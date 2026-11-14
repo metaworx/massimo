@@ -567,6 +567,8 @@
   "cubes.differsCount.other": "{n} lignes du fichier diffèrent",
   "cubes.empty": "(vide)",
   "cubes.takeFile": "Prendre la valeur du fichier",
+  "cubes.changedMeanwhile": "Modifié entre-temps sur le serveur, maintenant : {value}. Enregistrer garde le vôtre.",
+  "cubes.takeTheirs": "Prendre la leur",
   "pairing.open": "Appairer un appareil",
   "pairing.seconds": "Durée d’appairage",
   "pairing.how": "Démarrer met le Cube en mode d’appairage. Appuyez ensuite sur le bouton d’appairage du nouvel appareil, comme l’indique son manuel ; chaque appareil qui s’annonce apparaît ici.",

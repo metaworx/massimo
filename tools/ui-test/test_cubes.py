@@ -424,3 +424,39 @@ def test_cube_panel_pill(page, case):
     finally:
         page.unroute("**/api/v1/cubes")
     page.evaluate("loadCubes()")
+
+
+CHANGED = {"en": "Changed meanwhile on the server", "de": "Inzwischen auf dem Server geändert"}
+
+
+def test_cube_drafts_across_polls(page, case):
+    """An open Cube's form across the polls: a field not touched follows a
+    name stored meanwhile by another client; a field being edited keeps
+    the draft and says under it that the stored value changed, Take
+    theirs taking it, Save then having nothing to send."""
+    panel, form = open_panel(page)
+    name = form.locator("input[name=name]")
+    proxy_serial = form.locator("input[name=proxy_serial]")
+    before = page.evaluate("state.cubes.find((c) => c.serial === 'KEQ0000100').name || ''")
+    put = "(body) => api('PUT', 'api/v1/cubes/KEQ0000100', body)"
+    try:
+        page.evaluate(put, {"name": "Stored meanwhile"})
+        page.evaluate("loadCubes()")
+        assert wait_until(page, "document.querySelector(\"%s input[name=name]\").value === 'Stored meanwhile'" % PANEL, 5), \
+            "an untouched field follows"
+        assert form.locator(".cube-conflict").count() == 0, "without a word"
+        proxy_serial.fill("KEQ0000555")
+        page.evaluate(put, {"proxy_serial": "KEQ0000777"})
+        page.evaluate("loadCubes()")
+        conflict = form.locator(".cube-conflict")
+        assert wait_until(page, "!!document.querySelector(\"%s .cube-conflict\")" % PANEL, 5), "the change said"
+        assert proxy_serial.input_value() == "KEQ0000555", "the draft kept"
+        assert CHANGED[case.lang] in conflict.inner_text() and "KEQ0000777" in conflict.inner_text(), "with the stored value"
+        conflict.locator(".take-theirs").click()
+        assert proxy_serial.input_value() == "KEQ0000777" and form.locator(".cube-conflict").count() == 0, "Take theirs takes it"
+        assert form.locator("button[type=submit]").is_disabled(), "nothing left to save"
+        assert scroll_width(page) <= case.width, "no horizontal scroll"
+    finally:
+        page.evaluate(put, {"name": before, "proxy_serial": ""})
+        page.evaluate("loadCubes()")
+        panel.locator(":scope > summary").click()

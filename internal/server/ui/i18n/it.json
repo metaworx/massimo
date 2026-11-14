@@ -567,6 +567,8 @@
   "cubes.differsCount.other": "{n} righe del file sono diverse",
   "cubes.empty": "(vuoto)",
   "cubes.takeFile": "Usa il valore del file",
+  "cubes.changedMeanwhile": "Modificato nel frattempo sul server, ora: {value}. Salva mantiene il tuo.",
+  "cubes.takeTheirs": "Prendi il loro",
   "pairing.open": "Associa un dispositivo",
   "pairing.seconds": "Durata dell’associazione",
   "pairing.how": "Avvia mette il Cube in modalità di associazione. Poi premere il tasto di associazione del nuovo dispositivo, come indicato nel suo manuale; ogni dispositivo che si annuncia compare qui.",

@@ -77,6 +77,7 @@ function fillCubeFacts(d, c) {
   fillLinkState(d, c);
   fillProxyState(d, c);
   fillCubeHead(d, c);
+  if (d.syncForm) d.syncForm(c);
 }
 
 // fillLinkState says above the Cube's facts why it is not connected,
@@ -761,25 +762,67 @@ function cubePanel(c) {
   const actions = form.querySelector(".actions");
   actions.querySelector(".remove-cube").addEventListener("click", () => removeCube(c.serial, actions));
 
-  // changes is what Save sends: the fields that differ from the Cube's.
+  // cur is the Cube as the list last gave it, which a poll moves on
+  // (d.syncForm); changes is what Save sends: the fields that differ
+  // from it.
+  let cur = c;
   const changes = () => {
     const body = {};
     const name = field("name").value.trim();
-    if (name !== (c.name || "")) body.name = name;
+    if (name !== (cur.name || "")) body.name = name;
     const a = addr.value.trim();
-    if (a !== (c.configured_address || "")) body.address = a;
-    if (follow.checked !== !!c.follow_discovery) body.follow_discovery = follow.checked;
+    if (a !== (cur.configured_address || "")) body.address = a;
+    if (follow.checked !== !!cur.follow_discovery) body.follow_discovery = follow.checked;
     const proxy = field("proxy").value.trim();
-    if (proxy !== (c.proxy_address || "")) body.proxy_address = proxy;
+    if (proxy !== (cur.proxy_address || "")) body.proxy_address = proxy;
     const ps = field("proxy_serial").value.trim();
-    if (ps.toUpperCase() !== (c.proxy_serial || "")) body.proxy_serial = ps;
-    if (virtual.checked !== !!c.proxy_virtual) body.proxy_virtual = virtual.checked;
-    const hidden = cubesUI.edits[c.serial] || c.hidden || [];
-    if (!sameList(hidden, c.hidden)) body.hidden = hidden;
+    if (ps.toUpperCase() !== (cur.proxy_serial || "")) body.proxy_serial = ps;
+    if (virtual.checked !== !!cur.proxy_virtual) body.proxy_virtual = virtual.checked;
+    const hidden = cubesUI.edits[c.serial] || cur.hidden || [];
+    if (!sameList(hidden, cur.hidden)) body.hidden = hidden;
     return body;
   };
   const save = actions.querySelector("button[type=submit]");
-  sendWhenChanged(form, () => Object.keys(changes()).length > 0, { btn: save });
+  const recheck = sendWhenChanged(form, () => Object.keys(changes()).length > 0, { btn: save });
+
+  // The form's drafts across the polls (D59-A): a field the user has not
+  // touched follows a value stored meanwhile, by another client or the
+  // settings file; one the user has changed keeps the draft and says
+  // under it that the stored value changed, with Take theirs. Each field
+  // is how its value is read from the Cube and from the form.
+  const text = (input, key, upper) => ({
+    input, stored: (x) => (upper ? (x[key] || "").toUpperCase() : x[key] || ""),
+    read: () => (upper ? input.value.trim().toUpperCase() : input.value.trim()), write: (v) => { input.value = v; },
+  });
+  const check = (input, key) => ({ input, stored: (x) => !!x[key], read: () => input.checked, write: (v) => { input.checked = v; } });
+  const fields = [text(field("name"), "name"), text(addr, "configured_address"), check(follow, "follow_discovery"),
+    text(field("proxy"), "proxy_address"), text(field("proxy_serial"), "proxy_serial", true), check(virtual, "proxy_virtual")];
+  const base = fields.map((f) => f.stored(c)); // what the form was drawn from, or last took
+  d.syncForm = (nc) => {
+    cur = nc;
+    fields.forEach((f, i) => {
+      const stored = f.stored(nc);
+      const row = f.input.closest(".field");
+      const conflict = row.nextElementSibling && row.nextElementSibling.classList.contains("cube-conflict") ? row.nextElementSibling : null;
+      if (stored === base[i]) return;
+      const take = () => {
+        f.write(stored);
+        base[i] = stored;
+        if (row.nextElementSibling && row.nextElementSibling.classList.contains("cube-conflict")) row.nextElementSibling.remove();
+        recheck();
+      };
+      if (f.read() === base[i]) {
+        take(); // untouched: it follows
+        return;
+      }
+      const box = elem("div", "cube-conflict");
+      box.appendChild(noticeEl(t("cubes.changedMeanwhile", { value: valueText(stored) })));
+      box.appendChild(button(t("cubes.takeTheirs"), "take-theirs", take));
+      if (conflict) conflict.replaceWith(box);
+      else row.after(box);
+    });
+    recheck();
+  };
   form.addEventListener("submit", (ev) => {
     ev.preventDefault();
     const body = changes();

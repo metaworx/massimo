@@ -566,6 +566,8 @@
   "cubes.differsCount.other": "{n} regels van het bestand wijken af",
   "cubes.empty": "(leeg)",
   "cubes.takeFile": "Waarde uit het bestand overnemen",
+  "cubes.changedMeanwhile": "Intussen op de server gewijzigd, nu: {value}. Opslaan houdt de jouwe.",
+  "cubes.takeTheirs": "Neem de hunne",
   "pairing.open": "Een apparaat koppelen",
   "pairing.seconds": "Koppeltijd",
   "pairing.how": "Starten zet de Cube in de koppelmodus. Druk daarna op de koppelknop van het nieuwe apparaat, zoals de handleiding beschrijft; elk apparaat dat zich meldt, verschijnt hier.",

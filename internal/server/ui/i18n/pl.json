@@ -586,6 +586,8 @@
   "cubes.differsCount.other": "{n} wiersza pliku się różni",
   "cubes.empty": "(puste)",
   "cubes.takeFile": "Użyj wartości z pliku",
+  "cubes.changedMeanwhile": "W międzyczasie zmienione na serwerze, teraz: {value}. Zapisz zachowa Twoją wartość.",
+  "cubes.takeTheirs": "Weź ich wartość",
   "pairing.open": "Sparuj urządzenie",
   "pairing.seconds": "Czas parowania",
   "pairing.how": "Start przełącza Cube w tryb parowania. Następnie naciśnij przycisk parowania nowego urządzenia, jak opisuje jego instrukcja; każde urządzenie, które się zgłosi, pojawi się tutaj.",
