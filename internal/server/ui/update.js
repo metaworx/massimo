@@ -478,7 +478,7 @@ function followReboot(at) {
 
 const infoState = { store: null, config: null, error: "" };
 
-// renderServerInfo draws Maintenance's Store and Settings in effect, from
+// renderServerInfo draws System Info's Store and Settings in effect, from
 // GET /api/v1/store and GET /api/v1/config; a secret is "set, not shown".
 function renderServerInfo() {
   const s = infoState.store;
@@ -754,7 +754,8 @@ function fillProxies(v) {
   const list = v.cube_proxies || [];
   if (!list.length) cell.textContent = "–";
   for (const p of list) {
-    const line = elem("div", "sys-proxy", textEl("span", p.serial || "", "mono"), " ", textEl("span", p.addr, "mono"));
+    // the address the original software connects to, copyable (components.js)
+    const line = elem("div", "sys-proxy", textEl("span", p.serial || "", "mono"), " ", copyEl(p.addr, { label: p.addr, icon: true }));
     if (p.listening) line.append(" ", textEl("span", t("proxy.listening"), "muted"));
     else line.appendChild(noticeEl(t("proxy.notListening", { addr: p.addr, error: p.error || "" }), { since: p.since, next: p.next_try }));
     cell.appendChild(line);

@@ -52,3 +52,27 @@ def test_copy(page, case):
         assert clipboard(page) == "KEQ0000100", "the fallback copies"
     finally:
         page.evaluate("document.getElementById('test-copy').remove()")
+
+
+def test_proxies_copy(page, case):
+    """System Info's Cube proxies: each address copies, by its icon. The
+    test's server runs without proxies, so the system's answer gets one."""
+    import json
+    from helpers import show_view
+    page.context.grant_permissions(["clipboard-read", "clipboard-write"], origin=page.evaluate("location.origin"))
+
+    def with_proxy(route):
+        v = route.fetch().json()
+        v["cube_proxies"] = [{"serial": "KEQ0000100", "addr": "192.168.1.31:62910", "listening": True}]
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(v))
+    page.route("**/api/v1/system", with_proxy)
+    try:
+        show_view(page, "system")
+        page.evaluate("loadSystemInfo()")
+        assert wait_until(page, "!!document.querySelector('#info-proxies .copy-icon')", 5), "the proxy with its copy icon"
+        page.evaluate("navigator.clipboard.writeText('')")
+        page.locator("#info-proxies .copy-icon").first.click()
+        assert wait_until(page, "navigator.clipboard.readText().then((t) => t === '192.168.1.31:62910')", 3), "its address copies"
+    finally:
+        page.unroute("**/api/v1/system")
+        show_view(page, "tiles")
