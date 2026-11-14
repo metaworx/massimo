@@ -95,6 +95,12 @@ var actions = map[string]string{
 	"POST /api/v1/users/{name}/identities/link/{key}":            "identity.link.start",
 	"POST /api/v1/users/{name}/identities/link/pending/{code}":   "identity.link",
 	"DELETE /api/v1/users/{name}/identities/link/pending/{code}": "identity.link.cancel",
+	"POST /api/v1/integrations/requests":                         "integration.request",
+	"POST /api/v1/integrations/{uuid}/approve":                   "integration.approve",
+	"POST /api/v1/integrations/{uuid}/refuse":                    "integration.refuse",
+	"POST /api/v1/integrations/{uuid}/accept-instance":           "integration.accept_instance",
+	"PUT /api/v1/integrations/{uuid}":                            "integration.update",
+	"DELETE /api/v1/integrations/{uuid}":                         "integration.revoke",
 	"POST /api/v1/providers":                                     "provider.add",
 	"PUT /api/v1/providers/{key}":                                "provider.update",
 	"DELETE /api/v1/providers/{key}":                             "provider.remove",
@@ -126,12 +132,14 @@ var changeLines = map[string]string{
 	"pairing.start": "change", "pairing.stop": "change",
 	"user.add": "change", "user.update": "change", "user.remove": "change", "token.add": "change", "token.revoke": "change",
 	"identity.add": "change", "identity.update": "change", "identity.link": "change", "identity.remove": "change", "provider.add": "change", "provider.update": "change", "provider.remove": "change",
+	"integration.request": "change", "integration.approve": "change", "integration.refuse": "change", "integration.accept_instance": "change",
+	"integration.update": "change", "integration.revoke": "change",
 	"role.add": "change", "role.update": "change", "role.remove": "change", "role.disable": "change", "capability.disable": "change",
 }
 
 // noCommand are the actions that are audited but are no command: they
 // send nothing to a Cube and a retry of them is harmless (commands.go).
-var noCommand = map[string]bool{"login": true, "login.start": true, "logout": true, "preference.set": true, "preference.delete": true,
+var noCommand = map[string]bool{"login": true, "login.start": true, "logout": true, "integration.request": true, "preference.set": true, "preference.delete": true,
 	"push.subscribe": true, "push.unsubscribe": true, "server.reload": true, "identity.link.start": true,
 	"identity.link.cancel": true}
 
@@ -251,6 +259,8 @@ func pathTarget(r *http.Request, pattern string) string {
 	switch {
 	case r.PathValue("rf") != "":
 		return "device:" + strings.ToLower(r.PathValue("rf"))
+	case r.PathValue("uuid") != "" && strings.Contains(pattern, "/integrations/"):
+		return "integration:" + r.PathValue("uuid")
 	case r.PathValue("id") != "" && strings.Contains(pattern, "/tokens/"):
 		return "token:" + r.PathValue("id")
 	case r.PathValue("id") != "" && strings.Contains(pattern, "/me/push/"):

@@ -750,6 +750,59 @@ one for every role but `owner`, whatever the roles' sets say
 or `update` on a box the owner updates by hand), and `false` enables it again.
 Both need `capabilities`, which only `owner` has by default.
 
+### Integrations: /api/v1/integrations
+
+An integration, Home Assistant first, is a program that acts for users of
+its own: each of its calls can name the user it acts for and the level
+the user has for that call, and Massimo allows only what every link of
+that chain allows (AP IntegrationUsers; "Acting for an integration's
+users", below, once that block is in).
+An integration is registered by the owner, without a key typed anywhere:
+
+1. The integration asks: `POST /api/v1/integrations/requests`, without a key,
+
+   ```json
+   {"kind": "homeassistant", "name": "Casa Leone", "instance_id": "<32 hex>",
+    "url": "http://homeassistant.local:8123", "version": "2026.11.1"}
+   ```
+
+   `instance_id` is the installation's id (Home Assistant's `core.uuid`).
+   The answer is `201` with `{"id": "<uuid>", "code": "K7Q2PX", "expires_at": "…"}`;
+   the integration shows the code.
+   A request waits ten minutes; at most five wait at once,
+   an address asks at most ten times in ten minutes (`429`),
+   and the setting `integrations.requests` `"off"` refuses requests (`403`).
+2. The owner compares the codes and approves (capability `integrations`):
+   `POST /api/v1/integrations/{uuid}/approve` with `{"max_caps": [...]}`,
+   the integration's maximum, within the role `integration` and all of it
+   by default; `"attach": "<uuid>"` makes the request an integration of the
+   same kind that was registered before, with its users, links and maximum,
+   as after a key lost or revoked.
+   `POST …/refuse` refuses it.
+3. The integration collects its key:
+   `GET /api/v1/integrations/requests/{id}?code=K7Q2PX`,
+   `202` while the request waits,
+   `200` with `{"key": "…", "integration": {…}}` once approved,
+   `410` once refused, expired, or its key collected and used.
+   An answer lost on the way is not lost:
+   the same call answers a new key, the one before revoked,
+   as long as that key was never used and ten minutes since the approval
+   have not passed.
+
+The key belongs to the integration's own user, named by the integration's
+`key` (lower case, from its name: `casa-leone`), with the role
+`integration`; the user `<key>.system` stands for its calls that no user
+started.
+`GET /api/v1/integrations` lists the integrations and the requests
+waiting, a request with its code and the address it came from;
+`PUT /api/v1/integrations/{uuid}` changes `name`, `max_caps` and `state`
+(`active`, `disabled`);
+`DELETE` revokes it: its key revoked and the integration disabled,
+its users, links and maximum kept for a request from the same installation.
+A call that came with another installation id than the accepted one is
+refused and the id recorded as `pending_instance`, which
+`POST …/accept-instance` accepts.
+
 ### Providers: /api/v1/providers
 
 `GET` and `POST /api/v1/providers`; `PUT` and `DELETE /api/v1/providers/{key}`.

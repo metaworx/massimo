@@ -40,7 +40,8 @@ CREATE TABLE integrations (
     request_code     TEXT    NOT NULL DEFAULT '',     -- the short code both sides show while pending
     request_expires  TEXT,                            -- a pending request's end
     request_remote   TEXT    NOT NULL DEFAULT '',     -- the address the request came from
-    key_issued_at    TEXT,                            -- when its key was handed out, once
+    key_issued_at    TEXT,                            -- when its key was handed out
+    merged_into      INTEGER REFERENCES integrations (id),  -- a request the owner attached to an integration it was before
     created_at       TEXT    NOT NULL,
     updated_at       TEXT    NOT NULL,
     updated_by       INTEGER REFERENCES users (id),

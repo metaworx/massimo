@@ -1096,6 +1096,169 @@ paths:
               schema: {$ref: "#/components/schemas/Error"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/integrations/requests:
+    post:
+      summary: An integration asks to be registered
+      x-capability: none
+      description: |
+        Without a key. Answers the request's id and a six-character code,
+        which the integration shows and the owner compares before approving.
+        A request waits ten minutes; at most five wait at once, an address
+        asks at most ten times in ten minutes, and the setting
+        integrations.requests "off" refuses requests (403).
+      security: [{}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/IntegrationRequest"}
+      responses:
+        "201":
+          description: The request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: {type: string}
+                  code: {type: string}
+                  expires_at: {type: string, format: date-time}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/integrations/requests/{id}:
+    get:
+      summary: An integration collects its key
+      x-capability: none
+      description: |
+        With the request's code. 202 while the request waits; 200 with the
+        key once approved, again with a new key (the one before revoked) as
+        long as that key was never used and ten minutes since the approval
+        have not passed; 410 once refused, expired or its key used.
+      security: [{}]
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+        - {name: code, in: query, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: The key, and the integration
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  key: {type: string}
+                  integration: {$ref: "#/components/schemas/Integration"}
+        "202": {description: The request waits for the owner}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "410": {description: Refused, expired, or its key collected and used}
+  /api/v1/integrations:
+    get:
+      summary: The integrations and the requests waiting
+      x-capability: integrations
+      responses:
+        "200":
+          description: Integrations, by name
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/Integration"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "503": {$ref: "#/components/responses/NoStore"}
+  /api/v1/integrations/{uuid}/approve:
+    post:
+      summary: Approve a registration request
+      x-capability: integrations
+      description: |
+        max_caps, the integration's maximum, within the role integration;
+        all of it by default. attach, an integration of the same kind, makes
+        the request that integration again, with its users, links and
+        maximum. Either way the integration collects its key within ten
+        minutes.
+      parameters: [{$ref: "#/components/parameters/integrationUUID"}]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                max_caps: {type: array, items: {type: string}}
+                attach: {type: string}
+      responses:
+        "200":
+          description: The integration
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Integration"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "410": {description: Not a request waiting}
+  /api/v1/integrations/{uuid}/refuse:
+    post:
+      summary: Refuse a registration request
+      x-capability: integrations
+      parameters: [{$ref: "#/components/parameters/integrationUUID"}]
+      responses:
+        "200": {description: Refused}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "410": {description: Not a request waiting}
+  /api/v1/integrations/{uuid}/accept-instance:
+    post:
+      summary: Accept the installation id last seen
+      x-capability: integrations
+      description: A call that came with another installation id than the accepted one was refused and recorded as pending_instance; this accepts it.
+      parameters: [{$ref: "#/components/parameters/integrationUUID"}]
+      responses:
+        "200":
+          description: The integration
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Integration"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/v1/integrations/{uuid}:
+    put:
+      summary: Change an integration
+      x-capability: integrations
+      parameters: [{$ref: "#/components/parameters/integrationUUID"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                name: {type: string, maxLength: 64}
+                max_caps: {type: array, items: {type: string}}
+                state: {type: string, enum: [active, disabled]}
+      responses:
+        "200":
+          description: The integration
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Integration"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+    delete:
+      summary: Revoke an integration
+      x-capability: integrations
+      description: Its key revoked and the integration disabled; its users, links and maximum stay, for a request from the same installation to be attached to it.
+      parameters: [{$ref: "#/components/parameters/integrationUUID"}]
+      responses:
+        "200": {description: Revoked}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
   /api/v1/providers:
     get:
       summary: The OpenID Connect providers
@@ -3042,6 +3205,12 @@ components:
       required: true
       description: "The device: its serial number, case-insensitive, or its radio address, six hex digits; a serial the Cube does not have is 404. A room's virtual wall thermostat also by room-<id>"
       schema: {type: string, pattern: "^([0-9a-fA-F]{6}|[A-Za-z]{3}[0-9]{7}|[Rr][Oo][Oo][Mm]-[0-9]{1,3})$", example: "MEQ0000101"}
+    integrationUUID:
+      name: uuid
+      in: path
+      required: true
+      description: An integration's or a registration request's uuid
+      schema: {type: string}
     ifMatch:
       name: If-Match
       in: header
@@ -4131,6 +4300,34 @@ components:
           type: array
           description: Devices that joined during the current or last pairing
           items: {$ref: "#/components/schemas/NewDevice"}
+    IntegrationRequest:
+      type: object
+      required: [kind, name, instance_id]
+      properties:
+        kind: {type: string, enum: [homeassistant]}
+        name: {type: string, maxLength: 64, description: "The installation's name (Home Assistant's location_name)"}
+        instance_id: {type: string, pattern: "^[0-9a-fA-F]{32}$", description: The installation id}
+        url: {type: string, maxLength: 256}
+        version: {type: string, maxLength: 32}
+    Integration:
+      type: object
+      properties:
+        uuid: {type: string}
+        kind: {type: string}
+        key: {type: string, description: "Lower case, its users' names begin with it; absent for a request"}
+        name: {type: string}
+        state: {type: string, enum: [pending, active, disabled]}
+        instance_id: {type: string}
+        pending_instance: {type: string, description: An installation id a call came with, not accepted yet}
+        url: {type: string}
+        version: {type: string}
+        max_caps: {type: array, items: {type: string}, description: "The key's maximum, within the role integration"}
+        user: {type: string, description: Its own user, holding its key}
+        request_code: {type: string, description: "A request's short code"}
+        request_expires: {type: string, format: date-time}
+        request_remote: {type: string, description: The address the request came from}
+        key_issued_at: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}
     ProgramWithTag:
       allOf:
         - {$ref: "#/components/schemas/WeekProgram"}

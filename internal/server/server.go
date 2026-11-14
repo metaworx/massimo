@@ -309,10 +309,13 @@ type Server struct {
 	limiter     failureLimiter
 	authLockout time.Duration // the lockout in effect, for the log
 	signIns     signIns       // the addresses with a login running
-	logins      opaqueLogins  // the sign-ins by OPAQUE started, and the proofs given
-	oidc        oidcFlows     // the sign-ins through a provider started, and their codes (oidc.go)
-	tickets     *ticketStore
-	refusals    *refusalAudit // nil without a store
+	// integrationRequests bounds the registration requests per address
+	// (integrations_api.go).
+	integrationRequests requestLimit
+	logins              opaqueLogins // the sign-ins by OPAQUE started, and the proofs given
+	oidc                oidcFlows    // the sign-ins through a provider started, and their codes (oidc.go)
+	tickets             *ticketStore
+	refusals            *refusalAudit // nil without a store
 	// steps writes the queues' step rows in order (commands.go).
 	steps   serialWorker
 	updates updateCheck
@@ -1197,6 +1200,14 @@ func (s *Server) routes() {
 	api("GET /api/v1/users/{name}/identities/link/pending/{code}", "users", s.getPendingLink)
 	api("POST /api/v1/users/{name}/identities/link/pending/{code}", "users", s.confirmPendingLink)
 	api("DELETE /api/v1/users/{name}/identities/link/pending/{code}", "users", s.cancelPendingLink)
+	api("POST /api/v1/integrations/requests", "none", s.postIntegrationRequest)
+	api("GET /api/v1/integrations/requests/{id}", "none", s.getIntegrationRequest)
+	api("GET /api/v1/integrations", "integrations", s.getIntegrations)
+	api("POST /api/v1/integrations/{uuid}/approve", "integrations", s.approveIntegration)
+	api("POST /api/v1/integrations/{uuid}/refuse", "integrations", s.refuseIntegration)
+	api("POST /api/v1/integrations/{uuid}/accept-instance", "integrations", s.acceptInstance)
+	api("PUT /api/v1/integrations/{uuid}", "integrations", s.putIntegration)
+	api("DELETE /api/v1/integrations/{uuid}", "integrations", s.deleteIntegration)
 	api("GET /api/v1/providers", "auth", s.listProviders)
 	api("POST /api/v1/providers", "auth", s.postProvider)
 	api("PUT /api/v1/providers/{key}", "auth", s.putProvider)

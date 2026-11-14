@@ -4,7 +4,9 @@
 package server
 
 import (
+	"encoding/json"
 	"slices"
+	"strings"
 	"testing"
 
 	"go.metaworx.ch/massimo/internal/store"
@@ -37,5 +39,84 @@ func TestIntegrationRoleIsTheCeiling(t *testing.T) {
 	}
 	if code, _ := callAPI(t, ts, "PUT", "/api/v1/roles/integration", "secret", `{"capabilities":["read"]}`); code < 400 {
 		t.Fatalf("the role integration changed: %d", code)
+	}
+}
+
+// An integration asks without a key, the owner approves it with its
+// maximum, and the integration collects its key with its code; revoked,
+// the key is refused.
+func TestIntegrationRegistrationRoutes(t *testing.T) {
+	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	body := `{"kind":"homeassistant","name":"Casa Leone","instance_id":"0123456789ABCDEF0123456789abcdef","url":"http://ha:8123","version":"2026.11.1"}`
+	code, text := callAPI(t, ts, "POST", "/api/v1/integrations/requests", "", body)
+	if code != 201 {
+		t.Fatalf("request: %d %s", code, text)
+	}
+	var req struct{ ID, Code string }
+	decodeInto(t, text, &req)
+	if len(req.Code) != 6 || req.ID == "" {
+		t.Fatalf("request %+v", req)
+	}
+	collect := "/api/v1/integrations/requests/" + req.ID + "?code=" + req.Code
+	if code, _ := callAPI(t, ts, "GET", collect, "", ""); code != 202 {
+		t.Fatalf("collect while waiting: %d", code)
+	}
+	if code, _ := callAPI(t, ts, "GET", "/api/v1/integrations/requests/"+req.ID+"?code=XXXXXX", "", ""); code != 404 {
+		t.Fatalf("a wrong code: %d", code)
+	}
+	code, text = callAPI(t, ts, "GET", "/api/v1/integrations", "secret", "")
+	if code != 200 || !strings.Contains(text, `"request_code": "`+req.Code+`"`) || !strings.Contains(text, `"state": "pending"`) {
+		t.Fatalf("the list: %d %s", code, text)
+	}
+	approve := "/api/v1/integrations/" + req.ID + "/approve"
+	if code, _ := callAPI(t, ts, "POST", approve, "secret", `{"max_caps":["read","users"]}`); code != 400 {
+		t.Fatalf("a maximum beyond the role integration: %d", code)
+	}
+	if code, text := callAPI(t, ts, "POST", approve, "secret", `{"max_caps":["read","setpoint"]}`); code != 200 || !strings.Contains(text, `"key": "casa-leone"`) {
+		t.Fatalf("approve: %d %s", code, text)
+	}
+	code, text = callAPI(t, ts, "GET", collect, "", "")
+	var got struct{ Key string }
+	decodeInto(t, text, &got)
+	if code != 200 || len(got.Key) != 64 {
+		t.Fatalf("collect: %d %s", code, text)
+	}
+	if code, text := callAPI(t, ts, "GET", "/api/v1/me", got.Key, ""); code != 200 || !strings.Contains(text, `"casa-leone"`) {
+		t.Fatalf("the key: %d %s", code, text)
+	}
+	if code, _ := callAPI(t, ts, "GET", collect, "", ""); code != 410 {
+		t.Fatalf("collect after the key's use: %d", code)
+	}
+	if code, _ := callAPI(t, ts, "DELETE", "/api/v1/integrations/"+req.ID, "secret", ""); code != 200 {
+		t.Fatalf("revoke: %d", code)
+	}
+	if code, _ := callAPI(t, ts, "GET", "/api/v1/me", got.Key, ""); code != 401 {
+		t.Fatalf("the revoked key: %d", code)
+	}
+
+	// The setting off refuses requests; an address asking too often waits.
+	if err := s.opts.Store.SetSetting(t.Context(), IntegrationRequestsKey, "off"); err != nil {
+		t.Fatal(err)
+	}
+	if code, _ := callAPI(t, ts, "POST", "/api/v1/integrations/requests", "", body); code != 403 {
+		t.Fatalf("with the setting off: %d", code)
+	}
+	s.opts.Store.SetSetting(t.Context(), IntegrationRequestsKey, "on")
+	limited := 0
+	for n := 0; n < requestBurst+1; n++ {
+		if code, _ := callAPI(t, ts, "POST", "/api/v1/integrations/requests", "", body); code == 429 {
+			limited++
+		}
+	}
+	if limited == 0 {
+		t.Fatal("no request refused for its address")
+	}
+}
+
+// decodeInto reads a JSON answer into v.
+func decodeInto(t *testing.T, text string, v any) {
+	t.Helper()
+	if err := json.Unmarshal([]byte(text), v); err != nil {
+		t.Fatalf("%v: %s", err, text)
 	}
 }
