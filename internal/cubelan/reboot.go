@@ -87,7 +87,7 @@ func (c *Client) Rebooting(d time.Duration) {
 	c.heardMu.Lock()
 	c.rebootAt, c.rebootUntil = now, now.Add(d)
 	c.heardMu.Unlock()
-	c.evlog.Info("cube rebooting", "addr", c.Address())
+	c.log.Info("cube rebooting", "addr", c.Address()) // no event says it
 	c.mu.Lock()
 	conn := c.conn
 	c.mu.Unlock()
