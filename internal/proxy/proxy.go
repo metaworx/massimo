@@ -46,11 +46,6 @@ type Options struct {
 	// MaxDutyPct is the duty cycle at which radio commands from clients
 	// are answered as discarded without being sent (default 95).
 	MaxDutyPct int
-	// Subscribe, when set, returns a channel that receives a signal
-	// whenever the Cube reported new device state, so connected clients
-	// get an L line pushed as the real Cube does, and a function to end
-	// the subscription.
-	Subscribe func() (<-chan struct{}, func())
 	// ReplyTimeout bounds how long a client waits for the Cube's answer
 	// to a passed-through command (default one minute).
 	ReplyTimeout time.Duration
@@ -188,11 +183,6 @@ func (p *Proxy) Run(ctx context.Context, tcpAddr string) error {
 
 // ServeTCP accepts clients on ln until ctx ends.
 func (p *Proxy) ServeTCP(ctx context.Context, ln net.Listener) error {
-	if p.opts.Subscribe != nil {
-		ch, cancel := p.opts.Subscribe()
-		defer cancel()
-		go p.pushLoop(ctx, ch)
-	}
 	go func() {
 		<-ctx.Done()
 		ln.Close()
@@ -211,31 +201,6 @@ func (p *Proxy) ServeTCP(ctx context.Context, ln net.Listener) error {
 			return err
 		}
 		go p.serve(ctx, conn)
-	}
-}
-
-// pushLoop writes the current L line to every client whenever the Cube
-// reported a state change.
-func (p *Proxy) pushLoop(ctx context.Context, ch <-chan struct{}) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case _, ok := <-ch:
-			if !ok {
-				return
-			}
-			snap := p.opts.Client.Snapshot()
-			l, ok := snap.DeviceListLineExcluding(p.hidden(snap.Metadata()))
-			if !ok {
-				continue
-			}
-			p.mu.Lock()
-			for s := range p.conns {
-				s.write(l)
-			}
-			p.mu.Unlock()
-		}
 	}
 }
 
@@ -722,6 +687,12 @@ func (p *Proxy) discoveryReply(serial string, op byte) ([]byte, bool) {
 // Cubes answer to the discovery port, which this socket holds, so the
 // request goes out from it and the answers are taken out of what it
 // reads.
+//
+// The port is shared with other programs on the host, such as the
+// original software, and a datagram to its unicast address reaches one
+// of the sockets only, typically this one. A request from the host
+// itself is therefore also answered by the broadcast of the subnet,
+// which reaches every socket on the port (replyTargets).
 type Responder struct {
 	log     *slog.Logger
 	mu      sync.Mutex
@@ -730,6 +701,13 @@ type Responder struct {
 	pc         net.PacketConn
 	serving    chan struct{} // closed once Serve has its socket
 	collectors map[chan cubelan.Packet]struct{}
+	searches   int // Discover calls running
+
+	// hostNets returns the host's IPv4 networks, each with the host's
+	// address in it; nil is hostNetworks.
+	hostNets func() []*net.IPNet
+	// sent, when set, is told of every reply sent, for the tests.
+	sent func(to net.Addr)
 }
 
 type responderMember struct {
@@ -759,14 +737,117 @@ func (r *Responder) Discover(ctx context.Context, o cubelan.SearchOptions) ([]cu
 	r.mu.Lock()
 	pc := r.pc
 	r.collectors[ch] = struct{}{}
+	r.searches++
+	r.mu.Unlock()
+	defer func() {
+		r.mu.Lock()
+		delete(r.collectors, ch)
+		r.searches--
+		r.mu.Unlock()
+	}()
+	o.Packets = ch
+	return cubelan.Search(ctx, pc, o)
+}
+
+// Reboot sends a Cube's restart request (cubelan.Reboot) from the
+// responder's socket, so that the answer, which a Cube sends to port
+// 23272 only, comes back here.
+func (r *Responder) Reboot(ctx context.Context, addr, serial string) (cubelan.RebootResult, error) {
+	select {
+	case <-r.serving:
+	case <-ctx.Done():
+		return cubelan.RebootResult{}, ctx.Err()
+	}
+	ch := make(chan cubelan.Packet, 16)
+	r.mu.Lock()
+	pc := r.pc
+	r.collectors[ch] = struct{}{}
 	r.mu.Unlock()
 	defer func() {
 		r.mu.Lock()
 		delete(r.collectors, ch)
 		r.mu.Unlock()
 	}()
-	o.Packets = ch
-	return cubelan.Search(ctx, pc, o)
+	return cubelan.Reboot(ctx, pc, ch, addr, serial)
+}
+
+// replyTargets are where a discovery reply to the request from src goes:
+// to src, and to the discovery port at src's address, where clients such
+// as the original software listen. A request from one of the host's own
+// addresses (nets) is also answered by the broadcast of a subnet, at port,
+// the port the responder holds: unicast to a shared port reaches one
+// socket only, and the requester's may not be the one. The subnet is that
+// of from, the address the reply is sent from, or src's where it is sent
+// from the wildcard. Not while the responder's own search runs, whose
+// requests come from the host too.
+func replyTargets(src *net.UDPAddr, from net.IP, port int, nets []*net.IPNet, searching bool) []*net.UDPAddr {
+	out := []*net.UDPAddr{src}
+	if src.Port != cubelan.DiscoveryPort {
+		out = append(out, &net.UDPAddr{IP: src.IP, Port: cubelan.DiscoveryPort})
+	}
+	n := hostNet(nets, src.IP)
+	if searching || port == 0 || n == nil {
+		return out
+	}
+	if from != nil && !from.IsUnspecified() {
+		n = hostNet(nets, from)
+	}
+	if b := broadcast(n); b != nil {
+		out = append(out, &net.UDPAddr{IP: b, Port: port})
+	}
+	return out
+}
+
+// hostNet returns the network of nets whose address is ip, or nil.
+func hostNet(nets []*net.IPNet, ip net.IP) *net.IPNet {
+	for _, n := range nets {
+		if n.IP.Equal(ip) {
+			return n
+		}
+	}
+	return nil
+}
+
+// broadcast is the directed broadcast address of an IPv4 network, nil
+// for one without (a /31, a /32, IPv6).
+func broadcast(n *net.IPNet) net.IP {
+	if n == nil {
+		return nil
+	}
+	ip, mask := n.IP.To4(), n.Mask
+	if ones, bits := mask.Size(); ip == nil || bits == 0 || ones >= bits-1 {
+		return nil
+	}
+	mask = mask[len(mask)-net.IPv4len:]
+	b := make(net.IP, net.IPv4len)
+	for i := range b {
+		b[i] = ip[i] | ^mask[i]
+	}
+	return b
+}
+
+// hostNetworks returns the host's IPv4 networks, but the loopback's,
+// each with the host's address in it.
+func hostNetworks() []*net.IPNet {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return nil
+	}
+	var out []*net.IPNet
+	for _, a := range addrs {
+		if n, ok := a.(*net.IPNet); ok && n.IP.To4() != nil && !n.IP.IsLoopback() {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// localPort is the UDP port pc is bound to, or 0.
+func localPort(pc net.PacketConn) int {
+	if a, ok := pc.LocalAddr().(*net.UDPAddr); ok {
+		return a.Port
+	}
+	return 0
 }
 
 // Add registers a proxy. With ip set, replies for it are sent from a
@@ -851,23 +932,38 @@ func (r *Responder) Serve(ctx context.Context, pc net.PacketConn) error {
 		}
 		r.mu.Lock()
 		members := append([]responderMember(nil), r.members...)
+		searching := r.searches > 0
+		hostNets, sent := r.hostNets, r.sent
 		r.mu.Unlock()
+		var nets []*net.IPNet
 		for _, m := range members {
 			reply, ok := m.p.discoveryReply(serial, op)
 			if !ok {
 				continue
 			}
-			send := func(to net.Addr) {
-				if m.from != nil {
-					m.from.WriteTo(reply, to)
-				} else {
-					pc.WriteTo(reply, to)
+			var from net.IP
+			conn := pc
+			if m.from != nil {
+				from, conn = m.from.LocalAddr().(*net.UDPAddr).IP, m.from
+			}
+			write := func(to net.Addr) {
+				conn.WriteTo(reply, to)
+				if sent != nil {
+					sent(to)
 				}
 			}
-			send(src)
-			// Clients such as the original software listen on the fixed port.
-			if u != nil && u.Port != cubelan.DiscoveryPort {
-				send(&net.UDPAddr{IP: u.IP, Port: cubelan.DiscoveryPort})
+			if u == nil {
+				write(src)
+				continue
+			}
+			if nets == nil && !searching {
+				if hostNets == nil {
+					hostNets = hostNetworks
+				}
+				nets = hostNets()
+			}
+			for _, to := range replyTargets(u, from, localPort(pc), nets, searching) {
+				write(to)
 			}
 			r.log.Debug("proxy: answered discovery", "from", src.String())
 		}

@@ -186,6 +186,10 @@ func (s *Server) withoutRemoved(m cube.Message) cube.Message {
 //	POST /devices/{rf}/remove    Remove
 //	POST /devices/{rf}/restore   Restore
 //	POST /drop                   Drop: the clients connect again
+//	POST /silent                 SetSilent(true): the cable is out
+//	DELETE /silent               SetSilent(false): the cable is back
+//	POST /release                Release: a held dead session is forgotten
+//	GET  /connections            the connections so far, open now, a dead session held, the restarts
 //
 // It stops with the fake.
 func (s *Server) Control(addr string) (string, error) {
@@ -274,6 +278,35 @@ func (s *Server) controlHandler() http.Handler {
 	mux.HandleFunc("POST /drop", func(w http.ResponseWriter, r *http.Request) {
 		s.Drop()
 		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("POST /silent", func(w http.ResponseWriter, r *http.Request) {
+		s.SetSilent(true)
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("DELETE /silent", func(w http.ResponseWriter, r *http.Request) {
+		s.SetSilent(false)
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("POST /release", func(w http.ResponseWriter, r *http.Request) {
+		s.Release()
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("GET /connections", func(w http.ResponseWriter, r *http.Request) {
+		s.mu.Lock()
+		v := struct {
+			Total    int        `json:"total"`
+			Open     int        `json:"open"`
+			Dead     bool       `json:"dead"`
+			Until    *time.Time `json:"dead_until,omitempty"`
+			Restarts int        `json:"restarts"`
+		}{Total: s.conns, Open: len(s.open), Dead: !s.deadUntil.IsZero(), Restarts: s.restarts}
+		if v.Dead {
+			u := s.deadUntil
+			v.Until = &u
+		}
+		s.mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(v)
 	})
 	return mux
 }

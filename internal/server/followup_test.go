@@ -197,15 +197,10 @@ func proxyClient(t *testing.T, addr string) (net.Conn, *cube.Reader) {
 func proxyWrite(t *testing.T, conn net.Conn, r *cube.Reader, data string) {
 	t.Helper()
 	conn.Write([]byte("s:" + data + "\r\n"))
-	for {
-		m, err := r.Read()
-		if err == nil && m.Type == 'L' {
-			continue // a device list the proxy pushed meanwhile, as the Cube does
-		}
-		if err != nil || m.Type != 'S' {
-			t.Fatalf("s:%s answered %v %v", data, m, err)
-		}
-		return
+	// The reply is the next line: the original software reads it so,
+	// and anything the proxy sent unasked would be taken for it.
+	if m, err := r.Read(); err != nil || m.Type != 'S' {
+		t.Fatalf("s:%s answered %v %v", data, m, err)
 	}
 }
 

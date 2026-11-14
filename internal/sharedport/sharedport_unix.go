@@ -3,7 +3,7 @@
 
 //go:build linux || darwin || dragonfly || freebsd || netbsd || openbsd
 
-package announce
+package sharedport
 
 import (
 	"syscall"
@@ -11,10 +11,10 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// shareAddress lets the socket share its address and port with the
-// system's responder: SO_REUSEADDR, and SO_REUSEPORT, which macOS'
-// mDNSResponder and a newer avahi set.
-func shareAddress(network, address string, c syscall.RawConn) error {
+// Control sets SO_REUSEADDR, which Linux needs on both sockets, and
+// SO_REUSEPORT, which macOS and the BSDs need on both for a wildcard
+// port (and which macOS' mDNSResponder and a newer avahi set).
+func Control(network, address string, c syscall.RawConn) error {
 	var err error
 	if cerr := c.Control(func(fd uintptr) {
 		if err = unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_REUSEADDR, 1); err == nil {

@@ -35,6 +35,7 @@
 //	POST /api/v1/cubes/{sn}/pairing                  start pairing (inclusion mode), {"seconds":60}
 //	GET  /api/v1/cubes/{sn}/pairing                  pairing state and the devices that joined
 //	DELETE /api/v1/cubes/{sn}/pairing                stop pairing
+//	POST /api/v1/cubes/{sn}/reboot                   restart the Cube with a UDP R (cube_reboot.go)
 //	GET  /api/v1/system                              how the server is installed, the computer, the caller's address (system_api.go)
 //	GET  /api/v1/update                              newest signed release on the update channel
 //	POST /api/v1/update                              ask the update helper to install it (needs a token)
@@ -159,6 +160,13 @@ type Options struct {
 	AuthWindow   time.Duration
 	AuthLockout  time.Duration
 	PollInterval time.Duration // L polling; 0 keeps the driver default of one minute
+	// CubeHold is how long a Cube's lost connection is held open, so that
+	// it resumes when the network is back (cubelan.Options.Hold): 0 is
+	// cubelan.DefaultHold, a negative value holds nothing.
+	CubeHold time.Duration
+	// cubeOptions, set by a test, changes the options of each Cube's
+	// client before it is made: a short reply timeout, a quick dialer.
+	cubeOptions func(*cubelan.Options)
 	// RefreshInterval is how often each Cube's snapshot is refreshed in
 	// full by reconnecting, so that a write the Cube acknowledged but did
 	// not apply does not leave it wrong until the next restart; 0 never.
@@ -405,7 +413,6 @@ type runtime struct {
 	epoch  string
 	seq    uint64
 	replay []published
-	push   map[chan struct{}]struct{} // proxy clients waiting for L pushes
 	logMu  sync.Mutex
 	events []event // the last logSize events, for GET …/log
 
@@ -442,20 +449,6 @@ func (rt *runtime) lockStructure(ctx context.Context) (func(), error) {
 		return func() { <-rt.structure }, nil
 	case <-ctx.Done():
 		return nil, fail(http.StatusServiceUnavailable, "another change of the cube's rooms and devices is still running")
-	}
-}
-
-// subscribePush returns a channel that gets a signal whenever the Cube
-// reported device state, for the LAN proxy.
-func (rt *runtime) subscribePush() (<-chan struct{}, func()) {
-	ch := make(chan struct{}, 1)
-	rt.subsMu.Lock()
-	rt.push[ch] = struct{}{}
-	rt.subsMu.Unlock()
-	return ch, func() {
-		rt.subsMu.Lock()
-		delete(rt.push, ch)
-		rt.subsMu.Unlock()
 	}
 }
 
@@ -925,14 +918,6 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			s.notifyEvent(rt, ev)
 			rt.subsMu.Lock()
 			rt.publishLocked(ev, 0)
-			if e.Kind == cubelan.EventState || e.Kind == cubelan.EventConnected || e.Kind == cubelan.EventForgotten {
-				for ch := range rt.push {
-					select {
-					case ch <- struct{}{}:
-					default: // a signal is already pending
-					}
-				}
-			}
 			rt.subsMu.Unlock()
 			for _, a := range after {
 				rt.emit(a)
@@ -1005,6 +990,11 @@ func (s *Server) detail(ctx context.Context, rt *runtime, e cubelan.Event, ev *e
 			ev.Changes = changes
 		default:
 			ev.Level, ev.Summary = "debug", configSummary(cfg)
+		}
+	case cubelan.EventDisconnected:
+		if !e.HeldUntil.IsZero() {
+			// The connection is held open (cubelan, hold.go).
+			ev.Summary = map[string]any{"held_until": e.HeldUntil.Format(time.RFC3339)}
 		}
 	case cubelan.EventConnected:
 		ref := s.logReference(ctx, rt)
@@ -1221,6 +1211,7 @@ func (s *Server) routes() {
 	api("POST /api/v1/cubes", "cubes", s.postCube)
 	api("PUT /api/v1/cubes/{sn}", "cubes", s.putCube)
 	api("DELETE /api/v1/cubes/{sn}", "cubes", s.deleteCube)
+	api("POST /api/v1/cubes/{sn}/reboot", "cubes.reboot", s.rebootCube)
 	api("GET /api/v1/settings", "settings", s.getSettings)
 	api("PUT /api/v1/settings", "settings", s.putSettings)
 	api("POST /api/v1/cubes/discover", "discover", s.postDiscover)
@@ -1420,9 +1411,13 @@ type cubeView struct {
 	ProxyFailing []proxyFailure `json:"proxy_failing,omitempty"`
 	// MAC and LastSeen come from discovery: the Cube's MAC address and
 	// when it last answered.
-	MAC       string         `json:"mac,omitempty"`
-	LastSeen  *time.Time     `json:"last_seen,omitempty"`
-	Connected bool           `json:"connected"`
+	MAC       string     `json:"mac,omitempty"`
+	LastSeen  *time.Time `json:"last_seen,omitempty"`
+	Connected bool       `json:"connected"`
+	// Link says how the server stands with the Cube beyond connected:
+	// a lost connection held open, a Cube that refuses a new one while it
+	// holds the server's old one (stale) or another client's (busy).
+	Link      *cubelan.Link  `json:"link,omitempty"`
 	Firmware  string         `json:"firmware,omitempty"`
 	RFAddress string         `json:"rf_address,omitempty"`
 	Budget    cubelan.Budget `json:"budget"`
@@ -1460,6 +1455,8 @@ func (s *Server) summary(rt *runtime) cubeView {
 	v := cubeView{Serial: rt.cubeSerial(), Name: cfg.Name, Address: rt.client.Address(), Configured: true, Source: cfg.Source, ConfiguredAddress: cfg.Addr, FollowDiscovery: cfg.Addr == "" || cfg.FollowDiscovery,
 		ProxyAddress: s.proxyAddress(rt), ProxySerial: cfg.ProxySerial, ProxyVirtual: rt.proxyVirtual.Load(), Hidden: hiddenStrings(cfg.Hidden), Budget: b, Pending: view.Pending(snap, b), Queued: rt.queue.Len()}
 	v.FileDiffers = s.fileDiffers(rt.cubeSerial())
+	link := rt.client.Link()
+	v.Link = &link
 	v.ProxyListening = s.proxyListening(rt)
 	v.ProxyFailing = s.proxyFailing(rt)
 	if f, ok := s.foundInfo(rt.cubeSerial()); ok {

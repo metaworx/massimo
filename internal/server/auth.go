@@ -64,7 +64,7 @@ const (
 // rows of the store.
 var capabilities = []string{
 	"read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore",
-	"guests", "users", "passwords", "roles", "roles.disable", "capabilities", "cubes", "settings", "update", "restart", "reboot", "audit",
+	"guests", "users", "passwords", "roles", "roles.disable", "capabilities", "cubes", "cubes.reboot", "settings", "update", "restart", "reboot", "audit",
 	"auth",
 }
 

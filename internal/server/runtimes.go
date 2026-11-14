@@ -24,6 +24,7 @@ import (
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/proxy"
+	"go.metaworx.ch/massimo/internal/sharedport"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/view"
 )
@@ -107,10 +108,14 @@ func (rt *runtime) setConfig(change func(*CubeConfig)) {
 // ("" waits for discovery).
 func (s *Server) newRuntime(c CubeConfig, addr string) *runtime {
 	opts := s.opts
-	rt := &runtime{evlog: s.opts.Logger, cfg: c, serial: strings.ToUpper(c.Serial), showHidden: opts.ShowHidden, last: map[cube.RFAddress]*view.State{}, subs: map[chan event]*subscriber{}, epoch: newEpoch(), push: map[chan struct{}]struct{}{},
+	rt := &runtime{evlog: s.opts.Logger, cfg: c, serial: strings.ToUpper(c.Serial), showHidden: opts.ShowHidden, last: map[cube.RFAddress]*view.State{}, subs: map[chan event]*subscriber{}, epoch: newEpoch(),
 		structure: make(chan struct{}, 1),
 		follow:    newFollowUp(opts.FollowUpDelays, opts.FollowUpReconnectGap, opts.RefreshInterval > 0)}
-	rt.client = cubelan.New(cubelan.Options{Addr: addr, PollInterval: opts.PollInterval, Logger: s.partLog("cube", rt.serial), EventLines: true})
+	copts := cubelan.Options{Addr: addr, PollInterval: opts.PollInterval, Hold: opts.CubeHold, Logger: s.partLog("cube", rt.serial), EventLines: true}
+	if opts.cubeOptions != nil {
+		opts.cubeOptions(&copts)
+	}
+	rt.client = cubelan.New(copts)
 	qopts := opts.Queue
 	qopts.Observer = s.newObserver(rt)
 	qopts.OnHold = rt.held
@@ -223,14 +228,16 @@ func (s *Server) stopRuntime(rt *runtime) {
 }
 
 // ensureResponder returns the proxies' discovery socket, opening it on
-// first use; nil when the discovery port is taken.
+// first use; nil when the discovery port is taken. The port is shared,
+// so that a program on this host that searches for Cubes, such as the
+// original software, can bind it too.
 func (s *Server) ensureResponder() *proxy.Responder {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.responder != nil || s.ctx == nil || s.ctx.Err() != nil {
 		return s.responder
 	}
-	pc, err := net.ListenPacket("udp4", s.discoveryAddr())
+	pc, err := sharedport.ListenPacket("udp4", s.discoveryAddr())
 	if err != nil {
 		s.log.Warn("proxy: discovery port not available, clients must be given the address", "port", cubelan.DiscoveryPort, "error", err)
 		return nil
@@ -258,7 +265,7 @@ func (s *Server) startProxy(pl ProxyListener) bool {
 		return false
 	}
 	p := proxy.New(proxy.Options{Client: rt.client, Queue: rt.queue, DiscoverySerial: pl.DiscoverySerial, HiddenList: func() []cube.RFAddress { return rt.config().Hidden },
-		ShowHidden: rt.showHidden, MaxDutyPct: s.opts.Queue.MaxDutyPct, Subscribe: rt.subscribePush, OnWrite: rt.proxyWrote, Logger: s.partLog("proxy", rt.cubeSerial()),
+		ShowHidden: rt.showHidden, MaxDutyPct: s.opts.Queue.MaxDutyPct, OnWrite: rt.proxyWrote, Logger: s.partLog("proxy", rt.cubeSerial()),
 		OnEvent: rt.proxyEvent, Command: s.proxyCommand(rt), Virtual: func() []proxy.Virtual { return s.proxyVirtuals(rt) }})
 	ctx, cancel := context.WithCancel(parent)
 	pr := &proxyRun{pl: pl, rt: rt, p: p, cancel: cancel, done: make(chan struct{})}

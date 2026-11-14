@@ -85,8 +85,12 @@ so the proxy cannot announce one inside the Cube protocol, and need not.
 On connect, the greeting a real Cube sends: `H` with a fresh connection id,
 the current duty cycle, free memory slots and clock, then `M`,
 the `C` line of every device and `L`.
-When the Cube reports a state change,
-the new `L` line is pushed to every connected client, as the Cube does.
+After that a client gets only the replies to its own lines, in order:
+the original software takes the next line it reads for the reply to the
+command it sent, so a line it did not ask for makes every later reply one
+line late ("S: expected", "ACK expected").
+A change of the Cube's state therefore shows at the client's next `l:`,
+which the original software sends every 10 s.
 Several clients may be connected at the same time.
 
 | Client line | Handling |
@@ -174,6 +178,9 @@ Nothing of a virtual wall thermostat reaches the Cube:
   A link with a virtual wall thermostat is a link with the room's real one,
   or answered the same way.
 - A `t:` that deletes a virtual wall thermostat is answered and leaves it.
+- The original software offers to move and delete a virtual wall thermostat
+  as any device; a moved one is stripped from the metadata write as above,
+  so it is back in its own room at the next connect.
 
 Pairing a real wall thermostat through the original software is refused by it,
 since every room shows one: pair it through Massimo's web UI,
@@ -236,7 +243,19 @@ massimo serve -proxy-serial XEQ0000200
 or, in `.env`, `MASSIMO_CUBE_<SERIAL>_PROXY_SERIAL=XEQ0000200`.
 The TCP greeting always carries the real serial.
 Alternatively block the Cube's UDP answers on the PC's firewall.
-If port 23272 is in use on the server's host, for example by `massimo discover`,
+The server shares port 23272 with the other programs on its host (SO_REUSEADDR,
+with SO_REUSEPORT on Linux and macOS),
+so that the original software there binds it too, as its search must.
+A datagram to a shared port's own address reaches one socket only:
+on Windows the one bound first, on Linux the server's.
+So the server answers a request from its own host by the subnet's broadcast too,
+which every socket on the port receives:
+the original software on the server's PC lists the server's proxies,
+but not a Cube the server holds,
+since the server's socket takes the Cube's answer.
+A program that binds the port without sharing it keeps it to itself:
+`massimo discover` and `massimo netconfig` take another port beside a running server,
+and where such a program holds the port first,
 the server runs without discovery and logs a warning;
 clients are then given the address by hand.
 

@@ -152,3 +152,39 @@ func TestNetconfigAgainstTheFakeCube(t *testing.T) {
 		t.Fatal("a cube with another serial than -sn accepted")
 	}
 }
+
+// netconfig -reboot reads the serial, warns, asks, and sends R; a dry
+// run prints the frame and sends nothing.
+func TestNetconfigReboot(t *testing.T) {
+	fake, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000000", 0x0a0b0c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fake.Close()
+	fake.SetRestartDelay(10 * time.Millisecond)
+
+	out, _, err := runNetconfigTest(t, "", "-addr", fake.Addr(), "-reboot", "-dry-run")
+	if err != nil || !strings.Contains(out, "cube     KEQ0000000 at "+fake.Addr()) || !strings.Contains(out, "frame    65 51 33 4d 61 78 2a 00 4b 45 51") ||
+		!strings.Contains(out, "dry run: nothing sent") {
+		t.Fatalf("dry run: %v\n%s", err, out)
+	}
+	if _, _, err = runNetconfigTest(t, "n\n", "-addr", fake.Addr(), "-reboot"); err == nil {
+		t.Fatal("a no went ahead")
+	}
+	if fake.Reboots() != 0 {
+		t.Fatalf("%d reboots before a yes", fake.Reboots())
+	}
+	out, errOut, err := runNetconfigTest(t, "y\n", "-addr", fake.Addr(), "-reboot")
+	if err != nil || !strings.Contains(out, "reboot   sent, answered with status 2 (restarting)") {
+		t.Fatalf("reboot: %v\n%s\n%s", err, out, errOut)
+	}
+	if !strings.Contains(errOut, "drops the radiograms") || !strings.Contains(errOut, "pending_radiograms") || !strings.Contains(errOut, "reboot cube KEQ0000000?") {
+		t.Fatalf("warning and question:\n%s", errOut)
+	}
+	if fake.Reboots() != 1 {
+		t.Fatalf("%d reboots", fake.Reboots())
+	}
+	if _, _, err = runNetconfigTest(t, "", "-addr", fake.Addr(), "-reboot", "-dhcp"); err == nil {
+		t.Fatal("-reboot with -dhcp went ahead")
+	}
+}

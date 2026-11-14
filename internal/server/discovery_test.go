@@ -18,6 +18,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
+	"go.metaworx.ch/massimo/internal/sharedport"
 )
 
 // freeUDP returns a local UDP address that was free a moment ago.
@@ -360,6 +361,35 @@ func TestDiscoveryWithoutThePort(t *testing.T) {
 	ts, _ := startDiscovering(t, Options{DiscoveryAddr: taken.LocalAddr().String()})
 	if code, out := postDiscovery(t, ts); code != http.StatusServiceUnavailable || out["error"] == nil {
 		t.Fatalf("discover with the port taken: %d %v", code, out)
+	}
+}
+
+// While serve's proxies answer discovery, another program on the host
+// can still bind the discovery port with the port shared, as the
+// original software's MulticastSocket does; a plain bind, the command
+// line's, is refused and falls back to another port.
+func TestDiscoveryPortShared(t *testing.T) {
+	own := freeUDP(t, "127.0.0.1")
+	tcp, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	proxyAddr := tcp.Addr().String()
+	tcp.Close()
+	_, s := startDiscovering(t, Options{DiscoveryAddr: own, Proxy: []ProxyListener{{Addr: proxyAddr, Discovery: true}}})
+	eventually(t, "the proxies' discovery socket", func() bool {
+		s.mu.RLock()
+		defer s.mu.RUnlock()
+		return s.responder != nil
+	})
+	pc, err := sharedport.ListenPacket("udp4", own)
+	if err != nil {
+		t.Fatalf("a shared bind beside serve: %v", err)
+	}
+	pc.Close()
+	if pc, err := net.ListenPacket("udp4", own); err == nil {
+		pc.Close()
+		t.Fatal("a plain bind beside serve")
 	}
 }
 
