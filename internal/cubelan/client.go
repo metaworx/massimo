@@ -181,7 +181,7 @@ func New(opts Options) *Client {
 		opts.RemindEvery = 24 * time.Hour
 	}
 	if opts.Dialer == nil {
-		d := holdDialer(opts.holdFor())
+		d := holdDialer(opts.kernelHold())
 		opts.Dialer = func(ctx context.Context, addr string) (net.Conn, error) { return d.DialContext(ctx, "tcp", addr) }
 	}
 	evlog := opts.Logger
@@ -482,7 +482,7 @@ func (c *Client) session(ctx context.Context, st *runState) (ending, error) {
 			if held || !greeted.Load() || !c.probeSilent(conn) {
 				continue
 			}
-			startHold(fmt.Errorf("cubelan: %d keepalive probes unanswered", keepAlive.Count))
+			startHold(fmt.Errorf("cubelan: the kernel counts %d probes unanswered", keepAlive.Count))
 			// Nothing is in flight to bring an answer once the network
 			// is back: a poll is.
 			c.write(cube.CmdList)

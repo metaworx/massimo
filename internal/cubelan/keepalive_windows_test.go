@@ -13,7 +13,8 @@ import (
 )
 
 // With polling, the default dialer's connection retransmits for the
-// hold (TCP_MAXRT, in seconds), read back from the socket.
+// hold and the time the loss takes to be marked (TCP_MAXRT, in seconds,
+// Options.kernelHold), read back from the socket.
 func TestDefaultDialerMaxRT(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -46,7 +47,7 @@ func TestDefaultDialerMaxRT(t *testing.T) {
 	if gerr != nil {
 		t.Skipf("TCP_MAXRT cannot be read back here: %v", gerr)
 	}
-	if got != 120 {
-		t.Errorf("TCP_MAXRT = %d, want 120", got)
+	if got != 265 { // the hold, two polls and their reply timeouts, a probe's interval
+		t.Errorf("TCP_MAXRT = %d, want 265", got)
 	}
 }

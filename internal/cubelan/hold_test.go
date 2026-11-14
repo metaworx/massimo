@@ -184,7 +184,7 @@ func TestUnansweredKeepaliveProbesBeginAHold(t *testing.T) {
 	silent.Store(true)
 	eventually(t, "the loss", c.Held)
 	silent.Store(false)
-	if lost := logs.lines("WARN", "cube connection lost"); len(lost) != 1 || !strings.Contains(lost[0], "keepalive probes unanswered") {
+	if lost := logs.lines("WARN", "cube connection lost"); len(lost) != 1 || !strings.Contains(lost[0], "probes unanswered") {
 		t.Errorf("loss lines: %q", lost)
 	}
 	eventually(t, "the hold's poll", func() bool { return pollsReceived(srv) == n+1 })
@@ -227,5 +227,24 @@ func TestKeepAliveCovering(t *testing.T) {
 	}
 	if s := holdSeconds(1500 * time.Millisecond); s != 2 {
 		t.Errorf("1.5 s in seconds: %d", s)
+	}
+}
+
+// The kernel lets a held connection live for the hold and the time the
+// loss takes to be marked before it, from the first byte left
+// unacknowledged: two polls and their reply timeouts, or the keepalive's
+// silence and probes, whichever is longer, and a probe's interval.
+func TestKernelHold(t *testing.T) {
+	for _, tc := range []struct {
+		o    Options
+		want time.Duration
+	}{
+		{Options{PollInterval: time.Minute, ReplyTimeout: 10 * time.Second}, DefaultHold + 140*time.Second + 5*time.Second},
+		{Options{PollInterval: 2 * time.Second, ReplyTimeout: 10 * time.Second, Hold: 20 * time.Second}, 20*time.Second + 30*time.Second + 5*time.Second},
+		{Options{PollInterval: time.Minute, Hold: -1}, 0},
+	} {
+		if got := tc.o.kernelHold(); got != tc.want {
+			t.Errorf("%+v: kernel hold %v, want %v", tc.o, got, tc.want)
+		}
 	}
 }

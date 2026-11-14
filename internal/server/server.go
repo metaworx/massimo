@@ -1014,6 +1014,11 @@ func (s *Server) detail(ctx context.Context, rt *runtime, e cubelan.Event, ev *e
 		default:
 			ev.Level, ev.Summary = "debug", configSummary(cfg)
 		}
+	case cubelan.EventDisconnected:
+		if !e.HeldUntil.IsZero() {
+			// The connection is held open (cubelan, hold.go).
+			ev.Summary = map[string]any{"held_until": e.HeldUntil.Format(time.RFC3339)}
+		}
 	case cubelan.EventConnected:
 		ref := s.logReference(ctx, rt)
 		ev.Summary = connectedSummary(snap, hidden, e)

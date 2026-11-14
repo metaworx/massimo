@@ -46,6 +46,21 @@ func (o Options) holdFor() time.Duration {
 	return o.Hold
 }
 
+// kernelHold is how long the kernel must let a held connection live
+// (holdControl, keepAliveFor): the hold, and before it the time the
+// loss takes to be marked, since the kernel counts from the first byte
+// left unacknowledged, a missed poll's, or the last one received: two
+// polls and their reply timeouts, or the keepalive's silence and
+// probes. 0 without a hold.
+func (o Options) kernelHold() time.Duration {
+	hold := o.holdFor()
+	if hold == 0 {
+		return 0
+	}
+	marking := max(pollMisses*(o.PollInterval+o.ReplyTimeout), keepAlive.Idle+time.Duration(keepAlive.Count)*keepAlive.Interval)
+	return hold + marking + keepAlive.Interval
+}
+
 // holdHeard is Options.HoldHeard or its default.
 func (o Options) holdHeard() time.Duration {
 	if o.HoldHeard > 0 {
@@ -120,7 +135,7 @@ func (c *Client) beginHold(st *runState, err error) {
 	c.held.Store(true)
 	c.online.Store(false)
 	c.lost.Store(true)
-	c.emit(Event{Kind: EventDisconnected, Err: err})
+	c.emit(Event{Kind: EventDisconnected, Err: err, HeldUntil: until})
 }
 
 // resumeHold ends a hold that resumed: the Cube answered on the held
@@ -133,7 +148,7 @@ func (c *Client) resumeHold(st *runState) {
 	st.lost = time.Time{}
 	c.evlog.Info("cube connection re-established", "addr", c.Address(), "down_for", down.Round(time.Second), "held", true)
 	c.noteLink()
-	c.emit(Event{Kind: EventConnected, Cause: CauseLoss, DownFor: down})
+	c.emit(Event{Kind: EventConnected, Cause: CauseLoss, DownFor: down, Held: true})
 }
 
 // endHold clears the hold's state.
@@ -160,7 +175,7 @@ func (c *Client) holdCheckEvery() time.Duration {
 // holdDialer is the dialer New gives a client without one: 10 s to
 // connect, and the keepalive and the socket options of the hold
 // (hold_<os>.go) so that the kernel does not end a held connection
-// first.
+// first; hold is Options.kernelHold.
 func holdDialer(hold time.Duration) *net.Dialer {
 	return &net.Dialer{Timeout: 10 * time.Second, KeepAliveConfig: keepAliveFor(hold), Control: holdControl(hold)}
 }

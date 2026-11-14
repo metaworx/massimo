@@ -35,12 +35,13 @@ func holdControl(hold time.Duration) func(network, address string, c syscall.Raw
 	}
 }
 
-// keepaliveSilent reports whether the connection's keepalive probes
-// went unanswered, keepAlive.Count of them: the kernel's count of
-// unanswered probes (TCP_INFO's tcpi_probes), which falls back to 0
-// when the Cube acknowledges anything. It marks a loss at about 30 s
-// on an idle connection, as the keepalive's end of it did before the
-// hold.
+// keepaliveSilent reports whether the connection's probes went
+// unanswered, keepAlive.Count of them: the kernel's count of unanswered
+// probes (TCP_INFO's tcpi_probes), which falls back to 0 when the Cube
+// acknowledges anything. On an idle connection they are the keepalive's,
+// so that the loss is marked at about 30 s, as the keepalive's end of it
+// did before the hold; with a poll that the link could not send, the
+// kernel's probes for it, sooner.
 func keepaliveSilent(conn net.Conn) bool {
 	tc, ok := conn.(*net.TCPConn)
 	if !ok {

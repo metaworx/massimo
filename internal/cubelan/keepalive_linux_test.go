@@ -14,7 +14,8 @@ import (
 
 // The connection the default dialer makes carries keepAlive: on, 15 s
 // idle, 5 s between probes, 3 probes, read back from the socket; with
-// polling, TCP_USER_TIMEOUT is the hold (hold.go), and without, none.
+// polling, TCP_USER_TIMEOUT covers the hold and the time the loss takes
+// to be marked (Options.kernelHold), and without, none.
 func TestDefaultDialerKeepAlive(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -38,8 +39,10 @@ func TestDefaultDialerKeepAlive(t *testing.T) {
 		o    Options
 		user int
 	}{
-		{"polling", Options{PollInterval: time.Minute}, int(DefaultHold.Milliseconds())},
-		{"a hold of its own", Options{PollInterval: time.Minute, Hold: 2 * time.Minute}, 120000},
+		// The hold, two polls and their reply timeouts before it, and a
+		// probe's interval.
+		{"polling", Options{PollInterval: time.Minute}, int((DefaultHold + 2*70*time.Second + 5*time.Second).Milliseconds())},
+		{"a hold of its own", Options{PollInterval: time.Minute, Hold: 2 * time.Minute}, 265000},
 		{"no polling", Options{}, 0},
 	} {
 		tc.o.Addr = ln.Addr().String()
