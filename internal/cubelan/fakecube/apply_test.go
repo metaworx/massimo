@@ -163,14 +163,16 @@ func TestApplyBoost(t *testing.T) {
 	if st[0x0a0203].Mode != cube.ModeBoost || *st[0x0a0203].ValvePct != 80 || st[0x0a0201].Mode != cube.ModeBoost {
 		t.Fatalf("boost: %+v %+v", st[0x0a0203], st[0x0a0201])
 	}
+	// Each device's boost ends on its own timer, as on a real Cube, so the
+	// test waits until neither is boosting any more.
 	deadline := time.Now().Add(3 * time.Second)
 	for {
 		st = c.states()
-		if st[0x0a0203].Mode == cube.ModeAuto {
+		if st[0x0a0203].Mode != cube.ModeBoost && st[0x0a0201].Mode != cube.ModeBoost {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("the boost did not end: %+v", st[0x0a0203])
+			t.Fatalf("the boost did not end: %+v %+v", st[0x0a0203], st[0x0a0201])
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
