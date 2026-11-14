@@ -46,7 +46,7 @@ func TestPreferencesRoutes(t *testing.T) {
 	if code, text := callAPI(t, ts, "GET", prefs+"/ui", owner, ""); code != 200 || strings.Contains(text, "20") {
 		t.Fatalf("the operator's write reached the owner's: %s", text)
 	}
-	for _, role := range []string{store.RoleGuest, store.RoleIntegration} {
+	for _, role := range []string{store.RoleGuest} {
 		tok := userToken(t, st, "u-"+role, role)
 		if code, text := callAPI(t, ts, "PUT", prefs+"/ui", tok, `{"poll":20}`); code != 403 || errorOf(text) != `capability "preferences" required` {
 			t.Errorf("%s's put: %d %s", role, code, text)

@@ -242,7 +242,9 @@ The default roles and their sets are those of docs/store.md section 6:
 restore and the restart,
 `operator` runs the heating, locks, configures, discovers and takes backups,
 `guest` is `operator` without the lock, backups, discovery and preferences,
-`viewer` reads, `integration` reads, sets, locks and configures.
+`viewer` reads, and `integration`, fixed like `owner`, is the role of the
+registered integrations and their users and the ceiling of their calls
+(docs/store.md section 6); a regular user is never given it.
 A role's set can be changed, a role renamed, created and disabled,
 and a capability disabled for every role but `owner`,
 through the routes of `/api/v1/roles` and `/api/v1/capabilities`.

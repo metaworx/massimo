@@ -6,7 +6,9 @@ package store
 // Roles and capabilities (docs/store.md section 6): a role is a set of
 // capability keys, seeded by the first migration for the six default
 // roles; owner has every capability by code and cannot be changed,
-// disabled or removed. The capability keys themselves are the server's
+// disabled or removed. integration is fixed as well, at the ceiling of
+// every call through an integration (migration 0021): it is the role of
+// integrations and their users, and never changes. The capability keys themselves are the server's
 // (internal/server/auth.go); the store keeps what it is given.
 
 import (
@@ -29,6 +31,15 @@ const (
 	RoleViewer      = "viewer"
 	RoleIntegration = "integration"
 )
+
+// Fixed reports whether a role can never change: owner, and integration,
+// the ceiling of the calls through an integration.
+func Fixed(key string) bool { return key == RoleOwner || key == RoleIntegration }
+
+// RoleIntegrationV0 is the role migration 0021 gave the users the role
+// integration had before it became fixed: an ordinary role with their
+// set, "integration (before 1.0)".
+const RoleIntegrationV0 = "integration-v0"
 
 // Errors of the roles.
 var (
@@ -188,12 +199,12 @@ func (s *Store) AddRole(ctx context.Context, r Role, by int64) (Role, error) {
 }
 
 // UpdateRole changes a role's Name and Capabilities with change, in one
-// transaction; owner is ErrImmutable.
+// transaction; owner and integration are ErrImmutable.
 func (s *Store) UpdateRole(ctx context.Context, key string, change func(*Role) error, by int64) (Role, error) {
 	if err := s.writable(); err != nil {
 		return Role{}, err
 	}
-	if key == RoleOwner {
+	if Fixed(key) {
 		return Role{}, fmt.Errorf("%w: %s", ErrImmutable, key)
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -225,13 +236,14 @@ func (s *Store) UpdateRole(ctx context.Context, key string, change func(*Role) e
 	return out, err
 }
 
-// SetRoleDisabled disables or enables a role; owner is ErrImmutable. A
+// SetRoleDisabled disables or enables a role; owner and integration are
+// ErrImmutable. A
 // disabled role's users keep their login and are refused everything.
 func (s *Store) SetRoleDisabled(ctx context.Context, key string, disabled bool, by int64) error {
 	if err := s.writable(); err != nil {
 		return err
 	}
-	if key == RoleOwner {
+	if Fixed(key) {
 		return fmt.Errorf("%w: %s", ErrImmutable, key)
 	}
 	res, err := s.db.ExecContext(ctx, `UPDATE roles SET disabled = ?, updated_at = ?, updated_by = ?, origin = ?, version = version + 1 WHERE key = ? AND deleted_at IS NULL`,

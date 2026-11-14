@@ -557,12 +557,34 @@ CREATE TABLE auth_providers (                   -- migration 0016
     origin        TEXT    NOT NULL DEFAULT ''
 );
 
-CREATE TABLE user_identities (                  -- migration 0016
+CREATE TABLE integrations (                     -- migration 0021
+    id               INTEGER PRIMARY KEY,
+    uuid             TEXT    NOT NULL UNIQUE,
+    kind             TEXT    NOT NULL,                -- homeassistant
+    key              TEXT    NOT NULL,                -- lower case, in its users' names
+    name             TEXT    NOT NULL DEFAULT '',     -- the installation's name
+    instance_id      TEXT    NOT NULL DEFAULT '',     -- the installation id the owner accepted
+    pending_instance TEXT    NOT NULL DEFAULT '',     -- one seen and not accepted
+    url              TEXT    NOT NULL DEFAULT '',
+    app_version      TEXT    NOT NULL DEFAULT '',
+    max_caps         TEXT    NOT NULL DEFAULT '[]',   -- JSON: the key's maximum, within the role integration
+    user_id          INTEGER REFERENCES users (id),   -- its own user, holding its key
+    system_user_id   INTEGER REFERENCES users (id),   -- its user "system"
+    state            TEXT    NOT NULL DEFAULT 'pending',  -- pending, active, disabled, refused
+    request_code     TEXT    NOT NULL DEFAULT '',
+    request_expires  TEXT,
+    request_remote   TEXT    NOT NULL DEFAULT '',
+    key_issued_at    TEXT
+    -- and created_at, updated_at, updated_by, version, deleted_at, origin
+);
+
+CREATE TABLE user_identities (                  -- migration 0016, made again by 0021
     id           INTEGER PRIMARY KEY,
     uuid         TEXT    NOT NULL UNIQUE,
     user_id      INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
-    provider_id  INTEGER NOT NULL REFERENCES auth_providers (id) ON DELETE CASCADE,
-    subject      TEXT,                          -- the provider's sub; NULL until bound
+    provider_id  INTEGER REFERENCES auth_providers (id) ON DELETE CASCADE,  -- an OIDC provider's, or
+    integration_id INTEGER REFERENCES integrations (id) ON DELETE CASCADE,  -- an integration's: exactly one set
+    subject      TEXT,                          -- the provider's sub, the integration's user id or system; NULL until bound
     email        TEXT    NOT NULL DEFAULT '',   -- lower case
     created_at   TEXT    NOT NULL,
     created_by   INTEGER REFERENCES users (id),
@@ -570,9 +592,13 @@ CREATE TABLE user_identities (                  -- migration 0016
     last_used_at TEXT,
     name         TEXT    NOT NULL DEFAULT '',   -- migration 0019: at the provider, at the last sign-in or link
     username     TEXT    NOT NULL DEFAULT '',   -- preferred_username, likewise
-    groups       TEXT    NOT NULL DEFAULT '[]'  -- a JSON array of strings, likewise
+    groups       TEXT    NOT NULL DEFAULT '[]', -- a JSON array of strings, likewise
+    own_user_id  INTEGER REFERENCES users (id), -- 0021, an integration's: the user made at its first call, kept when linked
+    system_generated INTEGER NOT NULL DEFAULT 0,-- 0021: the integration's own system user (Home Assistant's Supervisor, …)
+    last_level   TEXT    NOT NULL DEFAULT ''    -- 0021: the level of its last call, for display
 );
--- unique (provider_id, subject) where bound, (provider_id, email) where not
+-- unique (provider_id, subject) where bound, (provider_id, email) where not,
+-- (integration_id, subject) for an integration's
 ```
 
 Notes on the tables:
@@ -990,6 +1016,7 @@ The capabilities, what each allows, and the routes it guards:
 | `reboot` | reboot the computer the server runs on, where its owner switched that on | `GET`/`POST`/`DELETE /api/v1/reboot` |
 | `audit` | read the audit | `GET /api/v1/audit` |
 | `auth` | the OpenID Connect providers users sign in through; seeded for no role | `GET`/`POST /api/v1/providers`, `PUT`/`DELETE /api/v1/providers/{key}` |
+| `integrations` | the registered integrations: requests, approval, their maximum, their users and links (migration 0021) | `/api/v1/integrations…` |
 
 The default roles, as seeded.
 `owner` has every capability.
@@ -997,20 +1024,22 @@ The default roles, as seeded.
 | Capability | `manager` | `operator` | `guest` | `viewer` | `integration` |
 |---|---|---|---|---|---|
 | `read` | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `preferences` | ✓ | ✓ | | ✓ | |
+| `preferences` | ✓ | ✓ | | ✓ | ✓ |
 | `setpoint` | ✓ | ✓ | ✓ | | ✓ |
 | `lock` | ✓ | ✓ | | | ✓ |
 | `configure` | ✓ | ✓ | ✓ | | ✓ |
-| `rename` | ✓ | | | | |
-| `structure` | ✓ | | | | |
-| `pair` | ✓ | | | | |
-| `discover` | ✓ | ✓ | | | |
-| `backup` | ✓ | ✓ | | | |
-| `restore` | ✓ | | | | |
-| `guests` | ✓ | | | | |
+| `rename` | ✓ | | | | ✓ |
+| `structure` | ✓ | | | | ✓ |
+| `pair` | ✓ | | | | ✓ |
+| `discover` | ✓ | ✓ | | | ✓ |
+| `backup` | ✓ | ✓ | | | ✓ |
+| `restore` | ✓ | | | | ✓ |
+| `guests` | ✓ | | | | ✓ |
 | `passwords` | ✓ | | | | |
-| `restart` | ✓ | | | | |
-| `users`, `roles`, `roles.disable`, `capabilities`, `cubes`, `cubes.reboot`, `settings`, `update`, `reboot`, `audit`, `auth` | | | | | |
+| `restart` | ✓ | | | | ✓ |
+| `integrations` | ✓ | | | | |
+| `cubes`, `cubes.reboot`, `settings`, `update`, `reboot`, `audit` | | | | | ✓ |
+| `users`, `roles`, `roles.disable`, `capabilities`, `auth` | | | | | |
 
 So `manager` is `operator` plus guests, pairing, names, structure, restore,
 the server's restart (migration 0006, 2026-11-07)
@@ -1023,18 +1052,25 @@ and the owner gives it to a role where that is wanted;
 `operator` runs the heating, locks, configures, discovers and takes backups;
 `guest` is `operator` without the lock, backups, discovery and preferences;
 `viewer` reads;
-`integration` is what a home automation needs and nothing it does not:
-it reads, sets, locks and configures, so that Home Assistant writes
-week programmes as the web UI does (migration 0012, 2026-11-09,
-where the role still held exactly read, setpoint and lock:
-an owner who had changed it keeps the set chosen).
+`integration` is fixed, as `owner` is (migration 0021, 2026-11-14,
+AP IntegrationUsers): it is the role of the registered integrations and
+of their users, and the ceiling of every call through an integration
+("Integrations", below). It holds every capability but those that manage
+people, sign-in and the integrations themselves (`users`, `passwords`,
+`roles`, `roles.disable`, `capabilities`, `auth`, `integrations`), so that
+an integration can never widen its own users; each integration's maximum
+narrows it further. It cannot be changed, disabled or given to a regular
+user. Its users before 0021, API keys made by hand for an integration,
+moved to the ordinary role `integration-v0`, "integration (before 1.0)",
+with exactly the set they had (read, setpoint, lock, and configure where
+migration 0012 gave it).
 Moves and deletions (`structure`) go with the names to `manager`,
 because a move changes the house as a name does; if `operator` should keep them,
 that is one row of the seed.
 `preferences` keeps one's settings and colour schemes on the server (stage (c));
 a guest has it not, so a guest's settings stay on its devices,
 where the defaults apply anyway (decided 2026-11-06),
-and `integration` has no page to keep settings for.
+and an integration's users keep theirs if it ever shows them a page.
 A user changes only users whose role has no capability its own lacks,
 and gives only such roles: an owner changes everyone,
 nobody but an owner changes an owner or gives the role `owner`,

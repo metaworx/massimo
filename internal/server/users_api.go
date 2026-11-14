@@ -227,6 +227,9 @@ func (a access) maySetPassword(u store.User) bool {
 // mayAssign says whether a principal may give a role: any it outranks
 // with users, guest alone with guests.
 func (a access) mayAssign(role string) bool {
+	if role == store.RoleIntegration {
+		return false // an integration's and its users' alone (integrations.go)
+	}
 	return (a.all || a.guests && role == store.RoleGuest) && a.ranks(role)
 }
 
@@ -245,6 +248,8 @@ func (a access) rankFail(role, capability string) error {
 // assignFail is the refusal of a role the principal may not give.
 func (a access) assignFail(role string) error {
 	switch {
+	case role == store.RoleIntegration:
+		return fail(http.StatusForbidden, "the role integration is an integration's and its users' alone")
 	case !a.ranks(role) && role == store.RoleOwner:
 		return fail(http.StatusForbidden, "only an owner gives the role owner")
 	case !a.ranks(role):
@@ -350,7 +355,7 @@ func (s *Server) postUser(w http.ResponseWriter, r *http.Request) error {
 			u.Role = store.RoleViewer
 		}
 		if a := s.accessOf(ctx, p, ""); !a.mayAssign(u.Role) {
-			if !a.ranks(u.Role) {
+			if !a.ranks(u.Role) || u.Role == store.RoleIntegration {
 				return a.assignFail(u.Role)
 			}
 			return fail(http.StatusForbidden, "capability %q required to create a user with the role %s", "users", u.Role)

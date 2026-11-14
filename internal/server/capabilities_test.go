@@ -26,7 +26,7 @@ var roleSets = map[string][]string{
 	store.RoleOperator:    {"read", "preferences", "setpoint", "lock", "configure", "discover", "backup"},
 	store.RoleGuest:       {"read", "setpoint", "configure"},
 	store.RoleViewer:      {"read", "preferences"},
-	store.RoleIntegration: {"read", "setpoint", "lock", "configure"},
+	store.RoleIntegration: integrationCeiling,
 }
 
 // storeOptions are the options of a server over a store in dir with a

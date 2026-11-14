@@ -53,7 +53,8 @@ func TestMigration12(t *testing.T) {
 				}
 			}
 			s11.Close()
-			s := open(t, dir)
+			s := openAt(t, dir, 12) // 0021 sets the role at the ceiling
+
 			if got := integrationCaps(t, s); !slices.Equal(got, tc.want) {
 				t.Fatalf("integration has %v, want %v", got, tc.want)
 			}

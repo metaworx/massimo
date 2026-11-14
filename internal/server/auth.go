@@ -65,7 +65,17 @@ const (
 var capabilities = []string{
 	"read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore",
 	"guests", "users", "passwords", "roles", "roles.disable", "capabilities", "cubes", "cubes.reboot", "settings", "update", "restart", "reboot", "audit",
-	"auth",
+	"auth", "integrations",
+}
+
+// integrationCeiling is the fixed role integration's set (migration 0021):
+// every capability but those that manage people, sign-in and the
+// integrations themselves, so that an integration can never widen its
+// own users. It bounds every call through an integration
+// (docs/api-v1.md, "Integrations"); guests are an integration's to manage.
+var integrationCeiling = []string{
+	"read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore",
+	"guests", "cubes", "cubes.reboot", "settings", "update", "restart", "reboot", "audit",
 }
 
 // Two more values a route may be registered with, which no role holds:
