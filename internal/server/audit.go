@@ -375,6 +375,12 @@ func (s *Server) endAudit(ctx context.Context, a *auditInfo, remote string) {
 			detail["error"] = strings.TrimSpace(a.w.answer.String())
 		}
 	}
+	if a.p != nil && a.p.integration != nil {
+		detail["via"] = a.p.integration.Key
+		if f := a.p.actsFor; f != nil {
+			detail["for"] = map[string]any{"id": f.Subject, "name": f.Name, "level": f.LastLevel}
+		}
+	}
 	raw, _ := json.Marshal(detail)
 	if a.commandID != 0 {
 		// The command's steps are written first, so that whoever reads

@@ -25,6 +25,7 @@ func (s *Server) featuresOf() map[string]string {
 		f["idempotency"] = "1.0"   // Idempotency-Key, kept with the command
 		f["commands"] = "1.0"      // GET /api/v1/commands/{id}, command ids in answers
 		f["proxy_virtual"] = "1.0" // the Cube option proxy_virtual, kept in the store
+		f["integration"] = "1.0"   // registered integrations acting for their users, X-MassimoHA-On-Behalf-Of
 	}
 	return f
 }

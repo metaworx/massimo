@@ -511,3 +511,123 @@ func (s *Store) addUserTx(ctx context.Context, tx *sql.Tx, u User, by int64) (Us
 	u.UUID = uuid
 	return u, nil
 }
+
+// IntegrationIdentity is one of an integration's users: an identity of
+// user_identities whose subject is the user's id at the integration.
+type IntegrationIdentity struct {
+	ID              int64
+	UUID            string
+	IntegrationID   int64
+	Subject         string // the user's id at the integration, or "system"
+	Name            string // its name there, from its last call
+	UserID          int64  // the user it acts as: OwnUserID, or the Massimo user it is linked to
+	OwnUserID       int64  // the user made at its first call
+	SystemGenerated bool
+	LastLevel       string
+	CreatedAt       time.Time
+	LastUsedAt      time.Time
+}
+
+// Linked reports whether the identity acts as a Massimo user of its own.
+func (i IntegrationIdentity) Linked() bool { return i.UserID != i.OwnUserID }
+
+const integrationIdentityColumns = `id, uuid, integration_id, coalesce(subject, ''), name, user_id, coalesce(own_user_id, user_id), system_generated,
+	last_level, created_at, last_used_at`
+
+func scanIntegrationIdentity(row scanner) (IntegrationIdentity, error) {
+	var i IntegrationIdentity
+	var created, used sql.NullString
+	if err := row.Scan(&i.ID, &i.UUID, &i.IntegrationID, &i.Subject, &i.Name, &i.UserID, &i.OwnUserID, &i.SystemGenerated,
+		&i.LastLevel, &created, &used); err != nil {
+		return IntegrationIdentity{}, err
+	}
+	i.CreatedAt, i.LastUsedAt = parseTime(created), parseTime(used)
+	return i, nil
+}
+
+// IntegrationSeen is what a call through an integration says of its
+// user: its id there, its name, whether it is the integration's own
+// system user, and the level of the call.
+type IntegrationSeen struct {
+	Subject         string
+	Name            string
+	SystemGenerated bool
+	Level           string
+}
+
+// IntegrationUser finds the user a call through integration i acts for,
+// making it at its first call: an identity with a user of the role
+// integration, without a password, named "<key>.<the id's first 8
+// characters>" (longer where that name is taken). Its name, level and
+// time of use are kept current; a name only where the call brings one.
+// The subject "system" is the integration's user for the calls no user
+// started.
+func (s *Store) IntegrationUser(ctx context.Context, i Integration, seen IntegrationSeen) (IntegrationIdentity, error) {
+	if err := s.writable(); err != nil {
+		return IntegrationIdentity{}, err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return IntegrationIdentity{}, fmt.Errorf("store: integration user: %w", err)
+	}
+	defer tx.Rollback()
+	now := s.nowText()
+	id, err := scanIntegrationIdentity(tx.QueryRowContext(ctx, `SELECT `+integrationIdentityColumns+` FROM user_identities WHERE integration_id = ? AND subject = ?`,
+		i.ID, seen.Subject))
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		if seen.Subject == "system" {
+			return IntegrationIdentity{}, fmt.Errorf("%w: integration %s has no system user", ErrNoIntegration, i.Key)
+		}
+		own, err := s.integrationUserTx(ctx, tx, i, seen)
+		if err != nil {
+			return IntegrationIdentity{}, err
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO user_identities (uuid, user_id, integration_id, subject, name, own_user_id, system_generated,
+			last_level, created_at, bound_at, last_used_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			newUUID(), own.ID, i.ID, seen.Subject, seen.Name, own.ID, seen.SystemGenerated, seen.Level, now, now, now); err != nil {
+			return IntegrationIdentity{}, fmt.Errorf("store: integration user: %w", err)
+		}
+	case err != nil:
+		return IntegrationIdentity{}, fmt.Errorf("store: integration user: %w", err)
+	default:
+		name := id.Name
+		if seen.Name != "" && seen.Name != id.Name {
+			name = seen.Name
+			if _, err := tx.ExecContext(ctx, `UPDATE users SET display_name = ?, updated_at = ?, version = version + 1 WHERE id = ?`, name, now, id.OwnUserID); err != nil {
+				return IntegrationIdentity{}, fmt.Errorf("store: integration user: %w", err)
+			}
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE user_identities SET name = ?, last_level = ?, system_generated = ?, last_used_at = ? WHERE id = ?`,
+			name, seen.Level, seen.SystemGenerated || id.SystemGenerated, now, id.ID); err != nil {
+			return IntegrationIdentity{}, fmt.Errorf("store: integration user: %w", err)
+		}
+	}
+	out, err := scanIntegrationIdentity(tx.QueryRowContext(ctx, `SELECT `+integrationIdentityColumns+` FROM user_identities WHERE integration_id = ? AND subject = ?`,
+		i.ID, seen.Subject))
+	if err != nil {
+		return IntegrationIdentity{}, fmt.Errorf("store: integration user: %w", err)
+	}
+	return out, tx.Commit()
+}
+
+// integrationUserTx makes the user of an integration's user's first call,
+// its name the integration's key and as much of the id as makes it free.
+func (s *Store) integrationUserTx(ctx context.Context, tx *sql.Tx, i Integration, seen IntegrationSeen) (User, error) {
+	short := strings.ToLower(seen.Subject)
+	for n := 8; ; n += 4 {
+		name := i.Key + "." + short[:min(n, len(short))]
+		if err := s.nameFree(ctx, tx, name); err == nil {
+			display := seen.Name
+			if display == "" {
+				display = seen.Subject
+			}
+			return s.addUserTx(ctx, tx, User{Name: name, DisplayName: display, Role: RoleIntegration}, 0)
+		} else if !errors.Is(err, ErrUserExists) {
+			return User{}, err
+		}
+		if n >= len(short) {
+			return User{}, fmt.Errorf("%w: no free name for %s's user %s", ErrUserExists, i.Key, seen.Subject)
+		}
+	}
+}

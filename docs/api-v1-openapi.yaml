@@ -3807,6 +3807,25 @@ components:
           items: {type: string}
         setup: {type: boolean, description: The first owner can be created from here}
         token: {$ref: "#/components/schemas/Token"}
+        integration:
+          type: object
+          nullable: true
+          description: "The registered integration whose key it is; null for any other key"
+          properties:
+            uuid: {type: string}
+            key: {type: string}
+            name: {type: string}
+            state: {type: string}
+            instance_id: {type: string}
+        acts_for:
+          type: object
+          description: "With X-MassimoHA-On-Behalf-Of: the integration's user the call acts for; capabilities is then what the chain leaves"
+          properties:
+            id: {type: string}
+            name: {type: string}
+            level: {type: string, enum: [view, control, admin]}
+            linked: {type: boolean}
+            system_generated: {type: boolean}
     RestoreStep:
       type: object
       description: One command of a restore plan

@@ -358,6 +358,7 @@ without a store (`serve -addr`) the features that need one are left out.
 | `program_etag` | the programme's tag, `If-Match`, `412`, `pending`, the config event's `changed` and `etag`, `GET …/devices/{rf}/program` | no | the release after 0.15.0-alpha.1 |
 | `boost` | `{"mode": "boost"}` on the setpoint routes | no | the release after 0.15.0-alpha.1 |
 | `proxy_virtual` | the Cube option `proxy_virtual` | yes | the release after 0.15.0-alpha.1 |
+| `integration` | registered integrations (`/api/v1/integrations`) acting for their users (`X-MassimoHA-On-Behalf-Of`), `integration` and `acts_for` in `/api/v1/me` | yes | the release after 0.15.0-alpha.1 |
 
 What a key may do is not here but in `GET /api/v1/me`.
 `node_id` is the box's identifier from its store (`node.id`,
@@ -802,6 +803,65 @@ its users, links and maximum kept for a request from the same installation.
 A call that came with another installation id than the accepted one is
 refused and the id recorded as `pending_instance`, which
 `POST …/accept-instance` accepts.
+
+### Acting for an integration's users
+
+A registered integration's key with the header
+
+```
+X-MassimoHA-On-Behalf-Of: id=<the user's id, 32 hex>; level=control; name*=UTF-8''J%C3%BCrg; instance=<installation id, 32 hex>
+```
+
+acts for one of the integration's users.
+
+- **The header's parameters:**
+  - `id` is the user's id at the integration (Home Assistant's `user.id`),
+    or `system` for a call no user started (an automation);
+  - `level` is the user's level for this call: `view`, `control` or `admin`;
+  - `instance` is the installation id;
+  - `name` (quoted or not) or `name*` (RFC 8187, for any character)
+    is the user's name there,
+    shown in the users list and updated when it changes;
+  - `system_generated`, alone,
+    marks one of the integration's own system users
+    (Home Assistant's Supervisor, Cloud, …).
+- **The user** is made at its first call,
+  with the role `integration` and no password,
+  named `<integration key>.<the id's first 8 characters>`
+  (longer where two ids begin alike).
+  Several of the integration's users may be linked to one Massimo user.
+- **What the call may do** is what every link of the chain allows:
+  1. the integration user's role, `integration` at first,
+     narrowed by the owner where wanted;
+  2. the role `integration`, the ceiling of every call through an integration;
+  3. the Massimo user it is linked to, where it is;
+  4. the integration's maximum, `max_caps`;
+  5. the level: `view` reads, `control` also sets, locks and configures,
+     and `admin` adds nothing of its own.
+- **Without the header** the key acts as the integration itself:
+  its role and its maximum (an integration's own polls and stream).
+- **The audit and the log** name the user the call acted as,
+  with `"via"`, the integration's key,
+  and `"for"`, the integration's user (id, name, level).
+
+A refusal says which link refused, in `code`:
+
+| Status | `code` | Why |
+|--------|--------|-----|
+| 400 | `bad_header` | the header says something it may not |
+| 403 | `not_integration` | the header with a key that is no registered integration's |
+| 403 | `integration_disabled` | the integration is disabled or revoked |
+| 403 | `instance_pending` | another installation id than the accepted one; recorded as `pending_instance` for the owner to accept |
+| 403 | `user_disabled` | the integration's user, its linked user or one of their roles is disabled |
+| 403 | `forbidden` | a capability the chain did not leave |
+
+`GET /api/v1/me` answers, for an integration's key, `integration`
+(`uuid`, `key`, `name`, `state`, `instance_id`, null for any other key),
+with the header `acts_for` (`id`, `name`, `level`, `linked`,
+`system_generated`), and `capabilities`, what the chain leaves.
+So an integration knows before naming a user whether its key is a
+registered integration's, and a key typed by hand keeps working without
+the header.
 
 ### Providers: /api/v1/providers
 

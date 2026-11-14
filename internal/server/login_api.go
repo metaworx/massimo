@@ -78,6 +78,12 @@ type meView struct {
 	Setup bool `json:"setup,omitempty"`
 	// Token is the one the caller presented.
 	Token *tokenView `json:"token,omitempty"`
+	// Integration is the registered integration whose key it is, null
+	// for any other key; ActsFor the integration's user a call with
+	// X-MassimoHA-On-Behalf-Of acts for (onbehalf.go). Capabilities is
+	// then what the chain leaves.
+	Integration *meIntegration `json:"integration"`
+	ActsFor     *meActsFor     `json:"acts_for,omitempty"`
 }
 
 func optTime(t time.Time) *time.Time {
@@ -363,5 +369,33 @@ func (s *Server) meOf(r *http.Request, p *principal) (meView, error) {
 	u := viewUser(p.user, invitedBy)
 	tok := viewToken(p.token)
 	me.User, me.Role, me.Capabilities, me.Token = &u, &roleRef{Key: role.Key, Name: role.Name, Disabled: role.Disabled}, caps, &tok
+	if i := p.integration; i != nil {
+		me.Integration = &meIntegration{UUID: i.UUID, Key: i.Key, Name: i.Name, State: i.State, InstanceID: i.InstanceID}
+		me.Capabilities = integrationCaps(p)
+		if me.Capabilities == nil {
+			me.Capabilities = []string{}
+		}
+		if f := p.actsFor; f != nil {
+			me.ActsFor = &meActsFor{ID: f.Subject, Name: f.Name, Level: f.LastLevel, Linked: f.Linked(), SystemGenerated: f.SystemGenerated}
+		}
+	}
 	return me, nil
+}
+
+// meIntegration is a key's integration in GET /api/v1/me.
+type meIntegration struct {
+	UUID       string `json:"uuid"`
+	Key        string `json:"key"`
+	Name       string `json:"name"`
+	State      string `json:"state"`
+	InstanceID string `json:"instance_id"`
+}
+
+// meActsFor is the integration's user a call acts for in GET /api/v1/me.
+type meActsFor struct {
+	ID              string `json:"id"`
+	Name            string `json:"name,omitempty"`
+	Level           string `json:"level"`
+	Linked          bool   `json:"linked"`
+	SystemGenerated bool   `json:"system_generated,omitempty"`
 }

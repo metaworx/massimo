@@ -32,18 +32,18 @@ func featuresAt(t *testing.T, ts *httptest.Server) map[string]string {
 func TestHealthzFeatures(t *testing.T) {
 	_, ts, _, _ := startRooms(t) // with a store
 	with := featuresAt(t, ts)
-	for _, name := range []string{"event_ids", "idempotency", "commands", "vwt", "program_etag", "boost", "proxy_virtual"} {
+	for _, name := range []string{"event_ids", "idempotency", "commands", "vwt", "program_etag", "boost", "proxy_virtual", "integration"} {
 		if with[name] != "1.0" {
 			t.Errorf("with a store: %s = %q, want 1.0", name, with[name])
 		}
 	}
-	if len(with) != 7 {
+	if len(with) != 8 {
 		t.Errorf("with a store: %v", with)
 	}
 
 	_, bare, _ := start(t, "") // without one
 	without := featuresAt(t, bare)
-	for _, name := range []string{"idempotency", "commands", "proxy_virtual"} {
+	for _, name := range []string{"idempotency", "commands", "proxy_virtual", "integration"} {
 		if _, ok := without[name]; ok {
 			t.Errorf("without a store: %s listed", name)
 		}

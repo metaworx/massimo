@@ -130,3 +130,34 @@ func TestIntegrationRequestsBounded(t *testing.T) {
 		t.Fatalf("a bad installation id: %v", err)
 	}
 }
+
+// An integration's users are made at their first call, named by the
+// integration's key and their id, longer where two ids begin alike; a
+// later call updates the name and the level.
+func TestIntegrationUsers(t *testing.T) {
+	s := open(t, t.TempDir())
+	ctx := context.Background()
+	req, _ := s.AddIntegrationRequest(ctx, haRequest(instanceA), "AAAAAA")
+	i, _ := s.ApproveIntegration(ctx, req.UUID, nil, "", 0)
+	a, err := s.IntegrationUser(ctx, i, IntegrationSeen{Subject: "12345678aaaaaaaaaaaaaaaaaaaaaaaa", Name: "Anna", Level: "view"})
+	if err != nil || a.Linked() || a.Name != "Anna" {
+		t.Fatalf("Anna %+v %v", a, err)
+	}
+	b, err := s.IntegrationUser(ctx, i, IntegrationSeen{Subject: "12345678bbbbbbbbbbbbbbbbbbbbbbbb", Name: "Bruno", Level: "control", SystemGenerated: true})
+	if err != nil || !b.SystemGenerated {
+		t.Fatalf("Bruno %+v %v", b, err)
+	}
+	ua, _, _ := s.UserByID(ctx, a.OwnUserID)
+	ub, _, _ := s.UserByID(ctx, b.OwnUserID)
+	if ua.Name != "casa-leone.12345678" || ub.Name != "casa-leone.12345678bbbb" || ua.Role != RoleIntegration || ua.DisplayName != "Anna" {
+		t.Fatalf("names %q %q %+v", ua.Name, ub.Name, ua)
+	}
+	again, _ := s.IntegrationUser(ctx, i, IntegrationSeen{Subject: "12345678aaaaaaaaaaaaaaaaaaaaaaaa", Name: "Anna R.", Level: "admin"})
+	ua, _, _ = s.UserByID(ctx, a.OwnUserID)
+	if again.ID != a.ID || again.Name != "Anna R." || again.LastLevel != "admin" || ua.DisplayName != "Anna R." {
+		t.Fatalf("again %+v, user %+v", again, ua)
+	}
+	if sys, err := s.IntegrationUser(ctx, i, IntegrationSeen{Subject: "system", Level: "admin"}); err != nil || sys.UserID != i.SystemUserID {
+		t.Fatalf("system %+v %v", sys, err)
+	}
+}
