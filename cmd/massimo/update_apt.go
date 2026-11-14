@@ -37,19 +37,25 @@ import (
 
 // The apt commands, run as they are: the massimo source's lists fetched
 // (the other lists kept, so that apt still knows the dependencies), then
-// massimo upgraded if it is installed, keeping a conffile the owner
-// changed, and waiting for the dpkg lock up to two minutes.
+// massimo and its keyring package upgraded where they are installed, so
+// that a new or rotated key arrives as any update does, keeping a
+// conffile the owner changed, and waiting for the dpkg lock up to two
+// minutes; aptKeyringArgs upgrades the keyring package alone.
 var (
 	aptUpdateArgs = []string{"update", "-q",
 		"-o", "Dir::Etc::sourcelist=" + install.AptSource,
 		"-o", "Dir::Etc::sourceparts=-",
 		"-o", "APT::Get::List-Cleanup=0"}
-	aptInstallArgs = []string{"install", "-y", "-q", "--only-upgrade",
+	aptUpgradeOptions = []string{"install", "-y", "-q", "--only-upgrade",
 		"-o", "Dpkg::Options::=--force-confdef",
 		"-o", "Dpkg::Options::=--force-confold",
-		"-o", "DPkg::Lock::Timeout=120",
-		"massimo"}
+		"-o", "DPkg::Lock::Timeout=120"}
+	aptInstallArgs = append(slices.Clone(aptUpgradeOptions), "massimo", aptKeyringPackage)
+	aptKeyringArgs = append(slices.Clone(aptUpgradeOptions), aptKeyringPackage)
 )
+
+// aptKeyringPackage is the package that carries the repository's keys.
+const aptKeyringPackage = "massimo-archive-keyring"
 
 // aptRun runs apt-get or dpkg-query and returns what it printed; a
 // variable for the tests.
@@ -92,6 +98,9 @@ func aptUpdate(ctx context.Context, status func(update.Status), channel, health 
 	}
 	from = debTag(before)
 	status(update.Status{State: "checking", From: from, Channel: channel})
+	if err := aptRollingKey(ctx, channel); err != nil {
+		return fail("", err)
+	}
 	restore, switched, err := aptSwitch(channel)
 	if err != nil {
 		return fail("", err)
@@ -140,12 +149,37 @@ func aptUpdate(ctx context.Context, status func(update.Status), channel, health 
 	return nil
 }
 
+// aptRollingKey brings the rolling key before a switch to a rolling
+// suite needs it: where channel is devel or nightly, the source on
+// another suite and the rolling keyring missing, it fetches the source's
+// current suite and upgrades the keyring package from there. aptSwitch
+// then checks for the key again.
+func aptRollingKey(ctx context.Context, channel string) error {
+	if !update.Rolling(channel) {
+		return nil
+	}
+	if _, err := os.Stat(aptRollingKeyring); err == nil {
+		return nil
+	}
+	if cur, err := install.AptSuite(aptSourcePath); err != nil || cur == channel {
+		return nil // aptSwitch reports a source it cannot read
+	}
+	if err := aptGetUpdate(ctx); err != nil {
+		return err
+	}
+	if out, err := aptRun(ctx, "apt-get", aptKeyringArgs...); err != nil {
+		return aptError("apt-get install "+aptKeyringPackage, out, err)
+	}
+	return nil
+}
+
 // aptSwitch points the massimo source at the suite of channel where that
 // is an update channel and not the source's suite already, and returns
 // what puts it back and the suite it named; "" where it changed nothing.
-// A rolling suite needs the keyring package's rolling key, which a box
-// gets with a newer massimo-archive-keyring; a source the README did not
-// set up is left to its owner, and the error names the line to change.
+// A rolling suite needs the keyring package's rolling key, which
+// aptRollingKey has upgraded the package for where the source's suite
+// had it; a source the README did not set up is left to its owner, and
+// the error names the line to change.
 func aptSwitch(channel string) (restore func() error, was string, err error) {
 	none := func() error { return nil }
 	if !slices.Contains(update.Flavours, channel) {
@@ -161,8 +195,8 @@ func aptSwitch(channel string) (restore func() error, was string, err error) {
 	}
 	rolling := update.Rolling(channel)
 	if _, err := os.Stat(aptRollingKeyring); rolling && err != nil {
-		return none, "", fmt.Errorf("the suite %s is signed with the rolling key, which the installed massimo-archive-keyring does not carry (%s): sudo apt update && sudo apt install massimo-archive-keyring brings it once a suite has the newer package; %s stays on the suite %s",
-			channel, install.AptRollingKeyring, install.AptSource, cur)
+		return none, "", fmt.Errorf("the suite %s is signed with the rolling key, which %s does not carry (%s), even upgraded from the suite %s: that suite has no keyring package with it yet; %s stays on the suite %s",
+			channel, aptKeyringPackage, install.AptRollingKeyring, cur, install.AptSource, cur)
 	}
 	b, err := install.AptSwitch(old, channel, rolling)
 	if err != nil {
