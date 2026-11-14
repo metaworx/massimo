@@ -4133,6 +4133,14 @@ components:
       description: A Cube that answered discovery
       properties:
         serial: {type: string}
+        kind: {type: string, enum: [cube, proxy, unknown], description: "What answered: a Cube, a massimo proxy (also one at an announced server's address), or neither"}
+        serves: {type: string, description: "A proxy's: the serial of the Cube with its radio address, served here or found; absent where none is known"}
+        host:
+          type: object
+          description: "The massimo server that serves it, announced on the LAN: the one at a proxy's address, or the one a proxy of a Cube runs on; absent where none matched"
+          properties:
+            name: {type: string, description: Its instance name}
+            url: {type: string, description: "The url its announcement gives, else http(s)://<address>:<port>"}
         configured: {type: boolean}
         address: {type: string, description: "The IP it answered from, its own where a massimo proxy answers for it too"}
         mac: {type: string, description: From the host's ARP cache; absent when unknown}
