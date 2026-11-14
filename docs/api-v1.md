@@ -1176,6 +1176,12 @@ A configured Cube has the fields below;
 discovery has seen it:
 `found_address` is the host it answered from, which differs from `address`
 where the server connects through a proxy or to a fixed address the Cube has left.
+`problems` lists, where there are any, the Cube's visible devices with a problem,
+as `GET …/devices` shows them, each with its room's name (`room`):
+a transmit or link error, a low battery, a window open (with its `window` times);
+a client that shows every Cube's problems, such as the web UI's header,
+needs no other request.
+It is the server's last state, also while the Cube is not connected.
 A found Cube has only the fields shown: `address` is the IP it answered from,
 its own where a massimo proxy answers for it too (docs/proxy.md),
 and `proxies` the other addresses that answered for its serial in the latest run;
