@@ -1,4 +1,4 @@
-# AP CubeBadges v1.0: every Cube's signs and problems
+# AP CubeBadges v1.1: every Cube's signs and problems
 
 ## TL;DR
 
@@ -18,21 +18,37 @@ redraws. It builds on AP Signs.
   its badges on top; the green "connected" badge goes
 - drafts → kept across redraws; a stored value that changed meanwhile
   warns, with "Take theirs" (D59-A)
+- Blocks 1 to 6 are merged (#251). v1.1:
+  - the Cubes card's badges at every poll, one per link state;
+  - a Cube's panel in three groups (Info with the serial and copy icons,
+    Settings, the actions last);
+  - the found Cubes: an icon of their own in the header's pill, and one
+    fold in System settings, Cubes and Massimo proxies apart
 
 ### Blocks
 
 1. LinkApi: each Cube's link state with its reason, `found_address`;
-   the OpenAPI file, tests
+   the OpenAPI file, tests (done)
 2. ProblemsApi: each Cube's devices' problems and configuration
-   warnings in `GET /api/v1/cubes`; tests
+   warnings in `GET /api/v1/cubes`; tests (done)
 3. HeaderPill: the Cube choice's sign, the problems pill and its
-   grouped list, the cog group, the choice list's icons
-4. CubeCards: System settings → Cubes, closed and open
-5. Drafts: edits kept across redraws, the conflict warning
+   grouped list, the cog group, the choice list's icons (done)
+4. CubeCards: System settings → Cubes, closed and open (done)
+5. Drafts: edits kept across redraws, the conflict warning (done)
 6. Docs: `docs/ui.md`, `docs/api-v1.md`, the six languages, tests
+   (done)
+7. CardBadges: the card's badges drawn at every poll, a panel open or
+   not; one per link state (D92-A, D93-A); tests
+8. PanelGroups: a Cube's panel as Info, Settings and the actions, Info
+   with the serial and the IP and radio address copyable (D97-A); tests
+9. FoundCubes: the found Cubes' icon in the header's pill (A2), their
+   group in its list, System settings' list one fold with the settings
+   file's lines; Cubes and Massimo proxies apart, the host serving one a
+   link (D104-A); the found entries' kind in the API; tests, docs
 
-The six blocks are one pull request, stacked on AP Signs' until that
-one is merged.
+Blocks 1 to 6 were one pull request (#251); Blocks 7 to 9 are another,
+after AP CopyFacts (its copy component) and AP AddressCheck (the same
+Cubes code) are merged.
 
 ## Discussion
 
@@ -66,6 +82,33 @@ The owner's evaluation of 2026-11-13/14, in mock rounds 1 to 8 (the page
 
 `PLAN++ as recommended` on 2026-11-14.
 
+**v1.1.** The owner's look at the merged work and three rounds of
+evaluation on 2026-11-14 evening:
+
+- the Cubes card's badges were not drawn again while a Cube's panel was
+  open, and the card's "not connected" was red where a Cube's own sign
+  was amber; D92-A, the card's badges at every poll; D93-A, one badge per
+  link state, red "not connected", amber "connection held" or
+  rebooting;
+- a Cube's panel in three floating groups: Info first, Settings beside it
+  where there are two columns, else after it, the action buttons last;
+  the serial among the facts, the IP and radio address copyable with an
+  icon; Remove and Reboot keep their questions in place; Hidden devices
+  is part of Save, the Settings group's last field (D97-A: the actions
+  one row under both columns, pairing's progress under it);
+- the found Cubes: the line under the header goes, an icon of their own
+  in the header's pill, D103-A2, a cube with the count in a corner badge
+  (mock v10); System settings' list one fold, closed by default, with
+  the settings file's lines in a fold of their own, copied as a whole;
+  Cubes and Massimo proxies apart; D104-A, "Served by Massimo on
+  <host>", the host a link to the URL of its mDNS announcement; the text
+  rewritten (no settings file needed, no portal);
+- AP AddressCheck, another session's plan, adds `found_elsewhere` and
+  its warning to the same functions (`cubeSettingItems`, `cubeBadges`,
+  `renderCubes`, `fillCubeFacts`): v1.1 starts once it is merged.
+
+`PLAN+ as recommended` on 2026-11-14.
+
 ## Analysis
 
 **The Cubes' API** (`server.go` `cubeView`, `listCubes`). Each Cube has
@@ -96,6 +139,25 @@ disconnected, proxy failing, found; each Cube's: connected or
 disconnected, source, differs, proxy failing. `cubesPolled` redraws on
 each poll: a redraw while a field is being edited would take the
 edit, which is why the cards are not live today.
+
+**v1.1: the card's badges** (`cubes.js` `renderCubes`, `cubesPolled`):
+`renderCubes` draws the card's badges (served, not connected, proxy
+failing, found) and runs only while no panel is open; with one open,
+`cubesPolled` refreshes the panels alone. The "not connected" count is
+`bad` whatever the link; a Cube's own sign follows `LINK_SIGN`.
+
+**v1.1: the panel** (`cubePanel`, `partials/cube-panel.html`): today
+`.cube-cols` holds the facts table, the pairing section and the form,
+the reboot row after it; Remove is in the form's actions. Pairing shows
+its countdown and the joined devices under its button.
+
+**v1.1: the found Cubes.** `cubelan.Search` marks each answer `cube` or
+`proxy`, but the found list (`foundCube`, `discovery.go`) does not keep
+the mark; a proxy answers with its own proxy serial. `internal/announce`
+browses `_massimo._tcp` (`Browse`), each server with its addresses and
+the TXT's `url`. The header's `#cube-found` line and its link go; the
+pill (`renderCubeProblems`) takes the icon; System settings' list is
+`renderCubes`' `ul.cube-found-list` with `foundHints`.
 
 ## Implementation Plan
 
@@ -166,6 +228,54 @@ edit, which is why the cards are not live today.
 **Verification:** `make ui-test` whole, `go test ./...`, `make cross`,
 `gofmt -l .`, the three `go vet`, `GUIDELINES/shared/tools/check`.
 
+### Block 7: CardBadges
+
+- `cubes.js`: the card's badges drawn by `cubesPolled` at every poll,
+  a panel open or not, apart from the panels' redraw; "not connected"
+  counted by `LINK_SIGN`: red for a cross, amber "connection held" or
+  "rebooting" for a triangle.
+- Tests: a reconnect redraws the card's badge with a panel open; a held
+  link counts amber, a lost one red.
+
+**Verification:** `make ui-test` (`test_cubes.py`).
+
+### Block 8: PanelGroups
+
+- `partials/cube-panel.html`, `cubes.js` `cubePanel`: three groups,
+  `.cube-info` (the facts table with the serial; the IP and the radio
+  address with AP CopyFacts' copy icon), `.cube-settings` (the form,
+  Hidden devices last, then Save), `.cube-actions` (Pair a device, Reboot
+  the Cube, Remove) one row under both, pairing's progress under it;
+  Remove and Reboot keep their questions in place.
+- `style.css`: Info and Settings side by side where there is room, else
+  one after the other; the actions last.
+- Tests: the order at 1100 and 390 px, the copies, the questions.
+
+**Verification:** `make ui-test` (`test_cubes.py`, `test_system_layout.py`,
+`test_pairing.py`).
+
+### Block 9: FoundCubes
+
+- `discovery.go` `foundCube`: `kind` (`cube`, `proxy`) from the search's
+  answers; for a proxy, `serves` (the serial of the Cube it answers for,
+  where its radio address matches a found or served Cube's) and `host`
+  (the announcing server's name and `url`, matched by address from
+  `announce.Browse`, browsed at a search).
+- The header: `#cube-found` goes; `renderCubeProblems` adds the found
+  Cubes' icon (a cube with the count in a corner badge, A2) and a group
+  "Found on the network" last in its list.
+- System settings → Cubes: the found list one fold (`detailsPanel`),
+  closed by default, its head the icon, the title and the counts; open:
+  each Cube with Add, each proxy "Massimo proxy, serves <serial>, served
+  by Massimo on <host>" with the host a link; the text rewritten; "Lines
+  for the settings file" a closed fold with one copy icon.
+- `docs/api-v1.md`, the OpenAPI file (`kind`, `serves`, `host`); i18n;
+  tests: the kinds, the link, the fold, the copy.
+
+**Verification:** `make ui-test` whole, `make lan-test` (discovery), `go
+test ./...`, `make cross`, `gofmt -l .`, the three `go vet`,
+`GUIDELINES/shared/tools/check`.
+
 ## Proposed commit messages
 
 The registration, with the other plans of the same evaluation, a commit
@@ -179,7 +289,17 @@ Block 4, `feat(ui): A Cube's problems in one pill in System settings`;
 Block 5, `feat(ui): An edit of a Cube survives the live redraw`;
 Block 6, `docs(ui): The Cubes' signs and problems`.
 
+v1.1's revision is committed with the other plans of the same evaluation,
+a commit of its own on main. Its blocks:
+Block 7, `fix(ui): The Cubes card's badges follow every poll, one per link state`;
+Block 8, `feat(ui): A Cube's panel in three groups, its facts copyable`;
+Block 9, `feat(ui): The Cubes found on the network in the header's pill and one fold`.
+
 ## Change History
 
 - v1.0 (2026-11-14): the first revision, from the owner's evaluation of
   2026-11-13/14 and `PLAN++ as recommended`.
+- v1.1 (2026-11-14): Blocks 7 (CardBadges), 8 (PanelGroups) and 9
+  (FoundCubes), from the owner's look at the merged work and three
+  rounds of evaluation (D92-A, D93-A, D97-A, D103-A2, D104-A) and
+  `PLAN+ as recommended`; Blocks 1 to 6 marked done.
