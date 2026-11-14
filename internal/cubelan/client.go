@@ -574,9 +574,18 @@ func (c *Client) handle(m cube.Message) {
 	if c.beforeApply != nil {
 		c.beforeApply(m)
 	}
+	greeting := c.snap.inGreeting()
 	evs, err := c.snap.apply(m, time.Now())
-	if err != nil {
+	switch {
+	case errors.Is(err, ErrKeptAsReceived):
+		c.log.Warn("cube: a line it sent cannot be read; kept as received for the proxy and backups",
+			"addr", c.Address(), "type", string(m.Type), "error", err)
+	case err != nil:
 		c.log.Warn("bad message from cube", "type", string(m.Type), "error", err)
+	}
+	if greeting && m.Type == 'L' && c.snap.listsZero() {
+		c.log.Warn("cube: its device list has an entry at radio address 000000; it is no device, not shown and sent nothing",
+			"addr", c.Address())
 	}
 	if m.Type == 'H' {
 		c.noteBudget(c.snap.Hello())
