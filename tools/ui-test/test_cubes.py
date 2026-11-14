@@ -464,10 +464,23 @@ def test_cube_panel_pill(page, case):
                 c["problems"] = [{"rf_address": "0a0101", "type": "radiator_thermostat", "name": "Radiator", "room": "Kitchen",
                                   "serial": "MEQ0000101", "reported": True, "state": {"error": False, "battery_low": True, "link_error": False}}]
         route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes))
+    def fine(route):
+        # The fixture's window contact is open, which warns once the server
+        # has run five minutes (view.WindowWarnAfter): no device problems.
+        cubes = route.fetch().json()
+        for c in cubes:
+            if c.get("serial") == "KEQ0000100":
+                c["problems"] = []
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes))
     show_view(page, "system")
     head = page.locator(PANEL).locator(":scope > summary")
-    assert head.locator(".panel-badges .flag").count() == 1, "connected: the source badge alone, no connected badge"
-    assert head.locator(".cube-pill .problems").count() == 0, "nothing wrong: no pill"
+    page.route("**/api/v1/cubes", fine)
+    try:
+        page.evaluate("loadCubes()")
+        assert head.locator(".panel-badges .flag").count() == 1, "connected: the source badge alone, no connected badge"
+        assert wait_until(page, "!document.querySelector(\"%s > summary .cube-pill .problems\")" % PANEL, 5), "nothing wrong: no pill"
+    finally:
+        page.unroute("**/api/v1/cubes")
     page.route("**/api/v1/cubes", stale)
     try:
         page.evaluate("loadCubes()")
