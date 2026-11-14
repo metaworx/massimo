@@ -107,7 +107,7 @@ func (rt *runtime) setConfig(change func(*CubeConfig)) {
 // ("" waits for discovery).
 func (s *Server) newRuntime(c CubeConfig, addr string) *runtime {
 	opts := s.opts
-	rt := &runtime{evlog: s.opts.Logger, cfg: c, serial: strings.ToUpper(c.Serial), showHidden: opts.ShowHidden, last: map[cube.RFAddress]*view.State{}, subs: map[chan event]*subscriber{}, epoch: newEpoch(), push: map[chan struct{}]struct{}{},
+	rt := &runtime{evlog: s.opts.Logger, cfg: c, serial: strings.ToUpper(c.Serial), showHidden: opts.ShowHidden, last: map[cube.RFAddress]*view.State{}, subs: map[chan event]*subscriber{}, epoch: newEpoch(),
 		structure: make(chan struct{}, 1),
 		follow:    newFollowUp(opts.FollowUpDelays, opts.FollowUpReconnectGap, opts.RefreshInterval > 0)}
 	copts := cubelan.Options{Addr: addr, PollInterval: opts.PollInterval, Hold: opts.CubeHold, Logger: s.partLog("cube", rt.serial), EventLines: true}
@@ -262,7 +262,7 @@ func (s *Server) startProxy(pl ProxyListener) bool {
 		return false
 	}
 	p := proxy.New(proxy.Options{Client: rt.client, Queue: rt.queue, DiscoverySerial: pl.DiscoverySerial, HiddenList: func() []cube.RFAddress { return rt.config().Hidden },
-		ShowHidden: rt.showHidden, MaxDutyPct: s.opts.Queue.MaxDutyPct, Subscribe: rt.subscribePush, OnWrite: rt.proxyWrote, Logger: s.partLog("proxy", rt.cubeSerial()),
+		ShowHidden: rt.showHidden, MaxDutyPct: s.opts.Queue.MaxDutyPct, OnWrite: rt.proxyWrote, Logger: s.partLog("proxy", rt.cubeSerial()),
 		OnEvent: rt.proxyEvent, Command: s.proxyCommand(rt), Virtual: func() []proxy.Virtual { return s.proxyVirtuals(rt) }})
 	ctx, cancel := context.WithCancel(parent)
 	pr := &proxyRun{pl: pl, rt: rt, p: p, cancel: cancel, done: make(chan struct{})}

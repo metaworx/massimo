@@ -85,8 +85,12 @@ so the proxy cannot announce one inside the Cube protocol, and need not.
 On connect, the greeting a real Cube sends: `H` with a fresh connection id,
 the current duty cycle, free memory slots and clock, then `M`,
 the `C` line of every device and `L`.
-When the Cube reports a state change,
-the new `L` line is pushed to every connected client, as the Cube does.
+After that a client gets only the replies to its own lines, in order:
+the original software takes the next line it reads for the reply to the
+command it sent, so a line it did not ask for makes every later reply one
+line late ("S: expected", "ACK expected").
+A change of the Cube's state therefore shows at the client's next `l:`,
+which the original software sends every 10 s.
 Several clients may be connected at the same time.
 
 | Client line | Handling |
@@ -174,6 +178,9 @@ Nothing of a virtual wall thermostat reaches the Cube:
   A link with a virtual wall thermostat is a link with the room's real one,
   or answered the same way.
 - A `t:` that deletes a virtual wall thermostat is answered and leaves it.
+- The original software offers to move and delete a virtual wall thermostat
+  as any device; a moved one is stripped from the metadata write as above,
+  so it is back in its own room at the next connect.
 
 Pairing a real wall thermostat through the original software is refused by it,
 since every room shows one: pair it through Massimo's web UI,
