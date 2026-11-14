@@ -246,13 +246,31 @@ Alternatively block the Cube's UDP answers on the PC's firewall.
 The server shares port 23272 with the other programs on its host (SO_REUSEADDR,
 with SO_REUSEPORT on Linux and macOS),
 so that the original software there binds it too, as its search must.
-A datagram to a shared port's own address reaches one socket only:
-on Windows the one bound first, on Linux the server's.
-So the server answers a request from its own host by the subnet's broadcast too,
-which every socket on the port receives:
-the original software on the server's PC lists the server's proxies,
-but not a Cube the server holds,
-since the server's socket takes the Cube's answer.
+A datagram to a shared port's own address reaches one socket only,
+and the Cubes answer that way, to port 23272 of the address that asked.
+The server's discovery socket is therefore dual-stack:
+Windows and Linux give such a datagram to an IPv4 socket on the port first,
+whichever was bound first,
+and the original software opens an IPv4 one for each search,
+for 2 s per network.
+While it is open, the software gets the Cubes' answers and the other servers',
+and the server's own searches and reboots wait for it,
+3 s after its last search, 30 s at most;
+a search of the server's that it interrupts lists what it heard
+and takes no Cube for gone (`discovery run cut short` in the log).
+Its network settings dialogue works the same way,
+but for a search of the server's that comes in between;
+an answer that comes to the server instead, other than to a search,
+is logged at Warn, once a minute
+(`a Cube answered another program on this host`),
+and stopping the server for that work avoids it.
+The server also answers a search from its own host by the subnet's broadcast,
+which every socket on the port receives,
+for a host where its socket is not dual-stack (without IPv6,
+where it opens udp4), or a system not measured (macOS).
+A program that keeps the port open with an IPv4 socket, shared,
+keeps the Cubes' answers to itself as long:
+the server then finds no Cube.
 A program that binds the port without sharing it keeps it to itself:
 `massimo discover` and `massimo netconfig` take another port beside a running server,
 and where such a program holds the port first,
