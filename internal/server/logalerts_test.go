@@ -16,6 +16,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/store"
 )
 
 // Every kind of settleRules, and every kind that settles one, is a kind
@@ -122,5 +123,59 @@ func TestLogAlertsRoute(t *testing.T) {
 	})
 	if code, _ := callAPI(t, ts, "GET", "/api/v1/log/alerts?after=x", "", ""); code != 400 {
 		t.Fatalf("a bad after: %d", code)
+	}
+}
+
+// A person's marks (Block 2): all hides the alerts up to its id, a
+// line's mark that line alone; another person's alerts stay; a document
+// that is not marks is refused.
+func TestLogAlertsSeenMarks(t *testing.T) {
+	_, ts, _, st := startStored(t, Options{})
+	ctx := t.Context()
+	anna := userToken(t, st, "anna", store.RoleOwner)
+	ben := userToken(t, st, "ben", store.RoleOwner)
+	var ids []int64
+	for i := 0; i < 3; i++ {
+		ev := event{Kind: "restart", Source: "system", Level: "error", Time: time.Now()}
+		ev.settle()
+		if err := st.InsertEvent(ctx, storedEvent(0, ev)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	alerts := func(token string) []int64 {
+		t.Helper()
+		var out logAlertsView
+		if code := getJSON(t, ts, token, "/api/v1/log/alerts", &out); code != 200 {
+			t.Fatalf("GET: %d", code)
+		}
+		var got []int64
+		for _, a := range out.Alerts {
+			got = append(got, a.ID)
+		}
+		return got
+	}
+	ids = alerts(anna)
+	if len(ids) != 3 {
+		t.Fatalf("the alerts: %v", ids)
+	}
+	newest, middle, oldest := ids[0], ids[1], ids[2]
+	put := func(body string) int {
+		t.Helper()
+		code, _ := callAPI(t, ts, "PUT", "/api/v1/me/preferences/log.seen", anna, body)
+		return code
+	}
+	if code := put(`{"all": ` + strconv.FormatInt(oldest, 10) + `, "lines": [` + strconv.FormatInt(newest, 10) + `]}`); code != 200 {
+		t.Fatalf("PUT: %d", code)
+	}
+	if got := alerts(anna); !slices.Equal(got, []int64{middle}) {
+		t.Fatalf("anna's alerts after her marks: %v, want %d", got, middle)
+	}
+	if got := alerts(ben); len(got) != 3 {
+		t.Fatalf("ben's alerts: %v", got)
+	}
+	for _, bad := range []string{`{"all": -1}`, `{"all": 1, "lines": [0]}`, `{"seen": 1}`, `[1]`} {
+		if code := put(bad); code != 400 {
+			t.Errorf("PUT %s: %d", bad, code)
+		}
 	}
 }

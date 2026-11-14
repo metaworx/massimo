@@ -1,3 +1,3 @@
-- `GET /api/v1/log/alerts` answers the log's warnings and errors that no
-  later event settled, such as a disconnect by the next connect, and a
-  device's transmit error, link error or low battery while it lasts.
+- `GET /api/v1/log/alerts` answers the log's unsettled warnings and
+  errors, a disconnect until the next connect, a device's flag while it
+  lasts, without those the person marked seen (preference `log.seen`).

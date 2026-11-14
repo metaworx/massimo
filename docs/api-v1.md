@@ -955,14 +955,20 @@ A key in use is `409`, an unknown one `404`.
 The signed-in user's preferences (docs/store.md section 9 (c)):
 a JSON document per key, which the web UI uses so that its settings follow
 the user across browsers.
-The page keeps two keys:
+The page keeps these keys, and `notify` (below):
 
 ```json
 {
   "ui": {"poll": 10, "expert": false, "clock": "browser", "lang": "auto", "theme": "system", "scheme": "custom:Mine"},
-  "schemes": {"format": "massimo-schemes/1", "schemes": [{"format": "massimo-scheme/1", "name": "Mine", "light": {…}, "dark": {…}}]}
+  "schemes": {"format": "massimo-schemes/1", "schemes": [{"format": "massimo-scheme/1", "name": "Mine", "light": {…}, "dark": {…}}]},
+  "log.seen": {"all": 4711, "lines": [4720]}
 }
 ```
+
+`log.seen` is the user's marks of the log's alerts (`GET /api/v1/log/alerts`):
+`all` marks every line up to that id seen, **Mark all as seen**,
+and `lines` up to 500 lines marked one by one, **Mark seen**;
+a document of another form is `400`.
 
 `GET /api/v1/me/preferences` is every key the user has, `{}` for none;
 `GET …/{key}` the document, `404` when the key is not set.
@@ -2653,7 +2659,11 @@ of the same Cube, or of the server for the server's own:
 | `restart`, `reboot`, `update` not started | `server_started`; for `update`, also an `update` started |
 
 Any other, such as `proxy_discarded` and `proxy_delete_refused`,
-is settled only by a person's mark (`log.seen`).
+is settled only by a person's mark.
+The alerts the signed-in user marked seen are left out:
+the preference `log.seen` (see "Preferences"),
+which the web UI writes and opening the log does not;
+a browser without a user keeps its marks itself and asks with `after`.
 A device's transmit error, link error and low battery are in the log at info,
 in its state's changes:
 each is an alert at warn while the device has it,

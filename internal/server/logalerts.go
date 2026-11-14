@@ -281,8 +281,9 @@ func flagLine(states []event, flag string) *event {
 }
 
 // getLogAlerts handles GET /api/v1/log/alerts: the log's unsettled
-// warnings and errors after an event's id (after), newest first, and the
-// worst level; none without a store.
+// warnings and errors after an event's id (after) that the signed-in
+// person has not marked seen (logseen.go), newest first, and the worst
+// level; none without a store.
 func (s *Server) getLogAlerts(w http.ResponseWriter, r *http.Request) error {
 	var after int64
 	if v := r.URL.Query().Get("after"); v != "" {
@@ -298,8 +299,9 @@ func (s *Server) getLogAlerts(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
+		seen := s.seenOf(r)
 		for _, a := range list {
-			if a.ID > after {
+			if a.ID > after && !seen.seen(a.ID) {
 				out.Alerts = append(out.Alerts, a)
 			}
 		}
