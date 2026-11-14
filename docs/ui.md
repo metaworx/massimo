@@ -89,10 +89,12 @@ narrower than 600 px the Cube choice then takes the line of **Massimo**.
 - **Cube**:
   a menu that chooses the Cube when the server has several.
   Closed it shows the chosen Cube's name (its serial where it has none)
-  and whether the server is connected to it, as a plug:
-  joined and green while connected, apart and red while not;
-  its tooltip adds the serial and the address.
-  Open, each Cube has its plug, its name and under it its serial and
+  and how the server stands with it, as the network's sign:
+  green while connected, a triangle while its lost connection is held open
+  or it reboots, a cross while it holds the server's old connection,
+  another client has it, or it is gone (see Signs, under How the page is built);
+  its tooltip adds the serial, the address and the link in words.
+  Open, each Cube has its sign, its name and under it its serial and
   address, the list as wide as they need; the arrow keys move between them.
   The last entry, **Search for new Cubes…**,
   asks the server to look for Cubes on the LAN (about two seconds;
@@ -108,6 +110,15 @@ narrower than 600 px the Cube choice then takes the line of **Massimo**.
   for others the line is the count alone, and the choice's entries cannot be chosen.
   A Cube the server finds by itself appears without reloading the page,
   and in the log.
+- **Problems**, beside the Cube choice where something is wrong on any Cube:
+  a pill with an icon per kind (a Cube's link, the radio, a battery, a window
+  open too long, the settings), which lists every Cube with a problem as a heading,
+  its own sign and its link's badge, and under it its devices with a problem
+  as "Room › Device" with their badges;
+  for one who may change the settings, **Settings** last:
+  a Cube proxy that does not listen, a settings file that differs,
+  Cubes found and not served.
+  A window open briefly is not listed: it is a state, not a problem.
 - **The time of the last update** and **↻**, one button without a frame,
   which asks the server for the current state now;
   a finger hits it a little beyond what it shows, and ↻ turns while it asks.
@@ -738,13 +749,17 @@ to the top of the page.
   From 900 px System Info and Software update share a row, Maintenance has one of its own.
 - **Cubes**:
   the Cubes the server serves, kept in its store,
-  each in a panel whose head shows the name, the serial and the address
+  each in a panel whose head shows the Cube's sign, the name, the serial and the address
   without the port, the duty cycle, the free slots and the radiograms pending,
-  and opens with a click:
+  a pill with every problem of the Cube (its link, its proxy, its settings file
+  and its devices with theirs, as the header's), whose click opens its list
+  and not the panel, and where its settings come from,
+  all of it drawn again at every poll, and opens with a click:
+  its own badges as its top line (its link where it is not connected,
+  a proxy that does not listen, a settings file that differs, the source),
   a table of its facts for everyone who sees the panel
   (address, port, firmware, radio address, the Cube's clock,
   duty cycle, free slots, pending and queued, refreshed while it is open),
-  its connection, in the head's badge,
   and above the facts a notice with since when where the server knows why it
   is not connected (`link` of `docs/api-v1.md`, "GET /api/v1/cubes"):
   its lost connection held open until a time, so that it carries on when the
@@ -769,6 +784,10 @@ to the top of the page.
   each with its name, serial number and radio address and **Show again**;
   **Hide** takes a radio address,
   with the Cube's devices to choose from.
+  While the panel is open, a field not touched follows a value stored meanwhile
+  (by another browser or the settings file);
+  a field being edited keeps what is typed and says under it that the stored value
+  changed, with the new value and **Take theirs**.
   **Save**, off while nothing differs from the Cube's settings,
   sends the changes, which apply at once:
   a hidden device leaves the tiles, the API and the original software,
@@ -951,7 +970,7 @@ its heading's `button.section-fold` folding it):
 `pageBar` fills the sections menu of its title's row kept at the top,
 and `backToTop` wires the page's ↑;
 `pickerMenu` makes a dropdown the choice of one item (the Cube choice),
-its items `menuItem`s, a Cube's connection a `connIcon`;
+its items `menuItem`s, a Cube's link its network sign (`cubeSignEl`, `LINK_SIGN`);
 a device's serial and radio address are a `deviceIds`;
 a list of facts is a `kvList`, of counts a `countList`;
 an action with what it does and its button is an `.action-row`;
