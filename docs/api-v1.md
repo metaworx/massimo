@@ -756,8 +756,7 @@ Both need `capabilities`, which only `owner` has by default.
 An integration, Home Assistant first, is a program that acts for users of
 its own: each of its calls can name the user it acts for and the level
 the user has for that call, and Massimo allows only what every link of
-that chain allows (AP IntegrationUsers; "Acting for an integration's
-users", below, once that block is in).
+that chain allows ("Acting for an integration's users", below).
 An integration is registered by the owner, without a key typed anywhere:
 
 1. The integration asks: `POST /api/v1/integrations/requests`, without a key,

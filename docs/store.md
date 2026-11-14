@@ -575,7 +575,8 @@ CREATE TABLE integrations (                     -- migration 0021
     request_code     TEXT    NOT NULL DEFAULT '',
     request_expires  TEXT,
     request_remote   TEXT    NOT NULL DEFAULT '',
-    key_issued_at    TEXT
+    key_issued_at    TEXT,
+    merged_into      INTEGER REFERENCES integrations (id)  -- a request approved as an earlier integration
     -- and created_at, updated_at, updated_by, version, deleted_at, origin
 );
 
@@ -1363,6 +1364,46 @@ Lost, or another store's, `opaque.key` leaves each secret unopened, as each pass
 the provider answers `secret_lost`, and the owner enters the secret again;
 a change that does not write it keeps the box, which the key found again opens.
 The secret is never answered (`has_secret`).
+
+### Integrations
+
+An integration, Home Assistant first, acts for users of its own
+(AP IntegrationUsers, migration 0021):
+a row of `integrations` per installation the owner approved,
+and per request waiting or refused.
+A request comes without a key and waits ten minutes with a short code
+the owner compares; at most five wait at once.
+Approved, the integration gets its `key` (from its name, `casa-leone`),
+its own user `<key>` holding its API key, a user `<key>.system` for the
+calls no user started, both with the role `integration`, and its maximum,
+`max_caps`.
+A request approved as an earlier integration (`merged_into`) reuses that
+one's row, users and links, as after a key lost or revoked;
+a revoke ends the key and keeps the rest.
+`instance_id` is the installation id the owner accepted;
+a call from another is refused and the id kept in `pending_instance`
+until the owner accepts it.
+
+Each of the integration's users is a row of `user_identities` with
+`integration_id` set, its id at the integration as `subject`:
+made at its first call, with a user of its own (`own_user_id`, named
+`<key>.<the id's first 8 characters>`) of the role `integration`.
+`user_id` is the user its calls act as: its own,
+or the Massimo user the owner linked it to,
+several of an integration's users to one where wanted.
+A call's capabilities are what the user's role, the role `integration`,
+the linked user's role, the maximum and the call's level all allow
+(docs/api-v1.md, "Acting for an integration's users").
+
+0021 made `user_identities` again for both kinds,
+`provider_id` NULL for an integration's:
+a store of a 0.15.0 alpha, once migrated, is not for that alpha again,
+although `min_reader` stays 1 (D10-C), since only the alphas had the
+table.
+The settings: `integrations.requests` (true by default) lets
+integrations ask; `server.proxied_url`, which the server writes,
+is the address a trusted reverse proxy serves it at,
+the announcement's `url` where `MASSIMO_PUBLIC_URL` is not set.
 
 ### Later: ownership per Cube
 
