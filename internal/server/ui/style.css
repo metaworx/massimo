@@ -195,6 +195,18 @@ body.server-down main .ni.sign, body.server-down .problems-sum, body.server-down
   #view-log, #view-settings { display: none; }
   #nav-menu { display: block; }
 }
+/* The version, the server's sign and the time on a row of their own where
+   they do not fit beside the logo on one line (app.js fitFacts): across
+   the header under the logo and the Cube choice, on a phone under the
+   logo and the pages; the version a line of its own where the row is too
+   narrow for all three, cut only where it is wider than the header. */
+.top-line.facts-row { grid-template-areas: "left cube nav" "facts facts facts"; }
+.top-line.facts-row > .top-left { display: contents; }
+.top-line.facts-row .brand { grid-area: left; align-self: start; }
+.top-line.facts-row .top-facts { grid-area: facts; flex-wrap: wrap; row-gap: 4px; margin-top: -4px; }
+@media (max-width: 599px) {
+  .top-line.facts-row { grid-template-areas: "left nav" "facts facts" "cube cube"; }
+}
 /* Signed out (login.js, askLogin): the name, the version and the sign-in,
    nothing of the page or of the last session. */
 body.signed-out .top-left > :not(.brand):not(.top-facts),
@@ -414,12 +426,17 @@ button.copy-icon .ni { width: 16px; height: 16px; }
 /* the version on one line, cut with … where a long one (a build between
    releases) leaves no room beside the page buttons */
 #version-short { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+/* Compacted (components.js stickyHeader): the version goes, the server's
+   sign and the time stay; on a phone the logo goes too, the sign and the
+   time a short line under the Cube choice and the pages. */
 body.scrolled .top { padding: 8px 0; }
-body.scrolled .top #refresh-btn, body.scrolled #tls-notice,
+body.scrolled #version-short, body.scrolled #tls-notice,
 body.scrolled #pending { display: none !important; }
 @media (max-width: 599px) {
-  body.scrolled .top-line { grid-template-areas: "cube nav"; grid-template-columns: minmax(0, 1fr) auto; }
-  body.scrolled .top-left { display: none; }
+  body.scrolled .top-line { grid-template-areas: "cube nav" "facts facts"; grid-template-columns: minmax(0, 1fr) auto; }
+  body.scrolled .top-left { display: contents; }
+  body.scrolled .top-left > .brand { display: none; }
+  body.scrolled .top-facts { grid-area: facts; }
 }
 
 /* slide toggle: a checkbox styled as a switch, keyboard accessible */

@@ -63,9 +63,14 @@ where the server no longer holds it, the page reloads the rooms
 
 The header's line reads, from the left:
 Massimo's logo with the server's version and the time of the last update with **↻**,
-all on one baseline, the M as tall as the page buttons;
+all on one baseline where they fit beside it, the M as tall as the page buttons;
 then the Cube choice with the server's connection to the Cube as a plug;
 then the house, **👤** and the other page buttons.
+Where the version, the server's sign and the time do not fit beside the logo
+on one line, they take a row of their own across the header,
+under the logo and the Cube choice, on a phone under the logo and the page buttons,
+the version on a line of its own where the row is too narrow for all three,
+so that it is cut only where it is wider than the header.
 On a screen narrower than 600 px the Cube choice takes a line of its own,
 **☰** beside the house and 👤 holds **Log** and **System settings**,
 highlighted while one of them is shown,
@@ -81,10 +86,11 @@ The sign-in, the form that creates the first owner and the apps' connect page
 show the logo too, the first two larger, above their titles.
 
 The header stays at the top while the page scrolls.
-Scrolled, it keeps its first line without the time of the last update,
-and the lines under it go until the page is back
+Scrolled, it keeps its first line, the server's sign and the time of the last update,
+without the version, and the lines under it go until the page is back
 at its top, expert mode's line of the Cube's radio budget apart;
-narrower than 600 px the Cube choice then takes the line of **Massimo**.
+narrower than 600 px the Cube choice then takes the line of **Massimo**,
+the sign and the time a short line under it.
 
 - **Cube**:
   a menu that chooses the Cube when the server has several.
