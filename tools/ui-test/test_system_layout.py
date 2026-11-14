@@ -90,7 +90,7 @@ def test_cube_panel_columns(page, case):
     devices at 1100 px, under the pairing at 390."""
     show_view(page, "system")
     panel = page.locator(".cube-panel[data-serial='KEQ0000100']")
-    panel.locator("summary").click()
+    panel.locator(":scope > summary").click()
     panel.locator(".cube-fields").wait_for(state="visible")
     fields = page.evaluate("document.querySelector(\".cube-panel[data-serial='KEQ0000100'] .cube-fields\").getBoundingClientRect().toJSON()")
     pair = page.evaluate("document.querySelector(\".cube-panel[data-serial='KEQ0000100'] .cube-pairing\").getBoundingClientRect().toJSON()")
@@ -98,7 +98,7 @@ def test_cube_panel_columns(page, case):
         assert pair["left"] > fields["right"], f"the pairing beside the settings ({pair}, {fields})"
     else:
         assert pair["bottom"] <= fields["top"] + 1, f"the pairing above the settings ({pair}, {fields})"
-    panel.locator("summary").click()
+    panel.locator(":scope > summary").click()
     show_view(page, "tiles")
 
 
