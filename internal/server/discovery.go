@@ -108,6 +108,17 @@ type discoveryRun struct {
 // errNoDiscoverySocket is the error of a run without the discovery port.
 var errNoDiscoverySocket = errors.New("the discovery port is in use by another program")
 
+// discoveryNetwork is the network of serve's discovery sockets: "udp",
+// dual-stack on the wildcard address. Windows and Linux give a unicast
+// datagram on a shared port to an IPv4 socket on it before a dual-stack
+// one, whichever was bound first (Linux: with SO_REUSEPORT, which
+// sharedport sets), so another program's IPv4 socket on the discovery
+// port, such as the original software's while it searches, gets the
+// Cubes' answers, and serve gets them whenever it is alone. An IPv4
+// address, as -discover-listen gives, opens IPv4, and so does a host
+// without IPv6.
+const discoveryNetwork = "udp"
+
 // discoveryAddr is the local address of a discovery socket of its own.
 func (s *Server) discoveryAddr() string {
 	if s.opts.DiscoveryAddr != "" {
@@ -290,8 +301,8 @@ func (s *Server) discoverOnce(ctx context.Context) ([]foundCube, error) {
 	if r == nil {
 		// serve answers no discovery: a socket of its own for this run, on
 		// the discovery port if it is free, since the Cubes answer to it;
-		// shared, as the responder's is (ensureResponder).
-		pc, err := sharedport.ListenPacket("udp4", s.discoveryAddr())
+		// shared and dual-stack, as the responder's is (ensureResponder).
+		pc, err := sharedport.ListenPacket(discoveryNetwork, s.discoveryAddr())
 		if err != nil {
 			// The Cubes answer to this port only; another one finds none.
 			s.log.Warn("discovery port in use, no discovery", "port", cubelan.DiscoveryPort, "error", err)
@@ -303,6 +314,14 @@ func (s *Server) discoverOnce(ctx context.Context) ([]foundCube, error) {
 		go r.Serve(rctx, pc)
 	}
 	answers, err := r.Discover(ctx, cubelan.SearchOptions{Targets: s.discoveryTargets(), Wait: wait, MAC: s.opts.LookupMAC})
+	// Another program on this host searched meanwhile and got the Cubes'
+	// answers from then on: the run lists what it heard, and settles
+	// nothing, as one cut short does.
+	shared := errors.Is(err, proxy.ErrSearchShared)
+	if shared {
+		s.log.Info("discovery run cut short: another program on this host searched for Cubes meanwhile")
+		err = nil
+	}
 	if err != nil && len(answers) == 0 {
 		return nil, err
 	}
@@ -330,7 +349,7 @@ func (s *Server) discoverOnce(ctx context.Context) ([]foundCube, error) {
 		answered[f.Serial] = true
 		out = append(out, f)
 	}
-	if err == nil {
+	if err == nil && !shared {
 		// A complete run: who did not answer it is gone. One cut short
 		// cannot tell a Cube gone from one not heard yet.
 		s.settle(answered)

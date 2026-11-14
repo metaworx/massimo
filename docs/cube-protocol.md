@@ -760,14 +760,25 @@ kept here because they cost time to learn.
   `massimo discover` sees only `serve`'s own proxy answer;
   use `POST /api/v1/cubes/discover` there.
   `serve` shares the port (2026-11-14, measured on Windows 11 and Linux
-  with Java 8's `MulticastSocket`, as the original software 1.4.6 binds it,
-  no Cube involved): a unicast datagram to a shared port reaches one socket,
-  on Windows the one bound first, on Linux the one bound last,
-  `serve`'s udp4 socket ahead of Java's dual-stack one; a broadcast reaches all.
-  So a Cube's answer to the original software on `serve`'s box goes to `serve`,
-  which answers a search from its own host by broadcast as well.
+  with Java 8's `MulticastSocket`, as the original software 1.4.6 binds it):
+  a unicast datagram to a shared port reaches one socket, a broadcast all.
+  Between IPv4 sockets, Windows gives it to the one bound first
+  and Linux to the one bound last;
+  an IPv4 socket gets it before a dual-stack one, in either order
+  (Linux with SO_REUSEPORT on the dual-stack one),
+  so `serve`'s discovery socket is dual-stack.
+  With the service's udp4 socket, bound at boot, the original software on the PC
+  found no Cube: all ten answers on the owner's LAN went to the service.
   Across Windows accounts, as between the service and a user,
   the port is shared only where the first socket set SO_REUSEADDR.
+- The original software 1.4.6 (`MaxLocalBackend-1.4.6.jar`):
+  its search (`CubeFinder`) opens `MulticastSocket(23272)` for each network interface,
+  joins 224.0.0.1, sends the identify request to 255.255.255.255 and 224.0.0.1,
+  listens 2 s and closes the socket again;
+  it takes a Cube's address from the answer's source address,
+  so another program cannot answer for a Cube.
+  Its network settings and firmware update (`CubeUdpProxy`) open 23272
+  for each operation and send to the Cube's address.
   GitHub creates no push event for more than three tags pushed at once,
   which is unrelated to Cubes but was learned the same night.
 - After a Cube restart, the eco switch stays "not reported" until someone presses it;

@@ -1651,6 +1651,10 @@ which starts as that one ends and which every call that came meanwhile shares,
 the same `ran_at`: a run sends its requests as it starts,
 so the answer is never that of a run begun before the call,
 and such a call takes up to twice the wait, about six seconds.
+While another program on the server's host searches for Cubes on UDP 23272,
+such as the original software, a run waits for it,
+up to 30 seconds (docs/proxy.md, "Discovery"),
+and a run it interrupts lists only what it heard before.
 `503` when the server cannot have the discovery port (UDP 23272,
 the only one the Cubes answer to, or the address of `serve -discover-listen`),
 for example because another program holds it.
