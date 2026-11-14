@@ -244,6 +244,109 @@ function keepBlink(use, key) {
   use.style.animationDelay = -((now - seen.first) / 1000).toFixed(2) + "s";
 }
 
+// copyText puts text on the clipboard: through navigator.clipboard where
+// the page may use it (HTTPS or localhost), else through a hidden text
+// area and the browser's copy command, which every browser still runs on
+// a click, as a page served over plain HTTP on the LAN needs. Resolves to
+// whether it copied.
+async function copyText(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (e) {
+      // refused: the fallback may still work
+    }
+  }
+  const area = document.createElement("textarea");
+  area.value = text;
+  area.setAttribute("readonly", "");
+  area.className = "copy-area";
+  document.body.appendChild(area);
+  area.select();
+  let ok = false;
+  try {
+    ok = document.execCommand("copy");
+  } catch (e) {
+    ok = false;
+  }
+  area.remove();
+  return ok;
+}
+
+// copied says that something was copied: "Copied" on the control for a
+// moment, and in the page's polite live region for a screen reader.
+function copied(el, ok) {
+  let live = document.getElementById("copy-status");
+  if (!live) {
+    live = textEl("span", "", "visually-hidden");
+    live.id = "copy-status";
+    live.setAttribute("role", "status");
+    live.setAttribute("aria-live", "polite");
+    document.body.appendChild(live);
+  }
+  const text = t(ok ? "copy.done" : "copy.failed");
+  live.textContent = "";
+  setTimeout(() => {
+    live.textContent = text;
+  }, 50);
+  el.dataset.copied = text;
+  el.classList.add("copied");
+  clearTimeout(el.copiedTimer);
+  el.copiedTimer = setTimeout(() => el.classList.remove("copied"), 1400);
+}
+
+// copyable makes an element copy what get() returns on a click, and on
+// Enter or Space: a button to the keyboard and a screen reader, named by
+// label, its tooltip saying so. Wired once; label may change later
+// (copyLabel).
+function copyable(el, get, label) {
+  el.classList.add("copyable");
+  if (!/^(BUTTON|A)$/.test(el.tagName)) {
+    el.setAttribute("role", "button");
+    el.tabIndex = 0;
+  }
+  copyLabel(el, label);
+  const run = async (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    const text = get();
+    if (text) copied(el, await copyText(text));
+  };
+  el.addEventListener("click", run);
+  el.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter" || ev.key === " ") run(ev);
+  });
+  return el;
+}
+
+// copyLabel names a copyable element: what it copies, for a screen
+// reader and as its tooltip.
+function copyLabel(el, label) {
+  el.setAttribute("aria-label", label);
+  el.title = label;
+}
+
+// copyIcon is a small button with the copy icon that copies what get()
+// returns; label names what it copies.
+function copyIcon(get, label) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "copy-icon";
+  b.appendChild(iconEl("icon-copy", "ni"));
+  return copyable(b, get, label);
+}
+
+// copyEl is a text that copies itself, as a mono span, and with icon a
+// copy icon after it, both copying text; label names what.
+function copyEl(text, { label, icon, cls } = {}) {
+  const span = textEl("span", text, cls || "mono");
+  const name = t("copy.what", { what: label || text });
+  copyable(span, () => text, name);
+  if (!icon) return span;
+  return elem("span", "copy-pair", span, copyIcon(() => text, name));
+}
+
 // iconButton is a button that shows an icon of the page only, so its
 // name is aria; opts as for button, iconCls the icon's class ("ni").
 function iconButton(symbol, aria, onClick, opts) {

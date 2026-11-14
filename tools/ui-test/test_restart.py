@@ -149,10 +149,15 @@ def test_sign_in_offers_the_key_after_an_open_server(page):
 
 
 def test_store_and_settings_in_effect(page):
-    """Maintenance, for a holder of settings: the store with its schema
-    and rows per table, and the settings in effect, the API token listed
-    as set without its value."""
+    """System Info, for a holder of settings, at its end: the store with
+    its schema and rows per table, and the settings in effect, the API
+    token listed as set without its value; no longer in Maintenance."""
     show_view(page, "system")
+    assert page.locator("#sys-info #store-info").count() == 1 and page.locator("#sys-info #config-info").count() == 1, \
+        "both in System Info"
+    assert page.locator("#sys-maint #store-info, #sys-maint #config-info").count() == 0, "not in Maintenance"
+    last = page.evaluate("[...document.querySelectorAll('#sys-info-body > *')].slice(-2).map((e) => e.id)")
+    assert last == ["store-info", "config-info"], f"at the end of System Info ({last})"
     assert wait_until(page, "document.getElementById('store-info-sum').textContent.includes('massimo.db')", 5), \
         "the store's file in the head of its part"
     page.locator("#store-info summary").click()

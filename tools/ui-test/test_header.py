@@ -245,7 +245,7 @@ DIGITS_MIDDLE = """(sel) => {
   return base - ctx.measureText('0').actualBoundingBoxAscent / 2;
 }"""
 
-VERSION_TITLE = {"en": "{v} (server version)", "de": "{v} (Server-Version)"}
+VERSION_TITLE = {"en": "{v} (server version) · click to copy", "de": "{v} (Server-Version) · Klick kopiert"}
 
 
 def test_header_on_one_baseline(page, case):
@@ -421,3 +421,26 @@ def test_each_page_keeps_its_scroll(page, case):
     finally:
         page.evaluate("document.querySelectorAll('.test-spacer').forEach((e) => e.remove()); window.scrollTo({top: 0, behavior: 'instant'})")
         show_view(page, "tiles")
+
+
+def test_versions_copy(page, case):
+    """The header's version and System Info's copy the whole version, as
+    the tooltip names it, without " (server version)"; System Info's by a
+    click on it and by its icon (D94-A)."""
+    page.context.grant_permissions(["clipboard-read", "clipboard-write"], origin=page.evaluate("location.origin"))
+    whole = page.evaluate("state.version")
+    page.evaluate("navigator.clipboard.writeText('')")
+    page.locator("#version-short").click()
+    assert wait_until(page, "navigator.clipboard.readText().then((t) => t === state.version)", 3), "the header's version copies whole"
+    assert "(" not in whole or "server version" not in whole, "without the tooltip's words"
+    show_view(page, "system")
+    cell = page.locator("#info-version")
+    assert wait_until(page, "!!document.querySelector('#info-version .copy-icon')", 5), "System Info's version with its icon"
+    page.evaluate("navigator.clipboard.writeText('')")
+    cell.locator(".copy-icon").click()
+    assert wait_until(page, "navigator.clipboard.readText().then((t) => t !== '')", 3), "its icon copies"
+    copied = page.evaluate("navigator.clipboard.readText()")
+    system = page.evaluate("api('GET', 'api/v1/system').then((v) => v.version)")
+    assert copied == system and len(copied) >= len(cell.locator(".mono").inner_text().strip()), \
+        f"the whole version, not the short one shown ({copied!r} vs {system!r})"
+    show_view(page, "tiles")

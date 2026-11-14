@@ -684,6 +684,20 @@ to the top of the page.
   and address, and that with that header the server reads the proxy's certificate;
   a page on HTTPS from a server without TLS says "(proxied)" too,
   and that `-trusted-proxies` would show more.
+  The server's version copies on a click, or by its copy icon, whole, with
+  what it was built with (the header's does too, without the icon);
+  so does each Cube proxy's address, which the original software connects to.
+  A copy says "Copied"; on a page served over plain HTTP the browser gives no
+  clipboard to the page, and the copy goes through its copy command instead.
+  At its end, for a holder of `settings`,
+  **Store** opens to what `massimo store info` shows:
+  the file, the schema version, the node and tenant and the rows per table,
+  its head the file, the schema and the rows in all;
+  **Settings in effect** to what `massimo config` shows: the version, the
+  settings file, the data directory, the listen address, TLS, the log level
+  and every `MASSIMO_*` variable with where it came from, a key, an IV, a
+  token or a password as "set, not shown"
+  (`docs/api-v1.md`, "GET /api/v1/store, GET /api/v1/config").
 - **Software update**:
   the running version, the update channel and whether a newer release is out.
   A holder of `settings` chooses the channel there:
@@ -750,14 +764,6 @@ to the top of the page.
   the delay and the button are missing and the server's reason is shown:
   the switch is off, the helper is not installed, a server in a terminal
   (`packaging/README.md`, "Rebooting from the web UI").
-  **Store** (with `settings`) opens to what `massimo store info` shows:
-  the file, the schema version, the node and tenant and the rows per table,
-  its head the file, the schema and the rows in all;
-  **Settings in effect** to what `massimo config` shows: the version, the
-  settings file, the data directory, the listen address, TLS, the log level
-  and every `MASSIMO_*` variable with where it came from, a key, an IV, a
-  token or a password as "set, not shown"
-  (`docs/api-v1.md`, "GET /api/v1/store, GET /api/v1/config").
   From 900 px System Info and Software update share a row, Maintenance has one of its own.
 - **Cubes**:
   the Cubes the server serves, kept in its store,
