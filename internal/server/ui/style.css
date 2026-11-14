@@ -977,10 +977,33 @@ html.blink-on .tone-warn use.mark, html.blink-on .tone-bad use.mark { animation:
 html.blink-first .tone-warn use.mark, html.blink-first .tone-bad use.mark { animation: markblink 1s ease-in-out 5; }
 .tone-info { color: var(--fill-info); }
 .menu-items.problems-list { min-width: 240px; max-width: min(360px, calc(100vw - 32px)); padding: 2px 0; gap: 0; }
-.problem-entry { display: grid; gap: 4px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+/* One entry of a problem list, the same at every level (components.js
+   problemEntry): the icon in a column of its own, the name and its grey
+   detail beside it, the badges under the name; the entries under it
+   indented to the name, a line down from its icon. */
+.problem-entry {
+  --ic: 16px;
+  display: grid;
+  grid-template-columns: var(--ic) minmax(0, 1fr);
+  gap: 4px 8px;
+  align-items: start;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
 .problem-entry:last-child { border-bottom: 0; }
-.problem-who { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; min-width: 0; }
-.problem-who .ni { width: 16px; height: 16px; flex: none; color: var(--muted); }
+.problem-entry > .problem-icon { grid-column: 1; width: var(--ic); height: var(--ic); margin-top: 2px; }
+.problem-entry > .problem-icon:not(.sign) { color: var(--muted); }
+.problem-entry > .problem-icon.sign:not([class*="tone-"]) { color: var(--ok); } /* a sign that is fine, its state's colour else */
+.problem-who { grid-column: 2; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; min-width: 0; }
+.problem-entry > .problem-flags { grid-column: 2; }
+.problem-subs {
+  grid-column: 1 / -1;
+  display: grid;
+  margin: 2px 0 0 calc(var(--ic) / 2 - 1px);
+  padding-left: calc(var(--ic) / 2 + 7px);
+  border-left: 2px solid var(--line);
+}
+.problem-subs > .problem-entry { padding: 4px 0; border-bottom: 0; }
 .problem-name { font-weight: 600; font-size: 0.95rem; overflow-wrap: anywhere; }
 .problem-sub { color: var(--muted); font-size: 0.8rem; }
 .problem-flags { display: flex; flex-wrap: wrap; gap: 6px; }
