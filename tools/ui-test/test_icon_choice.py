@@ -3,11 +3,13 @@
 """Each person's window and radio icons (AP IconChoice): the opening sash
 (the default) or the paned window, the Wi-Fi fan (the default) or the
 tower, each with its marks, in a tile's head, in its problem list and as
-a window contact's type icon.
+a window contact's type icon; the choice in My settings → Appearance,
+kept as the other settings are, for the person or for this device.
 
 The states come from state events applied in the page (updateDevice),
-since the fake Cube does not change its states; the choice is set in the
-page's settings and the rooms drawn again."""
+since the fake Cube does not change its states; the first tests set the
+choice in the page's settings and draw the rooms again."""
+from helpers import show_view, wait_until
 
 # Chooses the drawings in the page's settings and draws the rooms again.
 CHOOSE = """([win, radio]) => {
@@ -91,3 +93,49 @@ def test_the_other_drawings(page, case):
     check(page, rid, DRAWN[("paned", "tower")])
     page.evaluate(CHOOSE, ["sash", "wifi"])
     check(page, rid, DRAWN[("sash", "wifi")])
+
+
+def preview(page, which):
+    """The symbols of a choice's preview in My settings."""
+    return icons(page.locator("#icon-%s-preview" % which))
+
+
+def test_the_choice_in_my_settings(page, case):
+    """My settings → Appearance: the opening sash and the Wi-Fi fan
+    chosen, each previewed as the page draws it; the paned window and the
+    tower chosen, kept in the browser, the previews and the rooms drawn
+    again; kept across a reload; kept for this device; the defaults
+    stored as nothing."""
+    show_view(page, "prefs")
+    win, radio = page.locator("#icon-window-select"), page.locator("#icon-radio-select")
+    assert (win.input_value(), radio.input_value()) == ("sash", "wifi"), "the defaults"
+    assert preview(page, "window") == [DRAWN[("sash", "wifi")][k] for k in ("type", "open", "warn", "bad")], \
+        f"the sash: closed, open, amber, red ({preview(page, 'window')})"
+    assert preview(page, "radio") == ["#icon-radio-small+#mark-corner-warn", "#icon-radio-small+#mark-corner-x"], \
+        f"the fan, amber and red ({preview(page, 'radio')})"
+    win.select_option("paned")
+    radio.select_option("tower")
+    assert page.evaluate("[localStorage.getItem('massimo.iconWindow'), localStorage.getItem('massimo.iconRadio')]") == ["paned", "tower"], \
+        "the choices kept"
+    assert preview(page, "window")[0] == "#icon-window" and preview(page, "radio")[0] == "#icon-tower-small+#mark-tower-warn", \
+        f"the previews drawn again ({preview(page, 'window')}, {preview(page, 'radio')})"
+    show_view(page, "tiles")
+    rid = page.evaluate(PROBLEMS, 11)
+    check(page, rid, DRAWN[("paned", "tower")])
+    page.reload()
+    page.wait_for_selector(".room", timeout=10000)
+    assert page.evaluate("[state.settings.iconWindow, state.settings.iconRadio]") == ["paned", "tower"], "kept across a reload"
+    show_view(page, "prefs")
+    page.locator("input[data-device-only='iconWindow']").evaluate("(i) => i.closest('label').click()")
+    assert wait_until(page, "JSON.parse(localStorage.getItem('massimo.device') || '{}').iconWindow === 'paned'", 5), \
+        "kept for this device"
+    win.select_option("sash")
+    assert page.evaluate("JSON.parse(localStorage.getItem('massimo.device')).iconWindow") == "sash", "this device's value changed"
+    page.locator("input[data-device-only='iconWindow']").evaluate("(i) => i.closest('label').click()")
+    assert wait_until(page, "!('iconWindow' in JSON.parse(localStorage.getItem('massimo.device') || '{}'))", 5), "the device's value gone"
+    assert win.input_value() == "paned", "the person's value again"
+    win.select_option("sash")
+    radio.select_option("wifi")
+    assert page.evaluate("[localStorage.getItem('massimo.iconWindow'), localStorage.getItem('massimo.iconRadio')]") == [None, None], \
+        "the defaults stored as nothing"
+    show_view(page, "tiles")

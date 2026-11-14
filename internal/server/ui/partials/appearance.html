@@ -1,4 +1,4 @@
-<!-- My settings → Appearance: the mode, the colour scheme and the blinking signs in the rows of My settings, theme.js; the editor is drawn into #scheme-editor from scheme.html. -->
+<!-- My settings → Appearance: the mode, the colour scheme, the blinking signs and the window's and the radio's drawings in the rows of My settings, theme.js; the editor is drawn into #scheme-editor from scheme.html. -->
 <div class="appearance">
   <div class="dev-group">
     <span data-i18n="appearance.title">Appearance</span>
@@ -36,6 +36,30 @@
       </select>
     </div>
     <span class="dev-cell needs-sync"><label class="switch"><input type="checkbox" data-device-only="blink"><span class="slider" aria-hidden="true"></span></label></span>
+  </div>
+  <div class="dev-row">
+    <div class="field">
+      <label for="icon-window-select" data-i18n="appearance.iconWindow">Window icon</label>
+      <span data-help="iconWindow" data-help-label="appearance.iconWindow"></span>
+      <span id="icon-window-preview" class="icon-preview" aria-hidden="true"></span>
+      <select id="icon-window-select" class="field-control">
+        <option value="sash" data-i18n="appearance.iconWindowSash">opening sash</option>
+        <option value="paned" data-i18n="appearance.iconWindowPaned">paned window</option>
+      </select>
+    </div>
+    <span class="dev-cell needs-sync"><label class="switch"><input type="checkbox" data-device-only="iconWindow"><span class="slider" aria-hidden="true"></span></label></span>
+  </div>
+  <div class="dev-row">
+    <div class="field">
+      <label for="icon-radio-select" data-i18n="appearance.iconRadio">Radio icon</label>
+      <span data-help="iconRadio" data-help-label="appearance.iconRadio"></span>
+      <span id="icon-radio-preview" class="icon-preview" aria-hidden="true"></span>
+      <select id="icon-radio-select" class="field-control">
+        <option value="wifi" data-i18n="appearance.iconRadioWifi">Wi-Fi fan</option>
+        <option value="tower" data-i18n="appearance.iconRadioTower">radio tower</option>
+      </select>
+    </div>
+    <span class="dev-cell needs-sync"><label class="switch"><input type="checkbox" data-device-only="iconRadio"><span class="slider" aria-hidden="true"></span></label></span>
   </div>
   <div class="dev-row dev-last">
     <div class="scheme-actions">
