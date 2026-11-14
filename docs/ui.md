@@ -58,6 +58,9 @@ After an interruption the page opens a new stream that resumes after the
 last event it read, so what happened meanwhile still arrives;
 where the server no longer holds it, the page reloads the rooms
 (docs/api-v1.md, "GET …/events").
+A room's tile whose configuration has the focus is not drawn again under a click
+or the user's typing, for a state event or a reload of the rooms alike;
+it is drawn once the focus has left the configuration.
 
 ## Header
 
