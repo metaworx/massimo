@@ -3040,7 +3040,7 @@ components:
       name: rf
       in: path
       required: true
-      description: "The device: its serial number, case-insensitive, or its radio address, six hex digits; a serial the Cube does not have is 404. A room's virtual wall thermostat also by room-<id>"
+      description: "The device: its serial number, case-insensitive, or its radio address, six hex digits; a serial the Cube does not have is 404, radio address 000000 (no device's) is 400. A room's virtual wall thermostat also by room-<id>"
       schema: {type: string, pattern: "^([0-9a-fA-F]{6}|[A-Za-z]{3}[0-9]{7}|[Rr][Oo][Oo][Mm]-[0-9]{1,3})$", example: "MEQ0000101"}
     ifMatch:
       name: If-Match

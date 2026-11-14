@@ -779,6 +779,23 @@ kept here because they cost time to learn.
   and Massimo keeps the last measured value meanwhile.
 - The original MAX! software cannot find a Cube again in the same run after it
   moved the Cube to a static address; a restart of the software does.
+- A Cube can list an entry at radio address 000000
+  (2026-11-13 and 14, Cube firmware 1.1.3, one of the owner's Cubes,
+  read from its own greeting with nothing sent):
+  its L line holds `0b 00 00 00 09 00 …`, 000000 without flags,
+  and its greeting a C line `C:000000,…` of 207 bytes,
+  length byte 0xce, address and type bytes zero:
+  type 0 is the Cube's own, whose configuration needs 238 bytes,
+  so the line cannot be read.
+  No C line of a device and no room name it, and no record says how it came.
+  Massimo shows no device there and keeps both lines as received,
+  so that its proxy and a backup give what the Cube gave;
+  `serve` warns of them at each greeting.
+  Nothing is sent to 000000 as a device (`cube.CheckZero`):
+  removing a device makes the Cube send a factory reset to its address,
+  which to 000000 could reach more than intended.
+  A room's radio command, which may carry 000000 with the room flag, is not refused.
+  Clearing the entry is left to the owner, outside Massimo.
 
 ## Open questions
 

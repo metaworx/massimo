@@ -574,9 +574,18 @@ func (c *Client) handle(m cube.Message) {
 	if c.beforeApply != nil {
 		c.beforeApply(m)
 	}
+	greeting := c.snap.inGreeting()
 	evs, err := c.snap.apply(m, time.Now())
-	if err != nil {
+	switch {
+	case errors.Is(err, ErrKeptAsReceived):
+		c.log.Warn("cube: a line it sent cannot be read; kept as received for the proxy and backups",
+			"addr", c.Address(), "type", string(m.Type), "error", err)
+	case err != nil:
 		c.log.Warn("bad message from cube", "type", string(m.Type), "error", err)
+	}
+	if greeting && m.Type == 'L' && c.snap.listsZero() {
+		c.log.Warn("cube: its device list has an entry at radio address 000000; it is no device, not shown and sent nothing",
+			"addr", c.Address())
 	}
 	if m.Type == 'H' {
 		c.noteBudget(c.snap.Hello())
@@ -672,6 +681,11 @@ func (c *Client) trySend(ctx context.Context, m cube.Message) (cube.Message, err
 }
 
 func (c *Client) send(ctx context.Context, m cube.Message, wait bool) (cube.Message, error) {
+	// Nothing goes to radio address 000000 as a device, whoever asks: the
+	// API, a rule, a client of the proxy (cube.CheckZero).
+	if err := cube.CheckZero(m); err != nil {
+		return cube.Message{}, err
+	}
 	want := replyType(m.Type)
 	if want == 0 {
 		if c.held.Load() {

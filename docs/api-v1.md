@@ -295,6 +295,10 @@ and it will be removed in a later release.
   the two cannot be confused.
   A serial reaches a device while the Cube has it, and a serial the Cube
   does not have is `404`.
+  Radio address 000000 is no device's and is `400`
+  ("radio address 000000 is no device"):
+  a Cube can list an entry there, which no list of the API shows,
+  and nothing is sent to it (docs/cube-protocol.md).
   The answers carry both, `serial` and `rf_address`,
   and the audit names a device by its serial (`device:MEQ0000101`).
 - `{id}` is a room number as the Cube assigns it (1..255).
