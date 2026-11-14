@@ -582,3 +582,16 @@ def test_card_badges_follow_the_poll(page, case):
         page.unroute("**/api/v1/cubes")
         page.evaluate("loadCubes()")
         panel.locator(":scope > summary").click()
+
+
+def test_cube_facts_copy(page, case):
+    """A Cube's facts: its serial, address and radio address each with a
+    copy icon; the serial copies (D97-A, AP CopyFacts' component)."""
+    page.context.grant_permissions(["clipboard-read", "clipboard-write"], origin=page.evaluate("location.origin"))
+    panel, _ = open_panel(page)
+    for fact in ("serial", "host", "radio"):
+        assert panel.locator(f".cube-info [data-fact={fact}] .copy-icon").count() == 1, f"{fact} with its copy icon"
+    page.evaluate("navigator.clipboard.writeText('')")
+    panel.locator(".cube-info [data-fact=serial] .copy-icon").click()
+    assert wait_until(page, "navigator.clipboard.readText().then((t) => t === 'KEQ0000100')", 3), "the serial copies"
+    panel.locator(":scope > summary").click()

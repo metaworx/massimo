@@ -561,6 +561,7 @@
   "notice.since": "Dal {time}.",
   "notice.next": "Prossimo tentativo alle {time}",
   "cubes.proxySerial": "Numero di serie nelle risposte alla ricerca",
+  "cubes.serial": "Numero di serie",
   "cubes.proxySerialHint": "vuoto: quello del Cube",
   "cubes.proxyVirtual": "Mostra ai client del proxy il termostato a parete virtuale di ogni stanza",
   "cubes.hidden": "Dispositivi nascosti",

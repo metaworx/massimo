@@ -674,13 +674,15 @@ body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8p
   .fold-i { transition: none; }
 }
 
-/* System settings → Cubes (cubes.js): a Cube's panel in two columns where
-   there is room, its own settings at the left, the pairing and the
-   hidden devices at the right; one column on a phone, the pairing first.
-   The form lends its parts to the grid (display: contents). */
+/* System settings → Cubes (cubes.js): a Cube's panel in three groups, its
+   facts (Info), its settings (the form, Hidden devices last, then Save)
+   and its actions in one row last; Info and the settings side by side
+   where there is room, one after the other on a phone. The pairing lends
+   its parts to the actions' row (display: contents): Pair a device beside
+   Reboot and Remove, its form, countdown and joined devices under it. */
 .cube-panel { margin-bottom: 8px; padding: 8px 12px; }
-.cube-cols { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "info" "pair" "fields" "hidden" "actions"; gap: 4px 28px; }
-.cube-cols > .cube-info { grid-area: info; margin-bottom: 10px; }
+.cube-cols { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "info" "settings" "actions"; gap: 4px 28px; }
+.cube-cols > .cube-info { grid-area: info; margin-bottom: 10px; align-self: start; }
 /* a Cube's radio budget in its head, between its serial and its badges */
 .cube-head-stats { font-variant-numeric: tabular-nums; }
 /* a Cube's panel's head (cubes.js fillCubeHead): its sign before the
@@ -699,15 +701,16 @@ body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8p
 .cube-top-line:empty { display: none; }
 .cube-panel:not([open]) > .cube-top-line { display: none; }
 .cube-panel[open] > summary > .panel-badges { display: none; } /* the source is on the top line then */
-.cube-cols > .cube-form { display: contents; }
-.cube-cols > .cube-pairing { grid-area: pair; }
-.cube-cols .cube-fields { grid-area: fields; }
-.cube-cols .cube-hidden { grid-area: hidden; }
-.cube-cols .cube-form > .actions { grid-area: actions; }
-.cube-cols > .cube-differs, .cube-cols > p { grid-column: 1 / -1; }
+.cube-cols > .cube-form { grid-area: settings; display: grid; gap: 4px; align-content: start; min-width: 0; }
+.cube-cols > p.needs-cubes { grid-area: settings; }
+.cube-cols > .cube-actions { grid-area: actions; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 10px; margin-top: 6px; border-top: 1px solid var(--line); }
+.cube-cols > .cube-actions > .cube-pairing, .cube-cols > .cube-actions > .cube-reboot { display: contents; } /* over .panel .actions */
+.cube-actions > .cube-pairing > :not(.pair-open) { flex-basis: 100%; order: 3; }
+.cube-actions > .confirm-box { flex-basis: 100%; }
+.cube-cols > .cube-differs { grid-column: 1 / -1; }
 @media (min-width: 760px) {
-  .cube-cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "info pair" "fields pair" "fields hidden" "actions actions"; align-items: start; }
-  .no-cubes .cube-cols { grid-template-columns: minmax(0, 1fr); grid-template-areas: "info" "pair"; }
+  .cube-cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "info settings" "actions actions"; align-items: start; }
+  .no-cubes .cube-cols { grid-template-columns: minmax(0, 1fr); grid-template-areas: "info" "actions"; }
 }
 .cube-differs { border-left: 3px solid var(--warn); padding: 2px 0 2px 10px; margin: 0 0 10px; }
 .cube-differs p { margin: 0 0 6px; overflow-wrap: anywhere; }

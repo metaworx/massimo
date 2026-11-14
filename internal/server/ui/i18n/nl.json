@@ -560,6 +560,7 @@
   "notice.since": "Sinds {time}.",
   "notice.next": "Volgende poging om {time}",
   "cubes.proxySerial": "Serienummer in zoekantwoorden",
+  "cubes.serial": "Serienummer",
   "cubes.proxySerialHint": "leeg: dat van de Cube",
   "cubes.proxyVirtual": "Proxyclients de virtuele wandthermostaat van elke kamer tonen",
   "cubes.hidden": "Verborgen apparaten",

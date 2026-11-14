@@ -86,21 +86,32 @@ def test_back_to_top(page, case):
 
 
 def test_cube_panel_columns(page, case):
-    """A Cube's panel: its settings beside the pairing and the hidden
-    devices at 1100 px, under the pairing at 390."""
+    """A Cube's panel in three groups: its facts (Info), its settings and
+    its actions; Info and the settings side by side at 1100 px, one after
+    the other at 390; the actions in one row under both, Pair a device,
+    Reboot the Cube and Remove, the settings form without Remove (D97-A)."""
     show_view(page, "system")
     panel = page.locator(".cube-panel[data-serial='KEQ0000100']")
     panel.locator(":scope > summary").click()
-    panel.locator(".cube-fields").wait_for(state="visible")
-    fields = page.evaluate("document.querySelector(\".cube-panel[data-serial='KEQ0000100'] .cube-fields\").getBoundingClientRect().toJSON()")
-    pair = page.evaluate("document.querySelector(\".cube-panel[data-serial='KEQ0000100'] .cube-pairing\").getBoundingClientRect().toJSON()")
+    panel.locator(".cube-form").wait_for(state="visible")
+    info, form, acts = page.evaluate("""() => ['.cube-info', '.cube-form', '.cube-actions'].map((s) =>
+      document.querySelector(".cube-panel[data-serial='KEQ0000100'] " + s).getBoundingClientRect().toJSON())""")
     if case.width >= 900:
-        assert pair["left"] > fields["right"], f"the pairing beside the settings ({pair}, {fields})"
+        assert form["left"] > info["right"], f"the settings beside Info ({form}, {info})"
     else:
-        assert pair["bottom"] <= fields["top"] + 1, f"the pairing above the settings ({pair}, {fields})"
+        assert form["top"] >= info["bottom"] - 1, f"the settings under Info ({form}, {info})"
+    assert acts["top"] >= max(info["bottom"], form["bottom"]) - 1, f"the actions last ({acts})"
+    row = panel.locator(".cube-actions")
+    for sel in (".pair-open", ".cube-reboot-btn", ".remove-cube"):
+        assert row.locator(sel).count() == 1, f"{sel} in the actions' row"
+    # in one go: the page may still be scrolling to the opened panel
+    tops = page.evaluate("""() => ['.pair-open', '.cube-reboot-btn', '.remove-cube'].map((s) =>
+      document.querySelector(".cube-panel[data-serial='KEQ0000100'] .cube-actions " + s).getBoundingClientRect().top)""")
+    if case.width >= 900:
+        assert max(tops) - min(tops) <= 2, f"on one row ({tops})"
+    assert panel.locator(".cube-form .remove-cube").count() == 0, "Remove no longer in the settings"
     panel.locator(":scope > summary").click()
     show_view(page, "tiles")
-
 
 def test_header_and_page_bar_stay(page, case):
     """Scrolled, the header and System settings' row stay at the top, the

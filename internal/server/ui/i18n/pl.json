@@ -584,6 +584,7 @@
   "notice.since": "Od {time}.",
   "notice.next": "Następna próba o {time}",
   "cubes.proxySerial": "Numer seryjny w odpowiedziach na wyszukiwanie",
+  "cubes.serial": "Numer seryjny",
   "cubes.proxySerialHint": "puste: numer urządzenia Cube",
   "cubes.proxyVirtual": "Pokazuj klientom proxy wirtualny termostat ścienny każdego pomieszczenia",
   "cubes.hidden": "Ukryte urządzenia",

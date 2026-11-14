@@ -73,8 +73,21 @@ function fillCubeFacts(d, c) {
   d.querySelector(".cube-head-stats").textContent =
     [t("budget.duty") + " " + f.duty, t("budget.slots") + " " + f.slots, t("budget.pending") + " " + f.pending].join(" · ");
   const clock = clockText(c); // app.js
-  const facts = { host, port, firmware: c.firmware, radio: c.rf_address, clock: clock.text, ...f };
-  for (const td of d.querySelectorAll(".cube-info [data-fact]")) td.textContent = facts[td.dataset.fact] || "–";
+  const facts = { serial: c.serial, host, port, firmware: c.firmware, radio: c.rf_address, clock: clock.text, ...f };
+  for (const td of d.querySelectorAll(".cube-info [data-fact]")) {
+    const v = facts[td.dataset.fact] || "";
+    if (!td.hasAttribute("data-copy")) {
+      td.textContent = v || "–";
+      continue;
+    }
+    // the serial, the address and the radio address copy (components.js
+    // copyEl), drawn again only where they changed, so that a poll leaves
+    // a focused icon where it is
+    if (td.dataset.value === v) continue;
+    td.dataset.value = v;
+    const what = td.closest("tr").querySelector("th").textContent;
+    td.replaceChildren(v ? copyEl(v, { label: what, icon: true }) : "–");
+  }
   d.querySelector('.cube-info [data-fact="clock"]').title = clock.title;
   fillLinkState(d, c);
   fillAddressState(d, c);
@@ -751,16 +764,23 @@ function cubePanel(c) {
   });
   // two columns where there is room (style.css .cube-cols): the Cube's
   // fields at the left, the pairing and the hidden devices at the right
+  // Three groups: the Cube's facts (Info), its settings (the form), and
+  // its actions in one row last: Pair a device (its progress under the
+  // row), Reboot the Cube, Remove; Info and the settings side by side
+  // where there is room (style.css .cube-cols).
   const form = d.querySelector("form.cube-form");
   sum.insertBefore(textEl("span", "", "cube-head-stats muted small"), pills);
-  const cols = elem("div", "cube-cols", fromTemplate("tpl-cube-info"), pairingSection(c.serial), form);
+  const acts = elem("div", "cube-actions", pairingSection(c.serial), rebootRow(c));
+  const cols = elem("div", "cube-cols", fromTemplate("tpl-cube-info"), form, acts);
   sum.after(elem("div", "cube-top-line"), elem("div", "cube-link-state"), elem("div", "cube-address-state"), cols);
-  cols.after(rebootRow(c));
   fillCubeFacts(d, c);
   if (c.source === "flag" || !c.source) {
     form.replaceWith(textEl("p", t("cubes.flagNote"), "muted small needs-cubes"));
     return d;
   }
+  const removeBox = elem("div", "cube-remove needs-cubes");
+  removeBox.appendChild(button(t("cubes.remove"), "remove-cube", () => removeCube(c.serial, removeBox)));
+  acts.appendChild(removeBox);
   for (const fd of c.file_differs || []) {
     const row = fromTemplate("tpl-cube-differs");
     row.querySelector("p").textContent = t("cubes.differs", { variable: fd.variable, file: valueText(fd.file), store: valueText(fd.store) });
@@ -792,7 +812,6 @@ function cubePanel(c) {
   fillProxyState(d, c);
   fillHiddenEditor(c, form.querySelector(".cube-hidden"));
   const actions = form.querySelector(".actions");
-  actions.querySelector(".remove-cube").addEventListener("click", () => removeCube(c.serial, actions));
 
   // cur is the Cube as the list last gave it, which a poll moves on
   // (d.syncForm); changes is what Save sends: the fields that differ
