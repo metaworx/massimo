@@ -2853,6 +2853,7 @@ paths:
                 backups.keep_newest: {value: "10", default: "10", set: false, in_effect: "10", applies: now}
                 auth.password_login: {value: "true", default: "true", set: false, in_effect: "true", applies: now}
                 integrations.requests: {value: "true", default: "true", set: false, in_effect: "true", applies: now}
+                announce: {value: auto, default: auto, set: false, in_effect: "off", applies: restart}
                 update.channel: {value: alpha, default: alpha, set: false, in_effect: alpha, applies: now}
                 poll_interval: {value: 1m, default: 1m, set: false, in_effect: 1m, applies: restart}
                 node.id: {value: 01a1ae5a-6bee-7ed4-bb4e-3baa2c43fe55, set: true, read_only: true}
@@ -2875,7 +2876,8 @@ paths:
         numbers; auth.password_login, true or false, whether POST
         /api/v1/login takes a password (off, the users sign in by OPAQUE
         alone); integrations.requests, true or false, whether
-        integrations may ask to be registered; update.channel, devel, nightly, alpha, beta, rc or stable,
+        integrations may ask to be registered; announce, auto, on or off,
+        the announcement on the LAN at the next start; update.channel, devel, nightly, alpha, beta, rc or stable,
         the releases the box takes (its own flavour's and every more
         stable one's; the default is the build's flavour); null goes back
         to the default. Every value is checked before any is written. The
@@ -4216,6 +4218,7 @@ components:
         in_effect: {type: string, description: What this run uses; a serve flag wins for one run}
         applies: {type: string, enum: [now, restart]}
         read_only: {type: boolean}
+        fixed_by: {type: string, description: "What decides this run's value instead of the setting: -announce or MASSIMO_ANNOUNCE (announce)"}
     FileDifference:
       type: object
       properties:

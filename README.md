@@ -819,8 +819,12 @@ A server that announces itself also looks for Home Assistant on the LAN
 (`docs/api-v1.md`, "Integrations").
 It is on by default where `-listen` is reachable from the LAN,
 and off on a loopback address;
-`-announce` (or `MASSIMO_ANNOUNCE`) switches it,
+the setting `announce` (System settings → Maintenance,
+**Announce on the LAN**) switches it, at the next start,
+and `-announce` (or `MASSIMO_ANNOUNCE`), where given, wins over it,
 taking the same values as `MASSIMO_REBOOT`, and `-addr` announces nothing.
+A box behind a reverse proxy listens on the loopback,
+so it announces itself only with the setting or the switch on.
 A switch alone is on, and its value goes after `=`, as `-announce=off`:
 `serve` refuses `-announce off`, which would set it on and leave `off` and the
 flags after it unread.
