@@ -4060,6 +4060,13 @@ components:
         since: {type: string, format: date-time, description: The first failure}
         next_try: {type: string, format: date-time}
         tries: {type: integer}
+    FoundElsewhere:
+      type: object
+      description: "A Cube with a fixed address that answered the latest discovery at another one, neither it nor a proxy answering at its own; absent otherwise"
+      properties:
+        address: {type: string, description: "Where it answers, with the configured address's port: the address a PUT takes"}
+        configured: {type: string, description: The configured address}
+        since: {type: string, format: date-time, description: The run that first found it there}
     ConfigView:
       type: object
       properties:
@@ -4176,6 +4183,7 @@ components:
         mac: {type: string, description: From discovery, once it saw the Cube}
         last_seen: {type: string, format: date-time, description: When the Cube last answered discovery}
         found_address: {type: string, description: "The host discovery last found the Cube at; differs from address where the server connects through a proxy or to a fixed address the Cube has left"}
+        found_elsewhere: {$ref: '#/components/schemas/FoundElsewhere'}
         problems:
           type: array
           description: "The Cube's visible devices with a problem (a transmit or link error, a low battery, a window open), each with its room's name; absent where none"

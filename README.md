@@ -1132,7 +1132,8 @@ which only a test's fake Cube answers to),
 lists Cubes it finds that are not configured in the API (`GET /api/v1/cubes`
 with `"configured": false`),
 keeps them in the store so that they are still listed after a restart,
-and logs a configured Cube that answers from another address than configured.
+and logs a configured Cube that answers from another address than configured,
+once until that changes, and gives it as the Cube's `found_elsewhere` in the API.
 A lost Cube is searched for at once and every minute until it is back,
 one with a fixed address only where the interval is not `0`,
 and followed to its new address where it follows discovery.

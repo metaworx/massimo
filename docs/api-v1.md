@@ -1329,6 +1329,18 @@ A configured Cube has the fields below;
 discovery has seen it:
 `found_address` is the host it answered from, which differs from `address`
 where the server connects through a proxy or to a fixed address the Cube has left.
+`found_elsewhere` says the latter:
+a Cube with a fixed address (`follow_discovery` false) that answered the latest
+discovery at another address, and neither it nor a proxy at its own,
+has `address` (where it answers, with the configured address's port,
+ready for a `PUT` of `address`), `configured` and `since`;
+it is absent otherwise, and goes at once with a `PUT` of that address or of
+`"follow_discovery": true`:
+
+```json
+"found_elsewhere": {"address": "192.0.2.24:62910", "configured": "192.0.2.23:62910", "since": "2026-11-04T15:00:02+01:00"}
+```
+
 `problems` lists, where there are any, the Cube's visible devices with a problem,
 as `GET …/devices` shows them, each with its room's name (`room`):
 a transmit or link error, a low battery, a window open (with its `window` times);
@@ -1676,7 +1688,10 @@ A found Cube that does not answer a complete run leaves the list of `GET /api/v1
 and serve's log says "cube gone from the LAN";
 the stream sends nothing for it.
 
-A configured Cube that answers from another address than configured is logged;
+A configured Cube that answers from another address than configured is logged,
+at Warn when that is new or the address it answers from changes,
+at Debug for the runs that repeat it,
+and shows as `found_elsewhere` (above);
 one configured by serial only, without an address, follows discovery:
 it keeps its address while that answers,
 else takes the address of a proxy that answers for it
