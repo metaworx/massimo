@@ -58,6 +58,9 @@ After an interruption the page opens a new stream that resumes after the
 last event it read, so what happened meanwhile still arrives;
 where the server no longer holds it, the page reloads the rooms
 (docs/api-v1.md, "GET …/events").
+A room's tile whose configuration has the focus is not drawn again under a click
+or the user's typing, for a state event or a reload of the rooms alike;
+it is drawn once the focus has left the configuration.
 
 ## Header
 
@@ -103,11 +106,10 @@ narrower than 600 px the Cube choice then takes the line of **Massimo**.
   not configured",
   as long as they answer: one that a search or the server's own look no
   longer hears leaves the list at the page's next poll.
-  A line under the header counts them.
-  For a role that may add Cubes, the line and a found Cube in the choice
-  open System settings with **Cubes** in view,
-  which lists them with **Add** and the lines for the server's env file;
-  for others the line is the count alone, and the choice's entries cannot be chosen.
+  For a role that may add Cubes, a found Cube in the choice
+  opens System settings with **Cubes** in view and its found list open,
+  which lists them with **Add** and the lines for the server's settings file;
+  for others the choice's entries cannot be chosen.
   A Cube the server finds by itself appears without reloading the page,
   and in the log.
 - **Problems**, beside the Cube choice where something is wrong on any Cube:
@@ -115,10 +117,17 @@ narrower than 600 px the Cube choice then takes the line of **Massimo**.
   open too long, the settings), which lists every Cube with a problem as a heading,
   its own sign and its link's badge, and under it its devices with a problem
   as "Room › Device" with their badges;
-  for one who may change the settings, **Settings** last:
+  for one who may change the settings, **Settings**:
   a Cube proxy that does not listen, a settings file that differs,
-  a Cube that discovery finds at another address than its fixed one,
-  Cubes found and not served.
+  a Cube that discovery finds at another address than its fixed one.
+  What discovery found and the server does not serve has the pill's last icon,
+  a cube in the accent's blue with their number in a corner badge,
+  as information rather than a problem,
+  and its list's last group, **Found on the network**:
+  "not set up", for a role that may add Cubes with a link to System settings → Cubes,
+  and under it each Cube and Massimo proxy with its address,
+  for a proxy the Cube it serves, and the Massimo server serving it,
+  its name a link to the address its announcement on the network gives.
   A window open briefly is not listed: it is a state, not a problem.
 - **The time of the last update** and **↻**, one button without a frame,
   which asks the server for the current state now;
@@ -133,6 +142,10 @@ narrower than 600 px the Cube choice then takes the line of **Massimo**.
   The items of **☰** have the icons of their pages.
 - The page buttons, a house, a person, a sheet and a cog,
   switch between **Rooms**, **Personal settings**, **Log** and **System settings**.
+  The sheet turns amber with a triangle, or red with a cross,
+  while the log holds a warning or an error not yet settled or marked seen (see Log),
+  its name with the count;
+  on a phone ☰ carries the mark, and the log's entry in it the sign.
 - The page shown is in the address, Rooms without one:
   `#log`, `#me` (Personal settings, or at a card `#profile`, `#prefs` and
   `#notify`) and `#system` (System settings),
@@ -400,6 +413,21 @@ the oldest line, where an event of that same millisecond can be missed.
 A page that cannot load says so in the log, whatever is chosen;
 an answer that comes after **Clear**, another choice or another Cube is dropped,
 and another Cube in the header starts the log over with every device.
+
+A warning or an error of any Cube's log, or of the server's,
+stays a problem until a later line settles it
+or the person marks it seen (`docs/api-v1.md`, "GET /api/v1/log/alerts"):
+a lost connection until the next one,
+a failed command until the same one is acknowledged,
+a failed backup until the next, a hold until it ends;
+a device's transmit error, link error and low battery while the device has them,
+at the line that set them.
+Its line is highlighted, a bar and its mark in amber or red,
+with **Mark seen**; **Mark all as seen** beside **Clear** marks every one.
+Opening the log marks nothing.
+The marks follow a signed-in user with `preferences` (the preference `log.seen`);
+anyone else's stay in the browser.
+The page asks at every poll.
 The server keeps its log in its store across restarts and updates,
 for the days `log.keep_days` says (30 by default; docs/api-v1.md,
 "GET and PUT /api/v1/settings").
@@ -696,6 +724,20 @@ to the top of the page.
   and address, and that with that header the server reads the proxy's certificate;
   a page on HTTPS from a server without TLS says "(proxied)" too,
   and that `-trusted-proxies` would show more.
+  The server's version copies on a click, or by its copy icon, whole, with
+  what it was built with (the header's does too, without the icon);
+  so does each Cube proxy's address, which the original software connects to.
+  A copy says "Copied"; on a page served over plain HTTP the browser gives no
+  clipboard to the page, and the copy goes through its copy command instead.
+  At its end, for a holder of `settings`,
+  **Store** opens to what `massimo store info` shows:
+  the file, the schema version, the node and tenant and the rows per table,
+  its head the file, the schema and the rows in all;
+  **Settings in effect** to what `massimo config` shows: the version, the
+  settings file, the data directory, the listen address, TLS, the log level
+  and every `MASSIMO_*` variable with where it came from, a key, an IV, a
+  token or a password as "set, not shown"
+  (`docs/api-v1.md`, "GET /api/v1/store, GET /api/v1/config").
 - **Software update**:
   the running version, the update channel and whether a newer release is out.
   A holder of `settings` chooses the channel there:
@@ -724,6 +766,13 @@ to the top of the page.
   (packaging/README.md, "Homebrew").
   While the helper works, **Check for updates** and **Update** are greyed out,
   also after a reload of the page, until it reports that it is done.
+  **Last updates** lists the last three under the version lines:
+  the version reached,
+  or the one asked for with "under way" until the next start,
+  when, and who started it,
+  or "outside Massimo" with apt or brew where Massimo did not start it;
+  one the helper ended without its version says how it ended (`docs/api-v1.md`,
+  "GET /api/v1/update?refresh=1").
 - **Maintenance** (with `restart`, `reboot` for its reboot,
   or `settings` for its announcement and its last two parts):
   **Restart the server**
@@ -762,19 +811,17 @@ to the top of the page.
   the delay and the button are missing and the server's reason is shown:
   the switch is off, the helper is not installed, a server in a terminal
   (`packaging/README.md`, "Rebooting from the web UI").
-  **Store** (with `settings`) opens to what `massimo store info` shows:
-  the file, the schema version, the node and tenant and the rows per table,
-  its head the file, the schema and the rows in all;
-  **Settings in effect** to what `massimo config` shows: the version, the
-  settings file, the data directory, the listen address, TLS, the log level
-  and every `MASSIMO_*` variable with where it came from, a key, an IV, a
-  token or a password as "set, not shown"
-  (`docs/api-v1.md`, "GET /api/v1/store, GET /api/v1/config").
   From 900 px System Info and Software update share a row, Maintenance has one of its own.
 - **Cubes**:
-  the Cubes the server serves, kept in its store,
-  each in a panel whose head shows the Cube's sign, the name, the serial and the address
-  without the port, the duty cycle, the free slots and the radiograms pending,
+  the Cubes the server serves, kept in its store;
+  the card's head counts them, at every poll whether a panel is open or not:
+  how many are served, those not connected as their signs show them
+  (red "not connected" for a cross, amber "connection held" or "rebooting"
+  for a triangle), the proxies that do not listen,
+  the Cubes found at another address and those found and not served.
+  Each is in a panel whose head shows the Cube's sign, the name,
+  the serial and the address without the port,
+  the duty cycle, the free slots and the radiograms pending,
   a pill with every problem of the Cube (its link, its proxy, its settings file
   and its devices with theirs, as the header's), whose click opens its list
   and not the panel, and where its settings come from,
@@ -783,8 +830,10 @@ to the top of the page.
   a proxy that does not listen, a settings file that differs,
   a Cube found elsewhere than its fixed address, the source),
   a table of its facts for everyone who sees the panel
-  (address, port, firmware, radio address, the Cube's clock,
-  duty cycle, free slots, pending and queued, refreshed while it is open),
+  (serial, address, port, firmware, radio address, the Cube's clock,
+  duty cycle, free slots, pending and queued, refreshed while it is open;
+  the serial, the address and the radio address copy with a click on them
+  or their copy icon),
   and above the facts a notice with since when where the server knows why it
   is not connected (`link` of `docs/api-v1.md`, "GET /api/v1/cubes"):
   its lost connection held open until a time, so that it carries on when the
@@ -822,7 +871,7 @@ to the top of the page.
   sends the changes, which apply at once:
   a hidden device leaves the tiles, the API and the original software,
   and a room that holds only hidden devices goes with it.
-  **Reboot the Cube**, at the bottom of the panel for a role with `cubes.reboot`,
+  **Reboot the Cube**, in the panel's actions for a role with `cubes.reboot`,
   restarts the Cube (`POST /api/v1/cubes/{sn}/reboot`),
   which frees one that still holds the server's old connection at once:
   in place of the button it asks first, naming the Cube's serial,
@@ -833,25 +882,37 @@ to the top of the page.
   When a line of the server's settings file says something else than the panel,
   a notice names the line and **Take the file's value** takes it.
   **Remove** stops serving the Cube;
-  it keeps its settings and history in the store and is listed under **Found on
-  the LAN** while discovery hears it, with its address,
-  DHCP flag and firmware, "via proxy at …" where a massimo proxy answers for it,
+  it keeps its settings and history in the store and is listed as found
+  while discovery hears it.
+  Under the panels, what discovery found and the server does not serve
+  is one fold, **Found on the network, not set up**, closed at first:
+  its head the found Cubes' sign and how many Cubes and Massimo proxies;
+  open, each Cube with its address, DHCP flag and firmware,
+  "via proxy at …" where a massimo proxy answers for it,
   in expert mode its radio and MAC address and the gateway it uses, and **Add**,
-  which serves a found Cube at once.
-  Under the found Cubes, the lines to put into the server's env file
-  serve them too (`/etc/massimo/env` for a server installed with `massimo install`,
+  which serves a found Cube at once;
+  each Massimo proxy with its address, the Cube it serves
+  and the Massimo server serving it, its name a link to the address
+  its announcement gives (`host` of `docs/api-v1.md`), without **Add**:
+  it is another server's, listed so that its Cube is not added twice;
+  a Cube a proxy of another server serves names that server too.
+  Under them, **Lines for the settings file**, a fold of its own
+  with one copy icon for all of them, serve the Cubes too
+  (`/etc/massimo/env` for a server installed with `massimo install`,
   otherwise `.env`):
   the server serves a Cube once its `MASSIMO_CUBE_<SERIAL>_ADDRESS`,
   or only a `_NAME`, is there and the server has been restarted;
   with a name alone it takes the address from discovery and follows it.
-  With several Cubes each also needs a `_PROXY` address.
-  Key and IV are only needed for the portal commands (README.md,
+  With several Cubes each also needs a `_PROXY` address (README.md,
   "Cube variables").
   A Cube served for this run only (`serve -addr` or `-sn`) cannot be changed here.
 
-  From 760 px a Cube's panel has two columns: its settings at the left,
-  the pairing and the hidden devices at the right.
-  **Pair a device**, at the top of the Cube's panel on a phone,
+  A Cube's panel has three groups: its facts, its settings with **Hidden devices**
+  and **Save**, and its actions in one row under both,
+  **Pair a device**, **Reboot the Cube** and **Remove**,
+  each question and the pairing's progress in a line under them;
+  from 760 px the facts and the settings are side by side.
+  **Pair a device**
   shows the pairing time (60 seconds, at most 600) and **Start**,
   which puts the Cube into pairing mode;
   then the device's pairing button is pressed, as its manual says.

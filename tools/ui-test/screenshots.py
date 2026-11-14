@@ -81,7 +81,7 @@ BACKUPS = {"backups": [
     {"id": 1, "taken_at": "2026-11-02T18:05:00+01:00", "reason": "auto", "format": "json", "tool": VERSION, "size": 23990,
      "sha256": "1" * 64}]}
 TIME_RE = re.compile(r'"20\d\d-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?(Z|[+-]\d\d:\d\d)"')
-# System settings → Maintenance's store and settings in effect: run.sh's
+# System settings → System Info's store and settings in effect: run.sh's
 # temporary directory and ports would differ on every run, so placeholders.
 STORE = {"file": "/var/lib/massimo/massimo.db", "schema": 8, "min_reader": 1, "binary": 8,
          "node": "00000000-0000-7000-8000-000000000001", "tenant": "00000000-0000-7000-8000-000000000002",
@@ -115,8 +115,8 @@ PAGES = {
     "notify": "#notify",                            # Notifications, this browser not notified
     "appearance": "#prefs .appearance",
     "system": "#system",                            # System settings
-    "maintenance": "#sys-maint",                    # its Maintenance, the store and settings open
-    "cube-found": "header.top",                     # the Cube choice with the found Cube under it
+    "maintenance": "#sys-maint",                    # its Maintenance
+    "cube-found": "header.top",                     # the Cube choice, the found Cubes' sign in its pill
     "cubes": "#system .cubes-settings",
     "nav-menu": None,                               # ☰, which only a narrow screen shows
 }
@@ -338,9 +338,6 @@ def step(page, which):
         show_view(page, "notify")
     elif which == "maintenance":
         show_view(page, "system")
-        wait_until(page, "document.getElementById('store-info-sum').textContent !== ''", 5)
-        page.locator("#store-info summary").click()
-        page.locator("#config-info summary").click()
         to_top(page, page.locator("#sys-maint"))
     elif which == "appearance":
         show_view(page, "prefs")
@@ -348,12 +345,13 @@ def step(page, which):
         page.locator("#scheme-editor").wait_for(state="visible")
         to_top(page, page.locator("#prefs .appearance"))
     elif which == "cube-found":
-        page.locator("#cube-found-link").wait_for(state="visible")
+        page.locator("#cube-problems .problems-sum .found-count").wait_for(state="visible")
     elif which == "cubes":
         show_view(page, "system")
         panel = page.locator(".cube-panel[data-serial='KEQ0000100']")
         panel.locator(":scope > summary").click()
         panel.locator("form.cube-form").wait_for(state="visible")
+        page.locator("#cubes-list .found-panel > summary").click()
         page.locator(".cube-found-row[data-serial='KEQ0000000']").wait_for(state="visible")
         to_top(page, page.locator("#system .cubes-settings"))
     else:

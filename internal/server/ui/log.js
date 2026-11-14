@@ -605,9 +605,12 @@ function logLineMatches(line) {
 // configuration is the Cube's, by its S/N; a removed device is named by
 // the text alone. Under All Cubes a Cube's line names its Cube first,
 // "Upstairs › Kitchen › Window", and the Cube's own lines by it alone.
+// An unsettled problem not marked seen is highlighted, with its mark and
+// Mark seen.
 function renderLogLine(line) {
   const row = fromTemplate("tpl-log-line");
   row.className += " kind-" + line.kind;
+  if (line.id) row.dataset.id = String(line.id);
   row.querySelector(".log-time").textContent = fmtLogTime(line.time);
   row.querySelector(".log-kind").textContent = logKind(line.kind);
   const dev = row.querySelector(".log-device");
@@ -635,6 +638,15 @@ function renderLogLine(line) {
   if (line.device) rf.textContent = line.device;
   else rf.remove();
   row.querySelector(".log-text").textContent = logText(line);
+  const alert = line.id ? logAlerts.levels.get(line.id) : "";
+  if (alert) {
+    // an unsettled problem the person has not marked seen (renderLogSign)
+    const tone = alert === "error" ? "bad" : "warn";
+    row.classList.add("log-alert", "log-alert-" + tone);
+    const kind = row.querySelector(".log-kind");
+    kind.insertBefore(markEl(tone, "log-line-" + line.id), kind.firstChild);
+    row.appendChild(button(t("log.markSeen"), { cls: "subtle log-mark" }, () => markLogSeen(line.id)));
+  }
   if (line.command) {
     const open = logState.openCommands.has(line.command);
     const b = button(t("log.cmd.open", { id: line.command }), { cls: "subtle log-cmd", title: t("log.cmd.title") }, () => toggleLogCommand(line.command));
@@ -1107,6 +1119,149 @@ function logCubeChanged() {
 // log's range, kind and device after its page (logHash), so that a
 // reload or a link opens it again as chosen and the browser's back and
 // forward move between the pages.
+// --- the log's unseen problems (AP LogAlerts) ---------------------------
+
+// The log's button shows the worst of the log's warnings and errors that
+// nothing has settled (GET /api/v1/log/alerts) and the person has not
+// marked seen: amber with a triangle, red with a cross. A line is marked
+// with its Mark seen, every one with Mark all as seen; opening the log
+// marks nothing. The marks follow a signed-in user with the capability
+// preferences (the preference log.seen); else this browser keeps them.
+
+// LOG_SEEN_KEY is where a browser keeps its marks for nobody signed in.
+const LOG_SEEN_KEY = "massimo.log.seen";
+
+// LOG_SEEN_LINES is how many lines are kept marked one by one, the
+// server's limit.
+const LOG_SEEN_LINES = 500;
+
+const logAlerts = {
+  list: [], // the alerts not marked seen, newest first
+  levels: new Map(), // their ids to their levels
+  level: "", // the worst: error, warn or ""
+  seen: { all: 0, lines: [] }, // the marks
+  seenOf: null, // whose marks seen holds: the user's name, "" for this browser's
+};
+
+// logSeenOwner is whose marks the page keeps: the signed-in user's where
+// they follow the user (canSync, login.js), else this browser's.
+function logSeenOwner() {
+  return canSync() ? state.me.user.name : "";
+}
+
+// validSeen is a marks document as the page keeps it, or none.
+function validSeen(v) {
+  if (!v || typeof v !== "object") return { all: 0, lines: [] };
+  const all = Number.isSafeInteger(v.all) && v.all > 0 ? v.all : 0;
+  const lines = Array.isArray(v.lines) ? v.lines.filter((id) => Number.isSafeInteger(id) && id > all) : [];
+  return { all, lines: lines.slice(-LOG_SEEN_LINES) };
+}
+
+// loadLogSeen reads the marks of whoever the page is for now: the
+// user's preference, else this browser's.
+async function loadLogSeen() {
+  const owner = logSeenOwner();
+  if (logAlerts.seenOf === owner) return;
+  let v = null;
+  if (owner) {
+    try {
+      // every key, {} for none: the key alone would answer 404 before the first mark
+      v = ((await api("GET", "api/v1/me/preferences")) || {})["log.seen"];
+    } catch (e) {
+      return; // asked again at the next poll
+    }
+  } else {
+    try {
+      v = JSON.parse(readStored(LOG_SEEN_KEY) || "null");
+    } catch (e) {
+      v = null;
+    }
+  }
+  logAlerts.seen = validSeen(v);
+  logAlerts.seenOf = owner;
+}
+
+// saveLogSeen keeps the marks: as the user's preference, else in this
+// browser.
+async function saveLogSeen() {
+  const doc = { all: logAlerts.seen.all, lines: logAlerts.seen.lines };
+  if (!logAlerts.seenOf) {
+    store(LOG_SEEN_KEY, JSON.stringify(doc));
+    return;
+  }
+  try {
+    await api("PUT", "api/v1/me/preferences/log.seen", doc);
+  } catch (e) {
+    showMessage(t("log.markFailed", { error: e.message }), false);
+  }
+}
+
+// loadLogAlerts asks for the log's unsettled problems after the last
+// Mark all as seen, leaves out the lines marked, and draws the button's
+// sign, and the log's highlights where they changed.
+async function loadLogAlerts() {
+  await loadLogSeen();
+  let a;
+  try {
+    a = await api("GET", "api/v1/log/alerts" + (logAlerts.seen.all ? "?after=" + logAlerts.seen.all : ""));
+  } catch (e) {
+    return; // the sign stays as it was
+  }
+  setLogAlerts(((a && a.alerts) || []).filter((x) => x.id > logAlerts.seen.all && !logAlerts.seen.lines.includes(x.id)));
+}
+
+// setLogAlerts takes the alerts not marked seen and draws them.
+function setLogAlerts(list) {
+  const before = [...logAlerts.levels].join();
+  logAlerts.list = list;
+  logAlerts.levels = new Map(list.map((x) => [x.id, x.level]));
+  logAlerts.level = list.some((x) => x.level === "error") ? "error" : list.length ? "warn" : "";
+  renderLogSign();
+  if (before !== [...logAlerts.levels].join() && isShown("log")) renderLog();
+}
+
+// renderLogSign draws the log's button and ☰'s log entry: the log
+// plain, or with the triangle or the cross of the worst unseen problem,
+// the count in its name; the mark on ☰ too, which holds the log's button
+// on a phone; and Mark all as seen while there is one.
+function renderLogSign() {
+  const tone = logAlerts.level === "error" ? "bad" : logAlerts.level ? "warn" : "";
+  const n = logAlerts.list.length;
+  for (const id of ["view-log", "menu-log"]) {
+    const old = $(id).querySelector("svg");
+    if (old) old.replaceWith(signEl("log", tone, "", "log-sign"));
+  }
+  const btn = $("view-log");
+  btn.setAttribute("aria-label", n ? t("nav.logAlerts", { count: n }) : t("nav.log"));
+  btn.title = n ? t("nav.logAlerts", { count: n }) : t("nav.logTitle");
+  const entry = $("menu-log");
+  if (n) entry.setAttribute("aria-label", t("nav.logAlerts", { count: n }));
+  else entry.removeAttribute("aria-label");
+  const menu = $("nav-menu").querySelector("summary");
+  const mark = menu.querySelector(".mark-sign");
+  if (mark) mark.remove();
+  if (tone) menu.appendChild(markEl(tone, "log-sign-menu"));
+  $("log-seen-all").classList.toggle("hidden", !n);
+}
+
+// markLogSeen marks one line seen.
+function markLogSeen(id) {
+  const seen = logAlerts.seen;
+  if (!seen.lines.includes(id)) seen.lines = seen.lines.concat(id).slice(-LOG_SEEN_LINES);
+  setLogAlerts(logAlerts.list.filter((x) => x.id !== id));
+  saveLogSeen();
+}
+
+// markAllLogSeen marks every problem there is now seen: all moves up to
+// the newest, and the lines it covers go.
+function markAllLogSeen() {
+  const seen = logAlerts.seen;
+  seen.all = Math.max(seen.all, ...logAlerts.list.map((x) => x.id));
+  seen.lines = seen.lines.filter((id) => id > seen.all);
+  setLogAlerts([]);
+  saveLogSeen();
+}
+
 const VIEW_SECTION = { log: "logview", me: "me", system: "system" };
 const VIEW_BUTTON = { tiles: "view-tiles", log: "view-log", me: "view-me", system: "view-settings" };
 const VIEW_HASH = { tiles: "", log: "#log", me: "#me", system: "#system" };
@@ -1280,6 +1435,7 @@ function initLog() {
     renderLog();
   });
   $("log-clear").addEventListener("click", clearLogFilter);
+  $("log-seen-all").addEventListener("click", markAllLogSeen);
   $("log-cubes").addEventListener("change", (ev) => {
     logState.cubes = ev.target.value === "all" ? "all" : "";
     fillLogSelects(); // the devices of every Cube, or the header's alone

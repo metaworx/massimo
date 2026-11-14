@@ -6,6 +6,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -16,8 +17,10 @@ import (
 	"testing"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/announce"
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
+	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/sharedport"
 )
 
@@ -155,7 +158,7 @@ func TestDiscoveryFindsUnconfiguredCubes(t *testing.T) {
 	}
 	for k := range cubes[1] {
 		switch k {
-		case "serial", "configured", "address", "mac", "rf_address", "firmware", "dhcp", "gateway", "netmask", "dns", "proxies", "found_at", "last_seen":
+		case "serial", "kind", "serves", "host", "configured", "address", "mac", "rf_address", "firmware", "dhcp", "gateway", "netmask", "dns", "proxies", "found_at", "last_seen":
 		default:
 			t.Errorf("unexpected field %q in a found cube", k)
 		}
@@ -282,6 +285,27 @@ func TestDiscoveryLeavesOutTheProxysOwnAnswers(t *testing.T) {
 	}
 }
 
+// A served Cube on this host, as the fake Cube of the UI tests is, is
+// heard: its answer is a Cube's, which no proxy of the server gives. The
+// same serial from this host answering the identify request alone is the
+// server's own proxy's, and left out.
+func TestDiscoveryHearsAServedCubeOnThisHost(t *testing.T) {
+	atHost, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000000", 0x0a0b0c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer atHost.Close()
+	ts, _ := startDiscovering(t, Options{Cubes: []CubeConfig{{Serial: "KEQ0000000", Addr: "127.0.0.1:9"}},
+		DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{atHost.Addr()}})
+	if got := foundSerials(t, ts); len(got) != 1 || got[0] != "KEQ0000000" {
+		t.Fatalf("found %v, want the served Cube KEQ0000000", got)
+	}
+	atHost.SetIdentifyOnly(true)
+	if got := foundSerials(t, ts); len(got) != 0 {
+		t.Fatalf("found %v, want none: a proxy's answer from this host", got)
+	}
+}
+
 // foundSerials are the serials a discovery run found, configured or not.
 func foundSerials(t *testing.T, ts *httptest.Server) []string {
 	t.Helper()
@@ -350,6 +374,83 @@ func TestDiscoveryLeavesOutItsProxySerialFromAnywhere(t *testing.T) {
 	if got := foundSerials(t, ts); len(got) != 1 || got[0] != "KEQ0000999" {
 		t.Fatalf("found %v, want the Cube KEQ0000999", got)
 	}
+}
+
+// A found entry says what it is: a Cube, a massimo proxy by its answer,
+// or one at an announced server's address, which is a proxy too; a proxy
+// names the Cube with its radio address and the server it runs on, a
+// Cube the server one of its proxies runs on. The servers are asked at
+// the discovery targets' addresses, as long as the run waits.
+func TestFoundEntriesNameTheirKindAndServer(t *testing.T) {
+	start := func(addr, serial string, rf cube.RFAddress, identifyOnly bool) *fakecube.DiscoveryResponder {
+		d, err := fakecube.StartDiscovery(addr, serial, rf)
+		if err != nil {
+			t.Skip(err)
+		}
+		t.Cleanup(func() { d.Close() })
+		d.SetIdentifyOnly(identifyOnly)
+		return d
+	}
+	atCube := start("127.0.0.4:0", "KEQ0000201", 0x0a0101, false)
+	atProxy := start("127.0.0.3:0", "KEQ0000202", 0x0a0101, true)
+	atServer := start("127.0.0.5:0", "KEQ0000203", 0x0a0102, true)
+	mac := func(ip net.IP) string {
+		if ip.String() == "127.0.0.3" {
+			return "02:00:00:00:00:03"
+		}
+		return ""
+	}
+	var asked atomic.Value
+	browse := func(_ context.Context, wait time.Duration, unicast ...net.IP) ([]announce.Found, error) {
+		var ips []string
+		for _, ip := range unicast {
+			ips = append(ips, ip.String())
+		}
+		asked.Store(strings.Join(ips, " ") + " " + wait.String())
+		return []announce.Found{
+			{Name: "box-a", Host: "massimo-1.local.", Port: 8443, From: net.IPv4(192, 0, 2, 7), Addrs: []net.IP{net.IPv4(127, 0, 0, 3)}, TLS: true,
+				TXT: map[string]string{"url": "https://box-a.example:8443"}},
+			{Host: "box-b.local.", Port: 8080, From: net.IPv4(127, 0, 0, 5)},
+		}, nil
+	}
+	ts, _ := startDiscovering(t, Options{LookupMAC: mac, BrowseServers: browse, DiscoveryAddr: "127.0.0.1:0",
+		DiscoveryTargets: []string{atProxy.Addr(), atCube.Addr(), atServer.Addr()}})
+	_, out := postDiscovery(t, ts)
+	if got, want := asked.Load(), "127.0.0.3 127.0.0.4 127.0.0.5 200ms"; got != want {
+		t.Errorf("servers asked at %v, want %q", got, want)
+	}
+	check := func(where string, found []map[string]any) {
+		t.Helper()
+		by := map[string]map[string]any{}
+		for _, f := range found {
+			by[f["serial"].(string)] = f
+		}
+		want := map[string]string{
+			"KEQ0000201": "cube  box-a https://box-a.example:8443",
+			"KEQ0000202": "proxy KEQ0000201 box-a https://box-a.example:8443",
+			"KEQ0000203": "proxy  box-b http://127.0.0.5:8080",
+		}
+		for serial, w := range want {
+			f := by[serial]
+			if f == nil {
+				t.Errorf("%s: %s not found", where, serial)
+				continue
+			}
+			host, _ := f["host"].(map[string]any)
+			serves, _ := f["serves"].(string)
+			if got := fmt.Sprintf("%v %s %v %v", f["kind"], serves, host["name"], host["url"]); got != w {
+				t.Errorf("%s: %s is %q, want %q", where, serial, got, w)
+			}
+		}
+	}
+	var answer []map[string]any
+	for _, f := range out["found"].([]any) {
+		answer = append(answer, f.(map[string]any))
+	}
+	check("the run's answer", answer)
+	var cubes []map[string]any
+	getJSON(t, ts, "", "/api/v1/cubes", &cubes)
+	check("GET /cubes", cubes)
 }
 
 func TestDiscoveryWithoutThePort(t *testing.T) {

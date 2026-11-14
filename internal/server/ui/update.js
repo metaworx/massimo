@@ -4,9 +4,10 @@
 // The Massimo web UI, System settings → Software: the update channel a
 // holder of settings chooses (the setting update.channel), which release
 // runs and whether a newer one is out on that channel, the request to the
-// server's update helper to install it (POST /api/v1/update), and the
-// server's restart (POST /api/v1/restart), after which the page follows
-// /healthz until the server is back, and the computer's reboot (POST
+// server's update helper to install it (POST /api/v1/update), the last
+// three updates (GET /api/v1/update's history), and the server's
+// restart (POST /api/v1/restart), after which the page follows /healthz
+// until the server is back, and the computer's reboot (POST
 // /api/v1/reboot), which waits its delay, can be taken back meanwhile,
 // and is followed the same way. Once the server restarts with a new
 // version, the version check in app.js offers the reload.
@@ -36,14 +37,46 @@ function setUpdateBusy(busy) {
 // helperText is the helper's last state; unknown states are shown as
 // the helper reports them.
 function helperText(h) {
-  const key = "update.state." + h.state;
-  let s = t(key);
-  if (s === key) s = h.state;
+  let s = stateText(h.state);
   if (h.to && h.state !== "up-to-date") s += " " + h.to;
   if (h.message) s += ": " + h.message;
   const when = h.time ? new Date(h.time) : null;
   if (when && !isNaN(when)) s += " (" + when.toLocaleString(i18n.lang) + ")";
   return s;
+}
+
+// stateText is a helper state's text, as the helper reports it where
+// the page has none.
+function stateText(state) {
+  const key = "update.state." + state;
+  const s = t(key);
+  return s === key ? state : s;
+}
+
+// historyLine is one of the last updates: the version reached, or the one
+// asked for with how far it got (under way for the newest, else not
+// reached, or the helper's outcome), when, and by whom or from outside
+// Massimo with the package manager.
+function historyLine(e, newest) {
+  const asked = e.to || "";
+  let what = e.reached;
+  if (!what && e.result) what = t("update.history.ended", { version: asked, state: stateText(e.result) });
+  else if (!what) what = t(newest ? "update.history.running" : "update.history.notReached", { version: asked });
+  const parts = [what];
+  const ms = Date.parse(e.reached_at || e.at || "");
+  if (!isNaN(ms)) parts.push(fmtInstant(new Date(ms))); // app.js
+  if (e.outside) parts.push(e.manager ? t("update.history.outsideWith", { manager: e.manager }) : t("update.history.outside"));
+  else if (e.by) parts.push(t("update.history.by", { name: e.by.display_name || e.by.name }));
+  return textEl("li", parts.join(" · "));
+}
+
+// renderHistory shows the last three updates under the version lines,
+// nothing before the first.
+function renderHistory(list) {
+  const ul = $("update-history-list");
+  clear(ul);
+  list.slice(0, 3).forEach((e, i) => ul.appendChild(historyLine(e, i === 0)));
+  $("update-history").classList.toggle("hidden", !list.length);
 }
 
 function renderUpdate(u) {
@@ -66,6 +99,7 @@ function renderUpdate(u) {
     link.textContent = t("update.notes", { version: u.latest });
   }
   $("update-helper").textContent = u.helper ? t("update.last", { state: helperText(u.helper) }) : "";
+  renderHistory(u.history || []);
   // the card's badge, also while it is folded: up to date, or what is out
   const known = !u.check_error && u.channel && u.latest;
   sectionBadges($("sys-software"), known ? [u.available ? badgeEl(t("update.badge.available", { version: u.latest }), "warn") : badgeEl(t("update.badge.upToDate"), "ok")] : []);
@@ -478,7 +512,7 @@ function followReboot(at) {
 
 const infoState = { store: null, config: null, error: "" };
 
-// renderServerInfo draws Maintenance's Store and Settings in effect, from
+// renderServerInfo draws System Info's Store and Settings in effect, from
 // GET /api/v1/store and GET /api/v1/config; a secret is "set, not shown".
 function renderServerInfo() {
   const s = infoState.store;
@@ -754,7 +788,8 @@ function fillProxies(v) {
   const list = v.cube_proxies || [];
   if (!list.length) cell.textContent = "–";
   for (const p of list) {
-    const line = elem("div", "sys-proxy", textEl("span", p.serial || "", "mono"), " ", textEl("span", p.addr, "mono"));
+    // the address the original software connects to, copyable (components.js)
+    const line = elem("div", "sys-proxy", textEl("span", p.serial || "", "mono"), " ", copyEl(p.addr, { label: p.addr, icon: true }));
     if (p.listening) line.append(" ", textEl("span", t("proxy.listening"), "muted"));
     else line.appendChild(noticeEl(t("proxy.notListening", { addr: p.addr, error: p.error || "" }), { since: p.since, next: p.next_try }));
     cell.appendChild(line);
@@ -828,7 +863,10 @@ async function loadSystemInfo() {
   }
   if (!v) return;
   const parts = splitVersion(v.version || "");
-  $("info-version").textContent = parts.short || "–";
+  // the short version shown, the whole one copied, by a click or the icon
+  const name = t("copy.version");
+  const version = copyable(textEl("span", parts.short || "–", "mono"), () => v.version || "", name); // components.js
+  $("info-version").replaceChildren(v.version ? elem("span", "copy-pair", version, copyIcon(() => v.version, name)) : version);
   $("info-built").textContent = parts.rest || "–";
   sysClock.zone = v.time_zone || "";
   fillStarted(v);

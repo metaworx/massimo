@@ -17,7 +17,8 @@
 # then brings up the box, a serve beside avahi-daemon whose proxy answers
 # discovery for the Cube and which polls it every 5 s, and checks
 #   4. that, while the box's proxy answers for the Cube too, a search
-#      lists the Cube once, at its own address, the box among its proxies;
+#      lists the Cube once, at its own address, the box among its proxies,
+#      a Cube served by the box's server, as its announcement names it;
 #   5. that serve announces itself beside avahi, UDP 5353 shared;
 #   6. that avahi-browse resolves the service, its node, version, TLS
 #      and fingerprint, on the box and on the client, to the box;
@@ -120,13 +121,16 @@ cube_ip="$(ip_of cube)"
 
 # search runs one search of the searcher's, through its API, and sets
 # answers to one line per found Cube: the serial, the address, the MAC,
-# whether it is configured, and its proxies (- for none).
+# whether it is configured, its proxies, its kind, and the name and url
+# of the server serving it (- for none).
 answers=""
 search() {
 	answers="$(compose exec -T searcher curl -sf -X POST http://127.0.0.1:8099/api/v1/cubes/discover | python3 -I -c '
 import json, sys
 for f in json.load(sys.stdin).get("found") or []:
-    print(f.get("serial"), f.get("address"), (f.get("mac") or "-").lower(), str(f.get("configured")).lower(), ",".join(f.get("proxies") or []) or "-")
+    host = f.get("host") or {}
+    print(f.get("serial"), f.get("address"), (f.get("mac") or "-").lower(), str(f.get("configured")).lower(), ",".join(f.get("proxies") or []) or "-",
+          f.get("kind") or "-", host.get("name") or "-", host.get("url") or "-")
 ' 2>/dev/null)"
 }
 cube_listed() { grep -q "^$SERIAL $cube_ip $CUBE_MAC false " <<<"$answers"; }
@@ -169,9 +173,14 @@ compose up --detach box >/dev/null 2>&1 || compose up --detach box
 box_ip="$(ip_of box)"
 box_answers() { compose exec -T client /m/massimo discover -json -wait 2s 2>/dev/null | grep -q "\"ip\": \"$box_ip\""; }
 within 30 box_answers || fail "the box's proxy does not answer the client's discover for $SERIAL"
-once() { search && cube_listed && [ "$(grep -c "^$SERIAL " <<<"$answers")" -eq 1 ] && grep -qE "^$SERIAL $cube_ip [^ ]+ false ([^ ]*,)?$box_ip(,|$)" <<<"$answers"; }
+once() { search && cube_listed && [ "$(grep -c "^$SERIAL " <<<"$answers")" -eq 1 ] && grep -qE "^$SERIAL $cube_ip [^ ]+ false ([^ ]*,)?$box_ip(,| )" <<<"$answers"; }
 within 10 once || fail "the searcher's search does not list $SERIAL once, at $cube_ip, with the box's $box_ip among its proxies: ${answers:-nothing}"
 ok "with the box's proxy up, a search lists $SERIAL once, at the Cube's $cube_ip, with the box's $box_ip among its proxies"
+# The servers are asked beside the search: the Cube is a Cube, served by
+# the box's server, its name and the url its announcement gives.
+hosted() { search && grep -qE "^$SERIAL $cube_ip [^ ]+ false [^ ]+ cube [^ -][^ ]* https://[^ ]+:8099$" <<<"$answers"; }
+within 10 hosted || fail "the searcher's search does not name the box's server as serving $SERIAL: ${answers:-nothing}"
+ok "and names the Cube a Cube, served by the box's server: $(grep "^$SERIAL " <<<"$answers" | cut -d' ' -f7-)"
 
 # 5. serve announces itself beside avahi-daemon.
 box_log() { compose logs --no-color box 2>&1; }

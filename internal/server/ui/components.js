@@ -183,11 +183,12 @@ function iconEl(symbol, cls) {
 // mark, a triangle (warn) or a cross (bad). The radio and the window are
 // drawn as the person chooses (ICON_CHOICES); the network (a Cube's
 // link) carries the mark on top, in place of its upper node; the cog
-// (the settings) at the bottom right. A battery has no mark: it is amber
-// or nothing.
+// (the settings) and the log (its unseen problems, log.js renderLogSign)
+// at the bottom right. A battery has no mark: it is amber or nothing.
 const SIGNS = {
   net: { icon: "icon-net", base: "icon-net-base", warn: "mark-net-warn", bad: "mark-net-x" },
   cog: { icon: "icon-cog", base: "icon-cog-small", warn: "mark-corner-warn", bad: "mark-corner-x" },
+  log: { icon: "icon-log", base: "icon-log-small", warn: "mark-corner-warn", bad: "mark-corner-x" },
   battery: { icon: "icon-battery" },
 };
 
@@ -277,6 +278,132 @@ function keepBlink(use, key) {
   }
   seen.last = now;
   use.style.animationDelay = -((now - seen.first) / 1000).toFixed(2) + "s";
+}
+
+// copyText puts text on the clipboard: through navigator.clipboard where
+// the page may use it (HTTPS or localhost), else through a hidden text
+// area and the browser's copy command, which every browser still runs on
+// a click, as a page served over plain HTTP on the LAN needs. Resolves to
+// whether it copied.
+async function copyText(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (e) {
+      // refused: the fallback may still work
+    }
+  }
+  const area = document.createElement("textarea");
+  area.value = text;
+  area.setAttribute("readonly", "");
+  area.className = "copy-area";
+  document.body.appendChild(area);
+  area.select();
+  let ok = false;
+  try {
+    ok = document.execCommand("copy");
+  } catch (e) {
+    ok = false;
+  }
+  area.remove();
+  return ok;
+}
+
+// copied says that something was copied: "Copied" on the control for a
+// moment, and in the page's polite live region for a screen reader.
+function copied(el, ok) {
+  let live = document.getElementById("copy-status");
+  if (!live) {
+    live = textEl("span", "", "visually-hidden");
+    live.id = "copy-status";
+    live.setAttribute("role", "status");
+    live.setAttribute("aria-live", "polite");
+    document.body.appendChild(live);
+  }
+  const text = t(ok ? "copy.done" : "copy.failed");
+  live.textContent = "";
+  setTimeout(() => {
+    live.textContent = text;
+  }, 50);
+  el.dataset.copied = text;
+  el.classList.add("copied");
+  clearTimeout(el.copiedTimer);
+  el.copiedTimer = setTimeout(() => el.classList.remove("copied"), 1400);
+}
+
+// copyable makes an element copy what get() returns on a click, and on
+// Enter or Space: a button to the keyboard and a screen reader, named by
+// label, its tooltip saying so. Wired once; label may change later
+// (copyLabel).
+function copyable(el, get, label) {
+  el.classList.add("copyable");
+  if (!/^(BUTTON|A)$/.test(el.tagName)) {
+    el.setAttribute("role", "button");
+    el.tabIndex = 0;
+  }
+  copyLabel(el, label);
+  const run = async (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    const text = get();
+    if (text) copied(el, await copyText(text));
+  };
+  el.addEventListener("click", run);
+  el.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter" || ev.key === " ") run(ev);
+  });
+  return el;
+}
+
+// copyLabel names a copyable element: what it copies, for a screen
+// reader and as its tooltip.
+function copyLabel(el, label) {
+  el.setAttribute("aria-label", label);
+  el.title = label;
+}
+
+// copyIcon is a small button with the copy icon that copies what get()
+// returns; label names what it copies.
+function copyIcon(get, label) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "copy-icon";
+  b.appendChild(iconEl("icon-copy", "ni"));
+  return copyable(b, get, label);
+}
+
+// copyEl is a text that copies itself, as a mono span, and with icon a
+// copy icon after it, both copying text; label names what.
+function copyEl(text, { label, icon, cls } = {}) {
+  const span = textEl("span", text, cls || "mono");
+  const name = t("copy.what", { what: label || text });
+  copyable(span, () => text, name);
+  if (!icon) return span;
+  return elem("span", "copy-pair", span, copyIcon(() => text, name));
+}
+
+// foundCountEl is the sign of the Cubes found on the network and not
+// served: a cube with their number in a corner badge, in the accent's
+// blue, as information rather than a problem; hidden from a screen
+// reader, which the label beside it tells.
+function foundCountEl(n) {
+  const w = elem("span", "found-count", iconEl("icon-cube3d", "ni"), textEl("b", String(n)));
+  w.setAttribute("aria-hidden", "true");
+  return w;
+}
+
+// linkEl is a link to url that opens in a tab of its own, its text text;
+// a url that is not http(s), as one from the network may be, gives the
+// text alone.
+function linkEl(url, text, cls) {
+  if (!/^https?:\/\//i.test(url || "")) return textEl("span", text, cls);
+  const a = textEl("a", text, cls);
+  a.href = url;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  a.title = url;
+  return a;
 }
 
 // iconButton is a button that shows an icon of the page only, so its
@@ -932,18 +1059,22 @@ function pickerMenu(details, { items, value, onPick, shown }) {
 // colour of the worst tone of its kind, as the summary of a menu
 // (dropdown) that lists the entries in one format at every level
 // (problemEntry).
-// An entry is { icon, sign, title, sub, items, subs }: its icon, or sign
-// ({ kind, state }, a sign of SIGNS) where its own state shows, its name,
-// a grey detail (a serial), its items, and subs, entries under it (a
-// Cube's devices). An item is { kind, icon, sign, tone, mark, text, at,
+// An entry is { icon, sign, node, title, sub, items, subs, info, summary }:
+// its icon, or sign ({ kind, state }, a sign of SIGNS) where its own
+// state shows, or node, an element of its own (foundCountEl), its name,
+// a grey detail (a serial; an array of texts and elements, a link among
+// them, is not monospaced), its items, and subs, entries under it (a
+// Cube's devices); info lists the entry and those under it without an
+// item, as information, and summary is an element the summary shows
+// after the kinds' icons (the found Cubes' sign). An item is { kind, icon, sign, tone, mark, text, at,
 // stale }: kind groups the summary's icons (sign, a kind of SIGNS, draws
 // it with its state's mark), an item without one is listed but adds no
 // icon (a device's mode beside its problems); tone is a badgeEl kind
 // ("bad", "warn", "fill-ok", …), which colours the badge and, without
 // "fill-", the icon, or mark where an item says how its icon is coloured
 // ("warn"); at is when the value came (ageEl). label names the problems
-// to a screen reader and in the tooltip. Null where no item has a kind:
-// nothing is wrong there.
+// to a screen reader and in the tooltip. Null where no item has a kind
+// and no entry a summary: nothing is wrong there, nor to tell.
 function problemsEl(entries, label) {
   const kinds = new Map(); // kind: { icon, sign, tone }
   for (const it of entries.flatMap(entryItems)) {
@@ -954,7 +1085,8 @@ function problemsEl(entries, label) {
     if (rank(tone) > rank(k.tone)) k.tone = tone;
     kinds.set(it.kind, k);
   }
-  if (!kinds.size) return null;
+  const extra = entries.map((e) => e.summary).filter(Boolean);
+  if (!kinds.size && !extra.length) return null;
   const details = elem("details", "menu problems");
   const summary = document.createElement("summary");
   summary.className = "problems-sum";
@@ -964,6 +1096,7 @@ function problemsEl(entries, label) {
   for (const k of kinds.values()) {
     summary.appendChild(k.sign ? signEl(k.sign, k.tone, "", [who, k.sign, k.tone].join(":")) : iconEl(k.icon, "ni" + (k.tone ? " tone-" + k.tone : "")));
   }
+  summary.append(...extra);
   const list = elem("div", "menu-items problems-list");
   for (const e of entries) {
     const el = problemEntry(e);
@@ -983,15 +1116,19 @@ function entryItems(e) {
 // under the name its badges, each led by its icon (a warning's or a
 // failure's by its mark instead), with its age; then the entries under
 // it, indented to the name, a line down from its icon. Null for an entry
-// without an item, its own or under it.
+// without an item, its own or under it, but for information (info).
 function problemEntry(e) {
-  if (!entryItems(e).length) return null;
+  if (!entryItems(e).length && !e.info) return null;
   const entry = elem("div", "problem-entry");
   if (e.sign) entry.appendChild(signEl(e.sign.kind, e.sign.state, "problem-icon", e.title + ":" + e.sign.state));
-  else entry.appendChild(e.icon ? iconEl(e.icon, "ni problem-icon") : elem("span", "problem-icon"));
+  else if (e.node) {
+    e.node.classList.add("problem-icon");
+    entry.appendChild(e.node);
+  } else entry.appendChild(e.icon ? iconEl(e.icon, "ni problem-icon") : elem("span", "problem-icon"));
   const who = elem("div", "problem-who");
   who.appendChild(textEl("span", e.title, "problem-name"));
-  if (e.sub) who.appendChild(textEl("span", e.sub, "mono problem-sub"));
+  if (Array.isArray(e.sub)) who.appendChild(elem("span", "problem-sub", ...e.sub));
+  else if (e.sub) who.appendChild(textEl("span", e.sub, "mono problem-sub"));
   entry.appendChild(who);
   if ((e.items || []).length) {
     const flags = elem("div", "problem-flags");
@@ -1007,7 +1144,7 @@ function problemEntry(e) {
     }
     entry.appendChild(flags);
   }
-  const subs = (e.subs || []).map(problemEntry).filter(Boolean);
+  const subs = (e.subs || []).map((x) => problemEntry(e.info ? { ...x, info: true } : x)).filter(Boolean);
   if (subs.length) entry.appendChild(elem("div", "problem-subs", ...subs));
   return entry;
 }

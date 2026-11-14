@@ -93,6 +93,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/announce"
 	"go.metaworx.ch/massimo/internal/backup"
 	"go.metaworx.ch/massimo/internal/certs"
 	"go.metaworx.ch/massimo/internal/cubeio"
@@ -225,6 +226,12 @@ type Options struct {
 	// (integrations_found.go), at the start and every 30 minutes; nil
 	// looks for none.
 	FindIntegrations func(ctx context.Context) ([]FoundIntegration, error)
+	// BrowseServers asks the LAN for the massimo servers announced there,
+	// beside each discovery run and for as long, so that a found Massimo
+	// proxy, and a Cube one serves, names the server it runs on; by
+	// multicast, or to the unicast addresses given (Options.DiscoveryTargets').
+	// announce.Browse is one; nil looks for none.
+	BrowseServers    func(ctx context.Context, wait time.Duration, unicast ...net.IP) ([]announce.Found, error)
 	DiscoveryAddr    string
 	DiscoveryTargets []string
 	// LookupMAC gives the MAC of an address that answered discovery
@@ -329,6 +336,9 @@ type Server struct {
 	updates updateCheck
 	// updateMu holds one update request at a time (startUpdate).
 	updateMu sync.Mutex
+	// historyMu holds the last updates' row while it is read and written
+	// again (editHistory).
+	historyMu sync.Mutex
 	// restartGate lets one restart through (restart_api.go), and
 	// pending lists what applies only at the next one.
 	restartGate restartGate
@@ -363,6 +373,7 @@ type Server struct {
 	ctx       context.Context // Run's, for work that outlives a request
 	foundMu   sync.Mutex
 	found     map[string]*foundCube // by serial, upper case
+	servers   []announce.Found      // the servers announced at the latest run, under foundMu
 
 	// The runtimes' and the proxies' goroutines, see runtimes.go.
 	wg       sync.WaitGroup
@@ -1317,6 +1328,7 @@ func (s *Server) routes() {
 	api("POST /api/v1/cubes/{sn}/events/ticket", "read", s.issueTicket)
 	api("GET /api/v1/cubes/{sn}/log", "read", s.getLog)
 	api("GET /api/v1/log", "read", s.getAllLog)
+	api("GET /api/v1/log/alerts", "read", s.getLogAlerts)
 	api("POST /api/v1/cubes/{sn}/pairing", "pair", s.startPairing)
 	api("GET /api/v1/cubes/{sn}/pairing", "read", s.getPairing)
 	api("DELETE /api/v1/cubes/{sn}/pairing", "pair", s.stopPairing)

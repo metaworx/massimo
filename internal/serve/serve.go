@@ -190,6 +190,11 @@ func LoopbackListen(listen string) bool {
 // it, so that no test reaches the network.
 var browseHomeAssistant = announce.BrowseHomeAssistant
 
+// browseServers asks the LAN for the massimo servers beside each
+// discovery run (server.Options.BrowseServers); the tests replace it
+// (TestMain), so that none reaches the network.
+var browseServers = announce.Browse
+
 // findIntegrations is the server's look at the LAN for integrations:
 // Home Assistant's zeroconf records, two seconds of answers.
 func findIntegrations(ctx context.Context) ([]server.FoundIntegration, error) {
@@ -299,7 +304,7 @@ func open(ctx context.Context, cfg Config, root *slog.Logger, src certs.Source, 
 	}
 	srv := server.New(server.Options{Cubes: su.cubes, Token: cfg.Token, PollInterval: poll, CubeHold: cfg.CubeHold, RefreshInterval: refresh, DiscoverInterval: discover, DiscoveryTargets: cfg.DiscoveryTargets, DiscoveryAddr: cfg.DiscoveryListen, Logger: root, Version: cfg.Version, Proxy: su.listeners, ShowHidden: cfg.ShowHidden,
 		Store: st, FileCubes: su.fileCubes, SettingsFile: cfg.SettingsFile, StaleAfter: staleAfter, ProxyFixed: len(cfg.Proxies) > 0, Update: cfg.Update, TLS: src, HSTSDays: cfg.HSTSDays, TrustedProxies: cfg.TrustedProxies,
-		Restart: cfg.Restart, Reboot: cfg.Reboot, Install: cfg.Install, Deliverers: cfg.Deliverers, FindIntegrations: find,
+		Restart: cfg.Restart, Reboot: cfg.Reboot, Install: cfg.Install, Deliverers: cfg.Deliverers, FindIntegrations: find, BrowseServers: browseServers,
 		Announce: server.AnnounceState{On: cfg.Announce.On && st != nil, FixedBy: cfg.Announce.FixedBy}})
 	ln, err := net.Listen("tcp", cfg.Listen)
 	if err != nil {

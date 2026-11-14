@@ -10,10 +10,11 @@ names, before this module or a test file reads them.
 
 Every test runs four times, at 1100 and 390 px wide and in English and
 German, the language from the browser context's locale (`case`, with the
-ids 1100-en, 390-en, 1100-de and 390-de). Each run gets a browser context
-of its own from pytest-playwright, with the token in localStorage before
-the page loads, and `page` is the page loaded with its room tiles and
-its event stream open. The four cases share the one server of a worker,
+ids 1100-en, 390-en, 1100-de and 390-de); UI_TEST_CASES, comma-separated
+ids, runs only those cases, as each of CI's jobs does. Each run gets a
+browser context of its own from pytest-playwright, with the token in
+localStorage before the page loads, and `page` is the page loaded with
+its room tiles and its event stream open. The four cases share the one server of a worker,
 so a test that changes the server's store puts it back; the settings the page
 keeps on the server for the token's user are removed before every page.
 
@@ -90,8 +91,21 @@ class Watch:
         self.expected = []
 
 
-@pytest.fixture(params=[(1100, "en"), (390, "en"), (1100, "de"), (390, "de")],
-                ids=lambda p: f"{p[0]}-{p[1]}")
+CASES = {"1100-en": (1100, "en"), "390-en": (390, "en"), "1100-de": (1100, "de"), "390-de": (390, "de")}
+
+
+def chosen_cases():
+    """The cases UI_TEST_CASES names, comma-separated ids such as
+    1100-en,1100-de, in CASES's order; all four where it names none.
+    An unknown id stops the run, so that a typo does not test nothing."""
+    names = [n.strip() for n in os.environ.get("UI_TEST_CASES", "").split(",") if n.strip()]
+    unknown = [n for n in names if n not in CASES]
+    if unknown:
+        raise pytest.UsageError(f"UI_TEST_CASES names {', '.join(unknown)}; the cases are {', '.join(CASES)}")
+    return [p for n, p in CASES.items() if not names or n in names]
+
+
+@pytest.fixture(params=chosen_cases(), ids=lambda p: f"{p[0]}-{p[1]}")
 def case(request):
     return Case(*request.param)
 
@@ -154,11 +168,12 @@ def failed_checks_forgotten(request):
 def clear_preferences():
     """The token's user keeps the page's settings on the server, and the
     four cases share the server: its preferences are removed before
-    every page, its notification rules among them, so that a test starts
-    from the defaults as a fresh browser does."""
+    every page, its notification rules and its marks of the log among
+    them, so that a test starts from the defaults as a fresh browser
+    does."""
     if not TOKEN:
         return
-    for key in ("ui", "schemes", "notify"):
+    for key in ("ui", "schemes", "notify", "log.seen"):
         api_call("DELETE", "api/v1/me/preferences/" + key)
 
 
