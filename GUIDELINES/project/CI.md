@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.49.0)
+# Massimo — CI Conventions (v1.50.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -36,7 +36,7 @@ There is no other platform.
 |---------|------|
 | push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test, the store's benchmarks once each with `-short`, `make cross`); actionlint (`make actionlint`: the workflows by actionlint, their `run:` scripts by the runner's shellcheck); Race (`make race`, the race detector on `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve`, `internal/announce` and `internal/notify`); Test (armv6, QEMU) (`make test-armv6`, every package's tests with `-short` on 32-bit ARM, run by Ubuntu's `qemu-user` as the Raspberry Pi 1's core); Fuzz on a push to `main` only (`make fuzz`, every fuzz target for 10 s, a crash's input kept as the artifact `fuzz-crash`, Go 1.26's own deadline passed with a warning); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, then under systemd, each case in a container of its own (`make deb-systemd-test`: the first start, the restart, the upgrade from v0.12.0-alpha.1 with the service running), and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Windows service (the unit tests of the update, the installer, the command line, discovery and `internal/safefile`; install, run, update from the API and by hand, roll back, remove, on a Windows runner; then a second `serve` announcing itself beside Windows' own mDNS, found by `massimo discover`); macOS LaunchDaemon (the unit tests of the update, the installer, the command line and `internal/safefile`; first `install` on the template's settings, `packaging/launchd/template-test.sh`: the message and its owner line run as printed, a loaded job restarted, a booted-out one left stopped, the web UI's way, the purge; then the same as Windows on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`; then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker; then a second `serve` beside Apple's mDNSResponder, found and resolved by `dns-sd`); Screenshots (the web UI's pytest suite, then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only, and on failure the failed tests' screenshots and videos and the traces of their run once more as `ui-test-results`; on a pull request only when it changes the UI, its suite or `ci.yml`, as the job What to test answers; all four of the suite's cases, in four workers); LAN against avahi (`make lan-test`: a second `serve`'s searches finding a fake Cube, losing it with its cable pulled and finding it again, then from a box's proxy too; `serve` beside avahi-daemon, `avahi-browse` and `massimo discover` on a client; a third `serve` following the Cube by its serial to another address after the loss; in Docker; on a pull request only when it changes the announcement, discovery, the proxy, the LAN test or `ci.yml`, as the job What to test answers); Guidelines (section 4); Site (`packaging/site/build.sh --no-apt`: the site's pages and the docs of the commit, every link checked, a document under `docs/` missing from `docs/fragments/_documents.md` failing it; never deployed; also for a change to the site's documents alone) |
 | beside the jobs above, on a push | Build (build.yml): What to release decides what the run releases, then every target built without cgo with the Debian packages, the build record, `SHA256SUMS` and the manifest, the provenance attested; nothing signed (section 6) |
-| after every job above | All tests passed: fails unless none of them failed or was cancelled; then, on a push, once Build is done, Release (release.yml): a push to `main` becomes the `devel` build, the GitHub release `release/devel` replaced in place, signed with the rolling key (section 6); then, at every run of release.yml, Site (site.yml): the site built with the newest release's signed apt index and the docs of every channel, and deployed to GitHub Pages; nothing where no release carries the index yet; for a push to `main` of the site's documents alone, which has no Build and so no Release, Deploy site (site.yml) instead |
+| after every job above | All tests passed: fails unless none of them failed or was cancelled, and names each with its result in its summary, an annotation for each that did not pass, and on a pull request in one comment; then, on a push, once Build is done, Release (release.yml): a push to `main` becomes the `devel` build, the GitHub release `release/devel` replaced in place, signed with the rolling key (section 6); then, at every run of release.yml, Site (site.yml): the site built with the newest release's signed apt index and the docs of every channel, and deployed to GitHub Pages; nothing where no release carries the index yet; for a push to `main` of the site's documents alone, which has no Build and so no Release, Deploy site (site.yml) instead |
 | push to a release branch (`release/alpha`, later `release/beta` and `release/stable`) | nothing: ci.yml listens to `main` and the tags; the release moved the branch to a commit ci.yml had tested |
 | a version tag | every job above, as for a push to `main`, Build included; then release.yml: sign the manifest with the release key, verify the signature against the public key compiled into `massimo`, publish the GitHub release; then, with the deploy key set, the Homebrew formula of the release's channel rendered and pushed to the tap (publish.yml, section 6), and, with the apt key set, the apt repository rebuilt from the releases and deployed to GitHub Pages |
 | daily at 02:30 UTC, or by hand (`gh workflow run nightly.yml --ref main`) | nightly.yml: build.yml, then release.yml, no tests: the nightly build, `release/nightly`, of the newest commit of `main` whose suite passed and that is newer than the one it carries; nothing where there is none (section 6) |
@@ -191,6 +191,32 @@ a matrix job skipped as a whole reports once, under its unexpanded name
 so a required `govulncheck (linux)` waited forever on pull request #177;
 All tests passed counts every job, a skipped one as passed,
 and a new job needs only to be among its `needs`.
+All tests passed says which job did not pass, and how (owner,
+2026-11-14, D1-B, D2-A, D3-A),
+since `needs` alone gives results without names
+and a job no runner took reads as cancelled:
+macOS LaunchDaemon on pull request #225, twice, with no step run.
+Its first step reads the run's jobs through the API (`actions: read`),
+by display name, matrix jobs expanded,
+"cancelled before a runner took it" for a cancelled job with no runner and no step;
+it lists them in the job's summary, those that did not pass first,
+with an error annotation for each,
+and falls back to the `needs`' ids where the API tells nothing.
+It leaves out All tests passed itself and the jobs of the workflows the run calls,
+Build, Release and Deploy site, which are not among its `needs`:
+the API knows a job by its name, not by its id,
+so the step names them, and a new job calling a workflow is added there.
+On a pull request it keeps one comment (`pull-requests: write`),
+starting with `<!-- ci-report -->`:
+written at the pull request's first failing run,
+then edited by every run, a passing one included,
+so a pull request that never fails gets none.
+A push to `main` and a tag get the summary and annotations alone;
+GitHub's failure email reaches whoever pushed.
+The step fails nothing (`continue-on-error`):
+the verdict is the next step's, from `needs`,
+and a read-only token, Dependabot's or a fork's,
+leaves a warning instead of the comment.
 A pipe into `grep` in a step reads to the end (`grep … >/dev/null`,
 not `grep -q`):
 under `pipefail` a `grep -q` that exits at its match kills a writer still writing,
