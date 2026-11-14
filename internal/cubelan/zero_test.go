@@ -6,6 +6,7 @@ package cubelan
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -138,6 +139,29 @@ func TestClientWarnsOfZeroEntry(t *testing.T) {
 	for _, rf := range c.Snapshot().Devices() {
 		if rf == cube.ZeroAddress {
 			t.Fatal("000000 among the client's devices")
+		}
+	}
+}
+
+// The client sends nothing to 000000 as a device, whoever asks: the
+// deletion that would make the Cube send a factory reset there is
+// refused before it is written.
+func TestClientRefusesZero(t *testing.T) {
+	srv, addr := startFake(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c := New(Options{Addr: addr})
+	go c.Run(ctx)
+	deadline := time.Now().Add(5 * time.Second)
+	for !c.isConnected() && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if _, err := c.Send(ctx, cube.CmdDeleteDevices(true, cube.ZeroAddress)); !errors.Is(err, cube.ErrZeroAddress) {
+		t.Fatalf("t: to 000000: %v, want ErrZeroAddress", err)
+	}
+	for _, m := range srv.Received() {
+		if m.Type == 't' {
+			t.Fatalf("the Cube got %s", m)
 		}
 	}
 }

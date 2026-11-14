@@ -681,6 +681,11 @@ func (c *Client) trySend(ctx context.Context, m cube.Message) (cube.Message, err
 }
 
 func (c *Client) send(ctx context.Context, m cube.Message, wait bool) (cube.Message, error) {
+	// Nothing goes to radio address 000000 as a device, whoever asks: the
+	// API, a rule, a client of the proxy (cube.CheckZero).
+	if err := cube.CheckZero(m); err != nil {
+		return cube.Message{}, err
+	}
 	want := replyType(m.Type)
 	if want == 0 {
 		if c.held.Load() {
