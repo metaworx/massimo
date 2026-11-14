@@ -2965,7 +2965,11 @@ The server asks GitHub at most every ten minutes; `refresh` asks now.
   "available": true,
   "checked_at": "2026-11-05T13:40:00+01:00",
   "can_update": true,
-  "helper": {"state": "done", "from": "v0.1.0-alpha.8", "to": "v0.1.0-alpha.9", "channel": "alpha", "time": "…"}
+  "helper": {"state": "done", "from": "v0.1.0-alpha.8", "to": "v0.1.0-alpha.9", "channel": "alpha", "time": "…"},
+  "history": [
+    {"at": "2026-11-05T12:01:00Z", "by": {"name": "anna", "display_name": "Anna"}, "from": "v0.1.0-alpha.8", "to": "v0.1.0-alpha.9", "reached": "v0.1.0-alpha.9", "reached_at": "2026-11-05T12:02:10Z"},
+    {"at": "2026-10-30T07:15:00Z", "outside": true, "manager": "apt", "from": "v0.1.0-alpha.7", "reached": "v0.1.0-alpha.8", "reached_at": "2026-10-30T07:15:00Z"}
+  ]
 }
 ```
 
@@ -2984,6 +2988,16 @@ no API token; no update helper; a development build).
 `helper` is the update helper's last run: `state` is one of `checking`,
 `installing`, `restarting`, `done`, `up-to-date`, `failed`, `rolled-back`,
 with `message` on failure.
+`history` is the last ten updates, newest first,
+kept in the setting `update.history`:
+an update started here names who started it (`by`, absent for the owner's key),
+the version it ran (`from`) and the one it asked for (`to`);
+the next start with another version adds `reached` and `reached_at`.
+A new version that no entry waits for came from outside Massimo (`outside`):
+apt, brew (`manager`) or a person on the box.
+`result` is the update helper's outcome where it ended without reaching `to`:
+`failed`, `rolled-back` or `up-to-date`.
+The log keeps an update's lines for a month only.
 
 ### POST /api/v1/update
 
