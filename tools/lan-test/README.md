@@ -67,8 +67,10 @@ with the box up, a search would still list the serial while the Cube is pulled,
 and check 2 would test the proxy, not the search.
 Then it brings up the box and checks:
 
-4. a search lists `KEQ0000100` twice,
-   from the Cube's address and from the box's, as the API lists each answer;
+4. a search lists `KEQ0000100` once, at the Cube's address,
+   the box's among its `proxies`;
+   it is a Cube (`kind`), served by the box's server (`host`: its name and
+   the url its announcement gives, asked by mDNS beside the search);
 5. the box's `serve` logs "announced on the LAN" and no "not announced":
    it shares UDP 5353 with avahi-daemon;
 6. `avahi-browse -rpt _massimo._tcp` resolves the server,

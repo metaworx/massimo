@@ -347,6 +347,29 @@ function copyEl(text, { label, icon, cls } = {}) {
   return elem("span", "copy-pair", span, copyIcon(() => text, name));
 }
 
+// foundCountEl is the sign of the Cubes found on the network and not
+// served: a cube with their number in a corner badge, in the accent's
+// blue, as information rather than a problem; hidden from a screen
+// reader, which the label beside it tells.
+function foundCountEl(n) {
+  const w = elem("span", "found-count", iconEl("icon-cube3d", "ni"), textEl("b", String(n)));
+  w.setAttribute("aria-hidden", "true");
+  return w;
+}
+
+// linkEl is a link to url that opens in a tab of its own, its text text;
+// a url that is not http(s), as one from the network may be, gives the
+// text alone.
+function linkEl(url, text, cls) {
+  if (!/^https?:\/\//i.test(url || "")) return textEl("span", text, cls);
+  const a = textEl("a", text, cls);
+  a.href = url;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  a.title = url;
+  return a;
+}
+
 // iconButton is a button that shows an icon of the page only, so its
 // name is aria; opts as for button, iconCls the icon's class ("ni").
 function iconButton(symbol, aria, onClick, opts) {
@@ -1000,18 +1023,22 @@ function pickerMenu(details, { items, value, onPick, shown }) {
 // colour of the worst tone of its kind, as the summary of a menu
 // (dropdown) that lists the entries in one format at every level
 // (problemEntry).
-// An entry is { icon, sign, title, sub, items, subs }: its icon, or sign
-// ({ kind, state }, a sign of SIGNS) where its own state shows, its name,
-// a grey detail (a serial), its items, and subs, entries under it (a
-// Cube's devices). An item is { kind, icon, sign, tone, mark, text, at,
+// An entry is { icon, sign, node, title, sub, items, subs, info, summary }:
+// its icon, or sign ({ kind, state }, a sign of SIGNS) where its own
+// state shows, or node, an element of its own (foundCountEl), its name,
+// a grey detail (a serial; an array of texts and elements, a link among
+// them, is not monospaced), its items, and subs, entries under it (a
+// Cube's devices); info lists the entry and those under it without an
+// item, as information, and summary is an element the summary shows
+// after the kinds' icons (the found Cubes' sign). An item is { kind, icon, sign, tone, mark, text, at,
 // stale }: kind groups the summary's icons (sign, a kind of SIGNS, draws
 // it with its state's mark), an item without one is listed but adds no
 // icon (a device's mode beside its problems); tone is a badgeEl kind
 // ("bad", "warn", "fill-ok", …), which colours the badge and, without
 // "fill-", the icon, or mark where an item says how its icon is coloured
 // ("warn"); at is when the value came (ageEl). label names the problems
-// to a screen reader and in the tooltip. Null where no item has a kind:
-// nothing is wrong there.
+// to a screen reader and in the tooltip. Null where no item has a kind
+// and no entry a summary: nothing is wrong there, nor to tell.
 function problemsEl(entries, label) {
   const kinds = new Map(); // kind: { icon, sign, tone }
   for (const it of entries.flatMap(entryItems)) {
@@ -1022,7 +1049,8 @@ function problemsEl(entries, label) {
     if (rank(tone) > rank(k.tone)) k.tone = tone;
     kinds.set(it.kind, k);
   }
-  if (!kinds.size) return null;
+  const extra = entries.map((e) => e.summary).filter(Boolean);
+  if (!kinds.size && !extra.length) return null;
   const details = elem("details", "menu problems");
   const summary = document.createElement("summary");
   summary.className = "problems-sum";
@@ -1032,6 +1060,7 @@ function problemsEl(entries, label) {
   for (const k of kinds.values()) {
     summary.appendChild(k.sign ? signEl(k.sign, k.tone, "", [who, k.sign, k.tone].join(":")) : iconEl(k.icon, "ni" + (k.tone ? " tone-" + k.tone : "")));
   }
+  summary.append(...extra);
   const list = elem("div", "menu-items problems-list");
   for (const e of entries) {
     const el = problemEntry(e);
@@ -1051,15 +1080,19 @@ function entryItems(e) {
 // under the name its badges, each led by its icon (a warning's or a
 // failure's by its mark instead), with its age; then the entries under
 // it, indented to the name, a line down from its icon. Null for an entry
-// without an item, its own or under it.
+// without an item, its own or under it, but for information (info).
 function problemEntry(e) {
-  if (!entryItems(e).length) return null;
+  if (!entryItems(e).length && !e.info) return null;
   const entry = elem("div", "problem-entry");
   if (e.sign) entry.appendChild(signEl(e.sign.kind, e.sign.state, "problem-icon", e.title + ":" + e.sign.state));
-  else entry.appendChild(e.icon ? iconEl(e.icon, "ni problem-icon") : elem("span", "problem-icon"));
+  else if (e.node) {
+    e.node.classList.add("problem-icon");
+    entry.appendChild(e.node);
+  } else entry.appendChild(e.icon ? iconEl(e.icon, "ni problem-icon") : elem("span", "problem-icon"));
   const who = elem("div", "problem-who");
   who.appendChild(textEl("span", e.title, "problem-name"));
-  if (e.sub) who.appendChild(textEl("span", e.sub, "mono problem-sub"));
+  if (Array.isArray(e.sub)) who.appendChild(elem("span", "problem-sub", ...e.sub));
+  else if (e.sub) who.appendChild(textEl("span", e.sub, "mono problem-sub"));
   entry.appendChild(who);
   if ((e.items || []).length) {
     const flags = elem("div", "problem-flags");
@@ -1075,7 +1108,7 @@ function problemEntry(e) {
     }
     entry.appendChild(flags);
   }
-  const subs = (e.subs || []).map(problemEntry).filter(Boolean);
+  const subs = (e.subs || []).map((x) => problemEntry(e.info ? { ...x, info: true } : x)).filter(Boolean);
   if (subs.length) entry.appendChild(elem("div", "problem-subs", ...subs));
   return entry;
 }

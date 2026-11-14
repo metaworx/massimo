@@ -109,6 +109,24 @@ function t(key, params) {
   return s;
 }
 
+// tNodes is t with elements among params, for a link inside a
+// sentence: the text in parts, each element in its placeholder's place.
+function tNodes(key, params) {
+  const nodes = {};
+  const texts = {};
+  for (const [k, v] of Object.entries(params || {})) (v instanceof Node ? nodes : texts)[k] = v;
+  const s = t(key, texts);
+  const out = [];
+  let last = 0;
+  for (const m of s.matchAll(/\{(\w+)\}/g)) {
+    if (!nodes[m[1]]) continue;
+    out.push(s.slice(last, m.index), nodes[m[1]]);
+    last = m.index + m[0].length;
+  }
+  out.push(s.slice(last));
+  return out.filter((x) => x !== "");
+}
+
 // tn picks the plural form of a key (key.one, key.other, …) for n by the
 // language's plural rules, and fills {n}.
 function tn(key, n, params) {

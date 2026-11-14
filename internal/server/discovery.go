@@ -18,15 +18,18 @@ package server
 // (searchLost), since it may have taken another address.
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"net"
 	"net/http"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/announce"
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/notify"
@@ -44,6 +47,13 @@ const (
 	// default of Options.AddressRetry.
 	addressRetry = time.Minute
 )
+
+// foundHost is a massimo server announced on the LAN (announce.Found),
+// as a found entry names it.
+type foundHost struct {
+	Name string `json:"name"` // the instance name, its host's
+	URL  string `json:"url"`  // where its API and page are, the announcement's url
+}
 
 // foundState is where a found Cube stands with discovery, in memory
 // only.
@@ -83,6 +93,18 @@ type foundCube struct {
 	// serial in the latest run, massimo proxies (docs/proxy.md); in
 	// memory only.
 	Proxies []string `json:"proxies,omitempty"`
+	// Kind is what the entry's own answer came from (ownOf): a Cube, a
+	// massimo proxy, or unknown; a copy takes an unknown one at an
+	// announced server's address for a proxy (describeFound).
+	Kind cubelan.Kind `json:"kind"`
+	// Serves is, on a proxy's copy, the serial of the Cube with its radio
+	// address, served here or found; "" where none is known.
+	Serves string `json:"serves,omitempty"`
+	// Host is, on a copy, the massimo server that serves the entry: the
+	// one at a proxy's address, or, for a Cube, the one a proxy of it
+	// runs on; from the servers announced at the latest run, nil where
+	// none matched.
+	Host *foundHost `json:"host,omitempty"`
 	// Configured says whether the server serves the Cube when the copy
 	// is handed out. It is set on the copies only, never kept on the
 	// entry, since a Cube is added and removed without discovery
@@ -177,14 +199,20 @@ func (s *Server) configured(serial string) *runtime {
 // ownAnswer reports whether an answer is one of this server's proxies':
 // from one of this host's addresses with a configured Cube's serial, or,
 // from any address, with a serial of its own that one of its proxies
-// answers with (proxySerial), unless a Cube gave it (cubelan.KindCube).
-// A configured Cube's serial from elsewhere is left in: the Cube itself,
-// or another server's proxy of it, which the Cube may follow.
+// answers with (proxySerial). An answer a Cube gave (cubelan.KindCube: N
+// or c answered, eQ-3's MAC, the bootloader) is none, from wherever it
+// came: a proxy answers the identify request alone, and a fake Cube on
+// this host, served, is still heard. A configured Cube's serial from
+// elsewhere is left in: the Cube itself, or another server's proxy of
+// it, which the Cube may follow.
 func (s *Server) ownAnswer(d cubelan.Discovered, local map[string]bool) bool {
+	if d.Kind == cubelan.KindCube {
+		return false
+	}
 	if s.configured(d.Serial) != nil {
 		return local[d.IP.String()]
 	}
-	return d.Kind != cubelan.KindCube && s.proxySerial(d.Serial)
+	return s.proxySerial(d.Serial)
 }
 
 // proxySerial reports whether one of this server's proxies answers
@@ -321,7 +349,9 @@ func (s *Server) discoverOnce(ctx context.Context) ([]foundCube, error) {
 		r = proxy.NewResponder(s.partLog("proxy", ""))
 		go r.Serve(rctx, pc)
 	}
+	browsed := s.browseServers(ctx, wait)
 	answers, err := r.Discover(ctx, cubelan.SearchOptions{Targets: s.discoveryTargets(), Wait: wait, MAC: s.opts.LookupMAC})
+	<-browsed
 	// Another program on this host searched meanwhile and got the Cubes'
 	// answers from then on: the run lists what it heard, and settles
 	// nothing, as one cut short does.
@@ -365,6 +395,127 @@ func (s *Server) discoverOnce(ctx context.Context) ([]foundCube, error) {
 	return out, nil
 }
 
+// browseServers asks for the massimo servers announced on the LAN while
+// a run waits for the Cubes' answers, as long, and keeps them for
+// describeFound; the channel closes when it is done. Without
+// Options.BrowseServers it asks nothing, and the servers stay none; a
+// failed look keeps the last.
+func (s *Server) browseServers(ctx context.Context, wait time.Duration) <-chan struct{} {
+	done := make(chan struct{})
+	if s.opts.BrowseServers == nil {
+		close(done)
+		return done
+	}
+	var unicast []net.IP
+	if len(s.opts.DiscoveryTargets) > 0 {
+		for _, t := range s.discoveryTargets() {
+			unicast = append(unicast, t.IP)
+		}
+	}
+	go func() {
+		defer close(done)
+		found, err := s.opts.BrowseServers(ctx, wait, unicast...)
+		if err != nil {
+			s.log.Debug("discovery: servers not looked for", "error", err)
+			return
+		}
+		s.foundMu.Lock()
+		s.servers = found
+		s.foundMu.Unlock()
+	}()
+	return done
+}
+
+// describeFound completes copies of found entries for the API: an
+// unknown entry at an announced server's address is a proxy, as massimo
+// discover marks it; a proxy names the Cube with its radio address
+// (Serves); a proxy names the server at its address, and a Cube the
+// server one of its proxies runs on (Host). It runs without foundMu
+// held.
+func (s *Server) describeFound(list []foundCube) {
+	if len(list) == 0 {
+		return
+	}
+	cubeAt := map[string]string{} // radio address → the Cube's serial
+	for _, rt := range s.runtimes() {
+		if h := rt.client.Snapshot().Hello(); h != nil {
+			cubeAt[h.RFAddress.String()] = rt.cubeSerial()
+		}
+	}
+	s.foundMu.Lock()
+	servers := s.servers
+	var present []foundCube
+	for _, f := range s.found {
+		if f.state == foundPresent {
+			present = append(present, *f)
+		}
+	}
+	s.foundMu.Unlock()
+	hostAt := func(addr string) *foundHost {
+		ip := net.ParseIP(addr)
+		if ip == nil {
+			return nil
+		}
+		for _, srv := range servers {
+			if srv.Has(ip) {
+				return serverHost(srv)
+			}
+		}
+		return nil
+	}
+	kindOf := func(f foundCube) cubelan.Kind {
+		if f.Kind != cubelan.KindCube && f.Kind != cubelan.KindProxy && hostAt(f.Address) != nil {
+			return cubelan.KindProxy
+		}
+		return f.Kind
+	}
+	// The server serving each radio address: a proxy's at its own
+	// address, or at another address answering with a Cube's serial.
+	proxyHost := map[string]*foundHost{}
+	for _, f := range present {
+		if kindOf(f) == cubelan.KindCube {
+			cubeAt[f.RFAddress] = cmp.Or(cubeAt[f.RFAddress], f.Serial)
+		} else if h := hostAt(f.Address); h != nil && proxyHost[f.RFAddress] == nil {
+			proxyHost[f.RFAddress] = h
+		}
+		for _, a := range f.Proxies {
+			if h := hostAt(a); h != nil && proxyHost[f.RFAddress] == nil {
+				proxyHost[f.RFAddress] = h
+			}
+		}
+	}
+	for i := range list {
+		f := &list[i]
+		f.Kind = kindOf(*f)
+		f.Serves, f.Host = "", nil
+		if f.Kind == cubelan.KindProxy {
+			f.Serves = cubeAt[f.RFAddress]
+			f.Host = hostAt(f.Address)
+			continue
+		}
+		f.Host = proxyHost[f.RFAddress]
+	}
+}
+
+// serverHost is how a found entry names an announced server: its
+// instance name, else its host's first label, and the url its
+// announcement gives, else its own address.
+func serverHost(srv announce.Found) *foundHost {
+	name := srv.Name
+	if name == "" {
+		name, _, _ = strings.Cut(srv.Host, ".")
+	}
+	url := srv.TXT["url"]
+	if url == "" {
+		scheme := "http"
+		if srv.TLS {
+			scheme = "https"
+		}
+		url = scheme + "://" + srv.Address()
+	}
+	return &foundHost{Name: name, URL: url}
+}
+
 // note records one answer, as noteSerial does a run's answers of one
 // serial.
 func (s *Server) note(ctx context.Context, d cubelan.Discovered, now time.Time) foundCube {
@@ -390,6 +541,7 @@ func (s *Server) noteSerial(ctx context.Context, answers []cubelan.Discovered, n
 	arrived := !known || f.state == foundGone
 	f.state = foundPresent
 	f.Address, f.RFAddress, f.Firmware, f.LastSeen = d.IP.String(), d.RFAddress.String(), d.Firmware, now
+	f.Kind = d.Kind
 	if d.MAC != "" {
 		f.MAC = d.MAC
 	}
@@ -621,7 +773,6 @@ func (s *Server) cubeGone(f foundCube) {
 // those that answered the latest complete run, or the run going.
 func (s *Server) unconfigured() []foundCube {
 	s.foundMu.Lock()
-	defer s.foundMu.Unlock()
 	var out []foundCube
 	for _, f := range s.found {
 		if f.state == foundPresent && s.configured(f.Serial) == nil {
@@ -630,7 +781,9 @@ func (s *Server) unconfigured() []foundCube {
 			out = append(out, c)
 		}
 	}
+	s.foundMu.Unlock()
 	sort.Slice(out, func(i, j int) bool { return out[i].Serial < out[j].Serial })
+	s.describeFound(out)
 	return out
 }
 
@@ -729,10 +882,11 @@ func (s *Server) postDiscover(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return fail(http.StatusInternalServerError, "discovery: %v", err)
 	}
-	found := run.found
+	found := slices.Clone(run.found)
 	if found == nil {
 		found = []foundCube{}
 	}
+	s.describeFound(found)
 	writeJSON(w, http.StatusOK, map[string]any{"ran_at": run.ranAt, "found": found})
 	return nil
 }

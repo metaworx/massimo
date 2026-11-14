@@ -349,15 +349,36 @@ button.copy-icon .ni { width: 16px; height: 16px; }
 .menu-sep { border: none; border-top: 1px solid var(--line); margin: 6px 0; }
 .menu-items button[aria-current="true"] { box-shadow: inset 3px 0 0 var(--accent); font-weight: 600; }
 #cube-search.bad { color: var(--bad); }
-/* Cubes found on the LAN but not configured, counted under the header: a
-   link to System settings → Cubes, or the count alone without cubes; in
-   the text's colour, as the warning's has too little contrast on the page */
-.cube-found { margin: 8px 0 0; font-size: 0.9rem; max-width: 100%; }
-.cube-found-link {
+/* The found Cubes' sign (components.js foundCountEl): a cube with their
+   number in a corner badge, in the accent's blue, as information; in the
+   header's problem pill last, its list's last group, and System settings'
+   fold of them. */
+.found-count { position: relative; display: inline-flex; flex: none; color: var(--accent); }
+.found-count .ni { width: 18px; height: 18px; }
+.found-count b {
+  position: absolute;
+  top: -6px;
+  right: -7px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--card);
+  font-size: 0.66rem;
+  font-weight: 700;
+  line-height: 15px;
+  text-align: center;
+}
+.problems-sum .found-count { margin-right: 4px; }
+.problem-entry > .found-count.problem-icon, .problem-entry > .found-count.problem-icon .ni { width: var(--ic); height: var(--ic); color: var(--accent); }
+/* in the pill's list, the way to System settings → Cubes: a link's look */
+.found-to-cubes {
   padding: 0;
   border: none;
   background: none;
-  color: inherit;
+  color: var(--accent);
   font: inherit;
   height: auto;
   min-height: 0;
@@ -365,9 +386,14 @@ button.copy-icon .ni { width: 16px; height: 16px; }
   text-underline-offset: 2px;
   cursor: pointer;
 }
-body:not(.no-cubes) .without-cubes { display: none; }
-/* under System settings → Cubes' found list: the env lines to serve them */
+.menu-items .found-to-cubes { display: inline; width: auto; padding: 0; }
+/* System settings → Cubes: the found Cubes and proxies, one fold */
+.found-panel > summary .found-count { margin-right: 6px; }
+.cube-found-list .found-icon { width: 16px; height: 16px; flex: none; color: var(--muted); }
+/* under System settings → Cubes' found list: how to serve them, the lines
+   for the settings file in a fold with one copy icon */
 .cubes-found-hints p { margin: 6px 0; }
+.found-lines > summary { align-items: center; }
 .cubes-found-hints .env-lines {
   margin: 6px 0;
   padding: 8px 10px;
@@ -390,7 +416,7 @@ body:not(.no-cubes) .without-cubes { display: none; }
 #version-short { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 body.scrolled .top { padding: 8px 0; }
 body.scrolled .top #refresh-btn, body.scrolled #tls-notice,
-body.scrolled #cube-found, body.scrolled #pending { display: none !important; }
+body.scrolled #pending { display: none !important; }
 @media (max-width: 599px) {
   body.scrolled .top-line { grid-template-areas: "cube nav"; grid-template-columns: minmax(0, 1fr) auto; }
   body.scrolled .top-left { display: none; }
@@ -674,13 +700,15 @@ body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8p
   .fold-i { transition: none; }
 }
 
-/* System settings → Cubes (cubes.js): a Cube's panel in two columns where
-   there is room, its own settings at the left, the pairing and the
-   hidden devices at the right; one column on a phone, the pairing first.
-   The form lends its parts to the grid (display: contents). */
+/* System settings → Cubes (cubes.js): a Cube's panel in three groups, its
+   facts (Info), its settings (the form, Hidden devices last, then Save)
+   and its actions in one row last; Info and the settings side by side
+   where there is room, one after the other on a phone. The pairing lends
+   its parts to the actions' row (display: contents): Pair a device beside
+   Reboot and Remove, its form, countdown and joined devices under it. */
 .cube-panel { margin-bottom: 8px; padding: 8px 12px; }
-.cube-cols { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "info" "pair" "fields" "hidden" "actions"; gap: 4px 28px; }
-.cube-cols > .cube-info { grid-area: info; margin-bottom: 10px; }
+.cube-cols { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "info" "settings" "actions"; gap: 4px 28px; }
+.cube-cols > .cube-info { grid-area: info; margin-bottom: 10px; align-self: start; }
 /* a Cube's radio budget in its head, between its serial and its badges */
 .cube-head-stats { font-variant-numeric: tabular-nums; }
 /* a Cube's panel's head (cubes.js fillCubeHead): its sign before the
@@ -699,15 +727,16 @@ body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8p
 .cube-top-line:empty { display: none; }
 .cube-panel:not([open]) > .cube-top-line { display: none; }
 .cube-panel[open] > summary > .panel-badges { display: none; } /* the source is on the top line then */
-.cube-cols > .cube-form { display: contents; }
-.cube-cols > .cube-pairing { grid-area: pair; }
-.cube-cols .cube-fields { grid-area: fields; }
-.cube-cols .cube-hidden { grid-area: hidden; }
-.cube-cols .cube-form > .actions { grid-area: actions; }
-.cube-cols > .cube-differs, .cube-cols > p { grid-column: 1 / -1; }
+.cube-cols > .cube-form { grid-area: settings; display: grid; gap: 4px; align-content: start; min-width: 0; }
+.cube-cols > p.needs-cubes { grid-area: settings; }
+.cube-cols > .cube-actions { grid-area: actions; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 10px; margin-top: 6px; border-top: 1px solid var(--line); }
+.cube-cols > .cube-actions > .cube-pairing, .cube-cols > .cube-actions > .cube-reboot { display: contents; } /* over .panel .actions */
+.cube-actions > .cube-pairing > :not(.pair-open) { flex-basis: 100%; order: 3; }
+.cube-actions > .confirm-box { flex-basis: 100%; }
+.cube-cols > .cube-differs { grid-column: 1 / -1; }
 @media (min-width: 760px) {
-  .cube-cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "info pair" "fields pair" "fields hidden" "actions actions"; align-items: start; }
-  .no-cubes .cube-cols { grid-template-columns: minmax(0, 1fr); grid-template-areas: "info" "pair"; }
+  .cube-cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "info settings" "actions actions"; align-items: start; }
+  .no-cubes .cube-cols { grid-template-columns: minmax(0, 1fr); grid-template-areas: "info" "actions"; }
 }
 .cube-differs { border-left: 3px solid var(--warn); padding: 2px 0 2px 10px; margin: 0 0 10px; }
 .cube-differs p { margin: 0 0 6px; overflow-wrap: anywhere; }

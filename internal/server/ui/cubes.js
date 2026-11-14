@@ -5,8 +5,8 @@
 // from its store, each in a panel with its name, address, proxy and
 // hidden devices (PUT /api/v1/cubes/{sn}), a notice with "Take the
 // file's value" for a line of the settings file that differs, and
-// Remove (DELETE); then the Cubes found on the LAN with Add (POST
-// /api/v1/cubes). The list is drawn when the settings open, after every
+// Remove (DELETE); then, in one fold, the Cubes and the Massimo proxies
+// found on the network, a Cube with Add (POST /api/v1/cubes). The list is drawn when the settings open, after every
 // change, and on a poll while no panel is open, so that a poll never
 // throws away what is being typed. Each panel starts with Pair a device
 // (capability pair), the pairing flow: the time, Start, the countdown
@@ -23,6 +23,8 @@ const cubesUI = {
   devices: {}, // per serial: the Cube's visible devices, for the hide choice
   rooms: {}, // per serial: the rooms of a Cube that is not the one shown
   pairing: {}, // per serial: the pairing flow, see pairingOf
+  foundOpen: false, // the found Cubes' fold (foundFold)
+  linesOpen: false, // its lines for the settings file (foundHints)
   busy: false,
 };
 
@@ -37,10 +39,12 @@ function cubesVisible() {
 }
 
 // cubesPolled is called by loadCubes after every load of the list: the
-// list drawn again while no panel is open, otherwise each panel's head and
-// facts refreshed in place (fillCubeFacts), so that what is typed stays.
+// card's badges drawn again always; the list drawn again while no panel
+// is open, otherwise each panel's head and facts refreshed in place
+// (fillCubeFacts), so that what is typed stays.
 function cubesPolled() {
   if (!cubesVisible()) return;
+  renderCubesBadges();
   if (cubesUI.open.size === 0 && !cubesUI.busy) {
     renderCubes();
     return;
@@ -71,8 +75,21 @@ function fillCubeFacts(d, c) {
   d.querySelector(".cube-head-stats").textContent =
     [t("budget.duty") + " " + f.duty, t("budget.slots") + " " + f.slots, t("budget.pending") + " " + f.pending].join(" · ");
   const clock = clockText(c); // app.js
-  const facts = { host, port, firmware: c.firmware, radio: c.rf_address, clock: clock.text, ...f };
-  for (const td of d.querySelectorAll(".cube-info [data-fact]")) td.textContent = facts[td.dataset.fact] || "–";
+  const facts = { serial: c.serial, host, port, firmware: c.firmware, radio: c.rf_address, clock: clock.text, ...f };
+  for (const td of d.querySelectorAll(".cube-info [data-fact]")) {
+    const v = facts[td.dataset.fact] || "";
+    if (!td.hasAttribute("data-copy")) {
+      td.textContent = v || "–";
+      continue;
+    }
+    // the serial, the address and the radio address copy (components.js
+    // copyEl), drawn again only where they changed, so that a poll leaves
+    // a focused icon where it is
+    if (td.dataset.value === v) continue;
+    td.dataset.value = v;
+    const what = td.closest("tr").querySelector("th").textContent;
+    td.replaceChildren(v ? copyEl(v, { label: what, icon: true }) : "–");
+  }
   d.querySelector('.cube-info [data-fact="clock"]').title = clock.title;
   fillLinkState(d, c);
   fillAddressState(d, c);
@@ -749,16 +766,23 @@ function cubePanel(c) {
   });
   // two columns where there is room (style.css .cube-cols): the Cube's
   // fields at the left, the pairing and the hidden devices at the right
+  // Three groups: the Cube's facts (Info), its settings (the form), and
+  // its actions in one row last: Pair a device (its progress under the
+  // row), Reboot the Cube, Remove; Info and the settings side by side
+  // where there is room (style.css .cube-cols).
   const form = d.querySelector("form.cube-form");
   sum.insertBefore(textEl("span", "", "cube-head-stats muted small"), pills);
-  const cols = elem("div", "cube-cols", fromTemplate("tpl-cube-info"), pairingSection(c.serial), form);
+  const acts = elem("div", "cube-actions", pairingSection(c.serial), rebootRow(c));
+  const cols = elem("div", "cube-cols", fromTemplate("tpl-cube-info"), form, acts);
   sum.after(elem("div", "cube-top-line"), elem("div", "cube-link-state"), elem("div", "cube-address-state"), cols);
-  cols.after(rebootRow(c));
   fillCubeFacts(d, c);
   if (c.source === "flag" || !c.source) {
     form.replaceWith(textEl("p", t("cubes.flagNote"), "muted small needs-cubes"));
     return d;
   }
+  const removeBox = elem("div", "cube-remove needs-cubes");
+  removeBox.appendChild(button(t("cubes.remove"), "remove-cube", () => removeCube(c.serial, removeBox)));
+  acts.appendChild(removeBox);
   for (const fd of c.file_differs || []) {
     const row = fromTemplate("tpl-cube-differs");
     row.querySelector("p").textContent = t("cubes.differs", { variable: fd.variable, file: valueText(fd.file), store: valueText(fd.store) });
@@ -790,7 +814,6 @@ function cubePanel(c) {
   fillProxyState(d, c);
   fillHiddenEditor(c, form.querySelector(".cube-hidden"));
   const actions = form.querySelector(".actions");
-  actions.querySelector(".remove-cube").addEventListener("click", () => removeCube(c.serial, actions));
 
   // cur is the Cube as the list last gave it, which a poll moves on
   // (d.syncForm); changes is what Save sends: the fields that differ
@@ -865,34 +888,112 @@ function cubePanel(c) {
   return d;
 }
 
-// foundRow is a Cube found on the LAN, from its template
-// (tpl-found-row): its serial, address and firmware, the massimo proxies
-// that answer for it, in expert mode its radio and MAC address and the
-// gateway it uses, how long ago it answered, and Add (addCube),
-// which serves it at once; System settings → Cubes lists it.
+// foundRow is a Cube or a Massimo proxy found on the network, from its
+// template (tpl-found-row): its sign, its serial, for a Cube its address,
+// DHCP flag and firmware, the massimo proxies that answer for it, for a
+// proxy what it serves, for both the Massimo server serving it
+// (foundWhat), in expert mode the radio and MAC address and the gateway
+// it uses, how long ago it answered, and for a Cube Add (addCube), which
+// serves it at once: a proxy is another server's, listed so that its
+// Cube is not added twice. System settings → Cubes lists it (foundFold).
 function foundRow(c) {
   const li = fromTemplate("tpl-found-row");
   li.dataset.serial = c.serial;
+  li.dataset.kind = c.kind || "unknown";
+  li.prepend(iconEl(c.kind === "proxy" ? "icon-proxy" : "icon-cube3d", "ni found-icon"));
   li.querySelector(".found-serial").textContent = c.serial;
   const part = (cls, values) => {
     const el = li.querySelector(cls);
-    const v = values.filter((x) => x);
-    if (v.length) el.textContent = " · " + v.join(" · ");
+    const v = joinParts(values);
+    if (v.length) el.append(" · ", ...v);
     else el.remove();
   };
   // dhcp is absent until the Cube has answered the c request.
   const dhcp = c.dhcp === true ? t("cubes.dhcp") : c.dhcp === false ? t("cubes.static") : "";
   // proxies are the other addresses that answered for its serial.
   const proxies = (c.proxies || []).join(", ");
-  part(".found-facts", [c.address, dhcp, c.firmware ? t("budget.firmware") + " " + c.firmware : "",
-    proxies ? t("cubes.viaProxy", { address: proxies }) : ""]);
+  const own = c.kind === "proxy" ? [] : [dhcp, c.firmware ? t("budget.firmware") + " " + c.firmware : "",
+    proxies ? t("cubes.viaProxy", { address: proxies }) : ""];
+  part(".found-facts", [c.address, ...own, ...foundWhat(c)]);
   part(".found-extra", [c.rf_address, c.mac, c.gateway ? t("cubes.gateway") + " " + c.gateway : ""]);
   const add = li.querySelector(".add-cube");
   const age = ageEl(c.last_seen, false, true);
   if (age) add.before(age);
+  if (c.kind === "proxy") {
+    add.remove();
+    return li;
+  }
   add.setAttribute("aria-label", t("cubes.addLabel", { serial: c.serial }));
   add.addEventListener("click", () => addCube(c.serial, add));
   return li;
+}
+
+// foundWhat is what a found entry is and who serves it, as parts for
+// joinParts: a Massimo proxy and the Cube it serves, and the Massimo
+// server serving it, the proxy's own or the one a Cube's proxy runs on
+// (host), its name a link to the address its announcement on the
+// network gives.
+function foundWhat(c) {
+  const parts = [];
+  if (c.kind === "proxy") parts.push(c.serves ? t("found.proxyServes", { serial: c.serves }) : t("found.proxy"));
+  if (c.host) parts.push(tNodes("found.servedBy", { host: linkEl(c.host.url, c.host.name || c.host.url, "found-host") })); // i18n.js, components.js
+  return parts;
+}
+
+// joinParts joins parts, each a text or an array of texts and elements,
+// with " · ", leaving out the empty ones.
+function joinParts(parts) {
+  const out = [];
+  for (const p of parts) {
+    if (!p || (Array.isArray(p) && !p.length)) continue;
+    if (out.length) out.push(" · ");
+    out.push(...[].concat(p));
+  }
+  return out;
+}
+
+// foundFold is what was found on the network and is not served, one fold
+// under the served Cubes, closed at first and kept as it was across
+// redraws (cubesUI.foundOpen): the found Cubes' sign (foundCountEl), its
+// name and how many Cubes and Massimo proxies, then a row each (foundRow)
+// and how to serve them (foundHints). For a role with cubes.
+function foundFold(found) {
+  const proxies = found.filter((c) => c.kind === "proxy").length;
+  const cubes = found.length - proxies;
+  const badges = [];
+  if (cubes) badges.push(badgeEl(tn("found.cubes", cubes), "mode"));
+  if (proxies) badges.push(badgeEl(tn("found.proxies", proxies), "mode"));
+  const ul = elem("ul", "cube-found-list");
+  for (const c of found) {
+    const li = foundRow(c);
+    li.classList.add("cube-found-row");
+    ul.appendChild(li);
+  }
+  const d = detailsPanel({ name: t("found.title"), badges, open: cubesUI.foundOpen, onToggle: (o) => { cubesUI.foundOpen = o; }, cls: "found-panel needs-cubes" },
+    [ul, foundHints(found)]);
+  d.querySelector(":scope > summary").prepend(foundCountEl(found.length));
+  return d;
+}
+
+// renderCubesBadges draws the Cubes card's badges from the list as the
+// last poll gave it, at every poll, a panel open or not: how many are
+// served; those not connected by their link's state, as their signs
+// show it, a cross red ("not connected"), a held connection or a reboot
+// amber; the proxies that do not listen, the Cubes found at another
+// address, those found and not served.
+function renderCubesBadges() {
+  const count = (link) => state.cubes.filter((c) => linkState(c) === link).length; // app.js
+  const lost = state.cubes.filter((c) => linkSign(c) === "bad").length; // app.js
+  const badges = [badgeEl(tn("cubes.badge.served", state.cubes.length), "mode")];
+  if (lost) badges.push(badgeEl(tn("cubes.badge.disconnected", lost), "bad"));
+  if (count("held")) badges.push(badgeEl(tn("cubes.badge.held", count("held")), "warn"));
+  if (count("rebooting")) badges.push(badgeEl(tn("cubes.badge.rebooting", count("rebooting")), "warn"));
+  const failing = proxyFailing(state.cubes);
+  if (failing) badges.push(badgeEl(tn("proxy.badge.failing", failing), "warn"));
+  const elsewhere = state.cubes.filter((c) => c.found_elsewhere).length;
+  if (elsewhere) badges.push(badgeEl(tn("cubes.badge.elsewhere", elsewhere), "warn"));
+  if (state.found.length) badges.push(badgeEl(tn("cubes.badge.found", state.found.length), "warn"));
+  sectionBadges($("sys-cubes"), badges);
 }
 
 // renderCubes draws System settings → Cubes from state.cubes and state.found.
@@ -902,42 +1003,32 @@ function renderCubes() {
   clear(box);
   if (!state.cubes.length) box.appendChild(textEl("p", t("cubes.none"), "muted small"));
   for (const c of state.cubes) box.appendChild(cubePanel(c));
-  const off = state.cubes.filter((c) => !c.connected).length;
-  const badges = [badgeEl(tn("cubes.badge.served", state.cubes.length), "mode")];
-  if (off) badges.push(badgeEl(tn("cubes.badge.disconnected", off), "bad"));
-  const failing = proxyFailing(state.cubes);
-  if (failing) badges.push(badgeEl(tn("proxy.badge.failing", failing), "warn"));
-  const elsewhere = state.cubes.filter((c) => c.found_elsewhere).length;
-  if (elsewhere) badges.push(badgeEl(tn("cubes.badge.elsewhere", elsewhere), "warn"));
-  if (state.found.length) badges.push(badgeEl(tn("cubes.badge.found", state.found.length), "warn"));
-  sectionBadges($("sys-cubes"), badges);
-  if (state.found.length) {
-    box.appendChild(textEl("p", t("cubes.found"), "muted cube-found-title needs-cubes"));
-    const ul = elem("ul", "cube-found-list needs-cubes");
-    for (const c of state.found) {
-      const li = foundRow(c);
-      li.classList.add("cube-found-row");
-      ul.appendChild(li);
-    }
-    box.appendChild(ul);
-    box.appendChild(foundHints(state.found));
-  }
+  renderCubesBadges();
+  if (state.found.length) box.appendChild(foundFold(state.found));
 }
 
-// foundHints is the other way to serve the found Cubes: the lines for the
-// server's settings file, ready to copy, and where that file is. The
-// address makes serve take the Cube; a name alone would as well, serve
-// then follows the address the Cube answers discovery from.
+// foundHints is how the found Cubes are served: Add at once, or the lines
+// for the server's settings file and a restart, in a fold of their own
+// with one copy icon for them all (cubesUI.linesOpen), and where that
+// file is. The address makes serve take the Cube; a name alone would as
+// well, serve then follows the address the Cube answers discovery from.
+// A Massimo proxy has no lines: it is another server's.
 function foundHints(found) {
-  const box = elem("div", "cubes-found-hints needs-cubes");
+  const box = elem("div", "cubes-found-hints");
   box.appendChild(textEl("p", t("discover.hint"), "muted small"));
   const lines = [];
   for (const c of found) {
+    if (c.kind === "proxy") continue;
     const p = "MASSIMO_CUBE_" + c.serial + "_";
     lines.push(p + "ADDRESS=" + (c.address || ""), p + "NAME=");
   }
-  box.appendChild(textEl("pre", lines.join("\n"), "env-lines mono"));
-  box.appendChild(textEl("p", t("discover.hintFile"), "muted small"));
+  if (!lines.length) return box;
+  const text = lines.join("\n");
+  const sum = elem("summary", "", textEl("span", t("found.lines"), "panel-name"), copyIcon(() => text, t("found.copyLines"))); // components.js
+  const d = elem("details", "sys-sub found-lines", sum, textEl("pre", text, "env-lines mono"), textEl("p", t("discover.hintFile"), "muted small"));
+  d.open = cubesUI.linesOpen;
+  d.addEventListener("toggle", () => { cubesUI.linesOpen = d.open; });
+  box.appendChild(d);
   return box;
 }
 

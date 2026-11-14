@@ -701,19 +701,42 @@ function renderCubeSelect() {
 // (green where only its devices fail), its link's badge where it is not
 // connected, and its devices with a problem under it, "Room › Device",
 // with their badges (tiles.js deviceProblems); a window open briefly is a
-// state, not a problem. Last, for one who may change the settings, the
+// state, not a problem. Then, for one who may change the settings, the
 // settings: a Cube proxy that does not listen, a settings file that
-// differs from the store, a Cube found elsewhere than its fixed address,
-// Cubes found and not served.
+// differs from the store, a Cube found elsewhere than its fixed address.
+// Last, for everyone, what was found on the network and is not served
+// (foundEntry), as information.
 function cubeProblemEntries() {
   const entries = state.cubes.map((c) => cubeEntry(c));
   if (hasCap("settings")) {
     const items = [];
     for (const c of state.cubes) items.push(...cubeSettingItems(c, c.name || c.serial));
-    if (state.found.length) items.push({ kind: "cog", icon: "icon-cog", sign: "cog", tone: "warn", text: tn("cubes.badge.found", state.found.length) });
     entries.push({ sign: { kind: "cog", state: items.length ? "warn" : "" }, title: t("problem.settings"), items });
   }
+  if (state.found.length) entries.push(foundEntry(state.found));
   return entries;
+}
+
+// foundEntry is what was found on the network and is not served, as the
+// problem list's last group: the found Cubes' sign with their number,
+// shown in the summary too, "not set up" and, for a role with cubes, a
+// link to System settings → Cubes (showFound); under it each Cube and
+// Massimo proxy, its address, what it is and the server serving it
+// (cubes.js foundWhat).
+function foundEntry(found) {
+  const sub = [t("found.notSetUp")];
+  if (hasCap("cubes")) {
+    const go = textEl("button", t("found.toCubes"), "link-button found-to-cubes");
+    go.type = "button";
+    go.addEventListener("click", showFound);
+    sub.push(" · ", go);
+  }
+  const subs = found.map((c) => ({
+    icon: c.kind === "proxy" ? "icon-proxy" : "icon-cube3d",
+    title: c.serial,
+    sub: joinParts([c.address, ...foundWhat(c)]), // cubes.js
+  }));
+  return { node: foundCountEl(found.length), title: t("found.group"), sub, subs, info: true, summary: foundCountEl(found.length) };
 }
 
 // cubeEntry is a Cube's problems as an entry of problemsEl: the Cube as
@@ -751,7 +774,9 @@ function cubeSettingItems(c, who) {
 // screen reader and the tooltip.
 function problemsLabelOf(entries) {
   const kinds = ["net", "radio", "battery", "window", "cog"].filter((k) => entries.flatMap(entryItems).some((it) => it.kind === k)); // components.js
-  return t("problem.label", { list: kinds.map((k) => t("problem." + k)).join(", ") });
+  const found = entries.some((e) => e.info) && state.found.length ? tn("found.pill", state.found.length) : "";
+  if (!kinds.length) return found;
+  return [t("problem.label", { list: kinds.map((k) => t("problem." + k)).join(", ") }), found].filter(Boolean).join(" · ");
 }
 
 // renderCubeProblems draws every Cube's problems beside the Cube choice
@@ -786,7 +811,6 @@ async function loadCubes() {
   const all = (await api("GET", "api/v1/cubes")) || [];
   state.cubes = all.filter(isConfigured);
   state.found = all.filter((c) => !isConfigured(c));
-  renderFound();
   cubesPolled(); // cubes.js
   state.lastPoll = new Date();
   if (!state.serial || !state.cubes.some((c) => c.serial === state.serial)) {
@@ -974,25 +998,14 @@ function addFound(c) {
   if (i >= 0) state.found[i] = c;
   else state.found.push(c);
   renderCubeSelect();
-  renderFound();
 }
 
-// renderFound counts, under the header, the Cubes found on the LAN that
-// the server does not serve: for a role with cubes a link to System
-// settings → Cubes (showFound), which lists them with Add and the lines
-// for the server's settings file (cubes.js); the count alone otherwise.
-function renderFound() {
-  const n = state.found.length;
-  $("cube-found").classList.toggle("hidden", !n);
-  if (!n) return;
-  $("cube-found-link").textContent = tn("discover.found", n);
-  $("cube-found-text").textContent = tn("discover.found", n);
-}
-
-// showFound opens System settings with the Cubes card in view, which
-// lists the found Cubes.
+// showFound opens System settings with the Cubes card in view and the
+// fold of what was found open (cubes.js foundFold).
 function showFound() {
+  cubesUI.foundOpen = true; // cubes.js
   showView("system");
+  renderCubes(); // cubes.js
   showCard($("sys-cubes"), true); // components.js
 }
 
@@ -1186,7 +1199,6 @@ function clearCubeData() {
   Object.assign(state, { cubes: [], found: [], rooms: [], unlisted: [], roomsOf: null, details: {}, ui: {}, lastPoll: null });
   logState.cubeRooms.clear(); // log.js: every Cube's rooms, as the last user saw them
   renderRooms(); // tiles.js
-  renderFound();
   renderCubeSelect();
   renderHomeNotice();
   renderUpdated();
@@ -1360,7 +1372,6 @@ function initSettings() {
   copyable($("version-short"), () => state.version, ""); // components.js
   $("refresh-btn").addEventListener("click", (ev) => whileBusy(ev.currentTarget, () => poll(true)));
   $("home-notice-cubes").addEventListener("click", () => showView("system"));
-  $("cube-found-link").addEventListener("click", showFound);
   $("clock-select").addEventListener("change", (ev) => {
     setSetting("clock", validSetting("clock", ev.target.value) || "browser");
     applySettings();
@@ -1421,7 +1432,6 @@ function applyLanguage() {
   renderLangSelect();
   applyAppearance();
   renderCubeSelect();
-  renderFound();
   renderMe();
   renderVersionTitle();
   renderServerSign();

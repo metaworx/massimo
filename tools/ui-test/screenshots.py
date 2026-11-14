@@ -116,7 +116,7 @@ PAGES = {
     "appearance": "#prefs .appearance",
     "system": "#system",                            # System settings
     "maintenance": "#sys-maint",                    # its Maintenance
-    "cube-found": "header.top",                     # the Cube choice with the found Cube under it
+    "cube-found": "header.top",                     # the Cube choice, the found Cubes' sign in its pill
     "cubes": "#system .cubes-settings",
     "nav-menu": None,                               # ☰, which only a narrow screen shows
 }
@@ -345,12 +345,13 @@ def step(page, which):
         page.locator("#scheme-editor").wait_for(state="visible")
         to_top(page, page.locator("#prefs .appearance"))
     elif which == "cube-found":
-        page.locator("#cube-found-link").wait_for(state="visible")
+        page.locator("#cube-problems .problems-sum .found-count").wait_for(state="visible")
     elif which == "cubes":
         show_view(page, "system")
         panel = page.locator(".cube-panel[data-serial='KEQ0000100']")
         panel.locator(":scope > summary").click()
         panel.locator("form.cube-form").wait_for(state="visible")
+        page.locator("#cubes-list .found-panel > summary").click()
         page.locator(".cube-found-row[data-serial='KEQ0000000']").wait_for(state="visible")
         to_top(page, page.locator("#system .cubes-settings"))
     else:

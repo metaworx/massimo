@@ -1307,6 +1307,7 @@ then every Cube discovery found on the LAN that is not configured:
   },
   {
     "serial": "KEQ0000000",
+    "kind": "cube",
     "configured": false,
     "address": "192.168.1.23",
     "mac": "00:1a:22:01:02:03",
@@ -1317,6 +1318,7 @@ then every Cube discovery found on the LAN that is not configured:
     "netmask": "255.255.255.0",
     "dns": ["192.168.1.1"],
     "proxies": ["192.168.1.40"],
+    "host": {"name": "box-a", "url": "https://box-a.example:8443"},
     "found_at": "2026-11-04T14:30:01+01:00",
     "last_seen": "2026-11-04T15:00:02+01:00"
   }
@@ -1350,6 +1352,20 @@ It is the server's last state, also while the Cube is not connected.
 A found Cube has only the fields shown: `address` is the IP it answered from,
 its own where a massimo proxy answers for it too (docs/proxy.md),
 and `proxies` the other addresses that answered for its serial in the latest run;
+`kind` is what answered: `cube`, a Cube
+(it answered the `N` or `c` request, or has eQ-3's MAC),
+`proxy`, a massimo proxy (it answered the identify request alone, from a MAC
+that is not eQ-3's, or from the address of a massimo server announced on the LAN),
+or `unknown`, neither, as on the loopback;
+a proxy has `serves`, the serial of the Cube with its radio address,
+served here or found, where one is known.
+`host` names the massimo server that serves the entry:
+for a proxy the one at its address, for a Cube the one a proxy of it runs on,
+with its instance name (`name`) and the `url` its announcement gives
+(`_massimo._tcp`, README.md); it is absent where no announced server matched.
+The servers are asked by mDNS beside each run of discovery, for as long,
+by multicast, or at the addresses of `-discover-target` where it is set;
+the answer of a run that heard none keeps the last.
 `found_at` when the server first saw it, `last_seen` its latest answer;
 `mac` comes from the host's ARP cache and may be missing.
 `gateway`, `netmask` and `dns` are the addresses the Cube uses,

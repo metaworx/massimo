@@ -93,6 +93,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/announce"
 	"go.metaworx.ch/massimo/internal/backup"
 	"go.metaworx.ch/massimo/internal/certs"
 	"go.metaworx.ch/massimo/internal/cubeio"
@@ -225,6 +226,12 @@ type Options struct {
 	// (integrations_found.go), at the start and every 30 minutes; nil
 	// looks for none.
 	FindIntegrations func(ctx context.Context) ([]FoundIntegration, error)
+	// BrowseServers asks the LAN for the massimo servers announced there,
+	// beside each discovery run and for as long, so that a found Massimo
+	// proxy, and a Cube one serves, names the server it runs on; by
+	// multicast, or to the unicast addresses given (Options.DiscoveryTargets').
+	// announce.Browse is one; nil looks for none.
+	BrowseServers    func(ctx context.Context, wait time.Duration, unicast ...net.IP) ([]announce.Found, error)
 	DiscoveryAddr    string
 	DiscoveryTargets []string
 	// LookupMAC gives the MAC of an address that answered discovery
@@ -363,6 +370,7 @@ type Server struct {
 	ctx       context.Context // Run's, for work that outlives a request
 	foundMu   sync.Mutex
 	found     map[string]*foundCube // by serial, upper case
+	servers   []announce.Found      // the servers announced at the latest run, under foundMu
 
 	// The runtimes' and the proxies' goroutines, see runtimes.go.
 	wg       sync.WaitGroup
