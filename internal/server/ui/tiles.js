@@ -272,16 +272,23 @@ function renderNotReady(el, room) {
 
 // PROBLEM_KINDS are the problems a tile's head shows as icons, in their
 // order there, each with its icon (index.html's sprite): a sign where
-// its state has a mark (components.js SIGNS), the radio and the window.
+// its state has a mark (components.js signOf), the radio and the window,
+// drawn as the person chooses (problemIcon).
 const PROBLEM_KINDS = {
-  radio: "icon-radio",
+  radio: null,
   battery: "icon-battery",
-  window: "icon-window-open",
+  window: null,
   mixed: "icon-shuffle",
 };
 
 // PROBLEM_SIGNS are the kinds of PROBLEM_KINDS drawn as signs.
 const PROBLEM_SIGNS = { radio: "radio", window: "window" };
+
+// problemIcon is a kind's icon: its sign's, as the person chooses it,
+// for the radio and the window.
+function problemIcon(kind) {
+  return PROBLEM_SIGNS[kind] ? signOf(PROBLEM_SIGNS[kind]).icon : PROBLEM_KINDS[kind];
+}
 
 // windowState is an open window's state by the page's clock and the
 // window's times (the server's limits): "open" until its warning time,
@@ -342,10 +349,11 @@ function modeTone(mode) {
 }
 
 // deviceIcon is the icon of a device's type: a radiator, a wall
-// thermostat, a window or a leaf for the eco button.
+// thermostat, a window as the person chooses it, closed, or a leaf for
+// the eco button.
 function deviceIcon(d) {
   if (d.type === "wall_thermostat") return "icon-wall";
-  if (d.type === "shutter_contact") return "icon-window";
+  if (d.type === "shutter_contact") return iconChoice("window").type; // components.js
   if (d.type === "eco_button") return "icon-leaf";
   return "icon-radiator";
 }
@@ -357,11 +365,11 @@ function deviceProblems(d, withWindow) {
   const s = d.state || {};
   const out = [];
   if (!d.reported) return out;
-  if (s.error) out.push({ kind: "radio", icon: PROBLEM_KINDS.radio, sign: PROBLEM_SIGNS.radio, tone: "bad", text: t("badge.transmitError") });
-  if (s.link_error) out.push({ kind: "radio", icon: PROBLEM_KINDS.radio, sign: PROBLEM_SIGNS.radio, tone: "warn", text: t("badge.linkError") });
+  if (s.error) out.push({ kind: "radio", icon: problemIcon("radio"), sign: PROBLEM_SIGNS.radio, tone: "bad", text: t("badge.transmitError") });
+  if (s.link_error) out.push({ kind: "radio", icon: problemIcon("radio"), sign: PROBLEM_SIGNS.radio, tone: "warn", text: t("badge.linkError") });
   if (s.battery_low) out.push({ kind: "battery", icon: PROBLEM_KINDS.battery, tone: "warn", text: t("badge.batteryLow"), at: received(d, "battery_low"), stale: d.stale });
   if (withWindow && s.window_open === true) {
-    out.push({ kind: "window", icon: PROBLEM_KINDS.window, sign: PROBLEM_SIGNS.window, tone: WINDOW_TONE[windowState(d)], text: t("badge.open"), at: received(d, "window_open"), stale: d.stale });
+    out.push({ kind: "window", icon: problemIcon("window"), sign: PROBLEM_SIGNS.window, tone: WINDOW_TONE[windowState(d)], text: t("badge.open"), at: received(d, "window_open"), stale: d.stale });
   }
   return out;
 }

@@ -180,18 +180,53 @@ function iconEl(symbol, cls) {
 
 // SIGNS draw a kind of thing in a state: its icon alone where all is
 // well; else its drawing, smaller where the mark takes a corner, and the
-// mark, a triangle (warn) or a cross (bad). The radio (a Wi-Fi fan) and
-// the window carry the mark at the bottom right, as the original MAX!
-// software does; the network (a Cube's link) on top, in place of its
-// upper node; the cog (the settings) at the bottom right too. A battery
-// has no mark: it is amber or nothing.
+// mark, a triangle (warn) or a cross (bad). The radio and the window are
+// drawn as the person chooses (ICON_CHOICES); the network (a Cube's
+// link) carries the mark on top, in place of its upper node; the cog
+// (the settings) at the bottom right. A battery has no mark: it is amber
+// or nothing.
 const SIGNS = {
-  radio: { icon: "icon-radio", base: "icon-radio-small", warn: "mark-corner-warn", bad: "mark-corner-x" },
-  window: { icon: "icon-window-open", base: "icon-window-open-small", warn: "mark-corner-warn", bad: "mark-corner-x" },
   net: { icon: "icon-net", base: "icon-net-base", warn: "mark-net-warn", bad: "mark-net-x" },
   cog: { icon: "icon-cog", base: "icon-cog-small", warn: "mark-corner-warn", bad: "mark-corner-x" },
   battery: { icon: "icon-battery" },
 };
+
+// ICON_CHOICES are the drawings a person chooses for the window and the
+// radio (My settings → Appearance, AP IconChoice), the first of each the
+// default: each its sign, as SIGNS has them, and the window's type icon,
+// a window contact's (closed). The opening sash carries its mark inside
+// its frame, at its size; the paned window of the original MAX! software
+// and the Wi-Fi fan at the bottom right, drawn smaller; the tower of the
+// thermostats' display moves aside for it.
+const ICON_CHOICES = {
+  window: {
+    sash: { type: "icon-window-sash", sign: { icon: "icon-window-sash-open", base: "icon-window-sash-open", warn: "mark-sash-warn", bad: "mark-sash-x" } },
+    paned: { type: "icon-window", sign: { icon: "icon-window-open", base: "icon-window-open-small", warn: "mark-corner-warn", bad: "mark-corner-x" } },
+  },
+  radio: {
+    wifi: { sign: { icon: "icon-radio", base: "icon-radio-small", warn: "mark-corner-warn", bad: "mark-corner-x" } },
+    tower: { sign: { icon: "icon-tower", base: "icon-tower-small", warn: "mark-tower-warn", bad: "mark-tower-x" } },
+  },
+};
+
+// ICON_SETTINGS name the person's setting of each kind of ICON_CHOICES
+// (app.js state.settings).
+const ICON_SETTINGS = { window: "iconWindow", radio: "iconRadio" };
+
+// iconChoice is the drawing of a kind of ICON_CHOICES that the person's
+// setting chooses, the default where it chooses none of them; the
+// default on a page without the settings.
+function iconChoice(kind) {
+  const set = ICON_CHOICES[kind];
+  const settings = (typeof state !== "undefined" && state.settings) || {}; // app.js; none on the connect page
+  return set[settings[ICON_SETTINGS[kind]]] || Object.values(set)[0];
+}
+
+// signOf is a kind's sign: the person's choice for the window and the
+// radio, SIGNS' for the others.
+function signOf(kind) {
+  return ICON_CHOICES[kind] ? iconChoice(kind).sign : SIGNS[kind];
+}
 
 // signEl is the icon of a kind of SIGNS in a state: "" or "ok" plain,
 // "warn" with a triangle, "bad" with a cross, coloured by the state
@@ -200,7 +235,7 @@ const SIGNS = {
 // is what blinks (html.blink-on, blink-first). cls adds classes; key
 // names the sign across redraws (keepBlink).
 function signEl(kind, state, cls, key) {
-  const s = SIGNS[kind];
+  const s = signOf(kind);
   const mark = s[state];
   const svg = iconEl(mark ? s.base : s.icon, "ni sign" + (state ? " tone-" + state : "") + (cls ? " " + cls : ""));
   if (mark) {
