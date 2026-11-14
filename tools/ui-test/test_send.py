@@ -204,11 +204,11 @@ def test_boost_from_the_room_menu(page, case):
     held, sent = [], []
     hold(page, "**/rooms/*/setpoint", "PUT", held, sent)
     try:
-        tile.locator("details.menu summary").click()
+        tile.locator(".tile-head > details.menu summary").click()
         tile.locator(".menu-boost").click()
         assert wait_held(page, held), "the setpoint PUT is sent"
         assert sent == [{"mode": "boost"}], f"the body names the boost alone: {sent}"
-        assert tile.locator("details.menu").get_attribute("open") is None, "the menu closes"
+        assert tile.locator(".tile-head > details.menu").get_attribute("open") is None, "the menu closes"
         answer(held)
         assert wait_until(page, "!document.querySelector(%r).disabled" % (sel + " .mode-auto"), 5), "the tile's buttons are back"
     finally:

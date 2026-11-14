@@ -41,7 +41,16 @@
       <span class="mode-group needs-setpoint" role="group" aria-label="mode" data-i18n-attr="aria-label:room.modeGroup">
         <button type="button" class="mode-auto" aria-pressed="false" data-i18n="mode.auto">AUTO</button>
         <button type="button" class="mode-manual" aria-pressed="false" data-i18n="mode.manu">MANU</button>
-        <button type="button" class="mode-holiday" aria-pressed="false" title="holiday: a temperature until a date" data-i18n="mode.holiday" data-i18n-attr="title:room.holidayTitle">HOLIDAY</button>
+        <details class="menu more-menu">
+          <summary class="more-sum" title="eco, comfort, holiday" data-i18n-attr="title:room.moreTitle"><span class="more-label" data-i18n="mode.more">MORE</span><svg class="ni caret" aria-hidden="true"><use href="#icon-chevron-down"/></svg></summary>
+          <div class="menu-items">
+            <button type="button" class="menu-eco"><span class="menu-item-text"><span class="menu-item-label" data-i18n="room.eco">Eco</span><span class="menu-item-sub more-temp"></span></span></button>
+            <button type="button" class="menu-comfort"><span class="menu-item-text"><span class="menu-item-label" data-i18n="room.comfort">Comfort</span><span class="menu-item-sub more-temp"></span></span></button>
+            <label class="switch more-hold hidden"><input type="checkbox" class="hold-input"><span class="slider" aria-hidden="true"></span><span data-i18n="room.hold">Hold (Manual)</span></label>
+            <hr class="menu-sep">
+            <button type="button" class="menu-holiday" data-i18n="room.holidayForm">Holiday…</button>
+          </div>
+        </details>
       </span>
       <span class="mode-vacation hidden"></span>
       <span class="tile-tools">

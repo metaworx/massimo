@@ -2,7 +2,8 @@
 // Copyright (C) 2026 The Massimo Authors
 
 // The Massimo web UI, tiles: one tile per room with the setpoint
-// stepper, the mode buttons and the inline panels (vacation, delete),
+// stepper, the mode buttons with the More menu (Eco, Comfort, Hold,
+// Holiday…) and the inline panels (vacation, delete),
 // the House tile with its panel, the device list, the devices without a
 // room with Put into a room… and Remove from the Cube, and the actions
 // behind them. Uses the state, api and helpers of app.js, and
@@ -74,7 +75,7 @@ function received(d, field) {
 }
 
 function roomUI(room) {
-  if (!state.ui[room.id]) state.ui[room.id] = { open: false, pending: null, timer: null, vacation: false, confirm: false, config: null, deferred: false, sending: null };
+  if (!state.ui[room.id]) state.ui[room.id] = { open: false, pending: null, timer: null, vacation: false, confirm: false, config: null, deferred: false, sending: null, hold: false };
   return state.ui[room.id];
 }
 
@@ -433,11 +434,11 @@ function renderSetpoint(el, room) {
   const mode = mixed ? null : s ? s.mode : null;
   const autoBtn = el.querySelector(".mode-auto");
   const manuBtn = el.querySelector(".mode-manual");
-  const holidayBtn = el.querySelector(".mode-holiday");
+  const moreSum = el.querySelector(".more-sum");
   // With mixed modes no button is pressed; those in use are marked as
   // partly pressed, and the head's problems name the devices and their
-  // modes (renderProblems).
-  const pressed = [[autoBtn, "auto"], [manuBtn, "manual"], [holidayBtn, "vacation"]];
+  // modes (renderProblems). A holiday presses More.
+  const pressed = [[autoBtn, "auto"], [manuBtn, "manual"]];
   for (const [btn, m] of pressed) {
     const on = mixed ? false : mode === m || (m === "manual" && mode === "boost");
     const part = mixed && modes.includes(m);
@@ -445,7 +446,9 @@ function renderSetpoint(el, room) {
     btn.classList.toggle("partial", part);
     btn.setAttribute("aria-pressed", part ? "mixed" : on ? "true" : "false");
   }
-  holidayBtn.addEventListener("click", () => openVacation(room, el));
+  moreSum.classList.toggle("active", !mixed && mode === "vacation");
+  moreSum.classList.toggle("partial", mixed && modes.includes("vacation"));
+  renderMore(el, room, mode);
   autoBtn.addEventListener("click", () => {
     leaveEditing(room);
     sendRoomSetpoint(room, { mode: "auto" }, t("label.auto"), "auto");
@@ -464,12 +467,95 @@ function renderSetpoint(el, room) {
   const vac = el.querySelector(".mode-vacation");
   if (mode === "vacation") {
     const until = s.until || "?";
-    holidayBtn.title = t("room.holidayUntil", { until });
+    moreSum.title = t("room.holidayUntil", { until });
     vac.appendChild(textEl("span", "\u{1F9F3}", "suitcase"));
     vac.appendChild(document.createTextNode(" " + t("room.until", { until })));
     vac.title = t("room.holidayUntil", { until });
     vac.classList.remove("hidden");
   }
+}
+
+// renderMore wires the tile's More menu (D99): Eco and Comfort, the
+// room thermostat's eco or comfort temperature in the room's mode
+// (presetBody), each with its temperature once the menu has opened; the
+// Hold switch while the room is in Auto, which makes them hold theirs in
+// Manual; and Holiday…, the holiday form. The arrow keys move between
+// the items.
+function renderMore(el, room, mode) {
+  const ui = roomUI(room);
+  const menu = el.querySelector(".more-menu");
+  const hold = menu.querySelector(".more-hold");
+  const input = hold.querySelector("input");
+  hold.classList.toggle("hidden", mode !== "auto");
+  input.checked = ui.hold;
+  input.addEventListener("change", () => {
+    ui.hold = input.checked;
+  });
+  const items = { eco: menu.querySelector(".menu-eco"), comfort: menu.querySelector(".menu-comfort") };
+  for (const [which, b] of Object.entries(items)) b.addEventListener("click", () => sendPreset(room, which));
+  menu.querySelector(".menu-holiday").addEventListener("click", () => openVacation(room, el));
+  menu.addEventListener("toggle", () => {
+    if (!menu.open) return;
+    presetTemps(roomThermostat(room)).then((temps) => {
+      for (const [which, b] of Object.entries(items)) b.querySelector(".more-temp").textContent = temps[which] === undefined ? "" : fmtTemp(temps[which]);
+    }).catch(() => {});
+  });
+  dropdown(menu);
+  menuArrows(menu, ".menu-items button:not(:disabled), .menu-items .switch:not(.hidden) input");
+}
+
+// presetTemps are a thermostat's configured eco and comfort
+// temperatures, { eco, comfort }, undefined where it has none.
+async function presetTemps(th) {
+  const detail = await deviceDetail(th);
+  const cfg = detail.thermostat || detail.wall_thermostat || {};
+  return { eco: cfg.eco_temp, comfort: cfg.comfort_temp };
+}
+
+// presetBody is the setpoint body that sets temp and keeps the room's
+// mode (D99): in Auto until the next switch point, or in Manual where
+// the tile's Hold switch is on; Manual and a boost hold it, a holiday
+// keeps its end. A room whose thermostats differ takes its room
+// thermostat's mode, and no Hold, which it does not show.
+function presetBody(room, temp) {
+  const s = roomState(room) || {};
+  if (s.mode === "auto") return roomModes(room).length <= 1 && roomUI(room).hold ? { mode: "manual", temp } : { mode: "auto", temp };
+  if (s.mode === "vacation" && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(s.until || "")) return { mode: "vacation", temp, until: s.until };
+  return { mode: "manual", temp };
+}
+
+// presetLabel names a preset's write by the body it sends.
+function presetLabel(which, body) {
+  const temp = fmtNum(body.temp, 1);
+  const label = which === "eco" ? t("label.eco", { temp }) : t("label.comfort", { temp });
+  if (body.mode === "auto") return t("label.presetAuto", { label });
+  if (body.mode === "vacation") return t("label.presetUntil", { label, until: body.until });
+  return t("label.presetManual", { label });
+}
+
+// sendPreset sets the room to its thermostat's eco or comfort
+// temperature (which) in the room's mode, from the More menu, which
+// keeps the focus.
+function sendPreset(room, which) {
+  leaveEditing(room);
+  const sum = document.querySelector('.room[data-id="' + room.id + '"] .more-sum');
+  if (sum) sum.focus();
+  return tileWrite(room, which, async () => {
+    const what = t(which === "eco" ? "room.eco" : "room.comfort");
+    let temp;
+    try {
+      temp = (await presetTemps(roomThermostat(room)))[which];
+    } catch (e) {
+      showTileResult(room.id, errorText(what, e), false);
+      return null;
+    }
+    if (temp === undefined) {
+      showTileResult(room.id, t("result.error", { label: what, error: t(which === "eco" ? "house.noEco" : "house.noComfort") }), false);
+      return null;
+    }
+    const body = presetBody(room, temp);
+    return setpointRequest(room, body, presetLabel(which, body));
+  });
 }
 
 // drawSetpoint shows the tile's setpoint, or the stepper's value that
@@ -485,12 +571,13 @@ function drawSetpoint(el, room) {
 }
 
 // SENDING_BUTTON is, per write of a tile (roomUI(room).sending), the
-// button that turns while it runs; "device:<rf>" is a device's Lock.
-const SENDING_BUTTON = { auto: ".mode-auto", manual: ".mode-manual", vacation: ".mode-holiday", setpoint: ".pending-save", boost: ".menu-boost", lock: ".menu-lock", unlock: ".menu-unlock" };
+// button that turns while it runs, More's summary for what its menu
+// sent; "device:<rf>" is a device's Lock.
+const SENDING_BUTTON = { auto: ".mode-auto", manual: ".mode-manual", vacation: ".more-sum", eco: ".more-sum", comfort: ".more-sum", setpoint: ".pending-save", boost: ".menu-boost", lock: ".menu-lock", unlock: ".menu-unlock" };
 
 // WRITE_BUTTONS are the buttons of a tile that send, or change what is
 // to be sent: all off while one of the tile's writes runs.
-const WRITE_BUTTONS = ".mode-group button, .stepper button, .pending-row button, .vacation-panel button[type=submit], .menu-boost, .menu-lock, .menu-unlock, .device-lock";
+const WRITE_BUTTONS = ".mode-group button, .more-sum, .stepper button, .pending-row button, .vacation-panel button[type=submit], .menu-boost, .menu-lock, .menu-unlock, .device-lock";
 
 function sendingSelector(key) {
   if (key && key.startsWith("device:")) return '.device[data-rf="' + key.slice(7) + '"] .device-lock';
@@ -599,9 +686,11 @@ function renderTools(el, room) {
   });
 }
 
+// closeMenu closes the open menus of a tile: its ⋯, More and its
+// problems.
 function closeMenu(el) {
-  const m = el && el.querySelector("details.menu");
-  if (m) m.open = false;
+  if (!el) return;
+  for (const m of el.querySelectorAll("details.menu[open]")) m.open = false;
 }
 
 // renderVacation wires the inline vacation panel of a tile.
@@ -1211,9 +1300,7 @@ async function houseRequests() {
     try {
       let temp = manualTemp;
       if (mode === "eco" || mode === "comfort") {
-        const detail = await deviceDetail(th);
-        const cfg = detail.thermostat || detail.wall_thermostat || {};
-        temp = mode === "eco" ? cfg.eco_temp : cfg.comfort_temp;
+        temp = (await presetTemps(th))[mode];
         if (temp === undefined) throw new Error(t(mode === "eco" ? "house.noEco" : "house.noComfort"));
       }
       let body = { mode: "auto" };
