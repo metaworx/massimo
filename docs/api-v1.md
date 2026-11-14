@@ -955,14 +955,20 @@ A key in use is `409`, an unknown one `404`.
 The signed-in user's preferences (docs/store.md section 9 (c)):
 a JSON document per key, which the web UI uses so that its settings follow
 the user across browsers.
-The page keeps two keys:
+The page keeps these keys, and `notify` (below):
 
 ```json
 {
   "ui": {"poll": 10, "expert": false, "clock": "browser", "lang": "auto", "theme": "system", "scheme": "custom:Mine"},
-  "schemes": {"format": "massimo-schemes/1", "schemes": [{"format": "massimo-scheme/1", "name": "Mine", "light": {…}, "dark": {…}}]}
+  "schemes": {"format": "massimo-schemes/1", "schemes": [{"format": "massimo-scheme/1", "name": "Mine", "light": {…}, "dark": {…}}]},
+  "log.seen": {"all": 4711, "lines": [4720]}
 }
 ```
+
+`log.seen` is the user's marks of the log's alerts (`GET /api/v1/log/alerts`):
+`all` marks every line up to that id seen, **Mark all as seen**,
+and `lines` up to 500 lines marked one by one, **Mark seen**;
+a document of another form is `400`.
 
 `GET /api/v1/me/preferences` is every key the user has, `{}` for none;
 `GET …/{key}` the document, `404` when the key is not set.
@@ -2637,6 +2643,53 @@ A Cube without a row in the store yet adds nothing.
 Without a store, each Cube's last 500 events, merged by time, without `id`.
 A Cube's own log does not carry `cube_serial`.
 
+### GET /api/v1/log/alerts?after=
+
+The log's warnings and errors that nothing has settled yet,
+of every Cube and the server's own (`read`), newest first,
+and the worst of them, for the web UI's log button:
+
+```json
+{
+  "level": "error",
+  "alerts": [
+    {"id": 4720, "kind": "state", "level": "warn", "cube_serial": "KEQ0000100", "device": "0a0101", "serial": "MEQ0000101", "flag": "error", "time": "…"},
+    {"id": 4715, "kind": "restart", "level": "error", "time": "…"}
+  ]
+}
+```
+
+A warning or an error is settled by a later event that says it is over,
+of the same Cube, or of the server for the server's own:
+
+| Kind | Settled by |
+|------|------------|
+| `disconnected`, also one the link held | the next `connected` |
+| `command` retried, failed or dropped | the same command key acknowledged for the same device |
+| `hold` | its end: the duty cycle's reset, or the wait for free slots |
+| `backup`, `restore_done`, `update_result`, `log_rotated` failed | the next one of its kind below warn |
+| `proxy_refused` | the Cube's `connected`, or `proxy_connected` |
+| `proxy_warning`, a pairing not stopped or not started | `pairing_ended`; `pairing_started` or `proxy_pairing` |
+| `login_failed` | a `login` of the same name |
+| `locked_out` | its end |
+| `restart`, `reboot`, `update` not started | `server_started`; for `update`, also an `update` started |
+
+Any other, such as `proxy_discarded` and `proxy_delete_refused`,
+is settled only by a person's mark.
+The alerts the signed-in user marked seen are left out:
+the preference `log.seen` (see "Preferences"),
+which the web UI writes and opening the log does not;
+a browser without a user keeps its marks itself and asks with `after`.
+A device's transmit error, link error and low battery are in the log at info,
+in its state's changes:
+each is an alert at warn while the device has it,
+at the state line that set it (`flag`).
+`after` leaves out the alerts up to that id.
+The audit's lines (`login_failed`, `locked_out`)
+are there for a holder of `audit` only.
+A Cube without a row in the store yet adds nothing;
+without a store, there are none.
+
 ### GET /api/v1/cubes/{sn}/events
 
 A `text/event-stream`.
@@ -2965,7 +3018,11 @@ The server asks GitHub at most every ten minutes; `refresh` asks now.
   "available": true,
   "checked_at": "2026-11-05T13:40:00+01:00",
   "can_update": true,
-  "helper": {"state": "done", "from": "v0.1.0-alpha.8", "to": "v0.1.0-alpha.9", "channel": "alpha", "time": "…"}
+  "helper": {"state": "done", "from": "v0.1.0-alpha.8", "to": "v0.1.0-alpha.9", "channel": "alpha", "time": "…"},
+  "history": [
+    {"at": "2026-11-05T12:01:00Z", "by": {"name": "anna", "display_name": "Anna"}, "from": "v0.1.0-alpha.8", "to": "v0.1.0-alpha.9", "reached": "v0.1.0-alpha.9", "reached_at": "2026-11-05T12:02:10Z"},
+    {"at": "2026-10-30T07:15:00Z", "outside": true, "manager": "apt", "from": "v0.1.0-alpha.7", "reached": "v0.1.0-alpha.8", "reached_at": "2026-10-30T07:15:00Z"}
+  ]
 }
 ```
 
@@ -2984,6 +3041,16 @@ no API token; no update helper; a development build).
 `helper` is the update helper's last run: `state` is one of `checking`,
 `installing`, `restarting`, `done`, `up-to-date`, `failed`, `rolled-back`,
 with `message` on failure.
+`history` is the last ten updates, newest first,
+kept in the setting `update.history`:
+an update started here names who started it (`by`, absent for the owner's key),
+the version it ran (`from`) and the one it asked for (`to`);
+the next start with another version adds `reached` and `reached_at`.
+A new version that no entry waits for came from outside Massimo (`outside`):
+apt, brew (`manager`) or a person on the box.
+`result` is the update helper's outcome where it ended without reaching `to`:
+`failed`, `rolled-back` or `up-to-date`.
+The log keeps an update's lines for a month only.
 
 ### POST /api/v1/update
 

@@ -5,12 +5,12 @@ package server
 
 // The signed-in user's preferences (docs/store.md section 9 (c)): the
 // web UI's settings and colour schemes as a JSON document per key, so
-// that they follow the user across browsers. The page uses ui and
-// schemes. Reading one's own needs a signed-in user only; writing needs
-// the capability preferences, which a guest has not, so that its
-// settings stay in the browser. Without a signed-in user (an open
-// server, the API token without a store) there is no one to keep them
-// for, and the page keeps them in the browser.
+// that they follow the user across browsers. The page uses ui, schemes,
+// notify and log.seen (logseen.go). Reading one's own needs a signed-in
+// user only; writing needs the capability preferences, which a guest has
+// not, so that its settings stay in the browser. Without a signed-in
+// user (an open server, the API token without a store) there is no one
+// to keep them for, and the page keeps them in the browser.
 
 import (
 	"encoding/json"
@@ -117,6 +117,12 @@ func (s *Server) putPreference(w http.ResponseWriter, r *http.Request) error {
 			return fail(http.StatusBadRequest, "%v", err)
 		}
 		defer s.refreshNotify()
+	}
+	if key == seenPrefKey && len(body) <= store.MaxPreferenceBytes {
+		// GET /api/v1/log/alerts reads it (logseen.go).
+		if _, err := parseSeen(body); err != nil {
+			return fail(http.StatusBadRequest, "%v", err)
+		}
 	}
 	pr, err := st.SetPreference(r.Context(), p.user.ID, key, json.RawMessage(body))
 	switch {

@@ -1598,7 +1598,9 @@ Implemented on 2026-11-06 (AP StorePrefs v1.0).
 - API: `GET /api/v1/me/preferences`,
   `GET`/`PUT`/`DELETE /api/v1/me/preferences/{key}`, the value a JSON document:
   `ui` is poll, expert, clock, language, the mode and the chosen scheme;
-  `schemes` the user's own, a list of `massimo-scheme/1` documents.
+  `schemes` the user's own, a list of `massimo-scheme/1` documents;
+  `log.seen` the user's marks of the log's alerts (AP LogAlerts,
+  `docs/api-v1.md`, "GET /api/v1/log/alerts").
   A write is an audit row and no command.
 - UI: the settings follow the user across browsers;
   under each a switch "only on this device" keeps its value in the browser,

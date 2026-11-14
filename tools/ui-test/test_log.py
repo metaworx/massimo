@@ -433,14 +433,15 @@ def test_log_answers(page, case):
     chosen back to all, a page fetched with Older stays when a live
     event comes past 2000 lines, and the error line shows with a kind
     chosen. The page's api() holds the log's requests, which the test
-    answers in its own time."""
+    answers in its own time; the log button's question (log/alerts) goes
+    through."""
     now = time.time()
     show_view(page, "log")
     all_events(page)
     page.evaluate("""() => {
       window.logAnswers = [];
       const real = api;
-      window.api = (method, path, body) => path.includes("/log")
+      window.api = (method, path, body) => path.includes("/log") && !path.includes("/log/alerts")
         ? new Promise((resolve, reject) => window.logAnswers.push({ path, resolve, reject }))
         : real(method, path, body);
     }""")
@@ -524,7 +525,7 @@ def test_log_keeps_events_that_come_while_it_loads(page, case):
     page.evaluate("""() => {
       window.logAnswers = [];
       const real = api;
-      window.api = (method, path, body) => path.includes("/log")
+      window.api = (method, path, body) => path.includes("/log") && !path.includes("/log/alerts")
         ? new Promise((resolve, reject) => window.logAnswers.push({ path, resolve, reject }))
         : real(method, path, body);
     }""")
