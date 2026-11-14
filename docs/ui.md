@@ -208,11 +208,13 @@ Every room has a tile:
   blue for its first 5 minutes, then amber with a triangle,
   red with a cross after 10
   (the server's settings `window_warn_after` and `window_alert_after`);
-  crossed arrows, the room's thermostats in different modes.
+  crossed arrows, the room's thermostats in different modes;
+  a suitcase, a room on holiday, which is no problem but is listed there.
   A tap on them lists the devices concerned, each once with its serial,
   its badges under its name, led by the same icons, a warning's and a failure's
   by its mark, and how long ago each came,
-  and for different modes each thermostat's mode;
+  for different modes each thermostat's mode,
+  and for a holiday its end, "holiday until 24.12., 18:00";
   Escape or a click outside closes the list.
   An icon goes as soon as its problem does.
   The room's virtual wall thermostat is not listed:
@@ -230,7 +232,18 @@ Every room has a tile:
   A temperature set this way puts the room into manual mode.
 - **AUTO** follows the week programme.
   **MANU** keeps the current temperature.
-  **HOLIDAY** keeps a temperature until a date and time.
+  **MORE** opens a menu; the arrow keys move in it, Escape closes it:
+  - **Eco** and **Comfort** set the room's eco or comfort temperature,
+    shown under each, and keep the room's mode:
+    in Auto until the next switch point,
+    in Manual held, on holiday until the holiday's end.
+  - **Hold (Manual)**, a switch shown while the room is in Auto:
+    on, Eco and Comfort put the room into Manual, holding the temperature.
+    It stays as set for the tile until the page is loaded again.
+  - **Holiday…** opens the holiday form:
+    a temperature kept until a date and time, then back to Auto.
+  A room on holiday has MORE pressed, saying until when:
+  "Holiday until 24.12., 18:00", the year added where it is not this one.
 - With the room's thermostats in different modes, for example after another
   program set one of them, the modes in use are outlined,
   and the head's crossed arrows list each thermostat's mode.
