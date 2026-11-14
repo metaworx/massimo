@@ -34,9 +34,16 @@ def test_tiles_device_list_configuration(page, case):
     assert scroll_width(page) <= case.width, "no horizontal scroll on the tiles"
 
 
+def sign_icons(summary):
+    """The icons of a problems' summary, each by its symbols: a sign with
+    a mark as its drawing and its mark, "#icon-radio-small+#mark-corner-x"."""
+    return [svg.evaluate("(s) => [...s.querySelectorAll('use')].map((u) => u.getAttribute('href')).join('+')")
+            for svg in summary.locator("svg").all()]
+
+
 def head_icons(room):
-    """The icons of a tile head's problems, by their symbol."""
-    return [u.get_attribute("href") for u in room.locator(".tile-head .problems-sum use").all()]
+    """The icons of a tile head's problems, by their symbols."""
+    return sign_icons(room.locator(".tile-head .problems-sum"))
 
 
 def test_open_window(page, case):
@@ -45,7 +52,7 @@ def test_open_window(page, case):
     icon goes when a state event closes the contact; the measured
     temperature shows its age."""
     room = page.locator(".room", has=page.locator(".room-name", has_text="Kind 1"))
-    assert head_icons(room) == ["#icon-window-open"], "the open window in the head of the room with the open window"
+    assert head_icons(room) == ["#icon-window-open-small+#mark-corner-x"], "the open window in the head of the room with the open window"
     summary = room.locator(".tile-head .problems-sum")
     assert OPEN[case.lang] in (summary.get_attribute("aria-label") or "").lower(), "named to a screen reader"
     assert page.locator(".room").first.locator(".problems").count() == 0, "nothing in the head of a room with closed windows"
@@ -68,8 +75,9 @@ def test_open_window(page, case):
 def test_problems_in_the_heads(page, case):
     """A radiator thermostat with a transmit error and a low battery, and
     two thermostats in different modes: the room's head shows radio,
-    battery and the mixed modes, radio in red; the list names the devices,
-    each once, with their badges; the device's head shows its problems as
+    battery and the mixed modes, radio in red with a cross; the list names the devices,
+    each once, with their badges, a failure bold and led by its cross in
+    place of its kind's icon, a warning by its triangle; the device's head shows its problems as
     icons, its mode a word, and every device its type's icon; the room's
     virtual thermostat, whose flags copy the wall thermostat's, is not
     listed."""
@@ -89,7 +97,7 @@ def test_problems_in_the_heads(page, case):
     name = page.evaluate("window.__room")
     room = page.locator(".room", has=page.locator(".room-name", has_text=name)).first
     icons = head_icons(room)
-    assert icons[:2] == ["#icon-radio", "#icon-battery"], f"radio, then battery ({icons})"
+    assert icons[:2] == ["#icon-radio-small+#mark-corner-x", "#icon-battery"], f"radio with its cross, then battery ({icons})"
     two = page.evaluate("state.rooms.find((r) => r.name === window.__room).devices.filter((d) => isThermostat(d)).length >= 2")
     if two:
         assert "#icon-shuffle" in icons, f"the mixed modes ({icons})"
@@ -100,6 +108,12 @@ def test_problems_in_the_heads(page, case):
     first = entries.first.inner_text()
     assert page.evaluate("t('badge.transmitError')") in first and page.evaluate("t('badge.batteryLow')") in first, \
         f"the device with its badges ({first!r})"
+    bad = entries.first.locator(".flag.bad").first
+    assert bad.locator("svg.mark-sign use").get_attribute("href") == "#mark-x", "a failure led by its cross"
+    assert int(bad.evaluate("(e) => getComputedStyle(e).fontWeight")) >= 600, "and bold"
+    assert bad.locator("use[href='#icon-radio']").count() == 0, "the cross in place of the radio's icon"
+    warn = entries.first.locator(".flag.warn").first
+    assert warn.locator("svg.mark-sign use").get_attribute("href") == "#mark-warn", "a warning led by its triangle"
     names = [e.locator(".problem-name").inner_text() for e in entries.all()]
     assert len(names) == len(set(names)), f"each device once ({names})"
     listed = entries.count()
@@ -109,7 +123,7 @@ def test_problems_in_the_heads(page, case):
     for dev in room.locator(".device:not(.virtual)").all():
         assert dev.locator(".device-type-icon[aria-label] svg use").count() == 1, "every device its type's icon"
     sick = room.locator(".device:not(.virtual)", has=page.locator(".problems-sum")).first
-    assert [u.get_attribute("href") for u in sick.locator(".problems-sum use").all()] == ["#icon-radio", "#icon-battery"], \
+    assert sign_icons(sick.locator(".problems-sum")) == ["#icon-radio-small+#mark-corner-x", "#icon-battery"], \
         "the device's problems as icons"
     assert sick.locator(".device-badges > .flag").count() >= 1, "its mode a word"
     # the virtual thermostat with the wall thermostat's flags: not listed

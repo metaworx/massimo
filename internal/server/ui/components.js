@@ -129,10 +129,20 @@ function sendWhenChanged(form, changed, { btn, lazy } = {}) {
 }
 
 // badgeEl is a small outlined or filled label (.flag) of a kind: ok,
-// warn, bad, mode, fill-ok, fill-warn, fill-bad.
+// warn, bad, mode, fill-ok, fill-warn (the Manual mode), fill-bad,
+// fill-info. A warning or a failure (warn, bad, fill-bad) is set in bold
+// and led by its mark, a triangle or a cross, so that it reads without
+// its colour (markEl); the others are states, in the regular weight.
 function badgeEl(text, kind) {
-  return textEl("span", text, "flag " + kind);
+  const b = textEl("span", text, "flag " + kind);
+  const state = BADGE_STATE[kind];
+  if (state) b.prepend(markEl(state));
+  return b;
 }
+
+// BADGE_STATE is the state a badge's kind stands for, where it is one a
+// mark shows: amber a warning, red a failure.
+const BADGE_STATE = { warn: "warn", bad: "bad", "fill-bad": "bad" };
 
 // noticeEl is a lasting warning (.notice) of a text, for a state the
 // server keeps trying to leave, such as a Cube proxy that does not listen
@@ -157,6 +167,47 @@ function iconEl(symbol, cls) {
   const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
   use.setAttribute("href", "#" + symbol);
   svg.appendChild(use);
+  return svg;
+}
+
+// SIGNS draw a kind of thing in a state: its icon alone where all is
+// well; else its drawing, smaller where the mark takes a corner, and the
+// mark, a triangle (warn) or a cross (bad). The radio (a Wi-Fi fan) and
+// the window carry the mark at the bottom right, as the original MAX!
+// software does; the network (a Cube's link) on top, in place of its
+// upper node; the cog (the settings) at the bottom right too. A battery
+// has no mark: it is amber or nothing.
+const SIGNS = {
+  radio: { icon: "icon-radio", base: "icon-radio-small", warn: "mark-corner-warn", bad: "mark-corner-x" },
+  window: { icon: "icon-window-open", base: "icon-window-open-small", warn: "mark-corner-warn", bad: "mark-corner-x" },
+  net: { icon: "icon-net", base: "icon-net-base", warn: "mark-net-warn", bad: "mark-net-x" },
+  cog: { icon: "icon-cog", base: "icon-cog-small", warn: "mark-corner-warn", bad: "mark-corner-x" },
+  battery: { icon: "icon-battery" },
+};
+
+// signEl is the icon of a kind of SIGNS in a state: "" or "ok" plain,
+// "warn" with a triangle, "bad" with a cross, coloured by the state
+// (tone-…) where it is one; "open" (a window open, not yet for long)
+// plain in the accent. The mark is a part of its own (use.mark), which
+// is what blinks (html.blink-on, blink-first). cls adds classes.
+function signEl(kind, state, cls) {
+  const s = SIGNS[kind];
+  const mark = s[state];
+  const svg = iconEl(mark ? s.base : s.icon, "ni sign" + (state ? " tone-" + state : "") + (cls ? " " + cls : ""));
+  if (mark) {
+    const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+    use.setAttribute("href", "#" + mark);
+    use.setAttribute("class", state === "bad" ? "mark x" : "mark");
+    svg.appendChild(use);
+  }
+  return svg;
+}
+
+// markEl is a mark alone, the triangle of a warning or the cross of a
+// failure, for a badge or a list.
+function markEl(state) {
+  const svg = iconEl(state === "bad" ? "mark-x" : "mark-warn", "ni mark-sign tone-" + state);
+  svg.firstChild.setAttribute("class", state === "bad" ? "mark x" : "mark");
   return svg;
 }
 
@@ -824,8 +875,9 @@ function pickerMenu(details, { items, value, onPick, shown }) {
 // of the worst tone of its kind, as the summary of a menu (dropdown)
 // that lists the entries, each with its icon, its name and a mono line
 // (a serial), then its badges, each led by its icon, with its age.
-// An entry is { icon, title, sub, items }, an item { kind, icon, tone,
-// mark, text, at, stale }: kind groups the summary's icons, an item without
+// An entry is { icon, title, sub, items }, an item { kind, icon, sign,
+// tone, mark, text, at, stale }: kind groups the summary's icons (sign,
+// a kind of SIGNS, draws it with its state's mark), an item without
 // one is listed but adds no icon (a device's mode beside its problems);
 // tone is a badgeEl kind ("bad", "warn", "fill-ok", …), which colours
 // the badge and, without "fill-", the icon, or mark where an item says
@@ -836,7 +888,7 @@ function problemsEl(entries, label) {
   for (const e of entries) {
     for (const it of e.items) {
       if (!it.kind) continue;
-      const k = kinds.get(it.kind) || { icon: it.icon, tone: "" };
+      const k = kinds.get(it.kind) || { icon: it.icon, sign: it.sign, tone: "" };
       const tone = it.mark || (it.tone || "").replace(/^fill-/, "");
       if (tone === "bad" || !k.tone) k.tone = tone;
       kinds.set(it.kind, k);
@@ -848,7 +900,9 @@ function problemsEl(entries, label) {
   summary.className = "problems-sum";
   summary.title = label;
   summary.setAttribute("aria-label", label);
-  for (const k of kinds.values()) summary.appendChild(iconEl(k.icon, "ni" + (k.tone ? " tone-" + k.tone : "")));
+  for (const k of kinds.values()) {
+    summary.appendChild(k.sign ? signEl(k.sign, k.tone) : iconEl(k.icon, "ni" + (k.tone ? " tone-" + k.tone : "")));
+  }
   const list = elem("div", "menu-items problems-list");
   for (const e of entries) {
     if (!e.items.length) continue;
@@ -858,8 +912,10 @@ function problemsEl(entries, label) {
     if (e.sub) who.appendChild(textEl("span", e.sub, "mono problem-sub"));
     const flags = elem("div", "problem-flags");
     for (const it of e.items) {
+      // A warning's or a failure's badge is led by its mark, which takes
+      // the place of its kind's icon; another state keeps the icon.
       const b = badgeEl("", it.tone || "mode");
-      if (it.icon) b.appendChild(iconEl(it.icon, "ni"));
+      if (it.icon && !BADGE_STATE[it.tone]) b.appendChild(iconEl(it.icon, "ni"));
       b.appendChild(document.createTextNode(it.text));
       const age = it.at ? ageEl(it.at, it.stale) : null; // app.js
       if (age) b.appendChild(age);

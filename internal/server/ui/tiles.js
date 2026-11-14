@@ -270,13 +270,17 @@ function renderNotReady(el, room) {
 }
 
 // PROBLEM_KINDS are the problems a tile's head shows as icons, in their
-// order there, each with its icon (index.html's sprite) and its name.
+// order there, each with its icon (index.html's sprite): a sign where
+// its state has a mark (components.js SIGNS), the radio and the window.
 const PROBLEM_KINDS = {
   radio: "icon-radio",
   battery: "icon-battery",
   window: "icon-window-open",
   mixed: "icon-shuffle",
 };
+
+// PROBLEM_SIGNS are the kinds of PROBLEM_KINDS drawn as signs.
+const PROBLEM_SIGNS = { radio: "radio", window: "window" };
 
 // MODE_TONE colours a mode's badge: auto green, manual (and boost) amber,
 // holiday violet.
@@ -304,11 +308,11 @@ function deviceProblems(d, withWindow) {
   const s = d.state || {};
   const out = [];
   if (!d.reported) return out;
-  if (s.error) out.push({ kind: "radio", icon: PROBLEM_KINDS.radio, tone: "bad", text: t("badge.transmitError") });
-  if (s.link_error) out.push({ kind: "radio", icon: PROBLEM_KINDS.radio, tone: "warn", text: t("badge.linkError") });
+  if (s.error) out.push({ kind: "radio", icon: PROBLEM_KINDS.radio, sign: PROBLEM_SIGNS.radio, tone: "bad", text: t("badge.transmitError") });
+  if (s.link_error) out.push({ kind: "radio", icon: PROBLEM_KINDS.radio, sign: PROBLEM_SIGNS.radio, tone: "warn", text: t("badge.linkError") });
   if (s.battery_low) out.push({ kind: "battery", icon: PROBLEM_KINDS.battery, tone: "warn", text: t("badge.batteryLow"), at: received(d, "battery_low"), stale: d.stale });
   if (withWindow && s.window_open === true) {
-    out.push({ kind: "window", icon: PROBLEM_KINDS.window, tone: "fill-bad", text: t("badge.open"), at: received(d, "window_open"), stale: d.stale });
+    out.push({ kind: "window", icon: PROBLEM_KINDS.window, sign: PROBLEM_SIGNS.window, tone: "fill-bad", text: t("badge.open"), at: received(d, "window_open"), stale: d.stale });
   }
   return out;
 }

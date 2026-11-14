@@ -964,6 +964,10 @@ button.subtle { color: var(--muted); }
 .tone-bad { color: var(--bad); }
 .tone-warn { color: var(--warn-mark); }
 .tone-ok { color: var(--ok); }
+.tone-open { color: var(--accent); } /* a window open, not yet for long */
+/* A sign's mark (components.js signEl, markEl), a part of its own: a
+   cross drawn heavier than the icon, so that it reads at a glance. */
+.ni use.mark.x { stroke-width: 2.4; }
 .tone-info { color: var(--fill-info); }
 .menu-items.problems-list { min-width: 240px; max-width: min(360px, calc(100vw - 32px)); padding: 2px 0; gap: 0; }
 .problem-entry { display: grid; gap: 4px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
@@ -1137,6 +1141,10 @@ button.subtle { color: var(--muted); }
 .flag.warn { color: var(--warn); border-color: var(--warn); }
 .flag.bad { color: var(--bad); border-color: var(--bad); }
 .flag.ok { color: var(--ok); border-color: var(--ok); }
+/* a warning or a failure: bold, led by its mark in the badge's colour */
+.flag.warn, .flag.bad, .flag.fill-bad { font-weight: 650; }
+.flag .mark-sign { width: 1em; height: 1em; margin-right: 0.25em; vertical-align: -0.12em; stroke-width: 2.3; color: inherit; }
+.flag .mark-sign use.mark.x { stroke-width: 2.6; }
 /* filled badges for the mode and the window state, text always on them */
 .flag.fill-ok { background: var(--fill-ok); color: var(--fill-fg); border-color: var(--fill-ok); }
 .flag.fill-warn { background: var(--fill-warn); color: var(--fill-fg); border-color: var(--fill-warn); }
