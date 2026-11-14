@@ -2,11 +2,11 @@
 # Copyright (C) 2026 The Massimo Authors
 """The header: its order at full width and ☰ on a narrow screen, the log
 button's symbol, its baseline, the personal page 👤 opens, the page
-shown in the address, and expert mode's line of the chosen Cube's radio
-budget."""
+shown in the address, each page's own scroll position, and expert mode's
+line of the chosen Cube's radio budget."""
 import json
 
-from helpers import VIEWER, css_hidden, hold, open_personal_page, scroll_width, show_view, wait_held, wait_until
+from helpers import VIEWER, css_hidden, hold, open_personal_page, scroll_settled, scroll_width, show_view, wait_held, wait_until
 
 # The symbol a page button shows, drawn in an svg of its own outside the
 # header, so that its size does not depend on whether the button is shown;
@@ -176,8 +176,8 @@ def active(page, selector):
 
 def test_header_order_and_the_narrow_header(page, case):
     """At full width the brand and the time of the last update with ↻
-    beside it at the left (the time under the brand where a long version
-    leaves no room), then on the first line the Cube choice with the plug
+    beside it at the left (the version and the time under the brand, both,
+    where they leave no room), then on the first line the Cube choice with the plug
     of its connection, then 🏠 👤 📄 ⚙, without ☰. Below 600 px 🏠 👤 ☰
     beside the brand and the Cube choice on a line of its own under them; ☰ holds Log and System settings, opens each, and is
     highlighted while one of them is shown."""
@@ -231,23 +231,43 @@ BRAND_BOX = """() => {
   return {top: b.top, bottom: b.bottom, height: b.height};
 }"""
 
+# The middle of an element's digits: its baseline less half the height
+# of a 0 in its font.
+DIGITS_MIDDLE = """(sel) => {
+  const e = document.querySelector(sel);
+  const probe = document.createElement('span');
+  probe.style.display = 'inline-block';
+  e.appendChild(probe);
+  const base = probe.getBoundingClientRect().bottom;
+  probe.remove();
+  const ctx = document.createElement('canvas').getContext('2d');
+  ctx.font = getComputedStyle(e).font;
+  return base - ctx.measureText('0').actualBoundingBoxAscent / 2;
+}"""
+
 VERSION_TITLE = {"en": "{v} (server version)", "de": "{v} (Server-Version)"}
 
 
 def test_header_on_one_baseline(page, case):
     """The logo (the small mark under 600 px), the version and the time of
     the last update stand on one baseline, the drawing's bottom edge, and
-    the M is as tall as the page buttons. The time and ↻ are one button
-    without a frame, larger to a finger than it looks; the version's
-    tooltip is the whole version."""
+    the M is as tall as the page buttons; on a phone the version and the
+    time stand together under the mark. ↻ stands on the digits' middle.
+    The time and ↻ are one button without a frame, larger to a finger
+    than it looks; the version's tooltip is the whole version."""
     brand = page.evaluate(BRAND_BOX)
     button = box(page, "#view-tiles")
     assert abs(brand["height"] - button["height"]) <= 1, f"the M as tall as the page buttons: {brand} vs {button}"
     assert abs(brand["top"] - button["y"]) <= 1, f"and level with them: {brand} vs {button}"
-    for sel in ("#version-short", "#updated"):
-        y = page.evaluate(BASELINE, sel)
-        if case.width >= 600 or sel == "#version-short":
-            assert abs(y - brand["bottom"]) <= 1, f"{sel} on the logo's baseline: {y} vs {brand['bottom']}"
+    lines = {sel: page.evaluate(BASELINE, sel) for sel in ("#version-short", "#updated")}
+    assert abs(lines["#version-short"] - lines["#updated"]) <= 1, f"the version and the time on one line: {lines}"
+    if case.width >= 600:
+        assert abs(lines["#updated"] - brand["bottom"]) <= 1, f"on the logo's baseline: {lines} vs {brand['bottom']}"
+    else:
+        assert lines["#updated"] > brand["bottom"] + 8, f"both under the mark: {lines} vs {brand['bottom']}"
+    icon = box(page, "#refresh-btn svg")
+    digits = page.evaluate(DIGITS_MIDDLE, "#updated")
+    assert abs(icon["y"] + icon["height"] / 2 - digits) <= 1, f"↻ on the digits' middle: {icon} vs {digits}"
     btn = page.locator("#refresh-btn")
     assert btn.evaluate("(e) => getComputedStyle(e).borderTopStyle") == "none", "no frame"
     b = box(page, "#refresh-btn")
@@ -355,3 +375,49 @@ def test_no_buttons_before_the_session_is_known(page, case, watch):
     page.unroute("**/api/v1/me")
     page.reload()
     page.wait_for_selector(".room", timeout=10000)
+
+
+# Room to scroll on every page, whatever the window's height: a spacer at
+# the end of each page's section.
+SPACERS = """() => { for (const id of ['rooms', 'system']) {
+  const d = document.createElement('div');
+  d.className = 'test-spacer';
+  d.style.height = '2000px';
+  document.getElementById(id).appendChild(d);
+} }"""
+
+
+def scrolled_to(page, y):
+    """Scrolls the window to y at once and waits until it rests there."""
+    page.evaluate("(y) => window.scrollTo({top: y, behavior: 'instant'})", y)
+    scroll_settled(page)
+    return page.evaluate("window.scrollY")
+
+
+def test_each_page_keeps_its_scroll(page, case):
+    """Each page comes back where it was left: Rooms scrolled, System
+    settings opened at its top the first time, scrolled on its own, and
+    each of them back at its own place when it is shown again, by its
+    button and by the browser's back button."""
+    page.evaluate(SPACERS)
+    try:
+        show_view(page, "tiles")
+        house = scrolled_to(page, 400)
+        assert house == 400, "Rooms scrolled"
+        show_view(page, "system")
+        scroll_settled(page)
+        assert page.evaluate("window.scrollY") == 0, "System settings at its top the first time"
+        system = scrolled_to(page, 250)
+        show_view(page, "tiles")
+        scroll_settled(page)
+        assert page.evaluate("window.scrollY") == house, "Rooms back where it was left"
+        show_view(page, "system")
+        scroll_settled(page)
+        assert page.evaluate("window.scrollY") == system, "System settings back at its own place"
+        page.go_back()
+        page.locator("#rooms").wait_for(state="visible")
+        scroll_settled(page)
+        assert page.evaluate("window.scrollY") == house, "the back button too"
+    finally:
+        page.evaluate("document.querySelectorAll('.test-spacer').forEach((e) => e.remove()); window.scrollTo({top: 0, behavior: 'instant'})")
+        show_view(page, "tiles")
