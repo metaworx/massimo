@@ -54,8 +54,8 @@ func (s *Server) emitBy(rt *runtime, ev event) {
 func (s *Server) noteStop(why string) { s.stopWhy.Store(why) }
 
 // logStarted writes server_started with the version, and the one before
-// when it changed; and an update's outcome the helper reported since the
-// last one the log said.
+// when it changed, completing the last updates (noteVersionStart); and an
+// update's outcome the helper reported since the last one the log said.
 func (s *Server) logStarted(ctx context.Context) {
 	version := s.opts.Update.Version // the release's, without the Go details
 	if version == "" {
@@ -71,6 +71,7 @@ func (s *Server) logStarted(ctx context.Context) {
 		if before != "" && before != version {
 			summary["before"] = before
 		}
+		s.noteVersionStart(ctx, before, version, s.helperStatus())
 		if err := st.SetSetting(ctx, logVersionKey, version); err != nil {
 			s.log.Debug("log: the version not kept", "error", err)
 		}

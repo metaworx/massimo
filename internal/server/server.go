@@ -329,6 +329,9 @@ type Server struct {
 	updates updateCheck
 	// updateMu holds one update request at a time (startUpdate).
 	updateMu sync.Mutex
+	// historyMu holds the last updates' row while it is read and written
+	// again (editHistory).
+	historyMu sync.Mutex
 	// restartGate lets one restart through (restart_api.go), and
 	// pending lists what applies only at the next one.
 	restartGate restartGate
