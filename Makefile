@@ -50,7 +50,7 @@ export SOURCE_DATE_EPOCH ?= $(shell git log -1 --format=%ct 2>/dev/null || date 
 # The container the package test runs in (make deb-test).
 DEB_IMAGE ?= debian:trixie-slim
 
-.PHONY: all ui build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots ui-brand lan-test actionlint windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages debver version deb-test deb-systemd-test apt-test site build-release release release-files clean release-alpha release-beta release-rc release-stable
+.PHONY: all ui ui-check build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots ui-brand lan-test actionlint windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages debver version deb-test deb-systemd-test apt-test site build-release release release-files clean release-alpha release-beta release-rc release-stable
 
 # Development happens on main; a release is a tag on main, whose label is
 # the release's flavour (internal/update): -alpha.N is alpha, -beta.N beta,
@@ -179,6 +179,15 @@ all: test build
 # build machine, whatever GOOS and GOARCH a cross build is given.
 ui:
 	GOOS= GOARCH= GOARM= go -C tools/uibundle run .
+
+# The parts' types (tsc --noEmit over internal/server/ui/src/, its
+# tsconfig.json), with the TypeScript tools/ui-check/package-lock.json
+# locks, installed there by npm without running a package's scripts.
+# Needs Node.js and npm; CI's job UI types runs it
+# (GUIDELINES/project/CI.md, section 2).
+ui-check:
+	npm ci --prefix tools/ui-check --ignore-scripts --no-audit --no-fund --loglevel=error --no-update-notifier
+	tools/ui-check/node_modules/.bin/tsc --noEmit -p internal/server/ui/src
 
 build: ui
 	go build -ldflags "$(LDFLAGS)" -o massimo $(PKG)

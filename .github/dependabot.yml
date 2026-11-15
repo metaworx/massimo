@@ -10,6 +10,10 @@
 # actionlint), has an entry of its own, so that its modules stay out of
 # the product's group; the tool's module is marked indirect there, so
 # the entry allows it by name, and its own dependencies follow it.
+# esbuild, pinned by tools/uibundle/go.mod (make ui), has one of its own
+# for the same reason, allowed by name; the type check's TypeScript,
+# locked by tools/ui-check/package-lock.json (make ui-check), is the npm
+# entry's, the one package there.
 version: 2
 updates:
   - package-ecosystem: gomod
@@ -42,6 +46,24 @@ updates:
       interval: monthly
     allow:
       - dependency-name: github.com/rhysd/actionlint
+    commit-message:
+      prefix: build
+      include: scope
+
+  - package-ecosystem: gomod
+    directory: /tools/uibundle
+    schedule:
+      interval: monthly
+    allow:
+      - dependency-name: github.com/evanw/esbuild
+    commit-message:
+      prefix: build
+      include: scope
+
+  - package-ecosystem: npm
+    directory: /tools/ui-check
+    schedule:
+      interval: monthly
     commit-message:
       prefix: build
       include: scope

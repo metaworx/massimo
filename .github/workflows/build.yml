@@ -211,6 +211,11 @@ jobs:
           check-latest: true
           cache: false
 
+      # The web UI's parts (make ui), which the server embeds; make
+      # build-release's clean removes the bundle and its cross builds make
+      # it again, as this step does first in every job that compiles Go.
+      - uses: ./.github/actions/ui-bundle
+
       # Tested by ci.yml's jobs before this workflow was called. The build
       # record, massimo-build.txt, holds this step's log; SHA256SUMS and
       # the manifest list it (packaging/build-record.sh).

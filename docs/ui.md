@@ -1359,6 +1359,10 @@ CI and the Homebrew formula;
 Preact 11.2.0 and @preact/signals 2.11.4 are vendored under
 `third_party/preact/` (its `README.md`);
 the bundler takes them from there and refuses any other import.
+`make ui-check` type-checks `ui/src/` with `tsc --noEmit` (its `tsconfig.json`:
+strict, the vendored types by `paths`),
+with the TypeScript `tools/ui-check/` locks (its `README.md`),
+and CI's job UI types runs it.
 
 `ui/connect.html` is a second page, the apps' (docs/app.md),
 served at `/ui/connect.html` as it is, not assembled:

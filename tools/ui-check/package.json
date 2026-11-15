@@ -1,0 +1,9 @@
+{
+  "name": "massimo-ui-check",
+  "private": true,
+  "description": "The type check of the web UI's parts (make ui-check): TypeScript alone. The bundle is made by tools/uibundle, not from here.",
+  "license": "AGPL-3.0-or-later",
+  "devDependencies": {
+    "typescript": "7.0.2"
+  }
+}
