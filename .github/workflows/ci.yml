@@ -78,9 +78,11 @@ jobs:
   changes:
     name: What to test
     runs-on: ubuntu-latest
-    # statuses: the Tested status of the commit tested before.
+    # statuses: the Tested status of the commit tested before; actions:
+    # the runs Code result's check reads.
     permissions:
       contents: read
+      actions: read
       statuses: read
     outputs:
       suite: ${{ steps.what.outputs.suite }}
@@ -160,6 +162,20 @@ jobs:
               code=false site=true
             fi
           fi
+          # Documents alone on code no run tested (AP SiteOnly, D81-A): a
+          # merge whose run main's group cancelled while it waited leaves
+          # its code untested, which Code result could only call red. On a
+          # push the run tests it instead; a run still going, or a verdict
+          # of either colour, keeps code=false. A pull request takes main's
+          # code as it is, and its shallow history cannot be walked.
+          if [ "$code" = false ] && [ "$suite" = true ] && [ "$GITHUB_EVENT_NAME" = push ]; then
+            if known="$(CODE_CHECK=1 packaging/code-result.sh 2>&1)"; then
+              say "the code's verdict is known: ${known##*$'\n'}"
+            else
+              say "no verdict on this code (${known##*$'\n'}): this run tests it."
+              code=true site=false
+            fi
+          fi
           # The code that ran, and whether an earlier run passed for it:
           # the Tested status on the commit the run before tested (a pull
           # request's head's parent; a merge's second parent, the pull
@@ -202,7 +218,7 @@ jobs:
               echo "| $1 | \`$2\` | ${so} |"
             }
             row suite "$suite" "the suite runs" "a release commit: every job is skipped, its tag's run tests it"
-            row code "$code" "code changed: the test jobs run" "documents alone: no test job runs, Code result carries the code's verdict"
+            row code "$code" "code changed, or no run tested it: the test jobs run" "documents alone: no test job runs, Code result carries the code's verdict"
             row site "$site" "the site's documents alone: Site runs, and a push to main deploys them" "-"
             row tested "$tested" "this code passed before: what passed is skipped" "no green record for this code"
             echo "| fp | \`${fp:-none}\` | $([ -n "$fp" ] && echo "the code's fingerprint" || echo "not taken") |"

@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.56.0)
+# Massimo — CI Conventions (v1.57.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -218,6 +218,14 @@ the merge it would have tested had passed as its pull request (owner,
 Otherwise the walk goes on.
 Where the walk reaches a commit with other code, 100 commits
 or the end of the history first, no run tested this code, which is red.
+On a push, What to test asks that first (owner, 2026-11-15, D81-A):
+`CODE_CHECK=1 packaging/code-result.sh` waits for nothing and answers
+whether a verdict, of either colour, is known or a run is still going.
+Where none is, as after a merge whose run was replaced while it waited and
+whose pull request was tested on another base,
+it answers `code=true`, and the run tests the code;
+so on a push Code result's red is a run that failed.
+A pull request is not asked: it adds no code, and its history is shallow.
 Red fails Code result on a push, and so All tests passed,
 which keeps the nightly build and Deploy site away,
 until a change to the code passes or the failed run is re-run green;
