@@ -47,6 +47,15 @@ var logAttr = regexp.MustCompile(`\b(\w+)=("[^"]*"|\S+)`)
 // variables; it returns once the API listens.
 func startBuiltServe(t *testing.T, env []string, args ...string) *builtServe {
 	t.Helper()
+	s := launchBuiltServe(t, env, args...)
+	s.addr = s.waitFor(t, "api listening")["addr"]
+	return s
+}
+
+// launchBuiltServe is startBuiltServe without the wait: it returns once
+// serve is started, for a test of its start.
+func launchBuiltServe(t *testing.T, env []string, args ...string) *builtServe {
+	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("no SIGTERM to send")
 	}
@@ -91,7 +100,6 @@ func startBuiltServe(t *testing.T, env []string, args ...string) *builtServe {
 			t.Logf("serve's log:\n%s", strings.Join(s.log(), "\n"))
 		}
 	})
-	s.addr = s.waitFor(t, "api listening")["addr"]
 	return s
 }
 
