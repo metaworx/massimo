@@ -70,7 +70,8 @@ its decompiled code or public analyses, and says so.
   `i:ffffffff,00000000` (portal polling off), 0x80 key lock in both directions;
   their cost in duty cycle and memory slots.
 - **Set temperature (0x40)**:
-  a device in a room is accepted only when addressed as its room.
+  a device in a room is accepted only when addressed as its room,
+  and one command addressed as the room sets every member, whichever one it names.
   The setpoint shows in a member's L entry when that member acknowledges,
   within seconds for a device that answers; the mode only with its next report.
 - **Room commands are discarded while any member has no state** (no valid L entry):
@@ -513,6 +514,17 @@ then wakeup of the new room,
 Links are therefore the only per-device data that is not readable from the Cube;
 a restore derives them from the room layout.
 
+The Cube takes a link radiogram with the room flag (0x20, 0x21) as one delivery
+per member of the room's group, about one memory slot each (2026-11-15, Cube
+firmware 1.1.3, one of the owner's rooms with three radiator thermostats; the
+original software's removal the same day took 4 slots in a room of 4).
+The member the radiogram is addressed to took it at once; the others were
+still pending ten minutes later and took it with the next wakeup of the room.
+Whether every member then acts on it was not settled: the devices pass setpoint
+changes on among themselves, so a member that kept a partner hides one that
+dropped it.
+Massimo sends one room-flagged link radiogram to each radiator thermostat.
+
 Boost over the air (2026-11-13, Cube firmware 1.1.3, through Massimo's proxy):
 one room-addressed 0x40 with mode 3 in its top bits
 (`00 04 40 00 00 00 <rf of a room member> <room> c0|<setpoint>`),
@@ -597,6 +609,16 @@ a device that is in a room is only accepted as its room (flags 0x04, room id);
 both flags 0 with the room id and flags 0 with room 0 were discarded by the Cube
 for such a device.
 A device without a room (just paired) takes flags 0 and room 0.
+
+A set-temperature command (0x40) with the room flag sets every member of the
+room whose number it carries, whichever member its header names: the room's
+master, its wall thermostat or any of its radiator thermostats (2026-11-15,
+Cube firmware 1.1.3, one of the owner's rooms with a wall thermostat and three
+radiator thermostats, through serve's proxy, no wakeup; each command set all
+four within 7 to 17 s, one memory slot and 3 % of the duty cycle each).
+A command whose header names a device of another room sets that device too,
+besides the room it names; that device's own wall thermostat put it back
+to its room's setpoint about two minutes later.
 
 Room commands and never-reported members, 2026-11-04: on a Cube with four rooms,
 0x40 to the two rooms whose members had all reported was accepted,
