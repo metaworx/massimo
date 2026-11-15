@@ -447,6 +447,17 @@ A command's steps on the radio are lines of the queue
 ("command acknowledged by the Cube; duty cycle 3 %, 49 free memory slots"),
 queued and sent at debug, a discard, a retry and a failure as warnings,
 and so are the queue's holds for the duty cycle and the memory slots.
+The room checks (`docs/api-v1.md`, "The room checks") have lines of their own:
+**room disagrees**, a room whose thermostats differ for ten minutes, each named
+with its setting ("Bedroom: its thermostats differ in setpoint for 11 min:
+Window: manual set 21.0, Door: manual set 18.0"), then the room's state sent
+again to them and from where ("as Massimo last set it", "as its wall thermostat
+has it"), or why not, and their agreeing again;
+**programme drift**, a thermostat that does not follow its week programme while
+the room's others follow theirs ("does not follow its week programme: 12.0
+instead of 21.0 since the switch point at 18:20, …; its clock or its programme is
+suspect"), with "it shows the programme an hour off" where it does and the
+radiogram that failed, and its following again.
 The LAN proxy's clients have lines of their own: a client connected or gone,
 turned away, its deletes, a pairing for it and the proxy's warnings;
 a line a client passes on to the Cube is a command like the web UI's.
@@ -498,7 +509,9 @@ stays a problem until a later line settles it
 or the person marks it seen (`docs/api-v1.md`, "GET /api/v1/log/alerts"):
 a lost connection until the next one,
 a failed command until the same one is acknowledged,
-a failed backup until the next, a hold until it ends;
+a failed backup until the next, a hold until it ends,
+a room whose thermostats disagree until they agree again,
+a thermostat off its week programme until it follows it again;
 a device's communication error, link error and low battery
 while the device has them, at the line that set them;
 a communication error's line names the radiogram that failed,

@@ -2017,6 +2017,55 @@ with the room's settings and week programme in a wall thermostat's shape
 thermostat) and its own `settings`:
 `{"temp_method": "median"}`, and `rf_address` where the owner set one.
 
+### The room checks
+
+Every minute the server compares the thermostats of each room,
+those whose C line names it, as the Cube goes by,
+and writes what it finds to the Cube's log (`disagree` and `drift`, see the log, below).
+Left out are the hidden and parked devices, window contacts,
+a thermostat in boost and one whose entry is out of date;
+a room while one of its windows is open
+(its thermostats then hold their own window-open temperature),
+while a structure change of Massimo's concerns it
+(see "Structure changes read back")
+and while a command to it waits or runs in the queue;
+a difference not yet reported then starts again.
+
+- **Thermostats that disagree:** they differ in mode, setpoint or `until`,
+  as the virtual wall thermostat's `consistent` says,
+  but two in auto that each follow their own week programme agree,
+  since a difference of their programmes is their configuration's.
+  No person can mean a room's thermostats to differ:
+  the original software and Massimo set them only together.
+  Differing for 10 minutes, the room is a `disagree` warning;
+  still differing 10 minutes later, its state is sent once more
+  as one room command (`0x40`) through the queue at low priority:
+  Massimo's last setpoint to the room (`PUT …/rooms/{id}/setpoint`,
+  a member's or the virtual wall thermostat's setpoint),
+  where it was sent at most 15 minutes before they began to differ,
+  or since, and a thermostat still shows it;
+  else the room's wall thermostat's state, its week programme where it follows it;
+  without either, nothing.
+  It is sent at most once a day per room, the day's re-sends read back from the
+  log after a restart, and never while the queue holds the radio for the duty
+  cycle or the memory slots: it waits for a later check then.
+  Once they agree, an `agree` line settles the warning.
+- **A thermostat off its week programme:** in a room in auto,
+  one whose setpoint has not been its own programme's temperature
+  at the Cube's time for 5 minutes, while every other thermostat
+  of the room follows its own: a `drift` warning naming its clock or its
+  programme as suspect, with the radiogram that failed where it has the
+  communication error, and `hour_off` where its setpoint is the programme's
+  an hour before or after, as a clock on the other side of a change of summer
+  time would show it; its `auto_dst` says whether it switches summer time itself.
+  Nothing is sent for it.
+  A temperature the programme has within 5 minutes of the Cube's time counts,
+  so that a switch point just past, or a clock a few minutes off, is no drift.
+  The Cube's time is its last greeting's, moved on by this host's local clock.
+  Following again, a `follows` line settles the warning;
+  the next warning for the thermostat comes a day later at the earliest.
+  Such a thermostat is left out of the comparison above.
+
 ### GET /api/v1/cubes/{sn}/devices
 
 Every device the Cube knows, in the Cube's order,
@@ -2803,6 +2852,8 @@ of the same Cube, or of the server for the server's own:
 | `backup`, `restore_done`, `update_result`, `log_rotated` failed | the next one of its kind below warn |
 | `proxy_refused` | the Cube's `connected`, or `proxy_connected` |
 | `proxy_warning`, a pairing not stopped or not started | `pairing_ended`; `pairing_started` or `proxy_pairing` |
+| `disagree`, a room's thermostats differing or its state not sent again | a `disagree` of the same `room` whose `outcome` is `agree` |
+| `drift`, a thermostat off its week programme | a `drift` of the same device whose `outcome` is `follows` or `left_auto` |
 | `login_failed` | a `login` of the same name |
 | `locked_out` | its end |
 | `restart`, `reboot`, `update` not started | `server_started`; for `update`, also an `update` started |
@@ -2906,6 +2957,24 @@ discarded it, the device's error state was reset and it was sent again),
 now (`free_slots`), the minutes since it (`minutes`), the slots still `held`
 or `no_reading`, and, at `warn`, the devices the change left `flagged` or
 with a `link_error`; it is settled only by a person's mark.
+The room checks', every minute (see "The room checks"):
+`disagree`, source `cube`, a room whose thermostats differ, with the
+`room` and the `outcome` in its `summary`:
+`differ` at `warn` (the `members`, each with its `rf`, `mode`, `setpoint`
+and `until`, what `differs`, the `minutes` so far),
+`resent` (the room's state sent once more as a room command: `from`
+`massimo` or `wall_thermostat`, its `mode`, `setpoint` and `until`, the
+budget's `duty_pct` and `free_slots`), `resend_failed` at `warn` with its
+`error`, `not_resent` (`why`: `today`, once a day at most, or
+`no_state`), and `agree` once they agree again (`minutes`);
+`drift`, source `device`, a thermostat in auto that does not follow its
+week programme while the room's other thermostats follow theirs:
+`not_following` at `warn` (its `setpoint` and the programme's
+`expected` at the Cube's `cube_time`, the switch point `switch_at`, the
+`others`, `hour_off` where its setpoint is the programme's an hour
+before or after, its `auto_dst`, and the `failed_radiogram` of its
+communication error), then `follows` (`minutes`) or `left_auto`
+(`mode`).
 The server's sign-ins, source `server`, only on the pages and streams of a
 user with `audit`: `login` (`user`, `remote`), `login_failed` at `warn`,
 and `locked_out` at `warn` (`remote`, `for`, `after`: `logins` or `tokens`).

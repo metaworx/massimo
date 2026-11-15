@@ -192,6 +192,11 @@ type Options struct {
 	Logger          *slog.Logger
 	Version         string
 	Queue           engine.Options
+	// driftClock is the room checks' clock (drift.go), for the tests;
+	// nil is time.Now. driftEvery is how often they run: 0 every
+	// minute, a negative value never (the tests run them).
+	driftClock func() time.Time
+	driftEvery time.Duration
 	// Proxy lists the LAN listeners on which the server itself answers
 	// as a Cube (see internal/proxy), one per Cube.
 	// One that cannot listen is tried again until it does.
@@ -450,6 +455,10 @@ type runtime struct {
 	// programs holds the week programmes written and not yet confirmed
 	// by the devices' configurations (etag.go).
 	programs pendingPrograms
+	// drift is the room checks' state: disagreeing members, programme
+	// drift, the re-sends and Massimo's last setpoint per room
+	// (drift.go).
+	drift driftState
 	// proxyVirtual is the Cube's option proxy_virtual: its proxy shows
 	// clients the virtual wall thermostats (proxy_virtual.go).
 	proxyVirtual atomic.Bool
@@ -1932,6 +1941,9 @@ func (s *Server) setpoint(w http.ResponseWriter, r *http.Request, rt *runtime, t
 		return err
 	}
 	rt.afterWrite()
+	if t.Room {
+		rt.intend(t.RoomID, mode, req.Temp, until, s.roomNow()) // the room's intended state (drift.go)
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "discarded": res.Discarded, "budget": res.Budget})
 	return nil
 }
