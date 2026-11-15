@@ -3197,6 +3197,7 @@ devices showed it (`confirmed`), and the `devices` that do not, each with its
 or `confirmed_late` at `info`, one device's, with the `seconds` it took.
 A device's write has the device in `device`, and so has each device's of a
 configuration; a room's setpoint none.
+Its warning is settled only by a person's mark.
 The server's sign-ins, source `server`, only on the pages and streams of a
 user with `audit`: `login` (`user`, `remote`), `login_failed` at `warn`,
 and `locked_out` at `warn` (`remote`, `for`, `after`: `logins` or `tokens`).

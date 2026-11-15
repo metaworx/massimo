@@ -82,6 +82,7 @@ const PROBLEM_KINDS = {
   radio: null,
   battery: "icon-battery",
   window: null,
+  unconfirmed: "icon-unconfirmed",
   mixed: "icon-shuffle",
   holiday: "icon-suitcase",
 };
@@ -220,7 +221,8 @@ function problemsLabel(items) {
 
 // renderProblems shows in the tile's head what is wrong in the room, as
 // icons that open the list of its devices with their problems: a radio
-// fault, a low battery, an open window, and the thermostats' modes where
+// fault, a low battery, an open window, a write a device has not shown
+// by its deadline (confirmItem), and the thermostats' modes where
 // they differ; a thermostat on holiday with the holiday's end, in its
 // mode's colour, in place of its mode among those that differ. The
 // room's virtual wall thermostat is not listed: its flags are the wall
@@ -230,6 +232,8 @@ function renderProblems(el, room) {
   const mixed = modes.length > 1;
   const entries = room.devices.map((d) => {
     const items = deviceProblems(d, true);
+    const unconfirmed = confirmItem(d); // rooms.js
+    if (unconfirmed) items.push(unconfirmed);
     const s = d.state || {};
     if (isThermostat(d) && s.mode === "vacation") {
       items.push({ kind: "holiday", icon: PROBLEM_KINDS.holiday, tone: modeTone(s.mode), text: t("room.holidayUntil", { until: fmtUntil(s.until) }) });

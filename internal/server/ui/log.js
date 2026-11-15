@@ -425,6 +425,8 @@ function logSummaryText(kind, s, serial) {
       if (s.link_error) parts.push(t("log.sum.structureLink", { devices: s.link_error.map(rfLabel).join(", ") }));
       return parts.join("; ");
     }
+    case "unconfirmed":
+      return logUnconfirmedText(s, serial);
     case "disagree":
       return logDisagreeText(s, serial);
     case "drift":
@@ -505,6 +507,31 @@ function logDisagreeText(s, serial) {
       return t("log.sum.disagreeAgree", { room, minutes: num(s.minutes) });
   }
   return "";
+}
+
+// logUnconfirmedText is the line of a write its devices did not show by
+// its deadline (confirm.go): the write, its room, each device by name with
+// what it shows; or a device that showed it late.
+function logUnconfirmedText(s, serial) {
+  const num = (v) => (v === undefined || v === null ? "–" : String(v));
+  const write = logWord("log.write.", s.write);
+  if (s.outcome === "confirmed_late") return t("log.sum.confirmedLate", { write, seconds: num(s.seconds) });
+  const value = (k, v) => {
+    if (Array.isArray(v)) return ""; // a day's switch points: its name says it
+    if (k === "mode") return logWord("log.mode.", v);
+    if (k === "setpoint") return fmtNum(v, 1);
+    if (k === "locked") return t(v ? "confirm.lockedOn" : "confirm.lockedOff");
+    return logValue(k, v);
+  };
+  const devices = (s.devices || []).map((d) => {
+    const dev = logDevice(d.rf_address, serial);
+    const name = dev ? deviceName(dev) : d.rf_address;
+    const shows = Object.keys(d.shows || {}).sort().map((k) => (confirmFieldName(k) + " " + value(k, d.shows[k])).trim()); // rooms.js
+    return shows.length ? name + " (" + shows.join(", ") + ")" : name;
+  }).join(", ");
+  const args = { write, minutes: num(s.minutes), devices: devices || "–" };
+  if (!s.room) return t("log.sum.unconfirmed", args);
+  return t("log.sum.unconfirmedRoom", Object.assign(args, { room: logRoomName(s.room, serial) }));
 }
 
 // logDriftText is a room check's line of a thermostat that does not

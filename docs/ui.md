@@ -280,6 +280,14 @@ Every room has a tile:
   blue for its first 5 minutes, then amber with a triangle,
   red with a cross after 10
   (the server's settings `window_warn_after` and `window_alert_after`);
+  an hourglass, amber, a device that has not shown a write by its deadline
+  (`docs/api-v1.md`, "Writes confirmed by the devices"):
+  five minutes after a setpoint, a key lock or a display mode,
+  about six after a setting or a week programme;
+  its badge **not confirmed**, its tooltip what the device does not show and
+  what it shows, "mode (shows auto), setpoint (shows 20.0 °C)";
+  nothing while the write is pending, and it goes once the device shows it
+  or a newer write replaces it;
   crossed arrows, the room's thermostats in different modes;
   a suitcase, a room on holiday, which is no problem but is listed there.
   A tap on them lists the devices concerned, each once with its serial,
@@ -328,7 +336,8 @@ Every room has a tile:
   every device with its type's icon before its name (a radiator, a wall
   thermostat, a window, a leaf for the eco button), its values (valve, set
   and measured temperature, offset), its problems as icons that list them,
-  as in the tile's head, and badges for lock, window and mode.
+  as in the tile's head, a write not confirmed among them,
+  and badges for lock, window and mode.
   A device the Cube has not heard for some minutes keeps the values of its
   last report, greyed, with the badge "out of date" and its age in place of
   "not reported".
@@ -360,6 +369,8 @@ Every room has a tile:
   - **Devices**:
     name, room, temperature offset,
     and for a wall thermostat whether its display shows the measured temperature.
+    A device that has not shown a write by its deadline says which values first,
+    "Not confirmed by the device: eco, Monday's program".
     A device moved to another room gets that room's settings,
     as when it is put into a room (System settings → Cubes, **Pair a device**),
     where the role has the capability `configure`.
@@ -507,6 +518,11 @@ the room's others follow theirs ("does not follow its week programme: 12.0
 instead of 21.0 since the switch point at 18:20, …; its clock or its programme is
 suspect"), with "it shows the programme an hour off" where it does and the
 radiogram that failed, and its following again.
+A write its devices do not show by its deadline is a **not confirmed** line,
+a warning that names the write, the room and each device with what it shows
+("setpoint to Bedroom: not confirmed after 5 min: Window (mode auto, setpoint
+20.0)"); a device that shows it later has a line of its own ("setpoint:
+confirmed after 70 s"). The warning is settled by a mark alone.
 The LAN proxy's clients have lines of their own: a client connected or gone,
 turned away, its deletes, a pairing for it and the proxy's warnings;
 a line a client passes on to the Cube is a command like the web UI's.

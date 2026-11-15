@@ -847,6 +847,9 @@ async function connectEvents() {
     loadRooms().catch(() => {});
   });
   on("device_forgotten", logged(() => loadRooms()));
+  // A write a device has not shown by its deadline, or showed late: the
+  // rooms' confirmations changed without a state event (confirm.go).
+  on("unconfirmed", logged(() => loadRooms()));
   on("connected", logged(() => refresh()));
   on("disconnected", logged(() => loadCubes()));
   on("config", logged((data) => {
@@ -870,7 +873,7 @@ async function connectEvents() {
   // Cube's address and its leaving the LAN, the changes, for the log
   // alone.
   const handled = new Set(["state", "hello", "metadata", "pairing_started", "pairing_ended", "paired", "device_forgotten",
-    "connected", "disconnected", "config", "cube_found", "restore_step", "restore_done"]);
+    "connected", "disconnected", "config", "cube_found", "restore_step", "restore_done", "unconfirmed"]);
   for (const kind of LOG_KINDS) if (!handled.has(kind)) on(kind, logged(() => {}));
   es.onerror = () => {
     if (gen !== eventsGen) return;
