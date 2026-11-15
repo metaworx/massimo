@@ -490,6 +490,12 @@ type runtime struct {
 	// slots is the readings of the Cube's free slots, for the warning
 	// of slots that stay full (slots.go).
 	slots slotWatch
+	// cong is the findings of the Cube's C lines against its metadata
+	// (congruence.go).
+	cong congruence
+	// clock is the server's clock of the radio health checks
+	// (Server.checkNow).
+	clock func() time.Time
 }
 
 // lockStructure takes the Cube's structure lock, so that one change of
@@ -960,6 +966,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 						wallBack = rt.wallReset(dv, ev.Time)
 					}
 					rt.setBattery(&dv)
+					rt.setMismatches(&dv)
 					ev.State = dv
 					if e.Kind == cubelan.EventState {
 						if prev, had := rt.last[e.Device]; had {
@@ -1012,6 +1019,11 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			}
 			if e.Kind == cubelan.EventConnected {
 				s.slotsGreeting(ctx, rt) // the greeting's free slots (slots.go)
+			}
+			switch {
+			case e.Kind == cubelan.EventConnected,
+				!e.Greeting && (e.Kind == cubelan.EventConfig || e.Kind == cubelan.EventMetadata || e.Kind == cubelan.EventForgotten):
+				s.checkMismatches(ctx, rt) // the C lines against the metadata (congruence.go)
 			}
 		}
 	}
@@ -1746,6 +1758,7 @@ func (s *Server) getDevice(w http.ResponseWriter, r *http.Request) error {
 	d := deviceDetail{Device: view.DeviceOf(snap, rf, s.staleness())}
 	d.SetWindow(s.windowLimits())
 	rt.setBattery(&d.Device)
+	rt.setMismatches(&d.Device)
 	if c != nil {
 		d.Firmware, d.Thermostat, d.Wall = c.Firmware, c.Thermostat, c.Wall
 		if d.Wall != nil && st.Valid {

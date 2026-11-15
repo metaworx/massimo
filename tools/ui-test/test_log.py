@@ -346,6 +346,39 @@ def test_log_slots_lines(page, case):
     show_view(page, "tiles")
 
 
+MISMATCH_SAYS = {
+    "en": ("Ghost: in Upstairs by its configuration on the Cube, and not in the room list, which can block the room's commands.",
+           "agrees again: Ghost: in Upstairs by its configuration on the Cube, and not in the room list"),
+    "de": ("Ghost: laut seiner Konfiguration im Cube in Upstairs und nicht in der Raumliste, was die Befehle an den Raum blockieren kann.",
+           "stimmt wieder überein: Ghost: laut seiner Konfiguration im Cube in Upstairs und nicht in der Raumliste"),
+}
+
+
+def test_log_mismatch_lines(page, case):
+    """A C line in a room for a device the room list does not have, and
+    the same agreeing again, name the device and the room (AP
+    RadioHealth, Block 7)."""
+    show_view(page, "log")
+    page.wait_for_timeout(1600)
+    page.evaluate("""() => {
+      const m = { finding: "unlisted", device: "0a0a01", name: "Ghost", room: 9, room_name: "Upstairs", cube_room: 9,
+        cube_room_name: "Upstairs", cube_type: "radiator_thermostat", since: new Date().toISOString() };
+      // as the stream's handler takes them, without its reload of the
+      // rooms, which reads the log again from the server
+      const send = (st, level) => appendLogEvent({ kind: "mismatch", source: "cube", level, device: m.device,
+        time: new Date().toISOString(), summary: Object.assign({ state: st }, m) });
+      send("found", "warn");
+      send("cleared", "info");
+    }""")
+    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-mismatch').length === 2", 5), \
+        "the two lines, and none of the server's: its fixture agrees with its room list"
+    texts = page.locator("#log-lines .log-line.kind-mismatch .log-text").all_inner_texts()
+    found, cleared = MISMATCH_SAYS[case.lang]
+    assert found in texts, f"the finding: {texts}"
+    assert any(s.startswith(cleared) for s in texts), f"the finding agreeing again: {texts}"
+    show_view(page, "tiles")
+
+
 def test_log_source_and_level(page, case):
     """The source and the level chosen are asked of the server and kept in
     the address after the log's page; a reload keeps them, Clear sets

@@ -85,6 +85,15 @@ func eventMessage(ev event) string {
 			return "the cube's memory slots stay full with nothing of the server's in flight: radiograms held for devices that do not answer, a reboot of the cube drops them"
 		}
 		return "the cube's memory slots are free again"
+	case "mismatch":
+		finding := summaryText(&ev, "finding")
+		if why := summaryText(&ev, "why"); why != "" {
+			finding += " (" + why + ")"
+		}
+		if ev.Summary["state"] == "found" {
+			return "the cube's device configurations and its room list differ: " + finding
+		}
+		return "the cube's device configurations and its room list agree again: " + finding
 	case "hold":
 		switch ev.Summary["reason"] {
 		case engine.HoldDutyCycle:

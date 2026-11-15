@@ -62,6 +62,9 @@ var settleRules = map[string]settleRule{
 	// the Cube's memory slots full for an hour: the reading that has
 	// them free again (slots.go)
 	"slots": {by: []string{"slots"}},
+	// a C line and the metadata, or the members of a room, that differ:
+	// the check that finds them agree again (congruence.go)
+	"mismatch": {by: []string{"mismatch"}, match: sameMismatch},
 	// an automatic backup failed: the next one taken
 	"backup": {by: []string{"backup"}},
 	// a restore failed: the next one done

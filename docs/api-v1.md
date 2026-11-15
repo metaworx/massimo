@@ -1903,6 +1903,56 @@ a thermostat out of range or with a flat battery goes quiet,
 but so may one whose valve stays shut outside the heating season.
 Shutter contacts and eco buttons transmit only on events and are never stale.
 
+**The Cube's lines against its room list.**
+A device's room for the Cube is the room byte of its C line, not the room list's
+(the metadata, `M`):
+a previous owner's unlisted devices, their C lines in two rooms,
+made the Cube discard those rooms' commands.
+So at every complete greeting, every C line and every change of the room list
+the server compares the two, which costs no radio time,
+and gives a device, and each room a finding concerns, `mismatches`,
+a list of what it found, absent where nothing:
+
+| `finding` | what differs |
+|-----------|--------------|
+| `room` | the device's C line names another room (`cube_room`) than the room list (`list_room`) |
+| `unlisted` | a C line in a room (`cube_room`) for a device the room list does not have, which can block the room's commands |
+| `no_config` | a device the room list has in `list_room`, that the Cube has no C line for and does not report: one it no longer holds |
+| `type` | the C line's type (`cube_type`) and the room list's (`list_type`) differ |
+| `master` | the room's master in the room list, the address of its entry (`device`), is no device of the Cube (`why` `no_device`), a device of another room (`other_room`, that room in `cube_room`) or no thermostat (`not_thermostat`); a room without a thermostat is not looked at |
+| `programme`, `temperatures` | a thermostat of the room, by its C line, whose week programme, or whose comfort, eco, maximum, minimum or window-open temperature, differs from the room's: those most of its thermostats share, on a tie those of the thermostat a room command names (the master where it is a thermostat of the room, else the wall thermostat, else the first radiator thermostat); the window-open minutes, which a wall thermostat does not keep, are not compared |
+
+Each finding has its `device` (the device concerned, a room's master for
+`master`) and its `name` in the room list, its `room` (the room list's where it
+has the device) with `room_name`, the rooms of both sides with their names
+(`cube_room_name`, `list_room_name`) where the room list has them,
+and `since`, when the server first found it.
+A device's `mismatches` are those of its `device`, a room's those of its `room`
+or of either side.
+Left out are the hidden devices and those parked in room 255, and the rooms
+they alone make up;
+the device of a removal, placement or move through the API, and the rooms it
+concerns, from the change's start until the device's C line follows,
+5 minutes at most after its end
+(the Cube changes a C line only once the device acknowledged);
+for `programme` and `temperatures`, a room with a member whose configuration
+write the server still follows (see the re-reads after writes, above);
+and the whole Cube while a restore runs.
+
+```json
+"mismatches": [{"finding": "room", "device": "0a010a", "name": "Living room radiator", "room": 1, "room_name": "Living room",
+  "cube_room": 2, "cube_room_name": "Office", "list_room": 1, "list_room_name": "Living room", "since": "2026-11-15T08:00:00+01:00"}]
+```
+
+Each finding is the Cube's log event `mismatch` at `warn` (see the log, below),
+once, until a check finds the two agree again:
+then `mismatch` at `info`, which settles the warning.
+A room master's warning is given again while it holds once someone has marked
+the last one seen (`log.seen`), at most once a minute:
+warned only while no unread warning for it exists.
+After a restart the server takes the findings its log holds unsettled,
+so that it does not warn of them again.
+
 A device whose state says a window is open (`window_open: true`,
 a shutter contact, or a virtual wall thermostat of a room with one)
 also has `window`, when the server saw it open and when it counts as open
@@ -2915,6 +2965,12 @@ of the server's in flight (see `slots_full` under `GET /api/v1/cubes`):
 at `warn` with `state` `full`, once, and at `info` with `state` `free` at the
 first reading with more than one free slot, which settles it; its `summary`
 has the `free_slots` of the reading and the `since` of the first full one.
+`mismatch`, source `cube`, a C line and the room list, or the members of a
+room, that differ (see "The Cube's lines against its room list" under the
+devices): at `warn` with `state` `found`, once, a room master's again once
+read, and at `info` with `state` `cleared` when they agree again, which settles
+it; with the device in `device`, and in its `summary` the finding as a
+device's `mismatches` has it.
 The server's sign-ins, source `server`, only on the pages and streams of a
 user with `audit`: `login` (`user`, `remote`), `login_failed` at `warn`,
 and `locked_out` at `warn` (`remote`, `for`, `after`: `logins` or `tokens`).

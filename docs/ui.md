@@ -292,6 +292,22 @@ Every room has a tile:
   It may be out of range or its batteries flat,
   but a thermostat whose valve stays shut outside the heating season can be quiet as well.
   Its values are greyed.
+- **Where the Cube and its room list differ** (`mismatches` of `docs/api-v1.md`,
+  "The Cube's lines against its room list"), a notice each, with since when,
+  naming the device and both rooms:
+  "Radiator: in Office by its configuration on the Cube, in Living room in the
+  room list"; a device the room list does not have whose configuration puts it
+  in the room, which can block the room's commands;
+  a device the room list has and the Cube does not;
+  another type on each side;
+  the room's master in the room list that is no device of the Cube,
+  in another room, or no thermostat;
+  and a thermostat whose week programme or temperatures differ from the rest
+  of the room.
+  The device's row in the device list has a badge for each,
+  "in Office for the Cube", "own week programme",
+  the whole sentence its tooltip;
+  the log has its **room list** line, a warning until the two agree again.
 - **SET** is the set temperature.
   The up and down chevrons next to it change it in steps of 0.5 °C;
   the value is sent 2 seconds after the last click, or at once with **Save**;

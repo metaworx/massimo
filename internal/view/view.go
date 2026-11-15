@@ -195,6 +195,11 @@ type Device struct {
 	// Sources is a virtual wall thermostat's alone: the radio addresses
 	// its actual_temp and its mode came from.
 	Sources map[string][]string `json:"sources,omitempty"`
+	// Mismatches are the differences the server finds between the
+	// device's C line and the metadata, or between it and the other
+	// members of its room (Mismatch); the server sets them, none
+	// elsewhere.
+	Mismatches []Mismatch `json:"mismatches,omitempty"`
 }
 
 // StaleAfter is how long a radiator thermostat's entry may stay
@@ -342,6 +347,10 @@ type Room struct {
 	// Stale is set when a device of the room is stale (Device.Stale).
 	Stale   bool     `json:"stale,omitempty"`
 	Devices []Device `json:"devices"`
+	// Mismatches are the differences the server finds between the
+	// Cube's C lines and its metadata that concern the room, and among
+	// its members (Mismatch); the server sets them, none elsewhere.
+	Mismatches []Mismatch `json:"mismatches,omitempty"`
 }
 
 // Rooms lists the visible rooms in the Cube's order, each with the

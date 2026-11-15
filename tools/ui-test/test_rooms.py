@@ -398,3 +398,57 @@ def test_out_of_date_device(page, case):
     assert "out-of-date" in (grid.get_attribute("class") or ""), "the values greyed"
     assert "18" in grid.inner_text(), f"the last report's setpoint ({grid.inner_text()!r})"
     page.evaluate("() => updateDevice(window.__dev)")
+
+
+MISMATCH_NOTE = {
+    "en": "{device}: in {cube} by its configuration on the Cube, in {list} in the room list.",
+    "de": "{device}: laut seiner Konfiguration im Cube in {cube}, in der Raumliste in {list}.",
+}
+MISMATCH_BADGE = {"en": "in {cube} for the Cube", "de": "in {cube} laut Cube"}
+MISMATCH_PROGRAMME = {"en": "own week programme", "de": "eigenes Wochenprogramm"}
+
+
+def test_mismatch_marks(page, case):
+    """A device whose C line names another room than the room list, and a
+    member whose week programme differs (mismatches, as the server sends
+    them; AP RadioHealth, Block 7): the room's tile says each in a notice
+    that names the device and both rooms, the device's row has a badge
+    naming the room the Cube has it in, the whole sentence its title; the
+    marks go with the findings."""
+    names = page.evaluate("""() => {
+      const r = state.rooms.find((r) => r.devices.some((d) => isThermostat(d) && !d.virtual));
+      const other = state.rooms.find((x) => x.id !== r.id);
+      const d = r.devices.find((d) => isThermostat(d) && !d.virtual);
+      window.__room = JSON.parse(JSON.stringify(r));
+      const since = new Date(Date.now() - 600e3).toISOString();
+      const moved = { finding: "room", device: d.rf_address, name: d.name, room: r.id, room_name: r.name,
+        cube_room: other.id, cube_room_name: other.name, list_room: r.id, list_room_name: r.name, since };
+      const programme = { finding: "programme", device: d.rf_address, name: d.name, room: r.id, room_name: r.name, since };
+      r.mismatches = [moved, programme];
+      d.mismatches = [moved, programme];
+      roomUI(r).open = true;
+      rerenderRoom(r);
+      return { room: r.name, other: other.name, device: deviceName(d) };
+    }""")
+    tile = page.locator(".room", has=page.locator(".room-name", has_text=names["room"])).first
+    notes = tile.locator(".mismatch-notes .notice")
+    assert notes.count() == 2, "a notice per finding"
+    text = notes.first.inner_text()
+    want = MISMATCH_NOTE[case.lang].format(device=names["device"], cube=names["other"], list=names["room"])
+    assert text.startswith(want), f"the notice names the device and both rooms: {text!r}, want {want!r}"
+    assert notes.first.locator(".notice-since").count() == 1, "since when"
+    badge = tile.locator(".device .mismatch-badge").first
+    assert badge.inner_text().strip().endswith(MISMATCH_BADGE[case.lang].format(cube=names["other"])), \
+        f"the device's badge: {badge.inner_text()!r}"
+    assert badge.get_attribute("title") == want, "the badge's title the whole sentence"
+    assert MISMATCH_PROGRAMME[case.lang] in tile.locator(".device .device-badges").first.inner_text(), "the programme's badge"
+    assert scroll_width(page) <= case.width, "no horizontal scroll with the notices"
+    page.evaluate("""() => {
+      const r = state.rooms.find((x) => x.id === window.__room.id);
+      Object.assign(r, window.__room);
+      delete r.mismatches;
+      for (const d of r.devices) delete d.mismatches;
+      roomUI(r).open = false;
+      rerenderRoom(r);
+    }""")
+    assert tile.locator(".mismatch-notes .notice").count() == 0 and tile.locator(".mismatch-notes").is_hidden(), "the notices gone"

@@ -2832,7 +2832,10 @@ paths:
         link_error in "summary"); slots, source cube (the Cube's memory
         slots full for an hour with nothing of the server's in flight, at
         warn, and free again, at info: state full or free, free_slots,
-        since in "summary"); the server's sign-ins, source server, for a
+        since in "summary"); mismatch, source cube (a C line and the room
+        list, or a room's members, that differ, at warn, and agree again,
+        at info: state found or cleared and the Mismatch's fields in
+        "summary"); the server's sign-ins, source server, for a
         user with audit alone: login, login_failed, locked_out; the LAN
         proxy's, source proxy: proxy_connected, proxy_disconnected,
         proxy_refused, proxy_discarded, proxy_deleted, proxy_delete_refused,
@@ -4405,6 +4408,28 @@ components:
         devices:
           type: array
           items: {$ref: "#/components/schemas/Device"}
+        mismatches:
+          type: array
+          description: "The findings of the Cube's C lines against its room list that concern the room, and of its members that differ (docs/api-v1.md, \"The Cube's lines against its room list\"); absent where none"
+          items: {$ref: "#/components/schemas/Mismatch"}
+    Mismatch:
+      type: object
+      description: "A difference between a C line and the room list, or among a room's members, that the server found (docs/api-v1.md, \"The Cube's lines against its room list\")"
+      required: [finding, room, since]
+      properties:
+        finding: {type: string, enum: [room, unlisted, no_config, type, master, programme, temperatures]}
+        device: {type: string, description: "The device concerned, a room's master for master; absent for a master of address 000000"}
+        name: {type: string, description: The device's name in the room list}
+        room: {type: integer, description: "The room concerned: the room list's where it has the device, else its C line's"}
+        room_name: {type: string}
+        cube_room: {type: integer, description: "The room of the device's C line (room, unlisted), of the master's (master other_room)"}
+        cube_room_name: {type: string}
+        list_room: {type: integer, description: "The room the room list has the device in (room, no_config)"}
+        list_room_name: {type: string}
+        cube_type: {$ref: "#/components/schemas/DeviceType"}
+        list_type: {$ref: "#/components/schemas/DeviceType"}
+        why: {type: string, enum: [no_device, other_room, not_thermostat], description: A master's finding}
+        since: {type: string, format: date-time, description: When the server first found it}
     DeviceType:
       type: string
       enum: [cube, radiator_thermostat, radiator_thermostat_plus, wall_thermostat, shutter_contact, eco_switch]
@@ -4470,6 +4495,10 @@ components:
           properties:
             actual_temp: {type: array, items: {type: string}}
             mode: {type: array, items: {type: string}}
+        mismatches:
+          type: array
+          description: "The findings of the device's C line against the room list, and of its room's members, that name it (docs/api-v1.md, \"The Cube's lines against its room list\"); absent where none"
+          items: {$ref: "#/components/schemas/Mismatch"}
     ConfigWrite:
       type: object
       description: Every field optional; merged into the device's current configuration
