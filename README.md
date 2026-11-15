@@ -523,6 +523,11 @@ whoever could change the tags could change the line naming it.
 `make linux-armv6` builds for a Raspberry Pi 1, `make linux-arm64` for a 64-bit
 Raspberry Pi OS, `make windows` for Windows,
 and `make cross` every release binary, all into `dist/`.
+Each of them bundles the web UI's parts first, `make ui`,
+with esbuild from its Go module, which the first build downloads
+as it does the other modules;
+`go build ./cmd/massimo` alone stops at the missing
+`internal/server/ui/parts.js` until `make ui` has made it.
 The binary goes in as a release's does,
 `sudo ./massimo install -dry-run -settings .env`, then without `-dry-run`.
 It follows the tag's flavour, `alpha` for an `-alpha.N` tag,

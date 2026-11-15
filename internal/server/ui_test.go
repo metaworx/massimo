@@ -71,6 +71,14 @@ func TestUIServed(t *testing.T) {
 			t.Errorf("uiScriptsOffPage names %s, which is not embedded", f)
 		}
 	}
+	// The parts' bundle (make ui) comes after the plain scripts, whose
+	// globals it calls, and registers the parts the plain code calls.
+	if tags := regexp.MustCompile(`<script src="(ui/[^"]+\.js)"`).FindAllStringSubmatch(page, -1); len(tags) == 0 || tags[len(tags)-1][1] != "ui/parts.js" {
+		t.Errorf("the page's last script is not ui/parts.js")
+	}
+	if _, _, body := get("/ui/parts.js"); !strings.HasPrefix(body, "// SPDX-License-Identifier: AGPL-3.0-or-later\n") || !strings.Contains(body, "MassimoParts") {
+		t.Errorf("ui/parts.js is not the bundle of make ui: %q", body[:min(120, len(body))])
+	}
 	if code, ct, _ := get("/ui/style.css"); code != 200 || !strings.HasPrefix(ct, "text/css") {
 		t.Fatalf("GET /ui/style.css: %d %s", code, ct)
 	}

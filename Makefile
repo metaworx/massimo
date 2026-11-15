@@ -50,7 +50,7 @@ export SOURCE_DATE_EPOCH ?= $(shell git log -1 --format=%ct 2>/dev/null || date 
 # The container the package test runs in (make deb-test).
 DEB_IMAGE ?= debian:trixie-slim
 
-.PHONY: all build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots ui-brand lan-test actionlint windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages debver version deb-test deb-systemd-test apt-test site build-release release release-files clean release-alpha release-beta release-rc release-stable
+.PHONY: all ui build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots ui-brand lan-test actionlint windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages debver version deb-test deb-systemd-test apt-test site build-release release release-files clean release-alpha release-beta release-rc release-stable
 
 # Development happens on main; a release is a tag on main, whose label is
 # the release's flavour (internal/update): -alpha.N is alpha, -beta.N beta,
@@ -167,13 +167,26 @@ release-alpha release-beta release-rc release-stable:
 
 all: test build
 
-build:
+# The web UI's parts (docs/ui.md, "How the page is built"): the TypeScript
+# under internal/server/ui/src/ bundled by esbuild, through its Go API at
+# the version tools/uibundle/go.mod pins, a module of its own, into
+# internal/server/ui/parts.js, which the server embeds and git does not
+# keep (AP UiParts, D172-A). Every target that compiles Go needs it, and
+# names it; without it the go:embed line of internal/server/ui.go stops
+# the build with its name. go -C runs the bundler from its own module,
+# the same way on every platform; it finds the repository above it, and
+# leaves the bundle untouched when it would not change. It runs on the
+# build machine, whatever GOOS and GOARCH a cross build is given.
+ui:
+	GOOS= GOARCH= GOARM= go -C tools/uibundle run .
+
+build: ui
 	go build -ldflags "$(LDFLAGS)" -o massimo $(PKG)
 
-test:
+test: ui
 	go test ./...
 
-vet:
+vet: ui
 	go vet ./...
 
 # The race detector on the packages whose goroutines meet: the server, the
@@ -181,7 +194,7 @@ vet:
 # and its notification rules (the contract's test gate).
 RACEPKGS = ./internal/server ./internal/store ./internal/cubelan ./internal/proxy ./internal/serve ./internal/announce ./internal/notify
 
-race:
+race: ui
 	MASSIMO_ENV_FILE=/dev/null go test -race $(RACEPKGS)
 
 # Every package's tests on 32-bit ARM, the armv6 binary that the armhf
@@ -191,7 +204,7 @@ race:
 # section 2).
 QEMU_ARM ?= qemu-arm -cpu arm1176
 
-test-armv6:
+test-armv6: ui
 	GOOS=linux GOARCH=arm GOARM=6 CGO_ENABLED=0 MASSIMO_ENV_FILE=/dev/null go test -short -exec '$(QEMU_ARM)' ./...
 
 # The fuzz targets (Fuzz* in the packages that parse untrusted bytes:
@@ -204,17 +217,17 @@ test-armv6:
 FUZZTIME ?= 10s
 FUZZPKGS = ./internal/protocol/cube ./internal/backup ./internal/store
 
-fuzz:
+fuzz: ui
 	FUZZTIME=$(FUZZTIME) tools/fuzz/run.sh $(FUZZPKGS)
 
 # Web UI smoke test with Playwright against the fake Cube; skipped when
 # Playwright for Python is not installed (tools/ui-test/README.md).
-ui-test:
+ui-test: ui
 	tools/ui-test/run.sh
 
 # The web UI's screenshot set into docs/screenshots/, from the same
 # start-up as ui-test; retaken at every change of the UI.
-ui-screenshots:
+ui-screenshots: ui
 	tools/ui-test/run.sh screenshots
 
 # The web UI's brand files into internal/server/ui/brand/: the ui scope of
@@ -228,7 +241,7 @@ ui-brand:
 # Discovery, serve's mDNS announcement and massimo discover on a LAN in
 # Docker, against avahi (tools/lan-test/README.md); needs Docker with
 # Compose v2.
-lan-test:
+lan-test: ui
 	tools/lan-test/run.sh
 
 # The workflows under .github/workflows/ by actionlint, their run:
@@ -241,28 +254,28 @@ actionlint:
 	go tool -modfile=tools/actionlint/go.mod actionlint
 
 # Cross builds; each lands in $(OUT)/.
-windows:
+windows: ui
 	GOOS=windows GOARCH=amd64 $(CROSS) -o $(OUT)/massimo-windows-amd64.exe $(PKG)
 
-linux:
+linux: ui
 	GOOS=linux GOARCH=amd64 $(CROSS) -o $(OUT)/massimo-linux-amd64 $(PKG)
 
-linux-arm64:
+linux-arm64: ui
 	GOOS=linux GOARCH=arm64 $(CROSS) -o $(OUT)/massimo-linux-arm64 $(PKG)
 
 # Raspberry Pi 2/3/4 with a 32-bit OS (LoxBerry on Raspberry Pi OS 32-bit).
-linux-armv7:
+linux-armv7: ui
 	GOOS=linux GOARCH=arm GOARM=7 $(CROSS) -o $(OUT)/massimo-linux-armv7 $(PKG)
 
 # Raspberry Pi 1 (A, B, B+) and Zero / Zero W: ARMv6 with a hardware FPU.
-linux-armv6:
+linux-armv6: ui
 	GOOS=linux GOARCH=arm GOARM=6 $(CROSS) -o $(OUT)/massimo-linux-armv6 $(PKG)
 
 # macOS on Intel and on Apple silicon.
-darwin-amd64:
+darwin-amd64: ui
 	GOOS=darwin GOARCH=amd64 $(CROSS) -o $(OUT)/massimo-darwin-amd64 $(PKG)
 
-darwin-arm64:
+darwin-arm64: ui
 	GOOS=darwin GOARCH=arm64 $(CROSS) -o $(OUT)/massimo-darwin-arm64 $(PKG)
 
 darwin: darwin-amd64 darwin-arm64
@@ -273,7 +286,7 @@ cross: linux linux-arm64 linux-armv7 linux-armv6 darwin windows
 # binaries for the Raspberry Pis, the Pi 5's arm64 and the Pi 1's armv6,
 # to run on a copy of a box's store (docs/store.md section 5, "Measuring
 # on a box").
-store-bench:
+store-bench: ui
 	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go test -c -trimpath -o $(OUT)/store-bench-linux-arm64 ./internal/store
 	GOOS=linux GOARCH=arm GOARM=6 CGO_ENABLED=0 go test -c -trimpath -o $(OUT)/store-bench-linux-armv6 ./internal/store
 
@@ -355,4 +368,4 @@ build-release: clean
 release-files: cross packages
 
 clean:
-	rm -rf massimo $(OUT)
+	rm -rf massimo $(OUT) internal/server/ui/parts.js
