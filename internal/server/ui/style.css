@@ -215,7 +215,7 @@ body.signed-out .top-line > .cube,
 body.signed-out .top-line > .nav,
 body.signed-out header.top > :not(.top-line),
 body.signed-out main,
-body.signed-out #notify-toast { display: none !important; }
+body.signed-out #toast { display: none !important; }
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -366,7 +366,6 @@ button.copy-icon .ni { width: 16px; height: 16px; }
 .menu-item-icons { display: inline-flex; gap: 4px; }
 .menu-item-icons > svg { width: 18px; height: 18px; flex: none; }
 .menu-items button[aria-current="true"] { box-shadow: inset 3px 0 0 var(--accent); font-weight: 600; }
-#cube-search.bad { color: var(--bad); }
 /* The found Cubes' sign (components.js foundCountEl): a cube with their
    number in a corner badge, in the accent's blue, as information; in the
    header's problem pill last, its list's last group, and System settings'
@@ -1691,10 +1690,23 @@ massimo-week-program { display: contents; }
 .log-mark { padding: 0 8px; font-size: 0.85rem; }
 .menu-items button > .ni.sign.tone-warn { color: var(--warn-mark); }
 .menu-items button > .ni.sign.tone-bad { color: var(--bad); }
-/* the log's mark on ☰ too, where the phone keeps the log's button in it;
-   on the page's own button, the mark's shape alone over the accent */
+/* the log's mark on ☰, at its corner on a disc of the card's colour, so
+   that amber and red read on the filled ☰ too (D172-A) */
 #nav-menu > summary { position: relative; }
-#nav-menu > summary > .mark-sign { position: absolute; right: 1px; bottom: 1px; width: 13px; height: 13px; stroke-width: 2.6; }
+#nav-menu > summary > .mark-sign {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  width: 18px;
+  height: 18px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--card);
+  stroke-width: 2.6;
+}
+/* ☰'s Sign out in the accent, as the personal page's button (D171-A) */
+#menu-logout { color: var(--accent); font-weight: 600; }
 .nav-btn.active > .ni.sign { color: inherit; }
 .log-cmd-detail {
   flex-basis: 100%;
@@ -1880,7 +1892,8 @@ massimo-week-program { display: contents; }
 .notify-device-name { flex: 1 1 12rem; min-width: 0; overflow-wrap: anywhere; }
 .notify-device > p { flex: 1 1 100%; margin: 0; }
 
-/* A notification while the page is open, at its foot (notify.js) */
+/* The page's toast at its foot (components.js showToast): a notification
+   while the page is open, the Cube search's outcome */
 .toast {
   position: fixed;
   right: 16px;
@@ -1898,5 +1911,8 @@ massimo-week-program { display: contents; }
   color: var(--fg);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
 }
+.toast.bad { border-left-color: var(--bad); }
 .toast-text { flex: 1 1 auto; min-width: 0; margin: 0; overflow-wrap: anywhere; }
 .toast-title { display: block; }
+/* its action (components.js showToast): Show for the Cubes a search found */
+.toast-action { flex: none; align-self: center; padding: 4px 10px; color: var(--accent); border-color: var(--accent); font-weight: 600; }

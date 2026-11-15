@@ -2161,7 +2161,9 @@ The answer is
 ```
 
 with `copied` absent when nothing was copied,
-and `"mode_not_set": true` in it when the Cube discarded the 0x40,
+`"confirmation": "pending"` where the device went into a room
+(see "Structure changes read back", below),
+and `"mode_not_set": true` in `copied` when the Cube discarded the 0x40,
 which leaves the device's mode as it was and ends nothing:
 on 2026-11-04 the Cube discarded a direct 0x40 to a device in a room.
 Any other command of the copy that fails ends it with its error (`502`,
@@ -2197,6 +2199,25 @@ then, for a device the metadata lists, the metadata without it.
 The server's copy forgets the device at once:
 it is gone from the devices, the rooms and the counts,
 and the stream reports `metadata` (for a listed device) and `device_forgotten`.
+The answer is `{"ok": true, "budget": {…}, "confirmation": "pending"}`.
+
+**Structure changes read back.**
+The Cube accepts a removal's, a placement's or a move's radiograms at once,
+but the room's members take them at their next wakeup, about ten minutes on,
+and the Cube holds a memory slot for each until then;
+it reports its free slots only in `S:` replies and in the `H` line of a new
+connection.
+So such a change answers `"confirmation": "pending"`,
+and the server reads it back 2, 6 and 12 minutes after it:
+done once a budget the Cube reported after the change shows the free slots
+back at their count before it;
+at the last check, where the Cube reported none since,
+the server reconnects once for a fresh `H` line
+(only with `RefreshInterval` set, as the budget refresh after writes).
+The outcome is the Cube's log event `structure` (see the log, below):
+at `info` when done, at `warn` when not confirmed,
+or when the change left a member of the rooms concerned with the error flag
+or a link error it did not have before.
 
 A device the metadata lists without a C line, a leftover,
 loses its entry in the metadata, and nothing is sent by radio.
@@ -2857,6 +2878,13 @@ discarded it, the device's error state was reset and it was sent again),
 `dropped` and `failed` with their `error`;
 `hold` at `warn`, the radio commands waiting (`reason` `duty_cycle` with
 `duty_pct` and `until`, or `memory_slots` with `free_slots` and `wait_s`).
+`structure`, source `cube`, a removal, placement or move read back
+(see "Structure changes read back"), with the device in `device` and in its
+`summary` the `action` (`remove`, `add`, `move`), the `outcome` (`done` at
+`info`, `not_confirmed` at `warn`), the free slots `before` the change and
+now (`free_slots`), the minutes since it (`minutes`), the slots still `held`
+or `no_reading`, and, at `warn`, the devices the change left `flagged` or
+with a `link_error`; it is settled only by a person's mark.
 The server's sign-ins, source `server`, only on the pages and streams of a
 user with `audit`: `login` (`user`, `remote`), `login_failed` at `warn`,
 and `locked_out` at `warn` (`remote`, `for`, `after`: `logins` or `tokens`).

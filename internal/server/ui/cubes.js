@@ -713,6 +713,7 @@ function pairDeviceForm(serial, dev, e, { onDone, onFail, onCancel } = {}) {
       if (res.copied.mode_not_set) text += " " + t("pairing.modeNotSet");
     }
     if (res && res.budget) text = t("result.budget", { text, duty: res.budget.duty_cycle_pct, slots: res.budget.free_memory_slots });
+    if (res && res.confirmation === "pending") text += " " + t("result.structurePending");
     e.result = { text, ok: true };
     e.done = true;
     e.busy = false;

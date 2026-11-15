@@ -1031,7 +1031,7 @@ async function refresh() {
 
 // DISCOVER is the value of the Cube choice's entry that searches the LAN.
 const DISCOVER = "__discover";
-const discovery = { running: false, timer: null };
+const discovery = { running: false };
 
 // isConfigured tells the Cubes the server serves from those it only
 // found on the LAN; a server without discovery sends no flag.
@@ -1039,32 +1039,24 @@ function isConfigured(c) {
   return c.configured !== false;
 }
 
-// showSearch shows the state of a search next to the Cube choice, for
-// ms milliseconds when given.
-function showSearch(text, ms, bad) {
-  const el = $("cube-search");
-  if (discovery.timer) clearTimeout(discovery.timer);
-  discovery.timer = null;
-  el.textContent = text;
-  el.classList.toggle("bad", !!bad);
-  el.classList.toggle("hidden", !text);
-  if (ms) discovery.timer = setTimeout(() => showSearch(""), ms);
-}
-
 // discoverCubes asks the server to search the LAN for Cubes (about two
-// seconds), then reloads the list and says what it found.
+// seconds), the Cube choice's entry saying so meanwhile, then reloads the
+// list and says what it found in the page's toast (components.js
+// showToast): Cubes found with Show, which opens them in System settings
+// for a role with cubes, as their entries in the list do; a failure in
+// red, for longer.
 async function discoverCubes() {
   if (discovery.running) return;
   discovery.running = true;
-  showSearch(t("discover.searching"));
   renderCubeSelect();
   try {
     const res = (await api("POST", "api/v1/cubes/discover")) || {};
     await loadCubes();
     const n = (res.found || []).filter((c) => !isConfigured(c)).length;
-    showSearch(n ? tn("discover.found", n) : t("discover.none"), 8000);
+    const show = n && hasCap("cubes") ? { label: t("discover.show"), run: showFound } : null;
+    showToast(n ? tn("discover.found", n) : t("discover.none"), { ms: 8000, action: show });
   } catch (e) {
-    showSearch(t("discover.failed", { error: e.message }), 15000, true);
+    showToast(t("discover.failed", { error: e.message }), { ms: 15000, tone: "bad" });
   } finally {
     discovery.running = false;
     renderCubeSelect();

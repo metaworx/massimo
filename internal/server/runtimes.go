@@ -112,7 +112,7 @@ func (s *Server) newRuntime(c CubeConfig, addr string) *runtime {
 	opts := s.opts
 	rt := &runtime{evlog: s.opts.Logger, cfg: c, serial: strings.ToUpper(c.Serial), showHidden: opts.ShowHidden, last: map[cube.RFAddress]*view.State{}, subs: map[chan event]*subscriber{}, epoch: newEpoch(),
 		structure: make(chan struct{}, 1),
-		follow:    newFollowUp(opts.FollowUpDelays, opts.FollowUpReconnectGap, opts.RefreshInterval > 0)}
+		follow:    newFollowUp(opts.FollowUpDelays, opts.FollowUpReconnectGap, opts.RefreshInterval > 0, opts.StructureChecks)}
 	rt.battery = &battery.Tracker{DecalcOf: rt.decalcOf}
 	copts := cubelan.Options{Addr: addr, PollInterval: opts.PollInterval, Hold: opts.CubeHold, Logger: s.partLog("cube", rt.serial), EventLines: true}
 	if opts.cubeOptions != nil {

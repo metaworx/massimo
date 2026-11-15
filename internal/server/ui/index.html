@@ -145,7 +145,6 @@
       </details>
       <!-- every Cube's problems (app.js renderCubeProblems) -->
       <span id="cube-problems" class="cube-problems"></span>
-      <span id="cube-search" class="muted small hidden" role="status"></span>
     </div>
     <nav class="nav" aria-label="pages" data-i18n-attr="aria-label:nav.pages">
       <button type="button" id="view-tiles" class="icon-btn nav-btn active" aria-current="page" aria-label="rooms" title="Rooms" data-i18n-attr="aria-label:nav.rooms title:nav.roomsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-house"/></svg></button>
@@ -508,10 +507,12 @@
   </details>
 </dialog>
 
-<!-- A notification while the page is open (notify.js notifyToast) -->
-<div id="notify-toast" class="toast hidden" role="status" aria-live="polite">
-  <p class="toast-text"><strong id="notify-toast-title" class="toast-title"></strong> <span id="notify-toast-body"></span></p>
-  <button type="button" id="notify-toast-close" class="icon-btn toast-close" aria-label="close" title="Close" data-i18n-attr="aria-label:action.close title:action.close">×</button>
+<!-- The page's toast (components.js showToast): a notification while the
+     page is open (notify.js notifyToast), the Cube search's outcome
+     (app.js discoverCubes) -->
+<div id="toast" class="toast hidden" role="status" aria-live="polite">
+  <p class="toast-text"><strong id="toast-title" class="toast-title"></strong> <span id="toast-body"></span></p>
+  <button type="button" id="toast-close" class="icon-btn toast-close" aria-label="close" title="Close" data-i18n-attr="aria-label:action.close title:action.close">×</button>
 </div>
 
 <!-- partials: templates -->
