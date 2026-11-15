@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlparse
 
 from conftest import api_call
-from helpers import CHANGES, named_buttons, scroll_width, show_view, wait_until
+from helpers import CHANGES, named_buttons, scroll_width, show_view, wait_held, wait_until
 
 OLDER = {"en": "Older events", "de": "Ältere Ereignisse"}
 NO_OLDER = {"en": "No older events", "de": "Keine älteren Ereignisse"}
@@ -93,7 +93,9 @@ def test_log_names_devices_once_the_rooms_come(page):
     page.route("**/rooms?devices=all", lambda route: held.append(route))
     page.reload()
     assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-state').length > 0", 10), "the log drawn"
-    assert wait_until(page, "state.serial !== null", 5) and held, "the rooms asked for and held"
+    # the page knows its Cube from the browser's storage at once, and asks
+    # for the rooms only after the Cubes: wait for the request itself
+    assert wait_held(page, held), "the rooms asked for and held"
     first = page.locator("#log-lines .log-line.kind-state").first
     kept = page.evaluate("logState.lines.filter((l) => l.state).at(-1).state.name")
     assert first.locator(".log-device").inner_text() == kept, "the name the line kept, before the rooms"
