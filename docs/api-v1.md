@@ -1041,7 +1041,7 @@ keep the default:
 | `window_open` | a window opened and is still open after `after_min` | on, 30 min |
 | `battery_low` | a device's battery flag held for 15 minutes: change the batteries (its `battery` `low`) | on |
 | `battery_weak` | a device's battery flag seen, as under the valve motor's load, and still weak after 15 minutes (its `battery` `weak`); once until a long valve move goes by without it | on |
-| `device_error` | a device reports an error or a link error | on |
+| `device_error` | a device reports a communication error (its state's `error`) or a link error (`link_error`), when the first of them is set | on |
 | `frost` | a device's measured temperature fell under `below_c`; again once it rose half a degree above | on, 8 °C |
 | `device_stale` | a thermostat went past the stale threshold (`stale_after`, `stale_after_wall`) | off |
 | `paired` | a device joined by pairing | off |
@@ -1071,6 +1071,19 @@ for `cube_offline`, `cube_online` and `window_open`; `values` are the kind's:
 `error` and `link_error` (`device_error`), `actual_c` and `below_c` (`frost`),
 `type` (`paired`), `address` (`cube_found`, whose `cube` is the one found),
 `version` (`update`).
+A `device_error` names the flags set then:
+`error` the communication error, with `failed_radiogram`,
+the type of the radiogram that failed, where the device gives it
+(`{"code": 64, "name": "ControlMode"}`, as a device's state gives it),
+and `link_error` the link error;
+the web UI's text names the one set, or both, and the radiogram:
+
+```json
+{"kind": "device_error", "cube": "KEQ0000000", "device": "0a0103", "serial": "MEQ0000003",
+ "device_name": "Radiator", "room": 3, "room_name": "Bath",
+ "values": {"error": true, "link_error": false, "failed_radiogram": {"code": 64, "name": "ControlMode"}},
+ "time": "2026-11-09T07:00:00Z", "url": "/"}
+```
 
 **Delivery.**
 A notification goes to every subscription of its user that may be sent to,

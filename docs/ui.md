@@ -790,7 +790,8 @@ also while no page is open.
 - **What notifies you**:
   a switch per kind, with its delay or threshold, each with its help:
   a window open (after 30 min), frost (below 8 °C), a low battery, a battery getting weak,
-  a device's error, the Cube out of reach (after 10 min) and back,
+  a device's communication error or link error,
+  the Cube out of reach (after 10 min) and back,
   and, off by default, a device that sends no news, a device paired,
   a new Cube on the network and a new version of Massimo.
   A change is saved a second after the last one;
@@ -817,6 +818,10 @@ a notification shows at its foot for ten seconds instead,
 in the toast the Cube search's outcome uses (`showToast`),
 in the page's language, with × to close it;
 the same one from the stream and from the push shows once.
+A device's error names its flag, here as in the push:
+the communication error, with the radiogram that failed where the device
+gives it ("The radiogram that failed: ControlMode (0x40)."),
+the link error, or both (`notifytext.js`).
 The page is at most 640 px wide, as My settings is.
 
 **The installable page.**

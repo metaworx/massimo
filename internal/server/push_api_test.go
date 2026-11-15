@@ -333,14 +333,15 @@ func TestNotificationDelivered(t *testing.T) {
 		return getJSON(t, ts, "secret", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
 	})
 	mine, theirs := notificationEvents(t, ts, "secret"), notificationEvents(t, ts, op)
-	// 0a010d reports manual, 21 °C, valve 30 %; then an error.
+	// 0a010d reports manual, 21 °C, valve 30 %; then a communication
+	// error, a setpoint's radiogram (0x40) having failed.
 	greeting, _ := fakecube.LoadGreeting(fixture)
 	l := greeting[len(greeting)-1]
 	raw, _ := base64.StdEncoding.DecodeString(l.Data)
 	copy(raw, []byte{0x0b, 0x0a, 0x01, 0x0d, 0x09, 0x12, 0x01, 30, 42, 0, 0, 0})
 	fc.SetDeviceList(cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(raw)})
 	eventually(t, "the first state", func() bool { return strings.Contains(log.String(), "device=0a010d") })
-	raw[5] |= 0x08
+	raw[4], raw[5] = byte(cube.RadiogramControlMode), raw[5]|0x08
 	fc.SetDeviceList(cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(raw)})
 
 	select {
@@ -356,6 +357,10 @@ func TestNotificationDelivered(t *testing.T) {
 	var n notify.Notification
 	if got.Err != nil || json.Unmarshal(got.Message, &n) != nil || n.Kind != notify.KindDeviceError || n.Device != "0a010d" || got.Path != "/send/owner" {
 		t.Fatalf("the push: %+v %s", got, got.Message)
+	}
+	// It names the flag and the radiogram that failed (D180-B).
+	if v, _ := json.Marshal(n.Values); string(v) != `{"error":true,"failed_radiogram":{"code":64,"name":"ControlMode"},"link_error":false}` {
+		t.Fatalf("the push's values: %s", v)
 	}
 	if h := got.Header; h.Get("TTL") != "86400" || h.Get("Urgency") != "normal" || h.Get("Topic") != "device_error-0a010d" {
 		t.Fatalf("the push's headers: %v", h)
