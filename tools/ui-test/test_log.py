@@ -533,7 +533,10 @@ def test_log_answers(page, case):
 def test_log_keeps_events_that_come_while_it_loads(page, case):
     """A live event that comes while a page of the log is on its way is
     kept after the page, and one the page holds already is not doubled.
-    The page's api() holds the log's request until the test answers it."""
+    The page's api() holds the log's request until the test answers it.
+    Only the kinds the test sends are counted: a real event of the server
+    may come meanwhile too, such as a backup an earlier test's change
+    made, and is kept as well."""
     now = time.time()
     show_view(page, "log")
     assert wait_until(page, "!logState.loading", 5), "the log loaded"
@@ -556,10 +559,10 @@ def test_log_keeps_events_that_come_while_it_loads(page, case):
                   [{"id": i, "kind": "hello", "time": stamp(now, i)} for i in (1, 2)] +
                   [{"id": 3, "kind": "config", "device": rf, "time": both}])
     assert wait_until(page, "!logState.loading", 5), "the page is in"
-    kinds = page.evaluate("logState.lines.map((l) => l.kind + ' ' + l.at)")
+    kinds = page.evaluate("logState.lines.filter((l) => l.kind === 'hello' || l.kind === 'config').map((l) => l.kind + ' ' + l.at)")
     assert kinds == ["hello " + stamp(now, 1), "hello " + stamp(now, 2), "config " + both, "config " + late], \
         f"the page, then the live event it lacks, once each: {kinds}"
-    assert page.locator("#log-lines .log-line").count() == 4, "and the view shows them"
+    assert page.locator("#log-lines .log-line.kind-hello, #log-lines .log-line.kind-config").count() == 4, "and the view shows them"
     show_view(page, "tiles")
 
 
