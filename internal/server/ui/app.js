@@ -1525,8 +1525,7 @@ function applyLanguage() {
   renderUsers();
   renderProviders(); // providers.js
   if ($("login-dialog").open) renderLoginProviders(); // login.js
-  renderBackups();
-  renderPlan();
+  renderBackups(); // backup.js: each box with its restore
   renderRoles();
   renderCubes();
   const cube = state.cubes.find((c) => c.serial === state.serial);
@@ -1555,7 +1554,7 @@ async function init() {
   // sections menu, its cards that fold; back to top on every page
   stickyHeader();
   watchFacts();
-  for (const page of [$("system"), $("maint-page"), $("me")]) {
+  for (const page of [$("system"), $("maint-page"), $("cube-page"), $("me")]) {
     sectionCards(page);
     pageBar(page);
   }

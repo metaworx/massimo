@@ -723,6 +723,8 @@ The page follows the Cube choice and every poll, as the card does,
 and what it saves shows in System settings.
 A panel is drawn in one place at a time:
 while Cube settings is shown, System settings' list does not hold it.
+Under the panel the Cube's **Backup and restore** (with `backup`),
+as System settings → Backup and restore shows it for each Cube.
 
 ## System info
 
@@ -1006,6 +1008,9 @@ the browser keeps which cards are folded.
 - **Capabilities for every role** (with `capabilities`):
   a switch per capability, which switches it off for every role but the owner.
 - **Backup and restore** (with `backup`):
+  a fold per Cube, its sign, name and serial and how many backups the server
+  keeps of it in its head, a single Cube's open; the card's head counts them all.
+  In each, and on Cube settings for the chosen Cube,
   **Download backup** saves the Cube as it is now, as YAML or JSON (**Format**).
   The server keeps the Cube's backups in its store,
   listed newest first with why each was taken (after a change, by hand,

@@ -811,6 +811,13 @@ body.scrolled .top-btn { display: inline-flex; }
   font-size: 1.1rem;
 }
 .cube-page .panel.cube-panel > summary::before { display: none; }
+/* its Backup and restore under the panel (backup.js renderCubeBackup) */
+.cube-page > .section-card { margin-top: 16px; }
+/* System settings → Backup and restore: a fold per Cube, its head as a
+   Cube's in the Cubes card, its sign before its name */
+.backups-cubes { display: grid; gap: 8px; }
+.backup-fold > summary > .conn-sign { width: 18px; height: 18px; flex: none; }
+.backup-fold > summary > .panel-badges { margin-left: auto; }
 .cube-page .cube-head-who { grid-column: 1; }
 .cube-page .cube-pill { grid-column: 2; }
 .cube-page .panel.cube-panel > summary > .panel-badges { grid-column: 1 / -1; }
