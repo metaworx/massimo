@@ -16,7 +16,9 @@ scrolling up, which a step would read as going back. A notice that stays
 moves nothing: with the fake Cube one radiogram counts as pending for good
 once any test has sent a command, the fake answering every command with
 49 of its 50 slots free and a Cube saying its slots only then."""
-from helpers import wait_until
+import pytest
+from helpers import scroll_settled, wait_until
+from test_send import first_tile, open_tab
 
 
 def quiet_header(page):
@@ -127,3 +129,31 @@ def test_scroll_to_the_bottom_stays_there(page, case):
     y, bottom = page.evaluate("[Math.round(window.scrollY), document.documentElement.scrollHeight - innerHeight]")
     assert abs(y - bottom) <= 1, f"the page stays at its bottom ({y}, its bottom {bottom})"
     page.evaluate("() => { document.getElementById('scroll-spacer').remove(); window.scrollTo(0, 0); }")
+
+
+
+
+def test_a_jump_down_stays_where_it_went(page, case):
+    """A room's configuration open on its week programme, the page
+    scrolled at once from the top, as a control scrolled into view is, to
+    every 25 px down to 1000: the header compacts and the page stays where
+    it went. The browser's scroll anchoring, switched off on the root
+    alone, took the page back by the compacted header's height for a band
+    of such jumps, 53 px at 390 px, and a click aimed before the
+    compaction landed above its target."""
+    tile, _ = first_tile(page)
+    open_tab(tile, "program")
+    end = page.evaluate("Math.min(1000, document.documentElement.scrollHeight - innerHeight)")
+    moved = []
+    for want in range(150, end + 1, 25):
+        page.evaluate("window.scrollTo(0, 0)")
+        assert wait_until(page, "!document.body.classList.contains('scrolled')", 3), "the header whole at the top"
+        page.evaluate("(y) => window.scrollTo(0, y)", want)
+        assert wait_until(page, "document.body.classList.contains('scrolled')", 3), "the header compacted"
+        assert scroll_settled(page), "the page comes to rest"
+        y = page.evaluate("Math.round(window.scrollY)")
+        if abs(y - want) > 1:
+            moved.append(f"{want} → {y}")
+    assert not moved, f"the page went back after the jump: {', '.join(moved)}"
+    page.evaluate("window.scrollTo(0, 0)")
+    tile.locator(".config-tabs .close").click()
