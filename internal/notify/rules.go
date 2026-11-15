@@ -152,8 +152,14 @@ func (e *engine) state(ev Event, st State) {
 	}
 
 	if (st.Error || st.LinkError) && !(had && (prev.Error || prev.LinkError)) && p.on(KindDeviceError) {
+		// The flags it names (D180-B): the communication error, with the
+		// radiogram that failed where the device gives it, the link
+		// error, or both.
 		n := device(ev, KindDeviceError)
 		n.Values = map[string]any{"error": st.Error, "link_error": st.LinkError}
+		if st.Error && st.FailedRadiogram != nil {
+			n.Values["failed_radiogram"] = *st.FailedRadiogram
+		}
 		e.send(n)
 	}
 

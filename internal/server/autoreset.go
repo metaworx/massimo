@@ -9,9 +9,9 @@ package server
 // an r: or a Cube restart clears it, never the device's own reports
 // (docs/cube-protocol.md). A device that reports while flagged can be
 // reached again: serve then sends it one r:01 through the queue, which
-// costs no radio time, at low priority and behind the duty hold as every
-// radio line, and logs it at info as error_reset. At most once a day per
-// device; not while a command of Massimo's own to the device or its room
+// costs no radio time and takes no slot, at low priority and past the
+// queue's holds (D183-B), and logs it at info as error_reset. At most
+// once a day per device; not while a command of Massimo's own to the device or its room
 // waits or runs in the queue, which resets the device itself where it
 // needs it (Block 2); not while the hold hook holds it (Block 6). It is
 // checked at the device's report, so it needs no job queue: the Cube is

@@ -11,6 +11,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"go.metaworx.ch/massimo/internal/protocol/cube"
 )
 
 // fakeClock is a clock the test moves: Advance runs the timers that
@@ -274,6 +276,44 @@ func TestDeviceConditions(t *testing.T) {
 	h.push(temp(7.0))
 	if k := h.kinds(); k != KindFrost {
 		t.Fatalf("after rising above: %q", k)
+	}
+}
+
+// A device error names its flags (D180-B): the link error alone, the
+// communication error with the radiogram that failed, both; the
+// radiogram only with the communication error.
+func TestDeviceErrorNamesTheFlags(t *testing.T) {
+	h := newHarness(t, user(1, `{}`))
+	control, timeInfo := cube.RadiogramControlMode, cube.RadiogramTimeInformation
+	ev := func(errFlag, link bool, failed *cube.RadiogramType) Event {
+		return Event{Kind: "state", Cube: "KEQ0000100", Device: "0a0103", State: &State{Error: errFlag, LinkError: link, FailedRadiogram: failed}}
+	}
+	values := func(st Event) string {
+		h.push(ev(false, false, nil))
+		h.advance(time.Hour) // past the half hour of the one before
+		h.push(st)
+		got := h.take()
+		if len(got) != 1 || got[0].n.Kind != KindDeviceError {
+			t.Fatalf("%+v: %+v", st.State, got)
+		}
+		raw, err := json.Marshal(got[0].n.Values)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(raw)
+	}
+	for _, c := range []struct {
+		ev   Event
+		want string
+	}{
+		{ev(false, true, &timeInfo), `{"error":false,"link_error":true}`},
+		{ev(true, false, &control), `{"error":true,"failed_radiogram":{"code":64,"name":"ControlMode"},"link_error":false}`},
+		{ev(true, false, nil), `{"error":true,"link_error":false}`},
+		{ev(true, true, &timeInfo), `{"error":true,"failed_radiogram":{"code":3,"name":"TimeInformation"},"link_error":true}`},
+	} {
+		if got := values(c.ev); got != c.want {
+			t.Errorf("%+v: values %s, want %s", c.ev.State, got, c.want)
+		}
 	}
 }
 

@@ -79,6 +79,71 @@ var radiogramNames = map[RadiogramType]string{
 // Name is the type's FrameType name, "" for a code the enum lacks.
 func (r RadiogramType) Name() string { return radiogramNames[r] }
 
+// RadiogramCategory is a radiogram type's category in the original
+// software's FrameType enum (docs/cube-protocol.md, "FrameType"), meant
+// there to decide when a device whose radiogram of the type failed is
+// reset.
+type RadiogramCategory uint8
+
+// The FrameType categories; a type of none is RadiogramCategoryNone.
+const (
+	RadiogramCategoryNone          RadiogramCategory = iota // the time push, the wakeup, the states, codes the enum lacks
+	RadiogramCategoryControl                                // the setpoints and the key lock
+	RadiogramCategoryConfiguration                          // the week programme, the temperatures, the valve, the display
+	RadiogramCategoryAssignment                             // the links and the group address
+	RadiogramCategoryRemove                                 // the reset
+)
+
+// radiogramCategories are the categories of the types that have one.
+var radiogramCategories = map[RadiogramType]RadiogramCategory{
+	RadiogramConfigWeekTemperatureProfile: RadiogramCategoryConfiguration,
+	RadiogramConfigTemperatures:           RadiogramCategoryConfiguration,
+	RadiogramConfigValveFunctions:         RadiogramCategoryConfiguration,
+	RadiogramSwitchDisplaySetPointActual:  RadiogramCategoryConfiguration,
+	RadiogramControlMode:                  RadiogramCategoryControl,
+	RadiogramSetPointTemperature:          RadiogramCategoryControl,
+	RadiogramComfortTemperature:           RadiogramCategoryControl,
+	RadiogramEcoTemperature:               RadiogramCategoryControl,
+	RadiogramLockManualControls:           RadiogramCategoryControl,
+	RadiogramAddLinkPartner:               RadiogramCategoryAssignment,
+	RadiogramRemoveLinkPartner:            RadiogramCategoryAssignment,
+	RadiogramSetGroupAddress:              RadiogramCategoryAssignment,
+	RadiogramRemoveGroupAddress:           RadiogramCategoryAssignment,
+	RadiogramReset:                        RadiogramCategoryRemove,
+}
+
+// radiogramCategoryNames are the categories' FrameType names.
+var radiogramCategoryNames = map[RadiogramCategory]string{
+	RadiogramCategoryNone:          "none",
+	RadiogramCategoryControl:       "Control",
+	RadiogramCategoryConfiguration: "Configuration",
+	RadiogramCategoryAssignment:    "Assignment",
+	RadiogramCategoryRemove:        "Remove",
+}
+
+// String is the category's FrameType name, "none" for none.
+func (c RadiogramCategory) String() string { return radiogramCategoryNames[c] }
+
+// Category is the type's FrameType category, none for a type without
+// one and for a code the enum lacks.
+func (r RadiogramType) Category() RadiogramCategory { return radiogramCategories[r] }
+
+// Severity ranks a radiogram that failed by its category, the highest
+// first (D181): 3 for Assignment and Remove, which change the system's
+// structure; 2 for Configuration; 1 for Control; 0 for the rest, the
+// time push, the wakeup and codes the enum lacks.
+func (r RadiogramType) Severity() int {
+	switch r.Category() {
+	case RadiogramCategoryAssignment, RadiogramCategoryRemove:
+		return 3
+	case RadiogramCategoryConfiguration:
+		return 2
+	case RadiogramCategoryControl:
+		return 1
+	}
+	return 0
+}
+
 // String is the type's name, or its code in hex for one the enum lacks
 // ("0xf6").
 func (r RadiogramType) String() string {

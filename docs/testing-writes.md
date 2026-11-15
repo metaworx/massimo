@@ -112,11 +112,6 @@ the duty cycle before and after.
 
 ## Known limits
 
-- The room-level configuration write sends its lines to each device directly
-  and uses the first device as the target for the queue's error-reset prelude;
-  a device in error state other than the first may need a second attempt.
-  A room-flagged command (a setpoint, a room's programme)
-  resets every flagged member of the room first.
 - The Cube drops unanswered radiograms slowly (about one per half hour);
   `status` shows them as pending.
 - Nothing here changes room 255, the room for hidden devices, or its devices.

@@ -11,9 +11,11 @@ The server keeps one persistent connection and one command queue per Cube.
 Reads answer from the server's copy of the Cube's state,
 which the Cube refreshes on every change and which the server polls every 10 seconds.
 Writes go through the queue, which serialises commands, respects the
-radio duty cycle and the Cube's memory slots, and resets a device's
-communication error (`error`) before a command that reaches it:
-one `r:`, which costs no radio time, for the device a command names,
+radio duty cycle and the Cube's memory slots
+(a command of `r:` lines alone, which take neither, does not wait for them),
+and resets a device's communication error (`error`) before a command that reaches it:
+one `r:`, which costs no radio time, for each device whose flag is set
+that a command names or sends a radiogram to directly,
 and for every member of the room a room command names whose flag is set.
 
 ## Web UI
@@ -1041,7 +1043,7 @@ keep the default:
 | `window_open` | a window opened and is still open after `after_min` | on, 30 min |
 | `battery_low` | a device's battery flag held for 15 minutes: change the batteries (its `battery` `low`) | on |
 | `battery_weak` | a device's battery flag seen, as under the valve motor's load, and still weak after 15 minutes (its `battery` `weak`); once until a long valve move goes by without it | on |
-| `device_error` | a device reports an error or a link error | on |
+| `device_error` | a device reports a communication error (its state's `error`) or a link error (`link_error`), when the first of them is set | on |
 | `frost` | a device's measured temperature fell under `below_c`; again once it rose half a degree above | on, 8 °C |
 | `device_stale` | a thermostat went past the stale threshold (`stale_after`, `stale_after_wall`) | off |
 | `paired` | a device joined by pairing | off |
@@ -1071,6 +1073,19 @@ for `cube_offline`, `cube_online` and `window_open`; `values` are the kind's:
 `error` and `link_error` (`device_error`), `actual_c` and `below_c` (`frost`),
 `type` (`paired`), `address` (`cube_found`, whose `cube` is the one found),
 `version` (`update`).
+A `device_error` names the flags set then:
+`error` the communication error, with `failed_radiogram`,
+the type of the radiogram that failed, where the device gives it
+(`{"code": 64, "name": "ControlMode"}`, as a device's state gives it),
+and `link_error` the link error;
+the web UI's text names the one set, or both, and the radiogram:
+
+```json
+{"kind": "device_error", "cube": "KEQ0000000", "device": "0a0103", "serial": "MEQ0000003",
+ "device_name": "Radiator", "room": 3, "room_name": "Bath",
+ "values": {"error": true, "link_error": false, "failed_radiogram": {"code": 64, "name": "ControlMode"}},
+ "time": "2026-11-09T07:00:00Z", "url": "/"}
+```
 
 **Delivery.**
 A notification goes to every subscription of its user that may be sent to,
@@ -2133,13 +2148,24 @@ a difference not yet reported then starts again.
   the original software and Massimo set them only together.
   Differing for 10 minutes, the room is a `disagree` warning;
   still differing 10 minutes later, its state is sent once more
-  as one room command (`0x40`) through the queue at low priority:
-  Massimo's last setpoint to the room (`PUT …/rooms/{id}/setpoint`,
-  a member's or the virtual wall thermostat's setpoint),
-  where it was sent at most 15 minutes before they began to differ,
-  or since, and a thermostat still shows it;
-  else the room's wall thermostat's state, its week programme where it follows it;
-  without either, nothing.
+  as one room command (`0x40`) through the queue at low priority,
+  the first of these (D188), which the log's line names (`from`):
+  1. `massimo`: Massimo's last setpoint to the room (`PUT …/rooms/{id}/setpoint`,
+     a member's or the virtual wall thermostat's setpoint),
+     where it was sent at most 15 minutes before they began to differ,
+     or since, and a thermostat still shows it.
+     Where it was auto, auto again:
+     auto without a temperature, the week programme, takes the programme's value now;
+     auto with a temperature, which lasts until the next switch point,
+     is sent as it was while no switch point of a thermostat's programme
+     has passed since, at the Cube's time, and else as auto on the programme,
+     which a thermostat on its programme shows too;
+  2. `majority`: else the state more than half of the compared thermostats show,
+     their mode, setpoint and `until`, those on their own programmes counting
+     as one state, auto on the programme;
+  3. `wall_thermostat`: else the room's wall thermostat's state,
+     its week programme where it follows it;
+  4. else nothing, the warning alone (`not_resent`, `no_state`).
   It is sent at most once a day per room, the day's re-sends read back from the
   log after a restart, and never while the queue holds the radio for the duty
   cycle or the memory slots: it waits for a later check then.
@@ -2358,7 +2384,8 @@ A thermostat put into a room, by an add or a move,
 then gets the room's settings, as the original software gives them to a device
 it pairs or moves:
 0x40 auto with temperature 0, to the device directly,
-without the error reset and the retry other writes get;
+with an error reset first, and one more and a retry after a discard,
+only where the device's flag is set;
 after a wakeup of the room,
 0x11 to every thermostat of the room, the device included,
 with the room's comfort, eco, maximum, minimum and window-open temperatures
@@ -2995,7 +3022,7 @@ A room is its members by their C lines, the Cube's own idea of it.
 | `…/cubes/{sn}/rooms/{id}/repair/unlink-relink` | "unlink all and re-link" (D163-B), with `structure` as well as `repair`, its preview too: for each member that takes part in links, a command of its own after a wakeup of the room, the 0x21 remove link partner radiograms of a move's unlink half without its 0x23 (one with the room flag naming it to the room's addressee, one to each window contact among its partners, one to the member for each partner), the room's flagged members reset in the first; then the re-link of every member, as above, whose 0x22 sets each group again. **Not yet run on hardware**: its preview says so (`untested`, a note), and a run that stops halfway, at a discarded radiogram or a lost connection, leaves the room's devices without their partners until it is run again. Nothing to send as the re-link | about twice a re-link's: 25 radiograms, about 31 %, for the room above; a room of five members far more, which the duty-cycle refusal may stop before it starts |
 | `…/cubes/{sn}/devices/{rf}/repair/config` | after a wakeup of the room, the days of the week programme that differ from what more than half of the room's other thermostats share by their C lines (0x10), then 0x11 with the temperatures they share (comfort, eco, maximum, minimum, window open), the device's own offset and window-open minutes kept; its C line read again. Nothing to send where the room has no other thermostat, its others share no temperatures or no programme by a majority (`nothing` says which), the device agrees already, or the Cube and its list have it in different rooms | one or two radiograms per day, one 0x11 |
 | `…/cubes/{sn}/devices/{rf}/repair/place` | where the device's C line names another room than the metadata, or none: a move into the metadata's room (`PUT …/devices/{rf}` with `room_id`, without the copy), from none the placement's link half alone; its C line read again. The metadata stays. Nothing to send where the list does not list the device, has it in no room or where the Cube has it, or the room has a wall thermostat already | about 8 % for a move |
-| `…/cubes/{sn}/devices/{rf}/repair/list` | the metadata, the device's entry moved to the room its C line names, or one made for a device the list does not have; a room the list does not have is made with `room_name` (a query parameter), its master the room's wall thermostat, else its first radiator thermostat, and asked for (above) where it is not given. Nothing to send where the Cube has the device in no room, or its list where the Cube has it | none: metadata only |
+| `…/cubes/{sn}/devices/{rf}/repair/list` | the metadata, the device's entry moved to the room its C line names, or one made for a device the list does not have, named by `name` (a query parameter) or by default (below); a room the list does not have is made with `room_name` (a query parameter), its master the room's wall thermostat, else its first radiator thermostat, and asked for (above) where it is not given. Nothing to send where the Cube has the device in no room, or its list where the Cube has it | none: metadata only |
 
 `details` holds, per repair:
 `devices`, those reset;
@@ -3004,7 +3031,24 @@ for the configuration `room`, `others` (the room's other thermostats),
 `temperatures_by` and `program_by` (how many share what is re-sent),
 `temperatures` and `days` (what is re-sent) and `agreed_temperatures`;
 for a placement `from` and `to`;
-for a listing `from`, `to`, `listed` and `new_room`.
+for a listing `from`, `to`, `listed` and `new_room`,
+and for a device the list lacks `name`, the name its entry gets,
+`room_name`, the room's, and `type`, the device's,
+so that a client can offer a name of its own words.
+
+**A listed device's name** (D185):
+a device the list lacks gets the name the query's `name` gives,
+checked as every name is (1 to 32 bytes, else `400`),
+else the default `<room name> <type> <n>`:
+the room's name, the one it is listed into or the new room's `room_name`;
+the device type in English (`radiator thermostat`, `radiator thermostat plus`,
+`wall thermostat`, `window contact`, `eco button`);
+`n` the lowest number from 1 that no device the list has in that room
+takes in a name of that form, whatever its case,
+such as `Bath radiator thermostat 2` beside `Bath radiator thermostat 1`.
+A room's name too long for the whole to fit 32 bytes is cut, at a character.
+A device the list has keeps its name, `name` or not.
+The web UI offers the same default with the type in the page's language.
 The log's **device change** names a re-link `relink`, "unlink all and re-link"
 `unlink_relink`, a re-sent configuration `config` and a placement `move`;
 one of a room has no device and names its `rooms`.
@@ -3152,7 +3196,20 @@ A device's communication error, link error and low battery are in the log at inf
 in its state's changes:
 each is an alert at warn while the device has it,
 at the state line that set it (`flag`),
-the `error` flag's with the device's `failed_radiogram` now, as its state gives it.
+the `error` flag's with a `failed_radiogram`:
+of the radiograms that failed while the flag stayed set,
+those of the device's state lines from the one that set it on
+and the one its state gives now,
+the most severe, and of two as severe the oldest.
+The severity is the original software's category of the radiogram's type
+(docs/cube-protocol.md, "FrameType"), highest first:
+Assignment and Remove (0x20 to 0x23, 0xF0), which change the system's structure;
+Configuration (0x10 to 0x12, 0x82);
+Control (0x40, 0x41, 0x43, 0x44, 0x80);
+then the rest (the time push 0x03, the wakeup 0xF1, a code the list lacks).
+So a flag set by the Cube's time push (0x03) at 10:00
+and still set when a setpoint (0x40) fails at 14:00 names the setpoint's,
+and a removal's link (0x21) failing after that names the link's.
 `after` leaves out the alerts up to that id.
 The audit's lines (`login_failed`, `locked_out`)
 are there for a holder of `audit` only.
@@ -3295,7 +3352,7 @@ The room checks', every minute (see "The room checks"):
 `differ` at `warn` (the `members`, each with its `rf`, `mode`, `setpoint`
 and `until`, what `differs`, the `minutes` so far),
 `resent` (the room's state sent once more as a room command: `from`
-`massimo` or `wall_thermostat`, its `mode`, `setpoint` and `until`, the
+`massimo`, `majority` or `wall_thermostat`, its `mode`, `setpoint` and `until`, the
 budget's `duty_pct` and `free_slots`), `resend_failed` at `warn` with its
 `error`, `not_resent` (`why`: `today`, once a day at most, or
 `no_state`), and `agree` once they agree again (`minutes`);
