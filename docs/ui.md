@@ -233,7 +233,12 @@ first why, where the server knows (its connection held open,
 or the Cube refusing the server, as in System settings → Cubes),
 the address the server tries, when the Cube last sent data
 (or last answered discovery),
-and what to check, a Cube serving one client at a time;
+and what to check, a Cube serving one client at a time,
+or, for a Cube whose address lies outside this machine's networks
+(`other_network` of `docs/api-v1.md`), that the server reaches it only through a
+router, that a Cube without a DHCP lease uses 192.168.0.222,
+and the `massimo netconfig` line with its serial that gives it a fixed address,
+which copies;
 the rooms the server still has stay under it.
 Without a Cube, it says that none is configured.
 For a role with `cubes` its button opens System settings → Cubes.
@@ -848,6 +853,8 @@ the browser keeps which cards are folded.
   network is back, the Cube still holding the server's old connection
   (it lets go after up to about 40 minutes, or a reboot frees it),
   or the Cube busy with another client;
+  for a Cube not connected whose address lies outside this machine's networks
+  (`other_network`), a notice as on Rooms, with the `netconfig` line;
   and where discovery finds a Cube with a fixed address at another one
   (`found_elsewhere`), a notice with both addresses and since when,
   and **Use the found address** and **Follow discovery**, which save either
@@ -899,6 +906,8 @@ the browser keeps which cards are folded.
   "via proxy at …" where a massimo proxy answers for it,
   in expert mode its radio and MAC address and the gateway it uses, and **Add**,
   which serves a found Cube at once;
+  under a Cube whose address lies outside this machine's networks
+  (`other_network`), a notice as on Rooms, with the `netconfig` line;
   each Massimo proxy with its address, the Cube it serves
   and the Massimo server serving it, its name a link to the address
   its announcement gives (`host` of `docs/api-v1.md`), without **Add**:

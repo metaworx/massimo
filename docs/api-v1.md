@@ -1360,6 +1360,16 @@ it is absent otherwise, and goes at once with a `PUT` of that address or of
 "found_elsewhere": {"address": "192.0.2.24:62910", "configured": "192.0.2.23:62910", "since": "2026-11-04T15:00:02+01:00"}
 ```
 
+`other_network` is `true` where the address the server connects to lies in none
+of this machine's networks, as its interfaces' addresses and netmasks give them,
+and absent otherwise, as it is for a host name:
+the server reaches it only through a router, if at all.
+A Cube with DHCP on and no lease uses its fallback address,
+192.168.0.222/16 from the factory (docs/cube-protocol.md),
+and refuses a connection from another network;
+`massimo netconfig -sn <serial> -broadcast -static …` gives it a fixed address (README.md).
+The networks are read again at most every 30 seconds.
+
 `problems` lists, where there are any, the Cube's visible devices with a problem,
 as `GET …/devices` shows them, each with its room's name (`room`):
 a transmit or link error, a low battery, a window open (with its `window` times);
@@ -1376,6 +1386,9 @@ that is not eQ-3's, or from the address of a massimo server announced on the LAN
 or `unknown`, neither, as on the loopback;
 a proxy has `serves`, the serial of the Cube with its radio address,
 served here or found, where one is known.
+A found Cube whose `address` lies in none of this machine's networks has
+`other_network`, as a configured one has (above), in the `cube_found` event too;
+a proxy never has it.
 `host` names the massimo server that serves the entry:
 for a proxy the one at its address, for a Cube the one a proxy of it runs on,
 with its instance name (`name`) and the `url` its announcement gives

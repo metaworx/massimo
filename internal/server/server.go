@@ -281,6 +281,9 @@ type Options struct {
 	// proxyListen opens a proxy listener in place of net.Listen, for
 	// the tests.
 	proxyListen func(addr string) (net.Listener, error)
+	// hostNets returns this host's networks in place of its interfaces',
+	// for the tests of other_network (hostnets.go).
+	hostNets func() []*net.IPNet
 	// TLS, when set, is the certificate source of a server that
 	// terminates TLS itself (internal/serve wraps the listener with
 	// certs.Config): /healthz then reports the certificate as "tls", and
@@ -381,6 +384,7 @@ type Server struct {
 	foundMu   sync.Mutex
 	found     map[string]*foundCube // by serial, upper case
 	servers   []announce.Found      // the servers announced at the latest run, under foundMu
+	nets      hostNets              // this host's networks, for other_network (hostnets.go)
 
 	// The runtimes' and the proxies' goroutines, see runtimes.go.
 	wg       sync.WaitGroup
@@ -1569,7 +1573,11 @@ type cubeView struct {
 	// latest discovery at another one, neither it nor a proxy answering
 	// at its own; absent otherwise (discovery.go noteElsewhere).
 	FoundElsewhere *addressElsewhere `json:"found_elsewhere,omitempty"`
-	Connected      bool              `json:"connected"`
+	// OtherNetwork says that the address the server connects to lies in
+	// none of this host's networks (hostnets.go otherNetwork): the
+	// server reaches it only through a router; absent otherwise.
+	OtherNetwork bool `json:"other_network,omitempty"`
+	Connected    bool `json:"connected"`
 	// Link says how the server stands with the Cube beyond connected:
 	// a lost connection held open, a Cube that refuses a new one while it
 	// holds the server's old one (stale) or another client's (busy).
@@ -1615,6 +1623,7 @@ func (s *Server) summary(rt *runtime) cubeView {
 	v.Link = &link
 	v.ProxyListening = s.proxyListening(rt)
 	v.ProxyFailing = s.proxyFailing(rt)
+	v.OtherNetwork = otherNetwork(s.hostNetworks(), v.Address)
 	if f, ok := s.foundInfo(rt.cubeSerial()); ok {
 		v.MAC, v.LastSeen, v.FoundAddress = f.MAC, &f.LastSeen, f.Address
 		v.FoundElsewhere = foundElsewhere(f, cfg, v.Address)

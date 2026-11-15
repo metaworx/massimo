@@ -110,9 +110,14 @@ type foundCube struct {
 	// entry, since a Cube is added and removed without discovery
 	// hearing it: a flag kept from the last answer, or from the store at
 	// the start, listed a removed Cube as configured.
-	Configured bool      `json:"configured"`
-	FoundAt    time.Time `json:"found_at"`
-	LastSeen   time.Time `json:"last_seen"`
+	Configured bool `json:"configured"`
+	// OtherNetwork says, on the copies as Configured, that a Cube's
+	// address lies in none of this host's networks (hostnets.go
+	// otherNetwork): a Cube without a DHCP lease, on 192.168.0.222, or
+	// with a static address of another network. Never on a proxy.
+	OtherNetwork bool      `json:"other_network,omitempty"`
+	FoundAt      time.Time `json:"found_at"`
+	LastSeen     time.Time `json:"last_seen"`
 	// state is the entry's: kept on the map's entry, and in a copy only
 	// as it was when copied.
 	state foundState
@@ -430,8 +435,9 @@ func (s *Server) browseServers(ctx context.Context, wait time.Duration) <-chan s
 // unknown entry at an announced server's address is a proxy, as massimo
 // discover marks it; a proxy names the Cube with its radio address
 // (Serves); a proxy names the server at its address, and a Cube the
-// server one of its proxies runs on (Host). It runs without foundMu
-// held.
+// server one of its proxies runs on (Host); a Cube says whether its
+// address lies outside this host's networks (OtherNetwork). It runs
+// without foundMu held.
 func (s *Server) describeFound(list []foundCube) {
 	if len(list) == 0 {
 		return
@@ -484,10 +490,12 @@ func (s *Server) describeFound(list []foundCube) {
 			}
 		}
 	}
+	nets := s.hostNetworks()
 	for i := range list {
 		f := &list[i]
 		f.Kind = kindOf(*f)
 		f.Serves, f.Host = "", nil
+		f.OtherNetwork = f.Kind != cubelan.KindProxy && otherNetwork(nets, f.Address)
 		if f.Kind == cubelan.KindProxy {
 			f.Serves = cubeAt[f.RFAddress]
 			f.Host = hostAt(f.Address)
@@ -748,12 +756,14 @@ func (s *Server) settle(answered map[string]bool) {
 // cubeFound is the one place where a Cube becomes found: new to the
 // server, or back after a complete run it did not answer. One that is
 // not configured is logged and announced, an event of the server's, kept
-// once and sent on every Cube's stream (cube_found). It runs without
-// foundMu held.
+// once and sent on every Cube's stream (cube_found), saying whether its
+// address lies outside this host's networks, as a listing does. It runs
+// without foundMu held.
 func (s *Server) cubeFound(f foundCube) {
 	if f.Configured {
 		return
 	}
+	f.OtherNetwork = f.Kind != cubelan.KindProxy && otherNetwork(s.hostNetworks(), f.Address)
 	s.logServer(event{Kind: "cube_found", Source: "cube", Serial: f.Serial, Cube: &f, Time: f.LastSeen})
 	s.pushNotify(notify.Event{Kind: "cube_found", Cube: f.Serial, Values: map[string]any{"address": f.Address}, Time: f.LastSeen})
 }
