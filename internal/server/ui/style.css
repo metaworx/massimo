@@ -679,8 +679,7 @@ body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8p
   .section-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .section-grid > * { grid-column: 1 / -1; }
   .section-grid > .half { grid-column: auto; }
-  /* System Info and Software update share the first row, Maintenance
-     the next alone */
+  /* Maintenance a row of its own */
   .section-grid > #sys-maint { grid-column: 1 / -1; }
   .section-flow { display: block; columns: 2; column-gap: 16px; }
   .section-flow > .section-card { break-inside: avoid; margin-bottom: 16px; }

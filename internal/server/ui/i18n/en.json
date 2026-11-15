@@ -179,7 +179,6 @@
   "help.blink": "Whether the triangle of a warning and the cross of a failure blink, so that they are not missed: always, for the first five seconds a sign is shown, or never. As the system blinks unless the device asks for reduced motion.",
   "help.scheme": "The page's colours, as a light and a dark set; the mode picks which is shown. Customise… edits a copy of the chosen scheme, Save as keeps it in this browser under a name, Export saves it as a file and Import reads such a file.",
 
-  "sysinfo.title": "System Info",
   "sysinfo.install": "Installation",
   "sysinfo.install.apt": "Debian package (apt)",
   "sysinfo.install.brew": "Homebrew",

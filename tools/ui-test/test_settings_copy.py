@@ -33,7 +33,7 @@ def test_proxies_both_serials(page, case):
     grant(page)
     page.route("**/api/v1/system", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(SYSTEM)))
     try:
-        show_view(page, "system")
+        show_view(page, "info")
         assert wait_until(page, "document.querySelectorAll('#info-proxies .sys-proxy').length === 2", 5), "two listeners"
         lines = page.locator("#info-proxies .sys-proxy")
         first = lines.nth(0)

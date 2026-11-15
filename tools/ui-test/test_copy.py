@@ -68,7 +68,7 @@ def test_proxies_copy(page, case):
         route.fulfill(status=200, content_type="application/json", body=json.dumps(v))
     page.route("**/api/v1/system", with_proxy)
     try:
-        show_view(page, "system")
+        show_view(page, "info")
         page.evaluate("loadSystemInfo()")
         assert wait_until(page, "!!document.querySelector('#info-proxies .copy-icon')", 5), "the proxy with its copy icon"
         page.evaluate("navigator.clipboard.writeText('')")

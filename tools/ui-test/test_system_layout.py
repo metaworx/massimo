@@ -6,7 +6,7 @@ section buttons, folding kept in the browser, back to top, the columns
 where there is room, and a Cube's panel in two columns."""
 from helpers import named_buttons, scroll_settled, scroll_width, show_view, wait_until
 
-CARDS = ["sys-info", "sys-software", "sys-maint", "sys-cubes", "sys-users", "sys-providers", "sys-integrations", "sys-roles", "sys-caps", "sys-backup"]
+CARDS = ["sys-software", "sys-maint", "sys-cubes", "sys-users", "sys-providers", "sys-integrations", "sys-roles", "sys-caps", "sys-backup"]
 
 
 def card_ids(page):
@@ -30,7 +30,7 @@ def test_cards_and_contents(page, case):
     menu, and no row of section buttons; the cards flow in two columns at
     1100 px and stack at 390; nothing overflows."""
     show_view(page, "system")
-    assert card_ids(page) == CARDS, "System Info first, Backup and restore last"
+    assert card_ids(page) == CARDS, "Software update first, Backup and restore last"
     assert page.locator("#system .toc").count() == 0, "no row of section buttons"
     toc = open_sections(page).locator(".toc-link")
     assert toc.count() == len(CARDS), "a menu item per card"

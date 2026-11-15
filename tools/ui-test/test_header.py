@@ -481,7 +481,7 @@ def test_versions_copy(page, case):
     page.locator("#version-short").click()
     assert wait_until(page, "navigator.clipboard.readText().then((t) => t === state.version)", 3), "the header's version copies whole"
     assert "(" not in whole or "server version" not in whole, "without the tooltip's words"
-    show_view(page, "system")
+    show_view(page, "info")
     cell = page.locator("#info-version")
     assert wait_until(page, "!!document.querySelector('#info-version .copy-icon')", 5), "System Info's version with its icon"
     page.evaluate("navigator.clipboard.writeText('')")

@@ -179,7 +179,6 @@
   "help.blink": "Ob das Dreieck einer Warnung und das Kreuz eines Fehlers blinken, damit man sie nicht übersieht: immer, in den ersten fünf Sekunden, in denen ein Zeichen erscheint, oder nie. Wie das System blinkt, außer das Gerät wünscht weniger Bewegung.",
   "help.scheme": "Die Farben der Seite, als heller und dunkler Satz; der Modus wählt, welcher gezeigt wird. Anpassen… bearbeitet eine Kopie des gewählten Schemas, Speichern als behält sie in diesem Browser unter einem Namen, Exportieren speichert sie als Datei und Importieren liest eine solche Datei.",
 
-  "sysinfo.title": "System-Info",
   "sysinfo.install": "Installation",
   "sysinfo.install.apt": "Debian-Paket (apt)",
   "sysinfo.install.brew": "Homebrew",

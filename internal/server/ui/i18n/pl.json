@@ -182,7 +182,6 @@
   "help.blink": "Czy trójkąt ostrzeżenia i krzyżyk błędu migają, aby ich nie przeoczyć: zawsze, przez pierwsze pięć sekund od pojawienia się znaku, lub nigdy. Jak system miga, chyba że urządzenie prosi o mniej ruchu.",
   "help.scheme": "Kolory strony jako zestaw jasny i ciemny; tryb wybiera, który jest pokazywany. Dostosuj… edytuje kopię wybranego schematu, Zapisz jako zachowuje ją w tej przeglądarce pod nazwą, Eksportuj zapisuje ją do pliku, a Importuj wczytuje taki plik.",
 
-  "sysinfo.title": "Informacje o systemie",
   "sysinfo.install": "Instalacja",
   "sysinfo.install.apt": "Pakiet Debiana (apt)",
   "sysinfo.install.brew": "Homebrew",

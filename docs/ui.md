@@ -187,7 +187,7 @@ the sign and the time a short line under it.
 - In expert mode a line under the first shows the chosen Cube's name,
   its duty cycle, free slots and radiograms pending,
   and the commands queued while there are any.
-  The server's facts are in System settings → **System Info**,
+  The server's facts are in ⚙ → **System info**,
   the Cube's in its panel under System settings → **Cubes**.
 - With a self-signed certificate (`massimo serve -tls self-signed`)
   the browser warned once, and a line under the header,
@@ -688,6 +688,60 @@ shows a notification in the language the page last told it
 or hands it to the page in front, and a tap opens the page.
 It caches nothing else: the page loads from the server as before.
 
+## System info
+
+⚙ → **System info** is for every role with `read`, a viewer's too:
+its title stays under the header while the page scrolls.
+The facts are the server's, a Cube's in its panel under System settings → **Cubes**.
+The page is a table of the server's version and what it was built with,
+when it started, as the server's clock read it, to the second in its zone,
+then how long ago,
+the server's time in its own zone, ticking,
+with a note where it differs from this browser's clock by more than 5 s,
+both times in this browser's zone when the pointer rests on them,
+the certificate the browser sees,
+how it was installed (the Debian package, Homebrew, the Windows service,
+a systemd or launchd service, or other: by hand, a container or another supervisor),
+the system it runs on with its processor,
+the host's full name, the host bold and the domain as it is,
+the interfaces the server listens on,
+a line each with the name, the MAC and the addresses,
+an asterisk marking the web interface's,
+the Cube proxies' listeners, a line each with the Cube's serial,
+the address and "listening",
+or a notice for one that does not listen: the error, since when,
+and the next try when the pointer rests on it,
+counted in a badge in the page's row while it fails (docs/proxy.md),
+and the address the server sees this browser at
+(`docs/api-v1.md`, "GET /api/v1/system").
+The certificate is the server's own (its source, names and expiry; none on plain HTTP),
+or, where a trusted proxy serves the page, the proxy's, "(proxied)":
+its names, expiry and issuer as the server read it, "not trusted" where it is not valid,
+with the address the proxy serves, a link to it in a new window and its copy icon;
+"being read…" while the server reads it,
+which it does within seconds of the first request:
+the page asks again every 2 s while it is shown,
+and says "could not be read" when 30 s have not brought it;
+where the proxy names no scheme (no `X-Forwarded-Proto`), the page's own scheme
+and address, and that with that header the server reads the proxy's certificate;
+a page on HTTPS from a server without TLS says "(proxied)" too,
+and that `-trusted-proxies` would show more.
+The server's version copies on a click, or by its copy icon, whole, with
+what it was built with (the header's does too, without the icon);
+so do each Cube proxy's serial, the serial it answers discovery with ("as …",
+where it answers discovery) and its address, which the original software connects to.
+A copy says "Copied"; on a page served over plain HTTP the browser gives no
+clipboard to the page, and the copy goes through its copy command instead.
+At its end, for a holder of `settings`,
+**Store** opens to what `massimo store info` shows:
+the file, the schema version, the node and tenant and the rows per table,
+its head the file, the schema and the rows in all;
+**Settings in effect** to what `massimo config` shows: the version, the
+settings file, the data directory, the listen address, TLS, the log level
+and every `MASSIMO_*` variable with where it came from, a key, an IV, a
+token or a password as "set, not shown"
+(`docs/api-v1.md`, "GET /api/v1/store, GET /api/v1/config").
+
 ## System settings
 
 ⚙ → **System settings** holds what is the server's,
@@ -695,7 +749,7 @@ each part for a role with its capability;
 a role with none of them (the viewer's, a guest's) has no such entry in ⚙.
 
 The page is a card per part, as wide as the page:
-System Info first, then Software update, Maintenance, Cubes, Users, Roles,
+Software update first, then Maintenance, Cubes, Users, Roles,
 **Capabilities for every role**, and Backup and restore last;
 from 900 px Users, Roles and Capabilities flow in two columns,
 none split, the break where their heights put it.
@@ -710,55 +764,6 @@ the browser keeps which cards are folded.
 Once the first card's head is out of sight, **↑** at the bottom right goes back
 to the top of the page.
 
-- **System Info**, for everyone who opens System settings:
-  a table of the server's version and what it was built with,
-  when it started, as the server's clock read it, to the second in its zone,
-  then how long ago,
-  the server's time in its own zone, ticking,
-  with a note where it differs from this browser's clock by more than 5 s,
-  both times in this browser's zone when the pointer rests on them,
-  the certificate the browser sees,
-  how it was installed (the Debian package, Homebrew, the Windows service,
-  a systemd or launchd service, or other: by hand, a container or another supervisor),
-  the system it runs on with its processor,
-  the host's full name, the host bold and the domain as it is,
-  the interfaces the server listens on,
-  a line each with the name, the MAC and the addresses,
-  an asterisk marking the web interface's,
-  the Cube proxies' listeners, a line each with the Cube's serial,
-  the address and "listening",
-  or a notice for one that does not listen: the error, since when,
-  and the next try when the pointer rests on it,
-  counted in the card's badge while it fails (docs/proxy.md),
-  and the address the server sees this browser at
-  (`docs/api-v1.md`, "GET /api/v1/system").
-  The certificate is the server's own (its source, names and expiry; none on plain HTTP),
-  or, where a trusted proxy serves the page, the proxy's, "(proxied)":
-  its names, expiry and issuer as the server read it, "not trusted" where it is not valid,
-  with the address the proxy serves, a link to it in a new window and its copy icon;
-  "being read…" while the server reads it,
-  which it does within seconds of the first request:
-  the page asks again every 2 s while System settings is shown,
-  and says "could not be read" when 30 s have not brought it;
-  where the proxy names no scheme (no `X-Forwarded-Proto`), the page's own scheme
-  and address, and that with that header the server reads the proxy's certificate;
-  a page on HTTPS from a server without TLS says "(proxied)" too,
-  and that `-trusted-proxies` would show more.
-  The server's version copies on a click, or by its copy icon, whole, with
-  what it was built with (the header's does too, without the icon);
-  so do each Cube proxy's serial, the serial it answers discovery with ("as …",
-  where it answers discovery) and its address, which the original software connects to.
-  A copy says "Copied"; on a page served over plain HTTP the browser gives no
-  clipboard to the page, and the copy goes through its copy command instead.
-  At its end, for a holder of `settings`,
-  **Store** opens to what `massimo store info` shows:
-  the file, the schema version, the node and tenant and the rows per table,
-  its head the file, the schema and the rows in all;
-  **Settings in effect** to what `massimo config` shows: the version, the
-  settings file, the data directory, the listen address, TLS, the log level
-  and every `MASSIMO_*` variable with where it came from, a key, an IV, a
-  token or a password as "set, not shown"
-  (`docs/api-v1.md`, "GET /api/v1/store, GET /api/v1/config").
 - **Software update**:
   the running version, the update channel and whether a newer release is out.
   A holder of `settings` chooses the channel there:
@@ -834,7 +839,6 @@ to the top of the page.
   the delay and the button are missing and the server's reason is shown:
   the switch is off, the helper is not installed, a server in a terminal
   (`packaging/README.md`, "Rebooting from the web UI").
-  From 900 px System Info and Software update share a row, Maintenance has one of its own.
 - **Cubes**:
   the Cubes the server serves, kept in its store;
   the card's head counts them, at every poll whether a panel is open or not:

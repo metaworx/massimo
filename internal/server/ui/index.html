@@ -159,7 +159,7 @@
   <!-- in expert mode, the chosen Cube's radio budget: its name, the duty
        cycle, the free slots and the radiograms pending, and the commands
        queued while there are any (app.js renderHeader); the server's facts
-       are System settings → System Info's, the Cube's its panel's -->
+       are System info's, the Cube's its panel's -->
   <p id="cube-stats" class="cube-stats expert-only"><span id="stats-cube" class="stats-cube"></span><span class="stat"><span data-i18n="budget.duty">Duty cycle</span> <span id="duty">–</span></span><span class="stat"><span data-i18n="budget.slots">Free slots</span> <span id="slots">–</span></span><span class="stat"><span data-i18n="budget.pending">Pending</span> <span id="pending-n">–</span></span><span id="stat-queued" class="stat hidden"><span data-i18n="budget.queued">Queued</span> <span id="queued">–</span></span></p>
   <p id="pending" class="notice hidden"></p>
 </header>
@@ -317,11 +317,15 @@
   </section>
 
   <!-- System info, the page ⚙ → System info opens, for every role with
-       read: its row kept at the top under the header, with the title. -->
+       read: its row kept at the top under the header, with the title and
+       the badges of what is wrong (update.js fillProxies), then the
+       server's facts (system-info.html). -->
   <section id="info-page" class="settings settings-page info-page hidden" aria-labelledby="info-title">
     <div class="page-bar">
       <h2 id="info-title" data-i18n="nav.infoTitle">System info</h2>
+      <span class="section-badges"></span>
     </div>
+    <!-- partials: info -->
   </section>
 
   <!-- Cube settings, the page ⚙ → Cube settings opens, for a role with

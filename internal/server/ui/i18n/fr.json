@@ -181,7 +181,6 @@
   "help.blink": "Si le triangle d’un avertissement et la croix d’une erreur clignotent, pour qu’on ne les manque pas : toujours, pendant les cinq premières secondes où un signe apparaît, ou jamais. Comme le système clignote, sauf si l’appareil demande moins de mouvement.",
   "help.scheme": "Les couleurs de la page, en un jeu clair et un jeu sombre ; le mode choisit lequel est affiché. Personnaliser… modifie une copie du jeu choisi, Enregistrer sous la garde dans ce navigateur sous un nom, Exporter l’enregistre dans un fichier et Importer lit un tel fichier.",
 
-  "sysinfo.title": "Infos système",
   "sysinfo.install": "Installation",
   "sysinfo.install.apt": "Paquet Debian (apt)",
   "sysinfo.install.brew": "Homebrew",
