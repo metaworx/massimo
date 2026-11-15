@@ -1,30 +1,31 @@
-# AP DeviceUnPairingFix v1.1: Removal and moves that work
+# AP DeviceUnPairingFix v1.2: Removal and moves that work
 
 ## TL;DR
 
 Massimo removes a device from its room with the sequence the original MAX!
 software 1.4.6 used on 2026-11-15, resets the room's flagged members first,
-and builds a move from the same two halves as a removal and a placement
-(D156-A). A sequence counts by its results, read back from the Cube and the
-devices; the original is a baseline.
+builds a move from the removal's and the placement's halves, and re-pairs a
+device whose links do not come right. A sequence counts by its results; the
+original is a baseline.
 
-- **Removal:** 0x23, then 0x21 to and from each partner → `r:` for every
-  flagged member, **one** room-flagged 0x21 to a member of the room,
-  `t:`, `m:`
-- **Move:** its own out-part → the removal's unlink half (with a 0x23),
+- **Removal:** 0x23, 0x21 to and from each partner → `r:` for every
+  flagged member, **one** room-flagged 0x21, `t:`, `m:`
+- **Move:** its own out-part → the removal's unlink half with a 0x23,
   then the placement's link half
-- **Placement:** 0x20 in both directions per partner, 0x22 → one
-  room-flagged 0x20, 0x22, as T134 sent them
-- **Done:** "accepted" → accepted, the slots back after the next wakeup,
-  no flag, the device working in its room
-- **`linkTarget`** and the link half: this plan's (D158-A)
+- **Placement:** 0x20 both ways per partner, 0x22 → one room-flagged
+  0x20, 0x22
+- **Addressee:** the master if in the room, else the wall thermostat,
+  else the first radiator thermostat; one function, room commands too
+- **Done:** "accepted" → slots back, no flag, the device working
+- **Re-pair:** a guided action that keeps name, room and configuration
 
 ### Blocks
 
 1. The removal, and each line's answer logged
-2. Unlink and link halves shared by removal, placement and move
+2. Shared halves and one addressee for every room radiogram
 3. "Done" read back from the Cube
-4. On hardware, with the owner: a removal and a move
+4. A guided re-pair that keeps the device's settings
+5. On hardware, with the owner: a removal and a move
 
 ## Discussion
 
@@ -39,51 +40,50 @@ removeDevice followed by addDevice …", "PLAN+ RadioHealth +
 DeviceUnPairingFix"; on what counts: "We don't need to know the internals
 of the radio signals. We need to know the working commands we need to send
 to the CUBE in order to get reliable results", and "take the legacy
-protocol as a baseline but be vigilant to logical errors also there and so
-maybe even improve things by our own logic, discoveries and tests".
-Then "PLAN+ both".
+protocol as a baseline but be vigilant to logical errors also there".
+At the gate of v1.1: "159 A (B remains as a manual route by first removing
+and then paring) … 167 A with the metadata's master tried first, as long
+as it is in the same room - warned if not (and no unread warning) - , not
+the moving device, falling back to the WT (if available) then the first TS
+in the room", then "D168A, D169A".
 
 What goes over the air cannot be observed here. That a room-flagged
 radiogram reaches each member as a radiogram of its own is an assumption
 the slot counts fit (one slot per member); this plan does not rest on it.
 
-**Settled:**
+**Settled** (D159 to D169 at the gate of v1.1, NOTE DeviceUnPairingFix
+v1.1: owner decisions, folded in here):
 
 - **D156-A:** a plan of its own for removal and moves.
 - **D158-A** (the owner, through AP LegacyLogs,
   `wip/2026-11-15_13-55_NOTE_LegacyLogs_v1.0_block_5_dropped.md`):
   `linkTarget` and the link half of moves and removals are this plan's;
-  LegacyLogs' Block 5 is dropped, and its 0x23-first change (#286) is on
-  `main`.
-
-**Open, written here as recommended:**
-
-- **D159. What "removeDevice followed by addDevice" means for a move**
-  - **A (recommended).** Shared code, the device staying paired: a move's
-    out-part is the removal's unlink half (without `t:` and the metadata's
-    deletion), its in-part the placement of a device in no room.
-  - **B.** Delete the device (`t:`, a factory reset) and pair it again:
-    someone at the device for every move, its settings lost.
-- **D160. The 0x23**
-  - **A (recommended).** A move sends 0x23 first, as the original's
-    `DisassociateDeviceFromRoom` and T134's out-step: the device stays, its
-    group has to go. A removal sends none, as captured: `t:` resets the
-    device.
-  - **B.** 0x23 in both: a line the original's removal does not send.
-- **D161. Resets before a removal or a move**
-  - **B (recommended).** One `r:01` for every flagged member of the room,
-    the leaving device included: free, and it removes a known cause of
-    discards; the original resets only the leaving device, and the
-    original is no proof.
-  - **A.** The leaving device only, as the original.
-- **D167. The member a room-flagged link radiogram names**
-  - **A (recommended).** The room's first radiator thermostat, else its
-    wall thermostat, never the moving device and never a device of
-    another room, as AP LegacyLogs' Block 6 names one for room commands;
-    T135: any member works, the room number decides, and a device of
-    another room named in the header takes it too.
-  - **B.** The metadata's master: it may be no device of the room
-    (AP RadioHealth checks it, Block 7).
+  LegacyLogs' 0x23-first change (#286) is on `main`.
+- **D159-A, with B by hand:** a move is the removal's unlink half and the
+  placement's link half, the device staying paired; removing and pairing
+  anew stays available as D168's guided action.
+- **D160-A:** 0x23 first in a move, as the original's
+  `DisassociateDeviceFromRoom` and T134's out-step; none in a removal, as
+  captured: `t:` resets the device.
+- **D161-B:** before a removal or a move, one `r:01` for every flagged
+  member of the room, the leaving device included; free, and it removes a
+  known cause of discards, though the original resets the leaving device
+  alone.
+- **D167, the owner's order:** a room radiogram names the metadata's
+  master where it is a device of the room, else the room's wall
+  thermostat, else its first radiator thermostat; never the moving
+  device, never a device of another room. A master outside its room is
+  warned of (AP RadioHealth, Block 7), only while no unread warning for
+  it exists.
+- **D168-A:** the manual re-pair is a guided action in the device's
+  panel, under `structure` and `pair`: it keeps the device's name, room
+  and configuration, removes the device (its factory reset), opens the
+  pairing and asks for the device's button, places it in its room and
+  writes its configuration back.
+- **D169-A:** D167's order is one function that moves, removals and room
+  commands share; AP LegacyLogs' Block 6 (the room-command fallback, now
+  master, then first radiator thermostat, then wall thermostat) changes to
+  call it, its session told on the owner's word.
 
 ## Analysis
 
@@ -126,9 +126,13 @@ another room set that device too.
 - `internal/cubeio/remove.go`, `RemoveCommands`: `MoveCommands`' out-part,
   then `t:`; `RemoveDevice` writes the metadata without the device.
 - `internal/server/config_api.go`: `moveDevice` (`PUT …/devices/{rf}` with
-  a room) runs the out- and in-part; a device in no room, after a pairing,
-  is placed the same way, its out-part then only a 0x23. `removeDevice`
-  (`DELETE …/devices/{rf}`).
+  a room) runs the out- and in-part, and with its copy option writes the
+  device's configuration; a device in no room, after a pairing, is placed
+  the same way, its out-part then only a 0x23. `removeDevice`
+  (`DELETE …/devices/{rf}`). Pairing: `internal/cubeio/pairing.go`,
+  `internal/server/pairing_api.go`.
+- `internal/server/server.go`: AP LegacyLogs' Block 6 picks the member a
+  room command names.
 - `internal/engine/queue.go`: wakes the room, resets the command's target
   where flagged, retries once after a discard; it logs a step's result,
   not each line's answer, so which line the Cube discarded at 04:28 and
@@ -142,9 +146,9 @@ another room set that device too.
 
 1. `internal/cubeio/remove.go`: a removal's unlink of its own: the room
    wakeup, one `r:01` per flagged member of the room (D161-B), one
-   room-flagged 0x21 naming the leaving device, addressed to the member of
-   D167-A; no 0x23, no 0x21 to the leaving device; then `t:` and `m:`.
-   A device alone in its room sends no 0x21.
+   room-flagged 0x21 naming the leaving device, addressed as D167; no
+   0x23, no 0x21 to the leaving device; then `t:` and `m:`. A device alone
+   in its room sends no 0x21.
 2. `internal/engine/queue.go`: each line's answer of a structure command
    logged at Debug, so a discard names its line.
 3. Tests: the exact lines from a room of five, of two, of one, with
@@ -156,30 +160,35 @@ another room set that device too.
   `make cross`, `gofmt -l .`, `go vet` on three platforms,
   `GUIDELINES/shared/tools/check`.
 
-### Block 2: Shared halves
+### Block 2: Shared halves and one addressee
 
-1. `internal/cubeio`: `unlinkFromRoom` (Block 1's, with a 0x23 first for
-   a move, D160-A) and `linkIntoRoom` (one room-flagged 0x20 naming the
-   device, addressed to the member of D167-A, then 0x22 to the device, as
-   T134's in-step); `linkTarget` as D167-A.
-2. A move is `unlinkFromRoom` of the old room, then `linkIntoRoom` of the
+1. `internal/cubeio`: the addressee of a room radiogram (D167, D169-A):
+   the master where it is a device of the room, else the wall thermostat,
+   else the first radiator thermostat, never a given device to leave out;
+   `linkTarget` becomes it.
+2. `unlinkFromRoom` (Block 1's, with a 0x23 first for a move, D160-A) and
+   `linkIntoRoom` (one room-flagged 0x20 naming the device, to the
+   addressee, then 0x22 to the device, as T134's in-step).
+3. A move is `unlinkFromRoom` of the old room, then `linkIntoRoom` of the
    new one (D159-A); a placement after a pairing is `linkIntoRoom` alone;
-   a removal `unlinkFromRoom` without 0x23, then `t:` and `m:`.
-3. Each half carries its own room's number: the old room's out, the new
-   room's in (T135).
-4. Tests: the exact lines of a move, a placement and a removal, with and
-   without a radiator thermostat in the room, and a wall thermostat moving.
-5. `docs/cube-protocol.md`, `docs/api-v1.md`; `CHANGELOG.d/Fixed/`.
+   a removal `unlinkFromRoom` without 0x23, then `t:` and `m:`. Each half
+   carries its own room's number (T135).
+4. Room commands name the same addressee (`internal/server/server.go`,
+   AP LegacyLogs' Block 6), in this block where that block is merged,
+   else in that block.
+5. Tests: the exact lines of a move, a placement and a removal, with and
+   without a radiator thermostat or a wall thermostat in the room, a
+   wall thermostat moving, and a master in another room.
+6. `docs/cube-protocol.md`, `docs/api-v1.md`; `CHANGELOG.d/Fixed/`.
 
 - **Verification:** as Block 1.
 
 ### Block 3: "Done", read back from the Cube
 
-1. A removal, placement or move reports done once its lines were
-   accepted and the Cube's free slots are back at their count before it,
-   read at the next greeting or `S:` reply, within 15 minutes (one wakeup
-   period and more); until then "pending", after it a Warn naming the
-   slots still held.
+1. A removal, placement or move reports done once its lines were accepted
+   and the Cube's free slots are back at their count before it, read at
+   the next greeting or `S:` reply, within 15 minutes (a wakeup period and
+   more); until then "pending", after it a Warn naming the slots still held.
 2. Afterwards no member flagged by it and no link error lasting past the
    next wakeup: else a Warn naming the device.
 3. The API's result and the UI say which ("done", "pending", "not
@@ -188,7 +197,22 @@ another room set that device too.
 
 - **Verification:** the Go gate, `make ui-test`, `GUIDELINES/shared/tools/check`.
 
-### Block 4: On hardware, with the owner
+### Block 4: A guided re-pair (D168-A)
+
+1. A route and a panel action under `structure` and `pair`: the device's
+   name, room and configuration (temperatures, week programme, valve
+   settings) are kept; the device is removed (Block 1, its factory reset);
+   the pairing opens and the UI asks for the device's button; the paired
+   device, matched by its serial, is placed in its room (Block 2) and its
+   configuration written back.
+2. A device that does not pair within the pairing time: the kept settings
+   stay for a retry, and the UI says so.
+3. Six languages; `docs/ui.md`, `docs/api-v1.md`.
+4. Tests against the fake Cube, its pairing answered and not.
+
+- **Verification:** the Go gate, `make ui-test`, `GUIDELINES/shared/tools/check`.
+
+### Block 5: On hardware, with the owner
 
 Under a gate of its own, each radio command said before it is sent:
 
@@ -199,8 +223,10 @@ Under a gate of its own, each radio command said before it is sent:
    check of "Lessons from the hardware days".
 2. A removal of a device the owner chooses, through Massimo; read back:
    gone from the Cube's lists, the room's members as before.
-3. Cost: about 8 % duty per move, a few radiograms per removal.
-4. A NOTE of how it went.
+3. Where the owner has one at hand, a re-pair (Block 4), the owner at the
+   device.
+4. Cost: about 8 % duty per move, a few radiograms per removal.
+5. A NOTE of how it went.
 
 - **Verification:** each read-back as listed; nothing discarded.
 
@@ -211,7 +237,7 @@ For Block 1:
 ```
 fix(cubeio/remove): Remove a device with one room-flagged 0x21, its room's flags reset first
 
-A removal resets every flagged member of the room and sends one 0x21 to a member of the room naming the leaving device, without the 0x23 and the 0x21 to the leaving device, as the original software removed one on 2026-11-15 (AP DeviceUnPairingFix v1.1, Block 1).
+A removal resets every flagged member of the room and sends one 0x21 to the room's addressee naming the leaving device, without the 0x23 and the 0x21 to the leaving device, as the original software removed one on 2026-11-15 (AP DeviceUnPairingFix v1.2, Block 1).
 
 Key changes:
 - internal/cubeio/remove.go: the removal's own unlink
@@ -226,16 +252,16 @@ For Block 2:
 ```
 fix(cubeio/move): A move is the removal's unlink and the placement's link
 
-Removal, placement and move share two halves, each with one room-flagged link radiogram carrying its room's number (AP DeviceUnPairingFix v1.1, Block 2).
+Removal, placement and move share two halves, each with one room-flagged link radiogram carrying its room's number, and every room radiogram names its member by one rule: the master in the room, else the wall thermostat, else the first radiator thermostat (AP DeviceUnPairingFix v1.2, Block 2).
 
 Key changes:
-- internal/cubeio: unlinkFromRoom and linkIntoRoom; MoveCommands and RemoveCommands built on them; linkTarget
+- internal/cubeio: the addressee; unlinkFromRoom and linkIntoRoom; MoveCommands and RemoveCommands built on them
 - the exact-line tests of a move, a placement and a removal
 
 Assisted-by: claude-code:claude-opus-5-5
 ```
 
-Blocks 3 and 4: `feat(cubeio/done)`, and a NOTE.
+Blocks 3 to 5: `feat(cubeio/done)`, `feat(api/repair-pairing)`, and a NOTE.
 
 ## Change History
 
@@ -245,3 +271,8 @@ Blocks 3 and 4: `feat(cubeio/done)`, and a NOTE.
   sequence judged by its results, the original a baseline; D161 to B;
   D167 added; Block 2 no longer waits for T134; Block 3 reads "done"
   back from the Cube; the hardware run is Block 4.
+- v1.2 (2026-11-15): folds NOTE DeviceUnPairingFix v1.1: owner decisions;
+  D159-A with B by hand, D160-A, D161-B, D167 in the owner's order,
+  D168-A, D169-A settled; Block 2 makes the addressee one function, room
+  commands included; Block 4 the guided re-pair; the hardware run is
+  Block 5.

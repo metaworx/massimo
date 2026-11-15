@@ -1,22 +1,24 @@
-# AP RadioHealth v1.1: Communication errors, checks and repair
+# AP RadioHealth v1.2: Communication errors, checks and repair
 
 ## TL;DR
 
 Massimo finds, resets and repairs what goes wrong between the Cube and its
-devices: the error flag (byte 5's 0x08), lost room commands, disagreeing
-members, and a Cube whose rooms differ from its list. The original software
-is the baseline, not the proof: a command counts by its results.
+devices: the error flag (0x08), lost room commands, disagreeing members, and
+rooms that differ from the list. A command counts by its results; the
+original software is a baseline.
 
 - **Byte 4:** "unknown" → the failed radiogram's type, with the flag (D112-A)
 - **Room command:** no reset → one `r:01` per flagged member of the
   numbered room first, for 0x08 only (D110, D111)
 - **Names:** "transmit error" → "communication error" (D154-A)
-- **A flagged device that reports:** reset once a day at most (D102)
+- **A flagged device that reports:** reset once a day at most, a Warn
+  when the flag returns (D102-B)
 - **Watched:** full slots, returning flags, C lines and room masters
   against the metadata (D165), unconfirmed commands, disagreeing members,
   programme drift (D162-A)
 - **Repair:** a `repair` capability, owner and manager (D166); resets,
-  re-sent configuration, re-linked rooms; "unlink all" a step of its own (D163)
+  re-sent configuration, re-linked rooms, automatically where safe (D157);
+  "unlink all" a step of its own (D163)
 
 ### Blocks
 
@@ -32,6 +34,7 @@ is the baseline, not the proof: a command counts by its results.
 10. The `repair` capability
 11. Repair actions: resets, configuration, links, rooms
 12. "Unlink all and re-link", behind its own warning
+13. A room whose link error lasts is re-linked, where it is safe
 
 ## Discussion
 
@@ -52,7 +55,12 @@ would be to focus on how to reliably recover from erroneous situations";
 and "We don't need to know the internals of the radio signals. We need to
 know the working commands we need to send to the CUBE in order to get
 reliable results." Then "D 162 A, 163 A … with B as a separate repair step
-with a special warning and confirmation", and "PLAN+ both".
+with a special warning and confirmation", and "PLAN+ both". To the gate
+of v1.1: "102 B - with a warning if it comes back with the next report?",
+"157 EVAL B - as long as we know all devices have reported recently …
+only once, reporting as warning, marked seen if the auto-repair clears it.
+an error if it stays for more than 24hrs? what would mark a 'clear'?",
+and "does D102 need a 'job queue'?"
 
 **Settled:**
 
@@ -78,45 +86,44 @@ with a special warning and confirmation", and "PLAN+ both".
   second confirmation.
 - **D113:** moot (#283, #287).
 
+**Settled at the gate of v1.1** (NOTE RadioHealth v1.1: owner decisions,
+folded in here):
+
+- **D102-B, with a warning:** one `r:` when a flagged device reports, at
+  most once a day; its flag back by its next report, or later that day,
+  a Warn and no more automatic resets for it until it stays clear a day;
+  still flagged after 24 hours, an Error. The flag is set only by a failed
+  radiogram of the Cube, so a flag back so soon means the Cube failed again.
+- **D110-A:** one `r:01` per flagged member of the numbered room before a
+  room command; T135 showed the room number deciding every member.
+- **D111-A:** 0x08 only; 0x40 is the devices' own report.
+- **D164-A:** detection, reset and repair in this plan; AP LegacyLogs keeps
+  its Block 15, which Block 8 builds on.
+- **D165-A:** C lines and room masters against the metadata at every
+  greeting, C line and metadata write, at no radio cost.
+- **D166-A:** a new `repair` capability, the owner's and `manager`'s by a
+  migration, in the integration role's ceiling; "unlink all and re-link"
+  needs `repair` and `structure`.
+- **No job queue** for D102 (the owner's question): see the Analysis.
+
 **Open, written here as recommended:**
 
-- **D102. A flagged device that reports**
-  - **B (recommended).** One `r:` when it reports, at most once a day per
-    device, logged at Info (Block 4): the flag is then stale, and an
-    all-flagged room loses room commands. `r:` costs nothing.
-  - **C.** Reset only before commands (Block 2 alone).
-  - **A.** An amber "earlier error": wrong, the flag stays until a reset.
-- **D110. Room commands to a room with flagged members**
-  - **A (recommended).** One `r:01,<address>` for each member of the
-    numbered room whose 0x08 is set, silent members included, before the
-    room command: the original does so in practice, and T135 showed the
-    room number deciding every member.
-  - **B.** Leave it: a room command to an all-flagged room is lost.
-- **D111. What is reset**
-  - **A (recommended).** 0x08 only; 0x40 is the devices' own report.
-  - **B.** 0x40 as well: a line that does nothing.
-- **D157. An automatic link repair for 0x40**
-  - **A (recommended).** None: the Cube cannot repair a link between two
-    devices; Block 6 names a lasting 0x40, and Block 11's re-link is
-    there for the owner.
-  - **B.** Re-link a room automatically when a member's 0x40 lasts a day.
-- **D164. Where the checks and repair go**
-  - **A (recommended).** Here, Blocks 7–12: detection, reset and repair in
-    one plan. AP LegacyLogs keeps its Block 15 (room commands "not
-    confirmed" per member, D135-B); Block 8 builds on it.
-  - **B.** A plan of its own: three plans on the same flags and rooms.
-- **D165. C lines against the metadata**
-  - **A (recommended).** At every greeting, every C line after a change,
-    and every metadata write, at no radio cost (Block 7); with the owner's
-    addition, whether each room's master in the metadata is a thermostat
-    of that room.
-  - **B.** At the greeting alone: a half-done move shows hours later.
-- **D166. The capability**
-  - **A (recommended).** A new `repair`: the owner's, `manager`'s by a
-    migration, in the integration role's ceiling as `structure` is.
-    "Unlink all and re-link" needs `repair` and `structure`.
-  - **B.** The existing ones (`setpoint`, `configure`, `structure`):
-    nothing to grant or withhold repair as a whole.
+- **D157. An automatic re-link when a member's 0x40 lasts**
+  - **B, with conditions (recommended).** Block 13:
+    - only when every thermostat of the room reported within 15 minutes
+      and no member has 0x08; window contacts left out of the condition,
+      and a silent partner reported as such, which a re-link cannot fix;
+    - no wakeup to probe: it makes devices listen, not report;
+    - once per room and day, a Warn when it acts, marked seen when it
+      clears;
+    - cleared: the Cube's free slots back at their count before it, then
+      every member that had 0x40 without it at two reports in a row, and
+      no new 0x08;
+    - an Error when 0x40 lasts 24 hours, repaired or not;
+    - only after Block 11's manual re-link passed on the spare Cube and on
+      hardware; its setting off until then.
+  - **A.** None automatic: Block 6 names a lasting 0x40, Block 11's
+    re-link is the owner's.
 
 ## Analysis
 
@@ -147,6 +154,14 @@ addressing"; AP LegacyLogs' analyses of T134 and T135 on `main`):
   the next wakeup (T134).
 - **Names:** the original reads 0x08 as its radio error and names 0x40
   `transmitError` (parameter `unreachable`).
+- **Time:** no job queue is needed. Each Cube is polled every 10 s, and a
+  changed entry is an event: D102's reset and its warning are checked at
+  the device's report. "Still flagged after 24 hours" is a timer keyed by
+  the device, set when the flag shows and cancelled when it clears, as the
+  notify engine's `delay` and `cancel` work (`internal/notify/rules.go`);
+  its periodic `scan` covers a device gone silent. The times (flagged
+  since, last reset) are kept per device and seeded at `serve`'s start from
+  the store's log of flag changes, so a restart does not set them back.
 - **C lines and metadata:** a device's room for the Cube is its C line's
   room byte, not the metadata's; the previous owner's unlisted devices,
   their C lines in rooms 4 and 5, blocked those rooms' commands. The Cube
@@ -213,10 +228,13 @@ texts in all six languages (FR, IT, NL, PL machine-translated, marked).
 
 ### Block 4: A flagged device that reports is reset (D102-B)
 
-1. `serve`: a device whose 0x08 is set and which reports (a new valid
-   entry, values changed) gets one `r:01`, at most once a day, at Info;
+1. `serve`, at each changed entry of a device whose 0x08 is set (a new
+   valid entry, its values changed): one `r:01`, unless its last
+   automatic reset is less than a day old or Block 6 holds it; at Info;
    not while a command of Massimo to its room is in flight.
-2. Tests against the fake Cube.
+2. The device's last reset kept, and seeded at start from the store's log.
+3. Tests against the fake Cube: a report, one `r:`; another the same day,
+   none.
 
 - **Verification:** the Go gate, `make race`, `GUIDELINES/shared/tools/check`.
 
@@ -230,12 +248,17 @@ texts in all six languages (FR, IT, NL, PL machine-translated, marked).
 
 - **Verification:** the Go gate, `make ui-test`, `GUIDELINES/shared/tools/check`.
 
-### Block 6: A flag that keeps coming back
+### Block 6: A flag that keeps coming back (D102-B)
 
-1. A device flagged again within a day of a reset: a Warn once a day with
-   the failed radiogram; Block 4 leaves it alone until it stays clear a day.
-2. A 0x40 that lasts a day is named the same way (D157-A).
-3. Tests with the fake Cube.
+1. A device whose 0x08 is back by its next report after a reset, or later
+   that day: a Warn, once a day, with the failed radiogram; Block 4 leaves
+   it alone until it stays clear for a day.
+2. A device flagged for 24 hours: an Error, through a timer keyed by the
+   device (the notify engine's `delay`, cancelled when the flag clears);
+   the flag's start seeded from the store's log at start.
+3. A 0x40 that lasts 24 hours: an Error the same way; Block 13 may act
+   before it.
+4. Tests with the fake Cube and the notify engine's clock.
 
 - **Verification:** the Go gate, `GUIDELINES/shared/tools/check`.
 
@@ -246,7 +269,8 @@ texts in all six languages (FR, IT, NL, PL machine-translated, marked).
    C line in a room with no metadata entry (it blocks that room); a
    metadata entry the Cube has no C line for; a type that differs;
    a room whose master in the metadata (the room's address in the M line)
-   is no device of the Cube, a device of another room, or no thermostat.
+   is no device of the Cube, a device of another room, or no thermostat,
+   warned only while no unread warning for it exists.
    Hidden and parked devices, and the minutes after Massimo's own
    structure change (until the C line follows, 5 minutes at most), are
    left out.
@@ -303,9 +327,9 @@ no flag), in the Cube's, the room's and the device's panels:
    its room's agreeing members: Block 7's third case.
 3. Place a device in the room the metadata lists, or list it where its
    C line has it (metadata only, no radio): Block 7's first case.
-   Name a thermostat of the room as its master, its first radiator
-   thermostat, else its wall thermostat (metadata only): Block 7's
-   master case.
+   Name a thermostat of the room as its master, its wall thermostat,
+   else its first radiator thermostat (D167 of AP DeviceUnPairingFix,
+   metadata only): Block 7's master case.
 4. Re-link a room, adding only: each member's group and links again,
    with AP DeviceUnPairingFix's link half; first on the spare Cube.
 5. Tests: the exact lines of each against the fake Cube.
@@ -324,6 +348,23 @@ no flag), in the Cube's, the room's and the device's panels:
 
 - **Verification:** the Go gate, `make ui-test`, the spare Cube's run.
 
+### Block 13: An automatic re-link where it is safe (D157-B)
+
+Only once Block 11's re-link has passed on the spare Cube and on hardware.
+
+1. A member whose 0x40 lasts an hour, every thermostat of its room
+   reported within 15 minutes, no member with 0x08: the room re-linked
+   once (Block 11's re-link, adding only), a Warn naming it; once per room
+   and day, behind the duty hold.
+2. Cleared: the slots back at their count, then no 0x40 at two reports in
+   a row of each member that had it, and no new 0x08: the Warn marked
+   seen. Not cleared within the day: Block 6's Error.
+3. A setting in System settings → Maintenance, off by default until the
+   hardware run; six languages.
+4. Tests against the fake Cube: the conditions met and not met.
+
+- **Verification:** the Go gate, `make ui-test`, `GUIDELINES/shared/tools/check`.
+
 ## Proposed commit message
 
 For Block 1:
@@ -331,7 +372,7 @@ For Block 1:
 ```
 feat(cube/errors): The failed radiogram of a communication error
 
-Byte 4 of an L entry is decoded as the type of the Cube's last radiogram to the device that failed, read only with the error flag, logged with it and given in the device's state (AP RadioHealth v1.1, Block 1).
+Byte 4 of an L entry is decoded as the type of the Cube's last radiogram to the device that failed, read only with the error flag, logged with it and given in the device's state (AP RadioHealth v1.2, Block 1).
 
 Key changes:
 - internal/protocol/cube: the radiogram types; DeviceState.FailedRadiogram
@@ -346,7 +387,7 @@ For Block 2:
 ```
 fix(engine/queue): Room commands reset their flagged members first
 
-The queue sends one r: for every device of the numbered room whose error flag is set before a room command, as the original software does, and no longer resets for the link error alone (AP RadioHealth v1.1, Block 2).
+The queue sends one r: for every device of the numbered room whose error flag is set before a room command, as the original software does, and no longer resets for the link error alone (AP RadioHealth v1.2, Block 2).
 
 Key changes:
 - internal/engine/queue.go: the room's flagged members reset before a room command; deviceInError reads 0x08 only
@@ -358,7 +399,8 @@ Assisted-by: claude-code:claude-opus-5-5
 The other blocks follow the same form: `feat(ui/errors)`,
 `feat(serve/errors)`, `feat(serve/slots)`, `feat(serve/errors)`,
 `feat(serve/congruence)`, `feat(engine/confirm)`, `feat(serve/drift)`,
-`feat(auth/repair)`, `feat(api/repair)`, `feat(api/repair)`.
+`feat(auth/repair)`, `feat(api/repair)`, `feat(api/repair)`,
+`feat(serve/relink)`.
 
 ## Change History
 
@@ -369,3 +411,7 @@ The other blocks follow the same form: `feat(ui/errors)`,
   settled; D164, D165, D166 added, D165 with the owner's room-master
   check; Blocks 7–12 (checks and repair); Block 2 takes the room's
   members by their C lines.
+- v1.2 (2026-11-15): folds NOTE RadioHealth v1.1: owner decisions;
+  D102-B with its warning and Error, D110-A, D111-A, D164-A, D165-A,
+  D166-A settled; no job queue for D102; D157-B with conditions, Block 13;
+  the room master named in D167's order.
