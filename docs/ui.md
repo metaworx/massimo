@@ -297,6 +297,22 @@ Every room has a tile:
   It may be out of range or its batteries flat,
   but a thermostat whose valve stays shut outside the heating season can be quiet as well.
   Its values are greyed.
+- **Where the Cube and its room list differ** (`mismatches` of `docs/api-v1.md`,
+  "The Cube's lines against its room list"), a notice each, with since when,
+  naming the device and both rooms:
+  "Radiator: in Office by its configuration on the Cube, in Living room in the
+  room list"; a device the room list does not have whose configuration puts it
+  in the room, which can block the room's commands;
+  a device the room list has and the Cube does not;
+  another type on each side;
+  the room's master in the room list that is no device of the Cube,
+  in another room, or no thermostat;
+  and a thermostat whose week programme or temperatures differ from the rest
+  of the room.
+  The device's row in the device list has a badge for each,
+  "in Office for the Cube", "own week programme",
+  the whole sentence its tooltip;
+  the log has its **room list** line, a warning until the two agree again.
 - **SET** is the set temperature.
   The up and down chevrons next to it change it in steps of 0.5 °C;
   the value is sent 2 seconds after the last click, or at once with **Save**;
@@ -966,6 +982,14 @@ the browser keeps which cards are folded.
   and **Use the found address** and **Follow discovery**, which save either
   at once (a Cube of `-addr` or `-sn` has the notice alone);
   the card's badge counts such Cubes;
+  where few of the Cube's memory slots stayed free for an hour with nothing of
+  the server's on its way (`slots_low`), a badge, amber **few memory slots
+  free** below 5, red **memory slots full** below 2, and a notice with the
+  free slots and since when, that they hold radiograms for devices that do not
+  answer and that radio commands wait for free slots, pointing to
+  **Reboot the Cube** below, the owner's, which drops them;
+  the log has its **memory slots** line, a warning below 5, an error below 2,
+  until the slots are free;
   where its settings came from (the settings file, changed here,
   or for this run only), and the fields **Name**, **Address** (empty:
   the address the Cube answers discovery from, shown in grey),

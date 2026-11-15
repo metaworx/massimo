@@ -403,6 +403,69 @@ def test_log_change_line(page, case):
     show_view(page, "tiles")
 
 
+SLOTS_SAYS = {
+    "en": ("few of the Cube's memory slots are free, 4 since ", "the Cube's memory slots stay full, 1 free since ",
+           "the Cube's memory slots are free again, 50 free (fewer than 5 since "),
+    "de": ("nur wenige Speicherplätze des Cubes sind frei, 4 seit ", "die Speicherplätze des Cubes bleiben voll, 1 frei seit ",
+           "die Speicherplätze des Cubes sind wieder frei, 50 frei (weniger als 5 seit "),
+}
+
+
+def test_log_slots_lines(page, case):
+    """A Cube's memory slots that stay held, short and full, and are free
+    again, say so with the free slots and since when (AP RadioHealth,
+    Block 5, D192-A)."""
+    show_view(page, "log")
+    page.wait_for_timeout(1600)
+    page.evaluate("""() => {
+      const since = new Date(Date.now() - 7200e3).toISOString();
+      const full_since = new Date(Date.now() - 3600e3).toISOString();
+      const send = (summary, level) => state.events.dispatchEvent(new MessageEvent("slots", { data: JSON.stringify({
+        kind: "slots", source: "cube", level, time: new Date().toISOString(), summary }) }));
+      send({ state: "low", free_slots: 4, since }, "warn");
+      send({ state: "full", from: "low", free_slots: 1, since, full_since }, "error");
+      send({ state: "free", free_slots: 50, since }, "info");
+    }""")
+    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-slots').length === 3", 5), "the three lines"
+    texts = page.locator("#log-lines .log-line.kind-slots .log-text").all_inner_texts()
+    for want, what in zip(SLOTS_SAYS[case.lang], ("short", "full", "free again")):
+        assert any(s.startswith(want) for s in texts), f"the slots {what}: {texts}"
+    show_view(page, "tiles")
+
+
+MISMATCH_SAYS = {
+    "en": ("Ghost: in Upstairs by its configuration on the Cube, and not in the room list, which can block the room's commands.",
+           "agrees again: Ghost: in Upstairs by its configuration on the Cube, and not in the room list"),
+    "de": ("Ghost: laut seiner Konfiguration im Cube in Upstairs und nicht in der Raumliste, was die Befehle an den Raum blockieren kann.",
+           "stimmt wieder überein: Ghost: laut seiner Konfiguration im Cube in Upstairs und nicht in der Raumliste"),
+}
+
+
+def test_log_mismatch_lines(page, case):
+    """A C line in a room for a device the room list does not have, and
+    the same agreeing again, name the device and the room (AP
+    RadioHealth, Block 7)."""
+    show_view(page, "log")
+    page.wait_for_timeout(1600)
+    page.evaluate("""() => {
+      const m = { finding: "unlisted", device: "0a0a01", name: "Ghost", room: 9, room_name: "Upstairs", cube_room: 9,
+        cube_room_name: "Upstairs", cube_type: "radiator_thermostat", since: new Date().toISOString() };
+      // as the stream's handler takes them, without its reload of the
+      // rooms, which reads the log again from the server
+      const send = (st, level) => appendLogEvent({ kind: "mismatch", source: "cube", level, device: m.device,
+        time: new Date().toISOString(), summary: Object.assign({ state: st }, m) });
+      send("found", "warn");
+      send("cleared", "info");
+    }""")
+    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-mismatch').length === 2", 5), \
+        "the two lines, and none of the server's: its fixture agrees with its room list"
+    texts = page.locator("#log-lines .log-line.kind-mismatch .log-text").all_inner_texts()
+    found, cleared = MISMATCH_SAYS[case.lang]
+    assert found in texts, f"the finding: {texts}"
+    assert any(s.startswith(cleared) for s in texts), f"the finding agreeing again: {texts}"
+    show_view(page, "tiles")
+
+
 ERROR_RESET_SAYS = {
     "en": ("communication error reset", "at the device's report; the server does it once a day at most"),
     "de": ("Kommunikationsstörung zurückgesetzt", "bei der Meldung des Geräts; der Server tut es höchstens einmal am Tag"),
