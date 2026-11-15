@@ -232,10 +232,12 @@ function showUnlistedResult(text, ok) {
 async function removeFromCube(d) {
   const label = deviceName(d);
   try {
-    await api("DELETE", devicePath(d));
+    const res = await api("DELETE", devicePath(d));
     delete state.details[d.rf_address];
     await loadRooms();
-    return { text: t("device.removed", { device: label }), ok: true };
+    let text = t("device.removed", { device: label });
+    if (res && res.confirmation === "pending") text += " " + t("result.structurePending");
+    return { text, ok: true };
   } catch (e) {
     return { text: errorText(label, e), ok: false };
   }

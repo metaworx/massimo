@@ -184,9 +184,14 @@ type Options struct {
 	// defaults.
 	FollowUpDelays       []time.Duration
 	FollowUpReconnectGap time.Duration
-	Logger               *slog.Logger
-	Version              string
-	Queue                engine.Options
+	// StructureChecks are the times after a removal, placement or move
+	// at which the Cube's free slots are read back (structure.go), the
+	// last with a reconnect where none was read; nil takes
+	// DefaultStructureChecks.
+	StructureChecks []time.Duration
+	Logger          *slog.Logger
+	Version         string
+	Queue           engine.Options
 	// Proxy lists the LAN listeners on which the server itself answers
 	// as a Cube (see internal/proxy), one per Cube.
 	// One that cannot listen is tried again until it does.

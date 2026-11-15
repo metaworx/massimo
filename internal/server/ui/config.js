@@ -469,6 +469,7 @@ async function sendDevice(room, c, d, moveConfirmed) {
       const res = await api("PUT", devicePath(d), meta);
       const done = t(meta.room_id !== undefined ? "cfg.devMoved" : "cfg.devRenamed", { name: label });
       lines.push(res && res.budget ? t("cfg.dutySuffix", { text: done, duty: res.budget.duty_cycle_pct }) : done);
+      if (res && res.confirmation === "pending") lines.push(t("result.structurePending"));
     }
   } catch (e2) {
     lines.push(errorText(label, e2));

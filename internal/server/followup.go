@@ -45,10 +45,13 @@ type followUp struct {
 	settle    time.Duration
 	reconnect bool // reconnects allowed (the periodic refresh is on)
 
+	checks []time.Duration // when a structure change's budget is read back
+
 	mu            sync.Mutex
 	devices       map[cube.RFAddress]*followed
 	budgetAfter   time.Time // a radio write wants a budget refresh after this
 	lastReconnect time.Time
+	watches       []*structureWatch // structure changes read back (structure.go)
 	wake          chan struct{}
 }
 
@@ -58,7 +61,7 @@ type followed struct {
 	next     time.Time
 }
 
-func newFollowUp(delays []time.Duration, gap time.Duration, reconnect bool) *followUp {
+func newFollowUp(delays []time.Duration, gap time.Duration, reconnect bool, checks []time.Duration) *followUp {
 	if len(delays) == 0 {
 		delays = DefaultFollowUpDelays
 	}
@@ -71,7 +74,10 @@ func newFollowUp(delays []time.Duration, gap time.Duration, reconnect bool) *fol
 		total += d
 	}
 	settle = min(settle, total)
-	return &followUp{delays: delays, gap: gap, settle: settle, reconnect: reconnect,
+	if len(checks) == 0 {
+		checks = DefaultStructureChecks
+	}
+	return &followUp{delays: delays, gap: gap, settle: settle, reconnect: reconnect, checks: checks,
 		devices: map[cube.RFAddress]*followed{}, wake: make(chan struct{}, 1)}
 }
 
@@ -159,6 +165,11 @@ func (f *followUp) nextDue(now time.Time, rt *runtime) time.Time {
 			due = d.next
 		}
 	}
+	for _, w := range f.watches {
+		if w.next.Before(due) {
+			due = w.next
+		}
+	}
 	if len(f.devices) == 0 && !f.budgetAfter.IsZero() {
 		at := f.budgetAfter
 		if next := f.lastReconnect.Add(f.gap); next.After(at) {
@@ -174,6 +185,7 @@ func (f *followUp) nextDue(now time.Time, rt *runtime) time.Time {
 // followUpStep re-reads the C lines that are due, and reconnects for the
 // budget when nothing else is left.
 func (s *Server) followUpStep(ctx context.Context, rt *runtime) {
+	s.structureStep(ctx, rt)
 	f := rt.follow
 	now := time.Now()
 	f.mu.Lock()

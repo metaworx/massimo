@@ -358,6 +358,12 @@ Every room has a tile:
     and it has to be paired again to be used again.
     A device out of range or out of battery stays in the Cube's memory
     and comes back under the devices without a room.
+    After a move, a removal or a device put into a room,
+    the message adds that the room's devices take it at their next wakeup
+    and that the log says when it is done:
+    the log's **device change** line, within about 15 minutes,
+    a warning where the Cube still holds memory slots for it
+    or a device of the room was left with an error.
   - **Week programme**:
     one bar per day.
     - A click on a day selects it together with every day that has the same programme.

@@ -439,6 +439,14 @@ func (s *Server) editConfigLocked(rf cube.RFAddress, edit func(c []byte, t cube.
 // current L line and C lines, without removed devices.
 func (s *Server) liveGreetingLocked() []cube.Message {
 	out := append([]cube.Message(nil), s.Greeting...)
+	if s.free != nil {
+		for i, g := range out {
+			if f := strings.Split(g.Data, ","); g.Type == 'H' && len(f) > 6 {
+				f[6] = fmt.Sprintf("%02x", *s.free)
+				out[i] = cube.Message{Type: 'H', Data: strings.Join(f, ",")}
+			}
+		}
+	}
 	if !s.live {
 		return out
 	}

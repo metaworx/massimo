@@ -71,6 +71,15 @@ func eventMessage(ev event) string {
 		if state, ok := ev.Summary["state"].(string); ok {
 			return "command " + state
 		}
+	case "structure":
+		switch {
+		case ev.Summary["outcome"] == "done":
+			return "structure change done, the cube's free memory slots back"
+		case ev.Summary["no_reading"] == true:
+			return "structure change not confirmed, no budget read from the cube since"
+		default:
+			return "structure change not confirmed, memory slots still held"
+		}
 	case "hold":
 		switch ev.Summary["reason"] {
 		case engine.HoldDutyCycle:
