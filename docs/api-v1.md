@@ -1017,7 +1017,7 @@ keep the default:
 
 ```json
 {"cube_offline": {"on": true, "after_min": 10}, "window_open": {"on": true, "after_min": 30},
- "frost": {"on": true, "below_c": 8}, "battery_low": {"on": true}, "device_error": {"on": true},
+ "frost": {"on": true, "below_c": 8}, "battery_low": {"on": true}, "battery_weak": {"on": true}, "device_error": {"on": true},
  "device_stale": {"on": false}, "paired": {"on": false}, "cube_found": {"on": false}, "update": {"on": false}}
 ```
 
@@ -1026,10 +1026,11 @@ keep the default:
 | `cube_offline` | the Cube disconnected and is not back within `after_min` | on, 10 min |
 | `cube_online` | the Cube is back after a `cube_offline` was told | on |
 | `window_open` | a window opened and is still open after `after_min` | on, 30 min |
-| `battery_low` | a device's battery went low | on |
+| `battery_low` | a device's battery flag held for 15 minutes: change the batteries (its `battery` `low`) | on |
+| `battery_weak` | a device's battery flag seen, as under the valve motor's load, and still weak after 15 minutes (its `battery` `weak`); once until a long valve move goes by without it | on |
 | `device_error` | a device reports an error or a link error | on |
 | `frost` | a device's measured temperature fell under `below_c`; again once it rose half a degree above | on, 8 °C |
-| `device_stale` | a thermostat went past the stale threshold (`stale_after`) | off |
+| `device_stale` | a thermostat went past the stale threshold (`stale_after`, `stale_after_wall`) | off |
 | `paired` | a device joined by pairing | off |
 | `cube_found` | discovery found a Cube that is not configured | off |
 | `update` | `GET /api/v1/update` saw a newer release | off |
@@ -1461,7 +1462,8 @@ Until then it is in `proxy_failing`, not in `proxy_listening`:
 the share of the hourly radio budget already used,
 and the free memory slots (each unacknowledged radiogram occupies one).
 `pending_radiograms` is the number of slots in use,
-that is commands the Cube has sent and no device has acknowledged yet;
+that is commands the Cube has sent and no device has acknowledged yet,
+all 50 when no slot is free, and 0 until the Cube has reported its budget;
 a setpoint shows in a device's state once that device has acknowledged it,
 and the mode follows only with its next report,
 so a non-zero value says the states may still change.
@@ -1545,10 +1547,12 @@ The server's settings in the store:
 
 ```json
 {
-  "stale_after":       {"value": "24h", "default": "24h", "set": false, "in_effect": "24h", "applies": "now"},
+  "stale_after":       {"value": "50h", "default": "50h", "set": false, "in_effect": "50h", "applies": "now"},
+  "stale_after_wall":  {"value": "24h", "default": "24h", "set": false, "in_effect": "24h", "applies": "now"},
   "poll_interval":     {"value": "10s", "default": "10s", "set": false, "in_effect": "10s", "applies": "restart"},
   "refresh_interval":  {"value": "6h",  "default": "6h",  "set": false, "in_effect": "6h",  "applies": "restart"},
   "discover_interval": {"value": "30m", "default": "30m", "set": false, "in_effect": "30m", "applies": "restart"},
+  "duty_wait":         {"value": "10m", "default": "10m", "set": false, "in_effect": "10m", "applies": "restart"},
   "window_warn_after": {"value": "5m",  "default": "5m",  "set": false, "in_effect": "5m",  "applies": "now"},
   "window_alert_after": {"value": "10m", "default": "10m", "set": false, "in_effect": "10m", "applies": "now"},
   "update.channel":    {"value": "alpha", "default": "alpha", "set": false, "in_effect": "alpha", "applies": "now"},
@@ -1565,9 +1569,17 @@ The server's settings in the store:
 10 seconds by default, which costs no radio time;
 `refresh_interval` how often it connects to each Cube anew and reads
 everything the Cube holds, 6 hours by default;
-`discover_interval` how often it looks for Cubes on the LAN, 30 minutes by default.
-`stale_after` is when a thermostat that has not changed counts as stale,
-and applies at once; the intervals apply at the next start.
+`discover_interval` how often it looks for Cubes on the LAN, 30 minutes by default;
+`duty_wait` how long radio commands wait while a Cube's duty cycle is used up
+before the server reads the Cube's budget again by a new connection,
+which costs no radio time, 10 minutes by default:
+the duty cycle falls within the hour (docs/cube-protocol.md), so the server
+does not wait for the next full hour, and holds again while it is still used up.
+`stale_after` is when a radiator thermostat that has not changed counts as stale,
+50 hours by default, since an idle one changes its entry once a day and not on
+its decalcification day (docs/cube-protocol.md, "How devices report");
+`stale_after_wall` the same for a wall thermostat, 24 hours by default;
+both apply at once, the intervals at the next start.
 `window_warn_after` and `window_alert_after` are how long a window may stay open
 before it counts as open too long, a warning and then an alert
 (5 and 10 minutes, 1m to 24h, the alert not under the warning, at once;
@@ -1618,8 +1630,8 @@ with `null` for the default and `"0"` to switch the refresh or the periodic disc
 A number setting takes a JSON number, or the number as a string,
 `auth.password_login` and `integrations.requests` `true` or `false`,
 `announce` `auto`, `on` or `off`, and `update.channel` a name.
-The ranges: `stale_after` 1h to 720h, `poll_interval` 10s to 1h,
-`refresh_interval` 10m to 168h, `discover_interval` 1m to 24h,
+The ranges: `stale_after` and `stale_after_wall` 1h to 720h, `poll_interval` 10s to 1h,
+`refresh_interval` 10m to 168h, `discover_interval` 1m to 24h, `duty_wait` 1m to 1h,
 `window_warn_after` and `window_alert_after` 1m to 24h.
 Every value is checked before any is written.
 The answer is that of `GET`.
@@ -1772,6 +1784,11 @@ Device types: `radiator_thermostat`, `radiator_thermostat_plus`,
 it is false for every device after a Cube restart until the device transmits
 again (window contacts only do so on a window change),
 and `state` is then absent.
+It is false too for a device the Cube has not heard for some minutes, whose
+entry the Cube marks out of date (a wall thermostat after about five minutes of
+silence, docs/cube-protocol.md): such a device has `out_of_date: true` and
+`last_known`, the values of its last report, as `state` holds them,
+with `received` and `last_seen` as old as they are.
 `ready` on a room is true when all its devices have reported,
 which is the condition for the Cube to accept a room command.
 Thermostats carry `mode` (`auto`, `manual`, `vacation`, `boost`), `setpoint`,
@@ -1782,6 +1799,19 @@ shutter contacts carry `window_open`.
 `error` is the Cube's transmit error flag,
 `link_error` a failed link with a partner device,
 `panel_locked` (present when true) the key lock on the device.
+`battery_low` is the device's battery flag as the Cube shows it now;
+`battery`, beside `state`, is the level the server keeps from its history:
+`ok`; `weak` once the flag has been seen, as a radiator thermostat shows it for
+a few minutes under the load of its valve motor days before it stays;
+`low` once the flag has stayed for 15 minutes.
+A weak device is `ok` again once a long valve move has gone by without the flag:
+its next decalcification, a valve move of 50 points or more,
+or for a device without a valve a day;
+a low one an hour after the flag went, with new batteries.
+The levels outlive a restart: the server reads them back from its log
+(docs/cube-protocol.md, "How devices report").
+A change of a device's level is a `battery` event in the log,
+its `summary` the `level` and the one before (`from`); `low` at warn.
 
 How old the values are: a device with state also has `received`,
 the time per value of `state` (same names) at which the server saw its current
@@ -1814,7 +1844,9 @@ the decalcification day, at the programme's switch points in auto,
 and not at all on vacation, when those bytes carry the end:
 the server keeps the last one until a new one comes,
 and `received.actual_temp` says how old it is.
-`stale` is a hint: a thermostat out of range or with a flat battery goes quiet,
+`stale` is a hint, after `stale_after` for a radiator thermostat (50 hours by
+default) and `stale_after_wall` for a wall thermostat (24 hours):
+a thermostat out of range or with a flat battery goes quiet,
 but so may one whose valve stays shut outside the heating season.
 Shutter contacts and eco buttons transmit only on events and are never stale.
 
@@ -2004,7 +2036,14 @@ and returned by themselves to the mode they had after their boost time
 ### PUT /api/v1/cubes/{sn}/rooms/{id}/setpoint
 
 Same body and answer, addressed to every device of the room, which is
-what the original software does.
+what the original software does:
+one set-temperature radiogram with the room flag, which every member takes.
+It names one thermostat of the room:
+the room's master from the Cube's metadata where that is one,
+else the room's wall thermostat, else its first radiator thermostat,
+never a device of another room, which would take the command as well
+(docs/cube-protocol.md, "Set temperature (0x40) addressing").
+A room without a thermostat is refused with `409`.
 
 ### DELETE /api/v1/cubes/{sn}/rooms/{id}
 
@@ -2724,7 +2763,11 @@ the server retries by itself, without an event for each attempt,
 and sends `connected` when the Cube is back),
 `hello` (new budget or clock from the Cube),
 `metadata` (rooms or names changed), `config` (a device configuration arrived),
-`state`, `pairing_started`, `paired` (with `paired`, the device that joined),
+`state`, `battery` (a device's battery level changed, see the devices above),
+`wall_reset` (a wall thermostat came back after five minutes or more without a
+state on another mode than it had, as after new batteries, at warn: its
+`summary` has the `mode` and the `was_mode`, the setpoints and `silent_min`),
+`pairing_started`, `paired` (with `paired`, the device that joined),
 `pairing_ended` (see Pairing),
 `device_forgotten` (a device deleted from the Cube, through the API or a client
 of the proxy, left the server's copy;

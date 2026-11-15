@@ -32,6 +32,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/announce"
 	"go.metaworx.ch/massimo/internal/certs"
+	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/push"
 	"go.metaworx.ch/massimo/internal/server"
 	"go.metaworx.ch/massimo/internal/store"
@@ -81,8 +82,9 @@ type Config struct {
 	// (never, or only on request); nil takes the store's setting, else
 	// server.DefaultPollInterval and the others.
 	PollInterval, RefreshInterval, DiscoverInterval *time.Duration
-	// StaleAfter wins over the store's stale_after for this run where it
-	// is set; 0 takes view.StaleAfter. Tests make a device stale with a
+	// StaleAfter wins over the store's stale_after and stale_after_wall
+	// for this run where it is set; 0 takes view.StaleAfter and
+	// view.StaleAfterWall. Tests make a device stale with a
 	// short one.
 	StaleAfter *time.Duration
 	// CubeHold is how long a Cube's lost connection is held open
@@ -270,7 +272,7 @@ func open(ctx context.Context, cfg Config, root *slog.Logger, src certs.Source, 
 	// The values given win for this run, and GET /api/v1/settings names
 	// their flags; otherwise the store's settings.
 	poll, refresh, discover := server.DefaultPollInterval, server.DefaultRefreshInterval, server.DefaultDiscoverInterval
-	var staleAfter time.Duration
+	var staleAfter, staleAfterWall time.Duration
 	fixedBy := map[string]string{}
 	for _, d := range []struct {
 		key   string
@@ -278,7 +280,8 @@ func open(ctx context.Context, cfg Config, root *slog.Logger, src certs.Source, 
 		given *time.Duration
 		v     *time.Duration
 	}{{store.PollIntervalKey, "-poll", cfg.PollInterval, &poll}, {store.RefreshIntervalKey, "-refresh", cfg.RefreshInterval, &refresh},
-		{store.DiscoverIntervalKey, "-discover-interval", cfg.DiscoverInterval, &discover}, {store.StaleAfterKey, "-stale-after", cfg.StaleAfter, &staleAfter}} {
+		{store.DiscoverIntervalKey, "-discover-interval", cfg.DiscoverInterval, &discover}, {store.StaleAfterKey, "-stale-after", cfg.StaleAfter, &staleAfter},
+		{store.StaleAfterWallKey, "-stale-after", cfg.StaleAfter, &staleAfterWall}} {
 		if d.given != nil {
 			*d.v = *d.given
 			fixedBy[d.key] = d.flag
@@ -291,6 +294,16 @@ func open(ctx context.Context, cfg Config, root *slog.Logger, src certs.Source, 
 			log.Warn("setting ignored", "key", d.key, "error", err)
 		} else if ok {
 			*d.v = v
+		}
+	}
+
+	// The duty cycle's hold (AP LegacyLogs, D143-A) has no flag.
+	var queue engine.Options
+	if st != nil {
+		if v, ok, err := st.SettingDuration(ctx, store.DutyWaitKey); err != nil {
+			log.Warn("setting ignored", "key", store.DutyWaitKey, "error", err)
+		} else if ok {
+			queue.DutyWait = v
 		}
 	}
 
@@ -308,7 +321,7 @@ func open(ctx context.Context, cfg Config, root *slog.Logger, src certs.Source, 
 		find = findIntegrations
 	}
 	srv := server.New(server.Options{Cubes: su.cubes, Token: cfg.Token, PollInterval: poll, CubeHold: cfg.CubeHold, RefreshInterval: refresh, DiscoverInterval: discover, DiscoveryTargets: cfg.DiscoveryTargets, DiscoveryAddr: cfg.DiscoveryListen, Logger: root, Version: cfg.Version, Proxy: su.listeners, ShowHidden: cfg.ShowHidden,
-		Store: st, FileCubes: su.fileCubes, SettingsFile: cfg.SettingsFile, StaleAfter: staleAfter, SettingsFixedBy: fixedBy, ProxyFixed: len(cfg.Proxies) > 0, Update: cfg.Update, TLS: src, HSTSDays: cfg.HSTSDays, TrustedProxies: cfg.TrustedProxies,
+		Store: st, Queue: queue, FileCubes: su.fileCubes, SettingsFile: cfg.SettingsFile, StaleAfter: staleAfter, StaleAfterWall: staleAfterWall, SettingsFixedBy: fixedBy, ProxyFixed: len(cfg.Proxies) > 0, Update: cfg.Update, TLS: src, HSTSDays: cfg.HSTSDays, TrustedProxies: cfg.TrustedProxies,
 		Restart: cfg.Restart, Reboot: cfg.Reboot, Install: cfg.Install, Deliverers: cfg.Deliverers, FindIntegrations: find, BrowseServers: browseServers,
 		Announce: server.AnnounceState{On: cfg.Announce.On && st != nil, FixedBy: cfg.Announce.FixedBy}})
 	ln, err := net.Listen("tcp", cfg.Listen)

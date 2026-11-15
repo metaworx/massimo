@@ -21,9 +21,11 @@ type Hello struct {
 	ConnectionID    string    `json:"connection_id,omitempty"`
 	DutyCycle       int       `json:"duty_cycle_pct"` // percentage of the hourly radio budget already used
 	FreeMemorySlots int       `json:"free_memory_slots"`
-	CubeDate        string    `json:"cube_date,omitempty"` // YYYY-MM-DD
-	CubeTime        string    `json:"cube_time,omitempty"` // HH:MM
-	Fields          []string  `json:"fields"`              // all raw fields, for diagnostics
+	CubeDate        string    `json:"cube_date,omitempty"`       // YYYY-MM-DD
+	CubeTime        string    `json:"cube_time,omitempty"`       // HH:MM
+	StateCubeTime   string    `json:"state_cube_time,omitempty"` // field 9, decimal; the original's stateCubeTime, always 3 here
+	NTPCounter      string    `json:"ntp_counter,omitempty"`     // field 10, hex; the original's ntpCounter, always 0000 here
+	Fields          []string  `json:"fields"`                    // all raw fields, for diagnostics
 }
 
 // ParseHello parses the payload of an H message.
@@ -60,6 +62,12 @@ func ParseHello(data string) (*Hello, error) {
 		hh, _ := strconv.ParseUint(f[8][0:2], 16, 8)
 		mm, _ := strconv.ParseUint(f[8][2:4], 16, 8)
 		h.CubeTime = fmt.Sprintf("%02d:%02d", hh, mm)
+	}
+	if len(f) > 9 {
+		h.StateCubeTime = f[9]
+	}
+	if len(f) > 10 {
+		h.NTPCounter = f[10]
 	}
 	return h, nil
 }

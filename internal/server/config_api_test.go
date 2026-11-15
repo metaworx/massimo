@@ -782,3 +782,88 @@ func TestRemoveAndAddAtOnce(t *testing.T) {
 		t.Fatalf("metadata: added %v, removed %v", added, removed)
 	}
 }
+
+// withRoomMaster sets a room's address in the greeting's metadata, the
+// device the Cube's metadata names as the room's master.
+func withRoomMaster(t *testing.T, greeting []cube.Message, room uint8, rf cube.RFAddress) {
+	t.Helper()
+	for i, g := range greeting {
+		if g.Type != 'M' {
+			continue
+		}
+		p, err := cube.ParseMetadataPart(g.Data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		md, err := cube.ParseMetadata([]cube.MetadataPart{p})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for j := range md.Rooms {
+			if md.Rooms[j].ID == room {
+				md.Rooms[j].RFAddress = rf
+			}
+		}
+		enc, err := md.Encode()
+		if err != nil {
+			t.Fatal(err)
+		}
+		greeting[i] = cube.Message{Type: 'M', Data: "00,01," + base64.StdEncoding.EncodeToString(enc)}
+		return
+	}
+	t.Fatal("no M line")
+}
+
+// A room command names a thermostat of the room: the metadata's master
+// where it is one, else the room's wall thermostat, else its first
+// radiator thermostat (D167, D169-A), never a device of another room, which would take the
+// command too (docs/cube-protocol.md, "Set temperature (0x40)
+// addressing"); a room without a thermostat is refused and nothing is
+// sent. Room 1 holds 0a010a and the wall thermostat, room 6 0a010d.
+func TestRoomCommandAddress(t *testing.T) {
+	auto := func(rf cube.RFAddress) string {
+		m, err := cube.CmdSetTemperature(cube.Target{RFAddress: rf, RoomID: 1, Room: true}, 0, cube.ModeAuto, cube.Until{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return m.String()
+	}
+	for _, c := range []struct {
+		name   string
+		master cube.RFAddress
+		moved  []cube.RFAddress // into room 6 by their C lines
+		want   string           // the line sent, "" for a refusal
+	}{
+		{"no master", 0, nil, auto(copyWall)},
+		{"master of another room", 0x0a010d, nil, auto(copyWall)},
+		{"the radiator thermostat as master", 0x0a010a, nil, auto(0x0a010a)},
+		{"only a radiator thermostat", 0, []cube.RFAddress{copyWall}, auto(0x0a010a)},
+		{"no thermostat", 0x0a010a, []cube.RFAddress{0x0a010a, copyWall}, ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			fc, ts, _ := startCopyCube(t, func(fc *fakecube.Server) {
+				withRoomMaster(t, fc.Greeting, 1, c.master)
+				for _, rf := range c.moved {
+					withConfigRoom(t, fc.Greeting, rf, 6)
+				}
+			})
+			sent := len(fc.Received())
+			code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/rooms/1/setpoint", `{"mode":"auto"}`)
+			var got []string
+			for _, m := range fc.Received()[sent:] {
+				if m.Type == 's' {
+					got = append(got, m.String())
+				}
+			}
+			if c.want == "" {
+				if code != http.StatusConflict || len(got) != 0 {
+					t.Fatalf("%d %v, sent %v; want 409 and nothing sent", code, out, got)
+				}
+				return
+			}
+			if code != 200 || len(got) != 1 || got[0] != c.want {
+				t.Fatalf("%d %v, sent %v; want %s", code, out, got, c.want)
+			}
+		})
+	}
+}

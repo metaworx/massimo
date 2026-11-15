@@ -158,12 +158,14 @@ func TestQueueCoalescesByKey(t *testing.T) {
 	first.Wait(ctx)
 }
 
-func TestQueueWaitsForDutyCycleReset(t *testing.T) {
-	// Pretend the duty cycle is exhausted; the reset is 100 ms away.
-	resetAt := func(now time.Time) time.Time { return now.Add(100 * time.Millisecond) }
+// A full duty cycle holds radio commands for DutyWait, not until the next
+// full hour; then the queue reads the budget again by a reconnect, which
+// costs no radio time, and the command goes once the greeting's duty
+// cycle is under the limit.
+func TestQueueHoldsAtFullDutyCycle(t *testing.T) {
 	var holds []Hold
 	var mu sync.Mutex
-	srv, q, _ := setup(t, Options{ResetAt: resetAt, OnHold: func(h Hold) { mu.Lock(); holds = append(holds, h); mu.Unlock() }})
+	srv, q, _ := setup(t, Options{DutyWait: 100 * time.Millisecond, OnHold: func(h Hold) { mu.Lock(); holds = append(holds, h); mu.Unlock() }})
 	srv.Duty = 0x64 // 100 %
 	// First radio command learns the budget (100 %), second one must wait.
 	m, _ := cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a0108, RoomID: 3, Room: true}, 18, cube.ModeManual, cube.Until{})
@@ -175,12 +177,15 @@ func TestQueueWaitsForDutyCycleReset(t *testing.T) {
 		t.Fatal(res.Err)
 	}
 	if d := time.Since(start); d < 90*time.Millisecond {
-		t.Fatalf("did not wait for the reset: %s", d)
+		t.Fatalf("did not hold: %s", d)
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if len(holds) != 1 || holds[0].Reason != HoldDutyCycle || holds[0].DutyPct != 100 || holds[0].Until.IsZero() {
-		t.Fatalf("holds %+v, want the duty cycle's", holds)
+	if len(holds) != 1 || holds[0].Reason != HoldDutyCycle || holds[0].DutyPct != 100 || holds[0].Until.Sub(start) > time.Second {
+		t.Fatalf("holds %+v, want one of the duty cycle's, for DutyWait", holds)
+	}
+	if b := res.Budget; b.DutyCyclePct >= 100 {
+		t.Fatalf("budget after the hold %+v, want the one read again", b)
 	}
 }
 

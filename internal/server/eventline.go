@@ -30,6 +30,8 @@ import (
 var (
 	eventMessages = map[string]string{
 		"state":                "device state",
+		"battery":              "device battery level",
+		"wall_reset":           "wall thermostat came back on another mode",
 		"connected":            "cube connected",
 		"disconnected":         "cube connection lost",
 		"cube_found":           "cube found on the LAN",
@@ -72,7 +74,7 @@ func eventMessage(ev event) string {
 	case "hold":
 		switch ev.Summary["reason"] {
 		case engine.HoldDutyCycle:
-			return "radio duty cycle exhausted, waiting for the hourly reset"
+			return "radio duty cycle exhausted, holding radio commands until the budget is read again"
 		case engine.HoldMemorySlots:
 			return "few free memory slots on the cube, holding radio commands"
 		}

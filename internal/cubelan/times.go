@@ -31,10 +31,11 @@ type StateTimes struct {
 }
 
 // stateValues renders the values of a state for comparison, keyed by
-// their API names; an entry without valid state has none.
+// their API names; an entry without valid state has none, but for one
+// out of date, whose values are its last report's and keep their times.
 func stateValues(st cube.DeviceState) map[string]string {
 	v := map[string]string{}
-	if !st.Valid {
+	if !st.Valid && !st.OutOfDate {
 		return v
 	}
 	v["mode"] = st.Mode.String()

@@ -188,13 +188,14 @@ func TestCloseWithoutRun(t *testing.T) {
 
 // An interval given wins over the store's setting, 0 included, and the
 // settings name its flag; one not given takes the store's, else the
-// default. The stale threshold too.
+// default. The stale threshold too, and the duty cycle's hold, which has
+// no flag.
 func TestOpenIntervals(t *testing.T) {
 	clearCubeEnv(t)
 	data := t.TempDir()
 	st := testStore(t, data)
 	ctx := context.Background()
-	for k, v := range map[string]string{store.PollIntervalKey: "5m", store.RefreshIntervalKey: "12h"} {
+	for k, v := range map[string]string{store.PollIntervalKey: "5m", store.RefreshIntervalKey: "12h", store.DutyWaitKey: "15m"} {
 		if err := st.SetSetting(ctx, k, v); err != nil {
 			t.Fatal(err)
 		}
@@ -206,8 +207,8 @@ func TestOpenIntervals(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer inst.Close()
-	if got := inst.Server().StaleAfter(); got != stale {
-		t.Errorf("stale after %s, want %s", got, stale)
+	if got, wall := inst.Server().StaleAfter(), inst.Server().StaleAfterWall(); got != stale || wall != stale {
+		t.Errorf("stale after %s and %s for wall thermostats, want %s for both", got, wall, stale)
 	}
 	ts := httptest.NewServer(inst.Server().Handler())
 	defer ts.Close()
@@ -216,12 +217,12 @@ func TestOpenIntervals(t *testing.T) {
 		FixedBy  string `json:"fixed_by"`
 	}
 	getJSON(t, ts.URL+"/api/v1/settings", &settings)
-	for k, want := range map[string]string{store.PollIntervalKey: "5m", store.RefreshIntervalKey: "0", store.DiscoverIntervalKey: "30m"} {
+	for k, want := range map[string]string{store.PollIntervalKey: "5m", store.RefreshIntervalKey: "0", store.DiscoverIntervalKey: "30m", store.DutyWaitKey: "15m"} {
 		if got := settings[k].InEffect; got != want {
 			t.Errorf("%s in effect %q, want %q", k, got, want)
 		}
 	}
-	for k, want := range map[string]string{store.PollIntervalKey: "", store.RefreshIntervalKey: "-refresh", store.DiscoverIntervalKey: "", store.StaleAfterKey: "-stale-after"} {
+	for k, want := range map[string]string{store.PollIntervalKey: "", store.RefreshIntervalKey: "-refresh", store.DiscoverIntervalKey: "", store.StaleAfterKey: "-stale-after", store.StaleAfterWallKey: "-stale-after"} {
 		if got := settings[k].FixedBy; got != want {
 			t.Errorf("%s fixed by %q, want %q", k, got, want)
 		}

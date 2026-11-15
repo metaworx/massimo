@@ -255,7 +255,7 @@ Every room has a tile:
   the radio, a Wi-Fi fan or a tower as you choose (My settings),
   a device that lost its link (amber, a triangle),
   or the Cube could not reach (red, a cross);
-  a battery, one running low (amber);
+  a battery, one getting weak (amber) or low (red), as the server keeps its level;
   an open window, the opening sash or the paned window as you choose,
   a window contact reporting it:
   blue for its first 5 minutes, then amber with a triangle,
@@ -309,6 +309,9 @@ Every room has a tile:
   thermostat, a window, a leaf for the eco button), its values (valve, set
   and measured temperature, offset), its problems as icons that list them,
   as in the tile's head, and badges for lock, window and mode.
+  A device the Cube has not heard for some minutes keeps the values of its
+  last report, greyed, with the badge "out of date" and its age in place of
+  "not reported".
   Expert mode adds each device's type, serial number and radio address,
   as "S/N MEQ0000103 · RF 0a0103": the serial is printed on the device,
   the radio address is not.
@@ -685,7 +688,7 @@ also while no page is open.
   On an iPhone or iPad the page has to be added to the Home Screen first.
 - **What notifies you**:
   a switch per kind, with its delay or threshold, each with its help:
-  a window open (after 30 min), frost (below 8 °C), a low battery,
+  a window open (after 30 min), frost (below 8 °C), a low battery, a battery getting weak,
   a device's error, the Cube out of reach (after 10 min) and back,
   and, off by default, a device that sends no news, a device paired,
   a new Cube on the network and a new version of Massimo.
@@ -1122,12 +1125,16 @@ The server's sign, when it says an update is out, opens it at Software update.
   Cubes every** (with `settings`) choose the intervals `poll_interval`
   (10 s to 1 h, 10 s by default), `refresh_interval` (Off, 30 min to
   7 days, 6 h by default) and `discover_interval` (Off, 1 min to 1 day,
-  30 min by default) from a list of steps; a value set through the API
+  30 min by default) from a list of steps, and **Re-read the radio
+  budget after a hold every** the duty cycle's hold `duty_wait` (1 min to
+  1 h, 10 min by default); a value set through the API
   that is none of them is listed as well, and the default is stored as
   none.
   The line under each says what it does: the device list asked for,
   which costs the Cube no radio time; a new connection that reads
-  everything the Cube holds; the search for Cubes on the LAN.
+  everything the Cube holds; the search for Cubes on the LAN; how long
+  radio commands wait at a used-up duty cycle before the Cube's budget is
+  read again.
   It then gives this run's value, or says that a change waits for the
   next restart; where `-poll`, `-refresh` or `-discover-interval`
   decides, the choice is read-only and names the flag.
