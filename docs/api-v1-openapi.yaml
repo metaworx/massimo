@@ -2795,6 +2795,7 @@ paths:
                         device: {type: string, description: The device's radio address on its Cube}
                         serial: {type: string}
                         flag: {type: string, enum: [error, link_error, battery_low], description: "The device's flag, for a state line"}
+                        failed_radiogram: {$ref: "#/components/schemas/FailedRadiogram"}
                         time: {type: string, format: date-time}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
@@ -4400,6 +4401,13 @@ components:
     Mode:
       type: string
       enum: [auto, manual, vacation, boost]
+    FailedRadiogram:
+      type: object
+      description: "The type of the Cube's last radiogram to the device that failed, byte 4 of its entry; present only while error is set"
+      required: [code]
+      properties:
+        code: {type: integer, minimum: 0, maximum: 255, description: "The radiogram type's code, 3 for TimeInformation"}
+        name: {type: string, description: "The original software's name of the type (its FrameType enum, docs/cube-protocol.md); absent for a code it lacks"}
     State:
       type: object
       description: The device's last report; absent until it reported once
@@ -4412,6 +4420,7 @@ components:
         window_open: {type: boolean}
         battery_low: {type: boolean, description: "The battery flag as the Cube shows it now; the device's battery has the level the server keeps"}
         error: {type: boolean, description: Transmit error reported by the Cube}
+        failed_radiogram: {$ref: "#/components/schemas/FailedRadiogram"}
         link_error: {type: boolean}
         panel_locked: {type: boolean, description: Key lock active on the device; present when true}
         consistent: {type: boolean, description: "A virtual wall thermostat's alone: false while the room's thermostats disagree on mode, setpoint or until"}

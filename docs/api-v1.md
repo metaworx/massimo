@@ -1825,7 +1825,15 @@ its entries carry none),
 `valve_pct` for radiator thermostats, `until` for vacation mode;
 shutter contacts carry `window_open`.
 `error` is the Cube's transmit error flag,
-`link_error` a failed link with a partner device,
+and `failed_radiogram`, present with it alone,
+the type of the Cube's last radiogram to the device that failed,
+`{"code": 3, "name": "TimeInformation"}`:
+the code is byte 4 of the device's entry,
+the name the original software's (docs/cube-protocol.md, its `FrameType` list),
+absent for a code the list lacks, such as `{"code": 246}`;
+nearly always the Cube's own time push (`TimeInformation`),
+also a client's radiograms, such as a removal's `RemoveLinkPartner`.
+`link_error` is a failed link with a partner device,
 `panel_locked` (present when true) the key lock on the device.
 `battery_low` is the device's battery flag as the Cube shows it now;
 `battery`, beside `state`, is the level the server keeps from its history:
@@ -1941,8 +1949,8 @@ whichever client shows it.
 - `valve_pct` is the highest of the radiator thermostats',
   `window_open` true while any shutter contact of the room is open;
   both are given so that a client need not compute them.
-  `battery_low`, `error`, `link_error` and `panel_locked` are the real wall
-  thermostat's; the radiator thermostats show their own.
+  `battery_low`, `error`, `failed_radiogram`, `link_error` and `panel_locked`
+  are the real wall thermostat's; the radiator thermostats show their own.
 - `reported` is true once a thermostat of the room has reported;
   a room without one has a virtual wall thermostat with `window_open` alone.
 - It has a `state` event whenever its computed state changes,
@@ -2766,7 +2774,8 @@ and the worst of them, for the web UI's log button:
 {
   "level": "error",
   "alerts": [
-    {"id": 4720, "kind": "state", "level": "warn", "cube_serial": "KEQ0000100", "device": "0a0101", "serial": "MEQ0000101", "flag": "error", "time": "…"},
+    {"id": 4720, "kind": "state", "level": "warn", "cube_serial": "KEQ0000100", "device": "0a0101", "serial": "MEQ0000101", "flag": "error",
+     "failed_radiogram": {"code": 3, "name": "TimeInformation"}, "time": "…"},
     {"id": 4715, "kind": "restart", "level": "error", "time": "…"}
   ]
 }
@@ -2796,7 +2805,8 @@ a browser without a user keeps its marks itself and asks with `after`.
 A device's transmit error, link error and low battery are in the log at info,
 in its state's changes:
 each is an alert at warn while the device has it,
-at the state line that set it (`flag`).
+at the state line that set it (`flag`),
+the `error` flag's with the device's `failed_radiogram` now, as its state gives it.
 `after` leaves out the alerts up to that id.
 The audit's lines (`login_failed`, `locked_out`)
 are there for a holder of `audit` only.
@@ -2997,10 +3007,13 @@ data: {"kind":"state","device":"05cdc6","state":{…},
 
 `changes` has one entry per value of `state` that differs (the same names:
 `mode`, `setpoint`, `actual_temp`, `valve_pct`, `window_open`, `until`,
-`battery_low`, `error`, `link_error`, `panel_locked`), with `from` and `to`;
+`battery_low`, `error`, `failed_radiogram`, `link_error`, `panel_locked`),
+with `from` and `to`;
 a value the device did not have is `null`,
 so a measured temperature the thermostat stopped reporting is
-`{"from": 19.9, "to": null}`.
+`{"from": 19.9, "to": null}`,
+and the line that sets `error` has the radiogram that failed,
+`"failed_radiogram": {"from": null, "to": {"code": 3, "name": "TimeInformation"}}`.
 `reported` appears when the Cube gained or lost the device's state
 (`{"from": false, "to": true}` for a device that reported for the first time
 since the Cube's restart).

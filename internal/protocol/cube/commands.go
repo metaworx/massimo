@@ -172,18 +172,19 @@ func CmdResetError(addrs ...RFAddress) Message {
 	return Message{Type: 'r', Data: fmt.Sprintf("%02x,%s", len(addrs), b64.EncodeToString(raw))}
 }
 
-// Radio command codes used in s messages.
+// Radio command codes used in s messages: the radiogram types
+// (RadiogramType) Massimo sends, as the byte of the frame's header.
 const (
-	RFSetTemperature  = 0x40
-	RFSetWeekProgram  = 0x10
-	RFSetTemperatures = 0x11
-	RFSetValveConfig  = 0x12
-	RFAddLinkPartner  = 0x20
-	RFRemoveLink      = 0x21
-	RFSetGroupAddress = 0x22
-	RFRemoveGroup     = 0x23
-	RFLockControls    = 0x80 // "LockManualControls" in the original software
-	RFSetDisplayMode  = 0x82
+	RFSetTemperature  = byte(RadiogramControlMode)
+	RFSetWeekProgram  = byte(RadiogramConfigWeekTemperatureProfile)
+	RFSetTemperatures = byte(RadiogramConfigTemperatures)
+	RFSetValveConfig  = byte(RadiogramConfigValveFunctions)
+	RFAddLinkPartner  = byte(RadiogramAddLinkPartner)
+	RFRemoveLink      = byte(RadiogramRemoveLinkPartner)
+	RFSetGroupAddress = byte(RadiogramSetGroupAddress)
+	RFRemoveGroup     = byte(RadiogramRemoveGroupAddress)
+	RFLockControls    = byte(RadiogramLockManualControls)
+	RFSetDisplayMode  = byte(RadiogramSwitchDisplaySetPointActual)
 )
 
 // Target addresses a radio command to a single device or to a room.

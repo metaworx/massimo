@@ -10,10 +10,16 @@ type DeviceState struct {
 	RFAddress RFAddress  `json:"rf_address"`
 	Type      DeviceType `json:"type"` // taken from metadata; guessed from the entry length if unknown
 
-	Valid       bool `json:"valid"`
-	Error       bool `json:"error"`
-	Flag04      bool `json:"flag_04"` // byte 5 bit 0x04: unknown; seen only together with the error flag (0x0c, 0x0e, 0x1e)
-	Initialized bool `json:"initialized"`
+	Valid bool `json:"valid"`
+	// Error is the communication error, 0x08 of byte 5: the Cube's last
+	// radiogram to the device failed (docs/cube-protocol.md).
+	Error bool `json:"error"`
+	// FailedRadiogram is that radiogram's type, byte 4, read only while
+	// Error is set: the byte keeps its value after an r:, so without
+	// the flag it says nothing.
+	FailedRadiogram *RadiogramType `json:"failed_radiogram,omitempty"`
+	Flag04          bool           `json:"flag_04"` // byte 5 bit 0x04: unknown; seen only together with the error flag (0x0c, 0x0e, 0x1e)
+	Initialized     bool           `json:"initialized"`
 	// OutOfDate is an entry the Cube marks out of date: 0x02 without the
 	// valid bit 0x10, as after a device fell silent for some minutes
 	// (docs/cube-protocol.md); its values are those of the device's last
@@ -63,8 +69,9 @@ func ParseDeviceList(data string, types map[RFAddress]DeviceType) ([]DeviceState
 }
 
 // decodeDeviceState decodes one entry including its length byte. Offsets
-// follow the protocol docs: 1-3 address, 4 unknown, 5-6 flags, then
-// 7 valve, 8 setpoint, 9-10 date or temperature, 11 time, 12 wall temperature.
+// follow the protocol docs: 1-3 address, 4 the type of the last radiogram
+// that failed (with the error flag), 5-6 flags, then 7 valve, 8 setpoint,
+// 9-10 date or temperature, 11 time, 12 wall temperature.
 func decodeDeviceState(e []byte, types map[RFAddress]DeviceType) DeviceState {
 	s := DeviceState{RFAddress: RFAddressFromBytes(e[1:4]), Raw: append([]byte(nil), e...)}
 	if t, ok := types[s.RFAddress]; ok {
@@ -75,6 +82,10 @@ func decodeDeviceState(e []byte, types map[RFAddress]DeviceType) DeviceState {
 	f1, f2 := e[5], e[6]
 	s.Valid = f1&0x10 != 0
 	s.Error = f1&0x08 != 0
+	if s.Error {
+		r := RadiogramType(e[4])
+		s.FailedRadiogram = &r
+	}
 	s.Flag04 = f1&0x04 != 0
 	s.Initialized = f1&0x02 != 0
 	s.OutOfDate = !s.Valid && s.Initialized

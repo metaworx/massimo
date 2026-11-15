@@ -761,6 +761,9 @@ After an `r:` the byte kept the failed type (0x03 in four of four resets,
 the original software's logs of 2026-02-19; 0x21 in four of four on
 2026-11-15, after the reset and a room command the devices took),
 so without the flag it says nothing.
+Massimo reads it so (`cube.DeviceState.FailedRadiogram`, the codes and names
+of the list above in `cube.RadiogramType`) and gives it with the flag alone,
+as the device state's `failed_radiogram` (docs/api-v1.md).
 
 Duty cycle and memory slots: with the thermostats out of range,
 each command raised the duty cycle (0x44 → 0x64 = 100 %) and consumed one free
