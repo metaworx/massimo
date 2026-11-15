@@ -427,6 +427,48 @@ def test_log_error_reset_line(page, case):
     show_view(page, "tiles")
 
 
+ERROR_WATCH_SAYS = {
+    "en": ("error watch",
+           "communication error back at the device's next report, 60 min after the automatic reset; "
+           "last radiogram that failed: TimeInformation (0x03); no automatic reset until it stays clear a day",
+           "link error set for 24 hours, since ",
+           "communication error clear again; set for 26 h; automatic resets resume once it stays clear a day"),
+    "de": ("Fehlerüberwachung",
+           "Kommunikationsstörung bei der nächsten Meldung des Geräts zurück, 60 Min. nach dem automatischen Zurücksetzen; "
+           "zuletzt fehlgeschlagenes Funktelegramm: TimeInformation (0x03); kein automatisches Zurücksetzen, bis sie einen Tag lang ausbleibt",
+           "Verbindungsfehler 24 Stunden lang gesetzt, seit ",
+           "Kommunikationsstörung wieder weg; 26 Std. gesetzt; automatisches Zurücksetzen wieder, sobald sie einen Tag lang ausbleibt"),
+}
+
+
+def test_log_error_watch_lines(page, case):
+    """A device's watched flags, sent on the stream, are lines of its device
+    with their kind: its communication error back after the automatic reset
+    with the radiogram that failed, its link error set for 24 hours, and
+    the communication error clear again (AP RadioHealth v1.2, Block 6)."""
+    show_view(page, "log")
+    page.wait_for_timeout(1600)
+    d = page.evaluate("state.rooms[0].devices[0]")
+    page.evaluate("""(d) => {
+      const send = (level, summary) => state.events.dispatchEvent(new MessageEvent("error_watch", { data: JSON.stringify({
+        kind: "error_watch", source: "device", level, device: d.rf_address, serial: d.serial, time: new Date().toISOString(), summary }) }));
+      const reset = new Date(Date.now() - 3600000).toISOString();
+      send("warn", { what: "back", flag: "error", reset, minutes: 60, next_report: true, held: true,
+        failed_radiogram: { code: 3, name: "TimeInformation" } });
+      send("error", { what: "lasting", flag: "link_error", since: reset, hours: 24 });
+      send("info", { what: "clear", flag: "error", since: reset, hours: 26, held: true });
+    }""", d)
+    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-error_watch').length >= 3", 5), "the watch's lines"
+    kind, back, lasting, clear = ERROR_WATCH_SAYS[case.lang]
+    texts = page.locator("#log-lines .log-line.kind-error_watch .log-text").all_inner_texts()
+    kinds = page.locator("#log-lines .log-line.kind-error_watch .log-kind").all_inner_texts()
+    assert all(k.strip() == kind for k in kinds), f"the kinds: {kinds}"
+    assert back in texts, f"the flag back: {texts}"
+    assert clear in texts, f"the clear: {texts}"
+    assert any(x.startswith(lasting) for x in texts), f"the link error: {texts}"
+    show_view(page, "tiles")
+
+
 def test_log_source_and_level(page, case):
     """The source and the level chosen are asked of the server and kept in
     the address after the log's page; a reload keeps them, Clear sets

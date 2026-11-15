@@ -3127,6 +3127,12 @@ paths:
         on another mode, at warn), error_reset (the server reset the
         communication error of a device that reported while flagged, once a
         day at most: the room of its C line and automatic in "summary"),
+        error_watch (a device's flags watched, "what" in "summary": back,
+        at warn, its communication error back within a day of its
+        automatic reset, which holds further automatic resets until it
+        stays clear a day; lasting, at error, the communication error or
+        the link error set for 24 hours; clear, at info, such a flag clear
+        again),
         pairing_started,
         paired (with the device that joined in "paired"), pairing_ended,
         device_forgotten (a device deleted from the Cube left the server's
