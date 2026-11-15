@@ -1931,6 +1931,7 @@ paths:
                       days: {type: integer, minimum: 0, maximum: 7, description: The days of the week programme sent (0x10).}
                       mode_not_set: {type: boolean, description: The Cube discarded the 0x40 that sets auto; the device keeps its mode.}
                   budget: {$ref: "#/components/schemas/Budget"}
+                  confirmation: {type: string, enum: [pending], description: "The device went into a room: the server reads the change back from the Cube's free slots, and the log's structure event says when it is done."}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
@@ -1946,11 +1947,15 @@ paths:
       summary: Remove a device from the Cube
       x-capability: structure
       description: >-
-        As the original software deletes a device: a device in a room (the
-        metadata's, else its C line's) is unlinked from the room's members
-        in both directions after a wakeup (0x21), hidden devices left out,
-        and its group removed (0x23), which the original software leaves;
-        a device in room 255 by its C line is not unlinked. Then t: with
+        As the original software removed a device on 2026-11-15: a device
+        in a room (the metadata's, else its C line's) is unlinked after a
+        wakeup of the room, each other member whose error flag is set
+        reset first (r:), by one 0x21 with the room flag naming it, to the
+        room's master where it is a thermostat of the room, else its wall
+        thermostat, else its first radiator thermostat, which every member
+        takes; window contacts alone in the room get one each; hidden
+        devices left out; no 0x23 and no 0x21 to the device itself; a
+        device in room 255 by its C line is not unlinked. Then t: with
         the force flag, which makes the Cube send the device a factory
         reset; then the metadata without it, where it was listed. A device
         the metadata lists without a C line loses its entry alone. The
@@ -1968,6 +1973,7 @@ paths:
                 properties:
                   ok: {type: boolean}
                   budget: {$ref: "#/components/schemas/Budget"}
+                  confirmation: {type: string, enum: [pending], description: "The server reads the removal back from the Cube's free slots; the log's structure event says when it is done."}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
@@ -2820,7 +2826,10 @@ paths:
         "summary" and who in "by"; the queue's, source queue: command (a
         step of the command named in "command": its state queued, sent,
         acknowledged, retried, dropped or failed) and hold (the radio
-        commands waiting); the server's sign-ins, source server, for a
+        commands waiting); structure, source cube (a removal, placement or
+        move read back from the Cube's free slots: action, outcome,
+        before, free_slots, minutes, held or no_reading, flagged,
+        link_error in "summary"); the server's sign-ins, source server, for a
         user with audit alone: login, login_failed, locked_out; the LAN
         proxy's, source proxy: proxy_connected, proxy_disconnected,
         proxy_refused, proxy_discarded, proxy_deleted, proxy_delete_refused,
