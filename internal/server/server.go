@@ -1832,12 +1832,13 @@ func (s *Server) setRoomSetpoint(w http.ResponseWriter, r *http.Request) error {
 // named device takes it too, whatever room it is in (docs/cube-protocol.md,
 // "Set temperature (0x40) addressing", 2026-11-15). So it is the room's
 // master from the metadata where that is a thermostat of the room by its
-// C line, else the room's first radiator thermostat, else its wall
-// thermostat, as the original software falls back; never a device of
-// another room. ok is false for a room without a thermostat.
+// C line, else the room's wall thermostat, else its first radiator
+// thermostat, the owner's order (D167, D169-A of AP DeviceUnPairingFix,
+// which moves it into internal/cubeio for every room radiogram); never a
+// device of another room. ok is false for a room without a thermostat.
 func roomAddress(rt *runtime, room cube.RoomMeta) (cube.RFAddress, bool) {
 	radiators, walls := roomThermostats(rt, room.ID)
-	members := append(radiators, walls...)
+	members := append(walls, radiators...)
 	if len(members) == 0 {
 		return 0, false
 	}

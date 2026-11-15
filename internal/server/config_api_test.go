@@ -815,8 +815,8 @@ func withRoomMaster(t *testing.T, greeting []cube.Message, room uint8, rf cube.R
 }
 
 // A room command names a thermostat of the room: the metadata's master
-// where it is one, else the room's first radiator thermostat, else its
-// wall thermostat, never a device of another room, which would take the
+// where it is one, else the room's wall thermostat, else its first
+// radiator thermostat (D167, D169-A), never a device of another room, which would take the
 // command too (docs/cube-protocol.md, "Set temperature (0x40)
 // addressing"); a room without a thermostat is refused and nothing is
 // sent. Room 1 holds 0a010a and the wall thermostat, room 6 0a010d.
@@ -834,10 +834,10 @@ func TestRoomCommandAddress(t *testing.T) {
 		moved  []cube.RFAddress // into room 6 by their C lines
 		want   string           // the line sent, "" for a refusal
 	}{
-		{"no master", 0, nil, auto(0x0a010a)},
-		{"master of another room", 0x0a010d, nil, auto(0x0a010a)},
-		{"the wall thermostat as master", copyWall, nil, auto(copyWall)},
-		{"only a wall thermostat", 0, []cube.RFAddress{0x0a010a}, auto(copyWall)},
+		{"no master", 0, nil, auto(copyWall)},
+		{"master of another room", 0x0a010d, nil, auto(copyWall)},
+		{"the radiator thermostat as master", 0x0a010a, nil, auto(0x0a010a)},
+		{"only a radiator thermostat", 0, []cube.RFAddress{copyWall}, auto(0x0a010a)},
 		{"no thermostat", 0x0a010a, []cube.RFAddress{0x0a010a, copyWall}, ""},
 	} {
 		t.Run(c.name, func(t *testing.T) {
