@@ -327,6 +327,48 @@ function chooseBlink(mode) {
   applyBlink();
 }
 
+// ICON_SELECTS are the choices of the window's and the radio's drawing
+// (components.js ICON_CHOICES), each its setting's select and preview.
+const ICON_SELECTS = { iconWindow: ["icon-window-select", "icon-window-preview"], iconRadio: ["icon-radio-select", "icon-radio-preview"] };
+
+// iconsDrawn is the drawings the page was last drawn with, so that a
+// change of them draws again what shows them, from the settings page or
+// from the user's settings arriving or changing elsewhere.
+let iconsDrawn = null;
+
+// applyIcons shows the drawings chosen, each select's value and beside
+// it the drawing as the page shows it: the window closed, open, and with
+// a warning's and a failure's marks; the radio with them. Where the
+// choice changed since the page was drawn, the rooms, the Cubes and the
+// header's problems are drawn again.
+function applyIcons() {
+  for (const [key, [sel, preview]] of Object.entries(ICON_SELECTS)) {
+    const select = $(sel);
+    if (select) select.value = state.settings[key];
+    const box = $(preview);
+    if (!box) continue;
+    const kind = key === "iconWindow" ? "window" : "radio";
+    const signs = kind === "window" ? [iconEl(iconChoice(kind).type, "ni"), signEl(kind, "")] : [];
+    box.replaceChildren(...signs, signEl(kind, "warn"), signEl(kind, "bad")); // components.js
+  }
+  const now = state.settings.iconWindow + "/" + state.settings.iconRadio;
+  if (iconsDrawn !== null && iconsDrawn !== now) redrawSigns();
+  iconsDrawn = now;
+}
+
+// redrawSigns draws again what shows the window and the radio.
+function redrawSigns() {
+  renderRooms(); // tiles.js
+  renderCubes(); // cubes.js
+  renderCubeSelect(); // app.js, the header's problems
+}
+
+// chooseIcon is a drawing's choice, kept as the other settings are.
+function chooseIcon(key, value) {
+  setSetting(key, validSetting(key, value) || (key === "iconWindow" ? "sash" : "wifi")); // app.js
+  applyIcons();
+}
+
 // chooseMode and chooseScheme are the settings' choices, kept as the
 // other settings are (app.js setSetting): for this device, or as the
 // user's, in the browser and for a signed-in user on the server.
@@ -362,6 +404,7 @@ function applyAppearance() {
   if (themeState.draft) renderSchemeEditor();
   reapplyTheme();
   applyBlink();
+  applyIcons();
 }
 
 // schemeMessage shows the result of a save, delete or import under the
@@ -373,6 +416,7 @@ function schemeMessage(text, ok) {
 function initAppearance() {
   $("theme-select").addEventListener("change", (ev) => chooseMode(ev.target.value));
   $("blink-select").addEventListener("change", (ev) => chooseBlink(ev.target.value));
+  for (const [key, [sel]] of Object.entries(ICON_SELECTS)) $(sel).addEventListener("change", (ev) => chooseIcon(key, ev.target.value));
   REDUCED_MOTION.addEventListener("change", applyBlink);
   $("scheme-select").addEventListener("change", (ev) => {
     closeSchemeEditor();

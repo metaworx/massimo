@@ -77,14 +77,14 @@ def test_open_window(page, case):
     contact; the measured temperature shows its age."""
     room = page.locator(".room", has=page.locator(".room-name", has_text="Kind 1"))
     page.evaluate(WINDOW_TIMES, 1)
-    assert head_icons(room) == ["#icon-window-open"], "open briefly: the open window, plain"
+    assert head_icons(room) == ["#icon-window-sash-open"], "open briefly: the open window, plain"
     assert "tone-open" in room.locator(".tile-head .problems-sum svg").first.get_attribute("class"), "in blue"
     assert window_badge(room) == ("flag fill-open", []), "its badge filled blue, no mark"
     page.evaluate(WINDOW_TIMES, 6)
-    assert head_icons(room) == ["#icon-window-open-small+#mark-corner-warn"], "open long: amber, a triangle"
+    assert head_icons(room) == ["#icon-window-sash-open+#mark-sash-warn"], "open long: amber, a triangle"
     assert window_badge(room) == ("flag warn", ["#mark-warn"]), "its badge an amber outline led by a triangle"
     page.evaluate(WINDOW_TIMES, 11)
-    assert head_icons(room) == ["#icon-window-open-small+#mark-corner-x"], "open too long: red, a cross"
+    assert head_icons(room) == ["#icon-window-sash-open+#mark-sash-x"], "open too long: red, a cross"
     assert window_badge(room) == ("flag fill-bad", ["#mark-x"]), "its badge filled red, led by a cross"
     page.evaluate("""() => {
       const r = state.rooms.find((r) => r.devices.some((d) => d.type === "shutter_contact"));
@@ -93,8 +93,8 @@ def test_open_window(page, case):
         alert_at: new Date(Date.now() + 300500).toISOString() };
       updateDevice(d);
     }""")
-    assert head_icons(room) == ["#icon-window-open"], "half a second before the warning"
-    assert wait_until(page, "document.querySelector('.room .tile-head .problems-sum use[href=\"#mark-corner-warn\"]') !== null", 3), \
+    assert head_icons(room) == ["#icon-window-sash-open"], "half a second before the warning"
+    assert wait_until(page, "document.querySelector('.room .tile-head .problems-sum use[href=\"#mark-sash-warn\"]') !== null", 3), \
         "the tile turns amber by the clock alone"
     summary = room.locator(".tile-head .problems-sum")
     assert OPEN[case.lang] in (summary.get_attribute("aria-label") or "").lower(), "named to a screen reader"

@@ -214,10 +214,12 @@ Every room has a tile:
   mostly after the valve moved.
 - **Icons in the tile's head** say what is wrong in the room, each in its colour
   and with its mark (see Signs, below):
-  the radio as a Wi-Fi fan, a device that lost its link (amber, a triangle)
+  the radio, a Wi-Fi fan or a tower as you choose (My settings),
+  a device that lost its link (amber, a triangle),
   or the Cube could not reach (red, a cross);
   a battery, one running low (amber);
-  an open window, a window contact reporting it:
+  an open window, the opening sash or the paned window as you choose,
+  a window contact reporting it:
   blue for its first 5 minutes, then amber with a triangle,
   red with a cross after 10
   (the server's settings `window_warn_after` and `window_alert_after`);
@@ -549,7 +551,8 @@ the first one handing over what it had.
 Once the server has your schemes, its list is the list:
 a scheme deleted in one browser goes from the others when they next load the page.
 Beside each of **Poll every**, **Expert mode**, **Cube clock shown in**,
-**Language**, **Mode**, **Colour scheme** and **Blinking signs**,
+**Language**, **Mode**, **Colour scheme**, **Blinking signs**,
+**Window icon** and **Radio icon**,
 in a column of its own at the right headed **only on this device**,
 a switch keeps that setting's value in this browser instead (its tooltip names the setting),
 for a phone that polls less often or a wall tablet that stays dark;
@@ -593,6 +596,15 @@ without the switches.
   **Blinking signs**: whether a warning's triangle and a failure's cross blink,
   so that they are not missed; as the system (blinking unless the device asks
   for reduced motion), on, at first (five times when a sign comes) or off.
+  **Window icon**: an open window drawn as the opening sash (the default),
+  its mark inside its frame,
+  or as the paned window of the original MAX! software,
+  its mark at the bottom right;
+  a window contact's icon follows.
+  **Radio icon**: a radio fault drawn as the Wi-Fi fan (the default)
+  or as the tower of the thermostats' display, its mark at the bottom right.
+  Beside each choice it is drawn as the page shows it, plain and with its marks,
+  and the page is drawn again at once.
   Next to each colour input is its hex value, `#f6f6f4`, in a text field:
   a value typed or pasted there, with or without the `#`,
   also as `#abc` and in any case, applies at once
@@ -1099,9 +1111,11 @@ an action with what it does and its button is an `.action-row`;
 A state is a sign, a colour and a mark, so that it reads without its colour:
 nothing for a state that is fine, a triangle for a warning (amber),
 a cross for a failure (red).
-`signEl` draws a kind of thing in a state (`SIGNS`: the radio, a Wi-Fi fan,
-and the window with the mark at the bottom right, as the original MAX! software has
-them; the network of a Cube's link with it on top; the cog for the settings),
+`signEl` draws a kind of thing in a state (`signOf`: the radio and the window
+as the person chooses, `ICON_CHOICES`, the Wi-Fi fan or the tower,
+the opening sash with the mark inside its frame or the paned window with it
+at the bottom right, as the original MAX! software has it;
+`SIGNS`: the network of a Cube's link with it on top, the cog for the settings),
 the drawing and the mark two parts, so that the mark alone blinks;
 `badgeEl` leads a warning's or a failure's badge with its mark (`markEl`)
 and sets it in bold, while a badge that names a state, such as a mode, stays regular;
