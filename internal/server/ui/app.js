@@ -1112,26 +1112,31 @@ function fitFacts() {
   line.classList.toggle("facts-row", !beside);
 }
 
-// watchFacts fits the facts again when the header's width or the logo
-// changes, or the header is whole again after compacting (fitFacts),
-// after the frame, so that the layout it changes does not call it back
-// within the same one.
+// watchFacts fits the facts again when the header's width or the logo's
+// size changes, when the page's fonts have come, or when the header is
+// whole again after compacting (fitFacts), after the frame, so that the
+// layout it changes does not call it back within the same one.
 function watchFacts() {
   const line = document.querySelector(".top-line");
   let width = -1;
-  let brand = -1;
+  let brand = "";
   const ro = new ResizeObserver(() => {
     const w = line.getBoundingClientRect().width;
-    const bw = line.querySelector(".brand").getBoundingClientRect().width;
-    if (w === width && bw === brand) return;
+    // the logo's height too: on a phone the drawing that replaces the
+    // word keeps its width and changes its height
+    const r = line.querySelector(".brand").getBoundingClientRect();
+    const b = r.width + "x" + r.height;
+    if (w === width && b === brand) return;
     width = w;
-    brand = bw;
+    brand = b;
     requestAnimationFrame(fitFacts);
   });
   ro.observe(line);
   ro.observe(line.querySelector(".brand"));
+  // the page's fonts change the version's width when they come
+  if (document.fonts) document.fonts.ready.then(() => requestAnimationFrame(fitFacts));
   // a resize while compacted is fitted once the header is whole again
-  let was = false;
+  let was = document.body.classList.contains("scrolled");
   new MutationObserver(() => {
     const now = document.body.classList.contains("scrolled");
     if (was && !now) requestAnimationFrame(fitFacts);
