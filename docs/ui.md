@@ -713,7 +713,10 @@ also while no page is open.
   and, off by default, a device that sends no news, a device paired,
   a new Cube on the network and a new version of Massimo.
   A change is saved a second after the last one;
-  a delay is 1 to 1440 minutes, the threshold −10 to 20 °C.
+  a delay is 1 to 1440 minutes, the threshold −10 to 20 °C,
+  and a value outside is not saved:
+  its box turns red, with the range in amber before it,
+  until it holds one inside, whatever a save meanwhile says.
   One kind notifies once per device per half hour.
 - **Your devices**:
   every browser and app notified for you,
@@ -721,6 +724,12 @@ also while no page is open.
   and the deliveries that failed since;
   this browser is marked, and **Remove** ends one.
   Revoking a session or a key under My profile removes the devices it subscribed.
+
+A line under the lists says what came of reading them, of a save,
+and of turning this browser on or off or removing a device.
+Each clears only its own outcome when it next succeeds,
+so the outcome of turning on stays after the lists are read again,
+and the page opened again starts with the line empty.
 
 While the page is open,
 a notification shows at its foot for ten seconds instead,
