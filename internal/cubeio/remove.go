@@ -19,11 +19,11 @@ import (
 // else its C line's: one r: for every other member of the room whose
 // error flag is set (the queue resets the device itself, the command's
 // target), then one 0x21 with the room flag naming the device
-// (linkLines), which every member of the room takes; no 0x23 and no
-// 0x21 to the device, which t: resets anyway. The devices in skip, the
-// hidden ones, are left out. Then del, t: with the force flag, which
-// makes the Cube send the device a factory reset and drop it once it
-// answered. ok is false for a device in no room, which has nothing to
+// (unlinkFromRoom, linkLines), which every member of the room takes;
+// no 0x23 and no 0x21 to the device, which t: resets anyway. The
+// devices in skip, the hidden ones, are left out. Then del, t: with the
+// force flag, which makes the Cube send the device a factory reset and
+// drop it once it answered. ok is false for a device in no room, which has nothing to
 // unlink, and for one in room 255, whose partners there are all hidden.
 func RemoveCommands(snap *cubelan.Snapshot, rf cube.RFAddress, typ cube.DeviceType, skip view.Hidden) (unlink, del engine.Command, ok bool) {
 	del = engine.Command{Key: "delete:" + rf.String(), Lines: []cube.Message{cube.CmdDeleteDevices(true, rf)}}
@@ -43,10 +43,8 @@ func RemoveCommands(snap *cubelan.Snapshot, rf cube.RFAddress, typ cube.DeviceTy
 	if room == 0 || room == cube.HiddenRoom {
 		return engine.Command{}, del, false
 	}
-	members := RoomMembers(snap, room, skip)
-	lines := flaggedResets(snap, members, rf)
-	lines = append(lines, linkLines(roomMaster(snap, room), rf, typ, room, members, false)...)
-	unlink = engine.Command{Key: "unlink:" + rf.String(), Target: rf, RoomID: room, Wakeup: true, Lines: lines}
+	unlink = engine.Command{Key: "unlink:" + rf.String(), Target: rf, RoomID: room, Wakeup: true,
+		Lines: unlinkFromRoom(snap, rf, typ, room, skip, false)}
 	return unlink, del, true
 }
 

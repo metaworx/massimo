@@ -67,6 +67,18 @@ func RoomMembers(snap *cubelan.Snapshot, room uint8, skip view.Hidden) []cube.De
 	return members
 }
 
+// PartnerCount is how many of members rf, of type typ, is linked with
+// in their room: the thermostats, and a thermostat's window contacts.
+func PartnerCount(members []cube.DeviceMeta, rf cube.RFAddress, typ cube.DeviceType) int {
+	n := 0
+	for _, d := range members {
+		if d.RFAddress != rf && linkPair(d.Type, typ) {
+			n++
+		}
+	}
+	return n
+}
+
 // roomMaster is the metadata's master of room: the address its M entry
 // gives the room, 0 where the metadata does not list the room.
 func roomMaster(snap *cubelan.Snapshot, room uint8) cube.RFAddress {
@@ -98,12 +110,18 @@ func flaggedResets(snap *cubelan.Snapshot, members []cube.DeviceMeta, except cub
 }
 
 // linkLines links (add) or unlinks rf, of type typ, with its partners
-// among members, the devices of room, as the original software did on
-// 2026-11-15 and in T134: one radiogram with the room flag naming rf,
-// to the member Addressee picks, which every member of the room takes.
-// Where no member but rf is a thermostat, its partners are window
-// contacts, each addressed directly. Nothing where rf has no partner.
-func linkLines(master, rf cube.RFAddress, typ cube.DeviceType, room uint8, members []cube.DeviceMeta, add bool) []cube.Message {
+// among members, the devices of room. The rest of the room gets one
+// radiogram with the room flag naming rf, to the member Addressee picks,
+// which every member of the room takes; where no member but rf is a
+// thermostat, its partners are window contacts, each addressed
+// directly. With both, as the original software moved and placed
+// devices in its captures of 2026-11-04 (docs/cube-protocol.md,
+// "Pairing a device, as the original software does it"; AP
+// DeviceUnPairingFix v1.3, D170-A), each window contact among the
+// partners gets one of its own as well, and rf one for each partner, so
+// that its own partners follow it. A removal sends neither (both
+// false): t: resets the device. Nothing where rf has no partner.
+func linkLines(master, rf cube.RFAddress, typ cube.DeviceType, room uint8, members []cube.DeviceMeta, add, both bool) []cube.Message {
 	var partners []cube.DeviceMeta
 	for _, d := range members {
 		if d.RFAddress != rf && linkPair(d.Type, typ) {
@@ -113,12 +131,20 @@ func linkLines(master, rf cube.RFAddress, typ cube.DeviceType, room uint8, membe
 	if len(partners) == 0 {
 		return nil
 	}
-	if a, ok := Addressee(master, members, rf); ok {
-		return []cube.Message{cube.CmdLinkPartner(cube.Target{RFAddress: a, RoomID: room, Room: true}, add, rf, typ)}
-	}
 	var out []cube.Message
+	a, ok := Addressee(master, members, rf)
+	if ok {
+		out = append(out, cube.CmdLinkPartner(cube.Target{RFAddress: a, RoomID: room, Room: true}, add, rf, typ))
+	}
 	for _, d := range partners {
-		out = append(out, cube.CmdLinkPartner(cube.Target{RFAddress: d.RFAddress}, add, rf, typ))
+		if !ok || (both && !d.Type.IsThermostat()) {
+			out = append(out, cube.CmdLinkPartner(cube.Target{RFAddress: d.RFAddress}, add, rf, typ))
+		}
+	}
+	if both {
+		for _, d := range partners {
+			out = append(out, cube.CmdLinkPartner(cube.Target{RFAddress: rf}, add, d.RFAddress, d.Type))
+		}
 	}
 	return out
 }

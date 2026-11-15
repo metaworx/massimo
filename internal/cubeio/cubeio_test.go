@@ -105,11 +105,37 @@ func TestMoveCommands(t *testing.T) {
 	}
 	c := snap.Config(0x0a010d)
 	out, in := MoveCommands(snap, 0x0a010d, c.Type, 6, 1, members, nil)
-	if out.RoomID != 6 || in.RoomID != 1 || !in.Wakeup || len(out.Lines) != 1 || len(in.Lines) != 1+2*len(members) {
+	if out.RoomID != 6 || in.RoomID != 1 || !out.Wakeup || !in.Wakeup || len(out.Lines) != 1 || len(in.Lines) != 3 {
 		t.Fatalf("out %+v in %+v", out, in)
 	}
+	// Out: 0x23 alone, room 6 holding no partner. In, as the original's
+	// capture of 2026-11-04: one 0x20 with the room flag to room 1's
+	// master naming the device, one to the device naming its partner, 0x22.
 	if out.Lines[0].String() != cube.CmdSetGroup(0x0a010d, 6, true).String() {
 		t.Fatalf("out starts with %s, not 0x23", out.Lines[0])
+	}
+	want := []cube.Message{cube.CmdLinkPartner(cube.Target{RFAddress: 0x0a010a, RoomID: 1, Room: true}, true, 0x0a010d, c.Type),
+		cube.CmdLinkPartner(cube.Target{RFAddress: 0x0a010d}, true, 0x0a010a, cube.DeviceRadiatorThermostat),
+		cube.CmdSetGroup(0x0a010d, 1, false)}
+	for i := range want {
+		if in.Lines[i].String() != want[i].String() {
+			t.Fatalf("in line %d: %s, want %s", i, in.Lines[i], want[i])
+		}
+	}
+	// Out of room 1, whose master 0a010a stays: the 0x23, one 0x21 with
+	// the room flag to 0a010a naming the device, one to the device naming
+	// 0a010a.
+	out, _ = MoveCommands(snap, 0x0a010d, c.Type, 1, 6, nil, nil)
+	want = []cube.Message{cube.CmdSetGroup(0x0a010d, 1, true),
+		cube.CmdLinkPartner(cube.Target{RFAddress: 0x0a010a, RoomID: 1, Room: true}, false, 0x0a010d, c.Type),
+		cube.CmdLinkPartner(cube.Target{RFAddress: 0x0a010d}, false, 0x0a010a, cube.DeviceRadiatorThermostat)}
+	if len(out.Lines) != len(want) {
+		t.Fatalf("out of room 1: %v", out.Lines)
+	}
+	for i := range want {
+		if out.Lines[i].String() != want[i].String() {
+			t.Fatalf("out line %d: %s, want %s", i, out.Lines[i], want[i])
+		}
 	}
 }
 

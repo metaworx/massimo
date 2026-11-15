@@ -151,8 +151,8 @@ func TestConfigEndpoints(t *testing.T) {
 		t.Fatalf("device programme lines % x", lines[nS:])
 	}
 
-	// Move the device to room 1: leave (group remove), join (links with the
-	// room's radiator both ways, group set), metadata; the copy of the
+	// Move the device to room 1: leave (group remove), join (one link to
+	// the room with its flag, one to the device, group set), metadata; the copy of the
 	// room's settings, which follows by default, has tests of its own
 	// (TestAddCopiesTheRoomsSettings and those after it).
 	nS = len(sLines(fc))
@@ -341,7 +341,6 @@ func TestAddCopiesTheRoomsSettings(t *testing.T) {
 	want := []string{"z:1e,G,01",
 		cube.CmdLinkPartner(cube.Target{RFAddress: 0x0a010a, RoomID: 1, Room: true}, true, copyNew, cube.DeviceRadiatorThermostat).String(),
 		cube.CmdLinkPartner(cube.Target{RFAddress: copyNew}, true, 0x0a010a, cube.DeviceRadiatorThermostat).String(),
-		cube.CmdLinkPartner(cube.Target{RFAddress: copyWall}, true, copyNew, cube.DeviceRadiatorThermostat).String(),
 		cube.CmdLinkPartner(cube.Target{RFAddress: copyNew}, true, copyWall, cube.DeviceWallThermostat).String(),
 		cube.CmdSetGroup(copyNew, 1, false).String(),
 		"m:", "c:0a0b0c",
@@ -381,7 +380,6 @@ func TestAddWithoutCopy(t *testing.T) {
 	sameLines(t, fc.Received()[before:], []string{"z:1e,G,01",
 		cube.CmdLinkPartner(cube.Target{RFAddress: 0x0a010a, RoomID: 1, Room: true}, true, copyNew, cube.DeviceRadiatorThermostat).String(),
 		cube.CmdLinkPartner(cube.Target{RFAddress: copyNew}, true, 0x0a010a, cube.DeviceRadiatorThermostat).String(),
-		cube.CmdLinkPartner(cube.Target{RFAddress: copyWall}, true, copyNew, cube.DeviceRadiatorThermostat).String(),
 		cube.CmdLinkPartner(cube.Target{RFAddress: copyNew}, true, copyWall, cube.DeviceWallThermostat).String(),
 		cube.CmdSetGroup(copyNew, 1, false).String(), "m:", "c:0a0b0c"})
 }
@@ -398,7 +396,6 @@ func TestAddContactCopiesNothing(t *testing.T) {
 	sameLines(t, fc.Received()[before:], []string{"z:1e,G,01",
 		cube.CmdLinkPartner(cube.Target{RFAddress: 0x0a010a, RoomID: 1, Room: true}, true, copyContact, cube.DeviceShutterContact).String(),
 		cube.CmdLinkPartner(cube.Target{RFAddress: copyContact}, true, 0x0a010a, cube.DeviceRadiatorThermostat).String(),
-		cube.CmdLinkPartner(cube.Target{RFAddress: copyWall}, true, copyContact, cube.DeviceShutterContact).String(),
 		cube.CmdLinkPartner(cube.Target{RFAddress: copyContact}, true, copyWall, cube.DeviceWallThermostat).String(),
 		cube.CmdSetGroup(copyContact, 1, false).String(), "m:", "c:0d0e0f"})
 }

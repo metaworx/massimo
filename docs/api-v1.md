@@ -2027,10 +2027,17 @@ A metadata write; answers `{"ok": true}`.
 
 Rename a device and/or move it to another room:
 `{"name": "Thermostat Küche", "room_id": 2}`, either field alone is fine.
-A move is done as the original software does it:
-the device's group is removed and it is unlinked from every partner of its old room,
-then linked with every partner of the new room and the new group set,
-each after a wakeup of the room concerned, then the metadata is written.
+A move is done as the original software moved one in its capture of 2026-11-04:
+after a wakeup of the old room, one `r:` for each other member whose error flag is set,
+0x23 remove group,
+one 0x21 remove link partner radiogram with the room flag naming the device,
+which every member of the room takes,
+addressed to the room's master where it is a thermostat of the room,
+else to its wall thermostat, else to its first radiator thermostat,
+one to each window contact among its partners,
+and one to the device for each partner;
+then, after a wakeup of the new room, the same with 0x20 add link partner
+and 0x22 set group; then the metadata is written.
 `room_id` must name an existing room; 0 is refused,
 a device outside every room would be a device that blocks no room but cannot be
 addressed by one either.
@@ -2039,11 +2046,13 @@ A device that is paired but in no room yet (`"unlisted": true`,
 such as one just paired, see Pairing) needs `room_id`;
 `name` alone answers `409`.
 It is added to the room as the original software adds a new device:
-after a wakeup of the room (`z:1e,G,<room>`),
-one 0x20 add link partner radiogram per room member it links with in each
-direction (to a radiator thermostat with the room flag and its room,
-to every other device directly, and from the new device to each partner;
-two shutter contacts are not linked with each other), then 0x22 set group,
+after a wakeup of the room (`z:1e,G,<room>`)
+and one `r:` for each member whose error flag is set,
+one 0x20 add link partner radiogram with the room flag naming the device,
+addressed as in a move, which every member of the room takes,
+one to each window contact among its partners,
+and one to the new device for each partner
+(two shutter contacts are not linked with each other), then 0x22 set group,
 then the metadata with the device listed under its name in the room,
 then a re-read of its C line.
 A device whose C line names another room (paired long ago and never listed) is
