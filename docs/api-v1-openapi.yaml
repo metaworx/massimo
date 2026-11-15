@@ -2790,7 +2790,9 @@ paths:
         On connect, one `state` event per device with its current data,
         then an event per change the Cube reports. Kinds: connected,
         disconnected (once per loss of the connection, not at each retry),
-        hello, metadata, config, state, pairing_started,
+        hello, metadata, config, state, battery (a device's battery
+        level changed), wall_reset (a wall thermostat back from a silence
+        on another mode, at warn), pairing_started,
         paired (with the device that joined in "paired"), pairing_ended,
         device_forgotten (a device deleted from the Cube left the server's
         copy; its "state" is the device as the server knew it), cube_found (with a Cube that is not configured in "cube"),

@@ -395,6 +395,8 @@ function logSummaryText(kind, s, serial) {
       if (s.duty_pct === undefined) return t("log.sum.command", { state });
       return t("log.sum.commandBudget", { state, duty: num(s.duty_pct), slots: num(s.free_slots) });
     }
+    case "wall_reset":
+      return t("log.sum.wallReset", { mode: logWord("log.mode.", s.mode), was: logWord("log.mode.", s.was_mode), silent: num(s.silent_min) });
     case "battery":
       return t("log.sum.battery", { level: logWord("log.battery.", s.level), from: logWord("log.battery.", s.from) });
     case "hold":

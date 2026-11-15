@@ -432,6 +432,9 @@ type runtime struct {
 	last map[cube.RFAddress]*view.State
 	// battery keeps the devices' battery levels (battery.go).
 	battery *battery.Tracker
+	// walls is each wall thermostat's last mode, for wall_reset; only the
+	// pump uses it (wallreset.go).
+	walls map[cube.RFAddress]*wallMemo
 	// vwt is the rooms' uids and settings, and each room's virtual wall
 	// thermostat as its last event had it (vwt.go).
 	vwt vwtState
@@ -913,6 +916,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			}
 			ev := event{Kind: e.Kind.String(), Time: time.Now()}
 			var batteryChanges []battery.Change
+			var wallBack *event
 			if e.Device != 0 {
 				ev.Device = e.Device.String()
 				snap := rt.client.Snapshot()
@@ -936,6 +940,9 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 					if r, ok := batteryReport(dv); ok && e.Kind == cubelan.EventState {
 						batteryChanges = rt.battery.Report(ev.Device, ev.Time, r)
 					}
+					if e.Kind == cubelan.EventState {
+						wallBack = rt.wallReset(dv, ev.Time)
+					}
 					rt.setBattery(&dv)
 					ev.State = dv
 					if e.Kind == cubelan.EventState {
@@ -952,6 +959,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			}
 			if e.Kind == cubelan.EventForgotten {
 				delete(rt.last, e.Device)
+				delete(rt.walls, e.Device)
 				rt.battery.Forget(e.Device.String())
 				rt.follow.forget(e.Device)
 			}
@@ -976,6 +984,9 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 				rt.emit(a)
 			}
 			s.emitBattery(rt, batteryChanges)
+			if wallBack != nil {
+				rt.emit(*wallBack)
+			}
 			switch e.Kind {
 			case cubelan.EventState, cubelan.EventMetadata, cubelan.EventConnected, cubelan.EventConfig, cubelan.EventForgotten:
 				s.publishVWTs(rt, ev.Command)

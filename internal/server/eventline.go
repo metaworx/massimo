@@ -31,6 +31,7 @@ var (
 	eventMessages = map[string]string{
 		"state":                "device state",
 		"battery":              "device battery level",
+		"wall_reset":           "wall thermostat came back on another mode",
 		"connected":            "cube connected",
 		"disconnected":         "cube connection lost",
 		"cube_found":           "cube found on the LAN",

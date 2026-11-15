@@ -340,6 +340,10 @@ and from serve's store on one of the owner's hosts (2026-11-11 to 14):
     reports.
   - No device was seen going from flickering to steady in those days; in
     February five devices had it steady for 4 to 7 days, until new batteries.
+  - A wall thermostat whose batteries go back in starts in auto mode on its
+    week programme: one that had been on manual 6 °C came back on auto 5.5 °C
+    (2026-11-15), its room's radiator thermostat still on manual; Massimo
+    warns of such a return in its log (`wall_reset`).
   - Massimo keeps a level per device from this: weak at the first flag,
     low when it stays 15 minutes, weak again ok after the next
     decalcification without it.

@@ -2758,7 +2758,11 @@ the server retries by itself, without an event for each attempt,
 and sends `connected` when the Cube is back),
 `hello` (new budget or clock from the Cube),
 `metadata` (rooms or names changed), `config` (a device configuration arrived),
-`state`, `pairing_started`, `paired` (with `paired`, the device that joined),
+`state`, `battery` (a device's battery level changed, see the devices above),
+`wall_reset` (a wall thermostat came back after five minutes or more without a
+state on another mode than it had, as after new batteries, at warn: its
+`summary` has the `mode` and the `was_mode`, the setpoints and `silent_min`),
+`pairing_started`, `paired` (with `paired`, the device that joined),
 `pairing_ended` (see Pairing),
 `device_forgotten` (a device deleted from the Cube, through the API or a client
 of the proxy, left the server's copy;
