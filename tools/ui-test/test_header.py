@@ -6,7 +6,7 @@ shown in the address, each page's own scroll position, and expert mode's
 line of the chosen Cube's radio budget."""
 import json
 
-from helpers import VIEWER, css_hidden, hold, open_personal_page, scroll_settled, scroll_width, show_view, wait_held, wait_until
+from helpers import VIEWER, css_hidden, hold, open_personal_page, scroll_settled, scroll_width, set_version, show_view, wait_held, wait_until
 
 # The symbol a page button shows, drawn in an svg of its own outside the
 # header, so that its size does not depend on whether the button is shown;
@@ -302,9 +302,12 @@ def test_facts_fitted_again_when_the_time_comes(page, case):
 def test_header_on_one_baseline(page, case):
     """The logo (the small mark under 600 px), the version and the time of
     the last update stand on one baseline, the drawing's bottom edge, and
-    the M is as tall as the page buttons; on a phone the version and the
-    time stand under the mark, the version whole, on the time's line or a
-    line of its own above it. ↻ stands on the digits' middle.
+    the M is as tall as the page buttons, where they fit beside it: a
+    release's short version (CI's build has one too) always does, a long
+    build's on a phone does not, and then the version and the time stand
+    under the mark, the version whole, on the time's line or a line of its
+    own above it. Each version is set here, so that the build's own does
+    not decide which case is tested. ↻ stands on the digits' middle.
     The time and ↻ are one button without a frame, larger to a finger
     than it looks; the version's tooltip is the whole version."""
     brand = page.evaluate(BRAND_BOX)
@@ -314,13 +317,21 @@ def test_header_on_one_baseline(page, case):
     # fitted once the version has come (app.js fitFacts)
     assert wait_until(page, "(() => { const v = document.getElementById('version-short'); return v.textContent !== '' && v.scrollWidth <= v.clientWidth + 1; })()", 5), \
         "the version whole"
-    lines = {sel: page.evaluate(BASELINE, sel) for sel in ("#version-short", "#updated")}
-    if case.width >= 600:
-        assert abs(lines["#version-short"] - lines["#updated"]) <= 1, f"the version and the time on one line: {lines}"
-        assert abs(lines["#updated"] - brand["bottom"]) <= 1, f"on the logo's baseline: {lines} vs {brand['bottom']}"
-    else:
-        assert lines["#version-short"] <= lines["#updated"] + 1, f"the version on the time's line or above it: {lines}"
-        assert lines["#version-short"] > brand["bottom"] + 8, f"both under the mark: {lines} vs {brand['bottom']}"
+    real = page.locator("#version-short").inner_text()
+    try:
+        for version, beside in (("v0.0.0-dev", True), ("v0.0.0-dev+0123456789ab-dirty", case.width >= 600)):
+            set_version(page, version)
+            assert wait_until(page, "(() => { const v = document.getElementById('version-short'); return v.scrollWidth <= v.clientWidth + 1; })()", 3), \
+                f"{version} whole"
+            lines = {sel: page.evaluate(BASELINE, sel) for sel in ("#version-short", "#updated")}
+            if beside:
+                assert abs(lines["#version-short"] - lines["#updated"]) <= 1, f"{version} and the time on one line: {lines}"
+                assert abs(lines["#updated"] - brand["bottom"]) <= 1, f"on the logo's baseline with {version}: {lines} vs {brand['bottom']}"
+            else:
+                assert lines["#version-short"] <= lines["#updated"] + 1, f"{version} on the time's line or above it: {lines}"
+                assert lines["#version-short"] > brand["bottom"] + 8, f"both under the mark with {version}: {lines} vs {brand['bottom']}"
+    finally:
+        set_version(page, real)
     icon = box(page, "#refresh-btn svg")
     digits = page.evaluate(DIGITS_MIDDLE, "#updated")
     assert abs(icon["y"] + icon["height"] / 2 - digits) <= 1, f"↻ on the digits' middle: {icon} vs {digits}"

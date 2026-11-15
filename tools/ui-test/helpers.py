@@ -158,6 +158,13 @@ def assert_busy(page, selector, what):
     assert state == [True, True, "true"], f"{what} is off with its spinner while the request runs: {state}"
 
 
+def set_version(page, version):
+    """The header's version set by hand, and fitted again (app.js
+    watchFacts refits the facts a frame after their text changes)."""
+    page.evaluate("""(v) => new Promise((done) => { document.getElementById('version-short').textContent = v;
+      requestAnimationFrame(() => requestAnimationFrame(() => done())); })""", version)
+
+
 def css_hidden(page, selector):
     """Whether the page's style hides an element (display none), shown or
     not where it sits: an item of a closed menu is not."""

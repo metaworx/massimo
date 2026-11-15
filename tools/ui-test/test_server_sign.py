@@ -6,7 +6,7 @@ the server gone, each its icon in a frame and a label that says what a
 click does."""
 import json
 
-from helpers import show_view, wait_until
+from helpers import set_version, show_view, wait_until
 
 # The middle of an element's digits: its baseline less half the height of
 # a 0 in its font.
@@ -37,7 +37,7 @@ def test_server_connected_and_update(page, case):
     assert (state, icon) == ("up", "#icon-plug-on") and label == page.evaluate("t('server.up')"), "connected"
     real = page.locator("#version-short").inner_text()
     for version in ("v0.16.0", "v0.0.0-dev+0123456789ab-dirty", real):  # a release's, a build's: the header wraps differently
-        page.evaluate("(v) => { document.getElementById('version-short').textContent = v; }", version)
+        set_version(page, version)  # and fitted again, a frame later
         b = page.locator("#server-sign").bounding_box()
         u = page.locator("#updated").bounding_box()
         assert b["x"] + b["width"] <= u["x"], f"before the time with {version}, however the header wraps ({b}, {u})"
