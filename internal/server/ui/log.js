@@ -24,7 +24,7 @@ const LOG_KINDS = ["connected", "disconnected", "hello", "metadata", "config", "
   "device_forgotten", "cube_found", "restore_step", "restore_done", "disagree", "drift",
   "cube_gone", "address_changed", "server_started", "server_stopping", "settings_read", "restart", "reboot", "reboot_cancelled",
   "update", "update_result", "backup", "backup_deleted", "backups_pruned", "log_pruned", "log_rotated", "restore_started",
-  "change", "command", "hold", "structure", "error_reset", "error_watch", "slots", "mismatch", "login", "login_failed", "locked_out", "audit_pruned",
+  "change", "command", "hold", "structure", "unconfirmed", "error_reset", "error_watch", "slots", "mismatch", "login", "login_failed", "locked_out", "audit_pruned",
   "proxy_connected", "proxy_disconnected", "proxy_refused", "proxy_discarded", "proxy_deleted", "proxy_delete_refused", "proxy_pairing", "proxy_warning"];
 
 // LOG_RANGES are the choices of how far back the log goes: the newest
@@ -72,7 +72,7 @@ const LOG_SOURCES = ["system", "config", "cube", "device", "queue", "server", "p
 // LOG_KIND_SOURCE groups the kinds by the source they come from, for the
 // kind choice; a kind of more than one (config) goes with the devices.
 const LOG_KIND_SOURCE = {
-  state: "device", config: "device", paired: "device", device_forgotten: "device", error_reset: "device", error_watch: "device",
+  state: "device", config: "device", paired: "device", device_forgotten: "device", error_reset: "device", error_watch: "device", unconfirmed: "device",
   connected: "cube", disconnected: "cube", hello: "cube", metadata: "cube", pairing_started: "cube", pairing_ended: "cube",
   cube_found: "cube", cube_gone: "cube", address_changed: "cube",
   disagree: "cube", drift: "device",
@@ -427,6 +427,8 @@ function logSummaryText(kind, s, serial) {
       if (s.link_error) parts.push(t("log.sum.structureLink", { devices: s.link_error.map(rfLabel).join(", ") }));
       return parts.join("; ");
     }
+    case "unconfirmed":
+      return logUnconfirmedText(s, serial);
     case "slots": {
       const at = (iso) => (iso ? fmtLogTime(new Date(iso)) : "–");
       if (s.state === "full") return t("log.sum.slotsFull", { slots: num(s.free_slots), since: at(s.full_since || s.since) });
@@ -547,6 +549,31 @@ function logDisagreeText(s, serial) {
       return t("log.sum.disagreeAgree", { room, minutes: num(s.minutes) });
   }
   return "";
+}
+
+// logUnconfirmedText is the line of a write its devices did not show by
+// its deadline (confirm.go): the write, its room, each device by name with
+// what it shows; or a device that showed it late.
+function logUnconfirmedText(s, serial) {
+  const num = (v) => (v === undefined || v === null ? "–" : String(v));
+  const write = logWord("log.write.", s.write);
+  if (s.outcome === "confirmed_late") return t("log.sum.confirmedLate", { write, seconds: num(s.seconds) });
+  const value = (k, v) => {
+    if (Array.isArray(v)) return ""; // a day's switch points: its name says it
+    if (k === "mode") return logWord("log.mode.", v);
+    if (k === "setpoint") return fmtNum(v, 1);
+    if (k === "locked") return t(v ? "confirm.lockedOn" : "confirm.lockedOff");
+    return logValue(k, v);
+  };
+  const devices = (s.devices || []).map((d) => {
+    const dev = logDevice(d.rf_address, serial);
+    const name = dev ? deviceName(dev) : d.rf_address;
+    const shows = Object.keys(d.shows || {}).sort().map((k) => (confirmFieldName(k) + " " + value(k, d.shows[k])).trim()); // rooms.js
+    return shows.length ? name + " (" + shows.join(", ") + ")" : name;
+  }).join(", ");
+  const args = { write, minutes: num(s.minutes), devices: devices || "–" };
+  if (!s.room) return t("log.sum.unconfirmed", args);
+  return t("log.sum.unconfirmedRoom", Object.assign(args, { room: logRoomName(s.room, serial) }));
 }
 
 // logDriftText is a room check's line of a thermostat that does not

@@ -114,7 +114,8 @@ func kindOf(r *http.Request) (view.Kind, error) {
 func (s *Server) roomsOf(rt *runtime, kind view.Kind) []view.Room {
 	rooms := view.RoomsOf(rt.client.Snapshot(), rt.hidden(), s.staleness(), kind, rt.roomInfo())
 	for i := range rooms {
-		rt.withBattery(s.withWindow(rooms[i].Devices))
+		rt.withConfirmations(rt.withBattery(s.withWindow(rooms[i].Devices)))
+		rooms[i].Confirmation = rt.roomConfirmation(rooms[i].ID)
 		rt.setRoomMismatches(&rooms[i]) // congruence.go
 	}
 	return rooms
@@ -122,7 +123,7 @@ func (s *Server) roomsOf(rt *runtime, kind view.Kind) []view.Room {
 
 // devicesOf is the device list of a Cube as the API shows it in a view.
 func (s *Server) devicesOf(rt *runtime, kind view.Kind) []view.Device {
-	return rt.withMismatches(rt.withBattery(s.withWindow(view.DevicesOf(rt.client.Snapshot(), rt.hidden(), s.staleness(), kind, rt.roomInfo()))))
+	return rt.withConfirmations(rt.withMismatches(rt.withBattery(s.withWindow(view.DevicesOf(rt.client.Snapshot(), rt.hidden(), s.staleness(), kind, rt.roomInfo())))))
 }
 
 // roomAlias is a virtual wall thermostat named by its room, room-<id>.

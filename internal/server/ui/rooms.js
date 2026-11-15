@@ -221,6 +221,63 @@ function modeName(mode) {
   return s === key ? mode : s;
 }
 
+// --- writes not confirmed ---------------------------------------------
+
+// confirmFieldName names a value a write's confirmation waits for (the
+// server's confirm.go): the state's mode, setpoint, vacation end, key
+// lock and display, a configuration's by the log's names, a day of the
+// week programme by its day.
+function confirmFieldName(f) {
+  const day = /^program\.([a-z]+)(\.2)?$/.exec(f);
+  if (day) return t("confirm.program", { day: t("day." + day[1]) });
+  if (f === "locked") return t("confirm.locked");
+  if (f === "display_actual") return t("confirm.display");
+  if (f === "mode" || f === "setpoint" || f === "until") return t("log.disagree.what." + f);
+  const key = "log.cfg." + f;
+  return t(key) === key ? f : t(key);
+}
+
+// confirmShown is what a device's state shows of a value its write waits
+// for; "" for a configuration's value, which the state does not hold.
+function confirmShown(d, f) {
+  const s = d.state || {};
+  switch (f) {
+    case "mode":
+      return s.mode ? modeName(s.mode) : "";
+    case "setpoint":
+      return s.setpoint !== undefined ? fmtTemp(s.setpoint) : "";
+    case "until":
+      return s.until ? fmtUntil(s.until) : "";
+    case "locked":
+      return t(s.panel_locked ? "confirm.lockedOn" : "confirm.lockedOff");
+  }
+  return "";
+}
+
+// confirmFieldsText lists what a device has not shown of the writes to
+// it, each value with what the device shows where its state says:
+// "mode (shows auto), setpoint (shows 20.0 °C)".
+function confirmFieldsText(d) {
+  const out = [];
+  for (const f of (d.confirmation && d.confirmation.fields) || []) {
+    const shown = confirmShown(d, f);
+    const text = confirmFieldName(f) + (shown ? " (" + t("confirm.shows", { value: shown }) + ")" : "");
+    if (!out.includes(text)) out.push(text); // a long day's two parts are one day
+  }
+  return out.join(", ");
+}
+
+// confirmItem is the mark of a device that has not shown a write by its
+// deadline, an amber problem of its tile and of its row whose title says
+// what it does not show; none while the write is pending, nor for a
+// virtual wall thermostat, whose room's devices carry it.
+function confirmItem(d) {
+  const c = d.confirmation;
+  if (!c || c.state !== "unconfirmed" || d.virtual) return null;
+  return { kind: "unconfirmed", icon: "icon-unconfirmed", tone: "warn", text: t("badge.notConfirmed"),
+    title: t("badge.notConfirmedTitle", { fields: confirmFieldsText(d) }) };
+}
+
 function typeName(type) {
   const key = "type." + type;
   const s = t(key);

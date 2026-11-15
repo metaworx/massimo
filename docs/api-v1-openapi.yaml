@@ -2139,6 +2139,7 @@ paths:
                     type: array
                     items: {$ref: "#/components/schemas/DeviceResult"}
                   budget: {$ref: "#/components/schemas/Budget"}
+                  confirmation: {type: string, enum: [pending, confirmed], description: "Pending until each device that took the write shows it in its configuration; absent where none did"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
@@ -3152,7 +3153,11 @@ paths:
         commands waiting); structure, source cube (a removal, placement or
         move read back from the Cube's free slots: action, outcome,
         before, free_slots, minutes, held or no_reading, flagged,
-        link_error in "summary"); slots, source cube (the Cube's memory
+        link_error in "summary"); unconfirmed, source device (a write its
+        devices do not show in time: write (setpoint, lock, display, config,
+        program), target, room, source, expected,
+        outcome not_confirmed at warn with minutes, confirmed and devices,
+        or confirmed_late at info with seconds, in "summary"); slots, source cube (the Cube's memory
         slots held for an hour with nothing of the server's in flight,
         fewer than 5 free at warn, fewer than 2 at error, and free again,
         at info: state low, full or free, from for a step, free_slots,
@@ -3884,6 +3889,7 @@ components:
               ok: {type: boolean}
               discarded: {type: boolean, description: Always false on 200; a discarded command answers 502}
               budget: {$ref: "#/components/schemas/Budget"}
+              confirmation: {type: string, enum: [pending, confirmed], description: "A setpoint, a key lock or a display mode: pending until the devices' states show it (the devices' and the room's confirmation, the log's unconfirmed line after five minutes); a configuration or a week programme until their configurations show it (the line after the last re-read, about six minutes). Confirmed where each shows it already. Absent for other writes"}
         pending_radiograms: {type: integer, description: "Radiograms sent by the Cube and not yet acknowledged by a device (memory slots in use): all of them when no slot is free, 0 until the Cube has reported its budget"}
     BadRequest:
       description: Bad input
@@ -4833,6 +4839,16 @@ components:
           type: array
           description: "The findings of the Cube's C lines against its room list that concern the room, and of its members that differ (docs/api-v1.md, \"The Cube's lines against its room list\"); absent where none"
           items: {$ref: "#/components/schemas/Mismatch"}
+        confirmation: {$ref: "#/components/schemas/Confirmation"}
+    Confirmation:
+      type: object
+      description: "A write not confirmed yet: the device, or members of the room, do not show what it set. Present while one is open"
+      required: [state, since, fields]
+      properties:
+        state: {type: string, enum: [pending, unconfirmed], description: "pending until five minutes after the Cube's answer, then unconfirmed until the devices show it or a newer write of the same kind replaces it"}
+        since: {type: string, format: date-time, description: "When the Cube took the oldest write still open"}
+        fields: {type: array, items: {type: string}, description: "The values not shown yet: mode, setpoint, until, locked and display_actual of the state; the configuration's by their names (comfort_temp … valve_offset_pct); program.<day> for a day of the week programme, program.<day>.2 for a long day's second radiogram"}
+        devices: {type: array, items: {type: string}, description: "A room's: the radio addresses of its members that do not show them"}
     Mismatch:
       type: object
       description: "A difference between a C line and the room list, or among a room's members, that the server found (docs/api-v1.md, \"The Cube's lines against its room list\")"
@@ -4924,6 +4940,7 @@ components:
           properties:
             actual_temp: {type: array, items: {type: string}}
             mode: {type: array, items: {type: string}}
+        confirmation: {$ref: "#/components/schemas/Confirmation"}
         mismatches:
           type: array
           description: "The findings of the device's C line against the room list, and of its room's members, that name it (docs/api-v1.md, \"The Cube's lines against its room list\"); absent where none"

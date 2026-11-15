@@ -5,6 +5,7 @@ package cube
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -231,16 +232,17 @@ func (t Target) header(cmd byte) []byte {
 
 func send(payload []byte) Message { return Message{Type: 's', Data: b64.EncodeToString(payload)} }
 
-// RadioCommand is the header of an s: command: the radio command code
-// (RFSetTemperature and the others) and whom it addresses.
+// RadioCommand is an s: command: the radio command code
+// (RFSetTemperature and the others), whom it addresses, and the payload
+// after the header, which its methods decode.
 type RadioCommand struct {
 	Command byte
 	Target  Target
+	Payload []byte
 }
 
 // ParseRadioCommand decodes the header of an s: command's data, as a
-// client of the LAN proxy sends it; the payload after the header is
-// not looked at.
+// client of the LAN proxy sends it, and keeps the payload after it.
 func ParseRadioCommand(data string) (RadioCommand, error) {
 	raw, err := b64.DecodeString(strings.TrimSpace(data))
 	if err != nil {
@@ -249,7 +251,124 @@ func ParseRadioCommand(data string) (RadioCommand, error) {
 	if len(raw) < 10 {
 		return RadioCommand{}, fmt.Errorf("s: %d bytes, want a header of 10", len(raw))
 	}
-	return RadioCommand{Command: raw[2], Target: Target{RFAddress: RFAddressFromBytes(raw[6:9]), RoomID: raw[9], Room: raw[1]&0x04 != 0}}, nil
+	return RadioCommand{Command: raw[2], Target: Target{RFAddress: RFAddressFromBytes(raw[6:9]), RoomID: raw[9], Room: raw[1]&0x04 != 0},
+		Payload: append([]byte(nil), raw[10:]...)}, nil
+}
+
+// SetTemperature is what a 0x40 radio command sets: the mode, the
+// setpoint, and a vacation's end.
+type SetTemperature struct {
+	Mode Mode
+	// Setpoint is 0 for auto without a temperature: the device follows
+	// its week programme.
+	Setpoint float64
+	Until    Until // ModeVacation only
+}
+
+// SetTemperature decodes a 0x40 command's payload, as CmdSetTemperature
+// builds it.
+func (c RadioCommand) SetTemperature() (SetTemperature, error) {
+	p := c.Payload
+	if c.Command != RFSetTemperature || len(p) < 1 {
+		return SetTemperature{}, fmt.Errorf("s: not a set temperature command (0x%02x, %d bytes)", c.Command, len(p))
+	}
+	st := SetTemperature{Mode: Mode(p[0] >> 6), Setpoint: DecodeTemp(p[0] & 0x3f)}
+	if st.Mode == ModeVacation {
+		if len(p) < 4 {
+			return SetTemperature{}, fmt.Errorf("s: vacation without its end (%d bytes)", len(p))
+		}
+		y, m, d := decodeUntilDate(p[1], p[2])
+		st.Until = Until{Year: y, Month: m, Day: d, Minutes: int(p[3]&0x3f) * 30}
+	}
+	return st, nil
+}
+
+// Locked decodes a 0x80 command's payload, as CmdLockControls builds
+// it: true locks the device's buttons.
+func (c RadioCommand) Locked() (bool, error) {
+	if c.Command != RFLockControls || len(c.Payload) < 1 {
+		return false, fmt.Errorf("s: not a lock command (0x%02x, %d bytes)", c.Command, len(c.Payload))
+	}
+	return c.Payload[0]&0x01 != 0, nil
+}
+
+// DisplayActual decodes a 0x82 command's payload, as CmdSetDisplayActual
+// builds it: true shows the measured temperature.
+func (c RadioCommand) DisplayActual() (bool, error) {
+	if c.Command != RFSetDisplayMode || len(c.Payload) < 1 {
+		return false, fmt.Errorf("s: not a display command (0x%02x, %d bytes)", c.Command, len(c.Payload))
+	}
+	return c.Payload[0]&0x04 != 0, nil
+}
+
+// Temperatures decodes a 0x11 command's payload, as CmdSetTemperatures
+// builds it.
+func (c RadioCommand) Temperatures() (TemperatureSettings, error) {
+	p := c.Payload
+	if c.Command != RFSetTemperatures || len(p) < 7 {
+		return TemperatureSettings{}, fmt.Errorf("s: not a temperatures command (0x%02x, %d bytes)", c.Command, len(p))
+	}
+	return TemperatureSettings{Comfort: DecodeTemp(p[0]), Eco: DecodeTemp(p[1]), Max: DecodeTemp(p[2]), Min: DecodeTemp(p[3]),
+		Offset: DecodeTemp(p[4]) - 3.5, WindowOpen: DecodeTemp(p[5]), WindowOpenMinutes: int(p[6]) * 5}, nil
+}
+
+// ValveSettings decodes a 0x12 command's payload, as CmdSetValveConfig
+// builds it; the percentages are read as a C line reads them.
+func (c RadioCommand) ValveSettings() (ValveSettings, error) {
+	p := c.Payload
+	if c.Command != RFSetValveConfig || len(p) < 4 {
+		return ValveSettings{}, fmt.Errorf("s: not a valve command (0x%02x, %d bytes)", c.Command, len(p))
+	}
+	boost := int(p[0]>>5) * 5
+	if p[0]>>5 == 7 {
+		boost = 60
+	}
+	return ValveSettings{BoostMinutes: boost, BoostValvePct: int(p[0]&0x1f) * 5, DecalcDay: Weekday(p[1] >> 5), DecalcHour: int(p[1] & 0x1f),
+		MaxValvePct: pctFrom255(p[2]), ValveOffsetPct: pctFrom255(p[3])}, nil
+}
+
+// DayProgramPart is the part of a day's programme that one 0x10 command
+// carries: the first telegram's points from 0, a long day's second from
+// 7, the padding left out; Last says that it ends the day, with the 24:00
+// point.
+type DayProgramPart struct {
+	Day    Weekday
+	From   int
+	Points DayProgram
+	Last   bool
+}
+
+// DayProgram decodes a 0x10 command's payload, as CmdSetDayProgram
+// builds it.
+func (c RadioCommand) DayProgram() (DayProgramPart, error) {
+	p := c.Payload
+	if c.Command != RFSetWeekProgram || len(p) < 3 {
+		return DayProgramPart{}, fmt.Errorf("s: not a day programme command (0x%02x, %d bytes)", c.Command, len(p))
+	}
+	part := DayProgramPart{Day: Weekday(p[0] & 0x0f)}
+	if part.Day > Friday {
+		return DayProgramPart{}, fmt.Errorf("s: day programme of weekday %d", part.Day)
+	}
+	if p[0]&0x10 != 0 {
+		part.From = 7
+	}
+	for off := 1; off+1 < len(p) && !part.Last; off += 2 {
+		sp := decodeSwitchPoint(uint16(p[off])<<8 | uint16(p[off+1]))
+		part.Points = append(part.Points, sp)
+		part.Last = sp.Until >= 24*60
+	}
+	return part, nil
+}
+
+// Shown reports whether day, a day's programme as a C line holds it,
+// holds the part: its points in their place, and nothing after them
+// where the part ends the day.
+func (p DayProgramPart) Shown(day DayProgram) bool {
+	end := p.From + len(p.Points)
+	if len(day) < end || p.Last && len(day) != end {
+		return false
+	}
+	return slices.Equal(day[p.From:end], p.Points)
 }
 
 // CmdSetTemperature sets setpoint and mode. For ModeVacation, until must be

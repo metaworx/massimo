@@ -112,6 +112,8 @@ function renderDevice(d) {
   ids.appendChild(deviceIds(d.serial, d.rf_address));
   const badges = el.querySelector(".device-badges");
   const items = deviceProblems(d, false);
+  const unconfirmed = confirmItem(d); // rooms.js
+  if (unconfirmed) items.push(unconfirmed);
   const problems = problemsEl([{ icon: deviceIcon(d), title: deviceName(d), sub: d.serial || d.rf_address, items }], problemsLabel(items));
   if (problems) badges.appendChild(problems);
   for (const m of d.mismatches || []) badges.appendChild(mismatchBadge(m));
