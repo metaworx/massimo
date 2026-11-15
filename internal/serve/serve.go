@@ -267,16 +267,21 @@ func Open(ctx context.Context, cfg Config) (*Instance, error) {
 // open is Open once the store is open.
 func open(ctx context.Context, cfg Config, root *slog.Logger, src certs.Source, st *store.Store) (*Instance, error) {
 	log := root.With("source", "system")
-	// The values given win for this run; otherwise the store's settings.
+	// The values given win for this run, and GET /api/v1/settings names
+	// their flags; otherwise the store's settings.
 	poll, refresh, discover := server.DefaultPollInterval, server.DefaultRefreshInterval, server.DefaultDiscoverInterval
 	var staleAfter time.Duration
+	fixedBy := map[string]string{}
 	for _, d := range []struct {
 		key   string
+		flag  string
 		given *time.Duration
 		v     *time.Duration
-	}{{store.PollIntervalKey, cfg.PollInterval, &poll}, {store.RefreshIntervalKey, cfg.RefreshInterval, &refresh}, {store.DiscoverIntervalKey, cfg.DiscoverInterval, &discover}, {store.StaleAfterKey, cfg.StaleAfter, &staleAfter}} {
+	}{{store.PollIntervalKey, "-poll", cfg.PollInterval, &poll}, {store.RefreshIntervalKey, "-refresh", cfg.RefreshInterval, &refresh},
+		{store.DiscoverIntervalKey, "-discover-interval", cfg.DiscoverInterval, &discover}, {store.StaleAfterKey, "-stale-after", cfg.StaleAfter, &staleAfter}} {
 		if d.given != nil {
 			*d.v = *d.given
+			fixedBy[d.key] = d.flag
 			continue
 		}
 		if st == nil {
@@ -303,7 +308,7 @@ func open(ctx context.Context, cfg Config, root *slog.Logger, src certs.Source, 
 		find = findIntegrations
 	}
 	srv := server.New(server.Options{Cubes: su.cubes, Token: cfg.Token, PollInterval: poll, CubeHold: cfg.CubeHold, RefreshInterval: refresh, DiscoverInterval: discover, DiscoveryTargets: cfg.DiscoveryTargets, DiscoveryAddr: cfg.DiscoveryListen, Logger: root, Version: cfg.Version, Proxy: su.listeners, ShowHidden: cfg.ShowHidden,
-		Store: st, FileCubes: su.fileCubes, SettingsFile: cfg.SettingsFile, StaleAfter: staleAfter, ProxyFixed: len(cfg.Proxies) > 0, Update: cfg.Update, TLS: src, HSTSDays: cfg.HSTSDays, TrustedProxies: cfg.TrustedProxies,
+		Store: st, FileCubes: su.fileCubes, SettingsFile: cfg.SettingsFile, StaleAfter: staleAfter, SettingsFixedBy: fixedBy, ProxyFixed: len(cfg.Proxies) > 0, Update: cfg.Update, TLS: src, HSTSDays: cfg.HSTSDays, TrustedProxies: cfg.TrustedProxies,
 		Restart: cfg.Restart, Reboot: cfg.Reboot, Install: cfg.Install, Deliverers: cfg.Deliverers, FindIntegrations: find, BrowseServers: browseServers,
 		Announce: server.AnnounceState{On: cfg.Announce.On && st != nil, FixedBy: cfg.Announce.FixedBy}})
 	ln, err := net.Listen("tcp", cfg.Listen)

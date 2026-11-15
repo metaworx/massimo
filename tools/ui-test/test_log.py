@@ -442,11 +442,18 @@ def test_log_answers(page, case):
     event comes past 2000 lines, and the error line shows with a kind
     chosen. The page's api() holds the log's requests, which the test
     answers in its own time; the log button's question (log/alerts) goes
-    through."""
+    through. The test server's own stream (a device's state from the fake
+    Cube, polled every 10 s) is kept out, since a line it brought would
+    push one of the counted out; the events the test sends get through."""
     now = time.time()
     show_view(page, "log")
     all_events(page)
     page.evaluate("""() => {
+      // at the stream, a capturing listener comes before the page's own:
+      // the server's events (trusted) stop there, the test's go on
+      for (const kind of LOG_KINDS) {
+        state.events.addEventListener(kind, (ev) => { if (ev.isTrusted) ev.stopImmediatePropagation(); }, true);
+      }
       window.logAnswers = [];
       const real = api;
       window.api = (method, path, body) => path.includes("/log") && !path.includes("/log/alerts")

@@ -801,9 +801,10 @@ to the top of the page.
   one the helper ended without its version says how it ended (`docs/api-v1.md`,
   "GET /api/v1/update?refresh=1").
 - **Maintenance** (with `restart`, `reboot` for its reboot,
-  or `settings` for its announcement and its last two parts),
-  in this order: **Announce on the LAN**, **Settings file**, **Restart**
-  and **Reboot the computer**, each under a bold title:
+  or `settings` for its announcement, its Cube intervals and its last two parts),
+  in this order: **Announce on the LAN**, the three Cube intervals,
+  **Settings file**, **Restart** and **Reboot the computer**,
+  each under a bold title:
   **Restart the server**
   asks in the section and restarts the server through its service manager
   (`docs/api-v1.md`, "POST /api/v1/restart");
@@ -814,7 +815,8 @@ to the top of the page.
   and the server's reason is shown,
   such as a server in a terminal or an open server asked from elsewhere than the box.
   The settings of the settings file that changed since the start and apply only
-  at the next one are listed under it, by name, and counted in the card's head.
+  at the next one are listed under it, by name, and counted in the card's head,
+  with the card's own settings that wait for it.
   **Announce on the LAN** (with `settings`) chooses **Automatic**, **On**
   or **Off** for the setting `announce`: the announcement by mDNS for
   `massimo discover`, the apps and Home Assistant, Automatic on unless the
@@ -823,6 +825,19 @@ to the top of the page.
   a change waits for the next restart; where `-announce` or
   `MASSIMO_ANNOUNCE` decides, the choice is read-only and names it
   (`docs/api-v1.md`, "GET and PUT /api/v1/settings").
+  **Poll the Cubes every**, **Refresh the Cubes every** and **Look for
+  Cubes every** (with `settings`) choose the intervals `poll_interval`
+  (10 s to 1 h, 10 s by default), `refresh_interval` (Off, 30 min to
+  7 days, 6 h by default) and `discover_interval` (Off, 1 min to 1 day,
+  30 min by default) from a list of steps; a value set through the API
+  that is none of them is listed as well, and the default is stored as
+  none.
+  The line under each says what it does: the device list asked for,
+  which costs the Cube no radio time; a new connection that reads
+  everything the Cube holds; the search for Cubes on the LAN.
+  It then gives this run's value, or says that a change waits for the
+  next restart; where `-poll`, `-refresh` or `-discover-interval`
+  decides, the choice is read-only and names the flag.
   **Settings file** names the file and when the server last read it;
   **Reload now** reads it again at once, as SIGHUP does
   (`docs/api-v1.md`, "POST /api/v1/reload"), and says what changed.

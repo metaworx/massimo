@@ -280,7 +280,8 @@ async function runUpdate(u) {
 const RESTART_POLL_MS = 2000;
 const RESTART_WAIT_MS = 2 * 60 * 1000;
 
-const restartState = { following: false };
+// pending is the settings file's settings that wait for the next start.
+const restartState = { following: false, pending: [] };
 
 // showRestartText says how the restart stands, under its button.
 function showRestartText(text) {
@@ -298,10 +299,11 @@ function renderRestart(v) {
   $("restart-btn").classList.toggle("hidden", !(v && v.available));
   showRestartText(v && !v.available && v.blocked ? t("restart.unavailable", { reason: v.blocked }) : v ? t("maint.restartText") : "");
   const pending = (v && v.pending) || [];
+  restartState.pending = pending;
   const p = $("restart-pending");
   p.textContent = pending.length ? t("restart.pending", { names: pending.join(", ") }) : "";
   p.classList.toggle("hidden", !pending.length);
-  sectionBadges($("sys-maint"), pending.length ? [badgeEl(tn("maint.badge.pending", pending.length), "warn")] : []);
+  renderMaintBadge();
   const file = [];
   if (v && v.file) file.push(t("maint.fileText", { file: v.file }));
   if (v && v.read_at) file.push(t("maint.lastRead", { time: fmtInstant(new Date(Date.parse(v.read_at))) }));
@@ -921,6 +923,15 @@ async function loadSystemInfo() {
   $("info-client").textContent = v.client_ip || "–";
 }
 
+// renderMaintBadge counts in the Maintenance card's head what waits for
+// the next start: the settings file's settings and the store's (the
+// announcement and the Cube intervals, AP CubePoll v1.0).
+function renderMaintBadge() {
+  const n = restartState.pending.length + (announceWaits(announceUI.v) ? 1 : 0) +
+    INTERVALS.filter((iv) => intervalWaits(intervalsUI.v[iv.key])).length;
+  sectionBadges($("sys-maint"), n ? [badgeEl(tn("maint.badge.pending", n), "warn")] : []);
+}
+
 // --- the announcement on the LAN (the setting announce) ----------------
 
 // announceUI keeps the setting as GET /api/v1/settings answered it.
@@ -938,22 +949,32 @@ function renderAnnounce() {
   sel.value = v.value || "auto";
   sel.disabled = !!v.fixed_by;
   const now = t(v.in_effect === "on" ? "maint.announceNowOn" : "maint.announceNowOff");
+  renderMaintBadge();
   if (v.fixed_by) {
     text.textContent = t("maint.announceFixed", { by: v.fixed_by }) + " " + now;
     return;
   }
-  const wants = v.value === "on" ? "on" : v.value === "off" ? "off" : "";
-  const waits = wants && wants !== v.in_effect;
-  text.textContent = t("maint.announceHint") + " " + (waits ? t("maint.announceWaits") : now);
+  text.textContent = t("maint.announceHint") + " " + (announceWaits(v) ? t("maint.announceWaits") : now);
 }
 
-// loadAnnounce reads the setting, for a holder of settings.
+// announceWaits reports whether the stored choice differs from this
+// run's announcement: On or Off chosen, the other in effect.
+function announceWaits(v) {
+  if (!v || v.fixed_by) return false;
+  const wants = v.value === "on" ? "on" : v.value === "off" ? "off" : "";
+  return !!wants && wants !== v.in_effect;
+}
+
+// loadAnnounce reads the settings of the card, the announcement and
+// the Cube intervals, for a holder of settings.
 async function loadAnnounce() {
   if (!hasCap("settings")) return;
   try {
     const all = (await api("GET", "api/v1/settings")) || {};
     announceUI.v = all.announce || null;
+    for (const iv of INTERVALS) intervalsUI.v[iv.key] = all[iv.key] || null;
     renderAnnounce();
+    INTERVALS.forEach(renderInterval);
   } catch (e) {
     showResult($("announce-msg"), t("maint.cannotAsk", { error: e.message }), false);
   }
@@ -975,6 +996,115 @@ async function setAnnounce() {
   renderAnnounce();
 }
 
+// --- the Cube intervals (poll_interval, refresh_interval, discover_interval)
+
+// INTERVALS are the Cube intervals of the Maintenance card (AP CubePoll
+// v1.0, D119-B): the setting, its select and its explanation, and the
+// steps offered in seconds, 0 for off, within the API's range.
+const INTERVALS = [
+  { key: "poll_interval", id: "interval-poll", hint: "maint.pollHint", steps: [10, 15, 20, 30, 60, 120, 300, 600, 1800, 3600] },
+  { key: "refresh_interval", id: "interval-refresh", hint: "maint.refreshHint", steps: [0, 1800, 3600, 7200, 10800, 21600, 43200, 86400, 172800, 604800] },
+  { key: "discover_interval", id: "interval-discover", hint: "maint.discoverHint", steps: [0, 60, 300, 600, 900, 1800, 3600, 7200, 21600, 43200, 86400] },
+];
+
+// intervalsUI keeps the settings as GET /api/v1/settings answered them.
+const intervalsUI = { v: {} };
+
+// parseGoDuration is a duration as the API writes it (10s, 1m30s, 6h,
+// 0) in seconds; NaN for anything else.
+function parseGoDuration(text) {
+  const s = String(text || "").trim();
+  if (s === "0") return 0;
+  if (!s) return NaN;
+  const units = { h: 3600, m: 60, s: 1 };
+  const part = /^(\d+(?:\.\d+)?)(h|m|s)/;
+  let sec = 0;
+  let rest = s;
+  while (rest) {
+    const m = part.exec(rest);
+    if (!m) return NaN;
+    sec += Number(m[1]) * units[m[2]];
+    rest = rest.slice(m[0].length);
+  }
+  return Math.round(sec);
+}
+
+// apiDuration writes seconds as the API reads a duration: 10s, 30m, 6h, 0.
+function apiDuration(sec) {
+  if (sec === 0) return "0";
+  if (sec % 3600 === 0) return sec / 3600 + "h";
+  if (sec % 60 === 0) return sec / 60 + "m";
+  return sec + "s";
+}
+
+// intervalLabel is seconds in the language's short units ("10 s",
+// "6 h", "1 min, 30 s"), Off for 0.
+function intervalLabel(sec) {
+  if (isNaN(sec)) return "–";
+  if (sec === 0) return t("maint.off");
+  const parts = [];
+  for (const [unit, n] of [["day", 86400], ["hour", 3600], ["minute", 60], ["second", 1]]) {
+    if (sec >= n) {
+      parts.push(fmtUnit(Math.floor(sec / n), unit)); // app.js
+      sec %= n;
+    }
+  }
+  return parts.join(", ");
+}
+
+// intervalWaits reports whether a stored interval differs from this
+// run's, so that it waits for the next start.
+function intervalWaits(v) {
+  return !!v && !v.fixed_by && parseGoDuration(v.value) !== parseGoDuration(v.in_effect);
+}
+
+// renderInterval shows one interval: its steps, a stored value that is
+// none of them added; the line saying what it does and this run's
+// value, or that a change waits for the restart; read-only with what
+// sets it where a flag decides (as the announcement, D15-A).
+function renderInterval(iv) {
+  const v = intervalsUI.v[iv.key];
+  const sel = $(iv.id);
+  const text = $(iv.id + "-text");
+  if (!v) return;
+  const value = parseGoDuration(v.value);
+  const steps = isNaN(value) || iv.steps.includes(value) ? iv.steps : [...iv.steps, value].sort((a, b) => a - b);
+  sel.replaceChildren(...steps.map((sec) => {
+    const o = document.createElement("option");
+    o.value = String(sec);
+    o.textContent = intervalLabel(sec);
+    return o;
+  }));
+  sel.value = String(value);
+  sel.disabled = !!v.fixed_by;
+  const now = intervalLabel(parseGoDuration(v.in_effect));
+  const state = v.fixed_by ? t("maint.intervalFixed", { by: v.fixed_by, value: now })
+    : intervalWaits(v) ? t("maint.intervalWaits", { value: now })
+      : t("maint.intervalNow", { value: now });
+  // a unit that ends in a full stop ("10 Sek.") ends the sentence too
+  text.textContent = t(iv.hint) + " " + state.replace(/\.\.$/, ".");
+  renderMaintBadge();
+}
+
+// saveInterval stores the chosen interval; the default is sent as null,
+// so that the store keeps no copy of it.
+async function saveInterval(iv) {
+  const sel = $(iv.id);
+  const sec = Number(sel.value);
+  const v = intervalsUI.v[iv.key];
+  const def = v ? parseGoDuration(v.default) : NaN;
+  sel.disabled = true;
+  try {
+    const all = (await api("PUT", "api/v1/settings", { [iv.key]: sec === def ? null : apiDuration(sec) })) || {};
+    intervalsUI.v[iv.key] = all[iv.key] || v;
+    showResult($(iv.id + "-msg"), t("maint.intervalSaved"), true);
+  } catch (e) {
+    showResult($(iv.id + "-msg"), t("maint.intervalFailed", { error: e.message }), false);
+  }
+  sel.disabled = false;
+  renderInterval(iv);
+}
+
 function initUpdate() {
   $("update-btn").addEventListener("click", startUpdate);
   $("update-check").addEventListener("click", (ev) => whileBusy(ev.currentTarget, () => loadUpdate(true)));
@@ -984,8 +1114,10 @@ function initUpdate() {
   $("reboot-btn").addEventListener("click", startReboot);
   $("reboot-cancel").addEventListener("click", cancelReboot);
   $("announce-mode").addEventListener("change", setAnnounce);
+  for (const iv of INTERVALS) $(iv.id).addEventListener("change", () => saveInterval(iv));
   onView("system", () => {
     showResult($("announce-msg"), "");
+    for (const iv of INTERVALS) showResult($(iv.id + "-msg"), "");
     loadAnnounce();
     loadUpdate(false).then(loadChannel);
     loadRestart();

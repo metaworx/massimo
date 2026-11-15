@@ -36,9 +36,11 @@ type durationSetting struct {
 }
 
 // The intervals of a server without a setting in the store; serve's
-// flags have them as their defaults.
+// flags have them as their defaults. The device list is asked for every
+// 10 s, as the original software does: the Cube answers it from its
+// memory, without radio time.
 const (
-	DefaultPollInterval     = time.Minute
+	DefaultPollInterval     = 10 * time.Second
 	DefaultRefreshInterval  = 6 * time.Hour
 	DefaultDiscoverInterval = 30 * time.Minute
 )
@@ -123,7 +125,8 @@ type settingView struct {
 	Applies  string `json:"applies,omitempty"`
 	ReadOnly bool   `json:"read_only,omitempty"`
 	// FixedBy names what decides this run's value instead of the setting:
-	// a flag or a variable of the env file (announce).
+	// a flag or a variable of the env file (announce), a flag (-poll and
+	// the other durations; Options.SettingsFixedBy).
 	FixedBy string `json:"fixed_by,omitempty"`
 }
 
@@ -158,7 +161,8 @@ func (s *Server) settingsView(r *http.Request) (map[string]settingView, error) {
 		if !ok {
 			v = d.def
 		}
-		sv := settingView{Value: fmtDuration(v), Default: fmtDuration(d.def), Set: ok, InEffect: fmtDuration(d.inEffect(s)), Applies: "restart"}
+		sv := settingView{Value: fmtDuration(v), Default: fmtDuration(d.def), Set: ok, InEffect: fmtDuration(d.inEffect(s)), Applies: "restart",
+			FixedBy: s.opts.SettingsFixedBy[d.key]}
 		if d.now {
 			sv.Applies = "now"
 		}
