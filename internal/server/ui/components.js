@@ -635,12 +635,13 @@ function showResult(el, text, ok) {
 }
 
 // markRange marks a number field by what its required, min, max and step
-// allow: a value they refuse sets aria-invalid, which style.css outlines
-// in red, and shows hint, the amber range before the box, which the
-// field then names as its description; a good value clears both. It
-// returns whether the value is good.
-function markRange(input, hint) {
-  const ok = input.validity.valid;
+// allow, or by ok where the caller judges the value itself (the
+// notifications' threshold takes any number in its range, not only its
+// step): a value refused sets aria-invalid, which style.css outlines in
+// red, and shows hint, the amber range before the box, which the field
+// then names as its description; a good value clears both. It returns
+// whether the value is good.
+function markRange(input, hint, ok = input.validity.valid) {
   if (ok) {
     input.removeAttribute("aria-invalid");
     input.removeAttribute("aria-describedby");
