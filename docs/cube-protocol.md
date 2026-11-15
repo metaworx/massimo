@@ -513,6 +513,17 @@ then wakeup of the new room,
 Links are therefore the only per-device data that is not readable from the Cube;
 a restore derives them from the room layout.
 
+The Cube takes a link radiogram with the room flag (0x20, 0x21) as one delivery
+per member of the room's group, about one memory slot each (2026-11-15, Cube
+firmware 1.1.3, one of the owner's rooms with three radiator thermostats; the
+original software's removal the same day took 4 slots in a room of 4).
+The member the radiogram is addressed to took it at once; the others were
+still pending ten minutes later and took it with the next wakeup of the room.
+Whether every member then acts on it was not settled: the devices pass setpoint
+changes on among themselves, so a member that kept a partner hides one that
+dropped it.
+Massimo sends one room-flagged link radiogram to each radiator thermostat.
+
 Boost over the air (2026-11-13, Cube firmware 1.1.3, through Massimo's proxy):
 one room-addressed 0x40 with mode 3 in its top bits
 (`00 04 40 00 00 00 <rf of a room member> <room> c0|<setpoint>`),
