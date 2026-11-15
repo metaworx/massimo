@@ -94,6 +94,28 @@ func eventMessage(ev event) string {
 		case watchClear:
 			return flag + " clear again"
 		}
+	case "disagree":
+		switch ev.Summary["outcome"] {
+		case "differ":
+			return "the room's members disagree"
+		case "resent":
+			return "the room's state sent again to its members"
+		case "resend_failed":
+			return "the room's state not sent again"
+		case "not_resent":
+			return "the room's members still disagree, the room's state not sent again"
+		case "agree":
+			return "the room's members agree again"
+		}
+	case "drift":
+		switch ev.Summary["outcome"] {
+		case "not_following":
+			return "device does not follow its week programme, its clock or programme suspect"
+		case "follows":
+			return "device follows its week programme again"
+		case "left_auto":
+			return "device no longer in auto mode"
+		}
 	case "hold":
 		switch ev.Summary["reason"] {
 		case engine.HoldDutyCycle:

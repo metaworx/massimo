@@ -71,6 +71,12 @@ var settleRules = map[string]settleRule{
 	"proxy_warning":        {by: []string{"pairing_ended", "pairing_started", "proxy_pairing"}, match: pairingSettles},
 	"proxy_discarded":      {},
 	"proxy_delete_refused": {},
+	// a room's members that disagree, or a re-send of its state that
+	// failed: its members agreeing again; a member that does not follow
+	// its week programme: the member following it again, or out of auto
+	// (drift.go)
+	"disagree": {by: []string{"disagree"}, match: roomCheckSettles},
+	"drift":    {by: []string{"drift"}, match: roomCheckSettles},
 	// the server's own: an update failed or rolled back, the log's file
 	// not rotated, a failed sign-in, an address locked out, a restart, a
 	// reboot or an update not started

@@ -33,7 +33,7 @@ import (
 // same; TestLogKinds holds the three together.
 var eventKinds = []string{
 	"connected", "disconnected", "hello", "metadata", "config", "state", "pairing_started", "paired", "pairing_ended",
-	"device_forgotten", "cube_found", "restore_step", "restore_done",
+	"device_forgotten", "cube_found", "restore_step", "restore_done", "disagree", "drift",
 	"cube_gone", "address_changed", "server_started", "server_stopping", "settings_read", "restart", "reboot", "reboot_cancelled",
 	"update", "update_result", "backup", "backup_deleted", "backups_pruned", "log_pruned", "log_rotated", "restore_started",
 	"change", "command", "hold", "structure", "error_reset", "error_watch", "login", "login_failed", "locked_out", "audit_pruned",
