@@ -134,6 +134,11 @@ func StateOf(st cube.DeviceState) *State {
 	if !st.Valid {
 		return nil
 	}
+	return valuesOf(st)
+}
+
+// valuesOf is the values of a device's entry, valid or out of date.
+func valuesOf(st cube.DeviceState) *State {
 	return &State{Mode: st.Mode, Setpoint: st.Setpoint, Until: st.Until, ActualTemp: st.ActualTemp, ValvePct: st.ValvePct,
 		WindowOpen: st.WindowOpen, BatteryLow: st.BatteryLow, Error: st.Error, LinkError: st.LinkError, PanelLocked: st.PanelLocked}
 }
@@ -157,6 +162,12 @@ type Device struct {
 	// is, the device has transmitted since the Cube's last restart.
 	Reported bool   `json:"reported"`
 	State    *State `json:"state,omitempty"`
+	// OutOfDate marks a device the Cube has not heard for some minutes
+	// (its entry's valid bit cleared, 0x02 alone): Reported is false and
+	// State absent, and LastKnown holds the values of its last report,
+	// with LastSeen and Received as old as they are.
+	OutOfDate bool   `json:"out_of_date,omitempty"`
+	LastKnown *State `json:"last_known,omitempty"`
 	// Received is, per value of State, when the server saw its current
 	// value appear (see cubelan.StateTimes): the age of each value. A
 	// time equal to the Cube's observed_since means the value was there
@@ -247,8 +258,21 @@ func DeviceOf(snap *cubelan.Snapshot, rf cube.RFAddress, stale Staleness) Device
 	}
 	d.Reported = st.Valid
 	d.State = StateOf(st)
-	if t, ok := snap.Times(rf); ok && st.Valid {
+	if st.OutOfDate {
+		d.OutOfDate, d.LastKnown = true, valuesOf(st)
+	}
+	if t, ok := snap.Times(rf); ok && (st.Valid || st.OutOfDate) {
 		changed := t.Changed
+		if st.OutOfDate {
+			// The entry changed when it went out of date; the device was
+			// last heard when its newest value appeared.
+			changed = time.Time{}
+			for _, at := range t.Fields {
+				if at.After(changed) {
+					changed = at
+				}
+			}
+		}
 		d.LastSeen = &changed
 		if len(t.Fields) > 0 {
 			d.Received = t.Fields

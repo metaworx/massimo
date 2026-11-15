@@ -4403,6 +4403,8 @@ components:
         unlisted: {type: boolean, description: Paired but not assigned to a room}
         reported: {type: boolean, description: The Cube holds state for the device (it transmitted since the Cube restarted)}
         state: {$ref: "#/components/schemas/State"}
+        out_of_date: {type: boolean, description: "The Cube marks the device's entry out of date, as after some minutes of silence: reported is false and state absent, last_known holds its last report. Present when true"}
+        last_known: {$ref: "#/components/schemas/State"}
         received:
           type: object
           description: >-

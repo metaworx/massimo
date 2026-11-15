@@ -550,6 +550,7 @@
   "label.unlock": "odblokuj {name}",
 
   "badge.notReported": "brak zgłoszenia",
+  "badge.outOfDate": "nieaktualne",
   "discover.search": "Szukaj nowych urządzeń Cube…",
   "discover.searching": "Wyszukiwanie…",
   "discover.group": "Znalezione, nieskonfigurowane",

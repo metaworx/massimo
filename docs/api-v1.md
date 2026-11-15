@@ -1784,6 +1784,11 @@ Device types: `radiator_thermostat`, `radiator_thermostat_plus`,
 it is false for every device after a Cube restart until the device transmits
 again (window contacts only do so on a window change),
 and `state` is then absent.
+It is false too for a device the Cube has not heard for some minutes, whose
+entry the Cube marks out of date (a wall thermostat after about five minutes of
+silence, docs/cube-protocol.md): such a device has `out_of_date: true` and
+`last_known`, the values of its last report, as `state` holds them,
+with `received` and `last_seen` as old as they are.
 `ready` on a room is true when all its devices have reported,
 which is the condition for the Cube to accept a room command.
 Thermostats carry `mode` (`auto`, `manual`, `vacation`, `boost`), `setpoint`,

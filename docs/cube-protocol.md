@@ -329,6 +329,18 @@ and from serve's store on one of the owner's hosts (2026-11-11 to 14):
   and its memory slot back within 3 to 6 s once the members answered.
   A 0x40 to a room whose members did not answer held its slot for at least
   3.9 days at 0 % duty.
+- The valid bit (0x10 of the first flags byte) says the Cube heard the device
+  lately (2026-11-15, Cube firmware 1.1.3, two wall thermostats of one of the
+  owner's Cubes, their batteries taken out and put back by the owner):
+  a wall thermostat lost it 4¾ to 5¾ minutes after its batteries came out,
+  about two of its 3-minute reports, and had it again within a minute of the
+  batteries going back.
+  The entry is then "out of date", as the original software calls it: flag
+  0x02 alone, the values of the last report kept; Massimo shows them as
+  `last_known`.
+  Radiator thermostats, which report once a day when idle, kept it for more
+  than 23 hours of silence (2026-02-19/20); wall thermostats that missed a
+  report or two lost it for a minute (2026-11-12 and 13).
 - A device's battery flag (byte 6 bit 0x80), 2026-11-11 to 15 on the owner's Cubes:
   - Two radiator thermostats showed it for 1 to 4 minutes at a time, ten and
     four times in three days, each time with a report out of turn and

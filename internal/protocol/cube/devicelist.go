@@ -10,10 +10,15 @@ type DeviceState struct {
 	RFAddress RFAddress  `json:"rf_address"`
 	Type      DeviceType `json:"type"` // taken from metadata; guessed from the entry length if unknown
 
-	Valid        bool `json:"valid"`
-	Error        bool `json:"error"`
-	Flag04       bool `json:"flag_04"` // byte 5 bit 0x04: unknown; seen only together with the error flag (0x0c, 0x0e, 0x1e)
-	Initialized  bool `json:"initialized"`
+	Valid       bool `json:"valid"`
+	Error       bool `json:"error"`
+	Flag04      bool `json:"flag_04"` // byte 5 bit 0x04: unknown; seen only together with the error flag (0x0c, 0x0e, 0x1e)
+	Initialized bool `json:"initialized"`
+	// OutOfDate is an entry the Cube marks out of date: 0x02 without the
+	// valid bit 0x10, as after a device fell silent for some minutes
+	// (docs/cube-protocol.md); its values are those of the device's last
+	// report, read as for a valid entry.
+	OutOfDate    bool `json:"out_of_date,omitempty"`
 	BatteryLow   bool `json:"battery_low"`
 	LinkError    bool `json:"link_error"`
 	PanelLocked  bool `json:"panel_locked"`
@@ -72,6 +77,7 @@ func decodeDeviceState(e []byte, types map[RFAddress]DeviceType) DeviceState {
 	s.Error = f1&0x08 != 0
 	s.Flag04 = f1&0x04 != 0
 	s.Initialized = f1&0x02 != 0
+	s.OutOfDate = !s.Valid && s.Initialized
 	s.BatteryLow = f2&0x80 != 0
 	s.LinkError = f2&0x40 != 0
 	s.PanelLocked = f2&0x20 != 0
@@ -83,7 +89,7 @@ func decodeDeviceState(e []byte, types map[RFAddress]DeviceType) DeviceState {
 	case s.Type == DeviceShutterContact:
 		open := f2&0x02 != 0
 		s.WindowOpen = &open
-	case !s.Valid:
+	case !s.Valid && !s.OutOfDate:
 		// The Cube has no data for the device yet (e.g. after a reboot);
 		// the value bytes are all zero and must not be read as 0 °C.
 	case s.Type.IsThermostat() && len(e) >= 12:

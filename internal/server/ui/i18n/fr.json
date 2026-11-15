@@ -545,6 +545,7 @@
   "label.unlock": "déverrouiller {name}",
 
   "badge.notReported": "non signalé",
+  "badge.outOfDate": "pas à jour",
   "discover.search": "Rechercher de nouveaux Cubes…",
   "discover.searching": "Recherche…",
   "discover.group": "Trouvés, non configurés",

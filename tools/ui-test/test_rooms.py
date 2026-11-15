@@ -367,3 +367,34 @@ def test_battery_levels(page, case):
     page.keyboard.press("Escape")
     assert battery_tone("ok", True) is None, "the flag alone, at ok, shows nothing"
     page.evaluate("() => updateDevice(window.__dev)")
+
+
+def test_out_of_date_device(page, case):
+    """A device the Cube no longer hears keeps the values of its last
+    report on its tile, greyed, with the badge out of date in place of
+    not reported (AP LegacyLogs v1.0, Block 13)."""
+    page.evaluate("""() => {
+      const r = state.rooms.find((r) => r.devices.some((d) => isThermostat(d) && !d.virtual && d.reported));
+      window.__room = r.name;
+      const d = JSON.parse(JSON.stringify(r.devices.find((d) => isThermostat(d) && !d.virtual && d.reported)));
+      window.__dev = JSON.parse(JSON.stringify(d));
+      window.__name = d.name;
+      d.reported = false;
+      d.out_of_date = true;
+      d.last_known = Object.assign({}, d.state, { setpoint: 18.5 });
+      delete d.state;
+      delete d.battery;
+      updateDevice(d);
+    }""")
+    name = page.evaluate("window.__room")
+    room = page.locator(".room", has=page.locator(".room-name", has_text=name)).first
+    room.locator(".room-name-btn").click()
+    page.wait_for_selector(".room .device", timeout=5000)
+    dev = room.locator(".device:not(.virtual)", has=page.locator(".device-name", has_text=page.evaluate("window.__name"))).first
+    badges = dev.locator(".device-badges").inner_text()
+    assert page.evaluate("t('badge.outOfDate')") in badges, f"the badge out of date ({badges!r})"
+    assert page.evaluate("t('badge.notReported')") not in badges, "not 'not reported'"
+    grid = dev.locator(".device-vals")
+    assert "out-of-date" in (grid.get_attribute("class") or ""), "the values greyed"
+    assert "18" in grid.inner_text(), f"the last report's setpoint ({grid.inner_text()!r})"
+    page.evaluate("() => updateDevice(window.__dev)")

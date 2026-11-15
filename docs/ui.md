@@ -302,6 +302,9 @@ Every room has a tile:
   thermostat, a window, a leaf for the eco button), its values (valve, set
   and measured temperature, offset), its problems as icons that list them,
   as in the tile's head, and badges for lock, window and mode.
+  A device the Cube has not heard for some minutes keeps the values of its
+  last report, greyed, with the badge "out of date" and its age in place of
+  "not reported".
   Expert mode adds each device's type, serial number and radio address,
   as "S/N MEQ0000103 · RF 0a0103": the serial is printed on the device,
   the radio address is not.

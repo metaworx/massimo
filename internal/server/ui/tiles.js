@@ -841,7 +841,9 @@ function deviceBadges(d) {
   const s = d.state || {};
   const out = [];
   if (!d.reported) {
-    out.push([t("badge.notReported"), "warn"]);
+    // A device the Cube has not heard for some minutes keeps its last
+    // values, out of date; one it never heard has none.
+    out.push([t(d.out_of_date ? "badge.outOfDate" : "badge.notReported"), "warn", d.out_of_date ? d.last_seen : undefined]);
     return out;
   }
   if (d.stale) out.push([staleText(d), "warn stale-badge"]);
@@ -941,11 +943,14 @@ function renderDevice(d) {
     if (sb) sb.title = line;
   }
   const grid = el.querySelector(".device-vals");
-  if (isThermostat(d) && d.reported) {
-    deviceValues(grid, d, undefined);
+  if (isThermostat(d) && (d.reported || (d.out_of_date && d.last_known))) {
+    // An out-of-date device shows the values of its last report.
+    const shown = d.reported ? d : Object.assign({}, d, { state: d.last_known });
+    if (!d.reported) grid.classList.add("out-of-date");
+    deviceValues(grid, shown, undefined);
     deviceDetail(d).then((detail) => {
       const cfg = detail.thermostat || detail.wall_thermostat;
-      if (cfg && cfg.temp_offset !== undefined) deviceValues(grid, d, cfg.temp_offset);
+      if (cfg && cfg.temp_offset !== undefined) deviceValues(grid, shown, cfg.temp_offset);
     }).catch(() => {});
   }
   const actions = el.querySelector(".device-actions");

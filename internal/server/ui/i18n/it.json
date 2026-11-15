@@ -545,6 +545,7 @@
   "label.unlock": "sblocca {name}",
 
   "badge.notReported": "non segnalato",
+  "badge.outOfDate": "non aggiornato",
   "discover.search": "Cerca nuovi Cube…",
   "discover.searching": "Ricerca…",
   "discover.group": "Trovati, non configurati",

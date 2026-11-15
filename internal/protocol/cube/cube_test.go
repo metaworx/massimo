@@ -530,6 +530,20 @@ func TestDeviceListInvalidEntryHasNoValues(t *testing.T) {
 	}
 }
 
+// An entry the Cube marks out of date, 0x02 without the valid bit, as for
+// a device silent for some minutes (2026-11-15), keeps the values of the
+// device's last report.
+func TestDeviceListOutOfDateKeepsValues(t *testing.T) {
+	st, err := ParseDeviceList("CwoBDQkCGB4qAAAA", map[RFAddress]DeviceType{0x0a010d: DeviceRadiatorThermostat})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := st[0]
+	if s.Valid || !s.OutOfDate || s.Setpoint == nil || *s.Setpoint != 21 || s.ValvePct == nil || *s.ValvePct != 30 {
+		t.Fatalf("got %+v", s)
+	}
+}
+
 // TestRealCubeGreeting decodes a session captured from a Cube with firmware
 // 1.1.3 (room and device names anonymised, the serials and radio addresses
 // replaced by placeholders, everything else verbatim).

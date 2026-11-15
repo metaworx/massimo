@@ -543,6 +543,7 @@
   "label.unlock": "unlock {name}",
 
   "badge.notReported": "not reported",
+  "badge.outOfDate": "out of date",
   "discover.search": "Search for new Cubes…",
   "discover.searching": "Searching…",
   "discover.group": "Found, not configured",
