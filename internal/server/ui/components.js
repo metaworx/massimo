@@ -767,7 +767,7 @@ function sectionBadges(card, badges) {
 }
 
 // showCard brings a card into view, opened, with the focus on its
-// heading's button. On a page just opened (instant) the cards above it
+// heading's button (a page-section's on its summary, where it has one). On a page just opened (instant) the cards above it
 // still grow as their data comes, and a smooth scroll keeps the target
 // it started with and stops short: the card is brought there at once,
 // and again while the cards around it change size for two seconds,
@@ -779,7 +779,8 @@ function showCard(card, instant) {
   }
   const smooth = !instant && !matchMedia("(prefers-reduced-motion: reduce)").matches;
   card.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" });
-  card.querySelector(".section-fold").focus({ preventScroll: true });
+  const head = card.querySelector(".section-fold") || card.querySelector("summary");
+  if (head) head.focus({ preventScroll: true });
   if (instant) keepCardInView(card, 2000);
 }
 
@@ -797,13 +798,18 @@ function keepCardInView(card, ms) {
   setTimeout(stop, ms);
 }
 
+// PAGE_SECTIONS are what a page's sections menu lists: its section cards,
+// and a part without a card's fold marked page-section (Cube settings'
+// panel, named by its data-toc).
+const PAGE_SECTIONS = ".section-card, .page-section";
+
 // sectionButtons are a button per card of a page shown, named by the
 // card's data-toc key or else its title, after the card's icon where it
 // has one (data-icon), hidden where the card is (its needs-* classes),
 // each bringing its card into view (showCard); data-target is the card's
 // id.
 function sectionButtons(page) {
-  return [...page.querySelectorAll(".section-card:not(.hidden)")].map((card) => {
+  return [...page.querySelectorAll(PAGE_SECTIONS)].filter((card) => !card.classList.contains("hidden")).map((card) => {
     const name = card.dataset.toc ? t(card.dataset.toc) : card.querySelector(".section-title").textContent;
     const b = button(name, "toc-link", () => showCard(card));
     if (card.dataset.icon) {
@@ -816,13 +822,16 @@ function sectionButtons(page) {
   });
 }
 
-// pageSwitch puts into a settings page's row, before its sections menu,
-// a button for each of the other settings pages (pages, log.js
-// SETTINGS_PAGES): its icon and its name, the icon alone below 600 px
-// (style.css), each hidden from a role that may not open its page by
-// that page's needs class (login.js); open shows the page. They and the
-// sections menu are one group (.page-tools), which the row wraps under
-// its title where both do not fit (has-switch).
+// pageSwitch puts into a settings page's row, in its title's place, a
+// button for every settings page (pages, log.js SETTINGS_PAGES), in the
+// same order on every page, so that each keeps its place: its icon and
+// its name, the icon alone below 900 px but for the page shown
+// (style.css); the page shown filled and marked current, a click on it
+// opening nothing; each hidden from a role that may not open its page by
+// that page's needs class (login.js). The title stays in the row, hidden
+// but the page's name for a screen reader, and shows in the buttons'
+// place where the role may open no other settings page (log.js
+// markSettingsPages). open shows a page.
 function pageSwitch(page, current, pages, open) {
   const bar = page.querySelector(".page-bar");
   bar.classList.add("has-switch");
@@ -830,18 +839,39 @@ function pageSwitch(page, current, pages, open) {
   nav.setAttribute("aria-label", t("page.switch"));
   nav.dataset.i18nAttr = "aria-label:page.switch";
   for (const p of pages) {
-    if (p.view === current) continue;
+    const here = p.view === current;
     const label = textEl("span", t(p.key), "page-link-label");
     label.dataset.i18n = p.key;
-    const b = button("", { cls: "page-link " + p.needs }, () => open(p.view));
+    const b = button("", { cls: "page-link " + p.needs + (here ? " current" : "") }, () => here || open(p.view));
     b.dataset.view = p.view;
+    if (here) b.setAttribute("aria-current", "page");
     b.title = t(p.key);
     b.dataset.i18nAttr = "title:" + p.key;
     b.append(iconEl(p.icon, "ni"), label);
     nav.appendChild(b);
   }
-  const menu = bar.querySelector(".sec-menu");
-  bar.appendChild(elem("div", "page-tools", nav, ...(menu ? [menu] : [])));
+  bar.querySelector("h2").after(nav);
+}
+
+// fitPageTabs gives the button of the page shown in a settings page's
+// row (pageSwitch) the width of the longest name among the pages the
+// role may open, so that it is as wide on every page and the buttons
+// after it keep their places; style.css applies it below 900 px, where
+// the others show their icon alone, no wider than the row leaves beside
+// the sections menu's place. It measures the names of a page shown
+// (log.js fitSettingsPages: when one is shown, after a change of
+// language or of the signed-in user); a hidden name still has its width.
+function fitPageTabs(page) {
+  const nav = page.querySelector(".page-switch");
+  if (!nav || !nav.offsetParent) return;
+  // the text's own width, to the fraction (scrollWidth rounds it, and a
+  // name rounded down ends in "…"), also of a name hidden on a phone
+  const range = document.createRange();
+  const widths = [...nav.querySelectorAll(".page-link")].filter((b) => b.offsetParent).map((b) => {
+    range.selectNodeContents(b.querySelector(".page-link-label"));
+    return range.getBoundingClientRect().width;
+  });
+  if (widths.length) nav.style.setProperty("--tab-name", Math.ceil(Math.max(...widths)) + "px");
 }
 
 // pageBar fills a page's row kept at the top (its .page-bar) with the
@@ -866,7 +896,7 @@ function pageBar(page) {
     const line = bar.getBoundingClientRect().bottom + 24;
     let best = null;
     let bestTop = -Infinity;
-    for (const card of page.querySelectorAll(".section-card")) {
+    for (const card of page.querySelectorAll(PAGE_SECTIONS)) {
       if (!card.offsetParent) continue; // not shown to this role
       const y = Math.round(card.getBoundingClientRect().top);
       if (y <= line && y > bestTop) {

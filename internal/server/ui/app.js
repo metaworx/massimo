@@ -1558,7 +1558,9 @@ function applyLanguage() {
   initHelpSlots();
   pageBar($("system"));
   pageBar($("maint-page"));
+  pageBar($("cube-page"));
   pageBar($("me"));
+  fitSettingsPages(); // log.js: the page shown's button as wide as the longest name
   renderLangSelect();
   applyAppearance();
   renderCubeSelect();
