@@ -1,4 +1,4 @@
-# AP GlobalMenu v1.0: one menu, four settings pages
+# AP GlobalMenu v1.1: one menu, four settings pages
 
 ## TL;DR
 
@@ -14,6 +14,9 @@ problems.
   Personal settings, Sign out (D130-A); the log's mark on ☰
 - settings pages → a title row each; the other settings pages as buttons
   left of the sections menu, icons only on a phone (D132-A, D135-A)
+- the buttons → in the title's place, all four in ☰'s order, the current
+  one filled; on a phone the current one with its name (D157-A, D158-A);
+  one page alone → its title, no buttons
 - Maintenance → its own page, `#maintenance`: Software update and
   Maintenance, out of System settings
 - backups → one component per Cube; Cube settings shows its Cube's,
@@ -22,7 +25,7 @@ problems.
   server's clock; its tooltip "updated 20:51:00, click to reload" (D134-A)
 - Cube choice's list → each Cube's problem icons after its name (spec v10)
 
-Stacked on AP PageMenu's pull request (#281).
+Blocks 1–8 are merged (#289); Block 9 follows on a branch of its own.
 
 ### Blocks
 
@@ -37,6 +40,8 @@ Stacked on AP PageMenu's pull request (#281).
 6. UpdatedAge: the chosen Cube's age in the header, and its tooltip
 7. CubeListSigns: the problem icons in the Cube choice's list
 8. Docs: `docs/ui.md` whole, the screenshot set, the slideshow
+9. PageTabs: the settings pages' buttons in the title's place, in one
+   order, the current one filled
 
 ## Discussion
 
@@ -78,6 +83,25 @@ the answers to the TL;DR gate that followed:
 `PLAN++` on 2026-11-15: this session writes the plan and runs all eight
 blocks into a pull request stacked on #281, then the completion gate. No
 merge and no retirement.
+
+The owner's look at the merged pages, 2026-11-15: the buttons move from
+page to page, since the current page is left out and only System settings
+and Maintenance have a sections menu at the row's end.
+
+- D157-A: the buttons take the title's place, left-aligned, all four
+  always in ☰'s order, the current one filled in accent; the title stays
+  for a screen reader. Option B, the title kept and the current one
+  disabled, was not taken: on a phone the row wraps on every page, the
+  name shows twice and a disabled control does nothing.
+- D158-A: on a phone the current one keeps its name, cut with "…" where
+  the row is too narrow, the others their icon; without it the page's
+  name shows nowhere on a phone.
+- The owner's addition: where the role may open one settings page alone,
+  its title shows and no button is drawn.
+
+`PLAN++` on 2026-11-15 for this revision: Block 9 on a new branch from
+main, to a pull request and the completion gate. No merge and no
+retirement.
 
 Out of scope: the redraws that close an open pill (the evaluation of
 2026-11-15, D118–D121, waits for the chip session's fresh look).
@@ -133,6 +157,21 @@ Out of scope: the redraws that close an open pill (the evaluation of
   (D85-C).
 - **The icon of Maintenance:** the sprite has none. Tabler Icons' `tool`
   (MIT, `third_party/tabler-icons/`) is drawn in the same box and stroke.
+- **The switch** (after Block 4, `components.js` `pageSwitch`): built
+  once per page at the start (`log.js` `initLog`) in a `.page-tools`
+  group, right-aligned, with the sections menu; a role's pages hidden by
+  their `needs-*` class, as ☰'s entries are. Cube settings and System info
+  have no sections menu; System info has its badges in the row
+  (`update.js` `fillProxies`, at most one).
+  - Which pages a role may open is `mayShow`, applied in `login.js`
+    `applyCaps` whenever the signed-in user changes: the one place where
+    the count of a role's settings pages is known.
+  - On a phone, the current one's name makes it wider, so the buttons
+    after it shift with the page shown; their order, and those before it,
+    stay. At full width every button keeps its place.
+  - With the current page's name shown on its button, the title (`h2`)
+    stays in the row, visually hidden, still the page's name for a screen
+    reader (each page's `aria-labelledby`).
 - **Tests:** `helpers.py` `show_view` and `open_personal_page` open
   every page through ☰ after Block 3. The tests of the cards that move
   open `maint` after Block 4, and `test_backup.py` follows the component
@@ -284,6 +323,33 @@ choice's tests.
 shot looked at; `make ui-test` whole, `go test ./...`, `make cross`,
 `gofmt`, the three `go vet`, `GUIDELINES/shared/tools/check`.
 
+### Block 9: PageTabs
+
+- `components.js` `pageSwitch`: every settings page, in ☰'s order, at the
+  row's start; the current one filled in accent, `aria-current="page"`, a
+  click on it opening nothing; the title visually hidden while the
+  buttons show.
+- `style.css`: below 600 px the others their icon alone, the current one
+  its icon and its name, cut with "…" where the row is too narrow; the
+  sections menu and System info's badges at the row's right end;
+  `.page-tools` and Block 4's wrapping go.
+- `log.js`: where the role may open one settings page alone (`mayShow`),
+  the rows show their title and no button, set from `login.js`
+  `applyCaps`.
+- `docs/ui.md`: the header's list, the pages, the components; the
+  fragment `claude-page-switch.md` corrected in place (not released).
+- `screenshots.py`: the pointer moved off the page before each shot; the
+  four settings pages taken again at 1100 and 390 px, and the slideshow.
+- Tests: `test_page_switch.py`, every page's four buttons in order, the
+  current one filled and marked, each button's place at full width and
+  before the current one on a phone, the current one's name on a phone,
+  the sections menu on the same line, no horizontal scroll; a viewer's
+  System info with its title and no button; `test_cube_page.py`'s row.
+
+**Verification:** `make ui-test` whole, 1100 and 390 px; `go test ./...`,
+`make cross`, `gofmt`, the three `go vet`,
+`GUIDELINES/shared/tools/check`; each new shot looked at.
+
 ## Proposed commit messages
 
 - Block 1: `feat(ui): Cube settings has its title row`
@@ -294,9 +360,13 @@ shot looked at; `make ui-test` whole, `go test ./...`, `make cross`,
 - Block 6: `feat(ui): The header shows how long ago the chosen Cube was heard from`
 - Block 7: `feat(ui): The Cube choice's list shows each Cube's problems`
 - Block 8: `docs(ui): The menu and the pages in docs/ui.md and the screenshot set`
+- Block 9: `feat(ui): The page buttons take the title's place, the current one filled`
 
 ## Change History
 
 - v1.0 (2026-11-15): first revision, by `PLAN++`, with D130-A,
   D131-C (everywhere), D132-A, D133-A and D134-A as the owner chose;
   D135-A this plan's answer to the owner's question on more buttons.
+- v1.1 (2026-11-15): Block 9, PageTabs, by `PLAN++`, with D157-A and
+  D158-A as the owner chose and the owner's rule for a role with one
+  settings page; the TL;DR names the merge of Blocks 1–8 (#289).
