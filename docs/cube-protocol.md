@@ -605,6 +605,12 @@ Massimo refuses a second wall thermostat in a room the same way
 So wall thermostats take 0x11 and 0x12 with the same payloads as radiator thermostats,
 and their C line ends with offset,
 window-open temperature and boost (3 bytes after the week program at 0x16).
+Seen on hardware on 2026-11-15 (Cube firmware 1.1.3, through Massimo's proxy):
+a 0x11 to one wall thermostat, after a wakeup of its room, with its eco
+temperature raised by 0.5 °C and its other presets as they were,
+was in its C line at the server's first re-read, 15 s after the Cube's answer,
+and the 0x11 that put it back as fast; the other values stayed.
+0x12 to a wall thermostat was not tried.
 Their L entry (12 bytes) carries the setpoint at offset 8 and the measured
 temperature at 12 (with bit 7 of byte 8 as the ninth bit);
 byte 7 is not a valve but the display mode: 0x01 shows the setpoint,
