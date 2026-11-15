@@ -168,9 +168,16 @@ The compacted header has **↑** left of ☰, back to the top.
   ☰ carries an amber triangle or a red cross,
   and the sheet of its Log entry turns amber or red, both named with the count.
 - The settings pages, Cube settings, System settings, Maintenance and System info,
-  each have a title row kept under the header, and in it, right-aligned
-  before the sections menu, a button for each of the others the role may
-  open, with its icon and its name; on a phone the icon alone.
+  each have a row kept under the header, and in it, in the title's place,
+  a button for each of them the role may open, with its icon and its name,
+  always in this order, so that each keeps its place;
+  the page shown is filled, and a click on it opens nothing.
+  Below 900 px the buttons show their icon alone but for the page shown,
+  which is as wide on every page, so that the buttons after it keep their places too:
+  the longest of the names, as far as the row leaves room
+  beside the sections menu's place, kept on every page;
+  a longer name ends in "…".
+  A role that may open one of them alone sees its title there, and no button.
 - The page shown is in the address, Rooms without one:
   `#log`, `#me` (Personal settings, or at a card `#profile`, `#prefs` and
   `#notify`), `#cube` (Cube settings), `#system` (System settings),
@@ -721,8 +728,9 @@ It caches nothing else: the page loads from the server as before.
 ☰ → **Cube settings** shows the panel of the Cube chosen in the header,
 as System settings → Cubes draws it, for a role with `cubes` or with `pair`
 (the pairing alone for `pair`).
-The page's title row, **Cube settings**, stays under the header as the page
-scrolls, as every page's does.
+The page's row, **Cube settings** filled among the settings pages,
+stays under the header as the page scrolls, as every page's does,
+with **Sections** at its right end: the Cube and Backup and restore.
 Under it the panel is open and stays open: its head, the Cube's sign, name,
 serial, radio budget and pill, is its first row, and a click on it folds
 nothing.
@@ -736,7 +744,8 @@ as System settings → Backup and restore shows it for each Cube.
 ## System info
 
 ☰ → **System info** is for every role with `read`, a viewer's too:
-its title stays under the header while the page scrolls.
+its row stays under the header while the page scrolls,
+with the viewer's title in it, the one settings page that role has.
 The facts are the server's, a Cube's in its panel under System settings → **Cubes**.
 The page is a table of the server's version and what it was built with,
 when it started, as the server's clock read it, to the second in its zone,
@@ -798,7 +807,7 @@ Cubes first, then Users, Roles,
 **Capabilities for every role**, and Backup and restore last;
 from 900 px Users, Roles and Capabilities flow in two columns,
 none split, the break where their heights put it.
-The title stays under the header while the page scrolls,
+The page's row stays under the header while the page scrolls,
 with **Sections** at its right end (a bulleted list):
 it lists the cards the role sees, marks the one in view and brings the one
 chosen into view, opened.
@@ -1048,7 +1057,7 @@ the browser keeps which cards are folded.
 
 ☰ → **Maintenance** keeps the server itself going,
 in two cards as wide as the page, **Software update** and **Maintenance**,
-under the page's title row with **Sections** at its right end, as System settings has.
+under the page's row with **Sections** at its right end, as System settings has.
 It is for every role that has System settings, Software update being for all of them,
 and for one with `update`, `restart` or `reboot` alone;
 a viewer has no such entry in ☰.
@@ -1199,9 +1208,11 @@ A long page is a grid of section cards (`section.section-card`,
 its heading's `button.section-fold` folding it):
 `sectionCards` makes them fold and keeps the fold in the browser,
 `sectionBadges` shows what a card holds in its head,
-`pageBar` fills the sections menu of its title's row kept at the top,
-`pageSwitch` puts the other settings pages beside it (`SETTINGS_PAGES` in `log.js`,
-as ☰'s pages are `MENU_VIEWS`),
+`pageBar` fills the sections menu of its title's row kept at the top
+(with a part without a fold marked `.page-section`, as Cube settings' panel),
+`pageSwitch` puts the settings pages in its title's place (`SETTINGS_PAGES` in `log.js`,
+as ☰'s pages are `MENU_VIEWS`; `markSettingsPages` shows the title for one page alone),
+`fitPageTabs` gives the page shown's button the longest name's width,
 and `backToTop` wires the two ↑, the floating one and the compacted header's;
 `pickerMenu` makes a dropdown the choice of one item (the Cube choice),
 its items `menuItem`s, a Cube's link its network sign (`cubeSignEl`, `LINK_SIGN`);

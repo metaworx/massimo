@@ -265,9 +265,12 @@ def load(page, url):
 
 
 def settle(page):
-    """No request open, the fonts in, no focus ring, nothing moving."""
+    """No request open, the fonts in, no focus ring, nothing under the
+    pointer (a button the last click left it on drawn as hovered), nothing
+    moving."""
     page.wait_for_load_state("networkidle")
     page.evaluate("document.activeElement && document.activeElement.blur()")
+    page.mouse.move(0, 0)
     page.evaluate("document.fonts.ready.then(() => true)")
     page.wait_for_timeout(300)
 
