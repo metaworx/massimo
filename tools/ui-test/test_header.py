@@ -161,7 +161,7 @@ def test_an_address_the_user_may_not_open_shows_rooms(page, case):
         page.reload()
         page.wait_for_selector(".room", timeout=10000)
         assert wait_until(page, "location.hash === ''", 5), "the address drops System settings"
-        assert page.locator("#system").is_hidden() and css_hidden(page, "#view-settings"), "Rooms, and no ⚙"
+        assert page.locator("#system").is_hidden() and css_hidden(page, "#gear-system"), "Rooms, and no System settings in ⚙"
     finally:
         page.unroute("**/api/v1/me")
 
@@ -179,7 +179,7 @@ def test_header_order_and_the_narrow_header(page, case):
     beside it at the left (the version and the time under the brand, both,
     where they leave no room), then on the first line the Cube choice with the network
     sign of its link, then 🏠 👤 📄 ⚙, without ☰. Below 600 px 🏠 👤 ☰
-    beside the brand and the Cube choice on a line of its own under them; ☰ holds Log and System settings, opens each, and is
+    beside the brand and the Cube choice on a line of its own under them; ☰ holds Log and ⚙'s pages, opens each, and is
     highlighted while one of them is shown."""
     order = ["h1", "#updated", "#refresh-btn", "#refresh-btn svg", "#cube-choice", "#view-tiles", "#view-me"]
     b = {sel: box(page, sel) for sel in order}
@@ -187,22 +187,22 @@ def test_header_order_and_the_narrow_header(page, case):
     assert page.locator("#cube-choice .picker-icon .conn-sign use[href='#icon-net']").count() == 1, "the link, a network sign in the Cube choice"
     assert b["#view-tiles"]["x"] < b["#view-me"]["x"], "🏠 left of 👤"
     if case.width >= 600:
-        right = ["#cube-choice", "#view-tiles", "#view-me", "#view-log", "#view-settings"]
-        b.update({sel: box(page, sel) for sel in ("#view-log", "#view-settings")})
+        right = ["#cube-choice", "#view-tiles", "#view-me", "#view-log", "#view-gear"]
+        b.update({sel: box(page, sel) for sel in ("#view-log", "#view-gear")})
         xs = [b[sel]["x"] for sel in right]
         assert xs == sorted(xs), f"left to right in this order: {right}"
         assert max(b[sel]["x"] + b[sel]["width"] for sel in ("h1", "#updated", "#refresh-btn")) < b["#cube-choice"]["x"], \
             f"the brand and the time left of the Cube choice: {b}"
         first_line = b["h1"]["y"] + b["h1"]["height"]
         assert all(b[sel]["y"] < first_line for sel in right), f"the Cube choice and the pages on the first line: {b}"
-        assert page.locator("#view-log").is_visible() and page.locator("#view-settings").is_visible(), "📄 and ⚙ shown"
+        assert page.locator("#view-log").is_visible() and page.locator("#view-gear").is_visible(), "📄 and ⚙ shown"
         assert page.locator("#nav-menu").is_hidden(), "no ☰"
         return
     assert page.locator("#nav-menu").is_visible(), "☰ shown"
-    assert page.locator("#view-log").is_hidden() and page.locator("#view-settings").is_hidden(), "📄 and ⚙ in it"
+    assert page.locator("#view-log").is_hidden() and page.locator("#view-gear").is_hidden(), "📄 and ⚙ in it"
     assert b["#view-me"]["x"] < box(page, "#nav-menu summary")["x"], "🏠 👤 ☰"
     assert b["#cube-choice"]["y"] >= b["#view-tiles"]["y"] + b["#view-tiles"]["height"], "the Cube choice under them"
-    for view, section in (("log", "#logview"), ("system", "#system")):
+    for view, section in (("log", "#logview"), ("cube", "#cube-page"), ("system", "#system"), ("info", "#info-page")):
         page.locator("#nav-menu summary").click()
         page.locator("#menu-" + view).click()
         page.locator(section).wait_for(state="visible")
@@ -248,23 +248,89 @@ DIGITS_MIDDLE = """(sel) => {
 VERSION_TITLE = {"en": "{v} (server version) · click to copy", "de": "{v} (Server-Version) · Klick kopiert"}
 
 
+# A build's version, as long as one between releases.
+BUILD = "v0.15.0-alpha.1-293-gd36148f"
+
+# The facts' state: the version cut or not, shown or not, the time shown,
+# all inside the window, and whether they have a row of their own.
+FACTS = """() => {
+  const v = document.getElementById("version-short");
+  const r = (e) => e.getBoundingClientRect();
+  const right = Math.max(r(v).right, r(document.getElementById("refresh-btn")).right);
+  return { cut: v.scrollWidth > v.clientWidth + 1, version: v.offsetParent !== null, time: document.getElementById("updated").offsetParent !== null,
+    inside: right <= document.documentElement.clientWidth + 0.5, row: document.querySelector(".top-line").classList.contains("facts-row") };
+}"""
+
+
+def test_version_never_hidden(page, case):
+    """A build's long version, at widths from a wide screen to a phone:
+    beside the logo where it fits, else on a row of its own, never cut,
+    inside the window; compacted, the version goes and the server's sign
+    and the time stay."""
+    size = page.viewport_size
+    page.evaluate("""(v) => { window.__version = [state.version, document.getElementById("version-short").textContent];
+      state.version = v; document.getElementById("version-short").textContent = v; renderVersionTitle(); }""", BUILD)
+    try:
+        rows = {}
+        for w in (1280, 1100, 900, 750, 600, 520, 430, 390):
+            page.set_viewport_size({"width": w, "height": size["height"]})
+            page.wait_for_timeout(150)
+            f = page.evaluate(FACTS)
+            rows[w] = f["row"]
+            assert f["version"] and not f["cut"] and f["time"] and f["inside"], f"at {w} px the version whole, the time, inside: {f}"
+            page.evaluate("document.body.classList.add('scrolled')")
+            f = page.evaluate(FACTS)
+            assert not f["version"] and f["time"], f"at {w} px compacted: the time, not the version: {f}"
+            page.evaluate("document.body.classList.remove('scrolled')")
+            page.wait_for_timeout(50)
+        assert rows[390], f"a row of their own on a phone: {rows}"
+    finally:
+        page.set_viewport_size(size)
+        page.evaluate("""() => { const [v, short] = window.__version; state.version = v;
+          document.getElementById("version-short").textContent = short; renderVersionTitle(); }""")
+        page.wait_for_timeout(150)
+
+
+def test_facts_fitted_again_when_the_time_comes(page, case):
+    """The version, the sign and the time are fitted again when what they
+    show changes: with a short version (a build's from a checkout without
+    tags, as CI's) they fit beside the logo on a phone before the time of
+    the last update has come, and the time then takes them to their row,
+    the version whole, not cut under the logo."""
+    page.evaluate("""() => { const v = document.getElementById('version-short'), u = document.getElementById('updated');
+      window.__facts = [v.textContent, u.textContent]; v.textContent = 'v0.0.0-dev'; u.textContent = ''; fitFacts(); }""")
+    try:
+        page.wait_for_timeout(100)
+        page.evaluate("document.getElementById('updated').textContent = 'updated 03:57:52'")
+        assert wait_until(page, "(() => { const v = document.getElementById('version-short'); "
+                          "return v.scrollWidth <= v.clientWidth + 1; })()", 3), "the version whole once the time came"
+    finally:
+        page.evaluate("""() => { const [v, u] = window.__facts; document.getElementById('version-short').textContent = v;
+          document.getElementById('updated').textContent = u; }""")
+
+
 def test_header_on_one_baseline(page, case):
     """The logo (the small mark under 600 px), the version and the time of
     the last update stand on one baseline, the drawing's bottom edge, and
     the M is as tall as the page buttons; on a phone the version and the
-    time stand together under the mark. ↻ stands on the digits' middle.
+    time stand under the mark, the version whole, on the time's line or a
+    line of its own above it. ↻ stands on the digits' middle.
     The time and ↻ are one button without a frame, larger to a finger
     than it looks; the version's tooltip is the whole version."""
     brand = page.evaluate(BRAND_BOX)
     button = box(page, "#view-tiles")
     assert abs(brand["height"] - button["height"]) <= 1, f"the M as tall as the page buttons: {brand} vs {button}"
     assert abs(brand["top"] - button["y"]) <= 1, f"and level with them: {brand} vs {button}"
+    # fitted once the version has come (app.js fitFacts)
+    assert wait_until(page, "(() => { const v = document.getElementById('version-short'); return v.textContent !== '' && v.scrollWidth <= v.clientWidth + 1; })()", 5), \
+        "the version whole"
     lines = {sel: page.evaluate(BASELINE, sel) for sel in ("#version-short", "#updated")}
-    assert abs(lines["#version-short"] - lines["#updated"]) <= 1, f"the version and the time on one line: {lines}"
     if case.width >= 600:
+        assert abs(lines["#version-short"] - lines["#updated"]) <= 1, f"the version and the time on one line: {lines}"
         assert abs(lines["#updated"] - brand["bottom"]) <= 1, f"on the logo's baseline: {lines} vs {brand['bottom']}"
     else:
-        assert lines["#updated"] > brand["bottom"] + 8, f"both under the mark: {lines} vs {brand['bottom']}"
+        assert lines["#version-short"] <= lines["#updated"] + 1, f"the version on the time's line or above it: {lines}"
+        assert lines["#version-short"] > brand["bottom"] + 8, f"both under the mark: {lines} vs {brand['bottom']}"
     icon = box(page, "#refresh-btn svg")
     digits = page.evaluate(DIGITS_MIDDLE, "#updated")
     assert abs(icon["y"] + icon["height"] / 2 - digits) <= 1, f"↻ on the digits' middle: {icon} vs {digits}"
@@ -313,7 +379,7 @@ def test_menu_icons_and_user_title(page, case):
     assert "owner" in title, f"the 👤 tooltip names the user ({title!r})"
     assert page.locator("#view-me").get_attribute("aria-label") == title, "and says it to a screen reader"
     page.keyboard.press("Escape")
-    for sel in ("#menu-log", "#menu-system"):
+    for sel in ("#menu-log", "#menu-cube", "#menu-system", "#menu-info", "#gear-cube", "#gear-system", "#gear-info"):
         assert page.locator(sel + " > svg.ni").count() == 1, f"{sel} shows its icon"
 
 
@@ -433,7 +499,7 @@ def test_versions_copy(page, case):
     page.locator("#version-short").click()
     assert wait_until(page, "navigator.clipboard.readText().then((t) => t === state.version)", 3), "the header's version copies whole"
     assert "(" not in whole or "server version" not in whole, "without the tooltip's words"
-    show_view(page, "system")
+    show_view(page, "info")
     cell = page.locator("#info-version")
     assert wait_until(page, "!!document.querySelector('#info-version .copy-icon')", 5), "System Info's version with its icon"
     page.evaluate("navigator.clipboard.writeText('')")

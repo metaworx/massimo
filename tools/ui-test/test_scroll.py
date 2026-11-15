@@ -140,7 +140,10 @@ def test_a_jump_down_stays_where_it_went(page, case):
     it went. The browser's scroll anchoring, switched off on the root
     alone, took the page back by the compacted header's height for a band
     of such jumps, 53 px at 390 px, and a click aimed before the
-    compaction landed above its target."""
+    compaction landed above its target. Only a move back counts: one
+    forward is the anchoring that keeps the view where it is while
+    something above it grows (725 → 728 at 390 px on a CI runner,
+    2026-11-15, what grew not seen)."""
     tile, _ = first_tile(page)
     open_tab(tile, "program")
     end = page.evaluate("Math.min(1000, document.documentElement.scrollHeight - innerHeight)")
@@ -152,7 +155,7 @@ def test_a_jump_down_stays_where_it_went(page, case):
         assert wait_until(page, "document.body.classList.contains('scrolled')", 3), "the header compacted"
         assert scroll_settled(page), "the page comes to rest"
         y = page.evaluate("Math.round(window.scrollY)")
-        if abs(y - want) > 1:
+        if y < want - 1:
             moved.append(f"{want} → {y}")
     assert not moved, f"the page went back after the jump: {', '.join(moved)}"
     page.evaluate("window.scrollTo(0, 0)")

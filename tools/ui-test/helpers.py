@@ -201,19 +201,20 @@ VIEWER = {"mode": "users", "user": {"name": "viewer1", "role": "viewer", "has_pa
 
 # The pages of the main area: how a user opens each, and the section it
 # shows.
-VIEW_BUTTON = {"tiles": "#view-tiles", "log": "#view-log", "me": "#view-me", "system": "#view-settings"}
+VIEW_BUTTON = {"tiles": "#view-tiles", "log": "#view-log", "me": "#view-me"}
+VIEW_GEAR = {"cube": "#gear-cube", "system": "#gear-system", "info": "#gear-info"}  # in ⚙'s menu
 VIEW_CARD = ("profile", "prefs", "notify")  # the personal page's cards, from its sections menu
-VIEW_FOLDED = {"log": "#menu-log", "system": "#menu-system"}  # in ☰ below 600 px
+VIEW_FOLDED = {"log": "#menu-log", "cube": "#menu-cube", "system": "#menu-system", "info": "#menu-info"}  # in ☰ below 600 px
 VIEW_SECTION = {"tiles": "#rooms", "log": "#logview", "me": "#me", "profile": "#profile", "prefs": "#prefs", "notify": "#notify",
-                "system": "#system"}
+                "cube": "#cube-page", "system": "#system", "info": "#info-page"}
 
 
 def show_view(page, view):
-    """A page of the main area, opened as a user opens it: Rooms, the log,
-    the personal page and System settings with their button in the
-    header, or on a narrow screen the log and System settings from ☰; My
-    profile, My settings and Notifications from the personal page's
-    sections menu."""
+    """A page of the main area, opened as a user opens it: Rooms, the log
+    and the personal page with their button in the header, Cube settings,
+    System settings and System info from ⚙, on a narrow screen the log
+    and ⚙'s pages from ☰; My profile, My settings and Notifications from
+    the personal page's sections menu."""
     if view in VIEW_CARD:
         open_personal_page(page)
         menu = page.locator("#me .sec-menu")
@@ -227,6 +228,11 @@ def show_view(page, view):
         if menu.get_attribute("open") is None:
             menu.locator("summary").click()
         page.locator(VIEW_FOLDED[view]).click()
+    elif view in VIEW_GEAR:
+        menu = page.locator("#gear-menu")
+        if menu.get_attribute("open") is None:
+            menu.locator("summary").click()
+        page.locator(VIEW_GEAR[view]).click()
     else:
         page.locator(VIEW_BUTTON[view]).click()
     page.locator(VIEW_SECTION[view]).wait_for(state="visible")

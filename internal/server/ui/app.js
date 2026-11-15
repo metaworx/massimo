@@ -21,7 +21,7 @@ const state = {
   me: null, // GET /api/v1/me: the mode, the user, the role, the capabilities, setup (login.js)
   events: null,
   eventsOpen: false,
-  settings: { poll: 10, expert: false, clock: "browser", lang: "auto", theme: "system", scheme: "massimo", blink: "system" },
+  settings: { poll: 10, expert: false, clock: "browser", lang: "auto", theme: "system", scheme: "massimo", blink: "system", iconWindow: "sash", iconRadio: "wifi" },
   tz: {}, // per serial: {winter, summer} time zone rules from the cube detail
   details: {}, // device detail by rf address, fetched on demand
   ui: {}, // per room id: {open, pending, timer, vacation, confirm}
@@ -84,11 +84,21 @@ async function readToken() {
 // the capability preferences also keeps on the server, so that it follows
 // the user to every browser (login.js, loadPreferences); a setting can be
 // kept for this device only instead, in massimo.device, which then wins.
-const SETTING_KEYS = ["poll", "expert", "clock", "lang", "theme", "scheme", "blink"];
+const SETTING_KEYS = ["poll", "expert", "clock", "lang", "theme", "scheme", "blink", "iconWindow", "iconRadio"];
 
 // SETTING_LABELS name each setting's row, for its "only on this device"
 // switch.
-const SETTING_LABELS = { poll: "settings.poll", expert: "settings.expertShort", clock: "settings.clock", lang: "settings.language", theme: "appearance.mode", scheme: "appearance.scheme", blink: "appearance.blink" };
+const SETTING_LABELS = {
+  poll: "settings.poll",
+  expert: "settings.expertShort",
+  clock: "settings.clock",
+  lang: "settings.language",
+  theme: "appearance.mode",
+  scheme: "appearance.scheme",
+  blink: "appearance.blink",
+  iconWindow: "appearance.iconWindow",
+  iconRadio: "appearance.iconRadio",
+};
 
 // SETTING_STORE writes a value as massimo.<key> has always held it; the
 // default is kept as no entry, but for the poll and the expert switch.
@@ -100,6 +110,8 @@ const SETTING_STORE = {
   theme: (v) => (v === "system" ? null : v),
   scheme: (v) => (v === "massimo" ? null : v),
   blink: (v) => (v === "system" ? null : v),
+  iconWindow: (v) => (v === "sash" ? null : v),
+  iconRadio: (v) => (v === "wifi" ? null : v),
 };
 
 // validSetting is a value of a setting when it is one, else undefined.
@@ -121,6 +133,10 @@ function validSetting(key, v) {
       return typeof v === "string" && v !== "" ? v : undefined;
     case "blink":
       return BLINK_MODES.includes(v) ? v : undefined; // theme.js
+    case "iconWindow":
+      return Object.keys(ICON_CHOICES.window).includes(v) ? v : undefined; // components.js
+    case "iconRadio":
+      return Object.keys(ICON_CHOICES.radio).includes(v) ? v : undefined;
   }
   return undefined;
 }
@@ -128,11 +144,11 @@ function validSetting(key, v) {
 // storedSettings are the user's values as the browser keeps them, the
 // defaults where it keeps none.
 function storedSettings() {
-  const s = { poll: 10, expert: false, clock: "browser", lang: "auto", theme: "system", scheme: "massimo", blink: "system" };
+  const s = { poll: 10, expert: false, clock: "browser", lang: "auto", theme: "system", scheme: "massimo", blink: "system", iconWindow: "sash", iconRadio: "wifi" };
   const poll = validSetting("poll", readStored("massimo.poll"));
   if (poll !== undefined) s.poll = poll;
   s.expert = readStored("massimo.expert") === "1";
-  for (const k of ["clock", "lang", "theme", "scheme", "blink"]) {
+  for (const k of ["clock", "lang", "theme", "scheme", "blink", "iconWindow", "iconRadio"]) {
     const v = validSetting(k, readStored("massimo." + k));
     if (v !== undefined) s[k] = v;
   }
@@ -775,13 +791,13 @@ function cubeSettingItems(c, who) {
 function problemsLabelOf(entries) {
   const kinds = ["net", "radio", "battery", "window", "cog"].filter((k) => entries.flatMap(entryItems).some((it) => it.kind === k)); // components.js
   const found = entries.some((e) => e.info) && state.found.length ? tn("found.pill", state.found.length) : "";
-  if (!kinds.length) return found;
+  if (!kinds.length) return [t("problem.none"), found].filter(Boolean).join(" · ");
   return [t("problem.label", { list: kinds.map((k) => t("problem." + k)).join(", ") }), found].filter(Boolean).join(" · ");
 }
 
 // renderCubeProblems draws every Cube's problems beside the Cube choice
-// (problemsEl), nothing where none has one; its list kept open across a
-// poll where it was open.
+// (problemsEl), a green check where none has one (okPill), nothing before
+// there is a Cube; its list kept open across a poll where it was open.
 function renderCubeProblems() {
   const box = $("cube-problems");
   if (!box) return;
@@ -789,7 +805,8 @@ function renderCubeProblems() {
   if (was && was.open) return;
   const entries = cubeProblemEntries();
   const p = problemsEl(entries, problemsLabelOf(entries));
-  box.replaceChildren(...(p ? [p] : []));
+  if (p) box.replaceChildren(p);
+  else box.replaceChildren(...(state.cubes.length ? [okPill(t("problem.none"))] : [])); // components.js
 }
 
 function applySettings() {
@@ -1025,7 +1042,7 @@ function selectCube(serial) {
 // somethingOpen reports whether a reload would interrupt the user: a
 // panel, a dialog, a device list, or a stepper value not yet sent.
 function somethingOpen() {
-  if (isShown("me") || isShown("system")) return true;
+  if (isShown("me") || isShown("system") || isShown("cube")) return true;
   if (!$("house-panel").classList.contains("hidden")) return true;
   if ($("login-dialog").open) return true;
   for (const ui of Object.values(state.ui)) {
@@ -1088,6 +1105,72 @@ function certText(tls) {
 // the short one in the header.
 function renderVersionTitle() {
   copyLabel($("version-short"), state.version ? t("header.versionTitle", { version: state.version }) + " · " + t("copy.hint") : ""); // components.js
+  fitFacts();
+}
+
+// fitFacts puts the version, the server's sign and the time beside the
+// logo where all three fit there on one line, on the logo's baseline, and
+// on a row of their own across the header otherwise (.top-line.facts-row):
+// under the logo and the Cube choice, on a phone under the logo and the
+// pages, the version on a line of its own where that row is narrow too.
+// It measures them beside the logo each time, so that it never swings;
+// the compacted header is left as it is.
+function fitFacts() {
+  const line = document.querySelector(".top-line");
+  if (!line || document.body.classList.contains("scrolled")) return;
+  const brand = line.querySelector(".brand");
+  const facts = line.querySelector(".top-facts");
+  const version = $("version-short");
+  line.classList.remove("facts-row");
+  const b = brand.getBoundingClientRect();
+  const f = facts.getBoundingClientRect();
+  const beside = f.top < b.bottom - 1 && version.scrollWidth <= version.clientWidth + 1;
+  line.classList.toggle("facts-row", !beside);
+}
+
+// watchFacts fits the facts again when the header's width or the logo's
+// size changes, when what the facts show changes (the time of the last
+// update, which comes after the version, and the server's sign), when the
+// page's fonts have come, or when the header is whole again after
+// compacting (fitFacts), after the frame, so that the layout it changes
+// does not call it back within the same one.
+function watchFacts() {
+  const line = document.querySelector(".top-line");
+  let width = -1;
+  let brand = "";
+  const ro = new ResizeObserver(() => {
+    const w = line.getBoundingClientRect().width;
+    // the logo's height too: on a phone the drawing that replaces the
+    // word keeps its width and changes its height
+    const r = line.querySelector(".brand").getBoundingClientRect();
+    const b = r.width + "x" + r.height;
+    if (w === width && b === brand) return;
+    width = w;
+    brand = b;
+    requestAnimationFrame(fitFacts);
+  });
+  ro.observe(line);
+  ro.observe(line.querySelector(".brand"));
+  // the facts beside the logo wrapped under it once the time came, the
+  // version cut; fitFacts changes no text, so it does not call itself
+  let queued = false;
+  new MutationObserver(() => {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(() => {
+      queued = false;
+      fitFacts();
+    });
+  }).observe(line.querySelector(".top-facts"), { childList: true, characterData: true, subtree: true });
+  // the page's fonts change the version's width when they come
+  if (document.fonts) document.fonts.ready.then(() => requestAnimationFrame(fitFacts));
+  // a resize while compacted is fitted once the header is whole again
+  let was = document.body.classList.contains("scrolled");
+  new MutationObserver(() => {
+    const now = document.body.classList.contains("scrolled");
+    if (was && !now) requestAnimationFrame(fitFacts);
+    was = now;
+  }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
 }
 
 async function checkVersion() {
@@ -1468,13 +1551,14 @@ async function init() {
   renderLangSelect();
   initHelpSlots();
   // the header kept at the top; System settings' row there with its
-  // sections menu, its cards that fold, back to top
+  // sections menu, its cards that fold; back to top on every page
   stickyHeader();
+  watchFacts();
   for (const page of [$("system"), $("me")]) {
     sectionCards(page);
     pageBar(page);
-    backToTop(page);
   }
+  backToTop();
   initSettings();
   applySettings();
   checkVersion();

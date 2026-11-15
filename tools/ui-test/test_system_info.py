@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
-"""System settings → System Info (update.js loadSystemInfo), from GET
+"""System info, the page of ⚙ (update.js loadSystemInfo), from GET
 /api/v1/system: the server's version and what it was built with, its
 start and clock, the certificate (or a proxy's), how it was installed,
 the computer, its full name and the interfaces it listens on, and the
@@ -36,8 +36,8 @@ def tls_lines(page):
 def test_system_info_of_the_test_server(page, case):
     """The test server: its version, a start, no certificate, "other" as
     the installation, the computer, and the loopback as this browser's
-    address; the tile first among the cards, nothing overflowing."""
-    show_view(page, "system")
+    address; the card shown, nothing overflowing."""
+    show_view(page, "info")
     assert wait_until(page, "document.getElementById('info-client').textContent !== '–'", 5), "System Info filled"
     version = page.evaluate("splitVersion(state.version)")
     assert cell(page, "version") == version["short"], "the server's version"
@@ -64,7 +64,7 @@ def test_system_info_of_a_debian_box(page, case):
     manager the page has no text for is named as the server names it."""
     box = dict(BOX)
     page.route("**/api/v1/system", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(box)))
-    show_view(page, "system")
+    show_view(page, "info")
     assert wait_until(page, "document.getElementById('info-client').textContent === '192.0.2.20'", 5), "System Info filled"
     assert cell(page, "version") == "v0.0.1-test", "the short version"
     assert cell(page, "built") == "go1.26.0, linux/arm64", "what it was built with"
@@ -75,7 +75,7 @@ def test_system_info_of_a_debian_box(page, case):
     assert scroll_width(page) <= case.width, "no horizontal scroll with a long certificate line"
     show_view(page, "tiles")
     box["install"] = "dnf"
-    show_view(page, "system")
+    show_view(page, "info")
     assert wait_until(page, "document.getElementById('info-install').textContent === 'dnf'", 5), \
         "a package manager without a text, as the server names it"
     page.unroute("**/api/v1/system")
@@ -104,7 +104,7 @@ def test_system_details_behind_a_proxy(page, case):
                                       "checked_at": "2026-11-13T09:50:02+01:00"}})
     box.pop("tls")
     page.route("**/api/v1/system", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(box)))
-    show_view(page, "system")
+    show_view(page, "info")
     assert wait_until(page, "document.getElementById('info-client').textContent === '192.0.2.20'", 5), "System Info filled"
     clock = cell(page, "now")
     assert "Europe/Zurich" in clock and AHEAD[case.lang] in clock, f"the server's clock in its zone, ahead ({clock!r})"
@@ -136,7 +136,7 @@ def test_system_details_behind_a_proxy(page, case):
     show_view(page, "tiles")
     box["interfaces"] = [{"name": "eth0", "mac": "02:00:00:00:00:01", "addresses": [{"ip": "192.0.2.8", "api": True}, {"ip": "192.0.2.31", "api": True}]}]
     box["proxy"] = {"proto": "https", "host": "massimo.example.net", "port": 443}
-    show_view(page, "system")
+    show_view(page, "info")
     assert wait_until(page, "document.querySelector('#info-addrs .sys-note') && !document.getElementById('info-addrs').textContent.includes('*')", 5), \
         "the web interface everywhere: no asterisk"
     assert page.locator("#info-addrs .sys-note").inner_text() == ALL[case.lang], "the note says so instead"
@@ -145,6 +145,56 @@ def test_system_details_behind_a_proxy(page, case):
         "a certificate not read yet, proxied all the same"
     page.unroute("**/api/v1/system")
     show_view(page, "tiles")
+
+
+PENDING = {"en": "being read…", "de": "wird gelesen…"}
+UNREAD = {"en": "could not be read", "de": "konnte nicht gelesen werden"}
+
+
+def test_proxy_certificate_followed(page, case):
+    """A proxy's certificate the server has not read yet: "being read…",
+    asked for again until it is read, then shown; one that stays unread,
+    "could not be read" after the last try. The address the proxy serves
+    is a link to a new window and copies by its icon."""
+    page.context.grant_permissions(["clipboard-read", "clipboard-write"], origin=page.evaluate("location.origin"))
+    box = dict(BOX, now=time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime()), time_zone="UTC", interfaces=[],
+               proxy={"proto": "https", "host": "massimo.example.net", "port": 443})
+    box.pop("tls")
+    read = {"source": "proxy", "names": ["massimo.example.net"], "not_after": "2027-02-10T12:00:00Z", "fingerprint": "00",
+            "self_signed": False, "issuer": "Example CA", "trusted": True, "checked_at": "2026-11-13T09:50:02+01:00"}
+    asked = []
+
+    def answer(route):
+        asked.append(1)
+        body = dict(box, proxy=dict(box["proxy"], certificate=read)) if len(asked) >= 3 else box
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
+    page.route("**/api/v1/system", answer)
+    page.evaluate("certRetry.every = 150")
+    try:
+        show_view(page, "info")
+        assert wait_until(page, "document.getElementById('info-tls').textContent.includes(%r)" % PENDING[case.lang], 5), \
+            "being read… first"
+        assert wait_until(page, "document.getElementById('info-tls').textContent.includes('Example CA')", 5), \
+            "asked for again until read, then shown"
+        assert len(asked) == 3, f"no more asking once read ({len(asked)})"
+        link = page.locator("#info-tls a")
+        assert link.get_attribute("href") == "https://massimo.example.net" and link.get_attribute("target") == "_blank", \
+            "the address a link to a new window"
+        page.evaluate("navigator.clipboard.writeText('')")
+        page.locator("#info-tls .copy-icon").click()
+        assert wait_until(page, "navigator.clipboard.readText().then((t) => t === 'https://massimo.example.net')", 3), \
+            "and copies by its icon"
+        show_view(page, "tiles")
+        page.unroute("**/api/v1/system")
+        page.route("**/api/v1/system", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(box)))
+        page.evaluate("certRetry.every = 20")
+        show_view(page, "info")
+        assert wait_until(page, "document.getElementById('info-tls').textContent.includes(%r)" % UNREAD[case.lang], 5), \
+            "could not be read after the last try"
+    finally:
+        page.evaluate("certRetry.every = 2000")
+        page.unroute("**/api/v1/system")
+        show_view(page, "tiles")
 
 
 NO_SCHEME = {"en": "The proxy sends no X-Forwarded-Proto", "de": "Der Proxy sendet kein X-Forwarded-Proto"}
@@ -158,7 +208,7 @@ def test_proxy_without_a_scheme(page, case):
                proxy={"host": "massimo.example.net"})
     box.pop("tls")
     page.route("**/api/v1/system", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(box)))
-    show_view(page, "system")
+    show_view(page, "info")
     assert wait_until(page, "document.getElementById('info-client').textContent === '192.0.2.20'", 5), "System Info filled"
     lines = tls_lines(page)
     origin = page.evaluate("location.protocol + '//' + location.host")
@@ -178,10 +228,11 @@ LISTENING = {"en": "listening", "de": "horcht"}
 def test_system_info_cube_proxies(page, case):
     """The Cube proxies' listeners, a line each: one listening, one that
     does not with its error, since when and the next try as its tooltip,
-    counted in the card's badge; none listed, a dash and no badge."""
+    counted in the page's badge, in its row; none listed, a dash and no
+    badge."""
     box = dict(BOX, cube_proxies=[{"serial": "KEQ0000100", "addr": "192.0.2.5:62910", "listening": True}, FAILING])
     page.route("**/api/v1/system", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(box)))
-    show_view(page, "system")
+    show_view(page, "info")
     assert wait_until(page, "document.querySelectorAll('#info-proxies .sys-proxy').length === 2", 5), "two listeners listed"
     lines = page.locator("#info-proxies .sys-proxy")
     assert lines.nth(0).inner_text().split() == ["KEQ0000100", "192.0.2.5:62910", LISTENING[case.lang]], "the listening one"
@@ -191,11 +242,11 @@ def test_system_info_cube_proxies(page, case):
     assert "192.0.2.10:62910" in text and "cannot assign requested address" in text, "its address and its error"
     assert notice.locator(".notice-since").count() == 1, "since when"
     assert notice.get_attribute("title"), "the next try as its tooltip"
-    assert page.locator("#sys-info .section-badges").inner_text().strip() == PROXIES_BADGE[case.lang], "the card's badge"
+    assert page.locator("#info-page .section-badges").inner_text().strip() == PROXIES_BADGE[case.lang], "the page's badge"
     assert scroll_width(page) <= case.width, "no horizontal scroll with a long error"
     show_view(page, "tiles")
     box["cube_proxies"] = []
-    show_view(page, "system")
+    show_view(page, "info")
     assert wait_until(page, "document.getElementById('info-proxies').textContent === '–'", 5), "none listed: a dash"
-    assert page.locator("#sys-info .section-badges .flag").count() == 0, "no badge"
+    assert page.locator("#info-page .section-badges .flag").count() == 0, "no badge"
     show_view(page, "tiles")

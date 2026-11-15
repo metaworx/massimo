@@ -13,6 +13,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/server"
 )
 
 // runWatch keeps a persistent connection to a Cube and prints state
@@ -20,10 +21,10 @@ import (
 func runWatch(args []string) error {
 	fs := flag.NewFlagSet("watch", flag.ContinueOnError)
 	addr := fs.String("addr", "", "Cube address, host[:port]")
-	poll := fs.Duration("poll", 60*time.Second, "device list poll interval (0 = never)")
+	poll := fs.Duration("poll", server.DefaultPollInterval, "device list poll interval, as serve's default (0 = never)")
 	snFlag(fs)
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, "usage: massimo watch -addr <ip> [-poll 60s]\n\nStay connected to a Cube and print state changes.\n\n")
+		fmt.Fprint(os.Stderr, "usage: massimo watch -addr <ip> [-poll 10s]\n\nStay connected to a Cube and print state changes.\n\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {

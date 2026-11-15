@@ -1,9 +1,5 @@
-<!-- System settings → System Info, a section card: the server's version, start, clock and certificate (or its proxy's), how it was installed, the computer it runs on, its full name, the interfaces it listens on and the Cube proxies' listeners (copyable), the address the server sees the browser at, then the store and the settings in effect (with settings), from GET /api/v1/system, update.js. -->
-<section id="sys-info" class="tile section-card half system-info" aria-labelledby="sys-info-h">
-  <header class="tile-head section-head">
-    <h3 id="sys-info-h"><button type="button" class="section-fold" aria-expanded="true" aria-controls="sys-info-body"><svg class="fold-i" aria-hidden="true"><use href="#icon-chevron"/></svg><span class="section-title" data-i18n="sysinfo.title">System Info</span></button></h3>
-    <span class="section-badges"></span>
-  </header>
+<!-- System info, the page's card: the server's version, start, clock and certificate (or its proxy's), how it was installed, the computer it runs on, its full name, the interfaces it listens on and the Cube proxies' listeners (copyable), the address the server sees the browser at, then the store and the settings in effect (with settings), from GET /api/v1/system, update.js. -->
+<section id="sys-info" class="tile system-info" aria-label="System info" data-i18n-attr="aria-label:nav.infoTitle">
   <div id="sys-info-body" class="section-body">
     <table class="info-table">
       <tbody>

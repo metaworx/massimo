@@ -63,7 +63,8 @@ jobs:
   # UI test and LAN jobs, are true for
   # a push; for a pull request, ui is true when it touches the web UI, its
   # suite or this file, lan when it touches the announcement, discovery,
-  # the proxy, the LAN test or this file. The run checks out the pull
+  # the proxy, the server's own files (not ui/: discovery's runs are
+  # decided there), the LAN test or this file. The run checks out the pull
   # request's merge commit, whose first parent is the base branch. The
   # list is taken before it is matched, so that grep -q ending the pipe
   # early cannot fail the step under pipefail. Only an answer of false
@@ -106,6 +107,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           suite=true code=true site=false tested=false fp="" ui=true lan=true
+          # Each reason the answers have, for the log and the summary.
+          why=()
+          say() { echo "$1"; why+=("$1"); }
           ui_done=false lan_done=false fuzz_done=false
           fpsh=GUIDELINES/shared/tools/fingerprint.sh
           base="" prev=""
@@ -119,7 +123,7 @@ jobs:
             # for any summary config.ini allows, chore(release:x) included.
             role="$(python3 GUIDELINES/shared/tools/commit_title.py --root GUIDELINES parse "${MESSAGE%%$'\n'*}" 2>/dev/null | cut -d'|' -f1 || true)"
             if [ "$role" = release ]; then
-              echo "a release commit: its tag's run tests it."
+              say "a release commit: its tag's run tests it."
               suite=false
             else
               base="$BEFORE"
@@ -130,7 +134,7 @@ jobs:
           # Documents alone (GUIDELINES/config.ini, [ci] untested): the
           # same code as the base; exit 2, an unknown base included, tests.
           if [ -n "$base" ] && same="$("$fpsh" -q same "$base" HEAD)" && [ "$same" = true ]; then
-            echo "documents alone since ${base}: no test reads them."
+            say "documents alone since ${base}: no test reads them."
             code=false
           fi
           # The site's documents (config.ini, [ci] site) and untested ones
@@ -148,7 +152,7 @@ jobs:
             if [ "${#sites[@]}" -gt 0 ] && [ "$plain" = true ] &&
               git diff --quiet "$base" HEAD -- . "${skip[@]}" &&
               shipped="$("$fpsh" -q shipped "${base}..HEAD")" && [ "$shipped" = false ]; then
-              echo "the site's documents alone since ${base}: Site checks them."
+              say "the site's documents alone since ${base}: Site checks them."
               code=false site=true
             fi
           fi
@@ -161,7 +165,7 @@ jobs:
               --jq '[.[] | select(.context == "Tested")][0] | select(.state == "success" and .creator.login == "github-actions[bot]") | .description' 2>/dev/null || true)"
             read -r -a words <<<"$desc"
             if [ "${words[0]:-}" = "$fp" ]; then
-              echo "${fp} passed at ${prev}: ${desc}"
+              say "${fp} passed at ${prev}: ${desc}"
               tested=true
               for w in "${words[@]:1}"; do
                 case "$w" in
@@ -175,9 +179,34 @@ jobs:
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
             changed="$(git diff --name-only HEAD^1 HEAD)"
             grep -qE '^(internal/server/ui/|tools/ui-test/|\.github/workflows/ci\.yml$)' <<<"$changed" || ui=false
-            grep -qE '^(internal/announce/|internal/serve/|internal/proxy/|internal/cubelan/|cmd/massimo/(discover|serve)\.go$|tools/lan-test/|\.github/workflows/ci\.yml$)' <<<"$changed" || lan=false
+            grep -qE '^(internal/announce/|internal/serve/|internal/proxy/|internal/server/[^/]+$|internal/cubelan/|cmd/massimo/(discover|serve)\.go$|tools/lan-test/|\.github/workflows/ci\.yml$)' <<<"$changed" || lan=false
           fi
           echo "suite=${suite} code=${code} site=${site} tested=${tested} fp=${fp} ui=${ui} lan=${lan} ui_done=${ui_done} lan_done=${lan_done} fuzz_done=${fuzz_done}"
+          # The answers as a table in the run's summary, with the reasons.
+          {
+            echo "### What to test"
+            echo
+            if [ "${#why[@]}" -gt 0 ]; then
+              printf -- '- %s\n' "${why[@]}"
+              echo
+            fi
+            echo "| Answer | Value | So |"
+            echo "|--------|-------|----|"
+            row() { # <answer> <value> <so where true> <so where false>
+              if [ "$2" = true ]; then so="$3"; else so="$4"; fi
+              echo "| $1 | \`$2\` | ${so} |"
+            }
+            row suite "$suite" "the suite runs" "a release commit: every job is skipped, its tag's run tests it"
+            row code "$code" "code changed: the test jobs run" "documents alone: no test job runs, Code result carries the code's verdict"
+            row site "$site" "the site's documents alone: Site runs, and a push to main deploys them" "-"
+            row tested "$tested" "this code passed before: what passed is skipped" "no green record for this code"
+            echo "| fp | \`${fp:-none}\` | $([ -n "$fp" ] && echo "the code's fingerprint" || echo "not taken") |"
+            row ui "$ui" "the UI tests are wanted" "the UI tests are not wanted"
+            row lan "$lan" "LAN against avahi is wanted" "LAN against avahi is not wanted"
+            row ui_done "$ui_done" "the UI tests passed for this code before" "-"
+            row lan_done "$lan_done" "LAN passed for this code before" "-"
+            row fuzz_done "$fuzz_done" "Fuzz passed for this code before" "-"
+          } >>"$GITHUB_STEP_SUMMARY"
           {
             echo "suite=${suite}"
             echo "code=${code}"
@@ -419,8 +448,9 @@ jobs:
   # client, discover listing it and marking the proxy, and its goodbye.
   # The runner has Docker and Compose v2; the hosts' image is built from
   # debian:trixie-slim at each run. It runs for every push to main and for
-  # a pull request whose What to test answered lan=true, as the UI tests
-  # do; skipped by this condition, the check counts as passed.
+  # a pull request whose What to test answered lan=true, the server's own
+  # files among its paths, as the UI tests do; skipped by this condition,
+  # the check counts as passed.
   lan:
     name: LAN against avahi
     needs: changes
@@ -1182,9 +1212,10 @@ jobs:
   # 2): that of the last run that tested this code, on main's first parents,
   # read and never run again. Red fails it on a push, so that All tests
   # passed fails and the nightly build takes nothing, and is a warning on a
-  # pull request, which adds no code. The whole history, for the walk;
-  # actions to read the runs and wait for one still going, statuses for the
-  # Tested status of a run that skipped its jobs on it.
+  # pull request, which adds no code. The whole history, for the walk, and
+  # the guidelines, for fingerprint.sh; actions to read the runs and wait
+  # for one still going, statuses for the Tested record where no run gives
+  # a verdict: a run cancelled while it waited, or one that skipped its jobs.
   code-result:
     name: Code result
     needs: changes
@@ -1199,6 +1230,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          submodules: true
 
       - name: The verdict of the last run that tested this code
         env:

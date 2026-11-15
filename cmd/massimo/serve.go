@@ -36,7 +36,7 @@ func runServe(args []string) error {
 	}
 	listen := fs.String("listen", listenDefault, "address to listen on (default MASSIMO_LISTEN, else 127.0.0.1:8099)")
 	addr := fs.String("addr", "", "serve this one Cube (host[:port]) instead of the configured ones, for this run and without the store: massimo.db is neither opened nor created, and nothing is written")
-	poll := fs.Duration("poll", server.DefaultPollInterval, "how often to poll the device list (default the store's poll_interval, else 1m)")
+	poll := fs.Duration("poll", server.DefaultPollInterval, "how often to ask each Cube for its device list, which costs no radio time (default the store's poll_interval, else 10s)")
 	refresh := fs.Duration("refresh", server.DefaultRefreshInterval, "how often to reconnect to each Cube to re-read everything it holds (0 = never; default the store's refresh_interval, else 6h)")
 	cubeHold := fs.Duration("cube-hold", cubelan.DefaultHold, "how long a Cube's lost connection is held open, so that it resumes on the same session when the network is back, before serve connects anew, which a Cube that still holds the old session refuses (0 = not at all; without -poll nothing is held)")
 	staleAfter := fs.Duration("stale-after", 0, "mark a thermostat stale once its entry has not changed for this long (default the store's stale_after, else 24h); short values are for tests")

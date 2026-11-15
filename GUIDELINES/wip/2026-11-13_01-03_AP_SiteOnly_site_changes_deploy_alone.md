@@ -1,4 +1,4 @@
-# AP SiteOnly v1.2: Site changes deploy alone
+# AP SiteOnly v1.4: Site changes deploy alone
 
 ## TL;DR
 
@@ -18,6 +18,13 @@ pushed to `main`, deploys Pages directly: no test jobs and no devel build.
 - v1.2: `code=false` → a **Code result** job, the verdict of the last run
   that tested this code; red → All tests passed red on `main`, a warning on a
   pull request; nothing re-run (D68-C, D73-A, D74-A, D75-A)
+- v1.3: no run's verdict on a commit (a queued run cancelled) → its Tested
+  status, or a merge's pull request head's, with `HEAD`'s fingerprint → green
+  (D76-A, D77-A)
+- v1.4: a pull request's `lan=false` → its Tested status `lan=unneeded` →
+  main's push skips LAN for that code (D78-C); LAN's paths + `internal/sharedport/`,
+  `go.mod`, `go.sum` (D79-A); the summary's `ui` and `lan` rows say what the job
+  does (D80-A)
 
 | Change | Guidelines | Site | Tests | Devel build | Pages deploy |
 |---|---|---|---|---|---|
@@ -32,6 +39,9 @@ pushed to `main`, deploys Pages directly: no test jobs and no devel build.
 3. CI.md section 2, the CHANGELOG fragment, checked against real commits
 4. `packaging/site/`'s pages in `[ci] site` and out of `project.shipped`
 5. The Code result job: a docs-only change carries the code's last verdict
+6. Code result reads the Tested status where no run gives a verdict
+7. LAN: the pull request's "not needed" carried to `main`; its paths' gaps
+8. The summary's `ui` and `lan` rows say whether the job runs
 
 ## Discussion
 
@@ -96,6 +106,46 @@ runs where the code jobs are skipped, and carries their last result.
 - **D75-A:** Code result is among All tests passed's needs, nothing more:
   What to release already takes only a commit whose All tests passed
   succeeded. Not B, a second source for Build's What to release.
+
+**v1.3** (`PLAN++ D76-A D77-A`, 2026-11-15): Code result was red on the
+push of `chore(aps): -LanPaths` (run 43673977102). The run on the merge of
+`Cap Cube pairing time at 255 seconds` (#273) before it, run 43673876936, had
+been cancelled while it waited, with no job run: "Canceling since a higher
+priority waiting request for CI-refs/heads/main exists". The group keeps one
+run going and one waiting, and the push a minute later replaced the waiting
+one. The walk took the cancelled run as no verdict and reached the merge of
+#274, other code. The owner: Code result should look for other results where
+a run was cancelled.
+
+- **D76-A:** a Block 6 of its own, on a branch from `main`, its own pull
+  request. Not B, on the What to test summary's pull request (#270).
+- **D77-A:** the fingerprint compared is `HEAD`'s, taken by `fingerprint.sh`
+  in Code result. Not B, What to test's `fp`, which it takes only where
+  `code=true`.
+
+**v1.4** (`PLAN++ D78-C D79-A D80-A`, 2026-11-15): the owner asked whether
+LAN against avahi should not run only with the other code tests, and whether
+its paths could be tightened; then why it ran in run 43698938871, the merge
+of #282, which changed `tools/ui-test/test_scroll.py` alone. Its pull request
+answered `lan=false` and wrote `lan=false` into its Tested status; the merge's
+push, `tested=true`, skipped every job that had passed and ran LAN and Fuzz,
+as a push to `main` always wants them.
+
+- **D78-C:** a pull request's `lan=false` is recorded as `lan=unneeded`, and
+  a push to `main` with that record for its code skips LAN. Not A, main runs
+  LAN once for every code: the backstop for the path list, and runner time
+  for a change that cannot reach discovery. Not B, skip on `lan=false` alone,
+  which cannot tell "not needed" from "not passed". The cost: a change the
+  list misses never runs LAN, so the list has to be right (D79).
+- **D79-A:** the list keeps `internal/server/`'s own files (LanPaths' D1-A)
+  and adds `internal/sharedport/` (the shared UDP port of the announcement and
+  of discovery), `go.mod` and `go.sum` (`golang.org/x/net`'s multicast). Not B,
+  the five files of `internal/server/` that touch discovery, which would undo
+  D1-A; not C, as it is.
+- **D80-A:** the summary's `ui` and `lan` rows say what the job does: skipped
+  with no code test, not needed, passed before, or it runs. It was to go onto
+  #270, which the owner merged before this revision, so it is Block 8 on
+  Block 7's branch.
 
 ## Analysis
 
@@ -185,6 +235,47 @@ where history ends: no run tested this code, which is red. Red fails the job
 on a push and passes it with a warning on a pull request (D73-A); either way
 the summary names the run. It needs `actions: read` and `statuses: read`.
 
+**Where no run gives a verdict (v1.3).** The pull request's head of #273
+carries a green Tested status, `fp1:03d9dda1…`, and the merge commit and
+`-LanPaths` have that fingerprint: the run on the merge, had it started,
+would have found it as What to test's `prev` (a merge's second parent),
+skipped every code job and passed. Code result read a Tested status only for
+a run whose code jobs were skipped, and only on its own commit. So, once a
+commit's runs give no verdict (none, or all cancelled or skipped), it reads
+the Tested status where What to test reads it: on the commit, then, for a
+merge, on its second parent. Green, written by this workflow and opening
+with `HEAD`'s fingerprint → green, the status's run named. Anything else and
+the walk goes on. A run's red still comes first, since a commit's runs are
+read before its record. The fingerprint needs `fingerprint.sh`, so Code
+result's checkout takes the submodules. The per-run check of a run that
+skipped its jobs folds into it.
+
+**LAN's record (v1.4).** The Tested status holds `lan=true` where LAN
+passed for the code, in the run or before it, and `lan=false` otherwise;
+What to test reads `lan=true` as `lan_done=true`. A push sets `lan=true`,
+and only a pull request's filter sets it false. So the merge of a pull
+request the filter judged clear of discovery runs LAN on `main`, alone. Now
+All tests passed writes `lan=unneeded` where What to test answered
+`lan=false` and LAN did not pass; What to test, on a push, reads it as
+`lan=false`, so LAN is skipped and the run's own status carries
+`lan=unneeded` on. A pull request ignores it: its own filter decides. A
+direct push to `main` without a record runs LAN as before. The status stays
+within 140 characters: 68 for the fingerprint, 32 for the rest. Fuzz keeps
+its rule: a pull request never runs it.
+
+**LAN's paths (v1.4).** `serve` imports nearly every package, so the list
+cannot come from the import graph. Of the packages the LAN test goes
+through, only `internal/sharedport/` is missing: `internal/announce`'s
+responder and `internal/cubelan`'s search share their UDP ports through it,
+and the test checks `serve` beside avahi-daemon on 5353. `go.mod` and
+`go.sum` pin `golang.org/x/net`, whose `ipv4` and `ipv6` the announcement's
+multicast uses.
+
+**The summary's rows (v1.4).** `ui` and `lan` said "wanted" or "not wanted"
+whatever the run did with them. The row says, in this order: skipped, no
+code test (`suite` or `code` false); not needed (the answer false); passed
+for this code before (`ui_done`, `lan_done`); else it runs. Fuzz's row stays.
+
 **Not changed.** The nightly build may take a site-only commit; its code is
 that of the commit before, which was tested (CI.md section 2). Pages keeps
 the first deploy of a commit, so a nightly whose head `main` already
@@ -263,6 +354,48 @@ docs-only commits before it), on a docs-only commit after the merge of #264
 (green), as a pull request (red as a warning, exit 0); shellcheck;
 `make actionlint`.
 
+### Block 6: The Tested record where no run gives a verdict (v1.3)
+
+1. `packaging/code-result.sh`: `HEAD`'s fingerprint at the start; after a
+   commit's runs, its Tested status, then a merge's second parent's, matched
+   on that fingerprint; the header comment says it.
+2. `ci.yml`: Code result's checkout with `submodules: true`; its comment.
+3. `GUIDELINES/project/CI.md` section 2 (v1.54.0): the record where no run
+   gives a verdict.
+4. `CHANGELOG.d/Fixed/claude-code-result-record.md`.
+
+**Verification:** the script against `main`'s real runs: on
+`chore(aps): -LanPaths` (red before, green now, the status of #273's head
+named); on `chore(aps): -DiscoveryShare, -ANALYSIS DiscoveryShare` (red, as
+before); on a docs-only commit after the merge of #264 (green); a mismatched
+fingerprint (red); shellcheck; `make actionlint`.
+
+### Block 7: LAN's record and paths (v1.4)
+
+1. `ci.yml`, What to test: `lan=unneeded` in the record → `lan=false` on a
+   push; the filter adds `internal/sharedport/`, `go.mod`, `go.sum`; the job
+   comments.
+2. `ci.yml`, All tests passed: `LAN` is `unneeded` where `lan` was false and
+   LAN did not pass.
+3. `GUIDELINES/project/CI.md` (v1.56.0): the record's `lan=unneeded`, the
+   table's row and section 2's list.
+4. `CHANGELOG.d/Changed/claude-lan-unneeded.md`.
+
+**Verification:** What to test's step, run by hand as in Block 1, on the
+merge of #282 with a record `lan=unneeded` (`lan=false`), with `lan=false`
+(`lan=true`), as a pull request with that record and a LAN path (`lan=true`);
+the filter on a change to `internal/sharedport/` and to `go.mod`
+(`lan=true`); All tests passed's expression by actionlint; `make actionlint`.
+
+### Block 8: The summary's rows (v1.4)
+
+1. `ci.yml`, What to test: the `ui` and `lan` rows by the order of the
+   Analysis.
+
+**Verification:** the step's summary, run by hand, for a docs-only push, a
+pull request of the UI suite alone, a merge with `ui=true`, and a push with
+nothing recorded; `make actionlint`.
+
 ## Proposed commit message
 
 ```
@@ -319,6 +452,51 @@ File-revision-v1: GUIDELINES/project/CI.md::v1.49.0::2026-11-14::2::a docs-only 
 Assisted-by: claude-code:claude-opus-5-5
 ```
 
+Block 6:
+
+```
+fix(pipeline): Code result reads the Tested record where a run was cancelled
+
+For AP SiteOnly v1.3, Block 6, with the owner's D76-A and D77-A: a run on main cancelled while it waited, replaced by the next push, gave no verdict, and Code result walked past code that had passed in its pull request; it now reads the Tested status where What to test reads it.
+
+Key changes:
+- packaging/code-result.sh: where a commit's runs give no verdict, its Tested status, or a merge's pull request head's, with HEAD's fingerprint is green
+- ci.yml: Code result checks out the guidelines, for fingerprint.sh
+- CI.md section 2 states it
+
+File-revision-v1: GUIDELINES/project/CI.md::v1.54.0::2026-11-15::2::Code result reads the Tested record where a run was cancelled
+Assisted-by: claude-code:claude-opus-5-5
+```
+
+Block 7:
+
+```
+ci(pipeline): A pull request's LAN not needed is not run again on main
+
+For AP SiteOnly v1.4, Block 7, with the owner's D78-C and D79-A: the merge of a pull request whose filter found LAN not needed ran LAN alone on main, since a push always wants it; the Tested status now records it as unneeded, and the job's paths take in the shared port and the Go module.
+
+Key changes:
+- ci.yml: All tests passed writes lan=unneeded where LAN was not wanted and did not pass; What to test reads it on a push as lan=false
+- What to test's LAN filter adds internal/sharedport/, go.mod and go.sum
+- CI.md states the record and the list
+
+File-revision-v1: GUIDELINES/project/CI.md::v1.56.0::2026-11-15::2::a pull request's LAN not needed is not run again on main
+Assisted-by: claude-code:claude-opus-5-5
+```
+
+Block 8:
+
+```
+ci(pipeline): The summary's UI and LAN rows say whether the job runs
+
+For AP SiteOnly v1.4, Block 8, with the owner's D80-A: the rows said wanted or not wanted whatever the run did; they now say skipped without a code test, not needed, passed for this code before, or that the job runs.
+
+Key changes:
+- ci.yml: What to test's ui and lan rows
+
+Assisted-by: claude-code:claude-opus-5-5
+```
+
 ## Change History
 
 - v1.0 (2026-11-13): first revision, D62-A, D63-A, D64-C.
@@ -326,3 +504,8 @@ Assisted-by: claude-code:claude-opus-5-5
   Blocks 1 to 3 merged as pull request #199.
 - v1.2 (2026-11-14): Block 5, the Code result job, D68-C, D70-B, D73-A,
   D74-A, D75-A; Block 4 merged as pull request #214.
+- v1.3 (2026-11-15): Block 6, the Tested record where no run gives a verdict,
+  D76-A, D77-A; Block 5 merged as pull request #269.
+- v1.4 (2026-11-15): Blocks 7 and 8, LAN's record and paths and the
+  summary's rows, D78-C, D79-A, D80-A; Block 6 merged as pull request #280,
+  the summary as #270.

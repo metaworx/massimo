@@ -410,18 +410,27 @@ func TestCubeRoutesNeedAStore(t *testing.T) {
 }
 
 // The settings: defaults, a change that applies at once, the checks.
+// The poll interval's default is 10 s; a flag that decides a setting for
+// the run is its fixed_by.
 func TestSettingsAPI(t *testing.T) {
-	_, ts, srv, st := startStored(t, Options{PollInterval: 2 * time.Minute})
+	_, ts, srv, st := startStored(t, Options{PollInterval: 2 * time.Minute, SettingsFixedBy: map[string]string{store.PollIntervalKey: "-poll"}})
 	code, out := do(t, ts, "GET", "/api/v1/settings", "")
 	stale, _ := out["stale_after"].(map[string]any)
 	poll, _ := out["poll_interval"].(map[string]any)
+	refresh, _ := out["refresh_interval"].(map[string]any)
 	node, _ := out["node.id"].(map[string]any)
-	if code != 200 || stale["value"] != "24h" || stale["set"] != false || stale["applies"] != "now" || poll["in_effect"] != "2m" || poll["applies"] != "restart" || node["value"] != st.NodeID() || node["read_only"] != true {
+	if code != 200 || stale["value"] != "24h" || stale["set"] != false || stale["applies"] != "now" || node["value"] != st.NodeID() || node["read_only"] != true {
 		t.Fatalf("get %d %v", code, out)
+	}
+	if poll["value"] != "10s" || poll["default"] != "10s" || poll["in_effect"] != "2m" || poll["applies"] != "restart" || poll["fixed_by"] != "-poll" {
+		t.Fatalf("poll_interval %v", poll)
+	}
+	if _, ok := refresh["fixed_by"]; ok {
+		t.Fatalf("refresh_interval fixed without a flag: %v", refresh)
 	}
 	code, out = do(t, ts, "PUT", "/api/v1/settings", `{"stale_after":"36h","refresh_interval":"0"}`)
 	stale, _ = out["stale_after"].(map[string]any)
-	refresh, _ := out["refresh_interval"].(map[string]any)
+	refresh, _ = out["refresh_interval"].(map[string]any)
 	if code != 200 || stale["value"] != "36h" || stale["set"] != true || stale["in_effect"] != "36h" || refresh["value"] != "0" {
 		t.Fatalf("put %d %v", code, out)
 	}

@@ -280,7 +280,8 @@ async function runUpdate(u) {
 const RESTART_POLL_MS = 2000;
 const RESTART_WAIT_MS = 2 * 60 * 1000;
 
-const restartState = { following: false };
+// pending is the settings file's settings that wait for the next start.
+const restartState = { following: false, pending: [] };
 
 // showRestartText says how the restart stands, under its button.
 function showRestartText(text) {
@@ -298,10 +299,11 @@ function renderRestart(v) {
   $("restart-btn").classList.toggle("hidden", !(v && v.available));
   showRestartText(v && !v.available && v.blocked ? t("restart.unavailable", { reason: v.blocked }) : v ? t("maint.restartText") : "");
   const pending = (v && v.pending) || [];
+  restartState.pending = pending;
   const p = $("restart-pending");
   p.textContent = pending.length ? t("restart.pending", { names: pending.join(", ") }) : "";
   p.classList.toggle("hidden", !pending.length);
-  sectionBadges($("sys-maint"), pending.length ? [badgeEl(tn("maint.badge.pending", pending.length), "warn")] : []);
+  renderMaintBadge();
   const file = [];
   if (v && v.file) file.push(t("maint.fileText", { file: v.file }));
   if (v && v.read_at) file.push(t("maint.lastRead", { time: fmtInstant(new Date(Date.parse(v.read_at))) }));
@@ -703,7 +705,7 @@ function startSystemClock(v) {
   sysClock.skew = ms - Date.now();
   const note = Math.abs(sysClock.skew) > 5000 ? t(sysClock.skew > 0 ? "sysinfo.ahead" : "sysinfo.behind", { d: clockSpan(sysClock.skew) }) : "";
   const tick = () => {
-    if (!isShown("system")) return;
+    if (!isShown("info")) return;
     const now = Date.now() + sysClock.skew;
     clear(cell);
     cell.appendChild(document.createTextNode(serverTime(now, v.now)));
@@ -788,27 +790,59 @@ function fillProxies(v) {
   const list = v.cube_proxies || [];
   if (!list.length) cell.textContent = "–";
   for (const p of list) {
-    // the address the original software connects to, copyable (components.js)
-    const line = elem("div", "sys-proxy", textEl("span", p.serial || "", "mono"), " ", copyEl(p.addr, { label: p.addr, icon: true }));
+    // the Cube's serial, the serial the proxy answers discovery with, and
+    // the address the original software connects to, each copyable
+    // (components.js)
+    const line = elem("div", "sys-proxy", copyEl(p.serial || "", { label: p.serial, icon: true }));
+    if (p.discovery_serial) line.append(" ", ...tNodes("proxy.appearsAs", { serial: copyEl(p.discovery_serial, { label: p.discovery_serial, icon: true }) })); // i18n.js
+    line.append(" ", copyEl(p.addr, { label: p.addr, icon: true }));
     if (p.listening) line.append(" ", textEl("span", t("proxy.listening"), "muted"));
     else line.appendChild(noticeEl(t("proxy.notListening", { addr: p.addr, error: p.error || "" }), { since: p.since, next: p.next_try }));
     cell.appendChild(line);
   }
   const failing = list.filter((p) => !p.listening).length;
-  sectionBadges($("sys-info"), failing ? [badgeEl(tn("proxy.badge.failing", failing), "warn")] : []);
+  sectionBadges($("info-page"), failing ? [badgeEl(tn("proxy.badge.failing", failing), "warn")] : []); // in its row
+}
+
+// certRetry follows a proxy's certificate the server has not read yet
+// (it reads it within seconds of the first request): System info asks
+// again every `every` ms while it is shown, `max` times; after the last,
+// the certificate could not be read. Opening System info starts it again.
+const certRetry = { tries: 0, timer: null, every: 2000, max: 15, last: null };
+
+// certPending reports whether the proxy's certificate is still to be read.
+function certPending(v) {
+  return !!(v && v.proxy && v.proxy.proto === "https" && !v.proxy.certificate);
+}
+
+// certFollow asks again while the certificate is being read and System
+// info is shown (certRetry), a request that failed counting as a try;
+// after the last, it says the certificate could not be read.
+function certFollow(v) {
+  clearTimeout(certRetry.timer);
+  if (!certPending(v) || !isShown("info")) return;
+  if (certRetry.tries < certRetry.max) {
+    certRetry.tries++;
+    certRetry.timer = setTimeout(loadSystemInfo, certRetry.every);
+  } else fillCertificate(v);
 }
 
 // fillCertificate shows the certificate the browser sees: the proxy's,
 // "(proxied)", where a trusted proxy serves the page (its names, expiry
-// and issuer as the server last read them, or why it could not), with the
-// address the proxy serves, the page's own where the proxy names no
-// scheme, and the header it does not send; the page's own HTTPS while the
-// server serves none, which only a proxy does, with the setting that would
-// tell more; else the server's own (certText, app.js).
+// and issuer as the server last read them, or why it could not, "being
+// read…" while it reads it, "could not be read" once certRetry gave up),
+// with the address the proxy serves, a link and copyable, the page's own
+// where the proxy names no scheme, and the header it does not send; the
+// page's own HTTPS while the server serves none, which only a proxy does,
+// with the setting that would tell more; else the server's own (certText,
+// app.js).
 function fillCertificate(v) {
   const cell = $("info-tls");
   clear(cell);
   const line = (text, cls) => cell.appendChild(textEl("div", text, cls));
+  // an address: a link to it in a new window, and its copy icon
+  const address = (url) =>
+    cell.appendChild(elem("div", "mono muted small sys-url", elem("span", "copy-pair", linkEl(url, url), copyIcon(() => url, t("copy.what", { what: url })))));
   const p = v.proxy;
   if (p) {
     const c = p.certificate;
@@ -816,14 +850,14 @@ function fillCertificate(v) {
       // no scheme from the proxy: the page's own, which the browser knows
       const https = location.protocol === "https:";
       line(t(https ? "sysinfo.proxyHttps" : "sysinfo.proxyPlain") + " " + t("sysinfo.proxied"));
-      line(location.protocol + "//" + location.host, "mono muted small");
+      address(location.protocol + "//" + location.host);
       line(t("sysinfo.proxyNoScheme"), "muted small");
       if (v.tls) line(t("sysinfo.ownCert", { cert: certText(v.tls) }), "muted small");
       return;
     }
     let text;
     if (p.proto !== "https") text = t("sysinfo.proxyPlain");
-    else if (!c) text = t("sysinfo.proxyPending");
+    else if (!c) text = t(certRetry.tries >= certRetry.max ? "sysinfo.proxyUnread" : "sysinfo.proxyPending");
     else if (c.error) text = t("sysinfo.proxyError", { error: c.error });
     else {
       const until = Date.parse(c.not_after || "");
@@ -833,35 +867,38 @@ function fillCertificate(v) {
     line(text + " " + t("sysinfo.proxied"));
     // the scheme's own port left out, as the announcement's url has it
     const own = (p.proto === "https" && p.port === 443) || (p.proto === "http" && p.port === 80) || !p.port;
-    line(p.proto + "://" + (p.host.includes(":") ? "[" + p.host + "]" : p.host) + (own ? "" : ":" + p.port), "mono muted small");
+    address(p.proto + "://" + (p.host.includes(":") ? "[" + p.host + "]" : p.host) + (own ? "" : ":" + p.port));
     if (v.tls) line(t("sysinfo.ownCert", { cert: certText(v.tls) }), "muted small");
     return;
   }
   if (location.protocol === "https:" && !v.tls) {
     line(t("sysinfo.proxyHttps") + " " + t("sysinfo.proxied"));
-    line("https://" + location.host, "mono muted small");
+    address("https://" + location.host);
     line(t("sysinfo.proxyHint"), "muted small");
     return;
   }
   cell.textContent = v.tls ? certText(v.tls) : t("sysinfo.noTLS");
 }
 
-// loadSystemInfo fills System settings → System Info from GET
+// loadSystemInfo fills System info, the page, from GET
 // /api/v1/system: the version and what it was built with, when the
 // server started and how long ago, the server's clock (startSystemClock),
-// the certificate the browser sees (fillCertificate), how it was
-// installed, the operating system and processor, the host's full name
-// (fillHostName), the interfaces it listens on (fillAddresses), the Cube
-// proxies' listeners (fillProxies), and the address the server sees this
-// browser at.
+// the certificate the browser sees (fillCertificate, asked for again
+// while the server reads it, certFollow), how it was installed, the
+// operating system and processor, the host's full name (fillHostName),
+// the interfaces it listens on (fillAddresses), the Cube proxies'
+// listeners (fillProxies), and the address the server sees this browser
+// at.
 async function loadSystemInfo() {
   let v;
   try {
     v = await api("GET", "api/v1/system");
   } catch (e) {
-    return; // the rows keep their dashes
+    certFollow(certRetry.last);
+    return; // the rows keep their dashes, or what they showed
   }
   if (!v) return;
+  certRetry.last = v;
   const parts = splitVersion(v.version || "");
   // the short version shown, the whole one copied, by a click or the icon
   const name = t("copy.version");
@@ -872,6 +909,7 @@ async function loadSystemInfo() {
   fillStarted(v);
   startSystemClock(v);
   fillCertificate(v);
+  certFollow(v);
   // a kind this page has no text for, a package manager's, as it is
   const kind = v.install || "other";
   const label = t("sysinfo.install." + kind);
@@ -882,6 +920,15 @@ async function loadSystemInfo() {
   fillAddresses(v);
   fillProxies(v);
   $("info-client").textContent = v.client_ip || "–";
+}
+
+// renderMaintBadge counts in the Maintenance card's head what waits for
+// the next start: the settings file's settings and the store's (the
+// announcement and the Cube intervals, AP CubePoll v1.0).
+function renderMaintBadge() {
+  const n = restartState.pending.length + (announceWaits(announceUI.v) ? 1 : 0) +
+    INTERVALS.filter((iv) => intervalWaits(intervalsUI.v[iv.key])).length;
+  sectionBadges($("sys-maint"), n ? [badgeEl(tn("maint.badge.pending", n), "warn")] : []);
 }
 
 // --- the announcement on the LAN (the setting announce) ----------------
@@ -901,22 +948,32 @@ function renderAnnounce() {
   sel.value = v.value || "auto";
   sel.disabled = !!v.fixed_by;
   const now = t(v.in_effect === "on" ? "maint.announceNowOn" : "maint.announceNowOff");
+  renderMaintBadge();
   if (v.fixed_by) {
     text.textContent = t("maint.announceFixed", { by: v.fixed_by }) + " " + now;
     return;
   }
-  const wants = v.value === "on" ? "on" : v.value === "off" ? "off" : "";
-  const waits = wants && wants !== v.in_effect;
-  text.textContent = t("maint.announceHint") + " " + (waits ? t("maint.announceWaits") : now);
+  text.textContent = t("maint.announceHint") + " " + (announceWaits(v) ? t("maint.announceWaits") : now);
 }
 
-// loadAnnounce reads the setting, for a holder of settings.
+// announceWaits reports whether the stored choice differs from this
+// run's announcement: On or Off chosen, the other in effect.
+function announceWaits(v) {
+  if (!v || v.fixed_by) return false;
+  const wants = v.value === "on" ? "on" : v.value === "off" ? "off" : "";
+  return !!wants && wants !== v.in_effect;
+}
+
+// loadAnnounce reads the settings of the card, the announcement and
+// the Cube intervals, for a holder of settings.
 async function loadAnnounce() {
   if (!hasCap("settings")) return;
   try {
     const all = (await api("GET", "api/v1/settings")) || {};
     announceUI.v = all.announce || null;
+    for (const iv of INTERVALS) intervalsUI.v[iv.key] = all[iv.key] || null;
     renderAnnounce();
+    INTERVALS.forEach(renderInterval);
   } catch (e) {
     showResult($("announce-msg"), t("maint.cannotAsk", { error: e.message }), false);
   }
@@ -938,6 +995,115 @@ async function setAnnounce() {
   renderAnnounce();
 }
 
+// --- the Cube intervals (poll_interval, refresh_interval, discover_interval)
+
+// INTERVALS are the Cube intervals of the Maintenance card (AP CubePoll
+// v1.0, D119-B): the setting, its select and its explanation, and the
+// steps offered in seconds, 0 for off, within the API's range.
+const INTERVALS = [
+  { key: "poll_interval", id: "interval-poll", hint: "maint.pollHint", steps: [10, 15, 20, 30, 60, 120, 300, 600, 1800, 3600] },
+  { key: "refresh_interval", id: "interval-refresh", hint: "maint.refreshHint", steps: [0, 1800, 3600, 7200, 10800, 21600, 43200, 86400, 172800, 604800] },
+  { key: "discover_interval", id: "interval-discover", hint: "maint.discoverHint", steps: [0, 60, 300, 600, 900, 1800, 3600, 7200, 21600, 43200, 86400] },
+];
+
+// intervalsUI keeps the settings as GET /api/v1/settings answered them.
+const intervalsUI = { v: {} };
+
+// parseGoDuration is a duration as the API writes it (10s, 1m30s, 6h,
+// 0) in seconds; NaN for anything else.
+function parseGoDuration(text) {
+  const s = String(text || "").trim();
+  if (s === "0") return 0;
+  if (!s) return NaN;
+  const units = { h: 3600, m: 60, s: 1 };
+  const part = /^(\d+(?:\.\d+)?)(h|m|s)/;
+  let sec = 0;
+  let rest = s;
+  while (rest) {
+    const m = part.exec(rest);
+    if (!m) return NaN;
+    sec += Number(m[1]) * units[m[2]];
+    rest = rest.slice(m[0].length);
+  }
+  return Math.round(sec);
+}
+
+// apiDuration writes seconds as the API reads a duration: 10s, 30m, 6h, 0.
+function apiDuration(sec) {
+  if (sec === 0) return "0";
+  if (sec % 3600 === 0) return sec / 3600 + "h";
+  if (sec % 60 === 0) return sec / 60 + "m";
+  return sec + "s";
+}
+
+// intervalLabel is seconds in the language's short units ("10 s",
+// "6 h", "1 min, 30 s"), Off for 0.
+function intervalLabel(sec) {
+  if (isNaN(sec)) return "–";
+  if (sec === 0) return t("maint.off");
+  const parts = [];
+  for (const [unit, n] of [["day", 86400], ["hour", 3600], ["minute", 60], ["second", 1]]) {
+    if (sec >= n) {
+      parts.push(fmtUnit(Math.floor(sec / n), unit)); // app.js
+      sec %= n;
+    }
+  }
+  return parts.join(", ");
+}
+
+// intervalWaits reports whether a stored interval differs from this
+// run's, so that it waits for the next start.
+function intervalWaits(v) {
+  return !!v && !v.fixed_by && parseGoDuration(v.value) !== parseGoDuration(v.in_effect);
+}
+
+// renderInterval shows one interval: its steps, a stored value that is
+// none of them added; the line saying what it does and this run's
+// value, or that a change waits for the restart; read-only with what
+// sets it where a flag decides (as the announcement, D15-A).
+function renderInterval(iv) {
+  const v = intervalsUI.v[iv.key];
+  const sel = $(iv.id);
+  const text = $(iv.id + "-text");
+  if (!v) return;
+  const value = parseGoDuration(v.value);
+  const steps = isNaN(value) || iv.steps.includes(value) ? iv.steps : [...iv.steps, value].sort((a, b) => a - b);
+  sel.replaceChildren(...steps.map((sec) => {
+    const o = document.createElement("option");
+    o.value = String(sec);
+    o.textContent = intervalLabel(sec);
+    return o;
+  }));
+  sel.value = String(value);
+  sel.disabled = !!v.fixed_by;
+  const now = intervalLabel(parseGoDuration(v.in_effect));
+  const state = v.fixed_by ? t("maint.intervalFixed", { by: v.fixed_by, value: now })
+    : intervalWaits(v) ? t("maint.intervalWaits", { value: now })
+      : t("maint.intervalNow", { value: now });
+  // a unit that ends in a full stop ("10 Sek.") ends the sentence too
+  text.textContent = t(iv.hint) + " " + state.replace(/\.\.$/, ".");
+  renderMaintBadge();
+}
+
+// saveInterval stores the chosen interval; the default is sent as null,
+// so that the store keeps no copy of it.
+async function saveInterval(iv) {
+  const sel = $(iv.id);
+  const sec = Number(sel.value);
+  const v = intervalsUI.v[iv.key];
+  const def = v ? parseGoDuration(v.default) : NaN;
+  sel.disabled = true;
+  try {
+    const all = (await api("PUT", "api/v1/settings", { [iv.key]: sec === def ? null : apiDuration(sec) })) || {};
+    intervalsUI.v[iv.key] = all[iv.key] || v;
+    showResult($(iv.id + "-msg"), t("maint.intervalSaved"), true);
+  } catch (e) {
+    showResult($(iv.id + "-msg"), t("maint.intervalFailed", { error: e.message }), false);
+  }
+  sel.disabled = false;
+  renderInterval(iv);
+}
+
 function initUpdate() {
   $("update-btn").addEventListener("click", startUpdate);
   $("update-check").addEventListener("click", (ev) => whileBusy(ev.currentTarget, () => loadUpdate(true)));
@@ -947,13 +1113,18 @@ function initUpdate() {
   $("reboot-btn").addEventListener("click", startReboot);
   $("reboot-cancel").addEventListener("click", cancelReboot);
   $("announce-mode").addEventListener("change", setAnnounce);
+  for (const iv of INTERVALS) $(iv.id).addEventListener("change", () => saveInterval(iv));
   onView("system", () => {
     showResult($("announce-msg"), "");
+    for (const iv of INTERVALS) showResult($(iv.id + "-msg"), "");
     loadAnnounce();
     loadUpdate(false).then(loadChannel);
     loadRestart();
     loadReboot();
+  });
+  onView("info", () => {
     loadServerInfo();
+    Object.assign(certRetry, { tries: 0, last: null });
     loadSystemInfo();
   });
 }

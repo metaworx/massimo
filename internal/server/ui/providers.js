@@ -149,7 +149,8 @@ function providerForm(p, onCancel) {
 function renderProviders() {
   const box = $("providers-list");
   if (!box || !hasCap("auth")) return;
-  $("providers-callback").textContent = pageBase() + "api/v1/login/oidc/callback"; // login.js
+  const callback = pageBase() + "api/v1/login/oidc/callback"; // login.js
+  $("providers-callback").replaceChildren(copyEl(callback, { label: callback, icon: true })); // components.js
   clear(box);
   if (!providersUI.list.length) box.appendChild(textEl("p", t("providers.none"), "muted small"));
   for (const p of providersUI.list) {

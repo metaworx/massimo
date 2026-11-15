@@ -442,11 +442,18 @@ def test_log_answers(page, case):
     event comes past 2000 lines, and the error line shows with a kind
     chosen. The page's api() holds the log's requests, which the test
     answers in its own time; the log button's question (log/alerts) goes
-    through."""
+    through. The test server's own stream (a device's state from the fake
+    Cube, polled every 10 s) is kept out, since a line it brought would
+    push one of the counted out; the events the test sends get through."""
     now = time.time()
     show_view(page, "log")
     all_events(page)
     page.evaluate("""() => {
+      // at the stream, a capturing listener comes before the page's own:
+      // the server's events (trusted) stop there, the test's go on
+      for (const kind of LOG_KINDS) {
+        state.events.addEventListener(kind, (ev) => { if (ev.isTrusted) ev.stopImmediatePropagation(); }, true);
+      }
       window.logAnswers = [];
       const real = api;
       window.api = (method, path, body) => path.includes("/log") && !path.includes("/log/alerts")
@@ -627,7 +634,9 @@ def iso(t):
 
 def test_log_range_is_the_last_20_by_default(page, case):
     """The range is the last 20 events at first: the page asks for 20 and
-    no time, has no Older, and keeps the newest 20 as live events come."""
+    no time, has no Older, and keeps the newest 20 as live events come:
+    the three sent, and any the test server's own stream brings meanwhile
+    (a device's state from the fake Cube), push out the oldest."""
     now = time.time()
     asked = []
 
@@ -652,8 +661,12 @@ def test_log_range_is_the_last_20_by_default(page, case):
           kind: "config", device: rf, time: new Date().toISOString() }) }))""", rf)
     assert wait_until(page, "document.querySelectorAll('#log-lines .kind-config').length === 3", 5), "the live events"
     assert page.locator("#log-lines .log-line").count() == 20, "the newest 20 kept"
-    assert page.evaluate("logState.lines.length") == 20 and page.locator("#log-lines .kind-hello").count() == 17, \
-        "the three oldest gone"
+    assert page.evaluate("logState.lines.length") == 20, "and no more held"
+    # the stubbed lines left are the newest of them, the oldest gone: three
+    # for the events sent, one more for each the stream brought itself
+    kept = sorted(int(i) for i in page.evaluate(
+        "[...document.querySelectorAll('#log-lines .kind-hello')].map((l) => l.dataset.id)"))
+    assert kept == list(range(21 - len(kept), 21)) and len(kept) <= 17, f"the oldest gone, the newest kept: {kept}"
     show_view(page, "tiles")
 
 
