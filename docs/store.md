@@ -644,7 +644,8 @@ Notes on the tables:
   where it took 90 to 120 ms (`TestEventsPageQuery`);
   a page of errors reads at most the warnings:
   1.7 s on the Pi 1 at 90,000 events, a third of which are warnings there.
-  The server writes no line at `error`, and the UI offers no such choice,
+  Only a `restart`, `reboot` or `update` its helper did not start is at `error`,
+  and the UI offers no such choice,
   so only `GET …/log?level=error` meets that walk.
   With a kind, a source, a device or a user as well,
   the page reads that term's index and checks the level on its rows.

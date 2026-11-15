@@ -2797,8 +2797,9 @@ Setpoints are changes too; a sign-in, a preference, a search, a restore's
 plan and the requests whose own line is the server's (a backup, a restore,
 a restart, …) write none.
 `massimo user` writes the same lines, with `"via": "cli"`.
-A failure the server reports, such as a reboot the helper did not start,
-is its kind's line at `warn` with the `error`.
+A `restart`, `reboot` or `update` the helper did not start is its kind's line
+at `error` with the `error`;
+any other failure the server reports is at `warn` with its `error`.
 A comment line is sent every 30 seconds to keep the connection alive.
 
 **Ids and resume.**
