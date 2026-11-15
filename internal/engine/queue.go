@@ -611,6 +611,61 @@ func lineRoom(l cube.Message) uint8 {
 	return rc.Target.RoomID
 }
 
+// Concerns reports whether a command of Massimo's own that is waiting
+// or in flight addresses rf or its room (the room of its C line): by
+// its Target or its RoomID, or by one of its lines, a room-flagged s:
+// by its room, any other s: or an r: by its device. Commands of the
+// LAN proxy's clients (Passthrough) and reconnects do not count. The
+// server's automatic resets ask it, so that they leave a device alone
+// while a command to it or its room may reset it (AP RadioHealth v1.2,
+// Block 4).
+func (q *Queue) Concerns(rf cube.RFAddress) bool {
+	var room uint8
+	if c := q.gw.Snapshot().Config(rf); c != nil {
+		room = c.RoomID
+	}
+	q.mu.Lock()
+	cmds := make([]Command, 0, len(q.items)+1)
+	for _, e := range q.items {
+		cmds = append(cmds, e.cmd)
+	}
+	if q.inFlght != nil {
+		cmds = append(cmds, q.inFlght.cmd)
+	}
+	q.mu.Unlock()
+	for _, cmd := range cmds {
+		if concerns(cmd, rf, room) {
+			return true
+		}
+	}
+	return false
+}
+
+// concerns reports whether cmd addresses rf or room (0 for none).
+func concerns(cmd Command, rf cube.RFAddress, room uint8) bool {
+	if cmd.Passthrough || cmd.Reconnect {
+		return false
+	}
+	if cmd.Target == rf || room != 0 && cmd.RoomID == room {
+		return true
+	}
+	for _, l := range cmd.Lines {
+		switch l.Type {
+		case 's':
+			rc, err := cube.ParseRadioCommand(l.Data)
+			if err == nil && (rc.Target.Room && room != 0 && rc.Target.RoomID == room || !rc.Target.Room && rc.Target.RFAddress == rf) {
+				return true
+			}
+		case 'r':
+			addrs, _ := cube.ParseResetError(l.Data)
+			if slices.Contains(addrs, rf) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // rereadBudget reads the Cube's budget again by reconnecting, which
 // costs no radio time: the Cube sends its H line with the duty cycle and
 // the free slots at every connection. It reports false where the gateway

@@ -2840,6 +2840,13 @@ and sends `connected` when the Cube is back),
 `wall_reset` (a wall thermostat came back after five minutes or more without a
 state on another mode than it had, as after new batteries, at warn: its
 `summary` has the `mode` and the `was_mode`, the setpoints and `silent_min`),
+`error_reset` (the server reset a device's communication error,
+its `error` flag, with one `r:`, which costs no radio time,
+because the device reported while flagged:
+at most once a day per device,
+never while a command to the device or its room waits or runs in the queue,
+at info;
+its `summary` has `automatic`: `true` and the `room` of the device's C line),
 `pairing_started`, `paired` (with `paired`, the device that joined),
 `pairing_ended` (see Pairing),
 `device_forgotten` (a device deleted from the Cube, through the API or a client

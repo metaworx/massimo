@@ -1055,6 +1055,9 @@ kept here because they cost time to learn.
     room-flagged radiogram, one `r:01` for each device whose C line names
     the room and whose error flag is set, none for the link error alone,
     and after a discard the same resets and one retry.
+    And `serve` resets a flagged device that reports, at most once a day
+    (the log's `error_reset`): the device answers again, so the Cube's next
+    radiogram to it has a chance, and nothing else would clear the flag.
 - A radiogram for a device that does not answer holds its memory slot,
   without radio time, until the device answers or the Cube restarts,
   and a Cube with no slot left discards every command

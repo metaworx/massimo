@@ -36,7 +36,7 @@ var eventKinds = []string{
 	"device_forgotten", "cube_found", "restore_step", "restore_done",
 	"cube_gone", "address_changed", "server_started", "server_stopping", "settings_read", "restart", "reboot", "reboot_cancelled",
 	"update", "update_result", "backup", "backup_deleted", "backups_pruned", "log_pruned", "log_rotated", "restore_started",
-	"change", "command", "hold", "structure", "login", "login_failed", "locked_out", "audit_pruned",
+	"change", "command", "hold", "structure", "error_reset", "login", "login_failed", "locked_out", "audit_pruned",
 	"proxy_connected", "proxy_disconnected", "proxy_refused", "proxy_discarded", "proxy_deleted", "proxy_delete_refused", "proxy_pairing", "proxy_warning",
 }
 
