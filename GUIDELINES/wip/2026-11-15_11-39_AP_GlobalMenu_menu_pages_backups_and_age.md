@@ -1,4 +1,4 @@
-# AP GlobalMenu v1.1: one menu, four settings pages
+# AP GlobalMenu v1.2: one menu, four settings pages
 
 ## TL;DR
 
@@ -17,6 +17,9 @@ problems.
 - the buttons → in the title's place, all four in ☰'s order, the current
   one filled; on a phone the current one with its name (D157-A, D158-A);
   one page alone → its title, no buttons
+- the Cube search's line beside the Cube choice → a toast at the page's
+  foot, shared with notifications, Show for found Cubes (D170-A); ☰'s
+  Sign out in the accent (D171-A); ☰'s mark on a disc (D172-A)
 - Maintenance → its own page, `#maintenance`: Software update and
   Maintenance, out of System settings
 - backups → one component per Cube; Cube settings shows its Cube's,
@@ -25,7 +28,7 @@ problems.
   server's clock; its tooltip "updated 20:51:00, click to reload" (D134-A)
 - Cube choice's list → each Cube's problem icons after its name (spec v10)
 
-Blocks 1–8 are merged (#289); Block 9 follows on a branch of its own.
+Blocks 1–9 are merged (#289, #293); Block 10 follows on a branch of its own.
 
 ### Blocks
 
@@ -42,6 +45,8 @@ Blocks 1–8 are merged (#289); Block 9 follows on a branch of its own.
 8. Docs: `docs/ui.md` whole, the screenshot set, the slideshow
 9. PageTabs: the settings pages' buttons in the title's place, in one
    order, the current one filled
+10. SearchToast: the search's outcome in a toast; ☰'s Sign out in the
+    accent and its mark on a disc
 
 ## Discussion
 
@@ -100,6 +105,25 @@ and Maintenance have a sections menu at the row's end.
   its title shows and no button is drawn.
 
 `PLAN++` on 2026-11-15 for this revision: Block 9 on a new branch from
+main, to a pull request and the completion gate. No merge and no
+retirement.
+
+The owner's look after #293, 2026-11-15, at the header in German and
+dark: "10 Cubes gefunden, nicht eingerichtet", the search's outcome beside
+the Cube choice, should show as a toast; ☰'s Sign out should be in the
+accent; and whether this needs a plan.
+
+- D170-A: one toast for the page, the one notifications use, made a
+  shared component; the search's outcome there, a found Cube with Show
+  (System settings → Cubes at the found Cubes); the line beside the Cube
+  choice goes.
+- D171-A: ☰'s Sign out (and Forget key) in the accent and bold, as the
+  personal page's button.
+- D172-A: ☰'s mark on a small disc of the card's colour, so that it
+  reads on the filled ☰; in the owner's screenshot it hardly shows.
+- D173-A: this plan's Block 10, not a plan of its own, nor none.
+
+`PLAN++` on 2026-11-15 for this revision: Block 10 on a new branch from
 main, to a pull request and the completion gate. No merge and no
 retirement.
 
@@ -172,6 +196,21 @@ Out of scope: the redraws that close an open pill (the evaluation of
   - With the current page's name shown on its button, the title (`h2`)
     stays in the row, visually hidden, still the page's name for a screen
     reader (each page's `aria-labelledby`).
+- **The search** (`app.js` `discoverCubes`): the Cube choice's entry
+  starts it and reads "Searching…" while it runs, disabled; `showSearch`
+  writes `#cube-search` beside the Cube choice: "Searching…", then the
+  outcome for 8 s, a failure in red for 15 s. `showFound` opens System
+  settings → Cubes with the found Cubes' fold open.
+- **The toast** (`index.html` `#notify-toast`, `notify.js` `notifyToast`):
+  a title and a text at the page's foot, × closes it, 10 s; hidden while
+  signed out. Its ids are the notifications'; `test_notifications.py`
+  reads them.
+- **☰'s mark** (`log.js` `renderLogSign`, `markEl`): the amber triangle
+  or red cross at ☰'s corner, in `--warn-mark` or `--bad`, blinking as the
+  person chooses. On the filled ☰ (`--accent`, a light blue in the dark
+  theme) amber has little contrast.
+- **☰'s Sign out** (`#menu-logout`, `login.js`): a menu entry like the
+  others; the personal page's `.logout-btn` is in the accent, bold.
 - **Tests:** `helpers.py` `show_view` and `open_personal_page` open
   every page through ☰ after Block 3. The tests of the cards that move
   open `maint` after Block 4, and `test_backup.py` follows the component
@@ -350,6 +389,31 @@ shot looked at; `make ui-test` whole, `go test ./...`, `make cross`,
 `make cross`, `gofmt`, the three `go vet`,
 `GUIDELINES/shared/tools/check`; each new shot looked at.
 
+### Block 10: SearchToast
+
+- `components.js` `showToast(text, {title, ms, tone, action})`: the
+  page's one toast, a newer in the place of the one shown; `bad` a red
+  edge; an action a button that runs it and closes the toast.
+  - `index.html`: `#toast` in place of `#notify-toast`, with the action's
+    button.
+  - `notify.js` `notifyToast` shows through it.
+- `app.js` `discoverCubes`: the outcome as a toast, 8 s; a found Cube
+  with Show (`showFound`) for a role that may open System settings; a
+  failure in red, 15 s. `showSearch` and `#cube-search` go; the Cube
+  choice's entry says "Searching…" as before.
+- i18n: `discover.show` in the six languages.
+- `style.css`: ☰'s Sign out in the accent and bold; ☰'s mark on a disc
+  of the card's colour; the toast's `bad` edge.
+- `docs/ui.md`: the search, the toast, ☰'s Sign out and mark; a fragment
+  for the toast; the fragment of ☰ corrected in place (not released).
+- Tests: `test_discover.py` (the outcome in the toast, Show, a refused
+  search in red); `test_notifications.py` (the toast's ids);
+  `test_main_menu.py` (Sign out in the accent, the mark's disc).
+- The screenshot set taken again where it changes.
+
+**Verification:** `make ui-test` whole; `go test ./...`, `make cross`,
+`gofmt`, the three `go vet`, `GUIDELINES/shared/tools/check`.
+
 ## Proposed commit messages
 
 - Block 1: `feat(ui): Cube settings has its title row`
@@ -361,6 +425,7 @@ shot looked at; `make ui-test` whole, `go test ./...`, `make cross`,
 - Block 7: `feat(ui): The Cube choice's list shows each Cube's problems`
 - Block 8: `docs(ui): The menu and the pages in docs/ui.md and the screenshot set`
 - Block 9: `feat(ui): The page buttons take the title's place, the current one filled`
+- Block 10: `feat(ui): The search's outcome in a toast, ☰'s Sign out and mark clearer`
 
 ## Change History
 
@@ -370,3 +435,6 @@ shot looked at; `make ui-test` whole, `go test ./...`, `make cross`,
 - v1.1 (2026-11-15): Block 9, PageTabs, by `PLAN++`, with D157-A and
   D158-A as the owner chose and the owner's rule for a role with one
   settings page; the TL;DR names the merge of Blocks 1–8 (#289).
+- v1.2 (2026-11-15): Block 10, SearchToast, by `PLAN++`, with D170-A,
+  D171-A, D172-A and D173-A as recommended; the TL;DR names the merge of
+  Block 9 (#293).
