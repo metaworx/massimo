@@ -817,6 +817,16 @@ at the start and every 30 minutes.
 each installation with `kind`, `name`, `instance_id`, `location`, `url`,
 `version`, `address`, and `integration`, the uuid of the integration or
 the request of that installation id, where there is one.
+A server that does not look answers `"looks": false` and why, in
+`announce`: the setting `announce` as `GET /api/v1/settings` shows it
+(`value`, the stored one or `auto`; `in_effect`, `off`; `fixed_by`),
+and `why`, the first that holds of
+`fixed` (`-announce` or `MASSIMO_ANNOUNCE` decides, named in `fixed_by`),
+`restart` (the stored setting announces from the next start: `on`, or
+`auto` where the server does not listen on the loopback),
+`off` (the setting is `off`) and
+`loopback` (the setting is `auto` and the server listens on a loopback
+address), so that a holder of `integrations` alone reads it too.
 An integration or request whose installation id the last look saw is
 marked `"seen": true`: a request's id confirmed by the LAN.
 Home Assistant finds the server the same way:
