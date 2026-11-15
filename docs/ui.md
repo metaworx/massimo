@@ -507,8 +507,9 @@ The room checks (`docs/api-v1.md`, "The room checks") have lines of their own:
 **room disagrees**, a room whose thermostats differ for ten minutes, each named
 with its setting ("Bedroom: its thermostats differ in setpoint for 11 min:
 Window: manual set 21.0, Door: manual set 18.0"), then the room's state sent
-again to them and from where ("as Massimo last set it", "as its wall thermostat
-has it"), or why not, and their agreeing again;
+again to them and from where ("as Massimo last set it", "as most of its
+thermostats have it", "as its wall thermostat has it"), or why not,
+and their agreeing again;
 **programme drift**, a thermostat that does not follow its week programme while
 the room's others follow theirs ("does not follow its week programme: 12.0
 instead of 21.0 since the switch point at 18:20, …; its clock or its programme is

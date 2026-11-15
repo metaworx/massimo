@@ -2055,13 +2055,24 @@ a difference not yet reported then starts again.
   the original software and Massimo set them only together.
   Differing for 10 minutes, the room is a `disagree` warning;
   still differing 10 minutes later, its state is sent once more
-  as one room command (`0x40`) through the queue at low priority:
-  Massimo's last setpoint to the room (`PUT …/rooms/{id}/setpoint`,
-  a member's or the virtual wall thermostat's setpoint),
-  where it was sent at most 15 minutes before they began to differ,
-  or since, and a thermostat still shows it;
-  else the room's wall thermostat's state, its week programme where it follows it;
-  without either, nothing.
+  as one room command (`0x40`) through the queue at low priority,
+  the first of these (D188), which the log's line names (`from`):
+  1. `massimo`: Massimo's last setpoint to the room (`PUT …/rooms/{id}/setpoint`,
+     a member's or the virtual wall thermostat's setpoint),
+     where it was sent at most 15 minutes before they began to differ,
+     or since, and a thermostat still shows it.
+     Where it was auto, auto again:
+     auto without a temperature, the week programme, takes the programme's value now;
+     auto with a temperature, which lasts until the next switch point,
+     is sent as it was while no switch point of a thermostat's programme
+     has passed since, at the Cube's time, and else as auto on the programme,
+     which a thermostat on its programme shows too;
+  2. `majority`: else the state more than half of the compared thermostats show,
+     their mode, setpoint and `until`, those on their own programmes counting
+     as one state, auto on the programme;
+  3. `wall_thermostat`: else the room's wall thermostat's state,
+     its week programme where it follows it;
+  4. else nothing, the warning alone (`not_resent`, `no_state`).
   It is sent at most once a day per room, the day's re-sends read back from the
   log after a restart, and never while the queue holds the radio for the duty
   cycle or the memory slots: it waits for a later check then.
@@ -3158,7 +3169,7 @@ The room checks', every minute (see "The room checks"):
 `differ` at `warn` (the `members`, each with its `rf`, `mode`, `setpoint`
 and `until`, what `differs`, the `minutes` so far),
 `resent` (the room's state sent once more as a room command: `from`
-`massimo` or `wall_thermostat`, its `mode`, `setpoint` and `until`, the
+`massimo`, `majority` or `wall_thermostat`, its `mode`, `setpoint` and `until`, the
 budget's `duty_pct` and `free_slots`), `resend_failed` at `warn` with its
 `error`, `not_resent` (`why`: `today`, once a day at most, or
 `no_state`), and `agree` once they agree again (`minutes`);

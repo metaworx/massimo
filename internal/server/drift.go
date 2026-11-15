@@ -23,8 +23,11 @@ package server
 // thermostats only together. Differing for disagreeAfter, a Warn names
 // the room, the members and what differs; still differing a
 // disagreeAfter later, the room's intended state is sent once more as a
-// room command: Massimo's last setpoint to the room, where it is recent
-// and a member still shows it, else the room's wall thermostat's state.
+// room command, taken in this order (D188): Massimo's last setpoint to
+// the room, where it is recent and a member still shows it, auto again
+// where it was auto, which takes the programme's value now; else the
+// state more than half of the members show; else the room's wall
+// thermostat's state; else none, the Warn alone.
 // It goes through the queue at low priority, never while the queue holds
 // the radio for the duty cycle or the memory slots, and at most once a
 // day per room, the day's re-sends seeded from the log at the first
@@ -85,10 +88,12 @@ const (
 	driftWarnGap = 24 * time.Hour
 )
 
-// The re-sent state's origins, the summary's from.
+// The re-sent state's origins, the summary's from, in the order they
+// are taken (D188).
 const (
-	fromMassimo = "massimo"
-	fromWall    = "wall_thermostat"
+	fromMassimo  = "massimo"
+	fromMajority = "majority"
+	fromWall     = "wall_thermostat"
 )
 
 // driftState is a runtime's room checks: each room's disagreement and
@@ -129,13 +134,15 @@ type roomIntent struct {
 
 // shownBy reports whether a member shows the setpoint: its mode, and its
 // temperature but for auto on the programme, and its until in vacation.
+// Auto with a temperature is shown also by a member on its programme,
+// as after a switch point (D188).
 func (in roomIntent) shownBy(m roomMember) bool {
 	st := m.st
 	if st.Mode != in.mode {
 		return false
 	}
 	switch {
-	case in.mode == cube.ModeAuto && in.temp == 0:
+	case in.mode == cube.ModeAuto && (in.temp == 0 || m.follows):
 		return true
 	case in.mode == cube.ModeVacation:
 		return *st.Setpoint == in.temp && st.Until != nil && *st.Until == in.until
@@ -390,7 +397,7 @@ type resend struct {
 	mode  cube.Mode
 	temp  float64 // 0 with auto: the programme
 	until cube.Until
-	from  string // fromMassimo or fromWall
+	from  string // fromMassimo, fromMajority or fromWall
 }
 
 // summary is the re-sent state as an event names it.
@@ -405,32 +412,92 @@ func (r resend) summary(outcome string) map[string]any {
 	return out
 }
 
-// intended is the state to send a disagreeing room once more: Massimo's
-// last setpoint to it, sent since the disagreement began or at most
-// intentLead before, while a member shows it; else the room's wall
-// thermostat's, on its programme where it follows it.
-func (d *driftState) intended(room uint8, since time.Time, ms []roomMember) (resend, bool) {
+// intended is the state to send a disagreeing room once more, in this
+// order (D188):
+//  1. Massimo's last setpoint to it, sent since the disagreement began
+//     or at most intentLead before, while a member shows it; where it
+//     was auto, auto again on the programme, which takes the programme's
+//     value now, and auto with its temperature only while no switch
+//     point has passed since (switchedSince), the Cube's clock known;
+//  2. else the state more than half of the members show (majority);
+//  3. else the room's wall thermostat's, on its programme where it
+//     follows it;
+//  4. else none.
+//
+// now is the room checks' clock, cubeNow the Cube's at now.
+func (d *driftState) intended(room uint8, since time.Time, ms []roomMember, now, cubeNow time.Time, clock bool) (resend, bool) {
 	if in, ok := d.intent[room]; ok && !in.at.Before(since.Add(-intentLead)) {
 		for _, m := range ms {
-			if in.shownBy(m) {
-				return resend{room: room, mode: in.mode, temp: in.temp, until: in.until, from: fromMassimo}, true
+			if !in.shownBy(m) {
+				continue
 			}
+			r := resend{room: room, mode: in.mode, temp: in.temp, until: in.until, from: fromMassimo}
+			if in.mode == cube.ModeAuto && clock && switchedSince(ms, cubeNow.Add(in.at.Sub(now)), cubeNow) {
+				r.temp = 0
+			}
+			return r, true
 		}
 	}
-	for _, m := range ms {
-		if !m.wall {
-			continue
-		}
-		r := resend{room: room, mode: m.st.Mode, temp: *m.st.Setpoint, from: fromWall}
-		if m.st.Until != nil {
-			r.until = *m.st.Until
-		}
-		if m.follows {
-			r.temp = 0
-		}
+	if r, ok := majority(room, ms); ok {
 		return r, true
 	}
+	for _, m := range ms {
+		if m.wall {
+			return memberResend(room, m, fromWall), true
+		}
+	}
 	return resend{}, false
+}
+
+// memberResend is a member's state as a re-send: its mode, setpoint and
+// until, auto on the programme where it follows it.
+func memberResend(room uint8, m roomMember, from string) resend {
+	r := resend{room: room, mode: m.st.Mode, temp: *m.st.Setpoint, from: from}
+	if m.st.Until != nil {
+		r.until = *m.st.Until
+	}
+	if m.follows {
+		r.temp = 0
+	}
+	return r
+}
+
+// majority is the state more than half of the members show (D188): a
+// member's, with which more than half agree (membersAgree, itself
+// counted), in mode, setpoint and until, the members in auto that each
+// follow their own programme as one state, auto on the programme; false
+// where no state has more than half.
+func majority(room uint8, ms []roomMember) (resend, bool) {
+	for i, m := range ms {
+		n := 0
+		for _, o := range ms {
+			if membersAgree(m, o) {
+				n++
+			}
+		}
+		if 2*n > len(ms) {
+			return memberResend(room, ms[i], fromMajority), true
+		}
+	}
+	return resend{}, false
+}
+
+// switchedSince reports whether a switch point of a member's week
+// programme lies after then and up to now, both times of the Cube's
+// clock: the programme's period in force differs, or the day does.
+func switchedSince(ms []roomMember, then, now time.Time) bool {
+	if !then.Before(now) {
+		return false
+	}
+	for _, m := range ms {
+		if m.program == nil {
+			continue
+		}
+		if then.YearDay() != now.YearDay() || then.Year() != now.Year() || switchedAt(m.program, then) != switchedAt(m.program, now) {
+			return true
+		}
+	}
+	return false
 }
 
 // roomChecks runs the room checks of every room of the Cube once.
@@ -483,7 +550,7 @@ func (s *Server) roomChecks(ctx context.Context, rt *runtime) {
 			d.pause(r.id, r.scan)
 			continue
 		}
-		e, send := d.checkRoom(snap, r.id, r.scan, now, cubeNow, held)
+		e, send := d.checkRoom(snap, r.id, r.scan, now, cubeNow, clock, held)
 		evs = append(evs, e...)
 		if send != nil {
 			sends = append(sends, *send)
@@ -525,8 +592,9 @@ func (d *driftState) pause(room uint8, sc roomScan) {
 // checkRoom checks one room, with d.mu held: the drift of its members,
 // then their disagreement. It returns the events to emit and the state
 // to send once more, where the second check has come and the queue does
-// not hold the radio (held).
-func (d *driftState) checkRoom(snap *cubelan.Snapshot, id uint8, sc roomScan, now, cubeNow time.Time, held bool) ([]event, *resend) {
+// not hold the radio (held); clock says whether cubeNow, the Cube's
+// time, is known.
+func (d *driftState) checkRoom(snap *cubelan.Snapshot, id uint8, sc roomScan, now, cubeNow time.Time, clock, held bool) ([]event, *resend) {
 	var evs []event
 	at := time.Now()
 	odd := drifting(sc.members)
@@ -599,7 +667,7 @@ func (d *driftState) checkRoom(snap *cubelan.Snapshot, id uint8, sc roomScan, no
 	case !ep.resent && now.Sub(ep.reported) >= disagreeAfter && !held:
 		ep.resent = true
 		why := ""
-		r, ok := d.intended(id, ep.since, cmp)
+		r, ok := d.intended(id, ep.since, cmp, now, cubeNow, clock)
 		switch last, sent := d.resent[id]; {
 		case sent && now.Sub(last) < resendGap:
 			why = "today"
