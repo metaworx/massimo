@@ -32,10 +32,11 @@ const REPAIRS = {
 };
 
 // repairBoxes are the open boxes by scope ("<serial>|room|<id>", …):
-// the kind, the API path the routes hang off, and per repair its state:
-// "loading", "ready" (preview), "none" (error, the preview's refusal),
-// "name" (a listing that needs the room's name, room), "running", then
-// "ready" again with the outcome of the run (result, ok).
+// the kind, the API path the routes hang off, the Cube's serial, and per
+// repair its state: "loading", "ready" (preview), "none" (error, the
+// preview's refusal), "name" (a listing that needs the room's name,
+// room), "running", then "ready" again with the outcome of the run
+// (result, ok); a listing keeps the names given, roomName and devName.
 const repairBoxes = new Map();
 
 // repairScope is the scope of a box: the Cube, a room or a device of it.
@@ -49,7 +50,7 @@ function toggleRepair(scope, kind, path, skip) {
   if (repairBoxes.has(scope)) {
     repairBoxes.delete(scope);
   } else {
-    repairBoxes.set(scope, { kind, path, skip: skip || [], items: {} });
+    repairBoxes.set(scope, { kind, path, serial: scope.split("|")[0], skip: skip || [], items: {} });
     loadRepairs(scope);
   }
   redrawRepair(scope);
@@ -72,26 +73,88 @@ function loadRepairs(scope) {
   }
 }
 
-// repairQuery is the query of a repair's routes: a listing's room name.
+// repairQuery is the query of a repair's routes: a listing's room name,
+// and the name of a device the list lacks.
 function repairQuery(item) {
-  return item.roomName ? "?room_name=" + encodeURIComponent(item.roomName) : "";
+  const q = [];
+  if (item.roomName) q.push("room_name=" + encodeURIComponent(item.roomName));
+  if (item.devName) q.push("name=" + encodeURIComponent(item.devName));
+  return q.length ? "?" + q.join("&") : "";
+}
+
+// listedNames are the names of the devices a Cube's list has in a room,
+// as the page holds them.
+function listedNames(serial, room) {
+  const r = cubeRooms(serial).find((x) => x.id === room); // pairing.js
+  return r ? (r.devices || []).map((d) => d.name || "") : [];
+}
+
+// listDefaultName is the name a device the Cube's list lacks is offered
+// when it is listed into a room (D185), as the server's default
+// (repair_api.go, defaultDeviceName) with the type in the page's
+// language: "<room name> <type> <n>", n the lowest number from 1 that no
+// name of the room's (taken) has in that form, whatever its case; a
+// room's name too long for the whole to fit NAME_BYTES is cut at a
+// character.
+function listDefaultName(room, word, taken) {
+  for (let digits = 1; ; digits++) {
+    const base = cutToBytes(String(room || "").trim(), NAME_BYTES - byteLength(word) - 2 - digits); // config.js
+    const prefix = (base + " " + word).trim();
+    const n = listNameNumber(prefix, taken);
+    if (String(n).length <= digits || base === "") return prefix + " " + n;
+  }
+}
+
+// listNameNumber is the lowest number from 1 that no name of taken has
+// in the form "<prefix> <n>", whatever its case.
+function listNameNumber(prefix, taken) {
+  const p = prefix.toLowerCase() + " ";
+  const used = new Set();
+  for (const name of taken) {
+    const s = String(name || "").trim();
+    if (!s.toLowerCase().startsWith(p)) continue;
+    const rest = s.slice(p.length);
+    if (/^[0-9]+$/.test(rest) && Number(rest) > 0) used.add(Number(rest));
+  }
+  let n = 1;
+  while (used.has(n)) n++;
+  return n;
+}
+
+// cutToBytes is s cut to at most max bytes of UTF-8 at a character,
+// trailing spaces left out.
+function cutToBytes(s, max) {
+  if (byteLength(s) <= max) return s;
+  let out = "";
+  for (const ch of s) {
+    if (byteLength(out + ch) > max) break;
+    out += ch;
+  }
+  return out.replace(/ +$/, "");
 }
 
 // loadRepair reads one repair's preview into item and draws the box: a
 // preview with nothing to send says why, one that needs a room's name
-// asks for it.
+// asks for it. A listing of a device the list lacks takes the name it
+// offers (listDefaultName) the first time, and reads the preview again
+// with it.
 async function loadRepair(scope, r, item) {
   const box = repairBoxes.get(scope);
   try {
     const p = await api("GET", box.path + r.route + repairQuery(item));
     item.preview = p;
     item.state = "ready";
-    if (p.details && p.details.code === "room_name_needed") {
+    const d = p.details || {};
+    if (d.code === "room_name_needed") {
       item.state = "name";
-      item.room = p.details.room;
+      item.room = d.room;
     } else if (p.nothing) {
       item.state = "none";
       item.error = p.nothing;
+    } else if (r.key === "list" && d.listed === false && item.devName === undefined) {
+      item.devName = listDefaultName(d.room_name, typeName(d.type), listedNames(box.serial, d.to)); // rooms.js
+      item.state = "loading"; // its plan is the server's default's
+      return loadRepair(scope, r, item);
     }
   } catch (e) {
     item.preview = null;
@@ -175,10 +238,36 @@ function repairItem(scope, r, item) {
       break;
     case "ready":
     case "running":
+      if (r.key === "list" && item.preview.details && item.preview.details.listed === false) row.appendChild(repairDeviceNameForm(scope, r, item));
       row.append(...repairReady(scope, r, item));
       break;
   }
   return row;
+}
+
+// repairDeviceNameForm asks for the name a device the Cube's list lacks
+// is listed under, offering the default (listDefaultName), and reads the
+// preview again with the name changed; an empty name or one longer than
+// NAME_BYTES is refused in place.
+function repairDeviceNameForm(scope, r, item) {
+  const input = document.createElement("input");
+  const note = elem("p", "small repair-name-note hidden");
+  note.setAttribute("role", "status");
+  const form = formEl(() => {
+    const name = input.value.trim();
+    if (!name) return showResult(note, t("cfg.nameRequired"), false);
+    if (byteLength(name) > NAME_BYTES) return showResult(note, t("cfg.devNameTooLong", { name, n: NAME_BYTES }), false);
+    if (name === item.devName) return showResult(note, "", true);
+    item.devName = name;
+    item.state = "loading";
+    redrawRepair(scope);
+    loadRepair(scope, r, item);
+  }, "repair-device-name-form");
+  input.name = "name";
+  input.required = true;
+  input.value = item.devName || "";
+  form.append(fieldRow(t("repair.deviceName"), input, { wide: true }), note, elem("div", "actions", submitButton(t("repair.preview"))));
+  return form;
 }
 
 // repairNameForm asks for the name of the room a listing makes, then

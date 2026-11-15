@@ -19,8 +19,10 @@ import (
 // A device's communication error names the radiogram that failed (AP
 // RadioHealth v1.2, Block 1): the device's state gives failed_radiogram
 // with the flag alone; the state line that set the flag has it in its
-// changes, in the store and in the process log; the flag's alert has it;
-// a code the list lacks stays a number; the flag cleared takes it away.
+// changes, in the store and in the process log; the flag's alert has it,
+// and of the radiograms that failed while the flag stayed, the most
+// severe (D181); a code the list lacks stays a number; the flag cleared
+// takes it away.
 func TestFailedRadiogram(t *testing.T) {
 	var buf syncBuffer
 	fc, ts, _, _ := startStored(t, Options{PollInterval: 100 * time.Millisecond, Logger: slog.New(slog.NewJSONHandler(&buf, nil))})
@@ -111,6 +113,25 @@ func TestFailedRadiogram(t *testing.T) {
 	if _, ok := line.Changes["error"]; ok {
 		t.Fatalf("the flag stayed, yet %v", line.Changes)
 	}
+	// The alert names the most severe of the run's radiograms, of two as
+	// severe the oldest (D181): the time push still, then a setpoint's.
+	alertNames := func(what string, want cube.RadiogramType) {
+		t.Helper()
+		var got *cube.RadiogramType
+		waitFor(t, what, func() bool {
+			if getJSON(t, ts, "", "/api/v1/log/alerts", &alerts) != 200 || len(alerts.Alerts) != 1 {
+				return false
+			}
+			got = alerts.Alerts[0].FailedRadiogram
+			return got != nil && *got == want
+		})
+	}
+	alertNames("the time push, as severe as the unknown code and older", cube.RadiogramTimeInformation)
+	list(0x40, true)
+	alertNames("the setpoint's, more severe", cube.RadiogramControlMode)
+	list(0xf6, true)
+	waitFor(t, "the unknown code again", func() bool { return failed(state("0a010d")) == `{"code":246}` })
+	alertNames("the setpoint's still", cube.RadiogramControlMode)
 
 	// The flag cleared, byte 4 kept: no failed radiogram.
 	list(0xf6, false)

@@ -2768,9 +2768,13 @@ paths:
         the list does not have is made with room_name, its master the
         room's wall thermostat, else its first radiator thermostat; without
         the name the preview asks for it (details code room_name_needed and room).
+        A device the list does not have gets the name name gives, else
+        "<room name> <type> <n>", the type in English and n the lowest
+        number no device of the room takes in a name of that form; details
+        name, room_name and type say which.
         The preview sends nothing: the lines a run would send and what they
         cost, and the plan's hash for the run.
-      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}, {$ref: "#/components/parameters/repairRoomName"}]
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}, {$ref: "#/components/parameters/repairRoomName"}, {$ref: "#/components/parameters/repairDeviceName"}]
       responses:
         "200": {$ref: "#/components/responses/RepairPreview"}
         "400": {$ref: "#/components/responses/BadRequest"}
@@ -2785,7 +2789,7 @@ paths:
       description: |
         Runs what the preview of the same path showed, once the plan it
         computes again has the preview's hash.
-      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}, {$ref: "#/components/parameters/repairRoomName"}, {$ref: "#/components/parameters/repairPlan"}, {$ref: "#/components/parameters/idempotencyKey"}]
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}, {$ref: "#/components/parameters/repairRoomName"}, {$ref: "#/components/parameters/repairDeviceName"}, {$ref: "#/components/parameters/repairPlan"}, {$ref: "#/components/parameters/idempotencyKey"}]
       responses:
         "200": {$ref: "#/components/responses/RepairRun"}
         "400": {$ref: "#/components/responses/BadRequest"}
@@ -3109,7 +3113,9 @@ paths:
                         device: {type: string, description: The device's radio address on its Cube}
                         serial: {type: string}
                         flag: {type: string, enum: [error, link_error, battery_low], description: "The device's flag, for a state line"}
-                        failed_radiogram: {$ref: "#/components/schemas/FailedRadiogram"}
+                        failed_radiogram:
+                          description: "The error flag's: of the radiograms that failed while it stayed set, the most severe (Assignment and Remove, then Configuration, then Control, then the rest), of two as severe the oldest"
+                          allOf: [{$ref: "#/components/schemas/FailedRadiogram"}]
                         time: {type: string, format: date-time}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
@@ -3166,8 +3172,9 @@ paths:
         at info: state found or cleared and the Mismatch's fields in
         "summary"); the room checks' (docs/api-v1.md, "The
         room checks"): disagree, source cube (a room whose thermostats
-        differ: room and outcome differ, resent, resend_failed, not_resent
-        or agree in "summary") and drift, source device (a thermostat off
+        differ: room and outcome differ, resent (from massimo, majority or
+        wall_thermostat), resend_failed, not_resent or agree in "summary")
+        and drift, source device (a thermostat off
         its week programme: outcome not_following, follows or left_auto);
         the server's sign-ins, source server, for a
         user with audit alone: login, login_failed, locked_out; the LAN
@@ -3756,6 +3763,11 @@ components:
       name: room_name
       in: query
       description: The name of a room the Cube's list does not have, to list the device there as a new room
+      schema: {type: string}
+    repairDeviceName:
+      name: name
+      in: query
+      description: "The name of a device the Cube's list does not have, 1 to 32 bytes; without it, \"<room name> <type> <n>\". A device the list has keeps its name"
       schema: {type: string}
     restorePortal:
       name: portal

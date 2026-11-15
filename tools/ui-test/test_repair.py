@@ -141,6 +141,65 @@ def test_device_repairs(page, case):
         stub.close()
 
 
+def test_listing_names_the_device(page, case):
+    """A listing of a device the Cube's list lacks offers its name (D185):
+    the room's, the type in the page's language and the lowest free
+    number, reads the preview with it and runs with it; a name changed
+    reads the preview again, one too long is refused in place."""
+    unlisted = dict(LIST, details={"from": 0, "to": 1, "listed": False, "new_room": False, "name": "Bath radiator thermostat 1",
+                                   "room_name": "Bath", "type": "radiator_thermostat"})
+    stub = RepairStub(page, {"config": "the 2 other thermostats of room 1 share no temperatures by a majority",
+                             "place": "the Cube's list does not list device 0a0101: list it instead", "list": unlisted})
+    names = []
+
+    def seen(req):
+        if req.method == "GET" and "/repair/list" in req.url:
+            names.append(parse_qs(urlparse(req.url).query).get("name"))
+
+    page.on("request", seen)
+    try:
+        word = page.evaluate("t('type.radiator_thermostat')")
+        assert page.evaluate("listNameNumber('Bath ' + %s, ['bath ' + %s + ' 1', 'Bath ' + %s + ' 3', 'Bath ' + %s + ' x'])"
+                             % (json.dumps(word), json.dumps(word.upper()), json.dumps(word), json.dumps(word))) == 2, "the lowest free n"
+        assert page.evaluate("listDefaultName('Attic over the garage', 'radiator thermostat', [])") == "Attic over radiator thermostat 1", \
+            "a room's name cut to fit 32 bytes"
+        assert page.evaluate("listDefaultName('aÄÄÄÄÄÄ', 'radiator thermostat', [])") == "aÄÄÄÄ radiator thermostat 1", "cut at a character"
+        want = page.evaluate("listDefaultName('Bath', %s, listedNames(state.serial, 1))" % json.dumps(word))
+        assert want.startswith("Bath " + word + " "), want
+        tile = page.locator(".room").first
+        tile.locator(".room-name-btn").click()
+        device = tile.locator(".device").first
+        device.wait_for(state="visible")
+        device.locator(".repair-open").click()
+        listing = page.locator(".device .repair-box:not(.hidden) .repair-item[data-repair=list]").first
+        field = listing.locator("input[name=name]")
+        field.wait_for(state="visible")
+        assert field.input_value() == want, "the name offered"
+        assert listing.locator(".repair-device-name-form label").inner_text() == page.evaluate("t('repair.deviceName')"), "the name asked for"
+        assert wait_until(page, "document.querySelector('.repair-item[data-repair=list] .repair-cost') !== null", 5), "the preview shown"
+        assert names and names[-1] == [want], f"the preview read with the name offered: {names}"
+        long = "x" * 33
+        field.fill(long)
+        listing.locator(".repair-device-name-form button[type=submit]").click()
+        assert listing.locator(".repair-name-note").inner_text() == page.evaluate("t('cfg.devNameTooLong', {name: %s, n: 32})" % json.dumps(long)), \
+            "a name too long refused in place"
+        field.fill("Sofa side")
+        listing.locator(".repair-device-name-form button[type=submit]").click()
+        assert wait_until(page, "document.querySelector('.repair-item[data-repair=list] input[name=name]') && "
+                          "document.querySelector('.repair-item[data-repair=list] input[name=name]').value === 'Sofa side' && "
+                          "document.querySelector('.repair-item[data-repair=list] .repair-cost') !== null", 5), "the preview read again"
+        assert names[-1] == ["Sofa side"], f"with the name changed: {names}"
+        named_buttons(page, "a listing's name")
+        assert scroll_width(page) <= case.width, "no horizontal scroll with the listing's name"
+        page.locator(".repair-item[data-repair=list] .repair-run").click()
+        page.locator(".repair-item[data-repair=list] .confirm-yes").click()
+        assert wait_until(page, "document.querySelector('.repair-item[data-repair=list] .repair-result.ok') !== null", 5), "the listing ran"
+        assert stub.runs and stub.runs[0][1] == {"name": ["Sofa side"], "plan": ["plan-list"]}, f"with the name and the plan: {stub.runs}"
+    finally:
+        page.remove_listener("request", seen)
+        stub.close()
+
+
 def test_cube_repairs(page, case):
     """The Cube's panel has Repair…, with the reset of every communication
     error, free; its run says the device list shows no flag any more."""

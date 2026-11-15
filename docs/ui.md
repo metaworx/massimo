@@ -490,7 +490,14 @@ or for resets whether the Cube's device list still shows the error.
   **Place in its listed room**, by radio, where the Cube has it in another
   room or none;
   **List where the Cube has it**, in the list only,
-  asking first for the name of a room the list does not have.
+  asking first for the name of a room the list does not have;
+  a device the list does not have is listed under the name its field
+  offers, which can be changed before Run…:
+  the room's name, the device's type in the page's language,
+  and the lowest number from 1 that no device of the room takes
+  in a name of that form ("Bath radiator thermostat 2"),
+  the room's name cut where the whole would pass 32 bytes (D185).
+  **Show what it sends** reads the preview again with a name changed.
 - In a Cube's panel: **Reset the communication errors** of every device.
 
 ## Log
@@ -527,8 +534,9 @@ The room checks (`docs/api-v1.md`, "The room checks") have lines of their own:
 **room disagrees**, a room whose thermostats differ for ten minutes, each named
 with its setting ("Bedroom: its thermostats differ in setpoint for 11 min:
 Window: manual set 21.0, Door: manual set 18.0"), then the room's state sent
-again to them and from where ("as Massimo last set it", "as its wall thermostat
-has it"), or why not, and their agreeing again;
+again to them and from where ("as Massimo last set it", "as most of its
+thermostats have it", "as its wall thermostat has it"), or why not,
+and their agreeing again;
 **programme drift**, a thermostat that does not follow its week programme while
 the room's others follow theirs ("does not follow its week programme: 12.0
 instead of 21.0 since the switch point at 18:20, …; its clock or its programme is
@@ -822,7 +830,8 @@ also while no page is open.
 - **What notifies you**:
   a switch per kind, with its delay or threshold, each with its help:
   a window open (after 30 min), frost (below 8 °C), a low battery, a battery getting weak,
-  a device's error, the Cube out of reach (after 10 min) and back,
+  a device's communication error or link error,
+  the Cube out of reach (after 10 min) and back,
   and, off by default, a device that sends no news, a device paired,
   a new Cube on the network and a new version of Massimo.
   A change is saved a second after the last one;
@@ -849,6 +858,10 @@ a notification shows at its foot for ten seconds instead,
 in the toast the Cube search's outcome uses (`showToast`),
 in the page's language, with × to close it;
 the same one from the stream and from the push shows once.
+A device's error names its flag, here as in the push:
+the communication error, with the radiogram that failed where the device
+gives it ("The radiogram that failed: ControlMode (0x40)."),
+the link error, or both (`notifytext.js`).
 The page is at most 640 px wide, as My settings is.
 
 **The installable page.**

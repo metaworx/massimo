@@ -73,6 +73,51 @@ func TestUnsettled(t *testing.T) {
 	}
 }
 
+// A communication error's alert names, of the radiograms that failed
+// while the flag stayed set, the most severe, of two as severe the
+// oldest (D181): the state lines from the one that set the flag on, as
+// the store gives them back, and the device's state now; a line before
+// the flag's counts not.
+func TestFlagRadiogram(t *testing.T) {
+	line := func(id int64, code int) event {
+		st := map[string]any{"error": true}
+		if code >= 0 {
+			st["failed_radiogram"] = map[string]any{"code": float64(code)}
+		}
+		return event{ID: id, Kind: "state", Device: "0a0101", State: map[string]any{"rf_address": "0a0101", "state": st}}
+	}
+	run := func(codes ...int) []event {
+		var out []event
+		for i, c := range codes {
+			out = append(out, line(int64(10+i), c))
+		}
+		return out
+	}
+	rt := func(r cube.RadiogramType) *cube.RadiogramType { return &r }
+	for _, c := range []struct {
+		name   string
+		states []event
+		from   int // the index of the line that set the flag
+		now    *cube.RadiogramType
+		want   *cube.RadiogramType
+	}{
+		{"the time push, then a setpoint", run(0x03, 0x40), 0, rt(0x40), rt(cube.RadiogramControlMode)},
+		{"a setpoint, then a removal's link", run(0x40, 0x21), 0, rt(0x21), rt(cube.RadiogramRemoveLinkPartner)},
+		{"two setpoints, the oldest", run(0x41, 0x40), 0, rt(0x40), rt(cube.RadiogramSetPointTemperature)},
+		{"a configuration over a control", run(0x40, 0x11, 0x44), 0, rt(0x44), rt(cube.RadiogramConfigTemperatures)},
+		{"a code the list lacks, then the time push, the oldest", run(0xf6, 0x03), 0, rt(0x03), rt(0xf6)},
+		{"a line before the flag's counts not", run(0x21, 0x03, 0x40), 1, rt(0x40), rt(cube.RadiogramControlMode)},
+		{"the state now, not yet in a line", run(0x03), 0, rt(0x10), rt(cube.RadiogramConfigWeekTemperatureProfile)},
+		{"lines without one, the state now's", run(-1, -1), 0, rt(0x03), rt(cube.RadiogramTimeInformation)},
+		{"none", run(-1), 0, nil, nil},
+	} {
+		got := flagRadiogram(c.states, &c.states[c.from], c.now)
+		if (got == nil) != (c.want == nil) || got != nil && *got != *c.want {
+			t.Errorf("%s: %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
 // GET /api/v1/log/alerts: a disconnect settled by the next connect, an
 // error of the server's left, a device's transmit error while it is set,
 // at the line that set it; after leaves out the older ones.
