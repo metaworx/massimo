@@ -1766,7 +1766,7 @@ massimo-week-program { display: contents; }
 .no-settings .needs-settings, .no-auth .needs-auth, .no-integrations .needs-integrations, .no-update .needs-update, .no-restart .needs-restart, .no-reboot .needs-reboot, .no-sync .needs-sync,
 .no-system .needs-system, .no-maint .needs-maint,
 .no-cubes.no-pair .needs-cubes-or-pair, .no-restart.no-settings.no-reboot .needs-maintenance { display: none !important; }
-.no-lock.no-structure .room .menu { display: none; }
+.no-lock.no-structure.no-repair .room .menu { display: none; }
 
 /* the sign-in dialog, the first-owner form, System settings → Users and Roles */
 .login-token summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; margin-bottom: 8px; }
@@ -1916,3 +1916,17 @@ massimo-week-program { display: contents; }
 .toast-title { display: block; }
 /* its action (components.js showToast): Show for the Cubes a search found */
 .toast-action { flex: none; align-self: center; padding: 4px 10px; color: var(--accent); border-color: var(--accent); font-weight: 600; }
+
+/* the repairs of a room, a device or a Cube (repair.js): a box under the
+   tile, the device's row or the panel's actions, a repair per block */
+.repair-box { margin-top: 8px; display: flex; flex-direction: column; gap: 10px; }
+.repair-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.repair-title { margin: 0; font-size: 1rem; }
+.repair-item { border-top: 1px solid var(--line); padding-top: 8px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.repair-name { margin: 0; font-size: 0.95rem; }
+.repair-item p { margin: 0; overflow-wrap: anywhere; }
+.repair-lines pre { margin: 4px 0 0; white-space: pre-wrap; word-break: break-all; }
+.repair-lines summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; }
+.repair-actions { justify-content: flex-start; }
+.repair-result.ok { color: var(--ok); }
+.repair-result.bad, .repair-refused { color: var(--bad); }

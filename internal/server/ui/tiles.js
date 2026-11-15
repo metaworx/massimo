@@ -34,6 +34,7 @@ function renderRoom(room) {
   renderMenu(el, room);
   renderVacation(el, room);
   renderDeleteConfirm(el, room);
+  el.querySelector(".repair-area").appendChild(repairSlot(roomRepairScope(room)));
   renderConfig(el, room);
   // A state event that came while the configuration had the focus is
   // drawn once the focus has left it (updateDevice); a tick later, since
@@ -447,7 +448,8 @@ async function tileWrite(room, key, fn) {
 }
 
 // renderMenu wires the tile's ⋯ menu: lock and unlock of the room's
-// thermostats, and the deletion of an empty room. A room with devices
+// thermostats, the deletion of an empty room, and Repair…, which opens
+// the room's repairs under the tile (repair.js). A room with devices
 // but no thermostat has nothing to offer, so its menu is hidden.
 function renderMenu(el, room) {
   const thermostats = room.devices.filter(isThermostat);
@@ -484,7 +486,17 @@ function renderMenu(el, room) {
   } else {
     del.classList.add("hidden");
   }
+  const repair = el.querySelector(".menu-repair");
+  repair.addEventListener("click", () => {
+    closeMenu(el);
+    toggleRepair(roomRepairScope(room), "room", base() + "/rooms/" + room.id);
+  });
   dropdown(el.querySelector(".menu"));
+}
+
+// roomRepairScope is the scope of a room's repairs (repair.js).
+function roomRepairScope(room) {
+  return repairScope(state.serial, "room", room.id);
 }
 
 // renderTools wires the info and cog buttons of the mode row: the device
