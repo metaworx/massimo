@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
-"""The server's sign before the time of the last update (app.js
+"""The server's sign before the time of the last update (header.js
 renderServerSign): connected, an update out, a new version running and
 the server gone, each its icon in a frame and a label that says what a
 click does."""

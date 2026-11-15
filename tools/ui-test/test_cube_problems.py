@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
-"""Every Cube's problems beside the Cube choice (app.js
+"""Every Cube's problems beside the Cube choice (header.js
 renderCubeProblems): a Cube with a problem as the heading, its devices
 under it, the settings last for one who may change them; nothing where
 nothing is wrong."""

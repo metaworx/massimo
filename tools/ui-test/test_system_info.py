@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
-"""System info, the page of ⚙ (update.js loadSystemInfo), from GET
+"""System info, the page of ⚙ (system-info.js loadSystemInfo), from GET
 /api/v1/system: the server's version and what it was built with, its
 start and clock, the certificate (or a proxy's), how it was installed,
 the computer, its full name and the interfaces it listens on, and the
