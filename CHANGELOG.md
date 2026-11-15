@@ -8,6 +8,551 @@ the next minor, a fix counts the suffix up.
 
 ## [Unreleased]
 
+## [0.16.0-alpha.1] - 2026-11-15
+
+### Added
+
+- Every room has a virtual wall thermostat, the room's temperature for
+  every client; `?devices=default|real|virtual|all` chooses the lists'
+  wall thermostats, and rooms carry a `room_uid`.
+
+- A virtual wall thermostat takes a real one's commands, sending them to
+  its room or the room's wall thermostat; a room refuses a second wall
+  thermostat, as the original software does.
+
+- Week programmes carry a tag over the room's thermostats: a write with
+  If-Match is refused with 412 where the programme changed since or a
+  write is still on its way; config events say what changed.
+
+- The web UI's programme editor refuses to overwrite a programme changed
+  elsewhere since it was loaded, and offers the current one instead.
+
+- Boost over the air: `{"mode": "boost"}` on the setpoint routes, and
+  Boost in a room's ⋯ menu; the thermostats return to their mode by
+  themselves after their boost time.
+
+- A Cube's proxy can show its clients the virtual wall thermostat of
+  every room (`proxy_virtual`, off by default), keeping them off the
+  Cube: commands go to the room or its real wall thermostat.
+
+- System Info shows the server's ticking clock, its full host name, its
+  interfaces with their MAC and addresses, and behind a trusted proxy
+  "(proxied)" with the proxy's address and certificate, trusted or not.
+
+- `/healthz` names what the running server can do, each feature with
+  its version (`"features": {"vwt": "1.0", …}`), for clients of builds
+  without a release version.
+
+- Users link their own accounts at the sign-in providers in My profile,
+  managers change a link not used yet, and both see what the provider
+  says of the account: its name, user name, groups and last sign-in.
+
+- A sign-in provider may admit only the accounts in some of its groups,
+  read from a claim of the provider's choosing, `groups` by default.
+
+- `make ui-brand` writes the web UI's logo, favicon and app icons into
+  `internal/server/ui/brand/`, from the brand tool's new `ui` scope
+  (`tools/brand/README.md`).
+
+- A link of an account at a sign-in provider is shown in My profile
+  before it is stored, with the link it replaces, so that a wrong account
+  signed in at the provider is never linked by mistake.
+
+- My profile explains its controls: an ⓘ behind the display name, the
+  password, the sessions and keys and the linked accounts opens what
+  their buttons do.
+
+- `GET /api/v1/log` reads every Cube's log at once, each Cube's line
+  with its Cube's serial number in `cube_serial`, the server's own once.
+
+- The log has a Cubes choice where there is more than one Cube: all
+  Cubes shows every Cube's lines at once, each naming its Cube, and asks
+  for new ones every 10 seconds.
+
+- GET /api/v1/cubes names a Cube's proxy listener that does not listen
+  as proxy_failing, with the error and the next try, and GET
+  /api/v1/system lists every Cube proxy as cube_proxies.
+
+- System settings show a Cube proxy that does not listen: a notice
+  with the error under the Cube's proxy address, a line in System
+  Info, and a warning badge on both cards.
+
+- `GET /api/v1/cubes` says when the Cube's clock was read
+  (`cube_time_at`), so that a client can move the clock on.
+
+- massimo fakecube -single-client serves one client at a time, as the
+  Cube does, and holds a session that ended while it was silent for
+  -hold-dead, until POST /release or an R frees it (README.md).
+
+- GET /api/v1/cubes says in link whether a Cube's lost connection is
+  held, or the Cube refuses serve while it holds serve's old connection
+  (stale) or another client's (busy); the UI says so in words.
+
+- Reboot the Cube in System settings → Cubes, POST
+  /api/v1/cubes/{sn}/reboot and massimo netconfig -reboot restart a Cube
+  (capability cubes.reboot), naming the radiograms the restart drops.
+
+- Integrations ask to be registered without a key and get one once the
+  owner approves them with the code both sides show, their maximum set;
+  `/api/v1/integrations` lists, changes and revokes them.
+
+- A registered integration acts for its users: `X-MassimoHA-On-Behalf-Of`
+  names the user and the call's level, and the call may do what its role,
+  its link, the integration's maximum and the level all allow.
+
+- An integration's users are linked to Massimo users by the owner, a
+  link proposed by name; the users list marks them (AP IntegrationUsers).
+
+- The announcement on the LAN tells integrations where the API is and
+  whether they may register; the server lists Home Assistant
+  installations it sees there (AP IntegrationUsers).
+
+- Behind a trusted reverse proxy, the announcement's url is the address
+  the proxy serves the server at; System Info leaves out the scheme's
+  own port (AP IntegrationUsers, D12-A).
+
+- Each page of the web UI comes back at the place it was left, Rooms
+  where it was scrolled to while System settings was open.
+
+- System settings → Integrations approves an integration's request by
+  its code, sets its maximum and links its users; the users list marks
+  integration users and their links (AP IntegrationUsers).
+
+- A warning's triangle and a failure's cross blink, so that they are
+  not missed; My settings → "Blinking signs" chooses as the system, on,
+  at first (5 s) or off.
+
+- A test fails when two scripts of the same web UI page declare the
+  same top-level name, which in their shared scope silently replaced a
+  function (the found Cubes under the header) or stopped a script.
+
+- An open window turns from blue to amber after 5 minutes and to red
+  after 10 in the web UI, by the settings `window_warn_after` and
+  `window_alert_after`; the API gives each open window these times.
+
+- The web UI's header shows the server's sign before the time of the
+  last update: connected, an update out, a new version (a click
+  reloads, in place of the reload button) or gone, blinking.
+
+- `GET /api/v1/cubes` gives each Cube the address discovery last found
+  it at (`found_address`), beside the one the server connects to.
+
+- `GET /api/v1/cubes` lists each Cube's devices with a problem, a radio
+  fault, a low battery or a window open, with their rooms' names.
+
+- The web UI's header shows each Cube's link as a network sign in the
+  Cube choice, and beside it every Cube's problems in one list, the
+  settings that need a look last.
+
+- An open Cube's form in System settings keeps what is being typed while
+  its values change on the server: a field not touched follows, an
+  edited one says so under it, with "Take theirs".
+
+- The announcement on the LAN is the setting announce (auto, on, off),
+  applied at the next start; -announce and MASSIMO_ANNOUNCE still win
+  (AP AnnounceSetting).
+
+- System settings → Maintenance chooses the announcement on the LAN:
+  automatic, on or off, at the next restart (AP AnnounceSetting).
+
+- A Cube with a fixed address that answers discovery at another one is
+  `found_elsewhere` in the API, and logged at Warn once rather than at
+  every run (AP AddressCheck).
+
+- System settings → Cubes and the header's problems show a Cube that
+  discovery finds at another address than its fixed one, with "Use the
+  found address" and "Follow discovery" (AP AddressCheck).
+
+- The web UI copies a fact with a click, or with the copy icon beside it,
+  also over plain HTTP: the server's version, whole, and System Info's
+  Cube proxies; Store and Settings in effect moved to System Info.
+
+- A room tile's Holiday button becomes More: Eco and Comfort set the
+  room's eco or comfort temperature in its mode, Hold (Manual) while it
+  is in Auto, and Holiday… (AP RoomTile).
+
+- A room on holiday says until when on its More button and in its
+  problem pill, with a suitcase, and its devices' end in the same form
+  (AP RoomTile).
+
+- ☰ (its mark on a disc) and its Log entry turn amber or red while a log
+  warning or error is not settled or seen; a line has Mark seen, the log
+  Mark all as seen (`GET /api/v1/log/alerts`, the preference `log.seen`).
+
+- My settings → Appearance chooses the window icon (the opening sash or
+  the paned window) and the radio icon (the Wi-Fi fan or the tower),
+  for the person or this device (AP IconChoice).
+
+- The found Cubes in the API say whether each is a Cube or a Massimo
+  proxy (`kind`), the Cube a proxy serves (`serves`) and the Massimo
+  server serving it (`host`), from the servers' announcements.
+
+- Software update lists the last three updates: the version, when, and
+  who started it, or "outside Massimo" with apt or brew; the server keeps
+  ten, in `GET /api/v1/update`.
+
+- `GET /api/v1/system` names the serial each Cube proxy answers
+  discovery with (`discovery_serial`); System Info shows it beside the
+  Cube's, both copyable.
+
+- System settings → Maintenance sets how often the server polls,
+  refreshes and looks for the Cubes, each with a line on what it does,
+  applied at the next restart and counted in the card's head till then.
+
+- Cube settings in ☰: the chosen Cube's panel on a page of its own,
+  open, under the page's row with its sections menu, following the Cube
+  choice.
+
+- Each settings page's row holds the settings pages' buttons in its
+  title's place, in one order, the page shown filled and as wide on every
+  page, the others icons alone below 900 px; one page alone: its title.
+
+- The Cube choice's list shows each Cube's problems as icons after its
+  name, as the pill beside it does.
+
+- A device's battery level, ok, weak or low, kept from its battery flag's
+  history (`battery` in the API, amber or red on the tile), with the
+  notification `battery_weak`, on by default.
+
+- A wall thermostat back from a silence on another mode, as after new
+  batteries, is a warning in the log (`wall_reset`, docs/api-v1.md).
+
+- A move, a removal or a device put into a room answers pending, and the
+  log says when the Cube's free memory slots show it done, or warns where
+  they do not within about 15 minutes.
+
+- A Cube outside this machine's networks, as one without a DHCP lease on
+  192.168.0.222, says so with the `netconfig` line that gives it an
+  address here (`other_network`, docs/api-v1.md).
+
+### Changed
+
+- A thermostat keeps its last measured temperature and its time while
+  its reports carry none, on vacation too, instead of losing it.
+
+- A room tile's temperature is its virtual wall thermostat's, the wall
+  thermostat's else the radiator thermostats' median; expert mode lists
+  the virtual wall thermostat with its settings.
+
+- The site's documentation pages name their channel, version and
+  source right under the header, no longer at the end of the page.
+
+- The sign-in providers' client secrets are sealed with a key derived
+  from `opaque.key`, so that a copy of `massimo.db` alone does not hold
+  them; those kept plain are sealed at the next start.
+
+- A change to the site's own pages under `packaging/site/` alone runs
+  Guidelines and Site and deploys the site, as one to `docs/` does; they
+  are no longer shipped (`GUIDELINES/project/CI.md`, section 2).
+
+- The Web Push key is kept sealed in the store, as the sign-in
+  providers' client secrets are.
+
+- The web UI's favicon and the installable app's icons are Massimo's
+  mark: an SVG favicon in the browser's light or dark, `/favicon.ico`,
+  and a full-square icon for Android's and Apple's home screens.
+
+- The web UI shows Massimo's logo in the header, the sign-in, the first
+  owner's form and the connect page, the mark alone on a narrow screen;
+  the word stays in view until the drawing has come.
+
+- A search for Cubes that comes while one is going gets the run after
+  it, so that it hears a Cube plugged in or moved just before the call;
+  the calls that came meanwhile share that run (`docs/api-v1.md`).
+
+- System Info shows the server's start to the second in its zone with
+  the uptime, both times in the browser's zone on hover, each interface
+  named, and behind a proxy without a scheme header the page's own.
+
+- A Cube whose connection is lost is searched for on the LAN at once
+  and every minute until it is back, so that one that took another
+  address is followed without waiting for the periodic search.
+
+- The log names a device by its room and name, "Kitchen › Window", and
+  one without a name by its room and type; its serial number is the
+  tooltip and shows, with the radio address, in expert mode.
+
+- The web UI draws Massimo's logo and mark without a margin, from the
+  M's top to the letters' baseline; the brand tool also writes each
+  drawing so (`-tight.svg`).
+
+- The header's logo, version and time of the last update stand on one
+  baseline, the M as tall as the page buttons; the time and ↻ are one
+  button, and the Cube's clock moved from the header to its facts.
+
+- System settings lists its sections in ☰ alone, without the row of
+  buttons under its title; System Info's "This browser's address" is
+  "Browser address".
+
+- 👤 opens the personal settings, one page like System settings: My
+  profile, My settings and Notifications as its cards, with Sign out and
+  its sections menu at its top; the 👤 menu is gone.
+
+- A room tile's head shows what is wrong as icons that list the devices
+  (radio, battery, open window, mixed modes); a device's head shows its
+  type's icon and its own problems so.
+
+- serve holds a Cube's lost connection open for 45 minutes (-cube-hold),
+  so that it resumes after a short outage of serve's network instead of
+  meeting a Cube that refuses it while it keeps the old session.
+
+- **Breaking** for stores of 0.15.0-alpha*: identities name a sign-in
+  provider or an integration, and those releases cannot open a migrated
+  store again; the role integration is fixed (its keys keep theirs).
+
+- The web UI's amber comes in two strengths, a brighter one for icons
+  and a deeper one for text, and its red is darker in light mode and
+  stronger in dark mode, so that amber and red are told apart better.
+
+- A state in the web UI is a colour and a mark: a warning's badge is
+  bold and led by a triangle, a failure's by a cross; the radio is drawn
+  as a Wi-Fi fan and the window as a paned window, each with its mark.
+
+- A problem list of the web UI has one entry format at every level: the
+  icon in a column of its own, the badges under the name, the entries
+  under an entry indented to its name with a line from its icon.
+
+- System settings → Cubes shows each Cube's network sign before its
+  name and every problem in one pill, whose click opens its list; an
+  open Cube's own badges are its top line, without "connected".
+
+- CI's All tests passed names each test job with its result, a job
+  no runner took told apart, and on a pull request keeps one comment
+  saying which jobs did not pass.
+
+- A Cube's panel in System settings shows its facts, with the serial, the
+  address and the radio address to copy, beside its settings, and its
+  actions in one row last: Pair a device, Reboot the Cube, Remove.
+
+- An open window is drawn as the opening sash again, its mark inside
+  its frame; the paned window and the radio's tower stay as drawings to
+  choose (AP IconChoice).
+
+- CI runs the web UI's suite in a job per width, "UI test (1100 px,
+  screenshots)" and "UI test (390 px)", each with both languages, so a
+  run takes about half the time and a failure names its width.
+
+- The Cubes found on the network have a sign of their own in the header's
+  problem pill, and a group last in its list, for the line under the
+  header; System settings lists them in one fold, proxies apart.
+
+- CI's What to test shows its answers in the run's summary, as a table of
+  what each means for the run, with the reasons it found for them.
+
+- A Cube's problem pill stays top-right in its head, the source badge a
+  line under it; a green check takes a pill's place where nothing is
+  wrong, in a Cube's head and beside the header's Cube choice.
+
+- System settings: the sign-in redirect URI copies by its icon, Sign-in
+  providers and Integrations explain themselves in their heads, and
+  Maintenance reads Announce, Settings file, Restart, Reboot.
+
+- `serve` polls each Cube every 10 s instead of every minute, as the
+  original software does; a lost Cube is marked within 30 s, and the
+  settings name the flag that decides an interval (`fixed_by`).
+
+- CI's LAN test runs on a pull request that changes the server's
+  own Go files, where discovery's runs are decided.
+
+- ☰, at every width, holds Log, Cube settings, System settings, System
+  info, Personal settings and Sign out, in the accent, each for the roles
+  that may open it; the header keeps Rooms and ☰; pages `#cube`, `#info`.
+
+- System info is a page of its own in ☰, for every role with `read`,
+  a viewer's too.
+
+- Back to top on every page, filled in the accent's blue, a screen down,
+  and in the compacted header left of ☰.
+
+- The protocol and API docs say a setpoint shows once each device has
+  acknowledged it, and that idle radiator thermostats report once a
+  day; the protocol docs describe the Cube's H line.
+
+- The merge of a pull request whose changes cannot reach discovery no
+  longer runs LAN against avahi on `main`; a pull request changing the
+  shared UDP port or the Go module now runs it.
+
+- What to test's summary says for the UI test and LAN jobs whether they
+  run, and if not, why.
+
+- The pairing time outlines a time out of range in red as it is typed,
+  the range in amber before it, and Start goes back to the field instead
+  of the browser's message, which came in the browser's language.
+
+- Software update and Maintenance are a page of their own, ☰ →
+  Maintenance at `#maintenance`; System settings starts with Cubes.
+
+- Backup and restore per Cube: the chosen Cube's on Cube settings, and
+  in System settings a fold for each Cube with how many are kept.
+
+- The header shows how long ago the chosen Cube was last heard from,
+  "8 sec", counting on; its tooltip says the time, click to reload.
+
+- `massimo decode` names the L flags as the original software reads them:
+  `auto_dst` for `dst`, `flag_04` for the inverted `is_answer`; the H
+  line adds `state_cube_time` and `ntp_counter`.
+
+- At a used-up duty cycle, radio commands wait 10 minutes, then the
+  Cube's budget is read again, not until the next full hour; the wait is
+  `duty_wait`, in System settings → Maintenance (docs/api-v1.md).
+
+- A radiator thermostat counts as stale after 50 h, not 24 h, as it
+  reports once a day and not on its decalcification day; wall
+  thermostats keep 24 h, settable apart as `stale_after_wall`.
+
+- An open window drawn as the paned window (My settings, Window icon)
+  has no middle bar: its frame is one opening beside the swung-out sash
+  (AP IconChoice).
+
+- `battery_low` is notified once the flag has stayed 15 minutes, not at
+  every flicker of it under a valve motor's load.
+
+- A device the Cube has not heard for some minutes keeps its last values,
+  as `last_known` with `out_of_date` in the API and greyed on its tile,
+  in place of none.
+
+- The Integrations card says why the server does not look for Home
+  Assistant on the LAN, naming Announce on the LAN and what to change,
+  with Open Maintenance; GET /api/v1/integrations/found gives the reason.
+
+- The Cube search's outcome shows in a toast at the page's foot, with
+  Show for the Cubes found, instead of a line beside the Cube choice; a
+  failed search in red.
+
+### Removed
+
+- The portal commands, `massimo portal` and `portal-crypto`, and the Cube
+  keys and IVs they read are gone, kept on the branch `archive/portal`;
+  a key line left in `.env` is named as ignored.
+
+### Fixed
+
+- A setpoint or programme write sent while the Cube answered the
+  minute's poll waits for that reply instead of failing with a 502
+  ("another command is waiting for its reply").
+
+- A sign-in through an OpenID Connect provider reads its userinfo for the
+  e-mail Nextcloud leaves out, a user ID may be assigned instead, the
+  issuer is checked at saving, and a refusal says why.
+
+- The web UI's sign-in page no longer flickers: the header's buttons stay
+  hidden until the server has said who is signed in.
+
+- The log names its devices again after a reload on the log or a
+  switch of Cube there, where it showed their serial numbers until
+  another page was opened and closed.
+
+- A Cube's proxy listener that cannot listen, on an address the host
+  does not carry yet or a port in use, is tried again every 30 s at
+  most, instead of staying down until serve restarts.
+
+- A wall thermostat that has not measured yet, as after new batteries,
+  no longer gives its room 0.0 °C: its 0 counts as not reported.
+
+- A device's values show their age under the value's name and their time
+  under the value, so each stands under its own value; the virtual
+  thermostat names its temperature's sources by serial.
+
+- An apt box switches to `devel` or `nightly` from the web UI: the
+  update helper upgrades `massimo-archive-keyring` with `massimo`, first
+  from the current suite where the rolling key is missing.
+
+- The LAN proxy no longer pushes an `L` line to its clients after every
+  change: the original software took it for the reply to its next
+  command ("S: expected"); a change shows at the client's next `l:`.
+
+- The original MAX! software on a PC running serve binds the discovery
+  port again and finds serve's proxies: serve shares UDP 23272, and
+  answers a search from its own host by broadcast too.
+
+- The web UI's refresh icon stands on the digits' middle, the logo's
+  round letters are no longer cut at the baseline, and a narrow header
+  moves the version and the update time under the logo together.
+
+- The proxy and backups keep a C line the Cube sends that `serve`
+  cannot read, so the original software gets the greeting as sent.
+
+- An entry a Cube lists at radio address 000000 is no device: the web
+  UI and the API no longer show it, and nothing is sent to it, so its
+  Remove can no longer make the Cube send a factory reset to 000000.
+
+- The original MAX! software on a PC running serve finds the Cubes:
+  serve's discovery socket is dual-stack, so the software gets their
+  answers; serve waits for its search, and warns of an answer it missed.
+
+- System settings → Cubes' badges follow every poll, also while a Cube's
+  panel is open, and count a held connection or a reboot in amber, a
+  lost Cube in red, as the Cubes' signs show them.
+
+- A click in a room's configuration, such as Reset all, is no longer lost
+  when the rooms are reloaded in the middle of it: the tile with the
+  focus stays, as for a state event, and is drawn once the focus leaves.
+
+- Discovery keeps hearing a served Cube on the server's own host, such as
+  the fake Cube: only an answer to the identify request alone from there
+  is the server's own proxy's, so the Cube is found again once removed.
+
+- A change to documents alone on code that failed no longer passes CI:
+  the job Code result carries the verdict of the last run that tested
+  the code, so the nightly build cannot release it.
+
+- The web UI's menus open inside the window on a phone too, no higher
+  than the room below them, and scroll in themselves, not the page; a
+  long badge in a problem list wraps instead of running out of it.
+
+- System Info follows a proxy's certificate the server is still reading,
+  "being read…", until it is read or "could not be read"; the address
+  the proxy serves is a link, and copies by its icon.
+
+- The header's version is no longer cut away beside the Cube choice or
+  on a narrow phone: it takes a row of its own where needed; the time of
+  the last update stays in the compacted header.
+
+- A SIGHUP while `serve` starts no longer ends it, which systemd took
+  for a clean stop and did not restart: with `-sighup reload` it is
+  logged as a warning and ignored until `serve` is ready.
+
+- Pairing lasts the time asked for, at most 255 seconds: a Cube reads
+  only its low byte, so 300 s paired for 44. The API refuses more, the
+  proxy caps a client's longer time, the web UI's field ends at 255.
+
+- A jump down the page, to a control scrolled into view, no longer moves
+  back by the header's height on a phone as the header compacts: the
+  browser's scroll anchoring is off then, as it was meant to be.
+
+- A change to documents alone after a merge whose run on `main` was
+  replaced while it waited no longer fails CI: Code result takes the
+  pull request's green Tested record for the same code.
+
+- A day of more than 7 switch points is written as the original
+  software writes it: the second telegram marked 0x10 and padded to 6
+  points, as verified on a Cube (docs/cube-protocol.md).
+
+- Moving a device out of a room, or removing it, sends 0x23 (remove
+  group) before the 0x21s that unlink it, as the original software does.
+
+- A room's setpoint and week programme name a thermostat of the room:
+  the metadata's master where it is one, else the wall thermostat, else
+  a radiator thermostat; a room without one gets 409 (docs/api-v1.md).
+
+- A metadata write of more than ten blocks numbers its `m:` lines in
+  decimal, as the original software does (docs/cube-protocol.md).
+
+- `pending_radiograms` reads 50, not 0, when the Cube has no memory slot
+  left, as a Cube whose radiograms wait for silent devices can have.
+
+- Removing a device from its room resets the room's flagged members and
+  sends one unlink radiogram to the room as a group, as the original
+  software did; a step's result names the line the Cube discarded.
+
+- Moving or placing a device sends one link radiogram to the room, one to
+  each window contact and one to the device per partner, as the original
+  software does, room commands naming the same member.
+
+- A change to documents alone, pushed after a merge whose own run never
+  started, tests the merged code instead of failing on a verdict no run
+  gave.
+
 ## [0.15.0-alpha.1] - 2026-11-13
 
 ### Added
