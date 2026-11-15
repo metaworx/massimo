@@ -1203,9 +1203,39 @@ html.blink-first .server-sign[data-state="new"] use.mark, html.blink-first .serv
   letter-spacing: 0.02em;
   padding: 6px 14px;
 }
-.mode-row .mode-group button { padding: 6px 10px; font-size: 0.85rem; }
-.mode-group { display: inline-flex; flex-wrap: wrap; gap: 8px; }
-.mode-row .mode-group button.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.mode-row .mode-group > button { padding: 6px 10px; font-size: 0.85rem; }
+/* The modes take the row beside the tools, and wrap there: More saying
+   until when a holiday lasts goes under AUTO and MANU, the tools beside
+   both rather than on a line of their own. */
+.mode-group { display: inline-flex; flex-wrap: wrap; gap: 8px; flex: 1 1 0; }
+.mode-row .mode-group > button.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+/* More (tiles.js renderMore): a mode button whose menu drops down, Eco,
+   Comfort, the Hold switch and Holiday…, its items those of a menu */
+.mode-group .more-sum {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 6px 6px 10px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: inherit;
+  white-space: nowrap;
+  border-color: var(--line);
+  background: var(--card);
+}
+.mode-group .more-sum:hover, .more-menu[open] > .more-sum { border-color: var(--accent); }
+.mode-group .more-sum.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.mode-group .more-sum.partial { border-color: var(--accent); border-style: dashed; }
+.more-sum .caret { width: 14px; height: 14px; flex: none; color: var(--muted); }
+.more-sum.active .caret { color: inherit; }
+.more-sum.busy { opacity: 0.75; cursor: progress; }
+.more-menu .menu-items { left: 0; right: auto; width: max-content; min-width: 180px; max-width: min(300px, calc(100vw - 32px)); }
+.mode-row .more-menu .menu-items button { font-weight: 400; letter-spacing: normal; padding: 8px 10px; }
+.more-menu .switch { padding: 8px 10px; border-radius: 6px; color: var(--fg); }
+.more-menu .switch:hover { background: var(--card-head); }
+.more-temp { font-family: inherit; }
+.more-temp:empty { display: none; }
 .tile-tools { margin-left: auto; display: inline-flex; gap: 4px; }
 .mode-row .tool-btn {
   display: inline-flex;
@@ -1219,9 +1249,7 @@ html.blink-first .server-sign[data-state="new"] use.mark, html.blink-first .serv
 .tool-btn:hover { color: var(--fg); }
 .mode-row .tool-btn.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 .tool-btn .ni { width: 18px; height: 18px; flex: none; }
-.mode-vacation { color: var(--warn); font-size: 0.9rem; white-space: nowrap; }
-.mode-row .mode-group button.partial { border-color: var(--accent); border-style: dashed; }
-.suitcase { font-size: 1rem; }
+.mode-row .mode-group > button.partial { border-color: var(--accent); border-style: dashed; }
 .house-modes {
   display: flex;
   align-items: center;
@@ -1325,7 +1353,7 @@ button:disabled { opacity: 0.5; cursor: default; }
    faded than a button with nothing to do, a ring turning after its text
    in the button's own colour, so in either theme. */
 button.busy:disabled { opacity: 0.75; cursor: progress; }
-button.busy::after {
+button.busy::after, summary.busy::after {
   content: "";
   display: inline-block;
   width: 0.8em;
@@ -1351,7 +1379,7 @@ button.busy::after {
 }
 @keyframes busy-turn { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
-  button.busy::after { animation-duration: 2.4s; }
+  button.busy::after, summary.busy::after { animation-duration: 2.4s; }
 }
 
 dialog {

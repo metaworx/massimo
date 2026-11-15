@@ -1008,15 +1008,7 @@ function pickerMenu(details, { items, value, onPick, shown }) {
     const b = details.querySelector(".menu-items button[aria-current='true']") || enabled()[0];
     if (b) b.focus();
   });
-  details.addEventListener("keydown", (ev) => {
-    if (!details.open || (ev.key !== "ArrowDown" && ev.key !== "ArrowUp")) return;
-    const bs = enabled();
-    if (!bs.length) return;
-    ev.preventDefault();
-    const i = bs.indexOf(document.activeElement);
-    const next = ev.key === "ArrowDown" ? (i + 1) % bs.length : (i <= 0 ? bs.length - 1 : i - 1);
-    bs[next].focus();
-  });
+  menuArrows(details, ".menu-items button:not(:disabled)");
 }
 
 // problemsEl shows what is wrong in a place, wherever it is put (a
@@ -1118,7 +1110,7 @@ function problemEntry(e) {
 // dropdown makes a <details class="menu"> a menu that drops down: one
 // open at a time, closed by a choice of one of its items, by Escape
 // (the focus back on its summary) and by a click outside it. The room
-// tiles' ⋯ and the header's 👤 and ☰ are such menus.
+// tiles' ⋯ and More and the header's 👤 and ☰ are such menus.
 function dropdown(details) {
   details.addEventListener("toggle", () => {
     if (!details.open) return;
@@ -1130,6 +1122,21 @@ function dropdown(details) {
     if (ev.target.closest(".menu-items button")) details.open = false;
   });
   return details;
+}
+
+// menuArrows lets the arrow keys move the focus between the items of
+// an open dropdown, the elements matching selector: down and up, round
+// at the ends, from its summary down to the first and up to the last.
+function menuArrows(details, selector) {
+  details.addEventListener("keydown", (ev) => {
+    if (!details.open || (ev.key !== "ArrowDown" && ev.key !== "ArrowUp")) return;
+    const items = [...details.querySelectorAll(selector)];
+    if (!items.length) return;
+    ev.preventDefault();
+    const i = items.indexOf(document.activeElement);
+    const next = ev.key === "ArrowDown" ? (i + 1) % items.length : (i <= 0 ? items.length - 1 : i - 1);
+    items[next].focus();
+  });
 }
 
 document.addEventListener("click", (ev) => {
