@@ -238,15 +238,21 @@ func TestProxyFailingInTheAPI(t *testing.T) {
 // Cube's proxy serial where one is set, and none for a listener that
 // answers no discovery.
 func TestProxyDiscoverySerialInSystem(t *testing.T) {
-	free := func() string {
+	// Two free ports, both listeners held until both are known, then
+	// closed for the proxies: closed one after the other, the second
+	// could get the first's port again (seen on armv6 under QEMU).
+	var ls []net.Listener
+	for range 2 {
 		l, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer l.Close()
-		return l.Addr().String()
+		ls = append(ls, l)
 	}
-	answering, silent := free(), free()
+	answering, silent := ls[0].Addr().String(), ls[1].Addr().String()
+	for _, l := range ls {
+		l.Close()
+	}
 	_, ts, _ := startWith(t, Options{ProxyFixed: true, DiscoveryAddr: "127.0.0.1:0", Proxy: []ProxyListener{
 		{Serial: "KEQ0000100", Addr: answering, Discovery: true, DiscoverySerial: "KEQ0000999"},
 		{Serial: "KEQ0000100", Addr: silent}}})
