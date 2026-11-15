@@ -47,6 +47,25 @@ func TestSighupAction(t *testing.T) {
 	}
 }
 
+// A SIGHUP before serve hands over its reload is logged at Warn and
+// dropped; afterwards it runs the reload, and logs nothing of its own.
+func TestHupReloadBeforeReady(t *testing.T) {
+	var out strings.Builder
+	h := &hupReload{log: slog.New(slog.NewTextHandler(&out, nil))}
+	h.handle()
+	if got := out.String(); !strings.Contains(got, `level=WARN msg="SIGHUP during the start, ignored"`) || !strings.Contains(got, "reason=") {
+		t.Fatalf("before ready: %q", got)
+	}
+	out.Reset()
+	runs := 0
+	h.ready(func() { runs++ })
+	h.handle()
+	h.handle()
+	if runs != 2 || out.Len() != 0 {
+		t.Fatalf("after ready: %d runs, logged %q", runs, out.String())
+	}
+}
+
 // The watch reads a changed file once it held still for one more look,
 // once; a missing file and an unchanged one ask for nothing.
 func TestWatchSettings(t *testing.T) {

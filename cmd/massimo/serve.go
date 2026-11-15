@@ -163,6 +163,14 @@ func runServe(args []string) error {
 	if runtime.GOOS == "windows" {
 		hup = "none" // no SIGHUP to handle
 	}
+	// SIGHUP as a reload is caught from here on, so that one during the
+	// start is logged rather than ending serve (sighup.go).
+	var hups *hupReload
+	if hup == sighupReload {
+		var stopHups func()
+		hups, stopHups = catchSighup(logger)
+		defer stopHups()
+	}
 	// The settings as this run started with them, for what a change of
 	// the settings file applies only at the next start (reload.go).
 	startSettings := settings()
@@ -274,24 +282,17 @@ func runServe(args []string) error {
 	srv.SetSettingsRead(settingsRead)
 	// GET /api/v1/config: the settings in effect, as massimo config shows
 	srv.SetConfigView(func() server.ConfigView { return configView(*listen, tlsInEffect) })
-	if hup == sighupReload {
-		hups := make(chan os.Signal, 1)
-		signal.Notify(hups, syscall.SIGHUP)
-		go func() {
-			defer signal.Stop(hups)
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case <-hups:
-					reloader.reload(ctx, "SIGHUP")
-					if logFile != nil {
-						logFile.Rotate("sighup")
-					}
-					checkpointStore(ctx, inst.Store(), logger)
-				}
+	if hups != nil {
+		hups.ready(func() {
+			if ctx.Err() != nil {
+				return // serve is stopping
 			}
-		}()
+			reloader.reload(ctx, "SIGHUP")
+			if logFile != nil {
+				logFile.Rotate("sighup")
+			}
+			checkpointStore(ctx, inst.Store(), logger)
+		})
 	}
 	// The store is closed when Run returns, once the server has written
 	// the log's pending events.
