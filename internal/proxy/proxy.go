@@ -485,7 +485,9 @@ func deleteAnswer(m cube.Message) []cube.Message {
 // the server (cubeio.Writer.StartPairing), so that every N line reaches
 // the client however late the Cube sends it, and the server's own
 // device list learns the new devices; a client that sends n: while
-// pairing already runs joins it. x: ends pairing for everyone. Neither
+// pairing already runs joins it. A time longer than a Cube keeps
+// (cubeio.MaxPairingTime) is capped, the time asked logged. x: ends
+// pairing for everyone. Neither
 // line has a reply of its own; the Cube's N lines, including the empty
 // one at the end, are relayed as they come.
 func (p *Proxy) pairing(ctx context.Context, s *session, m cube.Message, remote string) {
@@ -503,20 +505,28 @@ func (p *Proxy) pairing(ctx context.Context, s *session, m cube.Message, remote 
 	if secs, err := strconv.ParseUint(strings.TrimSpace(m.Data), 16, 16); err == nil && secs > 0 {
 		timeout = time.Duration(secs) * time.Second
 	}
-	timeout = min(timeout, cubeio.MaxPairingTime)
-	lines, stop, err := w.StartPairing(wctx, timeout)
-	if errors.Is(err, cubelan.ErrInclusionActive) {
-		lines, stop = p.opts.Client.WatchInclusion()
-		err = nil
-		p.note(Event{Kind: EventPairing, Level: slog.LevelInfo, Remote: remote, Summary: map[string]any{"joined": true}}, "proxy: client joins the running pairing", "remote", remote)
+	summary := map[string]any{}
+	attrs := []any{"remote", remote}
+	if timeout > cubeio.MaxPairingTime {
+		// The Cube would read only the low byte: 300 s would be 44.
+		summary["asked"] = int(timeout.Seconds())
+		attrs = append(attrs, "asked", int(timeout.Seconds()))
+		timeout = cubeio.MaxPairingTime
 	}
-	if err != nil {
+	summary["seconds"] = int(timeout.Seconds())
+	attrs = append(attrs, "seconds", int(timeout.Seconds()))
+	lines, stop, err := w.StartPairing(wctx, timeout)
+	switch {
+	case errors.Is(err, cubelan.ErrInclusionActive):
+		lines, stop = p.opts.Client.WatchInclusion()
+		p.note(Event{Kind: EventPairing, Level: slog.LevelInfo, Remote: remote, Summary: map[string]any{"joined": true}}, "proxy: client joins the running pairing", "remote", remote)
+	case err != nil:
 		p.note(Event{Kind: EventWarning, Level: slog.LevelWarn, Remote: remote, Summary: map[string]any{"what": "pairing_not_started"}, Err: err},
 			"proxy: pairing not started", "remote", remote, "error", err)
 		return
+	default:
+		p.note(Event{Kind: EventPairing, Level: slog.LevelInfo, Remote: remote, Summary: summary}, "proxy: pairing for a client", attrs...)
 	}
-	p.note(Event{Kind: EventPairing, Level: slog.LevelInfo, Remote: remote, Summary: map[string]any{"seconds": int(timeout.Seconds())}},
-		"proxy: pairing for a client", "remote", remote, "seconds", int(timeout.Seconds()))
 	s.watchPairing(stop)
 	go func() {
 		for l := range lines {

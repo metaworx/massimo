@@ -171,3 +171,36 @@ func TestPairingEndsWithTheCube(t *testing.T) {
 		t.Fatalf("received %v", got)
 	}
 }
+
+// The API asks for at most 255 s, the longest a Cube keeps the mode:
+// 256 is refused before anything is sent, 255 goes to the Cube as n:00ff.
+func TestPairingTimeLimit(t *testing.T) {
+	fc, ts, _ := startPairingCube(t, time.Hour)
+	const base = "/api/v1/cubes/KEQ0000100"
+	for _, body := range []string{`{"seconds":256}`, `{"seconds":600}`} {
+		if code, out := do(t, ts, "POST", base+"/pairing", body); code != 400 || out["error"] != "seconds must be 1..255" {
+			t.Fatalf("%s: %d %v", body, code, out)
+		}
+	}
+	if got := fc.Received(); len(got) != 0 {
+		t.Fatalf("a refused pairing sent %v", got)
+	}
+	code, st := do(t, ts, "POST", base+"/pairing", `{"seconds":255}`)
+	if code != 200 {
+		t.Fatalf("255 s: %d %v", code, st)
+	}
+	started, _ := time.Parse(time.RFC3339Nano, st["started"].(string))
+	until, _ := time.Parse(time.RFC3339Nano, st["until"].(string))
+	if until.Sub(started) != 255*time.Second {
+		t.Fatalf("started %v, until %v", st["started"], st["until"])
+	}
+	// The fake records a line once it read it, which can be after the
+	// answer.
+	waitFor(t, "the n: at the Cube", func() bool { return len(fc.Received()) > 0 })
+	if got := fc.Received(); len(got) != 1 || got[0].String() != "n:00ff" {
+		t.Fatalf("cube received %v", got)
+	}
+	if code, _ := do(t, ts, "DELETE", base+"/pairing", ""); code != 200 {
+		t.Fatalf("stop: %d", code)
+	}
+}

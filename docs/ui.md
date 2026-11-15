@@ -926,7 +926,8 @@ to the top of the page.
   each question and the pairing's progress in a line under them;
   from 760 px the facts and the settings are side by side.
   **Pair a device**
-  shows the pairing time (60 seconds, at most 600) and **Start**,
+  shows the pairing time (60 seconds, at most 255, the longest a Cube keeps)
+  and **Start**,
   which puts the Cube into pairing mode;
   then the device's pairing button is pressed, as its manual says.
   A countdown with **Stop** runs while the Cube pairs,
