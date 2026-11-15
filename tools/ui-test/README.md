@@ -12,7 +12,8 @@ The script:
    again after it was removed), with `greeting.txt`,
    which is the protocol fixture from internal/protocol/cube/testdata plus an
    `L:` line with device states (measured temperatures included) and a window contact,
-   "Fenster Kind 1", that reports an open window;
+   "Fenster Kind 1", with its `C:` line as a Cube sends one for every device,
+   that reports an open window;
    `massimo serve` against the fake Cube,
    with the API token `ui-test-token`;
    the Cube comes from `MASSIMO_CUBE_KEQ0000100_ADDRESS` and `_NAME` ("Fake Cube"),
