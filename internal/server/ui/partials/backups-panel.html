@@ -1,3 +1,26 @@
+<!-- A Cube's box of Backup and restore (backup.js backupBox): the backup
+     as it is now in a format, one taken now, a restore from a file, the
+     automatic one pending, the list, the restore shown and the outcome. -->
+<template id="tpl-backup-box">
+  <div class="backup-box">
+    <div class="backup-bar">
+      <div class="field">
+        <label class="backup-format-label" data-i18n="backup.format">Format</label>
+        <select class="field-control backup-format">
+          <option value="yaml">YAML</option>
+          <option value="json">JSON</option>
+        </select>
+      </div>
+      <button type="button" class="backup-download" data-i18n="backup.download">Download backup</button>
+      <button type="button" class="backup-take" data-i18n="backup.take">Take a backup now</button>
+      <button type="button" class="restore-file needs-restore" data-i18n="restore.fromFile">Restore from file…</button>
+    </div>
+    <p class="backup-pending muted small hidden"></p>
+    <div class="backups-list"></div>
+    <div class="restore-box"></div>
+    <p class="backup-msg small cubes-msg hidden" role="status"></p>
+  </div>
+</template>
 <!-- A stored backup's row and a restore's plan, backup.js. -->
 <template id="tpl-backup-row">
   <div class="backup-row">

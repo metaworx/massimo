@@ -14,7 +14,7 @@ def test_busy_while_the_helper_installs(page):
     are greyed out, also when the page only learns it from GET
     /api/v1/update (a reload during an update, or an update started from
     another browser), and come back once the helper reports done."""
-    show_view(page, "system")
+    show_view(page, "maint")
     page.route("**/api/v1/update*", lambda route: route.fulfill(
         status=200, content_type="application/json", body=update_json("installing", "v0.0.1-test", True)))
     page.locator("#update-check").click()
@@ -31,7 +31,7 @@ def test_busy_while_the_helper_installs(page):
 def test_update_asks_in_the_page(page):
     """Update asks in the Software section, not in a browser dialog, and
     Cancel takes the question back without a request."""
-    show_view(page, "system")
+    show_view(page, "maint")
     posts = []
     page.route("**/api/v1/update*", lambda route: posts.append(1) if route.request.method == "POST" else route.fulfill(
         status=200, content_type="application/json", body=update_json("up-to-date", "v0.0.1-test", True)))
@@ -50,7 +50,7 @@ def test_update_through_apt(page):
     """On a box the Debian package installed, Software names apt beside
     the version, and Update asks without promising the old version back:
     apt puts nothing back."""
-    show_view(page, "system")
+    show_view(page, "maint")
     page.route("**/api/v1/update*", lambda route: route.fulfill(
         status=200, content_type="application/json", body=update_json("up-to-date", "v0.0.1-test", True, "apt")))
     page.locator("#update-check").click()
@@ -108,7 +108,7 @@ def test_channel_is_chosen(page):
     choice is stored as update.channel, the build's flavour as null, and
     the release check asks again."""
     puts = channel_routes(page)
-    show_view(page, "system")
+    show_view(page, "maint")
     sel = page.locator("#update-channel")
     sel.wait_for(state="visible")
     assert sel.is_enabled() and sel.input_value() == "", "the build's flavour is chosen, and can be changed"
@@ -129,7 +129,7 @@ def test_channel_on_apt(page):
     """On a box apt updates the box follows apt's suite until a channel is
     chosen, which the next update switches apt to: the note says so."""
     puts = channel_routes(page, manager="apt", suite="devel")
-    show_view(page, "system")
+    show_view(page, "maint")
     sel = page.locator("#update-channel")
     sel.wait_for(state="visible")
     first = page.evaluate("t('update.channelSuite', {suite: 'devel'})")
@@ -149,7 +149,7 @@ def test_channel_fixed_by_the_variable(page):
     """MASSIMO_UPDATE_CHANNEL overrides the setting: the channel it sets is
     shown, fixed, and the note names the variable."""
     channel_routes(page, variable="nightly")
-    show_view(page, "system")
+    show_view(page, "maint")
     sel = page.locator("#update-channel")
     sel.wait_for(state="visible")
     assert wait_until(page, "document.getElementById('update-channel').disabled", 5), "the channel is fixed"
@@ -163,7 +163,7 @@ def test_last_updates(page):
     lines: the newest still under way with who started it, one from
     outside Massimo through apt, one the helper rolled back; a fourth is
     left out, and the list is gone without a history."""
-    show_view(page, "system")
+    show_view(page, "maint")
     history = [
         {"at": "2026-11-14T18:00:00Z", "by": {"name": "anna", "display_name": "Anna"}, "from": "v0.0.2", "to": "v0.0.3"},
         {"at": "2026-11-10T07:00:00Z", "outside": True, "manager": "apt", "from": "v0.0.1", "reached": "v0.0.2",

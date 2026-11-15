@@ -1108,14 +1108,13 @@ function logCubeChanged() {
   loadLog();
 }
 
-// The pages of the main area: Rooms ("tiles"), the log ("log"), the
-// personal settings ("me": My profile, My settings and Notifications as
-// its cards), and the settings pages of ⚙'s menu, the chosen Cube's
-// ("cube"), System settings ("system") and System info ("info"), each
-// with its section; ⚙ is highlighted while one of its pages is shown,
-// and ☰ while Log or one of them is, which it holds on a narrow screen
-// (GEAR_VIEWS). The tiles keep
-// their state while hidden. The page shown is in the address
+// The pages of the main area: Rooms ("tiles"), the header's one button,
+// and the pages of ☰ (MENU_VIEWS): the log ("log"), the settings pages,
+// the chosen Cube's ("cube"), System settings ("system"), Maintenance
+// ("maint") and System info ("info"), and the personal settings ("me": My profile, My settings and
+// Notifications as its cards), each with its section; ☰ is highlighted
+// while one of its pages is shown. The tiles keep their state while
+// hidden. The page shown is in the address
 // (VIEW_HASH), Rooms without one, the personal page at a card by the
 // card's own (CARD_HASH, the addresses of the pages they were), and the
 // log's range, kind and device after its page (logHash), so that a
@@ -1222,24 +1221,21 @@ function setLogAlerts(list) {
   if (before !== [...logAlerts.levels].join() && isShown("log")) renderLog();
 }
 
-// renderLogSign draws the log's button and ☰'s log entry: the log
-// plain, or with the triangle or the cross of the worst unseen problem,
-// the count in its name; the mark on ☰ too, which holds the log's button
-// on a phone; and Mark all as seen while there is one.
+// renderLogSign draws ☰'s log entry: the log plain, or with the
+// triangle or the cross of the worst unseen problem, the count in its
+// name; ☰ carries the mark, the count in its name too; and Mark all as
+// seen while there is one.
 function renderLogSign() {
   const tone = logAlerts.level === "error" ? "bad" : logAlerts.level ? "warn" : "";
   const n = logAlerts.list.length;
-  for (const id of ["view-log", "menu-log"]) {
-    const old = $(id).querySelector("svg");
-    if (old) old.replaceWith(signEl("log", tone, "", "log-sign"));
-  }
-  const btn = $("view-log");
-  btn.setAttribute("aria-label", n ? t("nav.logAlerts", { count: n }) : t("nav.log"));
-  btn.title = n ? t("nav.logAlerts", { count: n }) : t("nav.logTitle");
   const entry = $("menu-log");
+  const old = entry.querySelector("svg");
+  if (old) old.replaceWith(signEl("log", tone, "", "log-sign"));
   if (n) entry.setAttribute("aria-label", t("nav.logAlerts", { count: n }));
   else entry.removeAttribute("aria-label");
   const menu = $("nav-menu").querySelector("summary");
+  menu.setAttribute("aria-label", n ? t("nav.more") + ", " + t("nav.logAlerts", { count: n }) : t("nav.more"));
+  menu.title = n ? t("nav.moreTitle") + " · " + t("nav.logAlerts", { count: n }) : t("nav.moreTitle");
   const mark = menu.querySelector(".mark-sign");
   if (mark) mark.remove();
   if (tone) menu.appendChild(markEl(tone, "log-sign-menu"));
@@ -1264,12 +1260,22 @@ function markAllLogSeen() {
   saveLogSeen();
 }
 
-const VIEW_SECTION = { log: "logview", me: "me", system: "system", info: "info-page", cube: "cube-page" };
-const VIEW_BUTTON = { tiles: "view-tiles", log: "view-log", me: "view-me" };
-const VIEW_HASH = { tiles: "", log: "#log", me: "#me", system: "#system", info: "#info", cube: "#cube" };
-// GEAR_VIEWS are the pages of ⚙'s menu, with the ids of their entries
-// there and in ☰'s.
-const GEAR_VIEWS = { cube: ["gear-cube", "menu-cube"], system: ["gear-system", "menu-system"], info: ["gear-info", "menu-info"] };
+const VIEW_SECTION = { log: "logview", me: "me", system: "system", maint: "maint-page", info: "info-page", cube: "cube-page" };
+const VIEW_BUTTON = { tiles: "view-tiles" };
+const VIEW_HASH = { tiles: "", log: "#log", me: "#me", system: "#system", maint: "#maintenance", info: "#info", cube: "#cube" };
+// MENU_VIEWS are the pages of ☰, every page but Rooms, with the ids of
+// their entries.
+const MENU_VIEWS = { log: "menu-log", cube: "menu-cube", system: "menu-system", maint: "menu-maint", info: "menu-info", me: "menu-me" };
+// SETTINGS_PAGES are the settings pages, in ☰'s order, each with its
+// icon, the key of its name and the class that hides it from a role that
+// may not open it (login.js, style.css); each page's row links to the
+// others (components.js pageSwitch).
+const SETTINGS_PAGES = [
+  { view: "cube", icon: "icon-cube3d", key: "nav.cubeTitle", needs: "needs-cubes-or-pair" },
+  { view: "system", icon: "icon-cog", key: "nav.settingsTitle", needs: "needs-system" },
+  { view: "maint", icon: "icon-tool", key: "nav.maintTitle", needs: "needs-maint" },
+  { view: "info", icon: "icon-info", key: "nav.infoTitle", needs: "needs-read" },
+];
 const CARD_HASH = { "#profile": "profile", "#prefs": "prefs", "#notify": "notify" };
 let currentView = "tiles";
 
@@ -1343,10 +1349,13 @@ function showAddress() {
 }
 
 // mayShow reports whether the signed-in user may open a page: System
-// settings with one of its capabilities, the Cube's settings with cubes
-// or with pair (its pairing alone), System info with read.
+// settings with one of its capabilities, Maintenance with one of those
+// or update, restart or reboot (Software update is for all of them), the
+// Cube's settings with cubes or with pair (its pairing alone), System
+// info with read.
 function mayShow(view) {
-  if (view === "system") return hasSystem(); // login.js
+  if (view === "system") return hasSettingsPage(); // login.js
+  if (view === "maint") return hasSystem(); // login.js
   if (view === "cube") return hasCap("cubes") || hasCap("pair"); // login.js
   if (view === "info") return hasCap("read");
   return view in VIEW_BUTTON || view in VIEW_SECTION;
@@ -1387,18 +1396,11 @@ function showView(view, address = "push", card) {
     if (view === name) $(id).setAttribute("aria-current", "page");
     else $(id).removeAttribute("aria-current");
   }
-  const gear = view in GEAR_VIEWS;
-  const sum = $("view-gear");
-  sum.classList.toggle("active", gear);
-  if (gear) sum.setAttribute("aria-current", "page");
-  else sum.removeAttribute("aria-current");
-  for (const [name, ids] of Object.entries(GEAR_VIEWS)) {
-    for (const id of ids) {
-      if (view === name) $(id).setAttribute("aria-current", "page");
-      else $(id).removeAttribute("aria-current");
-    }
+  for (const [name, id] of Object.entries(MENU_VIEWS)) {
+    if (view === name) $(id).setAttribute("aria-current", "page");
+    else $(id).removeAttribute("aria-current");
   }
-  $("nav-menu").querySelector("summary").classList.toggle("active", view === "log" || gear);
+  $("nav-menu").querySelector("summary").classList.toggle("active", view in MENU_VIEWS);
   if (view === "log") {
     loadLog();
     logLoadUsers();
@@ -1440,14 +1442,9 @@ function onView(view, fn) {
 
 function initLog() {
   $("view-tiles").addEventListener("click", () => showView("tiles"));
-  $("view-log").addEventListener("click", () => showView("log"));
-  $("view-me").addEventListener("click", () => showView("me"));
-  $("menu-log").addEventListener("click", () => showView("log"));
-  for (const [view, ids] of Object.entries(GEAR_VIEWS)) {
-    for (const id of ids) $(id).addEventListener("click", () => showView(view));
-  }
-  dropdown($("gear-menu"));
+  for (const [view, id] of Object.entries(MENU_VIEWS)) $(id).addEventListener("click", () => showView(view));
   dropdown($("nav-menu"));
+  for (const p of SETTINGS_PAGES) pageSwitch($(VIEW_SECTION[p.view]), p.view, SETTINGS_PAGES, (v) => showView(v)); // components.js
   // back and forward, and a page named in the address bar
   window.addEventListener("popstate", () => showAddress());
   $("log-filter").addEventListener("input", (ev) => {

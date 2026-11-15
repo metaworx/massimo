@@ -185,15 +185,15 @@ body.server-down main .ni.sign, body.server-down .problems-sum, body.server-down
 /* ↻ on the digits' middle, not on their baseline (an SVG's own baseline
    is its bottom edge): moved down without moving the line */
 .refresh-btn .ni { position: relative; top: 3px; width: 16px; height: 16px; flex: none; }
+/* the age counts on each second: digits of one width, so that the line
+   does not move with them */
+#updated { font-variant-numeric: tabular-nums; }
 .refresh-btn:hover, .refresh-btn:focus-visible { color: var(--accent); }
 .refresh-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .refresh-btn.busy::after { content: none; }
 .refresh-btn.busy .ni { animation: busy-turn 0.8s linear infinite; }
-#nav-menu { display: none; }
 @media (max-width: 599px) {
   .top-line { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "left nav" "cube cube"; }
-  #view-log, #gear-menu { display: none; }
-  #nav-menu { display: block; }
 }
 /* The version, the server's sign and the time on a row of their own where
    they do not fit beside the logo on one line (app.js fitFacts): across
@@ -272,7 +272,7 @@ button.copy-icon .ni { width: 16px; height: 16px; }
   color: var(--fg);
 }
 .menu.nav-menu > summary:hover, .menu.nav-menu[open] > summary { border-color: var(--accent); }
-/* ⚙ and ☰ highlighted as a page button while one of their pages is shown */
+/* ☰ highlighted as a page button while one of its pages is shown */
 .menu.nav-menu > summary.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 .nav-menu .menu-items { width: max-content; min-width: 200px; max-width: min(320px, calc(100vw - 32px)); }
 .ni { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -361,6 +361,10 @@ button.copy-icon .ni { width: 16px; height: 16px; }
 .menu-icon-none { width: 20px; flex: none; }
 .menu-group { margin: 8px 10px 2px; font-size: 0.8rem; color: var(--muted); }
 .menu-sep { border: none; border-top: 1px solid var(--line); margin: 6px 0; }
+/* an item's icons after its name (the Cube choice: a Cube's problems) */
+.menu-item-line { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
+.menu-item-icons { display: inline-flex; gap: 4px; }
+.menu-item-icons > svg { width: 18px; height: 18px; flex: none; }
 .menu-items button[aria-current="true"] { box-shadow: inset 3px 0 0 var(--accent); font-weight: 600; }
 #cube-search.bad { color: var(--bad); }
 /* The found Cubes' sign (components.js foundCountEl): a cube with their
@@ -638,6 +642,36 @@ body.scrolled #pending { display: none !important; }
 body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8px -8px rgba(0, 0, 0, 0.25); }
 .page-bar h2 { font-size: 1.25rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .menu.sec-menu { margin-left: auto; }
+/* the other settings pages (components.js pageSwitch), right-aligned
+   before the sections menu, each its icon and its name, the icon alone
+   on a phone */
+.page-tools { display: flex; flex: none; align-items: center; gap: 6px; margin-left: auto; }
+.page-tools > .menu.sec-menu, .page-bar > .section-badges { margin-left: 0; }
+.page-switch { display: flex; gap: 6px; }
+/* where the title and the buttons do not fit on one line (a long title on
+   a phone), the buttons and the sections menu go under the title, which
+   stays whole */
+.page-bar.has-switch { flex-wrap: wrap; row-gap: 6px; }
+.page-bar.has-switch > h2 { flex: 0 1 auto; max-width: 100%; }
+.page-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--fg);
+  font-size: 0.9rem;
+  line-height: 1;
+}
+.page-link:hover { border-color: var(--accent); }
+.page-link > .ni { width: 18px; height: 18px; flex: none; }
+@media (max-width: 599px) {
+  .page-link { width: 40px; padding: 0; justify-content: center; }
+  .page-link-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}
 .menu.sec-menu > summary {
   display: inline-flex;
   align-items: center;
@@ -775,23 +809,22 @@ body.scrolled .top-btn { display: inline-flex; }
 .cube-panel:not([open]) > .cube-top-line { display: none; }
 .cube-panel[open] > summary > .panel-badges { display: none; } /* the source is on the top line then */
 .cube-cols > .cube-form { grid-area: settings; display: grid; gap: 4px; align-content: start; min-width: 0; }
-/* Cube settings (cubes.js renderCubePage): the chosen Cube's panel open,
-   its head the page's title row, kept under the header as a page's row
-   is, without the fold's chevron */
+/* Cube settings (cubes.js renderCubePage): under the page's row the
+   chosen Cube's panel, open, its head its first row, without the fold's
+   chevron */
 .cube-page .panel.cube-panel > summary {
-  position: sticky;
-  top: var(--top-h, 0px);
-  z-index: 5;
   grid-template-columns: minmax(0, 1fr) auto;
-  margin: -8px -12px 10px;
-  padding: 8px 12px;
-  border-radius: 10px 10px 0 0;
-  background: var(--card);
   cursor: default;
   font-size: 1.1rem;
 }
-body.scrolled .cube-page .panel.cube-panel > summary { box-shadow: 0 8px 8px -8px rgba(0, 0, 0, 0.25); }
 .cube-page .panel.cube-panel > summary::before { display: none; }
+/* its Backup and restore under the panel (backup.js renderCubeBackup) */
+.cube-page > .section-card { margin-top: 16px; }
+/* System settings → Backup and restore: a fold per Cube, its head as a
+   Cube's in the Cubes card, its sign before its name */
+.backups-cubes { display: grid; gap: 8px; }
+.backup-fold > summary > .conn-sign { width: 18px; height: 18px; flex: none; }
+.backup-fold > summary > .panel-badges { margin-left: auto; }
 .cube-page .cube-head-who { grid-column: 1; }
 .cube-page .cube-pill { grid-column: 2; }
 .cube-page .panel.cube-panel > summary > .panel-badges { grid-column: 1 / -1; }
@@ -1703,16 +1736,14 @@ massimo-week-program { display: contents; }
    markup marks what each one hides with needs-<capability>, with
    needs-cubes-or-pair what either of the two shows (System settings →
    Cubes), with needs-maintenance what restart, settings or reboot shows
-   (Maintenance), with needs-system what one of System settings' does, and
-   with needs-gear what System info or System settings does (⚙'s menu) */
+   (Maintenance), and with needs-system what one of System settings' does */
 .no-read .needs-read, .no-setpoint .needs-setpoint, .no-lock .needs-lock, .no-configure .needs-configure,
 .no-rename .needs-rename, .no-structure .needs-structure, .no-pair .needs-pair, .no-discover .needs-discover,
 .no-backup .needs-backup, .no-restore .needs-restore, .no-users-admin .needs-users-admin, .no-roles .needs-roles,
 .no-roles-disable .needs-roles-disable, .no-capabilities .needs-capabilities, .no-cubes .needs-cubes, .no-cubes-reboot .needs-cubes-reboot,
 .no-settings .needs-settings, .no-auth .needs-auth, .no-integrations .needs-integrations, .no-update .needs-update, .no-restart .needs-restart, .no-reboot .needs-reboot, .no-sync .needs-sync,
-.no-system .needs-system,
-.no-cubes.no-pair .needs-cubes-or-pair, .no-restart.no-settings.no-reboot .needs-maintenance,
-.no-read.no-system .needs-gear { display: none !important; }
+.no-system .needs-system, .no-maint .needs-maint,
+.no-cubes.no-pair .needs-cubes-or-pair, .no-restart.no-settings.no-reboot .needs-maintenance { display: none !important; }
 .no-lock.no-structure .room .menu { display: none; }
 
 /* the sign-in dialog, the first-owner form, System settings → Users and Roles */

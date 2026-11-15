@@ -6,7 +6,8 @@ section buttons, folding kept in the browser, back to top, the columns
 where there is room, and a Cube's panel in two columns."""
 from helpers import named_buttons, scroll_settled, scroll_width, show_view, wait_until
 
-CARDS = ["sys-software", "sys-maint", "sys-cubes", "sys-users", "sys-providers", "sys-integrations", "sys-roles", "sys-caps", "sys-backup"]
+CARDS = ["sys-cubes", "sys-users", "sys-providers", "sys-integrations", "sys-roles", "sys-caps", "sys-backup"]
+MAINT_CARDS = ["sys-software", "sys-maint"]  # Maintenance's page (AP GlobalMenu, Block 4)
 
 
 def card_ids(page):
@@ -30,7 +31,7 @@ def test_cards_and_contents(page, case):
     menu, and no row of section buttons; the cards flow in two columns at
     1100 px and stack at 390; nothing overflows."""
     show_view(page, "system")
-    assert card_ids(page) == CARDS, "Software update first, Backup and restore last"
+    assert card_ids(page) == CARDS, "Cubes first, Backup and restore last"
     assert page.locator("#system .toc").count() == 0, "no row of section buttons"
     toc = open_sections(page).locator(".toc-link")
     assert toc.count() == len(CARDS), "a menu item per card"
@@ -45,6 +46,25 @@ def test_cards_and_contents(page, case):
         assert len(lefts) == 1, f"one column on a phone ({lefts})"
     assert scroll_width(page) <= case.width, "no horizontal scroll in System settings"
     show_view(page, "tiles")
+
+
+def test_maintenance_page_cards(page, case):
+    """Maintenance's page holds Software update and Maintenance, as wide as
+    the page, each with an item in its sections menu; System settings has
+    neither."""
+    show_view(page, "maint")
+    got = page.evaluate("[...document.querySelectorAll('#maint-page .section-card')].map((c) => c.id)")
+    assert got == MAINT_CARDS, f"Software update, then Maintenance: {got}"
+    menu = page.locator("#maint-page .sec-menu")
+    menu.locator("summary").click()
+    toc = menu.locator(".toc-link")
+    assert [toc.nth(i).get_attribute("data-target") for i in range(toc.count())] == MAINT_CARDS, "an item per card"
+    page.keyboard.press("Escape")
+    width = page.locator("#maint-page").bounding_box()["width"]
+    for card in MAINT_CARDS:
+        assert page.locator("#" + card).bounding_box()["width"] >= width - 2, f"{card} as wide as the page"
+    assert page.locator("#system #sys-software, #system #sys-maint").count() == 0, "neither in System settings"
+    assert scroll_width(page) <= case.width, "no horizontal scroll on Maintenance"
 
 
 def test_fold_kept_and_opened_from_contents(page, case):
@@ -72,16 +92,20 @@ def test_fold_kept_and_opened_from_contents(page, case):
 
 def test_back_to_top(page, case):
     """A screen down, ↑ takes the page back to its top, the focus on the
-    sections menu."""
+    sections menu; the page made long enough, whatever the test's server
+    holds."""
     show_view(page, "system")
     top = page.locator("#to-top")
     assert top.is_hidden(), "no ↑ at the top of the page"
-    page.locator("#sys-backup").scroll_into_view_if_needed()
+    page.evaluate("() => { const d = document.createElement('div'); d.className = 'test-spacer'; d.style.height = '3000px';"
+                  " document.getElementById('system').appendChild(d); }")
+    page.evaluate("window.scrollTo({top: window.innerHeight + 40, behavior: 'instant'})")
     assert wait_until(page, "!document.getElementById('to-top').classList.contains('hidden')", 3), "↑ once scrolled"
     top.click()
     assert wait_until(page, "window.scrollY === 0", 3), "↑ goes back to the top"
     assert page.evaluate("document.activeElement === document.querySelector('#system .sec-menu > summary')"), \
         "the focus on the sections menu"
+    page.evaluate("document.querySelectorAll('.test-spacer').forEach((e) => e.remove())")
     show_view(page, "tiles")
 
 

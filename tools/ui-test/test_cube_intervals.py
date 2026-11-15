@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
-"""System settings → Maintenance, the Cube intervals (AP CubePoll v1.0,
+"""Maintenance, the Cube intervals (AP CubePoll v1.0,
 Block 2), as the owner: the test server runs without -poll and -refresh,
 so those two can be chosen, and with -discover-interval 0, so the search
 is read-only and names the flag. A choice is stored and waits for the
@@ -24,7 +24,7 @@ def test_poll_interval_choice(page, case):
     again clears the store's value."""
     api_call("PUT", "api/v1/settings", {"poll_interval": None})
     try:
-        show_view(page, "system")
+        show_view(page, "maint")
         sel = page.locator("#interval-poll")
         assert wait_until(page, "document.querySelector('#interval-poll-text').textContent.length > 0", 5), "the line is filled"
         assert sel.is_enabled() and sel.input_value() == "10", "10 s, and the choice open"
@@ -45,8 +45,8 @@ def test_poll_interval_choice(page, case):
         assert wait_until(page, "document.querySelector('#interval-poll-text').textContent === %r" % before, 5), "the line as at first"
         assert setting("poll_interval").get("set") is False, "the default stored as none"
         assert badges(page) == head, "the head as at first"
-        named_buttons(page, "System settings → Maintenance")
-        assert scroll_width(page) <= case.width, "no horizontal scroll in System settings → Maintenance"
+        named_buttons(page, "Maintenance")
+        assert scroll_width(page) <= case.width, "no horizontal scroll on Maintenance"
     finally:
         api_call("PUT", "api/v1/settings", {"poll_interval": None})
         show_view(page, "tiles")
@@ -57,7 +57,7 @@ def test_interval_outside_the_steps(page, case):
     and chosen; Off is a step of the refresh."""
     api_call("PUT", "api/v1/settings", {"poll_interval": "45s", "refresh_interval": "0"})
     try:
-        show_view(page, "system")
+        show_view(page, "maint")
         assert wait_until(page, "document.querySelector('#interval-poll').value === '45'", 5), "45 s listed and chosen"
         assert wait_until(page, "document.querySelector('#interval-refresh').value === '0'", 5), "Off chosen"
         assert page.locator("#interval-refresh").is_enabled(), "the refresh open without -refresh"
@@ -69,7 +69,7 @@ def test_interval_outside_the_steps(page, case):
 def test_interval_fixed_by_flag(page, case):
     """-discover-interval decides the search for this run: read-only, the
     line naming the flag and the run's value, Off."""
-    show_view(page, "system")
+    show_view(page, "maint")
     assert wait_until(page, "document.querySelector('#interval-discover').disabled", 5), "read-only where the flag decides"
     text = page.locator("#interval-discover-text").inner_text()
     assert "-discover-interval" in text, "the line names the flag"

@@ -14,7 +14,7 @@ which is open from the start once the page has seen the server ask for no key
 The password form holds the one password field, its fields named,
 so that a password manager such as KeePassXC fills it.
 The page keeps the session in the browser for 30 days from its last use;
-**Sign out** on the personal settings (👤) ends it.
+**Sign out** in ☰, or on the personal settings, ends it.
 The card's ☰ sets the language and the appearance (light, dark, as the system)
 before anyone signs in, the same settings as My settings,
 kept in this browser.
@@ -68,15 +68,13 @@ The header's line reads, from the left:
 Massimo's logo with the server's version and the time of the last update with **↻**,
 all on one baseline where they fit beside it, the M as tall as the page buttons;
 then the Cube choice with the server's connection to the Cube as a plug;
-then the house, **👤**, the log and **⚙**, the menu of the settings pages.
+then the house, **Rooms**, and **☰**, the menu of every other page.
 Where the version, the server's sign and the time do not fit beside the logo
 on one line, they take a row of their own across the header,
 under the logo and the Cube choice, on a phone under the logo and the page buttons,
 the version on a line of its own where the row is too narrow for all three,
 so that it is cut only where it is wider than the header.
 On a screen narrower than 600 px the Cube choice takes a line of its own,
-**☰** beside the house and 👤 holds **Log** and ⚙'s pages,
-highlighted while one of them is shown,
 and the logo is the mark alone, the M with the clock in its V.
 
 The logo lies over the word "Massimo", which a screen reader reads:
@@ -94,7 +92,7 @@ without the version, and the lines under it go until the page is back
 at its top, expert mode's line of the Cube's radio budget apart;
 narrower than 600 px the Cube choice then takes the line of **Massimo**,
 the sign and the time a short line under it.
-The compacted header has **↑** left of ⚙ (of ☰ on a phone), back to the top.
+The compacted header has **↑** left of ☰, back to the top.
 
 - **Cube**:
   a menu that chooses the Cube when the server has several.
@@ -104,8 +102,11 @@ The compacted header has **↑** left of ⚙ (of ☰ on a phone), back to the to
   or it reboots, a cross while it holds the server's old connection,
   another client has it, or it is gone (see Signs, under How the page is built);
   its tooltip adds the serial, the address and the link in words.
-  Open, each Cube has its sign, its name and under it its serial and
-  address, the list as wide as they need; the arrow keys move between them.
+  Open, each Cube has its sign, its name with an icon after it for each
+  kind of problem it has (the radio, a battery, a window open too long, a
+  device's link and, for one who may change the settings, the cog), each in
+  its worst colour, and under it its serial and address,
+  the list as wide as they need; the arrow keys move between them.
   The last entry, **Search for new Cubes…**,
   asks the server to look for Cubes on the LAN (about two seconds;
   the server also looks every 30 minutes by itself).
@@ -139,32 +140,41 @@ The compacted header has **↑** left of ⚙ (of ☰ on a phone), back to the to
   A window open briefly is not listed: it is a state, not a problem.
   Its list, as every menu of the page, opens inside the window,
   no higher than the room below it, and scrolls in itself, not the page.
-- **The time of the last update** and **↻**, one button without a frame,
-  which asks the server for the current state now;
+- **How long ago the chosen Cube was heard from** and **↻**, one button without a frame,
+  which asks the server for the current state now:
+  "8 sec" since the server last took a message from the Cube,
+  measured on the server's clock,
+  counting on by itself, each second under a minute, then each minute, each hour;
+  its tooltip says the time itself, "updated 20:51:00, click to reload";
   a finger hits it a little beyond what it shows, and ↻ turns while it asks.
 - **The version** is short; its tooltip is the whole version, "(server version)".
   The Cube's clock is in the Cube's facts, under System settings → **Cubes**:
   the Cube tells it when the server connects, to the minute,
   and the page moves it on from then;
   a clock that was off by 90 s or more says by how much ("3 min ahead").
-- **👤** opens the personal settings (see Personal settings);
-  its tooltip names whose they are, by display name and login.
-  The items of **☰** and of ⚙ have the icons of their pages.
-- The page buttons, a house, a person and a sheet,
-  switch between **Rooms**, **Personal settings** and **Log**.
-- **⚙** is a menu of the settings pages, each for the roles that may open it:
-  **Cube settings**, the chosen Cube's, for a role with `cubes` or with `pair`;
-  **System settings**, for a role with one of its capabilities;
-  and **System info**, for every role with `read`.
-  It is highlighted while one of them is shown, as a page button is.
-  The sheet turns amber with a triangle, or red with a cross,
-  while the log holds a warning or an error not yet settled or marked seen (see Log),
-  its name with the count;
-  on a phone ☰ carries the mark, and the log's entry in it the sign.
+- **The house** shows **Rooms**, the header's one page button.
+- **☰** holds every other page, at every width,
+  each for the roles that may open it and with the icon of its page:
+  **Log**;
+  **Cube settings**, the chosen Cube's, for a role with `cubes` or with `pair`,
+  **System settings**, for a role with one of its capabilities,
+  **Maintenance**, for those and a role with `update`, `restart` or `reboot`,
+  and **System info**, for every role with `read`;
+  **Personal settings**, its tooltip naming whose they are, by display name and login,
+  and **Sign out** (Forget key for an API key or the token, none on an open server).
+  It is highlighted while one of its pages is shown, as a page button is,
+  that page's entry marked current.
+  While the log holds a warning or an error not yet settled or marked seen (see Log),
+  ☰ carries an amber triangle or a red cross,
+  and the sheet of its Log entry turns amber or red, both named with the count.
+- The settings pages, Cube settings, System settings, Maintenance and System info,
+  each have a title row kept under the header, and in it, right-aligned
+  before the sections menu, a button for each of the others the role may
+  open, with its icon and its name; on a phone the icon alone.
 - The page shown is in the address, Rooms without one:
   `#log`, `#me` (Personal settings, or at a card `#profile`, `#prefs` and
-  `#notify`), `#cube` (Cube settings), `#system` (System settings)
-  and `#info` (System info),
+  `#notify`), `#cube` (Cube settings), `#system` (System settings),
+  `#maintenance` (Maintenance) and `#info` (System info),
   so that a reload opens it again, the browser's back and forward move between
   the pages, and an address can be kept as a bookmark.
   The log's range, kind and device follow its page,
@@ -175,7 +185,7 @@ The compacted header has **↑** left of ⚙ (of ☰ on a phone), back to the to
   a page opened for the first time starts at its top.
 - **↑**, round and filled in the accent's blue at the bottom right,
   shows on every page once it is a screen down,
-  and another ↑ left of ⚙ (of ☰ on a phone) while the header is compacted;
+  and another ↑ left of ☰ while the header is compacted;
   each takes the page back to its top,
   the focus on the page's sections menu where it has one.
 - **The server's sign**, before the time of the last update,
@@ -193,7 +203,7 @@ The compacted header has **↑** left of ⚙ (of ☰ on a phone), back to the to
 - In expert mode a line under the first shows the chosen Cube's name,
   its duty cycle, free slots and radiograms pending,
   and the commands queued while there are any.
-  The server's facts are in ⚙ → **System info**,
+  The server's facts are in ☰ → **System info**,
   the Cube's in its panel under System settings → **Cubes**.
 - With a self-signed certificate (`massimo serve -tls self-signed`)
   the browser warned once, and a line under the header,
@@ -508,12 +518,12 @@ The filter's text is not in the address.
 
 ## Personal settings
 
-**👤** opens the personal settings, a page built as System settings is:
+☰ → **Personal settings** opens the personal settings, a page built as System settings is:
 its title stays under the header while the page scrolls,
 with who is signed in under it (with the role, or the API key and whose it is),
 **Sign out** at its right end, which ends the session,
-and **Sections** (☰) beside it, which lists the page's cards with their icons
-and brings the one chosen into view.
+and **Sections** (a bulleted list) beside it,
+which lists the page's cards with their icons and brings the one chosen into view.
 An API key or the server's token is only forgotten in this browser
 (**Forget key**, with a key),
 and an open server says that it is open to everyone and has nothing to sign out of.
@@ -708,20 +718,24 @@ It caches nothing else: the page loads from the server as before.
 
 ## Cube settings
 
-⚙ → **Cube settings** shows the panel of the Cube chosen in the header,
+☰ → **Cube settings** shows the panel of the Cube chosen in the header,
 as System settings → Cubes draws it, for a role with `cubes` or with `pair`
 (the pairing alone for `pair`).
-The panel is open and stays open: its head, the Cube's sign, name, serial,
-radio budget and pill, is the page's title row, kept under the header as the
-page scrolls, and a click on it folds nothing.
+The page's title row, **Cube settings**, stays under the header as the page
+scrolls, as every page's does.
+Under it the panel is open and stays open: its head, the Cube's sign, name,
+serial, radio budget and pill, is its first row, and a click on it folds
+nothing.
 The page follows the Cube choice and every poll, as the card does,
 and what it saves shows in System settings.
 A panel is drawn in one place at a time:
 while Cube settings is shown, System settings' list does not hold it.
+Under the panel the Cube's **Backup and restore** (with `backup`),
+as System settings → Backup and restore shows it for each Cube.
 
 ## System info
 
-⚙ → **System info** is for every role with `read`, a viewer's too:
+☰ → **System info** is for every role with `read`, a viewer's too:
 its title stays under the header while the page scrolls.
 The facts are the server's, a Cube's in its panel under System settings → **Cubes**.
 The page is a table of the server's version and what it was built with,
@@ -775,17 +789,17 @@ token or a password as "set, not shown"
 
 ## System settings
 
-⚙ → **System settings** holds what is the server's,
+☰ → **System settings** holds what is the server's,
 each part for a role with its capability;
-a role with none of them (the viewer's, a guest's) has no such entry in ⚙.
+a role with none of them (the viewer's, a guest's) has no such entry in ☰.
 
 The page is a card per part, as wide as the page:
-Software update first, then Maintenance, Cubes, Users, Roles,
+Cubes first, then Users, Roles,
 **Capabilities for every role**, and Backup and restore last;
 from 900 px Users, Roles and Capabilities flow in two columns,
 none split, the break where their heights put it.
 The title stays under the header while the page scrolls,
-with **Sections** at its right end (a bulleted list, apart from ☰):
+with **Sections** at its right end (a bulleted list):
 it lists the cards the role sees, marks the one in view and brings the one
 chosen into view, opened.
 A card folds with the button in its heading,
@@ -793,96 +807,6 @@ which also says what it holds at a glance (**up to date**, **1 served**,
 **2 users**, **all on**, **3 kept**), also while it is folded;
 the browser keeps which cards are folded.
 
-- **Software update**:
-  the running version, the update channel and whether a newer release is out.
-  A holder of `settings` chooses the channel there:
-  the build's own flavour, or devel, nightly, alpha, beta, rc or stable,
-  each taking its own releases and those of every more stable one.
-  The choice is the setting `update.channel`, none for the build's flavour
-  (`docs/api-v1.md`, "GET and PUT /api/v1/settings"),
-  and the release check asks again at once.
-  On a box apt updates, the first choice is apt's suite,
-  and another channel is the one the next update switches apt's source to:
-  the note says so, and nothing is downgraded.
-  Where something else decides the channel, it is shown fixed, with the reason:
-  brew's formula, which another channel's formula replaces
-  (the rolling ones from the tap `metaworx/massimo-rolling`);
-  or `MASSIMO_UPDATE_CHANNEL`, until it is removed.
-  On a box with the update helper installed (packaging/README.md, "Updating"),
-  **Update** (with `update`) installs it and restarts the server.
-  If the new version does not come up, the old one is put back.
-  On a box the Debian package installed it says "Installed by apt",
-  the channel is the suite of the apt source,
-  and **Update** has the package's helper run apt;
-  nothing is put back there, and the last update says how to go back
-  (packaging/README.md, "Debian package").
-  Under Homebrew's service it says "Installed by brew",
-  and **Update** runs `brew upgrade` as the service's user
-  (packaging/README.md, "Homebrew").
-  While the helper works, **Check for updates** and **Update** are greyed out,
-  also after a reload of the page, until it reports that it is done.
-  **Last updates** lists the last three under the version lines:
-  the version reached,
-  or the one asked for with "under way" until the next start,
-  when, and who started it,
-  or "outside Massimo" with apt or brew where Massimo did not start it;
-  one the helper ended without its version says how it ended (`docs/api-v1.md`,
-  "GET /api/v1/update?refresh=1").
-- **Maintenance** (with `restart`, `reboot` for its reboot,
-  or `settings` for its announcement, its Cube intervals and its last two parts),
-  in this order: **Announce on the LAN**, the three Cube intervals,
-  **Settings file**, **Restart** and **Reboot the computer**,
-  each under a bold title:
-  **Restart the server**
-  asks in the section and restarts the server through its service manager
-  (`docs/api-v1.md`, "POST /api/v1/restart");
-  the page then asks `/healthz` every two seconds until the server reports a new start,
-  reads the data again and says when it started,
-  or says after two minutes that it has not come back.
-  Where the server cannot be restarted from this page the button is missing
-  and the server's reason is shown,
-  such as a server in a terminal or an open server asked from elsewhere than the box.
-  The settings of the settings file that changed since the start and apply only
-  at the next one are listed under it, by name, and counted in the card's head,
-  with the card's own settings that wait for it.
-  **Announce on the LAN** (with `settings`) chooses **Automatic**, **On**
-  or **Off** for the setting `announce`: the announcement by mDNS for
-  `massimo discover`, the apps and Home Assistant, Automatic on unless the
-  server listens on the loopback, as behind a reverse proxy.
-  The line under it says whether the server announces itself now, or that
-  a change waits for the next restart; where `-announce` or
-  `MASSIMO_ANNOUNCE` decides, the choice is read-only and names it
-  (`docs/api-v1.md`, "GET and PUT /api/v1/settings").
-  **Poll the Cubes every**, **Refresh the Cubes every** and **Look for
-  Cubes every** (with `settings`) choose the intervals `poll_interval`
-  (10 s to 1 h, 10 s by default), `refresh_interval` (Off, 30 min to
-  7 days, 6 h by default) and `discover_interval` (Off, 1 min to 1 day,
-  30 min by default) from a list of steps; a value set through the API
-  that is none of them is listed as well, and the default is stored as
-  none.
-  The line under each says what it does: the device list asked for,
-  which costs the Cube no radio time; a new connection that reads
-  everything the Cube holds; the search for Cubes on the LAN.
-  It then gives this run's value, or says that a change waits for the
-  next restart; where `-poll`, `-refresh` or `-discover-interval`
-  decides, the choice is read-only and names the flag.
-  **Settings file** names the file and when the server last read it;
-  **Reload now** reads it again at once, as SIGHUP does
-  (`docs/api-v1.md`, "POST /api/v1/reload"), and says what changed.
-  **Reboot the computer** (with `reboot`, the owner's) has a delay in seconds,
-  60 to begin with, 0 to 3600, and asks in the section,
-  naming the delay, before it asks the server (`docs/api-v1.md`,
-  "GET /api/v1/reboot, …");
-  while the reboot waits the row says when it comes,
-  and **Take the reboot back** takes it back;
-  from its time the page follows `/healthz` as for the restart,
-  for up to five minutes,
-  and says when the computer is back, that it has not come back,
-  or why the reboot failed while the old server still answers.
-  Where the computer cannot be rebooted from here
-  the delay and the button are missing and the server's reason is shown:
-  the switch is off, the helper is not installed, a server in a terminal
-  (`packaging/README.md`, "Rebooting from the web UI").
 - **Cubes**:
   the Cubes the server serves, kept in its store;
   the card's head counts them, at every poll whether a panel is open or not:
@@ -1093,6 +1017,9 @@ the browser keeps which cards are folded.
 - **Capabilities for every role** (with `capabilities`):
   a switch per capability, which switches it off for every role but the owner.
 - **Backup and restore** (with `backup`):
+  a fold per Cube, its sign, name and serial and how many backups the server
+  keeps of it in its head, a single Cube's open; the card's head counts them all.
+  In each, and on Cube settings for the chosen Cube,
   **Download backup** saves the Cube as it is now, as YAML or JSON (**Format**).
   The server keeps the Cube's backups in its store,
   listed newest first with why each was taken (after a change, by hand,
@@ -1111,6 +1038,107 @@ the browser keeps which cards are folded.
   then each step is marked as the Cube took it, and the end is said.
   A Cube that is not in the server's store (a run with `-addr`) has no list;
   its download and the restore from a file work as before.
+
+## Maintenance
+
+☰ → **Maintenance** keeps the server itself going,
+in two cards as wide as the page, **Software update** and **Maintenance**,
+under the page's title row with **Sections** at its right end, as System settings has.
+It is for every role that has System settings, Software update being for all of them,
+and for one with `update`, `restart` or `reboot` alone;
+a viewer has no such entry in ☰.
+The server's sign, when it says an update is out, opens it at Software update.
+
+- **Software update**:
+  the running version, the update channel and whether a newer release is out.
+  A holder of `settings` chooses the channel there:
+  the build's own flavour, or devel, nightly, alpha, beta, rc or stable,
+  each taking its own releases and those of every more stable one.
+  The choice is the setting `update.channel`, none for the build's flavour
+  (`docs/api-v1.md`, "GET and PUT /api/v1/settings"),
+  and the release check asks again at once.
+  On a box apt updates, the first choice is apt's suite,
+  and another channel is the one the next update switches apt's source to:
+  the note says so, and nothing is downgraded.
+  Where something else decides the channel, it is shown fixed, with the reason:
+  brew's formula, which another channel's formula replaces
+  (the rolling ones from the tap `metaworx/massimo-rolling`);
+  or `MASSIMO_UPDATE_CHANNEL`, until it is removed.
+  On a box with the update helper installed (packaging/README.md, "Updating"),
+  **Update** (with `update`) installs it and restarts the server.
+  If the new version does not come up, the old one is put back.
+  On a box the Debian package installed it says "Installed by apt",
+  the channel is the suite of the apt source,
+  and **Update** has the package's helper run apt;
+  nothing is put back there, and the last update says how to go back
+  (packaging/README.md, "Debian package").
+  Under Homebrew's service it says "Installed by brew",
+  and **Update** runs `brew upgrade` as the service's user
+  (packaging/README.md, "Homebrew").
+  While the helper works, **Check for updates** and **Update** are greyed out,
+  also after a reload of the page, until it reports that it is done.
+  **Last updates** lists the last three under the version lines:
+  the version reached,
+  or the one asked for with "under way" until the next start,
+  when, and who started it,
+  or "outside Massimo" with apt or brew where Massimo did not start it;
+  one the helper ended without its version says how it ended (`docs/api-v1.md`,
+  "GET /api/v1/update?refresh=1").
+- **Maintenance** (with `restart`, `reboot` for its reboot,
+  or `settings` for its announcement, its Cube intervals and its last two parts),
+  in this order: **Announce on the LAN**, the three Cube intervals,
+  **Settings file**, **Restart** and **Reboot the computer**,
+  each under a bold title:
+  **Restart the server**
+  asks in the section and restarts the server through its service manager
+  (`docs/api-v1.md`, "POST /api/v1/restart");
+  the page then asks `/healthz` every two seconds until the server reports a new start,
+  reads the data again and says when it started,
+  or says after two minutes that it has not come back.
+  Where the server cannot be restarted from this page the button is missing
+  and the server's reason is shown,
+  such as a server in a terminal or an open server asked from elsewhere than the box.
+  The settings of the settings file that changed since the start and apply only
+  at the next one are listed under it, by name, and counted in the card's head,
+  with the card's own settings that wait for it.
+  **Announce on the LAN** (with `settings`) chooses **Automatic**, **On**
+  or **Off** for the setting `announce`: the announcement by mDNS for
+  `massimo discover`, the apps and Home Assistant, Automatic on unless the
+  server listens on the loopback, as behind a reverse proxy.
+  The line under it says whether the server announces itself now, or that
+  a change waits for the next restart; where `-announce` or
+  `MASSIMO_ANNOUNCE` decides, the choice is read-only and names it
+  (`docs/api-v1.md`, "GET and PUT /api/v1/settings").
+  **Poll the Cubes every**, **Refresh the Cubes every** and **Look for
+  Cubes every** (with `settings`) choose the intervals `poll_interval`
+  (10 s to 1 h, 10 s by default), `refresh_interval` (Off, 30 min to
+  7 days, 6 h by default) and `discover_interval` (Off, 1 min to 1 day,
+  30 min by default) from a list of steps; a value set through the API
+  that is none of them is listed as well, and the default is stored as
+  none.
+  The line under each says what it does: the device list asked for,
+  which costs the Cube no radio time; a new connection that reads
+  everything the Cube holds; the search for Cubes on the LAN.
+  It then gives this run's value, or says that a change waits for the
+  next restart; where `-poll`, `-refresh` or `-discover-interval`
+  decides, the choice is read-only and names the flag.
+  **Settings file** names the file and when the server last read it;
+  **Reload now** reads it again at once, as SIGHUP does
+  (`docs/api-v1.md`, "POST /api/v1/reload"), and says what changed.
+  **Reboot the computer** (with `reboot`, the owner's) has a delay in seconds,
+  60 to begin with, 0 to 3600, and asks in the section,
+  naming the delay, before it asks the server (`docs/api-v1.md`,
+  "GET /api/v1/reboot, …");
+  while the reboot waits the row says when it comes,
+  and **Take the reboot back** takes it back;
+  from its time the page follows `/healthz` as for the restart,
+  for up to five minutes,
+  and says when the computer is back, that it has not come back,
+  or why the reboot failed while the old server still answers.
+  Where the computer cannot be rebooted from here
+  the delay and the button are missing and the server's reason is shown:
+  the switch is off, the helper is not installed, a server in a terminal
+  (`packaging/README.md`, "Rebooting from the web UI").
 
 ## In the apps
 
@@ -1141,7 +1169,8 @@ with its partials, the panels of the settings pages and at the end
 from the files in `ui/partials/` in the order `uiPartials` in
 `internal/server/ui.go` lists them, and serves the result at `/`;
 System settings' cards fill three markers,
-before, in and after the cards that flow in two columns.
+before, in and after the cards that flow in two columns,
+and Maintenance's two cards one, `maint`.
 A partial is a file per feature,
 and its first line names the script that uses it.
 What a script builds again and again, a Cube's panel, a log line, a scheme row,
@@ -1158,11 +1187,16 @@ the programme tab puts it in a form with Cancel, Send and the two resets.
 A panel that opens, a Cube's, a user's or a role's, is a `detailsPanel`:
 its head the name, the serial, login or key, and the badges,
 its body the form cloned from the feature's template.
+Backup and restore is a box per Cube (`backupBox` in `backup.js`),
+built once per Cube and page and kept while its page is shown again,
+what a Cube has kept by its serial (`backupOf`), so that both pages show the same.
 A long page is a grid of section cards (`section.section-card`,
 its heading's `button.section-fold` folding it):
 `sectionCards` makes them fold and keeps the fold in the browser,
 `sectionBadges` shows what a card holds in its head,
 `pageBar` fills the sections menu of its title's row kept at the top,
+`pageSwitch` puts the other settings pages beside it (`SETTINGS_PAGES` in `log.js`,
+as ☰'s pages are `MENU_VIEWS`),
 and `backToTop` wires the two ↑, the floating one and the compacted header's;
 `pickerMenu` makes a dropdown the choice of one item (the Cube choice),
 its items `menuItem`s, a Cube's link its network sign (`cubeSignEl`, `LINK_SIGN`);

@@ -3,7 +3,7 @@
 """The settings: My settings and System settings open, and a language
 chosen in My settings redraws what the scripts cloned from the page's
 templates; My profile changes the own display name and keys; a role
-without System settings' capabilities has no ⚙."""
+without System settings' capabilities has none in ☰."""
 import json
 
 from conftest import api_call
@@ -12,8 +12,8 @@ from helpers import PANEL_TEXTS, VIEWER, assert_busy, css_hidden, hold, named_bu
 
 def test_settings_open(page, case):
     """My settings holds the page's settings, System settings the
-    server's; each opens on its own page, named and without a horizontal
-    scroll."""
+    server's, Maintenance Software update and the server's upkeep; each
+    opens on its own page, named and without a horizontal scroll."""
     show_view(page, "prefs")
     assert page.locator("#prefs #poll-input").is_visible() and page.locator("#prefs .appearance").is_visible(), \
         "My settings: the poll and the appearance"
@@ -22,11 +22,16 @@ def test_settings_open(page, case):
     assert scroll_width(page) <= case.width, "no horizontal scroll on My settings"
     show_view(page, "system")
     page.wait_for_timeout(500)
-    for part in (".cubes-settings", ".backup-settings", ".users-settings", ".roles-settings", ".update"):
+    for part in (".cubes-settings", ".backup-settings", ".users-settings", ".roles-settings"):
         assert page.locator("#system " + part).is_visible(), f"System settings: {part}"
     assert page.locator("#prefs").is_hidden(), "System settings alone"
     named_buttons(page, "System settings")
     assert scroll_width(page) <= case.width, "no horizontal scroll on System settings"
+    show_view(page, "maint")
+    for part in (".update", ".maint-settings"):
+        assert page.locator("#maint-page " + part).is_visible(), f"Maintenance: {part}"
+    named_buttons(page, "Maintenance")
+    assert scroll_width(page) <= case.width, "no horizontal scroll on Maintenance"
     show_view(page, "tiles")
     assert page.locator(".room").first.is_visible(), "back to the tiles"
 
@@ -124,7 +129,7 @@ def test_my_profile_lists_and_creates_own_keys(page, case):
 
 
 def test_no_system_settings_without_their_capabilities(page, case):
-    """A viewer (/me stubbed) has no System settings in ⚙ or ☰, and an
+    """A viewer (/me stubbed) has no System settings in ☰, and an
     address or a page asking for them shows Rooms; the operator, with
     backup, has them."""
     page.route("**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(VIEWER)))
@@ -132,7 +137,7 @@ def test_no_system_settings_without_their_capabilities(page, case):
         show_view(page, "system")
         page.evaluate("loadMe()")
         assert wait_until(page, "document.body.classList.contains('no-system')", 5), "no System settings for a viewer"
-        assert css_hidden(page, "#gear-system") and css_hidden(page, "#menu-system"), "not in ⚙, nor in ☰"
+        assert css_hidden(page, "#menu-system"), "not in ☰"
         assert page.locator("#system").is_hidden() and page.locator(".room").first.is_visible(), \
             "System settings, open as the viewer signs in, gives way to Rooms"
         page.evaluate("showView('system')")

@@ -29,7 +29,7 @@ def test_restart_not_offered(page):
     and the reason is shown."""
     posts = []
     stub_restart(page, BLOCKED, posts)
-    show_view(page, "system")
+    show_view(page, "maint")
     assert wait_until(page, "!document.getElementById('restart-text').classList.contains('hidden')", 5), "the reason is shown"
     assert "no service manager" in page.locator("#restart-text").inner_text(), "the server's reason"
     assert page.locator("#restart-btn").is_hidden(), "no button"
@@ -41,7 +41,7 @@ def test_restart_asks_in_the_page(page):
     the question back without a request."""
     posts = []
     stub_restart(page, AVAILABLE, posts)
-    show_view(page, "system")
+    show_view(page, "maint")
     btn = page.locator("#restart-btn")
     btn.wait_for(state="visible")
     want = page.evaluate("t('maint.restartText')")
@@ -70,7 +70,7 @@ def test_restart_follows_the_server_back(page):
         body = later if calls["after"] > 1 else health
         route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
     page.route("**/healthz", healthz)
-    show_view(page, "system")
+    show_view(page, "maint")
     btn = page.locator("#restart-btn")
     btn.wait_for(state="visible")
     btn.click()
@@ -91,7 +91,7 @@ def test_restart_lists_what_waits(page):
     listed under the restart, by name, and counted in the card's badge."""
     posts = []
     stub_restart(page, '{"available": true, "by": "systemd", "pending": ["MASSIMO_LISTEN", "MASSIMO_TLS"]}', posts)
-    show_view(page, "system")
+    show_view(page, "maint")
     page.locator("#restart-btn").wait_for(state="visible")
     want = page.evaluate("t('restart.pending', {names: 'MASSIMO_LISTEN, MASSIMO_TLS'})")
     assert wait_until(page, f"document.getElementById('restart-pending').textContent === {json.dumps(want)}", 5), \
@@ -115,7 +115,7 @@ def test_reload_settings(page):
                       body='{"changed": ["MASSIMO_LISTEN"], "pending": ["MASSIMO_LISTEN"], "read_at": "2026-11-08T20:00:00Z"}')
     page.route("**/api/v1/reload", reload)
     try:
-        show_view(page, "system")
+        show_view(page, "maint")
         assert wait_until(page, "document.getElementById('settings-file-text').textContent.includes('/etc/massimo/env')", 5), \
             "the settings file named, with when it was read"
         page.locator("#settings-reload").click()

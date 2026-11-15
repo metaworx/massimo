@@ -6,7 +6,7 @@ the server gone, each its icon in a frame and a label that says what a
 click does."""
 import json
 
-from helpers import show_view, wait_until
+from helpers import set_version, show_view, wait_until
 
 # The middle of an element's digits: its baseline less half the height of
 # a 0 in its font.
@@ -37,7 +37,7 @@ def test_server_connected_and_update(page, case):
     assert (state, icon) == ("up", "#icon-plug-on") and label == page.evaluate("t('server.up')"), "connected"
     real = page.locator("#version-short").inner_text()
     for version in ("v0.16.0", "v0.0.0-dev+0123456789ab-dirty", real):  # a release's, a build's: the header wraps differently
-        page.evaluate("(v) => { document.getElementById('version-short').textContent = v; }", version)
+        set_version(page, version)  # and fitted again, a frame later
         b = page.locator("#server-sign").bounding_box()
         u = page.locator("#updated").bounding_box()
         assert b["x"] + b["width"] <= u["x"], f"before the time with {version}, however the header wraps ({b}, {u})"
@@ -55,7 +55,7 @@ def test_server_connected_and_update(page, case):
         assert icon == "#icon-info" and "v9.9.9" in label, f"a blue i, the version named ({label})"
         page.locator("#server-sign").click()
         page.locator("#sys-software").wait_for(state="visible")
-        assert page.evaluate("isShown('system')"), "a click opens Software update"
+        assert page.evaluate("isShown('maint')"), "a click opens Software update"
     finally:
         page.unroute("**/api/v1/update*")
         page.evaluate("updState.info = null; renderServerSign()")
@@ -84,8 +84,8 @@ def test_server_new_version(page, case):
 
 def test_server_gone(page, case, watch):
     """The server gone: the open plug on a filled red square that blinks,
-    the page's other signs greyed, the time that of the last update; back
-    at the next answer."""
+    the page's other signs greyed, the chosen Cube's age still shown, as the
+    server last told it; back at the next answer."""
     watch.expected.append(("/healthz", 503))
     page.evaluate("""() => {
       const r = state.rooms.find((r) => r.devices.some((d) => d.type === "shutter_contact"));
@@ -93,7 +93,6 @@ def test_server_gone(page, case, watch):
       d.state.window_open = true;
       updateDevice(d);
     }""")
-    before = page.locator("#updated").inner_text()
     page.route("**/healthz", lambda route: route.fulfill(status=503, body="gone"))
     try:
         page.evaluate("checkVersion()")
@@ -103,7 +102,7 @@ def test_server_gone(page, case, watch):
         assert page.evaluate("getComputedStyle(document.getElementById('server-sign')).backgroundColor") != "rgba(0, 0, 0, 0)", "filled"
         assert page.evaluate("getComputedStyle(document.querySelector('#server-sign .ni')).animationName") == "markblink", "it blinks"
         assert "grayscale" in page.evaluate("getComputedStyle(document.querySelector('main .problems-sum')).filter"), "the other signs greyed"
-        assert page.locator("#updated").inner_text() == before, "the time of the last update"
+        assert page.locator("#updated").inner_text().strip(), "the Cube's age still shown"
     finally:
         page.unroute("**/healthz")
     page.evaluate("checkVersion()")

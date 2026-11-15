@@ -85,7 +85,7 @@ def test_maintenance_order(page, case):
     """Maintenance: Announce on the LAN, the three Cube intervals (AP
     CubePoll v1.0), Settings file, Restart, Reboot the computer, their
     titles alike."""
-    show_view(page, "system")
+    show_view(page, "maint")
     try:
         rows = page.evaluate("""() => [...document.querySelectorAll('#sys-maint-body > div')].map((d) => {
           const title = d.querySelector('.action-title');

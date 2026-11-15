@@ -388,13 +388,14 @@ named `<page>-<width>-<theme>-<lang>.png` and listed in one place,
 the Rooms page, a tile's device list, the configuration's tabs Temperatures,
 Devices, Week programme and Copy, the House panel, the log, the 👤 menu,
 the Cube choice open, My profile, My settings, Notifications,
-the Appearance editor, System settings,
-its Maintenance with the store and the settings in effect (fixed answers:
-the run's temporary directory and ports differ),
-the Cube choice with a found Cube and System settings → Cubes,
+the Appearance editor, Cube settings, System settings,
+Maintenance, System info with the store and the settings in effect
+(fixed answers, as is its machine:
+the run's temporary directory, ports and host differ),
+the Cube choice with a found Cube, System settings → Cubes and ☰ open,
 at 1100 px in light and dark (`data-theme`), in English;
-the Rooms page, ☰ open, the Cube choice open, My settings and System
-settings also at 390 px,
+the Rooms page, ☰ open, the Cube choice open, My settings, Cube settings,
+System settings, Maintenance and System info also at 390 px,
 and the Rooms page in German as well.
 A shot is framed by its subject, set beside each page in `PAGES`:
 the viewport (1100 × 800,
@@ -408,13 +409,14 @@ The PNGs it took before are removed first.
 The set is retaken at every change of the UI, as the suite is run,
 and committed with it.
 It comes out the same on every run, byte for byte on one machine:
-the page's clock is fixed and the server's times are replaced by fixed ones
-on the way to the page, the time zone is Europe/Zurich,
+the page's clock is fixed and the server's times, its answers' Date header
+among them, are replaced by fixed ones on the way to the page,
+the time zone is Europe/Zurich,
 the event stream is a stub that sends nothing,
 the first room's thermostat is made 30 hours old and stale,
 the version (in the log's line of the server's start too),
-the Software section, the fake Cube's address and a found Cube
-are fixed answers,
+the Software section, the fake Cube's address, System info's machine
+and a found Cube are fixed answers,
 and Chromium rasters every tile whole (`--disable-partial-raster`):
 by default it rasters again only the part of a tile that changed,
 and an anti-aliased edge rastered in part comes out a level of 255 off

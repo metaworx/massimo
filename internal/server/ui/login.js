@@ -47,6 +47,13 @@ function hasSystem() {
   return ["cubes", "pair", "backup", "roles", "capabilities", "auth", "integrations", "update", "restart", "reboot"].some(hasCap) || canManageUsers();
 }
 
+// hasSettingsPage reports whether the signed-in user may open System
+// settings: one of its cards' capabilities, without those only
+// Maintenance's cards use (update, restart, reboot).
+function hasSettingsPage() {
+  return ["cubes", "pair", "backup", "roles", "capabilities", "auth", "integrations"].some(hasCap) || canManageUsers();
+}
+
 // hasProfile reports whether the page is signed in as a user, who has My
 // profile; an open server and the server's token have none.
 function hasProfile() {
@@ -115,7 +122,8 @@ function applyCaps() {
   for (const c of CAPABILITIES) body.classList.toggle("no-" + capClass(c), !hasCap(c));
   body.classList.toggle("no-users-admin", !canManageUsers());
   body.classList.toggle("no-sync", !canSync());
-  body.classList.toggle("no-system", !hasSystem());
+  body.classList.toggle("no-system", !hasSettingsPage());
+  body.classList.toggle("no-maint", !hasSystem());
   $("setup").classList.toggle("hidden", !(me && me.setup));
   renderOpenBanner();
   renderMe();
@@ -136,8 +144,8 @@ function renderOpenBanner() {
 // out does: a session ends, an API key or the token is only forgotten
 // (Forget key, with a key's icon), and an open server or one without
 // authentication has nothing to end and no profile, so the page has My
-// settings and Notifications alone. The 👤 button's tooltip names the
-// user.
+// settings and Notifications alone. ☰'s Personal settings names the user
+// in its tooltip, and ☰'s Sign out follows the page's button.
 function renderMe() {
   const me = state.me;
   const line = $("me-line");
@@ -162,15 +170,16 @@ function renderMe() {
   }
   line.textContent = text;
   line.classList.toggle("hidden", !text);
-  $("logout-label").textContent = label || t("me.signOut");
   const keyOnly = !!me && ((me.token && me.token.kind === "api") || me.mode === "token"); // Forget key
-  $("logout-icon").setAttribute("href", keyOnly ? "#icon-key" : "#icon-signout");
-  btn.classList.toggle("hidden", !label);
-  // the 👤 button names who is signed in, in its tooltip and to a screen reader
+  // the page's button and ☰'s entry alike
+  for (const [id, labelId, iconId] of [["logout-btn", "logout-label", "logout-icon"], ["menu-logout", "menu-logout-label", "menu-logout-icon"]]) {
+    $(labelId).textContent = label || t("me.signOut");
+    $(iconId).setAttribute("href", keyOnly ? "#icon-key" : "#icon-signout");
+    $(id).classList.toggle("hidden", !label);
+  }
+  // ☰'s Personal settings names who is signed in, in its tooltip
   const who = me && me.user ? (me.user.display_name && me.user.display_name !== me.user.name ? me.user.display_name + " (" + me.user.name + ")" : me.user.name) : "";
-  const sum = $("view-me");
-  sum.title = who ? t("nav.userNamed", { name: who }) : t("nav.userTitle");
-  sum.setAttribute("aria-label", who ? t("nav.userNamed", { name: who }) : t("nav.user"));
+  $("menu-me").title = who ? t("nav.userNamed", { name: who }) : "";
   $("profile").classList.toggle("hidden", !hasProfile());
   pageBar($("me")); // components.js: the sections menu without My profile where it is hidden
   // the own password: Change password, or for a user with keys only Set
@@ -676,6 +685,7 @@ function initLogin() {
     if (document.visibilityState === "hidden") flushPreferences();
   });
   $("logout-btn").addEventListener("click", logout);
+  $("menu-logout").addEventListener("click", logout);
   $("setup-form").addEventListener("submit", createOwner);
   checkOwnerName = watchName($("setup-user"), $("setup-name-msg"), () => []);
   $("me-password-form").addEventListener("submit", changeOwnPassword);

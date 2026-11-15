@@ -108,6 +108,8 @@
   <symbol id="icon-up" viewBox="0 0 24 24"><path d="M12 19V5"/><path d="M6 11l6-6 6 6"/></symbol>
   <!-- a page's sections menu: a bulleted list, apart from the header's ☰ -->
   <symbol id="icon-list" viewBox="0 0 24 24"><path d="M9.5 6h10.5M9.5 12h10.5M9.5 18h10.5"/><circle cx="4.75" cy="6" r="1.4" fill="currentColor"/><circle cx="4.75" cy="12" r="1.4" fill="currentColor"/><circle cx="4.75" cy="18" r="1.4" fill="currentColor"/></symbol>
+  <!-- Maintenance: Tabler Icons' tool (MIT, third_party/tabler-icons/) -->
+  <symbol id="icon-tool" viewBox="0 0 24 24"><path d="M7 10h3v-3l-3.5 -3.5a6 6 0 0 1 8 8l6 6a2 2 0 0 1 -3 3l-6 -6a6 6 0 0 1 -8 -8l3.5 3.5"/></symbol>
   <symbol id="icon-cog" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
 </svg>
 <header class="top">
@@ -147,28 +149,25 @@
     </div>
     <nav class="nav" aria-label="pages" data-i18n-attr="aria-label:nav.pages">
       <button type="button" id="view-tiles" class="icon-btn nav-btn active" aria-current="page" aria-label="rooms" title="Rooms" data-i18n-attr="aria-label:nav.rooms title:nav.roomsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-house"/></svg></button>
-      <button type="button" id="view-me" class="icon-btn nav-btn" aria-label="personal settings" title="Personal settings" data-i18n-attr="aria-label:nav.user title:nav.userTitle"><svg class="ni" aria-hidden="true"><use href="#icon-user"/></svg></button>
-      <button type="button" id="view-log" class="icon-btn nav-btn" aria-label="log" title="Log" data-i18n-attr="aria-label:nav.log title:nav.logTitle"><svg class="ni" aria-hidden="true"><use href="#icon-log"/></svg></button>
-      <!-- back to top, left of ⚙ (☰ below 600 px) while the header is
-           compacted (components.js backToTop) -->
+      <!-- back to top, left of ☰ while the header is compacted
+           (components.js backToTop) -->
       <button type="button" id="top-btn" class="icon-btn nav-btn top-btn" aria-label="back to top" title="Back to top" data-i18n-attr="aria-label:page.toTop title:page.toTopTitle"><svg class="ni" aria-hidden="true"><use href="#icon-up"/></svg></button>
-      <!-- ⚙: the settings pages, each for the roles that may open it
-           (log.js mayShow); ☰ holds the same under Log below 600 px -->
-      <details id="gear-menu" class="menu nav-menu gear-menu needs-gear">
-        <summary id="view-gear" class="nav-btn" aria-label="settings" title="Settings" data-i18n-attr="aria-label:nav.gear title:nav.gearTitle"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg></summary>
-        <div class="menu-items">
-          <button type="button" id="gear-cube" class="needs-cubes-or-pair"><svg class="ni" aria-hidden="true"><use href="#icon-cube3d"/></svg><span data-i18n="nav.cubeTitle">Cube settings</span></button>
-          <button type="button" id="gear-system" class="needs-system"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg><span data-i18n="nav.settingsTitle">System settings</span></button>
-          <button type="button" id="gear-info" class="needs-read"><svg class="ni" aria-hidden="true"><use href="#icon-info"/></svg><span data-i18n="nav.infoTitle">System info</span></button>
-        </div>
-      </details>
+      <!-- ☰, every page but Rooms, at every width, each for the roles that
+           may open it (log.js mayShow, MENU_VIEWS): the log; the settings
+           pages; the personal page and Sign out (login.js renderMe). It
+           carries the log's mark (log.js renderLogSign). -->
       <details id="nav-menu" class="menu nav-menu">
-        <summary class="nav-btn" aria-label="more pages" title="More pages" data-i18n-attr="aria-label:nav.more title:nav.moreTitle"><svg class="ni" aria-hidden="true"><use href="#icon-menu"/></svg></summary>
+        <summary class="nav-btn" aria-label="menu" title="Menu"><svg class="ni" aria-hidden="true"><use href="#icon-menu"/></svg></summary>
         <div class="menu-items">
           <button type="button" id="menu-log"><svg class="ni" aria-hidden="true"><use href="#icon-log"/></svg><span data-i18n="nav.logTitle">Log</span></button>
+          <hr class="menu-sep">
           <button type="button" id="menu-cube" class="needs-cubes-or-pair"><svg class="ni" aria-hidden="true"><use href="#icon-cube3d"/></svg><span data-i18n="nav.cubeTitle">Cube settings</span></button>
           <button type="button" id="menu-system" class="needs-system"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg><span data-i18n="nav.settingsTitle">System settings</span></button>
+          <button type="button" id="menu-maint" class="needs-maint"><svg class="ni" aria-hidden="true"><use href="#icon-tool"/></svg><span data-i18n="nav.maintTitle">Maintenance</span></button>
           <button type="button" id="menu-info" class="needs-read"><svg class="ni" aria-hidden="true"><use href="#icon-info"/></svg><span data-i18n="nav.infoTitle">System info</span></button>
+          <hr class="menu-sep">
+          <button type="button" id="menu-me"><svg class="ni" aria-hidden="true"><use href="#icon-user"/></svg><span data-i18n="nav.userTitle">Personal settings</span></button>
+          <button type="button" id="menu-logout" class="hidden"><svg class="ni" aria-hidden="true"><use id="menu-logout-icon" href="#icon-signout"/></svg><span id="menu-logout-label" data-i18n="me.signOut">Sign out</span></button>
         </div>
       </details>
     </nav>
@@ -332,7 +331,25 @@
     </div>
   </section>
 
-  <!-- System info, the page ⚙ → System info opens, for every role with
+  <!-- Maintenance, the page ☰ → Maintenance opens, for a role with one
+       of System settings' capabilities or with update, restart or reboot
+       (log.js mayShow): its row kept at the top under the header, with the
+       sections menu (components.js pageBar), and two section cards,
+       Software update and Maintenance. -->
+  <section id="maint-page" class="settings settings-page maint-page hidden" aria-labelledby="maint-title">
+    <div class="page-bar">
+      <h2 id="maint-title" data-i18n="nav.maintTitle">Maintenance</h2>
+      <details class="menu sec-menu">
+        <summary aria-label="sections" title="Sections" data-i18n-attr="aria-label:page.sections title:page.sectionsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-list"/></svg></summary>
+        <div class="menu-items"></div>
+      </details>
+    </div>
+    <div class="section-grid">
+      <!-- partials: maint -->
+    </div>
+  </section>
+
+  <!-- System info, the page ☰ → System info opens, for every role with
        read: its row kept at the top under the header, with the title and
        the badges of what is wrong (update.js fillProxies), then the
        server's facts (system-info.html). -->
@@ -344,14 +361,26 @@
     <!-- partials: info -->
   </section>
 
-  <!-- Cube settings, the page ⚙ → Cube settings opens, for a role with
-       cubes or with pair: the panel of the Cube chosen in the header,
-       open, its head the page's title row (cubes.js renderCubePage), and
-       the outcome of the last action under it. -->
+  <!-- Cube settings, the page ☰ → Cube settings opens, for a role with
+       cubes or with pair: its row kept at the top under the header, then
+       the panel of the Cube chosen in the header, open (cubes.js
+       renderCubePage), the outcome of the last action under it, and the
+       Cube's Backup and restore. -->
   <section id="cube-page" class="settings settings-page cube-page hidden" aria-labelledby="cube-page-title">
-    <h2 id="cube-page-title" class="visually-hidden" data-i18n="nav.cubeTitle">Cube settings</h2>
+    <div class="page-bar">
+      <h2 id="cube-page-title" data-i18n="nav.cubeTitle">Cube settings</h2>
+    </div>
     <div id="cube-page-body" aria-live="polite"></div>
     <p id="cube-page-msg" class="small cubes-msg hidden" role="status"></p>
+    <!-- the chosen Cube's Backup and restore (backup.js renderCubeBackup) -->
+    <section id="cube-backup" class="tile section-card backup-settings needs-backup" aria-labelledby="cube-backup-h">
+      <header class="tile-head section-head">
+        <h3 id="cube-backup-h"><button type="button" class="section-fold" aria-expanded="true" aria-controls="cube-backup-body"><svg class="fold-i" aria-hidden="true"><use href="#icon-chevron"/></svg><span class="section-title" data-i18n="backup.title">Backup and restore</span></button></h3>
+        <span class="section-badges"></span>
+        <span data-help="backup" data-help-label="backup.title"></span>
+      </header>
+      <div id="cube-backup-body" class="section-body" aria-live="polite"></div>
+    </section>
   </section>
 
   <section id="house" class="tile house needs-setpoint hidden">

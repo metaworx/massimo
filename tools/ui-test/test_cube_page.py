@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
-"""Cube settings, the page of ⚙ (AP PageMenu, Block 3): the panel of the
-Cube chosen in the header, open, its head the page's title row that
-folds nothing; drawn there alone while the page is shown, and in System
+"""Cube settings, the page of ⚙ (AP PageMenu, Block 3): its title row
+kept under the header (AP GlobalMenu, Block 1), then the panel of the
+Cube chosen in the header, open, its head folding nothing; drawn there alone while the page is shown, and in System
 settings' list again after; a change saved there shows in System
 settings; another Cube chosen, the page follows; a role with pair alone
 sees the pairing."""
@@ -16,10 +16,11 @@ SECOND = "KEQ0000200"
 
 
 def test_cube_page_shows_the_chosen_cube(page, case):
-    """The chosen Cube's facts, settings and actions, its panel open; a
-    click on its head folds nothing; the head stays under the header as
-    the page scrolls; System settings' list without it meanwhile, with it
-    again once System settings is shown."""
+    """The page's title row, kept under the header as the page scrolls;
+    the chosen Cube's facts, settings and actions, its panel open; a
+    click on its head folds nothing, and the head scrolls with the panel;
+    System settings' list without it meanwhile, with it again once System
+    settings is shown."""
     show_view(page, "cube")
     panel = page.locator(PAGE_PANEL)
     assert wait_until(page, "!!document.querySelector('#cube-page .cube-panel')", 5), "the Cube's panel on the page"
@@ -31,8 +32,12 @@ def test_cube_page_shows_the_chosen_cube(page, case):
     panel.locator(":scope > summary .cube-head-who").click()
     assert panel.get_attribute("open") is not None, "a click on its head folds nothing"
     assert panel.locator(":scope > summary").get_attribute("tabindex") == "-1", "its head out of the tab order"
+    bar = page.locator("#cube-page .page-bar")
+    assert bar.is_visible() and bar.locator("h2").inner_text() == page.evaluate("t('nav.cubeTitle')"), "the page's title row"
+    assert bar.evaluate("(e) => getComputedStyle(e).position") == "sticky", "kept under the header"
     head = panel.locator(":scope > summary")
-    assert head.evaluate("(e) => getComputedStyle(e).position") == "sticky", "its head kept under the header"
+    assert head.evaluate("(e) => getComputedStyle(e).position") == "static", "the panel's head scrolls with it"
+    assert head.bounding_box()["y"] >= bar.bounding_box()["y"] + bar.bounding_box()["height"] - 1, "under the row"
     assert scroll_width(page) <= case.width, "no horizontal scroll on Cube settings"
     show_view(page, "system")
     assert wait_until(page, "!!document.querySelector(\"#cubes-list .cube-panel[data-serial='KEQ0000100']\")", 5), \

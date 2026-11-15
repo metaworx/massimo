@@ -6,7 +6,7 @@ shown in the address, each page's own scroll position, and expert mode's
 line of the chosen Cube's radio budget."""
 import json
 
-from helpers import VIEWER, css_hidden, hold, open_personal_page, scroll_settled, scroll_width, show_view, wait_held, wait_until
+from helpers import VIEWER, css_hidden, hold, open_personal_page, scroll_settled, scroll_width, set_version, show_view, wait_held, wait_until
 
 # The symbol a page button shows, drawn in an svg of its own outside the
 # header, so that its size does not depend on whether the button is shown;
@@ -25,9 +25,9 @@ SYMBOL_BOX = """(sel) => {
 
 
 def test_log_button_shows_a_sheet(page, case):
-    """The log button shows a sheet, taller than wide, its lines inside a
+    """☰'s log entry shows a sheet, taller than wide, its lines inside a
     frame: three lines alone read as a menu."""
-    width, height = page.evaluate(SYMBOL_BOX, "#view-log")
+    width, height = page.evaluate(SYMBOL_BOX, "#menu-log")
     assert height >= 16 and height > width, f"the log's symbol is a sheet, taller than wide: {width} x {height}"
 
 
@@ -40,14 +40,14 @@ CARD_ICONS = {"profile": "#icon-id", "prefs": "#icon-sliders", "notify": "#icon-
 
 
 def test_personal_page_says_who_is_in(page, case):
-    """👤 opens the personal page and is highlighted while it is shown: at
+    """☰ → Personal settings opens the personal page, ☰ highlighted while it is shown: at
     its top who is in, here the owner by the suite's API key, and Forget
     key left of ☰; ☰ lists My profile, My settings and Notifications with
     the icons their cards' heads show; the cards side by side from 900 px,
     one under the other on a phone."""
     open_personal_page(page)
     assert page.evaluate("location.hash") == "#me", "the page in the address"
-    assert active(page, "#view-me"), "👤 highlighted while the page is shown"
+    assert active(page, "#nav-menu > summary"), "☰ highlighted while the page is shown"
     line = page.locator("#me-line")
     assert line.is_visible() and "owner" in line.inner_text() and "MASSIMO_API_TOKEN" in line.inner_text(), \
         f"the page names the key's user and label: {line.inner_text()!r}"
@@ -71,7 +71,7 @@ def test_personal_page_says_who_is_in(page, case):
         assert len(lefts) == 1, f"one column on a phone ({lefts})"
     assert scroll_width(page) <= case.width, "no horizontal scroll on the personal page"
     show_view(page, "tiles")
-    assert not active(page, "#view-me"), "and not on Rooms"
+    assert not active(page, "#nav-menu > summary"), "and not on Rooms"
 
 
 def test_personal_page_on_an_open_server(page, case):
@@ -161,7 +161,7 @@ def test_an_address_the_user_may_not_open_shows_rooms(page, case):
         page.reload()
         page.wait_for_selector(".room", timeout=10000)
         assert wait_until(page, "location.hash === ''", 5), "the address drops System settings"
-        assert page.locator("#system").is_hidden() and css_hidden(page, "#gear-system"), "Rooms, and no System settings in ⚙"
+        assert page.locator("#system").is_hidden() and css_hidden(page, "#menu-system"), "Rooms, and no System settings in ☰"
     finally:
         page.unroute("**/api/v1/me")
 
@@ -177,39 +177,26 @@ def active(page, selector):
 def test_header_order_and_the_narrow_header(page, case):
     """At full width the brand and the time of the last update with ↻
     beside it at the left (the version and the time under the brand, both,
-    where they leave no room), then on the first line the Cube choice with the network
-    sign of its link, then 🏠 👤 📄 ⚙, without ☰. Below 600 px 🏠 👤 ☰
-    beside the brand and the Cube choice on a line of its own under them; ☰ holds Log and ⚙'s pages, opens each, and is
-    highlighted while one of them is shown."""
-    order = ["h1", "#updated", "#refresh-btn", "#refresh-btn svg", "#cube-choice", "#view-tiles", "#view-me"]
+    where they leave no room), then on the first line the Cube choice with
+    the network sign of its link, then 🏠 and ☰ alone. Below 600 px 🏠 ☰
+    beside the brand and the Cube choice on a line of its own under them."""
+    order = ["h1", "#updated", "#refresh-btn", "#refresh-btn svg", "#cube-choice", "#view-tiles", "#nav-menu > summary"]
     b = {sel: box(page, sel) for sel in order}
     assert b["#updated"]["x"] < b["#refresh-btn svg"]["x"], "↻ after the time it renews, in the same button"
     assert page.locator("#cube-choice .picker-icon .conn-sign use[href='#icon-net']").count() == 1, "the link, a network sign in the Cube choice"
-    assert b["#view-tiles"]["x"] < b["#view-me"]["x"], "🏠 left of 👤"
+    assert b["#view-tiles"]["x"] < b["#nav-menu > summary"]["x"], "🏠 left of ☰"
+    shown = page.locator(".nav > *").evaluate_all("(es) => es.filter((e) => e.offsetParent).map((e) => e.id)")
+    assert shown == ["view-tiles", "nav-menu"], f"🏠 and ☰ alone in the header: {shown}"
     if case.width >= 600:
-        right = ["#cube-choice", "#view-tiles", "#view-me", "#view-log", "#view-gear"]
-        b.update({sel: box(page, sel) for sel in ("#view-log", "#view-gear")})
+        right = ["#cube-choice", "#view-tiles", "#nav-menu > summary"]
         xs = [b[sel]["x"] for sel in right]
         assert xs == sorted(xs), f"left to right in this order: {right}"
         assert max(b[sel]["x"] + b[sel]["width"] for sel in ("h1", "#updated", "#refresh-btn")) < b["#cube-choice"]["x"], \
             f"the brand and the time left of the Cube choice: {b}"
         first_line = b["h1"]["y"] + b["h1"]["height"]
         assert all(b[sel]["y"] < first_line for sel in right), f"the Cube choice and the pages on the first line: {b}"
-        assert page.locator("#view-log").is_visible() and page.locator("#view-gear").is_visible(), "📄 and ⚙ shown"
-        assert page.locator("#nav-menu").is_hidden(), "no ☰"
         return
-    assert page.locator("#nav-menu").is_visible(), "☰ shown"
-    assert page.locator("#view-log").is_hidden() and page.locator("#view-gear").is_hidden(), "📄 and ⚙ in it"
-    assert b["#view-me"]["x"] < box(page, "#nav-menu summary")["x"], "🏠 👤 ☰"
     assert b["#cube-choice"]["y"] >= b["#view-tiles"]["y"] + b["#view-tiles"]["height"], "the Cube choice under them"
-    for view, section in (("log", "#logview"), ("cube", "#cube-page"), ("system", "#system"), ("info", "#info-page")):
-        page.locator("#nav-menu summary").click()
-        page.locator("#menu-" + view).click()
-        page.locator(section).wait_for(state="visible")
-        assert page.locator("#nav-menu").get_attribute("open") is None, "the choice closes ☰"
-        assert active(page, "#nav-menu summary"), f"☰ highlighted while {view} is shown"
-    show_view(page, "tiles")
-    assert not active(page, "#nav-menu summary"), "and not on Rooms"
 
 
 # The baseline of an element's text: the bottom of an empty inline-block
@@ -296,25 +283,31 @@ def test_facts_fitted_again_when_the_time_comes(page, case):
     show changes: with a short version (a build's from a checkout without
     tags, as CI's) they fit beside the logo on a phone before the time of
     the last update has come, and the time then takes them to their row,
-    the version whole, not cut under the logo."""
-    page.evaluate("""() => { const v = document.getElementById('version-short'), u = document.getElementById('updated');
+    the version whole, not cut under the logo. The Cube's age is held
+    meanwhile (its timer stopped, the poll too), so that the test alone
+    writes the time."""
+    page.evaluate("""() => { clearInterval(state.pollTimer); clearTimeout(updatedTimer);
+      const v = document.getElementById('version-short'), u = document.getElementById('updated');
       window.__facts = [v.textContent, u.textContent]; v.textContent = 'v0.0.0-dev'; u.textContent = ''; fitFacts(); }""")
     try:
         page.wait_for_timeout(100)
-        page.evaluate("document.getElementById('updated').textContent = 'updated 03:57:52'")
+        page.evaluate("document.getElementById('updated').textContent = '59 sec'")
         assert wait_until(page, "(() => { const v = document.getElementById('version-short'); "
                           "return v.scrollWidth <= v.clientWidth + 1; })()", 3), "the version whole once the time came"
     finally:
         page.evaluate("""() => { const [v, u] = window.__facts; document.getElementById('version-short').textContent = v;
-          document.getElementById('updated').textContent = u; }""")
+          document.getElementById('updated').textContent = u; renderUpdated(); startPolling(); }""")
 
 
 def test_header_on_one_baseline(page, case):
     """The logo (the small mark under 600 px), the version and the time of
     the last update stand on one baseline, the drawing's bottom edge, and
-    the M is as tall as the page buttons; on a phone the version and the
-    time stand under the mark, the version whole, on the time's line or a
-    line of its own above it. ↻ stands on the digits' middle.
+    the M is as tall as the page buttons, where they fit beside it: a
+    release's short version (CI's build has one too) always does, a long
+    build's on a phone does not, and then the version and the time stand
+    under the mark, the version whole, on the time's line or a line of its
+    own above it. Each version is set here, so that the build's own does
+    not decide which case is tested. ↻ stands on the digits' middle.
     The time and ↻ are one button without a frame, larger to a finger
     than it looks; the version's tooltip is the whole version."""
     brand = page.evaluate(BRAND_BOX)
@@ -324,13 +317,21 @@ def test_header_on_one_baseline(page, case):
     # fitted once the version has come (app.js fitFacts)
     assert wait_until(page, "(() => { const v = document.getElementById('version-short'); return v.textContent !== '' && v.scrollWidth <= v.clientWidth + 1; })()", 5), \
         "the version whole"
-    lines = {sel: page.evaluate(BASELINE, sel) for sel in ("#version-short", "#updated")}
-    if case.width >= 600:
-        assert abs(lines["#version-short"] - lines["#updated"]) <= 1, f"the version and the time on one line: {lines}"
-        assert abs(lines["#updated"] - brand["bottom"]) <= 1, f"on the logo's baseline: {lines} vs {brand['bottom']}"
-    else:
-        assert lines["#version-short"] <= lines["#updated"] + 1, f"the version on the time's line or above it: {lines}"
-        assert lines["#version-short"] > brand["bottom"] + 8, f"both under the mark: {lines} vs {brand['bottom']}"
+    real = page.locator("#version-short").inner_text()
+    try:
+        for version, beside in (("v0.0.0-dev", True), ("v0.0.0-dev+0123456789ab-dirty", case.width >= 600)):
+            set_version(page, version)
+            assert wait_until(page, "(() => { const v = document.getElementById('version-short'); return v.scrollWidth <= v.clientWidth + 1; })()", 3), \
+                f"{version} whole"
+            lines = {sel: page.evaluate(BASELINE, sel) for sel in ("#version-short", "#updated")}
+            if beside:
+                assert abs(lines["#version-short"] - lines["#updated"]) <= 1, f"{version} and the time on one line: {lines}"
+                assert abs(lines["#updated"] - brand["bottom"]) <= 1, f"on the logo's baseline with {version}: {lines} vs {brand['bottom']}"
+            else:
+                assert lines["#version-short"] <= lines["#updated"] + 1, f"{version} on the time's line or above it: {lines}"
+                assert lines["#version-short"] > brand["bottom"] + 8, f"both under the mark with {version}: {lines} vs {brand['bottom']}"
+    finally:
+        set_version(page, real)
     icon = box(page, "#refresh-btn svg")
     digits = page.evaluate(DIGITS_MIDDLE, "#updated")
     assert abs(icon["y"] + icon["height"] / 2 - digits) <= 1, f"↻ on the digits' middle: {icon} vs {digits}"
@@ -344,7 +345,9 @@ def test_header_on_one_baseline(page, case):
         hit = page.evaluate("([x, y]) => { const e = document.elementFromPoint(x, y); "
                             "return !!e && (!!e.closest('#refresh-btn') || !!e.closest('button, summary, a, input, select')); }", [x, y])
         assert hit, f"a tap 8 px off the button still hits it, where no other control is (y {y}, button {b})"
-    assert page.locator("#updated").inner_text() in (btn.get_attribute("aria-label") or ""), "its label says the time"
+    label = btn.get_attribute("aria-label") or ""
+    assert label == btn.get_attribute("title") and label != page.evaluate("t('header.refreshTitle')"), \
+        f"its tooltip and its name say the time: {label!r}"
     version = page.evaluate("state.version")
     assert page.locator("#version-short").get_attribute("title") == VERSION_TITLE[case.lang].format(v=version), \
         "the tooltip is the whole version"
@@ -369,17 +372,15 @@ def test_cube_clock_in_its_facts(page, case):
 
 
 def test_menu_icons_and_user_title(page, case):
-    """Forget key shows a key's icon; ☰'s items each their page's; the 👤
-    button's tooltip names whose personal page it opens, here the owner
-    of the test's API key."""
+    """Forget key shows a key's icon; ☰'s items each their page's; ☰'s
+    Personal settings names whose personal page it opens in its tooltip,
+    here the owner of the test's API key."""
     open_personal_page(page)
     assert page.locator("#logout-btn > svg.ni").count() == 1, "Forget key shows its icon"
     assert page.locator("#logout-icon").get_attribute("href") == "#icon-key", "Forget key shows a key"
-    title = page.locator("#view-me").get_attribute("title") or ""
-    assert "owner" in title, f"the 👤 tooltip names the user ({title!r})"
-    assert page.locator("#view-me").get_attribute("aria-label") == title, "and says it to a screen reader"
-    page.keyboard.press("Escape")
-    for sel in ("#menu-log", "#menu-cube", "#menu-system", "#menu-info", "#gear-cube", "#gear-system", "#gear-info"):
+    title = page.locator("#menu-me").get_attribute("title") or ""
+    assert "owner" in title, f"Personal settings' tooltip names the user ({title!r})"
+    for sel in ("#menu-log", "#menu-cube", "#menu-system", "#menu-info", "#menu-me", "#menu-logout"):
         assert page.locator(sel + " > svg.ni").count() == 1, f"{sel} shows its icon"
 
 
@@ -510,3 +511,71 @@ def test_versions_copy(page, case):
     assert copied == system and len(copied) >= len(cell.locator(".mono").inner_text().strip()), \
         f"the whole version, not the short one shown ({copied!r} vs {system!r})"
     show_view(page, "tiles")
+
+
+AGES = ((5, 5, "second"), (125, 2, "minute"), (3 * 3600 + 5, 3, "hour"), (3 * 86400, 3, "day"))
+SET_AGE = """([ago, skew]) => {
+  serverSkew = skew;
+  const c = state.cubes.find((x) => x.serial === state.serial);
+  c.updated = new Date(Date.now() - ago * 1000).toISOString();
+  renderUpdated();
+  const d = new Date(Date.parse(c.updated)), pad = (n) => String(n).padStart(2, '0');
+  const time = pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+  return [document.getElementById('updated').textContent, document.getElementById('refresh-btn').title,
+          t('header.refreshUpdated', {time})];
+}"""
+
+
+def test_updated_is_the_cubes_age(page, case):
+    """Beside ↻ how long ago the chosen Cube was heard from (its updated),
+    on the server's clock: seconds under a minute, then minutes, hours,
+    days; it counts on by itself; ↻'s tooltip says the time itself. The
+    server's clock is taken from its answers. The poll is held meanwhile,
+    so that it does not bring the Cube's own time back."""
+    assert wait_until(page, "Math.abs(serverSkew) < 3000", 5), "the server's clock from its answers: this machine's"
+    page.evaluate("clearInterval(state.pollTimer)")
+    try:
+        for ago, n, unit in AGES:
+            text, title, want = page.evaluate(SET_AGE, [ago, 0])
+            assert text == page.evaluate(f"fmtUnit({n}, '{unit}')"), f"{ago} s ago: {text!r}"
+            assert title == want, f"the tooltip says the time: {title!r}"
+        text, _, _ = page.evaluate(SET_AGE, [0, 60000])
+        assert text == page.evaluate("fmtUnit(1, 'minute')"), f"on the server's clock, a minute ahead: {text!r}"
+        page.evaluate(SET_AGE, [3, 0])
+        assert wait_until(page, "document.getElementById('updated').textContent === fmtUnit(5, 'second')", 4), "it counts on"
+        assert page.locator("#updated").evaluate("(e) => getComputedStyle(e).fontVariantNumeric").find("tabular-nums") >= 0, \
+            "digits of one width"
+    finally:
+        page.evaluate("startPolling(); poll(true)")
+
+
+SET_PROBLEMS = """() => {
+  const c = state.cubes.find((x) => x.serial === 'KEQ0000100');
+  c.file_differs = ['MASSIMO_CUBE_KEQ0000100_NAME'];
+  c.connected = false;
+  renderCubeSelect();
+}"""
+
+
+def test_cube_choice_list_shows_problems(page, case):
+    """Open, the Cube choice's list shows each Cube's problems as icons
+    after its name, its worst tone each, its link left out (the Cube's own
+    sign shows it): here its settings file differing, the cog, for the
+    owner. The poll is held meanwhile."""
+    page.evaluate("clearInterval(state.pollTimer)")
+    try:
+        page.evaluate(SET_PROBLEMS)
+        page.locator("#cube-choice").click()
+        item = page.locator("#cube-menu .menu-items button[data-value='KEQ0000100']")
+        item.wait_for(state="visible")
+        icons = item.locator(".menu-item-icons > svg")
+        hrefs = icons.evaluate_all("(es) => es.map((e) => [...e.querySelectorAll('use')].map((u) => u.getAttribute('href')).join(' '))")
+        assert any("cog" in h for h in hrefs), f"the settings' cog after the name: {hrefs}"
+        assert not any("#icon-net" in h for h in hrefs), f"not its link, which its sign shows: {hrefs}"
+        name, line = item.locator(".menu-item-label").bounding_box(), icons.first.bounding_box()
+        assert line["x"] >= name["x"] + name["width"] and abs((line["y"] + line["height"] / 2) - (name["y"] + name["height"] / 2)) <= 6, \
+            f"after the name, on its line: {name} {line}"
+        page.keyboard.press("Escape")
+    finally:
+        page.evaluate("startPolling(); poll(true)")
+
