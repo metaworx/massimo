@@ -106,6 +106,10 @@ func (s *Server) viewIntegration(r *http.Request, i store.Integration) integrati
 		v.RequestCode, v.RequestExpires, v.RequestRemote = i.RequestCode, i.RequestExpires, i.RequestRemote
 	} else {
 		v.Key = i.Key
+		if i.State == store.IntegrationActive && i.KeyIssuedAt.IsZero() {
+			// approved, its key not collected yet: until when it may be
+			v.RequestExpires = i.RequestExpires
+		}
 		if u, ok, err := s.opts.Store.UserByID(r.Context(), i.UserID); err == nil && ok {
 			v.User = u.Name
 		}
