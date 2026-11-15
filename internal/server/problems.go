@@ -26,7 +26,7 @@ func (s *Server) problemsOf(rt *runtime) []cubeProblem {
 		}
 	}
 	var out []cubeProblem
-	for _, d := range s.withWindow(view.Devices(snap, rt.hidden(), s.StaleAfter())) {
+	for _, d := range s.withWindow(view.Devices(snap, rt.hidden(), s.staleness())) {
 		st := d.State
 		if !d.Reported || st == nil {
 			continue

@@ -15,7 +15,10 @@ import (
 // Keys of the server's settings. The durations are JSON strings in Go's
 // notation ("30m", "24h").
 const (
-	StaleAfterKey       = "stale_after"
+	StaleAfterKey = "stale_after"
+	// StaleAfterWallKey is the wall thermostats' stale threshold;
+	// StaleAfterKey the radiator thermostats'.
+	StaleAfterWallKey   = "stale_after_wall"
 	PollIntervalKey     = "poll_interval"
 	RefreshIntervalKey  = "refresh_interval"
 	DiscoverIntervalKey = "discover_interval"

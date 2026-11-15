@@ -1029,7 +1029,7 @@ keep the default:
 | `battery_low` | a device's battery went low | on |
 | `device_error` | a device reports an error or a link error | on |
 | `frost` | a device's measured temperature fell under `below_c`; again once it rose half a degree above | on, 8 °C |
-| `device_stale` | a thermostat went past the stale threshold (`stale_after`) | off |
+| `device_stale` | a thermostat went past the stale threshold (`stale_after`, `stale_after_wall`) | off |
 | `paired` | a device joined by pairing | off |
 | `cube_found` | discovery found a Cube that is not configured | off |
 | `update` | `GET /api/v1/update` saw a newer release | off |
@@ -1546,7 +1546,8 @@ The server's settings in the store:
 
 ```json
 {
-  "stale_after":       {"value": "24h", "default": "24h", "set": false, "in_effect": "24h", "applies": "now"},
+  "stale_after":       {"value": "50h", "default": "50h", "set": false, "in_effect": "50h", "applies": "now"},
+  "stale_after_wall":  {"value": "24h", "default": "24h", "set": false, "in_effect": "24h", "applies": "now"},
   "poll_interval":     {"value": "10s", "default": "10s", "set": false, "in_effect": "10s", "applies": "restart"},
   "refresh_interval":  {"value": "6h",  "default": "6h",  "set": false, "in_effect": "6h",  "applies": "restart"},
   "discover_interval": {"value": "30m", "default": "30m", "set": false, "in_effect": "30m", "applies": "restart"},
@@ -1573,8 +1574,11 @@ before the server reads the Cube's budget again by a new connection,
 which costs no radio time, 10 minutes by default:
 the duty cycle falls within the hour (docs/cube-protocol.md), so the server
 does not wait for the next full hour, and holds again while it is still used up.
-`stale_after` is when a thermostat that has not changed counts as stale,
-and applies at once; the intervals apply at the next start.
+`stale_after` is when a radiator thermostat that has not changed counts as stale,
+50 hours by default, since an idle one changes its entry once a day and not on
+its decalcification day (docs/cube-protocol.md, "How devices report");
+`stale_after_wall` the same for a wall thermostat, 24 hours by default;
+both apply at once, the intervals at the next start.
 `window_warn_after` and `window_alert_after` are how long a window may stay open
 before it counts as open too long, a warning and then an alert
 (5 and 10 minutes, 1m to 24h, the alert not under the warning, at once;
@@ -1625,7 +1629,7 @@ with `null` for the default and `"0"` to switch the refresh or the periodic disc
 A number setting takes a JSON number, or the number as a string,
 `auth.password_login` and `integrations.requests` `true` or `false`,
 `announce` `auto`, `on` or `off`, and `update.channel` a name.
-The ranges: `stale_after` 1h to 720h, `poll_interval` 10s to 1h,
+The ranges: `stale_after` and `stale_after_wall` 1h to 720h, `poll_interval` 10s to 1h,
 `refresh_interval` 10m to 168h, `discover_interval` 1m to 24h, `duty_wait` 1m to 1h,
 `window_warn_after` and `window_alert_after` 1m to 24h.
 Every value is checked before any is written.
@@ -1821,7 +1825,9 @@ the decalcification day, at the programme's switch points in auto,
 and not at all on vacation, when those bytes carry the end:
 the server keeps the last one until a new one comes,
 and `received.actual_temp` says how old it is.
-`stale` is a hint: a thermostat out of range or with a flat battery goes quiet,
+`stale` is a hint, after `stale_after` for a radiator thermostat (50 hours by
+default) and `stale_after_wall` for a wall thermostat (24 hours):
+a thermostat out of range or with a flat battery goes quiet,
 but so may one whose valve stays shut outside the heating season.
 Shutter contacts and eco buttons transmit only on events and are never stale.
 

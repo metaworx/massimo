@@ -347,7 +347,7 @@ func (s *Server) notifyDevices() []notify.Device {
 	var out []notify.Device
 	for _, rt := range s.runtimes() {
 		snap := rt.client.Snapshot()
-		for _, d := range view.Devices(snap, rt.hidden(), s.StaleAfter()) {
+		for _, d := range view.Devices(snap, rt.hidden(), s.staleness()) {
 			out = append(out, notify.Device{Cube: rt.cubeSerial(), Device: d.RFAddress, Serial: d.Serial, DeviceName: d.Name, Room: int(d.RoomID), RoomName: roomName(rt, d.RoomID), Stale: d.Stale})
 		}
 	}

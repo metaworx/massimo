@@ -207,8 +207,8 @@ func TestOpenIntervals(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer inst.Close()
-	if got := inst.Server().StaleAfter(); got != stale {
-		t.Errorf("stale after %s, want %s", got, stale)
+	if got, wall := inst.Server().StaleAfter(), inst.Server().StaleAfterWall(); got != stale || wall != stale {
+		t.Errorf("stale after %s and %s for wall thermostats, want %s for both", got, wall, stale)
 	}
 	ts := httptest.NewServer(inst.Server().Handler())
 	defer ts.Close()
@@ -222,7 +222,7 @@ func TestOpenIntervals(t *testing.T) {
 			t.Errorf("%s in effect %q, want %q", k, got, want)
 		}
 	}
-	for k, want := range map[string]string{store.PollIntervalKey: "", store.RefreshIntervalKey: "-refresh", store.DiscoverIntervalKey: "", store.StaleAfterKey: "-stale-after"} {
+	for k, want := range map[string]string{store.PollIntervalKey: "", store.RefreshIntervalKey: "-refresh", store.DiscoverIntervalKey: "", store.StaleAfterKey: "-stale-after", store.StaleAfterWallKey: "-stale-after"} {
 		if got := settings[k].FixedBy; got != want {
 			t.Errorf("%s fixed by %q, want %q", k, got, want)
 		}

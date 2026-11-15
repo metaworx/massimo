@@ -171,9 +171,9 @@ type Device struct {
 	// window is open (SetWindow): when the server saw it open, and when
 	// it counts as open too long, first as a warning, then as an alert.
 	Window *WindowTimes `json:"window,omitempty"`
-	// Stale marks a thermostat whose entry has not changed for
-	// StaleAfter: it may be out of range or out of battery, and its
-	// values may be old. Shutter contacts and eco buttons transmit only
+	// Stale marks a thermostat whose entry has not changed for its
+	// type's stale threshold (Staleness): it may be out of range or out
+	// of battery, and its values may be old. Shutter contacts and eco buttons transmit only
 	// on events and are never stale.
 	Stale bool `json:"stale,omitempty"`
 	// Sources is a virtual wall thermostat's alone: the radio addresses
@@ -181,15 +181,39 @@ type Device struct {
 	Sources map[string][]string `json:"sources,omitempty"`
 }
 
-// StaleAfter is how long a thermostat's entry may stay unchanged before
-// the device counts as stale. An idle radiator thermostat changes its
-// entry once a day, and not on its decalcification day, so it may pass
-// for stale over that day; while heating it changes more often. Stale is
-// a hint, not a fault.
-// It is the default; the functions below take the threshold as a
-// parameter (serve passes the store's stale_after), where 0 or less
-// means this default.
-const StaleAfter = 24 * time.Hour
+// StaleAfter is how long a radiator thermostat's entry may stay
+// unchanged before the device counts as stale: 50 h. An idle one changes
+// its entry once a day, and not on its decalcification day, so 48 h pass
+// over a weekend (docs/cube-protocol.md, "How devices report"); while
+// heating it changes more often. StaleAfterWall is a wall thermostat's,
+// 24 h: one reports every 3 minutes. Stale is a hint, not a fault.
+// They are the defaults; the functions below take the thresholds as a
+// Staleness (serve passes the store's stale_after and stale_after_wall).
+const (
+	StaleAfter     = 50 * time.Hour
+	StaleAfterWall = 24 * time.Hour
+)
+
+// Staleness is the stale thresholds by type: Radiator for radiator
+// thermostats, Wall for wall thermostats; 0 or less takes StaleAfter and
+// StaleAfterWall.
+type Staleness struct {
+	Radiator, Wall time.Duration
+}
+
+// after is the stale threshold of a device of type t.
+func (s Staleness) after(t cube.DeviceType) time.Duration {
+	if t == cube.DeviceWallThermostat {
+		if s.Wall > 0 {
+			return s.Wall
+		}
+		return StaleAfterWall
+	}
+	if s.Radiator > 0 {
+		return s.Radiator
+	}
+	return StaleAfter
+}
 
 // now is the clock of the stale rule, replaced in tests.
 var now = time.Now
@@ -197,11 +221,8 @@ var now = time.Now
 // DeviceOf builds the view of one device from the metadata, its
 // configuration and its live state. The metadata names the device and
 // its room; the configuration, when present, has the last word on the
-// type. staleAfter is the stale threshold (0: StaleAfter).
-func DeviceOf(snap *cubelan.Snapshot, rf cube.RFAddress, staleAfter time.Duration) Device {
-	if staleAfter <= 0 {
-		staleAfter = StaleAfter
-	}
+// type. stale holds the stale thresholds.
+func DeviceOf(snap *cubelan.Snapshot, rf cube.RFAddress, stale Staleness) Device {
 	st, _ := snap.State(rf)
 	d := Device{RFAddress: rf.String(), Type: st.Type}
 	if md := snap.Metadata(); md != nil {
@@ -228,7 +249,7 @@ func DeviceOf(snap *cubelan.Snapshot, rf cube.RFAddress, staleAfter time.Duratio
 			d.Received = t.Fields
 		}
 		thermostat := d.Type.IsThermostat()
-		d.Stale = thermostat && now().Sub(changed) > staleAfter
+		d.Stale = thermostat && now().Sub(changed) > stale.after(d.Type)
 	}
 	return d
 }
@@ -266,15 +287,15 @@ func (d *Device) SetWindow(warn, alert time.Duration) {
 }
 
 // Devices lists every visible device, in the order the Cube reported
-// them, without the Cube itself; staleAfter as for DeviceOf.
-func Devices(snap *cubelan.Snapshot, h Hidden, staleAfter time.Duration) []Device {
+// them, without the Cube itself; stale as for DeviceOf.
+func Devices(snap *cubelan.Snapshot, h Hidden, stale Staleness) []Device {
 	var out []Device
 	hello := snap.Hello()
 	for _, rf := range snap.Devices() {
 		if hello != nil && rf == hello.RFAddress || h[rf] {
 			continue
 		}
-		out = append(out, DeviceOf(snap, rf, staleAfter))
+		out = append(out, DeviceOf(snap, rf, stale))
 	}
 	return out
 }
@@ -295,14 +316,14 @@ type Room struct {
 }
 
 // Rooms lists the visible rooms in the Cube's order, each with the
-// visible devices the metadata places in it; staleAfter as for
+// visible devices the metadata places in it; stale as for
 // DeviceOf.
-func Rooms(snap *cubelan.Snapshot, h Hidden, staleAfter time.Duration) []Room {
+func Rooms(snap *cubelan.Snapshot, h Hidden, stale Staleness) []Room {
 	md := snap.Metadata()
 	if md == nil {
 		return nil
 	}
-	devs := Devices(snap, h, staleAfter)
+	devs := Devices(snap, h, stale)
 	var out []Room
 	for _, r := range h.VisibleRooms(md) {
 		room := Room{ID: r.ID, Name: r.Name, Ready: len(Silent(snap, r.ID, h)) == 0, Devices: []Device{}}

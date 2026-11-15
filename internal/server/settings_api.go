@@ -91,6 +91,8 @@ var boolSettings = []boolSetting{
 var durationSettings = []durationSetting{
 	{key: store.StaleAfterKey, def: view.StaleAfter, min: time.Hour, max: 30 * 24 * time.Hour, now: true,
 		inEffect: func(s *Server) time.Duration { return s.StaleAfter() }},
+	{key: store.StaleAfterWallKey, def: view.StaleAfterWall, min: time.Hour, max: 30 * 24 * time.Hour, now: true,
+		inEffect: func(s *Server) time.Duration { return s.StaleAfterWall() }},
 	{key: store.PollIntervalKey, def: DefaultPollInterval, min: 10 * time.Second, max: time.Hour,
 		inEffect: func(s *Server) time.Duration { return s.opts.PollInterval }},
 	{key: store.RefreshIntervalKey, def: DefaultRefreshInterval, min: 10 * time.Minute, max: 7 * 24 * time.Hour, zero: true,
@@ -405,11 +407,15 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 		case store.BackupsKeepDaysAutoKey, store.BackupsKeepDaysManualKey, store.BackupsKeepNewestKey:
 			pruneBackups = true
 		}
-		if wr.key == store.StaleAfterKey {
+		if wr.key == store.StaleAfterKey || wr.key == store.StaleAfterWallKey {
+			set := s.SetStaleAfter
+			if wr.key == store.StaleAfterWallKey {
+				set = s.SetStaleAfterWall
+			}
 			if wr.duration == nil {
-				s.SetStaleAfter(0)
+				set(0)
 			} else {
-				s.SetStaleAfter(*wr.duration)
+				set(*wr.duration)
 			}
 		}
 		if wr.key == store.WindowWarnKey || wr.key == store.WindowAlertKey {

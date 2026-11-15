@@ -259,9 +259,11 @@ type Options struct {
 	// (-proxy): a proxy address changed through the API is stored, and
 	// takes effect at the next start without -proxy.
 	ProxyFixed bool
-	// StaleAfter is the stale threshold of the device views (0:
-	// view.StaleAfter); SetStaleAfter changes it while the server runs.
-	StaleAfter time.Duration
+	// StaleAfter and StaleAfterWall are the stale thresholds of the
+	// device views, of radiator and of wall thermostats (0:
+	// view.StaleAfter, view.StaleAfterWall); SetStaleAfter and
+	// SetStaleAfterWall change them while the server runs.
+	StaleAfter, StaleAfterWall time.Duration
 	// notifyClock is the notification rules' clock, for the tests; nil
 	// is the real one.
 	notifyClock notify.Clock
@@ -385,8 +387,9 @@ type Server struct {
 	discWake chan struct{} // wakeDiscovery
 	proxyMu  sync.Mutex
 	proxies  []*proxyRun
-	// staleAfter is the stale threshold in effect, in nanoseconds.
-	staleAfter atomic.Int64
+	// staleAfter and staleAfterWall are the stale thresholds in effect,
+	// in nanoseconds.
+	staleAfter, staleAfterWall atomic.Int64
 	// windowWarn and windowAlert are how long a window may stay open
 	// before it counts as open too long, in nanoseconds (SetWindowLimits).
 	windowWarn, windowAlert atomic.Int64
@@ -709,6 +712,7 @@ func New(opts Options) *Server {
 	s.pushSlots = make(chan struct{}, maxDeliveries)
 	s.reboot.allowed = opts.Reboot.Allowed
 	s.SetStaleAfter(opts.StaleAfter)
+	s.SetStaleAfterWall(opts.StaleAfterWall)
 	s.SetWindowLimits(0, 0)
 	if opts.Store != nil {
 		s.loadWindowLimits(context.Background())
@@ -922,7 +926,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 					ev.State = view.Device{RFAddress: ev.Device, Type: g.Type, Name: g.Name, RoomID: g.RoomID, Serial: g.Serial}
 				}
 				if _, ok := rt.client.Snapshot().State(e.Device); ok {
-					dv := view.DeviceOf(rt.client.Snapshot(), e.Device, s.StaleAfter())
+					dv := view.DeviceOf(rt.client.Snapshot(), e.Device, s.staleness())
 					dv.SetWindow(s.windowLimits())
 					ev.State = dv
 					if e.Kind == cubelan.EventState {
@@ -1109,8 +1113,8 @@ func stateAttrs(serial string, d view.Device) []any {
 	return attrs
 }
 
-// SetStaleAfter sets the stale threshold of the device views; 0 or less
-// goes back to view.StaleAfter.
+// SetStaleAfter sets the stale threshold of radiator thermostats in the
+// device views; 0 or less goes back to view.StaleAfter.
 func (s *Server) SetStaleAfter(d time.Duration) {
 	if d <= 0 {
 		d = view.StaleAfter
@@ -1118,8 +1122,25 @@ func (s *Server) SetStaleAfter(d time.Duration) {
 	s.staleAfter.Store(int64(d))
 }
 
-// StaleAfter returns the stale threshold in effect.
+// StaleAfter returns the radiator thermostats' stale threshold in effect.
 func (s *Server) StaleAfter() time.Duration { return time.Duration(s.staleAfter.Load()) }
+
+// SetStaleAfterWall sets the stale threshold of wall thermostats in the
+// device views; 0 or less goes back to view.StaleAfterWall.
+func (s *Server) SetStaleAfterWall(d time.Duration) {
+	if d <= 0 {
+		d = view.StaleAfterWall
+	}
+	s.staleAfterWall.Store(int64(d))
+}
+
+// StaleAfterWall returns the wall thermostats' stale threshold in effect.
+func (s *Server) StaleAfterWall() time.Duration { return time.Duration(s.staleAfterWall.Load()) }
+
+// staleness is the stale thresholds in effect, for the device views.
+func (s *Server) staleness() view.Staleness {
+	return view.Staleness{Radiator: s.StaleAfter(), Wall: s.StaleAfterWall()}
+}
 
 // SetWindowLimits sets how long a window may stay open before it counts
 // as open too long, a warning, then an alert; 0 or less goes back to
@@ -1670,7 +1691,7 @@ func (s *Server) getDevice(w http.ResponseWriter, r *http.Request) error {
 	if !ok && c == nil || rt.hidden()[rf] {
 		return fail(http.StatusNotFound, "no device %s", rf)
 	}
-	d := deviceDetail{Device: view.DeviceOf(snap, rf, s.StaleAfter())}
+	d := deviceDetail{Device: view.DeviceOf(snap, rf, s.staleness())}
 	d.SetWindow(s.windowLimits())
 	if c != nil {
 		d.Firmware, d.Thermostat, d.Wall = c.Firmware, c.Thermostat, c.Wall

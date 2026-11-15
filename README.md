@@ -1145,7 +1145,7 @@ one with a fixed address only where the interval is not `0`,
 and followed to its new address where it follows discovery.
 `-poll`, `-refresh` and `-discover-interval` win for one run over the store's
 settings `poll_interval`, `refresh_interval` and `discover_interval`,
-and `-stale-after` over `stale_after`
+and `-stale-after` over `stale_after` and `stale_after_wall`
 (`duty_wait`, how long radio commands wait at a used-up duty cycle, has no flag),
 also below the hour the API allows, so that a test sees a thermostat go stale;
 the settings then name the flag (`fixed_by`),

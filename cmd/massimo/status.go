@@ -106,8 +106,8 @@ func statusFromSnapshot(snap *cubelan.Snapshot, b cubelan.Budget, hidden view.Hi
 		}
 	}
 	inRoom := map[string]bool{}
-	vwts, _ := view.RoomThermostats(snap, hidden, 0, nil)
-	for _, r := range view.Rooms(snap, hidden, 0) {
+	vwts, _ := view.RoomThermostats(snap, hidden, view.Staleness{}, nil)
+	for _, r := range view.Rooms(snap, hidden, view.Staleness{}) {
 		sr := statusRoom{ID: r.ID, Name: r.Name, Ready: r.Ready, Devices: []statusDevice{}}
 		if v, ok := vwts[r.ID]; ok && v.State != nil {
 			sr.ActualTemp = v.State.ActualTemp
@@ -118,7 +118,7 @@ func statusFromSnapshot(snap *cubelan.Snapshot, b cubelan.Budget, hidden view.Hi
 		}
 		rep.Rooms = append(rep.Rooms, sr)
 	}
-	for _, d := range view.Devices(snap, hidden, 0) {
+	for _, d := range view.Devices(snap, hidden, view.Staleness{}) {
 		if !inRoom[d.RFAddress] {
 			rep.Unlisted = append(rep.Unlisted, statusDevice{Device: d, Room: roomName[d.RoomID]})
 		}
