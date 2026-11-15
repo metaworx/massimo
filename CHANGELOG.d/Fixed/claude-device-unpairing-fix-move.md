@@ -1,3 +1,3 @@
-- Moving or placing a device sends one link radiogram to its room as a
-  group, one to each window contact and one to the device for each
-  partner, as the original software does, its room's flags reset first.
+- Moving or placing a device sends one link radiogram to the room, one to
+  each window contact and one to the device per partner, as the original
+  software does, room commands naming the same member.

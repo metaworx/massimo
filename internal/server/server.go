@@ -1864,34 +1864,14 @@ func (s *Server) setRoomSetpoint(w http.ResponseWriter, r *http.Request) error {
 	if !ok {
 		return fail(http.StatusNotFound, "no room %d", id)
 	}
-	addr, ok := roomAddress(rt, room)
+	// The device the room command names (cubeio.RoomAddressee): every
+	// member of the room takes a room-flagged command whichever it names,
+	// but the named device takes it too, whatever its room.
+	addr, ok := cubeio.RoomAddressee(rt.client.Snapshot(), room.ID, rt.hidden())
 	if !ok {
 		return fail(http.StatusConflict, "room %d has no thermostat", room.ID)
 	}
 	return s.setpoint(w, r, rt, cube.Target{RFAddress: addr, RoomID: room.ID, Room: true}, 0, fmt.Sprintf("room:%d", id))
-}
-
-// roomAddress is the device a room command names. Every member of the
-// room takes a room-flagged command whichever member it names, but the
-// named device takes it too, whatever room it is in (docs/cube-protocol.md,
-// "Set temperature (0x40) addressing", 2026-11-15). So it is the room's
-// master from the metadata where that is a thermostat of the room by its
-// C line, else the room's wall thermostat, else its first radiator
-// thermostat, the owner's order (D167, D169-A of AP DeviceUnPairingFix,
-// which moves it into internal/cubeio for every room radiogram); never a
-// device of another room. ok is false for a room without a thermostat.
-func roomAddress(rt *runtime, room cube.RoomMeta) (cube.RFAddress, bool) {
-	radiators, walls := roomThermostats(rt, room.ID)
-	members := append(walls, radiators...)
-	if len(members) == 0 {
-		return 0, false
-	}
-	for _, rf := range members {
-		if rf == room.RFAddress {
-			return rf, true
-		}
-	}
-	return members[0], true
 }
 
 func (s *Server) setpoint(w http.ResponseWriter, r *http.Request, rt *runtime, t cube.Target, target cube.RFAddress, key string) error {

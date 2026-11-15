@@ -204,10 +204,11 @@ another room set that device too.
    carries its own room's number (T135).
 4. Room commands name the same addressee (`internal/server/server.go`,
    AP LegacyLogs' Block 6), in this block where that block is merged,
-   else in that block. As run: #291, with Block 6, is not merged, so
-   `cubeio.RoomAddressee` is there for it and its session is told; the
-   backup restore's step labels count partners (`cubeio.PartnerCount`),
-   no longer half the lines.
+   else in that block. As run: Block 6 reached `main` with #295 while
+   this block ran, so its `roomAddress` gave way to
+   `cubeio.RoomAddressee` here, the same order; the backup restore's
+   step labels count partners (`cubeio.PartnerCount`), no longer half
+   the lines.
 5. Tests: the exact lines of a move, a placement and a removal, with and
    without a radiator thermostat or a wall thermostat in the room, a
    wall thermostat moving, and a master in another room.
@@ -312,4 +313,5 @@ Blocks 3 to 5: `feat(cubeio/done)`, `feat(api/repair-pairing)`, and a NOTE.
   a placement's link halves as the original's captures of 2026-11-04,
   the device's own side and the window contacts included; the captures
   in the Analysis; Block 1's line answers as built, in the step's result;
-  Block 2 item 4 as run, #291 not merged.
+  Block 2 item 4 as run, room commands on the shared addressee once
+  LegacyLogs' Block 6 was on `main`.
