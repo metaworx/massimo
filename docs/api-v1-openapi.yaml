@@ -2833,7 +2833,10 @@ paths:
         commands waiting); structure, source cube (a removal, placement or
         move read back from the Cube's free slots: action, outcome,
         before, free_slots, minutes, held or no_reading, flagged,
-        link_error in "summary"); the server's sign-ins, source server, for a
+        link_error in "summary"); unconfirmed, source device (a write its
+        devices do not show in time: write, target, room, source, expected,
+        outcome not_confirmed at warn with minutes, confirmed and devices,
+        or confirmed_late at info with seconds, in "summary"); the server's sign-ins, source server, for a
         user with audit alone: login, login_failed, locked_out; the LAN
         proxy's, source proxy: proxy_connected, proxy_disconnected,
         proxy_refused, proxy_discarded, proxy_deleted, proxy_delete_refused,
@@ -3510,6 +3513,7 @@ components:
               ok: {type: boolean}
               discarded: {type: boolean, description: Always false on 200; a discarded command answers 502}
               budget: {$ref: "#/components/schemas/Budget"}
+              confirmation: {type: string, enum: [pending, confirmed], description: "A setpoint, a key lock or a display mode: pending until the devices' states show it (the devices' and the room's confirmation, the log's unconfirmed line after five minutes), confirmed where each shows it already. Absent for other writes"}
         pending_radiograms: {type: integer, description: "Radiograms sent by the Cube and not yet acknowledged by a device (memory slots in use): all of them when no slot is free, 0 until the Cube has reported its budget"}
     BadRequest:
       description: Bad input
@@ -4398,6 +4402,16 @@ components:
         devices:
           type: array
           items: {$ref: "#/components/schemas/Device"}
+        confirmation: {$ref: "#/components/schemas/Confirmation"}
+    Confirmation:
+      type: object
+      description: "A write not confirmed yet: the device, or members of the room, do not show what it set. Present while one is open"
+      required: [state, since, fields]
+      properties:
+        state: {type: string, enum: [pending, unconfirmed], description: "pending until five minutes after the Cube's answer, then unconfirmed until the devices show it or a newer write of the same kind replaces it"}
+        since: {type: string, format: date-time, description: "When the Cube took the oldest write still open"}
+        fields: {type: array, items: {type: string, enum: [mode, setpoint, until, locked, display_actual]}, description: "The values of the state not shown yet"}
+        devices: {type: array, items: {type: string}, description: "A room's: the radio addresses of its members that do not show them"}
     DeviceType:
       type: string
       enum: [cube, radiator_thermostat, radiator_thermostat_plus, wall_thermostat, shutter_contact, eco_switch]
@@ -4471,6 +4485,7 @@ components:
           properties:
             actual_temp: {type: array, items: {type: string}}
             mode: {type: array, items: {type: string}}
+        confirmation: {$ref: "#/components/schemas/Confirmation"}
     ConfigWrite:
       type: object
       description: Every field optional; merged into the device's current configuration

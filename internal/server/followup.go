@@ -116,14 +116,18 @@ func (f *followUp) forget(rf cube.RFAddress) {
 
 // proxyWrote follows up a radio write that a client of the LAN proxy
 // sent, as the API follows up its own: a configuration write (week
-// programme, preset temperatures, valve settings, display mode, room
-// group) has the C line of the device followed, or of every thermostat
-// of the room when it was sent to the room, as the original software
-// sends them; any other write (setpoint, key lock, links) only wants the
+// programme, preset temperatures, valve settings, room group) has the C
+// line of the device followed, or of every thermostat of the room when it
+// was sent to the room, as the original software sends them; a setpoint,
+// a key lock and a display mode are confirmed by the devices' L entries
+// (confirm.go), which the C line does not hold; every write wants the
 // budget refresh.
 func (rt *runtime) proxyWrote(c cube.RadioCommand) {
 	switch c.Command {
-	case cube.RFSetWeekProgram, cube.RFSetTemperatures, cube.RFSetValveConfig, cube.RFSetDisplayMode, cube.RFSetGroupAddress, cube.RFRemoveGroup:
+	case cube.RFSetTemperature, cube.RFLockControls, cube.RFSetDisplayMode:
+		rt.afterWrite()
+		rt.proxyConfirm(c)
+	case cube.RFSetWeekProgram, cube.RFSetTemperatures, cube.RFSetValveConfig, cube.RFSetGroupAddress, cube.RFRemoveGroup:
 		if c.Target.Room {
 			radiators, walls := roomThermostats(rt, c.Target.RoomID)
 			rt.afterWrite(append(radiators, walls...)...)
@@ -170,6 +174,9 @@ func (f *followUp) nextDue(now time.Time, rt *runtime) time.Time {
 			due = w.next
 		}
 	}
+	if at, ok := rt.confirms.nextDue(); ok && at.Before(due) {
+		due = at
+	}
 	if len(f.devices) == 0 && !f.budgetAfter.IsZero() {
 		at := f.budgetAfter
 		if next := f.lastReconnect.Add(f.gap); next.After(at) {
@@ -186,6 +193,7 @@ func (f *followUp) nextDue(now time.Time, rt *runtime) time.Time {
 // budget when nothing else is left.
 func (s *Server) followUpStep(ctx context.Context, rt *runtime) {
 	s.structureStep(ctx, rt)
+	s.confirmStep(rt)
 	f := rt.follow
 	now := time.Now()
 	f.mu.Lock()

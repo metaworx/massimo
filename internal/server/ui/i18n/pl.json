@@ -847,6 +847,7 @@
   "log.kind.command": "polecenie",
   "log.kind.hold": "radio wstrzymane",
   "log.kind.structure": "zmiana urządzenia",
+  "log.kind.unconfirmed": "niepotwierdzone",
   "log.kind.battery": "bateria",
   "log.kind.wall_reset": "termostat ścienny zresetowany",
   "log.kind.error_reset": "błąd komunikacji zresetowany",

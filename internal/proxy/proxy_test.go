@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"net"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -723,13 +724,13 @@ func TestProxyReportsWrites(t *testing.T) {
 			t.Fatalf("cube received %d s commands", countType(fc, 's'))
 		}
 		want := []cube.RadioCommand{
-			{Command: cube.RFSetTemperatures, Target: cube.Target{RFAddress: 0x0a010a}},
-			{Command: cube.RFSetTemperature, Target: cube.Target{RFAddress: 0x0a010d, RoomID: 6, Room: true}},
+			{Command: cube.RFSetTemperatures, Target: cube.Target{RFAddress: 0x0a010a}, Payload: []byte{0x2c, 0x1e, 0x3d, 0x09, 0x03, 0x0a, 0x03}},
+			{Command: cube.RFSetTemperature, Target: cube.Target{RFAddress: 0x0a010d, RoomID: 6, Room: true}, Payload: []byte{0x00}},
 		}
 		if discard {
 			want = nil
 		}
-		if g := reported(); len(g) != len(want) || (len(want) > 0 && (g[0] != want[0] || g[1] != want[1])) {
+		if g := reported(); (len(g) > 0 || len(want) > 0) && !reflect.DeepEqual(g, want) {
 			t.Fatalf("discard %v: reported %+v, want %+v", discard, g, want)
 		}
 	}

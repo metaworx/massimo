@@ -1821,6 +1821,11 @@ silence, docs/cube-protocol.md): such a device has `out_of_date: true` and
 with `received` and `last_seen` as old as they are.
 `ready` on a room is true when all its devices have reported,
 which is the condition for the Cube to accept a room command.
+`confirmation`, on a device and on a room, is present while a write to it is
+not confirmed yet (see "Writes confirmed by the devices"):
+its `state` (`pending`, `unconfirmed`), `since` the Cube took the oldest write
+still open, the `fields` not shown yet, and on a room the `devices` that do not
+show them; a virtual wall thermostat has its room's.
 Thermostats carry `mode` (`auto`, `manual`, `vacation`, `boost`), `setpoint`,
 `actual_temp` once the device reported one (the last it reported, kept while
 its entries carry none),
@@ -2068,9 +2073,14 @@ The request waits for the Cube's answer (up to two minutes when the
 radio budget is exhausted) and returns
 
 ```json
-{"ok": true, "discarded": false, "budget": {"duty_cycle_pct": 5, "free_memory_slots": 49, "updated_at": "…"}}
+{"ok": true, "discarded": false, "budget": {"duty_cycle_pct": 5, "free_memory_slots": 49, "updated_at": "…"},
+ "confirmation": "pending"}
 ```
 
+`ok` is the Cube's answer: it has taken the radiogram.
+`confirmation` is `pending` until the device shows the setpoint and mode,
+or `confirmed` where it shows them already
+(see "Writes confirmed by the devices").
 A device that belongs to a room is addressed as its room,
 because the Cube discards a direct command to a room member;
 every thermostat of that room therefore takes the new setpoint,
@@ -2101,6 +2111,44 @@ the link error alone (`link_error`) gets none.
 A device's setpoint, a room command too, and a room's programme do the same.
 Where the Cube discards the radiogram, the same members are reset once more
 and it is sent once more.
+`confirmation` is `pending` until every visible thermostat of the room shows
+the setpoint and mode.
+
+### Writes confirmed by the devices
+
+The Cube answers a radio write once it has taken it;
+a device's state takes the new values only when the device has acknowledged the
+radiogram, at its next wakeup, and a room's members take a room command each at
+its own (docs/cube-protocol.md).
+So a setpoint, a key lock and a wall thermostat's display mode are confirmed
+by the devices' states, at each of their reports and at a deadline five
+minutes after the Cube's answer:
+
+| Write | Confirmed by `state`'s | Devices |
+|-------|------------------------|---------|
+| setpoint `manual` | `mode`, `setpoint` | a room's visible thermostats, or the device |
+| setpoint `vacation` | `mode`, `setpoint`, `until` | the same |
+| setpoint `auto`, `boost` | `mode` | the same |
+| key lock | `locked` (`panel_locked`) | the device |
+| display | `display_actual` | the wall thermostat |
+
+The write's answer says `"confirmation": "pending"`,
+or `confirmed` where each device shows it already.
+While it is open, the devices that do not show it yet and their room have
+`confirmation` with `state` `pending`;
+after the deadline `unconfirmed`, until they show it or a newer write of the
+same kind to them replaces it.
+A device whose entry is out of date (`out_of_date`) shows nothing until the
+Cube hears it again.
+At the deadline the log has one `unconfirmed` line at `warn` for the write,
+naming each device that does not show it, what it shows, and its `error`,
+`link_error` and `out_of_date`;
+a device that shows it later has a line at `info` then.
+There is no notification.
+The writes of the LAN proxy's clients are confirmed the same way where their
+radiogram decodes (docs/proxy.md).
+It costs no radio time: the states come with the server's poll of the Cube.
+The confirmations are kept in memory: a restart forgets them.
 
 ### DELETE /api/v1/cubes/{sn}/rooms/{id}
 
@@ -2291,7 +2339,11 @@ Wall thermostats take the same radiograms;
 the values they do not store are filled in from a radiator thermostat of the room.
 Shutter contacts and eco switches answer `400`.
 The answer is the same as for a setpoint;
-afterwards the server re-reads the device's configuration from the Cube.
+afterwards the server re-reads the device's configuration from the Cube
+for the temperature, boost, descaling and valve fields.
+The display mode is no part of the configuration the Cube reports:
+it is confirmed by the wall thermostat's state, `display_actual`, and the answer
+then has `confirmation` (see "Writes confirmed by the devices").
 
 ### GET /api/v1/cubes/{sn}/rooms/{id}/config
 
@@ -2367,7 +2419,9 @@ Both answer like a setpoint.
 
 Lock or unlock the buttons of one thermostat (the key lock,
 "LoC" on the display, `panel_locked` in its state).
-Body `{"locked": false}`; the answer is the same as for a setpoint.
+Body `{"locked": false}`; the answer is the same as for a setpoint,
+its `confirmation` the device's `panel_locked`
+(see "Writes confirmed by the devices").
 The command is radiogram 0x80,
 which the original software lists but never sends;
 it is sent directly to the device after a wakeup of its room and takes effect
@@ -2924,6 +2978,17 @@ and it was sent again),
 now (`free_slots`), the minutes since it (`minutes`), the slots still `held`
 or `no_reading`, and, at `warn`, the devices the change left `flagged` or
 with a `link_error`; it is settled only by a person's mark.
+`unconfirmed`, source `device`, a write its devices do not show in time
+(see "Writes confirmed by the devices"), its `summary` the `write`
+(`setpoint`, `lock`, `display`), its `target` (`room:<id>` or
+`device:<rf>`), the `room`, its `source` (`api` or `proxy`), what it set
+(`expected`), and an `outcome`:
+`not_confirmed` at `warn`, with the `minutes` since the Cube's answer, how many
+devices showed it (`confirmed`), and the `devices` that do not, each with its
+`rf_address`, `serial`, the `fields` it does not show, what it `shows`, and its
+`error`, `link_error` and `out_of_date`;
+or `confirmed_late` at `info`, one device's, with the `seconds` it took.
+A device's write has the device in `device`, a room's none.
 The server's sign-ins, source `server`, only on the pages and streams of a
 user with `audit`: `login` (`user`, `remote`), `login_failed` at `warn`,
 and `locked_out` at `warn` (`remote`, `for`, `after`: `logins` or `tokens`).

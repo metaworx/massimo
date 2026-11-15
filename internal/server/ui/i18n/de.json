@@ -812,6 +812,7 @@
   "log.kind.command": "Befehl",
   "log.kind.hold": "Funk angehalten",
   "log.kind.structure": "Geräteänderung",
+  "log.kind.unconfirmed": "nicht bestätigt",
   "log.kind.battery": "Batterie",
   "log.kind.wall_reset": "Wandthermostat zurückgesetzt",
   "log.kind.error_reset": "Kommunikationsstörung zurückgesetzt",

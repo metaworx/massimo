@@ -812,6 +812,7 @@
   "log.kind.command": "command",
   "log.kind.hold": "radio held",
   "log.kind.structure": "device change",
+  "log.kind.unconfirmed": "not confirmed",
   "log.kind.battery": "battery",
   "log.kind.wall_reset": "wall thermostat reset",
   "log.kind.error_reset": "communication error reset",

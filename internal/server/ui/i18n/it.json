@@ -814,6 +814,7 @@
   "log.kind.command": "comando",
   "log.kind.hold": "radio in attesa",
   "log.kind.structure": "modifica del dispositivo",
+  "log.kind.unconfirmed": "non confermato",
   "log.kind.battery": "batteria",
   "log.kind.wall_reset": "termostato a parete reimpostato",
   "log.kind.error_reset": "errore di comunicazione reimpostato",

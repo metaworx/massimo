@@ -711,8 +711,18 @@ func (s *Server) setDeviceConfig(w http.ResponseWriter, r *http.Request) error {
 	if err := s.commandError(rt, res, 0); err != nil {
 		return err
 	}
-	rt.afterWrite(rf)
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "discarded": res.Discarded, "budget": res.Budget})
+	answer := map[string]any{"ok": true, "discarded": res.Discarded, "budget": res.Budget}
+	if q.temperatures() || q.valve() {
+		rt.afterWrite(rf)
+	} else {
+		rt.afterWrite() // the display mode is no part of the C line
+	}
+	if q.DisplayActual != nil {
+		// The L entry shows it once the device took it (confirm.go).
+		answer["confirmation"] = rt.beginConfirm(&confirmWrite{what: writeDisplay, target: "device:" + rf.String(), source: "api", command: commandOf(ctx),
+			want: map[string]any{fieldDisplay: *q.DisplayActual}}, []cube.RFAddress{rf})
+	}
+	writeJSON(w, http.StatusOK, answer)
 	return nil
 }
 

@@ -794,12 +794,13 @@ func TestParseRadioCommand(t *testing.T) {
 		data string
 		want RadioCommand
 	}{
-		{"AAQQAAAACgEKAQRO3VTzRQoxIDEgMSAxIA==", RadioCommand{RFSetWeekProgram, Target{RFAddress: 0x0a010a, RoomID: 1, Room: true}}},
-		{"AAARAAAACgEKACwePQkDCgM=", RadioCommand{RFSetTemperatures, Target{RFAddress: 0x0a010a}}},
-		{"AARAAAAACgENBgA=", RadioCommand{RFSetTemperature, Target{RFAddress: 0x0a010d, RoomID: 6, Room: true}}},
+		{"AAQQAAAACgEKAQRO3VTzRQoxIDEgMSAxIA==", RadioCommand{RFSetWeekProgram, Target{RFAddress: 0x0a010a, RoomID: 1, Room: true},
+			[]byte{0x04, 0x4e, 0xdd, 0x54, 0xf3, 0x45, 0x0a, 0x31, 0x20, 0x31, 0x20, 0x31, 0x20, 0x31, 0x20}}},
+		{"AAARAAAACgEKACwePQkDCgM=", RadioCommand{RFSetTemperatures, Target{RFAddress: 0x0a010a}, []byte{0x2c, 0x1e, 0x3d, 0x09, 0x03, 0x0a, 0x03}}},
+		{"AARAAAAACgENBgA=", RadioCommand{RFSetTemperature, Target{RFAddress: 0x0a010d, RoomID: 6, Room: true}, []byte{0x00}}},
 	} {
 		got, err := ParseRadioCommand(tc.data)
-		if err != nil || got != tc.want {
+		if err != nil || got.Command != tc.want.Command || got.Target != tc.want.Target || !bytes.Equal(got.Payload, tc.want.Payload) {
 			t.Errorf("%s: %+v %v, want %+v", tc.data, got, err, tc.want)
 		}
 	}
@@ -807,6 +808,59 @@ func TestParseRadioCommand(t *testing.T) {
 		if _, err := ParseRadioCommand(bad); err == nil {
 			t.Errorf("%q accepted", bad)
 		}
+	}
+}
+
+// The payloads of 0x40, 0x80 and 0x82 decode to what was built, the
+// captured lines among them.
+func TestRadioCommandPayloads(t *testing.T) {
+	parse := func(m Message) RadioCommand {
+		t.Helper()
+		c, err := ParseRadioCommand(m.Data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	for _, tc := range []struct {
+		data string
+		want SetTemperature
+	}{
+		{"AARAAAAACgEKAV4=", SetTemperature{Mode: ModeManual, Setpoint: 15}},                                        // captured
+		{"AARAAAAACgEIAwA=", SetTemperature{Mode: ModeAuto}},                                                        // captured
+		{"AARAAAAACgEKAY2kmgQ=", SetTemperature{Mode: ModeVacation, Setpoint: 6.5, Until: Until{2026, 11, 4, 120}}}, // captured
+		{"AARAAAAACgIDAe0=", SetTemperature{Mode: ModeBoost, Setpoint: 22.5}},
+	} {
+		got, err := parse(Message{Type: 's', Data: tc.data}).SetTemperature()
+		if err != nil || got != tc.want {
+			t.Errorf("%s: %+v %v, want %+v", tc.data, got, err, tc.want)
+		}
+	}
+	if m, err := CmdSetTemperature(Target{RFAddress: 0x0a0203, RoomID: 1, Room: true}, 22.5, ModeBoost, Until{}); err != nil || m.Data != "AARAAAAACgIDAe0=" {
+		t.Errorf("boost 22.5: %v %v", m, err)
+	}
+	for _, locked := range []bool{true, false} {
+		if got, err := parse(CmdLockControls(Target{RFAddress: 0x0a0103}, locked)).Locked(); err != nil || got != locked {
+			t.Errorf("lock %v: %v %v", locked, got, err)
+		}
+	}
+	for _, actual := range []bool{true, false} {
+		if got, err := parse(CmdSetDisplayActual(Target{RFAddress: 0x0a010e}, actual)).DisplayActual(); err != nil || got != actual {
+			t.Errorf("display %v: %v %v", actual, got, err)
+		}
+	}
+	lock := parse(CmdLockControls(Target{RFAddress: 0x0a0103}, true))
+	if _, err := lock.SetTemperature(); err == nil {
+		t.Error("a lock decoded as a set temperature")
+	}
+	if _, err := lock.DisplayActual(); err == nil {
+		t.Error("a lock decoded as a display command")
+	}
+	if _, err := (RadioCommand{Command: RFSetTemperature, Payload: []byte{0x80}}).SetTemperature(); err == nil {
+		t.Error("a vacation without its end decoded")
+	}
+	if _, err := (RadioCommand{Command: RFLockControls}).Locked(); err == nil {
+		t.Error("a lock without its payload decoded")
 	}
 }
 

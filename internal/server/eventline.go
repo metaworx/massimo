@@ -81,6 +81,11 @@ func eventMessage(ev event) string {
 		default:
 			return "structure change not confirmed, memory slots still held"
 		}
+	case "unconfirmed":
+		if ev.Summary["outcome"] == "confirmed_late" {
+			return "write shown by the device after its deadline"
+		}
+		return "write not shown by its devices in time"
 	case "hold":
 		switch ev.Summary["reason"] {
 		case engine.HoldDutyCycle:

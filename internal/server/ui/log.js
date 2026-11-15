@@ -24,7 +24,7 @@ const LOG_KINDS = ["connected", "disconnected", "hello", "metadata", "config", "
   "device_forgotten", "cube_found", "restore_step", "restore_done",
   "cube_gone", "address_changed", "server_started", "server_stopping", "settings_read", "restart", "reboot", "reboot_cancelled",
   "update", "update_result", "backup", "backup_deleted", "backups_pruned", "log_pruned", "log_rotated", "restore_started",
-  "change", "command", "hold", "structure", "error_reset", "login", "login_failed", "locked_out", "audit_pruned",
+  "change", "command", "hold", "structure", "unconfirmed", "error_reset", "login", "login_failed", "locked_out", "audit_pruned",
   "proxy_connected", "proxy_disconnected", "proxy_refused", "proxy_discarded", "proxy_deleted", "proxy_delete_refused", "proxy_pairing", "proxy_warning"];
 
 // LOG_RANGES are the choices of how far back the log goes: the newest
@@ -72,7 +72,7 @@ const LOG_SOURCES = ["system", "config", "cube", "device", "queue", "server", "p
 // LOG_KIND_SOURCE groups the kinds by the source they come from, for the
 // kind choice; a kind of more than one (config) goes with the devices.
 const LOG_KIND_SOURCE = {
-  state: "device", config: "device", paired: "device", device_forgotten: "device", error_reset: "device",
+  state: "device", config: "device", paired: "device", device_forgotten: "device", error_reset: "device", unconfirmed: "device",
   connected: "cube", disconnected: "cube", hello: "cube", metadata: "cube", pairing_started: "cube", pairing_ended: "cube",
   cube_found: "cube", cube_gone: "cube", address_changed: "cube",
   change: "config",

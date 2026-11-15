@@ -813,6 +813,7 @@
   "log.kind.command": "opdracht",
   "log.kind.hold": "radio wacht",
   "log.kind.structure": "apparaatwijziging",
+  "log.kind.unconfirmed": "niet bevestigd",
   "log.kind.battery": "batterij",
   "log.kind.wall_reset": "wandthermostaat teruggezet",
   "log.kind.error_reset": "communicatiefout teruggezet",

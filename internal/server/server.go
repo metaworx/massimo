@@ -292,6 +292,9 @@ type Options struct {
 	// hostNets returns this host's networks in place of its interfaces',
 	// for the tests of other_network (hostnets.go).
 	hostNets func() []*net.IPNet
+	// confirmWithin is how long a write's devices have to show it, for
+	// the tests; zero for defaultConfirmWithin (confirm.go).
+	confirmWithin time.Duration
 	// TLS, when set, is the certificate source of a server that
 	// terminates TLS itself (internal/serve wraps the listener with
 	// certs.Config): /healthz then reports the certificate as "tls", and
@@ -438,6 +441,9 @@ type runtime struct {
 	serial     string // through cubeSerial and learnSerial: the pump learns it
 	showHidden bool
 	follow     *followUp // re-reads after writes, see followup.go
+	// confirms are the writes the devices have not shown yet
+	// (confirm.go).
+	confirms confirmations
 
 	// last is each device's state as the last state event had it, for
 	// the changes of the next one; only the pump uses it.
@@ -932,6 +938,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			ev := event{Kind: e.Kind.String(), Time: time.Now()}
 			var batteryChanges []battery.Change
 			var wallBack *event
+			var confirmed []event // writes the state shows after their deadline (confirm.go)
 			if e.Device != 0 {
 				ev.Device = e.Device.String()
 				snap := rt.client.Snapshot()
@@ -957,8 +964,10 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 					}
 					if e.Kind == cubelan.EventState {
 						wallBack = rt.wallReset(dv, ev.Time)
+						confirmed = s.confirmState(rt, e.Device)
 					}
 					rt.setBattery(&dv)
+					rt.setConfirmation(&dv)
 					ev.State = dv
 					if e.Kind == cubelan.EventState {
 						if prev, had := rt.last[e.Device]; had {
@@ -978,6 +987,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 				delete(rt.walls, e.Device)
 				rt.battery.Forget(e.Device.String())
 				rt.follow.forget(e.Device)
+				rt.confirms.forget(e.Device)
 			}
 			if e.Kind == cubelan.EventPaired {
 				// The metadata does not change by pairing; the device's C
@@ -1002,6 +1012,9 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			s.emitBattery(rt, batteryChanges)
 			if wallBack != nil {
 				rt.emit(*wallBack)
+			}
+			for _, c := range confirmed {
+				rt.emit(c)
 			}
 			switch e.Kind {
 			case cubelan.EventState, cubelan.EventMetadata, cubelan.EventConnected, cubelan.EventConfig, cubelan.EventForgotten:
@@ -1740,6 +1753,7 @@ func (s *Server) getDevice(w http.ResponseWriter, r *http.Request) error {
 	d := deviceDetail{Device: view.DeviceOf(snap, rf, s.staleness())}
 	d.SetWindow(s.windowLimits())
 	rt.setBattery(&d.Device)
+	rt.setConfirmation(&d.Device)
 	if c != nil {
 		d.Firmware, d.Thermostat, d.Wall = c.Firmware, c.Thermostat, c.Wall
 		if d.Wall != nil && st.Valid {
@@ -1822,7 +1836,9 @@ func (s *Server) setDeviceLock(w http.ResponseWriter, r *http.Request) error {
 		return fail(status, "%v", res.Err)
 	}
 	rt.afterWrite()
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "discarded": res.Discarded, "budget": res.Budget})
+	answer := rt.beginConfirm(&confirmWrite{what: writeLock, target: "device:" + rf.String(), source: "api", command: commandOf(ctx),
+		want: map[string]any{fieldLocked: *req.Locked}}, []cube.RFAddress{rf})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "discarded": res.Discarded, "budget": res.Budget, "confirmation": answer})
 	return nil
 }
 
@@ -1939,7 +1955,8 @@ func (s *Server) setpoint(w http.ResponseWriter, r *http.Request, rt *runtime, t
 		return err
 	}
 	rt.afterWrite()
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "discarded": res.Discarded, "budget": res.Budget})
+	answer := rt.setpointConfirm(ctx, t, target, cube.SetTemperature{Mode: mode, Setpoint: req.Temp, Until: until}, "api")
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "discarded": res.Discarded, "budget": res.Budget, "confirmation": answer})
 	return nil
 }
 

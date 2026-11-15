@@ -231,16 +231,17 @@ func (t Target) header(cmd byte) []byte {
 
 func send(payload []byte) Message { return Message{Type: 's', Data: b64.EncodeToString(payload)} }
 
-// RadioCommand is the header of an s: command: the radio command code
-// (RFSetTemperature and the others) and whom it addresses.
+// RadioCommand is an s: command: the radio command code
+// (RFSetTemperature and the others), whom it addresses, and the payload
+// after the header, which its methods decode.
 type RadioCommand struct {
 	Command byte
 	Target  Target
+	Payload []byte
 }
 
 // ParseRadioCommand decodes the header of an s: command's data, as a
-// client of the LAN proxy sends it; the payload after the header is
-// not looked at.
+// client of the LAN proxy sends it, and keeps the payload after it.
 func ParseRadioCommand(data string) (RadioCommand, error) {
 	raw, err := b64.DecodeString(strings.TrimSpace(data))
 	if err != nil {
@@ -249,7 +250,54 @@ func ParseRadioCommand(data string) (RadioCommand, error) {
 	if len(raw) < 10 {
 		return RadioCommand{}, fmt.Errorf("s: %d bytes, want a header of 10", len(raw))
 	}
-	return RadioCommand{Command: raw[2], Target: Target{RFAddress: RFAddressFromBytes(raw[6:9]), RoomID: raw[9], Room: raw[1]&0x04 != 0}}, nil
+	return RadioCommand{Command: raw[2], Target: Target{RFAddress: RFAddressFromBytes(raw[6:9]), RoomID: raw[9], Room: raw[1]&0x04 != 0},
+		Payload: append([]byte(nil), raw[10:]...)}, nil
+}
+
+// SetTemperature is what a 0x40 radio command sets: the mode, the
+// setpoint, and a vacation's end.
+type SetTemperature struct {
+	Mode Mode
+	// Setpoint is 0 for auto without a temperature: the device follows
+	// its week programme.
+	Setpoint float64
+	Until    Until // ModeVacation only
+}
+
+// SetTemperature decodes a 0x40 command's payload, as CmdSetTemperature
+// builds it.
+func (c RadioCommand) SetTemperature() (SetTemperature, error) {
+	p := c.Payload
+	if c.Command != RFSetTemperature || len(p) < 1 {
+		return SetTemperature{}, fmt.Errorf("s: not a set temperature command (0x%02x, %d bytes)", c.Command, len(p))
+	}
+	st := SetTemperature{Mode: Mode(p[0] >> 6), Setpoint: DecodeTemp(p[0] & 0x3f)}
+	if st.Mode == ModeVacation {
+		if len(p) < 4 {
+			return SetTemperature{}, fmt.Errorf("s: vacation without its end (%d bytes)", len(p))
+		}
+		y, m, d := decodeUntilDate(p[1], p[2])
+		st.Until = Until{Year: y, Month: m, Day: d, Minutes: int(p[3]&0x3f) * 30}
+	}
+	return st, nil
+}
+
+// Locked decodes a 0x80 command's payload, as CmdLockControls builds
+// it: true locks the device's buttons.
+func (c RadioCommand) Locked() (bool, error) {
+	if c.Command != RFLockControls || len(c.Payload) < 1 {
+		return false, fmt.Errorf("s: not a lock command (0x%02x, %d bytes)", c.Command, len(c.Payload))
+	}
+	return c.Payload[0]&0x01 != 0, nil
+}
+
+// DisplayActual decodes a 0x82 command's payload, as CmdSetDisplayActual
+// builds it: true shows the measured temperature.
+func (c RadioCommand) DisplayActual() (bool, error) {
+	if c.Command != RFSetDisplayMode || len(c.Payload) < 1 {
+		return false, fmt.Errorf("s: not a display command (0x%02x, %d bytes)", c.Command, len(c.Payload))
+	}
+	return c.Payload[0]&0x04 != 0, nil
 }
 
 // CmdSetTemperature sets setpoint and mode. For ModeVacation, until must be
