@@ -291,6 +291,24 @@ def test_version_never_hidden(page, case):
         page.wait_for_timeout(150)
 
 
+def test_facts_fitted_again_when_the_time_comes(page, case):
+    """The version, the sign and the time are fitted again when what they
+    show changes: with a short version (a build's from a checkout without
+    tags, as CI's) they fit beside the logo on a phone before the time of
+    the last update has come, and the time then takes them to their row,
+    the version whole, not cut under the logo."""
+    page.evaluate("""() => { const v = document.getElementById('version-short'), u = document.getElementById('updated');
+      window.__facts = [v.textContent, u.textContent]; v.textContent = 'v0.0.0-dev'; u.textContent = ''; fitFacts(); }""")
+    try:
+        page.wait_for_timeout(100)
+        page.evaluate("document.getElementById('updated').textContent = 'updated 03:57:52'")
+        assert wait_until(page, "(() => { const v = document.getElementById('version-short'); "
+                          "return v.scrollWidth <= v.clientWidth + 1; })()", 3), "the version whole once the time came"
+    finally:
+        page.evaluate("""() => { const [v, u] = window.__facts; document.getElementById('version-short').textContent = v;
+          document.getElementById('updated').textContent = u; }""")
+
+
 def test_header_on_one_baseline(page, case):
     """The logo (the small mark under 600 px), the version and the time of
     the last update stand on one baseline, the drawing's bottom edge, and
