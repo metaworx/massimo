@@ -1,4 +1,4 @@
-# AP IntegrationUsers v1.0: Integrations act for users
+# AP IntegrationUsers v1.1: Integrations act for users
 
 ## TL;DR
 
@@ -20,6 +20,10 @@ and the call's level, and Massimo allows only what every link in the chain allow
 - **Linking:** proposed by name, confirmed by the owner; several Home Assistant users → one
   Massimo user.
 - **`_massimo._tcp`:** gains `url`, `loc`, `reg` and `api=1`. **`features`:** `integration: 1.0`.
+- **v1.1, the panel's follow-ups:** Seen on the LAN → the address a link with copy, **Register**
+  for an unregistered installation (asks for the address where none is announced); after Approve →
+  the panel re-reads until the key is collected, else "approval expired" with **Register**.
+- **Moved to AP StoreRaise:** the display name, the key, the user names.
 
 ### Blocks
 
@@ -30,6 +34,7 @@ and the call's level, and Massimo allows only what every link in the chain allow
 5. mDNS: `_home-assistant._tcp` browsed; `url`, `loc`, `reg`, `api` in `_massimo._tcp`
 6. Web UI: the Integrations section, the users list's markers and links
 7. Docs, and the note to the integration session
+8. The panel's follow-ups: Seen on the LAN's link, copy and Register; re-reading after Approve
 
 ## Discussion
 
@@ -38,7 +43,7 @@ and the call's level, and Massimo allows only what every link in the chain allow
   can't tell who did what.
 - The integration knows: each service call's context names the Home Assistant user, and Home
   Assistant checks the call's level per entity (`admin`, `control`, `view`).
-- Its side, D55-B and D56: a call without a user names `system`. The integration builds its part
+- Its side, Integration.D55-B and Integration.D56 (the Home Assistant integration's plan): a call without a user names `system`. The integration builds its part
   only once Massimo's is on `main`, exactly as specified here.
 
 **What Home Assistant gives** (the integration session's answers, from Home Assistant 2026.10's
@@ -87,6 +92,29 @@ source):
 - **D11-A:** the users holding the role `integration` today (every API key made for an
   integration so far) move to a new, ordinary role "integration (before 1.0)" with exactly their
   capabilities. Nothing widens.
+
+**v1.1** (2026-11-15/16): the session "HA Integration 1" sent five follow-ups after Home
+Assistant registered on the Pi; the owner evaluated them, then `PLAN++ D18-C D19-A D20-A`, with
+"approval expired" for the state. The chat numbered them D23 to D32; here:
+- **D13-A (chat D24):** Seen on the LAN shows the address as a link with the existing copy pair
+  (`linkEl` and `copyIcon` in a `copy-pair`, as `system-info.js:268`).
+- **D14-A (chat D25):** an installation not registered gets **Register**, opening
+  `<url>/_my_redirect/config_flow_start?domain=massimo` in Home Assistant.
+- **D15-A (chat D27):** after Approve the page re-reads that integration from its own server,
+  `GET /api/v1/integrations/{uuid}`.
+- **D16-A (chat D31):** for the request's whole life, 10 minutes: every 3 s for the first minute,
+  then every 15 s; then "approval expired" with **Register**.
+- **D17-A (chat D30):** these go into this plan's v1.1, not a plan of their own.
+- **D18-C:** where Home Assistant announced no url, **Register** first asks for its address,
+  filled in with `http://<address>:8123`.
+- **D19-A:** "approval expired" is worked out by the page, by the server's rule: active, no key
+  collected, `request_expires` passed (`CollectIntegrationKey` answers 410 Gone then). No API
+  change. Home Assistant registers again, and the approval attaches to the integration by its
+  installation id.
+- **D20-A:** now, beside AP StoreRaise, whose Block 4 touches the same panel later.
+- **Settled elsewhere:** the chat's D23 (a display name for an integration) is AP StoreRaise's
+  own user's `display_name`; D29 (the key editable at approval) and D32 (reserved user names)
+  fall away with StoreRaise.D3 and StoreRaise.D8. D26 was no bug (jaguar's screenshot).
 
 ## Analysis
 
@@ -203,6 +231,17 @@ it finds give the hints, and confirm a request's installation id.
 - **`internal/announce`:** `announce.go` (the TXT record) and `browser.go` (the browser).
 - **`internal/server/ui/`:** the users page; a new partial for the Integrations section.
 
+### A7. The panel's follow-ups (v1.1)
+
+- **Seen on the LAN** (`integrations.js`, `renderSeenIntegrations`): each entry shows `f.url`,
+  else `f.address`, as plain text, and its registration badge. Home Assistant's own `url` comes
+  from its `_home-assistant._tcp` record (`internal/announce/browser.go`).
+- **After Approve** (`requestPanel`): `integrationAction` reads the list once. The integration is
+  then active with `request_expires` ten minutes on and no `key_issued_at` until Home Assistant
+  collects the key.
+- **Register's target:** the announced url, else the approved request's `url`, else the address
+  the owner gives (D18-C), its value kept for the page's session only.
+
 ## Implementation Plan
 
 Every block brings its tests, `docs/api-v1.md` and the OpenAPI file for each route, `docs/ui.md`
@@ -286,6 +325,30 @@ after a link.
 
 **Verification:** the guidelines check; the line breaks.
 
+### Block 8: The panel's follow-ups (v1.1)
+
+1. **Seen on the LAN:** the url as a link (`linkEl`) with `copyIcon` in a `copy-pair`; the bare
+   address copyable (`copyEl`); **Register** for an entry not registered.
+2. **Register:** opens `<url>/_my_redirect/config_flow_start?domain=massimo` in a new tab; with no
+   url, a `.field` row asks for Home Assistant's address, filled with `http://<address>:8123`,
+   and an Open button; the address checked as an `http(s)` URL.
+3. **After Approve:** the integration's panel says it waits for Home Assistant to collect its
+   key, and the page re-reads `GET /api/v1/integrations/{uuid}` every 3 s for the first minute,
+   then every 15 s, until `key_issued_at` is set or `request_expires` passes; a timer per
+   integration, stopped when the section is left or redrawn.
+4. **Approval expired:** an active integration without `key_issued_at` and with `request_expires`
+   passed shows "approval expired" and **Register**.
+5. **Texts** in the six languages (FR/IT/NL/PL machine-translated and marked).
+6. **Tests:** `test_integrations.py` at 1100 and 390 px, English and German: the link and the
+   copy; Register's link; the address asked for and checked; the re-read after Approve ending
+   with the key collected (the fake's request approved and its key collected through the API);
+   "approval expired" (the integration's answer stubbed).
+7. **Docs:** `docs/ui.md`.
+8. CHANGELOG fragment `Added`.
+
+**Verification:** the Go gate, `make cross`, the lint commands, the touched UI test file at 1100
+and 390 px, `GUIDELINES/shared/tools/check`.
+
 ## Proposed commit message
 
 For Block 1, for example:
@@ -310,3 +373,7 @@ Assisted-by: claude-code:claude-opus-5-5
 - **v1.0** (2026-11-14): first revision. It rests on the briefing of the session "HA Integration
   1", its two answers about Home Assistant's users and installation id, and the owner's D1 to
   D11.
+- **v1.1** (2026-11-16): the owner's `PLAN++ D18-C D19-A D20-A`, "approval expired" for the
+  state: Block 8, the panel's follow-ups from the session "HA Integration 1" (D13-A to D20-A,
+  numbered from the chat's D24, D25, D27, D30 and D31); the display name, the key and the user
+  names moved to AP StoreRaise; D55 and D56 qualified as the integration's plan's.
