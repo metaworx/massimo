@@ -168,9 +168,16 @@ The compacted header has **↑** left of ☰, back to the top.
   ☰ carries an amber triangle or a red cross,
   and the sheet of its Log entry turns amber or red, both named with the count.
 - The settings pages, Cube settings, System settings, Maintenance and System info,
-  each have a title row kept under the header, and in it, right-aligned
-  before the sections menu, a button for each of the others the role may
-  open, with its icon and its name; on a phone the icon alone.
+  each have a row kept under the header, and in it, in the title's place,
+  a button for each of them the role may open, with its icon and its name,
+  always in this order, so that each keeps its place;
+  the page shown is filled, and a click on it opens nothing.
+  Below 900 px the buttons show their icon alone but for the page shown,
+  which is as wide on every page, so that the buttons after it keep their places too:
+  the longest of the names, as far as the row leaves room
+  beside the sections menu's place, kept on every page;
+  a longer name ends in "…".
+  A role that may open one of them alone sees its title there, and no button.
 - The page shown is in the address, Rooms without one:
   `#log`, `#me` (Personal settings, or at a card `#profile`, `#prefs` and
   `#notify`), `#cube` (Cube settings), `#system` (System settings),
@@ -248,7 +255,7 @@ Every room has a tile:
   the radio, a Wi-Fi fan or a tower as you choose (My settings),
   a device that lost its link (amber, a triangle),
   or the Cube could not reach (red, a cross);
-  a battery, one running low (amber);
+  a battery, one getting weak (amber) or low (red), as the server keeps its level;
   an open window, the opening sash or the paned window as you choose,
   a window contact reporting it:
   blue for its first 5 minutes, then amber with a triangle,
@@ -302,6 +309,9 @@ Every room has a tile:
   thermostat, a window, a leaf for the eco button), its values (valve, set
   and measured temperature, offset), its problems as icons that list them,
   as in the tile's head, and badges for lock, window and mode.
+  A device the Cube has not heard for some minutes keeps the values of its
+  last report, greyed, with the badge "out of date" and its age in place of
+  "not reported".
   Expert mode adds each device's type, serial number and radio address,
   as "S/N MEQ0000103 · RF 0a0103": the serial is printed on the device,
   the radio address is not.
@@ -678,7 +688,7 @@ also while no page is open.
   On an iPhone or iPad the page has to be added to the Home Screen first.
 - **What notifies you**:
   a switch per kind, with its delay or threshold, each with its help:
-  a window open (after 30 min), frost (below 8 °C), a low battery,
+  a window open (after 30 min), frost (below 8 °C), a low battery, a battery getting weak,
   a device's error, the Cube out of reach (after 10 min) and back,
   and, off by default, a device that sends no news, a device paired,
   a new Cube on the network and a new version of Massimo.
@@ -721,8 +731,9 @@ It caches nothing else: the page loads from the server as before.
 ☰ → **Cube settings** shows the panel of the Cube chosen in the header,
 as System settings → Cubes draws it, for a role with `cubes` or with `pair`
 (the pairing alone for `pair`).
-The page's title row, **Cube settings**, stays under the header as the page
-scrolls, as every page's does.
+The page's row, **Cube settings** filled among the settings pages,
+stays under the header as the page scrolls, as every page's does,
+with **Sections** at its right end: the Cube and Backup and restore.
 Under it the panel is open and stays open: its head, the Cube's sign, name,
 serial, radio budget and pill, is its first row, and a click on it folds
 nothing.
@@ -736,7 +747,8 @@ as System settings → Backup and restore shows it for each Cube.
 ## System info
 
 ☰ → **System info** is for every role with `read`, a viewer's too:
-its title stays under the header while the page scrolls.
+its row stays under the header while the page scrolls,
+with the viewer's title in it, the one settings page that role has.
 The facts are the server's, a Cube's in its panel under System settings → **Cubes**.
 The page is a table of the server's version and what it was built with,
 when it started, as the server's clock read it, to the second in its zone,
@@ -798,7 +810,7 @@ Cubes first, then Users, Roles,
 **Capabilities for every role**, and Backup and restore last;
 from 900 px Users, Roles and Capabilities flow in two columns,
 none split, the break where their heights put it.
-The title stays under the header while the page scrolls,
+The page's row stays under the header while the page scrolls,
 with **Sections** at its right end (a bulleted list):
 it lists the cards the role sees, marks the one in view and brings the one
 chosen into view, opened.
@@ -1043,7 +1055,7 @@ the browser keeps which cards are folded.
 
 ☰ → **Maintenance** keeps the server itself going,
 in two cards as wide as the page, **Software update** and **Maintenance**,
-under the page's title row with **Sections** at its right end, as System settings has.
+under the page's row with **Sections** at its right end, as System settings has.
 It is for every role that has System settings, Software update being for all of them,
 and for one with `update`, `restart` or `reboot` alone;
 a viewer has no such entry in ☰.
@@ -1113,12 +1125,16 @@ The server's sign, when it says an update is out, opens it at Software update.
   Cubes every** (with `settings`) choose the intervals `poll_interval`
   (10 s to 1 h, 10 s by default), `refresh_interval` (Off, 30 min to
   7 days, 6 h by default) and `discover_interval` (Off, 1 min to 1 day,
-  30 min by default) from a list of steps; a value set through the API
+  30 min by default) from a list of steps, and **Re-read the radio
+  budget after a hold every** the duty cycle's hold `duty_wait` (1 min to
+  1 h, 10 min by default); a value set through the API
   that is none of them is listed as well, and the default is stored as
   none.
   The line under each says what it does: the device list asked for,
   which costs the Cube no radio time; a new connection that reads
-  everything the Cube holds; the search for Cubes on the LAN.
+  everything the Cube holds; the search for Cubes on the LAN; how long
+  radio commands wait at a used-up duty cycle before the Cube's budget is
+  read again.
   It then gives this run's value, or says that a change waits for the
   next restart; where `-poll`, `-refresh` or `-discover-interval`
   decides, the choice is read-only and names the flag.
@@ -1194,9 +1210,11 @@ A long page is a grid of section cards (`section.section-card`,
 its heading's `button.section-fold` folding it):
 `sectionCards` makes them fold and keeps the fold in the browser,
 `sectionBadges` shows what a card holds in its head,
-`pageBar` fills the sections menu of its title's row kept at the top,
-`pageSwitch` puts the other settings pages beside it (`SETTINGS_PAGES` in `log.js`,
-as ☰'s pages are `MENU_VIEWS`),
+`pageBar` fills the sections menu of its title's row kept at the top
+(with a part without a fold marked `.page-section`, as Cube settings' panel),
+`pageSwitch` puts the settings pages in its title's place (`SETTINGS_PAGES` in `log.js`,
+as ☰'s pages are `MENU_VIEWS`; `markSettingsPages` shows the title for one page alone),
+`fitPageTabs` gives the page shown's button the longest name's width,
 and `backToTop` wires the two ↑, the floating one and the compacted header's;
 `pickerMenu` makes a dropdown the choice of one item (the Cube choice),
 its items `menuItem`s, a Cube's link its network sign (`cubeSignEl`, `LINK_SIGN`);

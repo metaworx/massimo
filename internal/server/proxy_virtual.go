@@ -55,7 +55,7 @@ func (s *Server) proxyVirtuals(rt *runtime) []proxy.Virtual {
 	if md == nil {
 		return nil
 	}
-	vwts, _ := view.RoomThermostats(snap, rt.hidden(), s.StaleAfter(), rt.roomInfo())
+	vwts, _ := view.RoomThermostats(snap, rt.hidden(), s.staleness(), rt.roomInfo())
 	var out []proxy.Virtual
 	for _, room := range rt.hidden().VisibleRooms(md) {
 		d, ok := vwts[room.ID]

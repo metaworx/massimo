@@ -127,6 +127,7 @@ function applyCaps() {
   $("setup").classList.toggle("hidden", !(me && me.setup));
   renderOpenBanner();
   renderMe();
+  markSettingsPages(); // log.js
   if (!mayShow(currentView)) showView("tiles", "replace"); // log.js: a page the user signed in now may not open
 }
 

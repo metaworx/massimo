@@ -24,7 +24,8 @@ const (
 	KindCubeOffline = "cube_offline" // disconnected, and not back within the delay
 	KindCubeOnline  = "cube_online"  // back after a cube_offline was sent
 	KindWindowOpen  = "window_open"  // a window open, still open after the delay
-	KindBatteryLow  = "battery_low"  // a device's battery went low
+	KindBatteryLow  = "battery_low"  // a device's battery flag held: change the batteries
+	KindBatteryWeak = "battery_weak" // a device's battery flag seen under load, still weak after BatteryWeakDelay
 	KindDeviceError = "device_error" // a device reports an error or a link error
 	KindFrost       = "frost"        // the measured temperature fell under the threshold
 	KindDeviceStale = "device_stale" // a thermostat past the stale threshold
@@ -66,6 +67,7 @@ func Defaults() Prefs {
 		KindCubeOnline:  {On: true},
 		KindWindowOpen:  {On: true, AfterMin: intp(30)},
 		KindBatteryLow:  {On: true},
+		KindBatteryWeak: {On: true},
 		KindDeviceError: {On: true},
 		KindFrost:       {On: true, BelowC: floatp(8)},
 		KindDeviceStale: {On: false},
@@ -163,7 +165,7 @@ type Notification struct {
 // one of its own (cube_found, update).
 type Event struct {
 	// Kind is the server's event kind: connected, disconnected, state,
-	// paired, cube_found or update; others are ignored.
+	// battery, paired, cube_found or update; others are ignored.
 	Kind string
 	// Cube is the serial of the Cube the event is of.
 	Cube string
@@ -173,8 +175,8 @@ type Event struct {
 	RoomName                   string
 	// State is the device's state, for a state event.
 	State *State
-	// Values are the event's: type for paired, address for cube_found,
-	// version for update.
+	// Values are the event's: level for battery, type for paired,
+	// address for cube_found, version for update.
 	Values map[string]any
 	Time   time.Time
 }

@@ -978,10 +978,11 @@ func (s *Server) setRoomProgram(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	radiators, walls := roomThermostats(rt, room.ID)
-	if len(radiators)+len(walls) == 0 {
+	addr, ok := roomAddress(rt, room)
+	if !ok {
 		return fail(http.StatusConflict, "room %d has no thermostat", room.ID)
 	}
+	radiators, walls := roomThermostats(rt, room.ID)
 	body, err := readBody(r)
 	if err != nil {
 		return err
@@ -989,10 +990,6 @@ func (s *Server) setRoomProgram(w http.ResponseWriter, r *http.Request) error {
 	before, _ := rt.programOfRoom(room.ID)
 	if err := checkIfMatch(r, before.etag); err != nil {
 		return err
-	}
-	addr := room.RFAddress
-	if addr == 0 {
-		addr = append(radiators, walls...)[0]
 	}
 	lines, err := programLines(cube.Target{RFAddress: addr, RoomID: room.ID, Room: true}, body)
 	if err != nil {

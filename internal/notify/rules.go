@@ -71,9 +71,12 @@ func (e *engine) event(ev Event) {
 		if ev.State != nil {
 			e.state(ev, *ev.State)
 		}
+	case "battery":
+		e.battery(ev)
 	case "device_forgotten":
 		key := deviceKey(ev.Cube, ev.Device)
 		e.cancel("window|" + key)
+		e.cancel("battery|" + key)
 		delete(e.prev, key)
 		delete(e.below, key)
 		delete(e.stale, key)
@@ -98,6 +101,35 @@ func (e *engine) event(ev Event) {
 	}
 }
 
+// BatteryWeakDelay is how long a device stays weak before battery_weak
+// is sent: a wall thermostat goes from weak to low within 15 minutes
+// (internal/battery, HoldLow), and gets battery_low alone.
+const BatteryWeakDelay = 15 * time.Minute
+
+// battery runs the battery rules over a change of a device's level
+// (Values["level"], internal/battery): weak sends battery_weak once it
+// has lasted BatteryWeakDelay, low sends battery_low at once, ok drops
+// a battery_weak still waiting. Each is sent once per change of level,
+// never while the flag flickers.
+func (e *engine) battery(ev Event) {
+	p := e.user.Prefs
+	key := "battery|" + deviceKey(ev.Cube, ev.Device)
+	level, _ := ev.Values["level"].(string)
+	switch level {
+	case "weak":
+		if p.on(KindBatteryWeak) && e.pending[key] == nil {
+			e.delay(key, BatteryWeakDelay, device(ev, KindBatteryWeak))
+		}
+	case "low":
+		e.cancel(key)
+		if p.on(KindBatteryLow) {
+			e.send(device(ev, KindBatteryLow))
+		}
+	default:
+		e.cancel(key)
+	}
+}
+
 // state runs the device rules over a state event, against the device's
 // previous state; a device seen for the first time counts as having had
 // none of the conditions.
@@ -117,10 +149,6 @@ func (e *engine) state(ev Event, st State) {
 		n.Since = timep(ev.Time)
 		n.Values = map[string]any{"minutes": int(p.after(KindWindowOpen) / time.Minute)}
 		e.delay("window|"+key, p.after(KindWindowOpen), n)
-	}
-
-	if st.BatteryLow && !(had && prev.BatteryLow) && p.on(KindBatteryLow) {
-		e.send(device(ev, KindBatteryLow))
 	}
 
 	if (st.Error || st.LinkError) && !(had && (prev.Error || prev.LinkError)) && p.on(KindDeviceError) {

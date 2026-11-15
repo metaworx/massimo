@@ -33,7 +33,8 @@ def test_cube_page_shows_the_chosen_cube(page, case):
     assert panel.get_attribute("open") is not None, "a click on its head folds nothing"
     assert panel.locator(":scope > summary").get_attribute("tabindex") == "-1", "its head out of the tab order"
     bar = page.locator("#cube-page .page-bar")
-    assert bar.is_visible() and bar.locator("h2").inner_text() == page.evaluate("t('nav.cubeTitle')"), "the page's title row"
+    assert bar.is_visible() and bar.locator(".page-link.current").get_attribute("data-view") == "cube", "the page's row, itself current"
+    assert bar.locator("h2").text_content() == page.evaluate("t('nav.cubeTitle')"), "named Cube settings"
     assert bar.evaluate("(e) => getComputedStyle(e).position") == "sticky", "kept under the header"
     head = panel.locator(":scope > summary")
     assert head.evaluate("(e) => getComputedStyle(e).position") == "static", "the panel's head scrolls with it"
@@ -43,6 +44,29 @@ def test_cube_page_shows_the_chosen_cube(page, case):
     assert wait_until(page, "!!document.querySelector(\"#cubes-list .cube-panel[data-serial='KEQ0000100']\")", 5), \
         "System settings lists it again"
     assert page.locator(PAGE_PANEL).count() == 0, "and the page no longer holds it"
+
+
+def test_cube_page_sections_menu(page, case):
+    """Cube settings' sections menu, at its row's right end: the Cube and
+    Backup and restore, by name as System settings' are; Backup and
+    restore brought into view under the row, the Cube back under it."""
+    show_view(page, "cube")
+    assert wait_until(page, "!!document.querySelector('#cube-page .cube-panel')", 5), "the Cube's panel on the page"
+    page.locator("#cube-page .sec-menu > summary").click()
+    items = page.locator("#cube-page .sec-menu .toc-link")
+    names = [items.nth(i).inner_text().strip() for i in range(items.count())]
+    assert names == [page.evaluate("t('header.cube')"), page.evaluate("t('backup.title')")], f"the Cube and its backups: {names}"
+    items.nth(1).click()
+    bar = page.locator("#cube-page .page-bar")
+    assert wait_until(page, """(() => { const r = document.getElementById('cube-backup').getBoundingClientRect();
+      return r.top >= document.querySelector('#cube-page .page-bar').getBoundingClientRect().bottom - 1 && r.top < innerHeight; })()""", 3), \
+        "Backup and restore in view, under the row"
+    assert bar.bounding_box()["y"] >= 0, "the row still shown"
+    page.locator("#cube-page .sec-menu > summary").click()
+    items.nth(0).click()
+    assert wait_until(page, """(() => { const r = document.getElementById('cube-page-body').getBoundingClientRect();
+      const under = document.querySelector('#cube-page .page-bar').getBoundingClientRect().bottom;
+      return r.top >= under - 1 && r.top <= under + 30; })()""", 3), "the Cube back under the row"
 
 
 def test_cube_page_saves_as_system_settings_shows(page, case):

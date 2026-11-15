@@ -75,3 +75,28 @@ def test_interval_fixed_by_flag(page, case):
     assert "-discover-interval" in text, "the line names the flag"
     assert setting("discover_interval").get("fixed_by") == "-discover-interval"
     show_view(page, "tiles")
+
+
+def test_duty_wait_choice(page, case):
+    """The duty cycle's hold (AP LegacyLogs v1.0, Block 9): 10 min at
+    first, open, the line saying what it does; 30 min is stored and
+    waits for the restart; 10 min again clears the store's value."""
+    api_call("PUT", "api/v1/settings", {"duty_wait": None})
+    try:
+        show_view(page, "maint")
+        sel = page.locator("#interval-duty")
+        assert wait_until(page, "document.querySelector('#interval-duty-text').textContent.length > 0", 5), "the line is filled"
+        assert sel.is_enabled() and sel.input_value() == "600", "10 min, and the choice open"
+        assert page.locator("#interval-duty-text").inner_text().startswith(page.evaluate("t('maint.dutyWaitHint')")), \
+            "the line says what the hold does"
+        sel.select_option("1800")
+        assert wait_until(page, "!document.querySelector('#interval-duty-msg').classList.contains('hidden')", 5), "the change says how it went"
+        stored = setting("duty_wait")
+        assert stored.get("value") == "30m" and stored.get("set") is True, "30 min stored"
+        assert stored.get("in_effect") == "10m", "in effect only at the next start"
+        sel.select_option("600")
+        assert wait_until(page, "!document.querySelector('#interval-duty').disabled", 5)
+        assert setting("duty_wait").get("set") is False, "the default stored as none"
+    finally:
+        api_call("PUT", "api/v1/settings", {"duty_wait": None})
+        show_view(page, "tiles")
