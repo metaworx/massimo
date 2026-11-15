@@ -154,7 +154,7 @@ function badgeState(kind) {
 
 // noticeEl is a lasting warning (.notice) of a text, for a state the
 // server keeps trying to leave, such as a Cube proxy that does not listen
-// (cubes.js, update.js): since, an API time, adds from when it holds;
+// (cube-panel.js, system-info.js): since, an API time, adds from when it holds;
 // next, an API time, when the server tries again, as its tooltip. Times,
 // not ages: a try comes every few seconds, and refreshAges runs once a
 // minute.
@@ -823,14 +823,14 @@ function sectionButtons(page) {
 }
 
 // pageSwitch puts into a settings page's row, in its title's place, a
-// button for every settings page (pages, log.js SETTINGS_PAGES), in the
+// button for every settings page (pages, pages.js SETTINGS_PAGES), in the
 // same order on every page, so that each keeps its place: its icon and
 // its name, the icon alone below 900 px but for the page shown
 // (style.css); the page shown filled and marked current, a click on it
 // opening nothing; each hidden from a role that may not open its page by
 // that page's needs class (login.js). The title stays in the row, hidden
 // but the page's name for a screen reader, and shows in the buttons'
-// place where the role may open no other settings page (log.js
+// place where the role may open no other settings page (pages.js
 // markSettingsPages). open shows a page.
 function pageSwitch(page, current, pages, open) {
   const bar = page.querySelector(".page-bar");
@@ -859,7 +859,7 @@ function pageSwitch(page, current, pages, open) {
 // after it keep their places; style.css applies it below 900 px, where
 // the others show their icon alone, no wider than the row leaves beside
 // the sections menu's place. It measures the names of a page shown
-// (log.js fitSettingsPages: when one is shown, after a change of
+// (pages.js fitSettingsPages: when one is shown, after a change of
 // language or of the signed-in user); a hidden name still has its width.
 function fitPageTabs(page) {
   const nav = page.querySelector(".page-switch");

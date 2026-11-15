@@ -129,7 +129,7 @@ every three seconds for up to five minutes (`followUpdate`), with a
 thirty-second grace period after the request for the moment before the
 helper has written its first state; a poll that fails (the server is
 restarting) counts as busy; after a reload while the helper works,
-`renderUpdate` sees `helper.state` and resumes the polling. app.js's
+`renderUpdate` sees `helper.state` and resumes the polling. header.js's
 `checkVersion` compares `/healthz`'s `version` with the one the page
 was loaded with and reloads the page when nothing is open, or shows the
 reload button (the Settings page counts as open, `somethingOpen`).

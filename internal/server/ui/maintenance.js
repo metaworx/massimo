@@ -216,7 +216,7 @@ function followReboot(at) {
     if (now && now !== rebootState.before) {
       rebootState.following = false;
       showRebootText(t("reboot.back", { time: fmtInstant(new Date(Date.parse(now))) }));
-      checkVersion(); // app.js
+      checkVersion(); // header.js
       refresh().then(connectEvents);
       return;
     }
@@ -302,7 +302,7 @@ function followRestart(before, until) {
       restartState.following = false;
       $("restart-btn").disabled = false;
       showRestartText(t("restart.back", { time: fmtInstant(new Date(Date.parse(now))) }));
-      checkVersion(); // app.js: the start in the settings, and a reload for a new version
+      checkVersion(); // header.js: the start in the settings, and a reload for a new version
       refresh().then(connectEvents);
       return;
     }

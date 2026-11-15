@@ -9,10 +9,9 @@
 // found on the network, a Cube with Add (POST /api/v1/cubes). The list is drawn when the settings open, after every
 // change, and on a poll while no panel is open, so that a poll never
 // throws away what is being typed. Each panel starts with Pair a device
-// (capability pair), the pairing flow: the time, Start, the countdown
-// with Stop, and each device that joins with the form that puts it into
-// a room (pairDeviceForm, which Devices without a room uses too). A role
+// (capability pair), the pairing flow (pairing.js). A role
 // with pair but without cubes sees the panels with the pairing alone.
+// A Cube's panel itself, its head, facts and actions, is cube-panel.js.
 // The page Cube settings (☰) shows the chosen Cube's panel alone, open
 // (renderCubePage); a panel is drawn in one place at a time, as its ids
 // are its serial's.
@@ -164,7 +163,7 @@ function foundFold(found) {
 // address, those found and not served.
 function renderCubesBadges() {
   const count = (link) => state.cubes.filter((c) => linkState(c) === link).length; // app.js
-  const lost = state.cubes.filter((c) => linkSign(c) === "bad").length; // app.js
+  const lost = state.cubes.filter((c) => linkSign(c) === "bad").length; // header.js
   const badges = [badgeEl(tn("cubes.badge.served", state.cubes.length), "mode")];
   if (lost) badges.push(badgeEl(tn("cubes.badge.disconnected", lost), "bad"));
   if (count("held")) badges.push(badgeEl(tn("cubes.badge.held", count("held")), "warn"));

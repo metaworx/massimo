@@ -258,7 +258,7 @@ function certFollow(v) {
 // where the proxy names no scheme, and the header it does not send; the
 // page's own HTTPS while the server serves none, which only a proxy does,
 // with the setting that would tell more; else the server's own (certText,
-// app.js).
+// header.js).
 function fillCertificate(v) {
   const cell = $("info-tls");
   clear(cell);

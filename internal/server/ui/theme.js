@@ -13,9 +13,9 @@
 //    "light": {"bg": "#f6f6f4", …}, "dark": {"bg": "#151514", …}}
 //
 // which a server will later store per user, so the format is fixed. The
-// Settings page has the two choices, the editor with a contrast hint
-// (WCAG ratio) for the pairs that must stay readable, Export and Import.
-// Loaded after app.js (readStored, store, state, the DOM helpers); the
+// Settings page's Appearance card, the editor with a contrast hint
+// (WCAG ratio) for the pairs that must stay readable, Export and Import,
+// is appearance.js. Loaded after app.js (readStored, store, state, the DOM helpers); the
 // stored choice is applied as soon as this file runs, before the page
 // is drawn, so a scheme does not flash the default first.
 "use strict";
@@ -358,9 +358,9 @@ function applyIcons() {
 
 // redrawSigns draws again what shows the window and the radio.
 function redrawSigns() {
-  renderRooms(); // tiles.js
+  renderRooms(); // rooms.js
   renderCubes(); // cubes.js
-  renderCubeSelect(); // app.js, the header's problems
+  renderCubeSelect(); // header.js, the header's problems
 }
 
 // chooseIcon is a drawing's choice, kept as the other settings are.

@@ -1217,7 +1217,7 @@ its heading's `button.section-fold` folding it):
 `sectionBadges` shows what a card holds in its head,
 `pageBar` fills the sections menu of its title's row kept at the top
 (with a part without a fold marked `.page-section`, as Cube settings' panel),
-`pageSwitch` puts the settings pages in its title's place (`SETTINGS_PAGES` in `log.js`,
+`pageSwitch` puts the settings pages in its title's place (`SETTINGS_PAGES` in `pages.js`,
 as ☰'s pages are `MENU_VIEWS`; `markSettingsPages` shows the title for one page alone),
 `fitPageTabs` gives the page shown's button the longest name's width,
 and `backToTop` wires the two ↑, the floating one and the compacted header's;

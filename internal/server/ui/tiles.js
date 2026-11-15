@@ -3,11 +3,10 @@
 
 // The Massimo web UI, tiles: one tile per room with the setpoint
 // stepper, the mode buttons with the More menu (Eco, Comfort, Hold,
-// Holiday…) and the inline panels (vacation, delete),
-// the House tile with its panel, the device list, the devices without a
-// room with Put into a room… and Remove from the Cube, and the actions
-// behind them. Uses the state, api and helpers of app.js, and
-// pairDeviceForm of cubes.js.
+// Holiday…) and the inline panels (vacation, delete). The rooms' facts
+// and the actions behind a tile are in rooms.js, the device list in
+// devices.js, the devices without a room in unlisted.js, the House tile
+// in house.js. Uses the state, api and helpers of app.js.
 "use strict";
 
 // --- rendering --------------------------------------------------------

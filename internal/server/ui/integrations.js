@@ -62,12 +62,12 @@ function renderNotLooking(box) {
   const a = integrationsUI.announce || {};
   const key = NOT_LOOKING[a.why] || "integrations.foundNot";
   box.appendChild(textEl("p", t(key, { by: a.fixed_by || "" }), "muted small"));
-  if (!NOT_LOOKING[a.why] || a.why === "fixed" || !hasCap("settings") || !mayShow("maint")) return; // log.js
+  if (!NOT_LOOKING[a.why] || a.why === "fixed" || !hasCap("settings") || !mayShow("maint")) return; // pages.js
   const b = textEl("button", t("integrations.openMaintenance"));
   b.type = "button";
   b.id = "integrations-open-maint";
   b.addEventListener("click", () => {
-    showView("maint"); // log.js
+    showView("maint"); // pages.js
     showCard($("sys-maint")); // components.js
   });
   box.appendChild(elem("div", "actions", elem("span", "actions-left", b)));

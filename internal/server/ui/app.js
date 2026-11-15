@@ -5,9 +5,11 @@
 // login.js), the helpers the
 // other files share that read the page's state (fmtTemp, ageEl,
 // helpParts; fmtNum is in i18n.js, the components in components.js),
-// settings, the header with the Cube clock, loading of cubes and rooms,
-// polling and the event stream with its tickets. The tiles and their
-// actions are in tiles.js.
+// settings, the Cube clock, loading of cubes and rooms,
+// polling and the event stream with its tickets. The header is in
+// header.js, the home notice and the search for Cubes in home.js, My
+// settings' wiring in prefs.js; the rooms and their tiles are in rooms.js
+// and the scripts after it.
 "use strict";
 
 const state = {
@@ -726,7 +728,7 @@ function clearCubeData() {
   for (const ui of Object.values(state.ui)) if (ui.timer) clearTimeout(ui.timer);
   Object.assign(state, { cubes: [], found: [], rooms: [], unlisted: [], roomsOf: null, details: {}, ui: {}, lastPoll: null });
   logState.cubeRooms.clear(); // log.js: every Cube's rooms, as the last user saw them
-  renderRooms(); // tiles.js
+  renderRooms(); // rooms.js
   renderCubeSelect();
   renderHomeNotice();
   renderUpdated();
@@ -833,7 +835,7 @@ async function connectEvents() {
   };
   on("hello", logged(() => loadCubes()));
   on("metadata", logged(() => loadRooms()));
-  // Pairing (cubes.js): a device that joined is among the devices
+  // Pairing (pairing.js): a device that joined is among the devices
   // without a room once the server read its C line, which the reload
   // after its config event finds as well.
   on("pairing_started", logged(() => pairingEvent(serial)));
@@ -912,7 +914,7 @@ function applyLanguage() {
   pageBar($("maint-page"));
   pageBar($("cube-page"));
   pageBar($("me"));
-  fitSettingsPages(); // log.js: the page shown's button as wide as the longest name
+  fitSettingsPages(); // pages.js: the page shown's button as wide as the longest name
   renderLangSelect();
   applyAppearance();
   renderCubeSelect();
@@ -967,7 +969,7 @@ async function init() {
   initLog();
   initNotify(); // notify.js, before the page the address names is shown
   const hadSerial = !!state.serial;
-  showAddress(); // log.js: the page the address names, the log with its choices
+  showAddress(); // pages.js: the page the address names, the log with its choices
   refresh().then(() => {
     store("massimo.serial", state.serial);
     if (isShown("log") && !hadSerial) loadLog(); // it had no Cube to load from yet

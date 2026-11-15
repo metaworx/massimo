@@ -22,7 +22,7 @@ function hostPort(addr) {
 // Cube's clock and the whole budget.
 function fillCubeFacts(d, c) {
   const { host, port } = hostPort(c.address);
-  const f = budgetFacts(c); // app.js
+  const f = budgetFacts(c); // header.js
   d.querySelector("summary .cube-head-who > .mono").textContent = host ? c.serial + " · " + host : c.serial;
   d.querySelector(".cube-head-stats").textContent =
     [t("budget.duty") + " " + f.duty, t("budget.slots") + " " + f.slots, t("budget.pending") + " " + f.pending].join(" · ");
@@ -297,8 +297,8 @@ function sameList(a, b) {
 // settings file that differs, a fixed address it is found elsewhere
 // than, where its configuration comes from.
 function cubeBadges(c) {
-  const st = linkSign(c); // app.js
-  const out = st === "ok" ? [] : [badgeEl(linkWord(c), st === "bad" ? "bad" : "warn")]; // app.js
+  const st = linkSign(c); // header.js
+  const out = st === "ok" ? [] : [badgeEl(linkWord(c), st === "bad" ? "bad" : "warn")]; // header.js
   const failing = proxyFailing([c]);
   if (failing) out.push(badgeEl(tn("proxy.badge.failing", failing), "warn"));
   if ((c.file_differs || []).length) out.push(badgeEl(tn("cubes.differsCount", c.file_differs.length), "warn"));
@@ -315,11 +315,11 @@ function cubeBadges(c) {
 // its own badges as its top line.
 function fillCubeHead(d, c) {
   const sum = d.querySelector("summary");
-  sum.querySelector(".conn-sign").replaceWith(cubeSignEl(c)); // app.js
-  const entries = [cubeEntry(c, true)]; // app.js
+  sum.querySelector(".conn-sign").replaceWith(cubeSignEl(c)); // header.js
+  const entries = [cubeEntry(c, true)]; // header.js
   const was = sum.querySelector(".cube-pill details");
   if (!was || !was.open) {
-    const pill = problemsEl(entries, problemsLabelOf(entries)); // components.js, app.js
+    const pill = problemsEl(entries, problemsLabelOf(entries)); // components.js, header.js
     if (pill) {
       // a click in its list is not one on the panel's head
       pill.addEventListener("click", (ev) => {

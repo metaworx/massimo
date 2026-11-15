@@ -4,7 +4,7 @@
 // The Massimo web UI, configuration: the per-room configuration area
 // (name, temperatures, device settings, week programme, copy to other
 // rooms), inline in the tile, one screen per section with Send and
-// Cancel. Uses the state, api and helpers of app.js and tiles.js.
+// Cancel. Uses the state, api and helpers of app.js, rooms.js and tiles.js.
 "use strict";
 
 const DAYS = MassimoWeekProgram.DAYS; // week-program.js
@@ -404,7 +404,7 @@ function renderDeviceForm(room, c, d) {
 }
 
 // removeDeviceOfRoom removes a device of the room from the Cube
-// (removeFromCube, tiles.js) and shows the Devices tab again without it.
+// (removeFromCube, unlisted.js) and shows the Devices tab again without it.
 async function removeDeviceOfRoom(room, c, d) {
   setConfigResult(room, c, t("device.removing", { device: deviceName(d) }), true);
   const res = await removeFromCube(d);
@@ -509,7 +509,7 @@ function renderProgramTab(room, c) {
 }
 
 // weekKit is what the week programme editor builds with: the page's
-// translation, its elements (components.js) and temperatures (tiles.js).
+// translation, its elements (components.js) and temperatures (rooms.js).
 function weekKit() {
   return {
     t, elem, textEl, button, switchEl, fieldRow, numberInput, fmtNum, fmtTemp,

@@ -5,12 +5,10 @@
 // holder of settings chooses (the setting update.channel), which release
 // runs and whether a newer one is out on that channel, the request to the
 // server's update helper to install it (POST /api/v1/update), the last
-// three updates (GET /api/v1/update's history), and the server's
-// restart (POST /api/v1/restart), after which the page follows /healthz
-// until the server is back, and the computer's reboot (POST
-// /api/v1/reboot), which waits its delay, can be taken back meanwhile,
-// and is followed the same way. Once the server restarts with a new
-// version, the version check in app.js offers the reload.
+// three updates (GET /api/v1/update's history). The server's restart
+// and the computer's reboot are in maintenance.js. Once the server
+// restarts with a new version, the version check in header.js offers the
+// reload.
 
 "use strict";
 
@@ -115,7 +113,7 @@ function renderUpdate(u) {
 }
 
 // updateOut tells whether an update is out, for one who may install it
-// (the server's sign, app.js renderServerSign).
+// (the server's sign, header.js renderServerSign).
 function updateOut() {
   const u = updState.info;
   return !!u && !!u.available && hasCap("settings"); // login.js
@@ -131,7 +129,7 @@ async function loadUpdate(refresh) {
     const u = await api("GET", "api/v1/update" + (refresh ? "?refresh=1" : ""));
     updState.info = u;
     renderUpdate(u);
-    renderServerSign(); // app.js
+    renderServerSign(); // header.js
     return u;
   } catch (e) {
     $("update-text").textContent = t("update.cannotAsk", { error: e.message });

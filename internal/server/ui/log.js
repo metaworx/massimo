@@ -7,8 +7,9 @@
 // the server's log, the live events of the stream coming in at the top
 // (under All Cubes those a poll brings), one line each, with a text
 // filter, a choice of Cubes, kind, device and how far back (the range),
-// and Clear, which sets the choices back but the range.
-// Uses the state, api and helpers of app.js and tiles.js.
+// and Clear, which sets the choices back but the range; the log
+// button's sign for unseen problems. The pages and the menu are in
+// pages.js. Uses the state, api and helpers of app.js and rooms.js.
 "use strict";
 
 const LOG_MAX_LINES = 2000;

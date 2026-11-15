@@ -11,7 +11,7 @@
 // --- header -----------------------------------------------------------
 
 // budgetFacts is a Cube's radio budget as the page shows it, in the
-// header and in its panel (cubes.js): the duty cycle, the free memory
+// header and in its panel (cube-panel.js): the duty cycle, the free memory
 // slots, the radiograms pending and the commands queued, "–" while unknown.
 function budgetFacts(cube) {
   const b = cube.budget || {};
@@ -25,7 +25,7 @@ function budgetFacts(cube) {
 
 // renderHeader shows the chosen Cube in the header: its connection in
 // the Cube choice, and in expert mode its name with its radio budget,
-// queued only while commands wait. Its clock is in its facts (cubes.js).
+// queued only while commands wait. Its clock is in its facts (cube-panel.js).
 function renderHeader(cube) {
   renderCubeSelect(); // the chosen Cube's connection, its plug
   const f = budgetFacts(cube);
@@ -228,7 +228,7 @@ function foundEntry(found) {
 
 // cubeEntry is a Cube's problems as an entry of problemsEl: the Cube as
 // the heading with its network sign, its link's badge where it is not
-// connected, own its settings' warnings too (cubes.js, a Cube's panel),
+// connected, own its settings' warnings too (cube-panel.js, a Cube's panel),
 // and its devices with a problem under it, "Room › Device", with their
 // badges (tiles.js deviceProblems); a window open briefly is a state.
 function cubeEntry(c, own) {
@@ -335,7 +335,7 @@ function renderTLS(tls) {
 }
 
 // certText is the certificate the server serves, as GET /api/v1/system
-// has it, for System Info (update.js): its source, names and expiry.
+// has it, for System Info (system-info.js): its source, names and expiry.
 function certText(tls) {
   if (!tls) return "–";
   const until = Date.parse(tls.not_after || "");
@@ -480,7 +480,7 @@ function serverSignClick(ev) {
   const st = serverState();
   if (st === "new") location.reload();
   else if (st === "info") {
-    showView("maint"); // log.js
+    showView("maint"); // pages.js
     showCard($("sys-software")); // components.js
   } else whileBusy($("refresh-btn"), () => poll(true));
 }
