@@ -2078,7 +2078,13 @@ paths:
         "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
-        "409": {$ref: "#/components/responses/Superseded"}
+        "409":
+          description: >-
+            The room has no thermostat, or a newer command for the room
+            replaced this one before it was sent
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
         "502": {$ref: "#/components/responses/CubeError"}
         "503": {$ref: "#/components/responses/NotReady"}
   /api/v1/cubes/{sn}/rooms/{id}/config:

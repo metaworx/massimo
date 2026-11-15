@@ -2004,7 +2004,14 @@ and returned by themselves to the mode they had after their boost time
 ### PUT /api/v1/cubes/{sn}/rooms/{id}/setpoint
 
 Same body and answer, addressed to every device of the room, which is
-what the original software does.
+what the original software does:
+one set-temperature radiogram with the room flag, which every member takes.
+It names one thermostat of the room:
+the room's master from the Cube's metadata where that is one,
+else the room's first radiator thermostat, else its wall thermostat,
+never a device of another room, which would take the command as well
+(docs/cube-protocol.md, "Set temperature (0x40) addressing").
+A room without a thermostat is refused with `409`.
 
 ### DELETE /api/v1/cubes/{sn}/rooms/{id}
 
