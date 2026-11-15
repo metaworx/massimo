@@ -123,13 +123,9 @@ func reported(changes map[string]view.Change) bool {
 	return false
 }
 
-// now is the time of the automatic resets: Options.clock in the tests.
-func (s *Server) now() time.Time {
-	if s.opts.clock != nil {
-		return s.opts.clock()
-	}
-	return time.Now()
-}
+// now is the time of the pump's events, the automatic resets and the
+// error watch (errorwatch.go): Options.clock in the tests.
+func (s *Server) now() time.Time { return s.clock().Now() }
 
 // autoReset resets rf's communication error where dv, its state event's
 // view, and changes, the event's, are a report of the flagged device,
@@ -162,6 +158,12 @@ func (s *Server) autoResetDone(ctx context.Context, rt *runtime, rf cube.RFAddre
 	res := t.Wait(ctx)
 	at := s.now()
 	sent := res.Err == nil && !res.Discarded
+	if sent {
+		// Before done: the error watch takes no entry before the answer
+		// for a return of the flag (errorwatch.go).
+		times, _ := rt.client.Snapshot().Times(rf)
+		rt.errWatch.answered(rf, at, times.Changed)
+	}
 	rt.resets.done(rf, at, sent)
 	switch {
 	case sent:

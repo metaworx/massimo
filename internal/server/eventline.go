@@ -86,6 +86,19 @@ func eventMessage(ev event) string {
 			return "write shown by the device after its deadline"
 		}
 		return "write not shown by its devices in time"
+	case "error_watch":
+		flag := "communication error"
+		if ev.Summary["flag"] == flagLink {
+			flag = "link error"
+		}
+		switch ev.Summary["what"] {
+		case watchBack:
+			return "communication error back after its automatic reset, no automatic reset until it stays clear a day"
+		case watchLasting:
+			return flag + " set for 24 hours"
+		case watchClear:
+			return flag + " clear again"
+		}
 	case "disagree":
 		switch ev.Summary["outcome"] {
 		case "differ":

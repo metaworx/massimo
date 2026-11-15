@@ -282,9 +282,10 @@ type Options struct {
 	// notifyClock is the notification rules' clock, for the tests; nil
 	// is the real one.
 	notifyClock notify.Clock
-	// clock is the time of the automatic resets (autoreset.go), for the
-	// tests; nil is time.Now.
-	clock func() time.Time
+	// clock is the time of the pump's events, the automatic resets
+	// (autoreset.go) and the error watch's timers (errorwatch.go), for
+	// the tests; nil is the real one.
+	clock notify.Clock
 	// Deliverers take a user's notifications beside Web Push: an app
 	// embedding the server shows them itself (push.Local).
 	Deliverers []push.Deliverer
@@ -465,6 +466,9 @@ type runtime struct {
 	// resets are the devices' automatic resets of their communication
 	// error (autoreset.go).
 	resets autoResets
+	// errWatch follows the devices' flags: a communication error back
+	// after its reset, a flag that lasts a day (errorwatch.go).
+	errWatch errorWatch
 	// vwt is the rooms' uids and settings, and each room's virtual wall
 	// thermostat as its last event had it (vwt.go).
 	vwt vwtState
@@ -907,6 +911,7 @@ func (s *Server) proxyRuntime(pl ProxyListener) (*runtime, error) {
 // pump forwards client events to the SSE subscribers and learns the
 // serial once the Cube is connected.
 func (s *Server) pump(ctx context.Context, rt *runtime) {
+	defer rt.errWatch.stop()
 	s.rebuildBattery(ctx, rt) // before the first state, so that the replay comes first
 	for {
 		select {
@@ -934,6 +939,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 					s.seedLearned(ctx, rt)
 				}
 				s.learnStoreID(ctx, rt)
+				s.seedErrorWatch(ctx, rt, s.now()) // where the greeting's states could not
 			}
 			switch e.Kind {
 			case cubelan.EventConnected, cubelan.EventMetadata, cubelan.EventConfig, cubelan.EventPaired, cubelan.EventForgotten:
@@ -948,7 +954,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			if e.Device != 0 && rt.hidden()[e.Device] {
 				continue
 			}
-			ev := event{Kind: e.Kind.String(), Time: time.Now()}
+			ev := event{Kind: e.Kind.String(), Time: s.now()}
 			var batteryChanges []battery.Change
 			var wallBack *event
 			var confirmed []event // writes the state shows after their deadline (confirm.go)
@@ -992,6 +998,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 						rt.last[e.Device] = dv.State
 						ev.Command = rt.sentTo.take(e.Device)
 						s.autoReset(ctx, rt, e.Device, dv, ev.Changes)
+						s.watchErrors(ctx, rt, e.Device, ev.Changes)
 					}
 				}
 			}
@@ -1004,6 +1011,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 				rt.battery.Forget(e.Device.String())
 				rt.follow.forget(e.Device)
 				rt.confirms.forget(e.Device)
+				rt.errWatch.forget(e.Device)
 			}
 			if e.Kind == cubelan.EventPaired {
 				// The metadata does not change by pairing; the device's C
