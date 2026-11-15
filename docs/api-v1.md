@@ -6,6 +6,8 @@ with TLS every response carries `Strict-Transport-Security`,
 a year by default (`-hsts <days>`, `0` clears it).
 Every response is JSON unless stated otherwise.
 The machine-readable description is in [api-v1-openapi.yaml](api-v1-openapi.yaml).
+The web UI's types are generated from its schemas (`make api-types`,
+`tools/apitypes`), so a change to a schema writes them again in the same change.
 
 The server keeps one persistent connection and one command queue per Cube.
 Reads answer from the server's copy of the Cube's state,
