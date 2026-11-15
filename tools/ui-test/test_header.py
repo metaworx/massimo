@@ -537,3 +537,34 @@ def test_updated_is_the_cubes_age(page, case):
     finally:
         page.evaluate("startPolling(); poll(true)")
 
+
+SET_PROBLEMS = """() => {
+  const c = state.cubes.find((x) => x.serial === 'KEQ0000100');
+  c.file_differs = ['MASSIMO_CUBE_KEQ0000100_NAME'];
+  c.connected = false;
+  renderCubeSelect();
+}"""
+
+
+def test_cube_choice_list_shows_problems(page, case):
+    """Open, the Cube choice's list shows each Cube's problems as icons
+    after its name, its worst tone each, its link left out (the Cube's own
+    sign shows it): here its settings file differing, the cog, for the
+    owner. The poll is held meanwhile."""
+    page.evaluate("clearInterval(state.pollTimer)")
+    try:
+        page.evaluate(SET_PROBLEMS)
+        page.locator("#cube-choice").click()
+        item = page.locator("#cube-menu .menu-items button[data-value='KEQ0000100']")
+        item.wait_for(state="visible")
+        icons = item.locator(".menu-item-icons > svg")
+        hrefs = icons.evaluate_all("(es) => es.map((e) => [...e.querySelectorAll('use')].map((u) => u.getAttribute('href')).join(' '))")
+        assert any("cog" in h for h in hrefs), f"the settings' cog after the name: {hrefs}"
+        assert not any("#icon-net" in h for h in hrefs), f"not its link, which its sign shows: {hrefs}"
+        name, line = item.locator(".menu-item-label").bounding_box(), icons.first.bounding_box()
+        assert line["x"] >= name["x"] + name["width"] and abs((line["y"] + line["height"] / 2) - (name["y"] + name["height"] / 2)) <= 6, \
+            f"after the name, on its line: {name} {line}"
+        page.keyboard.press("Escape")
+    finally:
+        page.evaluate("startPolling(); poll(true)")
+

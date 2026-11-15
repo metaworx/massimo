@@ -704,7 +704,9 @@ function cubeSignEl(c) {
 
 // renderCubeSelect fills the Cube choice (components.js pickerMenu): the
 // configured Cubes, each with its network sign (cubeSignEl), its name
-// (its serial without one) and under it its serial and address; then
+// (its serial without one) with the icons of its problems after it, the
+// settings' cog for a role with settings, and under it its serial and
+// address; then
 // those found on the LAN but not configured, shown, not selectable; then
 // the entry that searches the LAN for new ones. Closed it shows the
 // chosen Cube's sign and name, its tooltip the serial, the address and
@@ -720,6 +722,8 @@ function renderCubeSelect() {
     label: c.name || c.serial,
     sub: [c.name ? c.serial : "", c.address || ""].filter(Boolean).join(" · "),
     icon: cubeSignEl(c),
+    // its problems after its name, its link apart: its sign is that
+    icons: kindIcons([cubeEntry(c, hasCap("settings"))], ["net"]), // components.js
   }));
   // a found Cube opens System settings → Cubes, where it can be added,
   // for a role with cubes; for others it is information

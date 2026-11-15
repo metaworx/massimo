@@ -361,6 +361,10 @@ button.copy-icon .ni { width: 16px; height: 16px; }
 .menu-icon-none { width: 20px; flex: none; }
 .menu-group { margin: 8px 10px 2px; font-size: 0.8rem; color: var(--muted); }
 .menu-sep { border: none; border-top: 1px solid var(--line); margin: 6px 0; }
+/* an item's icons after its name (the Cube choice: a Cube's problems) */
+.menu-item-line { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
+.menu-item-icons { display: inline-flex; gap: 4px; }
+.menu-item-icons > svg { width: 18px; height: 18px; flex: none; }
 .menu-items button[aria-current="true"] { box-shadow: inset 3px 0 0 var(--accent); font-weight: 600; }
 #cube-search.bad { color: var(--bad); }
 /* The found Cubes' sign (components.js foundCountEl): a cube with their

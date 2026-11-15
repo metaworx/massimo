@@ -102,8 +102,11 @@ The compacted header has **↑** left of ☰, back to the top.
   or it reboots, a cross while it holds the server's old connection,
   another client has it, or it is gone (see Signs, under How the page is built);
   its tooltip adds the serial, the address and the link in words.
-  Open, each Cube has its sign, its name and under it its serial and
-  address, the list as wide as they need; the arrow keys move between them.
+  Open, each Cube has its sign, its name with an icon after it for each
+  kind of problem it has (the radio, a battery, a window open too long, a
+  device's link and, for one who may change the settings, the cog), each in
+  its worst colour, and under it its serial and address,
+  the list as wide as they need; the arrow keys move between them.
   The last entry, **Search for new Cubes…**,
   asks the server to look for Cubes on the LAN (about two seconds;
   the server also looks every 30 minutes by itself).

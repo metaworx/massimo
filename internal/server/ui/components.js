@@ -1045,12 +1045,14 @@ function countList(counts) {
 // symbol's name, or an element such as a Cube's sign; with blank and no icon
 // an empty place of an icon's width, so that the labels line up), its
 // label and, under it in grey, a second line (sub).
-function menuItem({ icon, label, sub, blank }, onClick) {
+function menuItem({ icon, label, sub, blank, icons }, onClick) {
   const b = document.createElement("button");
   b.type = "button";
   if (icon) b.appendChild(typeof icon === "string" ? iconEl(icon, "ni") : icon);
   else if (blank) b.appendChild(elem("span", "menu-icon-none"));
-  const name = textEl("span", label, "menu-item-label");
+  let name = textEl("span", label, "menu-item-label");
+  // icons after the name, on its line (the Cube choice: a Cube's problems)
+  if (icons && icons.length) name = elem("span", "menu-item-line", name, elem("span", "menu-item-icons", ...icons));
   b.appendChild(sub ? elem("span", "menu-item-text", name, textEl("span", sub, "menu-item-sub")) : name);
   if (onClick) b.addEventListener("click", onClick);
   return b;
@@ -1061,7 +1063,7 @@ function menuItem({ icon, label, sub, blank }, onClick) {
 // item, a menu of the page where a select could not show the chosen
 // item's name alone while its list shows more. The summary shows
 // shown's icon and label, its title and aria-label; the list the items:
-// { value, label, sub, icon, disabled } (menuItem, the chosen value
+// { value, label, sub, icon, icons, disabled } (menuItem, the chosen value
 // marked aria-current), { group: heading } or { separator: true }.
 // A click on an item calls onPick with its value; the arrow keys move
 // between the items, and opening puts the focus on the chosen one.
@@ -1080,7 +1082,7 @@ function pickerMenu(details, { items, value, onPick, shown }) {
     if (it.group) list.appendChild(textEl("p", it.group, "menu-group"));
     else if (it.separator) list.appendChild(elem("hr", "menu-sep"));
     else {
-      const b = menuItem({ icon: it.icon, label: it.label, sub: it.sub, blank }, () => onPick(it.value));
+      const b = menuItem({ icon: it.icon, label: it.label, sub: it.sub, blank, icons: it.icons }, () => onPick(it.value));
       b.dataset.value = it.value;
       b.disabled = !!it.disabled;
       if (it.value === value) b.setAttribute("aria-current", "true");
@@ -1122,29 +1124,17 @@ function pickerMenu(details, { items, value, onPick, shown }) {
 // to a screen reader and in the tooltip. Null where no item has a kind
 // and no entry a summary: nothing is wrong there, nor to tell.
 function problemsEl(entries, label) {
-  const kinds = new Map(); // kind: { icon, sign, tone }
-  for (const it of entries.flatMap(entryItems)) {
-    if (!it.kind) continue;
-    const k = kinds.get(it.kind) || { icon: it.icon, sign: it.sign, tone: "" };
-    const tone = it.mark || (it.tone || "").replace(/^fill-/, "");
-    const rank = (x) => ({ bad: 3, warn: 2 })[x] || (x ? 1 : 0); // the worst of a kind shows
-    if (rank(tone) > rank(k.tone)) k.tone = tone;
-    kinds.set(it.kind, k);
-  }
+  const icons = kindIcons(entries);
   const extra = entries.map((e) => e.summary).filter(Boolean);
-  if (!kinds.size && !extra.length) return null;
+  if (!icons.length && !extra.length) return null;
   // information alone: nothing wrong, said first (okPill's check)
-  if (!kinds.size) extra.unshift(iconEl("icon-check", "ni ok-check"));
+  if (!icons.length) extra.unshift(iconEl("icon-check", "ni ok-check"));
   const details = elem("details", "menu problems");
   const summary = document.createElement("summary");
   summary.className = "problems-sum";
   summary.title = label;
   summary.setAttribute("aria-label", label);
-  const who = entries.filter((e) => entryItems(e).length).map((e) => e.title + " " + (e.sub || "")).join("|");
-  for (const k of kinds.values()) {
-    summary.appendChild(k.sign ? signEl(k.sign, k.tone, "", [who, k.sign, k.tone].join(":")) : iconEl(k.icon, "ni" + (k.tone ? " tone-" + k.tone : "")));
-  }
-  summary.append(...extra);
+  summary.append(...icons, ...extra);
   const list = elem("div", "menu-items problems-list");
   for (const e of entries) {
     const el = problemEntry(e);
@@ -1152,6 +1142,26 @@ function problemsEl(entries, label) {
   }
   details.append(summary, list);
   return dropdown(details);
+}
+
+// kindIcons are the icons of the kinds of problems among entries' items,
+// one per kind in the order they come, each in its worst tone (a sign of
+// SIGNS where the kind has one); skip leaves kinds out (the Cube choice's
+// list its network, which the Cube's own sign shows).
+function kindIcons(entries, skip = []) {
+  const kinds = new Map(); // kind: { icon, sign, tone }
+  for (const it of entries.flatMap(entryItems)) {
+    if (!it.kind || skip.includes(it.kind)) continue;
+    const k = kinds.get(it.kind) || { icon: it.icon, sign: it.sign, tone: "" };
+    const tone = it.mark || (it.tone || "").replace(/^fill-/, "");
+    const rank = (x) => ({ bad: 3, warn: 2 })[x] || (x ? 1 : 0); // the worst of a kind shows
+    if (rank(tone) > rank(k.tone)) k.tone = tone;
+    kinds.set(it.kind, k);
+  }
+  const who = entries.filter((e) => entryItems(e).length).map((e) => e.title + " " + (e.sub || "")).join("|");
+  return [...kinds.values()].map((k) =>
+    k.sign ? signEl(k.sign, k.tone, "", [who, k.sign, k.tone].join(":")) : iconEl(k.icon, "ni" + (k.tone ? " tone-" + k.tone : "")),
+  );
 }
 
 // entryItems are an entry's items and those of the entries under it.
