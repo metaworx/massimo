@@ -47,9 +47,28 @@ func TestUIServed(t *testing.T) {
 		!strings.Contains(body, `<base href="../">`) || !strings.Contains(body, `http-equiv="Content-Security-Policy"`) {
 		t.Fatalf("GET /ui/connect.html: %d %s %q", code, ct, body[:min(80, len(body))])
 	}
-	for _, p := range []string{"/ui/i18n.js", "/ui/components.js", "/ui/app.js", "/ui/tiles.js", "/ui/week-program.js", "/ui/config.js", "/ui/log.js", "/ui/update.js", "/ui/cubes.js", "/ui/login.js", "/ui/users.js", "/ui/providers.js", "/ui/integrations.js", "/ui/roles.js", "/ui/theme.js", "/ui/connect.js", "/ui/notify.js", "/ui/notifytext.js"} {
-		if code, ct, _ := get(p); code != 200 || !strings.Contains(ct, "javascript") {
-			t.Fatalf("GET %s: %d %s", p, code, ct)
+	// Every script embedded is on the page, or one of those that are not,
+	// and each is served as JavaScript.
+	_, _, page := get("/")
+	onPage := map[string]bool{}
+	for _, m := range regexp.MustCompile(`<script src="(ui/[^"]+\.js)"`).FindAllStringSubmatch(page, -1) {
+		onPage[m[1]] = true
+	}
+	scripts, _ := fs.Glob(uiFiles, "ui/*.js")
+	if len(scripts) < 10 {
+		t.Fatalf("only %d scripts embedded", len(scripts))
+	}
+	for _, f := range scripts {
+		if why, off := uiScriptsOffPage[f]; off == onPage[f] {
+			t.Errorf("%s: on the page %v, in uiScriptsOffPage %v (%s)", f, onPage[f], off, why)
+		}
+		if code, ct, _ := get("/" + f); code != 200 || !strings.Contains(ct, "javascript") {
+			t.Fatalf("GET /%s: %d %s", f, code, ct)
+		}
+	}
+	for f := range uiScriptsOffPage {
+		if !slices.Contains(scripts, f) {
+			t.Errorf("uiScriptsOffPage names %s, which is not embedded", f)
 		}
 	}
 	if code, ct, _ := get("/ui/style.css"); code != 200 || !strings.HasPrefix(ct, "text/css") {
@@ -164,6 +183,13 @@ func TestUIServed(t *testing.T) {
 	if resp.StatusCode != 401 {
 		t.Fatalf("events?token=wrong: %d, want 401", resp.StatusCode)
 	}
+}
+
+// uiScriptsOffPage are the scripts embedded that the page at / does not
+// load, each with where it is loaded instead.
+var uiScriptsOffPage = map[string]string{
+	"ui/connect.js": "the apps' connect page, ui/connect.html",
+	"ui/sw.js":      "the service worker, served at /sw.js",
 }
 
 // assembledPage is the page as the server serves it at /.
