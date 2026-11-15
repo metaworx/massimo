@@ -317,12 +317,18 @@ each device in the command's scope whose error flag is set,
 silent devices included.
 The scope of a room setpoint or mode is every device of the room,
 of a link change or a removal the device itself.
-Byte 4, the failed radiogram's type, decides by its category (below):
-a device whose failed radiogram has no category (such as TimeInformation
-or WakeUp) or is a configuration or control radiogram is reset before any
-command; one whose failed radiogram is a link change (0x20–0x23) only
-before a link change, a Reset (0xF0) only before a removal;
-the `link_error` bit alone is never reset.
+By its design byte 4, the failed radiogram's type, decides by its category
+(below): a failed link change (0x20–0x23) would be reset only before a link
+change, a failed Reset (0xF0) only before a removal, any other before every
+command.
+In practice every flagged device in the scope is reset:
+`FrameType` fills its code map while its constants are built,
+and the end of its static initialisation sets the map back to `null`,
+so byte 4 is never found and every flagged device reads as `Error`
+(seen 2026-11-15, Cube firmware 1.1.3: before a room mode command the
+software reset four members of the room whose byte 4 was 0x21,
+and its own model listed them as `Error`).
+The `link_error` bit alone is never reset.
 The software never resets on its own: no timer, nothing on a device's report.
 While the UI is open the software polls `l:` every 10 s and disconnects after 30
 s without user activity.
@@ -488,8 +494,8 @@ every radiogram the system knows, with the codes:
 0xF1 WakeUp, 0xFF Test
 (read again from the jar on 2026-11-15: this list had 0xF0 and 0xF1 the
 other way round and 0x70 for 0x45; no code of Massimo uses these two).
-Each type has a category, which decides when the software resets a device
-whose radiogram of that type failed (above):
+Each type has a category, meant to decide when the software resets a device
+whose radiogram of that type failed (above; in practice it never does):
 Configuration for 0x10–0x12 and 0x82, Control for 0x40, 0x41, 0x43, 0x44
 and 0x80, Assignment for 0x20–0x23, Remove for 0xF0, none for the rest.
 The same code is byte 4 of an L entry whose error flag is set (below).
@@ -601,7 +607,8 @@ but no class of its two backend jars uses it),
 was being removed, after the Cube discarded the removal, 2026-11-15),
 and 0xf6, which the list lacks.
 After an `r:` the byte kept the failed type (0x03 in four of four resets,
-the original software's logs of 2026-02-19),
+the original software's logs of 2026-02-19; 0x21 in four of four on
+2026-11-15, after the reset and a room command the devices took),
 so without the flag it says nothing.
 
 Duty cycle and memory slots: with the thermostats out of range,
@@ -854,6 +861,13 @@ kept here because they cost time to learn.
   and it stays until `r:` or a Cube restart
   (Cube firmware 1.1.3, the owner's Cubes, 2026-11-13 to 15,
   and the original software's logs of 2026-02-12 to 03-05):
+  - The names cross: the original software 1.4.6 reads this bit as its
+    radio error (`DeviceStateSerializer`: `BITPOS_RADIO_ERROR` 3 of byte 5),
+    the device's `RadioState` with byte 4,
+    and names byte 6's 0x40 `transmitError`
+    (`@DeviceStateParameter(bytePos=1, bitPos=6)` on every device type,
+    the setter's parameter called `unreachable`), which is Massimo's `link_error`.
+    So Massimo's "transmit error" is the original's radio error.
   - A radiogram the device does not answer sets it:
     nearly always the Cube's own time push after its restart,
     to a device it has not heard yet (byte 4 0x03),
@@ -895,6 +909,22 @@ kept here because they cost time to learn.
   A window contact woken with a new battery and three window cycles before the
   restart had freed none, so the radiograms were for other devices;
   the Cube does not say which.
+- Removing a device that answers from its room
+  (2026-11-15, Cube firmware 1.1.3, one of the owner's Cubes,
+  a radiator thermostat from a room with four other members):
+  Massimo's removal, a room wakeup, then 0x21 to and from each partner
+  (eight radiograms) and 0x23, was discarded by the Cube twice,
+  with 48 slots free, before `t:` was sent,
+  and within a minute the room's five members were flagged with byte 4 0x21.
+  The original software then removed it with a room wakeup,
+  an `r:` for the leaving device, **one** 0x21 to the room as a group
+  (`s:` flags 0x04, the room, a member as the recipient,
+  the leaving device's address and type as the payload),
+  which took a slot for each remaining member (49 → 45)
+  and was accepted although those four were flagged,
+  then `t:01,1,<address>` and `m:` without the device.
+  So a removal sends no 0x21 to the leaving device and no 0x23;
+  which of Massimo's lines the Cube discarded is not known.
 - A wall thermostat with new batteries reports a measured temperature of 0
   in its L entry until it has measured (2026-11-13, Cube firmware 1.1.3,
   seen as 0.0 °C in a room on the owner's Cube):
