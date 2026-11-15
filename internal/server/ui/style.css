@@ -892,6 +892,8 @@ body.scrolled .top-btn { display: inline-flex; }
 .cube-found-list { list-style: none; margin: 0; padding: 0; }
 .cube-found-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 2px 0; overflow-wrap: anywhere; }
 .cube-found-list .add-cube { margin-left: auto; }
+/* A found Cube outside this machine's networks: why, on a line of its own (cubes.js foundRow). */
+.cube-found-list .other-network { margin: 2px 0 6px; overflow-wrap: anywhere; }
 .cubes-msg { margin: 4px 0 0; overflow-wrap: anywhere; }
 .cubes-msg.ok { color: var(--ok); }
 .cubes-msg.bad { color: var(--bad); }

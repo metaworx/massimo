@@ -158,7 +158,7 @@ func TestDiscoveryFindsUnconfiguredCubes(t *testing.T) {
 	}
 	for k := range cubes[1] {
 		switch k {
-		case "serial", "kind", "serves", "host", "configured", "address", "mac", "rf_address", "firmware", "dhcp", "gateway", "netmask", "dns", "proxies", "found_at", "last_seen":
+		case "serial", "kind", "serves", "host", "configured", "other_network", "address", "mac", "rf_address", "firmware", "dhcp", "gateway", "netmask", "dns", "proxies", "found_at", "last_seen":
 		default:
 			t.Errorf("unexpected field %q in a found cube", k)
 		}

@@ -14,6 +14,9 @@ VIA_PROXY = {"en": "via proxy at {address}", "de": "über Proxy {address}"}
 GROUP = {"en": "Found on the network", "de": "Im Netzwerk gefunden"}
 SERVES = {"en": "Massimo proxy, serves {serial}", "de": "Massimo-Proxy, bedient {serial}"}
 SERVED_BY = {"en": "served by Massimo on {host}", "de": "von Massimo auf {host} bedient"}
+OTHER_NETWORK = {"en": "192.168.0.222 lies outside the networks of this machine",
+                 "de": "192.168.0.222 liegt außerhalb der Netze dieses Rechners"}
+NETCONFIG = "massimo netconfig -sn LEQ0000507 -broadcast -static <ip> -gateway <gateway> -netmask <netmask>"
 
 # The pill's found group: the last entry of its list.
 FOUND_GROUP = "#cube-problems .problems-list > .problem-entry:last-child"
@@ -186,6 +189,27 @@ def test_found_proxy(page, case):
         "a url that is not http(s) is the name alone"
     assert "LEQ0000601" not in " ".join(page.locator("#cubes-list .env-lines").all_text_contents()), "no lines for a proxy"
     assert scroll_width(page) <= case.width, "no horizontal scroll with the proxies"
+    show_view(page, "tiles")
+
+
+def test_found_cube_in_another_network(page, case):
+    """A found Cube outside this machine's networks (other_network), as a
+    Cube without a DHCP lease answers from 192.168.0.222: its row in
+    System settings → Cubes says so, under its facts, with the fallback
+    address and the netconfig line with its serial, which copies; a Cube
+    in the network has no such line."""
+    found_event(page, dict(FOUND2, serial="LEQ0000507", address="192.168.0.222", other_network=True))
+    show_view(page, "system")
+    open_found(page)
+    row = page.locator(".cube-found-row[data-serial='LEQ0000507']")
+    note = row.locator(".other-network")
+    assert note.count() == 1 and OTHER_NETWORK[case.lang] in note.inner_text(), "the row says it is in another network"
+    assert row.locator(".netconfig-line").inner_text() == NETCONFIG, "with the netconfig line of its serial"
+    assert note.locator("button.copy-icon").count() == 1, "which copies"
+    assert note.evaluate("(p) => p.getBoundingClientRect().top") > row.locator(".found-serial").evaluate(
+        "(s) => s.getBoundingClientRect().bottom") - 1, "on a line of its own"
+    assert page.locator(".cube-found-row[data-serial='KEQ0000000'] .other-network").count() == 0, "none in the network"
+    assert scroll_width(page) <= case.width, "no horizontal scroll with the line"
     show_view(page, "tiles")
 
 

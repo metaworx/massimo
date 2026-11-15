@@ -4243,6 +4243,7 @@ components:
             name: {type: string, description: Its instance name}
             url: {type: string, description: "The url its announcement gives, else http(s)://<address>:<port>"}
         configured: {type: boolean}
+        other_network: {type: boolean, description: "True where address lies in none of this machine's networks, as a Cube without a DHCP lease on 192.168.0.222 does; absent otherwise, and on a proxy"}
         address: {type: string, description: "The IP it answered from, its own where a massimo proxy answers for it too"}
         mac: {type: string, description: From the host's ARP cache; absent when unknown}
         rf_address: {type: string}
@@ -4293,6 +4294,7 @@ components:
         last_seen: {type: string, format: date-time, description: When the Cube last answered discovery}
         found_address: {type: string, description: "The host discovery last found the Cube at; differs from address where the server connects through a proxy or to a fixed address the Cube has left"}
         found_elsewhere: {$ref: '#/components/schemas/FoundElsewhere'}
+        other_network: {type: boolean, description: "True where the address the server connects to lies in none of this machine's networks: it reaches the Cube only through a router; absent otherwise, and for a host name"}
         problems:
           type: array
           description: "The Cube's visible devices with a problem (a transmit or link error, a low battery, a window open), each with its room's name; absent where none"

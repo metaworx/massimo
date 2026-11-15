@@ -912,6 +912,17 @@ function linkText(c) {
   return "";
 }
 
+// otherNetworkEls says that a Cube's address lies outside this machine's
+// networks (other_network), as the children of a notice: that the
+// server reaches it only through a router, the address a Cube without a
+// DHCP lease uses, and the netconfig line that gives it a fixed address,
+// which copies (components.js copyEl).
+function otherNetworkEls(c, address) {
+  const line = "massimo netconfig -sn " + c.serial + " -broadcast -static <ip> -gateway <gateway> -netmask <netmask>";
+  return [t("cubes.otherNetwork", { address }) + " " + t("cubes.otherNetworkFix") + " ",
+    copyEl(line, { label: t("cubes.netconfigLine"), icon: true, cls: "mono netconfig-line" })];
+}
+
 // renderHomeNotice says on Rooms why it shows nothing, or only what the
 // server last had: no Cube configured, or the Cube chosen not connected,
 // with the address the server tries, when the Cube last sent data or
@@ -932,6 +943,7 @@ function renderHomeNotice() {
     title.textContent = t("home.noCube");
     detail.textContent = t(hasCap("cubes") ? "home.noCubeAdd" : "home.noCubeAsk");
     check.textContent = "";
+    check.dataset.key = "";
   } else {
     // its name where it has one, its serial in the detail (as on its label)
     title.textContent = t("home.notConnected", { name: cube.name || cube.serial });
@@ -945,7 +957,13 @@ function renderHomeNotice() {
     else if (seen) parts.push(t("home.lastSeen", { time: fmtInstant(seen) }));
     else parts.push(t("home.noData"));
     detail.textContent = parts.join(" ");
-    check.textContent = t("home.check");
+    // A Cube outside this machine's networks: why, and the way to an
+    // address here, in place of the usual checks; drawn again only where
+    // it changed, so that a poll leaves a focused copy icon where it is.
+    const key = cube.other_network ? [i18n.lang, cube.serial, cube.address].join(" ") : "";
+    if (!key) check.textContent = t("home.check");
+    else if (check.dataset.key !== key) check.replaceChildren(...otherNetworkEls(cube, hostPort(cube.address).host)); // cubes.js
+    check.dataset.key = key;
   }
   check.classList.toggle("hidden", !check.textContent);
   box.classList.remove("hidden");

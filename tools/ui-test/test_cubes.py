@@ -406,6 +406,40 @@ def test_cube_link_stale(page, case):
     show_view(page, "tiles")
 
 
+OTHER_NETWORK = {"en": "lies outside the networks of this machine", "de": "liegt außerhalb der Netze dieses Rechners"}
+
+
+def test_cube_in_another_network(page, case):
+    """A served Cube not connected whose address lies outside this
+    machine's networks (other_network, stubbed): its open panel says so
+    above its facts, with the netconfig line of its serial, which copies;
+    the notice goes once the Cube is connected."""
+    def away(route):
+        cubes = route.fetch().json()
+        for c in cubes:
+            if c.get("serial") == "KEQ0000100":
+                c["connected"], c["other_network"] = False, True
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes))
+    page.route("**/api/v1/cubes", away)
+    try:
+        show_view(page, "system")
+        page.evaluate("loadCubes()")
+        panel, _ = open_panel(page)
+        note = panel.locator(".cube-link-state .other-network")
+        note.wait_for(state="visible")
+        assert OTHER_NETWORK[case.lang] in note.inner_text() and "192.168.0.222" in note.inner_text(), "why, and the fallback address"
+        assert note.locator(".netconfig-line").inner_text().startswith("massimo netconfig -sn KEQ0000100 -broadcast"), "the line"
+        assert note.locator("button.copy-icon").count() == 1, "which copies"
+        assert scroll_width(page) <= case.width, "no horizontal scroll with the line"
+        panel.locator(":scope > summary").click()
+    finally:
+        page.unroute("**/api/v1/cubes")
+    page.evaluate("loadCubes()")
+    assert wait_until(page, "!document.querySelector(\"%s .cube-link-state .other-network\")" % PANEL, 5), \
+        "the notice gone once the Cube is connected"
+    show_view(page, "tiles")
+
+
 REBOOT_PENDING = {"en": "that 2 radiograms are not delivered yet", "de": "dass 2 Funktelegramme noch nicht zugestellt sind"}
 REBOOTED = {"en": "Cube KEQ0000100 is rebooting", "de": "Cube KEQ0000100 startet neu"}
 
