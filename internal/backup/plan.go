@@ -544,8 +544,12 @@ func (p *Plan) planMove(f *File, snap *cubelan.Snapshot, want Device, name strin
 		}
 	}
 	out, in := cubeio.MoveCommands(snap, rf, typ, oldRoom, want.RoomID, members, nil)
-	p.add(fmt.Sprintf("%s %q: leave room %d (%d partners)", rf, name, oldRoom, len(out.Lines)/2), out)
-	p.add(fmt.Sprintf("%s %q: join room %d (%d partners)", rf, name, want.RoomID, len(in.Lines)/2), in)
+	left := cubeio.PartnerCount(cubeio.RoomMembers(snap, oldRoom, nil), rf, typ)
+	if oldRoom == 0 {
+		left = 0
+	}
+	p.add(fmt.Sprintf("%s %q: leave room %d (%d partners)", rf, name, oldRoom, left), out)
+	p.add(fmt.Sprintf("%s %q: join room %d (%d partners)", rf, name, want.RoomID, cubeio.PartnerCount(members, rf, typ)), in)
 }
 
 type dayChange struct {

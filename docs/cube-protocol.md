@@ -695,12 +695,16 @@ logged as `arrangeNewDevice`, `removeDevices`,
 unnamed, and a power cycle of the Cube did not drop them.
 The FHEM project notes that `t:` makes the Cube send a factory reset to the device,
 so a device that never answers is apparently never dropped.
-Massimo deletes a device the same way (`DELETE /api/v1/cubes/{sn}/devices/{rf}`,
-2026-11-06):
-wakeup, 0x23 and 0x21 per partner in both directions for a device in a room,
+Massimo deletes a device as the original software removed one that answers
+on 2026-11-15 ("Lessons from the hardware days";
+`DELETE /api/v1/cubes/{sn}/devices/{rf}`):
+a wakeup of the device's room, one `r:` per flagged member of the room,
+one 0x21 with the room flag naming the device,
 `t:01,1,<rf>`, `m:` without it, and its copy forgets the device on the `A:`.
-That a device which answers is dropped from the C lines and the next `L:` is
-*unverified* on hardware.
+Until then it sent 0x23 and 0x21 per partner in both directions,
+which the Cube discarded twice that night, before the `t:`.
+The original software's removal dropped the device from the Cube's lists;
+Massimo's with the same sequence is *unverified* on hardware.
 
 Which room such a device blocks is decided by the room byte of its own C line,
 not by the metadata (experiment 2026-11-04, one never-reporting device 0a0101):
