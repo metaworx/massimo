@@ -81,6 +81,10 @@ var settleRules = map[string]settleRule{
 	"restart":       {by: []string{"server_started"}},
 	"reboot":        {by: []string{"server_started"}},
 	"update":        {by: []string{"update", "server_started"}},
+	// a device's communication error back after its automatic reset, or
+	// a flag set for a day (errorwatch.go): the same flag of the same
+	// device clear again
+	"error_watch": {by: []string{"error_watch"}, match: sameFlagCleared},
 }
 
 // deviceFlags are a device's state's flags that are alerts while set.
@@ -110,6 +114,12 @@ func pairingSettles(alert, later *event) bool {
 		return later.Kind == "pairing_started" || later.Kind == "proxy_pairing"
 	}
 	return false
+}
+
+// sameFlagCleared: a later error_watch clear of the same device's same
+// flag.
+func sameFlagCleared(alert, later *event) bool {
+	return later.Device == alert.Device && summaryText(later, "what") == watchClear && summaryText(later, "flag") == summaryText(alert, "flag")
 }
 
 // sameUser: a later sign-in of the same login name.

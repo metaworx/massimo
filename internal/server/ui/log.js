@@ -24,7 +24,7 @@ const LOG_KINDS = ["connected", "disconnected", "hello", "metadata", "config", "
   "device_forgotten", "cube_found", "restore_step", "restore_done",
   "cube_gone", "address_changed", "server_started", "server_stopping", "settings_read", "restart", "reboot", "reboot_cancelled",
   "update", "update_result", "backup", "backup_deleted", "backups_pruned", "log_pruned", "log_rotated", "restore_started",
-  "change", "command", "hold", "structure", "error_reset", "login", "login_failed", "locked_out", "audit_pruned",
+  "change", "command", "hold", "structure", "error_reset", "error_watch", "login", "login_failed", "locked_out", "audit_pruned",
   "proxy_connected", "proxy_disconnected", "proxy_refused", "proxy_discarded", "proxy_deleted", "proxy_delete_refused", "proxy_pairing", "proxy_warning"];
 
 // LOG_RANGES are the choices of how far back the log goes: the newest
@@ -72,7 +72,7 @@ const LOG_SOURCES = ["system", "config", "cube", "device", "queue", "server", "p
 // LOG_KIND_SOURCE groups the kinds by the source they come from, for the
 // kind choice; a kind of more than one (config) goes with the devices.
 const LOG_KIND_SOURCE = {
-  state: "device", config: "device", paired: "device", device_forgotten: "device", error_reset: "device",
+  state: "device", config: "device", paired: "device", device_forgotten: "device", error_reset: "device", error_watch: "device",
   connected: "cube", disconnected: "cube", hello: "cube", metadata: "cube", pairing_started: "cube", pairing_ended: "cube",
   cube_found: "cube", cube_gone: "cube", address_changed: "cube",
   change: "config",
@@ -413,6 +413,8 @@ function logSummaryText(kind, s, serial) {
       return t("log.sum.battery", { level: logWord("log.battery.", s.level), from: logWord("log.battery.", s.from) });
     case "error_reset":
       return t("log.sum.errorReset");
+    case "error_watch":
+      return logErrorWatchText(s);
     case "structure": {
       const action = logWord("log.structure.", s.action);
       let text;
@@ -453,6 +455,36 @@ function logSummaryText(kind, s, serial) {
       return t("log.sum.lockedOut", { remote: s.remote || "–", for: s.for || "–", after: logWord("log.lockedAfter.", s.after) });
   }
   return "";
+}
+
+// logErrorWatchText is an error_watch line's text (AP RadioHealth v1.2,
+// Block 6): a communication error back after the automatic reset, with
+// the radiogram that failed; a communication error or a link error set
+// for 24 hours; one clear again.
+function logErrorWatchText(s) {
+  const num = (v) => (v === undefined || v === null ? "–" : String(v));
+  const link = s.flag === "link_error";
+  const parts = [];
+  switch (s.what) {
+    case "back":
+      parts.push(t(s.next_report ? "log.sum.watchBackNext" : "log.sum.watchBack", { minutes: num(s.minutes) }));
+      break;
+    case "lasting":
+      parts.push(t(link ? "log.sum.watchLastingLink" : "log.sum.watchLasting", {
+        hours: num(s.hours), since: s.since ? fmtLogTime(new Date(s.since)) : "–" }));
+      if (s.silent) parts.push(t("log.sum.watchSilent"));
+      break;
+    case "clear":
+      parts.push(t(link ? "log.sum.watchClearLink" : "log.sum.watchClear"));
+      if (s.hours !== undefined && s.hours !== null) parts.push(t("log.sum.watchFor", { hours: num(s.hours) }));
+      break;
+    default:
+      return "";
+  }
+  if (!link && s.failed_radiogram) parts.push(t("log.ch.failedRadiogram", { radiogram: radiogramName(s.failed_radiogram) })); // tiles.js
+  if (s.what === "back") parts.push(t("log.sum.watchHeld"));
+  else if (s.what === "clear" && s.held) parts.push(t("log.sum.watchResume"));
+  return parts.join("; ");
 }
 
 // logTargetText names what a change concerns: a device by its name, else

@@ -2816,6 +2816,7 @@ of the same Cube, or of the server for the server's own:
 | `login_failed` | a `login` of the same name |
 | `locked_out` | its end |
 | `restart`, `reboot`, `update` not started | `server_started`; for `update`, also an `update` started |
+| `error_watch` `back` or `lasting` | the same device's `error_watch` `clear` of the same `flag` |
 
 Any other, such as `proxy_discarded` and `proxy_delete_refused`,
 is settled only by a person's mark.
@@ -2868,6 +2869,28 @@ at most once a day per device,
 never while a command to the device or its room waits or runs in the queue,
 at info;
 its `summary` has `automatic`: `true` and the `room` of the device's C line),
+`error_watch` (a device's flags watched, its `summary`'s `what` saying which:
+`back`, at warn, once a day per device, where its communication error is back
+within a day of its automatic `error_reset`,
+in an entry the Cube sent after it answered the reset,
+at the device's report or set again after it was clear,
+with `reset`, the reset's time, and `minutes` since;
+`next_report` where it was the device's first report after it;
+`failed_radiogram`;
+and `held`: `true`, the server resets the device by itself no more
+until its flag has stayed clear for a day;
+`lasting`, at error, once in each run of the flag,
+where the communication error or the link error, its `flag`,
+has been set for 24 hours without a break,
+also for a device that sends no state (`silent`),
+the start of the run read from the device's state lines after a restart,
+with `since` and `hours`,
+for the communication error also `failed_radiogram` and `held`;
+`clear`, at info, where such a flag clears after a warning or an error of it,
+or the communication error of a held device does
+(`since` and `hours` where its start is known, `held`);
+a warning or an error of it is an alert until its clear,
+see GET /api/v1/log/alerts),
 `pairing_started`, `paired` (with `paired`, the device that joined),
 `pairing_ended` (see Pairing),
 `device_forgotten` (a device deleted from the Cube, through the API or a client

@@ -511,6 +511,16 @@ anyone else's stay in the browser.
 The page asks at every poll.
 A device that reports while its communication error is set is reset by the server,
 once a day at most: the log's **communication error reset** line.
+Where the error is back within that day,
+at the device's next report or later,
+the log's **error watch** line says so at warn, once a day,
+with the radiogram that failed,
+and the server leaves the device alone until the error has stayed away a day;
+a communication error or a link error set for 24 hours
+is an **error watch** line at error,
+also for a device that sends nothing any more;
+each stays a problem until the same flag clears,
+an **error watch** line at info.
 The server keeps its log in its store across restarts and updates,
 for the days `log.keep_days` says (30 by default; docs/api-v1.md,
 "GET and PUT /api/v1/settings").
