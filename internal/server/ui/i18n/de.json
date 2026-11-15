@@ -661,7 +661,7 @@
   "pairing.how": "Starten schaltet den Cube in den Anlernmodus. Dann die Anlerntaste des neuen Geräts drücken, wie seine Anleitung es beschreibt; jedes Gerät, das sich meldet, erscheint hier.",
   "pairing.start": "Starten",
   "pairing.stop": "Beenden",
-  "pairing.secondsBad": "Die Anlernzeit beträgt 1 bis 255 Sekunden.",
+  "pairing.secondsRange": "nur 1 bis 255",
   "pairing.failed": "Anlernen: {error}",
   "pairing.left": "Anlernen: noch {seconds} s. Jetzt die Anlerntaste des Geräts drücken.",
   "pairing.ending": "Das Anlernen endet …",
