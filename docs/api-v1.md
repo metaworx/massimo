@@ -11,9 +11,11 @@ The server keeps one persistent connection and one command queue per Cube.
 Reads answer from the server's copy of the Cube's state,
 which the Cube refreshes on every change and which the server polls every 10 seconds.
 Writes go through the queue, which serialises commands, respects the
-radio duty cycle and the Cube's memory slots, and resets a device's
-communication error (`error`) before a command that reaches it:
-one `r:`, which costs no radio time, for the device a command names,
+radio duty cycle and the Cube's memory slots
+(a command of `r:` lines alone, which take neither, does not wait for them),
+and resets a device's communication error (`error`) before a command that reaches it:
+one `r:`, which costs no radio time, for each device whose flag is set
+that a command names or sends a radiogram to directly,
 and for every member of the room a room command names whose flag is set.
 
 ## Web UI
@@ -2228,7 +2230,8 @@ A thermostat put into a room, by an add or a move,
 then gets the room's settings, as the original software gives them to a device
 it pairs or moves:
 0x40 auto with temperature 0, to the device directly,
-without the error reset and the retry other writes get;
+with an error reset first, and one more and a retry after a discard,
+only where the device's flag is set;
 after a wakeup of the room,
 0x11 to every thermostat of the room, the device included,
 with the room's comfort, eco, maximum, minimum and window-open temperatures

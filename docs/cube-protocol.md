@@ -543,7 +543,8 @@ The payloads and the order of steps 4 to 7 are the original software's,
 but Massimo writes the metadata (step 8) before them, with the links.
 That a device which was in a room before takes the direct 0x40 is *unverified*,
 since a direct 0x40 to a room member was discarded on 2026-11-04 (below):
-Massimo sends it without the error reset and the retry,
+Massimo resets the device first, and once more and retries after a discard,
+only where its error flag is set, as before every direct radiogram,
 and its discard ends nothing but says so in the answer.
 
 Moving a device to another room (same software,
@@ -1051,6 +1052,9 @@ kept here because they cost time to learn.
     for a device the Cube had not heard since its restart too.
     So `r:` is the Cube's bookkeeping, not a radiogram;
     a reset device stayed clear (3½ days and 17 hours, the longest watched).
+    Massimo's queue therefore sends a command of `r:` lines alone past its
+    holds for the duty cycle and the free slots (AP RadioHealth v1.2, D183-B),
+    and a command with a radiogram waits as before.
   - A Cube restart clears every flag.
     A Cube that does not hear a device by its first wakeup and time push
     flags it again within minutes (four devices within 6 minutes,
@@ -1067,6 +1071,10 @@ kept here because they cost time to learn.
     room-flagged radiogram, one `r:01` for each device whose C line names
     the room and whose error flag is set, none for the link error alone,
     and after a discard the same resets and one retry.
+    The same holds for every flagged device in a command's scope (D182-A):
+    a radiogram sent to a device directly, such as the room configuration
+    write's 0x11 and 0x12 to each thermostat or a copy's steps, gets one
+    `r:01` for that device first, once per device and command.
     And `serve` resets a flagged device that reports, at most once a day
     (the log's `error_reset`): the device answers again, so the Cube's next
     radiogram to it has a chance, and nothing else would clear the flag.
