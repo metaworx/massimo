@@ -113,7 +113,8 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-(cd "$root" && go build -o "$work/massimo" ./cmd/massimo)
+# The page's parts first (make ui): the server embeds the bundle.
+(cd "$root" && go -C tools/uibundle run . && go build -o "$work/massimo" ./cmd/massimo)
 
 # start_set n: set n's fake Cube and its two servers, in $work/set<n>.
 start_set() {

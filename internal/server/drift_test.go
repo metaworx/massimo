@@ -456,8 +456,17 @@ func TestDriftReported(t *testing.T) {
 	if got := r.outcomes("drift"); len(got) != 1 {
 		t.Fatalf("reported twice: %v", got)
 	}
-	if got := r.radioSince(sent); len(got) != 0 {
-		t.Fatalf("a drift corrected: %v", got)
+	// The flagged member's report may bring its automatic reset (AP
+	// RadioHealth v1.2, Block 4), an r: of its own; a correction would be
+	// an s: line.
+	var corrections []string
+	for _, l := range r.radioSince(sent) {
+		if !strings.HasPrefix(l, "r:") {
+			corrections = append(corrections, l)
+		}
+	}
+	if len(corrections) != 0 {
+		t.Fatalf("a drift corrected: %v", corrections)
 	}
 	r.set(0x0a0206, "auto", 21)
 	r.check()

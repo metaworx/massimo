@@ -32,6 +32,7 @@ var (
 		"state":                "device state",
 		"battery":              "device battery level",
 		"wall_reset":           "wall thermostat came back on another mode",
+		"error_reset":          "communication error reset at the device's report",
 		"connected":            "cube connected",
 		"disconnected":         "cube connection lost",
 		"cube_found":           "cube found on the LAN",

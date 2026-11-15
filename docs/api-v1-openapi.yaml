@@ -2811,7 +2811,10 @@ paths:
         disconnected (once per loss of the connection, not at each retry),
         hello, metadata, config, state, battery (a device's battery
         level changed), wall_reset (a wall thermostat back from a silence
-        on another mode, at warn), pairing_started,
+        on another mode, at warn), error_reset (the server reset the
+        communication error of a device that reported while flagged, once a
+        day at most: the room of its C line and automatic in "summary"),
+        pairing_started,
         paired (with the device that joined in "paired"), pairing_ended,
         device_forgotten (a device deleted from the Cube left the server's
         copy; its "state" is the device as the server knew it), cube_found (with a Cube that is not configured in "cube"),

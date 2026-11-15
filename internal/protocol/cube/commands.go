@@ -173,6 +173,31 @@ func CmdResetError(addrs ...RFAddress) Message {
 	return Message{Type: 'r', Data: fmt.Sprintf("%02x,%s", len(addrs), b64.EncodeToString(raw))}
 }
 
+// ParseResetError decodes the data of an r: command, as CmdResetError
+// builds it and the original software sends it: the devices it resets.
+func ParseResetError(data string) ([]RFAddress, error) {
+	n, b, ok := strings.Cut(strings.TrimSpace(data), ",")
+	if !ok {
+		return nil, fmt.Errorf("r: want count,addresses, got %q", data)
+	}
+	count, err := strconv.ParseUint(n, 16, 8)
+	if err != nil {
+		return nil, fmt.Errorf("r: bad count %q", n)
+	}
+	raw, err := b64.DecodeString(b)
+	if err != nil {
+		return nil, fmt.Errorf("r: bad addresses: %w", err)
+	}
+	if len(raw) != 3*int(count) {
+		return nil, fmt.Errorf("r: count %d but %d address bytes", count, len(raw))
+	}
+	var addrs []RFAddress
+	for i := 0; i < len(raw); i += 3 {
+		addrs = append(addrs, RFAddressFromBytes(raw[i:i+3]))
+	}
+	return addrs, nil
+}
+
 // Radio command codes used in s messages: the radiogram types
 // (RadiogramType) Massimo sends, as the byte of the frame's header.
 const (

@@ -71,6 +71,11 @@ print(*[x.getsockname()[1] for x in s])
 for x in s: x.close()')
 
 git -C "$root" -c submodule.recurse=false worktree add -q --detach "$work/src" "$commit"
+# The page's parts first where the commit has them (make ui, from AP
+# UiParts on): its server embeds the bundle, which git does not keep.
+if [ -d "$work/src/tools/uibundle" ]; then
+	(cd "$work/src" && go -C tools/uibundle run .)
+fi
 (cd "$work/src" && CGO_ENABLED=0 go build -ldflags "-X main.version=$tag -X main.flavour=$flavour" -o "$work/massimo" ./cmd/massimo)
 git -C "$root" worktree remove --force "$work/src"
 m=$work/massimo

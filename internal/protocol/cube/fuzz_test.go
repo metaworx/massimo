@@ -92,6 +92,12 @@ func FuzzLine(f *testing.F) {
 			_, _ = ParseCryptoReply(m.Data)
 		case 's':
 			_, _ = ParseRadioCommand(m.Data)
+		case 'r':
+			if addrs, err := ParseResetError(m.Data); err == nil && len(addrs) > 0 {
+				if back, err := ParseResetError(CmdResetError(addrs...).Data); err != nil || len(back) != len(addrs) {
+					t.Fatalf("r: %q came back as %v", m.Data, back)
+				}
+			}
 		case 't':
 			force, addrs, err := ParseDeleteDevices(m.Data)
 			if err == nil {
