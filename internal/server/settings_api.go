@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/update"
 	"go.metaworx.ch/massimo/internal/view"
@@ -96,6 +97,15 @@ var durationSettings = []durationSetting{
 		inEffect: func(s *Server) time.Duration { return s.opts.RefreshInterval }},
 	{key: store.DiscoverIntervalKey, def: DefaultDiscoverInterval, min: time.Minute, max: 24 * time.Hour, zero: true,
 		inEffect: func(s *Server) time.Duration { return s.opts.DiscoverInterval }},
+	// How long radio commands wait at a full duty cycle before the Cube's
+	// budget is read again (AP LegacyLogs, D143-A).
+	{key: store.DutyWaitKey, def: engine.DefaultDutyWait, min: time.Minute, max: time.Hour,
+		inEffect: func(s *Server) time.Duration {
+			if s.opts.Queue.DutyWait > 0 {
+				return s.opts.Queue.DutyWait
+			}
+			return engine.DefaultDutyWait
+		}},
 	// How long a window may stay open before the web UI shows it amber,
 	// then red; the second not under the first.
 	{key: store.WindowWarnKey, def: view.WindowWarnAfter, min: time.Minute, max: 24 * time.Hour, now: true,

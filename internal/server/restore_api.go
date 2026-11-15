@@ -157,7 +157,7 @@ func (s *Server) startRestore(w http.ResponseWriter, r *http.Request) error {
 		return s.refuseRestore(rt, http.StatusConflict, "the plan has changed since it was made (%s, now %s); plan again", want, v.Plan)
 	}
 	if v.RadioCommands > 0 && v.Budget.DutyCyclePct > maxRestoreDutyPct {
-		return s.refuseRestore(rt, http.StatusConflict, "radio duty cycle at %d %%, above %d %%; wait for the hourly reset", v.Budget.DutyCyclePct, maxRestoreDutyPct)
+		return s.refuseRestore(rt, http.StatusConflict, "radio duty cycle at %d %%, above %d %%; wait for it to fall", v.Budget.DutyCyclePct, maxRestoreDutyPct)
 	}
 	// A Cube with a row in the store keeps its configuration before the
 	// restore, and the file the restore was sent (docs/store.md 9 (e)).

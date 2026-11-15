@@ -32,6 +32,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/announce"
 	"go.metaworx.ch/massimo/internal/certs"
+	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/push"
 	"go.metaworx.ch/massimo/internal/server"
 	"go.metaworx.ch/massimo/internal/store"
@@ -294,6 +295,16 @@ func open(ctx context.Context, cfg Config, root *slog.Logger, src certs.Source, 
 		}
 	}
 
+	// The duty cycle's hold (AP LegacyLogs, D143-A) has no flag.
+	var queue engine.Options
+	if st != nil {
+		if v, ok, err := st.SettingDuration(ctx, store.DutyWaitKey); err != nil {
+			log.Warn("setting ignored", "key", store.DutyWaitKey, "error", err)
+		} else if ok {
+			queue.DutyWait = v
+		}
+	}
+
 	if cfg.Announce.Auto {
 		cfg.Announce.On = announceSetting(ctx, st, cfg.Listen, log)
 	}
@@ -308,7 +319,7 @@ func open(ctx context.Context, cfg Config, root *slog.Logger, src certs.Source, 
 		find = findIntegrations
 	}
 	srv := server.New(server.Options{Cubes: su.cubes, Token: cfg.Token, PollInterval: poll, CubeHold: cfg.CubeHold, RefreshInterval: refresh, DiscoverInterval: discover, DiscoveryTargets: cfg.DiscoveryTargets, DiscoveryAddr: cfg.DiscoveryListen, Logger: root, Version: cfg.Version, Proxy: su.listeners, ShowHidden: cfg.ShowHidden,
-		Store: st, FileCubes: su.fileCubes, SettingsFile: cfg.SettingsFile, StaleAfter: staleAfter, SettingsFixedBy: fixedBy, ProxyFixed: len(cfg.Proxies) > 0, Update: cfg.Update, TLS: src, HSTSDays: cfg.HSTSDays, TrustedProxies: cfg.TrustedProxies,
+		Store: st, Queue: queue, FileCubes: su.fileCubes, SettingsFile: cfg.SettingsFile, StaleAfter: staleAfter, SettingsFixedBy: fixedBy, ProxyFixed: len(cfg.Proxies) > 0, Update: cfg.Update, TLS: src, HSTSDays: cfg.HSTSDays, TrustedProxies: cfg.TrustedProxies,
 		Restart: cfg.Restart, Reboot: cfg.Reboot, Install: cfg.Install, Deliverers: cfg.Deliverers, FindIntegrations: find, BrowseServers: browseServers,
 		Announce: server.AnnounceState{On: cfg.Announce.On && st != nil, FixedBy: cfg.Announce.FixedBy}})
 	ln, err := net.Listen("tcp", cfg.Listen)

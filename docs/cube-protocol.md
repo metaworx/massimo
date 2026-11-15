@@ -329,6 +329,12 @@ and from serve's store on one of the owner's hosts (2026-11-11 to 14):
   and its memory slot back within 3 to 6 s once the members answered.
   A 0x40 to a room whose members did not answer held its slot for at least
   3.9 days at 0 % duty.
+- The duty cycle falls within the hour: on one Cube from 21 % at 14:05 to 3 %
+  at 14:42 on 2026-11-13 with no client command, and 21 % five minutes after
+  a full hour; 3 of 19 falls between readings had no full hour between them.
+  It is probably the share of the last 60 minutes, not a counter reset on the
+  hour, so after a hold Massimo reads the budget again in steps (`duty_wait`)
+  rather than waiting for the next full hour.
 
 ## One LAN client at a time
 

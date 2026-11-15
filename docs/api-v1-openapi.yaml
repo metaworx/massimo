@@ -2920,8 +2920,10 @@ paths:
       description: |
         An object of keys and values: stale_after (1h to 720h, applies
         at once), poll_interval (10s to 1h, 10s by default),
-        refresh_interval (10m to 168h, or 0 for off) and
-        discover_interval (1m to 24h, or 0 for only on request), the
+        refresh_interval (10m to 168h, or 0 for off),
+        discover_interval (1m to 24h, or 0 for only on request) and
+        duty_wait (1m to 1h, 10m by default, how long radio commands wait
+        at a used-up duty cycle before the budget is read again), the
         intervals at the next start;
         window_warn_after and window_alert_after (1m to 24h, the alert not
         under the warning, at once), how long a window may stay open; the whole

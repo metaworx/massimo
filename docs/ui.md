@@ -1113,12 +1113,16 @@ The server's sign, when it says an update is out, opens it at Software update.
   Cubes every** (with `settings`) choose the intervals `poll_interval`
   (10 s to 1 h, 10 s by default), `refresh_interval` (Off, 30 min to
   7 days, 6 h by default) and `discover_interval` (Off, 1 min to 1 day,
-  30 min by default) from a list of steps; a value set through the API
+  30 min by default) from a list of steps, and **Re-read the radio
+  budget after a hold every** the duty cycle's hold `duty_wait` (1 min to
+  1 h, 10 min by default); a value set through the API
   that is none of them is listed as well, and the default is stored as
   none.
   The line under each says what it does: the device list asked for,
   which costs the Cube no radio time; a new connection that reads
-  everything the Cube holds; the search for Cubes on the LAN.
+  everything the Cube holds; the search for Cubes on the LAN; how long
+  radio commands wait at a used-up duty cycle before the Cube's budget is
+  read again.
   It then gives this run's value, or says that a change waits for the
   next restart; where `-poll`, `-refresh` or `-discover-interval`
   decides, the choice is read-only and names the flag.

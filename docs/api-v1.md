@@ -1550,6 +1550,7 @@ The server's settings in the store:
   "poll_interval":     {"value": "10s", "default": "10s", "set": false, "in_effect": "10s", "applies": "restart"},
   "refresh_interval":  {"value": "6h",  "default": "6h",  "set": false, "in_effect": "6h",  "applies": "restart"},
   "discover_interval": {"value": "30m", "default": "30m", "set": false, "in_effect": "30m", "applies": "restart"},
+  "duty_wait":         {"value": "10m", "default": "10m", "set": false, "in_effect": "10m", "applies": "restart"},
   "window_warn_after": {"value": "5m",  "default": "5m",  "set": false, "in_effect": "5m",  "applies": "now"},
   "window_alert_after": {"value": "10m", "default": "10m", "set": false, "in_effect": "10m", "applies": "now"},
   "update.channel":    {"value": "alpha", "default": "alpha", "set": false, "in_effect": "alpha", "applies": "now"},
@@ -1566,7 +1567,12 @@ The server's settings in the store:
 10 seconds by default, which costs no radio time;
 `refresh_interval` how often it connects to each Cube anew and reads
 everything the Cube holds, 6 hours by default;
-`discover_interval` how often it looks for Cubes on the LAN, 30 minutes by default.
+`discover_interval` how often it looks for Cubes on the LAN, 30 minutes by default;
+`duty_wait` how long radio commands wait while a Cube's duty cycle is used up
+before the server reads the Cube's budget again by a new connection,
+which costs no radio time, 10 minutes by default:
+the duty cycle falls within the hour (docs/cube-protocol.md), so the server
+does not wait for the next full hour, and holds again while it is still used up.
 `stale_after` is when a thermostat that has not changed counts as stale,
 and applies at once; the intervals apply at the next start.
 `window_warn_after` and `window_alert_after` are how long a window may stay open
@@ -1620,7 +1626,7 @@ A number setting takes a JSON number, or the number as a string,
 `auth.password_login` and `integrations.requests` `true` or `false`,
 `announce` `auto`, `on` or `off`, and `update.channel` a name.
 The ranges: `stale_after` 1h to 720h, `poll_interval` 10s to 1h,
-`refresh_interval` 10m to 168h, `discover_interval` 1m to 24h,
+`refresh_interval` 10m to 168h, `discover_interval` 1m to 24h, `duty_wait` 1m to 1h,
 `window_warn_after` and `window_alert_after` 1m to 24h.
 Every value is checked before any is written.
 The answer is that of `GET`.

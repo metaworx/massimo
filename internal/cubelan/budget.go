@@ -13,9 +13,10 @@ import (
 // Budget is what the Cube last reported about its radio and memory limits.
 //
 // The 868 MHz band allows 1 % transmit time per hour (36 s); the Cube
-// reports the used share as a percentage that resets on the hour. Every
-// unacknowledged radiogram occupies one of about 50 memory slots until the
-// device acknowledges it. Observed on hardware: at 100 % the Cube still
+// reports the used share as a percentage, probably of the last 60
+// minutes rather than reset on the hour (docs/cube-protocol.md). Every
+// unacknowledged radiogram occupies one of about 50 memory slots until
+// the device acknowledges it. Observed on hardware: at 100 % the Cube still
 // accepts commands and queues them, so a client must hold back itself.
 type Budget struct {
 	DutyCyclePct    int       `json:"duty_cycle_pct"`

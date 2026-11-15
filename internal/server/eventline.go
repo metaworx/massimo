@@ -72,7 +72,7 @@ func eventMessage(ev event) string {
 	case "hold":
 		switch ev.Summary["reason"] {
 		case engine.HoldDutyCycle:
-			return "radio duty cycle exhausted, waiting for the hourly reset"
+			return "radio duty cycle exhausted, holding radio commands until the budget is read again"
 		case engine.HoldMemorySlots:
 			return "few free memory slots on the cube, holding radio commands"
 		}

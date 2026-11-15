@@ -19,6 +19,9 @@ const (
 	PollIntervalKey     = "poll_interval"
 	RefreshIntervalKey  = "refresh_interval"
 	DiscoverIntervalKey = "discover_interval"
+	// DutyWaitKey is how long radio commands wait at a full duty cycle
+	// before the Cube's budget is read again (engine.Options.DutyWait).
+	DutyWaitKey = "duty_wait"
 	// WindowWarnKey and WindowAlertKey are how long a window may stay
 	// open before the web UI shows it amber, then red.
 	WindowWarnKey  = "window_warn_after"
