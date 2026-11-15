@@ -71,7 +71,7 @@ function hostPort(addr) {
 function fillCubeFacts(d, c) {
   const { host, port } = hostPort(c.address);
   const f = budgetFacts(c); // app.js
-  d.querySelector("summary > .mono").textContent = host ? c.serial + " · " + host : c.serial;
+  d.querySelector("summary .cube-head-who > .mono").textContent = host ? c.serial + " · " + host : c.serial;
   d.querySelector(".cube-head-stats").textContent =
     [t("budget.duty") + " " + f.duty, t("budget.slots") + " " + f.slots, t("budget.pending") + " " + f.pending].join(" · ");
   const clock = clockText(c); // app.js
@@ -433,7 +433,7 @@ async function pairingWrite(serial, key, fn) {
 function startPairing(serial) {
   const p = pairingOf(serial);
   const secs = Number(p.seconds);
-  if (!Number.isInteger(secs) || secs < 1 || secs > 600) {
+  if (!Number.isInteger(secs) || secs < 1 || secs > 255) { // the longest a Cube keeps (cube.MaxInclusion)
     p.msg = { text: t("pairing.secondsBad"), ok: false };
     redrawPairing(serial);
     return;
@@ -737,7 +737,7 @@ function fillCubeHead(d, c) {
         if (!ev.target.closest("summary.problems-sum")) ev.preventDefault();
       });
     }
-    sum.querySelector(".cube-pill").replaceChildren(...(pill ? [pill] : []));
+    sum.querySelector(".cube-pill").replaceChildren(pill || okPill(t("problem.none"))); // components.js
   }
   d.querySelector(".cube-top-line").replaceChildren(...cubeBadges(c));
 }
@@ -748,8 +748,12 @@ function cubePanel(c) {
     fromTemplate("tpl-cube-panel"));
   d.dataset.serial = c.serial;
   const sum = d.querySelector("summary");
-  sum.prepend(elem("span", "conn-sign"));
+  // the head (style.css): the Cube's sign, name, serial and radio budget
+  // at the left, wrapping; its pill top-right whatever wraps; its badges
+  // a line of their own under them
+  const who = elem("span", "cube-head-who", elem("span", "conn-sign"), ...sum.querySelectorAll(":scope > .panel-name, :scope > .mono"));
   const pills = elem("span", "cube-pill");
+  sum.prepend(who);
   if (sum.querySelector(".panel-badges")) sum.insertBefore(pills, sum.querySelector(".panel-badges"));
   else sum.appendChild(pills);
   d.addEventListener("toggle", () => {
@@ -764,14 +768,12 @@ function cubePanel(c) {
       delete cubesUI.edits[c.serial];
     }
   });
-  // two columns where there is room (style.css .cube-cols): the Cube's
-  // fields at the left, the pairing and the hidden devices at the right
   // Three groups: the Cube's facts (Info), its settings (the form), and
   // its actions in one row last: Pair a device (its progress under the
   // row), Reboot the Cube, Remove; Info and the settings side by side
   // where there is room (style.css .cube-cols).
   const form = d.querySelector("form.cube-form");
-  sum.insertBefore(textEl("span", "", "cube-head-stats muted small"), pills);
+  who.appendChild(textEl("span", "", "cube-head-stats muted small"));
   const acts = elem("div", "cube-actions", pairingSection(c.serial), rebootRow(c));
   const cols = elem("div", "cube-cols", fromTemplate("tpl-cube-info"), form, acts);
   sum.after(elem("div", "cube-top-line"), elem("div", "cube-link-state"), elem("div", "cube-address-state"), cols);

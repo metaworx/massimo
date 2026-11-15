@@ -2238,9 +2238,11 @@ Mode/Menu and Boost/OK on a wall thermostat) together.
 
 ### Pairing: POST, GET, DELETE /api/v1/cubes/{sn}/pairing
 
-`POST` with `{"seconds": 60}` (optional; 1 to 600,
+`POST` with `{"seconds": 60}` (optional; 1 to 255,
 default 60) puts the Cube into inclusion mode with `n:<seconds>`;
 a device whose pairing button is pressed then joins.
+255 seconds is the longest a Cube keeps the mode (docs/cube-protocol.md,
+"Pairing a device, as the original software does it").
 The Cube may end the mode earlier on its own.
 The answer is the pairing state:
 
@@ -2771,8 +2773,9 @@ The LAN proxy's, source `proxy`, with the client's `remote`:
 sent, the duty cycle at `duty_pct`),
 `proxy_deleted` (the `devices` a client deleted),
 `proxy_delete_refused` at `warn` (`why`: `hidden`, with the `devices`, or
-`not_understood`), `proxy_pairing` (`seconds`, or `joined`)
-and `proxy_warning` at `warn` (`what`: `pairing_not_started`,
+`not_understood`),
+`proxy_pairing` (`seconds`, with `asked` where a client asked for more,
+or `joined`) and `proxy_warning` at `warn` (`what`: `pairing_not_started`,
 `pairing_not_stopped`, `metadata_multipart`, `metadata_not_understood` or
 `metadata_not_encoded`).
 A line a proxy client passes on to the Cube is a command
@@ -2940,8 +2943,8 @@ and that proxy, where the request came through one.
   ],
   "api_port": 8099,
   "cube_proxies": [
-    {"serial": "KEQ0000000", "addr": "192.168.1.31:62910", "listening": true},
-    {"serial": "KEQ0000001", "addr": "192.0.2.10:62910", "listening": false,
+    {"serial": "KEQ0000000", "discovery_serial": "LEQ0000000", "addr": "192.168.1.31:62910", "listening": true},
+    {"serial": "KEQ0000001", "discovery_serial": "KEQ0000001", "addr": "192.0.2.10:62910", "listening": false,
      "error": "listen tcp 192.0.2.10:62910: bind: cannot assign requested address",
      "since": "2026-11-13T08:00:00+01:00", "next_try": "2026-11-13T09:53:30+01:00", "tries": 230}
   ],
@@ -2970,7 +2973,10 @@ one on an address that address's interface;
 an interface comes with its MAC and its addresses but link-local ones,
 `api` marking those the API listens on, at `api_port`.
 `cube_proxies` are the Cubes' proxy listeners, listening or not,
-by Cube serial and address;
+by Cube serial and address, with `discovery_serial`, the serial a listener
+answers discovery with: the Cube's proxy serial where one is set, else the
+Cube's own; absent for a listener that answers no discovery
+(only one on the Cube port does, docs/proxy.md);
 one that does not listen has the fields of a Cube's `proxy_failing`
 (`GET /api/v1/cubes`), and is tried again.
 

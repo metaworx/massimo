@@ -451,6 +451,38 @@ def test_cube_reboot(page, case):
     show_view(page, "tiles")
 
 
+def test_cube_head_pill_top_right(page, case):
+    """A Cube's head with a long name: its sign, name, serial and radio
+    budget wrap at the left, its pill stays top-right on the first line,
+    the green check where nothing is wrong, and the source badge takes a
+    line of its own under them."""
+    def long(route):
+        cubes = route.fetch().json()
+        for c in cubes:
+            if c.get("serial") == "KEQ0000100":
+                c["name"] = "A Cube with a name long enough to wrap its head on a phone"
+                c["problems"] = []
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes))
+    page.route("**/api/v1/cubes", long)
+    try:
+        show_view(page, "system")
+        page.evaluate("loadCubes()")
+        assert wait_until(page, "!!document.querySelector(\"%s > summary .cube-pill .ok-pill\")" % PANEL, 5), "the green check"
+        b = page.evaluate("""(sel) => {
+          const s = document.querySelector(sel + " > summary");
+          const r = (q) => s.querySelector(q).getBoundingClientRect().toJSON();
+          return { who: r(".cube-head-who"), pill: r(".cube-pill"), badges: r(".panel-badges"), name: r(".panel-name") };
+        }""", PANEL)
+        assert b["pill"]["left"] >= b["who"]["right"] - 1, f"the pill right of the Cube's name and facts: {b}"
+        assert b["pill"]["top"] <= b["name"]["top"] + 6, f"on the first line: {b}"
+        assert b["badges"]["top"] >= b["who"]["bottom"] - 1, f"the source badge a line of its own under them: {b}"
+        assert scroll_width(page) <= case.width, "no horizontal scroll"
+    finally:
+        page.unroute("**/api/v1/cubes")
+        page.evaluate("loadCubes()")
+        show_view(page, "tiles")
+
+
 def test_cube_panel_pill(page, case):
     """A closed Cube's head: its network sign before the name, one pill
     with every problem, the neutral source badge, no "connected" badge; a
@@ -476,7 +508,8 @@ def test_cube_panel_pill(page, case):
     head = page.locator(PANEL).locator(":scope > summary")
     page.route("**/api/v1/cubes", clean)
     page.evaluate("loadCubes()")
-    assert wait_until(page, "!document.querySelector(\"%s > summary .cube-pill .problems\")" % PANEL, 5), "nothing wrong: no pill"
+    assert wait_until(page, "!document.querySelector(\"%s > summary .cube-pill .problems\")" % PANEL, 5), "nothing wrong: no problem pill"
+    assert head.locator(".cube-pill .ok-pill").count() == 1, "the green check in its place"
     assert head.locator(".panel-badges .flag").count() == 1, "connected: the source badge alone, no connected badge"
     page.unroute("**/api/v1/cubes")
     page.route("**/api/v1/cubes", stale)

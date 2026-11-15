@@ -233,3 +233,30 @@ func TestProxyFailingInTheAPI(t *testing.T) {
 		t.Errorf("cube_proxies[0] once listening %+v", p)
 	}
 }
+
+// System Info names the serial a proxy answers discovery with, the
+// Cube's proxy serial where one is set, and none for a listener that
+// answers no discovery.
+func TestProxyDiscoverySerialInSystem(t *testing.T) {
+	free := func() string {
+		l, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer l.Close()
+		return l.Addr().String()
+	}
+	answering, silent := free(), free()
+	_, ts, _ := startWith(t, Options{ProxyFixed: true, DiscoveryAddr: "127.0.0.1:0", Proxy: []ProxyListener{
+		{Serial: "KEQ0000100", Addr: answering, Discovery: true, DiscoverySerial: "KEQ0000999"},
+		{Serial: "KEQ0000100", Addr: silent}}})
+	var sys systemView
+	getJSON(t, ts, "", "/api/v1/system", &sys)
+	got := map[string]string{}
+	for _, p := range sys.CubeProxies {
+		got[p.Addr] = p.DiscoverySerial
+	}
+	if got[answering] != "KEQ0000999" || got[silent] != "" || len(got) != 2 {
+		t.Fatalf("discovery serials %v, want KEQ0000999 at %s and none at %s", got, answering, silent)
+	}
+}

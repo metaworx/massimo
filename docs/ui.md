@@ -66,9 +66,14 @@ it is drawn once the focus has left the configuration.
 
 The header's line reads, from the left:
 Massimo's logo with the server's version and the time of the last update with **↻**,
-all on one baseline, the M as tall as the page buttons;
+all on one baseline where they fit beside it, the M as tall as the page buttons;
 then the Cube choice with the server's connection to the Cube as a plug;
 then the house, **👤** and the other page buttons.
+Where the version, the server's sign and the time do not fit beside the logo
+on one line, they take a row of their own across the header,
+under the logo and the Cube choice, on a phone under the logo and the page buttons,
+the version on a line of its own where the row is too narrow for all three,
+so that it is cut only where it is wider than the header.
 On a screen narrower than 600 px the Cube choice takes a line of its own,
 **☰** beside the house and 👤 holds **Log** and **System settings**,
 highlighted while one of them is shown,
@@ -84,10 +89,11 @@ The sign-in, the form that creates the first owner and the apps' connect page
 show the logo too, the first two larger, above their titles.
 
 The header stays at the top while the page scrolls.
-Scrolled, it keeps its first line without the time of the last update,
-and the lines under it go until the page is back
+Scrolled, it keeps its first line, the server's sign and the time of the last update,
+without the version, and the lines under it go until the page is back
 at its top, expert mode's line of the Cube's radio budget apart;
-narrower than 600 px the Cube choice then takes the line of **Massimo**.
+narrower than 600 px the Cube choice then takes the line of **Massimo**,
+the sign and the time a short line under it.
 
 - **Cube**:
   a menu that chooses the Cube when the server has several.
@@ -112,7 +118,8 @@ narrower than 600 px the Cube choice then takes the line of **Massimo**.
   for others the choice's entries cannot be chosen.
   A Cube the server finds by itself appears without reloading the page,
   and in the log.
-- **Problems**, beside the Cube choice where something is wrong on any Cube:
+- **Problems**, beside the Cube choice, a green check in a pill's frame
+  where nothing is wrong on any Cube; where something is,
   a pill with an icon per kind (a Cube's link, the radio, a battery, a window
   open too long, the settings), which lists every Cube with a problem as a heading,
   its own sign and its link's badge, and under it its devices with a problem
@@ -129,6 +136,8 @@ narrower than 600 px the Cube choice then takes the line of **Massimo**.
   for a proxy the Cube it serves, and the Massimo server serving it,
   its name a link to the address its announcement on the network gives.
   A window open briefly is not listed: it is a state, not a problem.
+  Its list, as every menu of the page, opens inside the window,
+  no higher than the room below it, and scrolls in itself, not the page.
 - **The time of the last update** and **↻**, one button without a frame,
   which asks the server for the current state now;
   a finger hits it a little beyond what it shows, and ↻ turns while it asks.
@@ -214,18 +223,22 @@ Every room has a tile:
   mostly after the valve moved.
 - **Icons in the tile's head** say what is wrong in the room, each in its colour
   and with its mark (see Signs, below):
-  the radio as a Wi-Fi fan, a device that lost its link (amber, a triangle)
+  the radio, a Wi-Fi fan or a tower as you choose (My settings),
+  a device that lost its link (amber, a triangle),
   or the Cube could not reach (red, a cross);
   a battery, one running low (amber);
-  an open window, a window contact reporting it:
+  an open window, the opening sash or the paned window as you choose,
+  a window contact reporting it:
   blue for its first 5 minutes, then amber with a triangle,
   red with a cross after 10
   (the server's settings `window_warn_after` and `window_alert_after`);
-  crossed arrows, the room's thermostats in different modes.
+  crossed arrows, the room's thermostats in different modes;
+  a suitcase, a room on holiday, which is no problem but is listed there.
   A tap on them lists the devices concerned, each once with its serial,
   its badges under its name, led by the same icons, a warning's and a failure's
   by its mark, and how long ago each came,
-  and for different modes each thermostat's mode;
+  for different modes each thermostat's mode,
+  and for a holiday its end, "holiday until 24.12., 18:00";
   Escape or a click outside closes the list.
   An icon goes as soon as its problem does.
   The room's virtual wall thermostat is not listed:
@@ -243,7 +256,18 @@ Every room has a tile:
   A temperature set this way puts the room into manual mode.
 - **AUTO** follows the week programme.
   **MANU** keeps the current temperature.
-  **HOLIDAY** keeps a temperature until a date and time.
+  **MORE** opens a menu; the arrow keys move in it, Escape closes it:
+  - **Eco** and **Comfort** set the room's eco or comfort temperature,
+    shown under each, and keep the room's mode:
+    in Auto until the next switch point,
+    in Manual held, on holiday until the holiday's end.
+  - **Hold (Manual)**, a switch shown while the room is in Auto:
+    on, Eco and Comfort put the room into Manual, holding the temperature.
+    It stays as set for the tile until the page is loaded again.
+  - **Holiday…** opens the holiday form:
+    a temperature kept until a date and time, then back to Auto.
+  A room on holiday has MORE pressed, saying until when:
+  "Holiday until 24.12., 18:00", the year added where it is not this one.
 - With the room's thermostats in different modes, for example after another
   program set one of them, the modes in use are outlined,
   and the head's crossed arrows list each thermostat's mode.
@@ -536,7 +560,8 @@ the first one handing over what it had.
 Once the server has your schemes, its list is the list:
 a scheme deleted in one browser goes from the others when they next load the page.
 Beside each of **Poll every**, **Expert mode**, **Cube clock shown in**,
-**Language**, **Mode**, **Colour scheme** and **Blinking signs**,
+**Language**, **Mode**, **Colour scheme**, **Blinking signs**,
+**Window icon** and **Radio icon**,
 in a column of its own at the right headed **only on this device**,
 a switch keeps that setting's value in this browser instead (its tooltip names the setting),
 for a phone that polls less often or a wall tablet that stays dark;
@@ -580,6 +605,15 @@ without the switches.
   **Blinking signs**: whether a warning's triangle and a failure's cross blink,
   so that they are not missed; as the system (blinking unless the device asks
   for reduced motion), on, at first (five times when a sign comes) or off.
+  **Window icon**: an open window drawn as the opening sash (the default),
+  its mark inside its frame,
+  or as the paned window of the original MAX! software,
+  its mark at the bottom right;
+  a window contact's icon follows.
+  **Radio icon**: a radio fault drawn as the Wi-Fi fan (the default)
+  or as the tower of the thermostats' display, its mark at the bottom right.
+  Beside each choice it is drawn as the page shows it, plain and with its marks,
+  and the page is drawn again at once.
   Next to each colour input is its hex value, `#f6f6f4`, in a text field:
   a value typed or pasted there, with or without the `#`,
   also as `#abc` and in any case, applies at once
@@ -707,14 +741,19 @@ to the top of the page.
   The certificate is the server's own (its source, names and expiry; none on plain HTTP),
   or, where a trusted proxy serves the page, the proxy's, "(proxied)":
   its names, expiry and issuer as the server read it, "not trusted" where it is not valid,
-  with the address the proxy serves;
+  with the address the proxy serves, a link to it in a new window and its copy icon;
+  "being read…" while the server reads it,
+  which it does within seconds of the first request:
+  the page asks again every 2 s while System settings is shown,
+  and says "could not be read" when 30 s have not brought it;
   where the proxy names no scheme (no `X-Forwarded-Proto`), the page's own scheme
   and address, and that with that header the server reads the proxy's certificate;
   a page on HTTPS from a server without TLS says "(proxied)" too,
   and that `-trusted-proxies` would show more.
   The server's version copies on a click, or by its copy icon, whole, with
   what it was built with (the header's does too, without the icon);
-  so does each Cube proxy's address, which the original software connects to.
+  so do each Cube proxy's serial, the serial it answers discovery with ("as …",
+  where it answers discovery) and its address, which the original software connects to.
   A copy says "Copied"; on a page served over plain HTTP the browser gives no
   clipboard to the page, and the copy goes through its copy command instead.
   At its end, for a holder of `settings`,
@@ -762,7 +801,9 @@ to the top of the page.
   one the helper ended without its version says how it ended (`docs/api-v1.md`,
   "GET /api/v1/update?refresh=1").
 - **Maintenance** (with `restart`, `reboot` for its reboot,
-  or `settings` for its announcement and its last two parts):
+  or `settings` for its announcement and its last two parts),
+  in this order: **Announce on the LAN**, **Settings file**, **Restart**
+  and **Reboot the computer**, each under a bold title:
   **Restart the server**
   asks in the section and restarts the server through its service manager
   (`docs/api-v1.md`, "POST /api/v1/restart");
@@ -811,8 +852,9 @@ to the top of the page.
   the serial and the address without the port,
   the duty cycle, the free slots and the radiograms pending,
   a pill with every problem of the Cube (its link, its proxy, its settings file
-  and its devices with theirs, as the header's), whose click opens its list
-  and not the panel, and where its settings come from,
+  and its devices with theirs, as the header's), top-right whatever wraps,
+  a green check where nothing is wrong, whose click opens its list
+  and not the panel, and under them where its settings come from,
   all of it drawn again at every poll, and opens with a click:
   its own badges as its top line (its link where it is not connected,
   a proxy that does not listen, a settings file that differs,
@@ -901,7 +943,8 @@ to the top of the page.
   each question and the pairing's progress in a line under them;
   from 760 px the facts and the settings are side by side.
   **Pair a device**
-  shows the pairing time (60 seconds, at most 600) and **Start**,
+  shows the pairing time (60 seconds, at most 255, the longest a Cube keeps)
+  and **Start**,
   which puts the Cube into pairing mode;
   then the device's pairing button is pressed, as its manual says.
   A countdown with **Stop** runs while the Cube pairs,
@@ -954,9 +997,10 @@ to the top of the page.
   which the page uses for users whose password the server still hashes;
   the line under it says how many those are,
   and they cannot sign in once it is off until a password is set for them here.
-- **Sign-in providers** (with `auth`, the owner's alone by default):
+- **Sign-in providers** (with `auth`, the owner's alone by default),
+  explained by the ⓘ in its head:
   the redirect URI to register at a provider,
-  the page's address and `api/v1/login/oidc/callback`;
+  the page's address and `api/v1/login/oidc/callback`, with its copy icon;
   every OpenID Connect provider in a panel, its name and key,
   **disabled** and **creates users** as badges,
   with its name on the button, issuer, client ID, client secret (written only:
@@ -970,7 +1014,7 @@ to the top of the page.
   and says what is wrong where the issuer is not reached or named otherwise,
   **Remove**; **Add a provider** opens the form for one, with its key.
 - **Integrations** (with `integrations`, the owner's and the manager's by
-  default; docs/api-v1.md, "Integrations"):
+  default; docs/api-v1.md, "Integrations"), explained by the ⓘ in its head:
   with `settings`, **Integrations may ask to be registered**;
   each request waiting in a panel whose head shows its code, to compare
   with the one the integration shows,
@@ -1085,9 +1129,11 @@ an action with what it does and its button is an `.action-row`;
 A state is a sign, a colour and a mark, so that it reads without its colour:
 nothing for a state that is fine, a triangle for a warning (amber),
 a cross for a failure (red).
-`signEl` draws a kind of thing in a state (`SIGNS`: the radio, a Wi-Fi fan,
-and the window with the mark at the bottom right, as the original MAX! software has
-them; the network of a Cube's link with it on top; the cog for the settings),
+`signEl` draws a kind of thing in a state (`signOf`: the radio and the window
+as the person chooses, `ICON_CHOICES`, the Wi-Fi fan or the tower,
+the opening sash with the mark inside its frame or the paned window with it
+at the bottom right, as the original MAX! software has it;
+`SIGNS`: the network of a Cube's link with it on top, the cog for the settings),
 the drawing and the mark two parts, so that the mark alone blinks;
 `badgeEl` leads a warning's or a failure's badge with its mark (`markEl`)
 and sets it in bold, while a badge that names a state, such as a mode, stays regular;

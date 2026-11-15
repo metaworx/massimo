@@ -141,8 +141,9 @@ func (s *Server) paired() *Pairing {
 // Pairing describes the device that joins after n:. Delay after the n:
 // the fake sends its N line and from then on answers c: for it with
 // Config; the inclusion ends with an empty N line when the n: timeout is
-// over or on x:. This is how the real Cube is expected to behave; the
-// empty N line in particular still has to be confirmed on hardware.
+// over or on x:. A real Cube sends that line when the time is up (seen
+// on hardware, 2026-11-14); the N line of a device that joins and the
+// end by x: are how it is expected to behave, still to be confirmed.
 type Pairing struct {
 	Device cube.NewDevice
 	Config cube.Message // the device's C line
@@ -545,9 +546,12 @@ func (s *Server) serve(conn net.Conn) {
 		case 'e', 'd':
 			reply = fmt.Sprintf("%c:%s\r\n", m.Type-32, m.Data)
 		case 'n':
-			// No immediate reply: N lines come when devices join.
+			// No immediate reply: N lines come when devices join. The
+			// time is the low byte, as a real Cube reads it (n:012c
+			// lasted 44 s on hardware); what the Cube does with 0 is
+			// not known, the fake takes 60 s.
 			secs, _ := strconv.ParseUint(m.Data, 16, 16)
-			if secs == 0 {
+			if secs &= 0xff; secs == 0 {
 				secs = 60
 			}
 			if inclusion != nil {

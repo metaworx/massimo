@@ -63,7 +63,8 @@ jobs:
   # UI test and LAN jobs, are true for
   # a push; for a pull request, ui is true when it touches the web UI, its
   # suite or this file, lan when it touches the announcement, discovery,
-  # the proxy, the LAN test or this file. The run checks out the pull
+  # the proxy, the server's own files (not ui/: discovery's runs are
+  # decided there), the LAN test or this file. The run checks out the pull
   # request's merge commit, whose first parent is the base branch. The
   # list is taken before it is matched, so that grep -q ending the pipe
   # early cannot fail the step under pipefail. Only an answer of false
@@ -178,7 +179,7 @@ jobs:
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
             changed="$(git diff --name-only HEAD^1 HEAD)"
             grep -qE '^(internal/server/ui/|tools/ui-test/|\.github/workflows/ci\.yml$)' <<<"$changed" || ui=false
-            grep -qE '^(internal/announce/|internal/serve/|internal/proxy/|internal/cubelan/|cmd/massimo/(discover|serve)\.go$|tools/lan-test/|\.github/workflows/ci\.yml$)' <<<"$changed" || lan=false
+            grep -qE '^(internal/announce/|internal/serve/|internal/proxy/|internal/server/[^/]+$|internal/cubelan/|cmd/massimo/(discover|serve)\.go$|tools/lan-test/|\.github/workflows/ci\.yml$)' <<<"$changed" || lan=false
           fi
           echo "suite=${suite} code=${code} site=${site} tested=${tested} fp=${fp} ui=${ui} lan=${lan} ui_done=${ui_done} lan_done=${lan_done} fuzz_done=${fuzz_done}"
           # The answers as a table in the run's summary, with the reasons.
@@ -447,8 +448,9 @@ jobs:
   # client, discover listing it and marking the proxy, and its goodbye.
   # The runner has Docker and Compose v2; the hosts' image is built from
   # debian:trixie-slim at each run. It runs for every push to main and for
-  # a pull request whose What to test answered lan=true, as the UI tests
-  # do; skipped by this condition, the check counts as passed.
+  # a pull request whose What to test answered lan=true, the server's own
+  # files among its paths, as the UI tests do; skipped by this condition,
+  # the check counts as passed.
   lan:
     name: LAN against avahi
     needs: changes
@@ -1210,9 +1212,10 @@ jobs:
   # 2): that of the last run that tested this code, on main's first parents,
   # read and never run again. Red fails it on a push, so that All tests
   # passed fails and the nightly build takes nothing, and is a warning on a
-  # pull request, which adds no code. The whole history, for the walk;
-  # actions to read the runs and wait for one still going, statuses for the
-  # Tested status of a run that skipped its jobs on it.
+  # pull request, which adds no code. The whole history, for the walk, and
+  # the guidelines, for fingerprint.sh; actions to read the runs and wait
+  # for one still going, statuses for the Tested record where no run gives
+  # a verdict: a run cancelled while it waited, or one that skipped its jobs.
   code-result:
     name: Code result
     needs: changes
@@ -1227,6 +1230,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          submodules: true
 
       - name: The verdict of the last run that tested this code
         env:

@@ -682,7 +682,8 @@ and `-log-file-format` and `-log-process-format` (`MASSIMO_LOG_FILE_FORMAT`,
 `serve` rotates the file itself, on every platform:
 once it would grow past `-log-rotate-size` (10M),
 at once when its last line is in another format,
-and on SIGHUP and a reload from the API.
+and on SIGHUP and a reload from the API,
+so a fresh file is one **Reload now** or `systemctl reload massimo` away.
 `serve.log.1` is the newest rotated file, the older ones are gzipped,
 and the oldest is deleted only while more than `-log-keep` (8) are kept and
 the others still cover `-log-keep-min` (5M), so that many small files stay
@@ -745,6 +746,9 @@ as applying at the next restart.
 `reload`, `stop` as SIGTERM does,
 or `auto`, a reload under a service manager or after `nohup`,
 and a stop in a terminal, where SIGHUP means that the terminal closed.
+A SIGHUP that is a reload but comes while `serve` starts,
+before it is ready, is logged as a warning and ignored:
+the settings were just read and the log file just opened.
 Every six hours (`-refresh`,
 `0` to switch it off) `serve` reconnects to each Cube,
 in turn with the queued commands, and re-reads everything the Cube holds,

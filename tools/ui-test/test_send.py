@@ -9,7 +9,7 @@ what the Cube has.
 Every write is held at its route and then answered with a stub, so
 nothing reaches the fake Cube and its state stays as the other tests
 expect it."""
-from helpers import assert_busy, busy_state, hold, wait_held, wait_until
+from helpers import assert_busy, busy_state, hold, scroll_settled, wait_held, wait_until
 
 TILE = ".room:has(.mode-auto:not(.hidden))"
 OK = '{"ok": true, "devices": []}'
@@ -134,6 +134,17 @@ def test_configuration_send_is_off_until_a_change(page, case):
     tile.locator(".config-tabs .close").click()
 
 
+def reset_all_in_view(page, tile):
+    """Reset all, scrolled into view with the page at rest: at 390 px the
+    scroll compacts the header a frame later (components.js stickyHeader),
+    and the page then moves by 53 px, so a click aimed before that lands
+    on the note above the button."""
+    reset = tile.locator(".prog-reset-all")
+    reset.scroll_into_view_if_needed()
+    assert scroll_settled(page), "the page comes to rest"
+    return reset
+
+
 def test_week_programme_send_is_off_until_a_point_changes(page, case):
     """The week programme's Send is off until a switch point changes, and
     off again after Reset all."""
@@ -147,7 +158,7 @@ def test_week_programme_send_is_off_until_a_point_changes(page, case):
     temp.press("Tab")
     assert wait_until(page, "!!document.querySelector('.prog-days .day.dirty')", 5), "the day is marked as changed"
     assert send.is_enabled(), "a changed point turns Send on"
-    tile.locator(".prog-reset-all").click()
+    reset_all_in_view(page, tile).click()
     assert send.is_disabled(), "Reset all turns Send off"
     tile.locator(".config-tabs .close").click()
 
@@ -165,11 +176,10 @@ def test_a_redraw_of_the_rooms_keeps_a_click_in_the_configuration(page, case):
     temp.fill("%g" % (was + 0.5 if was < 30 else was - 0.5))
     temp.press("Tab")
     assert wait_until(page, "!!document.querySelector('.prog-days .day.dirty')", 5), "the day is marked as changed"
-    reset = tile.locator(".prog-reset-all")
-    reset.scroll_into_view_if_needed()
-    box = reset.bounding_box()
+    box = reset_all_in_view(page, tile).bounding_box()
     page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
     page.mouse.down()
+    assert page.evaluate("document.activeElement === document.querySelector(%r)" % (sel + " .prog-reset-all")), "the press is on Reset all"
     page.evaluate("document.querySelector(%r).dataset.before = '1'; renderRooms()" % sel)
     page.mouse.up()
     assert send.is_disabled(), "Reset all counts with a redraw in the click"
@@ -229,11 +239,11 @@ def test_boost_from_the_room_menu(page, case):
     held, sent = [], []
     hold(page, "**/rooms/*/setpoint", "PUT", held, sent)
     try:
-        tile.locator("details.menu summary").click()
+        tile.locator(".tile-head > details.menu summary").click()
         tile.locator(".menu-boost").click()
         assert wait_held(page, held), "the setpoint PUT is sent"
         assert sent == [{"mode": "boost"}], f"the body names the boost alone: {sent}"
-        assert tile.locator("details.menu").get_attribute("open") is None, "the menu closes"
+        assert tile.locator(".tile-head > details.menu").get_attribute("open") is None, "the menu closes"
         answer(held)
         assert wait_until(page, "!document.querySelector(%r).disabled" % (sel + " .mode-auto"), 5), "the tile's buttons are back"
     finally:

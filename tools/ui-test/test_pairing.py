@@ -187,3 +187,22 @@ def test_pairing_without_the_capability_cubes(page, case):
     assert page.locator("#system .cubes-settings").is_hidden(), "no System settings → Cubes without either"
     page.evaluate("document.body.classList.remove('no-cubes', 'no-pair')")
     show_view(page, "tiles")
+
+
+def test_pairing_time_at_most_255(page, case, clean):
+    """The pairing time is at most 255 seconds, the longest a Cube keeps
+    the mode: Start with 256 starts nothing."""
+    show_view(page, "system")
+    panel = page.locator(PANEL)
+    panel.locator(":scope > summary").click()
+    pairing = panel.locator(".cube-pairing")
+    pairing.locator(".pair-open").click()
+    secs = pairing.locator("input[name=seconds]")
+    assert secs.get_attribute("max") == "255", "the field's limit"
+    secs.fill("256")
+    pairing.locator(".pairing-form button[type=submit]").click()
+    page.wait_for_timeout(500)
+    assert secs.evaluate("(el) => el.validity.rangeOverflow"), "256 is out of range"
+    assert pairing.locator(".pairing-running").is_hidden(), "no countdown"
+    assert api("GET", CUBE + "/pairing")[1]["active"] is False, "no pairing started"
+    show_view(page, "tiles")
