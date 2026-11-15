@@ -53,6 +53,11 @@ def test_log_sign_by_level(page):
         assert page.locator("#menu-log").get_attribute("aria-label") == count, "the count named"
         assert count in (page.locator("#nav-menu > summary").get_attribute("aria-label") or ""), "in ☰'s name too"
         assert "tone-warn" in (page.locator("#nav-menu > summary > .mark-sign").get_attribute("class") or ""), "☰ with the amber mark"
+        mark = page.locator("#nav-menu > summary > .mark-sign")
+        disc = mark.evaluate("(e) => [getComputedStyle(e).backgroundColor, getComputedStyle(e).borderRadius]")
+        card = page.evaluate("""() => { const p = document.createElement('div'); p.style.background = 'var(--card)';
+          document.body.appendChild(p); const c = getComputedStyle(p).backgroundColor; p.remove(); return c; }""")
+        assert disc == [card, "50%"], f"the mark on a disc of the card's colour, readable on the filled ☰: {disc}, card {card}"
         alerts.append({"id": 900002, "kind": "restart", "level": "error", "time": "2026-11-14T20:01:00Z"})
         page.evaluate("loadLogAlerts()")
         s = sign(page, "#menu-log")

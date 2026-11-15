@@ -549,6 +549,7 @@
   "discover.found.one": "{n} Cube gevonden, niet ingesteld",
   "discover.found.other": "{n} Cubes gevonden, niet ingesteld",
   "discover.failed": "Zoeken mislukt: {error}",
+  "discover.show": "Tonen",
   "discover.hint": "„Toevoegen” bedient een Cube meteen, hier. Een Massimo-proxy hoort bij een andere server: hij staat hier zodat zijn Cube niet twee keer wordt toegevoegd. De andere weg is het instellingenbestand van de server, met een herstart:",
   "discover.hintFile": "Het instellingenbestand is /etc/massimo/env voor een server die met „massimo install” is geïnstalleerd, anders .env in de werkmap van de server of het bestand dat met -env is opgegeven. Bij meerdere Cubes heeft elke ook een _PROXY-adres nodig; README.md beschrijft de variabelen.",
   "discover.log": "Cube {serial} op {address}, niet ingesteld",

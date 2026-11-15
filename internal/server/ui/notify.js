@@ -48,7 +48,6 @@ const notifyState = {
   endpoint: "", // this browser's subscription's endpoint, "" for none
   timer: null, // the save of the rules, waiting
   seen: new Map(), // the notifications shown lately: key → when
-  toastTimer: null,
 };
 
 // notifyDefaults are the rules of a user who has set none.
@@ -337,18 +336,12 @@ function notifyToast(n) {
   if (notifyState.seen.has(key)) return;
   notifyState.seen.set(key, now);
   const { title, body } = notifyText(n, t, fmtNum);
-  const toast = $("notify-toast");
-  $("notify-toast-title").textContent = title;
-  $("notify-toast-body").textContent = body;
-  toast.classList.remove("hidden");
-  if (notifyState.toastTimer) clearTimeout(notifyState.toastTimer);
-  notifyState.toastTimer = setTimeout(() => toast.classList.add("hidden"), NOTIFY_TOAST_MS);
+  showToast(body, { title, ms: NOTIFY_TOAST_MS }); // components.js
 }
 
 function initNotify() {
   $("notify-on").addEventListener("click", turnOnNotify);
   $("notify-off").addEventListener("click", turnOffNotify);
-  $("notify-toast-close").addEventListener("click", () => $("notify-toast").classList.add("hidden"));
   onView("me", loadNotify);
   // a push while this page is in front: the service worker hands it over
   if ("serviceWorker" in navigator) {

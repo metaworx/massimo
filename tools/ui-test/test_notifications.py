@@ -238,12 +238,12 @@ def test_toast(page, case):
     n = notification(30, "2026-11-09T06:42:00Z")
     send = """(n) => state.events.dispatchEvent(new MessageEvent("notification", { data: JSON.stringify({ kind: "notification", notification: n }) }))"""
     page.evaluate(send, n)
-    toast = page.locator("#notify-toast")
+    toast = page.locator("#toast")
     toast.wait_for(state="visible")
-    assert page.locator("#notify-toast-title").inner_text() == t(page, "notify.window_open.title")
-    assert page.locator("#notify-toast-body").inner_text() == t(page, "notify.window_open.body", {"where": "Window (Bath)", "minutes": "30"})
+    assert page.locator("#toast-title").inner_text() == t(page, "notify.window_open.title")
+    assert page.locator("#toast-body").inner_text() == t(page, "notify.window_open.body", {"where": "Window (Bath)", "minutes": "30"})
     assert_axe(page, "the toast")
-    page.locator("#notify-toast-close").click()
+    page.locator("#toast-close").click()
     toast.wait_for(state="hidden")
     page.evaluate(send, n)
     page.wait_for_timeout(300)
@@ -251,7 +251,7 @@ def test_toast(page, case):
     page.evaluate("""(n) => navigator.serviceWorker.dispatchEvent(new MessageEvent("message", { data: { type: "notification", notification: n } }))""",
                   notification(45, "2026-11-09T06:57:00Z"))
     toast.wait_for(state="visible")
-    assert "45" in page.locator("#notify-toast-body").inner_text(), "the service worker's notification"
+    assert "45" in page.locator("#toast-body").inner_text(), "the service worker's notification"
 
 
 def test_guest_has_none(page, case):
@@ -305,8 +305,8 @@ def test_service_worker_shows_a_push(page, case, context):
         return (t(page, "notify.window_open.title"), t(page, "notify.window_open.body", {"where": "Window (Bath)", "minutes": str(minutes)}))
 
     want = push(30, "2026-11-09T07:00:00Z")
-    page.locator("#notify-toast").wait_for(state="visible")
-    assert (page.locator("#notify-toast-title").inner_text(), page.locator("#notify-toast-body").inner_text()) == want
+    page.locator("#toast").wait_for(state="visible")
+    assert (page.locator("#toast-title").inner_text(), page.locator("#toast-body").inner_text()) == want
 
     worker.evaluate("""() => {
       self.__shown = [];

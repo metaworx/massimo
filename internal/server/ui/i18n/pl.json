@@ -557,6 +557,7 @@
   "discover.found.many": "Znaleziono {n} urządzeń Cube, nieskonfigurowanych",
   "discover.found.other": "Znaleziono {n} urządzenia Cube, nieskonfigurowane",
   "discover.failed": "Wyszukiwanie nie powiodło się: {error}",
+  "discover.show": "Pokaż",
   "discover.hint": "„Dodaj” od razu obsługuje Cube, tutaj. Proxy Massimo należy do innego serwera: jest na liście, aby jego Cube nie został dodany dwa razy. Inną drogą jest plik ustawień serwera, z ponownym uruchomieniem:",
   "discover.hintFile": "Plik ustawień to /etc/massimo/env dla serwera zainstalowanego poleceniem „massimo install”, w przeciwnym razie .env w katalogu roboczym serwera lub plik podany przez -env. Przy kilku Cube każdy potrzebuje też adresu _PROXY; README.md opisuje zmienne.",
   "discover.log": "Cube {serial} pod adresem {address}, nieskonfigurowany",
