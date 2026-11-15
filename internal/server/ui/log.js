@@ -234,7 +234,9 @@ function logStateText(s) {
   if (st.window_open !== undefined) parts.push(t(st.window_open ? "log.windowOpen" : "log.windowClosed"));
   if (st.until) parts.push(t("log.until", { until: st.until }));
   for (const [k, key] of [["battery_low", "log.batteryLow"], ["error", "log.error"], ["link_error", "log.linkError"], ["panel_locked", "log.locked"]]) {
-    if (st[k]) parts.push(t(key));
+    if (!st[k]) continue;
+    if (k === "error" && st.failed_radiogram) parts.push(t("log.errorRadiogram", { radiogram: radiogramName(st.failed_radiogram) })); // tiles.js
+    else parts.push(t(key));
   }
   return parts.join(", ");
 }
@@ -242,8 +244,12 @@ function logStateText(s) {
 // logChangesText says what a state event changed, one phrase per value,
 // from the API's changes ({field: {from, to}}, null for a value the
 // device did not have): "window opened", "set 18.0 → 21.0", "reports
-// again". A field this page does not know shows as it came.
+// again"; a communication error with the radiogram that failed,
+// "communication error: TimeInformation (0x03)", and that radiogram
+// alone where another failed while the error stayed. A field this page
+// does not know shows as it came.
 function logChangesText(changes) {
+  const failed = changes.failed_radiogram ? changes.failed_radiogram.to : null;
   const num = (v, digits) => (v === null || v === undefined ? "–" : fmtNum(v, digits));
   const flag = (to, on, off) => t(to ? on : off);
   const parts = [];
@@ -276,7 +282,12 @@ function logChangesText(changes) {
         parts.push(flag(to, "log.batteryLow", "log.ch.batteryOk"));
         break;
       case "error":
-        parts.push(flag(to, "log.error", "log.ch.errorCleared"));
+        if (to && failed) parts.push(t("log.errorRadiogram", { radiogram: radiogramName(failed) })); // tiles.js
+        else parts.push(flag(to, "log.error", "log.ch.errorCleared"));
+        break;
+      case "failed_radiogram":
+        // said with the error where it came or went with it
+        if (to && !changes.error) parts.push(t("log.ch.failedRadiogram", { radiogram: radiogramName(to) }));
         break;
       case "link_error":
         parts.push(flag(to, "log.linkError", "log.ch.linkErrorCleared"));

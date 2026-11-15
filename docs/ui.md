@@ -267,8 +267,13 @@ Every room has a tile:
 - **Icons in the tile's head** say what is wrong in the room, each in its colour
   and with its mark (see Signs, below):
   the radio, a Wi-Fi fan or a tower as you choose (My settings),
-  a device that lost its link (amber, a triangle),
-  or the Cube could not reach (red, a cross);
+  a device that lost its link (amber, a triangle, the badge **link error**,
+  its tooltip the original software's sentence:
+  "The radio communication with another MAX! device in this room is disturbed."),
+  or the Cube could not reach (red, a cross, the badge **communication error**,
+  its tooltip the radiogram that failed, where the server gives it,
+  by its technical name and code:
+  "Last radiogram that failed: TimeInformation (0x03)");
   a battery, one getting weak (amber) or low (red), as the server keeps its level;
   an open window, the opening sash or the paned window as you choose,
   a window contact reporting it:
@@ -368,7 +373,7 @@ Every room has a tile:
     and that the log says when it is done:
     the log's **device change** line, within about 15 minutes,
     a warning where the Cube still holds memory slots for it
-    or a device of the room was left with an error.
+    or a device of the room was left with a communication error or a link error.
   - **Week programme**:
     one bar per day.
     - A click on a day selects it together with every day that has the same programme.
@@ -494,8 +499,10 @@ or the person marks it seen (`docs/api-v1.md`, "GET /api/v1/log/alerts"):
 a lost connection until the next one,
 a failed command until the same one is acknowledged,
 a failed backup until the next, a hold until it ends;
-a device's transmit error, link error and low battery while the device has them,
-at the line that set them.
+a device's communication error, link error and low battery
+while the device has them, at the line that set them;
+a communication error's line names the radiogram that failed,
+"communication error: TimeInformation (0x03)", as the badge's tooltip does.
 Its line is highlighted, a bar and its mark in amber or red,
 with **Mark seen**; **Mark all as seen** beside **Clear** marks every one.
 Opening the log marks nothing.
@@ -715,7 +722,10 @@ also while no page is open.
   and, off by default, a device that sends no news, a device paired,
   a new Cube on the network and a new version of Massimo.
   A change is saved a second after the last one;
-  a delay is 1 to 1440 minutes, the threshold −10 to 20 °C.
+  a delay is 1 to 1440 minutes, the threshold −10 to 20 °C,
+  and a value outside is not saved:
+  its box turns red, with the range in amber before it,
+  until it holds one inside, whatever a save meanwhile says.
   One kind notifies once per device per half hour.
 - **Your devices**:
   every browser and app notified for you,
@@ -723,6 +733,12 @@ also while no page is open.
   and the deliveries that failed since;
   this browser is marked, and **Remove** ends one.
   Revoking a session or a key under My profile removes the devices it subscribed.
+
+A line under the lists says what came of reading them, of a save,
+and of turning this browser on or off or removing a device.
+Each clears only its own outcome when it next succeeds,
+so the outcome of turning on stays after the lists are read again,
+and the page opened again starts with the line empty.
 
 While the page is open,
 a notification shows at its foot for ten seconds instead,
@@ -1206,8 +1222,10 @@ behind the phone's fingerprint or PIN where the server's settings in the app ask
 
 This section is for changing the UI;
 its rules are in the project contract (`AGENTS.md`, "The web UI").
-The page is plain HTML, CSS and JavaScript under `internal/server/ui/`,
-embedded in the binary, with no build step.
+The page is HTML, CSS and JavaScript under `internal/server/ui/`,
+embedded in the binary.
+Its regions move from plain scripts to parts, one region at a time,
+and the parts are the one thing that is built (below).
 `index.html` is the skeleton: the head, the icons, the sections of the page
 and the scripts, with marker comments.
 At start the server replaces each marker, such as `<!-- partials: prefs -->`,
@@ -1340,6 +1358,30 @@ The six scripts that held several regions were cut along them by
 and a branch that was open meanwhile makes the same moves with it.
 The tool is there while the plan UiParts lasts, and goes with it.
 
+A region that has moved is a part:
+Preact with its signals, written in TSX under `ui/src/<region>/`,
+built once and updated in place.
+`ui/src/index.ts` is the entry point; it registers `window.MassimoParts`,
+by region the functions the plain code calls,
+and no region is a part yet.
+`make ui` bundles it with esbuild, through esbuild's Go API (`tools/uibundle`,
+a module of its own, its `README.md`),
+into `ui/parts.js`: one classic script, minified, for ES2022,
+with the vendored packages' licence comments at its end.
+The page loads it after the plain scripts, whose globals a part calls.
+git does not keep the bundle:
+every target of the Makefile that compiles Go makes it first,
+and so do the scripts of the UI suite, the LAN test and the store fixture,
+CI and the Homebrew formula;
+`go build` without it stops at the `go:embed` line of `ui.go`, which names it.
+Preact 11.2.0 and @preact/signals 2.11.4 are vendored under
+`third_party/preact/` (its `README.md`);
+the bundler takes them from there and refuses any other import.
+`make ui-check` type-checks `ui/src/` with `tsc --noEmit` (its `tsconfig.json`:
+strict, the vendored types by `paths`),
+with the TypeScript `tools/ui-check/` locks (its `README.md`),
+and CI's job UI types runs it.
+
 `ui/connect.html` is a second page, the apps' (docs/app.md),
 served at `/ui/connect.html` as it is, not assembled:
 its markup, its templates and `<base href="../">`,
@@ -1356,3 +1398,5 @@ which the sign-in needs and which the browser does not offer
 and the page's `Content-Security-Policy` allows WebAssembly to compile
 (`'wasm-unsafe-eval'`) for it;
 `go test ./internal/server` checks the file's SHA-256.
+Nor is the Preact the bundle holds, which `go test ./internal/server`
+checks the same way (`third_party/preact/README.md`).

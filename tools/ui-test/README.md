@@ -3,7 +3,7 @@
 `make ui-test` runs `run.sh`.
 The script:
 
-1. builds massimo;
+1. builds massimo, the page's parts first (`make ui`);
 2. starts a server set for each of four pytest-xdist workers
    (`UI_TEST_WORKERS`, default 4), each set:
    the fake Cube (`massimo fakecube`), which also answers discovery

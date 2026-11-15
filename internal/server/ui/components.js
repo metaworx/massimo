@@ -635,12 +635,13 @@ function showResult(el, text, ok) {
 }
 
 // markRange marks a number field by what its required, min, max and step
-// allow: a value they refuse sets aria-invalid, which style.css outlines
-// in red, and shows hint, the amber range before the box, which the
-// field then names as its description; a good value clears both. It
-// returns whether the value is good.
-function markRange(input, hint) {
-  const ok = input.validity.valid;
+// allow, or by ok where the caller judges the value itself (the
+// notifications' threshold takes any number in its range, not only its
+// step): a value refused sets aria-invalid, which style.css outlines in
+// red, and shows hint, the amber range before the box, which the field
+// then names as its description; a good value clears both. It returns
+// whether the value is good.
+function markRange(input, hint, ok = input.validity.valid) {
   if (ok) {
     input.removeAttribute("aria-invalid");
     input.removeAttribute("aria-describedby");
@@ -1208,8 +1209,8 @@ function pickerMenu(details, { items, value, onPick, shown }) {
 // them, is not monospaced), its items, and subs, entries under it (a
 // Cube's devices); info lists the entry and those under it without an
 // item, as information, and summary is an element the summary shows
-// after the kinds' icons (the found Cubes' sign). An item is { kind, icon, sign, tone, mark, text, at,
-// stale }: kind groups the summary's icons (sign, a kind of SIGNS, draws
+// after the kinds' icons (the found Cubes' sign). An item is { kind, icon, sign, tone, mark, text, title, at,
+// stale }: title, where set, is its badge's tooltip; kind groups the summary's icons (sign, a kind of SIGNS, draws
 // it with its state's mark), an item without one is listed but adds no
 // icon (a device's mode beside its problems); tone is a badgeEl kind
 // ("bad", "warn", "fill-ok", …), which colours the badge and, without
@@ -1288,6 +1289,7 @@ function problemEntry(e) {
       // A warning's or a failure's badge is led by its mark, which takes
       // the place of its kind's icon; another state keeps the icon.
       const b = badgeEl("", it.tone || "mode", [e.title, e.sub, it.kind, it.text].join(":"));
+      if (it.title) b.title = it.title; // what the badge means, as a radio fault's says
       if (it.icon && !badgeState(it.tone)) b.appendChild(iconEl(it.icon, "ni"));
       b.appendChild(document.createTextNode(it.text));
       const age = it.at ? ageEl(it.at, it.stale) : null; // app.js

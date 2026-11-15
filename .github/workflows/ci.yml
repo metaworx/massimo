@@ -2,8 +2,8 @@ name: CI
 
 # Once per commit: a push to main, or a pull request (each push to its
 # branch), never both; and a release tag. Formatting, vet, the tests, a
-# cross build of every release binary, actionlint on the workflows,
-# govulncheck, the Debian package in a container, and the Windows
+# cross build of every release binary, actionlint on the workflows, the
+# types of the web UI's parts, govulncheck, the Debian package in a container, and the Windows
 # service on a Windows runner. A pull
 # request runs the web UI's suite only when it changes the UI, the suite
 # or this file, and on two of its four cases, and the mDNS test against
@@ -62,7 +62,8 @@ jobs:
   # not pass yet (All tests passed writes the status). ui and lan, for the
   # UI test and LAN jobs, are true for
   # a push; for a pull request, ui is true when it touches the web UI, its
-  # suite or this file, lan when it touches the announcement, discovery,
+  # bundler (tools/uibundle), the vendored Preact, its suite or this file,
+  # lan when it touches the announcement, discovery,
   # the shared port, the proxy, the server's own files (not ui/:
   # discovery's runs are decided there), the Go module, the LAN test or
   # this file. A push whose record says lan=unneeded, its pull request's
@@ -199,7 +200,7 @@ jobs:
           fi
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
             changed="$(git diff --name-only HEAD^1 HEAD)"
-            grep -qE '^(internal/server/ui/|tools/ui-test/|\.github/workflows/ci\.yml$)' <<<"$changed" || ui=false
+            grep -qE '^(internal/server/ui/|tools/ui-test/|tools/uibundle/|third_party/preact/|\.github/workflows/ci\.yml$)' <<<"$changed" || ui=false
             grep -qE '^(internal/announce/|internal/serve/|internal/sharedport/|internal/proxy/|internal/server/[^/]+$|internal/cubelan/|cmd/massimo/(discover|serve)\.go$|go\.(mod|sum)$|tools/lan-test/|\.github/workflows/ci\.yml$)' <<<"$changed" || lan=false
           fi
           echo "suite=${suite} code=${code} site=${site} tested=${tested} fp=${fp} ui=${ui} lan=${lan} ui_done=${ui_done} lan_done=${lan_done} fuzz_done=${fuzz_done}"
@@ -265,6 +266,8 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
 
+      - uses: ./.github/actions/ui-bundle
+
       - name: gofmt
         run: |
           unformatted="$(gofmt -l .)"
@@ -313,6 +316,21 @@ jobs:
       - name: make actionlint
         run: make actionlint
 
+  # The types of the web UI's parts (make ui-check, GUIDELINES/project/CI.md,
+  # section 2): tsc --noEmit over internal/server/ui/src/, with the
+  # TypeScript tools/ui-check/package-lock.json locks, installed by npm ci
+  # without running a package's scripts; the runner's Node.js runs it.
+  ui-types:
+    name: UI types
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: make ui-check
+        run: make ui-check
+
   # The race detector (make race, GUIDELINES/project/CI.md, section 2) on
   # the packages whose goroutines meet, beside Vet and test rather than in
   # it, so that neither waits for the other.
@@ -328,6 +346,8 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
+
+      - uses: ./.github/actions/ui-bundle
 
       - name: make race
         run: make race
@@ -348,6 +368,8 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
+
+      - uses: ./.github/actions/ui-bundle
 
       - name: qemu-user
         run: |
@@ -373,6 +395,8 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
+
+      - uses: ./.github/actions/ui-bundle
 
       - name: make fuzz
         run: make fuzz
@@ -437,6 +461,8 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
 
+      - uses: ./.github/actions/ui-bundle
+
       - name: Playwright
         run: pip install "playwright==1.64.1" -r tools/ui-test/requirements.txt
 
@@ -496,6 +522,8 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
 
+      - uses: ./.github/actions/ui-bundle
+
       - name: LAN test
         run: make lan-test
 
@@ -517,6 +545,8 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
+
+      - uses: ./.github/actions/ui-bundle
 
       # Built for the runner; GOOS then selects the code it scans.
       - name: govulncheck
@@ -552,6 +582,8 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
+
+      - uses: ./.github/actions/ui-bundle
 
       - name: Build the packages
         run: make packages
@@ -597,6 +629,8 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
+
+      - uses: ./.github/actions/ui-bundle
 
       # Discovery's tests as well: Windows binds UDP ports otherwise than
       # Linux, a wildcard beside an address's own port (CI.md, section 3).
@@ -930,6 +964,8 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
+
+      - uses: ./.github/actions/ui-bundle
 
       - name: Unit tests
         run: go test ./internal/update/... ./internal/install/... ./cmd/... ./internal/safefile/...
@@ -1304,7 +1340,7 @@ jobs:
   # a read-only token, and the step's failure fails nothing.
   tests:
     name: All tests passed
-    needs: [ changes, test, actionlint, race, armv6, fuzz, screenshots, lan, govulncheck, deb, windows, macos, guidelines, site, code-result ]
+    needs: [ changes, test, actionlint, ui-types, race, armv6, fuzz, screenshots, lan, govulncheck, deb, windows, macos, guidelines, site, code-result ]
     if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' }}
     runs-on: ubuntu-latest
     permissions:

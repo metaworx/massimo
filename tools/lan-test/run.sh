@@ -109,7 +109,8 @@ within() {
 	done
 }
 
-(cd "$root" && CGO_ENABLED=0 go build -ldflags "-X main.version=$BUILD" -o "$work/massimo" ./cmd/massimo)
+# The page's parts first (make ui): the server embeds the bundle.
+(cd "$root" && go -C tools/uibundle run . && CGO_ENABLED=0 go build -ldflags "-X main.version=$BUILD" -o "$work/massimo" ./cmd/massimo)
 cp "$root/tools/ui-test/greeting.txt" "$work/"
 # The second Cube's greeting: the same house, the serial KEQ0000101.
 sed 's/^H:KEQ0000100,/H:KEQ0000101,/' "$root/tools/ui-test/greeting.txt" >"$work/greeting2.txt"

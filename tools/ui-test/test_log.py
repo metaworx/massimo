@@ -43,6 +43,34 @@ def test_log_changes(page, case):
     show_view(page, "tiles")
 
 
+def test_log_radio_faults(page, case):
+    """The log names a device's flags as its badges do: a communication
+    error that came with the radiogram that failed, by its technical
+    name and code; another radiogram failing while the error stays; the
+    error cleared; a link error."""
+    show_view(page, "log")
+    page.wait_for_timeout(1600)
+    page.evaluate("""() => {
+      const d = JSON.parse(JSON.stringify(state.rooms[0].devices[0]));
+      const send = (changes) => state.events.dispatchEvent(new MessageEvent("state", { data: JSON.stringify({
+        kind: "state", device: d.rf_address, state: d, time: new Date().toISOString(), changes }) }));
+      send({ error: { from: false, to: true }, failed_radiogram: { from: null, to: { code: 3, name: "TimeInformation" } } });
+      send({ failed_radiogram: { from: { code: 3, name: "TimeInformation" }, to: { code: 246 } } });
+      send({ error: { from: true, to: false }, failed_radiogram: { from: { code: 246 }, to: null } });
+      send({ link_error: { from: false, to: true } });
+    }""")
+    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-state').length >= 4", 5), "the four lines"
+    texts = [page.locator(".log-line.kind-state").nth(i).locator(".log-text").inner_text() for i in range(4)]
+    want = page.evaluate("""() => [t("log.linkError"), t("log.ch.errorCleared"),
+      t("log.ch.failedRadiogram", { radiogram: "0xf6" }), t("log.errorRadiogram", { radiogram: "TimeInformation (0x03)" })]""")
+    assert texts == want, f"newest first: {texts}, want {want}"
+    if case.lang == "en":
+        assert want[3] == "communication error: TimeInformation (0x03)", want[3]
+    else:
+        assert want[3] == "Kommunikationsstörung: TimeInformation (0x03)", want[3]
+    show_view(page, "tiles")
+
+
 def test_log_names_devices_by_serial(page, case):
     """A line names a device without a name by its S/N, the radio address
     in expert mode only; the Cube's own configuration is the Cube's; a
@@ -466,18 +494,33 @@ def test_log_answers(page, case):
     event comes past 2000 lines, and the error line shows with a kind
     chosen. The page's api() holds the log's requests, which the test
     answers in its own time; the log button's question (log/alerts) goes
-    through. The test server's own stream (a device's state from the fake
-    Cube, polled every 10 s) is kept out, since a line it brought would
-    push one of the counted out; the events the test sends get through."""
+    through. Only the events the test sends (sendTestEvent) reach the
+    log: a line of the test server's own, such as an automatic backup an
+    earlier test's change brings or a device's state from the fake Cube's
+    10 s poll, would push one of the 2000 counted out."""
     now = time.time()
     show_view(page, "log")
     all_events(page)
     page.evaluate("""() => {
-      // at the stream, a capturing listener comes before the page's own:
-      // the server's events (trusted) stop there, the test's go on
-      for (const kind of LOG_KINDS) {
-        state.events.addEventListener(kind, (ev) => { if (ev.isTrusted) ev.stopImmediatePropagation(); }, true);
-      }
+      // The server's events are kept out of the log at appendLogEvent,
+      // which the stream's listeners call, not at the stream: Chromium
+      // calls an EventSource's listeners in the order they were added, a
+      // capturing one as well, so one added now would come after the
+      // page's own, and selectCube opens a new stream besides. The
+      // stream's other work (the devices, the rooms) goes on.
+      let sending = false;
+      window.sendTestEvent = (kind, data) => {
+        sending = true;
+        try {
+          state.events.dispatchEvent(new MessageEvent(kind, { data: JSON.stringify(data) }));
+        } finally {
+          sending = false;
+        }
+      };
+      const append = appendLogEvent;
+      window.appendLogEvent = (ev) => {
+        if (sending) append(ev);
+      };
       window.logAnswers = [];
       const real = api;
       window.api = (method, path, body) => path.includes("/log") && !path.includes("/log/alerts")
@@ -529,8 +572,7 @@ def test_log_answers(page, case):
     assert "before=1801" in held(), "Older from the oldest of 2000"
     answer(range(1601, 1801))
     assert wait_until(page, hellos + " === 2200", 5), "2200 lines"
-    page.evaluate("""(rf) => state.events.dispatchEvent(new MessageEvent("config", { data: JSON.stringify({
-      kind: "config", device: rf, time: new Date().toISOString() }) }))""", rf)
+    page.evaluate("""(rf) => sendTestEvent("config", { kind: "config", device: rf, time: new Date().toISOString() })""", rf)
     assert wait_until(page, "logState.lines.some((l) => l.kind === 'config')", 5), "the live event in the log"
     assert page.evaluate(hellos) == 2200 and page.evaluate("logState.lines[0].id === 1601 && logState.cursor === '1601'"), \
         "a live event keeps the page fetched"
@@ -539,8 +581,7 @@ def test_log_answers(page, case):
     held()
     answer(range(1, 2001))
     assert wait_until(page, hellos + " === 2000", 5), "a page of 2000"
-    page.evaluate("""(rf) => state.events.dispatchEvent(new MessageEvent("config", { data: JSON.stringify({
-      kind: "config", device: rf, time: new Date().toISOString() }) }))""", rf)
+    page.evaluate("""(rf) => sendTestEvent("config", { kind: "config", device: rf, time: new Date().toISOString() })""", rf)
     assert wait_until(page, "logState.lines[0].id >= 2 && logState.cursor === String(logState.lines[0].id)", 5), \
         "past 2000 lines the oldest go, and Older goes on from the oldest kept"
     assert page.evaluate("document.querySelectorAll('#log-lines .log-line').length === logState.lines.filter(logLineMatches).length"), \
@@ -557,7 +598,10 @@ def test_log_answers(page, case):
 def test_log_keeps_events_that_come_while_it_loads(page, case):
     """A live event that comes while a page of the log is on its way is
     kept after the page, and one the page holds already is not doubled.
-    The page's api() holds the log's request until the test answers it."""
+    The page's api() holds the log's request until the test answers it.
+    Only the kinds the test sends are counted: a real event of the server
+    may come meanwhile too, such as a backup an earlier test's change
+    made, and is kept as well."""
     now = time.time()
     show_view(page, "log")
     assert wait_until(page, "!logState.loading", 5), "the log loaded"
@@ -580,10 +624,10 @@ def test_log_keeps_events_that_come_while_it_loads(page, case):
                   [{"id": i, "kind": "hello", "time": stamp(now, i)} for i in (1, 2)] +
                   [{"id": 3, "kind": "config", "device": rf, "time": both}])
     assert wait_until(page, "!logState.loading", 5), "the page is in"
-    kinds = page.evaluate("logState.lines.map((l) => l.kind + ' ' + l.at)")
+    kinds = page.evaluate("logState.lines.filter((l) => l.kind === 'hello' || l.kind === 'config').map((l) => l.kind + ' ' + l.at)")
     assert kinds == ["hello " + stamp(now, 1), "hello " + stamp(now, 2), "config " + both, "config " + late], \
         f"the page, then the live event it lacks, once each: {kinds}"
-    assert page.locator("#log-lines .log-line").count() == 4, "and the view shows them"
+    assert page.locator("#log-lines .log-line.kind-hello, #log-lines .log-line.kind-config").count() == 4, "and the view shows them"
     show_view(page, "tiles")
 
 

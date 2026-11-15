@@ -1,0 +1,18 @@
+name: The web UI's bundle
+description: >-
+  Builds internal/server/ui/parts.js, the web UI's parts, as make ui does
+  (tools/uibundle), so that Go can compile the server, which embeds it.
+# The one step every job that compiles or tests Go runs first, after
+# checkout and setup-go (GUIDELINES/project/CI.md, section 3): git does not
+# keep the bundle (AP UiParts, D172-A), and without it the go:embed line
+# of internal/server/ui.go stops the build. The command is make ui's,
+# written out, for the jobs without make (the Playwright image) and the
+# Windows runner alike; the bundler runs on the runner whatever GOOS a
+# later step gives, and leaves a bundle that would not change as it is,
+# so a make target that builds it again changes nothing.
+runs:
+  using: composite
+  steps:
+    - name: make ui
+      shell: bash
+      run: GOOS= GOARCH= GOARM= go -C tools/uibundle run .

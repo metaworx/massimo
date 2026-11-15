@@ -160,9 +160,10 @@ func CmdSetTime(winter, summer TimeZoneRule, now time.Time) (Message, error) {
 	return m, nil
 }
 
-// CmdResetError clears the transmit-error state of devices. The original
-// software sends it right before a radio command to a device whose last
-// transmission failed. The Cube answers with an S line. Verified on hardware.
+// CmdResetError clears the communication error (the error flag) of
+// devices. The original software sends it right before a radio command
+// to a device whose last radiogram failed. The Cube answers with an S
+// line. Verified on hardware.
 func CmdResetError(addrs ...RFAddress) Message {
 	var raw []byte
 	for _, a := range addrs {
@@ -197,18 +198,19 @@ func ParseResetError(data string) ([]RFAddress, error) {
 	return addrs, nil
 }
 
-// Radio command codes used in s messages.
+// Radio command codes used in s messages: the radiogram types
+// (RadiogramType) Massimo sends, as the byte of the frame's header.
 const (
-	RFSetTemperature  = 0x40
-	RFSetWeekProgram  = 0x10
-	RFSetTemperatures = 0x11
-	RFSetValveConfig  = 0x12
-	RFAddLinkPartner  = 0x20
-	RFRemoveLink      = 0x21
-	RFSetGroupAddress = 0x22
-	RFRemoveGroup     = 0x23
-	RFLockControls    = 0x80 // "LockManualControls" in the original software
-	RFSetDisplayMode  = 0x82
+	RFSetTemperature  = byte(RadiogramControlMode)
+	RFSetWeekProgram  = byte(RadiogramConfigWeekTemperatureProfile)
+	RFSetTemperatures = byte(RadiogramConfigTemperatures)
+	RFSetValveConfig  = byte(RadiogramConfigValveFunctions)
+	RFAddLinkPartner  = byte(RadiogramAddLinkPartner)
+	RFRemoveLink      = byte(RadiogramRemoveLinkPartner)
+	RFSetGroupAddress = byte(RadiogramSetGroupAddress)
+	RFRemoveGroup     = byte(RadiogramRemoveGroupAddress)
+	RFLockControls    = byte(RadiogramLockManualControls)
+	RFSetDisplayMode  = byte(RadiogramSwitchDisplaySetPointActual)
 )
 
 // Target addresses a radio command to a single device or to a room.

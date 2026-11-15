@@ -101,16 +101,19 @@ func TestRoomThermostatState(t *testing.T) {
 
 	// The real wall thermostat's flags; the valve is the highest.
 	w := wall
-	w.State = &State{Mode: cube.ModeAuto, Setpoint: wall.State.Setpoint, ActualTemp: wall.State.ActualTemp, BatteryLow: true, PanelLocked: true}
+	timeInfo, link := cube.RadiogramTimeInformation, cube.RadiogramRemoveLinkPartner
+	w.State = &State{Mode: cube.ModeAuto, Setpoint: wall.State.Setpoint, ActualTemp: wall.State.ActualTemp, BatteryLow: true, PanelLocked: true,
+		Error: true, FailedRadiogram: &timeInfo}
 	v := 40
 	o := r1
-	o.State = &State{Mode: cube.ModeAuto, Setpoint: r1.State.Setpoint, ValvePct: &v, BatteryLow: true}
+	o.State = &State{Mode: cube.ModeAuto, Setpoint: r1.State.Setpoint, ValvePct: &v, BatteryLow: true, Error: true, FailedRadiogram: &link}
 	d = RoomThermostat(room, []Device{w, o}, RoomInfo{}, 5)
-	if !d.State.BatteryLow || !d.State.PanelLocked || *d.State.ValvePct != 40 {
+	if !d.State.BatteryLow || !d.State.PanelLocked || *d.State.ValvePct != 40 || !d.State.Error || d.State.FailedRadiogram == nil ||
+		*d.State.FailedRadiogram != timeInfo {
 		t.Errorf("flags and valve: %+v", d.State)
 	}
-	if d = RoomThermostat(room, []Device{o}, RoomInfo{}, 5); d.State.BatteryLow {
-		t.Errorf("a radiator thermostat's battery on the room: %+v", d.State)
+	if d = RoomThermostat(room, []Device{o}, RoomInfo{}, 5); d.State.BatteryLow || d.State.Error || d.State.FailedRadiogram != nil {
+		t.Errorf("a radiator thermostat's flags on the room: %+v", d.State)
 	}
 
 	// A contact alone: the window, nothing else, not reported.
