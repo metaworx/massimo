@@ -442,18 +442,33 @@ def test_log_answers(page, case):
     event comes past 2000 lines, and the error line shows with a kind
     chosen. The page's api() holds the log's requests, which the test
     answers in its own time; the log button's question (log/alerts) goes
-    through. The test server's own stream (a device's state from the fake
-    Cube, polled every 10 s) is kept out, since a line it brought would
-    push one of the counted out; the events the test sends get through."""
+    through. Only the events the test sends (sendTestEvent) reach the
+    log: a line of the test server's own, such as an automatic backup an
+    earlier test's change brings or a device's state from the fake Cube's
+    10 s poll, would push one of the 2000 counted out."""
     now = time.time()
     show_view(page, "log")
     all_events(page)
     page.evaluate("""() => {
-      // at the stream, a capturing listener comes before the page's own:
-      // the server's events (trusted) stop there, the test's go on
-      for (const kind of LOG_KINDS) {
-        state.events.addEventListener(kind, (ev) => { if (ev.isTrusted) ev.stopImmediatePropagation(); }, true);
-      }
+      // The server's events are kept out of the log at appendLogEvent,
+      // which the stream's listeners call, not at the stream: Chromium
+      // calls an EventSource's listeners in the order they were added, a
+      // capturing one as well, so one added now would come after the
+      // page's own, and selectCube opens a new stream besides. The
+      // stream's other work (the devices, the rooms) goes on.
+      let sending = false;
+      window.sendTestEvent = (kind, data) => {
+        sending = true;
+        try {
+          state.events.dispatchEvent(new MessageEvent(kind, { data: JSON.stringify(data) }));
+        } finally {
+          sending = false;
+        }
+      };
+      const append = appendLogEvent;
+      window.appendLogEvent = (ev) => {
+        if (sending) append(ev);
+      };
       window.logAnswers = [];
       const real = api;
       window.api = (method, path, body) => path.includes("/log") && !path.includes("/log/alerts")
@@ -505,8 +520,7 @@ def test_log_answers(page, case):
     assert "before=1801" in held(), "Older from the oldest of 2000"
     answer(range(1601, 1801))
     assert wait_until(page, hellos + " === 2200", 5), "2200 lines"
-    page.evaluate("""(rf) => state.events.dispatchEvent(new MessageEvent("config", { data: JSON.stringify({
-      kind: "config", device: rf, time: new Date().toISOString() }) }))""", rf)
+    page.evaluate("""(rf) => sendTestEvent("config", { kind: "config", device: rf, time: new Date().toISOString() })""", rf)
     assert wait_until(page, "logState.lines.some((l) => l.kind === 'config')", 5), "the live event in the log"
     assert page.evaluate(hellos) == 2200 and page.evaluate("logState.lines[0].id === 1601 && logState.cursor === '1601'"), \
         "a live event keeps the page fetched"
@@ -515,8 +529,7 @@ def test_log_answers(page, case):
     held()
     answer(range(1, 2001))
     assert wait_until(page, hellos + " === 2000", 5), "a page of 2000"
-    page.evaluate("""(rf) => state.events.dispatchEvent(new MessageEvent("config", { data: JSON.stringify({
-      kind: "config", device: rf, time: new Date().toISOString() }) }))""", rf)
+    page.evaluate("""(rf) => sendTestEvent("config", { kind: "config", device: rf, time: new Date().toISOString() })""", rf)
     assert wait_until(page, "logState.lines[0].id >= 2 && logState.cursor === String(logState.lines[0].id)", 5), \
         "past 2000 lines the oldest go, and Older goes on from the oldest kept"
     assert page.evaluate("document.querySelectorAll('#log-lines .log-line').length === logState.lines.filter(logLineMatches).length"), \
