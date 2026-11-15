@@ -42,8 +42,8 @@ type memberFlags struct{ err, link bool }
 
 // structureWatch is one structure change read back.
 type structureWatch struct {
-	action string         // "remove", "add" or "move"
-	device cube.RFAddress // the device removed, placed or moved
+	action string         // "remove", "add" or "move"; a repair's (repair_api.go)
+	device cube.RFAddress // the device removed, placed or moved; 0 for a room's repair
 	rooms  []uint8        // the rooms concerned
 	before int            // the free slots before the change; -1 unknown
 	flags  map[cube.RFAddress]memberFlags
@@ -194,5 +194,11 @@ func (s *Server) structureRead(rt *runtime, w *structureWatch, b cubelan.Budget,
 	if len(linkErr) > 0 {
 		summary["link_error"], level = linkErr, "warn"
 	}
-	rt.emit(event{Kind: "structure", Source: "cube", Level: level, Device: w.device.String(), Time: time.Now(), Summary: summary})
+	dev := ""
+	if w.device != 0 {
+		dev = w.device.String()
+	} else {
+		summary["rooms"] = w.rooms // a room's repair (repair_api.go)
+	}
+	rt.emit(event{Kind: "structure", Source: "cube", Level: level, Device: dev, Time: time.Now(), Summary: summary})
 }

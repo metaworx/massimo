@@ -63,18 +63,19 @@ const (
 // order. A route is registered with one of them; the roles' sets are
 // rows of the store.
 var capabilities = []string{
-	"read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore",
+	"read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore", "repair",
 	"guests", "users", "passwords", "roles", "roles.disable", "capabilities", "cubes", "cubes.reboot", "settings", "update", "restart", "reboot", "audit",
 	"auth", "integrations",
 }
 
-// integrationCeiling is the fixed role integration's set (migration 0021):
-// every capability but those that manage people, sign-in and the
-// integrations themselves, so that an integration can never widen its
-// own users. It bounds every call through an integration
-// (docs/api-v1.md, "Integrations"); guests are an integration's to manage.
+// integrationCeiling is the fixed role integration's set (migration 0021,
+// repair by 0022): every capability but those that manage people,
+// sign-in and the integrations themselves, so that an integration can
+// never widen its own users. It bounds every call through an
+// integration (docs/api-v1.md, "Integrations"); guests are an
+// integration's to manage.
 var integrationCeiling = []string{
-	"read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore",
+	"read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore", "repair",
 	"guests", "cubes", "cubes.reboot", "settings", "update", "restart", "reboot", "audit",
 }
 
