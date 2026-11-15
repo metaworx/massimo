@@ -1113,9 +1113,11 @@ function fitFacts() {
 }
 
 // watchFacts fits the facts again when the header's width or the logo's
-// size changes, when the page's fonts have come, or when the header is
-// whole again after compacting (fitFacts), after the frame, so that the
-// layout it changes does not call it back within the same one.
+// size changes, when what the facts show changes (the time of the last
+// update, which comes after the version, and the server's sign), when the
+// page's fonts have come, or when the header is whole again after
+// compacting (fitFacts), after the frame, so that the layout it changes
+// does not call it back within the same one.
 function watchFacts() {
   const line = document.querySelector(".top-line");
   let width = -1;
@@ -1133,6 +1135,17 @@ function watchFacts() {
   });
   ro.observe(line);
   ro.observe(line.querySelector(".brand"));
+  // the facts beside the logo wrapped under it once the time came, the
+  // version cut; fitFacts changes no text, so it does not call itself
+  let queued = false;
+  new MutationObserver(() => {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(() => {
+      queued = false;
+      fitFacts();
+    });
+  }).observe(line.querySelector(".top-facts"), { childList: true, characterData: true, subtree: true });
   // the page's fonts change the version's width when they come
   if (document.fonts) document.fonts.ready.then(() => requestAnimationFrame(fitFacts));
   // a resize while compacted is fitted once the header is whole again
