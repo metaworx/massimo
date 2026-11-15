@@ -216,6 +216,7 @@ the OpenAPI file carries each operation's as `x-capability`:
 | `discover` | search for Cubes on the LAN | `POST /api/v1/cubes/discover` |
 | `backup` | download a backup | `GET …/backup` |
 | `restore` | plan and run a restore | `POST …/restore/plan`, `POST …/restore` |
+| `repair` | the repairs of a Cube's rooms and devices: their communication errors reset, a device's configuration re-sent from its room, a device placed or listed where the Cube and its list disagree, a room's master named, a room re-linked; "unlink all and re-link" needs `structure` as well ("Repairs", below) | `GET`/`POST …/repair/…` |
 | `guests` | create, change and remove users whose role is `guest` | the users routes, limited to guests |
 | `users` | every user: create, role, disable, password, tokens | `GET`/`POST /api/v1/users`, `…/users/{name}`, `…/users/{name}/tokens` |
 | `passwords` | set the password of a user (the manager's by default) | `GET /api/v1/users`, `PUT …/users/{name}` with a password, `POST …/users/{name}/register` |
@@ -241,7 +242,7 @@ The users routes say what the caller may do with each user they list
 The default roles and their sets are those of docs/store.md section 6:
 `owner` has every capability and cannot be changed,
 `manager` is `operator` plus guests, pairing, names, structure,
-restore and the restart,
+restore, the repairs and the restart,
 `operator` runs the heating, locks, configures, discovers and takes backups,
 `guest` is `operator` without the lock, backups, discovery and preferences,
 `viewer` reads, and `integration`, fixed like `owner`, is the role of the
@@ -2736,6 +2737,112 @@ also as the event's `error`.
 `error`.
 Both are in `GET …/log`.
 
+### Repairs: GET and POST …/repair/…
+
+The repairs of a Cube's rooms and devices, with the capability `repair`
+(the owner's and the manager's; AP RadioHealth, D163-A).
+Each has a route whose `GET` is its preview and whose `POST ?plan=<hash>` runs it.
+The preview sends nothing:
+it answers the lines a run would send, command by command,
+and what they cost:
+
+```json
+{
+  "action": "relink",
+  "plan": "7f3c…",
+  "steps": [
+    {"what": "link 0a010a with its partners in room 1", "device": "0a010a", "room": 1,
+     "lines": ["s:…", "s:…", "s:…", "s:…", "s:…"]}
+  ],
+  "radiograms": 14, "duty_cost_pct": 17.5, "slots": 20, "held_slots": 6,
+  "resets": 0, "wakeups": 3, "metadata": false,
+  "budget": {"duty_cycle_pct": 4, "free_memory_slots": 50, "updated_at": "…"},
+  "notes": []
+}
+```
+
+`steps` are the commands in the order they would be sent:
+each with the device it addresses, which the queue resets first where its
+error flag is set (`reset`),
+the room woken up before it (`z:1e,G,<room>`, not among `lines`),
+and its `lines` as they go to the Cube;
+a metadata write is a step of its own.
+`radiograms` counts the `s:` lines,
+`duty_cost_pct` is about what they cost of the hourly radio budget (1.25 % each),
+`slots` the memory slots they take, one each,
+a radiogram with the room flag one per member of the room (T134),
+and `held_slots` those that stay taken until the members' next wakeup,
+about ten minutes: a room radiogram's but its addressee's.
+`resets` counts the `r:` lines, the queue's own included, which cost no radio
+time; `wakeups` the room wakeups; `metadata` a metadata write, no radio.
+`budget` is what the Cube last reported.
+`untested` marks a repair not yet run on hardware.
+`refused` says why a run would be refused now:
+the duty cycle with the repair's cost would reach the queue's hold (95 %),
+or its held slots would leave fewer free than the queue waits for (5);
+either would stop it halfway.
+`details` names what the repair concerns, per repair (below).
+A repair with nothing to send now has a preview without `plan` and
+`steps`, and `nothing` says why, as the table names it;
+its run is refused with `409` and that message.
+A listing into a room the Cube's list does not have says so with
+`details` `{"code": "room_name_needed", "room": 7}`, and its run's `409`
+carries the same `code` and `room`.
+
+The run takes the preview's `plan`:
+the repair is built again from the Cube as it is then,
+and a different one is refused with `409` (both hashes in the message;
+preview it again), as is one that `refused` names.
+Its answer:
+
+```json
+{"ok": true, "action": "relink", "confirmation": "pending",
+ "steps": [{"what": "link 0a010a with its partners in room 1", "lines": 5, "accepted": 5}],
+ "budget": {…}}
+```
+
+A run is judged by what the Cube shows:
+each step's lines `accepted`;
+where it sent radiograms, the structure read-back of
+`DELETE …/devices/{rf}` (`"confirmation": "pending"`, the log's
+**device change** line once the Cube's free slots are back at their count before
+it, or naming the slots still held and the members it left with an error flag
+or a link error they did not have);
+for resets, the device list read about two seconds after them:
+`still_flagged` names the devices whose flag it still shows.
+A step the Cube discarded or that failed stops the run there:
+`502` (`409` when superseded) with `error` naming the step and the same
+`steps`, so that a client sees how far it got.
+Room repairs and placements run under the Cube's structure lock,
+as moves and removals do.
+A room is its members by their C lines, the Cube's own idea of it.
+`400` for a bad device or room, a virtual wall thermostat
+(repair its room) and the Cube itself; `404` for a hidden or unknown one;
+`503` while the Cube is not connected.
+
+| Repair | What a run sends | Its cost |
+|---|---|---|
+| `…/cubes/{sn}/repair/reset` | one `r:01,<rf>` per device of the Cube whose error flag (byte 5's 0x08, the communication error) is set, the hidden ones left out; nothing where none is | none: `r:` is the Cube's bookkeeping |
+| `…/cubes/{sn}/rooms/{id}/repair/reset` | the same for the devices whose C line names the room | none |
+| `…/cubes/{sn}/rooms/{id}/repair/master` | the metadata, with the room's wall thermostat as its master, else its first radiator thermostat (AP DeviceUnPairingFix, D167), where the metadata's master is no thermostat whose C line names the room; nothing where it is one, or the room has none | none: metadata only |
+| `…/cubes/{sn}/rooms/{id}/repair/relink` | for each member that takes part in links (thermostats and window contacts), a command of its own after a wakeup of the room: one 0x20 add link partner radiogram with the room flag naming it, to the room's addressee (the master where it is a thermostat of the room and not the member, else its wall thermostat, else its first radiator thermostat), one to each window contact among its partners, one to the member for each partner, then 0x22, its group; the first resets the room's other flagged members. Nothing is unlinked. Nothing to send where the room's list and its C lines disagree (place or list the devices first) or fewer than two members take part in links | a few radiograms per member: a room of a radiator, a wall thermostat and a window contact is 14, about 17.5 % |
+| `…/cubes/{sn}/rooms/{id}/repair/unlink-relink` | "unlink all and re-link" (D163-B), with `structure` as well as `repair`, its preview too: for each member that takes part in links, a command of its own after a wakeup of the room, the 0x21 remove link partner radiograms of a move's unlink half without its 0x23 (one with the room flag naming it to the room's addressee, one to each window contact among its partners, one to the member for each partner), the room's flagged members reset in the first; then the re-link of every member, as above, whose 0x22 sets each group again. **Not yet run on hardware**: its preview says so (`untested`, a note), and a run that stops halfway, at a discarded radiogram or a lost connection, leaves the room's devices without their partners until it is run again. Nothing to send as the re-link | about twice a re-link's: 25 radiograms, about 31 %, for the room above; a room of five members far more, which the duty-cycle refusal may stop before it starts |
+| `…/cubes/{sn}/devices/{rf}/repair/config` | after a wakeup of the room, the days of the week programme that differ from what more than half of the room's other thermostats share by their C lines (0x10), then 0x11 with the temperatures they share (comfort, eco, maximum, minimum, window open), the device's own offset and window-open minutes kept; its C line read again. Nothing to send where the room has no other thermostat, its others share no temperatures or no programme by a majority (`nothing` says which), the device agrees already, or the Cube and its list have it in different rooms | one or two radiograms per day, one 0x11 |
+| `…/cubes/{sn}/devices/{rf}/repair/place` | where the device's C line names another room than the metadata, or none: a move into the metadata's room (`PUT …/devices/{rf}` with `room_id`, without the copy), from none the placement's link half alone; its C line read again. The metadata stays. Nothing to send where the list does not list the device, has it in no room or where the Cube has it, or the room has a wall thermostat already | about 8 % for a move |
+| `…/cubes/{sn}/devices/{rf}/repair/list` | the metadata, the device's entry moved to the room its C line names, or one made for a device the list does not have; a room the list does not have is made with `room_name` (a query parameter), its master the room's wall thermostat, else its first radiator thermostat, and asked for (above) where it is not given. Nothing to send where the Cube has the device in no room, or its list where the Cube has it | none: metadata only |
+
+`details` holds, per repair:
+`devices`, those reset;
+`room`, `master` and `new_master`;
+for the configuration `room`, `others` (the room's other thermostats),
+`temperatures_by` and `program_by` (how many share what is re-sent),
+`temperatures` and `days` (what is re-sent) and `agreed_temperatures`;
+for a placement `from` and `to`;
+for a listing `from`, `to`, `listed` and `new_room`.
+The log's **device change** names a re-link `relink`, "unlink all and re-link"
+`unlink_relink`, a re-sent configuration `config` and a placement `move`;
+one of a room has no device and names its `rooms`.
+
 ### GET /api/v1/cubes/{sn}/log?before=&since=&limit=&kind=&source=&level=&device=&user=&command=
 
 A page of the Cube's events, oldest first,
@@ -2969,12 +3076,16 @@ and it was sent again),
 `hold` at `warn`, the radio commands waiting (`reason` `duty_cycle` with
 `duty_pct` and `until`, or `memory_slots` with `free_slots` and `wait_s`).
 `structure`, source `cube`, a removal, placement or move read back
-(see "Structure changes read back"), with the device in `device` and in its
-`summary` the `action` (`remove`, `add`, `move`), the `outcome` (`done` at
-`info`, `not_confirmed` at `warn`), the free slots `before` the change and
-now (`free_slots`), the minutes since it (`minutes`), the slots still `held`
-or `no_reading`, and, at `warn`, the devices the change left `flagged` or
-with a `link_error`; it is settled only by a person's mark.
+(see "Structure changes read back"), or a repair's radiograms ("Repairs"),
+with the device in `device` and in its
+`summary` the `action` (`remove`, `add`, `move`; a repair's `relink`,
+`unlink_relink`, `config`, `move`, a room's without `device` and with its
+`rooms`),
+the `outcome` (`done` at `info`, `not_confirmed` at `warn`),
+the free slots `before` the change and now (`free_slots`),
+the minutes since it (`minutes`), the slots still `held` or `no_reading`,
+and, at `warn`, the devices the change left `flagged` or with a `link_error`;
+it is settled only by a person's mark.
 The room checks', every minute (see "The room checks"):
 `disagree`, source `cube`, a room whose thermostats differ, with the
 `room` and the `outcome` in its `summary`:
