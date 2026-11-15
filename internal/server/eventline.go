@@ -81,8 +81,11 @@ func eventMessage(ev event) string {
 			return "structure change not confirmed, memory slots still held"
 		}
 	case "slots":
-		if ev.Summary["state"] == "full" {
+		switch ev.Summary["state"] {
+		case slotsStateFull:
 			return "the cube's memory slots stay full with nothing of the server's in flight: radiograms held for devices that do not answer, a reboot of the cube drops them"
+		case slotsStateLow:
+			return "few of the cube's memory slots are free with nothing of the server's in flight: radiograms held for devices that do not answer, a reboot of the cube drops them"
 		}
 		return "the cube's memory slots are free again"
 	case "mismatch":

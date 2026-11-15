@@ -2830,9 +2830,10 @@ paths:
         move read back from the Cube's free slots: action, outcome,
         before, free_slots, minutes, held or no_reading, flagged,
         link_error in "summary"); slots, source cube (the Cube's memory
-        slots full for an hour with nothing of the server's in flight, at
-        warn, and free again, at info: state full or free, free_slots,
-        since in "summary"); mismatch, source cube (a C line and the room
+        slots held for an hour with nothing of the server's in flight,
+        fewer than 5 free at warn, fewer than 2 at error, and free again,
+        at info: state low, full or free, from for a step, free_slots,
+        since, full_since in "summary"); mismatch, source cube (a C line and the room
         list, or a room's members, that differ, at warn, and agree again,
         at info: state found or cleared and the Mismatch's fields in
         "summary"); the server's sign-ins, source server, for a
@@ -4301,14 +4302,16 @@ components:
         found_address: {type: string, description: "The host discovery last found the Cube at; differs from address where the server connects through a proxy or to a fixed address the Cube has left"}
         found_elsewhere: {$ref: '#/components/schemas/FoundElsewhere'}
         other_network: {type: boolean, description: "True where the address the server connects to lies in none of this machine's networks: it reaches the Cube only through a router; absent otherwise, and for a host name"}
-        slots_full:
+        slots_low:
           type: object
-          description: "The Cube's memory slots full (one free or none) at two readings an hour apart with nothing of the server's in flight: radiograms held for devices that do not answer, which a reboot of the Cube drops; absent otherwise (docs/api-v1.md, GET /api/v1/cubes)"
-          required: [since, free_slots, warned]
+          description: "The Cube's memory slots held, fewer than 5 free (level warn) or fewer than 2 (error), at two readings an hour apart with nothing of the server's in flight: radiograms held for devices that do not answer, which a reboot of the Cube drops; absent otherwise (docs/api-v1.md, GET /api/v1/cubes)"
+          required: [level, since, free_slots, logged]
           properties:
-            since: {type: string, format: date-time, description: The first of the full readings}
+            level: {type: string, enum: [warn, error]}
+            since: {type: string, format: date-time, description: The first reading below 5 of the run}
+            full_since: {type: string, format: date-time, description: "The first reading below 2, for error"}
             free_slots: {type: integer, description: The free slots at the last reading}
-            warned: {type: string, format: date-time, description: When the log's slots warning was given}
+            logged: {type: string, format: date-time, description: When the log's slots event of the level was given}
         problems:
           type: array
           description: "The Cube's visible devices with a problem (a transmit or link error, a low battery, a window open), each with its room's name; absent where none"

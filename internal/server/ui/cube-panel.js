@@ -97,20 +97,22 @@ function fillAddressState(d, c) {
   box.appendChild(elem("div", "cube-elsewhere-fix needs-cubes", use, follow));
 }
 
-// fillSlotsState says above the Cube's facts that its memory slots
-// stayed full with nothing of the server's on its way (slots_full),
-// since when, and that its Reboot, at the bottom of the panel, drops the
-// radiograms they hold. It is redrawn only where that changed.
+// fillSlotsState says above the Cube's facts that few of its memory
+// slots stayed free, or none, with nothing of the server's on its way
+// (slots_low, warn or error), since when, and that its Reboot, at the
+// bottom of the panel, drops the radiograms they hold. It is redrawn only
+// where that changed.
 function fillSlotsState(d, c) {
   const box = d.querySelector(".cube-slots-state");
   if (!box) return;
-  const f = c.slots_full;
-  const key = f ? [i18n.lang, f.since, f.free_slots].join(" ") : "";
+  const f = c.slots_low;
+  const key = f ? [i18n.lang, f.level, f.since, f.full_since, f.free_slots].join(" ") : "";
   if (box.dataset.key === key) return;
   box.dataset.key = key;
   clear(box);
   if (!f) return;
-  box.appendChild(noticeEl(t("cubes.slotsFull", { slots: f.free_slots }), { since: f.since })); // components.js
+  const full = f.level === "error";
+  box.appendChild(noticeEl(t(full ? "cubes.slotsFull" : "cubes.slotsLow", { slots: f.free_slots }), { since: full ? f.full_since : f.since })); // components.js
 }
 
 // fillProxyState says under the proxy address where the Cube's proxy
@@ -329,7 +331,10 @@ function cubeBadges(c) {
   if (failing) out.push(badgeEl(tn("proxy.badge.failing", failing), "warn"));
   if ((c.file_differs || []).length) out.push(badgeEl(tn("cubes.differsCount", c.file_differs.length), "warn"));
   if (c.found_elsewhere) out.push(badgeEl(t("cubes.elsewhereBadge"), "warn"));
-  if (c.slots_full) out.push(badgeEl(t("cubes.slotsBadge"), "warn"));
+  if (c.slots_low) {
+    const full = c.slots_low.level === "error";
+    out.push(badgeEl(t(full ? "cubes.slotsBadge" : "cubes.slotsLowBadge"), full ? "bad" : "warn"));
+  }
   if (c.source) out.push(badgeEl(t("cubes.source." + c.source), "mode"));
   return out;
 }

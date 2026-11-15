@@ -321,28 +321,32 @@ def test_log_change_line(page, case):
 
 
 SLOTS_SAYS = {
-    "en": ("the Cube's memory slots stay full, 1 free since ", "the Cube's memory slots are free again, 50 free (full since "),
-    "de": ("die Speicherplätze des Cubes bleiben voll, 1 frei seit ", "die Speicherplätze des Cubes sind wieder frei, 50 frei (voll seit "),
+    "en": ("few of the Cube's memory slots are free, 4 since ", "the Cube's memory slots stay full, 1 free since ",
+           "the Cube's memory slots are free again, 50 free (fewer than 5 since "),
+    "de": ("nur wenige Speicherplätze des Cubes sind frei, 4 seit ", "die Speicherplätze des Cubes bleiben voll, 1 frei seit ",
+           "die Speicherplätze des Cubes sind wieder frei, 50 frei (weniger als 5 seit "),
 }
 
 
 def test_log_slots_lines(page, case):
-    """A Cube's memory slots that stay full, and are free again, say so
-    with the free slots and since when (AP RadioHealth, Block 5)."""
+    """A Cube's memory slots that stay held, short and full, and are free
+    again, say so with the free slots and since when (AP RadioHealth,
+    Block 5, D192-A)."""
     show_view(page, "log")
     page.wait_for_timeout(1600)
     page.evaluate("""() => {
-      const since = new Date(Date.now() - 3600e3).toISOString();
+      const since = new Date(Date.now() - 7200e3).toISOString();
+      const full_since = new Date(Date.now() - 3600e3).toISOString();
       const send = (summary, level) => state.events.dispatchEvent(new MessageEvent("slots", { data: JSON.stringify({
         kind: "slots", source: "cube", level, time: new Date().toISOString(), summary }) }));
-      send({ state: "full", free_slots: 1, since }, "warn");
+      send({ state: "low", free_slots: 4, since }, "warn");
+      send({ state: "full", from: "low", free_slots: 1, since, full_since }, "error");
       send({ state: "free", free_slots: 50, since }, "info");
     }""")
-    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-slots').length === 2", 5), "the two lines"
+    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-slots').length === 3", 5), "the three lines"
     texts = page.locator("#log-lines .log-line.kind-slots .log-text").all_inner_texts()
-    full, free = SLOTS_SAYS[case.lang]
-    assert any(s.startswith(full) for s in texts), f"the full slots: {texts}"
-    assert any(s.startswith(free) for s in texts), f"the slots free again: {texts}"
+    for want, what in zip(SLOTS_SAYS[case.lang], ("short", "full", "free again")):
+        assert any(s.startswith(want) for s in texts), f"the slots {what}: {texts}"
     show_view(page, "tiles")
 
 

@@ -1375,7 +1375,7 @@ and refuses a connection from another network;
 `massimo netconfig -sn <serial> -broadcast -static …` gives it a fixed address (README.md).
 The networks are read again at most every 30 seconds.
 
-`slots_full` says that the Cube's memory slots stay full:
+`slots_low` says that the Cube's memory slots stay held:
 a radiogram for a device that does not answer holds its slot until the device
 answers or the Cube restarts, and one Cube held 49 of its 50 for months.
 Each `S:` reply to a radio line and each greeting's `H` line is a reading of the
@@ -1384,20 +1384,30 @@ a reading counts while nothing of the server's is in flight to the Cube,
 no `s:` line (the server's own or a proxy client's) accepted in the 15 minutes
 before it, since its radiogram may still wait for its device's wakeup
 (an `r:` holds no slot).
-Two counting readings an hour apart with one free slot or none,
-and none with more in between,
-give the Cube's log event `slots` at `warn` (see the log, below) and `slots_full`:
-`since`, the first of those readings, `free_slots` at the last reading,
-and `warned`, when the warning was given.
-The first reading with more than one free slot gives `slots` at `info`
-and drops `slots_full`.
+Two counting readings an hour apart with fewer than 5 free,
+and none with 5 or more in between,
+give the Cube's log event `slots` at `warn` (see the log, below)
+and `slots_low` with `level` `warn`;
+two with fewer than 2, and none with 2 or more in between,
+give it at `error` and `level` `error`, once each in a run,
+the error without the warning where both come due at one reading.
+A reading with 2 or more ends the error, which is logged as the step back to
+the warning;
+one with 5 or more gives `slots` at `info` and drops `slots_low`.
+`slots_low` has `since`, the first reading below 5,
+`full_since`, the first below 2, for an error,
+`free_slots` at the last reading, and `logged`, when its level was logged.
+Below 5 free the server holds each radio command for a while before it sends
+it all the same (the log's `hold` with `memory_slots`).
 A reboot of the Cube (`POST …/reboot`, below) drops the radiograms it holds.
 The server reads no budget of its own for it:
 the readings are those its writes, its proxy's clients and its reconnects bring,
-the periodic refresh (`serve -refresh`) among them.
+the periodic refresh (`serve -refresh`, or `refresh_interval` in the settings)
+among them.
 
 ```json
-"slots_full": {"since": "2026-11-14T08:00:00+01:00", "free_slots": 1, "warned": "2026-11-14T09:02:00+01:00"}
+"slots_low": {"level": "error", "since": "2026-11-14T07:10:00+01:00", "full_since": "2026-11-14T08:00:00+01:00",
+  "free_slots": 1, "logged": "2026-11-14T09:02:00+01:00"}
 ```
 
 `problems` lists, where there are any, the Cube's visible devices with a problem,
@@ -2960,11 +2970,14 @@ discarded it, the device's error state was reset and it was sent again),
 now (`free_slots`), the minutes since it (`minutes`), the slots still `held`
 or `no_reading`, and, at `warn`, the devices the change left `flagged` or
 with a `link_error`; it is settled only by a person's mark.
-`slots`, source `cube`, the Cube's memory slots full for an hour with nothing
-of the server's in flight (see `slots_full` under `GET /api/v1/cubes`):
-at `warn` with `state` `full`, once, and at `info` with `state` `free` at the
-first reading with more than one free slot, which settles it; its `summary`
-has the `free_slots` of the reading and the `since` of the first full one.
+`slots`, source `cube`, the Cube's memory slots held for an hour with nothing
+of the server's in flight (see `slots_low` under `GET /api/v1/cubes`):
+at `warn` with `state` `low` (fewer than 5 free), at `error` with `state`
+`full` (fewer than 2), each once in a run, a step between the two with the
+state it came `from`, and at `info` with `state` `free` at the first reading
+with 5 or more; each settles the one before it, so that the newest is the
+alert; its `summary` has the `free_slots` of the reading, the `since` of the
+first reading below 5 and, below 2, the `full_since` of the first.
 `mismatch`, source `cube`, a C line and the room list, or the members of a
 room, that differ (see "The Cube's lines against its room list" under the
 devices): at `warn` with `state` `found`, once, a room master's again once

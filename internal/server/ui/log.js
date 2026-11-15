@@ -412,9 +412,10 @@ function logSummaryText(kind, s, serial) {
       return parts.join("; ");
     }
     case "slots": {
-      const since = s.since ? fmtLogTime(new Date(s.since)) : "–";
-      if (s.state === "full") return t("log.sum.slotsFull", { slots: num(s.free_slots), since });
-      return t("log.sum.slotsFree", { slots: num(s.free_slots), since });
+      const at = (iso) => (iso ? fmtLogTime(new Date(iso)) : "–");
+      if (s.state === "full") return t("log.sum.slotsFull", { slots: num(s.free_slots), since: at(s.full_since || s.since) });
+      if (s.state === "low") return t("log.sum.slotsLow", { slots: num(s.free_slots), since: at(s.since) });
+      return t("log.sum.slotsFree", { slots: num(s.free_slots), since: at(s.since) });
     }
     case "mismatch": {
       const text = mismatchText(s); // tiles.js

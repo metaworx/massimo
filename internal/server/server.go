@@ -1584,11 +1584,11 @@ type cubeView struct {
 	// ProxyFailing lists the Cube's proxy listeners that do not listen,
 	// and are tried again (runtimes.go).
 	ProxyFailing []proxyFailure `json:"proxy_failing,omitempty"`
-	// SlotsFull says that the Cube's memory slots stayed full, with
-	// nothing of the server's in flight, from its since on (slots.go):
-	// radiograms held for devices that do not answer, which a reboot of
-	// the Cube drops; absent otherwise.
-	SlotsFull *slotsFull `json:"slots_full,omitempty"`
+	// SlotsLow says that the Cube's memory slots stayed short (warn) or
+	// full (error) for an hour, with nothing of the server's in flight
+	// (slots.go): radiograms held for devices that do not answer, which a
+	// reboot of the Cube drops; absent otherwise.
+	SlotsLow *slotsLow `json:"slots_low,omitempty"`
 	// MAC and LastSeen come from discovery: the Cube's MAC address and
 	// when it last answered.
 	MAC      string     `json:"mac,omitempty"`
@@ -1673,7 +1673,7 @@ func (s *Server) summary(rt *runtime) cubeView {
 	}
 	v.Rooms, v.Devices = view.Counts(snap, rt.hidden())
 	v.Problems = s.problemsOf(rt)
-	v.SlotsFull = rt.slotsState()
+	v.SlotsLow = rt.slotsState()
 	return v
 }
 

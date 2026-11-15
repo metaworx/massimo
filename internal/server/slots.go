@@ -3,24 +3,28 @@
 
 package server
 
-// A Cube whose memory slots stay full (AP RadioHealth v1.2, Block 5). A
-// radiogram for a device that does not answer holds its memory slot until
-// the device answers or the Cube restarts: one Cube held 49 of its 50 for
-// months, which only its greetings showed. The Cube reports its free
-// slots in the S reply to each radio line and in the H line of each
-// greeting, and each of them is a reading here. A reading counts while
-// nothing of Massimo is in flight to the Cube: no s: line accepted
-// through its queue (the server's own, its proxy clients') for slotsQuiet
-// before it, since a radiogram just sent holds a slot until its device
-// takes it, at the device's next wakeup at the latest. An r: holds none.
-// Two counting readings slotsHold apart, each with slotsLow free slots or
-// fewer, and none above in between, give the Cube's log event slots at
-// warn, once, which is an alert until the next reading above slotsLow
-// gives it at info. The Cube's panel says so (slots_full in GET
-// /api/v1/cubes) and points to its Reboot, which drops the held
-// radiograms (cube_reboot.go). At the Cube's first greeting the watch
-// takes its state from the store's newest slots event, so that a restart
-// neither warns again nor forgets to say that the slots are back.
+// A Cube whose memory slots stay held (AP RadioHealth v1.2, Block 5,
+// D192-A). A radiogram for a device that does not answer holds its
+// memory slot until the device answers or the Cube restarts: one Cube
+// held 49 of its 50 for months, which only its greetings showed. The
+// Cube reports its free slots in the S reply to each radio line and in
+// the H line of each greeting, and each of them is a reading here. A
+// reading counts while nothing of Massimo is in flight to the Cube: no s:
+// line accepted through its queue (the server's own, its proxy clients')
+// for slotsQuiet before it, since a radiogram just sent holds a slot
+// until its device takes it, at the device's next wakeup at the latest.
+// An r: holds none. Two counting readings slotsHold apart with fewer than
+// slotsWarnBelow free, and none with more in between, give the Cube's log
+// event slots at warn (state low); two with fewer than slotsErrorBelow,
+// at error (state full); each once in a run. A reading with
+// slotsErrorBelow or more ends the run below it, its step back to low
+// logged at warn; one with slotsWarnBelow or more ends the run, at info
+// (state free). The newest slots event is the alert. The Cube's panel
+// says so (slots_low in GET /api/v1/cubes) and points to its Reboot,
+// which drops the held radiograms (cube_reboot.go). At the Cube's first
+// greeting the watch takes its state from the store's newest slots event,
+// so that a restart neither warns again nor forgets to say that the
+// slots are back.
 
 import (
 	"context"
@@ -32,37 +36,57 @@ import (
 	"go.metaworx.ch/massimo/internal/store"
 )
 
-// The rule of the full slots.
+// The rule of the held slots (D192-A).
 const (
-	// slotsLow is the count of free slots at or below which a Cube's
-	// slots count as full.
-	slotsLow = 1
-	// slotsHold is how long they stay full, from the first counting
-	// reading to a later one, before the warning.
+	// slotsWarnBelow is the count of free slots below which a Cube's
+	// slots are short, a warning once it lasts; the queue holds radio
+	// commands below it too (engine.Options.MinFreeSlots).
+	slotsWarnBelow = 5
+	// slotsErrorBelow is the count below which they are full, an error
+	// once it lasts.
+	slotsErrorBelow = 2
+	// slotsHold is how long they stay so, from the first counting reading
+	// to a later one, before the warning or the error.
 	slotsHold = time.Hour
 	// slotsQuiet is how long after an s: line accepted a reading does
 	// not count: its radiogram may still wait for its device's wakeup.
 	slotsQuiet = 15 * time.Minute
 )
 
-// slotsFull is a Cube's memory slots full for slotsHold at least, as GET
-// /api/v1/cubes shows it in slots_full.
-type slotsFull struct {
-	// Since is the first counting reading of the run, FreeSlots the
-	// count at the last reading, Warned when the warning was given.
-	Since     time.Time `json:"since"`
-	FreeSlots int       `json:"free_slots"`
-	Warned    time.Time `json:"warned"`
+// The states of a slots event, in its summary.
+const (
+	slotsStateLow  = "low"  // fewer than slotsWarnBelow free, at warn
+	slotsStateFull = "full" // fewer than slotsErrorBelow free, at error
+	slotsStateFree = "free" // slotsWarnBelow or more free again, at info
+)
+
+// slotsLow is a Cube's memory slots short or full for slotsHold at least,
+// as GET /api/v1/cubes shows it in slots_low.
+type slotsLow struct {
+	// Level is warn, fewer than slotsWarnBelow free, or error, fewer than
+	// slotsErrorBelow; Since the first counting reading below
+	// slotsWarnBelow of the run, FullSince the first below
+	// slotsErrorBelow, for error; FreeSlots the count at the last
+	// reading; Logged when the level was logged.
+	Level     string     `json:"level"`
+	Since     time.Time  `json:"since"`
+	FullSince *time.Time `json:"full_since,omitempty"`
+	FreeSlots int        `json:"free_slots"`
+	Logged    time.Time  `json:"logged"`
 }
 
-// slotWatch is a Cube's readings of its free slots, for the warning.
+// slotWatch is a Cube's readings of its free slots, for the warning and
+// the error.
 type slotWatch struct {
 	mu        sync.Mutex
-	seeded    bool       // the store's newest slots event read
-	lastRadio time.Time  // when an s: line was last accepted
-	lowSince  time.Time  // the first counting reading at slotsLow or fewer; zero for none
-	full      *slotsFull // the warning given, nil for none
-	readings  int        // the readings taken, which the tests wait for
+	seeded    bool      // the store's newest slots event read
+	lastRadio time.Time // when an s: line was last accepted
+	lowSince  time.Time // the first counting reading below slotsWarnBelow; zero for none
+	fullSince time.Time // the first counting reading below slotsErrorBelow; zero for none
+	level     string    // the level logged in the run: "", warn or error
+	logged    time.Time // when it was logged
+	free      int       // the count at the last reading
+	readings  int       // the readings taken, which the tests wait for
 }
 
 // checkNow is the clock of the radio health checks, the readings of the
@@ -94,7 +118,7 @@ func (g slotsGateway) SendRadio(ctx context.Context, m cube.Message) (*cube.Send
 
 // slotsSent takes the S reply to a radio line the Cube's queue sent: an
 // s: line accepted puts a radiogram in flight, and the reply is a reading
-// that does not count, but for a count above slotsLow.
+// that does not count, but for a count that ends a run.
 func (s *Server) slotsSent(rt *runtime, m cube.Message, r *cube.SendResult) {
 	now := s.checkNow()
 	if m.Type == 's' && !r.Discarded {
@@ -118,30 +142,48 @@ func (s *Server) slotsGreeting(ctx context.Context, rt *runtime) {
 }
 
 // slotsRead is one reading of the Cube's free slots, taken at now: the
-// warning once they stayed full for slotsHold, its counterpart once they
-// are free again.
+// warning or the error once they stayed short or full for slotsHold, the
+// step back from full to short, and the counterpart once they are free
+// again.
 func (s *Server) slotsRead(rt *runtime, free int, now time.Time) {
 	w := &rt.slots
 	w.mu.Lock()
 	w.readings++
+	w.free = free
 	var ev *event
-	switch {
-	case free > slotsLow:
-		if f := w.full; f != nil {
-			ev = &event{Kind: "slots", Source: "cube", Level: "info", Time: time.Now(),
-				Summary: map[string]any{"state": "free", "free_slots": free, "since": f.Since.UTC().Format(time.RFC3339)}}
+	if free >= slotsWarnBelow {
+		if w.level != "" {
+			ev = w.event(slotsStateFree, "", now)
 		}
-		w.lowSince, w.full = time.Time{}, nil
-	case w.full != nil:
-		w.full.FreeSlots = free
-	case !w.lastRadio.IsZero() && now.Sub(w.lastRadio) < slotsQuiet:
-		// a radiogram of Massimo's may hold a slot: no count
-	case w.lowSince.IsZero():
-		w.lowSince = now
-	case now.Sub(w.lowSince) >= slotsHold:
-		w.full = &slotsFull{Since: w.lowSince, FreeSlots: free, Warned: now}
-		ev = &event{Kind: "slots", Source: "cube", Level: "warn", Time: time.Now(),
-			Summary: map[string]any{"state": "full", "free_slots": free, "since": w.lowSince.UTC().Format(time.RFC3339)}}
+		w.lowSince, w.fullSince, w.level = time.Time{}, time.Time{}, ""
+	} else {
+		if free >= slotsErrorBelow {
+			w.fullSince = time.Time{}
+			if w.level == "error" {
+				w.level, w.logged = "warn", now
+				ev = w.event(slotsStateLow, slotsStateFull, now)
+			}
+		}
+		if w.lastRadio.IsZero() || now.Sub(w.lastRadio) >= slotsQuiet { // a radiogram of Massimo's may hold a slot: no count
+			if w.lowSince.IsZero() {
+				w.lowSince = now
+			}
+			if free < slotsErrorBelow && w.fullSince.IsZero() {
+				w.fullSince = now
+			}
+			switch from := w.level; {
+			case from != "error" && !w.fullSince.IsZero() && now.Sub(w.fullSince) >= slotsHold:
+				w.level, w.logged = "error", now
+				was := ""
+				if from == "warn" {
+					was = slotsStateLow
+				}
+				ev = w.event(slotsStateFull, was, now)
+			case from == "" && now.Sub(w.lowSince) >= slotsHold:
+				w.level, w.logged = "warn", now
+				ev = w.event(slotsStateLow, "", now)
+			}
+		}
 	}
 	w.mu.Unlock()
 	if ev != nil {
@@ -149,9 +191,24 @@ func (s *Server) slotsRead(rt *runtime, free int, now time.Time) {
 	}
 }
 
+// event is the slots event of a state, a step from another where from is
+// set, as the watch has it now; w.mu is held.
+func (w *slotWatch) event(state, from string, now time.Time) *event {
+	level := map[string]string{slotsStateLow: "warn", slotsStateFull: "error", slotsStateFree: "info"}[state]
+	summary := map[string]any{"state": state, "free_slots": w.free, "since": w.lowSince.UTC().Format(time.RFC3339)}
+	if !w.fullSince.IsZero() {
+		summary["full_since"] = w.fullSince.UTC().Format(time.RFC3339)
+	}
+	if from != "" {
+		summary["from"] = from
+	}
+	return &event{Kind: "slots", Source: "cube", Level: level, Time: time.Now(), Summary: summary}
+}
+
 // seedSlots takes, once, the watch's state from the Cube's newest slots
-// event in the store: a warning there that nothing settled is the
-// warning given. A Cube without a row in the store has none to read.
+// event in the store: a warning or an error there, which only the next
+// slots event settles, is the level logged. A Cube without a row in the
+// store has none to read.
 func (s *Server) seedSlots(ctx context.Context, rt *runtime) {
 	w := &rt.slots
 	w.mu.Lock()
@@ -169,28 +226,39 @@ func (s *Server) seedSlots(ctx context.Context, rt *runtime) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.seeded = true
-	if len(evs) == 0 || evs[0].Level != "warn" || w.full != nil {
+	if len(evs) == 0 || evs[0].Level != "warn" && evs[0].Level != "error" || w.level != "" {
 		return
 	}
-	since, err := time.Parse(time.RFC3339, summaryText(&evs[0], "since"))
-	if err != nil {
-		since = evs[0].Time
+	at := func(key string) time.Time {
+		t, err := time.Parse(time.RFC3339, summaryText(&evs[0], key))
+		if err != nil {
+			return evs[0].Time
+		}
+		return t
 	}
-	free := slotsLow
+	w.level, w.logged, w.lowSince = evs[0].Level, evs[0].Time, at("since")
+	if w.level == "error" {
+		w.fullSince = at("full_since")
+	}
+	w.free = slotsErrorBelow - 1
 	if n, ok := evs[0].Summary["free_slots"].(float64); ok {
-		free = int(n)
+		w.free = int(n)
 	}
-	w.lowSince, w.full = since, &slotsFull{Since: since, FreeSlots: free, Warned: evs[0].Time}
 }
 
-// slotsState is the Cube's warning of full slots for its view, nil for
-// none.
-func (rt *runtime) slotsState() *slotsFull {
-	rt.slots.mu.Lock()
-	defer rt.slots.mu.Unlock()
-	if rt.slots.full == nil {
+// slotsState is the Cube's short or full slots for its view, nil while
+// no level is logged.
+func (rt *runtime) slotsState() *slotsLow {
+	w := &rt.slots
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.level == "" {
 		return nil
 	}
-	f := *rt.slots.full
-	return &f
+	v := &slotsLow{Level: w.level, Since: w.lowSince, FreeSlots: w.free, Logged: w.logged}
+	if w.level == "error" {
+		full := w.fullSince
+		v.FullSince = &full
+	}
+	return v
 }
