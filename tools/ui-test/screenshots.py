@@ -14,8 +14,9 @@ byte for byte on one machine, on every run:
   device states, the window contact of "Kind 1" open;
 - every time the server sends (received, last seen, the log, when it
   started) is replaced by SERVER_TIME on the way to the page, the page's
-  clock is fixed at NOW (Date only; the timers run), and the browser's
-  time zone is TZ, so that ages and times are the same on every run;
+  clock is fixed at NOW (Date only; the timers run), the answers' Date
+  header says NOW, and the browser's time zone is TZ, so that ages and
+  times are the same on every run;
 - the first room's devices are made 30 hours old and stale in the page,
   as the smoke test does it;
 - the event stream is a stub that opens and sends nothing, so that no
@@ -23,8 +24,9 @@ byte for byte on one machine, on every run:
   with changes is dispatched on it, with a fixed time); the poll still
   runs and gets the same answers;
 - the version (the log's line of the server's start too), the Software
-  section's answer, the fake Cube's address (which has run.sh's port)
-  and a Cube found on the LAN are fixed answers of the routes below;
+  section's answer, the fake Cube's address (which has run.sh's port),
+  System info's machine and a Cube found on the LAN are fixed answers
+  of the routes below;
   the found Cube is listed from the Cube choice's shot on;
 - reduced motion, one device pixel per CSS pixel, and the screenshots
   taken with animations stopped and the caret hidden;
@@ -57,6 +59,7 @@ OUT = Path(__file__).resolve().parents[2] / "docs" / "screenshots"
 NOW = "2026-11-03T20:51:00+01:00"            # the page's clock: the greeting's Cube clock in TZ
 SERVER_TIME = "2026-11-03T20:39:00+01:00"    # every time the server sends: 12 minutes ago
 LOG_TIME = "2026-11-03T20:45:00+01:00"       # the log's state event with changes
+HTTP_NOW = "Tue, 03 Nov 2026 19:51:00 GMT"   # NOW in an answer's Date header
 STALE_TIME = "2026-11-02T14:51:00+01:00"     # the stale thermostat: 30 hours ago
 TZ = "Europe/Zurich"
 HEIGHT = {1100: 800, 390: 844}
@@ -93,6 +96,12 @@ CONFIG = {"version": "v0.0.0-screenshots", "file": "/etc/massimo/env", "file_fou
               {"name": "MASSIMO_CUBE_KEQ0000100_ADDRESS", "value": CUBE_ADDRESS, "source": "file"},
               {"name": "MASSIMO_CUBE_KEQ0000100_NAME", "value": "Fake Cube", "source": "file"},
               {"name": "MASSIMO_LISTEN", "value": ":8099", "source": "file"}]}
+# System info's machine as a box on a LAN: the run's own host name,
+# addresses, system and port are this machine's, another on every one.
+SYSTEM = {"version": VERSION, "os_name": "Debian GNU/Linux 13 (trixie)", "arch": "amd64", "hostname": "massimo",
+          "fqdn": "massimo.home.arpa", "client_ip": "192.168.1.20", "api_port": 8099,
+          "interfaces": [{"name": "lo", "addresses": [{"ip": "127.0.0.1", "api": True}, {"ip": "::1", "api": True}]},
+                         {"name": "eth0", "addresses": [{"ip": "192.168.1.10", "api": True}]}]}
 # Its reboot as on a box with the helper and the owner's switch: the
 # server of the run is in a terminal, which reboots nothing.
 REBOOT = {"available": True, "by": "systemd"}
@@ -108,28 +117,30 @@ PAGES = {
     "config-copy": ".room",
     "house": "#house",
     "log": None,                                    # its lines run the full width
-    "me": None,                                     # the personal page, 👤's, at its top
+    "me": None,                                     # the personal page, ☰'s, at its top
     "cube-choice": None,                            # the Cube choice open over the rooms
     "profile": "#profile",                          # My profile, the owner's with keys only
     "prefs": "#prefs",                              # My settings
     "notify": "#notify",                            # Notifications, this browser not notified
     "appearance": "#prefs .appearance",
+    "cube-settings": "#cube-page",                  # Cube settings, the chosen Cube's panel
     "system": "#system",                            # System settings
-    "maintenance": "#sys-maint",                    # its Maintenance
+    "maintenance": "#maint-page",                   # Maintenance: Software update and its card
+    "system-info": "#info-page",                    # System info, a page of its own
     "cube-found": "header.top",                     # the Cube choice, the found Cubes' sign in its pill
     "cubes": "#system .cubes-settings",
-    "nav-menu": None,                               # ☰, which only a narrow screen shows
+    "nav-menu": None,                               # ☰ open over the rooms: every page
 }
 
-# The pages of the full width: all but ☰.
-WIDE = [p for p in PAGES if p != "nav-menu"]
+# The pages of the full width: all of them.
+WIDE = list(PAGES)
 
 # The set: each run is one browser context, (width, theme, language,
 # pages). The first is the main set and the slideshow's frames.
 SETS = [
     (1100, "light", "en", WIDE),
     (1100, "dark", "en", WIDE),
-    (390, "light", "en", ["rooms", "nav-menu", "cube-choice", "prefs", "system"]),
+    (390, "light", "en", ["rooms", "nav-menu", "cube-choice", "prefs", "cube-settings", "system", "maintenance", "system-info"]),
     (1100, "light", "de", ["rooms"]),
 ]
 
@@ -179,7 +190,8 @@ class Answers:
         if path == "/api/v1/reboot" and req.method == "GET":
             return route.fulfill(status=200, content_type="application/json", body=json.dumps(REBOOT))
         if path.endswith("/events/ticket"):
-            return route.continue_()
+            resp = route.fetch()
+            return route.fulfill(response=resp, headers={**resp.headers, "date": HTTP_NOW})
         if path.endswith("/backups") and req.method == "GET":
             # The backup history depends on when the run started; the set
             # shows a fixed one.
@@ -191,6 +203,10 @@ class Answers:
             return route.fulfill(status=200, content_type="application/json", body=body)
         resp = route.fetch()
         body = TIME_RE.sub('"' + SERVER_TIME + '"', resp.text())
+        if path == "/api/v1/system" and resp.ok:
+            sysinfo = json.loads(body)
+            sysinfo.update(SYSTEM)
+            body = json.dumps(sysinfo)
         if path.startswith("/api/v1/cubes") and "/rooms" not in path:
             body = ADDRESS_RE.sub(CUBE_ADDRESS, body)
         if path.endswith("/log") and resp.ok:
@@ -206,13 +222,13 @@ class Answers:
             if not any(c.get("serial") == FOUND["serial"] for c in cubes):
                 cubes.append(FOUND)
             body = json.dumps(cubes)
-        route.fulfill(response=resp, body=body)
+        route.fulfill(response=resp, body=body, headers={**resp.headers, "date": HTTP_NOW})
 
     def healthz(self, route):
         resp = route.fetch()
         h = resp.json()
         h.update(started_at=SERVER_TIME, version=VERSION, node_id="00000000-0000-0000-0000-000000000000")
-        route.fulfill(response=resp, body=json.dumps(h))
+        route.fulfill(response=resp, body=json.dumps(h), headers={**resp.headers, "date": HTTP_NOW})
 
 
 def wait_until(page, expr, seconds):
@@ -329,6 +345,19 @@ def step(page, which):
     elif which == "cube-choice":
         page.locator("#cube-choice").click()
         page.locator("#cube-menu .menu-items").wait_for(state="visible")
+    elif which == "cube-settings":
+        show_view(page, "cube")
+        page.locator("#cube-page-body .cube-panel form.cube-form").wait_for(state="visible")
+    elif which == "system-info":
+        show_view(page, "info")
+        wait_until(page, "document.getElementById('info-version').textContent !== '–'", 5)
+        for fold in ("#store-info", "#config-info"):
+            page.locator(fold + " > summary").click()
+            page.locator(fold + "-body > *").first.wait_for(state="visible")
+        # the page from its top, as a phone shows it: the folds' clicks
+        # scrolled it
+        page.evaluate("window.scrollTo(0, 0)")
+        wait_until(page, "!document.body.classList.contains('scrolled')", 3)
     elif which in ("prefs", "system", "profile"):
         show_view(page, which)
     elif which == "notify":
@@ -337,8 +366,7 @@ def step(page, which):
         page.evaluate("() => { Object.defineProperty(Notification, 'permission', { get: () => 'default' }); }")
         show_view(page, "notify")
     elif which == "maintenance":
-        show_view(page, "system")
-        to_top(page, page.locator("#sys-maint"))
+        show_view(page, "maint")
     elif which == "appearance":
         show_view(page, "prefs")
         page.locator("#scheme-customise").click()

@@ -1167,7 +1167,8 @@ with its partials, the panels of the settings pages and at the end
 from the files in `ui/partials/` in the order `uiPartials` in
 `internal/server/ui.go` lists them, and serves the result at `/`;
 System settings' cards fill three markers,
-before, in and after the cards that flow in two columns.
+before, in and after the cards that flow in two columns,
+and Maintenance's two cards one, `maint`.
 A partial is a file per feature,
 and its first line names the script that uses it.
 What a script builds again and again, a Cube's panel, a log line, a scheme row,
@@ -1184,11 +1185,16 @@ the programme tab puts it in a form with Cancel, Send and the two resets.
 A panel that opens, a Cube's, a user's or a role's, is a `detailsPanel`:
 its head the name, the serial, login or key, and the badges,
 its body the form cloned from the feature's template.
+Backup and restore is a box per Cube (`backupBox` in `backup.js`),
+built once per Cube and page and kept while its page is shown again,
+what a Cube has kept by its serial (`backupOf`), so that both pages show the same.
 A long page is a grid of section cards (`section.section-card`,
 its heading's `button.section-fold` folding it):
 `sectionCards` makes them fold and keeps the fold in the browser,
 `sectionBadges` shows what a card holds in its head,
 `pageBar` fills the sections menu of its title's row kept at the top,
+`pageSwitch` puts the other settings pages beside it (`SETTINGS_PAGES` in `log.js`,
+as ☰'s pages are `MENU_VIEWS`),
 and `backToTop` wires the two ↑, the floating one and the compacted header's;
 `pickerMenu` makes a dropdown the choice of one item (the Cube choice),
 its items `menuItem`s, a Cube's link its network sign (`cubeSignEl`, `LINK_SIGN`);
