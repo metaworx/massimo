@@ -149,14 +149,15 @@ func TestCopyCommands(t *testing.T) {
 	}
 }
 
-// RemoveCommands: 0a010d, alone in room 6, is unlinked from nobody but
-// loses its group after a wakeup of room 6, then t: with the force flag;
-// the Cube's own C line names no room, so it has nothing to unlink.
+// RemoveCommands: 0a010d, alone in room 6, has no partner to unlink: a
+// wakeup of room 6 and no line, no 0x23 (a removal sends none), then t:
+// with the force flag; the Cube's own C line names no room, so it has
+// nothing to unlink.
 func TestRemoveCommands(t *testing.T) {
 	_, w, _ := connect(t)
 	snap := w.Client.Snapshot()
 	unlink, del, ok := RemoveCommands(snap, 0x0a010d, cube.DeviceRadiatorThermostat, nil)
-	if !ok || !unlink.Wakeup || unlink.RoomID != 6 || len(unlink.Lines) != 1 || unlink.Lines[0].String() != cube.CmdSetGroup(0x0a010d, 6, true).String() {
+	if !ok || !unlink.Wakeup || unlink.RoomID != 6 || unlink.Target != 0x0a010d || len(unlink.Lines) != 0 || unlink.Key != "unlink:0a010d" {
 		t.Fatalf("unlink %+v %v", unlink, ok)
 	}
 	if len(del.Lines) != 1 || del.Lines[0].String() != "t:01,1,CgEN" || del.Key != "delete:0a010d" {

@@ -1256,6 +1256,11 @@ and a step by its radio address, the radio command's:
 }
 ```
 
+A step's `result` also gives `answers`, the Cube's answer to each of its
+lines in order up to the first failure (`S:` for a radio line, `A:` for
+`t:`), and `discarded_line`, the line the Cube discarded, where it
+discarded one.
+
 Needs `read`; a user without `audit` sees its own commands only,
 and another's is `404`.
 
@@ -2101,13 +2106,18 @@ and then answers `503`; the copies run side by side afterwards.
 ### DELETE /api/v1/cubes/{sn}/devices/{rf}
 
 Removes a device from the Cube, with the capability `structure`,
-as the original software's "delete device" does,
-and also removes the device's group, which the original software leaves.
+as the original software removed one on 2026-11-15.
 A device in a room, the metadata's or else its C line's,
 is unlinked from that room first:
-after a wakeup of the room (`z:1e,G,<room>`), 0x23 remove group,
-then one 0x21 remove link partner radiogram per room member it is linked with,
-in each direction (addressed as 0x20 is in an add).
+after a wakeup of the room (`z:1e,G,<room>`),
+one `r:` for each other member of the room whose error flag is set
+(the queue resets the device itself where it is flagged),
+then one 0x21 remove link partner radiogram with the room flag naming the device,
+which every member of the room takes,
+addressed to the room's master where it is a thermostat of the room,
+else to its wall thermostat, else to its first radiator thermostat;
+where the room's other members are window contacts only, each gets its own 0x21.
+No 0x23 and no 0x21 go to the device itself: `t:` resets it.
 Hidden devices are no partners,
 and a device whose C line names room 255 is not unlinked at all.
 Then `t:01,1,<rf>`, delete with the force flag,

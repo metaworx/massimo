@@ -3655,7 +3655,7 @@ components:
         target: {type: string, description: "device:0a010d or room:6"}
         state: {$ref: "#/components/schemas/CommandState"}
         request: {type: object, description: The queue key, the priority, the number of lines and of radio lines, the wakeup, the room}
-        result: {type: object, description: discarded, the budget the Cube reported, and the error}
+        result: {type: object, description: "discarded, the budget the Cube reported, the error, answers (the Cube's answer to each line, in order, up to the first failure) and discarded_line (the line the Cube discarded)"}
         created_at: {type: string, format: date-time}
         finished_at: {type: string, format: date-time}
     AuditEntry:
