@@ -1377,7 +1377,7 @@ The networks are read again at most every 30 seconds.
 
 `problems` lists, where there are any, the Cube's visible devices with a problem,
 as `GET …/devices` shows them, each with its room's name (`room`):
-a transmit or link error, a low battery, a window open (with its `window` times);
+a communication or link error, a low battery, a window open (with its `window` times);
 a client that shows every Cube's problems, such as the web UI's header,
 needs no other request.
 It is the server's last state, also while the Cube is not connected.
@@ -1824,8 +1824,12 @@ Thermostats carry `mode` (`auto`, `manual`, `vacation`, `boost`), `setpoint`,
 its entries carry none),
 `valve_pct` for radiator thermostats, `until` for vacation mode;
 shutter contacts carry `window_open`.
-`error` is the Cube's transmit error flag,
-and `failed_radiogram`, present with it alone,
+`error` is the device's communication error,
+as the original software's UI calls it ("Communication error!"):
+the Cube's last radiogram to the device failed,
+and the flag stays until it is reset (`r:`) or the Cube restarts,
+whatever the device reports meanwhile;
+`failed_radiogram`, present with it alone, is
 the type of the Cube's last radiogram to the device that failed,
 `{"code": 3, "name": "TimeInformation"}`:
 the code is byte 4 of the device's entry,
@@ -1833,8 +1837,15 @@ the name the original software's (docs/cube-protocol.md, its `FrameType` list),
 absent for a code the list lacks, such as `{"code": 246}`;
 nearly always the Cube's own time push (`TimeInformation`),
 also a client's radiograms, such as a removal's `RemoveLinkPartner`.
-`link_error` is a failed link with a partner device,
-`panel_locked` (present when true) the key lock on the device.
+`link_error` is the device's link error, its own report,
+in the original software's words
+"The radio communication with another MAX! device in this room is disturbed";
+it clears with a later report of the device.
+The original software names it `transmitError`,
+which this API's names do not follow:
+they stay `error` and `link_error`
+(docs/cube-protocol.md, "Lessons from the hardware days").
+`panel_locked` (present when true) is the key lock on the device.
 `battery_low` is the device's battery flag as the Cube shows it now;
 `battery`, beside `state`, is the level the server keeps from its history:
 `ok`; `weak` once the flag has been seen, as a radiator thermostat shows it for
@@ -2802,7 +2813,7 @@ The alerts the signed-in user marked seen are left out:
 the preference `log.seen` (see "Preferences"),
 which the web UI writes and opening the log does not;
 a browser without a user keeps its marks itself and asks with `after`.
-A device's transmit error, link error and low battery are in the log at info,
+A device's communication error, link error and low battery are in the log at info,
 in its state's changes:
 each is an alert at warn while the device has it,
 at the state line that set it (`flag`),

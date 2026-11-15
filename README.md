@@ -894,7 +894,7 @@ after a Cube restart every device is "not reported" until it transmits again,
 window contacts only on a window change,
 and the Cube discards room commands while a room has such a member,
 so the room is marked not ready (`-json` for machines).
-A device's transmit error shows as `ERROR`,
+A device's communication error shows as `ERROR`,
 with the type of the radiogram that failed, `ERROR(TimeInformation)`.
 `watch` prints state changes as they happen;
 `fakecube` serves recorded data on port 62910 so everything can be tried without hardware,

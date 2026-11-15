@@ -2767,7 +2767,7 @@ paths:
         event has settled: a disconnect by the next connect, a command by
         the same command acknowledged, a failed backup by the next one;
         a hold and a lockout once they end; a kind without a counterpart
-        only by a mark. A device's transmit error, link error and low
+        only by a mark. A device's communication error, link error and low
         battery are alerts at warn while the device has them, at the state
         line that set them. The audit's lines for a holder of audit only.
         A Cube without a row in the store adds nothing; without a store,
@@ -4298,7 +4298,7 @@ components:
         other_network: {type: boolean, description: "True where the address the server connects to lies in none of this machine's networks: it reaches the Cube only through a router; absent otherwise, and for a host name"}
         problems:
           type: array
-          description: "The Cube's visible devices with a problem (a transmit or link error, a low battery, a window open), each with its room's name; absent where none"
+          description: "The Cube's visible devices with a problem (a communication or link error, a low battery, a window open), each with its room's name; absent where none"
           items:
             allOf:
               - {$ref: '#/components/schemas/Device'}
@@ -4419,9 +4419,9 @@ components:
         valve_pct: {type: integer}
         window_open: {type: boolean}
         battery_low: {type: boolean, description: "The battery flag as the Cube shows it now; the device's battery has the level the server keeps"}
-        error: {type: boolean, description: Transmit error reported by the Cube}
+        error: {type: boolean, description: "The communication error the Cube reports: its last radiogram to the device failed; it stays until reset (r:) or a Cube restart"}
         failed_radiogram: {$ref: "#/components/schemas/FailedRadiogram"}
-        link_error: {type: boolean}
+        link_error: {type: boolean, description: "The link error the device reports: its radio communication with another MAX! device of its room is disturbed (the original software's transmitError)"}
         panel_locked: {type: boolean, description: Key lock active on the device; present when true}
         consistent: {type: boolean, description: "A virtual wall thermostat's alone: false while the room's thermostats disagree on mode, setpoint or until"}
     Device:

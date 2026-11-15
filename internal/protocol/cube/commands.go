@@ -160,9 +160,10 @@ func CmdSetTime(winter, summer TimeZoneRule, now time.Time) (Message, error) {
 	return m, nil
 }
 
-// CmdResetError clears the transmit-error state of devices. The original
-// software sends it right before a radio command to a device whose last
-// transmission failed. The Cube answers with an S line. Verified on hardware.
+// CmdResetError clears the communication error (the error flag) of
+// devices. The original software sends it right before a radio command
+// to a device whose last radiogram failed. The Cube answers with an S
+// line. Verified on hardware.
 func CmdResetError(addrs ...RFAddress) Message {
 	var raw []byte
 	for _, a := range addrs {

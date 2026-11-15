@@ -43,6 +43,34 @@ def test_log_changes(page, case):
     show_view(page, "tiles")
 
 
+def test_log_radio_faults(page, case):
+    """The log names a device's flags as its badges do: a communication
+    error that came with the radiogram that failed, by its technical
+    name and code; another radiogram failing while the error stays; the
+    error cleared; a link error."""
+    show_view(page, "log")
+    page.wait_for_timeout(1600)
+    page.evaluate("""() => {
+      const d = JSON.parse(JSON.stringify(state.rooms[0].devices[0]));
+      const send = (changes) => state.events.dispatchEvent(new MessageEvent("state", { data: JSON.stringify({
+        kind: "state", device: d.rf_address, state: d, time: new Date().toISOString(), changes }) }));
+      send({ error: { from: false, to: true }, failed_radiogram: { from: null, to: { code: 3, name: "TimeInformation" } } });
+      send({ failed_radiogram: { from: { code: 3, name: "TimeInformation" }, to: { code: 246 } } });
+      send({ error: { from: true, to: false }, failed_radiogram: { from: { code: 246 }, to: null } });
+      send({ link_error: { from: false, to: true } });
+    }""")
+    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-state').length >= 4", 5), "the four lines"
+    texts = [page.locator(".log-line.kind-state").nth(i).locator(".log-text").inner_text() for i in range(4)]
+    want = page.evaluate("""() => [t("log.linkError"), t("log.ch.errorCleared"),
+      t("log.ch.failedRadiogram", { radiogram: "0xf6" }), t("log.errorRadiogram", { radiogram: "TimeInformation (0x03)" })]""")
+    assert texts == want, f"newest first: {texts}, want {want}"
+    if case.lang == "en":
+        assert want[3] == "communication error: TimeInformation (0x03)", want[3]
+    else:
+        assert want[3] == "Kommunikationsstörung: TimeInformation (0x03)", want[3]
+    show_view(page, "tiles")
+
+
 def test_log_names_devices_by_serial(page, case):
     """A line names a device without a name by its S/N, the radio address
     in expert mode only; the Cube's own configuration is the Cube's; a
