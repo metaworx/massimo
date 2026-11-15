@@ -19,6 +19,9 @@ class @CLASS@ < Formula
   depends_on "go" => :build
 
   def install
+    # The web UI's parts first (make ui), which the server embeds and git
+    # does not keep; a release from before them has no tools/uibundle.
+    system "go", "-C", "tools/uibundle", "run", "." if (buildpath/"tools/uibundle").exist?
     system "go", "build", *std_go_args(output: bin/"massimo", ldflags: "-s -w -X main.version=v#{version} -X main.flavour=@CHANNEL@"), "./cmd/massimo"
     # The marker internal/install.Packaged reads: brew owns this binary, so
     # massimo update leaves the install to it, and the web UI's Update
