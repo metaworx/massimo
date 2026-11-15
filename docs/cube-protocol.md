@@ -598,7 +598,7 @@ The FHEM project notes that `t:` makes the Cube send a factory reset to the devi
 so a device that never answers is apparently never dropped.
 Massimo deletes a device the same way (`DELETE /api/v1/cubes/{sn}/devices/{rf}`,
 2026-11-06):
-wakeup, 0x21 per partner in both directions and 0x23 for a device in a room,
+wakeup, 0x23 and 0x21 per partner in both directions for a device in a room,
 `t:01,1,<rf>`, `m:` without it, and its copy forgets the device on the `A:`.
 That a device which answers is dropped from the C lines and the next `L:` is
 *unverified* on hardware.

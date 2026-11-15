@@ -2023,7 +2023,7 @@ A metadata write; answers `{"ok": true}`.
 Rename a device and/or move it to another room:
 `{"name": "Thermostat Küche", "room_id": 2}`, either field alone is fine.
 A move is done as the original software does it:
-the device is unlinked from every partner of its old room and its group removed,
+the device's group is removed and it is unlinked from every partner of its old room,
 then linked with every partner of the new room and the new group set,
 each after a wakeup of the room concerned, then the metadata is written.
 `room_id` must name an existing room; 0 is refused,
@@ -2042,7 +2042,7 @@ two shutter contacts are not linked with each other), then 0x22 set group,
 then the metadata with the device listed under its name in the room,
 then a re-read of its C line.
 A device whose C line names another room (paired long ago and never listed) is
-first unlinked from that room with 0x21 remove link partner and 0x23 remove group,
+first unlinked from that room with 0x23 remove group and 0x21 remove link partner,
 as in a move.
 
 A thermostat put into a room, by an add or a move,
@@ -2105,9 +2105,9 @@ as the original software's "delete device" does,
 and also removes the device's group, which the original software leaves.
 A device in a room, the metadata's or else its C line's,
 is unlinked from that room first:
-after a wakeup of the room (`z:1e,G,<room>`),
-one 0x21 remove link partner radiogram per room member it is linked with,
-in each direction (addressed as 0x20 is in an add), then 0x23 remove group.
+after a wakeup of the room (`z:1e,G,<room>`), 0x23 remove group,
+then one 0x21 remove link partner radiogram per room member it is linked with,
+in each direction (addressed as 0x20 is in an add).
 Hidden devices are no partners,
 and a device whose C line names room 255 is not unlinked at all.
 Then `t:01,1,<rf>`, delete with the force flag,

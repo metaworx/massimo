@@ -35,15 +35,16 @@ func linkTarget(rf cube.RFAddress, typ cube.DeviceType, room uint8) cube.Target 
 }
 
 // MoveCommands builds the two commands that move a device to another
-// room the way the original software does: unlink it from every partner
-// of the old room (as the Cube lists it now) in both directions and
-// remove its group, then link it with every partner among newMembers in
-// both directions and set the new group, each half after a wakeup of
-// the room concerned. The metadata write that records the new room is
-// not included. A device in skip, a hidden one, is no partner: every
-// write keeps away from it.
+// room the way the original software does: remove its group, then
+// unlink it from every partner of the old room (as the Cube lists it
+// now) in both directions, as the capture of 2026-11-04 and the original
+// software's DisassociateDeviceFromRoom have it (0x23 first); then link
+// it with every partner among newMembers in both directions and set the
+// new group, each half after a wakeup of the room concerned. The
+// metadata write that records the new room is not included. A device in
+// skip, a hidden one, is no partner: every write keeps away from it.
 func MoveCommands(snap *cubelan.Snapshot, rf cube.RFAddress, typ cube.DeviceType, oldRoom, newRoom uint8, newMembers []cube.DeviceMeta, skip view.Hidden) (out, in engine.Command) {
-	var outLines []cube.Message
+	outLines := []cube.Message{cube.CmdSetGroup(rf, oldRoom, true)}
 	if md := snap.Metadata(); md != nil {
 		for _, d := range md.Devices {
 			if d.RFAddress == rf || d.RoomID != oldRoom || !linkPair(d.Type, typ) || skip[d.RFAddress] {
@@ -53,7 +54,6 @@ func MoveCommands(snap *cubelan.Snapshot, rf cube.RFAddress, typ cube.DeviceType
 			outLines = append(outLines, cube.CmdLinkPartner(cube.Target{RFAddress: rf}, false, d.RFAddress, d.Type))
 		}
 	}
-	outLines = append(outLines, cube.CmdSetGroup(rf, oldRoom, true))
 	out = engine.Command{Key: "move-out:" + rf.String(), Target: rf, RoomID: oldRoom, Wakeup: oldRoom != 0, Lines: outLines}
 
 	var inLines []cube.Message
