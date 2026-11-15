@@ -18,7 +18,7 @@ type DeviceState struct {
 	LinkError    bool `json:"link_error"`
 	PanelLocked  bool `json:"panel_locked"`
 	GatewayKnown bool `json:"gateway_known"`
-	DST          bool `json:"dst"`
+	DST          bool `json:"dst"` // automatic DST switching on (set in winter too), not summer time
 	Mode         Mode `json:"mode"`
 
 	// Thermostats only.
@@ -97,8 +97,11 @@ func decodeDeviceState(e []byte, types map[RFAddress]DeviceType) DeviceState {
 			y, m, d := decodeUntilDate(e[9], e[10])
 			s.Until = &Until{Year: y, Month: m, Day: d, Minutes: int(e[11]&0x3f) * 30}
 		} else if s.Type.IsRadiatorThermostat() {
-			// Thermostats report the measured temperature only occasionally
-			// (e.g. after the valve moved); 0 means "not reported".
+			// An idle radiator thermostat reports the measured temperature
+			// once a day (at 12:00 with the default decalcification time,
+			// not on the decalcification day), in auto at its switch points;
+			// the Cube keeps it for seconds to minutes after a report, and 0
+			// means "not reported".
 			if raw := int(e[9]&0x01)<<8 | int(e[10]); raw != 0 {
 				t := float64(raw) / 10
 				s.ActualTemp = &t

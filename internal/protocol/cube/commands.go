@@ -129,8 +129,8 @@ func CubeTime(t time.Time) string {
 }
 
 // CmdSetTimeZone sets the Cube's daylight-saving rules (winter rule first).
-// This is what the original software sends; the Cube takes the time itself
-// from NTP. Verified on hardware (reply A:).
+// This is what the original software sends when the time zone changes; the
+// Cube takes the time itself from NTP. Verified on hardware (reply A:).
 func CmdSetTimeZone(winter, summer TimeZoneRule) (Message, error) {
 	w, err := winter.Encode()
 	if err != nil {
@@ -144,7 +144,10 @@ func CmdSetTimeZone(winter, summer TimeZoneRule) (Message, error) {
 }
 
 // CmdSetTime is CmdSetTimeZone with the clock value appended, as shown in
-// the community protocol docs. Not observed from the original software.
+// the community protocol docs. The original software 1.4.6 builds the same
+// form (MaxLocalApi.setCubeTime: lowercase hex, unpadded, only above 0) but
+// was never seen sending it; the 2000 epoch and the 8 digits here are
+// unconfirmed.
 func CmdSetTime(winter, summer TimeZoneRule, now time.Time) (Message, error) {
 	m, err := CmdSetTimeZone(winter, summer)
 	if err != nil {
