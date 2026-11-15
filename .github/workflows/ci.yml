@@ -63,9 +63,13 @@ jobs:
   # UI test and LAN jobs, are true for
   # a push; for a pull request, ui is true when it touches the web UI, its
   # suite or this file, lan when it touches the announcement, discovery,
-  # the proxy, the server's own files (not ui/: discovery's runs are
-  # decided there), the LAN test or this file. The run checks out the pull
-  # request's merge commit, whose first parent is the base branch. The
+  # the shared port, the proxy, the server's own files (not ui/:
+  # discovery's runs are decided there), the Go module, the LAN test or
+  # this file. A push whose record says lan=unneeded, its pull request's
+  # filter having found LAN not needed for this code, answers lan=false
+  # (AP SiteOnly, D78-C); a pull request's own filter decides. The run
+  # checks out the pull request's merge commit, whose first parent is the
+  # base branch. The
   # list is taken before it is matched, so that grep -q ending the pipe
   # early cannot fail the step under pipefail. Only an answer of false
   # skips a job: a step that fails anyway leaves every answer empty, so
@@ -171,6 +175,7 @@ jobs:
                 case "$w" in
                 ui=true) ui_done=true ;;
                 lan=true) lan_done=true ;;
+                lan=unneeded) [ "$GITHUB_EVENT_NAME" = pull_request ] || lan=false ;;
                 fuzz=true) fuzz_done=true ;;
                 esac
               done
@@ -179,7 +184,7 @@ jobs:
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
             changed="$(git diff --name-only HEAD^1 HEAD)"
             grep -qE '^(internal/server/ui/|tools/ui-test/|\.github/workflows/ci\.yml$)' <<<"$changed" || ui=false
-            grep -qE '^(internal/announce/|internal/serve/|internal/proxy/|internal/server/[^/]+$|internal/cubelan/|cmd/massimo/(discover|serve)\.go$|tools/lan-test/|\.github/workflows/ci\.yml$)' <<<"$changed" || lan=false
+            grep -qE '^(internal/announce/|internal/serve/|internal/sharedport/|internal/proxy/|internal/server/[^/]+$|internal/cubelan/|cmd/massimo/(discover|serve)\.go$|go\.(mod|sum)$|tools/lan-test/|\.github/workflows/ci\.yml$)' <<<"$changed" || lan=false
           fi
           echo "suite=${suite} code=${code} site=${site} tested=${tested} fp=${fp} ui=${ui} lan=${lan} ui_done=${ui_done} lan_done=${lan_done} fuzz_done=${fuzz_done}"
           # The answers as a table in the run's summary, with the reasons.
@@ -201,8 +206,17 @@ jobs:
             row site "$site" "the site's documents alone: Site runs, and a push to main deploys them" "-"
             row tested "$tested" "this code passed before: what passed is skipped" "no green record for this code"
             echo "| fp | \`${fp:-none}\` | $([ -n "$fp" ] && echo "the code's fingerprint" || echo "not taken") |"
-            row ui "$ui" "the UI tests are wanted" "the UI tests are not wanted"
-            row lan "$lan" "LAN against avahi is wanted" "LAN against avahi is not wanted"
+            # What a run does with a job the answer picks: skipped without a
+            # code test, not needed, passed before, or run (AP SiteOnly, D80-A).
+            job_row() { # <answer> <value> <done> <job>
+              if [ "$suite" != true ] || [ "$code" != true ]; then so="no code test: ${4} is skipped"
+              elif [ "$2" != true ]; then so="${4} is not needed for this change: skipped"
+              elif [ "$3" = true ]; then so="${4} passed for this code before: skipped"
+              else so="${4} runs"; fi
+              echo "| $1 | \`$2\` | ${so} |"
+            }
+            job_row ui "$ui" "$ui_done" "UI test"
+            job_row lan "$lan" "$lan_done" "LAN against avahi"
             row ui_done "$ui_done" "the UI tests passed for this code before" "-"
             row lan_done "$lan_done" "LAN passed for this code before" "-"
             row fuzz_done "$fuzz_done" "Fuzz passed for this code before" "-"
@@ -449,7 +463,9 @@ jobs:
   # The runner has Docker and Compose v2; the hosts' image is built from
   # debian:trixie-slim at each run. It runs for every push to main and for
   # a pull request whose What to test answered lan=true, the server's own
-  # files among its paths, as the UI tests do; skipped by this condition,
+  # files, the shared port and the Go module among its paths, as the UI
+  # tests do; not for the merge of a pull request that found it not
+  # needed for the same code (lan=unneeded). Skipped by this condition,
   # the check counts as passed.
   lan:
     name: LAN against avahi
@@ -1266,7 +1282,8 @@ jobs:
   # section 2) on the commit the run tested, a pull request's head or the
   # commit pushed to main: the fingerprint of the code that ran and whether
   # the UI tests, LAN and Fuzz passed for it, in this run or the one it
-  # carries on. What to test reads it to skip what passed. Not for a run
+  # carries on; LAN is unneeded where What to test answered lan=false and
+  # it did not pass. What to test reads it to skip what passed. Not for a run
   # that tested documents alone, nor for a tag; a fork's pull request has
   # a read-only token, and the step's failure fails nothing.
   tests:
@@ -1367,7 +1384,7 @@ jobs:
           SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           FP: ${{ needs.changes.outputs.fp }}
           UI: ${{ needs.changes.outputs.ui_done == 'true' || needs.screenshots.result == 'success' }}
-          LAN: ${{ needs.changes.outputs.lan_done == 'true' || needs.lan.result == 'success' }}
+          LAN: ${{ needs.changes.outputs.lan_done == 'true' || needs.lan.result == 'success' || needs.changes.outputs.lan == 'false' && 'unneeded' }}
           FUZZ: ${{ needs.changes.outputs.fuzz_done == 'true' || needs.fuzz.result == 'success' }}
         run: |
           desc="${FP} ui=${UI} lan=${LAN} fuzz=${FUZZ}"

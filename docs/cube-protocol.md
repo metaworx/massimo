@@ -32,6 +32,8 @@ without the firmware, the key from the QR code serves nothing.
 - [What is public](#what-is-public-research-2026-11-04)
 - [Recovering the IV from a Cube](#recovering-the-iv-from-a-cube)
 - [Observed polling](#observed-polling-cube-firmware-113-november-2026)
+- [The H line](#the-h-line)
+- [How devices report](#how-devices-report)
 - [One LAN client at a time](#one-lan-client-at-a-time)
 - [LAN commands verified against the original
   software](#lan-commands-verified-against-the-original-software-146)
@@ -69,8 +71,8 @@ its decompiled code or public analyses, and says so.
   their cost in duty cycle and memory slots.
 - **Set temperature (0x40)**:
   a device in a room is accepted only when addressed as its room.
-  The setpoint shows in the L line at once,
-  the mode only with the devices' next report.
+  The setpoint shows in a member's L entry when that member acknowledges,
+  within seconds for a device that answers; the mode only with its next report.
 - **Room commands are discarded while any member has no state** (no valid L entry):
   after a Cube restart until every member has transmitted,
   and for good with a paired device that never reports.
@@ -276,6 +278,57 @@ while the same lines over the LAN work.
 How the original portal delivered commands to the Cube is still unknown;
 the reply channel is not it, at least not in this form.
 
+## The H line
+
+The greeting's first line, as the original software 1.4.6 reads it
+(`MaxCubeStateFactory.parseHeader`), with what eleven greetings of three of
+the owner's Cubes showed in February 2026 (Cube firmware 1.1.3):
+
+| Field | Content |
+|---|---|
+| 0 | serial |
+| 1 | radio address, hex |
+| 2 | firmware, hex: `0113` (275) for 1.1.3 |
+| 3 | not read; always `00000000` |
+| 4 | not read; new at every connection |
+| 5 | duty cycle in %, hex |
+| 6 | free memory slots, hex (`32` = 50 when idle) |
+| 7 | date `YYMMDD`, two hex digits each |
+| 8 | time `HHMM`, two hex digits each, local time |
+| 9 | "stateCubeTime", decimal; always 3 |
+| 10 | "ntpCounter", hex; always `0000` |
+
+The date and time were the PC's local time to the minute at every connect.
+The software shows them and compares nothing with them.
+
+## How devices report
+
+From the original software's logs, which hold the L line every 10 s
+(2026-02-19 to 03-05, three of the owner's Cubes, Cube firmware 1.1.3),
+and from serve's store on one of the owner's hosts (2026-11-11 to 14):
+
+- A wall thermostat reports about every 3 minutes (2.7 min at least).
+- A radiator thermostat in manual mode with its valve still reports once a day,
+  at 12:00 local, the decalcification hour of every device there,
+  and not on its decalcification day (Saturday):
+  its entry changes every 24 h, over a weekend after 48 h.
+  Whether it follows the decalcification hour or noon itself is open.
+  In auto mode it reports at the programme's switch points.
+- A shutter contact reports only when the window moves.
+- A radiator thermostat's measured temperature (bytes 9 and 10 of its entry)
+  stays in the L entry only for 10 s to 13 min after such a report
+  (median 2.3 min), then reads 0 again.
+  The original software never shows it; Massimo keeps the last one with its age.
+- Byte 6 bit 0x08 of an entry is set in winter as in summer: it is the device's
+  automatic DST switching, which the original software reads and never uses,
+  not summer time.
+- What radio commands cost (2026-02-19, the original software):
+  a 0x40 to a room of two or three thermostats 3 % of the duty cycle
+  (about 1.1 s of air time), the same however many members,
+  and its memory slot back within 3 to 6 s once the members answered.
+  A 0x40 to a room whose members did not answer held its slot for at least
+  3.9 days at 0 % duty.
+
 ## One LAN client at a time
 
 The Cube serves a single TCP connection on port 62910.
@@ -302,12 +355,28 @@ A second capture (week program, presets, valve settings, renames):
 
 | UI action | Lines sent | Reply |
 |---|---|---|
-| Edit week program of room 1 | `z:1e,G,01` (wake the room for 30 s), then one `s:` (0x10) per changed day, e.g. `s:AAQQAAAACgEKAQRO3VTzRQoxIDEgMSAxIA==` (Wednesday, 4 points padded with the last) | `A:`, then `S:` per day |
+| Edit week program of room 1 | `z:1e,G,01` (wake the room, below), then one `s:` (0x10) per changed day, e.g. `s:AAQQAAAACgEKAQRO3VTzRQoxIDEgMSAxIA==` (Wednesday, 4 points padded with the last) | `A:`, then `S:` per day |
 | Temperature offset -2 °C | `r:` if in error state, then `s:AAARAAAACgEKACwePQkDCgM=` (0x11; flags 00, room 00) | `S:` |
 | Boost 5 min / 80 % | `s:AAQSAAAACgEKATAM/wA=` (0x12) | `S:` |
 | Rename room or device, reorder rooms | `m:00,<base64 metadata>` (index only, no count) | `A:` |
 
 All of these match the builders in `internal/protocol/cube` byte for byte.
+The `z:` duration `1e` has been read as 30 s; the original software 1.4.6 names
+the field `durationInMinutes`, and the byte is the same either way, so the unit
+is open.
+The software wakes a room only before configuration writes and 0x82,
+never before 0x40, and only a room with a radiator thermostat.
+A day of the week programme with more than 7 switch points goes as two 0x10
+telegrams: the first with points 1 to 7, the second with points 8 to 13,
+marked with bit 4 (0x10) of the day byte and padded to 6 points with the last
+one, as the original software 1.4.6 builds it
+(`SetRoomWeekTemperatureProfile.createDayPartSpec`), and as Massimo does.
+Verified on hardware 2026-11-15 (Cube firmware 1.1.3, one radiator thermostat
+of one of the owner's Cubes, through serve's proxy, after a `z:` room wakeup):
+the C line held all 8 points of a test day within 17 s,
+and the day was written back afterwards.
+Two wakeups and three telegrams (the test and the restore) cost 3 % of the
+duty cycle; up to three memory slots were held, one still two minutes later.
 A 0x11 command to a device in error state that was **not** preceded by `r:` came
 back as discarded (`S:14,1,31`); the software then reports "Command discarded".
 When the software sends `r:`, from its bytecode (`ResetRadiogramBuilder`) and
@@ -330,8 +399,16 @@ software reset four members of the room whose byte 4 was 0x21,
 and its own model listed them as `Error`).
 The `link_error` bit alone is never reset.
 The software never resets on its own: no timer, nothing on a device's report.
-While the UI is open the software polls `l:` every 10 s and disconnects after 30
-s without user activity.
+While the UI is open it calls the backend every 10 s, and each call sends one `l:`
+(2026-02-23 to 03-05: 88 000 polls of one Cube, 99.8 % 10 s apart).
+The backend sends `q:` when the UI stops calling for a time set outside the jars,
+about 30 s, not after 30 s without user activity: one Cube was held 10½ days
+without a command.
+When the connection idles it sends the line `e:something` as a keepalive.
+The software can also set the Cube's clock:
+`MaxLocalApi.setCubeTime` sends `v:<rules>,<seconds in hex>`, lowercase and
+unpadded, only when the seconds are above 0;
+the epoch is in its UI, not in its jars, and the call was never seen in its logs.
 It reads the next line after a command as its reply (seen 2026-11-14 through
 Massimo's proxy, software 1.4.6): a line it did not ask for comes back as
 "S: expected", "ACK expected" or "device list expected", each reply one line late,
@@ -558,7 +635,7 @@ The FHEM project notes that `t:` makes the Cube send a factory reset to the devi
 so a device that never answers is apparently never dropped.
 Massimo deletes a device the same way (`DELETE /api/v1/cubes/{sn}/devices/{rf}`,
 2026-11-06):
-wakeup, 0x21 per partner in both directions and 0x23 for a device in a room,
+wakeup, 0x23 and 0x21 per partner in both directions for a device in a room,
 `t:01,1,<rf>`, `m:` without it, and its copy forgets the device on the `A:`.
 That a device which answers is dropped from the C lines and the next `L:` is
 *unverified* on hardware.
@@ -581,11 +658,19 @@ with the devices in it, instead.
 The device types of the three are shutter contacts;
 their serials start with IEQ.
 
-After a 0x40 set-temperature command the Cube updates the setpoint in the room
-members' L entries at once,
-while the mode bits change only when the devices report back,
+After a 0x40 set-temperature command the Cube writes the new setpoint into a
+member's L entry when the member acknowledges it,
+within 1 to 19 s in four room commands of 2026-02-19
+(Cube firmware 1.1.3, the original software 1.4.6, polled every 10 s),
+while the mode bits change only with the device's next report,
 about 45 s later in one observation (a room shown as auto at the new temperature
 in between).
+A member that does not answer keeps its old setpoint:
+on one Cube whose last memory slot the command took, no member showed it in
+19 hours of polling, and two room commands to a room whose members were both
+flagged (2026-11-13 and 14) were never shown either.
+An `S:` not discarded therefore says the Cube took the command, not that the room did;
+the original software marks such a room "dirty" until an L line changes it.
 A client that needs the mode should wait for the next L line rather than read
 the one right after the command.
 
@@ -827,7 +912,7 @@ kept here because they cost time to learn.
   hence pending radiograms) only when a connection starts and in S replies;
   no command asks for it.
   The Cube changes a device's C line only after the device acknowledged (1 to 4 min);
-  the setpoint shows in L at once, the mode only with the device's report.
+  the setpoint in L also follows the device's acknowledgement, the mode its next report.
 - The Cube answers UDP discovery only to port 23272,
   whatever the request's source port, so on the box running `serve`,
   `massimo discover` sees only `serve`'s own proxy answer;

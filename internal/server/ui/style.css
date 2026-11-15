@@ -1519,6 +1519,10 @@ massimo-week-program { display: contents; }
 .field > .switch { flex: 1 1 0; min-width: 0; }
 .field .inline > .muted { min-width: 2.2em; }
 .field input[type="number"] { text-align: right; }
+/* a number its field refuses (markRange): the box red, the range in
+   amber (.warn-text) before it, twice as far from the box as the unit */
+.field input[type="number"][aria-invalid="true"] { border-color: var(--bad); outline-color: var(--bad); }
+.field .inline > .warn-text { margin-right: 6px; }
 .field.wide > .field-control { flex: 1 1 100%; margin-left: 0; min-width: 0; width: 100%; }
 .field-hint { flex-basis: 100%; margin: 0; }
 /* the window's and the radio's drawing as chosen, beside its choice

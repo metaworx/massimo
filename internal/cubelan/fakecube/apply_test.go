@@ -188,6 +188,38 @@ func TestApplyBoost(t *testing.T) {
 	}
 }
 
+// A day of more than 7 points goes as two telegrams, the second marked
+// 0x10 and padded to 6 points; the fake keeps both parts, so the C line
+// reads back the whole day, of 8 points as of 13.
+func TestApplyLongDay(t *testing.T) {
+	s := startRooms(t, &Server{})
+	c := dial(t, s.ln.Addr().String())
+	rf := cube.RFAddress(0x0a0204)
+	for _, n := range []int{8, 13} {
+		day := cube.DayProgram{}
+		for i := 1; i < n; i++ {
+			day = append(day, cube.SwitchPoint{Temp: 16 + float64(i%2)*4, Until: i * 90})
+		}
+		day = append(day, cube.SwitchPoint{Temp: 17, Until: 1440})
+		lines, err := cube.CmdSetDayProgram(cube.Target{RFAddress: rf}, cube.Thursday, day)
+		if err != nil || len(lines) != 2 {
+			t.Fatalf("%d points: %v %v", n, lines, err)
+		}
+		for _, l := range lines {
+			c.send(l)
+		}
+		got := c.config(rf).Thermostat.WeekProgram[cube.Thursday]
+		if len(got) != n {
+			t.Fatalf("%d points read back as %+v", n, got)
+		}
+		for i := range day {
+			if got[i] != day[i] {
+				t.Errorf("%d points, point %d: %+v, want %+v", n, i+1, got[i], day[i])
+			}
+		}
+	}
+}
+
 // A day's programme, the preset temperatures and the lock reach the C
 // line and the L entry; a new connection's greeting carries them.
 func TestApplyProgramTemperaturesLock(t *testing.T) {

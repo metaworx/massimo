@@ -25,14 +25,14 @@ type Metadata struct {
 	Header   [2]byte      `json:"-"` // observed as 'V', 0x02; preserved for round trips
 	Rooms    []RoomMeta   `json:"rooms"`
 	Devices  []DeviceMeta `json:"devices"`
-	Trailing []byte       `json:"-"` // bytes after the device list (observed: 0x01); preserved
+	Trailing []byte       `json:"-"` // after the device list: the original's daylightSaving byte (1 = on); preserved
 }
 
 // RoomMeta describes one room.
 type RoomMeta struct {
 	ID        uint8     `json:"id"`
 	Name      string    `json:"name"`
-	RFAddress RFAddress `json:"rf_address"` // address of the first device in the room
+	RFAddress RFAddress `json:"rf_address"` // the room's master: the original sets the first radiator thermostat added
 }
 
 // DeviceMeta describes one paired device.
