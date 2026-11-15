@@ -631,6 +631,11 @@ Each type has a category, meant to decide when the software resets a device
 whose radiogram of that type failed (above; in practice it never does):
 Configuration for 0x10–0x12 and 0x82, Control for 0x40, 0x41, 0x43, 0x44
 and 0x80, Assignment for 0x20–0x23, Remove for 0xF0, none for the rest.
+Massimo ranks a failed radiogram by them (`RadiogramType.Severity`, D181):
+Assignment and Remove first, which change the system's structure,
+then Configuration, then Control, then the rest;
+a communication error's alert names the most severe of the radiograms
+that failed while the flag stayed set (docs/api-v1.md, "Log alerts").
 The same code is byte 4 of an L entry whose error flag is set (below).
 Only `FrameType` itself references `LockManualControls`:
 the software has no UI for the key lock and never sends 0x80.

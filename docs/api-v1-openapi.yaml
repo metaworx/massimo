@@ -3108,7 +3108,9 @@ paths:
                         device: {type: string, description: The device's radio address on its Cube}
                         serial: {type: string}
                         flag: {type: string, enum: [error, link_error, battery_low], description: "The device's flag, for a state line"}
-                        failed_radiogram: {$ref: "#/components/schemas/FailedRadiogram"}
+                        failed_radiogram:
+                          description: "The error flag's: of the radiograms that failed while it stayed set, the most severe (Assignment and Remove, then Configuration, then Control, then the rest), of two as severe the oldest"
+                          allOf: [{$ref: "#/components/schemas/FailedRadiogram"}]
                         time: {type: string, format: date-time}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}

@@ -2999,7 +2999,20 @@ A device's communication error, link error and low battery are in the log at inf
 in its state's changes:
 each is an alert at warn while the device has it,
 at the state line that set it (`flag`),
-the `error` flag's with the device's `failed_radiogram` now, as its state gives it.
+the `error` flag's with a `failed_radiogram`:
+of the radiograms that failed while the flag stayed set,
+those of the device's state lines from the one that set it on
+and the one its state gives now,
+the most severe, and of two as severe the oldest.
+The severity is the original software's category of the radiogram's type
+(docs/cube-protocol.md, "FrameType"), highest first:
+Assignment and Remove (0x20 to 0x23, 0xF0), which change the system's structure;
+Configuration (0x10 to 0x12, 0x82);
+Control (0x40, 0x41, 0x43, 0x44, 0x80);
+then the rest (the time push 0x03, the wakeup 0xF1, a code the list lacks).
+So a flag set by the Cube's time push (0x03) at 10:00
+and still set when a setpoint (0x40) fails at 14:00 names the setpoint's,
+and a removal's link (0x21) failing after that names the link's.
 `after` leaves out the alerts up to that id.
 The audit's lines (`login_failed`, `locked_out`)
 are there for a holder of `audit` only.
