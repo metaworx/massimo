@@ -348,6 +348,30 @@ def test_log_change_line(page, case):
     show_view(page, "tiles")
 
 
+ERROR_RESET_SAYS = {
+    "en": ("communication error reset", "at the device's report; the server does it once a day at most"),
+    "de": ("Kommunikationsstörung zurückgesetzt", "bei der Meldung des Geräts; der Server tut es höchstens einmal am Tag"),
+}
+
+
+def test_log_error_reset_line(page, case):
+    """A device's automatic reset of its communication error, sent on the
+    stream, is a line of its device with its kind and what it says (AP
+    RadioHealth v1.2, Block 4)."""
+    show_view(page, "log")
+    page.wait_for_timeout(1600)
+    d = page.evaluate("state.rooms[0].devices[0]")
+    page.evaluate("""(d) => state.events.dispatchEvent(new MessageEvent("error_reset", { data: JSON.stringify({
+      kind: "error_reset", source: "device", level: "info", device: d.rf_address, serial: d.serial, time: new Date().toISOString(),
+      summary: { room: d.room_id || 1, automatic: true } }) }))""", d)
+    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-error_reset').length > 0", 5), "the reset's line"
+    line = page.locator("#log-lines .log-line.kind-error_reset").first
+    kind, text = ERROR_RESET_SAYS[case.lang]
+    assert line.locator(".log-kind").inner_text().strip() == kind, f"the kind: {line.locator('.log-kind').inner_text()}"
+    assert line.locator(".log-text").inner_text() == text, f"the text: {line.locator('.log-text').inner_text()}"
+    show_view(page, "tiles")
+
+
 def test_log_source_and_level(page, case):
     """The source and the level chosen are asked of the server and kept in
     the address after the log's page; a reload keeps them, Clear sets

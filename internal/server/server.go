@@ -273,6 +273,9 @@ type Options struct {
 	// notifyClock is the notification rules' clock, for the tests; nil
 	// is the real one.
 	notifyClock notify.Clock
+	// clock is the time of the automatic resets (autoreset.go), for the
+	// tests; nil is time.Now.
+	clock func() time.Time
 	// Deliverers take a user's notifications beside Web Push: an app
 	// embedding the server shows them itself (push.Local).
 	Deliverers []push.Deliverer
@@ -444,6 +447,9 @@ type runtime struct {
 	// walls is each wall thermostat's last mode, for wall_reset; only the
 	// pump uses it (wallreset.go).
 	walls map[cube.RFAddress]*wallMemo
+	// resets are the devices' automatic resets of their communication
+	// error (autoreset.go).
+	resets autoResets
 	// vwt is the rooms' uids and settings, and each room's virtual wall
 	// thermostat as its last event had it (vwt.go).
 	vwt vwtState
@@ -960,6 +966,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 						}
 						rt.last[e.Device] = dv.State
 						ev.Command = rt.sentTo.take(e.Device)
+						s.autoReset(ctx, rt, e.Device, dv, ev.Changes)
 					}
 				}
 			}

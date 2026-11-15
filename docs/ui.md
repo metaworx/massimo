@@ -509,6 +509,8 @@ Opening the log marks nothing.
 The marks follow a signed-in user with `preferences` (the preference `log.seen`);
 anyone else's stay in the browser.
 The page asks at every poll.
+A device that reports while its communication error is set is reset by the server,
+once a day at most: the log's **communication error reset** line.
 The server keeps its log in its store across restarts and updates,
 for the days `log.keep_days` says (30 by default; docs/api-v1.md,
 "GET and PUT /api/v1/settings").
