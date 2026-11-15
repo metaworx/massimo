@@ -109,7 +109,14 @@ The compacted header has **↑** left of ☰, back to the top.
   the list as wide as they need; the arrow keys move between them.
   The last entry, **Search for new Cubes…**,
   asks the server to look for Cubes on the LAN (about two seconds;
-  the server also looks every 30 minutes by itself).
+  the server also looks every 30 minutes by itself),
+  and reads **Searching…** meanwhile.
+  What it found shows in a toast at the page's foot for eight seconds,
+  as a notification does:
+  the number of Cubes found and not set up, with **Show**, for a role that may add Cubes,
+  which opens them in System settings;
+  or that none was found;
+  a failed search in red, with the server's reason, for 15 seconds.
   Cubes it finds but does not serve are listed in the choice under "Found,
   not configured",
   as long as they answer: one that a search or the server's own look no
@@ -161,11 +168,13 @@ The compacted header has **↑** left of ☰, back to the top.
   **Maintenance**, for those and a role with `update`, `restart` or `reboot`,
   and **System info**, for every role with `read`;
   **Personal settings**, its tooltip naming whose they are, by display name and login,
-  and **Sign out** (Forget key for an API key or the token, none on an open server).
+  and **Sign out** (Forget key for an API key or the token, none on an open server),
+  in the accent and bold, as the personal page's button.
   It is highlighted while one of its pages is shown, as a page button is,
   that page's entry marked current.
   While the log holds a warning or an error not yet settled or marked seen (see Log),
-  ☰ carries an amber triangle or a red cross,
+  ☰ carries an amber triangle or a red cross at its corner,
+  on a disc of the card's colour, so that it shows on the highlighted ☰ too,
   and the sheet of its Log entry turns amber or red, both named with the count.
 - The settings pages, Cube settings, System settings, Maintenance and System info,
   each have a row kept under the header, and in it, in the title's place,
@@ -704,6 +713,7 @@ also while no page is open.
 
 While the page is open,
 a notification shows at its foot for ten seconds instead,
+in the toast the Cube search's outcome uses (`showToast`),
 in the page's language, with × to close it;
 the same one from the stream and from the push shows once.
 The page is at most 640 px wide, as My settings is.
@@ -1221,6 +1231,7 @@ its heading's `button.section-fold` folding it):
 as ☰'s pages are `MENU_VIEWS`; `markSettingsPages` shows the title for one page alone),
 `fitPageTabs` gives the page shown's button the longest name's width,
 and `backToTop` wires the two ↑, the floating one and the compacted header's;
+`showToast` shows the page's one toast at its foot (a notification, the search's outcome),
 `pickerMenu` makes a dropdown the choice of one item (the Cube choice),
 its items `menuItem`s, a Cube's link its network sign (`cubeSignEl`, `LINK_SIGN`);
 a device's serial and radio address are a `deviceIds`;

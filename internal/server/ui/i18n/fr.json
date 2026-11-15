@@ -553,6 +553,7 @@
   "discover.found.one": "{n} Cube trouvé, non configuré",
   "discover.found.other": "{n} Cubes trouvés, non configurés",
   "discover.failed": "Échec de la recherche : {error}",
+  "discover.show": "Afficher",
   "discover.hint": "« Ajouter » prend en charge un Cube aussitôt, ici. Un proxy Massimo appartient à un autre serveur : il figure ici pour que son Cube ne soit pas ajouté deux fois. L'autre voie est le fichier de réglages du serveur, avec un redémarrage :",
   "discover.hintFile": "Le fichier de réglages est /etc/massimo/env pour un serveur installé avec « massimo install », sinon .env dans le répertoire de travail du serveur ou le fichier indiqué avec -env. Avec plusieurs Cubes, chacun a aussi besoin d'une adresse _PROXY ; README.md décrit les variables.",
   "discover.log": "Cube {serial} à {address}, non configuré",

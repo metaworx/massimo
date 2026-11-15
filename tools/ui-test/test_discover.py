@@ -33,9 +33,11 @@ def open_pill(page):
 
 
 def test_search_held_then_answered(page, case):
-    """The search shows "searching" while the request is held, then the
-    found Cube in the choice, and in the header's pill the found Cubes'
-    sign with their number and their group last in its list, its link
+    """The search's entry in the Cube choice says "searching" while the
+    request is held, then the outcome shows in the page's toast with Show
+    and no line beside the Cube choice; the found Cube in the choice, and
+    in the header's pill the found Cubes' sign with their number and their
+    group last in its list, its link
     opening System settings → Cubes with the found Cubes' fold open, which
     lists it with its DHCP flag and, folded, the lines for the settings
     file, copied by one icon; and the log has its cube_found."""
@@ -47,7 +49,8 @@ def test_search_held_then_answered(page, case):
     end = time.time() + 5
     while not held and time.time() < end:
         page.wait_for_timeout(100)
-    assert page.locator("#cube-search").inner_text() == SEARCHING[case.lang], "searching shown"
+    assert SEARCHING[case.lang] in cube_item(page, "__discover").text_content(), "the entry says searching"
+    assert page.locator("#toast").is_hidden(), "no toast yet"
     assert cube_item(page, "__discover").is_disabled(), "search entry disabled while searching"
     # Released before the route goes: a page without routes stops
     # intercepting, and Playwright would let the held request through.
@@ -55,7 +58,12 @@ def test_search_held_then_answered(page, case):
         held[0].continue_()  # on to the server, which asks the fake Cube
     page.unroute("**/api/v1/cubes/discover")
     assert wait_until(page, "!discovery.running", 10), "search done"
-    assert page.locator("#cube-search").inner_text() == found_text(case.lang, 1), "search result shown"
+    toast = page.locator("#toast")
+    assert toast.is_visible() and page.locator("#toast-body").inner_text() == found_text(case.lang, 1), "the outcome in the toast"
+    assert page.locator("#toast-action").inner_text() == page.evaluate("t('discover.show')"), "with Show"
+    assert page.locator("#cube-search").count() == 0, "no line beside the Cube choice"
+    page.locator("#toast-close").click()
+    assert toast.is_hidden(), "× closes it"
     opt = cube_item(page, "found:KEQ0000000")
     assert opt.count() == 1 and not opt.is_disabled(), "found Cube in the choice, which opens System settings with cubes"
     assert page.evaluate("state.serial") == serial, "the selected Cube stays"
@@ -181,11 +189,26 @@ def test_found_proxy(page, case):
     show_view(page, "tiles")
 
 
+def test_search_toast_shows_the_found(page, case):
+    """Show in the search's toast opens System settings → Cubes with the
+    found Cubes' fold open, and closes the toast."""
+    choose_cube(page, "__discover")
+    page.locator("#toast-action").wait_for(state="visible", timeout=10000)
+    page.locator("#toast-action").click()
+    assert wait_until(page, "currentView === 'system'", 3), "Show opens System settings"
+    assert page.locator("#toast").is_hidden(), "and closes the toast"
+    assert page.locator(".cube-found-row[data-serial='KEQ0000000']").is_visible(), "the found Cube, the fold open"
+    assert scroll_width(page) <= case.width, "no horizontal scroll"
+    show_view(page, "tiles")
+
+
 def test_refused_search(page):
-    """A refused search (a stubbed 503) shows the server's message."""
+    """A refused search (a stubbed 503) shows the server's message in the
+    toast, its edge red, and no Show."""
     page.route("**/api/v1/cubes/discover", lambda route: route.fulfill(
         status=503, content_type="application/json", body='{"error": "no discovery socket"}'))
     choose_cube(page, "__discover")
-    assert wait_until(page, "document.getElementById('cube-search').classList.contains('bad')", 5) \
-        and "no discovery socket" in page.locator("#cube-search").inner_text(), "a refused search shows the server's message"
+    assert wait_until(page, "document.getElementById('toast').classList.contains('bad')", 5) \
+        and "no discovery socket" in page.locator("#toast-body").inner_text(), "a refused search shows the server's message"
+    assert page.locator("#toast-action").is_hidden(), "nothing to show"
     page.unroute("**/api/v1/cubes/discover")
