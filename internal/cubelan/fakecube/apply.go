@@ -232,7 +232,8 @@ func (s *Server) programHalfLocked(rf cube.RFAddress, now time.Time) byte {
 }
 
 // setDayLocked applies 0x10: one day's switch points into the C line, the
-// second telegram of a long day from the eighth slot on.
+// second telegram of a long day (bit 4, 0x10, of the day byte, as the
+// original software marks it) from the eighth slot on.
 func (s *Server) setDayLocked(rf cube.RFAddress, p []byte) {
 	s.editConfigLocked(rf, func(c []byte, t cube.DeviceType) {
 		base := radiatorProgram
@@ -240,7 +241,7 @@ func (s *Server) setDayLocked(rf cube.RFAddress, p []byte) {
 			base = wallProgram
 		}
 		day, slot := int(p[0]&0x07), 0
-		if p[0]&0x08 != 0 {
+		if p[0]&0x10 != 0 {
 			slot = 7
 		}
 		if day > 6 {

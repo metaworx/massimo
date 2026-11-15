@@ -265,8 +265,13 @@ func SetpointTarget(rf RFAddress, room uint8) Target {
 }
 
 // CmdSetDayProgram writes the switch points of one weekday. Programs with
-// more than 7 points need two telegrams; the first one is padded with its
-// last point, as the original software does.
+// more than 7 points need two telegrams: the first carries points 1 to 7,
+// the second points 8 to 13, marked with bit 4 (0x10) of the day byte. Each
+// is padded with its last point, the first to 7 and the second to 6, as
+// the original software 1.4.6 builds them
+// (SetRoomWeekTemperatureProfile.createDayPartSpec). The long form was
+// verified on hardware on 2026-11-15 (Cube firmware 1.1.3): the device's C
+// line held all 8 points of a test day.
 func CmdSetDayProgram(t Target, day Weekday, prog DayProgram) ([]Message, error) {
 	if day > Friday {
 		return nil, fmt.Errorf("invalid weekday %d", day)
@@ -291,7 +296,11 @@ func CmdSetDayProgram(t Target, day Weekday, prog DayProgram) ([]Message, error)
 	}
 	out := []Message{build(byte(day), first)}
 	if len(words) > 7 {
-		out = append(out, build(byte(day)|0x08, words[7:]))
+		second := append([]uint16(nil), words[7:]...)
+		for len(second) < 6 {
+			second = append(second, second[len(second)-1])
+		}
+		out = append(out, build(byte(day)|0x10, second))
 	}
 	return out, nil
 }

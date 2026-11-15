@@ -357,6 +357,17 @@ the field `durationInMinutes`, and the byte is the same either way, so the unit
 is open.
 The software wakes a room only before configuration writes and 0x82,
 never before 0x40, and only a room with a radiator thermostat.
+A day of the week programme with more than 7 switch points goes as two 0x10
+telegrams: the first with points 1 to 7, the second with points 8 to 13,
+marked with bit 4 (0x10) of the day byte and padded to 6 points with the last
+one, as the original software 1.4.6 builds it
+(`SetRoomWeekTemperatureProfile.createDayPartSpec`), and as Massimo does.
+Verified on hardware 2026-11-15 (Cube firmware 1.1.3, one radiator thermostat
+of one of the owner's Cubes, through serve's proxy, after a `z:` room wakeup):
+the C line held all 8 points of a test day within 17 s,
+and the day was written back afterwards.
+Two wakeups and three telegrams (the test and the restore) cost 3 % of the
+duty cycle; up to three memory slots were held, one still two minutes later.
 A 0x11 command to a device in error state that was **not** preceded by `r:` came
 back as discarded (`S:14,1,31`); the software then reports "Command discarded".
 While the UI is open it calls the backend every 10 s, and each call sends one `l:`
