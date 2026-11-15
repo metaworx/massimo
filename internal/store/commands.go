@@ -309,9 +309,21 @@ func (s *Store) steps(ctx context.Context, parentID int64) ([]Command, error) {
 	return out, rows.Err()
 }
 
+// pendingWhere selects the queued and sent commands (StateQueued,
+// StateSent). The states are written out, as the partial index
+// commands_pending names them in its WHERE: SQLite takes a partial index
+// only for a query whose terms imply the index's, which bound parameters
+// never do.
+const pendingWhere = `state IN ('queued', 'sent')`
+
+// pendingQuery is Pending's: the unary + keeps SQLite from taking
+// commands_parent for parent_id IS NULL, which every parent, finished
+// or not, matches.
+const pendingQuery = `SELECT ` + commandColumns + ` FROM commands c WHERE ` + pendingWhere + ` AND +c.parent_id IS NULL ORDER BY c.id`
+
 // Pending lists the parents that are queued or sent, oldest first.
 func (s *Store) Pending(ctx context.Context) ([]Command, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+commandColumns+` FROM commands c WHERE c.state IN (?, ?) AND c.parent_id IS NULL ORDER BY c.id`, StateQueued, StateSent)
+	rows, err := s.db.QueryContext(ctx, pendingQuery)
 	if err != nil {
 		return nil, fmt.Errorf("store: pending: %w", err)
 	}
@@ -335,8 +347,8 @@ func (s *Store) DropUnfinished(ctx context.Context, reason string) (int, error) 
 	}
 	result, _ := json.Marshal(map[string]string{"error": reason})
 	now := s.nowText()
-	res, err := s.db.ExecContext(ctx, `UPDATE commands SET state = ?, result = ?, updated_at = ?, finished_at = ?, origin = ?, version = version + 1 WHERE state IN (?, ?)`,
-		StateDropped, string(result), now, now, s.nodeID, StateQueued, StateSent)
+	res, err := s.db.ExecContext(ctx, `UPDATE commands SET state = ?, result = ?, updated_at = ?, finished_at = ?, origin = ?, version = version + 1 WHERE `+pendingWhere,
+		StateDropped, string(result), now, now, s.nodeID)
 	if err != nil {
 		return 0, fmt.Errorf("store: commands: %w", err)
 	}
