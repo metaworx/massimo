@@ -2,10 +2,10 @@
 <template id="tpl-pairing">
   <div class="cube-pairing needs-pair">
     <button type="button" class="pair-open" data-i18n="pairing.open">Pair a device</button>
-    <form class="pairing-form">
+    <form class="pairing-form" novalidate>
       <div class="field">
         <label data-i18n="pairing.seconds">Pairing time</label>
-        <span class="inline field-control"><input type="number" name="seconds" min="1" max="255" step="1" value="60"> <span class="muted" data-i18n="settings.seconds">s</span></span>
+        <span class="inline field-control"><span class="small warn-text pairing-range hidden" role="status" data-i18n="pairing.secondsRange">only 1 to 255</span><input type="number" name="seconds" min="1" max="255" step="1" value="60" required> <span class="muted" data-i18n="settings.seconds">s</span></span>
       </div>
       <p class="muted small pairing-how" data-i18n="pairing.how">Start puts the Cube into pairing mode. Then press the pairing button of the new device, as its manual says; each device that joins is listed here.</p>
       <div class="actions">

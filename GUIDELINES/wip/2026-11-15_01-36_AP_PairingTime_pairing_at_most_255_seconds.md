@@ -1,10 +1,11 @@
-# AP PairingTime v1.0: Pairing at most 255 seconds
+# AP PairingTime v1.1: Pairing at most 255 seconds
 
 ## TL;DR
 
 The Cube reads only the low byte of `n:`'s four hex digits, so a
 pairing lasts at most 255 s; Massimo caps it there everywhere and
-writes the finding into the protocol document.
+writes the finding into the protocol document. The web UI's pairing
+time marks a value out of range at once (v1.1).
 
 - `cube.MaxInclusion` 255 s, new; `CmdInclusion` clamps to it
   (`n:00ff`); `cubeio.MaxPairingTime` 10 min → `cube.MaxInclusion`
@@ -18,12 +19,18 @@ writes the finding into the protocol document.
   2026-11-14, firmware 1.1.3; the empty `N` at the end of the time
   verified, `x:` and a joining device still not
 - `docs/api-v1.md`, `docs/proxy.md`, `docs/ui.md`: 600 s, ten minutes → 255 s
+- UI field, out of range (empty, < 1, > 255, a fraction): red outline,
+  amber "only 1 to 255" before the box, live (D3-A); Start → the box
+  focused; the browser's bubble and `pairing.secondsBad` → gone (D4-A);
+  `markRange` in `components.js` for the other number fields later (D2-A)
 
 ### Blocks
 
 1. Finding: the pairing time in `docs/cube-protocol.md`
 2. Cap: 255 s in the builder, cubeio, the API, the proxy, the UI and
    the fake Cube; tests with the exact `n:` line; docs; CHANGELOG fragment
+3. Field: the pairing time outlined in red out of range, the range in
+   amber before it; UI test; `docs/ui.md`; CHANGELOG fragment
 
 ## Discussion
 
@@ -56,6 +63,30 @@ software 1.4.6 also sends four hex digits (`Conversion.toHex16` of
   600 before; such a request paired for the wrong time anyway, and
   Massimo's own callers (the UI, the proxy) stay within the range; the
   Home Assistant integration does not pair.
+
+v1.1, the owner's EVAL of 2026-11-15 on #273, with two screenshots: 660
+typed into the field shows nothing until Start, and Start then shows
+the browser's bubble "Please select a value that is no more than 255.".
+The owner asked for a red outline on a value out of range and for the
+warning text in amber before the box; `PLAN++` took the evaluation's
+recommendations:
+
+- D1-A: Block 3 of this plan, in #273, the pull request that changes
+  the field; a plan of its own after the merge (B) would ship the 255
+  without the mark.
+- D2-A: the pairing field only, the marking a function of
+  `components.js` (`markRange`), so that the poll interval, the house
+  temperature, the reboot delay and the holiday temperature can take it
+  later; all five now (B) reaches well beyond pairing.
+- D3-A: marked as the value changes, and at Start, which puts the
+  cursor back into the box; a value in range clears it at once. An
+  emptied field is marked while a new value is typed. Marking only once
+  the field is left (B) says nothing to someone who types and presses
+  Enter.
+- D4-A: the browser's own bubble off (`novalidate` on the form): it is
+  in the browser's language, not the page's, and the amber text says the
+  same; with it, `startPairing`'s own check and `pairing.secondsBad`, the
+  sentence under the form that the bubble kept from ever showing, go.
 
 ## Analysis
 
@@ -92,6 +123,20 @@ for 0 as before; the comment on `Pairing` and the package comment of
 `inclusion.go` say that the end of the time is seen on hardware and the
 end by `x:` is not.
 
+**The field (v1.1).** The form has no `novalidate`, so Start with 660
+is stopped by the browser's constraint validation, whose bubble speaks
+the browser's language; `startPairing`'s own check (`secs > 255`,
+`pairing.secondsBad` under the form) runs only where the browser does
+not validate. Two places already mark a refused field with
+`aria-invalid="true"` (`users.js` for a new user's name, `theme.js` for
+a colour's hex value), and `style.css` outlines only `.scheme-hex` so
+marked, in `--bad`; amber text is `--warn` (`.warn-text`, the plain
+HTTP warning of the connect page). `.field`'s control is an `.inline`
+span, so a text before the input sits beside the box, and the row wraps
+on a phone as it does for a long label. `input.validity.valid` covers
+every case the field refuses: empty with `required`, below `min`, above
+`max`, a fraction by `step`, and text that is not a number.
+
 **The protocol document.** Another session writes other findings of
 2026-11-14 (transmit-error flag, `r:`, memory slots) into
 `docs/cube-protocol.md`, so Block 1 keeps to "Pairing a device, as the
@@ -104,7 +149,8 @@ owner's names. The summary list "Verified on hardware" at the top keeps
 
 ## Implementation Plan
 
-Every commit cites `AP PairingTime v1.0, Block <n>`.
+Every commit cites `AP PairingTime v<X.Y>, Block <n>`, the revision it
+ran under: Blocks 1 and 2 v1.0, Block 3 v1.1.
 
 ### Block 1: Finding
 
@@ -147,13 +193,44 @@ document), no serial, radio address or name in the new text
 `go vet` for linux, windows and darwin, `make cross`, `make ui-test`,
 `GUIDELINES/shared/tools/check`.
 
+### Block 3: Field
+
+- `internal/server/ui/components.js`: `markRange(input, hint)`: by
+  `input.validity`, `aria-invalid` and `aria-describedby` (the hint) on
+  the field and the hint shown, or both cleared; it returns whether the
+  value is good.
+- `internal/server/ui/style.css`: a number field of a `.field` marked
+  `aria-invalid` has a red border and focus outline (`--bad`).
+- `internal/server/ui/partials/pairing.html`: the form `novalidate`, the
+  input `required`, before it a hidden `.warn-text` hint
+  (`pairing.secondsRange`, `role="status"`).
+- `internal/server/ui/cubes.js` (`pairingSection`): the hint's id,
+  `markRange` when the form is drawn and at each input; the submit marks
+  and focuses the field instead of starting where the value is out of
+  range; `startPairing` without its own check.
+- `ui/i18n/<lang>.json`: `pairing.secondsRange` new in all six, FR/IT/NL/PL
+  machine-translated as their files say; `pairing.secondsBad` removed.
+- `tools/ui-test/test_pairing.py`: 660 marks the field (`aria-invalid`,
+  `aria-describedby`, the hint shown, its colour `--warn`, the border
+  `--bad`); Start then starts nothing and focuses the field; an empty
+  field is marked; 255 clears both; the form's `noValidate`.
+- `docs/ui.md`: the pairing time's mark.
+- CHANGELOG fragment, `Changed`.
+
+**Verification:** `make ui-test` (all cases, 1100 and 390 px),
+`MASSIMO_ENV_FILE=/dev/null go test ./...` (the i18n keys),
+`node --check` of the changed scripts, `GUIDELINES/shared/tools/check`.
+
 ## Proposed commit messages
 
 - `chore(aps): +PairingTime v1.0`, this plan, on main.
 - Block 1, `docs(cube): A Cube keeps pairing mode for at most 255 seconds`.
 - Block 2, `fix(pairing): Pairing asks the Cube for at most 255 seconds`.
+- Block 3, with this revision, `feat(ui): The pairing time marks a value out of range`.
 
 ## Change History
 
 - v1.0 (2026-11-15): first revision, by `PLAN++` after `PLAN`, D1-A and
   D2-A.
+- v1.1 (2026-11-15): Block 3, the field marked out of range, by `PLAN++`
+  after the owner's `EVAL`, D1-A to D4-A of v1.1.

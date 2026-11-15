@@ -542,6 +542,24 @@ function showResult(el, text, ok) {
   el.classList.toggle("bad", !!text && !ok);
 }
 
+// markRange marks a number field by what its required, min, max and step
+// allow: a value they refuse sets aria-invalid, which style.css outlines
+// in red, and shows hint, the amber range before the box, which the
+// field then names as its description; a good value clears both. It
+// returns whether the value is good.
+function markRange(input, hint) {
+  const ok = input.validity.valid;
+  if (ok) {
+    input.removeAttribute("aria-invalid");
+    input.removeAttribute("aria-describedby");
+  } else {
+    input.setAttribute("aria-invalid", "true");
+    input.setAttribute("aria-describedby", hint.id);
+  }
+  hint.classList.toggle("hidden", ok);
+  return ok;
+}
+
 // confirmBox asks in the page whether to go on: the question, No and
 // Yes (yes and no their labels, Yes the primary), Escape for No. The
 // caller puts it where the action was asked for, and may focus it. Yes
