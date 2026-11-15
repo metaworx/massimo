@@ -461,3 +461,28 @@ func TestRunAnnouncesBySetting(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// A server on the loopback whose setting announce is auto does not look
+// for Home Assistant on the LAN, and its found answer gives the loopback
+// as the reason (AP LookReason).
+func TestOpenNotLookingOnTheLoopback(t *testing.T) {
+	clearCubeEnv(t)
+	inst, err := Open(context.Background(), Config{Listen: "127.0.0.1:0", DataDir: t.TempDir(), Proxies: []string{"off"}, DiscoverInterval: &never,
+		Announce: Announce{Auto: true}, Logger: quietLog()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer inst.Close()
+	ts := httptest.NewServer(inst.Server().Handler())
+	defer ts.Close()
+	var found struct {
+		Looks    bool `json:"looks"`
+		Announce struct {
+			Why string `json:"why"`
+		} `json:"announce"`
+	}
+	getJSON(t, ts.URL+"/api/v1/integrations/found", &found)
+	if found.Looks || found.Announce.Why != "loopback" {
+		t.Errorf("found %+v, want not looking for the loopback", found)
+	}
+}

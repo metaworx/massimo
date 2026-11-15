@@ -993,6 +993,9 @@ kept here because they cost time to learn.
   so `serve`'s discovery socket is dual-stack.
   With the service's udp4 socket, bound at boot, the original software on the PC
   found no Cube: all ten answers on the owner's LAN went to the service.
+  With the dual-stack socket, the service running beside it on Windows 11,
+  the original software found all ten
+  (2026-11-15, five Cubes on firmware 1.1.3 and another server's five proxies).
   Across Windows accounts, as between the service and a user,
   the port is shared only where the first socket set SO_REUSEADDR.
 - The original software 1.4.6 (`MaxLocalBackend-1.4.6.jar`):

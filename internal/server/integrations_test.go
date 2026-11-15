@@ -249,3 +249,50 @@ func TestFoundIntegrations(t *testing.T) {
 		t.Fatalf("switched off: %d %s", code, text)
 	}
 }
+
+// Where the server does not look on the LAN, the found answer says why
+// (AP LookReason): what decided at the start wins, a setting that
+// announces at the next start waits for the restart, then the setting
+// off, then auto on the loopback.
+func TestFoundIntegrationsWhyNot(t *testing.T) {
+	_, ts, s, st := startRoomsOpts(t, roomsOpts{slow: true})
+	owner := userToken(t, st, "boss", store.RoleOwner)
+	for _, c := range []struct {
+		name, stored, fixedBy string
+		loopback              bool
+		why, value            string
+	}{
+		{"auto on the loopback", "", "", true, "loopback", "auto"},
+		{"auto stored on the loopback", "auto", "", true, "loopback", "auto"},
+		{"off", "off", "", false, "off", "off"},
+		{"off on the loopback", "off", "", true, "off", "off"},
+		{"on, waiting", "on", "", true, "restart", "on"},
+		{"auto off the loopback, waiting", "auto", "", false, "restart", "auto"},
+		{"nothing stored off the loopback", "", "", false, "restart", "auto"},
+		{"the variable", "on", "MASSIMO_ANNOUNCE", false, "fixed", "on"},
+		{"the flag", "", "-announce", true, "fixed", "auto"},
+	} {
+		if c.stored == "" {
+			if err := st.DeleteSetting(t.Context(), store.AnnounceKey); err != nil {
+				t.Fatal(err)
+			}
+		} else if err := st.SetSetting(t.Context(), store.AnnounceKey, c.stored); err != nil {
+			t.Fatal(err)
+		}
+		s.opts.Announce = AnnounceState{FixedBy: c.fixedBy, Loopback: c.loopback}
+		var got struct {
+			Looks    bool        `json:"looks"`
+			Announce *notLooking `json:"announce"`
+		}
+		code, text := callAPI(t, ts, "GET", "/api/v1/integrations/found", owner, "")
+		decodeInto(t, text, &got)
+		want := notLooking{Value: c.value, InEffect: "off", FixedBy: c.fixedBy, Why: c.why}
+		if code != 200 || got.Looks || got.Announce == nil || *got.Announce != want {
+			t.Errorf("%s: %d %s, want %+v", c.name, code, text, want)
+		}
+	}
+	s.opts.FindIntegrations = func(context.Context) ([]FoundIntegration, error) { return nil, nil }
+	if code, text := callAPI(t, ts, "GET", "/api/v1/integrations/found", owner, ""); code != 200 || strings.Contains(text, `"announce"`) {
+		t.Fatalf("a server that looks says no reason: %d %s", code, text)
+	}
+}
