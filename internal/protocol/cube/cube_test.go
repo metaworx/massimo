@@ -69,6 +69,10 @@ func TestParseHello(t *testing.T) {
 	if h.DutyCycle != 0 || h.FreeMemorySlots != 50 || h.CubeDate != "2013-12-09" || h.CubeTime != "20:04" {
 		t.Errorf("status: %+v", h)
 	}
+	// Fields 9 and 10, as the original software 1.4.6 names them.
+	if h.StateCubeTime != "03" || h.NTPCounter != "0000" {
+		t.Errorf("state cube time and NTP counter: %+v", h)
+	}
 	// Shortened form sent over the portal connection.
 	h, err = ParseHello("KMD0000505,0a0106,0113")
 	if err != nil || h.RFAddress != 0x0a0106 {
@@ -291,8 +295,16 @@ func TestParseDeviceList(t *testing.T) {
 		t.Fatalf("want 3 entries, got %d", len(st))
 	}
 	s := st[0]
-	if s.RFAddress != 0x0fdaed || !s.Valid || s.Error || !s.Initialized || s.BatteryLow || !s.GatewayKnown || !s.DST || s.Mode != ModeAuto {
+	if s.RFAddress != 0x0fdaed || !s.Valid || s.Error || !s.Initialized || s.BatteryLow || !s.GatewayKnown || !s.AutoDST || s.Mode != ModeAuto {
 		t.Errorf("flags: %+v", s)
+	}
+	// Byte 5 bit 0x04, seen only together with the error flag (0x0c).
+	if s.Flag04 {
+		t.Errorf("0x04 read in flags 0x12: %+v", s)
+	}
+	flagged, err := ParseDeviceList("CwoBAQMMGAAoAAAA", map[RFAddress]DeviceType{0x0a0101: DeviceRadiatorThermostat})
+	if err != nil || len(flagged) != 1 || !flagged[0].Flag04 || !flagged[0].Error || flagged[0].Valid {
+		t.Errorf("flags 0x0c: %+v %v", flagged, err)
 	}
 	if s.ValvePct == nil || *s.ValvePct != 24 || *s.Setpoint != 20 || s.ActualTemp == nil || *s.ActualTemp != 20.4 {
 		t.Errorf("values: valve=%v setpoint=%v actual=%v", deref(s.ValvePct), deref(s.Setpoint), deref(s.ActualTemp))

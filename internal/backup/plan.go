@@ -292,7 +292,7 @@ func (p *Plan) planNames(f *File, snap *cubelan.Snapshot, present []Device) erro
 	for _, d := range present {
 		backup[d.RFAddress] = d
 	}
-	want := &cube.Metadata{Header: cur.Header, Trailing: cur.Trailing}
+	want := &cube.Metadata{Header: cur.Header, DaylightSaving: cur.DaylightSaving}
 	for _, r := range cur.Rooms {
 		if n := f.RoomName(r.ID); n != "" {
 			r.Name = n

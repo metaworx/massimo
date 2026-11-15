@@ -12,13 +12,13 @@ type DeviceState struct {
 
 	Valid        bool `json:"valid"`
 	Error        bool `json:"error"`
-	IsAnswer     bool `json:"is_answer"` // the entry answers a command (protocol bit is inverted)
+	Flag04       bool `json:"flag_04"` // byte 5 bit 0x04: unknown; seen only together with the error flag (0x0c, 0x0e, 0x1e)
 	Initialized  bool `json:"initialized"`
 	BatteryLow   bool `json:"battery_low"`
 	LinkError    bool `json:"link_error"`
 	PanelLocked  bool `json:"panel_locked"`
 	GatewayKnown bool `json:"gateway_known"`
-	DST          bool `json:"dst"` // automatic DST switching on (set in winter too), not summer time
+	AutoDST      bool `json:"auto_dst"` // byte 6 bit 0x08: the device switches to and from summer time itself (the original's daylightSaving), set in winter too
 	Mode         Mode `json:"mode"`
 
 	// Thermostats only.
@@ -70,13 +70,13 @@ func decodeDeviceState(e []byte, types map[RFAddress]DeviceType) DeviceState {
 	f1, f2 := e[5], e[6]
 	s.Valid = f1&0x10 != 0
 	s.Error = f1&0x08 != 0
-	s.IsAnswer = f1&0x04 == 0
+	s.Flag04 = f1&0x04 != 0
 	s.Initialized = f1&0x02 != 0
 	s.BatteryLow = f2&0x80 != 0
 	s.LinkError = f2&0x40 != 0
 	s.PanelLocked = f2&0x20 != 0
 	s.GatewayKnown = f2&0x10 != 0
-	s.DST = f2&0x08 != 0
+	s.AutoDST = f2&0x08 != 0
 	s.Mode = Mode(f2 & 0x03)
 
 	switch {

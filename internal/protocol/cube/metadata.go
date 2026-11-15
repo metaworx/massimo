@@ -22,10 +22,10 @@ import (
 const HiddenRoom uint8 = 255
 
 type Metadata struct {
-	Header   [2]byte      `json:"-"` // observed as 'V', 0x02; preserved for round trips
-	Rooms    []RoomMeta   `json:"rooms"`
-	Devices  []DeviceMeta `json:"devices"`
-	Trailing []byte       `json:"-"` // after the device list: the original's daylightSaving byte (1 = on); preserved
+	Header         [2]byte      `json:"-"` // observed as 'V', 0x02; preserved for round trips
+	Rooms          []RoomMeta   `json:"rooms"`
+	Devices        []DeviceMeta `json:"devices"`
+	DaylightSaving []byte       `json:"-"` // after the device list: the original's daylightSaving flag (one byte, 1 = on), preserved as read
 }
 
 // RoomMeta describes one room.
@@ -120,7 +120,7 @@ func DecodeMetadata(b []byte) (*Metadata, error) {
 		return nil, r.err
 	}
 	// Empty, not nil, when there are none, so that Encode writes none.
-	m.Trailing = append([]byte{}, r.rest()...)
+	m.DaylightSaving = append([]byte{}, r.rest()...)
 	return m, nil
 }
 
@@ -165,8 +165,8 @@ func (m *Metadata) Encode() ([]byte, error) {
 		buf.WriteString(d.Name)
 		buf.WriteByte(d.RoomID)
 	}
-	if m.Trailing != nil {
-		buf.Write(m.Trailing)
+	if m.DaylightSaving != nil {
+		buf.Write(m.DaylightSaving)
 	} else {
 		buf.WriteByte(0x01)
 	}
