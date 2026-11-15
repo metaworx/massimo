@@ -3018,6 +3018,7 @@ paths:
                       type: object
                       properties:
                         serial: {type: string}
+                        discovery_serial: {type: string, description: "The serial it answers discovery with: the Cube's proxy serial where set, else the Cube's; absent where it answers no discovery."}
                         addr: {type: string}
                         listening: {type: boolean}
                         error: {type: string, description: The last try's error; absent while it listens.}

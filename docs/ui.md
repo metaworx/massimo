@@ -66,9 +66,14 @@ it is drawn once the focus has left the configuration.
 
 The header's line reads, from the left:
 Massimo's logo with the server's version and the time of the last update with **↻**,
-all on one baseline, the M as tall as the page buttons;
+all on one baseline where they fit beside it, the M as tall as the page buttons;
 then the Cube choice with the server's connection to the Cube as a plug;
 then the house, **👤** and the other page buttons.
+Where the version, the server's sign and the time do not fit beside the logo
+on one line, they take a row of their own across the header,
+under the logo and the Cube choice, on a phone under the logo and the page buttons,
+the version on a line of its own where the row is too narrow for all three,
+so that it is cut only where it is wider than the header.
 On a screen narrower than 600 px the Cube choice takes a line of its own,
 **☰** beside the house and 👤 holds **Log** and **System settings**,
 highlighted while one of them is shown,
@@ -84,10 +89,11 @@ The sign-in, the form that creates the first owner and the apps' connect page
 show the logo too, the first two larger, above their titles.
 
 The header stays at the top while the page scrolls.
-Scrolled, it keeps its first line without the time of the last update,
-and the lines under it go until the page is back
+Scrolled, it keeps its first line, the server's sign and the time of the last update,
+without the version, and the lines under it go until the page is back
 at its top, expert mode's line of the Cube's radio budget apart;
-narrower than 600 px the Cube choice then takes the line of **Massimo**.
+narrower than 600 px the Cube choice then takes the line of **Massimo**,
+the sign and the time a short line under it.
 
 - **Cube**:
   a menu that chooses the Cube when the server has several.
@@ -112,7 +118,8 @@ narrower than 600 px the Cube choice then takes the line of **Massimo**.
   for others the choice's entries cannot be chosen.
   A Cube the server finds by itself appears without reloading the page,
   and in the log.
-- **Problems**, beside the Cube choice where something is wrong on any Cube:
+- **Problems**, beside the Cube choice, a green check in a pill's frame
+  where nothing is wrong on any Cube; where something is,
   a pill with an icon per kind (a Cube's link, the radio, a battery, a window
   open too long, the settings), which lists every Cube with a problem as a heading,
   its own sign and its link's badge, and under it its devices with a problem
@@ -129,6 +136,8 @@ narrower than 600 px the Cube choice then takes the line of **Massimo**.
   for a proxy the Cube it serves, and the Massimo server serving it,
   its name a link to the address its announcement on the network gives.
   A window open briefly is not listed: it is a state, not a problem.
+  Its list, as every menu of the page, opens inside the window,
+  no higher than the room below it, and scrolls in itself, not the page.
 - **The time of the last update** and **↻**, one button without a frame,
   which asks the server for the current state now;
   a finger hits it a little beyond what it shows, and ↻ turns while it asks.
@@ -732,14 +741,19 @@ to the top of the page.
   The certificate is the server's own (its source, names and expiry; none on plain HTTP),
   or, where a trusted proxy serves the page, the proxy's, "(proxied)":
   its names, expiry and issuer as the server read it, "not trusted" where it is not valid,
-  with the address the proxy serves;
+  with the address the proxy serves, a link to it in a new window and its copy icon;
+  "being read…" while the server reads it,
+  which it does within seconds of the first request:
+  the page asks again every 2 s while System settings is shown,
+  and says "could not be read" when 30 s have not brought it;
   where the proxy names no scheme (no `X-Forwarded-Proto`), the page's own scheme
   and address, and that with that header the server reads the proxy's certificate;
   a page on HTTPS from a server without TLS says "(proxied)" too,
   and that `-trusted-proxies` would show more.
   The server's version copies on a click, or by its copy icon, whole, with
   what it was built with (the header's does too, without the icon);
-  so does each Cube proxy's address, which the original software connects to.
+  so do each Cube proxy's serial, the serial it answers discovery with ("as …",
+  where it answers discovery) and its address, which the original software connects to.
   A copy says "Copied"; on a page served over plain HTTP the browser gives no
   clipboard to the page, and the copy goes through its copy command instead.
   At its end, for a holder of `settings`,
@@ -787,7 +801,9 @@ to the top of the page.
   one the helper ended without its version says how it ended (`docs/api-v1.md`,
   "GET /api/v1/update?refresh=1").
 - **Maintenance** (with `restart`, `reboot` for its reboot,
-  or `settings` for its announcement and its last two parts):
+  or `settings` for its announcement and its last two parts),
+  in this order: **Announce on the LAN**, **Settings file**, **Restart**
+  and **Reboot the computer**, each under a bold title:
   **Restart the server**
   asks in the section and restarts the server through its service manager
   (`docs/api-v1.md`, "POST /api/v1/restart");
@@ -836,8 +852,9 @@ to the top of the page.
   the serial and the address without the port,
   the duty cycle, the free slots and the radiograms pending,
   a pill with every problem of the Cube (its link, its proxy, its settings file
-  and its devices with theirs, as the header's), whose click opens its list
-  and not the panel, and where its settings come from,
+  and its devices with theirs, as the header's), top-right whatever wraps,
+  a green check where nothing is wrong, whose click opens its list
+  and not the panel, and under them where its settings come from,
   all of it drawn again at every poll, and opens with a click:
   its own badges as its top line (its link where it is not connected,
   a proxy that does not listen, a settings file that differs,
@@ -980,9 +997,10 @@ to the top of the page.
   which the page uses for users whose password the server still hashes;
   the line under it says how many those are,
   and they cannot sign in once it is off until a password is set for them here.
-- **Sign-in providers** (with `auth`, the owner's alone by default):
+- **Sign-in providers** (with `auth`, the owner's alone by default),
+  explained by the ⓘ in its head:
   the redirect URI to register at a provider,
-  the page's address and `api/v1/login/oidc/callback`;
+  the page's address and `api/v1/login/oidc/callback`, with its copy icon;
   every OpenID Connect provider in a panel, its name and key,
   **disabled** and **creates users** as badges,
   with its name on the button, issuer, client ID, client secret (written only:
@@ -996,7 +1014,7 @@ to the top of the page.
   and says what is wrong where the issuer is not reached or named otherwise,
   **Remove**; **Add a provider** opens the form for one, with its key.
 - **Integrations** (with `integrations`, the owner's and the manager's by
-  default; docs/api-v1.md, "Integrations"):
+  default; docs/api-v1.md, "Integrations"), explained by the ⓘ in its head:
   with `settings`, **Integrations may ask to be registered**;
   each request waiting in a panel whose head shows its code, to compare
   with the one the integration shows,

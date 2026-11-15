@@ -383,6 +383,18 @@ function copyEl(text, { label, icon, cls } = {}) {
   return elem("span", "copy-pair", span, copyIcon(() => text, name));
 }
 
+// okPill stands in a problem pill's place where nothing is wrong (a
+// Cube's head, the header): a green check in the pill's frame, label
+// its name and tooltip, with no list behind it, so that a problem's pill
+// takes its place without moving what is beside it.
+function okPill(label) {
+  const pill = elem("span", "ok-pill", iconEl("icon-check", "ni ok-check"));
+  pill.setAttribute("role", "img");
+  pill.setAttribute("aria-label", label);
+  pill.title = label;
+  return pill;
+}
+
 // foundCountEl is the sign of the Cubes found on the network and not
 // served: a cube with their number in a corner badge, in the accent's
 // blue, as information rather than a problem; hidden from a screen
@@ -1086,6 +1098,8 @@ function problemsEl(entries, label) {
   }
   const extra = entries.map((e) => e.summary).filter(Boolean);
   if (!kinds.size && !extra.length) return null;
+  // information alone: nothing wrong, said first (okPill's check)
+  if (!kinds.size) extra.unshift(iconEl("icon-check", "ni ok-check"));
   const details = elem("details", "menu problems");
   const summary = document.createElement("summary");
   summary.className = "problems-sum";
@@ -1149,21 +1163,52 @@ function problemEntry(e) {
 }
 
 // dropdown makes a <details class="menu"> a menu that drops down: one
-// open at a time, closed by a choice of one of its items, by Escape
-// (the focus back on its summary) and by a click outside it. The room
-// tiles' ⋯ and More and the header's 👤 and ☰ are such menus.
+// open at a time, kept in the window (placeMenu), closed by a choice of
+// one of its items, by Escape (the focus back on its summary) and by a
+// click outside it. The room tiles' ⋯ and More and the header's 👤 and ☰
+// are such menus.
 function dropdown(details) {
   details.addEventListener("toggle", () => {
     if (!details.open) return;
     for (const other of document.querySelectorAll("details.menu[open]")) {
       if (other !== details) other.open = false;
     }
+    // after the other toggle listeners, which may fill the list
+    requestAnimationFrame(() => placeMenu(details));
   });
   details.addEventListener("click", (ev) => {
     if (ev.target.closest(".menu-items button")) details.open = false;
   });
   return details;
 }
+
+// placeMenu keeps an open menu's list in the window: where it runs out
+// of the window as the style sheet places it, aligned to its summary's
+// other edge where it fits there, else moved just inside the window,
+// 16 px from its edges; its height capped to the room below it, with a
+// scroll of its own that the page does not take over (style.css
+// .menu-items).
+function placeMenu(details) {
+  const list = details.querySelector(":scope > .menu-items");
+  if (!list || !details.open) return;
+  const gap = 16;
+  const vw = document.documentElement.clientWidth;
+  Object.assign(list.style, { left: "", right: "", maxHeight: "" });
+  const box = details.getBoundingClientRect();
+  const r = list.getBoundingClientRect();
+  const fits = (x) => x >= gap - 0.5 && x + r.width <= vw - gap + 0.5;
+  if (!fits(r.left)) {
+    const other = Math.abs(r.right - box.right) < 1 ? box.left : box.right - r.width;
+    const x = fits(other) ? other : Math.max(gap, Math.min(r.left, vw - gap - r.width));
+    Object.assign(list.style, { left: x - box.left + "px", right: "auto" });
+  }
+  const top = list.getBoundingClientRect().top;
+  list.style.maxHeight = Math.max(160, window.innerHeight - top - gap) + "px";
+}
+
+addEventListener("resize", () => {
+  for (const m of document.querySelectorAll("details.menu[open]")) placeMenu(m);
+});
 
 // menuArrows lets the arrow keys move the focus between the items of
 // an open dropdown, the elements matching selector: down and up, round

@@ -791,13 +791,13 @@ function cubeSettingItems(c, who) {
 function problemsLabelOf(entries) {
   const kinds = ["net", "radio", "battery", "window", "cog"].filter((k) => entries.flatMap(entryItems).some((it) => it.kind === k)); // components.js
   const found = entries.some((e) => e.info) && state.found.length ? tn("found.pill", state.found.length) : "";
-  if (!kinds.length) return found;
+  if (!kinds.length) return [t("problem.none"), found].filter(Boolean).join(" · ");
   return [t("problem.label", { list: kinds.map((k) => t("problem." + k)).join(", ") }), found].filter(Boolean).join(" · ");
 }
 
 // renderCubeProblems draws every Cube's problems beside the Cube choice
-// (problemsEl), nothing where none has one; its list kept open across a
-// poll where it was open.
+// (problemsEl), a green check where none has one (okPill), nothing before
+// there is a Cube; its list kept open across a poll where it was open.
 function renderCubeProblems() {
   const box = $("cube-problems");
   if (!box) return;
@@ -805,7 +805,8 @@ function renderCubeProblems() {
   if (was && was.open) return;
   const entries = cubeProblemEntries();
   const p = problemsEl(entries, problemsLabelOf(entries));
-  box.replaceChildren(...(p ? [p] : []));
+  if (p) box.replaceChildren(p);
+  else box.replaceChildren(...(state.cubes.length ? [okPill(t("problem.none"))] : [])); // components.js
 }
 
 function applySettings() {
@@ -1104,6 +1105,72 @@ function certText(tls) {
 // the short one in the header.
 function renderVersionTitle() {
   copyLabel($("version-short"), state.version ? t("header.versionTitle", { version: state.version }) + " · " + t("copy.hint") : ""); // components.js
+  fitFacts();
+}
+
+// fitFacts puts the version, the server's sign and the time beside the
+// logo where all three fit there on one line, on the logo's baseline, and
+// on a row of their own across the header otherwise (.top-line.facts-row):
+// under the logo and the Cube choice, on a phone under the logo and the
+// pages, the version on a line of its own where that row is narrow too.
+// It measures them beside the logo each time, so that it never swings;
+// the compacted header is left as it is.
+function fitFacts() {
+  const line = document.querySelector(".top-line");
+  if (!line || document.body.classList.contains("scrolled")) return;
+  const brand = line.querySelector(".brand");
+  const facts = line.querySelector(".top-facts");
+  const version = $("version-short");
+  line.classList.remove("facts-row");
+  const b = brand.getBoundingClientRect();
+  const f = facts.getBoundingClientRect();
+  const beside = f.top < b.bottom - 1 && version.scrollWidth <= version.clientWidth + 1;
+  line.classList.toggle("facts-row", !beside);
+}
+
+// watchFacts fits the facts again when the header's width or the logo's
+// size changes, when what the facts show changes (the time of the last
+// update, which comes after the version, and the server's sign), when the
+// page's fonts have come, or when the header is whole again after
+// compacting (fitFacts), after the frame, so that the layout it changes
+// does not call it back within the same one.
+function watchFacts() {
+  const line = document.querySelector(".top-line");
+  let width = -1;
+  let brand = "";
+  const ro = new ResizeObserver(() => {
+    const w = line.getBoundingClientRect().width;
+    // the logo's height too: on a phone the drawing that replaces the
+    // word keeps its width and changes its height
+    const r = line.querySelector(".brand").getBoundingClientRect();
+    const b = r.width + "x" + r.height;
+    if (w === width && b === brand) return;
+    width = w;
+    brand = b;
+    requestAnimationFrame(fitFacts);
+  });
+  ro.observe(line);
+  ro.observe(line.querySelector(".brand"));
+  // the facts beside the logo wrapped under it once the time came, the
+  // version cut; fitFacts changes no text, so it does not call itself
+  let queued = false;
+  new MutationObserver(() => {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(() => {
+      queued = false;
+      fitFacts();
+    });
+  }).observe(line.querySelector(".top-facts"), { childList: true, characterData: true, subtree: true });
+  // the page's fonts change the version's width when they come
+  if (document.fonts) document.fonts.ready.then(() => requestAnimationFrame(fitFacts));
+  // a resize while compacted is fitted once the header is whole again
+  let was = document.body.classList.contains("scrolled");
+  new MutationObserver(() => {
+    const now = document.body.classList.contains("scrolled");
+    if (was && !now) requestAnimationFrame(fitFacts);
+    was = now;
+  }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
 }
 
 async function checkVersion() {
@@ -1486,6 +1553,7 @@ async function init() {
   // the header kept at the top; System settings' row there with its
   // sections menu, its cards that fold, back to top
   stickyHeader();
+  watchFacts();
   for (const page of [$("system"), $("me")]) {
     sectionCards(page);
     pageBar(page);
