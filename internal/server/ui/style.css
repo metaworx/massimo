@@ -192,7 +192,7 @@ body.server-down main .ni.sign, body.server-down .problems-sum, body.server-down
 #nav-menu { display: none; }
 @media (max-width: 599px) {
   .top-line { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "left nav" "cube cube"; }
-  #view-log, #view-settings { display: none; }
+  #view-log, #gear-menu { display: none; }
   #nav-menu { display: block; }
 }
 /* The version, the server's sign and the time on a row of their own where
@@ -272,6 +272,8 @@ button.copy-icon .ni { width: 16px; height: 16px; }
   color: var(--fg);
 }
 .menu.nav-menu > summary:hover, .menu.nav-menu[open] > summary { border-color: var(--accent); }
+/* ⚙ and ☰ highlighted as a page button while one of their pages is shown */
+.menu.nav-menu > summary.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 .nav-menu .menu-items { width: max-content; min-width: 200px; max-width: min(320px, calc(100vw - 32px)); }
 .ni { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .icon-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
@@ -1667,14 +1669,16 @@ massimo-week-program { display: contents; }
    markup marks what each one hides with needs-<capability>, with
    needs-cubes-or-pair what either of the two shows (System settings →
    Cubes), with needs-maintenance what restart, settings or reboot shows
-   (Maintenance), and with needs-system what one of System settings' does (⚙) */
+   (Maintenance), with needs-system what one of System settings' does, and
+   with needs-gear what System info or System settings does (⚙'s menu) */
 .no-read .needs-read, .no-setpoint .needs-setpoint, .no-lock .needs-lock, .no-configure .needs-configure,
 .no-rename .needs-rename, .no-structure .needs-structure, .no-pair .needs-pair, .no-discover .needs-discover,
 .no-backup .needs-backup, .no-restore .needs-restore, .no-users-admin .needs-users-admin, .no-roles .needs-roles,
 .no-roles-disable .needs-roles-disable, .no-capabilities .needs-capabilities, .no-cubes .needs-cubes, .no-cubes-reboot .needs-cubes-reboot,
 .no-settings .needs-settings, .no-auth .needs-auth, .no-integrations .needs-integrations, .no-update .needs-update, .no-restart .needs-restart, .no-reboot .needs-reboot, .no-sync .needs-sync,
 .no-system .needs-system,
-.no-cubes.no-pair .needs-cubes-or-pair, .no-restart.no-settings.no-reboot .needs-maintenance { display: none !important; }
+.no-cubes.no-pair .needs-cubes-or-pair, .no-restart.no-settings.no-reboot .needs-maintenance,
+.no-read.no-system .needs-gear { display: none !important; }
 .no-lock.no-structure .room .menu { display: none; }
 
 /* the sign-in dialog, the first-owner form, System settings → Users and Roles */

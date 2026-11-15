@@ -68,14 +68,14 @@ The header's line reads, from the left:
 Massimo's logo with the server's version and the time of the last update with **↻**,
 all on one baseline where they fit beside it, the M as tall as the page buttons;
 then the Cube choice with the server's connection to the Cube as a plug;
-then the house, **👤** and the other page buttons.
+then the house, **👤**, the log and **⚙**, the menu of the settings pages.
 Where the version, the server's sign and the time do not fit beside the logo
 on one line, they take a row of their own across the header,
 under the logo and the Cube choice, on a phone under the logo and the page buttons,
 the version on a line of its own where the row is too narrow for all three,
 so that it is cut only where it is wider than the header.
 On a screen narrower than 600 px the Cube choice takes a line of its own,
-**☰** beside the house and 👤 holds **Log** and **System settings**,
+**☰** beside the house and 👤 holds **Log** and ⚙'s pages,
 highlighted while one of them is shown,
 and the logo is the mark alone, the M with the clock in its V.
 
@@ -148,16 +148,22 @@ the sign and the time a short line under it.
   a clock that was off by 90 s or more says by how much ("3 min ahead").
 - **👤** opens the personal settings (see Personal settings);
   its tooltip names whose they are, by display name and login.
-  The items of **☰** have the icons of their pages.
-- The page buttons, a house, a person, a sheet and a cog,
-  switch between **Rooms**, **Personal settings**, **Log** and **System settings**.
+  The items of **☰** and of ⚙ have the icons of their pages.
+- The page buttons, a house, a person and a sheet,
+  switch between **Rooms**, **Personal settings** and **Log**.
+- **⚙** is a menu of the settings pages, each for the roles that may open it:
+  **Cube settings**, the chosen Cube's, for a role with `cubes` or with `pair`;
+  **System settings**, for a role with one of its capabilities;
+  and **System info**, for every role with `read`.
+  It is highlighted while one of them is shown, as a page button is.
   The sheet turns amber with a triangle, or red with a cross,
   while the log holds a warning or an error not yet settled or marked seen (see Log),
   its name with the count;
   on a phone ☰ carries the mark, and the log's entry in it the sign.
 - The page shown is in the address, Rooms without one:
   `#log`, `#me` (Personal settings, or at a card `#profile`, `#prefs` and
-  `#notify`) and `#system` (System settings),
+  `#notify`), `#cube` (Cube settings), `#system` (System settings)
+  and `#info` (System info),
   so that a reload opens it again, the browser's back and forward move between
   the pages, and an address can be kept as a bookmark.
   The log's range, kind and device follow its page,
@@ -684,9 +690,9 @@ It caches nothing else: the page loads from the server as before.
 
 ## System settings
 
-The cog in the header, **System settings**, holds what is the server's,
+⚙ → **System settings** holds what is the server's,
 each part for a role with its capability;
-a role with none of them (the viewer's, a guest's) has no cog.
+a role with none of them (the viewer's, a guest's) has no such entry in ⚙.
 
 The page is a card per part, as wide as the page:
 System Info first, then Software update, Maintenance, Cubes, Users, Roles,

@@ -134,12 +134,23 @@
       <button type="button" id="view-tiles" class="icon-btn nav-btn active" aria-current="page" aria-label="rooms" title="Rooms" data-i18n-attr="aria-label:nav.rooms title:nav.roomsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-house"/></svg></button>
       <button type="button" id="view-me" class="icon-btn nav-btn" aria-label="personal settings" title="Personal settings" data-i18n-attr="aria-label:nav.user title:nav.userTitle"><svg class="ni" aria-hidden="true"><use href="#icon-user"/></svg></button>
       <button type="button" id="view-log" class="icon-btn nav-btn" aria-label="log" title="Log" data-i18n-attr="aria-label:nav.log title:nav.logTitle"><svg class="ni" aria-hidden="true"><use href="#icon-log"/></svg></button>
-      <button type="button" id="view-settings" class="icon-btn nav-btn needs-system" aria-label="system settings" title="System settings" data-i18n-attr="aria-label:nav.settings title:nav.settingsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg></button>
+      <!-- ⚙: the settings pages, each for the roles that may open it
+           (log.js mayShow); ☰ holds the same under Log below 600 px -->
+      <details id="gear-menu" class="menu nav-menu gear-menu needs-gear">
+        <summary id="view-gear" class="nav-btn" aria-label="settings" title="Settings" data-i18n-attr="aria-label:nav.gear title:nav.gearTitle"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg></summary>
+        <div class="menu-items">
+          <button type="button" id="gear-cube" class="needs-cubes-or-pair"><svg class="ni" aria-hidden="true"><use href="#icon-cube3d"/></svg><span data-i18n="nav.cubeTitle">Cube settings</span></button>
+          <button type="button" id="gear-system" class="needs-system"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg><span data-i18n="nav.settingsTitle">System settings</span></button>
+          <button type="button" id="gear-info" class="needs-read"><svg class="ni" aria-hidden="true"><use href="#icon-info"/></svg><span data-i18n="nav.infoTitle">System info</span></button>
+        </div>
+      </details>
       <details id="nav-menu" class="menu nav-menu">
         <summary class="nav-btn" aria-label="more pages" title="More pages" data-i18n-attr="aria-label:nav.more title:nav.moreTitle"><svg class="ni" aria-hidden="true"><use href="#icon-menu"/></svg></summary>
         <div class="menu-items">
           <button type="button" id="menu-log"><svg class="ni" aria-hidden="true"><use href="#icon-log"/></svg><span data-i18n="nav.logTitle">Log</span></button>
+          <button type="button" id="menu-cube" class="needs-cubes-or-pair"><svg class="ni" aria-hidden="true"><use href="#icon-cube3d"/></svg><span data-i18n="nav.cubeTitle">Cube settings</span></button>
           <button type="button" id="menu-system" class="needs-system"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg><span data-i18n="nav.settingsTitle">System settings</span></button>
+          <button type="button" id="menu-info" class="needs-read"><svg class="ni" aria-hidden="true"><use href="#icon-info"/></svg><span data-i18n="nav.infoTitle">System info</span></button>
         </div>
       </details>
     </nav>
@@ -303,6 +314,22 @@
       <!-- partials: system-end -->
     </div>
     <button type="button" class="icon-btn to-top hidden" aria-label="back to top" title="Back to top" data-i18n-attr="aria-label:page.toTop title:page.toTopTitle"><svg class="ni" aria-hidden="true"><use href="#icon-up"/></svg></button>
+  </section>
+
+  <!-- System info, the page ⚙ → System info opens, for every role with
+       read: its row kept at the top under the header, with the title. -->
+  <section id="info-page" class="settings settings-page info-page hidden" aria-labelledby="info-title">
+    <div class="page-bar">
+      <h2 id="info-title" data-i18n="nav.infoTitle">System info</h2>
+    </div>
+  </section>
+
+  <!-- Cube settings, the page ⚙ → Cube settings opens, for a role with
+       cubes or with pair: the Cube chosen in the header. -->
+  <section id="cube-page" class="settings settings-page cube-page hidden" aria-labelledby="cube-page-title">
+    <div class="page-bar">
+      <h2 id="cube-page-title" data-i18n="nav.cubeTitle">Cube settings</h2>
+    </div>
   </section>
 
   <section id="house" class="tile house needs-setpoint hidden">
