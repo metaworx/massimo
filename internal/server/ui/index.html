@@ -329,11 +329,13 @@
   </section>
 
   <!-- Cube settings, the page ⚙ → Cube settings opens, for a role with
-       cubes or with pair: the Cube chosen in the header. -->
+       cubes or with pair: the panel of the Cube chosen in the header,
+       open, its head the page's title row (cubes.js renderCubePage), and
+       the outcome of the last action under it. -->
   <section id="cube-page" class="settings settings-page cube-page hidden" aria-labelledby="cube-page-title">
-    <div class="page-bar">
-      <h2 id="cube-page-title" data-i18n="nav.cubeTitle">Cube settings</h2>
-    </div>
+    <h2 id="cube-page-title" class="visually-hidden" data-i18n="nav.cubeTitle">Cube settings</h2>
+    <div id="cube-page-body" aria-live="polite"></div>
+    <p id="cube-page-msg" class="small cubes-msg hidden" role="status"></p>
   </section>
 
   <section id="house" class="tile house needs-setpoint hidden">

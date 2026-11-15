@@ -768,6 +768,26 @@ body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8p
 .cube-panel:not([open]) > .cube-top-line { display: none; }
 .cube-panel[open] > summary > .panel-badges { display: none; } /* the source is on the top line then */
 .cube-cols > .cube-form { grid-area: settings; display: grid; gap: 4px; align-content: start; min-width: 0; }
+/* Cube settings (cubes.js renderCubePage): the chosen Cube's panel open,
+   its head the page's title row, kept under the header as a page's row
+   is, without the fold's chevron */
+.cube-page .panel.cube-panel > summary {
+  position: sticky;
+  top: var(--top-h, 0px);
+  z-index: 5;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin: -8px -12px 10px;
+  padding: 8px 12px;
+  border-radius: 10px 10px 0 0;
+  background: var(--card);
+  cursor: default;
+  font-size: 1.1rem;
+}
+body.scrolled .cube-page .panel.cube-panel > summary { box-shadow: 0 8px 8px -8px rgba(0, 0, 0, 0.25); }
+.cube-page .panel.cube-panel > summary::before { display: none; }
+.cube-page .cube-head-who { grid-column: 1; }
+.cube-page .cube-pill { grid-column: 2; }
+.cube-page .panel.cube-panel > summary > .panel-badges { grid-column: 1 / -1; }
 .cube-cols > p.needs-cubes { grid-area: settings; }
 .cube-cols > .cube-actions { grid-area: actions; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 10px; margin-top: 6px; border-top: 1px solid var(--line); }
 .cube-cols > .cube-actions > .cube-pairing, .cube-cols > .cube-actions > .cube-reboot { display: contents; } /* over .panel .actions */

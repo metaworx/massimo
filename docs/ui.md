@@ -688,6 +688,19 @@ shows a notification in the language the page last told it
 or hands it to the page in front, and a tap opens the page.
 It caches nothing else: the page loads from the server as before.
 
+## Cube settings
+
+⚙ → **Cube settings** shows the panel of the Cube chosen in the header,
+as System settings → Cubes draws it, for a role with `cubes` or with `pair`
+(the pairing alone for `pair`).
+The panel is open and stays open: its head, the Cube's sign, name, serial,
+radio budget and pill, is the page's title row, kept under the header as the
+page scrolls, and a click on it folds nothing.
+The page follows the Cube choice and every poll, as the card does,
+and what it saves shows in System settings.
+A panel is drawn in one place at a time:
+while Cube settings is shown, System settings' list does not hold it.
+
 ## System info
 
 ⚙ → **System info** is for every role with `read`, a viewer's too:
