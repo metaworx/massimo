@@ -127,8 +127,8 @@ function applyCaps() {
   $("setup").classList.toggle("hidden", !(me && me.setup));
   renderOpenBanner();
   renderMe();
-  markSettingsPages(); // log.js
-  if (!mayShow(currentView)) showView("tiles", "replace"); // log.js: a page the user signed in now may not open
+  markSettingsPages(); // pages.js
+  if (!mayShow(currentView)) showView("tiles", "replace"); // pages.js: a page the user signed in now may not open
 }
 
 // renderOpenBanner warns under the header while the server asks for no
@@ -212,7 +212,7 @@ let oidcError = null;
 let oidcLinked = null;
 
 // oidcReturn reads the fragment a provider's sign-in comes back with,
-// before the page reads its own (log.js showAddress): #oidc=<code>,
+// before the page reads its own (pages.js showAddress): #oidc=<code>,
 // traded for the session, or #oidc-error=<reason>; a link's,
 // #oidc-link-confirm=<code> or #oidc-link-error=<reason>, opens My
 // profile, which shows the link to confirm or says why there is none.
