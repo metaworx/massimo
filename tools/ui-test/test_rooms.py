@@ -116,7 +116,7 @@ def test_open_window(page, case):
 
 
 def test_problems_in_the_heads(page, case):
-    """A radiator thermostat with a transmit error and a low battery, and
+    """A radiator thermostat with a transmit error and a weak battery, and
     two thermostats in different modes: the room's head shows radio,
     battery and the mixed modes, radio in red with a cross; the list names the devices,
     each once, with their badges, a failure bold and led by its cross in
@@ -130,6 +130,7 @@ def test_problems_in_the_heads(page, case):
       const [a, b] = r.devices.filter((d) => isThermostat(d));
       const da = JSON.parse(JSON.stringify(a));
       Object.assign(da.state, { error: true, battery_low: true, mode: "manual" });
+      da.battery = "weak";
       updateDevice(da);
       if (b) {
         const db = JSON.parse(JSON.stringify(b));
@@ -149,7 +150,7 @@ def test_problems_in_the_heads(page, case):
     room.locator(".tile-head .problems-sum").click()
     entries = room.locator(".tile-head .problem-entry")
     first = entries.first.inner_text()
-    assert page.evaluate("t('badge.transmitError')") in first and page.evaluate("t('badge.batteryLow')") in first, \
+    assert page.evaluate("t('badge.transmitError')") in first and page.evaluate("t('badge.batteryWeak')") in first, \
         f"the device with its badges ({first!r})"
     bad = entries.first.locator(".flag.bad").first
     assert bad.locator("svg.mark-sign use").get_attribute("href") == "#mark-x", "a failure led by its cross"
@@ -329,3 +330,40 @@ def test_virtual_wall_thermostat(page, case):
     assert virtual.locator("input[name=rf_address]").get_attribute("placeholder") == room["vwt"]["rf_address"], "its address as the placeholder"
     named_buttons(page, "the virtual wall thermostat")
     page.evaluate("() => { state.settings.expert = false; applySettings(); }")
+
+
+def test_battery_levels(page, case):
+    """The battery's level, the server's (AP LegacyLogs v1.0, Block 11):
+    weak in amber with its word, low in red with its own; the flag alone
+    of a device that has a level shows nothing."""
+    page.evaluate("""() => {
+      const r = state.rooms.find((r) => r.devices.some((d) => isThermostat(d))) || state.rooms[0];
+      window.__room = r.name;
+      window.__dev = JSON.parse(JSON.stringify(r.devices.find((d) => isThermostat(d))));
+    }""")
+    name = page.evaluate("window.__room")
+    room = page.locator(".room", has=page.locator(".room-name", has_text=name)).first
+
+    def battery_tone(level, flag):
+        page.evaluate("""([level, flag]) => {
+          const d = JSON.parse(JSON.stringify(window.__dev));
+          d.reported = true;
+          d.state = Object.assign({}, d.state, { error: false, link_error: false, battery_low: flag });
+          d.battery = level;
+          updateDevice(d);
+        }""", [level, flag])
+        icons = room.locator(".tile-head .problems-sum svg", has=page.locator("use[href='#icon-battery']"))
+        if icons.count() == 0:
+            return None
+        return icons.first.get_attribute("class") or ""
+
+    assert "tone-warn" in (battery_tone("weak", False) or ""), "weak in amber"
+    room.locator(".tile-head .problems-sum").click()
+    assert page.evaluate("t('badge.batteryWeak')") in room.locator(".tile-head .problem-entry").first.inner_text(), "weak's word"
+    page.keyboard.press("Escape")
+    assert "tone-bad" in (battery_tone("low", True) or ""), "low in red"
+    room.locator(".tile-head .problems-sum").click()
+    assert page.evaluate("t('badge.batteryLow')") in room.locator(".tile-head .problem-entry").first.inner_text(), "low's word"
+    page.keyboard.press("Escape")
+    assert battery_tone("ok", True) is None, "the flag alone, at ok, shows nothing"
+    page.evaluate("() => updateDevice(window.__dev)")

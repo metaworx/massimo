@@ -248,7 +248,7 @@ Every room has a tile:
   the radio, a Wi-Fi fan or a tower as you choose (My settings),
   a device that lost its link (amber, a triangle),
   or the Cube could not reach (red, a cross);
-  a battery, one running low (amber);
+  a battery, one getting weak (amber) or low (red), as the server keeps its level;
   an open window, the opening sash or the paned window as you choose,
   a window contact reporting it:
   blue for its first 5 minutes, then amber with a triangle,
@@ -678,7 +678,7 @@ also while no page is open.
   On an iPhone or iPad the page has to be added to the Home Screen first.
 - **What notifies you**:
   a switch per kind, with its delay or threshold, each with its help:
-  a window open (after 30 min), frost (below 8 °C), a low battery,
+  a window open (after 30 min), frost (below 8 °C), a low battery, a battery getting weak,
   a device's error, the Cube out of reach (after 10 min) and back,
   and, off by default, a device that sends no news, a device paired,
   a new Cube on the network and a new version of Massimo.

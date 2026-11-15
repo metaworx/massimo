@@ -171,6 +171,11 @@ type Device struct {
 	// window is open (SetWindow): when the server saw it open, and when
 	// it counts as open too long, first as a warning, then as an alert.
 	Window *WindowTimes `json:"window,omitempty"`
+	// Battery is a reported device's battery level, ok, weak or low,
+	// which the server keeps from the history of its battery flag
+	// (internal/battery); empty for a virtual wall thermostat and a
+	// device without a state.
+	Battery string `json:"battery,omitempty"`
 	// Stale marks a thermostat whose entry has not changed for its
 	// type's stale threshold (Staleness): it may be out of range or out
 	// of battery, and its values may be old. Shutter contacts and eco buttons transmit only

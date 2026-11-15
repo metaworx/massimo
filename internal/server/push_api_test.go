@@ -225,9 +225,11 @@ func TestNotifyPreferenceChecked(t *testing.T) {
 	}
 }
 
-// A device of the fake Cube whose battery goes low is told to the user
+// A device of the fake Cube that reports an error is told to the user
 // with a subscription, through the server's events and the rules; a
-// user without one is told nothing.
+// user without one is told nothing. (A battery is told only once its
+// level changes, after minutes: internal/notify's and battery_test.go's
+// tests have it.)
 func TestNotificationFromTheCube(t *testing.T) {
 	opts := storeOptions(t, t.TempDir(), "secret")
 	var log syncBuffer
@@ -242,17 +244,17 @@ func TestNotificationFromTheCube(t *testing.T) {
 		var c cubeView
 		return getJSON(t, ts, "secret", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
 	})
-	// 0a010d reports manual, 21 °C, valve 30 %; then its battery low.
+	// 0a010d reports manual, 21 °C, valve 30 %; then an error.
 	greeting, _ := fakecube.LoadGreeting(fixture)
 	l := greeting[len(greeting)-1]
 	raw, _ := base64.StdEncoding.DecodeString(l.Data)
 	copy(raw, []byte{0x0b, 0x0a, 0x01, 0x0d, 0x09, 0x12, 0x01, 30, 42, 0, 0, 0})
 	fc.SetDeviceList(cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(raw)})
 	eventually(t, "the first state", func() bool { return strings.Contains(log.String(), "device=0a010d") })
-	raw[6] |= 0x80
+	raw[5] |= 0x08
 	fc.SetDeviceList(cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(raw)})
 	eventually(t, "the notification", func() bool {
-		return strings.Contains(log.String(), "msg=notification") && strings.Contains(log.String(), "kind=battery_low cube=KEQ0000100 device=0a010d")
+		return strings.Contains(log.String(), "msg=notification") && strings.Contains(log.String(), "kind=device_error cube=KEQ0000100 device=0a010d")
 	})
 	if n := strings.Count(log.String(), "msg=notification"); n != 1 {
 		t.Fatalf("%d notifications, want the subscriber's one:\n%s", n, log.String())
@@ -331,19 +333,19 @@ func TestNotificationDelivered(t *testing.T) {
 		return getJSON(t, ts, "secret", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
 	})
 	mine, theirs := notificationEvents(t, ts, "secret"), notificationEvents(t, ts, op)
-	// 0a010d reports manual, 21 °C, valve 30 %; then its battery low.
+	// 0a010d reports manual, 21 °C, valve 30 %; then an error.
 	greeting, _ := fakecube.LoadGreeting(fixture)
 	l := greeting[len(greeting)-1]
 	raw, _ := base64.StdEncoding.DecodeString(l.Data)
 	copy(raw, []byte{0x0b, 0x0a, 0x01, 0x0d, 0x09, 0x12, 0x01, 30, 42, 0, 0, 0})
 	fc.SetDeviceList(cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(raw)})
 	eventually(t, "the first state", func() bool { return strings.Contains(log.String(), "device=0a010d") })
-	raw[6] |= 0x80
+	raw[5] |= 0x08
 	fc.SetDeviceList(cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(raw)})
 
 	select {
 	case n := <-mine:
-		if n.Kind != notify.KindBatteryLow || n.Cube != "KEQ0000100" || n.Device != "0a010d" {
+		if n.Kind != notify.KindDeviceError || n.Cube != "KEQ0000100" || n.Device != "0a010d" {
 			t.Fatalf("the stream's notification: %+v", n)
 		}
 	case <-time.After(10 * time.Second):
@@ -352,10 +354,10 @@ func TestNotificationDelivered(t *testing.T) {
 	eventually(t, "the push", func() bool { return len(svc.Received()) == 1 })
 	got := svc.Received()[0]
 	var n notify.Notification
-	if got.Err != nil || json.Unmarshal(got.Message, &n) != nil || n.Kind != notify.KindBatteryLow || n.Device != "0a010d" || got.Path != "/send/owner" {
+	if got.Err != nil || json.Unmarshal(got.Message, &n) != nil || n.Kind != notify.KindDeviceError || n.Device != "0a010d" || got.Path != "/send/owner" {
 		t.Fatalf("the push: %+v %s", got, got.Message)
 	}
-	if h := got.Header; h.Get("TTL") != "86400" || h.Get("Urgency") != "normal" || h.Get("Topic") != "battery_low-0a010d" {
+	if h := got.Header; h.Get("TTL") != "86400" || h.Get("Urgency") != "normal" || h.Get("Topic") != "device_error-0a010d" {
 		t.Fatalf("the push's headers: %v", h)
 	}
 	eventually(t, "the local deliverer", func() bool {
@@ -363,7 +365,7 @@ func TestNotificationDelivered(t *testing.T) {
 		defer mu.Unlock()
 		return len(local) == 1
 	})
-	if !strings.HasSuffix(local[0], " battery_low 0a010d") || strings.HasPrefix(local[0], "0 ") {
+	if !strings.HasSuffix(local[0], " device_error 0a010d") || strings.HasPrefix(local[0], "0 ") {
 		t.Fatalf("the local deliverer: %v", local)
 	}
 	eventually(t, "the delivery noted", func() bool {

@@ -114,14 +114,14 @@ func kindOf(r *http.Request) (view.Kind, error) {
 func (s *Server) roomsOf(rt *runtime, kind view.Kind) []view.Room {
 	rooms := view.RoomsOf(rt.client.Snapshot(), rt.hidden(), s.staleness(), kind, rt.roomInfo())
 	for i := range rooms {
-		s.withWindow(rooms[i].Devices)
+		rt.withBattery(s.withWindow(rooms[i].Devices))
 	}
 	return rooms
 }
 
 // devicesOf is the device list of a Cube as the API shows it in a view.
 func (s *Server) devicesOf(rt *runtime, kind view.Kind) []view.Device {
-	return s.withWindow(view.DevicesOf(rt.client.Snapshot(), rt.hidden(), s.staleness(), kind, rt.roomInfo()))
+	return rt.withBattery(s.withWindow(view.DevicesOf(rt.client.Snapshot(), rt.hidden(), s.staleness(), kind, rt.roomInfo())))
 }
 
 // roomAlias is a virtual wall thermostat named by its room, room-<id>.

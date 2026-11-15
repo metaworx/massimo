@@ -394,14 +394,18 @@ function deviceIcon(d) {
 
 // deviceProblems are what is wrong with a device, as problemsEl's items:
 // a radio fault (the Cube could not send to it, or it lost its link) and
-// a low battery; withWindow, also an open window, with its age.
+// a weak or low battery; withWindow, also an open window, with its age.
 function deviceProblems(d, withWindow) {
   const s = d.state || {};
   const out = [];
   if (!d.reported) return out;
   if (s.error) out.push({ kind: "radio", icon: problemIcon("radio"), sign: PROBLEM_SIGNS.radio, tone: "bad", text: t("badge.transmitError") });
   if (s.link_error) out.push({ kind: "radio", icon: problemIcon("radio"), sign: PROBLEM_SIGNS.radio, tone: "warn", text: t("badge.linkError") });
-  if (s.battery_low) out.push({ kind: "battery", icon: PROBLEM_KINDS.battery, tone: "warn", text: t("badge.batteryLow"), at: received(d, "battery_low"), stale: d.stale });
+  // The battery's level, the server's (internal/battery): weak amber, low
+  // red; a device of a server without levels by its flag, amber.
+  if (d.battery === "low") out.push({ kind: "battery", icon: PROBLEM_KINDS.battery, tone: "bad", text: t("badge.batteryLow"), at: received(d, "battery_low"), stale: d.stale });
+  else if (d.battery === "weak") out.push({ kind: "battery", icon: PROBLEM_KINDS.battery, tone: "warn", text: t("badge.batteryWeak"), at: received(d, "battery_low"), stale: d.stale });
+  else if (d.battery === undefined && s.battery_low) out.push({ kind: "battery", icon: PROBLEM_KINDS.battery, tone: "warn", text: t("badge.batteryLow"), at: received(d, "battery_low"), stale: d.stale });
   if (withWindow && s.window_open === true) {
     out.push({ kind: "window", icon: problemIcon("window"), sign: PROBLEM_SIGNS.window, tone: WINDOW_TONE[windowState(d)], text: t("badge.open"), at: received(d, "window_open"), stale: d.stale });
   }

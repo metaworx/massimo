@@ -329,6 +329,20 @@ and from serve's store on one of the owner's hosts (2026-11-11 to 14):
   and its memory slot back within 3 to 6 s once the members answered.
   A 0x40 to a room whose members did not answer held its slot for at least
   3.9 days at 0 % duty.
+- A device's battery flag (byte 6 bit 0x80), 2026-11-11 to 15 on the owner's Cubes:
+  - Two radiator thermostats showed it for 1 to 4 minutes at a time, ten and
+    four times in three days, each time with a report out of turn and
+    cleared by another: the device reports when its battery state changes.
+  - In the decalcification hour (Saturday 11:03 to 11:05 UTC), all three that
+    ever flickered showed it, and were the only radiator thermostats to
+    report then: the valve's full travel is the week's heaviest load.
+  - A wall thermostat, with no motor, went from clear to steady between two
+    reports.
+  - No device was seen going from flickering to steady in those days; in
+    February five devices had it steady for 4 to 7 days, until new batteries.
+  - Massimo keeps a level per device from this: weak at the first flag,
+    low when it stays 15 minutes, weak again ok after the next
+    decalcification without it.
 - The duty cycle falls within the hour: on one Cube from 21 % at 14:05 to 3 %
   at 14:42 on 2026-11-13 with no client command, and 21 % five minutes after
   a full hour; 3 of 19 falls between readings had no full hour between them.

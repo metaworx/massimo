@@ -30,6 +30,7 @@ import (
 var (
 	eventMessages = map[string]string{
 		"state":                "device state",
+		"battery":              "device battery level",
 		"connected":            "cube connected",
 		"disconnected":         "cube connection lost",
 		"cube_found":           "cube found on the LAN",

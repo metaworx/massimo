@@ -4385,7 +4385,7 @@ components:
         actual_temp: {type: number, description: "The last measured temperature the device reported, kept while its entries carry none; received.actual_temp says when it appeared"}
         valve_pct: {type: integer}
         window_open: {type: boolean}
-        battery_low: {type: boolean}
+        battery_low: {type: boolean, description: "The battery flag as the Cube shows it now; the device's battery has the level the server keeps"}
         error: {type: boolean, description: Transmit error reported by the Cube}
         link_error: {type: boolean}
         panel_locked: {type: boolean, description: Key lock active on the device; present when true}
@@ -4422,6 +4422,7 @@ components:
             open_since: {type: string, format: date-time}
             warn_at: {type: string, format: date-time}
             alert_at: {type: string, format: date-time}
+        battery: {type: string, enum: [ok, weak, low], description: "A reported device's battery level, from the history of its flag: weak once the flag was seen, low once it stayed 15 minutes; ok again after a long valve move without it (weak) or an hour without it (low). Absent for a virtual wall thermostat and a device without state"}
         stale: {type: boolean, description: "Radiator or wall thermostat whose entry has not changed for its stale threshold (stale_after, 50 hours, or stale_after_wall, 24 hours): out of range, flat battery, or just quiet. Present when true. A virtual wall thermostat is stale when every source of its actual_temp is"}
         virtual: {type: boolean, description: "A room's virtual wall thermostat, which the server computes from the room's devices; present when true"}
         room_uid: {type: string, description: "A virtual wall thermostat's room's uid"}

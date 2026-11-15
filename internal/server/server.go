@@ -95,6 +95,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/announce"
 	"go.metaworx.ch/massimo/internal/backup"
+	"go.metaworx.ch/massimo/internal/battery"
 	"go.metaworx.ch/massimo/internal/certs"
 	"go.metaworx.ch/massimo/internal/cubeio"
 	"go.metaworx.ch/massimo/internal/cubelan"
@@ -429,6 +430,8 @@ type runtime struct {
 	// last is each device's state as the last state event had it, for
 	// the changes of the next one; only the pump uses it.
 	last map[cube.RFAddress]*view.State
+	// battery keeps the devices' battery levels (battery.go).
+	battery *battery.Tracker
 	// vwt is the rooms' uids and settings, and each room's virtual wall
 	// thermostat as its last event had it (vwt.go).
 	vwt vwtState
@@ -867,6 +870,7 @@ func (s *Server) proxyRuntime(pl ProxyListener) (*runtime, error) {
 // pump forwards client events to the SSE subscribers and learns the
 // serial once the Cube is connected.
 func (s *Server) pump(ctx context.Context, rt *runtime) {
+	s.rebuildBattery(ctx, rt) // before the first state, so that the replay comes first
 	for {
 		select {
 		case <-ctx.Done():
@@ -908,6 +912,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 				continue
 			}
 			ev := event{Kind: e.Kind.String(), Time: time.Now()}
+			var batteryChanges []battery.Change
 			if e.Device != 0 {
 				ev.Device = e.Device.String()
 				snap := rt.client.Snapshot()
@@ -928,6 +933,10 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 				if _, ok := rt.client.Snapshot().State(e.Device); ok {
 					dv := view.DeviceOf(rt.client.Snapshot(), e.Device, s.staleness())
 					dv.SetWindow(s.windowLimits())
+					if r, ok := batteryReport(dv); ok && e.Kind == cubelan.EventState {
+						batteryChanges = rt.battery.Report(ev.Device, ev.Time, r)
+					}
+					rt.setBattery(&dv)
 					ev.State = dv
 					if e.Kind == cubelan.EventState {
 						if prev, had := rt.last[e.Device]; had {
@@ -943,6 +952,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			}
 			if e.Kind == cubelan.EventForgotten {
 				delete(rt.last, e.Device)
+				rt.battery.Forget(e.Device.String())
 				rt.follow.forget(e.Device)
 			}
 			if e.Kind == cubelan.EventPaired {
@@ -965,6 +975,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			for _, a := range after {
 				rt.emit(a)
 			}
+			s.emitBattery(rt, batteryChanges)
 			switch e.Kind {
 			case cubelan.EventState, cubelan.EventMetadata, cubelan.EventConnected, cubelan.EventConfig, cubelan.EventForgotten:
 				s.publishVWTs(rt, ev.Command)
@@ -1693,6 +1704,7 @@ func (s *Server) getDevice(w http.ResponseWriter, r *http.Request) error {
 	}
 	d := deviceDetail{Device: view.DeviceOf(snap, rf, s.staleness())}
 	d.SetWindow(s.windowLimits())
+	rt.setBattery(&d.Device)
 	if c != nil {
 		d.Firmware, d.Thermostat, d.Wall = c.Firmware, c.Thermostat, c.Wall
 		if d.Wall != nil && st.Valid {

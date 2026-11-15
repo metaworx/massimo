@@ -279,7 +279,7 @@ func (s *Server) pushNotify(ev notify.Event) {
 // device's state, pairing, a device forgotten.
 func (s *Server) notifyEvent(rt *runtime, ev event) {
 	switch ev.Kind {
-	case "connected", "disconnected", "state", "paired", "device_forgotten":
+	case "connected", "disconnected", "state", "battery", "paired", "device_forgotten":
 	default:
 		return
 	}
@@ -291,6 +291,9 @@ func (s *Server) notifyEvent(rt *runtime, ev event) {
 			st := dv.State
 			n.State = &notify.State{WindowOpen: st.WindowOpen, BatteryLow: st.BatteryLow, Error: st.Error, LinkError: st.LinkError, ActualTemp: st.ActualTemp}
 		}
+	}
+	if ev.Kind == "battery" {
+		n.Values = map[string]any{"level": ev.Summary["level"]}
 	}
 	if ev.Paired != nil {
 		n.Serial = ev.Paired.Serial

@@ -1017,7 +1017,7 @@ keep the default:
 
 ```json
 {"cube_offline": {"on": true, "after_min": 10}, "window_open": {"on": true, "after_min": 30},
- "frost": {"on": true, "below_c": 8}, "battery_low": {"on": true}, "device_error": {"on": true},
+ "frost": {"on": true, "below_c": 8}, "battery_low": {"on": true}, "battery_weak": {"on": true}, "device_error": {"on": true},
  "device_stale": {"on": false}, "paired": {"on": false}, "cube_found": {"on": false}, "update": {"on": false}}
 ```
 
@@ -1026,7 +1026,8 @@ keep the default:
 | `cube_offline` | the Cube disconnected and is not back within `after_min` | on, 10 min |
 | `cube_online` | the Cube is back after a `cube_offline` was told | on |
 | `window_open` | a window opened and is still open after `after_min` | on, 30 min |
-| `battery_low` | a device's battery went low | on |
+| `battery_low` | a device's battery flag held for 15 minutes: change the batteries (its `battery` `low`) | on |
+| `battery_weak` | a device's battery flag seen, as under the valve motor's load, and still weak after 15 minutes (its `battery` `weak`); once until a long valve move goes by without it | on |
 | `device_error` | a device reports an error or a link error | on |
 | `frost` | a device's measured temperature fell under `below_c`; again once it rose half a degree above | on, 8 °C |
 | `device_stale` | a thermostat went past the stale threshold (`stale_after`, `stale_after_wall`) | off |
@@ -1793,6 +1794,19 @@ shutter contacts carry `window_open`.
 `error` is the Cube's transmit error flag,
 `link_error` a failed link with a partner device,
 `panel_locked` (present when true) the key lock on the device.
+`battery_low` is the device's battery flag as the Cube shows it now;
+`battery`, beside `state`, is the level the server keeps from its history:
+`ok`; `weak` once the flag has been seen, as a radiator thermostat shows it for
+a few minutes under the load of its valve motor days before it stays;
+`low` once the flag has stayed for 15 minutes.
+A weak device is `ok` again once a long valve move has gone by without the flag:
+its next decalcification, a valve move of 50 points or more,
+or for a device without a valve a day;
+a low one an hour after the flag went, with new batteries.
+The levels outlive a restart: the server reads them back from its log
+(docs/cube-protocol.md, "How devices report").
+A change of a device's level is a `battery` event in the log,
+its `summary` the `level` and the one before (`from`); `low` at warn.
 
 How old the values are: a device with state also has `received`,
 the time per value of `state` (same names) at which the server saw its current
