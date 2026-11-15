@@ -64,3 +64,13 @@ func TestTimedOutPairingIsWithdrawn(t *testing.T) {
 		}
 	}
 }
+
+// StartPairing refuses a time under a second, or longer than a Cube
+// keeps the mode (cube.MaxInclusion), before it marks anything.
+func TestStartPairingRange(t *testing.T) {
+	for _, d := range []time.Duration{0, 999 * time.Millisecond, MaxPairingTime + time.Second, 300 * time.Second} {
+		if _, _, err := (Writer{}).StartPairing(context.Background(), d); err == nil {
+			t.Errorf("%s: no error", d)
+		}
+	}
+}

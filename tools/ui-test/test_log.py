@@ -627,7 +627,9 @@ def iso(t):
 
 def test_log_range_is_the_last_20_by_default(page, case):
     """The range is the last 20 events at first: the page asks for 20 and
-    no time, has no Older, and keeps the newest 20 as live events come."""
+    no time, has no Older, and keeps the newest 20 as live events come:
+    the three sent, and any the test server's own stream brings meanwhile
+    (a device's state from the fake Cube), push out the oldest."""
     now = time.time()
     asked = []
 
@@ -652,8 +654,12 @@ def test_log_range_is_the_last_20_by_default(page, case):
           kind: "config", device: rf, time: new Date().toISOString() }) }))""", rf)
     assert wait_until(page, "document.querySelectorAll('#log-lines .kind-config').length === 3", 5), "the live events"
     assert page.locator("#log-lines .log-line").count() == 20, "the newest 20 kept"
-    assert page.evaluate("logState.lines.length") == 20 and page.locator("#log-lines .kind-hello").count() == 17, \
-        "the three oldest gone"
+    assert page.evaluate("logState.lines.length") == 20, "and no more held"
+    # the stubbed lines left are the newest of them, the oldest gone: three
+    # for the events sent, one more for each the stream brought itself
+    kept = sorted(int(i) for i in page.evaluate(
+        "[...document.querySelectorAll('#log-lines .kind-hello')].map((l) => l.dataset.id)"))
+    assert kept == list(range(21 - len(kept), 21)) and len(kept) <= 17, f"the oldest gone, the newest kept: {kept}"
     show_view(page, "tiles")
 
 

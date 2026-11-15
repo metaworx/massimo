@@ -647,7 +647,7 @@
   "pairing.how": "Start puts the Cube into pairing mode. Then press the pairing button of the new device, as its manual says; each device that joins is listed here.",
   "pairing.start": "Start",
   "pairing.stop": "Stop",
-  "pairing.secondsBad": "The pairing time is 1 to 600 seconds.",
+  "pairing.secondsBad": "The pairing time is 1 to 255 seconds.",
   "pairing.failed": "Pairing: {error}",
   "pairing.left": "Pairing: {seconds} s left. Press the device's pairing button now.",
   "pairing.ending": "Pairing is ending …",

@@ -606,6 +606,72 @@ func TestProxyPairing(t *testing.T) {
 	}
 }
 
+// A client's n: for longer than a Cube keeps the mode (300 s, which the
+// Cube would read as 44) reaches the Cube as n:00ff, its event names the
+// time asked; a second n: while it runs joins it, reported as joined
+// alone.
+func TestProxyPairingCapped(t *testing.T) {
+	fc, p, c, ctx := setup(t)
+	var mu sync.Mutex
+	var events []Event
+	p.opts.OnEvent = func(e Event) {
+		if e.Kind == EventPairing {
+			mu.Lock()
+			events = append(events, e)
+			mu.Unlock()
+		}
+	}
+	noted := func() []Event {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]Event(nil), events...)
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go p.ServeTCP(ctx, ln)
+	conn, err := net.DialTimeout("tcp", ln.Addr().String(), 5*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(10 * time.Second))
+	r := cube.NewReader(conn)
+	for readLine(t, r).Type != 'L' {
+	}
+
+	conn.Write([]byte("n:012c\r\n"))
+	waitFor(t, "the pairing's event", func() bool { return len(noted()) == 1 })
+	waitFor(t, "the n: at the Cube", func() bool { return countType(fc, 'n') > 0 })
+	if got := fc.Received(); len(got) != 1 || got[0].String() != "n:00ff" {
+		t.Fatalf("cube received %v", got)
+	}
+	if st := c.Inclusion(); !st.Active || st.Until.Sub(st.Started) != 255*time.Second {
+		t.Fatalf("server's pairing state %+v", st)
+	}
+	if s := noted()[0].Summary; len(s) != 2 || s["asked"] != 300 || s["seconds"] != 255 {
+		t.Fatalf("event %v", s)
+	}
+	conn.Write([]byte("n:003c\r\n"))
+	waitFor(t, "the join's event", func() bool { return len(noted()) >= 2 })
+	time.Sleep(50 * time.Millisecond)
+	if ev := noted(); len(ev) != 2 || len(ev[1].Summary) != 1 || ev[1].Summary["joined"] != true {
+		t.Fatalf("events %+v", ev)
+	}
+	conn.Write([]byte("x:\r\n"))
+	if m := readLine(t, r); m.Type != 'N' || m.Data != "" {
+		t.Fatalf("end of pairing relayed as %s", m)
+	}
+	var got []string
+	for _, m := range fc.Received() {
+		got = append(got, m.String())
+	}
+	if strings.Join(got, " ") != "n:00ff x:" {
+		t.Fatalf("cube received %v", got)
+	}
+}
+
 // A client's radio write that the Cube took is reported to OnWrite with
 // the device and the radio command; a read and a write the Cube
 // discarded are not.

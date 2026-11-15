@@ -649,7 +649,7 @@
   "pairing.how": "Démarrer met le Cube en mode d’appairage. Appuyez ensuite sur le bouton d’appairage du nouvel appareil, comme l’indique son manuel ; chaque appareil qui s’annonce apparaît ici.",
   "pairing.start": "Démarrer",
   "pairing.stop": "Arrêter",
-  "pairing.secondsBad": "La durée d’appairage est de 1 à 600 secondes.",
+  "pairing.secondsBad": "La durée d’appairage est de 1 à 255 secondes.",
   "pairing.failed": "Appairage : {error}",
   "pairing.left": "Appairage : encore {seconds} s. Appuyez maintenant sur le bouton d’appairage de l’appareil.",
   "pairing.ending": "L’appairage se termine …",

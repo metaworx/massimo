@@ -63,7 +63,8 @@ jobs:
   # UI test and LAN jobs, are true for
   # a push; for a pull request, ui is true when it touches the web UI, its
   # suite or this file, lan when it touches the announcement, discovery,
-  # the proxy, the LAN test or this file. The run checks out the pull
+  # the proxy, the server's own files (not ui/: discovery's runs are
+  # decided there), the LAN test or this file. The run checks out the pull
   # request's merge commit, whose first parent is the base branch. The
   # list is taken before it is matched, so that grep -q ending the pipe
   # early cannot fail the step under pipefail. Only an answer of false
@@ -175,7 +176,7 @@ jobs:
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
             changed="$(git diff --name-only HEAD^1 HEAD)"
             grep -qE '^(internal/server/ui/|tools/ui-test/|\.github/workflows/ci\.yml$)' <<<"$changed" || ui=false
-            grep -qE '^(internal/announce/|internal/serve/|internal/proxy/|internal/cubelan/|cmd/massimo/(discover|serve)\.go$|tools/lan-test/|\.github/workflows/ci\.yml$)' <<<"$changed" || lan=false
+            grep -qE '^(internal/announce/|internal/serve/|internal/proxy/|internal/server/[^/]+$|internal/cubelan/|cmd/massimo/(discover|serve)\.go$|tools/lan-test/|\.github/workflows/ci\.yml$)' <<<"$changed" || lan=false
           fi
           echo "suite=${suite} code=${code} site=${site} tested=${tested} fp=${fp} ui=${ui} lan=${lan} ui_done=${ui_done} lan_done=${lan_done} fuzz_done=${fuzz_done}"
           {
@@ -419,8 +420,9 @@ jobs:
   # client, discover listing it and marking the proxy, and its goodbye.
   # The runner has Docker and Compose v2; the hosts' image is built from
   # debian:trixie-slim at each run. It runs for every push to main and for
-  # a pull request whose What to test answered lan=true, as the UI tests
-  # do; skipped by this condition, the check counts as passed.
+  # a pull request whose What to test answered lan=true, the server's own
+  # files among its paths, as the UI tests do; skipped by this condition,
+  # the check counts as passed.
   lan:
     name: LAN against avahi
     needs: changes

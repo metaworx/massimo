@@ -2244,9 +2244,11 @@ Mode/Menu and Boost/OK on a wall thermostat) together.
 
 ### Pairing: POST, GET, DELETE /api/v1/cubes/{sn}/pairing
 
-`POST` with `{"seconds": 60}` (optional; 1 to 600,
+`POST` with `{"seconds": 60}` (optional; 1 to 255,
 default 60) puts the Cube into inclusion mode with `n:<seconds>`;
 a device whose pairing button is pressed then joins.
+255 seconds is the longest a Cube keeps the mode (docs/cube-protocol.md,
+"Pairing a device, as the original software does it").
 The Cube may end the mode earlier on its own.
 The answer is the pairing state:
 
@@ -2777,8 +2779,9 @@ The LAN proxy's, source `proxy`, with the client's `remote`:
 sent, the duty cycle at `duty_pct`),
 `proxy_deleted` (the `devices` a client deleted),
 `proxy_delete_refused` at `warn` (`why`: `hidden`, with the `devices`, or
-`not_understood`), `proxy_pairing` (`seconds`, or `joined`)
-and `proxy_warning` at `warn` (`what`: `pairing_not_started`,
+`not_understood`),
+`proxy_pairing` (`seconds`, with `asked` where a client asked for more,
+or `joined`) and `proxy_warning` at `warn` (`what`: `pairing_not_started`,
 `pairing_not_stopped`, `metadata_multipart`, `metadata_not_understood` or
 `metadata_not_encoded`).
 A line a proxy client passes on to the Cube is a command

@@ -192,3 +192,27 @@ func TestPairDeviceJoinsOnlyWhileIncluding(t *testing.T) {
 		t.Fatalf("a second join: %s", m)
 	}
 }
+
+// The fake reads n:'s time as a real Cube does, by its low byte: n:0101
+// ends after a second with an empty N line, not after 257.
+func TestInclusionTimeIsTheLowByte(t *testing.T) {
+	greeting, err := LoadGreeting(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{Greeting: greeting}
+	addr, err := s.Start("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	c := dial(t, addr)
+	start := time.Now()
+	c.conn.Write([]byte("n:0101\r\n"))
+	if n := c.read(); n.Type != 'N' || n.Data != "" {
+		t.Fatalf("n:0101 brought %s, want the empty N line", n)
+	}
+	if took := time.Since(start); took < 900*time.Millisecond || took > 3*time.Second {
+		t.Fatalf("the inclusion ended after %s", took)
+	}
+}

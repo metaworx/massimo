@@ -15,9 +15,10 @@ import (
 	"go.metaworx.ch/massimo/internal/view"
 )
 
-// MaxPairingTime is the longest inclusion the API and the proxy ask for;
-// the Cube may end the mode earlier on its own.
-const MaxPairingTime = 10 * time.Minute
+// MaxPairingTime is the longest inclusion the API and the proxy ask for,
+// the longest a Cube keeps (cube.MaxInclusion); the Cube may end the
+// mode earlier on its own.
+const MaxPairingTime = cube.MaxInclusion
 
 // StartPairing puts the Cube into inclusion mode for timeout: it marks
 // the mode in the client (cubelan.Client.StartInclusion), which then
@@ -28,7 +29,7 @@ const MaxPairingTime = 10 * time.Minute
 // cubelan.ErrInclusionActive while pairing is already running.
 func (w Writer) StartPairing(ctx context.Context, timeout time.Duration) (<-chan cube.Message, func(), error) {
 	if timeout < time.Second || timeout > MaxPairingTime {
-		return nil, nil, fmt.Errorf("pairing time must be 1 s to %s", MaxPairingTime)
+		return nil, nil, fmt.Errorf("pairing time must be 1 to %d s", int(MaxPairingTime.Seconds()))
 	}
 	if err := w.Client.StartInclusion(timeout); err != nil {
 		return nil, nil, err
