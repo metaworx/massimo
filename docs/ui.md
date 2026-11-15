@@ -109,7 +109,14 @@ The compacted header has **↑** left of ☰, back to the top.
   the list as wide as they need; the arrow keys move between them.
   The last entry, **Search for new Cubes…**,
   asks the server to look for Cubes on the LAN (about two seconds;
-  the server also looks every 30 minutes by itself).
+  the server also looks every 30 minutes by itself),
+  and reads **Searching…** meanwhile.
+  What it found shows in a toast at the page's foot for eight seconds,
+  as a notification does:
+  the number of Cubes found and not set up, with **Show**, for a role that may add Cubes,
+  which opens them in System settings;
+  or that none was found;
+  a failed search in red, with the server's reason, for 15 seconds.
   Cubes it finds but does not serve are listed in the choice under "Found,
   not configured",
   as long as they answer: one that a search or the server's own look no
@@ -161,11 +168,13 @@ The compacted header has **↑** left of ☰, back to the top.
   **Maintenance**, for those and a role with `update`, `restart` or `reboot`,
   and **System info**, for every role with `read`;
   **Personal settings**, its tooltip naming whose they are, by display name and login,
-  and **Sign out** (Forget key for an API key or the token, none on an open server).
+  and **Sign out** (Forget key for an API key or the token, none on an open server),
+  in the accent and bold, as the personal page's button.
   It is highlighted while one of its pages is shown, as a page button is,
   that page's entry marked current.
   While the log holds a warning or an error not yet settled or marked seen (see Log),
-  ☰ carries an amber triangle or a red cross,
+  ☰ carries an amber triangle or a red cross at its corner,
+  on a disc of the card's colour, so that it shows on the highlighted ☰ too,
   and the sheet of its Log entry turns amber or red, both named with the count.
 - The settings pages, Cube settings, System settings, Maintenance and System info,
   each have a row kept under the header, and in it, in the title's place,
@@ -233,7 +242,12 @@ first why, where the server knows (its connection held open,
 or the Cube refusing the server, as in System settings → Cubes),
 the address the server tries, when the Cube last sent data
 (or last answered discovery),
-and what to check, a Cube serving one client at a time;
+and what to check, a Cube serving one client at a time,
+or, for a Cube whose address lies outside this machine's networks
+(`other_network` of `docs/api-v1.md`), that the server reaches it only through a
+router, that a Cube without a DHCP lease uses 192.168.0.222,
+and the `massimo netconfig` line with its serial that gives it a fixed address,
+which copies;
 the rooms the server still has stay under it.
 Without a Cube, it says that none is configured.
 For a role with `cubes` its button opens System settings → Cubes.
@@ -349,6 +363,12 @@ Every room has a tile:
     and it has to be paired again to be used again.
     A device out of range or out of battery stays in the Cube's memory
     and comes back under the devices without a room.
+    After a move, a removal or a device put into a room,
+    the message adds that the room's devices take it at their next wakeup
+    and that the log says when it is done:
+    the log's **device change** line, within about 15 minutes,
+    a warning where the Cube still holds memory slots for it
+    or a device of the room was left with an error.
   - **Week programme**:
     one bar per day.
     - A click on a day selects it together with every day that has the same programme.
@@ -704,6 +724,7 @@ also while no page is open.
 
 While the page is open,
 a notification shows at its foot for ten seconds instead,
+in the toast the Cube search's outcome uses (`showToast`),
 in the page's language, with × to close it;
 the same one from the stream and from the push shows once.
 The page is at most 640 px wide, as My settings is.
@@ -848,6 +869,8 @@ the browser keeps which cards are folded.
   network is back, the Cube still holding the server's old connection
   (it lets go after up to about 40 minutes, or a reboot frees it),
   or the Cube busy with another client;
+  for a Cube not connected whose address lies outside this machine's networks
+  (`other_network`), a notice as on Rooms, with the `netconfig` line;
   and where discovery finds a Cube with a fixed address at another one
   (`found_elsewhere`), a notice with both addresses and since when,
   and **Use the found address** and **Follow discovery**, which save either
@@ -899,6 +922,8 @@ the browser keeps which cards are folded.
   "via proxy at …" where a massimo proxy answers for it,
   in expert mode its radio and MAC address and the gateway it uses, and **Add**,
   which serves a found Cube at once;
+  under a Cube whose address lies outside this machine's networks
+  (`other_network`), a notice as on Rooms, with the `netconfig` line;
   each Massimo proxy with its address, the Cube it serves
   and the Massimo server serving it, its name a link to the address
   its announcement gives (`host` of `docs/api-v1.md`), without **Add**:
@@ -1222,6 +1247,7 @@ its heading's `button.section-fold` folding it):
 as ☰'s pages are `MENU_VIEWS`; `markSettingsPages` shows the title for one page alone),
 `fitPageTabs` gives the page shown's button the longest name's width,
 and `backToTop` wires the two ↑, the floating one and the compacted header's;
+`showToast` shows the page's one toast at its foot (a notification, the search's outcome),
 `pickerMenu` makes a dropdown the choice of one item (the Cube choice),
 its items `menuItem`s, a Cube's link its network sign (`cubeSignEl`, `LINK_SIGN`);
 a device's serial and radio address are a `deviceIds`;

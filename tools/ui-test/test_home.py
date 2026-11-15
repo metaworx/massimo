@@ -19,6 +19,7 @@ SERIAL = {"en": "Serial number KEQ0000200.", "de": "Seriennummer KEQ0000200."}
 NO_CUBE = {"en": "No Cube is configured.", "de": "Es ist kein Cube eingerichtet."}
 NO_DATA = {"en": "No data has come from it", "de": "keine Daten von ihm"}
 LAST_DATA = {"en": "Its last data came at", "de": "Seine letzten Daten kamen um"}
+OTHER_NETWORK = {"en": "lies outside the networks of this machine", "de": "liegt außerhalb der Netze dieses Rechners"}
 
 NOTICE_SHOWN = "!document.getElementById('home-notice').classList.contains('hidden')"
 # the first room shown, and below the notice
@@ -97,6 +98,37 @@ def test_a_cube_that_dropped_keeps_its_rooms_under_the_notice(page, case):
         # anew, and a room a locator found may be gone by the time it
         # measures it (a bounding box of None).
         assert wait_until(page, ROOMS_UNDER_NOTICE, 5), "the rooms stay, under the notice"
+    finally:
+        page.unroute("**/api/v1/cubes")
+    page.evaluate("loadCubes()")
+    assert wait_until(page, "document.getElementById('home-notice').classList.contains('hidden')", 5), "gone once connected"
+
+
+def test_a_cube_in_another_network_says_how_to_reach_it(page, case):
+    """A Cube not connected whose address lies outside this machine's
+    networks (the list stubbed with other_network): the notice's check
+    says so, with the address a Cube without a DHCP lease uses and the
+    netconfig line with its serial, in place of the usual checks, kept
+    across polls; the usual checks come back without it."""
+    def away(route):
+        cubes = route.fetch().json()
+        for c in cubes:
+            if c.get("serial") == "KEQ0000100":
+                c["connected"], c["other_network"] = False, True
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes))
+
+    page.route("**/api/v1/cubes", away)
+    try:
+        page.evaluate("loadCubes()")
+        assert wait_until(page, NOTICE_SHOWN, 5), "the notice shows"
+        check = notice_text(page, "check")
+        assert OTHER_NETWORK[case.lang] in check and "192.168.0.222" in check, f"why, and the fallback address: {check}"
+        line = page.locator("#home-notice .netconfig-line")
+        assert line.inner_text().startswith("massimo netconfig -sn KEQ0000100 -broadcast -static"), "the netconfig line"
+        page.evaluate("document.querySelector('#home-notice .netconfig-line').dataset.mark = '1'")
+        page.evaluate("loadCubes()")
+        page.wait_for_timeout(300)
+        assert page.evaluate("document.querySelector('#home-notice .netconfig-line').dataset.mark") == "1", "kept across a poll"
     finally:
         page.unroute("**/api/v1/cubes")
     page.evaluate("loadCubes()")

@@ -85,6 +85,28 @@ type Server struct {
 	parkAddr  string        // its local address, to know it once accepted
 	freed     chan struct{} // closed and replaced whenever the slot changes
 	restarts  int           // Restart calls
+
+	free *int // free memory slots set with SetFreeSlots
+}
+
+// SetFreeSlots makes the fake report free memory slots in its S replies
+// and in the H line of its greeting, as a Cube that holds radiograms for
+// devices that have not taken them yet; without it the S replies say
+// 0x31 and the H line the greeting's own.
+func (s *Server) SetFreeSlots(n int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.free = &n
+}
+
+// freeSlots is the free-slot field of an S reply, as two hex digits.
+func (s *Server) freeSlots() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.free == nil {
+		return "31"
+	}
+	return fmt.Sprintf("%02x", *s.free)
 }
 
 // SetSilent makes the fake a Cube whose network cable is out, or puts
@@ -519,7 +541,7 @@ func (s *Server) serve(conn net.Conn) {
 			if d == 0 && m.Type == 's' && s.Apply {
 				s.apply(m)
 			}
-			reply = fmt.Sprintf("S:%02x,%d,31\r\n", s.Duty, d)
+			reply = fmt.Sprintf("S:%02x,%d,%s\r\n", s.Duty, d, s.freeSlots())
 		case 'f':
 			if m.Data != "" {
 				s.NTP = strings.Split(m.Data, ",")

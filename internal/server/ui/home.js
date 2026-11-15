@@ -6,6 +6,17 @@
 // the LAN from the Cube choice, with the Cubes it finds.
 "use strict";
 
+// otherNetworkEls says that a Cube's address lies outside this machine's
+// networks (other_network), as the children of a notice: that the
+// server reaches it only through a router, the address a Cube without a
+// DHCP lease uses, and the netconfig line that gives it a fixed address,
+// which copies (components.js copyEl).
+function otherNetworkEls(c, address) {
+  const line = "massimo netconfig -sn " + c.serial + " -broadcast -static <ip> -gateway <gateway> -netmask <netmask>";
+  return [t("cubes.otherNetwork", { address }) + " " + t("cubes.otherNetworkFix") + " ",
+    copyEl(line, { label: t("cubes.netconfigLine"), icon: true, cls: "mono netconfig-line" })];
+}
+
 // renderHomeNotice says on Rooms why it shows nothing, or only what the
 // server last had: no Cube configured, or the Cube chosen not connected,
 // with the address the server tries, when the Cube last sent data or
@@ -26,6 +37,7 @@ function renderHomeNotice() {
     title.textContent = t("home.noCube");
     detail.textContent = t(hasCap("cubes") ? "home.noCubeAdd" : "home.noCubeAsk");
     check.textContent = "";
+    check.dataset.key = "";
   } else {
     // its name where it has one, its serial in the detail (as on its label)
     title.textContent = t("home.notConnected", { name: cube.name || cube.serial });
@@ -39,7 +51,13 @@ function renderHomeNotice() {
     else if (seen) parts.push(t("home.lastSeen", { time: fmtInstant(seen) }));
     else parts.push(t("home.noData"));
     detail.textContent = parts.join(" ");
-    check.textContent = t("home.check");
+    // A Cube outside this machine's networks: why, and the way to an
+    // address here, in place of the usual checks; drawn again only where
+    // it changed, so that a poll leaves a focused copy icon where it is.
+    const key = cube.other_network ? [i18n.lang, cube.serial, cube.address].join(" ") : "";
+    if (!key) check.textContent = t("home.check");
+    else if (check.dataset.key !== key) check.replaceChildren(...otherNetworkEls(cube, hostPort(cube.address).host)); // cube-panel.js
+    check.dataset.key = key;
   }
   check.classList.toggle("hidden", !check.textContent);
   box.classList.remove("hidden");
@@ -49,34 +67,26 @@ function renderHomeNotice() {
 
 // DISCOVER is the value of the Cube choice's entry that searches the LAN.
 const DISCOVER = "__discover";
-const discovery = { running: false, timer: null };
-
-// showSearch shows the state of a search next to the Cube choice, for
-// ms milliseconds when given.
-function showSearch(text, ms, bad) {
-  const el = $("cube-search");
-  if (discovery.timer) clearTimeout(discovery.timer);
-  discovery.timer = null;
-  el.textContent = text;
-  el.classList.toggle("bad", !!bad);
-  el.classList.toggle("hidden", !text);
-  if (ms) discovery.timer = setTimeout(() => showSearch(""), ms);
-}
+const discovery = { running: false };
 
 // discoverCubes asks the server to search the LAN for Cubes (about two
-// seconds), then reloads the list and says what it found.
+// seconds), the Cube choice's entry saying so meanwhile, then reloads the
+// list and says what it found in the page's toast (components.js
+// showToast): Cubes found with Show, which opens them in System settings
+// for a role with cubes, as their entries in the list do; a failure in
+// red, for longer.
 async function discoverCubes() {
   if (discovery.running) return;
   discovery.running = true;
-  showSearch(t("discover.searching"));
   renderCubeSelect();
   try {
     const res = (await api("POST", "api/v1/cubes/discover")) || {};
     await loadCubes();
     const n = (res.found || []).filter((c) => !isConfigured(c)).length;
-    showSearch(n ? tn("discover.found", n) : t("discover.none"), 8000);
+    const show = n && hasCap("cubes") ? { label: t("discover.show"), run: showFound } : null;
+    showToast(n ? tn("discover.found", n) : t("discover.none"), { ms: 8000, action: show });
   } catch (e) {
-    showSearch(t("discover.failed", { error: e.message }), 15000, true);
+    showToast(t("discover.failed", { error: e.message }), { ms: 15000, tone: "bad" });
   } finally {
     discovery.running = false;
     renderCubeSelect();

@@ -1267,6 +1267,11 @@ and a step by its radio address, the radio command's:
 }
 ```
 
+A step's `result` also gives `answers`, the Cube's answer to each of its
+lines in order up to the first failure (`S:` for a radio line, `A:` for
+`t:`), and `discarded_line`, the line the Cube discarded, where it
+discarded one.
+
 Needs `read`; a user without `audit` sees its own commands only,
 and another's is `404`.
 
@@ -1360,6 +1365,16 @@ it is absent otherwise, and goes at once with a `PUT` of that address or of
 "found_elsewhere": {"address": "192.0.2.24:62910", "configured": "192.0.2.23:62910", "since": "2026-11-04T15:00:02+01:00"}
 ```
 
+`other_network` is `true` where the address the server connects to lies in none
+of this machine's networks, as its interfaces' addresses and netmasks give them,
+and absent otherwise, as it is for a host name:
+the server reaches it only through a router, if at all.
+A Cube with DHCP on and no lease uses its fallback address,
+192.168.0.222/16 from the factory (docs/cube-protocol.md),
+and refuses a connection from another network;
+`massimo netconfig -sn <serial> -broadcast -static …` gives it a fixed address (README.md).
+The networks are read again at most every 30 seconds.
+
 `problems` lists, where there are any, the Cube's visible devices with a problem,
 as `GET …/devices` shows them, each with its room's name (`room`):
 a transmit or link error, a low battery, a window open (with its `window` times);
@@ -1376,6 +1391,9 @@ that is not eQ-3's, or from the address of a massimo server announced on the LAN
 or `unknown`, neither, as on the loopback;
 a proxy has `serves`, the serial of the Cube with its radio address,
 served here or found, where one is known.
+A found Cube whose `address` lies in none of this machine's networks has
+`other_network`, as a configured one has (above), in the `cube_found` event too;
+a proxy never has it.
 `host` names the massimo server that serves the entry:
 for a proxy the one at its address, for a Cube the one a proxy of it runs on,
 with its instance name (`name`) and the `url` its announcement gives
@@ -2071,10 +2089,17 @@ A metadata write; answers `{"ok": true}`.
 
 Rename a device and/or move it to another room:
 `{"name": "Thermostat Küche", "room_id": 2}`, either field alone is fine.
-A move is done as the original software does it:
-the device's group is removed and it is unlinked from every partner of its old room,
-then linked with every partner of the new room and the new group set,
-each after a wakeup of the room concerned, then the metadata is written.
+A move is done as the original software moved one in its capture of 2026-11-04:
+after a wakeup of the old room, one `r:` for each other member whose error flag is set,
+0x23 remove group,
+one 0x21 remove link partner radiogram with the room flag naming the device,
+which every member of the room takes,
+addressed to the room's master where it is a thermostat of the room,
+else to its wall thermostat, else to its first radiator thermostat,
+one to each window contact among its partners,
+and one to the device for each partner;
+then, after a wakeup of the new room, the same with 0x20 add link partner
+and 0x22 set group; then the metadata is written.
 `room_id` must name an existing room; 0 is refused,
 a device outside every room would be a device that blocks no room but cannot be
 addressed by one either.
@@ -2083,11 +2108,13 @@ A device that is paired but in no room yet (`"unlisted": true`,
 such as one just paired, see Pairing) needs `room_id`;
 `name` alone answers `409`.
 It is added to the room as the original software adds a new device:
-after a wakeup of the room (`z:1e,G,<room>`),
-one 0x20 add link partner radiogram per room member it links with in each
-direction (to a radiator thermostat with the room flag and its room,
-to every other device directly, and from the new device to each partner;
-two shutter contacts are not linked with each other), then 0x22 set group,
+after a wakeup of the room (`z:1e,G,<room>`)
+and one `r:` for each member whose error flag is set,
+one 0x20 add link partner radiogram with the room flag naming the device,
+addressed as in a move, which every member of the room takes,
+one to each window contact among its partners,
+and one to the new device for each partner
+(two shutter contacts are not linked with each other), then 0x22 set group,
 then the metadata with the device listed under its name in the room,
 then a re-read of its C line.
 A device whose C line names another room (paired long ago and never listed) is
@@ -2134,7 +2161,9 @@ The answer is
 ```
 
 with `copied` absent when nothing was copied,
-and `"mode_not_set": true` in it when the Cube discarded the 0x40,
+`"confirmation": "pending"` where the device went into a room
+(see "Structure changes read back", below),
+and `"mode_not_set": true` in `copied` when the Cube discarded the 0x40,
 which leaves the device's mode as it was and ends nothing:
 on 2026-11-04 the Cube discarded a direct 0x40 to a device in a room.
 Any other command of the copy that fails ends it with its error (`502`,
@@ -2150,13 +2179,18 @@ and then answers `503`; the copies run side by side afterwards.
 ### DELETE /api/v1/cubes/{sn}/devices/{rf}
 
 Removes a device from the Cube, with the capability `structure`,
-as the original software's "delete device" does,
-and also removes the device's group, which the original software leaves.
+as the original software removed one on 2026-11-15.
 A device in a room, the metadata's or else its C line's,
 is unlinked from that room first:
-after a wakeup of the room (`z:1e,G,<room>`), 0x23 remove group,
-then one 0x21 remove link partner radiogram per room member it is linked with,
-in each direction (addressed as 0x20 is in an add).
+after a wakeup of the room (`z:1e,G,<room>`),
+one `r:` for each other member of the room whose error flag is set
+(the queue resets the device itself where it is flagged),
+then one 0x21 remove link partner radiogram with the room flag naming the device,
+which every member of the room takes,
+addressed to the room's master where it is a thermostat of the room,
+else to its wall thermostat, else to its first radiator thermostat;
+where the room's other members are window contacts only, each gets its own 0x21.
+No 0x23 and no 0x21 go to the device itself: `t:` resets it.
 Hidden devices are no partners,
 and a device whose C line names room 255 is not unlinked at all.
 Then `t:01,1,<rf>`, delete with the force flag,
@@ -2165,6 +2199,25 @@ then, for a device the metadata lists, the metadata without it.
 The server's copy forgets the device at once:
 it is gone from the devices, the rooms and the counts,
 and the stream reports `metadata` (for a listed device) and `device_forgotten`.
+The answer is `{"ok": true, "budget": {…}, "confirmation": "pending"}`.
+
+**Structure changes read back.**
+The Cube accepts a removal's, a placement's or a move's radiograms at once,
+but the room's members take them at their next wakeup, about ten minutes on,
+and the Cube holds a memory slot for each until then;
+it reports its free slots only in `S:` replies and in the `H` line of a new
+connection.
+So such a change answers `"confirmation": "pending"`,
+and the server reads it back 2, 6 and 12 minutes after it:
+done once a budget the Cube reported after the change shows the free slots
+back at their count before it;
+at the last check, where the Cube reported none since,
+the server reconnects once for a fresh `H` line
+(only with `RefreshInterval` set, as the budget refresh after writes).
+The outcome is the Cube's log event `structure` (see the log, below):
+at `info` when done, at `warn` when not confirmed,
+or when the change left a member of the rooms concerned with the error flag
+or a link error it did not have before.
 
 A device the metadata lists without a C line, a leftover,
 loses its entry in the metadata, and nothing is sent by radio.
@@ -2825,6 +2878,13 @@ discarded it, the device's error state was reset and it was sent again),
 `dropped` and `failed` with their `error`;
 `hold` at `warn`, the radio commands waiting (`reason` `duty_cycle` with
 `duty_pct` and `until`, or `memory_slots` with `free_slots` and `wait_s`).
+`structure`, source `cube`, a removal, placement or move read back
+(see "Structure changes read back"), with the device in `device` and in its
+`summary` the `action` (`remove`, `add`, `move`), the `outcome` (`done` at
+`info`, `not_confirmed` at `warn`), the free slots `before` the change and
+now (`free_slots`), the minutes since it (`minutes`), the slots still `held`
+or `no_reading`, and, at `warn`, the devices the change left `flagged` or
+with a `link_error`; it is settled only by a person's mark.
 The server's sign-ins, source `server`, only on the pages and streams of a
 user with `audit`: `login` (`user`, `remote`), `login_failed` at `warn`,
 and `locked_out` at `warn` (`remote`, `for`, `after`: `logins` or `tokens`).

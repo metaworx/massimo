@@ -151,8 +151,8 @@ func TestConfigEndpoints(t *testing.T) {
 		t.Fatalf("device programme lines % x", lines[nS:])
 	}
 
-	// Move the device to room 1: leave (group remove), join (links with the
-	// room's radiator both ways, group set), metadata; the copy of the
+	// Move the device to room 1: leave (group remove), join (one link to
+	// the room with its flag, one to the device, group set), metadata; the copy of the
 	// room's settings, which follows by default, has tests of its own
 	// (TestAddCopiesTheRoomsSettings and those after it).
 	nS = len(sLines(fc))
@@ -341,7 +341,6 @@ func TestAddCopiesTheRoomsSettings(t *testing.T) {
 	want := []string{"z:1e,G,01",
 		cube.CmdLinkPartner(cube.Target{RFAddress: 0x0a010a, RoomID: 1, Room: true}, true, copyNew, cube.DeviceRadiatorThermostat).String(),
 		cube.CmdLinkPartner(cube.Target{RFAddress: copyNew}, true, 0x0a010a, cube.DeviceRadiatorThermostat).String(),
-		cube.CmdLinkPartner(cube.Target{RFAddress: copyWall}, true, copyNew, cube.DeviceRadiatorThermostat).String(),
 		cube.CmdLinkPartner(cube.Target{RFAddress: copyNew}, true, copyWall, cube.DeviceWallThermostat).String(),
 		cube.CmdSetGroup(copyNew, 1, false).String(),
 		"m:", "c:0a0b0c",
@@ -381,7 +380,6 @@ func TestAddWithoutCopy(t *testing.T) {
 	sameLines(t, fc.Received()[before:], []string{"z:1e,G,01",
 		cube.CmdLinkPartner(cube.Target{RFAddress: 0x0a010a, RoomID: 1, Room: true}, true, copyNew, cube.DeviceRadiatorThermostat).String(),
 		cube.CmdLinkPartner(cube.Target{RFAddress: copyNew}, true, 0x0a010a, cube.DeviceRadiatorThermostat).String(),
-		cube.CmdLinkPartner(cube.Target{RFAddress: copyWall}, true, copyNew, cube.DeviceRadiatorThermostat).String(),
 		cube.CmdLinkPartner(cube.Target{RFAddress: copyNew}, true, copyWall, cube.DeviceWallThermostat).String(),
 		cube.CmdSetGroup(copyNew, 1, false).String(), "m:", "c:0a0b0c"})
 }
@@ -398,7 +396,6 @@ func TestAddContactCopiesNothing(t *testing.T) {
 	sameLines(t, fc.Received()[before:], []string{"z:1e,G,01",
 		cube.CmdLinkPartner(cube.Target{RFAddress: 0x0a010a, RoomID: 1, Room: true}, true, copyContact, cube.DeviceShutterContact).String(),
 		cube.CmdLinkPartner(cube.Target{RFAddress: copyContact}, true, 0x0a010a, cube.DeviceRadiatorThermostat).String(),
-		cube.CmdLinkPartner(cube.Target{RFAddress: copyWall}, true, copyContact, cube.DeviceShutterContact).String(),
 		cube.CmdLinkPartner(cube.Target{RFAddress: copyContact}, true, copyWall, cube.DeviceWallThermostat).String(),
 		cube.CmdSetGroup(copyContact, 1, false).String(), "m:", "c:0d0e0f"})
 }
@@ -539,10 +536,11 @@ func TestRemoveListedDevice(t *testing.T) {
 	if code, out := do(t, ts, "DELETE", base+"/devices/0a010a", ""); code != 200 || out["ok"] != true || out["budget"] == nil {
 		t.Fatalf("remove: %d %v", code, out)
 	}
+	// As the original software removed one on 2026-11-15: one 0x21 with
+	// the room flag naming the device, to the wall thermostat, the master
+	// being the device itself; no 0x23 and nothing to the device.
 	sameLines(t, fc.Received()[sent:], []string{"z:1e,G,01",
-		cube.CmdSetGroup(0x0a010a, 1, true).String(),
-		cube.CmdLinkPartner(cube.Target{RFAddress: copyWall}, false, 0x0a010a, cube.DeviceRadiatorThermostat).String(),
-		cube.CmdLinkPartner(cube.Target{RFAddress: 0x0a010a}, false, copyWall, cube.DeviceWallThermostat).String(),
+		cube.CmdLinkPartner(cube.Target{RFAddress: copyWall, RoomID: 1, Room: true}, false, 0x0a010a, cube.DeviceRadiatorThermostat).String(),
 		"t:01,1,CgEK", "m:"})
 	for _, d := range s.cubes["keq0000100"].client.Snapshot().Metadata().Devices {
 		if d.RFAddress == 0x0a010a {
@@ -584,8 +582,8 @@ func TestRemoveUnlistedDevice(t *testing.T) {
 }
 
 // A device in no room by the metadata whose C line names room 1, as one
-// paired long ago, is unlinked from room 1's members before t:; no
-// metadata is written for it.
+// paired long ago, is unlinked from room 1's members before t:, by one
+// 0x21 to the room's master; no metadata is written for it.
 func TestRemoveDeviceInARoomByItsConfig(t *testing.T) {
 	fc, ts, _ := startCopyCube(t, func(fc *fakecube.Server) { withConfigRoom(t, fc.Greeting, copyContact, 1) })
 	sent := len(fc.Received())
@@ -593,12 +591,95 @@ func TestRemoveDeviceInARoomByItsConfig(t *testing.T) {
 		t.Fatalf("remove: %d %v", code, out)
 	}
 	sameLines(t, fc.Received()[sent:], []string{"z:1e,G,01",
-		cube.CmdSetGroup(copyContact, 1, true).String(),
 		cube.CmdLinkPartner(cube.Target{RFAddress: 0x0a010a, RoomID: 1, Room: true}, false, copyContact, cube.DeviceShutterContact).String(),
-		cube.CmdLinkPartner(cube.Target{RFAddress: copyContact}, false, 0x0a010a, cube.DeviceRadiatorThermostat).String(),
-		cube.CmdLinkPartner(cube.Target{RFAddress: copyWall}, false, copyContact, cube.DeviceShutterContact).String(),
-		cube.CmdLinkPartner(cube.Target{RFAddress: copyContact}, false, copyWall, cube.DeviceWallThermostat).String(),
 		"t:01,1,DQ4P"})
+}
+
+// withErrorFlag sets the error flag (byte 5's 0x08) of rf's entry in the
+// greeting's device list, with byte 4 as the failed radiogram.
+func withErrorFlag(t *testing.T, greeting []cube.Message, rf cube.RFAddress, failed byte) {
+	t.Helper()
+	for i, g := range greeting {
+		if g.Type != 'L' {
+			continue
+		}
+		raw, err := base64.StdEncoding.DecodeString(g.Data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for off := 0; off < len(raw); off += int(raw[off]) + 1 {
+			if cube.RFAddressFromBytes(raw[off+1:off+4]) == rf {
+				raw[off+4], raw[off+5] = failed, raw[off+5]|0x08
+				greeting[i] = cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(raw)}
+				return
+			}
+		}
+	}
+	t.Fatalf("no entry for %s", rf)
+}
+
+// A removal resets every flagged member of the room first (D161-B), then
+// sends its one 0x21 to the room's master, which names the wall
+// thermostat leaving.
+func TestRemoveResetsFlaggedMembers(t *testing.T) {
+	fc, ts, _ := startCopyCube(t, func(fc *fakecube.Server) { withErrorFlag(t, fc.Greeting, 0x0a010a, cube.RFRemoveLink) })
+	sent := len(fc.Received())
+	if code, out := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0000100/devices/0c0d0e", ""); code != 200 {
+		t.Fatalf("remove the wall thermostat: %d %v", code, out)
+	}
+	sameLines(t, fc.Received()[sent:], []string{"z:1e,G,01",
+		cube.CmdResetError(0x0a010a).String(),
+		cube.CmdLinkPartner(cube.Target{RFAddress: 0x0a010a, RoomID: 1, Room: true}, false, copyWall, cube.DeviceWallThermostat).String(),
+		cube.CmdDeleteDevices(true, copyWall).String(), "m:"})
+}
+
+// A step's result gives each line's answer, and the line the Cube
+// discarded: here the removal's 0x21.
+func TestStepNamesTheDiscardedLine(t *testing.T) {
+	fc := &fakecube.Server{Greeting: copyGreeting(t), DiscardIf: func(m cube.Message) bool {
+		rc, err := cube.ParseRadioCommand(m.Data)
+		return m.Type == 's' && err == nil && rc.Command == cube.RFRemoveLink
+	}}
+	addr, err := fc.Start("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	opts := storeOptions(t, t.TempDir(), "secret")
+	opts.Cubes, opts.Queue = []CubeConfig{{Serial: "KEQ0000100", Addr: addr}}, engine.Options{Gap: time.Millisecond}
+	s := New(opts)
+	ctx, cancel := context.WithCancel(context.Background())
+	go s.Run(ctx)
+	ts := httptest.NewServer(s.Handler())
+	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
+	stores[ts] = s.opts.Store
+	waitFor(t, "the cube", func() bool {
+		code, text := callAPI(t, ts, "GET", "/api/v1/cubes/KEQ0000100", "secret", "")
+		var c cubeView
+		return code == 200 && json.Unmarshal([]byte(text), &c) == nil && c.Connected
+	})
+	if code, text := callAPI(t, ts, "DELETE", "/api/v1/cubes/KEQ0000100/devices/0a010a", "secret", ""); code != 502 {
+		t.Fatalf("remove with the 0x21 discarded: %d %s", code, text)
+	}
+	unlink := cube.CmdLinkPartner(cube.Target{RFAddress: copyWall, RoomID: 1, Room: true}, false, 0x0a010a, cube.DeviceRadiatorThermostat).String()
+	rows := auditRows(t, ts, "secret", "?limit=1")
+	if len(rows) != 1 || rows[0].CommandID == 0 {
+		t.Fatalf("audit row %+v", rows)
+	}
+	c := commandOfRow(t, ts, "secret", rows[0])
+	for _, step := range c.Steps {
+		var r struct {
+			Answers       []string `json:"answers"`
+			DiscardedLine string   `json:"discarded_line"`
+		}
+		if json.Unmarshal(step.Result, &r) != nil || r.DiscardedLine == "" {
+			continue
+		}
+		if r.DiscardedLine != unlink || len(r.Answers) != 1 || !strings.HasPrefix(r.Answers[0], "S:") || !strings.Contains(r.Answers[0], ",1,") {
+			t.Fatalf("step result %s, want the discarded %s", step.Result, unlink)
+		}
+		return
+	}
+	t.Fatalf("no step names the discarded line: %+v", c.Steps)
 }
 
 // A hidden device is not found, the Cube itself and a bad address are
@@ -705,7 +786,7 @@ func TestRemoveLeavesHiddenDevicesAlone(t *testing.T) {
 	if code, out := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0000100/devices/0a010a", ""); code != 200 {
 		t.Fatalf("remove 0a010a: %d %v", code, out)
 	}
-	sameLines(t, fc.Received()[sent:], []string{"z:1e,G,01", cube.CmdSetGroup(0x0a010a, 1, true).String(), "t:01,1,CgEK", "m:"})
+	sameLines(t, fc.Received()[sent:], []string{"z:1e,G,01", "t:01,1,CgEK", "m:"})
 	sent = len(fc.Received())
 	if code, out := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0000100/devices/0d0e0f", ""); code != 200 {
 		t.Fatalf("remove 0d0e0f: %d %v", code, out)

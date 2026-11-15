@@ -436,7 +436,9 @@ func TestPlanMovesDeviceBetweenRooms(t *testing.T) {
 	if in.RoomID != 3 || !in.Wakeup || len(in.Lines) != 3 {
 		t.Fatalf("join %+v", in)
 	}
-	// 00 04 20 000000 0a0108 03 0a010d 01: tell the room's radiator thermostat (room flag) about the new partner.
+	// 00 04 20 000000 0a0108 03 0a010d 01: one radiogram with the room
+	// flag to the room's master naming the new partner, which every member
+	// of room 3 takes (AP DeviceUnPairingFix v1.3, Block 2).
 	// 00 00 20 000000 0a010d 00 0a0108 01: tell the moved device about it.
 	// 00 00 22 000000 0a010d 00 03: set the group.
 	want := []string{"s:AAQgAAAACgEIAwoBDQE=", "s:AAAgAAAACgENAAoBCAE=", "s:AAAiAAAACgENAAM="}

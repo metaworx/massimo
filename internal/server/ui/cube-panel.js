@@ -51,13 +51,22 @@ function fillCubeFacts(d, c) {
 }
 
 // fillLinkState says above the Cube's facts why it is not connected,
-// where the server knows (linkText, app.js), and since when.
+// where the server knows (linkText, app.js), and since when, and for a
+// Cube outside this machine's networks the way to an address here
+// (otherNetworkEls, home.js). It is redrawn only where that changed, so
+// that a poll leaves a focused copy icon where it is.
 function fillLinkState(d, c) {
   const box = d.querySelector(".cube-link-state");
   if (!box) return;
-  clear(box);
   const text = linkText(c);
-  if (text) box.appendChild(noticeEl(text, { since: c.link && c.link.since }));
+  const since = c.link && c.link.since;
+  const away = c.other_network && !c.connected ? hostPort(c.address).host : "";
+  const key = [i18n.lang, text, since, away].join(" ");
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  clear(box);
+  if (text) box.appendChild(noticeEl(text, { since }));
+  if (away) box.appendChild(elem("p", "notice other-network", ...otherNetworkEls(c, away)));
 }
 
 // fillAddressState says above the Cube's facts that discovery finds a

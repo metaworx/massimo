@@ -281,11 +281,12 @@ func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	withCopy := (req.Copy == nil || *req.Copy) && c.Type.IsThermostat()
-	var room uint8 // the room the device went into, 0 when it stayed
+	var room uint8   // the room the device went into, 0 when it stayed
+	var pending bool // the move or the placement is read back (structure.go)
 	if idx < 0 {
-		room, err = s.addDevice(ctx, r, rt, md, c, req.Name, req.RoomID, withCopy)
+		room, pending, err = s.addDevice(ctx, r, rt, md, c, req.Name, req.RoomID, withCopy)
 	} else {
-		room, err = s.moveDevice(ctx, r, rt, md, idx, c, req.Name, req.RoomID, withCopy)
+		room, pending, err = s.moveDevice(ctx, r, rt, md, idx, c, req.Name, req.RoomID, withCopy)
 	}
 	if err != nil {
 		return err
@@ -303,6 +304,9 @@ func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	answer["budget"] = rt.client.Budget()
+	if pending {
+		answer["confirmation"] = "pending"
+	}
 	writeJSON(w, http.StatusOK, answer)
 	return nil
 }
@@ -311,24 +315,25 @@ func (s *Server) updateDevice(w http.ResponseWriter, r *http.Request) error {
 // and moves it to another room as the original software does; withCopy
 // says that the copy follows, which needs configure. It returns the
 // room it moved the device into, 0 when the room stayed.
-func (s *Server) moveDevice(ctx context.Context, r *http.Request, rt *runtime, md *cube.Metadata, idx int, c *cube.DeviceConfig, name *string, roomID *int, withCopy bool) (uint8, error) {
+func (s *Server) moveDevice(ctx context.Context, r *http.Request, rt *runtime, md *cube.Metadata, idx int, c *cube.DeviceConfig, name *string, roomID *int, withCopy bool) (uint8, bool, error) {
 	rf, cur := c.RFAddress, md.Devices[idx]
+	pending := false // a structure change is read back (structure.go)
 	newRoom := cur.RoomID
 	if roomID != nil {
 		if *roomID < 1 || *roomID > 255 {
-			return 0, fail(http.StatusBadRequest, "room_id must be 1..255")
+			return 0, false, fail(http.StatusBadRequest, "room_id must be 1..255")
 		}
 		newRoom = uint8(*roomID)
 		if _, ok := rt.hidden().Room(md, newRoom); !ok {
-			return 0, fail(http.StatusNotFound, "no room %d", newRoom)
+			return 0, false, fail(http.StatusNotFound, "no room %d", newRoom)
 		}
 		if other, ok := secondWall(md, rf, newRoom); ok && c.Type == cube.DeviceWallThermostat && newRoom != cur.RoomID {
-			return 0, fail(http.StatusConflict, "room %d has a wall thermostat already (%s); a room takes one, as in the original software", newRoom, other)
+			return 0, false, fail(http.StatusConflict, "room %d has a wall thermostat already (%s); a room takes one, as in the original software", newRoom, other)
 		}
 		if newRoom != cur.RoomID {
 			if withCopy {
 				if err := s.require(r, "configure"); err != nil {
-					return 0, err
+					return 0, false, err
 				}
 			}
 			var members []cube.DeviceMeta
@@ -337,13 +342,15 @@ func (s *Server) moveDevice(ctx context.Context, r *http.Request, rt *runtime, m
 					members = append(members, d)
 				}
 			}
+			watch := rt.beginStructure("move", rf, cur.RoomID, newRoom)
 			out, in := cubeio.MoveCommands(rt.client.Snapshot(), rf, c.Type, cur.RoomID, newRoom, members, rt.hidden())
 			for _, cmd := range []engine.Command{out, in} {
 				res := rt.enqueue(ctx, cmd).Wait(ctx)
 				if err := s.commandError(rt, res, 0); err != nil {
-					return 0, err
+					return 0, false, err
 				}
 			}
+			pending = rt.watchStructure(watch)
 		}
 	}
 	cp := *md
@@ -353,14 +360,14 @@ func (s *Server) moveDevice(ctx context.Context, r *http.Request, rt *runtime, m
 	}
 	cp.Devices[idx].RoomID = newRoom
 	if err := s.writeMetadata(ctx, rt, &cp); err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	if newRoom == cur.RoomID {
-		return 0, nil
+		return 0, false, nil
 	}
 	rt.writer().Reread(ctx, rf)
 	rt.afterWrite(rf) // the C line names the new room once the device acknowledged
-	return newRoom, nil
+	return newRoom, pending, nil
 }
 
 // copySettings gives a device just put into room the room's settings
@@ -391,41 +398,42 @@ func (s *Server) copySettings(ctx context.Context, rt *runtime, rf cube.RFAddres
 // addDevice puts a device that is not in the metadata, one just paired
 // or paired long ago and never listed, into a room; withCopy says that
 // the copy follows, which needs configure. It returns the room.
-func (s *Server) addDevice(ctx context.Context, r *http.Request, rt *runtime, md *cube.Metadata, c *cube.DeviceConfig, name *string, roomID *int, withCopy bool) (uint8, error) {
+func (s *Server) addDevice(ctx context.Context, r *http.Request, rt *runtime, md *cube.Metadata, c *cube.DeviceConfig, name *string, roomID *int, withCopy bool) (uint8, bool, error) {
 	if roomID == nil {
-		return 0, fail(http.StatusConflict, "device %s is in no room yet; give room_id to add it to one", c.RFAddress)
+		return 0, false, fail(http.StatusConflict, "device %s is in no room yet; give room_id to add it to one", c.RFAddress)
 	}
 	if *roomID < 1 || *roomID > 255 {
-		return 0, fail(http.StatusBadRequest, "room_id must be 1..255")
+		return 0, false, fail(http.StatusBadRequest, "room_id must be 1..255")
 	}
 	room := uint8(*roomID)
 	if _, ok := rt.hidden().Room(md, room); !ok {
-		return 0, fail(http.StatusNotFound, "no room %d", room)
+		return 0, false, fail(http.StatusNotFound, "no room %d", room)
 	}
 	if c.Type == cube.DeviceCube {
-		return 0, fail(http.StatusBadRequest, "the cube itself is not in a room")
+		return 0, false, fail(http.StatusBadRequest, "the cube itself is not in a room")
 	}
 	if other, ok := secondWall(md, c.RFAddress, room); ok && c.Type == cube.DeviceWallThermostat {
-		return 0, fail(http.StatusConflict, "room %d has a wall thermostat already (%s); a room takes one, as in the original software", room, other)
+		return 0, false, fail(http.StatusConflict, "room %d has a wall thermostat already (%s); a room takes one, as in the original software", room, other)
 	}
 	if withCopy {
 		if err := s.require(r, "configure"); err != nil {
-			return 0, err
+			return 0, false, err
 		}
 	}
 	n := ""
 	if name != nil {
 		n = strings.TrimSpace(*name)
 	}
+	watch := rt.beginStructure("add", c.RFAddress, room, c.RoomID)
 	res, err := rt.writerOf(ctx).AddDevice(ctx, md, c, n, room, rt.hidden())
 	if err != nil {
-		return 0, fail(http.StatusBadRequest, "%v", err)
+		return 0, false, fail(http.StatusBadRequest, "%v", err)
 	}
 	if err := s.commandError(rt, res, 0); err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	rt.afterWrite(c.RFAddress) // the C line names the room once the device acknowledged
-	return room, nil
+	return room, rt.watchStructure(watch), nil
 }
 
 // removeDevice handles DELETE /devices/{rf}: the device is deleted from
@@ -491,6 +499,11 @@ func (s *Server) removeDevice(w http.ResponseWriter, r *http.Request) error {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "budget": rt.client.Budget()})
 		return nil
 	}
+	room := c.RoomID
+	if listed != nil && listed.RoomID != 0 {
+		room = listed.RoomID
+	}
+	watch := rt.beginStructure("remove", rf, room)
 	res, err := rt.writerOf(ctx).RemoveDevice(ctx, md, c, hidden)
 	if err != nil {
 		return fail(http.StatusBadRequest, "%v", err)
@@ -500,7 +513,11 @@ func (s *Server) removeDevice(w http.ResponseWriter, r *http.Request) error {
 	}
 	rt.afterWrite() // the unlinks were radio writes
 	s.log.Info("device removed", "cube", rt.cubeSerial(), "device", rf, "type", c.Type, "remote", s.clientIP(r))
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "budget": rt.client.Budget()})
+	answer := map[string]any{"ok": true, "budget": rt.client.Budget()}
+	if rt.watchStructure(watch) {
+		answer["confirmation"] = "pending"
+	}
+	writeJSON(w, http.StatusOK, answer)
 	return nil
 }
 
@@ -978,7 +995,7 @@ func (s *Server) setRoomProgram(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	addr, ok := roomAddress(rt, room)
+	addr, ok := cubeio.RoomAddressee(rt.client.Snapshot(), room.ID, rt.hidden())
 	if !ok {
 		return fail(http.StatusConflict, "room %d has no thermostat", room.ID)
 	}

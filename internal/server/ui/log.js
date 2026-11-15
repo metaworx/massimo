@@ -24,7 +24,7 @@ const LOG_KINDS = ["connected", "disconnected", "hello", "metadata", "config", "
   "device_forgotten", "cube_found", "restore_step", "restore_done",
   "cube_gone", "address_changed", "server_started", "server_stopping", "settings_read", "restart", "reboot", "reboot_cancelled",
   "update", "update_result", "backup", "backup_deleted", "backups_pruned", "log_pruned", "log_rotated", "restore_started",
-  "change", "command", "hold", "login", "login_failed", "locked_out", "audit_pruned",
+  "change", "command", "hold", "structure", "login", "login_failed", "locked_out", "audit_pruned",
   "proxy_connected", "proxy_disconnected", "proxy_refused", "proxy_discarded", "proxy_deleted", "proxy_delete_refused", "proxy_pairing", "proxy_warning"];
 
 // LOG_RANGES are the choices of how far back the log goes: the newest
@@ -400,6 +400,17 @@ function logSummaryText(kind, s, serial) {
       return t("log.sum.wallReset", { mode: logWord("log.mode.", s.mode), was: logWord("log.mode.", s.was_mode), silent: num(s.silent_min) });
     case "battery":
       return t("log.sum.battery", { level: logWord("log.battery.", s.level), from: logWord("log.battery.", s.from) });
+    case "structure": {
+      const action = logWord("log.structure.", s.action);
+      let text;
+      if (s.outcome === "done") text = t("log.sum.structureDone", { action, slots: num(s.free_slots), minutes: num(s.minutes) });
+      else if (s.no_reading) text = t("log.sum.structureNoReading", { action });
+      else text = t("log.sum.structureHeld", { action, held: num(s.held), slots: num(s.free_slots), minutes: num(s.minutes) });
+      const parts = [text];
+      if (s.flagged) parts.push(t("log.sum.structureFlagged", { devices: s.flagged.map(rfLabel).join(", ") }));
+      if (s.link_error) parts.push(t("log.sum.structureLink", { devices: s.link_error.map(rfLabel).join(", ") }));
+      return parts.join("; ");
+    }
     case "hold":
       if (s.reason === "duty_cycle") return t("log.sum.holdDuty", { duty: num(s.duty_pct), until: s.until ? fmtLogTime(new Date(s.until)) : "–" });
       return t("log.sum.holdSlots", { slots: num(s.free_slots), wait: num(s.wait_s) });
@@ -485,6 +496,17 @@ function logChangeText(s, serial) {
 
 // logWord is a value's word in the language shown, the value itself where
 // the page has none.
+// rfLabel names a device by its radio address as the page names it,
+// the address where the page does not know it (a structure event's).
+function rfLabel(rf) {
+  for (const r of state.rooms || []) {
+    for (const d of r.devices || []) {
+      if (d.rf_address === rf) return deviceName(d);
+    }
+  }
+  return rf;
+}
+
 function logWord(prefix, v) {
   const key = prefix + v;
   const s = t(key);

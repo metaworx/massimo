@@ -184,9 +184,14 @@ type Options struct {
 	// defaults.
 	FollowUpDelays       []time.Duration
 	FollowUpReconnectGap time.Duration
-	Logger               *slog.Logger
-	Version              string
-	Queue                engine.Options
+	// StructureChecks are the times after a removal, placement or move
+	// at which the Cube's free slots are read back (structure.go), the
+	// last with a reconnect where none was read; nil takes
+	// DefaultStructureChecks.
+	StructureChecks []time.Duration
+	Logger          *slog.Logger
+	Version         string
+	Queue           engine.Options
 	// Proxy lists the LAN listeners on which the server itself answers
 	// as a Cube (see internal/proxy), one per Cube.
 	// One that cannot listen is tried again until it does.
@@ -281,6 +286,9 @@ type Options struct {
 	// proxyListen opens a proxy listener in place of net.Listen, for
 	// the tests.
 	proxyListen func(addr string) (net.Listener, error)
+	// hostNets returns this host's networks in place of its interfaces',
+	// for the tests of other_network (hostnets.go).
+	hostNets func() []*net.IPNet
 	// TLS, when set, is the certificate source of a server that
 	// terminates TLS itself (internal/serve wraps the listener with
 	// certs.Config): /healthz then reports the certificate as "tls", and
@@ -381,6 +389,7 @@ type Server struct {
 	foundMu   sync.Mutex
 	found     map[string]*foundCube // by serial, upper case
 	servers   []announce.Found      // the servers announced at the latest run, under foundMu
+	nets      hostNets              // this host's networks, for other_network (hostnets.go)
 
 	// The runtimes' and the proxies' goroutines, see runtimes.go.
 	wg       sync.WaitGroup
@@ -1569,7 +1578,11 @@ type cubeView struct {
 	// latest discovery at another one, neither it nor a proxy answering
 	// at its own; absent otherwise (discovery.go noteElsewhere).
 	FoundElsewhere *addressElsewhere `json:"found_elsewhere,omitempty"`
-	Connected      bool              `json:"connected"`
+	// OtherNetwork says that the address the server connects to lies in
+	// none of this host's networks (hostnets.go otherNetwork): the
+	// server reaches it only through a router; absent otherwise.
+	OtherNetwork bool `json:"other_network,omitempty"`
+	Connected    bool `json:"connected"`
 	// Link says how the server stands with the Cube beyond connected:
 	// a lost connection held open, a Cube that refuses a new one while it
 	// holds the server's old one (stale) or another client's (busy).
@@ -1615,6 +1628,7 @@ func (s *Server) summary(rt *runtime) cubeView {
 	v.Link = &link
 	v.ProxyListening = s.proxyListening(rt)
 	v.ProxyFailing = s.proxyFailing(rt)
+	v.OtherNetwork = otherNetwork(s.hostNetworks(), v.Address)
 	if f, ok := s.foundInfo(rt.cubeSerial()); ok {
 		v.MAC, v.LastSeen, v.FoundAddress = f.MAC, &f.LastSeen, f.Address
 		v.FoundElsewhere = foundElsewhere(f, cfg, v.Address)
@@ -1864,34 +1878,14 @@ func (s *Server) setRoomSetpoint(w http.ResponseWriter, r *http.Request) error {
 	if !ok {
 		return fail(http.StatusNotFound, "no room %d", id)
 	}
-	addr, ok := roomAddress(rt, room)
+	// The device the room command names (cubeio.RoomAddressee): every
+	// member of the room takes a room-flagged command whichever it names,
+	// but the named device takes it too, whatever its room.
+	addr, ok := cubeio.RoomAddressee(rt.client.Snapshot(), room.ID, rt.hidden())
 	if !ok {
 		return fail(http.StatusConflict, "room %d has no thermostat", room.ID)
 	}
 	return s.setpoint(w, r, rt, cube.Target{RFAddress: addr, RoomID: room.ID, Room: true}, 0, fmt.Sprintf("room:%d", id))
-}
-
-// roomAddress is the device a room command names. Every member of the
-// room takes a room-flagged command whichever member it names, but the
-// named device takes it too, whatever room it is in (docs/cube-protocol.md,
-// "Set temperature (0x40) addressing", 2026-11-15). So it is the room's
-// master from the metadata where that is a thermostat of the room by its
-// C line, else the room's wall thermostat, else its first radiator
-// thermostat, the owner's order (D167, D169-A of AP DeviceUnPairingFix,
-// which moves it into internal/cubeio for every room radiogram); never a
-// device of another room. ok is false for a room without a thermostat.
-func roomAddress(rt *runtime, room cube.RoomMeta) (cube.RFAddress, bool) {
-	radiators, walls := roomThermostats(rt, room.ID)
-	members := append(walls, radiators...)
-	if len(members) == 0 {
-		return 0, false
-	}
-	for _, rf := range members {
-		if rf == room.RFAddress {
-			return rf, true
-		}
-	}
-	return members[0], true
 }
 
 func (s *Server) setpoint(w http.ResponseWriter, r *http.Request, rt *runtime, t cube.Target, target cube.RFAddress, key string) error {

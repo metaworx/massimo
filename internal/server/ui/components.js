@@ -258,6 +258,52 @@ function markEl(state, key) {
   return svg;
 }
 
+// toastState is the page's toast's: its timer and the action of its
+// button (showToast).
+const toastState = { timer: null, action: null };
+
+// showToast shows a message at the page's foot (#toast) for ms
+// milliseconds, a newer one in the place of the one shown: its title in
+// bold where it has one, its text, its tone ("bad" for what failed, a red
+// edge) and an action, { label, run }, a button drawn for it alone that
+// runs it and closes the toast; × closes it at once. Notifications
+// (notify.js notifyToast) and the Cube search's outcome (app.js
+// discoverCubes) show here.
+function showToast(text, { title = "", ms = 10000, tone = "", action = null } = {}) {
+  const toast = $("toast");
+  if (!toast.dataset.wired) {
+    toast.dataset.wired = "1";
+    $("toast-close").addEventListener("click", hideToast);
+  }
+  $("toast-title").textContent = title;
+  $("toast-title").classList.toggle("hidden", !title);
+  $("toast-body").textContent = text;
+  toastState.action = action ? action.run : null;
+  const old = toast.querySelector(".toast-action");
+  if (old) old.remove();
+  if (action) {
+    const b = button(action.label, "toast-action", () => {
+      const run = toastState.action;
+      hideToast();
+      if (run) run();
+    });
+    b.id = "toast-action";
+    toast.insertBefore(b, $("toast-close"));
+  }
+  toast.classList.toggle("bad", tone === "bad");
+  toast.classList.remove("hidden");
+  if (toastState.timer) clearTimeout(toastState.timer);
+  toastState.timer = setTimeout(hideToast, ms);
+}
+
+// hideToast takes the page's toast away (showToast).
+function hideToast() {
+  if (toastState.timer) clearTimeout(toastState.timer);
+  toastState.timer = null;
+  toastState.action = null;
+  $("toast").classList.add("hidden");
+}
+
 // marksSeen are when each mark was first drawn and last drawn, by key.
 const marksSeen = new Map();
 

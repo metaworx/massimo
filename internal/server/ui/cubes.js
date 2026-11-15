@@ -105,6 +105,8 @@ function foundRow(c) {
   }
   add.setAttribute("aria-label", t("cubes.addLabel", { serial: c.serial }));
   add.addEventListener("click", () => addCube(c.serial, add));
+  // outside this machine's networks: why, and the way to an address here
+  if (c.other_network) li.appendChild(elem("p", "notice other-network", ...otherNetworkEls(c, c.address))); // app.js
   return li;
 }
 

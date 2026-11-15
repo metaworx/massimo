@@ -118,4 +118,9 @@ branch's older copy is in the script it moved to.
 Run the tool again: the script cut's version takes the place of the copy,
 in the copy's place, and leaves the script cut.
 An item that is new on main stops the tool until the map places it.
+An item that main deleted is not seen: the tool cannot tell a deletion
+from a move, so the copy stays in the script it moved to.
+List main's items against the map (`split.py --root <a tree of main>
+--list <script>`), and take the copy and its line in the map out by
+hand; `go test` finds one that reads an id the page no longer has.
 Then `split.py --check`, and the tests, again.

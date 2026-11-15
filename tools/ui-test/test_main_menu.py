@@ -23,7 +23,8 @@ PAGES = {"log": ("#logview", "#log", "#menu-log"), "cube": ("#cube-page", "#cube
 
 def test_main_menu_entries(page, case):
     """☰ at every width, its entries with their icons in this order, the
-    groups apart; Sign out with the personal page's label and icon."""
+    groups apart; Sign out with the personal page's label and icon, in
+    its accent and weight."""
     assert page.locator("#nav-menu").is_visible(), "☰ shown"
     m = open_main_menu(page)
     got = m.locator(".menu-items > *").evaluate_all("(es) => es.map((e) => e.id ? '#' + e.id : e.tagName.toLowerCase())")
@@ -38,6 +39,10 @@ def test_main_menu_entries(page, case):
     assert page.locator("#menu-logout-label").inner_text() == page.evaluate("document.getElementById('logout-label').textContent"), \
         "Sign out says what the personal page's button says"
     assert page.locator("#menu-logout-icon").get_attribute("href") == page.locator("#logout-icon").get_attribute("href"), "and its icon"
+    look = "(e) => [getComputedStyle(e).color, getComputedStyle(e).fontWeight]"
+    assert page.locator("#menu-logout").evaluate(look) == page.locator("#logout-btn").evaluate(look), \
+        "in the accent and bold, as the personal page's button"
+    assert page.locator("#menu-logout").evaluate(look) != page.locator("#menu-me").evaluate(look), "unlike the other entries"
     m.locator("summary").click()
 
 

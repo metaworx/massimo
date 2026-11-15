@@ -8,6 +8,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net"
@@ -76,6 +77,8 @@ func startFakeCube(t *testing.T) string {
 	return cubeAddr
 }
 
+// freeAddr returns a loopback address whose port was free a moment ago;
+// another process can take it before the caller listens on it.
 func freeAddr(t *testing.T) string {
 	t.Helper()
 	free, err := net.Listen("tcp", "127.0.0.1:0")
@@ -84,6 +87,42 @@ func freeAddr(t *testing.T) string {
 	}
 	defer free.Close()
 	return free.Addr().String()
+}
+
+// proxyGreeting dials the proxy at addr until deadline and returns the
+// connection with the first line it reads. A refused dial is tried
+// again while the proxy starts, and so is a connection that ends before
+// its first line (D174-A): make race runs other packages' tests at the
+// same time, so another process can listen on freeAddr's port before
+// the proxy and drop this client, while the proxy tries its own
+// listener again. A line that does not parse, or none by the deadline,
+// ends the tries.
+func proxyGreeting(addr string, deadline time.Time) (net.Conn, cube.Message, error) {
+	err := errors.New("no time left to dial")
+	for ; time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		var conn net.Conn
+		if conn, err = net.DialTimeout("tcp", addr, time.Second); err != nil {
+			continue
+		}
+		conn.SetReadDeadline(deadline)
+		var m cube.Message
+		if m, err = cube.NewReader(conn).Read(); err == nil {
+			return conn, m, nil
+		}
+		conn.Close()
+		if !connEnded(err) {
+			break
+		}
+	}
+	return nil, cube.Message{}, err
+}
+
+// connEnded reports whether err is the end of a connection, closed or
+// reset by its peer, rather than a deadline or a line that does not
+// parse.
+func connEnded(err error) bool {
+	var op *net.OpError
+	return errors.Is(err, io.EOF) || errors.As(err, &op) && !op.Timeout()
 }
 
 // A single Cube given only as MASSIMO_CUBE_ADDRESS, without a serial, is
@@ -121,18 +160,10 @@ func TestServeSingleCubeWithoutSerial(t *testing.T) {
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	go srv.Run(runCtx)
-	var conn net.Conn
-	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
-		if conn, err = net.Dial("tcp", proxyAddr); err == nil {
-			break
-		}
+	conn, m, err := proxyGreeting(proxyAddr, time.Now().Add(20*time.Second))
+	if conn != nil {
+		defer conn.Close()
 	}
-	if conn == nil {
-		t.Fatal("proxy never listened")
-	}
-	defer conn.Close()
-	conn.SetReadDeadline(time.Now().Add(20 * time.Second))
-	m, err := cube.NewReader(conn).Read()
 	if err != nil || m.Type != 'H' || !strings.HasPrefix(m.Data, "KEQ0000100,") {
 		t.Fatalf("greeting %v %v", m, err)
 	}
