@@ -638,8 +638,14 @@ body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8p
 /* the other settings pages (components.js pageSwitch), right-aligned
    before the sections menu, each its icon and its name, the icon alone
    on a phone */
-.page-switch { display: flex; flex: none; gap: 6px; margin-left: auto; }
-.page-switch + .menu.sec-menu, .page-bar > .section-badges { margin-left: 0; }
+.page-tools { display: flex; flex: none; align-items: center; gap: 6px; margin-left: auto; }
+.page-tools > .menu.sec-menu, .page-bar > .section-badges { margin-left: 0; }
+.page-switch { display: flex; gap: 6px; }
+/* where the title and the buttons do not fit on one line (a long title on
+   a phone), the buttons and the sections menu go under the title, which
+   stays whole */
+.page-bar.has-switch { flex-wrap: wrap; row-gap: 6px; }
+.page-bar.has-switch > h2 { flex: 0 1 auto; max-width: 100%; }
 .page-link {
   display: inline-flex;
   align-items: center;
@@ -1718,7 +1724,7 @@ massimo-week-program { display: contents; }
 .no-backup .needs-backup, .no-restore .needs-restore, .no-users-admin .needs-users-admin, .no-roles .needs-roles,
 .no-roles-disable .needs-roles-disable, .no-capabilities .needs-capabilities, .no-cubes .needs-cubes, .no-cubes-reboot .needs-cubes-reboot,
 .no-settings .needs-settings, .no-auth .needs-auth, .no-integrations .needs-integrations, .no-update .needs-update, .no-restart .needs-restart, .no-reboot .needs-reboot, .no-sync .needs-sync,
-.no-system .needs-system,
+.no-system .needs-system, .no-maint .needs-maint,
 .no-cubes.no-pair .needs-cubes-or-pair, .no-restart.no-settings.no-reboot .needs-maintenance { display: none !important; }
 .no-lock.no-structure .room .menu { display: none; }
 

@@ -1110,8 +1110,8 @@ function logCubeChanged() {
 
 // The pages of the main area: Rooms ("tiles"), the header's one button,
 // and the pages of ☰ (MENU_VIEWS): the log ("log"), the settings pages,
-// the chosen Cube's ("cube"), System settings ("system") and System info
-// ("info"), and the personal settings ("me": My profile, My settings and
+// the chosen Cube's ("cube"), System settings ("system"), Maintenance
+// ("maint") and System info ("info"), and the personal settings ("me": My profile, My settings and
 // Notifications as its cards), each with its section; ☰ is highlighted
 // while one of its pages is shown. The tiles keep their state while
 // hidden. The page shown is in the address
@@ -1260,12 +1260,12 @@ function markAllLogSeen() {
   saveLogSeen();
 }
 
-const VIEW_SECTION = { log: "logview", me: "me", system: "system", info: "info-page", cube: "cube-page" };
+const VIEW_SECTION = { log: "logview", me: "me", system: "system", maint: "maint-page", info: "info-page", cube: "cube-page" };
 const VIEW_BUTTON = { tiles: "view-tiles" };
-const VIEW_HASH = { tiles: "", log: "#log", me: "#me", system: "#system", info: "#info", cube: "#cube" };
+const VIEW_HASH = { tiles: "", log: "#log", me: "#me", system: "#system", maint: "#maintenance", info: "#info", cube: "#cube" };
 // MENU_VIEWS are the pages of ☰, every page but Rooms, with the ids of
 // their entries.
-const MENU_VIEWS = { log: "menu-log", cube: "menu-cube", system: "menu-system", info: "menu-info", me: "menu-me" };
+const MENU_VIEWS = { log: "menu-log", cube: "menu-cube", system: "menu-system", maint: "menu-maint", info: "menu-info", me: "menu-me" };
 // SETTINGS_PAGES are the settings pages, in ☰'s order, each with its
 // icon, the key of its name and the class that hides it from a role that
 // may not open it (login.js, style.css); each page's row links to the
@@ -1273,6 +1273,7 @@ const MENU_VIEWS = { log: "menu-log", cube: "menu-cube", system: "menu-system", 
 const SETTINGS_PAGES = [
   { view: "cube", icon: "icon-cube3d", key: "nav.cubeTitle", needs: "needs-cubes-or-pair" },
   { view: "system", icon: "icon-cog", key: "nav.settingsTitle", needs: "needs-system" },
+  { view: "maint", icon: "icon-tool", key: "nav.maintTitle", needs: "needs-maint" },
   { view: "info", icon: "icon-info", key: "nav.infoTitle", needs: "needs-read" },
 ];
 const CARD_HASH = { "#profile": "profile", "#prefs": "prefs", "#notify": "notify" };
@@ -1348,10 +1349,13 @@ function showAddress() {
 }
 
 // mayShow reports whether the signed-in user may open a page: System
-// settings with one of its capabilities, the Cube's settings with cubes
-// or with pair (its pairing alone), System info with read.
+// settings with one of its capabilities, Maintenance with one of those
+// or update, restart or reboot (Software update is for all of them), the
+// Cube's settings with cubes or with pair (its pairing alone), System
+// info with read.
 function mayShow(view) {
-  if (view === "system") return hasSystem(); // login.js
+  if (view === "system") return hasSettingsPage(); // login.js
+  if (view === "maint") return hasSystem(); // login.js
   if (view === "cube") return hasCap("cubes") || hasCap("pair"); // login.js
   if (view === "info") return hasCap("read");
   return view in VIEW_BUTTON || view in VIEW_SECTION;

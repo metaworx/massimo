@@ -68,6 +68,7 @@
   "nav.moreTitle": "Menu",
   "nav.cubeTitle": "Impostazioni del Cube",
   "nav.infoTitle": "Info di sistema",
+  "nav.maintTitle": "Manutenzione",
   "home.noCube": "Nessun Cube configurato.",
   "home.noCubeAdd": "Aggiungine uno in Impostazioni di sistema → Cube, dove sono elencati anche i Cube trovati in rete.",
   "home.noCubeAsk": "Chiedi al proprietario del server di aggiungerne uno.",

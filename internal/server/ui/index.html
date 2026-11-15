@@ -108,6 +108,8 @@
   <symbol id="icon-up" viewBox="0 0 24 24"><path d="M12 19V5"/><path d="M6 11l6-6 6 6"/></symbol>
   <!-- a page's sections menu: a bulleted list, apart from the header's ☰ -->
   <symbol id="icon-list" viewBox="0 0 24 24"><path d="M9.5 6h10.5M9.5 12h10.5M9.5 18h10.5"/><circle cx="4.75" cy="6" r="1.4" fill="currentColor"/><circle cx="4.75" cy="12" r="1.4" fill="currentColor"/><circle cx="4.75" cy="18" r="1.4" fill="currentColor"/></symbol>
+  <!-- Maintenance: Tabler Icons' tool (MIT, third_party/tabler-icons/) -->
+  <symbol id="icon-tool" viewBox="0 0 24 24"><path d="M7 10h3v-3l-3.5 -3.5a6 6 0 0 1 8 8l6 6a2 2 0 0 1 -3 3l-6 -6a6 6 0 0 1 -8 -8l3.5 3.5"/></symbol>
   <symbol id="icon-cog" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
 </svg>
 <header class="top">
@@ -161,6 +163,7 @@
           <hr class="menu-sep">
           <button type="button" id="menu-cube" class="needs-cubes-or-pair"><svg class="ni" aria-hidden="true"><use href="#icon-cube3d"/></svg><span data-i18n="nav.cubeTitle">Cube settings</span></button>
           <button type="button" id="menu-system" class="needs-system"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg><span data-i18n="nav.settingsTitle">System settings</span></button>
+          <button type="button" id="menu-maint" class="needs-maint"><svg class="ni" aria-hidden="true"><use href="#icon-tool"/></svg><span data-i18n="nav.maintTitle">Maintenance</span></button>
           <button type="button" id="menu-info" class="needs-read"><svg class="ni" aria-hidden="true"><use href="#icon-info"/></svg><span data-i18n="nav.infoTitle">System info</span></button>
           <hr class="menu-sep">
           <button type="button" id="menu-me"><svg class="ni" aria-hidden="true"><use href="#icon-user"/></svg><span data-i18n="nav.userTitle">Personal settings</span></button>
@@ -325,6 +328,24 @@
         <!-- partials: system-flow -->
       </div>
       <!-- partials: system-end -->
+    </div>
+  </section>
+
+  <!-- Maintenance, the page ☰ → Maintenance opens, for a role with one
+       of System settings' capabilities or with update, restart or reboot
+       (log.js mayShow): its row kept at the top under the header, with the
+       sections menu (components.js pageBar), and two section cards,
+       Software update and Maintenance. -->
+  <section id="maint-page" class="settings settings-page maint-page hidden" aria-labelledby="maint-title">
+    <div class="page-bar">
+      <h2 id="maint-title" data-i18n="nav.maintTitle">Maintenance</h2>
+      <details class="menu sec-menu">
+        <summary aria-label="sections" title="Sections" data-i18n-attr="aria-label:page.sections title:page.sectionsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-list"/></svg></summary>
+        <div class="menu-items"></div>
+      </details>
+    </div>
+    <div class="section-grid">
+      <!-- partials: maint -->
     </div>
   </section>
 

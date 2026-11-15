@@ -212,10 +212,11 @@ VIEWER = {"mode": "users", "user": {"name": "viewer1", "role": "viewer", "has_pa
 # The pages of the main area: how a user opens each, and the section it
 # shows.
 VIEW_BUTTON = {"tiles": "#view-tiles"}
-VIEW_MENU = {"log": "#menu-log", "cube": "#menu-cube", "system": "#menu-system", "info": "#menu-info", "me": "#menu-me"}  # in ☰
+VIEW_MENU = {"log": "#menu-log", "cube": "#menu-cube", "system": "#menu-system", "maint": "#menu-maint", "info": "#menu-info",
+             "me": "#menu-me"}  # in ☰
 VIEW_CARD = ("profile", "prefs", "notify")  # the personal page's cards, from its sections menu
 VIEW_SECTION = {"tiles": "#rooms", "log": "#logview", "me": "#me", "profile": "#profile", "prefs": "#prefs", "notify": "#notify",
-                "cube": "#cube-page", "system": "#system", "info": "#info-page"}
+                "cube": "#cube-page", "system": "#system", "maint": "#maint-page", "info": "#info-page"}
 
 
 def show_view(page, view):

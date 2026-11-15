@@ -47,6 +47,13 @@ function hasSystem() {
   return ["cubes", "pair", "backup", "roles", "capabilities", "auth", "integrations", "update", "restart", "reboot"].some(hasCap) || canManageUsers();
 }
 
+// hasSettingsPage reports whether the signed-in user may open System
+// settings: one of its cards' capabilities, without those only
+// Maintenance's cards use (update, restart, reboot).
+function hasSettingsPage() {
+  return ["cubes", "pair", "backup", "roles", "capabilities", "auth", "integrations"].some(hasCap) || canManageUsers();
+}
+
 // hasProfile reports whether the page is signed in as a user, who has My
 // profile; an open server and the server's token have none.
 function hasProfile() {
@@ -115,7 +122,8 @@ function applyCaps() {
   for (const c of CAPABILITIES) body.classList.toggle("no-" + capClass(c), !hasCap(c));
   body.classList.toggle("no-users-admin", !canManageUsers());
   body.classList.toggle("no-sync", !canSync());
-  body.classList.toggle("no-system", !hasSystem());
+  body.classList.toggle("no-system", !hasSettingsPage());
+  body.classList.toggle("no-maint", !hasSystem());
   $("setup").classList.toggle("hidden", !(me && me.setup));
   renderOpenBanner();
   renderMe();

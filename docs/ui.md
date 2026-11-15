@@ -151,6 +151,7 @@ The compacted header has **↑** left of ☰, back to the top.
   **Log**;
   **Cube settings**, the chosen Cube's, for a role with `cubes` or with `pair`,
   **System settings**, for a role with one of its capabilities,
+  **Maintenance**, for those and a role with `update`, `restart` or `reboot`,
   and **System info**, for every role with `read`;
   **Personal settings**, its tooltip naming whose they are, by display name and login,
   and **Sign out** (Forget key for an API key or the token, none on an open server).
@@ -159,14 +160,14 @@ The compacted header has **↑** left of ☰, back to the top.
   While the log holds a warning or an error not yet settled or marked seen (see Log),
   ☰ carries an amber triangle or a red cross,
   and the sheet of its Log entry turns amber or red, both named with the count.
-- The settings pages, Cube settings, System settings and System info,
+- The settings pages, Cube settings, System settings, Maintenance and System info,
   each have a title row kept under the header, and in it, right-aligned
   before the sections menu, a button for each of the others the role may
   open, with its icon and its name; on a phone the icon alone.
 - The page shown is in the address, Rooms without one:
   `#log`, `#me` (Personal settings, or at a card `#profile`, `#prefs` and
-  `#notify`), `#cube` (Cube settings), `#system` (System settings)
-  and `#info` (System info),
+  `#notify`), `#cube` (Cube settings), `#system` (System settings),
+  `#maintenance` (Maintenance) and `#info` (System info),
   so that a reload opens it again, the browser's back and forward move between
   the pages, and an address can be kept as a bookmark.
   The log's range, kind and device follow its page,
@@ -784,7 +785,7 @@ each part for a role with its capability;
 a role with none of them (the viewer's, a guest's) has no such entry in ☰.
 
 The page is a card per part, as wide as the page:
-Software update first, then Maintenance, Cubes, Users, Roles,
+Cubes first, then Users, Roles,
 **Capabilities for every role**, and Backup and restore last;
 from 900 px Users, Roles and Capabilities flow in two columns,
 none split, the break where their heights put it.
@@ -797,96 +798,6 @@ which also says what it holds at a glance (**up to date**, **1 served**,
 **2 users**, **all on**, **3 kept**), also while it is folded;
 the browser keeps which cards are folded.
 
-- **Software update**:
-  the running version, the update channel and whether a newer release is out.
-  A holder of `settings` chooses the channel there:
-  the build's own flavour, or devel, nightly, alpha, beta, rc or stable,
-  each taking its own releases and those of every more stable one.
-  The choice is the setting `update.channel`, none for the build's flavour
-  (`docs/api-v1.md`, "GET and PUT /api/v1/settings"),
-  and the release check asks again at once.
-  On a box apt updates, the first choice is apt's suite,
-  and another channel is the one the next update switches apt's source to:
-  the note says so, and nothing is downgraded.
-  Where something else decides the channel, it is shown fixed, with the reason:
-  brew's formula, which another channel's formula replaces
-  (the rolling ones from the tap `metaworx/massimo-rolling`);
-  or `MASSIMO_UPDATE_CHANNEL`, until it is removed.
-  On a box with the update helper installed (packaging/README.md, "Updating"),
-  **Update** (with `update`) installs it and restarts the server.
-  If the new version does not come up, the old one is put back.
-  On a box the Debian package installed it says "Installed by apt",
-  the channel is the suite of the apt source,
-  and **Update** has the package's helper run apt;
-  nothing is put back there, and the last update says how to go back
-  (packaging/README.md, "Debian package").
-  Under Homebrew's service it says "Installed by brew",
-  and **Update** runs `brew upgrade` as the service's user
-  (packaging/README.md, "Homebrew").
-  While the helper works, **Check for updates** and **Update** are greyed out,
-  also after a reload of the page, until it reports that it is done.
-  **Last updates** lists the last three under the version lines:
-  the version reached,
-  or the one asked for with "under way" until the next start,
-  when, and who started it,
-  or "outside Massimo" with apt or brew where Massimo did not start it;
-  one the helper ended without its version says how it ended (`docs/api-v1.md`,
-  "GET /api/v1/update?refresh=1").
-- **Maintenance** (with `restart`, `reboot` for its reboot,
-  or `settings` for its announcement, its Cube intervals and its last two parts),
-  in this order: **Announce on the LAN**, the three Cube intervals,
-  **Settings file**, **Restart** and **Reboot the computer**,
-  each under a bold title:
-  **Restart the server**
-  asks in the section and restarts the server through its service manager
-  (`docs/api-v1.md`, "POST /api/v1/restart");
-  the page then asks `/healthz` every two seconds until the server reports a new start,
-  reads the data again and says when it started,
-  or says after two minutes that it has not come back.
-  Where the server cannot be restarted from this page the button is missing
-  and the server's reason is shown,
-  such as a server in a terminal or an open server asked from elsewhere than the box.
-  The settings of the settings file that changed since the start and apply only
-  at the next one are listed under it, by name, and counted in the card's head,
-  with the card's own settings that wait for it.
-  **Announce on the LAN** (with `settings`) chooses **Automatic**, **On**
-  or **Off** for the setting `announce`: the announcement by mDNS for
-  `massimo discover`, the apps and Home Assistant, Automatic on unless the
-  server listens on the loopback, as behind a reverse proxy.
-  The line under it says whether the server announces itself now, or that
-  a change waits for the next restart; where `-announce` or
-  `MASSIMO_ANNOUNCE` decides, the choice is read-only and names it
-  (`docs/api-v1.md`, "GET and PUT /api/v1/settings").
-  **Poll the Cubes every**, **Refresh the Cubes every** and **Look for
-  Cubes every** (with `settings`) choose the intervals `poll_interval`
-  (10 s to 1 h, 10 s by default), `refresh_interval` (Off, 30 min to
-  7 days, 6 h by default) and `discover_interval` (Off, 1 min to 1 day,
-  30 min by default) from a list of steps; a value set through the API
-  that is none of them is listed as well, and the default is stored as
-  none.
-  The line under each says what it does: the device list asked for,
-  which costs the Cube no radio time; a new connection that reads
-  everything the Cube holds; the search for Cubes on the LAN.
-  It then gives this run's value, or says that a change waits for the
-  next restart; where `-poll`, `-refresh` or `-discover-interval`
-  decides, the choice is read-only and names the flag.
-  **Settings file** names the file and when the server last read it;
-  **Reload now** reads it again at once, as SIGHUP does
-  (`docs/api-v1.md`, "POST /api/v1/reload"), and says what changed.
-  **Reboot the computer** (with `reboot`, the owner's) has a delay in seconds,
-  60 to begin with, 0 to 3600, and asks in the section,
-  naming the delay, before it asks the server (`docs/api-v1.md`,
-  "GET /api/v1/reboot, …");
-  while the reboot waits the row says when it comes,
-  and **Take the reboot back** takes it back;
-  from its time the page follows `/healthz` as for the restart,
-  for up to five minutes,
-  and says when the computer is back, that it has not come back,
-  or why the reboot failed while the old server still answers.
-  Where the computer cannot be rebooted from here
-  the delay and the button are missing and the server's reason is shown:
-  the switch is off, the helper is not installed, a server in a terminal
-  (`packaging/README.md`, "Rebooting from the web UI").
 - **Cubes**:
   the Cubes the server serves, kept in its store;
   the card's head counts them, at every poll whether a panel is open or not:
@@ -1113,6 +1024,107 @@ the browser keeps which cards are folded.
   then each step is marked as the Cube took it, and the end is said.
   A Cube that is not in the server's store (a run with `-addr`) has no list;
   its download and the restore from a file work as before.
+
+## Maintenance
+
+☰ → **Maintenance** keeps the server itself going,
+in two cards as wide as the page, **Software update** and **Maintenance**,
+under the page's title row with **Sections** at its right end, as System settings has.
+It is for every role that has System settings, Software update being for all of them,
+and for one with `update`, `restart` or `reboot` alone;
+a viewer has no such entry in ☰.
+The server's sign, when it says an update is out, opens it at Software update.
+
+- **Software update**:
+  the running version, the update channel and whether a newer release is out.
+  A holder of `settings` chooses the channel there:
+  the build's own flavour, or devel, nightly, alpha, beta, rc or stable,
+  each taking its own releases and those of every more stable one.
+  The choice is the setting `update.channel`, none for the build's flavour
+  (`docs/api-v1.md`, "GET and PUT /api/v1/settings"),
+  and the release check asks again at once.
+  On a box apt updates, the first choice is apt's suite,
+  and another channel is the one the next update switches apt's source to:
+  the note says so, and nothing is downgraded.
+  Where something else decides the channel, it is shown fixed, with the reason:
+  brew's formula, which another channel's formula replaces
+  (the rolling ones from the tap `metaworx/massimo-rolling`);
+  or `MASSIMO_UPDATE_CHANNEL`, until it is removed.
+  On a box with the update helper installed (packaging/README.md, "Updating"),
+  **Update** (with `update`) installs it and restarts the server.
+  If the new version does not come up, the old one is put back.
+  On a box the Debian package installed it says "Installed by apt",
+  the channel is the suite of the apt source,
+  and **Update** has the package's helper run apt;
+  nothing is put back there, and the last update says how to go back
+  (packaging/README.md, "Debian package").
+  Under Homebrew's service it says "Installed by brew",
+  and **Update** runs `brew upgrade` as the service's user
+  (packaging/README.md, "Homebrew").
+  While the helper works, **Check for updates** and **Update** are greyed out,
+  also after a reload of the page, until it reports that it is done.
+  **Last updates** lists the last three under the version lines:
+  the version reached,
+  or the one asked for with "under way" until the next start,
+  when, and who started it,
+  or "outside Massimo" with apt or brew where Massimo did not start it;
+  one the helper ended without its version says how it ended (`docs/api-v1.md`,
+  "GET /api/v1/update?refresh=1").
+- **Maintenance** (with `restart`, `reboot` for its reboot,
+  or `settings` for its announcement, its Cube intervals and its last two parts),
+  in this order: **Announce on the LAN**, the three Cube intervals,
+  **Settings file**, **Restart** and **Reboot the computer**,
+  each under a bold title:
+  **Restart the server**
+  asks in the section and restarts the server through its service manager
+  (`docs/api-v1.md`, "POST /api/v1/restart");
+  the page then asks `/healthz` every two seconds until the server reports a new start,
+  reads the data again and says when it started,
+  or says after two minutes that it has not come back.
+  Where the server cannot be restarted from this page the button is missing
+  and the server's reason is shown,
+  such as a server in a terminal or an open server asked from elsewhere than the box.
+  The settings of the settings file that changed since the start and apply only
+  at the next one are listed under it, by name, and counted in the card's head,
+  with the card's own settings that wait for it.
+  **Announce on the LAN** (with `settings`) chooses **Automatic**, **On**
+  or **Off** for the setting `announce`: the announcement by mDNS for
+  `massimo discover`, the apps and Home Assistant, Automatic on unless the
+  server listens on the loopback, as behind a reverse proxy.
+  The line under it says whether the server announces itself now, or that
+  a change waits for the next restart; where `-announce` or
+  `MASSIMO_ANNOUNCE` decides, the choice is read-only and names it
+  (`docs/api-v1.md`, "GET and PUT /api/v1/settings").
+  **Poll the Cubes every**, **Refresh the Cubes every** and **Look for
+  Cubes every** (with `settings`) choose the intervals `poll_interval`
+  (10 s to 1 h, 10 s by default), `refresh_interval` (Off, 30 min to
+  7 days, 6 h by default) and `discover_interval` (Off, 1 min to 1 day,
+  30 min by default) from a list of steps; a value set through the API
+  that is none of them is listed as well, and the default is stored as
+  none.
+  The line under each says what it does: the device list asked for,
+  which costs the Cube no radio time; a new connection that reads
+  everything the Cube holds; the search for Cubes on the LAN.
+  It then gives this run's value, or says that a change waits for the
+  next restart; where `-poll`, `-refresh` or `-discover-interval`
+  decides, the choice is read-only and names the flag.
+  **Settings file** names the file and when the server last read it;
+  **Reload now** reads it again at once, as SIGHUP does
+  (`docs/api-v1.md`, "POST /api/v1/reload"), and says what changed.
+  **Reboot the computer** (with `reboot`, the owner's) has a delay in seconds,
+  60 to begin with, 0 to 3600, and asks in the section,
+  naming the delay, before it asks the server (`docs/api-v1.md`,
+  "GET /api/v1/reboot, …");
+  while the reboot waits the row says when it comes,
+  and **Take the reboot back** takes it back;
+  from its time the page follows `/healthz` as for the restart,
+  for up to five minutes,
+  and says when the computer is back, that it has not come back,
+  or why the reboot failed while the old server still answers.
+  Where the computer cannot be rebooted from here
+  the delay and the button are missing and the server's reason is shown:
+  the switch is off, the helper is not installed, a server in a terminal
+  (`packaging/README.md`, "Rebooting from the web UI").
 
 ## In the apps
 

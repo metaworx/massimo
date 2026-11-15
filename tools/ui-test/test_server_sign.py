@@ -55,7 +55,7 @@ def test_server_connected_and_update(page, case):
         assert icon == "#icon-info" and "v9.9.9" in label, f"a blue i, the version named ({label})"
         page.locator("#server-sign").click()
         page.locator("#sys-software").wait_for(state="visible")
-        assert page.evaluate("isShown('system')"), "a click opens Software update"
+        assert page.evaluate("isShown('maint')"), "a click opens Software update"
     finally:
         page.unroute("**/api/v1/update*")
         page.evaluate("updState.info = null; renderServerSign()")

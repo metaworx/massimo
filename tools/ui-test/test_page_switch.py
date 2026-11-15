@@ -8,8 +8,9 @@ import json
 
 from helpers import VIEWER, css_hidden, scroll_width, show_view, wait_until
 
-PAGES = {"cube": ("#cube-page", "nav.cubeTitle"), "system": ("#system", "nav.settingsTitle"), "info": ("#info-page", "nav.infoTitle")}
-ADDRESS = {"cube": "#cube", "system": "#system", "info": "#info"}
+PAGES = {"cube": ("#cube-page", "nav.cubeTitle"), "system": ("#system", "nav.settingsTitle"), "maint": ("#maint-page", "nav.maintTitle"),
+         "info": ("#info-page", "nav.infoTitle")}
+ADDRESS = {"cube": "#cube", "system": "#system", "maint": "#maintenance", "info": "#info"}
 
 
 def links(page, section):
@@ -20,8 +21,9 @@ def test_each_settings_page_links_the_others(page, case):
     """Every settings page's row: the other pages in ☰'s order, each with
     its icon and its name (shown at full width, its title and accessible
     name on a phone, where the icon stands alone), right of the title and
-    left of the sections menu; the title whole and no horizontal scroll;
-    a click opens the page."""
+    left of the sections menu, under the title where both do not fit on
+    one line; the title whole and no horizontal scroll; a click opens the
+    page."""
     for view, (section, _) in PAGES.items():
         show_view(page, view)
         page.locator(section).wait_for(state="visible")
@@ -42,7 +44,8 @@ def test_each_settings_page_links_the_others(page, case):
                 assert label.is_visible() and label.bounding_box()["width"] > 10, f"{other}'s name shown"
             else:
                 assert label.bounding_box()["width"] <= 1 and box["width"] <= 41, f"{other} its icon alone on a phone: {box}"
-            assert box["x"] >= title["x"] + title["width"], f"{other} right of the title"
+            assert box["x"] >= title["x"] + title["width"] or box["y"] >= title["y"] + title["height"] - 1, \
+                f"{other} right of the title, or under it where both do not fit"
             if menu.count():
                 assert box["x"] + box["width"] <= menu.bounding_box()["x"], f"{other} left of the sections menu"
         assert page.locator(section + " .page-bar h2").evaluate("(e) => e.scrollWidth <= e.clientWidth + 1"), f"{view}'s title whole"
@@ -57,14 +60,14 @@ def test_each_settings_page_links_the_others(page, case):
 
 def test_a_viewer_has_no_other_page_to_switch_to(page, case):
     """A viewer (/me stubbed) opens System info alone: its row shows no
-    button for Cube settings or System settings."""
+    button for Cube settings, System settings or Maintenance."""
     page.route("**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(VIEWER)))
     try:
         page.evaluate("loadMe()")
         assert wait_until(page, "document.body.classList.contains('no-system')", 5), "a viewer"
         page.evaluate("showView('info')")
         page.locator("#info-page").wait_for(state="visible")
-        for view in ("cube", "system"):
+        for view in ("cube", "system", "maint"):
             assert css_hidden(page, f"#info-page .page-link[data-view='{view}']"), f"no {view} button for a viewer"
     finally:
         page.unroute("**/api/v1/me")

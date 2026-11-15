@@ -21,7 +21,7 @@ def test_announce_choice(page, case):
     itself; On is stored and the hint says it waits for the restart."""
     api_call("PUT", "api/v1/settings", {"announce": None})
     try:
-        show_view(page, "system")
+        show_view(page, "maint")
         sel = page.locator("#announce-mode")
         assert wait_until(page, "document.querySelector('#announce-text').textContent.length > 0", 5), "the hint is filled"
         assert sel.is_enabled() and sel.input_value() == "auto", "Automatic, and the choice open"
@@ -58,7 +58,7 @@ def test_announce_fixed(page, case):
 
     page.route("**/api/v1/settings", handle)
     try:
-        show_view(page, "system")
+        show_view(page, "maint")
         assert wait_until(page, "document.querySelector('#announce-mode').disabled", 5), "read-only where the variable decides"
         assert "MASSIMO_ANNOUNCE" in page.locator("#announce-text").inner_text(), "the hint names what decides"
     finally:

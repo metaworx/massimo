@@ -57,7 +57,7 @@ def test_reboot_not_offered(page):
     button stay hidden and the server's reason is shown."""
     stub = RebootStub(page, {"available": False, "by": "systemd", "blocked": MISSING})
     try:
-        show_view(page, "system")
+        show_view(page, "maint")
         want = page.evaluate("t('reboot.unavailable', {reason: %s})" % json.dumps(MISSING))
         assert wait_until(page, "document.getElementById('reboot-text').textContent === %s" % json.dumps(want), 5), "the reason"
         assert page.locator("#reboot-btn").is_hidden() and page.locator("#reboot-delay-row").is_hidden(), "no delay, no button"
@@ -72,7 +72,7 @@ def test_reboot_asks_with_its_delay(page):
     and a delay the server would refuse is refused in the page."""
     stub = RebootStub(page, AVAILABLE)
     try:
-        show_view(page, "system")
+        show_view(page, "maint")
         btn = page.locator("#reboot-btn")
         btn.wait_for(state="visible")
         assert reboot_text(page) == page.evaluate("t('maint.rebootText')"), "what a reboot does"
@@ -102,7 +102,7 @@ def test_reboot_waits_and_is_taken_back(page):
     the row says when, and Take the reboot back takes it back."""
     stub = RebootStub(page, AVAILABLE)
     try:
-        show_view(page, "system")
+        show_view(page, "maint")
         page.locator("#reboot-btn").wait_for(state="visible")
         page.locator("#reboot-delay").fill("90")
         page.locator("#reboot-btn").click()
@@ -140,7 +140,7 @@ def test_reboot_follows_the_computer_back(page):
         route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
     page.route("**/healthz", healthz)
     try:
-        show_view(page, "system")
+        show_view(page, "maint")
         page.locator("#reboot-btn").wait_for(state="visible")
         page.locator("#reboot-delay").fill("0")
         page.locator("#reboot-btn").click()
@@ -161,7 +161,7 @@ def test_reboot_that_failed(page):
     is drawn again with the server's reason."""
     stub = RebootStub(page, AVAILABLE)
     try:
-        show_view(page, "system")
+        show_view(page, "maint")
         page.locator("#reboot-btn").wait_for(state="visible")
         page.locator("#reboot-delay").fill("0")
         page.locator("#reboot-btn").click()
@@ -186,7 +186,7 @@ def test_reboot_row_needs_its_capability(page):
     try:
         page.evaluate("loadMe()")
         assert wait_until(page, "document.body.classList.contains('no-reboot')", 5), "no reboot for a manager"
-        show_view(page, "system")
+        show_view(page, "maint")
         assert page.locator("#sys-maint").is_visible() and page.locator("#restart-btn").count() == 1, "Maintenance is there"
         assert css_hidden(page, ".action-row.reboot"), "without the reboot"
     finally:

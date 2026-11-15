@@ -1042,7 +1042,7 @@ function selectCube(serial) {
 // somethingOpen reports whether a reload would interrupt the user: a
 // panel, a dialog, a device list, or a stepper value not yet sent.
 function somethingOpen() {
-  if (isShown("me") || isShown("system") || isShown("cube")) return true;
+  if (isShown("me") || isShown("system") || isShown("maint") || isShown("cube")) return true;
   if (!$("house-panel").classList.contains("hidden")) return true;
   if ($("login-dialog").open) return true;
   for (const ui of Object.values(state.ui)) {
@@ -1237,7 +1237,7 @@ function serverSignClick(ev) {
   const st = serverState();
   if (st === "new") location.reload();
   else if (st === "info") {
-    showView("system"); // log.js
+    showView("maint"); // log.js
     showCard($("sys-software")); // components.js
   } else whileBusy($("refresh-btn"), () => poll(true));
 }
@@ -1513,6 +1513,7 @@ function applyLanguage() {
   if (I18N.en) applyI18n(document);
   initHelpSlots();
   pageBar($("system"));
+  pageBar($("maint-page"));
   pageBar($("me"));
   renderLangSelect();
   applyAppearance();
@@ -1554,7 +1555,7 @@ async function init() {
   // sections menu, its cards that fold; back to top on every page
   stickyHeader();
   watchFacts();
-  for (const page of [$("system"), $("me")]) {
+  for (const page of [$("system"), $("maint-page"), $("me")]) {
     sectionCards(page);
     pageBar(page);
   }

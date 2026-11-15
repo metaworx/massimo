@@ -802,9 +802,12 @@ function sectionButtons(page) {
 // a button for each of the other settings pages (pages, log.js
 // SETTINGS_PAGES): its icon and its name, the icon alone below 600 px
 // (style.css), each hidden from a role that may not open its page by
-// that page's needs class (login.js); open shows the page.
+// that page's needs class (login.js); open shows the page. They and the
+// sections menu are one group (.page-tools), which the row wraps under
+// its title where both do not fit (has-switch).
 function pageSwitch(page, current, pages, open) {
   const bar = page.querySelector(".page-bar");
+  bar.classList.add("has-switch");
   const nav = elem("nav", "page-switch");
   nav.setAttribute("aria-label", t("page.switch"));
   nav.dataset.i18nAttr = "aria-label:page.switch";
@@ -819,7 +822,8 @@ function pageSwitch(page, current, pages, open) {
     b.append(iconEl(p.icon, "ni"), label);
     nav.appendChild(b);
   }
-  bar.insertBefore(nav, bar.querySelector(".sec-menu"));
+  const menu = bar.querySelector(".sec-menu");
+  bar.appendChild(elem("div", "page-tools", nav, ...(menu ? [menu] : [])));
 }
 
 // pageBar fills a page's row kept at the top (its .page-bar) with the

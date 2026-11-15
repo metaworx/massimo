@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
 """☰, the page's one menu (AP GlobalMenu, Block 3), at every width: the
-log; Cube settings, System settings and System info; Personal settings
+log; Cube settings, System settings, Maintenance and System info;
+Personal settings
 and Sign out, each for the roles that may open it, a separator between
 the groups. Each opens its page, puts it into the address, highlights ☰,
 marks its entry current and closes the menu; back returns to the page
@@ -13,9 +14,10 @@ from conftest import URL
 from helpers import VIEWER, css_hidden, open_main_menu, show_view, wait_until
 from test_login import sign_in
 
-ORDER = ["#menu-log", "hr", "#menu-cube", "#menu-system", "#menu-info", "hr", "#menu-me", "#menu-logout"]
+ORDER = ["#menu-log", "hr", "#menu-cube", "#menu-system", "#menu-maint", "#menu-info", "hr", "#menu-me", "#menu-logout"]
 PAGES = {"log": ("#logview", "#log", "#menu-log"), "cube": ("#cube-page", "#cube", "#menu-cube"),
-         "system": ("#system", "#system", "#menu-system"), "info": ("#info-page", "#info", "#menu-info"),
+         "system": ("#system", "#system", "#menu-system"), "maint": ("#maint-page", "#maintenance", "#menu-maint"),
+         "info": ("#info-page", "#info", "#menu-info"),
          "me": ("#me", "#me", "#menu-me")}
 
 
@@ -60,8 +62,9 @@ def test_main_menu_opens_each_page(page, case):
 
 
 def test_an_address_opens_its_settings_page(page, case):
-    """#cube and #info open their pages at a reload, as #system does."""
-    for view in ("cube", "system", "info"):
+    """#cube, #maintenance and #info open their pages at a reload, as
+    #system does."""
+    for view in ("cube", "system", "maint", "info"):
         section, address, _ = PAGES[view]
         page.evaluate(f"history.replaceState(null, '', location.pathname + '{address}')")
         page.reload()
@@ -70,8 +73,8 @@ def test_an_address_opens_its_settings_page(page, case):
 
 def test_a_viewer_has_its_entries_alone(page, case):
     """A viewer (/me stubbed) has the log, System info, Personal settings
-    and Sign out in ☰; Cube settings and System settings neither there
-    nor by their address, which shows Rooms."""
+    and Sign out in ☰; Cube settings, System settings and Maintenance
+    neither there nor by their address, which shows Rooms."""
     page.route("**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(VIEWER)))
     try:
         page.evaluate("loadMe()")
@@ -79,11 +82,11 @@ def test_a_viewer_has_its_entries_alone(page, case):
         m = open_main_menu(page)
         for sel in ("#menu-log", "#menu-info", "#menu-me", "#menu-logout"):
             assert page.locator(sel).is_visible(), f"{sel} for a viewer"
-        for sel in ("#menu-cube", "#menu-system"):
+        for sel in ("#menu-cube", "#menu-system", "#menu-maint"):
             assert css_hidden(page, sel), f"no {sel} for a viewer"
         assert page.locator("#menu-logout-label").inner_text() == page.evaluate("t('me.signOut')"), "Sign out for a session"
         m.locator("summary").click()
-        for view in ("cube", "system"):
+        for view in ("cube", "system", "maint"):
             page.evaluate(f"showView('{view}')")
             assert page.locator(PAGES[view][0]).is_hidden() and page.locator("#rooms").is_visible(), f"{view} gives way to Rooms"
         page.evaluate("showView('info')")

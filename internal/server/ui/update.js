@@ -1114,7 +1114,7 @@ function initUpdate() {
   $("reboot-cancel").addEventListener("click", cancelReboot);
   $("announce-mode").addEventListener("change", setAnnounce);
   for (const iv of INTERVALS) $(iv.id).addEventListener("change", () => saveInterval(iv));
-  onView("system", () => {
+  onView("maint", () => {
     showResult($("announce-msg"), "");
     for (const iv of INTERVALS) showResult($(iv.id + "-msg"), "");
     loadAnnounce();

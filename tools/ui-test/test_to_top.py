@@ -6,7 +6,7 @@ header's ↑ left of ☰ while the header is compacted; each
 takes the page back to its top."""
 from helpers import scroll_settled, show_view, wait_until
 
-PAGES = {"tiles": "rooms", "log": "logview", "me": "me", "cube": "cube-page", "system": "system", "info": "info-page"}
+PAGES = {"tiles": "rooms", "log": "logview", "me": "me", "cube": "cube-page", "system": "system", "maint": "maint-page", "info": "info-page"}
 SHOWN = "!document.getElementById('to-top').classList.contains('hidden')"
 
 
