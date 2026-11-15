@@ -152,11 +152,11 @@ type CopyStep struct {
 // and after a move (docs/cube-protocol.md, "Pairing a device, as the
 // original software does it", steps 4 to 7): 0x40 auto with temperature
 // 0 to the device, directly as in the original software's log, without
-// the error reset and the retry, since the Cube discarded such a 0x40
-// to a device in a room on 2026-11-04; after a wakeup of the room, 0x11
-// with the room's temperatures to every thermostat of the room, the
-// device included,
-// each keeping its own temperature offset; after a wakeup, 0x12 with the
+// a Target, since the Cube discarded such a 0x40 to a device in a room
+// on 2026-11-04: the queue resets the device first, and retries a
+// discard, only where its error flag is set; after a wakeup of the
+// room, 0x11 with the room's temperatures to every thermostat of the
+// room, the device included, each keeping its own temperature offset; after a wakeup, 0x12 with the
 // room's boost, descaling and valve settings to the device; after a
 // wakeup, one 0x10 per day of the room's week programme that differs
 // from the device's own, then 0x11 to the device once more, and no

@@ -447,11 +447,21 @@ func (q *Queue) execute(ctx context.Context, cmd Command) Result {
 		q.sleep(ctx, q.opts.Gap)
 	}
 	var members map[uint8][]cube.RFAddress
+	var addressees []cube.RFAddress
 	if needsRadio && !cmd.Passthrough {
 		var rooms []uint8
 		rooms, members = q.flaggedMembers(cmd)
 		for _, room := range rooms {
 			if err := q.resetMembers(ctx, room, members[room]); err != nil {
+				return Result{Err: fmt.Errorf("reset the communication error: %w", err), Budget: q.gw.Budget()}
+			}
+		}
+		addressees = q.flaggedAddressees(cmd)
+		for _, rf := range addressees {
+			if resetForRoom(members, rf) {
+				continue
+			}
+			if err := q.resetAddressee(ctx, rf); err != nil {
 				return Result{Err: fmt.Errorf("reset the communication error: %w", err), Budget: q.gw.Budget()}
 			}
 		}
@@ -481,12 +491,14 @@ func (q *Queue) execute(ctx context.Context, cmd Command) Result {
 				"duty_pct", r.DutyCycle, "free_slots", r.FreeMemorySlots)
 			continue
 		}
-		room := lineRoom(l)
-		if again := members[room]; r.Discarded && (cmd.Target != 0 || len(again) > 0) {
+		room, dev := lineRoom(l), lineDevice(l)
+		again, direct := members[room], dev != 0 && slices.Contains(addressees, dev)
+		if r.Discarded && (cmd.Target != 0 || len(again) > 0 || direct) {
 			// Observed on hardware: a command to a device with a
 			// communication error is discarded unless r: was sent first.
-			// Reset once and retry: the target, and the flagged members of
-			// the room a room-flagged line names, those the prelude reset.
+			// Reset once and retry: the target, the flagged members of
+			// the room a room-flagged line names, and the flagged device a
+			// direct line addresses, those the prelude reset.
 			q.stepLog(cmd).Info("command discarded, resetting the communication error and retrying", "target", cmd.Target, "room", room, "command", l.String(),
 				"duty_pct", r.DutyCycle, "free_slots", r.FreeMemorySlots)
 			res.Retried = true
@@ -500,6 +512,12 @@ func (q *Queue) execute(ctx context.Context, cmd Command) Result {
 			if err := q.resetMembers(ctx, room, again); err != nil {
 				res.Err = err
 				break
+			}
+			if direct {
+				if err := q.resetAddressee(ctx, dev); err != nil {
+					res.Err = err
+					break
+				}
 			}
 			if r, err = q.gw.SendRadio(ctx, l); err != nil {
 				res.Err = err
@@ -554,23 +572,15 @@ func (q *Queue) deviceInError(rf cube.RFAddress) bool {
 // lines reset (cubeio's removals and moves) are left out.
 func (q *Queue) flaggedMembers(cmd Command) ([]uint8, map[uint8][]cube.RFAddress) {
 	var rooms []uint8
-	skip := map[cube.RFAddress]bool{cmd.Target: true}
 	for _, l := range cmd.Lines {
-		switch l.Type {
-		case 'r':
-			addrs, _ := cube.ParseResetError(l.Data)
-			for _, a := range addrs {
-				skip[a] = true
-			}
-		case 's':
-			if room := lineRoom(l); room != 0 && !slices.Contains(rooms, room) {
-				rooms = append(rooms, room)
-			}
+		if room := lineRoom(l); room != 0 && !slices.Contains(rooms, room) {
+			rooms = append(rooms, room)
 		}
 	}
 	if len(rooms) == 0 {
 		return nil, nil
 	}
+	skip := ownResets(cmd)
 	snap := q.gw.Snapshot()
 	members := map[uint8][]cube.RFAddress{}
 	for _, rf := range snap.Devices() {
@@ -583,6 +593,59 @@ func (q *Queue) flaggedMembers(cmd Command) ([]uint8, map[uint8][]cube.RFAddress
 		}
 	}
 	return rooms, members
+}
+
+// flaggedAddressees finds the devices a command's direct radio lines
+// address (AP RadioHealth v1.2, D182-A): an s: line without the room flag
+// goes to the device its header names, as the room configuration
+// write's 0x11 and 0x12 to each thermostat and a copy's steps do, and
+// the Cube may hold it back where that device's communication error is
+// set, so each such device is reset first, as the original software
+// resets every flagged device in a command's scope. It returns the
+// devices whose error flag is set, in the order the lines name them,
+// each once; the command's Target, which its own prelude resets, and the
+// devices the command's own r: lines reset are left out.
+func (q *Queue) flaggedAddressees(cmd Command) []cube.RFAddress {
+	skip, snap := ownResets(cmd), q.gw.Snapshot()
+	var out []cube.RFAddress
+	for _, l := range cmd.Lines {
+		rf := lineDevice(l)
+		if rf == 0 || skip[rf] || slices.Contains(out, rf) {
+			continue
+		}
+		if st, ok := snap.State(rf); ok && st.Error {
+			out = append(out, rf)
+		}
+	}
+	return out
+}
+
+// ownResets is the set of devices a command resets itself: its Target,
+// by the prelude, and the devices of its own r: lines (cubeio's
+// removals and moves).
+func ownResets(cmd Command) map[cube.RFAddress]bool {
+	skip := map[cube.RFAddress]bool{cmd.Target: true}
+	for _, l := range cmd.Lines {
+		if l.Type != 'r' {
+			continue
+		}
+		addrs, _ := cube.ParseResetError(l.Data)
+		for _, a := range addrs {
+			skip[a] = true
+		}
+	}
+	return skip
+}
+
+// resetForRoom reports whether rf is among the flagged members the
+// prelude reset for a room.
+func resetForRoom(members map[uint8][]cube.RFAddress, rf cube.RFAddress) bool {
+	for _, devs := range members {
+		if slices.Contains(devs, rf) {
+			return true
+		}
+	}
+	return false
 }
 
 // resetMembers sends one r: for each of devs, flagged members of room,
@@ -598,6 +661,21 @@ func (q *Queue) resetMembers(ctx context.Context, room uint8, devs []cube.RFAddr
 	return nil
 }
 
+// resetAddressee sends one r: for rf, a flagged device a direct line of
+// the command addresses, and logs it with the room of its C line.
+func (q *Queue) resetAddressee(ctx context.Context, rf cube.RFAddress) error {
+	if _, err := q.gw.SendRadio(ctx, cube.CmdResetError(rf)); err != nil {
+		return err
+	}
+	var room uint8
+	if c := q.gw.Snapshot().Config(rf); c != nil {
+		room = c.RoomID
+	}
+	q.opts.Logger.Info("communication error reset before a command", "device", rf, "room", room)
+	q.sleep(ctx, q.opts.Gap)
+	return nil
+}
+
 // lineRoom is the room a room-flagged s: line names; 0 for any other
 // line.
 func lineRoom(l cube.Message) uint8 {
@@ -609,6 +687,19 @@ func lineRoom(l cube.Message) uint8 {
 		return 0
 	}
 	return rc.Target.RoomID
+}
+
+// lineDevice is the device an s: line without the room flag addresses;
+// 0 for any other line.
+func lineDevice(l cube.Message) cube.RFAddress {
+	if l.Type != 's' {
+		return 0
+	}
+	rc, err := cube.ParseRadioCommand(l.Data)
+	if err != nil || rc.Target.Room {
+		return 0
+	}
+	return rc.Target.RFAddress
 }
 
 // Concerns reports whether a command of Massimo's own that is waiting
