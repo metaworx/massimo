@@ -185,6 +185,19 @@ func (o *stepObserver) finished(cmd engine.Command, res engine.Result) {
 	}
 	state := store.StateAcknowledged
 	result := map[string]any{"discarded": res.Discarded, "budget": res.Budget}
+	// Each line's answer, so that a discard names its line (AP
+	// DeviceUnPairingFix v1.2, Block 1): the replies follow the lines in
+	// order up to the first failure.
+	if len(res.Replies) > 0 {
+		answers := make([]string, len(res.Replies))
+		for i, r := range res.Replies {
+			answers[i] = r.String()
+		}
+		result["answers"] = answers
+		if res.Discarded && len(res.Replies) <= len(cmd.Lines) {
+			result["discarded_line"] = cmd.Lines[len(res.Replies)-1].String()
+		}
+	}
 	switch {
 	case res.Err == nil:
 	case errors.Is(res.Err, engine.ErrSuperseded), errors.Is(res.Err, engine.ErrDiscarded), errors.Is(res.Err, context.Canceled), errors.Is(res.Err, context.DeadlineExceeded):

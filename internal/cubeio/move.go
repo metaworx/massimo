@@ -23,50 +23,57 @@ func linkPair(a, b cube.DeviceType) bool {
 	return Linkable(a) && Linkable(b) && (a.IsThermostat() || b.IsThermostat())
 }
 
-// linkTarget addresses a link radiogram to a room member the way the
-// original software does: radiator thermostats with the room flag and
-// their room, every other device directly. The device being moved is
-// always addressed directly, as its group is being changed.
-func linkTarget(rf cube.RFAddress, typ cube.DeviceType, room uint8) cube.Target {
-	if typ.IsRadiatorThermostat() {
-		return cube.Target{RFAddress: rf, RoomID: room, Room: true}
-	}
-	return cube.Target{RFAddress: rf}
-}
-
 // MoveCommands builds the two commands that move a device to another
-// room the way the original software does: remove its group, then
-// unlink it from every partner of the old room (as the Cube lists it
-// now) in both directions, as the capture of 2026-11-04 and the original
-// software's DisassociateDeviceFromRoom have it (0x23 first); then link
-// it with every partner among newMembers in both directions and set the
-// new group, each half after a wakeup of the room concerned. The
-// metadata write that records the new room is not included. A device in
-// skip, a hidden one, is no partner: every write keeps away from it.
+// room as the original software moved one in its capture of 2026-11-04
+// (AP DeviceUnPairingFix v1.3, Block 2, D159-A, D170-A): out, the
+// removal's unlink half for the old room (unlinkFromRoom) with a 0x23
+// first (D160-A) and the device's own side; in, the placement's link
+// half for the new room (linkIntoRoom). Each half goes after a wakeup
+// of its room and carries its room's number. A device in no
+// room has no partner to leave: out is the 0x23 alone, without a
+// wakeup. The metadata write that records the new room is not
+// included. A device in skip, a hidden one, is no partner: every write
+// keeps away from it.
 func MoveCommands(snap *cubelan.Snapshot, rf cube.RFAddress, typ cube.DeviceType, oldRoom, newRoom uint8, newMembers []cube.DeviceMeta, skip view.Hidden) (out, in engine.Command) {
 	outLines := []cube.Message{cube.CmdSetGroup(rf, oldRoom, true)}
-	if md := snap.Metadata(); md != nil {
-		for _, d := range md.Devices {
-			if d.RFAddress == rf || d.RoomID != oldRoom || !linkPair(d.Type, typ) || skip[d.RFAddress] {
-				continue
-			}
-			outLines = append(outLines, cube.CmdLinkPartner(linkTarget(d.RFAddress, d.Type, oldRoom), false, rf, typ))
-			outLines = append(outLines, cube.CmdLinkPartner(cube.Target{RFAddress: rf}, false, d.RFAddress, d.Type))
-		}
+	if oldRoom != 0 {
+		outLines = unlinkFromRoom(snap, rf, typ, oldRoom, skip, true)
 	}
 	out = engine.Command{Key: "move-out:" + rf.String(), Target: rf, RoomID: oldRoom, Wakeup: oldRoom != 0, Lines: outLines}
-
-	var inLines []cube.Message
-	for _, d := range newMembers {
-		if d.RFAddress == rf || !linkPair(d.Type, typ) || skip[d.RFAddress] {
-			continue
-		}
-		inLines = append(inLines, cube.CmdLinkPartner(linkTarget(d.RFAddress, d.Type, newRoom), true, rf, typ))
-		inLines = append(inLines, cube.CmdLinkPartner(cube.Target{RFAddress: rf}, true, d.RFAddress, d.Type))
-	}
-	inLines = append(inLines, cube.CmdSetGroup(rf, newRoom, false))
-	in = engine.Command{Key: "move-in:" + rf.String(), Target: rf, RoomID: newRoom, Wakeup: true, Lines: inLines}
+	in = engine.Command{Key: "move-in:" + rf.String(), Target: rf, RoomID: newRoom, Wakeup: true,
+		Lines: linkIntoRoom(snap, rf, typ, newRoom, newMembers, skip)}
 	return out, in
+}
+
+// unlinkFromRoom is the unlink half of a removal and of a move: one r:
+// for each other member of room whose error flag is set (D161-B), then,
+// for a move, 0x23 for the device, then the 0x21s that unlink it from
+// its partners (linkLines), for a move on its own side too. The members
+// are the metadata's, the devices in skip left out.
+func unlinkFromRoom(snap *cubelan.Snapshot, rf cube.RFAddress, typ cube.DeviceType, room uint8, skip view.Hidden, move bool) []cube.Message {
+	members := RoomMembers(snap, room, skip)
+	lines := flaggedResets(snap, members, rf)
+	if move {
+		lines = append(lines, cube.CmdSetGroup(rf, room, true))
+	}
+	return append(lines, linkLines(roomMaster(snap, room), rf, typ, room, members, false, move)...)
+}
+
+// linkIntoRoom is the link half of a placement and of a move: one r:
+// for each of members whose error flag is set, the 0x20s that link the
+// device with its partners among them, on both sides (linkLines), then
+// 0x22, which gives the device the room's group. members are the
+// devices of room the caller names, the devices in skip left out.
+func linkIntoRoom(snap *cubelan.Snapshot, rf cube.RFAddress, typ cube.DeviceType, room uint8, members []cube.DeviceMeta, skip view.Hidden) []cube.Message {
+	var in []cube.DeviceMeta
+	for _, d := range members {
+		if d.RFAddress != rf && !skip[d.RFAddress] {
+			in = append(in, d)
+		}
+	}
+	lines := flaggedResets(snap, in, rf)
+	lines = append(lines, linkLines(roomMaster(snap, room), rf, typ, room, in, true, true)...)
+	return append(lines, cube.CmdSetGroup(rf, room, false))
 }
 
 // RoomRadiator returns the configuration of a radiator thermostat in the

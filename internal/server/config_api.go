@@ -978,7 +978,7 @@ func (s *Server) setRoomProgram(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	addr, ok := roomAddress(rt, room)
+	addr, ok := cubeio.RoomAddressee(rt.client.Snapshot(), room.ID, rt.hidden())
 	if !ok {
 		return fail(http.StatusConflict, "room %d has no thermostat", room.ID)
 	}
