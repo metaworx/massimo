@@ -66,6 +66,10 @@
   "nav.meTitle": "Persoonlijke instellingen",
   "nav.more": "meer pagina's",
   "nav.moreTitle": "Meer pagina's",
+  "nav.gear": "instellingen",
+  "nav.gearTitle": "Instellingen",
+  "nav.cubeTitle": "Cube-instellingen",
+  "nav.infoTitle": "Systeeminfo",
   "home.noCube": "Er is geen Cube ingesteld.",
   "home.noCubeAdd": "Voeg er een toe onder Systeeminstellingen → Cubes, waar ook de op het netwerk gevonden Cubes staan.",
   "home.noCubeAsk": "Vraag de eigenaar van de server er een toe te voegen.",
@@ -184,7 +188,6 @@
   "help.iconRadio": "Hoe een radiostoring wordt getekend, een apparaat dat zijn verbinding kwijt is of dat de Cube niet kon bereiken: de wifi-waaier of de zendmast van het display van de thermostaten. Het teken staat rechtsonder.",
   "help.scheme": "De kleuren van de pagina, als een lichte en een donkere set; de modus kiest welke wordt getoond. Aanpassen… bewerkt een kopie van het gekozen schema, Opslaan als bewaart die in deze browser onder een naam, Exporteren slaat die op als bestand en Importeren leest zo'n bestand.",
 
-  "sysinfo.title": "Systeeminfo",
   "sysinfo.install": "Installatie",
   "sysinfo.install.apt": "Debian-pakket (apt)",
   "sysinfo.install.brew": "Homebrew",

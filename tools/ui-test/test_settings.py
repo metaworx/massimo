@@ -124,14 +124,15 @@ def test_my_profile_lists_and_creates_own_keys(page, case):
 
 
 def test_no_system_settings_without_their_capabilities(page, case):
-    """A viewer (/me stubbed) has no ⚙, and an address or a page asking
-    for System settings shows Rooms; the operator, with backup, has it."""
+    """A viewer (/me stubbed) has no System settings in ⚙ or ☰, and an
+    address or a page asking for them shows Rooms; the operator, with
+    backup, has them."""
     page.route("**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(VIEWER)))
     try:
         show_view(page, "system")
         page.evaluate("loadMe()")
         assert wait_until(page, "document.body.classList.contains('no-system')", 5), "no System settings for a viewer"
-        assert css_hidden(page, "#view-settings") and css_hidden(page, "#menu-system"), "no ⚙, and nothing in ☰"
+        assert css_hidden(page, "#gear-system") and css_hidden(page, "#menu-system"), "not in ⚙, nor in ☰"
         assert page.locator("#system").is_hidden() and page.locator(".room").first.is_visible(), \
             "System settings, open as the viewer signs in, gives way to Rooms"
         page.evaluate("showView('system')")

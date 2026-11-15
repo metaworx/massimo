@@ -705,7 +705,7 @@ function startSystemClock(v) {
   sysClock.skew = ms - Date.now();
   const note = Math.abs(sysClock.skew) > 5000 ? t(sysClock.skew > 0 ? "sysinfo.ahead" : "sysinfo.behind", { d: clockSpan(sysClock.skew) }) : "";
   const tick = () => {
-    if (!isShown("system")) return;
+    if (!isShown("info")) return;
     const now = Date.now() + sysClock.skew;
     clear(cell);
     cell.appendChild(document.createTextNode(serverTime(now, v.now)));
@@ -801,14 +801,13 @@ function fillProxies(v) {
     cell.appendChild(line);
   }
   const failing = list.filter((p) => !p.listening).length;
-  sectionBadges($("sys-info"), failing ? [badgeEl(tn("proxy.badge.failing", failing), "warn")] : []);
+  sectionBadges($("info-page"), failing ? [badgeEl(tn("proxy.badge.failing", failing), "warn")] : []); // in its row
 }
 
 // certRetry follows a proxy's certificate the server has not read yet
-// (it reads it within seconds of the first request): System Info asks
-// again every `every` ms while System settings is shown, `max` times;
-// after the last, the certificate could not be read. Opening System
-// settings starts it again.
+// (it reads it within seconds of the first request): System info asks
+// again every `every` ms while it is shown, `max` times; after the last,
+// the certificate could not be read. Opening System info starts it again.
 const certRetry = { tries: 0, timer: null, every: 2000, max: 15, last: null };
 
 // certPending reports whether the proxy's certificate is still to be read.
@@ -817,11 +816,11 @@ function certPending(v) {
 }
 
 // certFollow asks again while the certificate is being read and System
-// settings is shown (certRetry), a request that failed counting as a
-// try; after the last, it says the certificate could not be read.
+// info is shown (certRetry), a request that failed counting as a try;
+// after the last, it says the certificate could not be read.
 function certFollow(v) {
   clearTimeout(certRetry.timer);
-  if (!certPending(v) || !isShown("system")) return;
+  if (!certPending(v) || !isShown("info")) return;
   if (certRetry.tries < certRetry.max) {
     certRetry.tries++;
     certRetry.timer = setTimeout(loadSystemInfo, certRetry.every);
@@ -881,7 +880,7 @@ function fillCertificate(v) {
   cell.textContent = v.tls ? certText(v.tls) : t("sysinfo.noTLS");
 }
 
-// loadSystemInfo fills System settings → System Info from GET
+// loadSystemInfo fills System info, the page, from GET
 // /api/v1/system: the version and what it was built with, when the
 // server started and how long ago, the server's clock (startSystemClock),
 // the certificate the browser sees (fillCertificate, asked for again
@@ -1122,6 +1121,8 @@ function initUpdate() {
     loadUpdate(false).then(loadChannel);
     loadRestart();
     loadReboot();
+  });
+  onView("info", () => {
     loadServerInfo();
     Object.assign(certRetry, { tries: 0, last: null });
     loadSystemInfo();

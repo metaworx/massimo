@@ -33,10 +33,11 @@ var uiFiles embed.FS
 // uiPartials are the parts of the page in ui/partials/, a file per
 // feature, by the marker of index.html they replace
 // (<!-- partials: system -->), in their order there: the panels of My
-// profile, of My settings, of Notifications and of System settings (its section cards in
-// three markers: before, in and after the cards that flow in two
-// columns), then the templates the scripts clone, each named for what it
-// holds and saying which script uses it.
+// profile, of My settings, of Notifications, System info's card, and the
+// panels of System settings (its section cards in three markers: before,
+// in and after the cards that flow in two columns), then the templates
+// the scripts clone, each named for what it holds and saying which script
+// uses it.
 var uiPartials = []struct {
 	marker string
 	files  []string
@@ -44,7 +45,8 @@ var uiPartials = []struct {
 	{"profile", []string{"profile.html"}},
 	{"prefs", []string{"appearance.html", "page.html"}},
 	{"notify", []string{"notify.html"}},
-	{"system", []string{"system-info.html", "software.html", "maintenance.html", "cubes.html"}},
+	{"info", []string{"system-info.html"}},
+	{"system", []string{"software.html", "maintenance.html", "cubes.html"}},
 	{"system-flow", []string{"users.html", "providers.html", "integrations.html", "roles.html", "capabilities.html"}},
 	{"system-end", []string{"backup.html"}},
 	{"templates", []string{"room.html", "device.html", "house.html", "config.html", "cube-panel.html", "pairing.html", "found.html", "scheme.html", "log.html", "users-panel.html", "providers-panel.html", "roles-panel.html", "backups-panel.html"}},

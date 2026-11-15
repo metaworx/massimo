@@ -1110,9 +1110,11 @@ function logCubeChanged() {
 
 // The pages of the main area: Rooms ("tiles"), the log ("log"), the
 // personal settings ("me": My profile, My settings and Notifications as
-// its cards) and System settings ("system"), each with its section and
-// its button in the header; ☰ is highlighted while Log or System
-// settings is shown, which it holds on a narrow screen. The tiles keep
+// its cards), and the settings pages of ⚙'s menu, the chosen Cube's
+// ("cube"), System settings ("system") and System info ("info"), each
+// with its section; ⚙ is highlighted while one of its pages is shown,
+// and ☰ while Log or one of them is, which it holds on a narrow screen
+// (GEAR_VIEWS). The tiles keep
 // their state while hidden. The page shown is in the address
 // (VIEW_HASH), Rooms without one, the personal page at a card by the
 // card's own (CARD_HASH, the addresses of the pages they were), and the
@@ -1262,9 +1264,12 @@ function markAllLogSeen() {
   saveLogSeen();
 }
 
-const VIEW_SECTION = { log: "logview", me: "me", system: "system" };
-const VIEW_BUTTON = { tiles: "view-tiles", log: "view-log", me: "view-me", system: "view-settings" };
-const VIEW_HASH = { tiles: "", log: "#log", me: "#me", system: "#system" };
+const VIEW_SECTION = { log: "logview", me: "me", system: "system", info: "info-page", cube: "cube-page" };
+const VIEW_BUTTON = { tiles: "view-tiles", log: "view-log", me: "view-me" };
+const VIEW_HASH = { tiles: "", log: "#log", me: "#me", system: "#system", info: "#info", cube: "#cube" };
+// GEAR_VIEWS are the pages of ⚙'s menu, with the ids of their entries
+// there and in ☰'s.
+const GEAR_VIEWS = { cube: ["gear-cube", "menu-cube"], system: ["gear-system", "menu-system"], info: ["gear-info", "menu-info"] };
 const CARD_HASH = { "#profile": "profile", "#prefs": "prefs", "#notify": "notify" };
 let currentView = "tiles";
 
@@ -1338,9 +1343,12 @@ function showAddress() {
 }
 
 // mayShow reports whether the signed-in user may open a page: System
-// settings with one of its capabilities.
+// settings with one of its capabilities, the Cube's settings with cubes
+// or with pair (its pairing alone), System info with read.
 function mayShow(view) {
   if (view === "system") return hasSystem(); // login.js
+  if (view === "cube") return hasCap("cubes") || hasCap("pair"); // login.js
+  if (view === "info") return hasCap("read");
   return view in VIEW_BUTTON || view in VIEW_SECTION;
 }
 
@@ -1379,7 +1387,18 @@ function showView(view, address = "push", card) {
     if (view === name) $(id).setAttribute("aria-current", "page");
     else $(id).removeAttribute("aria-current");
   }
-  $("nav-menu").querySelector("summary").classList.toggle("active", view === "log" || view === "system");
+  const gear = view in GEAR_VIEWS;
+  const sum = $("view-gear");
+  sum.classList.toggle("active", gear);
+  if (gear) sum.setAttribute("aria-current", "page");
+  else sum.removeAttribute("aria-current");
+  for (const [name, ids] of Object.entries(GEAR_VIEWS)) {
+    for (const id of ids) {
+      if (view === name) $(id).setAttribute("aria-current", "page");
+      else $(id).removeAttribute("aria-current");
+    }
+  }
+  $("nav-menu").querySelector("summary").classList.toggle("active", view === "log" || gear);
   if (view === "log") {
     loadLog();
     logLoadUsers();
@@ -1422,10 +1441,12 @@ function onView(view, fn) {
 function initLog() {
   $("view-tiles").addEventListener("click", () => showView("tiles"));
   $("view-log").addEventListener("click", () => showView("log"));
-  $("view-settings").addEventListener("click", () => showView("system"));
   $("view-me").addEventListener("click", () => showView("me"));
   $("menu-log").addEventListener("click", () => showView("log"));
-  $("menu-system").addEventListener("click", () => showView("system"));
+  for (const [view, ids] of Object.entries(GEAR_VIEWS)) {
+    for (const id of ids) $(id).addEventListener("click", () => showView(view));
+  }
+  dropdown($("gear-menu"));
   dropdown($("nav-menu"));
   // back and forward, and a page named in the address bar
   window.addEventListener("popstate", () => showAddress());

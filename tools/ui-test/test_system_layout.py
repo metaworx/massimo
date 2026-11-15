@@ -6,7 +6,7 @@ section buttons, folding kept in the browser, back to top, the columns
 where there is room, and a Cube's panel in two columns."""
 from helpers import named_buttons, scroll_settled, scroll_width, show_view, wait_until
 
-CARDS = ["sys-info", "sys-software", "sys-maint", "sys-cubes", "sys-users", "sys-providers", "sys-integrations", "sys-roles", "sys-caps", "sys-backup"]
+CARDS = ["sys-software", "sys-maint", "sys-cubes", "sys-users", "sys-providers", "sys-integrations", "sys-roles", "sys-caps", "sys-backup"]
 
 
 def card_ids(page):
@@ -30,7 +30,7 @@ def test_cards_and_contents(page, case):
     menu, and no row of section buttons; the cards flow in two columns at
     1100 px and stack at 390; nothing overflows."""
     show_view(page, "system")
-    assert card_ids(page) == CARDS, "System Info first, Backup and restore last"
+    assert card_ids(page) == CARDS, "Software update first, Backup and restore last"
     assert page.locator("#system .toc").count() == 0, "no row of section buttons"
     toc = open_sections(page).locator(".toc-link")
     assert toc.count() == len(CARDS), "a menu item per card"
@@ -71,13 +71,13 @@ def test_fold_kept_and_opened_from_contents(page, case):
 
 
 def test_back_to_top(page, case):
-    """Once the first card's head is out of sight, ↑ takes the page back
-    to its top, the focus on the sections menu."""
+    """A screen down, ↑ takes the page back to its top, the focus on the
+    sections menu."""
     show_view(page, "system")
-    top = page.locator("#system .to-top")
+    top = page.locator("#to-top")
     assert top.is_hidden(), "no ↑ at the top of the page"
     page.locator("#sys-backup").scroll_into_view_if_needed()
-    assert wait_until(page, "!document.querySelector('#system .to-top').classList.contains('hidden')", 3), "↑ once scrolled"
+    assert wait_until(page, "!document.getElementById('to-top').classList.contains('hidden')", 3), "↑ once scrolled"
     top.click()
     assert wait_until(page, "window.scrollY === 0", 3), "↑ goes back to the top"
     assert page.evaluate("document.activeElement === document.querySelector('#system .sec-menu > summary')"), \

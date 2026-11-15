@@ -65,6 +65,10 @@
   "nav.meTitle": "Persönliche Einstellungen",
   "nav.more": "weitere Seiten",
   "nav.moreTitle": "Weitere Seiten",
+  "nav.gear": "Einstellungen",
+  "nav.gearTitle": "Einstellungen",
+  "nav.cubeTitle": "Cube-Einstellungen",
+  "nav.infoTitle": "System-Info",
   "home.noCube": "Es ist kein Cube eingerichtet.",
   "home.noCubeAdd": "Füge einen unter Systemeinstellungen → Cubes hinzu, wo auch die im Netz gefundenen Cubes stehen.",
   "home.noCubeAsk": "Bitte den Besitzer des Servers, einen hinzuzufügen.",
@@ -183,7 +187,6 @@
   "help.iconRadio": "Wie eine Funkstörung gezeichnet wird, ein Gerät, das seine Verbindung verloren hat oder das der Cube nicht erreicht hat: der WLAN-Fächer oder der Funkturm aus der Anzeige der Thermostate. Das Zeichen steht unten rechts.",
   "help.scheme": "Die Farben der Seite, als heller und dunkler Satz; der Modus wählt, welcher gezeigt wird. Anpassen… bearbeitet eine Kopie des gewählten Schemas, Speichern als behält sie in diesem Browser unter einem Namen, Exportieren speichert sie als Datei und Importieren liest eine solche Datei.",
 
-  "sysinfo.title": "System-Info",
   "sysinfo.install": "Installation",
   "sysinfo.install.apt": "Debian-Paket (apt)",
   "sysinfo.install.brew": "Homebrew",

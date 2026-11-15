@@ -68,6 +68,10 @@
   "nav.meTitle": "Ustawienia osobiste",
   "nav.more": "więcej stron",
   "nav.moreTitle": "Więcej stron",
+  "nav.gear": "ustawienia",
+  "nav.gearTitle": "Ustawienia",
+  "nav.cubeTitle": "Ustawienia Cube",
+  "nav.infoTitle": "Informacje o systemie",
   "home.noCube": "Nie skonfigurowano żadnego Cube.",
   "home.noCubeAdd": "Dodaj go w Ustawienia systemu → Cube, gdzie są też Cube znalezione w sieci.",
   "home.noCubeAsk": "Poproś właściciela serwera o dodanie go.",
@@ -186,7 +190,6 @@
   "help.iconRadio": "Jak rysowana jest awaria radiowa, urządzenie, które straciło łączność lub którego Cube nie mógł osiągnąć: wachlarz Wi-Fi albo maszt z wyświetlacza termostatów. Znak jest w prawym dolnym rogu.",
   "help.scheme": "Kolory strony jako zestaw jasny i ciemny; tryb wybiera, który jest pokazywany. Dostosuj… edytuje kopię wybranego schematu, Zapisz jako zachowuje ją w tej przeglądarce pod nazwą, Eksportuj zapisuje ją do pliku, a Importuj wczytuje taki plik.",
 
-  "sysinfo.title": "Informacje o systemie",
   "sysinfo.install": "Instalacja",
   "sysinfo.install.apt": "Pakiet Debiana (apt)",
   "sysinfo.install.brew": "Homebrew",

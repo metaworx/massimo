@@ -67,6 +67,10 @@
   "nav.meTitle": "Impostazioni personali",
   "nav.more": "altre pagine",
   "nav.moreTitle": "Altre pagine",
+  "nav.gear": "impostazioni",
+  "nav.gearTitle": "Impostazioni",
+  "nav.cubeTitle": "Impostazioni del Cube",
+  "nav.infoTitle": "Info di sistema",
   "home.noCube": "Nessun Cube configurato.",
   "home.noCubeAdd": "Aggiungine uno in Impostazioni di sistema → Cube, dove sono elencati anche i Cube trovati in rete.",
   "home.noCubeAsk": "Chiedi al proprietario del server di aggiungerne uno.",
@@ -185,7 +189,6 @@
   "help.iconRadio": "Come viene disegnato un guasto radio, un dispositivo che ha perso il collegamento o che il Cube non ha raggiunto: il ventaglio Wi-Fi o la torre del display dei termostati. Il segno è in basso a destra.",
   "help.scheme": "I colori della pagina, come set chiaro e set scuro; la modalità sceglie quale viene mostrato. Personalizza… modifica una copia dello schema scelto, Salva come la conserva in questo browser con un nome, Esporta la salva come file e Importa legge un file di questo tipo.",
 
-  "sysinfo.title": "Info di sistema",
   "sysinfo.install": "Installazione",
   "sysinfo.install.apt": "Pacchetto Debian (apt)",
   "sysinfo.install.brew": "Homebrew",

@@ -81,7 +81,7 @@ BACKUPS = {"backups": [
     {"id": 1, "taken_at": "2026-11-02T18:05:00+01:00", "reason": "auto", "format": "json", "tool": VERSION, "size": 23990,
      "sha256": "1" * 64}]}
 TIME_RE = re.compile(r'"20\d\d-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?(Z|[+-]\d\d:\d\d)"')
-# System settings → System Info's store and settings in effect: run.sh's
+# System info's store and settings in effect: run.sh's
 # temporary directory and ports would differ on every run, so placeholders.
 STORE = {"file": "/var/lib/massimo/massimo.db", "schema": 8, "min_reader": 1, "binary": 8,
          "node": "00000000-0000-7000-8000-000000000001", "tenant": "00000000-0000-7000-8000-000000000002",

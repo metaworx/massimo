@@ -161,7 +161,7 @@ def test_an_address_the_user_may_not_open_shows_rooms(page, case):
         page.reload()
         page.wait_for_selector(".room", timeout=10000)
         assert wait_until(page, "location.hash === ''", 5), "the address drops System settings"
-        assert page.locator("#system").is_hidden() and css_hidden(page, "#view-settings"), "Rooms, and no ⚙"
+        assert page.locator("#system").is_hidden() and css_hidden(page, "#gear-system"), "Rooms, and no System settings in ⚙"
     finally:
         page.unroute("**/api/v1/me")
 
@@ -179,7 +179,7 @@ def test_header_order_and_the_narrow_header(page, case):
     beside it at the left (the version and the time under the brand, both,
     where they leave no room), then on the first line the Cube choice with the network
     sign of its link, then 🏠 👤 📄 ⚙, without ☰. Below 600 px 🏠 👤 ☰
-    beside the brand and the Cube choice on a line of its own under them; ☰ holds Log and System settings, opens each, and is
+    beside the brand and the Cube choice on a line of its own under them; ☰ holds Log and ⚙'s pages, opens each, and is
     highlighted while one of them is shown."""
     order = ["h1", "#updated", "#refresh-btn", "#refresh-btn svg", "#cube-choice", "#view-tiles", "#view-me"]
     b = {sel: box(page, sel) for sel in order}
@@ -187,22 +187,22 @@ def test_header_order_and_the_narrow_header(page, case):
     assert page.locator("#cube-choice .picker-icon .conn-sign use[href='#icon-net']").count() == 1, "the link, a network sign in the Cube choice"
     assert b["#view-tiles"]["x"] < b["#view-me"]["x"], "🏠 left of 👤"
     if case.width >= 600:
-        right = ["#cube-choice", "#view-tiles", "#view-me", "#view-log", "#view-settings"]
-        b.update({sel: box(page, sel) for sel in ("#view-log", "#view-settings")})
+        right = ["#cube-choice", "#view-tiles", "#view-me", "#view-log", "#view-gear"]
+        b.update({sel: box(page, sel) for sel in ("#view-log", "#view-gear")})
         xs = [b[sel]["x"] for sel in right]
         assert xs == sorted(xs), f"left to right in this order: {right}"
         assert max(b[sel]["x"] + b[sel]["width"] for sel in ("h1", "#updated", "#refresh-btn")) < b["#cube-choice"]["x"], \
             f"the brand and the time left of the Cube choice: {b}"
         first_line = b["h1"]["y"] + b["h1"]["height"]
         assert all(b[sel]["y"] < first_line for sel in right), f"the Cube choice and the pages on the first line: {b}"
-        assert page.locator("#view-log").is_visible() and page.locator("#view-settings").is_visible(), "📄 and ⚙ shown"
+        assert page.locator("#view-log").is_visible() and page.locator("#view-gear").is_visible(), "📄 and ⚙ shown"
         assert page.locator("#nav-menu").is_hidden(), "no ☰"
         return
     assert page.locator("#nav-menu").is_visible(), "☰ shown"
-    assert page.locator("#view-log").is_hidden() and page.locator("#view-settings").is_hidden(), "📄 and ⚙ in it"
+    assert page.locator("#view-log").is_hidden() and page.locator("#view-gear").is_hidden(), "📄 and ⚙ in it"
     assert b["#view-me"]["x"] < box(page, "#nav-menu summary")["x"], "🏠 👤 ☰"
     assert b["#cube-choice"]["y"] >= b["#view-tiles"]["y"] + b["#view-tiles"]["height"], "the Cube choice under them"
-    for view, section in (("log", "#logview"), ("system", "#system")):
+    for view, section in (("log", "#logview"), ("cube", "#cube-page"), ("system", "#system"), ("info", "#info-page")):
         page.locator("#nav-menu summary").click()
         page.locator("#menu-" + view).click()
         page.locator(section).wait_for(state="visible")
@@ -379,7 +379,7 @@ def test_menu_icons_and_user_title(page, case):
     assert "owner" in title, f"the 👤 tooltip names the user ({title!r})"
     assert page.locator("#view-me").get_attribute("aria-label") == title, "and says it to a screen reader"
     page.keyboard.press("Escape")
-    for sel in ("#menu-log", "#menu-system"):
+    for sel in ("#menu-log", "#menu-cube", "#menu-system", "#menu-info", "#gear-cube", "#gear-system", "#gear-info"):
         assert page.locator(sel + " > svg.ni").count() == 1, f"{sel} shows its icon"
 
 
@@ -499,7 +499,7 @@ def test_versions_copy(page, case):
     page.locator("#version-short").click()
     assert wait_until(page, "navigator.clipboard.readText().then((t) => t === state.version)", 3), "the header's version copies whole"
     assert "(" not in whole or "server version" not in whole, "without the tooltip's words"
-    show_view(page, "system")
+    show_view(page, "info")
     cell = page.locator("#info-version")
     assert wait_until(page, "!!document.querySelector('#info-version .copy-icon')", 5), "System Info's version with its icon"
     page.evaluate("navigator.clipboard.writeText('')")

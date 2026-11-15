@@ -13,6 +13,9 @@
 // with Stop, and each device that joins with the form that puts it into
 // a room (pairDeviceForm, which Devices without a room uses too). A role
 // with pair but without cubes sees the panels with the pairing alone.
+// The page Cube settings (⚙) shows the chosen Cube's panel alone, open
+// (renderCubePage); a panel is drawn in one place at a time, as its ids
+// are its serial's.
 "use strict";
 
 const cubesUI = {
@@ -23,28 +26,39 @@ const cubesUI = {
   devices: {}, // per serial: the Cube's visible devices, for the hide choice
   rooms: {}, // per serial: the rooms of a Cube that is not the one shown
   pairing: {}, // per serial: the pairing flow, see pairingOf
+  page: "", // the serial whose panel Cube settings has loaded for (renderCubePage)
   foundOpen: false, // the found Cubes' fold (foundFold)
   linesOpen: false, // its lines for the settings file (foundHints)
   busy: false,
 };
 
-// cubesMsg shows the outcome of the last action under the list.
+// cubesMsg shows the outcome of the last action under the list, or
+// under the panel of Cube settings.
 function cubesMsg(text, ok) {
-  showResult($("cubes-msg"), text, ok);
+  showResult($(isShown("cube") ? "cube-page-msg" : "cubes-msg"), text, ok);
 }
 
-// cubesVisible reports whether System settings, with the Cubes, is shown.
+// cubesVisible reports whether a page with the Cubes' panels is shown:
+// System settings, or Cube settings.
 function cubesVisible() {
-  return isShown("system");
+  return isShown("system") || isShown("cube");
 }
 
 // cubesPolled is called by loadCubes after every load of the list: the
 // card's badges drawn again always; the list drawn again while no panel
 // is open, otherwise each panel's head and facts refreshed in place
-// (fillCubeFacts), so that what is typed stays.
+// (fillCubeFacts), so that what is typed stays; Cube settings' panel,
+// always open, refreshed in place while it is the chosen Cube's.
 function cubesPolled() {
   if (!cubesVisible()) return;
   renderCubesBadges();
+  if (isShown("cube")) {
+    const d = $("cube-page-body").querySelector(".cube-panel");
+    const c = state.cubes.find((x) => x.serial === state.serial);
+    if (d && c && d.dataset.serial === c.serial) fillCubeFacts(d, c);
+    else if (!cubesUI.busy) renderCubes();
+    return;
+  }
   if (cubesUI.open.size === 0 && !cubesUI.busy) {
     renderCubes();
     return;
@@ -742,9 +756,12 @@ function fillCubeHead(d, c) {
   d.querySelector(".cube-top-line").replaceChildren(...cubeBadges(c));
 }
 
-function cubePanel(c) {
+// On Cube settings (page) the panel is open and stays open, its head the
+// page's title row, out of the tab order; its loads run once per Cube
+// shown there (cubesUI.page).
+function cubePanel(c, { page } = {}) {
   const badges = c.source ? [badgeEl(t("cubes.source." + c.source), "mode")] : [];
-  const d = detailsPanel({ name: c.name || undefined, mono: c.serial, badges, open: cubesUI.open.has(c.serial), cls: "cube-panel" },
+  const d = detailsPanel({ name: c.name || undefined, mono: c.serial, badges, open: page || cubesUI.open.has(c.serial), cls: "cube-panel" },
     fromTemplate("tpl-cube-panel"));
   d.dataset.serial = c.serial;
   const sum = d.querySelector("summary");
@@ -756,7 +773,22 @@ function cubePanel(c) {
   sum.prepend(who);
   if (sum.querySelector(".panel-badges")) sum.insertBefore(pills, sum.querySelector(".panel-badges"));
   else sum.appendChild(pills);
+  if (page) {
+    sum.tabIndex = -1;
+    // a click on the head folds nothing; its pill's opens the pill
+    sum.addEventListener("click", (ev) => {
+      if (!ev.target.closest(".cube-pill")) ev.preventDefault();
+    });
+  }
   d.addEventListener("toggle", () => {
+    if (page) {
+      if (!d.open || cubesUI.page === c.serial) return; // drawn again: loaded
+      cubesUI.page = c.serial;
+      if (!cubesUI.devices[c.serial]) loadCubeDevices(c.serial).then(() => devicesLoaded(c.serial));
+      loadPairing(c.serial);
+      loadCubeRooms(c.serial);
+      return;
+    }
     if (d.open) {
       if (cubesUI.open.has(c.serial)) return; // built open by a redraw
       cubesUI.open.add(c.serial);
@@ -998,15 +1030,35 @@ function renderCubesBadges() {
   sectionBadges($("sys-cubes"), badges);
 }
 
-// renderCubes draws System settings → Cubes from state.cubes and state.found.
+// renderCubes draws the Cubes' panels where they are shown: Cube
+// settings' while that page is shown (renderCubePage), else System
+// settings → Cubes from state.cubes and state.found; the other place
+// empty, as a panel's ids are its serial's.
 function renderCubes() {
   const box = $("cubes-list");
-  if (!box) return;
+  const page = $("cube-page-body");
+  if (!box || !page) return;
   clear(box);
+  clear(page);
+  if (isShown("cube")) {
+    renderCubePage(page);
+    return;
+  }
   if (!state.cubes.length) box.appendChild(textEl("p", t("cubes.none"), "muted small"));
   for (const c of state.cubes) box.appendChild(cubePanel(c));
   renderCubesBadges();
   if (state.found.length) box.appendChild(foundFold(state.found));
+}
+
+// renderCubePage draws Cube settings into box: the chosen Cube's panel,
+// open, or that no Cube is configured.
+function renderCubePage(box) {
+  const c = state.cubes.find((x) => x.serial === state.serial);
+  if (!c) {
+    box.appendChild(textEl("p", t("cubes.none"), "muted small"));
+    return;
+  }
+  box.appendChild(cubePanel(c, { page: true }));
 }
 
 // foundHints is how the found Cubes are served: Add at once, or the lines
@@ -1035,8 +1087,14 @@ function foundHints(found) {
 }
 
 // initCubes draws System settings → Cubes when the page opens; the panels
-// still open from before load what they would load when opened.
+// still open from before load what they would load when opened. Cube
+// settings draws its panel when it opens, which loads what it shows.
 function initCubes() {
+  onView("cube", () => {
+    cubesMsg("");
+    cubesUI.page = "";
+    renderCubes();
+  });
   onView("system", () => {
     cubesMsg("");
     renderCubes();

@@ -68,14 +68,14 @@ The header's line reads, from the left:
 Massimo's logo with the server's version and the time of the last update with **↻**,
 all on one baseline where they fit beside it, the M as tall as the page buttons;
 then the Cube choice with the server's connection to the Cube as a plug;
-then the house, **👤** and the other page buttons.
+then the house, **👤**, the log and **⚙**, the menu of the settings pages.
 Where the version, the server's sign and the time do not fit beside the logo
 on one line, they take a row of their own across the header,
 under the logo and the Cube choice, on a phone under the logo and the page buttons,
 the version on a line of its own where the row is too narrow for all three,
 so that it is cut only where it is wider than the header.
 On a screen narrower than 600 px the Cube choice takes a line of its own,
-**☰** beside the house and 👤 holds **Log** and **System settings**,
+**☰** beside the house and 👤 holds **Log** and ⚙'s pages,
 highlighted while one of them is shown,
 and the logo is the mark alone, the M with the clock in its V.
 
@@ -94,6 +94,7 @@ without the version, and the lines under it go until the page is back
 at its top, expert mode's line of the Cube's radio budget apart;
 narrower than 600 px the Cube choice then takes the line of **Massimo**,
 the sign and the time a short line under it.
+The compacted header has **↑** left of ⚙ (of ☰ on a phone), back to the top.
 
 - **Cube**:
   a menu that chooses the Cube when the server has several.
@@ -148,16 +149,22 @@ the sign and the time a short line under it.
   a clock that was off by 90 s or more says by how much ("3 min ahead").
 - **👤** opens the personal settings (see Personal settings);
   its tooltip names whose they are, by display name and login.
-  The items of **☰** have the icons of their pages.
-- The page buttons, a house, a person, a sheet and a cog,
-  switch between **Rooms**, **Personal settings**, **Log** and **System settings**.
+  The items of **☰** and of ⚙ have the icons of their pages.
+- The page buttons, a house, a person and a sheet,
+  switch between **Rooms**, **Personal settings** and **Log**.
+- **⚙** is a menu of the settings pages, each for the roles that may open it:
+  **Cube settings**, the chosen Cube's, for a role with `cubes` or with `pair`;
+  **System settings**, for a role with one of its capabilities;
+  and **System info**, for every role with `read`.
+  It is highlighted while one of them is shown, as a page button is.
   The sheet turns amber with a triangle, or red with a cross,
   while the log holds a warning or an error not yet settled or marked seen (see Log),
   its name with the count;
   on a phone ☰ carries the mark, and the log's entry in it the sign.
 - The page shown is in the address, Rooms without one:
   `#log`, `#me` (Personal settings, or at a card `#profile`, `#prefs` and
-  `#notify`) and `#system` (System settings),
+  `#notify`), `#cube` (Cube settings), `#system` (System settings)
+  and `#info` (System info),
   so that a reload opens it again, the browser's back and forward move between
   the pages, and an address can be kept as a bookmark.
   The log's range, kind and device follow its page,
@@ -166,6 +173,11 @@ the sign and the time a short line under it.
 - Each page comes back at the place it was left,
   by its button and by back and forward alike;
   a page opened for the first time starts at its top.
+- **↑**, round and filled in the accent's blue at the bottom right,
+  shows on every page once it is a screen down,
+  and another ↑ left of ⚙ (of ☰ on a phone) while the header is compacted;
+  each takes the page back to its top,
+  the focus on the page's sections menu where it has one.
 - **The server's sign**, before the time of the last update,
   an icon in a frame whose label says what a click does:
   the plug in green while the server answers (a click updates now);
@@ -181,7 +193,7 @@ the sign and the time a short line under it.
 - In expert mode a line under the first shows the chosen Cube's name,
   its duty cycle, free slots and radiograms pending,
   and the commands queued while there are any.
-  The server's facts are in System settings → **System Info**,
+  The server's facts are in ⚙ → **System info**,
   the Cube's in its panel under System settings → **Cubes**.
 - With a self-signed certificate (`massimo serve -tls self-signed`)
   the browser warned once, and a line under the header,
@@ -694,14 +706,81 @@ shows a notification in the language the page last told it
 or hands it to the page in front, and a tap opens the page.
 It caches nothing else: the page loads from the server as before.
 
+## Cube settings
+
+⚙ → **Cube settings** shows the panel of the Cube chosen in the header,
+as System settings → Cubes draws it, for a role with `cubes` or with `pair`
+(the pairing alone for `pair`).
+The panel is open and stays open: its head, the Cube's sign, name, serial,
+radio budget and pill, is the page's title row, kept under the header as the
+page scrolls, and a click on it folds nothing.
+The page follows the Cube choice and every poll, as the card does,
+and what it saves shows in System settings.
+A panel is drawn in one place at a time:
+while Cube settings is shown, System settings' list does not hold it.
+
+## System info
+
+⚙ → **System info** is for every role with `read`, a viewer's too:
+its title stays under the header while the page scrolls.
+The facts are the server's, a Cube's in its panel under System settings → **Cubes**.
+The page is a table of the server's version and what it was built with,
+when it started, as the server's clock read it, to the second in its zone,
+then how long ago,
+the server's time in its own zone, ticking,
+with a note where it differs from this browser's clock by more than 5 s,
+both times in this browser's zone when the pointer rests on them,
+the certificate the browser sees,
+how it was installed (the Debian package, Homebrew, the Windows service,
+a systemd or launchd service, or other: by hand, a container or another supervisor),
+the system it runs on with its processor,
+the host's full name, the host bold and the domain as it is,
+the interfaces the server listens on,
+a line each with the name, the MAC and the addresses,
+an asterisk marking the web interface's,
+the Cube proxies' listeners, a line each with the Cube's serial,
+the address and "listening",
+or a notice for one that does not listen: the error, since when,
+and the next try when the pointer rests on it,
+counted in a badge in the page's row while it fails (docs/proxy.md),
+and the address the server sees this browser at
+(`docs/api-v1.md`, "GET /api/v1/system").
+The certificate is the server's own (its source, names and expiry; none on plain HTTP),
+or, where a trusted proxy serves the page, the proxy's, "(proxied)":
+its names, expiry and issuer as the server read it, "not trusted" where it is not valid,
+with the address the proxy serves, a link to it in a new window and its copy icon;
+"being read…" while the server reads it,
+which it does within seconds of the first request:
+the page asks again every 2 s while it is shown,
+and says "could not be read" when 30 s have not brought it;
+where the proxy names no scheme (no `X-Forwarded-Proto`), the page's own scheme
+and address, and that with that header the server reads the proxy's certificate;
+a page on HTTPS from a server without TLS says "(proxied)" too,
+and that `-trusted-proxies` would show more.
+The server's version copies on a click, or by its copy icon, whole, with
+what it was built with (the header's does too, without the icon);
+so do each Cube proxy's serial, the serial it answers discovery with ("as …",
+where it answers discovery) and its address, which the original software connects to.
+A copy says "Copied"; on a page served over plain HTTP the browser gives no
+clipboard to the page, and the copy goes through its copy command instead.
+At its end, for a holder of `settings`,
+**Store** opens to what `massimo store info` shows:
+the file, the schema version, the node and tenant and the rows per table,
+its head the file, the schema and the rows in all;
+**Settings in effect** to what `massimo config` shows: the version, the
+settings file, the data directory, the listen address, TLS, the log level
+and every `MASSIMO_*` variable with where it came from, a key, an IV, a
+token or a password as "set, not shown"
+(`docs/api-v1.md`, "GET /api/v1/store, GET /api/v1/config").
+
 ## System settings
 
-The cog in the header, **System settings**, holds what is the server's,
+⚙ → **System settings** holds what is the server's,
 each part for a role with its capability;
-a role with none of them (the viewer's, a guest's) has no cog.
+a role with none of them (the viewer's, a guest's) has no such entry in ⚙.
 
 The page is a card per part, as wide as the page:
-System Info first, then Software update, Maintenance, Cubes, Users, Roles,
+Software update first, then Maintenance, Cubes, Users, Roles,
 **Capabilities for every role**, and Backup and restore last;
 from 900 px Users, Roles and Capabilities flow in two columns,
 none split, the break where their heights put it.
@@ -713,58 +792,7 @@ A card folds with the button in its heading,
 which also says what it holds at a glance (**up to date**, **1 served**,
 **2 users**, **all on**, **3 kept**), also while it is folded;
 the browser keeps which cards are folded.
-Once the first card's head is out of sight, **↑** at the bottom right goes back
-to the top of the page.
 
-- **System Info**, for everyone who opens System settings:
-  a table of the server's version and what it was built with,
-  when it started, as the server's clock read it, to the second in its zone,
-  then how long ago,
-  the server's time in its own zone, ticking,
-  with a note where it differs from this browser's clock by more than 5 s,
-  both times in this browser's zone when the pointer rests on them,
-  the certificate the browser sees,
-  how it was installed (the Debian package, Homebrew, the Windows service,
-  a systemd or launchd service, or other: by hand, a container or another supervisor),
-  the system it runs on with its processor,
-  the host's full name, the host bold and the domain as it is,
-  the interfaces the server listens on,
-  a line each with the name, the MAC and the addresses,
-  an asterisk marking the web interface's,
-  the Cube proxies' listeners, a line each with the Cube's serial,
-  the address and "listening",
-  or a notice for one that does not listen: the error, since when,
-  and the next try when the pointer rests on it,
-  counted in the card's badge while it fails (docs/proxy.md),
-  and the address the server sees this browser at
-  (`docs/api-v1.md`, "GET /api/v1/system").
-  The certificate is the server's own (its source, names and expiry; none on plain HTTP),
-  or, where a trusted proxy serves the page, the proxy's, "(proxied)":
-  its names, expiry and issuer as the server read it, "not trusted" where it is not valid,
-  with the address the proxy serves, a link to it in a new window and its copy icon;
-  "being read…" while the server reads it,
-  which it does within seconds of the first request:
-  the page asks again every 2 s while System settings is shown,
-  and says "could not be read" when 30 s have not brought it;
-  where the proxy names no scheme (no `X-Forwarded-Proto`), the page's own scheme
-  and address, and that with that header the server reads the proxy's certificate;
-  a page on HTTPS from a server without TLS says "(proxied)" too,
-  and that `-trusted-proxies` would show more.
-  The server's version copies on a click, or by its copy icon, whole, with
-  what it was built with (the header's does too, without the icon);
-  so do each Cube proxy's serial, the serial it answers discovery with ("as …",
-  where it answers discovery) and its address, which the original software connects to.
-  A copy says "Copied"; on a page served over plain HTTP the browser gives no
-  clipboard to the page, and the copy goes through its copy command instead.
-  At its end, for a holder of `settings`,
-  **Store** opens to what `massimo store info` shows:
-  the file, the schema version, the node and tenant and the rows per table,
-  its head the file, the schema and the rows in all;
-  **Settings in effect** to what `massimo config` shows: the version, the
-  settings file, the data directory, the listen address, TLS, the log level
-  and every `MASSIMO_*` variable with where it came from, a key, an IV, a
-  token or a password as "set, not shown"
-  (`docs/api-v1.md`, "GET /api/v1/store, GET /api/v1/config").
 - **Software update**:
   the running version, the update channel and whether a newer release is out.
   A holder of `settings` chooses the channel there:
@@ -855,7 +883,6 @@ to the top of the page.
   the delay and the button are missing and the server's reason is shown:
   the switch is off, the helper is not installed, a server in a terminal
   (`packaging/README.md`, "Rebooting from the web UI").
-  From 900 px System Info and Software update share a row, Maintenance has one of its own.
 - **Cubes**:
   the Cubes the server serves, kept in its store;
   the card's head counts them, at every poll whether a panel is open or not:
@@ -1134,7 +1161,7 @@ its heading's `button.section-fold` folding it):
 `sectionCards` makes them fold and keeps the fold in the browser,
 `sectionBadges` shows what a card holds in its head,
 `pageBar` fills the sections menu of its title's row kept at the top,
-and `backToTop` wires the page's ↑;
+and `backToTop` wires the two ↑, the floating one and the compacted header's;
 `pickerMenu` makes a dropdown the choice of one item (the Cube choice),
 its items `menuItem`s, a Cube's link its network sign (`cubeSignEl`, `LINK_SIGN`);
 a device's serial and radio address are a `deviceIds`;
