@@ -189,9 +189,13 @@ type Options struct {
 	// last with a reconnect where none was read; nil takes
 	// DefaultStructureChecks.
 	StructureChecks []time.Duration
-	Logger          *slog.Logger
-	Version         string
-	Queue           engine.Options
+	// ResetSettle is how long after a repair's resets the device list is
+	// read for the flags they cleared (repair_api.go); 0 takes
+	// DefaultResetSettle.
+	ResetSettle time.Duration
+	Logger      *slog.Logger
+	Version     string
+	Queue       engine.Options
 	// Proxy lists the LAN listeners on which the server itself answers
 	// as a Cube (see internal/proxy), one per Cube.
 	// One that cannot listen is tried again until it does.
@@ -1418,6 +1422,7 @@ func (s *Server) routes() {
 	api("GET /api/v1/store", "settings", s.getStore)
 	api("GET /api/v1/config", "settings", s.getConfig)
 	s.configRoutes(api)
+	s.repairRoutes(api)
 	s.uiRoutes(mux)
 	s.mux = mux
 	// A write that another site's page sent is refused before it is

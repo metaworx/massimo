@@ -322,7 +322,8 @@ Every room has a tile:
 - The **⋯** menu starts a **Boost** (the valves open by the thermostats' boost
   settings for their boost time, then the room returns to its mode),
   locks or unlocks the buttons on the room's thermostats,
-  and deletes a room that has no devices.
+  deletes a room that has no devices,
+  and with **Repair…** opens the room's repairs under the tile (Repairs, below).
 - The room name or the **i** button opens the device list:
   every device with its type's icon before its name (a radiator, a wall
   thermostat, a window, a leaf for the eco button), its values (valve, set
@@ -416,6 +417,54 @@ a value of the chevrons stays shown, with **Save** turning, until the answer.
 The tile shows the result when it is done: "ok", or what failed.
 While radio commands wait for the devices' acknowledgement,
 the header says how many are pending.
+
+### Repairs
+
+For a role with `repair` (the owner's and the manager's),
+**Repair…** opens a box of repairs:
+in a room tile's **⋯** menu, under the tile;
+in a device's row of the device list and of the devices without a room,
+under the row;
+in a Cube's panel (Cube settings, System settings → Cubes), under its actions.
+Each repair is named and says what it does;
+the box asks the server what each would send now, sending nothing,
+and shows its cost under it:
+the radiograms, about how much of the hourly radio budget they take,
+the memory slots, those held until the devices' next wakeup, and the wakeups;
+or that it costs no radio time, a reset or a list write.
+Expert mode adds the lines themselves.
+A repair with nothing to do says why, as the server words it,
+and one the Cube's budget would stop halfway says that it cannot run now.
+**Run…** asks in its place, naming the cost again;
+**Run now** sends exactly what was shown,
+and the box says how many lines the Cube accepted,
+that the devices take radiograms at their next wakeup and the log says when
+it is done (its **device change** line),
+or for resets whether the Cube's device list still shows the error.
+**Close** closes the box; it stays open while the tile is drawn again.
+
+- In a room: **Reset the communication errors** of its devices, free;
+  **Name the room's master**, where the Cube's list names no thermostat of
+  the room, the wall thermostat, else the first radiator thermostat,
+  in the list only;
+  **Re-link the room**, each device's links and room sent again,
+  adding only;
+  **Unlink all and re-link**, with `structure` as well,
+  every link of the room removed and then built again:
+  its **Run…** first warns, naming the cost,
+  that it has not yet run on real hardware,
+  and that a run that stops halfway leaves the room's devices without their
+  partners until it is run again;
+  **Continue** asks once more, and only that question's
+  **Unlink all and re-link now** sends it.
+- At a device: **Re-send the configuration**, for a thermostat,
+  the temperatures and week programme most of the room's other thermostats
+  share, where its own differ;
+  **Place in its listed room**, by radio, where the Cube has it in another
+  room or none;
+  **List where the Cube has it**, in the list only,
+  asking first for the name of a room the list does not have.
+- In a Cube's panel: **Reset the communication errors** of every device.
 
 ## Log
 
@@ -930,6 +979,9 @@ the browser keeps which cards are folded.
   sends the changes, which apply at once:
   a hidden device leaves the tiles, the API and the original software,
   and a room that holds only hidden devices goes with it.
+  **Repair…**, in the panel's actions for a role with `repair`,
+  opens the Cube's repairs under them (Rooms, Repairs):
+  the reset of every communication error of the Cube.
   **Reboot the Cube**, in the panel's actions for a role with `cubes.reboot`,
   restarts the Cube (`POST /api/v1/cubes/{sn}/reboot`),
   which frees one that still holds the server's old connection at once:
@@ -1348,7 +1400,8 @@ a script for each region of the page, in the order the page loads them:
 - `update.js`, Software update; `maintenance.js`, the Maintenance card;
   `system-info.js`, System info;
 - `cubes.js`, System settings → Cubes, the found Cubes and the Cube page;
-  `cube-panel.js`, a Cube's panel; `pairing.js`, the pairing;
+  `cube-panel.js`, a Cube's panel; `repair.js`, the repairs of a room,
+  a device and a Cube; `pairing.js`, the pairing;
 - `login.js`, `users.js`, `providers.js`, `integrations.js`,
   `backup.js` and `roles.js`, the sign-in and the cards of System settings;
 - `theme.js`, the mode and the colour schemes, applied as the script loads;

@@ -23,7 +23,7 @@ const integrationsUI = {
 
 // INTEGRATION_CEILING is the role integration's set, what an integration
 // may have at most (integrationCeiling in internal/server/auth.go).
-const INTEGRATION_CEILING = ["read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore",
+const INTEGRATION_CEILING = ["read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore", "repair",
   "guests", "cubes", "cubes.reboot", "settings", "update", "restart", "reboot", "audit"];
 
 function integrationsMsg(text, ok) {
