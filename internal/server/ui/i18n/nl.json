@@ -1058,7 +1058,7 @@
   "type.radiator_thermostat_plus": "radiatorthermostaat+",
   "type.wall_thermostat": "wandthermostaat",
   "type.shutter_contact": "raamcontact",
-  "type.eco_button": "Eco-schakelaar",
+  "type.eco_switch": "Eco-schakelaar",
 
   "result.ok": "{label}: ok",
   "result.budget": "{text} (duty cycle {duty} %, {slots} vrije plaatsen)",

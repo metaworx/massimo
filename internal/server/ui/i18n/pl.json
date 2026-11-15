@@ -1096,7 +1096,7 @@
   "type.radiator_thermostat_plus": "termostat grzejnikowy+",
   "type.wall_thermostat": "termostat ścienny",
   "type.shutter_contact": "kontaktron okienny",
-  "type.eco_button": "przycisk Eco",
+  "type.eco_switch": "przycisk Eco",
 
   "result.ok": "{label}: ok",
   "result.budget": "{text} (Duty Cycle {duty} %, wolne sloty: {slots})",

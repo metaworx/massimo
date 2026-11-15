@@ -1057,7 +1057,7 @@
   "type.radiator_thermostat_plus": "radiator thermostat plus",
   "type.wall_thermostat": "wall thermostat",
   "type.shutter_contact": "window contact",
-  "type.eco_button": "eco button",
+  "type.eco_switch": "eco button",
 
   "result.ok": "{label}: ok",
   "result.budget": "{text} (duty cycle {duty} %, {slots} free slots)",
