@@ -185,6 +185,9 @@ body.server-down main .ni.sign, body.server-down .problems-sum, body.server-down
 /* ↻ on the digits' middle, not on their baseline (an SVG's own baseline
    is its bottom edge): moved down without moving the line */
 .refresh-btn .ni { position: relative; top: 3px; width: 16px; height: 16px; flex: none; }
+/* the age counts on each second: digits of one width, so that the line
+   does not move with them */
+#updated { font-variant-numeric: tabular-nums; }
 .refresh-btn:hover, .refresh-btn:focus-visible { color: var(--accent); }
 .refresh-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .refresh-btn.busy::after { content: none; }

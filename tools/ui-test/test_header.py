@@ -283,17 +283,20 @@ def test_facts_fitted_again_when_the_time_comes(page, case):
     show changes: with a short version (a build's from a checkout without
     tags, as CI's) they fit beside the logo on a phone before the time of
     the last update has come, and the time then takes them to their row,
-    the version whole, not cut under the logo."""
-    page.evaluate("""() => { const v = document.getElementById('version-short'), u = document.getElementById('updated');
+    the version whole, not cut under the logo. The Cube's age is held
+    meanwhile (its timer stopped, the poll too), so that the test alone
+    writes the time."""
+    page.evaluate("""() => { clearInterval(state.pollTimer); clearTimeout(updatedTimer);
+      const v = document.getElementById('version-short'), u = document.getElementById('updated');
       window.__facts = [v.textContent, u.textContent]; v.textContent = 'v0.0.0-dev'; u.textContent = ''; fitFacts(); }""")
     try:
         page.wait_for_timeout(100)
-        page.evaluate("document.getElementById('updated').textContent = 'updated 03:57:52'")
+        page.evaluate("document.getElementById('updated').textContent = '59 sec'")
         assert wait_until(page, "(() => { const v = document.getElementById('version-short'); "
                           "return v.scrollWidth <= v.clientWidth + 1; })()", 3), "the version whole once the time came"
     finally:
         page.evaluate("""() => { const [v, u] = window.__facts; document.getElementById('version-short').textContent = v;
-          document.getElementById('updated').textContent = u; }""")
+          document.getElementById('updated').textContent = u; renderUpdated(); startPolling(); }""")
 
 
 def test_header_on_one_baseline(page, case):
@@ -331,7 +334,9 @@ def test_header_on_one_baseline(page, case):
         hit = page.evaluate("([x, y]) => { const e = document.elementFromPoint(x, y); "
                             "return !!e && (!!e.closest('#refresh-btn') || !!e.closest('button, summary, a, input, select')); }", [x, y])
         assert hit, f"a tap 8 px off the button still hits it, where no other control is (y {y}, button {b})"
-    assert page.locator("#updated").inner_text() in (btn.get_attribute("aria-label") or ""), "its label says the time"
+    label = btn.get_attribute("aria-label") or ""
+    assert label == btn.get_attribute("title") and label != page.evaluate("t('header.refreshTitle')"), \
+        f"its tooltip and its name say the time: {label!r}"
     version = page.evaluate("state.version")
     assert page.locator("#version-short").get_attribute("title") == VERSION_TITLE[case.lang].format(v=version), \
         "the tooltip is the whole version"
@@ -495,3 +500,40 @@ def test_versions_copy(page, case):
     assert copied == system and len(copied) >= len(cell.locator(".mono").inner_text().strip()), \
         f"the whole version, not the short one shown ({copied!r} vs {system!r})"
     show_view(page, "tiles")
+
+
+AGES = ((5, 5, "second"), (125, 2, "minute"), (3 * 3600 + 5, 3, "hour"), (3 * 86400, 3, "day"))
+SET_AGE = """([ago, skew]) => {
+  serverSkew = skew;
+  const c = state.cubes.find((x) => x.serial === state.serial);
+  c.updated = new Date(Date.now() - ago * 1000).toISOString();
+  renderUpdated();
+  const d = new Date(Date.parse(c.updated)), pad = (n) => String(n).padStart(2, '0');
+  const time = pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+  return [document.getElementById('updated').textContent, document.getElementById('refresh-btn').title,
+          t('header.refreshUpdated', {time})];
+}"""
+
+
+def test_updated_is_the_cubes_age(page, case):
+    """Beside ↻ how long ago the chosen Cube was heard from (its updated),
+    on the server's clock: seconds under a minute, then minutes, hours,
+    days; it counts on by itself; ↻'s tooltip says the time itself. The
+    server's clock is taken from its answers. The poll is held meanwhile,
+    so that it does not bring the Cube's own time back."""
+    assert wait_until(page, "Math.abs(serverSkew) < 3000", 5), "the server's clock from its answers: this machine's"
+    page.evaluate("clearInterval(state.pollTimer)")
+    try:
+        for ago, n, unit in AGES:
+            text, title, want = page.evaluate(SET_AGE, [ago, 0])
+            assert text == page.evaluate(f"fmtUnit({n}, '{unit}')"), f"{ago} s ago: {text!r}"
+            assert title == want, f"the tooltip says the time: {title!r}"
+        text, _, _ = page.evaluate(SET_AGE, [0, 60000])
+        assert text == page.evaluate("fmtUnit(1, 'minute')"), f"on the server's clock, a minute ahead: {text!r}"
+        page.evaluate(SET_AGE, [3, 0])
+        assert wait_until(page, "document.getElementById('updated').textContent === fmtUnit(5, 'second')", 4), "it counts on"
+        assert page.locator("#updated").evaluate("(e) => getComputedStyle(e).fontVariantNumeric").find("tabular-nums") >= 0, \
+            "digits of one width"
+    finally:
+        page.evaluate("startPolling(); poll(true)")
+

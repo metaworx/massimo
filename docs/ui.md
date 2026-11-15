@@ -137,8 +137,12 @@ The compacted header has **↑** left of ☰, back to the top.
   A window open briefly is not listed: it is a state, not a problem.
   Its list, as every menu of the page, opens inside the window,
   no higher than the room below it, and scrolls in itself, not the page.
-- **The time of the last update** and **↻**, one button without a frame,
-  which asks the server for the current state now;
+- **How long ago the chosen Cube was heard from** and **↻**, one button without a frame,
+  which asks the server for the current state now:
+  "8 sec" since the server last took a message from the Cube,
+  measured on the server's clock,
+  counting on by itself, each second under a minute, then each minute, each hour;
+  its tooltip says the time itself, "updated 20:51:00, click to reload";
   a finger hits it a little beyond what it shows, and ↻ turns while it asks.
 - **The version** is short; its tooltip is the whole version, "(server version)".
   The Cube's clock is in the Cube's facts, under System settings → **Cubes**:

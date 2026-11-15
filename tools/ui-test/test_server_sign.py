@@ -84,8 +84,8 @@ def test_server_new_version(page, case):
 
 def test_server_gone(page, case, watch):
     """The server gone: the open plug on a filled red square that blinks,
-    the page's other signs greyed, the time that of the last update; back
-    at the next answer."""
+    the page's other signs greyed, the chosen Cube's age still shown, as the
+    server last told it; back at the next answer."""
     watch.expected.append(("/healthz", 503))
     page.evaluate("""() => {
       const r = state.rooms.find((r) => r.devices.some((d) => d.type === "shutter_contact"));
@@ -93,7 +93,6 @@ def test_server_gone(page, case, watch):
       d.state.window_open = true;
       updateDevice(d);
     }""")
-    before = page.locator("#updated").inner_text()
     page.route("**/healthz", lambda route: route.fulfill(status=503, body="gone"))
     try:
         page.evaluate("checkVersion()")
@@ -103,7 +102,7 @@ def test_server_gone(page, case, watch):
         assert page.evaluate("getComputedStyle(document.getElementById('server-sign')).backgroundColor") != "rgba(0, 0, 0, 0)", "filled"
         assert page.evaluate("getComputedStyle(document.querySelector('#server-sign .ni')).animationName") == "markblink", "it blinks"
         assert "grayscale" in page.evaluate("getComputedStyle(document.querySelector('main .problems-sum')).filter"), "the other signs greyed"
-        assert page.locator("#updated").inner_text() == before, "the time of the last update"
+        assert page.locator("#updated").inner_text().strip(), "the Cube's age still shown"
     finally:
         page.unroute("**/healthz")
     page.evaluate("checkVersion()")

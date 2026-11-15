@@ -273,6 +273,7 @@ async function apiRequest(method, path, body, { auth = true, keepalive = false, 
   if (bearer) headers.Authorization = "Bearer " + bearer;
   if (body !== undefined) headers["Content-Type"] = "application/json";
   const resp = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), keepalive });
+  noteServerClock(resp);
   let data = null;
   const text = await resp.text();
   if (text) {
@@ -618,22 +619,61 @@ function renderHeader(cube) {
   renderUpdated();
 }
 
-// renderUpdated shows the time of the last successful poll with
-// seconds, in the browser's time, in the refresh button, which says both
-// to a screen reader.
+// serverSkew is the server's clock less the browser's, in ms, from the
+// Date header of the server's answers (noteServerClock), 0 before one
+// came.
+let serverSkew = 0;
+
+// noteServerClock takes the server's clock from an answer's Date header:
+// whole seconds, cut, so the middle of its second; kept unless it moved
+// by more than a second and a half, so that an age does not jump back
+// and forth with the cut.
+function noteServerClock(resp) {
+  const ms = Date.parse(resp.headers.get("Date") || "");
+  if (isNaN(ms)) return;
+  const skew = ms + 500 - Date.now();
+  if (Math.abs(skew - serverSkew) > 1500) serverSkew = skew;
+}
+
+// fmtSince is a time span (ms), briefly: seconds under a minute, then
+// minutes, hours, from two days on days ("8 sec", "12 min", "5 hr").
+function fmtSince(ms) {
+  const sec = Math.max(0, Math.floor(ms / 1000));
+  if (sec < 60) return fmtUnit(sec, "second");
+  if (sec < 3600) return fmtUnit(Math.floor(sec / 60), "minute");
+  if (sec < 48 * 3600) return fmtUnit(Math.floor(sec / 3600), "hour");
+  return fmtUnit(Math.floor(sec / 86400), "day");
+}
+
+let updatedTimer = null;
+
+// renderUpdated shows in the refresh button how long ago the chosen Cube
+// was last heard from: its updated, the last message the server took
+// from it, on the server's clock (serverSkew), the age counting on by
+// itself (each second under a minute, then each minute, each hour); its
+// tooltip and its name for a screen reader say the time itself, "updated
+// 20:51:00, click to reload". Nothing where the Cube has no such time.
 function renderUpdated() {
   const el = $("updated");
   const btn = $("refresh-btn");
-  if (!state.lastPoll) {
+  clearTimeout(updatedTimer);
+  const cube = state.cubes.find((c) => c.serial === state.serial);
+  const at = cube ? Date.parse(cube.updated || "") : NaN;
+  if (isNaN(at)) {
     el.textContent = "";
+    btn.title = t("header.refreshTitle");
     btn.setAttribute("aria-label", t("header.refreshTitle"));
     return;
   }
+  const age = Math.max(0, Date.now() + serverSkew - at);
+  el.textContent = fmtSince(age);
   const pad = (n) => String(n).padStart(2, "0");
-  const last = state.lastPoll;
-  const time = pad(last.getHours()) + ":" + pad(last.getMinutes()) + ":" + pad(last.getSeconds());
-  el.textContent = t("header.updated", { time });
+  const d = new Date(at);
+  const time = pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds());
+  btn.title = t("header.refreshUpdated", { time });
   btn.setAttribute("aria-label", t("header.refreshUpdated", { time }));
+  const step = age < 60000 ? 1000 : age < 3600000 ? 60000 : 3600000;
+  updatedTimer = setTimeout(renderUpdated, step - (age % step) + 20);
 }
 
 // LINK_SIGN is the state of a Cube's network sign by its link (linkState):
