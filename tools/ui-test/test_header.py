@@ -314,7 +314,7 @@ def test_header_on_one_baseline(page, case):
     button = box(page, "#view-tiles")
     assert abs(brand["height"] - button["height"]) <= 1, f"the M as tall as the page buttons: {brand} vs {button}"
     assert abs(brand["top"] - button["y"]) <= 1, f"and level with them: {brand} vs {button}"
-    # fitted once the version has come (app.js fitFacts)
+    # fitted once the version has come (header.js fitFacts)
     assert wait_until(page, "(() => { const v = document.getElementById('version-short'); return v.textContent !== '' && v.scrollWidth <= v.clientWidth + 1; })()", 5), \
         "the version whole"
     real = page.locator("#version-short").inner_text()

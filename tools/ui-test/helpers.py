@@ -159,7 +159,7 @@ def assert_busy(page, selector, what):
 
 
 def set_version(page, version):
-    """The header's version set by hand, and fitted again (app.js
+    """The header's version set by hand, and fitted again (header.js
     watchFacts refits the facts a frame after their text changes)."""
     page.evaluate("""(v) => new Promise((done) => { document.getElementById('version-short').textContent = v;
       requestAnimationFrame(() => requestAnimationFrame(() => done())); })""", version)
