@@ -756,9 +756,9 @@ function fillCubeHead(d, c) {
   d.querySelector(".cube-top-line").replaceChildren(...cubeBadges(c));
 }
 
-// On Cube settings (page) the panel is open and stays open, its head the
-// page's title row, out of the tab order; its loads run once per Cube
-// shown there (cubesUI.page).
+// On Cube settings (page) the panel is open and stays open, its head
+// under the page's row and out of the tab order; its loads run once per
+// Cube shown there (cubesUI.page).
 function cubePanel(c, { page } = {}) {
   const badges = c.source ? [badgeEl(t("cubes.source." + c.source), "mode")] : [];
   const d = detailsPanel({ name: c.name || undefined, mono: c.serial, badges, open: page || cubesUI.open.has(c.serial), cls: "cube-panel" },
