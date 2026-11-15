@@ -851,18 +851,25 @@ document.addEventListener("DOMContentLoaded", () => brandMarks());
 // of view under the click). The browser's scroll anchoring is off
 // meanwhile: it took the scroll back by what the page under the header
 // moved, to the top where that was more than 96 px (the expert list, the
-// found Cubes open), the header grew back and the screen flickered.
+// found Cubes open), the header grew back and the screen flickered. It is
+// switched off on the body as on the root, as Chrome takes the page's from
+// the body: off on the root alone, a jump down the page at 390 px went
+// back by the compacted header's 53 px (AP HeaderAnchor).
 // Growing back takes the margin and the class away in one layout.
 function stickyHeader() {
   const top = document.querySelector(".top");
   const root = document.documentElement;
+  const anchoring = (v) => {
+    root.style.overflowAnchor = v;
+    document.body.style.overflowAnchor = v;
+  };
   // the border box: compacting changes the padding, which the content
   // box does not see
   const height = () => root.style.setProperty("--top-h", top.getBoundingClientRect().height + "px");
   new ResizeObserver(height).observe(top, { box: "border-box" });
   const set = (on) => {
     if (on === document.body.classList.contains("scrolled")) return;
-    root.style.overflowAnchor = "none";
+    anchoring("none");
     if (on) {
       const whole = top.getBoundingClientRect().height;
       const margin = parseFloat(getComputedStyle(top).marginBottom) || 0;
@@ -874,7 +881,7 @@ function stickyHeader() {
       document.body.classList.remove("scrolled");
     }
     height(); // laid out with the margin, before the anchoring is back
-    root.style.overflowAnchor = "";
+    anchoring("");
   };
   const onScroll = () => {
     const y = window.scrollY;
