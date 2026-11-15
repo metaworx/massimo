@@ -32,6 +32,7 @@ var (
 		"state":                "device state",
 		"battery":              "device battery level",
 		"wall_reset":           "wall thermostat came back on another mode",
+		"error_reset":          "communication error reset at the device's report",
 		"connected":            "cube connected",
 		"disconnected":         "cube connection lost",
 		"cube_found":           "cube found on the LAN",
@@ -97,6 +98,41 @@ func eventMessage(ev event) string {
 			return "the cube's device configurations and its room list differ: " + finding
 		}
 		return "the cube's device configurations and its room list agree again: " + finding
+	case "error_watch":
+		flag := "communication error"
+		if ev.Summary["flag"] == flagLink {
+			flag = "link error"
+		}
+		switch ev.Summary["what"] {
+		case watchBack:
+			return "communication error back after its automatic reset, no automatic reset until it stays clear a day"
+		case watchLasting:
+			return flag + " set for 24 hours"
+		case watchClear:
+			return flag + " clear again"
+		}
+	case "disagree":
+		switch ev.Summary["outcome"] {
+		case "differ":
+			return "the room's members disagree"
+		case "resent":
+			return "the room's state sent again to its members"
+		case "resend_failed":
+			return "the room's state not sent again"
+		case "not_resent":
+			return "the room's members still disagree, the room's state not sent again"
+		case "agree":
+			return "the room's members agree again"
+		}
+	case "drift":
+		switch ev.Summary["outcome"] {
+		case "not_following":
+			return "device does not follow its week programme, its clock or programme suspect"
+		case "follows":
+			return "device follows its week programme again"
+		case "left_auto":
+			return "device no longer in auto mode"
+		}
 	case "hold":
 		switch ev.Summary["reason"] {
 		case engine.HoldDutyCycle:

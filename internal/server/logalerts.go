@@ -12,9 +12,10 @@ package server
 // disconnect by the next connect, also one the link held. settleRules
 // lists them; a kind without a counterpart is settled by a mark alone,
 // and a hold and a lockout settle by themselves once they end. A device's
-// transmit error, link error and low battery are in the log at info, in
-// its state's changes: each is an alert at warn while the device has the
-// flag, at the line that set it.
+// communication error, link error and low battery are in the log at info,
+// in its state's changes: each is an alert at warn while the device has
+// the flag, at the line that set it, a communication error with the type
+// of the radiogram that failed.
 
 import (
 	"context"
@@ -25,6 +26,7 @@ import (
 	"strconv"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/store"
 )
 
@@ -80,6 +82,12 @@ var settleRules = map[string]settleRule{
 	"proxy_warning":        {by: []string{"pairing_ended", "pairing_started", "proxy_pairing"}, match: pairingSettles},
 	"proxy_discarded":      {},
 	"proxy_delete_refused": {},
+	// a room's members that disagree, or a re-send of its state that
+	// failed: its members agreeing again; a member that does not follow
+	// its week programme: the member following it again, or out of auto
+	// (drift.go)
+	"disagree": {by: []string{"disagree"}, match: roomCheckSettles},
+	"drift":    {by: []string{"drift"}, match: roomCheckSettles},
 	// the server's own: an update failed or rolled back, the log's file
 	// not rotated, a failed sign-in, an address locked out, a restart, a
 	// reboot or an update not started
@@ -90,6 +98,10 @@ var settleRules = map[string]settleRule{
 	"restart":       {by: []string{"server_started"}},
 	"reboot":        {by: []string{"server_started"}},
 	"update":        {by: []string{"update", "server_started"}},
+	// a device's communication error back after its automatic reset, or
+	// a flag set for a day (errorwatch.go): the same flag of the same
+	// device clear again
+	"error_watch": {by: []string{"error_watch"}, match: sameFlagCleared},
 }
 
 // deviceFlags are a device's state's flags that are alerts while set.
@@ -121,6 +133,12 @@ func pairingSettles(alert, later *event) bool {
 	return false
 }
 
+// sameFlagCleared: a later error_watch clear of the same device's same
+// flag.
+func sameFlagCleared(alert, later *event) bool {
+	return later.Device == alert.Device && summaryText(later, "what") == watchClear && summaryText(later, "flag") == summaryText(alert, "flag")
+}
+
 // sameUser: a later sign-in of the same login name.
 func sameUser(alert, later *event) bool {
 	return summaryText(later, "user") == summaryText(alert, "user")
@@ -147,16 +165,18 @@ func lockoutEnds(ev *event) time.Time {
 }
 
 // logAlert is an unsettled warning or error of the log: its line, and
-// for a device's flag, which.
+// for a device's flag, which; for its communication error, the type of
+// the radiogram that failed, as the device shows it now.
 type logAlert struct {
-	ID         int64     `json:"id"`
-	Kind       string    `json:"kind"`
-	Level      string    `json:"level"`
-	CubeSerial string    `json:"cube_serial,omitempty"`
-	Device     string    `json:"device,omitempty"`
-	Serial     string    `json:"serial,omitempty"`
-	Flag       string    `json:"flag,omitempty"`
-	Time       time.Time `json:"time"`
+	ID              int64               `json:"id"`
+	Kind            string              `json:"kind"`
+	Level           string              `json:"level"`
+	CubeSerial      string              `json:"cube_serial,omitempty"`
+	Device          string              `json:"device,omitempty"`
+	Serial          string              `json:"serial,omitempty"`
+	Flag            string              `json:"flag,omitempty"`
+	FailedRadiogram *cube.RadiogramType `json:"failed_radiogram,omitempty"`
+	Time            time.Time           `json:"time"`
 }
 
 // logAlertsView is GET /api/v1/log/alerts' answer.
@@ -266,7 +286,11 @@ func (s *Server) flagAlerts(ctx context.Context, st *store.Store, id int64, rt *
 				}
 			}
 			if line := flagLine(states, flag); line != nil {
-				out = append(out, alertOf(line, "warn", flag))
+				a := alertOf(line, "warn", flag)
+				if flag == "error" {
+					a.FailedRadiogram = p.State.FailedRadiogram
+				}
+				out = append(out, a)
 			}
 		}
 	}

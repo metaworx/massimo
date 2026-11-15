@@ -35,6 +35,7 @@ function renderRoom(room) {
   renderMenu(el, room);
   renderVacation(el, room);
   renderDeleteConfirm(el, room);
+  el.querySelector(".repair-area").appendChild(repairSlot(roomRepairScope(room)));
   renderConfig(el, room);
   // A state event that came while the configuration had the focus is
   // drawn once the focus has left it (updateDevice); a tick later, since
@@ -163,15 +164,40 @@ function deviceIcon(d) {
   return "icon-radiator";
 }
 
+// radiogramName is a failed radiogram's type as the API gives it,
+// {code, name}: the original software's name with its code,
+// "TimeInformation (0x03)", or the code alone for one its list lacks.
+// The names are technical and stay untranslated.
+function radiogramName(r) {
+  const code = "0x" + (Number(r.code) & 0xff).toString(16).padStart(2, "0");
+  return r.name ? r.name + " (" + code + ")" : code;
+}
+
+// communicationErrorTitle explains a device's communication error, and
+// names the radiogram that failed where the state gives it.
+function communicationErrorTitle(s) {
+  const lines = [t("badge.communicationErrorTitle")];
+  if (s.failed_radiogram) lines.push(t("badge.failedRadiogram", { radiogram: radiogramName(s.failed_radiogram) }));
+  return lines.join("\n");
+}
+
 // deviceProblems are what is wrong with a device, as problemsEl's items:
-// a radio fault (the Cube could not send to it, or it lost its link) and
-// a weak or low battery; withWindow, also an open window, with its age.
+// a radio fault (the Cube could not reach it, its communication error,
+// or its link to another device of the room is disturbed, its link
+// error), each explained in its title, and a weak or low battery;
+// withWindow, also an open window, with its age.
 function deviceProblems(d, withWindow) {
   const s = d.state || {};
   const out = [];
   if (!d.reported) return out;
-  if (s.error) out.push({ kind: "radio", icon: problemIcon("radio"), sign: PROBLEM_SIGNS.radio, tone: "bad", text: t("badge.transmitError") });
-  if (s.link_error) out.push({ kind: "radio", icon: problemIcon("radio"), sign: PROBLEM_SIGNS.radio, tone: "warn", text: t("badge.linkError") });
+  if (s.error) {
+    out.push({ kind: "radio", icon: problemIcon("radio"), sign: PROBLEM_SIGNS.radio, tone: "bad", text: t("badge.communicationError"),
+      title: communicationErrorTitle(s) });
+  }
+  if (s.link_error) {
+    out.push({ kind: "radio", icon: problemIcon("radio"), sign: PROBLEM_SIGNS.radio, tone: "warn", text: t("badge.linkError"),
+      title: t("badge.linkErrorTitle") });
+  }
   // The battery's level, the server's (internal/battery): weak amber, low
   // red; a device of a server without levels by its flag, amber.
   if (d.battery === "low") out.push({ kind: "battery", icon: PROBLEM_KINDS.battery, tone: "bad", text: t("badge.batteryLow"), at: received(d, "battery_low"), stale: d.stale });
@@ -482,7 +508,8 @@ async function tileWrite(room, key, fn) {
 }
 
 // renderMenu wires the tile's ⋯ menu: lock and unlock of the room's
-// thermostats, and the deletion of an empty room. A room with devices
+// thermostats, the deletion of an empty room, and Repair…, which opens
+// the room's repairs under the tile (repair.js). A room with devices
 // but no thermostat has nothing to offer, so its menu is hidden.
 function renderMenu(el, room) {
   const thermostats = room.devices.filter(isThermostat);
@@ -519,7 +546,17 @@ function renderMenu(el, room) {
   } else {
     del.classList.add("hidden");
   }
+  const repair = el.querySelector(".menu-repair");
+  repair.addEventListener("click", () => {
+    closeMenu(el);
+    toggleRepair(roomRepairScope(room), "room", base() + "/rooms/" + room.id);
+  });
   dropdown(el.querySelector(".menu"));
+}
+
+// roomRepairScope is the scope of a room's repairs (repair.js).
+function roomRepairScope(room) {
+  return repairScope(state.serial, "room", room.id);
 }
 
 // renderTools wires the info and cog buttons of the mode row: the device

@@ -1,4 +1,4 @@
-# Testing the web UI (v1.0.0)
+# Testing the web UI (v1.1.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -6,8 +6,9 @@ what Cypress would give and what it would cost,
 the other runners on the same footing,
 how each would take a fixed set of screenshots,
 a recommendation with the steps to get there,
-and the questions left for the owner.
-Nothing here is implemented; no test code changes with this document.
+and the questions left for the owner;
+then, apart from the evaluation, the guard of the page's parts (section 8).
+Nothing of sections 1 to 7 is implemented; no test code changes with them.
 The figures were measured on 2026-11-06 on the development machine (WSL 2)
 and on the CI runs of that day, unless a section says otherwise.
 
@@ -550,3 +551,99 @@ and uploads the traces of a failure, in place of a job of its own.
    and is a slideshow GIF wanted for README.md?
 7. Is visual regression (a pull request failing on a changed picture) wanted,
    which would favour Playwright Test's `toHaveScreenshot()`?
+
+## 8. The guard of the page's parts
+
+The page's regions are rewritten one by one as parts that are built once
+and updated in place (AP UiParts).
+`tools/ui-test/test_parts_guard.py` is the check that holds them to it:
+data that comes in with nothing changed takes nothing away from what the
+user holds.
+It knows nothing of a part, so a region drawn anew fails it without a test
+of its own.
+It runs in two of the suite's four cases, 1100 px in English and 390 px
+in German: each width and each language once.
+
+### What it checks
+
+The file's table, `REGIONS`, cuts the page into its regions:
+the header's Cube choice, its problems list and ☰ with the facts,
+the home notice, the room tiles, a tile's configuration, the House tile,
+the devices without a room, the Cubes list, Cube settings, pairing,
+users, roles, capabilities, providers, integrations, backups, the log,
+software update, maintenance, system info, my settings, appearance,
+notifications, my profile, the page's chrome and the sign-in dialog.
+Each has the CSS selectors of its containers,
+what inside them belongs to another region,
+and its views: how a user brings it on screen and opens what it has to open,
+such as a tile's ⋯ and More menus, its problems list, its holiday form,
+a device list with the virtual thermostat's settings in expert mode,
+each configuration tab, a Cube's panel, the pairing form,
+a user's panel with the new user's form, the scheme editor.
+
+In each view, around each data source applied with the data as it was
+(`poll(false)`, `loadCubes()`, `loadRooms()`, `refresh()`,
+a `state` event per device on the page's `EventSource` as the server sends it,
+`loadLogAlerts()`, `refreshAges()` and the log's `pollLog()`),
+with the timer's own poll stopped:
+
+1. **Identity:** every element a user can hold that the region shows
+   (a button, a field, a select, a summary, a link, a `details`,
+   anything with a `tabindex`) is the same element, still in the document;
+2. **Open:** every `details` that was open is open;
+3. **Typed:** every field that takes text, a number, a date or a time holds
+   the value typed into it, valid for its type;
+4. **Focus:** the element of the region that had the focus has it;
+
+and 1 to 3 once more after the focus has left the region,
+where a redraw put off while the user was in it comes.
+Typing sets the value and sends an `input` event, as a key does;
+no `change` event, no Enter, no click on a button, so nothing is saved.
+A failure names the region, the view, the data source, the check and the
+element, by its path from the nearest ancestor with an id.
+
+The guard sends nothing:
+every request to the API other than a GET is refused and fails the test,
+so nothing reaches the fake Cube and nothing changes in the server's store.
+Two things the page itself does as it loads are not the guard's:
+its first sync of the settings to the server, which it schedules because
+conftest removed them, is dropped;
+and the event stream's ticket of a page loaded during a view
+(the home notice's, on the second server) is let through and named in
+the test's output.
+
+### The list
+
+`NOT_MOVED` names the regions not yet moved that fail the guard today,
+each with a line on what it loses.
+A region on it is still shown, so that the table stays true to the page,
+and is then skipped with its note, which `-rs` prints.
+On 2026-11-15 it held the room tiles, a tile's configuration,
+the House tile, the Cubes list and Cube settings, which lose what the user
+holds at a state event, a rooms reload or a poll
+(Cube settings its head's problem pill, which the fixture's open window
+brings once it is five minutes old),
+and the three regions the fixture cannot show:
+the header's problems list (the fixture's Cube has nothing wrong the header
+lists before that time, and a test cannot set it),
+the devices without a room (one joins only through pairing, a write to the Cube)
+and the sign-in dialog (a page without a token loads no data while it is open).
+The other regions passed although none had moved:
+they are filled in place, or drawn again only by the user's own action,
+which the guard does not apply.
+
+### Taking a region off the list
+
+The block that moves a region:
+
+1. runs the guard with the region checked, before and after the move:
+   `UI_GUARD_CHECK=<region> PYTEST_ADDOPTS='test_parts_guard.py -k <region>' make ui-test`
+   (`UI_GUARD_CHECK=all` checks every region);
+2. deletes the region's line from `NOT_MOVED` once it passes in the guard's two cases;
+3. adds a view where the part has something to open that the table does not
+   open yet, and corrects the region's selectors where the part changed them.
+
+`test_the_list_names_regions` fails on a line that names no region.
+The guard bites: with the room tiles and the Cubes list taken off the list,
+it failed on the page of 2026-11-15, the tiles at every state event and
+rooms reload, the Cubes list's closed panels at every poll.

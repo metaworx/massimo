@@ -1,0 +1,32 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 The Massimo Authors
+//
+// The type check of the page's parts (make ui-check: tsc --noEmit -p
+// internal/server/ui/src). Preact and its signals are the vendored ones
+// under third_party/preact/, their types mapped by paths; the bundler
+// (tools/uibundle) maps the same imports to their modules.
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact",
+    "strict": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": [],
+    "paths": {
+      "preact": ["../../../../third_party/preact/preact/src/index.d.ts"],
+      "preact/hooks": ["../../../../third_party/preact/preact/hooks/src/index.d.ts"],
+      "preact/jsx-runtime": ["../../../../third_party/preact/preact/jsx-runtime/src/index.d.ts"],
+      "@preact/signals": ["../../../../third_party/preact/signals/dist/signals.d.ts"],
+      "@preact/signals-core": ["../../../../third_party/preact/signals-core/dist/signals-core.d.ts"]
+    }
+  },
+  "include": ["."]
+}

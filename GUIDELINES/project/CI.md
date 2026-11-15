@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.57.0)
+# Massimo — CI Conventions (v1.58.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -34,7 +34,7 @@ There is no other platform.
 
 | Trigger | Jobs |
 |---------|------|
-| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test, the store's benchmarks once each with `-short`, `make cross`); actionlint (`make actionlint`: the workflows by actionlint, their `run:` scripts by the runner's shellcheck); Race (`make race`, the race detector on `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve`, `internal/announce` and `internal/notify`); Test (armv6, QEMU) (`make test-armv6`, every package's tests with `-short` on 32-bit ARM, run by Ubuntu's `qemu-user` as the Raspberry Pi 1's core); Fuzz on a push to `main` only (`make fuzz`, every fuzz target for 10 s, a crash's input kept as the artifact `fuzz-crash`, Go 1.26's own deadline passed with a warning); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, then under systemd, each case in a container of its own (`make deb-systemd-test`: the first start, the restart, the upgrade from v0.12.0-alpha.1 with the service running), and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Windows service (the unit tests of the update, the installer, the command line, discovery and `internal/safefile`; install, run, update from the API and by hand, roll back, remove, on a Windows runner; then a second `serve` announcing itself beside Windows' own mDNS, found by `massimo discover`); macOS LaunchDaemon (the unit tests of the update, the installer, the command line and `internal/safefile`; first `install` on the template's settings, `packaging/launchd/template-test.sh`: the message and its owner line run as printed, a loaded job restarted, a booted-out one left stopped, the web UI's way, the purge; then the same as Windows on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`; then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker; then a second `serve` beside Apple's mDNSResponder, found and resolved by `dns-sd`); UI test (the web UI's pytest suite, a job per width with both languages, "UI test (1100 px, screenshots)" and "UI test (390 px)", each its two cases in four workers; in the 1100 px job then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only; on failure the failed tests' screenshots and videos and the traces of their run once more as `ui-test-results-<width>`; on a pull request only when it changes the UI, its suite or `ci.yml`, as the job What to test answers); LAN against avahi (`make lan-test`: a second `serve`'s searches finding a fake Cube, losing it with its cable pulled and finding it again, then from a box's proxy too; `serve` beside avahi-daemon, `avahi-browse` and `massimo discover` on a client; a third `serve` following the Cube by its serial to another address after the loss; in Docker; on a pull request only when it changes the announcement, discovery, the shared port, the server's own files, the proxy, the Go module, the LAN test or `ci.yml`, as the job What to test answers, and not on the merge of a pull request that found it not needed); Guidelines (section 4); Site (`packaging/site/build.sh --no-apt`: the site's pages and the docs of the commit, every link checked, a document under `docs/` missing from `docs/fragments/_documents.md` failing it; never deployed; also for a change to the site's documents alone); Code result, for a change to documents alone only (`packaging/code-result.sh`: the verdict of the last run that tested the code, below) |
+| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test, the store's benchmarks once each with `-short`, `make cross`); actionlint (`make actionlint`: the workflows by actionlint, their `run:` scripts by the runner's shellcheck); UI types (`make ui-check`: `tsc --noEmit` over the web UI's parts, `internal/server/ui/src/`); Race (`make race`, the race detector on `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve`, `internal/announce` and `internal/notify`); Test (armv6, QEMU) (`make test-armv6`, every package's tests with `-short` on 32-bit ARM, run by Ubuntu's `qemu-user` as the Raspberry Pi 1's core); Fuzz on a push to `main` only (`make fuzz`, every fuzz target for 10 s, a crash's input kept as the artifact `fuzz-crash`, Go 1.26's own deadline passed with a warning); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, then under systemd, each case in a container of its own (`make deb-systemd-test`: the first start, the restart, the upgrade from v0.12.0-alpha.1 with the service running), and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Windows service (the unit tests of the update, the installer, the command line, discovery and `internal/safefile`; install, run, update from the API and by hand, roll back, remove, on a Windows runner; then a second `serve` announcing itself beside Windows' own mDNS, found by `massimo discover`); macOS LaunchDaemon (the unit tests of the update, the installer, the command line and `internal/safefile`; first `install` on the template's settings, `packaging/launchd/template-test.sh`: the message and its owner line run as printed, a loaded job restarted, a booted-out one left stopped, the web UI's way, the purge; then the same as Windows on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`; then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker; then a second `serve` beside Apple's mDNSResponder, found and resolved by `dns-sd`); UI test (the web UI's pytest suite, a job per width with both languages, "UI test (1100 px, screenshots)" and "UI test (390 px)", each its two cases in four workers; in the 1100 px job then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only; on failure the failed tests' screenshots and videos and the traces of their run once more as `ui-test-results-<width>`; on a pull request only when it changes the UI, its bundler (`tools/uibundle`), the vendored Preact, its suite or `ci.yml`, as the job What to test answers); LAN against avahi (`make lan-test`: a second `serve`'s searches finding a fake Cube, losing it with its cable pulled and finding it again, then from a box's proxy too; `serve` beside avahi-daemon, `avahi-browse` and `massimo discover` on a client; a third `serve` following the Cube by its serial to another address after the loss; in Docker; on a pull request only when it changes the announcement, discovery, the shared port, the server's own files, the proxy, the Go module, the LAN test or `ci.yml`, as the job What to test answers, and not on the merge of a pull request that found it not needed); Guidelines (section 4); Site (`packaging/site/build.sh --no-apt`: the site's pages and the docs of the commit, every link checked, a document under `docs/` missing from `docs/fragments/_documents.md` failing it; never deployed; also for a change to the site's documents alone); Code result, for a change to documents alone only (`packaging/code-result.sh`: the verdict of the last run that tested the code, below) |
 | beside the jobs above, on a push | Build (build.yml): What to release decides what the run releases, then every target built without cgo with the Debian packages, the build record, `SHA256SUMS` and the manifest, the provenance attested; nothing signed (section 6) |
 | after every job above | All tests passed: fails unless none of them failed or was cancelled, and names each with its result in its summary, an annotation for each that did not pass, and on a pull request in one comment; then, on a push, once Build is done, Release (release.yml): a push to `main` becomes the `devel` build, the GitHub release `release/devel` replaced in place, signed with the rolling key (section 6); then, at every run of release.yml, Site (site.yml): the site built with the newest release's signed apt index and the docs of every channel, and deployed to GitHub Pages; nothing where no release carries the index yet; for a push to `main` of the site's documents alone, which has no Build and so no Release, Deploy site (site.yml) instead |
 | push to a release branch (`release/alpha`, later `release/beta` and `release/stable`) | nothing: ci.yml listens to `main` and the tags; the release moved the branch to a commit ci.yml had tested |
@@ -403,12 +403,28 @@ the Windows and macOS jobs run against the fake Cube.
 
 CI runs the commands of the contract's facts table (`GUIDELINES/project/_CONTRACT.md`):
 `gofmt -l .`, `go vet ./...` for linux, windows and darwin,
-`go test ./...`, `make cross` and `make actionlint`.
+`go test ./...`, `make cross`, `make actionlint` and `make ui-check`.
 `go test` includes `tools/identifiers`,
 which fails on a serial, a MAC or a radio address in the tree that is not a
 placeholder (the contract, "Secrets and identities").
 Where CI differs, and why:
 
+- Every job that compiles or tests Go, `build.yml`'s too,
+  first runs one shared step, `.github/actions/ui-bundle`,
+  right after `actions/setup-go`:
+  the web UI's parts, `internal/server/ui/parts.js`,
+  which the server embeds and git does not keep (AP UiParts, D172-A),
+  so that without it the `go:embed` line of `internal/server/ui.go` stops the build.
+  It runs `make ui`'s command written out, `go -C tools/uibundle run .`,
+  because the UI test's image has no `make`,
+  and the same on the Linux, Windows and macOS runners, under bash.
+  The make targets a job runs after it build the bundle again,
+  which leaves it as it is.
+  The macOS job's Homebrew formula is built from `git archive`,
+  which holds no bundle: the formula builds it itself
+  (packaging/README.md, "Homebrew").
+- UI types runs `make ui-check` with the runner's Node.js and npm;
+  no action installs them.
 - `make race` is the contract's recommended `-race`, in a Race job of its own
   beside Vet and test, so that neither waits for the other:
   about 80 s on four cores,
@@ -803,7 +819,9 @@ since a site without `apt/` would take the repository offline.
 `.github/dependabot.yml` has Dependabot propose,
 once a month and in one pull request each,
 the updates of the Go modules the code imports directly,
-of the actions the workflows use and of actionlint.
+of the actions the workflows use, of actionlint,
+of esbuild, which bundles the web UI's parts,
+and of the TypeScript that type-checks them.
 Its pull requests differ from the project's in two ways, both on purpose:
 
 - Their commit messages, `build(deps): bump …`, carry no `Key changes:` list
@@ -838,6 +856,17 @@ Its pull request changes `tools/**` alone, which is not shipped,
 so it needs no `CHANGELOG.md` bullet.
 By hand, the update is `go get -tool github.com/rhysd/actionlint/cmd/actionlint@vX.Y.Z`
 and `go mod tidy` in that directory.
+
+esbuild is pinned in a module of its own for the same reason,
+`tools/uibundle/go.mod`, the bundler's (`make ui`),
+and its Dependabot entry, for `/tools/uibundle`,
+allows `github.com/evanw/esbuild` by name, its own dependencies following it.
+The type check's TypeScript is the npm entry's, for `/tools/ui-check`,
+whose `package.json` names `typescript` alone
+and whose `package-lock.json` locks it (`make ui-check`).
+Both pull requests change `tools/**` alone, and need no `CHANGELOG.md` bullet.
+By hand: `go get github.com/evanw/esbuild@vX.Y.Z` and `go mod tidy` in `tools/uibundle`,
+`npm install --save-exact --ignore-scripts typescript@X.Y.Z` in `tools/ui-check`.
 
 The repository's own security settings are the owner's,
 in its Settings, and need no file here:

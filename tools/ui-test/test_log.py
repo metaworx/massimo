@@ -43,6 +43,89 @@ def test_log_changes(page, case):
     show_view(page, "tiles")
 
 
+def test_log_radio_faults(page, case):
+    """The log names a device's flags as its badges do: a communication
+    error that came with the radiogram that failed, by its technical
+    name and code; another radiogram failing while the error stays; the
+    error cleared; a link error."""
+    show_view(page, "log")
+    page.wait_for_timeout(1600)
+    page.evaluate("""() => {
+      const d = JSON.parse(JSON.stringify(state.rooms[0].devices[0]));
+      const send = (changes) => state.events.dispatchEvent(new MessageEvent("state", { data: JSON.stringify({
+        kind: "state", device: d.rf_address, state: d, time: new Date().toISOString(), changes }) }));
+      send({ error: { from: false, to: true }, failed_radiogram: { from: null, to: { code: 3, name: "TimeInformation" } } });
+      send({ failed_radiogram: { from: { code: 3, name: "TimeInformation" }, to: { code: 246 } } });
+      send({ error: { from: true, to: false }, failed_radiogram: { from: { code: 246 }, to: null } });
+      send({ link_error: { from: false, to: true } });
+    }""")
+    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-state').length >= 4", 5), "the four lines"
+    texts = [page.locator(".log-line.kind-state").nth(i).locator(".log-text").inner_text() for i in range(4)]
+    want = page.evaluate("""() => [t("log.linkError"), t("log.ch.errorCleared"),
+      t("log.ch.failedRadiogram", { radiogram: "0xf6" }), t("log.errorRadiogram", { radiogram: "TimeInformation (0x03)" })]""")
+    assert texts == want, f"newest first: {texts}, want {want}"
+    if case.lang == "en":
+        assert want[3] == "communication error: TimeInformation (0x03)", want[3]
+    else:
+        assert want[3] == "Kommunikationsstörung: TimeInformation (0x03)", want[3]
+    show_view(page, "tiles")
+
+
+ROOM_CHECK_SAYS = {
+    "en": {
+        "kinds": ("room disagrees", "programme drift"),
+        "differ": "{room}: its thermostats differ in setpoint for 11 min: {a}: manual set 21.0, {b}: manual set 18.0",
+        "resent": "{room}: manual set 21.0 sent again to its thermostats, as Massimo last set it",
+        "drift": "does not follow its week programme: 12.0 instead of 21.0 since the switch point at 18:20, while the room's other"
+        " thermostats follow theirs; its clock or its programme is suspect; it shows the programme an hour off;"
+        " communication error: TimeInformation (0x03)",
+    },
+    "de": {
+        "kinds": ("Raum uneinig", "Programmabweichung"),
+        "differ": "{room}: die Thermostate unterscheiden sich seit 11 Min. in Solltemperatur: {a}: Manuell Soll 21,0, {b}: Manuell Soll 18,0",
+        "resent": "{room}: Manuell Soll 21,0 nochmals an die Thermostate gesendet, wie Massimo es zuletzt einstellte",
+        "drift": "folgt seinem Wochenprogramm nicht: 12,0 statt 21,0 seit dem Schaltpunkt um 18:20, während die anderen Thermostate"
+        " des Raums ihrem folgen; seine Uhr oder sein Programm ist verdächtig; es zeigt das Programm um eine Stunde verschoben;"
+        " Kommunikationsstörung: TimeInformation (0x03)",
+    },
+}
+
+
+def test_log_room_check_lines(page, case):
+    """The room checks' lines (AP RadioHealth v1.2, Block 9), sent on the
+    stream: a room whose thermostats disagree names the room and each
+    thermostat with its setting, the state sent again says from where; a
+    thermostat off its week programme says what it shows and what the
+    programme says, that it shows it an hour off and the radiogram that
+    failed."""
+    show_view(page, "log")
+    page.wait_for_timeout(1600)
+    names = page.evaluate("""() => {
+      const r = state.rooms.find((x) => x.devices.filter((d) => !d.virtual).length >= 2);
+      const ds = r.devices.filter((d) => !d.virtual);
+      const now = () => new Date().toISOString();
+      const send = (kind, ev) => state.events.dispatchEvent(new MessageEvent(kind, { data: JSON.stringify(Object.assign({ kind, time: now() }, ev)) }));
+      send("disagree", { source: "cube", level: "warn", summary: { room: r.id, outcome: "differ", minutes: 11, differs: ["setpoint"],
+        members: [{ rf: ds[0].rf_address, mode: "manual", setpoint: 21 }, { rf: ds[1].rf_address, mode: "manual", setpoint: 18 }] } });
+      send("disagree", { source: "cube", level: "info", summary: { room: r.id, outcome: "resent", from: "massimo", mode: "manual", setpoint: 21 } });
+      send("drift", { source: "device", level: "warn", device: ds[1].rf_address, serial: ds[1].serial, summary: { room: r.id,
+        outcome: "not_following", setpoint: 12, expected: 21, switch_at: "18:20", hour_off: true, auto_dst: true,
+        failed_radiogram: { code: 3, name: "TimeInformation" } } });
+      return { room: r.name, a: deviceName(ds[0]), b: deviceName(ds[1]) };
+    }""")
+    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-drift').length > 0", 5), "the drift line"
+    says = ROOM_CHECK_SAYS[case.lang]
+    lines = page.locator("#log-lines .log-line.kind-disagree")
+    assert lines.count() == 2, "the two lines of the room"
+    assert lines.nth(0).locator(".log-kind").inner_text().strip() == says["kinds"][0]
+    assert lines.nth(1).locator(".log-text").inner_text() == says["differ"].format(**names), lines.nth(1).locator(".log-text").inner_text()
+    assert lines.nth(0).locator(".log-text").inner_text() == says["resent"].format(**names), lines.nth(0).locator(".log-text").inner_text()
+    drift = page.locator("#log-lines .log-line.kind-drift").first
+    assert drift.locator(".log-kind").inner_text().strip() == says["kinds"][1]
+    assert drift.locator(".log-text").inner_text() == says["drift"], drift.locator(".log-text").inner_text()
+    show_view(page, "tiles")
+
+
 def test_log_names_devices_by_serial(page, case):
     """A line names a device without a name by its S/N, the radio address
     in expert mode only; the Cube's own configuration is the Cube's; a
@@ -383,6 +466,72 @@ def test_log_mismatch_lines(page, case):
     show_view(page, "tiles")
 
 
+ERROR_RESET_SAYS = {
+    "en": ("communication error reset", "at the device's report; the server does it once a day at most"),
+    "de": ("Kommunikationsstörung zurückgesetzt", "bei der Meldung des Geräts; der Server tut es höchstens einmal am Tag"),
+}
+
+
+def test_log_error_reset_line(page, case):
+    """A device's automatic reset of its communication error, sent on the
+    stream, is a line of its device with its kind and what it says (AP
+    RadioHealth v1.2, Block 4)."""
+    show_view(page, "log")
+    page.wait_for_timeout(1600)
+    d = page.evaluate("state.rooms[0].devices[0]")
+    page.evaluate("""(d) => state.events.dispatchEvent(new MessageEvent("error_reset", { data: JSON.stringify({
+      kind: "error_reset", source: "device", level: "info", device: d.rf_address, serial: d.serial, time: new Date().toISOString(),
+      summary: { room: d.room_id || 1, automatic: true } }) }))""", d)
+    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-error_reset').length > 0", 5), "the reset's line"
+    line = page.locator("#log-lines .log-line.kind-error_reset").first
+    kind, text = ERROR_RESET_SAYS[case.lang]
+    assert line.locator(".log-kind").inner_text().strip() == kind, f"the kind: {line.locator('.log-kind').inner_text()}"
+    assert line.locator(".log-text").inner_text() == text, f"the text: {line.locator('.log-text').inner_text()}"
+    show_view(page, "tiles")
+
+
+ERROR_WATCH_SAYS = {
+    "en": ("error watch",
+           "communication error back at the device's next report, 60 min after the automatic reset; "
+           "last radiogram that failed: TimeInformation (0x03); no automatic reset until it stays clear a day",
+           "link error set for 24 hours, since ",
+           "communication error clear again; set for 26 h; automatic resets resume once it stays clear a day"),
+    "de": ("Fehlerüberwachung",
+           "Kommunikationsstörung bei der nächsten Meldung des Geräts zurück, 60 Min. nach dem automatischen Zurücksetzen; "
+           "zuletzt fehlgeschlagenes Funktelegramm: TimeInformation (0x03); kein automatisches Zurücksetzen, bis sie einen Tag lang ausbleibt",
+           "Verbindungsfehler 24 Stunden lang gesetzt, seit ",
+           "Kommunikationsstörung wieder weg; 26 Std. gesetzt; automatisches Zurücksetzen wieder, sobald sie einen Tag lang ausbleibt"),
+}
+
+
+def test_log_error_watch_lines(page, case):
+    """A device's watched flags, sent on the stream, are lines of its device
+    with their kind: its communication error back after the automatic reset
+    with the radiogram that failed, its link error set for 24 hours, and
+    the communication error clear again (AP RadioHealth v1.2, Block 6)."""
+    show_view(page, "log")
+    page.wait_for_timeout(1600)
+    d = page.evaluate("state.rooms[0].devices[0]")
+    page.evaluate("""(d) => {
+      const send = (level, summary) => state.events.dispatchEvent(new MessageEvent("error_watch", { data: JSON.stringify({
+        kind: "error_watch", source: "device", level, device: d.rf_address, serial: d.serial, time: new Date().toISOString(), summary }) }));
+      const reset = new Date(Date.now() - 3600000).toISOString();
+      send("warn", { what: "back", flag: "error", reset, minutes: 60, next_report: true, held: true,
+        failed_radiogram: { code: 3, name: "TimeInformation" } });
+      send("error", { what: "lasting", flag: "link_error", since: reset, hours: 24 });
+      send("info", { what: "clear", flag: "error", since: reset, hours: 26, held: true });
+    }""", d)
+    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-error_watch').length >= 3", 5), "the watch's lines"
+    kind, back, lasting, clear = ERROR_WATCH_SAYS[case.lang]
+    texts = page.locator("#log-lines .log-line.kind-error_watch .log-text").all_inner_texts()
+    kinds = page.locator("#log-lines .log-line.kind-error_watch .log-kind").all_inner_texts()
+    assert all(k.strip() == kind for k in kinds), f"the kinds: {kinds}"
+    assert back in texts, f"the flag back: {texts}"
+    assert clear in texts, f"the clear: {texts}"
+    assert any(x.startswith(lasting) for x in texts), f"the link error: {texts}"
+    show_view(page, "tiles")
+
+
 def test_log_source_and_level(page, case):
     """The source and the level chosen are asked of the server and kept in
     the address after the log's page; a reload keeps them, Clear sets
@@ -505,18 +654,33 @@ def test_log_answers(page, case):
     event comes past 2000 lines, and the error line shows with a kind
     chosen. The page's api() holds the log's requests, which the test
     answers in its own time; the log button's question (log/alerts) goes
-    through. The test server's own stream (a device's state from the fake
-    Cube, polled every 10 s) is kept out, since a line it brought would
-    push one of the counted out; the events the test sends get through."""
+    through. Only the events the test sends (sendTestEvent) reach the
+    log: a line of the test server's own, such as an automatic backup an
+    earlier test's change brings or a device's state from the fake Cube's
+    10 s poll, would push one of the 2000 counted out."""
     now = time.time()
     show_view(page, "log")
     all_events(page)
     page.evaluate("""() => {
-      // at the stream, a capturing listener comes before the page's own:
-      // the server's events (trusted) stop there, the test's go on
-      for (const kind of LOG_KINDS) {
-        state.events.addEventListener(kind, (ev) => { if (ev.isTrusted) ev.stopImmediatePropagation(); }, true);
-      }
+      // The server's events are kept out of the log at appendLogEvent,
+      // which the stream's listeners call, not at the stream: Chromium
+      // calls an EventSource's listeners in the order they were added, a
+      // capturing one as well, so one added now would come after the
+      // page's own, and selectCube opens a new stream besides. The
+      // stream's other work (the devices, the rooms) goes on.
+      let sending = false;
+      window.sendTestEvent = (kind, data) => {
+        sending = true;
+        try {
+          state.events.dispatchEvent(new MessageEvent(kind, { data: JSON.stringify(data) }));
+        } finally {
+          sending = false;
+        }
+      };
+      const append = appendLogEvent;
+      window.appendLogEvent = (ev) => {
+        if (sending) append(ev);
+      };
       window.logAnswers = [];
       const real = api;
       window.api = (method, path, body) => path.includes("/log") && !path.includes("/log/alerts")
@@ -568,8 +732,7 @@ def test_log_answers(page, case):
     assert "before=1801" in held(), "Older from the oldest of 2000"
     answer(range(1601, 1801))
     assert wait_until(page, hellos + " === 2200", 5), "2200 lines"
-    page.evaluate("""(rf) => state.events.dispatchEvent(new MessageEvent("config", { data: JSON.stringify({
-      kind: "config", device: rf, time: new Date().toISOString() }) }))""", rf)
+    page.evaluate("""(rf) => sendTestEvent("config", { kind: "config", device: rf, time: new Date().toISOString() })""", rf)
     assert wait_until(page, "logState.lines.some((l) => l.kind === 'config')", 5), "the live event in the log"
     assert page.evaluate(hellos) == 2200 and page.evaluate("logState.lines[0].id === 1601 && logState.cursor === '1601'"), \
         "a live event keeps the page fetched"
@@ -578,8 +741,7 @@ def test_log_answers(page, case):
     held()
     answer(range(1, 2001))
     assert wait_until(page, hellos + " === 2000", 5), "a page of 2000"
-    page.evaluate("""(rf) => state.events.dispatchEvent(new MessageEvent("config", { data: JSON.stringify({
-      kind: "config", device: rf, time: new Date().toISOString() }) }))""", rf)
+    page.evaluate("""(rf) => sendTestEvent("config", { kind: "config", device: rf, time: new Date().toISOString() })""", rf)
     assert wait_until(page, "logState.lines[0].id >= 2 && logState.cursor === String(logState.lines[0].id)", 5), \
         "past 2000 lines the oldest go, and Older goes on from the oldest kept"
     assert page.evaluate("document.querySelectorAll('#log-lines .log-line').length === logState.lines.filter(logLineMatches).length"), \
@@ -596,7 +758,10 @@ def test_log_answers(page, case):
 def test_log_keeps_events_that_come_while_it_loads(page, case):
     """A live event that comes while a page of the log is on its way is
     kept after the page, and one the page holds already is not doubled.
-    The page's api() holds the log's request until the test answers it."""
+    The page's api() holds the log's request until the test answers it.
+    Only the kinds the test sends are counted: a real event of the server
+    may come meanwhile too, such as a backup an earlier test's change
+    made, and is kept as well."""
     now = time.time()
     show_view(page, "log")
     assert wait_until(page, "!logState.loading", 5), "the log loaded"
@@ -619,10 +784,10 @@ def test_log_keeps_events_that_come_while_it_loads(page, case):
                   [{"id": i, "kind": "hello", "time": stamp(now, i)} for i in (1, 2)] +
                   [{"id": 3, "kind": "config", "device": rf, "time": both}])
     assert wait_until(page, "!logState.loading", 5), "the page is in"
-    kinds = page.evaluate("logState.lines.map((l) => l.kind + ' ' + l.at)")
+    kinds = page.evaluate("logState.lines.filter((l) => l.kind === 'hello' || l.kind === 'config').map((l) => l.kind + ' ' + l.at)")
     assert kinds == ["hello " + stamp(now, 1), "hello " + stamp(now, 2), "config " + both, "config " + late], \
         f"the page, then the live event it lacks, once each: {kinds}"
-    assert page.locator("#log-lines .log-line").count() == 4, "and the view shows them"
+    assert page.locator("#log-lines .log-line.kind-hello, #log-lines .log-line.kind-config").count() == 4, "and the view shows them"
     show_view(page, "tiles")
 
 

@@ -13,7 +13,7 @@ type cubeProblem struct {
 }
 
 // problemsOf lists a Cube's visible devices with a problem, in the order
-// the Cube reported them: a transmit or link error, a low battery, a
+// the Cube reported them: a communication or link error, a low battery, a
 // window open (with its times, view.Device SetWindow). A device that has
 // not reported since the Cube's restart has none yet. The state is the
 // server's last, also while the Cube is not connected.

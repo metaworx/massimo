@@ -115,6 +115,76 @@ def test_open_window(page, case):
     assert head_icons(room) == [], "the icon goes when the window closes"
 
 
+# Gives the first reported thermostat a communication error, as the
+# server's state events would: with the radiogram that failed (failed,
+# an API object, or null for none) and, where link, a link error too.
+RADIO_FAULTS = """([failed, link]) => {
+  const r = state.rooms.find((r) => r.devices.some((d) => isThermostat(d) && d.reported));
+  if (!r) return null;
+  const d = JSON.parse(JSON.stringify(r.devices.find((d) => isThermostat(d) && d.reported)));
+  Object.assign(d.state, { error: true, link_error: link, failed_radiogram: failed });
+  if (!failed) delete d.state.failed_radiogram;
+  updateDevice(d);
+  return { room: r.name, name: deviceName(d) };
+}"""
+
+
+def test_radio_fault_badges(page, case):
+    """A communication error's badge says so and its title the radiogram
+    that failed, by its technical name and code, or by its code alone
+    where the original's list lacks it; without a radiogram the title
+    explains the error alone. A link error's badge says link error, its
+    title the original's sentence. The sentences are the page's language,
+    the radiogram's name is not translated; the device list's badge has
+    the same title."""
+    comm, link = page.evaluate("[t('badge.communicationError'), t('badge.linkError')]")
+    explain, sentence = page.evaluate("[t('badge.communicationErrorTitle'), t('badge.linkErrorTitle')]")
+    if case.lang == "en":
+        assert (comm, link) == ("communication error", "link error"), (comm, link)
+        assert sentence == "The radio communication with another MAX! device in this room is disturbed.", sentence
+    else:
+        assert comm == "Kommunikationsstörung", comm
+
+    def failed(text):
+        return explain + "\n" + page.evaluate("(r) => t('badge.failedRadiogram', { radiogram: r })", text)
+
+    def badges(faults):
+        """The badges of the device in its room's list, text: title."""
+        room = page.locator(".room", has=page.locator(".room-name", has_text=faults["room"])).first
+        room.locator(".tile-head .problems-sum").click()
+        entry = room.locator(".tile-head .problem-entry", has=page.locator(".problem-name", has_text=faults["name"])).first
+        out = {f.inner_text().strip(): f.get_attribute("title") for f in entry.locator(".problem-flags .flag").all()}
+        assert scroll_width(page) <= case.width, "no horizontal scroll with the list open"
+        page.keyboard.press("Escape")
+        return out
+
+    faults = page.evaluate(RADIO_FAULTS, [{"code": 3, "name": "TimeInformation"}, False])
+    assert faults, "a reported thermostat"
+    got = badges(faults)
+    assert got.get(comm) == failed("TimeInformation (0x03)"), f"the radiogram by its name and code ({got})"
+    assert case.lang == "en" or "Last radiogram" not in got[comm], "the sentence translated, the name not"
+
+    # The device list's badge, the same title.
+    room = page.locator(".room", has=page.locator(".room-name", has_text=faults["room"])).first
+    room.locator(".room-name-btn").click()
+    page.wait_for_selector(".room .device", timeout=5000)
+    dev = room.locator(".device:not(.virtual)", has=page.locator(".device-name", has_text=faults["name"])).first
+    dev.locator(".problems-sum").click()
+    flag = dev.locator(".problem-flags .flag", has_text=comm).first
+    assert flag.get_attribute("title") == failed("TimeInformation (0x03)"), "the device's badge, its title"
+    page.keyboard.press("Escape")
+    room.locator(".room-name-btn").click()
+
+    # No radiogram, and a link error.
+    got = badges(page.evaluate(RADIO_FAULTS, [None, True]))
+    assert got.get(comm) == explain, f"no radiogram: the explanation alone ({got})"
+    assert got.get(link) == sentence, f"the link error with the original's sentence ({got})"
+
+    # A code the original's list lacks, by its code.
+    got = badges(page.evaluate(RADIO_FAULTS, [{"code": 246}, False]))
+    assert got.get(comm) == failed("0xf6"), f"a code the list lacks, by its code ({got})"
+
+
 def test_problems_in_the_heads(page, case):
     """A radiator thermostat with a transmit error and a weak battery, and
     two thermostats in different modes: the room's head shows radio,
@@ -150,7 +220,7 @@ def test_problems_in_the_heads(page, case):
     room.locator(".tile-head .problems-sum").click()
     entries = room.locator(".tile-head .problem-entry")
     first = entries.first.inner_text()
-    assert page.evaluate("t('badge.transmitError')") in first and page.evaluate("t('badge.batteryWeak')") in first, \
+    assert page.evaluate("t('badge.communicationError')") in first and page.evaluate("t('badge.batteryWeak')") in first, \
         f"the device with its badges ({first!r})"
     bad = entries.first.locator(".flag.bad").first
     assert bad.locator("svg.mark-sign use").get_attribute("href") == "#mark-x", "a failure led by its cross"

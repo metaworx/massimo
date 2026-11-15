@@ -100,6 +100,11 @@ whoever could change the tags could change the line naming it.</p>
 <code>make linux-armv6</code> builds for a Raspberry Pi 1, <code>make linux-arm64</code> for a 64-bit
 Raspberry Pi OS, <code>make windows</code> for Windows,
 and <code>make cross</code> every release binary, all into <code>dist/</code>.
+Each of them bundles the web UI's parts first, <code>make ui</code>,
+with esbuild from its Go module, which the first build downloads
+as it does the other modules;
+<code>go build ./cmd/massimo</code> alone stops at the missing
+<code>internal/server/ui/parts.js</code> until <code>make ui</code> has made it.
 The binary goes in as a release's does,
 <code>sudo ./massimo install -dry-run -settings .env</code>, then without <code>-dry-run</code>.
 It follows the tag's flavour, <code>alpha</code> for an <code>-alpha.N</code> tag,

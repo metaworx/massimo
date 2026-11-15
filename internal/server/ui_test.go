@@ -71,6 +71,14 @@ func TestUIServed(t *testing.T) {
 			t.Errorf("uiScriptsOffPage names %s, which is not embedded", f)
 		}
 	}
+	// The parts' bundle (make ui) comes after the plain scripts, whose
+	// globals it calls, and registers the parts the plain code calls.
+	if tags := regexp.MustCompile(`<script src="(ui/[^"]+\.js)"`).FindAllStringSubmatch(page, -1); len(tags) == 0 || tags[len(tags)-1][1] != "ui/parts.js" {
+		t.Errorf("the page's last script is not ui/parts.js")
+	}
+	if _, _, body := get("/ui/parts.js"); !strings.HasPrefix(body, "// SPDX-License-Identifier: AGPL-3.0-or-later\n") || !strings.Contains(body, "MassimoParts") {
+		t.Errorf("ui/parts.js is not the bundle of make ui: %q", body[:min(120, len(body))])
+	}
 	if code, ct, _ := get("/ui/style.css"); code != 200 || !strings.HasPrefix(ct, "text/css") {
 		t.Fatalf("GET /ui/style.css: %d %s", code, ct)
 	}
@@ -437,6 +445,70 @@ func TestVendoredOpaque(t *testing.T) {
 	readme, _ := os.ReadFile("ui/vendor/README.md")
 	if !strings.Contains(string(readme), want) {
 		t.Error("ui/vendor/README.md does not name the file's SHA-256")
+	}
+}
+
+// vendoredPreact are the files of third_party/preact/ by path, each
+// with its SHA-256: Preact 11.2.0, @preact/signals 2.11.4 and
+// @preact/signals-core 1.14.5 as published (third_party/preact/README.md).
+var vendoredPreact = map[string]string{
+	"preact/LICENSE":                         "1fe6958409c8c257a70c587a18b6f7f412b179b456630790d30b2ec9a8e4b7d4",
+	"preact/dist/preact.mjs":                 "bdcbd9abdf2c77c5c45326eab42191e949222d479d0d5f69467387a77040cb55",
+	"preact/hooks/dist/hooks.mjs":            "e862ab2973aa6455eaa0f77c5d832d2157d6be59a17c8ba546550a575b58c6b4",
+	"preact/hooks/src/index.d.ts":            "21898d939444825cee1232af435330610b09171bea22a2f892cf2058d764b63d",
+	"preact/jsx-runtime/dist/jsxRuntime.mjs": "4761ad0e33728d1488ad98a194fe8c6a93cf940fec80e49995c82dc013d081cd",
+	"preact/jsx-runtime/src/index.d.ts":      "a563e6d3e9a0f337066d8407d48304943b961ef6b3f7fbb38651455a6af46afc",
+	"preact/src/dom.d.ts":                    "8199eb2fc00bb9ce68266df5e97ba914e03a56d4dd823629480c7e68d20b5129",
+	"preact/src/index.d.ts":                  "a5437961b23f82d3959e1cc4630c29dfe405068caee25321088b45d3868fef79",
+	"preact/src/jsx.d.ts":                    "5d082f468e25c12528dc4486ab6f3f48ba03c938d1c472ab6b76c8eb0aa42818",
+	"signals/LICENSE":                        "a11fc89e4c6b118854c7a667734a0b2e6bf2af5e45c6686de31adbccc8f3ae8d",
+	"signals/dist/signals.d.ts":              "6761e07a03f7704624ff7af23678a1bcdbd32edd593de8b3f4d1e24e983ab1ef",
+	"signals/dist/signals.mjs":               "ba8177597f45acaca4d05dcf3966b527d0a8264cfa2b0a87ace92dff324217f8",
+	"signals-core/LICENSE":                   "a11fc89e4c6b118854c7a667734a0b2e6bf2af5e45c6686de31adbccc8f3ae8d",
+	"signals-core/dist/signals-core.d.ts":    "7fd86ad5dfe671ca797ac75d99a657f2ae66022140428717f6c17373282e3050",
+	"signals-core/dist/signals-core.mjs":     "0c80bc127d72ecb1496ef116ffddae75079829a3af01e7f417c8e5a6474c68b6",
+}
+
+// The vendored Preact is the packages' files as published: every file
+// of third_party/preact/ but its README is in vendoredPreact with its
+// SHA-256, and the README names each, so that a change to one is a
+// change on purpose, with the README.
+func TestVendoredPreact(t *testing.T) {
+	const dir = "../../third_party/preact"
+	readme, err := os.ReadFile(dir + "/README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]bool{}
+	err = fs.WalkDir(os.DirFS(dir), ".", func(name string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || name == "README.md" {
+			return err
+		}
+		seen[name] = true
+		want, ok := vendoredPreact[name]
+		if !ok {
+			t.Errorf("third_party/preact/%s is not in vendoredPreact", name)
+			return nil
+		}
+		b, err := os.ReadFile(dir + "/" + name)
+		if err != nil {
+			return err
+		}
+		if got := fmt.Sprintf("%x", sha256.Sum256(b)); got != want {
+			t.Errorf("third_party/preact/%s: SHA-256 %s, want %s", name, got, want)
+		}
+		if !strings.Contains(string(readme), want+"  "+name+"\n") {
+			t.Errorf("third_party/preact/README.md does not name the SHA-256 of %s", name)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range slices.Sorted(maps.Keys(vendoredPreact)) {
+		if !seen[name] {
+			t.Errorf("vendoredPreact names %s, which is not in third_party/preact/", name)
+		}
 	}
 }
 

@@ -116,7 +116,10 @@ type State struct {
 	WindowOpen *bool       `json:"window_open,omitempty"`
 	BatteryLow bool        `json:"battery_low"`
 	Error      bool        `json:"error"`
-	LinkError  bool        `json:"link_error"`
+	// FailedRadiogram is the type of the Cube's last radiogram to the
+	// device that failed, present only with Error.
+	FailedRadiogram *cube.RadiogramType `json:"failed_radiogram,omitempty"`
+	LinkError       bool                `json:"link_error"`
 	// PanelLocked is the device's key lock ("LoC" on the display).
 	PanelLocked bool `json:"panel_locked,omitempty"`
 	// Consistent is a virtual wall thermostat's alone: false while the
@@ -140,7 +143,8 @@ func StateOf(st cube.DeviceState) *State {
 // valuesOf is the values of a device's entry, valid or out of date.
 func valuesOf(st cube.DeviceState) *State {
 	return &State{Mode: st.Mode, Setpoint: st.Setpoint, Until: st.Until, ActualTemp: st.ActualTemp, ValvePct: st.ValvePct,
-		WindowOpen: st.WindowOpen, BatteryLow: st.BatteryLow, Error: st.Error, LinkError: st.LinkError, PanelLocked: st.PanelLocked}
+		WindowOpen: st.WindowOpen, BatteryLow: st.BatteryLow, Error: st.Error, FailedRadiogram: st.FailedRadiogram, LinkError: st.LinkError,
+		PanelLocked: st.PanelLocked}
 }
 
 // Device is one device with its name, room and live state.

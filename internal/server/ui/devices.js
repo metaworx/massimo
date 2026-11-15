@@ -145,6 +145,13 @@ function renderDevice(d) {
     const lock = button(t(locked ? "device.unlock" : "device.lock"), "needs-lock device-lock", () => lockDevice(d, !locked, lock));
     actions.appendChild(lock);
   }
+  if (!d.virtual) {
+    // The device's repairs (repair.js): its configuration for a
+    // thermostat, its room by radio or in the list.
+    const scope = repairScope(state.serial, "device", d.rf_address);
+    actions.appendChild(repairButton(scope, "device", devicePath(d), { label: deviceName(d), skip: isThermostat(d) ? [] : ["config"] }));
+    el.appendChild(repairSlot(scope));
+  }
   return el;
 }
 

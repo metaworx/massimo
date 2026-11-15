@@ -189,9 +189,18 @@ type Options struct {
 	// last with a reconnect where none was read; nil takes
 	// DefaultStructureChecks.
 	StructureChecks []time.Duration
-	Logger          *slog.Logger
-	Version         string
-	Queue           engine.Options
+	// ResetSettle is how long after a repair's resets the device list is
+	// read for the flags they cleared (repair_api.go); 0 takes
+	// DefaultResetSettle.
+	ResetSettle time.Duration
+	Logger      *slog.Logger
+	Version     string
+	Queue       engine.Options
+	// driftClock is the room checks' clock (drift.go), for the tests;
+	// nil is time.Now. driftEvery is how often they run: 0 every
+	// minute, a negative value never (the tests run them).
+	driftClock func() time.Time
+	driftEvery time.Duration
 	// Proxy lists the LAN listeners on which the server itself answers
 	// as a Cube (see internal/proxy), one per Cube.
 	// One that cannot listen is tried again until it does.
@@ -273,6 +282,10 @@ type Options struct {
 	// notifyClock is the notification rules' clock, for the tests; nil
 	// is the real one.
 	notifyClock notify.Clock
+	// clock is the time of the pump's events, the automatic resets
+	// (autoreset.go) and the error watch's timers (errorwatch.go), for
+	// the tests; nil is the real one.
+	clock notify.Clock
 	// checkClock is the clock of the radio health checks, such as the
 	// readings of the Cubes' free slots (slots.go), for the tests; nil is
 	// the real one.
@@ -448,12 +461,22 @@ type runtime struct {
 	// walls is each wall thermostat's last mode, for wall_reset; only the
 	// pump uses it (wallreset.go).
 	walls map[cube.RFAddress]*wallMemo
+	// resets are the devices' automatic resets of their communication
+	// error (autoreset.go).
+	resets autoResets
+	// errWatch follows the devices' flags: a communication error back
+	// after its reset, a flag that lasts a day (errorwatch.go).
+	errWatch errorWatch
 	// vwt is the rooms' uids and settings, and each room's virtual wall
 	// thermostat as its last event had it (vwt.go).
 	vwt vwtState
 	// programs holds the week programmes written and not yet confirmed
 	// by the devices' configurations (etag.go).
 	programs pendingPrograms
+	// drift is the room checks' state: disagreeing members, programme
+	// drift, the re-sends and Massimo's last setpoint per room
+	// (drift.go).
+	drift driftState
 	// proxyVirtual is the Cube's option proxy_virtual: its proxy shows
 	// clients the virtual wall thermostats (proxy_virtual.go).
 	proxyVirtual atomic.Bool
@@ -895,6 +918,7 @@ func (s *Server) proxyRuntime(pl ProxyListener) (*runtime, error) {
 // pump forwards client events to the SSE subscribers and learns the
 // serial once the Cube is connected.
 func (s *Server) pump(ctx context.Context, rt *runtime) {
+	defer rt.errWatch.stop()
 	s.rebuildBattery(ctx, rt) // before the first state, so that the replay comes first
 	for {
 		select {
@@ -922,6 +946,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 					s.seedLearned(ctx, rt)
 				}
 				s.learnStoreID(ctx, rt)
+				s.seedErrorWatch(ctx, rt, s.now()) // where the greeting's states could not
 			}
 			switch e.Kind {
 			case cubelan.EventConnected, cubelan.EventMetadata, cubelan.EventConfig, cubelan.EventPaired, cubelan.EventForgotten:
@@ -936,7 +961,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			if e.Device != 0 && rt.hidden()[e.Device] {
 				continue
 			}
-			ev := event{Kind: e.Kind.String(), Time: time.Now()}
+			ev := event{Kind: e.Kind.String(), Time: s.now()}
 			var batteryChanges []battery.Change
 			var wallBack *event
 			if e.Device != 0 {
@@ -974,6 +999,8 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 						}
 						rt.last[e.Device] = dv.State
 						ev.Command = rt.sentTo.take(e.Device)
+						s.autoReset(ctx, rt, e.Device, dv, ev.Changes)
+						s.watchErrors(ctx, rt, e.Device, ev.Changes)
 					}
 				}
 			}
@@ -985,6 +1012,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 				delete(rt.walls, e.Device)
 				rt.battery.Forget(e.Device.String())
 				rt.follow.forget(e.Device)
+				rt.errWatch.forget(e.Device)
 			}
 			if e.Kind == cubelan.EventPaired {
 				// The metadata does not change by pairing; the device's C
@@ -1156,6 +1184,9 @@ func stateAttrs(serial string, d view.Device) []any {
 	}
 	if st.Error {
 		attrs = append(attrs, "error", true)
+	}
+	if st.FailedRadiogram != nil {
+		attrs = append(attrs, "failed_radiogram", st.FailedRadiogram.String())
 	}
 	if st.LinkError {
 		attrs = append(attrs, "link_error", true)
@@ -1422,6 +1453,7 @@ func (s *Server) routes() {
 	api("GET /api/v1/store", "settings", s.getStore)
 	api("GET /api/v1/config", "settings", s.getConfig)
 	s.configRoutes(api)
+	s.repairRoutes(api)
 	s.uiRoutes(mux)
 	s.mux = mux
 	// A write that another site's page sent is refused before it is
@@ -1958,6 +1990,9 @@ func (s *Server) setpoint(w http.ResponseWriter, r *http.Request, rt *runtime, t
 		return err
 	}
 	rt.afterWrite()
+	if t.Room {
+		rt.intend(t.RoomID, mode, req.Temp, until, s.roomNow()) // the room's intended state (drift.go)
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "discarded": res.Discarded, "budget": res.Budget})
 	return nil
 }

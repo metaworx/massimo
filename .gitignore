@@ -45,3 +45,10 @@ opaque.key
 
 # Python leaves it behind wherever the UI smoke test runs.
 __pycache__/
+
+# The web UI's parts, bundled by make ui from internal/server/ui/src/
+# (tools/uibundle) and embedded; built wherever Go is compiled, never
+# committed (AP UiParts, D172-A).
+/internal/server/ui/parts.js
+# The type check's TypeScript (make ui-check), installed by npm ci.
+node_modules/

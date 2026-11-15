@@ -115,6 +115,7 @@ func (s *Server) newRuntime(c CubeConfig, addr string) *runtime {
 		follow:    newFollowUp(opts.FollowUpDelays, opts.FollowUpReconnectGap, opts.RefreshInterval > 0, opts.StructureChecks)}
 	rt.battery = &battery.Tracker{DecalcOf: rt.decalcOf}
 	rt.clock = s.checkNow
+	rt.resets.hold = rt.errWatch.hold // a flag that keeps coming back (errorwatch.go)
 	copts := cubelan.Options{Addr: addr, PollInterval: opts.PollInterval, Hold: opts.CubeHold, Logger: s.partLog("cube", rt.serial), EventLines: true}
 	if opts.cubeOptions != nil {
 		opts.cubeOptions(&copts)
@@ -218,6 +219,7 @@ func (s *Server) startRuntime(rt *runtime) {
 	run(func() { s.followUps(ctx, rt) })
 	run(func() { s.backupLoop(ctx, rt) })
 	run(func() { s.batteryTicks(ctx, rt) })
+	run(func() { s.roomCheckLoop(ctx, rt) })
 	if s.opts.RefreshInterval > 0 {
 		run(func() { s.refresh(ctx, rt) })
 	}

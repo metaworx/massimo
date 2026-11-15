@@ -42,15 +42,7 @@ func Addressee(master cube.RFAddress, members []cube.DeviceMeta, leave cube.RFAd
 // are the devices whose C line names the room, the devices in skip left
 // out, and its master is the metadata's.
 func RoomAddressee(snap *cubelan.Snapshot, room uint8, skip view.Hidden) (cube.RFAddress, bool) {
-	var members []cube.DeviceMeta
-	for _, rf := range snap.Devices() {
-		c := snap.Config(rf)
-		if c == nil || skip[rf] || c.RoomID != room || c.Type == cube.DeviceCube {
-			continue
-		}
-		members = append(members, cube.DeviceMeta{Type: c.Type, RFAddress: rf, RoomID: room})
-	}
-	return Addressee(roomMaster(snap, room), members, 0)
+	return Addressee(roomMaster(snap, room), ConfigMembers(snap, room, skip), 0)
 }
 
 // RoomMembers lists the devices the metadata places in room, the

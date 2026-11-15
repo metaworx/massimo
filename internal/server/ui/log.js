@@ -21,10 +21,10 @@ const LOG_PAGE = 200;
 // LOG_KINDS are the kinds of event the server sends, in its order
 // (eventKinds in internal/server/log.go, which TestLogKinds compares).
 const LOG_KINDS = ["connected", "disconnected", "hello", "metadata", "config", "state", "pairing_started", "paired", "pairing_ended",
-  "device_forgotten", "cube_found", "restore_step", "restore_done",
+  "device_forgotten", "cube_found", "restore_step", "restore_done", "disagree", "drift",
   "cube_gone", "address_changed", "server_started", "server_stopping", "settings_read", "restart", "reboot", "reboot_cancelled",
   "update", "update_result", "backup", "backup_deleted", "backups_pruned", "log_pruned", "log_rotated", "restore_started",
-  "change", "command", "hold", "structure", "slots", "mismatch", "login", "login_failed", "locked_out", "audit_pruned",
+  "change", "command", "hold", "structure", "error_reset", "error_watch", "slots", "mismatch", "login", "login_failed", "locked_out", "audit_pruned",
   "proxy_connected", "proxy_disconnected", "proxy_refused", "proxy_discarded", "proxy_deleted", "proxy_delete_refused", "proxy_pairing", "proxy_warning"];
 
 // LOG_RANGES are the choices of how far back the log goes: the newest
@@ -72,9 +72,10 @@ const LOG_SOURCES = ["system", "config", "cube", "device", "queue", "server", "p
 // LOG_KIND_SOURCE groups the kinds by the source they come from, for the
 // kind choice; a kind of more than one (config) goes with the devices.
 const LOG_KIND_SOURCE = {
-  state: "device", config: "device", paired: "device", device_forgotten: "device",
+  state: "device", config: "device", paired: "device", device_forgotten: "device", error_reset: "device", error_watch: "device",
   connected: "cube", disconnected: "cube", hello: "cube", metadata: "cube", pairing_started: "cube", pairing_ended: "cube",
   cube_found: "cube", cube_gone: "cube", address_changed: "cube",
+  disagree: "cube", drift: "device",
   change: "config",
   command: "queue", hold: "queue",
   login: "server", login_failed: "server", locked_out: "server",
@@ -234,7 +235,9 @@ function logStateText(s) {
   if (st.window_open !== undefined) parts.push(t(st.window_open ? "log.windowOpen" : "log.windowClosed"));
   if (st.until) parts.push(t("log.until", { until: st.until }));
   for (const [k, key] of [["battery_low", "log.batteryLow"], ["error", "log.error"], ["link_error", "log.linkError"], ["panel_locked", "log.locked"]]) {
-    if (st[k]) parts.push(t(key));
+    if (!st[k]) continue;
+    if (k === "error" && st.failed_radiogram) parts.push(t("log.errorRadiogram", { radiogram: radiogramName(st.failed_radiogram) })); // tiles.js
+    else parts.push(t(key));
   }
   return parts.join(", ");
 }
@@ -242,8 +245,12 @@ function logStateText(s) {
 // logChangesText says what a state event changed, one phrase per value,
 // from the API's changes ({field: {from, to}}, null for a value the
 // device did not have): "window opened", "set 18.0 → 21.0", "reports
-// again". A field this page does not know shows as it came.
+// again"; a communication error with the radiogram that failed,
+// "communication error: TimeInformation (0x03)", and that radiogram
+// alone where another failed while the error stayed. A field this page
+// does not know shows as it came.
 function logChangesText(changes) {
+  const failed = changes.failed_radiogram ? changes.failed_radiogram.to : null;
   const num = (v, digits) => (v === null || v === undefined ? "–" : fmtNum(v, digits));
   const flag = (to, on, off) => t(to ? on : off);
   const parts = [];
@@ -276,7 +283,12 @@ function logChangesText(changes) {
         parts.push(flag(to, "log.batteryLow", "log.ch.batteryOk"));
         break;
       case "error":
-        parts.push(flag(to, "log.error", "log.ch.errorCleared"));
+        if (to && failed) parts.push(t("log.errorRadiogram", { radiogram: radiogramName(failed) })); // tiles.js
+        else parts.push(flag(to, "log.error", "log.ch.errorCleared"));
+        break;
+      case "failed_radiogram":
+        // said with the error where it came or went with it
+        if (to && !changes.error) parts.push(t("log.ch.failedRadiogram", { radiogram: radiogramName(to) }));
         break;
       case "link_error":
         parts.push(flag(to, "log.linkError", "log.ch.linkErrorCleared"));
@@ -400,6 +412,10 @@ function logSummaryText(kind, s, serial) {
       return t("log.sum.wallReset", { mode: logWord("log.mode.", s.mode), was: logWord("log.mode.", s.was_mode), silent: num(s.silent_min) });
     case "battery":
       return t("log.sum.battery", { level: logWord("log.battery.", s.level), from: logWord("log.battery.", s.from) });
+    case "error_reset":
+      return t("log.sum.errorReset");
+    case "error_watch":
+      return logErrorWatchText(s);
     case "structure": {
       const action = logWord("log.structure.", s.action);
       let text;
@@ -421,6 +437,10 @@ function logSummaryText(kind, s, serial) {
       const text = mismatchText(s); // tiles.js
       return s.state === "cleared" ? t("log.sum.mismatchCleared", { text }) : text;
     }
+    case "disagree":
+      return logDisagreeText(s, serial);
+    case "drift":
+      return logDriftText(s);
     case "hold":
       if (s.reason === "duty_cycle") return t("log.sum.holdDuty", { duty: num(s.duty_pct), until: s.until ? fmtLogTime(new Date(s.until)) : "–" });
       return t("log.sum.holdSlots", { slots: num(s.free_slots), wait: num(s.wait_s) });
@@ -448,6 +468,104 @@ function logSummaryText(kind, s, serial) {
       return logWord("log.proxyWarn.", s.what);
     case "locked_out":
       return t("log.sum.lockedOut", { remote: s.remote || "–", for: s.for || "–", after: logWord("log.lockedAfter.", s.after) });
+  }
+  return "";
+}
+
+// logErrorWatchText is an error_watch line's text (AP RadioHealth v1.2,
+// Block 6): a communication error back after the automatic reset, with
+// the radiogram that failed; a communication error or a link error set
+// for 24 hours; one clear again.
+function logErrorWatchText(s) {
+  const num = (v) => (v === undefined || v === null ? "–" : String(v));
+  const link = s.flag === "link_error";
+  const parts = [];
+  switch (s.what) {
+    case "back":
+      parts.push(t(s.next_report ? "log.sum.watchBackNext" : "log.sum.watchBack", { minutes: num(s.minutes) }));
+      break;
+    case "lasting":
+      parts.push(t(link ? "log.sum.watchLastingLink" : "log.sum.watchLasting", {
+        hours: num(s.hours), since: s.since ? fmtLogTime(new Date(s.since)) : "–" }));
+      if (s.silent) parts.push(t("log.sum.watchSilent"));
+      break;
+    case "clear":
+      parts.push(t(link ? "log.sum.watchClearLink" : "log.sum.watchClear"));
+      if (s.hours !== undefined && s.hours !== null) parts.push(t("log.sum.watchFor", { hours: num(s.hours) }));
+      break;
+    default:
+      return "";
+  }
+  if (!link && s.failed_radiogram) parts.push(t("log.ch.failedRadiogram", { radiogram: radiogramName(s.failed_radiogram) })); // tiles.js
+  if (s.what === "back") parts.push(t("log.sum.watchHeld"));
+  else if (s.what === "clear" && s.held) parts.push(t("log.sum.watchResume"));
+  return parts.join("; ");
+}
+
+// logRoomName names a room of a line's Cube by its name, else its
+// number.
+function logRoomName(id, serial) {
+  const r = (logRoomsOf(serial) || { rooms: [] }).rooms.find((x) => x.id === id);
+  return r && r.name ? r.name : t("log.room", { id });
+}
+
+// logSettingText is a thermostat's setting as a room check names it: its
+// mode, its setpoint (or the week programme, for auto without one) and
+// its vacation's end.
+function logSettingText(m) {
+  const parts = [logWord("log.mode.", m.mode)];
+  if (m.setpoint !== undefined) parts.push(t("log.set", { v: fmtNum(m.setpoint, 1) }));
+  else if (m.mode === "auto") parts.push(t("log.disagree.program"));
+  if (m.until) parts.push(t("log.until", { until: m.until }));
+  return parts.join(" ");
+}
+
+// logDisagreeText is a room check's line of a room whose thermostats
+// disagree (drift.go): the report with each member's setting, the
+// room's state sent again and from where, or why not, and the members
+// agreeing again.
+function logDisagreeText(s, serial) {
+  const room = logRoomName(s.room, serial);
+  const num = (v) => (v === undefined || v === null ? "–" : String(v));
+  const member = (rf) => {
+    const d = logDevice(rf, serial);
+    return d ? deviceName(d) : rf;
+  };
+  switch (s.outcome) {
+    case "differ": {
+      const members = (s.members || []).map((m) => member(m.rf) + ": " + logSettingText(m)).join(", ");
+      const what = (s.differs || []).map((w) => logWord("log.disagree.what.", w)).join(", ");
+      return t("log.sum.disagreeDiffer", { room, what: what || "–", minutes: num(s.minutes), members: members || "–" });
+    }
+    case "resent":
+      return t("log.sum.disagreeResent", { room, state: logSettingText(s), from: logWord("log.disagree.from.", s.from) });
+    case "resend_failed":
+      return t("log.sum.disagreeFailed", { room, state: logSettingText(s) });
+    case "not_resent":
+      return t("log.sum.disagreeNotResent", { room, why: logWord("log.disagree.why.", s.why) });
+    case "agree":
+      return t("log.sum.disagreeAgree", { room, minutes: num(s.minutes) });
+  }
+  return "";
+}
+
+// logDriftText is a room check's line of a thermostat that does not
+// follow its week programme (drift.go): its setpoint and the
+// programme's, its clock an hour off, the radiogram that failed; and
+// its following again.
+function logDriftText(s) {
+  const num = (v) => (v === undefined || v === null ? "–" : String(v));
+  switch (s.outcome) {
+    case "not_following": {
+      const parts = [t("log.sum.driftNot", { setpoint: fmtNum(s.setpoint, 1), expected: fmtNum(s.expected, 1), at: s.switch_at || "–" })];
+      if (s.hour_off) parts.push(t(s.auto_dst === false ? "log.sum.driftHourNoDst" : "log.sum.driftHour"));
+      if (s.failed_radiogram) parts.push(t("log.errorRadiogram", { radiogram: radiogramName(s.failed_radiogram) })); // tiles.js
+      return parts.join("; ");
+    }
+    case "follows":
+      return t("log.sum.driftFollows", { minutes: num(s.minutes) });
+    case "left_auto":
+      return t("log.sum.driftLeftAuto", { mode: logWord("log.mode.", s.mode) });
   }
   return "";
 }

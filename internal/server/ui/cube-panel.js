@@ -202,6 +202,16 @@ function rebootRow(c) {
   return row;
 }
 
+// repairRow is the Cube's Repair… in its panel's actions, for a role
+// with repair, and under it the Cube's repairs (repair.js): the reset of
+// every communication error.
+function repairRow(c) {
+  const scope = repairScope(c.serial, "cube");
+  const row = elem("div", "actions cube-repair needs-repair");
+  row.appendChild(repairButton(scope, "cube", "api/v1/cubes/" + encodeURIComponent(c.serial), { label: c.name || c.serial }));
+  return elem("div", "cube-repair-area needs-repair", row, repairSlot(scope));
+}
+
 // rebootCube asks in place of the Reboot whether to restart the Cube,
 // naming what a restart costs: the Cube gone for a minute and its rooms
 // refusing commands for a while, the radiograms pending as the Cube last
@@ -413,7 +423,7 @@ function cubePanel(c, { page } = {}) {
   // where there is room (style.css .cube-cols).
   const form = d.querySelector("form.cube-form");
   who.appendChild(textEl("span", "", "cube-head-stats muted small"));
-  const acts = elem("div", "cube-actions", pairingSection(c.serial), rebootRow(c));
+  const acts = elem("div", "cube-actions", pairingSection(c.serial), rebootRow(c), repairRow(c));
   const cols = elem("div", "cube-cols", fromTemplate("tpl-cube-info"), form, acts);
   sum.after(elem("div", "cube-top-line"), elem("div", "cube-link-state"), elem("div", "cube-address-state"), elem("div", "cube-slots-state"), cols);
   fillCubeFacts(d, c);

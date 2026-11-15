@@ -136,16 +136,15 @@ function sameKey(buf, bytes) {
 async function loadNotify() {
   renderNotify();
   if (notifyUnavailable()) return;
-  const msg = $("notify-msg");
   try {
     // every preference, not notify's alone, which is a 404 until set
     const [prefs, subs, sub] = await Promise.all([api("GET", "api/v1/me/preferences"), api("GET", "api/v1/me/push"), browserSubscription()]);
     notifyState.rules = notifyRulesOf((prefs || {}).notify);
     notifyState.subs = subs || [];
     notifyState.endpoint = sub ? sub.endpoint : "";
-    showResult(msg, "", true);
+    notifySay("load", "", true);
   } catch (e) {
-    showResult(msg, t("notify.loadFailed", { error: e.message }), false);
+    notifySay("load", t("notify.loadFailed", { error: e.message }), false);
   }
   renderNotify();
 }
@@ -195,26 +194,36 @@ function renderNotifyRules() {
       saveNotifyRules();
     });
     row.appendChild(fieldRow(null, sw, { help: "notify." + kind }));
-    if ("after_min" in r) {
-      value = numberInput(r.after_min, NOTIFY_AFTER[0], NOTIFY_AFTER[1], 1, (v) => {
-        if (Number.isInteger(v) && v >= NOTIFY_AFTER[0] && v <= NOTIFY_AFTER[1]) {
-          r.after_min = v;
-          saveNotifyRules();
-        } else showResult($("notify-msg"), t("notify.badAfter", { min: NOTIFY_AFTER[0], max: NOTIFY_AFTER[1] }), false);
-      });
-      row.appendChild(fieldRow(t("notify.after"), value, { unit: t("notify.minutes") }));
-    } else if ("below_c" in r) {
-      value = numberInput(r.below_c, NOTIFY_BELOW[0], NOTIFY_BELOW[1], 0.5, (v) => {
-        if (typeof v === "number" && !Number.isNaN(v) && v >= NOTIFY_BELOW[0] && v <= NOTIFY_BELOW[1]) {
-          r.below_c = v;
-          saveNotifyRules();
-        } else showResult($("notify-msg"), t("notify.badBelow", { min: NOTIFY_BELOW[0], max: NOTIFY_BELOW[1] }), false);
-      });
-      row.appendChild(fieldRow(t("notify.below"), value, { unit: "°C" }));
+    let field = null;
+    if ("after_min" in r) field = notifyValue(r, "after_min", NOTIFY_AFTER, 1, t("notify.after"), t("notify.minutes"));
+    else if ("below_c" in r) field = notifyValue(r, "below_c", NOTIFY_BELOW, 0.5, t("notify.below"), "°C");
+    if (field) {
+      value = field.input;
+      value.disabled = !r.on;
+      row.appendChild(field.row);
     }
-    if (value) value.disabled = !r.on;
     box.appendChild(row);
   }
+}
+
+// notifyValue is the field of a rule's delay (after_min, in whole
+// minutes) or threshold (below_c), r[key] within bounds: a value out of
+// them is marked on the field, the range in amber before the box
+// (markRange), and not saved until the field holds one inside; a save
+// meanwhile leaves the mark alone. It gives the field's row and input.
+function notifyValue(r, key, bounds, step, label, unit) {
+  const range = textEl("span", t("notify.range", { min: bounds[0], max: bounds[1] }), "small warn-text hidden");
+  range.setAttribute("role", "status");
+  const input = numberInput(r[key], bounds[0], bounds[1], step, (v) => {
+    const ok = typeof v === "number" && v >= bounds[0] && v <= bounds[1] && (key !== "after_min" || Number.isInteger(v));
+    if (!markRange(input, range, ok)) return;
+    r[key] = v;
+    saveNotifyRules();
+  });
+  const row = fieldRow(label, input, { unit });
+  range.id = input.id + "-range";
+  input.before(range);
+  return { row, input };
 }
 
 // renderNotifyDevices draws the user's devices: each with its label,
@@ -241,6 +250,19 @@ function renderNotifyDevices() {
   }
 }
 
+// notifySay says on the line under the lists how something went, from
+// naming whose outcome it is: "load" the rules and devices read, "save"
+// the rules sent, "device" this browser turned on or off or a device
+// removed. No text clears the line only where it shows from's own
+// outcome, so that the reload after turning this browser on keeps what
+// that said; from "" clears whatever it shows.
+function notifySay(from, text, ok) {
+  const msg = $("notify-msg");
+  if (!text && from && msg.dataset.from !== from) return;
+  msg.dataset.from = text ? from : "";
+  showResult(msg, text, ok);
+}
+
 // saveNotifyRules sends the rules shortly, the next change waiting a
 // second, as My settings do.
 function saveNotifyRules() {
@@ -249,9 +271,9 @@ function saveNotifyRules() {
     notifyState.timer = null;
     try {
       await api("PUT", "api/v1/me/preferences/notify", notifyState.rules);
-      showResult($("notify-msg"), "", true);
+      notifySay("save", "", true);
     } catch (e) {
-      showResult($("notify-msg"), t("notify.saveFailed", { error: e.message }), false);
+      notifySay("save", t("notify.saveFailed", { error: e.message }), false);
     }
   }, NOTIFY_SAVE_DELAY);
 }
@@ -261,7 +283,6 @@ function saveNotifyRules() {
 // and the server told of it with the label given.
 async function turnOnNotify(ev) {
   const btn = ev.currentTarget;
-  const msg = $("notify-msg");
   try {
     await whileBusy(btn, async () => {
       await navigator.serviceWorker.register("sw.js");
@@ -280,9 +301,9 @@ async function turnOnNotify(ev) {
       notifyState.endpoint = sub.endpoint;
       await tellWorkerLanguage();
     });
-    showResult(msg, t("notify.turnedOn"), true);
+    notifySay("device", t("notify.turnedOn"), true);
   } catch (e) {
-    showResult(msg, t("notify.turnOnFailed", { error: e.message }), false);
+    notifySay("device", t("notify.turnOnFailed", { error: e.message }), false);
   }
   await loadNotify();
 }
@@ -291,7 +312,6 @@ async function turnOnNotify(ev) {
 // the browser.
 async function turnOffNotify(ev) {
   const btn = ev.currentTarget;
-  const msg = $("notify-msg");
   try {
     await whileBusy(btn, async () => {
       const row = thisBrowser();
@@ -300,9 +320,9 @@ async function turnOffNotify(ev) {
       if (sub) await sub.unsubscribe();
       notifyState.endpoint = "";
     });
-    showResult(msg, t("notify.turnedOff"), true);
+    notifySay("device", t("notify.turnedOff"), true);
   } catch (e) {
-    showResult(msg, t("notify.turnOffFailed", { error: e.message }), false);
+    notifySay("device", t("notify.turnOffFailed", { error: e.message }), false);
   }
   await loadNotify();
 }
@@ -310,7 +330,6 @@ async function turnOffNotify(ev) {
 // removeNotifyDevice removes one of the user's devices; this browser's
 // own subscription ends with it.
 async function removeNotifyDevice(s, btn) {
-  const msg = $("notify-msg");
   try {
     await whileBusy(btn, async () => {
       await api("DELETE", "api/v1/me/push/" + s.id);
@@ -320,9 +339,9 @@ async function removeNotifyDevice(s, btn) {
         notifyState.endpoint = "";
       }
     });
-    showResult(msg, "", true);
+    notifySay("device", "", true);
   } catch (e) {
-    showResult(msg, t("notify.removeFailed", { error: e.message }), false);
+    notifySay("device", t("notify.removeFailed", { error: e.message }), false);
   }
   await loadNotify();
 }
@@ -343,7 +362,11 @@ function notifyToast(n) {
 function initNotify() {
   $("notify-on").addEventListener("click", turnOnNotify);
   $("notify-off").addEventListener("click", turnOffNotify);
-  onView("me", loadNotify);
+  // the page shown again starts with an empty line, then reads the rules
+  onView("me", () => {
+    notifySay("", "", true);
+    loadNotify();
+  });
   // a push while this page is in front: the service worker hands it over
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.addEventListener("message", (ev) => {

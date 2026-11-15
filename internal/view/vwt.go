@@ -250,7 +250,7 @@ func RoomThermostat(room cube.RoomMeta, members []Device, info RoomInfo, addr cu
 	d.Sources["mode"] = modeFrom
 	consistent := true
 	for _, m := range reported[1:] {
-		consistent = consistent && sameSetting(reported[0].State, m.State)
+		consistent = consistent && SameSetting(reported[0].State, m.State)
 	}
 	st.Consistent = &consistent
 
@@ -266,8 +266,8 @@ func RoomThermostat(room cube.RoomMeta, members []Device, info RoomInfo, addr cu
 	// theirs.
 	if len(walls) > 0 && walls[0].State != nil {
 		w := walls[0].State
-		st.BatteryLow, st.Error, st.LinkError, st.PanelLocked = w.BatteryLow, w.Error, w.LinkError, w.PanelLocked
-		for _, k := range []string{"battery_low", "error", "link_error", "panel_locked"} {
+		st.BatteryLow, st.Error, st.FailedRadiogram, st.LinkError, st.PanelLocked = w.BatteryLow, w.Error, w.FailedRadiogram, w.LinkError, w.PanelLocked
+		for _, k := range []string{"battery_low", "error", "failed_radiogram", "link_error", "panel_locked"} {
 			newest(k, walls[0].Received[k])
 		}
 	}
@@ -340,9 +340,10 @@ func aggregate(vals []float64, method string) float64 {
 	return math.Round(v*10) / 10
 }
 
-// sameSetting reports whether two thermostats agree on mode, setpoint
-// and until.
-func sameSetting(a, b *State) bool {
+// SameSetting reports whether two thermostats agree on mode, setpoint
+// and until: the rule of a virtual wall thermostat's Consistent, and of
+// the server's check of a room's members.
+func SameSetting(a, b *State) bool {
 	eqF := func(x, y *float64) bool { return x == nil && y == nil || x != nil && y != nil && *x == *y }
 	eqU := func(x, y *cube.Until) bool { return x == nil && y == nil || x != nil && y != nil && *x == *y }
 	return a.Mode == b.Mode && eqF(a.Setpoint, b.Setpoint) && eqU(a.Until, b.Until)
