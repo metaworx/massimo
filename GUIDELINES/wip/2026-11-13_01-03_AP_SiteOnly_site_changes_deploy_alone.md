@@ -1,4 +1,4 @@
-# AP SiteOnly v1.4: Site changes deploy alone
+# AP SiteOnly v1.5: Site changes deploy alone
 
 ## TL;DR
 
@@ -25,6 +25,9 @@ pushed to `main`, deploys Pages directly: no test jobs and no devel build.
   main's push skips LAN for that code (D78-C); LAN's paths + `internal/sharedport/`,
   `go.mod`, `go.sum` (D79-A); the summary's `ui` and `lan` rows say what the job
   does (D80-A)
+- v1.5: a docs-only push to `main` on code no run tested (its merge's run
+  cancelled waiting, its pull request on another base) → What to test asks
+  Code result first → `code=true`, the run tests it (D81-A)
 
 | Change | Guidelines | Site | Tests | Devel build | Pages deploy |
 |---|---|---|---|---|---|
@@ -42,6 +45,7 @@ pushed to `main`, deploys Pages directly: no test jobs and no devel build.
 6. Code result reads the Tested status where no run gives a verdict
 7. LAN: the pull request's "not needed" carried to `main`; its paths' gaps
 8. The summary's `ui` and `lan` rows say whether the job runs
+9. What to test tests code no run tested, rather than Code result calling it red
 
 ## Discussion
 
@@ -146,6 +150,26 @@ as a push to `main` always wants them.
   with no code test, not needed, passed before, or it runs. It was to go onto
   #270, which the owner merged before this revision, so it is Block 8 on
   Block 7's branch.
+
+**v1.5** (`PLAN++ D81-A with the new AP revision in the same commit`,
+2026-11-15): the owner asked whether Code result was right on the push of
+`chore(aps): -IconChoice` (run 43731468781). It was, by its rules: the run on
+the merge of #294 before it, run 43731237633, was cancelled three seconds
+after it was made, and #294's pull request had tested it on a `main` without
+#293 (page tabs), merged in between, so its record holds other code. No run
+tested the two together. But that is not known to fail, and red keeps
+`main` and the nightly stuck until the next code push.
+
+- **D81-A:** What to test asks Code result's question before the run, on a
+  push to `main` whose answer is `code=false`: where no run gave a verdict
+  and none is going, `code=true`, and the run tests the code. Code result's
+  red then means a run that failed. Not B, Code result starting a run
+  (`workflow_dispatch`, `actions: write`): a trigger of its own and a
+  second run. Not C, red until the next code push.
+- The plan's revision is committed with Block 9 on its branch, as the
+  owner's signal asks, not on `main` first.
+- D82 (re-running the cancelled run to clear `main` now) was not signalled
+  and is not done.
 
 ## Analysis
 
@@ -276,6 +300,22 @@ whatever the run did with them. The row says, in this order: skipped, no
 code test (`suite` or `code` false); not needed (the answer false); passed
 for this code before (`ui_done`, `lan_done`); else it runs. Fuzz's row stays.
 
+**Code whose verdict is unknown (v1.5).** Code result's walk ends in one
+of three ways: a verdict (a run green or red, or the record green); a run
+still going, which it waits for; or no run tested this code (the walk
+reaches other code, 100 commits, or the history's end). The third is no
+verdict, but it fails as red. `CODE_CHECK=1` makes the script answer only
+which way it ends, waiting for nothing and writing no summary: exit 0 for
+the first two, 1 for the third, 2 where the history or the API cannot be
+read. What to test runs it after the site check on a push with
+`code=false`. On 0 it keeps `code=false` and says the verdict; on anything
+else it answers `code=true site=false`, so the run tests the code, Build and
+Release run, and Release's Site deploys the documents (Deploy site is for
+`site=true` alone and would deploy twice). A pull request is left out: its
+Code result is a warning anyway, it adds no code, and its checkout's
+history, three commits deep, cannot be walked. What to test needs
+`actions: read` for the runs.
+
 **Not changed.** The nightly build may take a site-only commit; its code is
 that of the commit before, which was tested (CI.md section 2). Pages keeps
 the first deploy of a commit, so a nightly whose head `main` already
@@ -396,6 +436,24 @@ the filter on a change to `internal/sharedport/` and to `go.mod`
 pull request of the UI suite alone, a merge with `ui=true`, and a push with
 nothing recorded; `make actionlint`.
 
+### Block 9: Code no run tested is tested (v1.5)
+
+1. `packaging/code-result.sh`: `CODE_CHECK=1`, exit 0, 1 or 2 as the
+   Analysis says; the header comment.
+2. `ci.yml`, What to test: the check after the site check on a push with
+   `code=false`; `actions: read`; the code row's words.
+3. `GUIDELINES/project/CI.md` section 2 (v1.57.0).
+4. `CHANGELOG.d/Fixed/claude-code-unknown.md`.
+5. This revision, in the same commit.
+
+**Verification:** What to test's step, run by hand with this branch's
+script on `main`'s real commits: `chore(aps): -IconChoice` (`code=true`),
+`chore(aps): -LanPaths` (green through the record, `code=false`),
+`chore(aps): -DiscoveryShare, -ANALYSIS DiscoveryShare` (red, `code=false`),
+`chore(aps): +SiteOnly v1.2` (green, `code=false`); Code result without the
+check on `-IconChoice` (red, exit 1, as before); the check with an unreadable
+API (exit 2); shellcheck; `make actionlint`.
+
 ## Proposed commit message
 
 ```
@@ -497,6 +555,24 @@ Key changes:
 Assisted-by: claude-code:claude-opus-5-5
 ```
 
+Block 9:
+
+```
+fix(pipeline): A docs-only push tests the code no run tested
+
+For AP SiteOnly v1.5, Block 9, with the owner's D81-A: a merge whose run main's group cancelled while it waited, its pull request tested on another base, left code no run tested, and Code result called every docs-only push after it red until the next code push; What to test now asks Code result first, and the run tests such code.
+
+Key changes:
+- packaging/code-result.sh: CODE_CHECK=1 answers whether the code's verdict is known, without waiting
+- ci.yml: What to test, on a push with code=false and no verdict, answers code=true; it reads the runs with actions: read
+- CI.md section 2 states it
+- the plan's v1.5, in this commit
+
+File-revision-v1: GUIDELINES/project/CI.md::v1.57.0::2026-11-15::2::a docs-only push tests the code no run tested
+File-revision-v1: GUIDELINES/wip/2026-11-13_01-03_AP_SiteOnly_site_changes_deploy_alone.md::v1.5::2026-11-15::9::Block 9, code no run tested is tested, by PLAN++
+Assisted-by: claude-code:claude-opus-5-5
+```
+
 ## Change History
 
 - v1.0 (2026-11-13): first revision, D62-A, D63-A, D64-C.
@@ -509,3 +585,5 @@ Assisted-by: claude-code:claude-opus-5-5
 - v1.4 (2026-11-15): Blocks 7 and 8, LAN's record and paths and the
   summary's rows, D78-C, D79-A, D80-A; Block 6 merged as pull request #280,
   the summary as #270.
+- v1.5 (2026-11-15): Block 9, code no run tested is tested, D81-A;
+  Blocks 7 and 8 merged as pull request #284.

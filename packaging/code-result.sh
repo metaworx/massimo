@@ -31,6 +31,14 @@
 #
 # Red exits 1 on a push and 0 with a warning on a pull request, which adds
 # no code of its own; green exits 0. The summary names the run either way.
+#
+# CODE_CHECK=1 asks What to test's question before the run (AP SiteOnly,
+# D81-A): is this code's verdict known? It waits for nothing and writes no
+# summary. Exit 0: a run gave a verdict, green or red, or one is still
+# going, which Code result will wait for; the run tests no code. Exit 1:
+# no run tested this code, a merge whose run main's group cancelled while
+# it waited among them; the run tests it. Exit 2: the history or the API
+# could not be read; the run tests it too.
 # Needs a full history, the guidelines (fingerprint.sh), GH_TOKEN with actions: read and statuses: read, and
 # GITHUB_REPOSITORY; GITHUB_RUN_ID, GITHUB_EVENT_NAME and
 # GITHUB_STEP_SUMMARY where GitHub sets them. CODE_HEAD (HEAD) names the
@@ -45,11 +53,14 @@ repo="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is not set}"
 self="${GITHUB_RUN_ID:-}"
 cfg=GUIDELINES/config.ini
 fpsh=GUIDELINES/shared/tools/fingerprint.sh
+check="${CODE_CHECK:-}"
 end=$((SECONDS + deadline))
 
 # The verdict, said once: on stdout, in the summary, and as the exit code.
+# Asked as a check, a verdict is known whatever its colour.
 verdict() { # <green|red> <message>
 	echo "$2"
+	[ -z "$check" ] || exit 0
 	if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
 		{
 			if [ "$1" = green ]; then echo "### The code passed"; else echo "### The code did not pass"; fi
@@ -66,12 +77,24 @@ verdict() { # <green|red> <message>
 	exit 1
 }
 
+# No run tested this code: red, or asked as a check, exit 1.
+unknown() { # <message>
+	if [ -n "$check" ]; then echo "$1"; exit 1; fi
+	verdict red "$1"
+}
+
+# What could not be read: red, or asked as a check, exit 2.
+unreadable() { # <message>
+	if [ -n "$check" ]; then echo "$1"; exit 2; fi
+	verdict red "$1"
+}
+
 # The paths that are not code, as exclusions; a value with pathspec magic
 # cannot be negated by a prefix, so the code cannot be compared.
 skip=()
 while IFS= read -r p; do
 	[ -n "$p" ] || continue
-	case "$p" in :*) verdict red "${cfg} has a [ci] value with pathspec magic (${p}): the code cannot be compared." ;; esac
+	case "$p" in :*) unreadable "${cfg} has a [ci] value with pathspec magic (${p}): the code cannot be compared." ;; esac
 	skip+=(":!${p}")
 done < <(git config -f "$cfg" --get-all ci.untested || true; git config -f "$cfg" --get-all ci.site || true)
 
@@ -107,15 +130,15 @@ fp="$("$fpsh" -q fingerprint "$head" 2>/dev/null)" || fp=""
 [ -n "$fp" ] || echo "code-result: no fingerprint of ${head:0:12}; the Tested records are not read"
 
 commit="$(git rev-parse --verify --quiet "${head}^1^{commit}")" ||
-	verdict red "${head:0:12} has no parent: no run tested its code."
+	unknown "${head:0:12} has no parent: no run tested its code."
 n=0
 while :; do
 	git diff --quiet "$commit" "$head" -- . "${skip[@]}" ||
-		verdict red "No run tested this code: the walk reached ${commit:0:12}, which holds other code, without a verdict."
+		unknown "No run tested this code: the walk reached ${commit:0:12}, which holds other code, without a verdict."
 	carried_any=false
 	runs="$(gh api "repos/${repo}/actions/workflows/ci.yml/runs?head_sha=${commit}&event=push&per_page=100" \
 		--jq '.workflow_runs[] | "\(.id)\t\(.html_url)"')" ||
-		verdict red "The runs on ${commit:0:12} could not be read."
+		unreadable "The runs on ${commit:0:12} could not be read."
 	while IFS=$'\t' read -r id url; do
 		{ [ -n "$id" ] && [ "$id" != "$self" ]; } || continue
 		while :; do
@@ -123,13 +146,17 @@ while :; do
 				info="unreadable -"
 			status="${info% *}" conclusion="${info#* }"
 			[ "$status" != completed ] || break
+			if [ -n "$check" ]; then
+				echo "Run ${url} on ${commit:0:12} is ${status}: Code result will wait for its verdict."
+				exit 0
+			fi
 			[ "$SECONDS" -lt "$end" ] ||
 				verdict red "Run ${url} on ${commit:0:12} did not finish within ${deadline} s."
 			echo "code-result: run ${id} on ${commit:0:12} is ${status}; waiting"
 			sleep 20
 		done
 		[ "$conclusion" != cancelled ] || { echo "code-result: run ${id} was cancelled; no verdict"; continue; }
-		jobs="$(jobs_of "$id")" || verdict red "The jobs of run ${url} could not be read."
+		jobs="$(jobs_of "$id")" || unreadable "The jobs of run ${url} could not be read."
 		carried=false passed=false bad=""
 		while IFS=$'\t' read -r c name; do
 			[ -n "$name" ] || continue
@@ -161,7 +188,7 @@ while :; do
 		echo "code-result: no Tested record on ${commit:0:12} for this code"
 	fi
 	n=$((n + 1))
-	[ "$n" -lt "$walk" ] || verdict red "No run tested this code within ${walk} commits."
+	[ "$n" -lt "$walk" ] || unknown "No run tested this code within ${walk} commits."
 	commit="$(git rev-parse --verify --quiet "${commit}^1^{commit}")" ||
-		verdict red "No run tested this code: the history ends."
+		unknown "No run tested this code: the history ends."
 done
