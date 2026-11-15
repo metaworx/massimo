@@ -26,8 +26,10 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"go.metaworx.ch/massimo/internal/cubeio"
 	"go.metaworx.ch/massimo/internal/cubelan"
@@ -698,9 +700,10 @@ func (s *Server) buildPlace(r *http.Request, rt *runtime) (*repairAction, error)
 
 // buildList lists a device in the room its C line names, metadata only
 // (item 3): its entry moved there, or one made for a device the list
-// does not have. A room the list does not have is made with room_name,
-// its master the room's wall thermostat, else its first radiator
-// thermostat; without the name the request is refused.
+// does not have, named as the request's name says, else by
+// defaultDeviceName (D185). A room the list does not have is made with
+// room_name, its master the room's wall thermostat, else its first
+// radiator thermostat; without the name the request is refused.
 func (s *Server) buildList(r *http.Request, rt *runtime) (*repairAction, error) {
 	c, listed, md, err := s.repairDevice(r, rt)
 	if err != nil {
@@ -722,19 +725,23 @@ func (s *Server) buildList(r *http.Request, rt *runtime) (*repairAction, error) 
 	cp.Rooms = append([]cube.RoomMeta(nil), md.Rooms...)
 	cp.Devices = append([]cube.DeviceMeta(nil), md.Devices...)
 	newRoom := !slices.ContainsFunc(md.Rooms, func(m cube.RoomMeta) bool { return m.ID == to })
+	var roomName string
 	if newRoom {
-		name := strings.TrimSpace(r.URL.Query().Get("room_name"))
-		if name == "" {
+		roomName = strings.TrimSpace(r.URL.Query().Get("room_name"))
+		if roomName == "" {
 			return nil, &errRoomNameNeeded{room: to}
 		}
-		if err := checkName(name); err != nil {
+		if err := checkName(roomName); err != nil {
 			return nil, err
 		}
 		master, _ := cubeio.MasterCandidate(rt.client.Snapshot(), to, rt.hidden())
-		cp.Rooms = append(cp.Rooms, cube.RoomMeta{ID: to, Name: name, RFAddress: master})
-	} else if _, ok := rt.hidden().Room(md, to); !ok {
+		cp.Rooms = append(cp.Rooms, cube.RoomMeta{ID: to, Name: roomName, RFAddress: master})
+	} else if room, ok := rt.hidden().Room(md, to); ok {
+		roomName = room.Name
+	} else {
 		return nil, fail(http.StatusNotFound, "no room %d", to)
 	}
+	details := map[string]any{"to": to, "listed": listed != nil, "new_room": newRoom}
 	from := uint8(0)
 	if listed != nil {
 		from = listed.RoomID
@@ -744,8 +751,100 @@ func (s *Server) buildList(r *http.Request, rt *runtime) (*repairAction, error) 
 			}
 		}
 	} else {
-		cp.Devices = append(cp.Devices, cube.DeviceMeta{Type: c.Type, RFAddress: c.RFAddress, Serial: c.Serial, RoomID: to})
+		name := strings.TrimSpace(r.URL.Query().Get("name"))
+		if name != "" {
+			if err := checkName(name); err != nil {
+				return nil, err
+			}
+		} else {
+			name = defaultDeviceName(roomName, c.Type, roomDeviceNames(md, to))
+		}
+		cp.Devices = append(cp.Devices, cube.DeviceMeta{Type: c.Type, RFAddress: c.RFAddress, Serial: c.Serial, Name: name, RoomID: to})
+		details["name"], details["room_name"], details["type"] = name, roomName, c.Type.String()
 	}
-	return &repairAction{name: "list", device: c.RFAddress, metadata: &cp, rooms: []uint8{from, to}, structure: true,
-		details: map[string]any{"from": from, "to": to, "listed": listed != nil, "new_room": newRoom}}, nil
+	details["from"] = from
+	return &repairAction{name: "list", device: c.RFAddress, metadata: &cp, rooms: []uint8{from, to}, structure: true, details: details}, nil
+}
+
+// deviceTypeWords are the device types' words in a default name, as the
+// web UI's English table has them (type.<type>).
+var deviceTypeWords = map[cube.DeviceType]string{
+	cube.DeviceRadiatorThermostat:     "radiator thermostat",
+	cube.DeviceRadiatorThermostatPlus: "radiator thermostat plus",
+	cube.DeviceWallThermostat:         "wall thermostat",
+	cube.DeviceShutterContact:         "window contact",
+	cube.DeviceEcoSwitch:              "eco button",
+}
+
+// roomDeviceNames are the names of the devices the metadata lists in a
+// room.
+func roomDeviceNames(md *cube.Metadata, room uint8) []string {
+	var out []string
+	for _, d := range md.Devices {
+		if d.RoomID == room {
+			out = append(out, d.Name)
+		}
+	}
+	return out
+}
+
+// defaultDeviceName is the name a device listed into a room gets where
+// the request names none (D185): "<room name> <type> <n>", the type in
+// English (deviceTypeWords), n the lowest number from 1 that no name of
+// the room's (taken) has in that form, which a name matches whatever
+// its case. A room's name too long for the whole to fit maxNameBytes is
+// cut, at a character, the form then that of the cut name.
+func defaultDeviceName(room string, typ cube.DeviceType, taken []string) string {
+	word, ok := deviceTypeWords[typ]
+	if !ok {
+		word = strings.ReplaceAll(typ.String(), "_", " ")
+	}
+	for digits := 1; ; digits++ {
+		base := cutName(strings.TrimSpace(room), maxNameBytes-len(word)-2-digits)
+		prefix := strings.TrimSpace(base + " " + word)
+		n := freeNumber(prefix, taken)
+		if len(strconv.Itoa(n)) <= digits || base == "" {
+			return prefix + " " + strconv.Itoa(n)
+		}
+	}
+}
+
+// freeNumber is the lowest number from 1 that no name of taken has in
+// the form "<prefix> <n>", whatever its case.
+func freeNumber(prefix string, taken []string) int {
+	used := map[int]bool{}
+	for _, name := range taken {
+		name = strings.TrimSpace(name)
+		if len(name) <= len(prefix)+1 || !strings.EqualFold(name[:len(prefix)], prefix) || name[len(prefix)] != ' ' {
+			continue
+		}
+		rest := name[len(prefix)+1:]
+		if strings.Trim(rest, "0123456789") != "" {
+			continue
+		}
+		if n, err := strconv.Atoi(rest); err == nil && n > 0 {
+			used[n] = true
+		}
+	}
+	n := 1
+	for used[n] {
+		n++
+	}
+	return n
+}
+
+// cutName is s cut to at most max bytes at a character, trailing spaces
+// left out; "" for max below 1.
+func cutName(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	if max < 1 {
+		return ""
+	}
+	end := max
+	for end > 0 && !utf8.RuneStart(s[end]) {
+		end--
+	}
+	return strings.TrimRight(s[:end], " ")
 }

@@ -1537,6 +1537,7 @@
   "repair.stillFlagged": "Die Geräteliste des Cubes zeigt noch eine Kommunikationsstörung für {devices}.",
   "repair.cleared": "Die Geräteliste des Cubes zeigt für sie keine Kommunikationsstörung mehr.",
   "repair.roomName": "Raum {room} ist nicht in der Liste des Cubes; sein Name",
+  "repair.deviceName": "Das Gerät ist nicht in der Liste des Cubes; sein Name",
   "repair.preview": "Zeigen, was gesendet wird",
   "repair.reset": "Kommunikationsstörungen zurücksetzen",
   "repair.resetHelp": "Löscht die Kommunikationsstörung jedes Geräts des Cubes, das eine hat: je eine Rücksetzung, ohne Funkkosten.",

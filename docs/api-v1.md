@@ -2842,7 +2842,7 @@ A room is its members by their C lines, the Cube's own idea of it.
 | `…/cubes/{sn}/rooms/{id}/repair/unlink-relink` | "unlink all and re-link" (D163-B), with `structure` as well as `repair`, its preview too: for each member that takes part in links, a command of its own after a wakeup of the room, the 0x21 remove link partner radiograms of a move's unlink half without its 0x23 (one with the room flag naming it to the room's addressee, one to each window contact among its partners, one to the member for each partner), the room's flagged members reset in the first; then the re-link of every member, as above, whose 0x22 sets each group again. **Not yet run on hardware**: its preview says so (`untested`, a note), and a run that stops halfway, at a discarded radiogram or a lost connection, leaves the room's devices without their partners until it is run again. Nothing to send as the re-link | about twice a re-link's: 25 radiograms, about 31 %, for the room above; a room of five members far more, which the duty-cycle refusal may stop before it starts |
 | `…/cubes/{sn}/devices/{rf}/repair/config` | after a wakeup of the room, the days of the week programme that differ from what more than half of the room's other thermostats share by their C lines (0x10), then 0x11 with the temperatures they share (comfort, eco, maximum, minimum, window open), the device's own offset and window-open minutes kept; its C line read again. Nothing to send where the room has no other thermostat, its others share no temperatures or no programme by a majority (`nothing` says which), the device agrees already, or the Cube and its list have it in different rooms | one or two radiograms per day, one 0x11 |
 | `…/cubes/{sn}/devices/{rf}/repair/place` | where the device's C line names another room than the metadata, or none: a move into the metadata's room (`PUT …/devices/{rf}` with `room_id`, without the copy), from none the placement's link half alone; its C line read again. The metadata stays. Nothing to send where the list does not list the device, has it in no room or where the Cube has it, or the room has a wall thermostat already | about 8 % for a move |
-| `…/cubes/{sn}/devices/{rf}/repair/list` | the metadata, the device's entry moved to the room its C line names, or one made for a device the list does not have; a room the list does not have is made with `room_name` (a query parameter), its master the room's wall thermostat, else its first radiator thermostat, and asked for (above) where it is not given. Nothing to send where the Cube has the device in no room, or its list where the Cube has it | none: metadata only |
+| `…/cubes/{sn}/devices/{rf}/repair/list` | the metadata, the device's entry moved to the room its C line names, or one made for a device the list does not have, named by `name` (a query parameter) or by default (below); a room the list does not have is made with `room_name` (a query parameter), its master the room's wall thermostat, else its first radiator thermostat, and asked for (above) where it is not given. Nothing to send where the Cube has the device in no room, or its list where the Cube has it | none: metadata only |
 
 `details` holds, per repair:
 `devices`, those reset;
@@ -2851,7 +2851,24 @@ for the configuration `room`, `others` (the room's other thermostats),
 `temperatures_by` and `program_by` (how many share what is re-sent),
 `temperatures` and `days` (what is re-sent) and `agreed_temperatures`;
 for a placement `from` and `to`;
-for a listing `from`, `to`, `listed` and `new_room`.
+for a listing `from`, `to`, `listed` and `new_room`,
+and for a device the list lacks `name`, the name its entry gets,
+`room_name`, the room's, and `type`, the device's,
+so that a client can offer a name of its own words.
+
+**A listed device's name** (D185):
+a device the list lacks gets the name the query's `name` gives,
+checked as every name is (1 to 32 bytes, else `400`),
+else the default `<room name> <type> <n>`:
+the room's name, the one it is listed into or the new room's `room_name`;
+the device type in English (`radiator thermostat`, `radiator thermostat plus`,
+`wall thermostat`, `window contact`, `eco button`);
+`n` the lowest number from 1 that no device the list has in that room
+takes in a name of that form, whatever its case,
+such as `Bath radiator thermostat 2` beside `Bath radiator thermostat 1`.
+A room's name too long for the whole to fit 32 bytes is cut, at a character.
+A device the list has keeps its name, `name` or not.
+The web UI offers the same default with the type in the page's language.
 The log's **device change** names a re-link `relink`, "unlink all and re-link"
 `unlink_relink`, a re-sent configuration `config` and a placement `move`;
 one of a room has no device and names its `rooms`.

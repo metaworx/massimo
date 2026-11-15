@@ -1537,6 +1537,7 @@
   "repair.stillFlagged": "The Cube's device list still shows a communication error for {devices}.",
   "repair.cleared": "The Cube's device list shows no communication error for them any more.",
   "repair.roomName": "Room {room} is not in the Cube's list; its name",
+  "repair.deviceName": "The device is not in the Cube's list; its name",
   "repair.preview": "Show what it sends",
   "repair.reset": "Reset the communication errors",
   "repair.resetHelp": "Clears the Cube's communication error of every device of the Cube that has one: one reset each, at no radio cost.",

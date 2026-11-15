@@ -463,7 +463,14 @@ or for resets whether the Cube's device list still shows the error.
   **Place in its listed room**, by radio, where the Cube has it in another
   room or none;
   **List where the Cube has it**, in the list only,
-  asking first for the name of a room the list does not have.
+  asking first for the name of a room the list does not have;
+  a device the list does not have is listed under the name its field
+  offers, which can be changed before Run…:
+  the room's name, the device's type in the page's language,
+  and the lowest number from 1 that no device of the room takes
+  in a name of that form ("Bath radiator thermostat 2"),
+  the room's name cut where the whole would pass 32 bytes (D185).
+  **Show what it sends** reads the preview again with a name changed.
 - In a Cube's panel: **Reset the communication errors** of every device.
 
 ## Log

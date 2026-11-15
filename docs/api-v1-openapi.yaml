@@ -2767,9 +2767,13 @@ paths:
         the list does not have is made with room_name, its master the
         room's wall thermostat, else its first radiator thermostat; without
         the name the preview asks for it (details code room_name_needed and room).
+        A device the list does not have gets the name name gives, else
+        "<room name> <type> <n>", the type in English and n the lowest
+        number no device of the room takes in a name of that form; details
+        name, room_name and type say which.
         The preview sends nothing: the lines a run would send and what they
         cost, and the plan's hash for the run.
-      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}, {$ref: "#/components/parameters/repairRoomName"}]
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}, {$ref: "#/components/parameters/repairRoomName"}, {$ref: "#/components/parameters/repairDeviceName"}]
       responses:
         "200": {$ref: "#/components/responses/RepairPreview"}
         "400": {$ref: "#/components/responses/BadRequest"}
@@ -2784,7 +2788,7 @@ paths:
       description: |
         Runs what the preview of the same path showed, once the plan it
         computes again has the preview's hash.
-      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}, {$ref: "#/components/parameters/repairRoomName"}, {$ref: "#/components/parameters/repairPlan"}, {$ref: "#/components/parameters/idempotencyKey"}]
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}, {$ref: "#/components/parameters/repairRoomName"}, {$ref: "#/components/parameters/repairDeviceName"}, {$ref: "#/components/parameters/repairPlan"}, {$ref: "#/components/parameters/idempotencyKey"}]
       responses:
         "200": {$ref: "#/components/responses/RepairRun"}
         "400": {$ref: "#/components/responses/BadRequest"}
@@ -3746,6 +3750,11 @@ components:
       name: room_name
       in: query
       description: The name of a room the Cube's list does not have, to list the device there as a new room
+      schema: {type: string}
+    repairDeviceName:
+      name: name
+      in: query
+      description: "The name of a device the Cube's list does not have, 1 to 32 bytes; without it, \"<room name> <type> <n>\". A device the list has keeps its name"
       schema: {type: string}
     restorePortal:
       name: portal

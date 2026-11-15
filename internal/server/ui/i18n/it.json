@@ -1539,6 +1539,7 @@
   "repair.stillFlagged": "L'elenco dei dispositivi del Cube mostra ancora un errore di comunicazione per {devices}.",
   "repair.cleared": "L'elenco dei dispositivi del Cube non mostra più errori di comunicazione per loro.",
   "repair.roomName": "La stanza {room} non è nell'elenco del Cube; il suo nome",
+  "repair.deviceName": "Il dispositivo non è nell'elenco del Cube; il suo nome",
   "repair.preview": "Mostra cosa viene inviato",
   "repair.reset": "Azzera gli errori di comunicazione",
   "repair.resetHelp": "Cancella l'errore di comunicazione di ogni dispositivo del Cube che ne ha uno: un azzeramento ciascuno, senza costi radio.",

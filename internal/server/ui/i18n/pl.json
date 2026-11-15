@@ -1590,6 +1590,7 @@
   "repair.stillFlagged": "Lista urządzeń Cube nadal pokazuje błąd komunikacji dla {devices}.",
   "repair.cleared": "Lista urządzeń Cube nie pokazuje już dla nich błędu komunikacji.",
   "repair.roomName": "Pomieszczenia {room} nie ma na liście Cube; jego nazwa",
+  "repair.deviceName": "Urządzenia nie ma na liście Cube; jego nazwa",
   "repair.preview": "Pokaż, co zostanie wysłane",
   "repair.reset": "Skasuj błędy komunikacji",
   "repair.resetHelp": "Kasuje błąd komunikacji każdego urządzenia Cube, które go ma: jedno kasowanie na urządzenie, bez kosztów radiowych.",

@@ -1538,6 +1538,7 @@
   "repair.stillFlagged": "De apparatenlijst van de Cube toont nog een communicatiefout voor {devices}.",
   "repair.cleared": "De apparatenlijst van de Cube toont voor hen geen communicatiefout meer.",
   "repair.roomName": "Ruimte {room} staat niet in de lijst van de Cube; de naam",
+  "repair.deviceName": "Het apparaat staat niet in de lijst van de Cube; de naam",
   "repair.preview": "Tonen wat er verzonden wordt",
   "repair.reset": "Communicatiefouten resetten",
   "repair.resetHelp": "Wist de communicatiefout van elk apparaat van de Cube dat er een heeft: één reset per apparaat, zonder radiokosten.",
