@@ -81,8 +81,14 @@ def test_log_names_devices_once_the_rooms_come(page):
     rooms arrive (a Cube switch there too): a state line names its device
     by the name it kept meanwhile, and every line gets the device's name
     once the rooms are there, without leaving the log. The rooms' answer
-    is held back here so that the order is certain."""
+    is held back here so that the order is certain. The log shows the
+    state lines alone, kept in the address across the reload: by default
+    it shows the last 20 events, and the tests that ran before on the
+    same server may have logged more than that since the devices' state
+    lines (a backup's lines and their commands)."""
     show_view(page, "log")
+    page.locator("#log-kind").select_option("state")
+    assert wait_until(page, "location.hash.includes('kind=state')", 5), "the state lines alone, in the address"
     held = []
     page.route("**/rooms?devices=all", lambda route: held.append(route))
     page.reload()
