@@ -1132,6 +1132,32 @@ export interface Cube {
    */
   other_network?: boolean;
   /**
+   * The Cube's memory slots held, fewer than 5 free (level warn) or fewer than
+   * 2 (error), at two readings an hour apart with nothing of the server's in
+   * flight: radiograms held for devices that do not answer, which a reboot of
+   * the Cube drops; absent otherwise (docs/api-v1.md, GET /api/v1/cubes)
+   */
+  slots_low?: {
+    level: "warn" | "error";
+    /**
+     * The first reading below 5 of the run
+     * @format date-time
+     */
+    since: string;
+    /**
+     * The first reading below 2, for error
+     * @format date-time
+     */
+    full_since?: string;
+    /** The free slots at the last reading */
+    free_slots: number;
+    /**
+     * When the log's slots event of the level was given
+     * @format date-time
+     */
+    logged: string;
+  };
+  /**
    * The Cube's visible devices with a problem (a communication or link error, a
    * low battery, a window open), each with its room's name; absent where none
    */
@@ -1278,6 +1304,52 @@ export interface Room {
   /** A device of the room is stale; present when true */
   stale?: boolean;
   devices?: Device[];
+  /**
+   * The findings of the Cube's C lines against its room list that concern the
+   * room, and of its members that differ (docs/api-v1.md, "The Cube's lines
+   * against its room list"); absent where none
+   */
+  mismatches?: Mismatch[];
+}
+
+/**
+ * A difference between a C line and the room list, or among a room's members,
+ * that the server found (docs/api-v1.md, "The Cube's lines against its room
+ * list")
+ */
+export interface Mismatch {
+  finding: "room" | "unlisted" | "no_config" | "type" | "master" | "programme" | "temperatures";
+  /**
+   * The device concerned, a room's master for master; absent for a master of
+   * address 000000
+   */
+  device?: string;
+  /** The device's name in the room list */
+  name?: string;
+  /**
+   * The room concerned: the room list's where it has the device, else its C
+   * line's
+   */
+  room: number;
+  room_name?: string;
+  /**
+   * The room of the device's C line (room, unlisted), of the master's (master
+   * other_room)
+   */
+  cube_room?: number;
+  cube_room_name?: string;
+  /** The room the room list has the device in (room, no_config) */
+  list_room?: number;
+  list_room_name?: string;
+  cube_type?: DeviceType;
+  list_type?: DeviceType;
+  /** A master's finding */
+  why?: "no_device" | "other_room" | "not_thermostat";
+  /**
+   * When the server first found it
+   * @format date-time
+   */
+  since: string;
 }
 
 export type DeviceType = "cube" | "radiator_thermostat" | "radiator_thermostat_plus" | "wall_thermostat" | "shutter_contact" | "eco_switch";
@@ -1413,6 +1485,12 @@ export interface Device {
     actual_temp?: string[];
     mode?: string[];
   };
+  /**
+   * The findings of the device's C line against the room list, and of its
+   * room's members, that name it (docs/api-v1.md, "The Cube's lines against its
+   * room list"); absent where none
+   */
+  mismatches?: Mismatch[];
 }
 
 /** Every field optional; merged into the device's current configuration */

@@ -1380,6 +1380,41 @@ and refuses a connection from another network;
 `massimo netconfig -sn <serial> -broadcast -static …` gives it a fixed address (README.md).
 The networks are read again at most every 30 seconds.
 
+`slots_low` says that the Cube's memory slots stay held:
+a radiogram for a device that does not answer holds its slot until the device
+answers or the Cube restarts, and one Cube held 49 of its 50 for months.
+Each `S:` reply to a radio line and each greeting's `H` line is a reading of the
+free slots;
+a reading counts while nothing of the server's is in flight to the Cube,
+no `s:` line (the server's own or a proxy client's) accepted in the 15 minutes
+before it, since its radiogram may still wait for its device's wakeup
+(an `r:` holds no slot).
+Two counting readings an hour apart with fewer than 5 free,
+and none with 5 or more in between,
+give the Cube's log event `slots` at `warn` (see the log, below)
+and `slots_low` with `level` `warn`;
+two with fewer than 2, and none with 2 or more in between,
+give it at `error` and `level` `error`, once each in a run,
+the error without the warning where both come due at one reading.
+A reading with 2 or more ends the error, which is logged as the step back to
+the warning;
+one with 5 or more gives `slots` at `info` and drops `slots_low`.
+`slots_low` has `since`, the first reading below 5,
+`full_since`, the first below 2, for an error,
+`free_slots` at the last reading, and `logged`, when its level was logged.
+Below 5 free the server holds each radio command for a while before it sends
+it all the same (the log's `hold` with `memory_slots`).
+A reboot of the Cube (`POST …/reboot`, below) drops the radiograms it holds.
+The server reads no budget of its own for it:
+the readings are those its writes, its proxy's clients and its reconnects bring,
+the periodic refresh (`serve -refresh`, or `refresh_interval` in the settings)
+among them.
+
+```json
+"slots_low": {"level": "error", "since": "2026-11-14T07:10:00+01:00", "full_since": "2026-11-14T08:00:00+01:00",
+  "free_slots": 1, "logged": "2026-11-14T09:02:00+01:00"}
+```
+
 `problems` lists, where there are any, the Cube's visible devices with a problem,
 as `GET …/devices` shows them, each with its room's name (`room`):
 a communication or link error, a low battery, a window open (with its `window` times);
@@ -1902,6 +1937,56 @@ a thermostat out of range or with a flat battery goes quiet,
 but so may one whose valve stays shut outside the heating season.
 Shutter contacts and eco buttons transmit only on events and are never stale.
 
+**The Cube's lines against its room list.**
+A device's room for the Cube is the room byte of its C line, not the room list's
+(the metadata, `M`):
+a previous owner's unlisted devices, their C lines in two rooms,
+made the Cube discard those rooms' commands.
+So at every complete greeting, every C line and every change of the room list
+the server compares the two, which costs no radio time,
+and gives a device, and each room a finding concerns, `mismatches`,
+a list of what it found, absent where nothing:
+
+| `finding` | what differs |
+|-----------|--------------|
+| `room` | the device's C line names another room (`cube_room`) than the room list (`list_room`) |
+| `unlisted` | a C line in a room (`cube_room`) for a device the room list does not have, which can block the room's commands |
+| `no_config` | a device the room list has in `list_room`, that the Cube has no C line for, whatever its device list says: one it no longer holds, as a Cube sends a C line for every device it has |
+| `type` | the C line's type (`cube_type`) and the room list's (`list_type`) differ |
+| `master` | the room's master in the room list, the address of its entry (`device`), is no device of the Cube (`why` `no_device`), a device of another room (`other_room`, that room in `cube_room`) or no thermostat (`not_thermostat`); a room without a thermostat is not looked at |
+| `programme`, `temperatures` | a thermostat of the room, by its C line, whose week programme, or whose comfort, eco, maximum, minimum or window-open temperature, differs from the room's: those most of its thermostats share, on a tie those of the thermostat a room command names (the master where it is a thermostat of the room, else the wall thermostat, else the first radiator thermostat); the window-open minutes, which a wall thermostat does not keep, are not compared |
+
+Each finding has its `device` (the device concerned, a room's master for
+`master`) and its `name` in the room list, its `room` (the room list's where it
+has the device) with `room_name`, the rooms of both sides with their names
+(`cube_room_name`, `list_room_name`) where the room list has them,
+and `since`, when the server first found it.
+A device's `mismatches` are those of its `device`, a room's those of its `room`
+or of either side.
+Left out are the hidden devices and those parked in room 255, and the rooms
+they alone make up;
+the device of a removal, placement or move through the API, and the rooms it
+concerns, from the change's start until the device's C line follows,
+5 minutes at most after its end
+(the Cube changes a C line only once the device acknowledged);
+for `programme` and `temperatures`, a room with a member whose configuration
+write the server still follows (see the re-reads after writes, above);
+and the whole Cube while a restore runs.
+
+```json
+"mismatches": [{"finding": "room", "device": "0a010a", "name": "Living room radiator", "room": 1, "room_name": "Living room",
+  "cube_room": 2, "cube_room_name": "Office", "list_room": 1, "list_room_name": "Living room", "since": "2026-11-15T08:00:00+01:00"}]
+```
+
+Each finding is the Cube's log event `mismatch` at `warn` (see the log, below),
+once, until a check finds the two agree again:
+then `mismatch` at `info`, which settles the warning.
+A room master's warning is given again while it holds once someone has marked
+the last one seen (`log.seen`), at most once a minute:
+warned only while no unread warning for it exists.
+After a restart the server takes the findings its log holds unsettled,
+so that it does not warn of them again.
+
 A device whose state says a window is open (`window_open: true`,
 a shutter contact, or a virtual wall thermostat of a room with one)
 also has `window`, when the server saw it open and when it counts as open
@@ -2021,6 +2106,55 @@ with the room's settings and week programme in a wall thermostat's shape
 (`wall_thermostat`, from the room's wall thermostat, else its first radiator
 thermostat) and its own `settings`:
 `{"temp_method": "median"}`, and `rf_address` where the owner set one.
+
+### The room checks
+
+Every minute the server compares the thermostats of each room,
+those whose C line names it, as the Cube goes by,
+and writes what it finds to the Cube's log (`disagree` and `drift`, see the log, below).
+Left out are the hidden and parked devices, window contacts,
+a thermostat in boost and one whose entry is out of date;
+a room while one of its windows is open
+(its thermostats then hold their own window-open temperature),
+while a structure change of Massimo's concerns it
+(see "Structure changes read back")
+and while a command to it waits or runs in the queue;
+a difference not yet reported then starts again.
+
+- **Thermostats that disagree:** they differ in mode, setpoint or `until`,
+  as the virtual wall thermostat's `consistent` says,
+  but two in auto that each follow their own week programme agree,
+  since a difference of their programmes is their configuration's.
+  No person can mean a room's thermostats to differ:
+  the original software and Massimo set them only together.
+  Differing for 10 minutes, the room is a `disagree` warning;
+  still differing 10 minutes later, its state is sent once more
+  as one room command (`0x40`) through the queue at low priority:
+  Massimo's last setpoint to the room (`PUT …/rooms/{id}/setpoint`,
+  a member's or the virtual wall thermostat's setpoint),
+  where it was sent at most 15 minutes before they began to differ,
+  or since, and a thermostat still shows it;
+  else the room's wall thermostat's state, its week programme where it follows it;
+  without either, nothing.
+  It is sent at most once a day per room, the day's re-sends read back from the
+  log after a restart, and never while the queue holds the radio for the duty
+  cycle or the memory slots: it waits for a later check then.
+  Once they agree, an `agree` line settles the warning.
+- **A thermostat off its week programme:** in a room in auto,
+  one whose setpoint has not been its own programme's temperature
+  at the Cube's time for 5 minutes, while every other thermostat
+  of the room follows its own: a `drift` warning naming its clock or its
+  programme as suspect, with the radiogram that failed where it has the
+  communication error, and `hour_off` where its setpoint is the programme's
+  an hour before or after, as a clock on the other side of a change of summer
+  time would show it; its `auto_dst` says whether it switches summer time itself.
+  Nothing is sent for it.
+  A temperature the programme has within 5 minutes of the Cube's time counts,
+  so that a switch point just past, or a clock a few minutes off, is no drift.
+  The Cube's time is its last greeting's, moved on by this host's local clock.
+  Following again, a `follows` line settles the warning;
+  the next warning for the thermostat comes a day later at the earliest.
+  Such a thermostat is left out of the comparison above.
 
 ### GET /api/v1/cubes/{sn}/devices
 
@@ -2922,9 +3056,12 @@ of the same Cube, or of the server for the server's own:
 | `backup`, `restore_done`, `update_result`, `log_rotated` failed | the next one of its kind below warn |
 | `proxy_refused` | the Cube's `connected`, or `proxy_connected` |
 | `proxy_warning`, a pairing not stopped or not started | `pairing_ended`; `pairing_started` or `proxy_pairing` |
+| `disagree`, a room's thermostats differing or its state not sent again | a `disagree` of the same `room` whose `outcome` is `agree` |
+| `drift`, a thermostat off its week programme | a `drift` of the same device whose `outcome` is `follows` or `left_auto` |
 | `login_failed` | a `login` of the same name |
 | `locked_out` | its end |
 | `restart`, `reboot`, `update` not started | `server_started`; for `update`, also an `update` started |
+| `error_watch` `back` or `lasting` | the same device's `error_watch` `clear` of the same `flag` |
 
 Any other, such as `proxy_discarded` and `proxy_delete_refused`,
 is settled only by a person's mark.
@@ -2977,6 +3114,28 @@ at most once a day per device,
 never while a command to the device or its room waits or runs in the queue,
 at info;
 its `summary` has `automatic`: `true` and the `room` of the device's C line),
+`error_watch` (a device's flags watched, its `summary`'s `what` saying which:
+`back`, at warn, once a day per device, where its communication error is back
+within a day of its automatic `error_reset`,
+in an entry the Cube sent after it answered the reset,
+at the device's report or set again after it was clear,
+with `reset`, the reset's time, and `minutes` since;
+`next_report` where it was the device's first report after it;
+`failed_radiogram`;
+and `held`: `true`, the server resets the device by itself no more
+until its flag has stayed clear for a day;
+`lasting`, at error, once in each run of the flag,
+where the communication error or the link error, its `flag`,
+has been set for 24 hours without a break,
+also for a device that sends no state (`silent`),
+the start of the run read from the device's state lines after a restart,
+with `since` and `hours`,
+for the communication error also `failed_radiogram` and `held`;
+`clear`, at info, where such a flag clears after a warning or an error of it,
+or the communication error of a held device does
+(`since` and `hours` where its start is known, `held`);
+a warning or an error of it is an alert until its clear,
+see GET /api/v1/log/alerts),
 `pairing_started`, `paired` (with `paired`, the device that joined),
 `pairing_ended` (see Pairing),
 `device_forgotten` (a device deleted from the Cube, through the API or a client
@@ -3037,6 +3196,38 @@ the free slots `before` the change and now (`free_slots`),
 the minutes since it (`minutes`), the slots still `held` or `no_reading`,
 and, at `warn`, the devices the change left `flagged` or with a `link_error`;
 it is settled only by a person's mark.
+`slots`, source `cube`, the Cube's memory slots held for an hour with nothing
+of the server's in flight (see `slots_low` under `GET /api/v1/cubes`):
+at `warn` with `state` `low` (fewer than 5 free), at `error` with `state`
+`full` (fewer than 2), each once in a run, a step between the two with the
+state it came `from`, and at `info` with `state` `free` at the first reading
+with 5 or more; each settles the one before it, so that the newest is the
+alert; its `summary` has the `free_slots` of the reading, the `since` of the
+first reading below 5 and, below 2, the `full_since` of the first.
+`mismatch`, source `cube`, a C line and the room list, or the members of a
+room, that differ (see "The Cube's lines against its room list" under the
+devices): at `warn` with `state` `found`, once, a room master's again once
+read, and at `info` with `state` `cleared` when they agree again, which settles
+it; with the device in `device`, and in its `summary` the finding as a
+device's `mismatches` has it.
+The room checks', every minute (see "The room checks"):
+`disagree`, source `cube`, a room whose thermostats differ, with the
+`room` and the `outcome` in its `summary`:
+`differ` at `warn` (the `members`, each with its `rf`, `mode`, `setpoint`
+and `until`, what `differs`, the `minutes` so far),
+`resent` (the room's state sent once more as a room command: `from`
+`massimo` or `wall_thermostat`, its `mode`, `setpoint` and `until`, the
+budget's `duty_pct` and `free_slots`), `resend_failed` at `warn` with its
+`error`, `not_resent` (`why`: `today`, once a day at most, or
+`no_state`), and `agree` once they agree again (`minutes`);
+`drift`, source `device`, a thermostat in auto that does not follow its
+week programme while the room's other thermostats follow theirs:
+`not_following` at `warn` (its `setpoint` and the programme's
+`expected` at the Cube's `cube_time`, the switch point `switch_at`, the
+`others`, `hour_off` where its setpoint is the programme's an hour
+before or after, its `auto_dst`, and the `failed_radiogram` of its
+communication error), then `follows` (`minutes`) or `left_auto`
+(`mode`).
 The server's sign-ins, source `server`, only on the pages and streams of a
 user with `audit`: `login` (`user`, `remote`), `login_failed` at `warn`,
 and `locked_out` at `warn` (`remote`, `for`, `after`: `logins` or `tokens`).

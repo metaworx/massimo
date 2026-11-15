@@ -297,6 +297,22 @@ Every room has a tile:
   It may be out of range or its batteries flat,
   but a thermostat whose valve stays shut outside the heating season can be quiet as well.
   Its values are greyed.
+- **Where the Cube and its room list differ** (`mismatches` of `docs/api-v1.md`,
+  "The Cube's lines against its room list"), a notice each, with since when,
+  naming the device and both rooms:
+  "Radiator: in Office by its configuration on the Cube, in Living room in the
+  room list"; a device the room list does not have whose configuration puts it
+  in the room, which can block the room's commands;
+  a device the room list has and the Cube does not;
+  another type on each side;
+  the room's master in the room list that is no device of the Cube,
+  in another room, or no thermostat;
+  and a thermostat whose week programme or temperatures differ from the rest
+  of the room.
+  The device's row in the device list has a badge for each,
+  "in Office for the Cube", "own week programme",
+  the whole sentence its tooltip;
+  the log has its **room list** line, a warning until the two agree again.
 - **SET** is the set temperature.
   The up and down chevrons next to it change it in steps of 0.5 °C;
   the value is sent 2 seconds after the last click, or at once with **Save**;
@@ -496,6 +512,17 @@ A command's steps on the radio are lines of the queue
 ("command acknowledged by the Cube; duty cycle 3 %, 49 free memory slots"),
 queued and sent at debug, a discard, a retry and a failure as warnings,
 and so are the queue's holds for the duty cycle and the memory slots.
+The room checks (`docs/api-v1.md`, "The room checks") have lines of their own:
+**room disagrees**, a room whose thermostats differ for ten minutes, each named
+with its setting ("Bedroom: its thermostats differ in setpoint for 11 min:
+Window: manual set 21.0, Door: manual set 18.0"), then the room's state sent
+again to them and from where ("as Massimo last set it", "as its wall thermostat
+has it"), or why not, and their agreeing again;
+**programme drift**, a thermostat that does not follow its week programme while
+the room's others follow theirs ("does not follow its week programme: 12.0
+instead of 21.0 since the switch point at 18:20, …; its clock or its programme is
+suspect"), with "it shows the programme an hour off" where it does and the
+radiogram that failed, and its following again.
 The LAN proxy's clients have lines of their own: a client connected or gone,
 turned away, its deletes, a pairing for it and the proxy's warnings;
 a line a client passes on to the Cube is a command like the web UI's.
@@ -547,7 +574,9 @@ stays a problem until a later line settles it
 or the person marks it seen (`docs/api-v1.md`, "GET /api/v1/log/alerts"):
 a lost connection until the next one,
 a failed command until the same one is acknowledged,
-a failed backup until the next, a hold until it ends;
+a failed backup until the next, a hold until it ends,
+a room whose thermostats disagree until they agree again,
+a thermostat off its week programme until it follows it again;
 a device's communication error, link error and low battery
 while the device has them, at the line that set them;
 a communication error's line names the radiogram that failed,
@@ -560,6 +589,16 @@ anyone else's stay in the browser.
 The page asks at every poll.
 A device that reports while its communication error is set is reset by the server,
 once a day at most: the log's **communication error reset** line.
+Where the error is back within that day,
+at the device's next report or later,
+the log's **error watch** line says so at warn, once a day,
+with the radiogram that failed,
+and the server leaves the device alone until the error has stayed away a day;
+a communication error or a link error set for 24 hours
+is an **error watch** line at error,
+also for a device that sends nothing any more;
+each stays a problem until the same flag clears,
+an **error watch** line at info.
 The server keeps its log in its store across restarts and updates,
 for the days `log.keep_days` says (30 by default; docs/api-v1.md,
 "GET and PUT /api/v1/settings").
@@ -943,6 +982,14 @@ the browser keeps which cards are folded.
   and **Use the found address** and **Follow discovery**, which save either
   at once (a Cube of `-addr` or `-sn` has the notice alone);
   the card's badge counts such Cubes;
+  where few of the Cube's memory slots stayed free for an hour with nothing of
+  the server's on its way (`slots_low`), a badge, amber **few memory slots
+  free** below 5, red **memory slots full** below 2, and a notice with the
+  free slots and since when, that they hold radiograms for devices that do not
+  answer and that radio commands wait for free slots, pointing to
+  **Reboot the Cube** below, the owner's, which drops them;
+  the log has its **memory slots** line, a warning below 5, an error below 2,
+  until the slots are free;
   where its settings came from (the settings file, changed here,
   or for this run only), and the fields **Name**, **Address** (empty:
   the address the Cube answers discovery from, shown in grey),

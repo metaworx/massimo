@@ -6,32 +6,90 @@ package server
 import (
 	"context"
 	"net/http/httptest"
+	"slices"
 	"sync"
 	"testing"
 	"time"
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
+	"go.metaworx.ch/massimo/internal/notify"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/store"
 )
 
-// stepClock is a clock the test moves on.
+// stepClock is a clock the test moves on (a notify.Clock): add runs the
+// timers that come due, in their order, on the test's goroutine.
 type stepClock struct {
-	mu sync.Mutex
-	t  time.Time
+	mu     sync.Mutex
+	t      time.Time
+	timers []*stepTimer
 }
 
-func (c *stepClock) now() time.Time {
+// stepTimer is a stepClock's timer.
+type stepTimer struct {
+	c       *stepClock
+	at      time.Time
+	f       func()
+	stopped bool
+}
+
+func (t *stepTimer) Stop() bool {
+	t.c.mu.Lock()
+	defer t.c.mu.Unlock()
+	was := !t.stopped
+	t.stopped = true
+	return was
+}
+
+func (c *stepClock) Now() time.Time {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.t
 }
 
-func (c *stepClock) add(d time.Duration) {
+func (c *stepClock) AfterFunc(d time.Duration, f func()) notify.Timer {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	t := &stepTimer{c: c, at: c.t.Add(d), f: f}
+	c.timers = append(c.timers, t)
+	return t
+}
+
+func (c *stepClock) add(d time.Duration) {
+	c.mu.Lock()
 	c.t = c.t.Add(d)
+	var due []*stepTimer
+	kept := c.timers[:0]
+	for _, t := range c.timers {
+		switch {
+		case t.stopped:
+		case !t.at.After(c.t):
+			t.stopped = true
+			due = append(due, t)
+		default:
+			kept = append(kept, t)
+		}
+	}
+	c.timers = kept
+	c.mu.Unlock()
+	slices.SortStableFunc(due, func(a, b *stepTimer) int { return a.at.Compare(b.at) })
+	for _, t := range due {
+		t.f()
+	}
+}
+
+// pending counts the timers that have not fired or stopped.
+func (c *stepClock) pending() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	n := 0
+	for _, t := range c.timers {
+		if !t.stopped {
+			n++
+		}
+	}
+	return n
 }
 
 // startResets starts a server over the fake Cube at addr, the store's
@@ -53,7 +111,7 @@ func startResets(t *testing.T, st *store.Store, addr string, clock *stepClock, p
 	if err != nil {
 		t.Fatal(err)
 	}
-	s = New(Options{Cubes: []CubeConfig{cfg}, Store: st, PollInterval: 50 * time.Millisecond, Queue: engine.Options{Gap: time.Millisecond}, clock: clock.now})
+	s = New(Options{Cubes: []CubeConfig{cfg}, Store: st, PollInterval: 50 * time.Millisecond, Queue: engine.Options{Gap: time.Millisecond}, clock: clock})
 	if prep != nil {
 		prep(s)
 	}
@@ -126,7 +184,9 @@ func reportAndSettle(t *testing.T, fc *fakecube.Server, ts *httptest.Server, s *
 // Block 4, D102-B), with an error_reset at info; its next report the
 // same day is not, one a day later is, and a server started anew over
 // the same store reads the last reset from the log and sends none. A
-// device with the link error alone is never reset.
+// device with the link error alone is never reset. Block 6's hold is
+// left out: the fake Cube's r: does not clear the flag, so it would be
+// back at every report after the first (TestErrorWatchBack).
 func TestAutoReset(t *testing.T) {
 	greeting, err := fakecube.LoadGreeting(fixture)
 	if err != nil {
@@ -140,7 +200,8 @@ func TestAutoReset(t *testing.T) {
 	t.Cleanup(func() { fc.Close() })
 	st := testStore(t, "")
 	clock := &stepClock{t: time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)}
-	ts, s, stop := startResets(t, st, addr, clock, nil)
+	noHold := func(s *Server) { s.runtimes()[0].resets.hold = nil }
+	ts, s, stop := startResets(t, st, addr, clock, noHold)
 
 	const rf = cube.RFAddress(0x0a010d) // room 6
 	on := true
@@ -191,7 +252,7 @@ func TestAutoReset(t *testing.T) {
 	}
 	stop()
 	clock.add(time.Hour)
-	ts, s, _ = startResets(t, st, addr, clock, nil)
+	ts, s, _ = startResets(t, st, addr, clock, noHold)
 	reportAndSettle(t, fc, ts, s, rf, fakecube.State{ValvePct: valve(40)}, "valve_pct", float64(40))
 	if n := resets(fc, rf); n != 2 {
 		t.Fatalf("a report after the restart: %d resets, want 2", n)
@@ -259,7 +320,7 @@ func TestAutoResetWaitsForTheStoresRow(t *testing.T) {
 	clock := &stepClock{t: time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)}
 	// A store without a row for the Cube: the runtime has no store ID.
 	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0000100", Addr: addr}}, Store: st, PollInterval: 50 * time.Millisecond,
-		Queue: engine.Options{Gap: time.Millisecond}, clock: clock.now})
+		Queue: engine.Options{Gap: time.Millisecond}, clock: clock})
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { s.Run(ctx); close(done) }()

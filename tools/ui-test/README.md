@@ -12,7 +12,8 @@ The script:
    again after it was removed), with `greeting.txt`,
    which is the protocol fixture from internal/protocol/cube/testdata plus an
    `L:` line with device states (measured temperatures included) and a window contact,
-   "Fenster Kind 1", that reports an open window;
+   "Fenster Kind 1", with its `C:` line as a Cube sends one for every device,
+   that reports an open window;
    `massimo serve` against the fake Cube,
    with the API token `ui-test-token`;
    the Cube comes from `MASSIMO_CUBE_KEQ0000100_ADDRESS` and `_NAME` ("Fake Cube"),
@@ -59,6 +60,8 @@ UI_TEST_CASES=390-en,390-de make ui-test              # some cases, as a CI job 
 tools/ui-test/run.sh smoke test_log.py                # one file
 tools/ui-test/run.sh smoke 'test_log.py::test_log_changes[1100-en-chromium]' -x
 UI_TEST_WORKERS=1 make ui-test                        # in one process
+PYTEST_ADDOPTS='test_parts_guard.py -rs' make ui-test # the parts' guard alone, its skips' notes shown
+UI_GUARD_CHECK=rooms PYTEST_ADDOPTS='test_parts_guard.py -k rooms' make ui-test  # a region checked though on the list
 ```
 
 `PYTEST_ADDOPTS` is pytest's own;
@@ -365,6 +368,23 @@ hence `failed_checks_forgotten`.
   the server decides meanwhile reaches no network,
   and each test removes what it made.
   axe-core finds no violation on the page in each of its states.
+- `test_parts_guard.py`, the guard of the page's parts (AP UiParts, Block 3;
+  `docs/ui-testing.md`, section 8):
+  for every region of the page in its table (`REGIONS`: its containers,
+  and its views, which open its menus, panels and forms),
+  around each data source (`SOURCES`: `poll(false)`, `loadCubes()`,
+  `loadRooms()`, `refresh()`, a state event per device on the page's
+  `EventSource`, `loadLogAlerts()`, `refreshAges()`, `pollLog()`),
+  with the data as it was:
+  every element a user can hold is the same element, every open `details`
+  open, every text, number, date or time field holds what was typed into it,
+  the focus where it was, and the first three again once the focus has left;
+  a region on the list `NOT_MOVED` is shown and skipped with its note,
+  and `UI_GUARD_CHECK` (region names, or `all`) checks it all the same;
+  every request but a GET is refused and fails the test,
+  so nothing reaches the fake Cube or the store.
+  It runs in two of the four cases, 1100 px in English and 390 px in
+  German, each width and each language once.
 - Every button on every page the tests open has an accessible name (its text,
   `aria-label`, `aria-labelledby` or `title`),
   and the pages have no horizontal scroll where the tests look for one.

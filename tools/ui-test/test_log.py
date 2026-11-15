@@ -71,6 +71,61 @@ def test_log_radio_faults(page, case):
     show_view(page, "tiles")
 
 
+ROOM_CHECK_SAYS = {
+    "en": {
+        "kinds": ("room disagrees", "programme drift"),
+        "differ": "{room}: its thermostats differ in setpoint for 11 min: {a}: manual set 21.0, {b}: manual set 18.0",
+        "resent": "{room}: manual set 21.0 sent again to its thermostats, as Massimo last set it",
+        "drift": "does not follow its week programme: 12.0 instead of 21.0 since the switch point at 18:20, while the room's other"
+        " thermostats follow theirs; its clock or its programme is suspect; it shows the programme an hour off;"
+        " communication error: TimeInformation (0x03)",
+    },
+    "de": {
+        "kinds": ("Raum uneinig", "Programmabweichung"),
+        "differ": "{room}: die Thermostate unterscheiden sich seit 11 Min. in Solltemperatur: {a}: Manuell Soll 21,0, {b}: Manuell Soll 18,0",
+        "resent": "{room}: Manuell Soll 21,0 nochmals an die Thermostate gesendet, wie Massimo es zuletzt einstellte",
+        "drift": "folgt seinem Wochenprogramm nicht: 12,0 statt 21,0 seit dem Schaltpunkt um 18:20, während die anderen Thermostate"
+        " des Raums ihrem folgen; seine Uhr oder sein Programm ist verdächtig; es zeigt das Programm um eine Stunde verschoben;"
+        " Kommunikationsstörung: TimeInformation (0x03)",
+    },
+}
+
+
+def test_log_room_check_lines(page, case):
+    """The room checks' lines (AP RadioHealth v1.2, Block 9), sent on the
+    stream: a room whose thermostats disagree names the room and each
+    thermostat with its setting, the state sent again says from where; a
+    thermostat off its week programme says what it shows and what the
+    programme says, that it shows it an hour off and the radiogram that
+    failed."""
+    show_view(page, "log")
+    page.wait_for_timeout(1600)
+    names = page.evaluate("""() => {
+      const r = state.rooms.find((x) => x.devices.filter((d) => !d.virtual).length >= 2);
+      const ds = r.devices.filter((d) => !d.virtual);
+      const now = () => new Date().toISOString();
+      const send = (kind, ev) => state.events.dispatchEvent(new MessageEvent(kind, { data: JSON.stringify(Object.assign({ kind, time: now() }, ev)) }));
+      send("disagree", { source: "cube", level: "warn", summary: { room: r.id, outcome: "differ", minutes: 11, differs: ["setpoint"],
+        members: [{ rf: ds[0].rf_address, mode: "manual", setpoint: 21 }, { rf: ds[1].rf_address, mode: "manual", setpoint: 18 }] } });
+      send("disagree", { source: "cube", level: "info", summary: { room: r.id, outcome: "resent", from: "massimo", mode: "manual", setpoint: 21 } });
+      send("drift", { source: "device", level: "warn", device: ds[1].rf_address, serial: ds[1].serial, summary: { room: r.id,
+        outcome: "not_following", setpoint: 12, expected: 21, switch_at: "18:20", hour_off: true, auto_dst: true,
+        failed_radiogram: { code: 3, name: "TimeInformation" } } });
+      return { room: r.name, a: deviceName(ds[0]), b: deviceName(ds[1]) };
+    }""")
+    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-drift').length > 0", 5), "the drift line"
+    says = ROOM_CHECK_SAYS[case.lang]
+    lines = page.locator("#log-lines .log-line.kind-disagree")
+    assert lines.count() == 2, "the two lines of the room"
+    assert lines.nth(0).locator(".log-kind").inner_text().strip() == says["kinds"][0]
+    assert lines.nth(1).locator(".log-text").inner_text() == says["differ"].format(**names), lines.nth(1).locator(".log-text").inner_text()
+    assert lines.nth(0).locator(".log-text").inner_text() == says["resent"].format(**names), lines.nth(0).locator(".log-text").inner_text()
+    drift = page.locator("#log-lines .log-line.kind-drift").first
+    assert drift.locator(".log-kind").inner_text().strip() == says["kinds"][1]
+    assert drift.locator(".log-text").inner_text() == says["drift"], drift.locator(".log-text").inner_text()
+    show_view(page, "tiles")
+
+
 def test_log_names_devices_by_serial(page, case):
     """A line names a device without a name by its S/N, the radio address
     in expert mode only; the Cube's own configuration is the Cube's; a
@@ -348,6 +403,69 @@ def test_log_change_line(page, case):
     show_view(page, "tiles")
 
 
+SLOTS_SAYS = {
+    "en": ("few of the Cube's memory slots are free, 4 since ", "the Cube's memory slots stay full, 1 free since ",
+           "the Cube's memory slots are free again, 50 free (fewer than 5 since "),
+    "de": ("nur wenige Speicherplätze des Cubes sind frei, 4 seit ", "die Speicherplätze des Cubes bleiben voll, 1 frei seit ",
+           "die Speicherplätze des Cubes sind wieder frei, 50 frei (weniger als 5 seit "),
+}
+
+
+def test_log_slots_lines(page, case):
+    """A Cube's memory slots that stay held, short and full, and are free
+    again, say so with the free slots and since when (AP RadioHealth,
+    Block 5, D192-A)."""
+    show_view(page, "log")
+    page.wait_for_timeout(1600)
+    page.evaluate("""() => {
+      const since = new Date(Date.now() - 7200e3).toISOString();
+      const full_since = new Date(Date.now() - 3600e3).toISOString();
+      const send = (summary, level) => state.events.dispatchEvent(new MessageEvent("slots", { data: JSON.stringify({
+        kind: "slots", source: "cube", level, time: new Date().toISOString(), summary }) }));
+      send({ state: "low", free_slots: 4, since }, "warn");
+      send({ state: "full", from: "low", free_slots: 1, since, full_since }, "error");
+      send({ state: "free", free_slots: 50, since }, "info");
+    }""")
+    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-slots').length === 3", 5), "the three lines"
+    texts = page.locator("#log-lines .log-line.kind-slots .log-text").all_inner_texts()
+    for want, what in zip(SLOTS_SAYS[case.lang], ("short", "full", "free again")):
+        assert any(s.startswith(want) for s in texts), f"the slots {what}: {texts}"
+    show_view(page, "tiles")
+
+
+MISMATCH_SAYS = {
+    "en": ("Ghost: in Upstairs by its configuration on the Cube, and not in the room list, which can block the room's commands.",
+           "agrees again: Ghost: in Upstairs by its configuration on the Cube, and not in the room list"),
+    "de": ("Ghost: laut seiner Konfiguration im Cube in Upstairs und nicht in der Raumliste, was die Befehle an den Raum blockieren kann.",
+           "stimmt wieder überein: Ghost: laut seiner Konfiguration im Cube in Upstairs und nicht in der Raumliste"),
+}
+
+
+def test_log_mismatch_lines(page, case):
+    """A C line in a room for a device the room list does not have, and
+    the same agreeing again, name the device and the room (AP
+    RadioHealth, Block 7)."""
+    show_view(page, "log")
+    page.wait_for_timeout(1600)
+    page.evaluate("""() => {
+      const m = { finding: "unlisted", device: "0a0a01", name: "Ghost", room: 9, room_name: "Upstairs", cube_room: 9,
+        cube_room_name: "Upstairs", cube_type: "radiator_thermostat", since: new Date().toISOString() };
+      // as the stream's handler takes them, without its reload of the
+      // rooms, which reads the log again from the server
+      const send = (st, level) => appendLogEvent({ kind: "mismatch", source: "cube", level, device: m.device,
+        time: new Date().toISOString(), summary: Object.assign({ state: st }, m) });
+      send("found", "warn");
+      send("cleared", "info");
+    }""")
+    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-mismatch').length === 2", 5), \
+        "the two lines, and none of the server's: its fixture agrees with its room list"
+    texts = page.locator("#log-lines .log-line.kind-mismatch .log-text").all_inner_texts()
+    found, cleared = MISMATCH_SAYS[case.lang]
+    assert found in texts, f"the finding: {texts}"
+    assert any(s.startswith(cleared) for s in texts), f"the finding agreeing again: {texts}"
+    show_view(page, "tiles")
+
+
 ERROR_RESET_SAYS = {
     "en": ("communication error reset", "at the device's report; the server does it once a day at most"),
     "de": ("Kommunikationsstörung zurückgesetzt", "bei der Meldung des Geräts; der Server tut es höchstens einmal am Tag"),
@@ -369,6 +487,48 @@ def test_log_error_reset_line(page, case):
     kind, text = ERROR_RESET_SAYS[case.lang]
     assert line.locator(".log-kind").inner_text().strip() == kind, f"the kind: {line.locator('.log-kind').inner_text()}"
     assert line.locator(".log-text").inner_text() == text, f"the text: {line.locator('.log-text').inner_text()}"
+    show_view(page, "tiles")
+
+
+ERROR_WATCH_SAYS = {
+    "en": ("error watch",
+           "communication error back at the device's next report, 60 min after the automatic reset; "
+           "last radiogram that failed: TimeInformation (0x03); no automatic reset until it stays clear a day",
+           "link error set for 24 hours, since ",
+           "communication error clear again; set for 26 h; automatic resets resume once it stays clear a day"),
+    "de": ("Fehlerüberwachung",
+           "Kommunikationsstörung bei der nächsten Meldung des Geräts zurück, 60 Min. nach dem automatischen Zurücksetzen; "
+           "zuletzt fehlgeschlagenes Funktelegramm: TimeInformation (0x03); kein automatisches Zurücksetzen, bis sie einen Tag lang ausbleibt",
+           "Verbindungsfehler 24 Stunden lang gesetzt, seit ",
+           "Kommunikationsstörung wieder weg; 26 Std. gesetzt; automatisches Zurücksetzen wieder, sobald sie einen Tag lang ausbleibt"),
+}
+
+
+def test_log_error_watch_lines(page, case):
+    """A device's watched flags, sent on the stream, are lines of its device
+    with their kind: its communication error back after the automatic reset
+    with the radiogram that failed, its link error set for 24 hours, and
+    the communication error clear again (AP RadioHealth v1.2, Block 6)."""
+    show_view(page, "log")
+    page.wait_for_timeout(1600)
+    d = page.evaluate("state.rooms[0].devices[0]")
+    page.evaluate("""(d) => {
+      const send = (level, summary) => state.events.dispatchEvent(new MessageEvent("error_watch", { data: JSON.stringify({
+        kind: "error_watch", source: "device", level, device: d.rf_address, serial: d.serial, time: new Date().toISOString(), summary }) }));
+      const reset = new Date(Date.now() - 3600000).toISOString();
+      send("warn", { what: "back", flag: "error", reset, minutes: 60, next_report: true, held: true,
+        failed_radiogram: { code: 3, name: "TimeInformation" } });
+      send("error", { what: "lasting", flag: "link_error", since: reset, hours: 24 });
+      send("info", { what: "clear", flag: "error", since: reset, hours: 26, held: true });
+    }""", d)
+    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-error_watch').length >= 3", 5), "the watch's lines"
+    kind, back, lasting, clear = ERROR_WATCH_SAYS[case.lang]
+    texts = page.locator("#log-lines .log-line.kind-error_watch .log-text").all_inner_texts()
+    kinds = page.locator("#log-lines .log-line.kind-error_watch .log-kind").all_inner_texts()
+    assert all(k.strip() == kind for k in kinds), f"the kinds: {kinds}"
+    assert back in texts, f"the flag back: {texts}"
+    assert clear in texts, f"the clear: {texts}"
+    assert any(x.startswith(lasting) for x in texts), f"the link error: {texts}"
     show_view(page, "tiles")
 
 

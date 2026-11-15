@@ -10,7 +10,8 @@ package server
 // them; a Cube without one, a Cube of serve -addr or a server without a
 // store, keeps the last logSize in the runtime's ring, as before the
 // store. The stored copy leaves out a device's received times, which the
-// tiles' ages read and the log does not.
+// tiles' ages read and the log does not, and its mismatches, which the
+// log's own mismatch events say.
 
 import (
 	"context"
@@ -33,10 +34,10 @@ import (
 // same; TestLogKinds holds the three together.
 var eventKinds = []string{
 	"connected", "disconnected", "hello", "metadata", "config", "state", "pairing_started", "paired", "pairing_ended",
-	"device_forgotten", "cube_found", "restore_step", "restore_done",
+	"device_forgotten", "cube_found", "restore_step", "restore_done", "disagree", "drift",
 	"cube_gone", "address_changed", "server_started", "server_stopping", "settings_read", "restart", "reboot", "reboot_cancelled",
 	"update", "update_result", "backup", "backup_deleted", "backups_pruned", "log_pruned", "log_rotated", "restore_started",
-	"change", "command", "hold", "structure", "error_reset", "login", "login_failed", "locked_out", "audit_pruned",
+	"change", "command", "hold", "structure", "error_reset", "error_watch", "slots", "mismatch", "login", "login_failed", "locked_out", "audit_pruned",
 	"proxy_connected", "proxy_disconnected", "proxy_refused", "proxy_discarded", "proxy_deleted", "proxy_delete_refused", "proxy_pairing", "proxy_warning",
 }
 
@@ -49,8 +50,8 @@ const (
 // storedEvent is an event as the store keeps it: compact, without the
 // device view's received times.
 func storedEvent(cubeID int64, ev event) store.Event {
-	if dv, ok := ev.State.(view.Device); ok && dv.Received != nil {
-		dv.Received = nil
+	if dv, ok := ev.State.(view.Device); ok && (dv.Received != nil || dv.Mismatches != nil) {
+		dv.Received, dv.Mismatches = nil, nil // the mismatch events say them (congruence.go)
 		ev.State = dv
 	}
 	ev.settle()

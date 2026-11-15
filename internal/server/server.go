@@ -196,6 +196,11 @@ type Options struct {
 	Logger      *slog.Logger
 	Version     string
 	Queue       engine.Options
+	// driftClock is the room checks' clock (drift.go), for the tests;
+	// nil is time.Now. driftEvery is how often they run: 0 every
+	// minute, a negative value never (the tests run them).
+	driftClock func() time.Time
+	driftEvery time.Duration
 	// Proxy lists the LAN listeners on which the server itself answers
 	// as a Cube (see internal/proxy), one per Cube.
 	// One that cannot listen is tried again until it does.
@@ -277,9 +282,14 @@ type Options struct {
 	// notifyClock is the notification rules' clock, for the tests; nil
 	// is the real one.
 	notifyClock notify.Clock
-	// clock is the time of the automatic resets (autoreset.go), for the
-	// tests; nil is time.Now.
-	clock func() time.Time
+	// clock is the time of the pump's events, the automatic resets
+	// (autoreset.go) and the error watch's timers (errorwatch.go), for
+	// the tests; nil is the real one.
+	clock notify.Clock
+	// checkClock is the clock of the radio health checks, such as the
+	// readings of the Cubes' free slots (slots.go), for the tests; nil is
+	// the real one.
+	checkClock func() time.Time
 	// Deliverers take a user's notifications beside Web Push: an app
 	// embedding the server shows them itself (push.Local).
 	Deliverers []push.Deliverer
@@ -454,12 +464,19 @@ type runtime struct {
 	// resets are the devices' automatic resets of their communication
 	// error (autoreset.go).
 	resets autoResets
+	// errWatch follows the devices' flags: a communication error back
+	// after its reset, a flag that lasts a day (errorwatch.go).
+	errWatch errorWatch
 	// vwt is the rooms' uids and settings, and each room's virtual wall
 	// thermostat as its last event had it (vwt.go).
 	vwt vwtState
 	// programs holds the week programmes written and not yet confirmed
 	// by the devices' configurations (etag.go).
 	programs pendingPrograms
+	// drift is the room checks' state: disagreeing members, programme
+	// drift, the re-sends and Massimo's last setpoint per room
+	// (drift.go).
+	drift driftState
 	// proxyVirtual is the Cube's option proxy_virtual: its proxy shows
 	// clients the virtual wall thermostats (proxy_virtual.go).
 	proxyVirtual atomic.Bool
@@ -493,6 +510,15 @@ type runtime struct {
 	// sentTo names, per device, the command last sent to it, for the
 	// device's next state line (proxylog.go).
 	sentTo stateCommands
+	// slots is the readings of the Cube's free slots, for the warning
+	// of slots that stay full (slots.go).
+	slots slotWatch
+	// cong is the findings of the Cube's C lines against its metadata
+	// (congruence.go).
+	cong congruence
+	// clock is the server's clock of the radio health checks
+	// (Server.checkNow).
+	clock func() time.Time
 }
 
 // lockStructure takes the Cube's structure lock, so that one change of
@@ -892,6 +918,7 @@ func (s *Server) proxyRuntime(pl ProxyListener) (*runtime, error) {
 // pump forwards client events to the SSE subscribers and learns the
 // serial once the Cube is connected.
 func (s *Server) pump(ctx context.Context, rt *runtime) {
+	defer rt.errWatch.stop()
 	s.rebuildBattery(ctx, rt) // before the first state, so that the replay comes first
 	for {
 		select {
@@ -919,6 +946,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 					s.seedLearned(ctx, rt)
 				}
 				s.learnStoreID(ctx, rt)
+				s.seedErrorWatch(ctx, rt, s.now()) // where the greeting's states could not
 			}
 			switch e.Kind {
 			case cubelan.EventConnected, cubelan.EventMetadata, cubelan.EventConfig, cubelan.EventPaired, cubelan.EventForgotten:
@@ -933,7 +961,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			if e.Device != 0 && rt.hidden()[e.Device] {
 				continue
 			}
-			ev := event{Kind: e.Kind.String(), Time: time.Now()}
+			ev := event{Kind: e.Kind.String(), Time: s.now()}
 			var batteryChanges []battery.Change
 			var wallBack *event
 			if e.Device != 0 {
@@ -963,6 +991,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 						wallBack = rt.wallReset(dv, ev.Time)
 					}
 					rt.setBattery(&dv)
+					rt.setMismatches(&dv)
 					ev.State = dv
 					if e.Kind == cubelan.EventState {
 						if prev, had := rt.last[e.Device]; had {
@@ -971,6 +1000,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 						rt.last[e.Device] = dv.State
 						ev.Command = rt.sentTo.take(e.Device)
 						s.autoReset(ctx, rt, e.Device, dv, ev.Changes)
+						s.watchErrors(ctx, rt, e.Device, ev.Changes)
 					}
 				}
 			}
@@ -982,6 +1012,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 				delete(rt.walls, e.Device)
 				rt.battery.Forget(e.Device.String())
 				rt.follow.forget(e.Device)
+				rt.errWatch.forget(e.Device)
 			}
 			if e.Kind == cubelan.EventPaired {
 				// The metadata does not change by pairing; the device's C
@@ -1013,6 +1044,14 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			}
 			if e.Kind == cubelan.EventConfig && len(ev.Changed) > 0 {
 				s.publishVirtualConfig(rt, e.Device, ev.Changed, ev.Etag)
+			}
+			if e.Kind == cubelan.EventConnected {
+				s.slotsGreeting(ctx, rt) // the greeting's free slots (slots.go)
+			}
+			switch {
+			case e.Kind == cubelan.EventConnected,
+				!e.Greeting && (e.Kind == cubelan.EventConfig || e.Kind == cubelan.EventMetadata || e.Kind == cubelan.EventForgotten):
+				s.checkMismatches(ctx, rt) // the C lines against the metadata (congruence.go)
 			}
 		}
 	}
@@ -1577,6 +1616,11 @@ type cubeView struct {
 	// ProxyFailing lists the Cube's proxy listeners that do not listen,
 	// and are tried again (runtimes.go).
 	ProxyFailing []proxyFailure `json:"proxy_failing,omitempty"`
+	// SlotsLow says that the Cube's memory slots stayed short (warn) or
+	// full (error) for an hour, with nothing of the server's in flight
+	// (slots.go): radiograms held for devices that do not answer, which a
+	// reboot of the Cube drops; absent otherwise.
+	SlotsLow *slotsLow `json:"slots_low,omitempty"`
 	// MAC and LastSeen come from discovery: the Cube's MAC address and
 	// when it last answered.
 	MAC      string     `json:"mac,omitempty"`
@@ -1661,6 +1705,7 @@ func (s *Server) summary(rt *runtime) cubeView {
 	}
 	v.Rooms, v.Devices = view.Counts(snap, rt.hidden())
 	v.Problems = s.problemsOf(rt)
+	v.SlotsLow = rt.slotsState()
 	return v
 }
 
@@ -1745,6 +1790,7 @@ func (s *Server) getDevice(w http.ResponseWriter, r *http.Request) error {
 	d := deviceDetail{Device: view.DeviceOf(snap, rf, s.staleness())}
 	d.SetWindow(s.windowLimits())
 	rt.setBattery(&d.Device)
+	rt.setMismatches(&d.Device)
 	if c != nil {
 		d.Firmware, d.Thermostat, d.Wall = c.Firmware, c.Thermostat, c.Wall
 		if d.Wall != nil && st.Valid {
@@ -1944,6 +1990,9 @@ func (s *Server) setpoint(w http.ResponseWriter, r *http.Request, rt *runtime, t
 		return err
 	}
 	rt.afterWrite()
+	if t.Room {
+		rt.intend(t.RoomID, mode, req.Temp, until, s.roomNow()) // the room's intended state (drift.go)
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "discarded": res.Discarded, "budget": res.Budget})
 	return nil
 }
