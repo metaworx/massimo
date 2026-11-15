@@ -1,3 +1,3 @@
-- A build from source runs `make`, or `make ui` before `go build`: the
-  web UI's parts are bundled from `internal/server/ui/src/` into
-  `parts.js`, which is embedded and not committed (AP UiParts).
+- A build from source, the Homebrew formula's too, runs `make ui` before
+  `go build` (or `make`): the web UI's parts are bundled into `parts.js`,
+  which is embedded and not committed (AP UiParts).
