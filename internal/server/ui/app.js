@@ -1535,14 +1535,14 @@ async function init() {
   renderLangSelect();
   initHelpSlots();
   // the header kept at the top; System settings' row there with its
-  // sections menu, its cards that fold, back to top
+  // sections menu, its cards that fold; back to top on every page
   stickyHeader();
   watchFacts();
   for (const page of [$("system"), $("me")]) {
     sectionCards(page);
     pageBar(page);
-    backToTop(page);
   }
+  backToTop();
   initSettings();
   applySettings();
   checkVersion();

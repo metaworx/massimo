@@ -71,13 +71,13 @@ def test_fold_kept_and_opened_from_contents(page, case):
 
 
 def test_back_to_top(page, case):
-    """Once the first card's head is out of sight, ↑ takes the page back
-    to its top, the focus on the sections menu."""
+    """A screen down, ↑ takes the page back to its top, the focus on the
+    sections menu."""
     show_view(page, "system")
-    top = page.locator("#system .to-top")
+    top = page.locator("#to-top")
     assert top.is_hidden(), "no ↑ at the top of the page"
     page.locator("#sys-backup").scroll_into_view_if_needed()
-    assert wait_until(page, "!document.querySelector('#system .to-top').classList.contains('hidden')", 3), "↑ once scrolled"
+    assert wait_until(page, "!document.getElementById('to-top').classList.contains('hidden')", 3), "↑ once scrolled"
     top.click()
     assert wait_until(page, "window.scrollY === 0", 3), "↑ goes back to the top"
     assert page.evaluate("document.activeElement === document.querySelector('#system .sec-menu > summary')"), \

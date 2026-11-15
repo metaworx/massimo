@@ -716,7 +716,8 @@ body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8p
 .section-fold[aria-expanded="true"] .fold-i { transform: rotate(90deg); }
 .section-card.folded > .tile-head { border-bottom-color: transparent; border-radius: 11px; }
 .section-body { padding: 12px 14px 4px; min-width: 0; }
-/* back to top: round, at the bottom right of the page's column */
+/* back to top: round, filled in the accent's blue, at the bottom right
+   of the page's column; the header's ↑ only while it is compacted */
 .icon-btn.to-top {
   position: fixed;
   right: max(16px, calc((100vw - 1100px) / 2 + 16px));
@@ -729,8 +730,14 @@ body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8p
   height: 44px;
   padding: 0;
   border-radius: 50%;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-fg);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
 }
+.icon-btn.to-top:hover, .icon-btn.to-top:focus-visible { background: color-mix(in srgb, var(--accent) 85%, var(--fg)); }
+.top-btn { display: none; }
+body.scrolled .top-btn { display: inline-flex; }
 @media (prefers-reduced-motion: reduce) {
   .fold-i { transition: none; }
 }

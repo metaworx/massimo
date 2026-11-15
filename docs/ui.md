@@ -94,6 +94,7 @@ without the version, and the lines under it go until the page is back
 at its top, expert mode's line of the Cube's radio budget apart;
 narrower than 600 px the Cube choice then takes the line of **Massimo**,
 the sign and the time a short line under it.
+The compacted header has **↑** left of ⚙ (of ☰ on a phone), back to the top.
 
 - **Cube**:
   a menu that chooses the Cube when the server has several.
@@ -172,6 +173,11 @@ the sign and the time a short line under it.
 - Each page comes back at the place it was left,
   by its button and by back and forward alike;
   a page opened for the first time starts at its top.
+- **↑**, round and filled in the accent's blue at the bottom right,
+  shows on every page once it is a screen down,
+  and another ↑ left of ⚙ (of ☰ on a phone) while the header is compacted;
+  each takes the page back to its top,
+  the focus on the page's sections menu where it has one.
 - **The server's sign**, before the time of the last update,
   an icon in a frame whose label says what a click does:
   the plug in green while the server answers (a click updates now);
@@ -774,8 +780,6 @@ A card folds with the button in its heading,
 which also says what it holds at a glance (**up to date**, **1 served**,
 **2 users**, **all on**, **3 kept**), also while it is folded;
 the browser keeps which cards are folded.
-Once the first card's head is out of sight, **↑** at the bottom right goes back
-to the top of the page.
 
 - **Software update**:
   the running version, the update channel and whether a newer release is out.
@@ -1129,7 +1133,7 @@ its heading's `button.section-fold` folding it):
 `sectionCards` makes them fold and keeps the fold in the browser,
 `sectionBadges` shows what a card holds in its head,
 `pageBar` fills the sections menu of its title's row kept at the top,
-and `backToTop` wires the page's ↑;
+and `backToTop` wires the two ↑, the floating one and the compacted header's;
 `pickerMenu` makes a dropdown the choice of one item (the Cube choice),
 its items `menuItem`s, a Cube's link its network sign (`cubeSignEl`, `LINK_SIGN`);
 a device's serial and radio address are a `deviceIds`;

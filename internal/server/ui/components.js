@@ -904,21 +904,28 @@ function stickyHeader() {
   onScroll();
 }
 
-// backToTop shows a page's .to-top button once its first card's head is
-// out of sight, and takes the page back to its top, the focus on its
-// sections menu.
-function backToTop(page) {
-  const btn = page.querySelector(".to-top");
-  const head = page.querySelector(".section-card .section-head");
-  if (!btn || !head) return;
-  new IntersectionObserver(([e]) => btn.classList.toggle("hidden", e.isIntersecting || e.boundingClientRect.top > 0)).observe(head);
-  btn.addEventListener("click", () => {
+// backToTop wires the two back-to-top buttons: ↑ at the bottom right
+// of every page once it is a screen down (#to-top), and the header's,
+// left of ⚙ (☰ on a phone), while the header is compacted (#top-btn,
+// style.css). Each takes the page back to its top, the focus on the
+// page's sections menu where it has one, else on its button in the
+// header.
+function backToTop() {
+  const btn = document.getElementById("to-top");
+  const show = () => btn.classList.toggle("hidden", window.scrollY < window.innerHeight);
+  addEventListener("scroll", show, { passive: true });
+  addEventListener("resize", show, { passive: true });
+  show();
+  const go = () => {
     const smooth = !matchMedia("(prefers-reduced-motion: reduce)").matches;
     window.scrollTo({ top: 0, behavior: smooth ? "smooth" : "auto" });
     settleAtTop();
-    const menu = page.querySelector(".sec-menu > summary");
-    if (menu) menu.focus({ preventScroll: true });
-  });
+    const shown = (sel) => [...document.querySelectorAll(sel)].find((e) => e.offsetParent);
+    const to = shown("main .settings-page:not(.hidden) .sec-menu > summary") || shown(".nav [aria-current='page'], .nav summary.active");
+    if (to) to.focus({ preventScroll: true });
+  };
+  btn.addEventListener("click", go);
+  document.getElementById("top-btn").addEventListener("click", go);
 }
 
 // settleAtTop keeps a scroll to the top from ending a few pixels short:
