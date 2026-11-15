@@ -1609,7 +1609,9 @@ async function init() {
   applySettings();
   checkVersion();
   await loadMeAndPreferences(); // login.js: who is signed in, or the sign-in dialog, then the user's settings
-  initTiles();
+  initRooms();
+  initHouse();
+  initPages();
   initLog();
   initNotify(); // notify.js, before the page the address names is shown
   const hadSerial = !!state.serial;

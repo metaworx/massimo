@@ -1107,10 +1107,21 @@ async function saveInterval(iv) {
   renderInterval(iv);
 }
 
+// initUpdate wires the Software update card: Install, Check now and the
+// channel, and its load each time Maintenance is shown.
 function initUpdate() {
   $("update-btn").addEventListener("click", startUpdate);
   $("update-check").addEventListener("click", (ev) => whileBusy(ev.currentTarget, () => loadUpdate(true)));
   $("update-channel").addEventListener("change", setChannel);
+  onView("maint", () => {
+    loadUpdate(false).then(loadChannel);
+  });
+}
+
+// initMaintenance wires the Maintenance card: the restart, the settings
+// file's reload, the reboot, the announcement on the LAN and the Cube
+// intervals, and their loads each time Maintenance is shown.
+function initMaintenance() {
   $("restart-btn").addEventListener("click", startRestart);
   $("settings-reload").addEventListener("click", reloadSettings);
   $("reboot-btn").addEventListener("click", startReboot);
@@ -1121,10 +1132,13 @@ function initUpdate() {
     showResult($("announce-msg"), "");
     for (const iv of INTERVALS) showResult($(iv.id + "-msg"), "");
     loadAnnounce();
-    loadUpdate(false).then(loadChannel);
     loadRestart();
     loadReboot();
   });
+}
+
+// initSystemInfo loads System info each time it is shown.
+function initSystemInfo() {
   onView("info", () => {
     loadServerInfo();
     Object.assign(certRetry, { tries: 0, last: null });
@@ -1133,3 +1147,5 @@ function initUpdate() {
 }
 
 document.addEventListener("DOMContentLoaded", initUpdate);
+document.addEventListener("DOMContentLoaded", initMaintenance);
+document.addEventListener("DOMContentLoaded", initSystemInfo);

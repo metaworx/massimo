@@ -1461,7 +1461,10 @@ function onView(view, fn) {
   });
 }
 
-function initLog() {
+// initPages wires the pages and the main menu: the header's Rooms
+// button, the menu's items, each settings page's switch, and back and
+// forward.
+function initPages() {
   $("view-tiles").addEventListener("click", () => showView("tiles"));
   for (const [view, id] of Object.entries(MENU_VIEWS)) $(id).addEventListener("click", () => showView(view));
   dropdown($("nav-menu"));
@@ -1469,6 +1472,11 @@ function initLog() {
   for (const p of SETTINGS_PAGES) onView(p.view, fitSettingsPages);
   // back and forward, and a page named in the address bar
   window.addEventListener("popstate", () => showAddress());
+}
+
+// initLog wires the log view's choices, Clear, Mark all as seen, Older
+// events and its scroll.
+function initLog() {
   $("log-filter").addEventListener("input", (ev) => {
     logState.filter = ev.target.value;
     renderLogClear();

@@ -1300,7 +1300,7 @@ function renderHouseRooms() {
 }
 
 // houseSendCheck keeps the House panel's Send off while no room is
-// ticked (sendWhenChanged), set by initTiles.
+// ticked (sendWhenChanged), set by initHouse.
 let houseSendCheck = null;
 
 // updateHousePanel shows or hides the parts that depend on the mode.
@@ -1393,7 +1393,9 @@ function closePanels() {
 
 // --- wiring -----------------------------------------------------------
 
-function initTiles() {
+// initHouse wires the House tile: its mode buttons, its panel, and the
+// click outside it that closes it once it has sent.
+function initHouse() {
   $("house-eco").addEventListener("click", () => openHouse("eco"));
   $("house-auto").addEventListener("click", () => openHouse("auto"));
   $("house-comfort").addEventListener("click", () => openHouse("comfort"));
@@ -1411,10 +1413,6 @@ function initTiles() {
   $("house-temp-plus").addEventListener("click", () => {
     $("house-temp").value = clampTemp(parseFloat($("house-temp").value) + STEP);
   });
-  document.addEventListener("keydown", (ev) => {
-    if (ev.key !== "Escape") return;
-    closePanels();
-  });
   document.addEventListener("click", (ev) => {
     // Clicking outside closes the House panel once it has sent (and an
     // open menu, dropdown in components.js).
@@ -1422,5 +1420,14 @@ function initTiles() {
     if (!panel.classList.contains("hidden") && !ev.target.closest("#house") && !$("house-result").classList.contains("hidden")) {
       closeHouse();
     }
+  });
+}
+
+// initRooms wires what holds for every room tile: Escape closes the
+// open panels.
+function initRooms() {
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Escape") return;
+    closePanels();
   });
 }
