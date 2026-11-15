@@ -824,7 +824,7 @@
   "log.cmdState.queued": "in coda",
   "log.cmdState.sent": "inviato",
   "log.cmdState.acknowledged": "confermato dal Cube",
-  "log.cmdState.retried": "scartato, stato di errore azzerato e reinviato",
+  "log.cmdState.retried": "scartato, errore di comunicazione reimpostato e reinviato",
   "log.cmdState.dropped": "abbandonato",
   "log.cmdState.failed": "non riuscito",
   "log.sum.holdDuty": "i comandi radio attendono fino alle {until}, poi il budget del Cube viene riletto ({duty} % usato)",

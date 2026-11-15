@@ -823,7 +823,7 @@
   "log.cmdState.queued": "in de wachtrij",
   "log.cmdState.sent": "verzonden",
   "log.cmdState.acknowledged": "bevestigd door de Cube",
-  "log.cmdState.retried": "verworpen, foutstatus gewist en opnieuw verzonden",
+  "log.cmdState.retried": "verworpen, communicatiefout teruggezet en opnieuw verzonden",
   "log.cmdState.dropped": "vervallen",
   "log.cmdState.failed": "mislukt",
   "log.sum.holdDuty": "radio-opdrachten wachten tot {until}, dan wordt het budget van de Cube opnieuw gelezen ({duty} % gebruikt)",

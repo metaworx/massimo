@@ -11,8 +11,10 @@ The server keeps one persistent connection and one command queue per Cube.
 Reads answer from the server's copy of the Cube's state,
 which the Cube refreshes on every change and which the server polls every 10 seconds.
 Writes go through the queue, which serialises commands, respects the
-radio duty cycle and the Cube's memory slots, and resets a device's error
-state when needed.
+radio duty cycle and the Cube's memory slots, and resets a device's
+communication error (`error`) before a command that reaches it:
+one `r:`, which costs no radio time, for the device a command names,
+and for every member of the room a room command names whose flag is set.
 
 ## Web UI
 
@@ -2072,6 +2074,14 @@ else the room's wall thermostat, else its first radiator thermostat,
 never a device of another room, which would take the command as well
 (docs/cube-protocol.md, "Set temperature (0x40) addressing").
 A room without a thermostat is refused with `409`.
+Before the radiogram, every member of the room whose communication error
+(`error`) is set gets one `r:`, the room taken from each device's C line,
+as the Cube takes it, so that the Cube does not hold the command back
+for a flagged member, as the original software does;
+the link error alone (`link_error`) gets none.
+A device's setpoint, a room command too, and a room's programme do the same.
+Where the Cube discards the radiogram, the same members are reset once more
+and it is sent once more.
 
 ### DELETE /api/v1/cubes/{sn}/rooms/{id}
 
@@ -2874,7 +2884,8 @@ The queue's, source `queue`:
 request (`GET /api/v1/commands/{id}`) and its `summary` the `step`'s id, its
 `key` and its `state`: `queued` and `sent` at `debug`, `acknowledged` at `info`
 with the budget (`duty_pct`, `free_slots`), and at `warn` `retried` (the Cube
-discarded it, the device's error state was reset and it was sent again),
+discarded it, the communication error of the devices it reaches was reset
+and it was sent again),
 `dropped` and `failed` with their `error`;
 `hold` at `warn`, the radio commands waiting (`reason` `duty_cycle` with
 `duty_pct` and `until`, or `memory_slots` with `free_slots` and `wait_s`).

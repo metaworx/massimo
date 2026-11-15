@@ -822,6 +822,24 @@ func TestParseDeleteDevices(t *testing.T) {
 	}
 }
 
+// An r: as captured from the original software, and one of two devices,
+// decode to the devices they reset.
+func TestParseResetError(t *testing.T) {
+	addrs, err := ParseResetError("01,CgEK")
+	if err != nil || len(addrs) != 1 || addrs[0] != 0x0a010a {
+		t.Fatalf("captured: %v %v", addrs, err)
+	}
+	addrs, err = ParseResetError(CmdResetError(0x0a0204, 0x0a010d).Data)
+	if err != nil || len(addrs) != 2 || addrs[0] != 0x0a0204 || addrs[1] != 0x0a010d {
+		t.Fatalf("two: %v %v", addrs, err)
+	}
+	for _, bad := range []string{"", "01", "zz,CgEK", "02,CgEK", "01,!!"} {
+		if _, err := ParseResetError(bad); err == nil {
+			t.Errorf("%q accepted", bad)
+		}
+	}
+}
+
 // The thermostats are the radiator thermostats and the wall thermostat.
 func TestIsThermostat(t *testing.T) {
 	for typ, want := range map[DeviceType]bool{DeviceCube: false, DeviceRadiatorThermostat: true, DeviceRadiatorThermostatPlus: true,

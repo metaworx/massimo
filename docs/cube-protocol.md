@@ -1051,6 +1051,10 @@ kept here because they cost time to learn.
     (2026-11-13 and 14);
     the original software resets every flagged device of the room before a
     room command (the LAN commands verified against it, above).
+    Massimo's queue does the same since AP RadioHealth v1.2: before a
+    room-flagged radiogram, one `r:01` for each device whose C line names
+    the room and whose error flag is set, none for the link error alone,
+    and after a discard the same resets and one retry.
 - A radiogram for a device that does not answer holds its memory slot,
   without radio time, until the device answers or the Cube restarts,
   and a Cube with no slot left discards every command

@@ -822,7 +822,7 @@
   "log.cmdState.queued": "queued",
   "log.cmdState.sent": "sent",
   "log.cmdState.acknowledged": "acknowledged by the Cube",
-  "log.cmdState.retried": "discarded, error state reset and sent again",
+  "log.cmdState.retried": "discarded, communication error reset and sent again",
   "log.cmdState.dropped": "dropped",
   "log.cmdState.failed": "failed",
   "log.sum.holdDuty": "radio commands wait until {until}, when the Cube's budget is read again ({duty} % used)",

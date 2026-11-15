@@ -822,7 +822,7 @@
   "log.cmdState.queued": "eingereiht",
   "log.cmdState.sent": "gesendet",
   "log.cmdState.acknowledged": "vom Cube bestätigt",
-  "log.cmdState.retried": "verworfen, Fehlerzustand zurückgesetzt und erneut gesendet",
+  "log.cmdState.retried": "verworfen, Kommunikationsstörung zurückgesetzt und erneut gesendet",
   "log.cmdState.dropped": "verworfen",
   "log.cmdState.failed": "fehlgeschlagen",
   "log.sum.holdDuty": "Funkbefehle warten bis {until}, dann wird das Budget des Cube neu gelesen ({duty} % verbraucht)",

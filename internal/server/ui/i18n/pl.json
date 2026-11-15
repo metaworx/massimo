@@ -857,7 +857,7 @@
   "log.cmdState.queued": "w kolejce",
   "log.cmdState.sent": "wysłane",
   "log.cmdState.acknowledged": "potwierdzone przez Cube",
-  "log.cmdState.retried": "odrzucone, stan błędu wyzerowany i wysłane ponownie",
+  "log.cmdState.retried": "odrzucone, błąd komunikacji zresetowany i wysłane ponownie",
   "log.cmdState.dropped": "porzucone",
   "log.cmdState.failed": "nieudane",
   "log.sum.holdDuty": "polecenia radiowe czekają do {until}, potem budżet Cube jest odczytywany od nowa (zużyto {duty} %)",
