@@ -383,3 +383,21 @@ func RestartService(name string) error {
 	}
 	return waitState(s, svc.Running, time.Minute)
 }
+
+// StopService stops the service if it runs and returns once its process
+// has exited; for `massimo update`, whose rollback takes the store back
+// with the service stopped. RestartService starts it again.
+func StopService(name string) error {
+	m, err := connect()
+	if err != nil {
+		return err
+	}
+	defer m.Disconnect()
+	s, err := m.OpenService(name)
+	if err != nil {
+		return fmt.Errorf("service %s: %w", name, err)
+	}
+	defer s.Close()
+	_, err = stopService(newInstaller(Options{Out: os.Stderr}), s)
+	return err
+}

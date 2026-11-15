@@ -12,10 +12,13 @@ package store
 // massimo.db.before-<version> before applying it, so that an older
 // binary has a file it can open after a rollback. A file with the line
 // "-- foreign_keys: off" runs with foreign keys off, for one that makes a
-// referenced table again, and has them checked before its commit. Only
-// the numbered
-// files are embedded: migrations/store.sql beside them is the schema
-// they make, generated for reading (migrate_test.go, TestStoreSQL).
+// referenced table again, and has them checked before its commit. A
+// migration that raises min_reader comes with NNNN_<name>.down.sql, the
+// SQL that undoes it, which the store also keeps in schema_version
+// (migration 0023) and massimo store downgrade runs (downgrade.go). Only
+// the numbered files are embedded: migrations/store.sql beside them is
+// the schema they make, generated for reading (migrate_test.go,
+// TestStoreSQL).
 
 import (
 	"context"
@@ -29,6 +32,7 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 
 	"go.metaworx.ch/massimo/internal/safefile"
 )
@@ -46,10 +50,14 @@ type migration struct {
 	// TABLE with them on deletes the rows first, with the actions of
 	// the keys that reference them.
 	foreignKeysOff bool
+	// down is the SQL of NNNN_<name>.down.sql, which undoes the
+	// migration; "" where there is none.
+	down string
 }
 
 var (
 	migrationName      = regexp.MustCompile(`^(\d{4})_[a-z0-9_]+\.sql$`)
+	downName           = regexp.MustCompile(`^\d{4}_[a-z0-9_]+\.down\.sql$`)
 	minReaderLine      = regexp.MustCompile(`(?m)^--\s*min_reader:\s*(\d+)\s*$`)
 	foreignKeysOffLine = regexp.MustCompile(`(?m)^--\s*foreign_keys:\s*off\s*$`)
 )
@@ -75,14 +83,24 @@ func SchemaVersion() int {
 
 // loadMigrations reads the migrations of fsys, checked: numbered from 1
 // without gaps, each with a min_reader that never falls and never
-// exceeds its own version.
+// exceeds its own version, and each down part beside the migration of
+// its name.
 func loadMigrations(fsys fs.FS) ([]migration, error) {
 	entries, err := fs.ReadDir(fsys, ".")
 	if err != nil {
 		return nil, fmt.Errorf("store: migrations: %w", err)
 	}
 	var out []migration
+	downs := map[string]string{} // the up file's name: its down part
 	for _, e := range entries {
+		if downName.MatchString(e.Name()) {
+			b, err := fs.ReadFile(fsys, e.Name())
+			if err != nil {
+				return nil, fmt.Errorf("store: migrations: %w", err)
+			}
+			downs[strings.TrimSuffix(e.Name(), ".down.sql")+".sql"] = string(b)
+			continue
+		}
 		m := migrationName.FindStringSubmatch(e.Name())
 		if m == nil {
 			continue
@@ -98,6 +116,15 @@ func loadMigrations(fsys fs.FS) ([]migration, error) {
 		}
 		r, _ := strconv.Atoi(mr[1])
 		out = append(out, migration{version: v, minReader: r, name: e.Name(), sql: string(b), foreignKeysOff: foreignKeysOffLine.Match(b)})
+	}
+	for i := range out {
+		if d, ok := downs[out[i].name]; ok {
+			out[i].down = d
+			delete(downs, out[i].name)
+		}
+	}
+	for up := range downs {
+		return nil, fmt.Errorf("store: migration %s.down.sql: there is no %s", strings.TrimSuffix(up, ".sql"), up)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].version < out[j].version })
 	prev := 0
@@ -197,7 +224,7 @@ func (s *Store) migrate(ctx context.Context, fsys fs.FS, reader int) error {
 		// and what this binary does not know it ignores.
 		s.log.Info("store is at a newer schema version, opened as it is", "path", s.path, "schema", cur, "binary", reader)
 		s.schema, s.minReader = cur, minReader
-		return nil
+		return s.keepDownParts(ctx, ms)
 	}
 	for _, m := range ms {
 		if m.version <= cur || m.version > reader {
@@ -221,6 +248,47 @@ func (s *Store) migrate(ctx context.Context, fsys fs.FS, reader int) error {
 		cur, minReader = m.version, m.minReader
 	}
 	s.schema, s.minReader = cur, minReader
+	return s.keepDownParts(ctx, ms)
+}
+
+// keepDownParts writes the down part of each migration of ms into its
+// schema_version row where the row has none, so that a binary that
+// knows the version only by its row can still undo it (downgrade.go).
+// A file before migration 0023 has no column for them.
+func (s *Store) keepDownParts(ctx context.Context, ms []migration) error {
+	var has int
+	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM pragma_table_info('schema_version') WHERE name = 'down_sql'`).Scan(&has); err != nil {
+		return fmt.Errorf("store: down parts: %w", err)
+	}
+	if has == 0 {
+		return nil
+	}
+	missing := map[int]bool{}
+	rows, err := s.db.QueryContext(ctx, `SELECT version FROM schema_version WHERE down_sql IS NULL`)
+	if err != nil {
+		return fmt.Errorf("store: down parts: %w", err)
+	}
+	for rows.Next() {
+		var v int
+		if err := rows.Scan(&v); err != nil {
+			rows.Close()
+			return fmt.Errorf("store: down parts: %w", err)
+		}
+		missing[v] = true
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("store: down parts: %w", err)
+	}
+	for _, m := range ms {
+		if m.down == "" || !missing[m.version] {
+			continue
+		}
+		if _, err := s.db.ExecContext(ctx, `UPDATE schema_version SET down_sql = ? WHERE version = ? AND down_sql IS NULL`, m.down, m.version); err != nil {
+			return fmt.Errorf("store: down part of %s: %w", m.name, err)
+		}
+		s.log.Info("store: down part kept", "path", s.path, "version", m.version)
+	}
 	return nil
 }
 

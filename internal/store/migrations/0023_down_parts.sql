@@ -1,0 +1,16 @@
+-- SPDX-License-Identifier: AGPL-3.0-or-later
+-- Copyright (C) 2026 The Massimo Authors
+--
+-- min_reader: 1
+--
+-- The down parts in the store (AP StoreRaise v1.2, Block 1, D1-D): a
+-- migration that raises min_reader comes with NNNN_<name>.down.sql, the
+-- SQL that undoes it, and a binary writes the down part of every version
+-- it knows into that version's row, at every start where the row has
+-- none. massimo store downgrade -to <N> runs them, newest first, so that
+-- a binary for version N opens the file again; the SQL comes from the
+-- binary that runs it, else from here, which is how a binary that knows
+-- a version no more than by its row still undoes it (docs/store.md,
+-- "Migrations"). Additive: a binary built for an earlier version names
+-- the columns it writes and reads, and ignores this one.
+ALTER TABLE schema_version ADD COLUMN down_sql TEXT;

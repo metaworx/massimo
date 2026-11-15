@@ -169,7 +169,11 @@ func runUpdate(args []string) (err error) {
 			return err
 		}
 		fmt.Printf("rolled back %s; the replaced binary is now %s\n", target, update.PrevPath(target))
-		return restartService(*restart)
+		msg, serr := rollbackStore(ctx, target, update.PrevPath(target), false, *restart)
+		if msg != "" {
+			fmt.Println(msg)
+		}
+		return errors.Join(serr, restartService(*restart))
 	}
 
 	if !*check {
@@ -261,8 +265,18 @@ func runUpdate(args []string) (err error) {
 		fmt.Fprintln(os.Stderr, "update:", err, "- rolling back")
 		if rerr := update.Rollback(target, update.FailedPath(target)); rerr != nil {
 			err = fmt.Errorf("%v; the rollback failed too: %v", err, rerr)
-		} else if rerr := restartService(*restart); rerr != nil {
-			err = fmt.Errorf("%v; rolled back, but the restart failed: %v", err, rerr)
+		} else {
+			// The binary put back is this one unless -binary named another.
+			msg, serr := rollbackStore(ctx, target, update.FailedPath(target), *binary == "", *restart)
+			if serr != nil {
+				err = fmt.Errorf("%v; %v", err, serr)
+			} else if msg != "" {
+				fmt.Println(msg)
+				err = fmt.Errorf("%v; %s", err, msg)
+			}
+			if rerr := restartService(*restart); rerr != nil {
+				err = fmt.Errorf("%v; rolled back, but the restart failed: %v", err, rerr)
+			}
 		}
 		status(update.Status{State: "rolled-back", From: version, To: rel.Tag, Channel: *ch, Message: err.Error()})
 		return err
