@@ -24,7 +24,7 @@ const LOG_KINDS = ["connected", "disconnected", "hello", "metadata", "config", "
   "device_forgotten", "cube_found", "restore_step", "restore_done", "disagree", "drift",
   "cube_gone", "address_changed", "server_started", "server_stopping", "settings_read", "restart", "reboot", "reboot_cancelled",
   "update", "update_result", "backup", "backup_deleted", "backups_pruned", "log_pruned", "log_rotated", "restore_started",
-  "change", "command", "hold", "structure", "unconfirmed", "error_reset", "error_watch", "login", "login_failed", "locked_out", "audit_pruned",
+  "change", "command", "hold", "structure", "unconfirmed", "error_reset", "error_watch", "slots", "mismatch", "login", "login_failed", "locked_out", "audit_pruned",
   "proxy_connected", "proxy_disconnected", "proxy_refused", "proxy_discarded", "proxy_deleted", "proxy_delete_refused", "proxy_pairing", "proxy_warning"];
 
 // LOG_RANGES are the choices of how far back the log goes: the newest
@@ -429,6 +429,16 @@ function logSummaryText(kind, s, serial) {
     }
     case "unconfirmed":
       return logUnconfirmedText(s, serial);
+    case "slots": {
+      const at = (iso) => (iso ? fmtLogTime(new Date(iso)) : "–");
+      if (s.state === "full") return t("log.sum.slotsFull", { slots: num(s.free_slots), since: at(s.full_since || s.since) });
+      if (s.state === "low") return t("log.sum.slotsLow", { slots: num(s.free_slots), since: at(s.since) });
+      return t("log.sum.slotsFree", { slots: num(s.free_slots), since: at(s.since) });
+    }
+    case "mismatch": {
+      const text = mismatchText(s); // tiles.js
+      return s.state === "cleared" ? t("log.sum.mismatchCleared", { text }) : text;
+    }
     case "disagree":
       return logDisagreeText(s, serial);
     case "drift":

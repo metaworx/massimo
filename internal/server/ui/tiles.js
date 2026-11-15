@@ -30,6 +30,7 @@ function renderRoom(room) {
   renderProblems(el, room);
   renderNotReady(el, room);
   renderStale(el, room);
+  renderMismatches(el, room);
   renderSetpoint(el, room);
   renderMenu(el, room);
   renderVacation(el, room);
@@ -262,6 +263,40 @@ function renderStale(el, room) {
   }
   for (const [text, names] of groups) note.appendChild(document.createTextNode(" " + text + ": " + names.join(", ") + "."));
   note.classList.remove("hidden");
+}
+
+// renderMismatches says on the tile, one notice each with since when,
+// where the Cube's configuration of a device and its room list differ
+// for the room, or a member's week programme or temperatures differ from
+// the rest of the room (room.mismatches, docs/api-v1.md).
+function renderMismatches(el, room) {
+  const box = el.querySelector(".mismatch-notes");
+  for (const m of room.mismatches || []) box.appendChild(noticeEl(mismatchText(m), { since: m.since })); // components.js
+  box.classList.toggle("hidden", !box.childElementCount);
+}
+
+// mismatchArgs are a finding's words: its device by the name the page
+// knows, else the room list's, else its radio address; its rooms by
+// their names, else their numbers; its types.
+function mismatchArgs(m) {
+  const room = (id, name) => name || (id === 0 ? t("mismatch.noRoom") : t("log.room", { id }));
+  const known = m.device ? rfLabel(m.device) : ""; // log.js
+  return {
+    device: known && known !== m.device ? known : m.name || m.device || "–",
+    room: room(m.room, m.room_name),
+    cube: m.cube_room === undefined ? "–" : room(m.cube_room, m.cube_room_name),
+    list: m.list_room === undefined ? "–" : room(m.list_room, m.list_room_name),
+    cubeType: m.cube_type ? typeName(m.cube_type) : "–", // rooms.js
+    listType: m.list_type ? typeName(m.list_type) : "–",
+  };
+}
+
+// mismatchText is a finding in a sentence that names the device and both
+// rooms; a room master's by why.
+function mismatchText(m) {
+  const key = m.finding === "master" ? "mismatch.master." + m.why : "mismatch." + m.finding;
+  const s = t(key, mismatchArgs(m));
+  return s === key ? m.finding : s;
 }
 
 function renderSetpoint(el, room) {

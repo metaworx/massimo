@@ -3157,12 +3157,19 @@ paths:
         devices do not show in time: write (setpoint, lock, display, config,
         program), target, room, source, expected,
         outcome not_confirmed at warn with minutes, confirmed and devices,
-        or confirmed_late at info with seconds, in "summary"); the room
-        checks' (docs/api-v1.md, "The room checks"): disagree, source cube
-        (a room whose thermostats differ: room and outcome differ, resent,
-        resend_failed, not_resent or agree in "summary") and drift, source
-        device (a thermostat off its week programme: outcome not_following,
-        follows or left_auto); the server's sign-ins, source server, for a
+        or confirmed_late at info with seconds, in "summary"); slots, source cube (the Cube's memory
+        slots held for an hour with nothing of the server's in flight,
+        fewer than 5 free at warn, fewer than 2 at error, and free again,
+        at info: state low, full or free, from for a step, free_slots,
+        since, full_since in "summary"); mismatch, source cube (a C line and the room
+        list, or a room's members, that differ, at warn, and agree again,
+        at info: state found or cleared and the Mismatch's fields in
+        "summary"); the room checks' (docs/api-v1.md, "The
+        room checks"): disagree, source cube (a room whose thermostats
+        differ: room and outcome differ, resent, resend_failed, not_resent
+        or agree in "summary") and drift, source device (a thermostat off
+        its week programme: outcome not_following, follows or left_auto);
+        the server's sign-ins, source server, for a
         user with audit alone: login, login_failed, locked_out; the LAN
         proxy's, source proxy: proxy_connected, proxy_disconnected,
         proxy_refused, proxy_discarded, proxy_deleted, proxy_delete_refused,
@@ -4719,6 +4726,16 @@ components:
         found_address: {type: string, description: "The host discovery last found the Cube at; differs from address where the server connects through a proxy or to a fixed address the Cube has left"}
         found_elsewhere: {$ref: '#/components/schemas/FoundElsewhere'}
         other_network: {type: boolean, description: "True where the address the server connects to lies in none of this machine's networks: it reaches the Cube only through a router; absent otherwise, and for a host name"}
+        slots_low:
+          type: object
+          description: "The Cube's memory slots held, fewer than 5 free (level warn) or fewer than 2 (error), at two readings an hour apart with nothing of the server's in flight: radiograms held for devices that do not answer, which a reboot of the Cube drops; absent otherwise (docs/api-v1.md, GET /api/v1/cubes)"
+          required: [level, since, free_slots, logged]
+          properties:
+            level: {type: string, enum: [warn, error]}
+            since: {type: string, format: date-time, description: The first reading below 5 of the run}
+            full_since: {type: string, format: date-time, description: "The first reading below 2, for error"}
+            free_slots: {type: integer, description: The free slots at the last reading}
+            logged: {type: string, format: date-time, description: When the log's slots event of the level was given}
         problems:
           type: array
           description: "The Cube's visible devices with a problem (a communication or link error, a low battery, a window open), each with its room's name; absent where none"
@@ -4818,6 +4835,10 @@ components:
         devices:
           type: array
           items: {$ref: "#/components/schemas/Device"}
+        mismatches:
+          type: array
+          description: "The findings of the Cube's C lines against its room list that concern the room, and of its members that differ (docs/api-v1.md, \"The Cube's lines against its room list\"); absent where none"
+          items: {$ref: "#/components/schemas/Mismatch"}
         confirmation: {$ref: "#/components/schemas/Confirmation"}
     Confirmation:
       type: object
@@ -4828,6 +4849,24 @@ components:
         since: {type: string, format: date-time, description: "When the Cube took the oldest write still open"}
         fields: {type: array, items: {type: string}, description: "The values not shown yet: mode, setpoint, until, locked and display_actual of the state; the configuration's by their names (comfort_temp … valve_offset_pct); program.<day> for a day of the week programme, program.<day>.2 for a long day's second radiogram"}
         devices: {type: array, items: {type: string}, description: "A room's: the radio addresses of its members that do not show them"}
+    Mismatch:
+      type: object
+      description: "A difference between a C line and the room list, or among a room's members, that the server found (docs/api-v1.md, \"The Cube's lines against its room list\")"
+      required: [finding, room, since]
+      properties:
+        finding: {type: string, enum: [room, unlisted, no_config, type, master, programme, temperatures]}
+        device: {type: string, description: "The device concerned, a room's master for master; absent for a master of address 000000"}
+        name: {type: string, description: The device's name in the room list}
+        room: {type: integer, description: "The room concerned: the room list's where it has the device, else its C line's"}
+        room_name: {type: string}
+        cube_room: {type: integer, description: "The room of the device's C line (room, unlisted), of the master's (master other_room)"}
+        cube_room_name: {type: string}
+        list_room: {type: integer, description: "The room the room list has the device in (room, no_config)"}
+        list_room_name: {type: string}
+        cube_type: {$ref: "#/components/schemas/DeviceType"}
+        list_type: {$ref: "#/components/schemas/DeviceType"}
+        why: {type: string, enum: [no_device, other_room, not_thermostat], description: A master's finding}
+        since: {type: string, format: date-time, description: When the server first found it}
     DeviceType:
       type: string
       enum: [cube, radiator_thermostat, radiator_thermostat_plus, wall_thermostat, shutter_contact, eco_switch]
@@ -4902,6 +4941,10 @@ components:
             actual_temp: {type: array, items: {type: string}}
             mode: {type: array, items: {type: string}}
         confirmation: {$ref: "#/components/schemas/Confirmation"}
+        mismatches:
+          type: array
+          description: "The findings of the device's C line against the room list, and of its room's members, that name it (docs/api-v1.md, \"The Cube's lines against its room list\"); absent where none"
+          items: {$ref: "#/components/schemas/Mismatch"}
     ConfigWrite:
       type: object
       description: Every field optional; merged into the device's current configuration

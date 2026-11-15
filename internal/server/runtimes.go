@@ -115,6 +115,7 @@ func (s *Server) newRuntime(c CubeConfig, addr string) *runtime {
 		follow:    newFollowUp(opts.FollowUpDelays, opts.FollowUpReconnectGap, opts.RefreshInterval > 0, opts.StructureChecks)}
 	rt.battery = &battery.Tracker{DecalcOf: rt.decalcOf}
 	rt.confirms.within = cmp.Or(opts.confirmWithin, defaultConfirmWithin)
+	rt.clock = s.checkNow
 	rt.resets.hold = rt.errWatch.hold // a flag that keeps coming back (errorwatch.go)
 	copts := cubelan.Options{Addr: addr, PollInterval: opts.PollInterval, Hold: opts.CubeHold, Logger: s.partLog("cube", rt.serial), EventLines: true}
 	if opts.cubeOptions != nil {
@@ -129,7 +130,10 @@ func (s *Server) newRuntime(c CubeConfig, addr string) *runtime {
 	if qopts.Logger == nil {
 		qopts.Logger = s.partLog("queue", rt.serial)
 	}
-	rt.queue = engine.NewQueue(rt.client, qopts)
+	// The queue's radio lines are readings of the Cube's free slots
+	// (slots.go).
+	gw := slotsGateway{Client: rt.client, sent: func(m cube.Message, r *cube.SendResult) { s.slotsSent(rt, m, r) }}
+	rt.queue = engine.NewQueue(gw, qopts)
 	rt.store = opts.Store
 	if opts.Store != nil {
 		rt.storeID.Store(c.StoreID)

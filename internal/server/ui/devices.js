@@ -32,6 +32,16 @@ function deviceBadges(d) {
   return out;
 }
 
+// mismatchBadge is a finding of the device (d.mismatches, docs/api-v1.md)
+// as an outlined badge naming the other side, the room or the type the
+// Cube has; its whole sentence (tiles.js mismatchText) is its title, and
+// the room's tile says it in full.
+function mismatchBadge(m) {
+  const b = badgeEl(t("mismatchBadge." + m.finding, mismatchArgs(m)), "warn mismatch-badge"); // tiles.js
+  b.title = mismatchText(m);
+  return b;
+}
+
 // valueCell builds one cell of the values grid: label, number, unit, an
 // optional icon and the value's age after it. The number sits
 // right-aligned in a fixed-width span so the decimal points of a column
@@ -106,6 +116,7 @@ function renderDevice(d) {
   if (unconfirmed) items.push(unconfirmed);
   const problems = problemsEl([{ icon: deviceIcon(d), title: deviceName(d), sub: d.serial || d.rf_address, items }], problemsLabel(items));
   if (problems) badges.appendChild(problems);
+  for (const m of d.mismatches || []) badges.appendChild(mismatchBadge(m));
   for (const [label, kind, at] of deviceBadges(d)) {
     const b = badgeEl(label, kind);
     const age = ageEl(at, d.stale);

@@ -86,6 +86,23 @@ func eventMessage(ev event) string {
 			return "write shown by the device after its deadline"
 		}
 		return "write not shown by its devices in time"
+	case "slots":
+		switch ev.Summary["state"] {
+		case slotsStateFull:
+			return "the cube's memory slots stay full with nothing of the server's in flight: radiograms held for devices that do not answer, a reboot of the cube drops them"
+		case slotsStateLow:
+			return "few of the cube's memory slots are free with nothing of the server's in flight: radiograms held for devices that do not answer, a reboot of the cube drops them"
+		}
+		return "the cube's memory slots are free again"
+	case "mismatch":
+		finding := summaryText(&ev, "finding")
+		if why := summaryText(&ev, "why"); why != "" {
+			finding += " (" + why + ")"
+		}
+		if ev.Summary["state"] == "found" {
+			return "the cube's device configurations and its room list differ: " + finding
+		}
+		return "the cube's device configurations and its room list agree again: " + finding
 	case "error_watch":
 		flag := "communication error"
 		if ev.Summary["flag"] == flagLink {

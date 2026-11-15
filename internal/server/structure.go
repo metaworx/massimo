@@ -70,6 +70,7 @@ func (rt *runtime) beginStructure(action string, device cube.RFAddress, rooms ..
 		st, _ := snap.State(rf)
 		w.flags[rf] = memberFlags{st.Error, st.LinkError}
 	}
+	rt.settleMismatches(device, w.rooms, rt.clock()) // until its C line follows (congruence.go)
 	return w
 }
 
@@ -101,6 +102,9 @@ func (w *structureWatch) back(b cubelan.Budget) bool {
 // from beginStructure; false where it cannot, without the follow-up or
 // a budget from before.
 func (rt *runtime) watchStructure(w *structureWatch) bool {
+	if w != nil {
+		rt.settledMismatches(w.device, rt.clock()) // its lines answered (congruence.go)
+	}
 	f := rt.follow
 	if f == nil || w == nil || w.before < 0 {
 		return false

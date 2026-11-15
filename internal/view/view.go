@@ -199,6 +199,11 @@ type Device struct {
 	// Sources is a virtual wall thermostat's alone: the radio addresses
 	// its actual_temp and its mode came from.
 	Sources map[string][]string `json:"sources,omitempty"`
+	// Mismatches are the differences the server finds between the
+	// device's C line and the metadata, or between it and the other
+	// members of its room (Mismatch); the server sets them, none
+	// elsewhere.
+	Mismatches []Mismatch `json:"mismatches,omitempty"`
 	// Confirmation is a write the device has not shown yet, which the
 	// server keeps (its confirm.go); a virtual wall thermostat has its
 	// room's.
@@ -369,6 +374,10 @@ type Room struct {
 	// Stale is set when a device of the room is stale (Device.Stale).
 	Stale   bool     `json:"stale,omitempty"`
 	Devices []Device `json:"devices"`
+	// Mismatches are the differences the server finds between the
+	// Cube's C lines and its metadata that concern the room, and among
+	// its members (Mismatch); the server sets them, none elsewhere.
+	Mismatches []Mismatch `json:"mismatches,omitempty"`
 	// Confirmation is what its members have not shown of the writes to
 	// them (Device.Confirmation), set by the server.
 	Confirmation *Confirmation `json:"confirmation,omitempty"`
