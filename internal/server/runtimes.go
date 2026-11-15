@@ -127,7 +127,10 @@ func (s *Server) newRuntime(c CubeConfig, addr string) *runtime {
 	if qopts.Logger == nil {
 		qopts.Logger = s.partLog("queue", rt.serial)
 	}
-	rt.queue = engine.NewQueue(rt.client, qopts)
+	// The queue's radio lines are readings of the Cube's free slots
+	// (slots.go).
+	gw := slotsGateway{Client: rt.client, sent: func(m cube.Message, r *cube.SendResult) { s.slotsSent(rt, m, r) }}
+	rt.queue = engine.NewQueue(gw, qopts)
 	rt.store = opts.Store
 	if opts.Store != nil {
 		rt.storeID.Store(c.StoreID)

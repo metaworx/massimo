@@ -45,6 +45,7 @@ function fillCubeFacts(d, c) {
   d.querySelector('.cube-info [data-fact="clock"]').title = clock.title;
   fillLinkState(d, c);
   fillAddressState(d, c);
+  fillSlotsState(d, c);
   fillProxyState(d, c);
   fillCubeHead(d, c);
   if (d.syncForm) d.syncForm(c);
@@ -94,6 +95,22 @@ function fillAddressState(d, c) {
   follow.type = "button";
   follow.addEventListener("click", () => saveCube(c.serial, { follow_discovery: true }, follow));
   box.appendChild(elem("div", "cube-elsewhere-fix needs-cubes", use, follow));
+}
+
+// fillSlotsState says above the Cube's facts that its memory slots
+// stayed full with nothing of the server's on its way (slots_full),
+// since when, and that its Reboot, at the bottom of the panel, drops the
+// radiograms they hold. It is redrawn only where that changed.
+function fillSlotsState(d, c) {
+  const box = d.querySelector(".cube-slots-state");
+  if (!box) return;
+  const f = c.slots_full;
+  const key = f ? [i18n.lang, f.since, f.free_slots].join(" ") : "";
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  clear(box);
+  if (!f) return;
+  box.appendChild(noticeEl(t("cubes.slotsFull", { slots: f.free_slots }), { since: f.since })); // components.js
 }
 
 // fillProxyState says under the proxy address where the Cube's proxy
@@ -312,6 +329,7 @@ function cubeBadges(c) {
   if (failing) out.push(badgeEl(tn("proxy.badge.failing", failing), "warn"));
   if ((c.file_differs || []).length) out.push(badgeEl(tn("cubes.differsCount", c.file_differs.length), "warn"));
   if (c.found_elsewhere) out.push(badgeEl(t("cubes.elsewhereBadge"), "warn"));
+  if (c.slots_full) out.push(badgeEl(t("cubes.slotsBadge"), "warn"));
   if (c.source) out.push(badgeEl(t("cubes.source." + c.source), "mode"));
   return out;
 }
@@ -392,7 +410,7 @@ function cubePanel(c, { page } = {}) {
   who.appendChild(textEl("span", "", "cube-head-stats muted small"));
   const acts = elem("div", "cube-actions", pairingSection(c.serial), rebootRow(c));
   const cols = elem("div", "cube-cols", fromTemplate("tpl-cube-info"), form, acts);
-  sum.after(elem("div", "cube-top-line"), elem("div", "cube-link-state"), elem("div", "cube-address-state"), cols);
+  sum.after(elem("div", "cube-top-line"), elem("div", "cube-link-state"), elem("div", "cube-address-state"), elem("div", "cube-slots-state"), cols);
   fillCubeFacts(d, c);
   if (c.source === "flag" || !c.source) {
     form.replaceWith(textEl("p", t("cubes.flagNote"), "muted small needs-cubes"));

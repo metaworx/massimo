@@ -1375,6 +1375,31 @@ and refuses a connection from another network;
 `massimo netconfig -sn <serial> -broadcast -static …` gives it a fixed address (README.md).
 The networks are read again at most every 30 seconds.
 
+`slots_full` says that the Cube's memory slots stay full:
+a radiogram for a device that does not answer holds its slot until the device
+answers or the Cube restarts, and one Cube held 49 of its 50 for months.
+Each `S:` reply to a radio line and each greeting's `H` line is a reading of the
+free slots;
+a reading counts while nothing of the server's is in flight to the Cube,
+no `s:` line (the server's own or a proxy client's) accepted in the 15 minutes
+before it, since its radiogram may still wait for its device's wakeup
+(an `r:` holds no slot).
+Two counting readings an hour apart with one free slot or none,
+and none with more in between,
+give the Cube's log event `slots` at `warn` (see the log, below) and `slots_full`:
+`since`, the first of those readings, `free_slots` at the last reading,
+and `warned`, when the warning was given.
+The first reading with more than one free slot gives `slots` at `info`
+and drops `slots_full`.
+A reboot of the Cube (`POST …/reboot`, below) drops the radiograms it holds.
+The server reads no budget of its own for it:
+the readings are those its writes, its proxy's clients and its reconnects bring,
+the periodic refresh (`serve -refresh`) among them.
+
+```json
+"slots_full": {"since": "2026-11-14T08:00:00+01:00", "free_slots": 1, "warned": "2026-11-14T09:02:00+01:00"}
+```
+
 `problems` lists, where there are any, the Cube's visible devices with a problem,
 as `GET …/devices` shows them, each with its room's name (`room`):
 a transmit or link error, a low battery, a window open (with its `window` times);
@@ -2885,6 +2910,11 @@ discarded it, the device's error state was reset and it was sent again),
 now (`free_slots`), the minutes since it (`minutes`), the slots still `held`
 or `no_reading`, and, at `warn`, the devices the change left `flagged` or
 with a `link_error`; it is settled only by a person's mark.
+`slots`, source `cube`, the Cube's memory slots full for an hour with nothing
+of the server's in flight (see `slots_full` under `GET /api/v1/cubes`):
+at `warn` with `state` `full`, once, and at `info` with `state` `free` at the
+first reading with more than one free slot, which settles it; its `summary`
+has the `free_slots` of the reading and the `since` of the first full one.
 The server's sign-ins, source `server`, only on the pages and streams of a
 user with `audit`: `login` (`user`, `remote`), `login_failed` at `warn`,
 and `locked_out` at `warn` (`remote`, `for`, `after`: `logins` or `tokens`).

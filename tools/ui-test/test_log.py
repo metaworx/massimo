@@ -320,6 +320,32 @@ def test_log_change_line(page, case):
     show_view(page, "tiles")
 
 
+SLOTS_SAYS = {
+    "en": ("the Cube's memory slots stay full, 1 free since ", "the Cube's memory slots are free again, 50 free (full since "),
+    "de": ("die Speicherplätze des Cubes bleiben voll, 1 frei seit ", "die Speicherplätze des Cubes sind wieder frei, 50 frei (voll seit "),
+}
+
+
+def test_log_slots_lines(page, case):
+    """A Cube's memory slots that stay full, and are free again, say so
+    with the free slots and since when (AP RadioHealth, Block 5)."""
+    show_view(page, "log")
+    page.wait_for_timeout(1600)
+    page.evaluate("""() => {
+      const since = new Date(Date.now() - 3600e3).toISOString();
+      const send = (summary, level) => state.events.dispatchEvent(new MessageEvent("slots", { data: JSON.stringify({
+        kind: "slots", source: "cube", level, time: new Date().toISOString(), summary }) }));
+      send({ state: "full", free_slots: 1, since }, "warn");
+      send({ state: "free", free_slots: 50, since }, "info");
+    }""")
+    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-slots').length === 2", 5), "the two lines"
+    texts = page.locator("#log-lines .log-line.kind-slots .log-text").all_inner_texts()
+    full, free = SLOTS_SAYS[case.lang]
+    assert any(s.startswith(full) for s in texts), f"the full slots: {texts}"
+    assert any(s.startswith(free) for s in texts), f"the slots free again: {texts}"
+    show_view(page, "tiles")
+
+
 def test_log_source_and_level(page, case):
     """The source and the level chosen are asked of the server and kept in
     the address after the log's page; a reload keeps them, Clear sets

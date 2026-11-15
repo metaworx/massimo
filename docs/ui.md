@@ -876,6 +876,12 @@ the browser keeps which cards are folded.
   and **Use the found address** and **Follow discovery**, which save either
   at once (a Cube of `-addr` or `-sn` has the notice alone);
   the card's badge counts such Cubes;
+  where the Cube's memory slots stayed full with nothing of the server's on
+  its way (`slots_full`), a badge, **memory slots full**, and a notice with the
+  free slots and since when, that they hold radiograms for devices that do not
+  answer and that radio commands wait for free slots, pointing to
+  **Reboot the Cube** below, the owner's, which drops them;
+  the log has its **memory slots** line, a warning until the slots are free;
   where its settings came from (the settings file, changed here,
   or for this run only), and the fields **Name**, **Address** (empty:
   the address the Cube answers discovery from, shown in grey),

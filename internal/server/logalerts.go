@@ -59,6 +59,9 @@ var settleRules = map[string]settleRule{
 	"command": {by: []string{"command"}, match: sameCommand},
 	// the radio held for the duty cycle or the memory slots, till then
 	"hold": {ends: holdEnds},
+	// the Cube's memory slots full for an hour: the reading that has
+	// them free again (slots.go)
+	"slots": {by: []string{"slots"}},
 	// an automatic backup failed: the next one taken
 	"backup": {by: []string{"backup"}},
 	// a restore failed: the next one done

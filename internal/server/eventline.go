@@ -80,6 +80,11 @@ func eventMessage(ev event) string {
 		default:
 			return "structure change not confirmed, memory slots still held"
 		}
+	case "slots":
+		if ev.Summary["state"] == "full" {
+			return "the cube's memory slots stay full with nothing of the server's in flight: radiograms held for devices that do not answer, a reboot of the cube drops them"
+		}
+		return "the cube's memory slots are free again"
 	case "hold":
 		switch ev.Summary["reason"] {
 		case engine.HoldDutyCycle:

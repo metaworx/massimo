@@ -365,6 +365,49 @@ def test_cube_found_elsewhere(page, case):
         "the notice gone once the Cube answers at its address, the panel open"
 
 
+SLOTS_FULL = {"since": "2026-11-14T08:00:00+01:00", "free_slots": 1, "warned": "2026-11-14T09:00:00+01:00"}
+SLOTS_BADGE = {"en": "memory slots full", "de": "Speicherplätze voll"}
+SLOTS_TEXT = {"en": "memory slots stay full (1 free)", "de": "Speicherplätze des Cubes bleiben voll (1 frei)"}
+SLOTS_REBOOT = {"en": "Reboot the Cube, below", "de": "Ein Neustart des Cubes, unten"}
+
+
+def test_cube_slots_full(page, case):
+    """A Cube whose memory slots stayed full (slots_full, stubbed): a
+    badge on the panel's top line, and a notice above its facts with the
+    free slots and since when that points to the Reboot below; both go
+    once the slots are free, the panel open."""
+    def full(route):
+        try:
+            cubes = route.fetch().json()
+            for c in cubes:
+                if c.get("serial") == "KEQ0000100":
+                    c["slots_full"] = SLOTS_FULL
+            route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes))
+        except Exception:  # Route is already handled, or the page closed
+            pass
+    page.route("**/api/v1/cubes", full)
+    try:
+        show_view(page, "system")
+        page.evaluate("loadCubes()")
+        assert wait_until(page, "!!document.querySelector(\"%s .cube-top-line\") && "
+                          "document.querySelector(\"%s .cube-top-line\").textContent.includes(%s)"
+                          % (PANEL, PANEL, json.dumps(SLOTS_BADGE[case.lang])), 5), "the panel's badge"
+        panel, _ = open_panel(page)
+        notice = panel.locator(".cube-slots-state .notice")
+        assert notice.count() == 1, "the notice above the facts"
+        text = notice.inner_text()
+        assert SLOTS_TEXT[case.lang] in text and SLOTS_REBOOT[case.lang] in text, "the free slots and the Reboot: %r" % text
+        assert notice.locator(".notice-since").count() == 1, "since when"
+        assert panel.locator(".cube-reboot-btn").count() == 1, "the Reboot it points to"
+        assert scroll_width(page) <= case.width, "no horizontal scroll with the notice"
+    finally:
+        page.unroute("**/api/v1/cubes")
+    page.evaluate("loadCubes()")
+    assert wait_until(page, "!document.querySelector(\"%s .cube-slots-state .notice\")" % PANEL, 5), \
+        "the notice gone once the slots are free, the panel open"
+    assert SLOTS_BADGE[case.lang] not in page.locator(PANEL + " .cube-top-line").inner_text(), "the badge gone"
+
+
 STALE = {"en": "it still holds the server's old connection", "de": "Er hält noch dessen alte Verbindung"}
 STALE_BADGE = {"en": "old connection", "de": "alte Verbindung"}
 

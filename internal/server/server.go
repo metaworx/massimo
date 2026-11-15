@@ -273,6 +273,10 @@ type Options struct {
 	// notifyClock is the notification rules' clock, for the tests; nil
 	// is the real one.
 	notifyClock notify.Clock
+	// checkClock is the clock of the radio health checks, such as the
+	// readings of the Cubes' free slots (slots.go), for the tests; nil is
+	// the real one.
+	checkClock func() time.Time
 	// Deliverers take a user's notifications beside Web Push: an app
 	// embedding the server shows them itself (push.Local).
 	Deliverers []push.Deliverer
@@ -483,6 +487,9 @@ type runtime struct {
 	// sentTo names, per device, the command last sent to it, for the
 	// device's next state line (proxylog.go).
 	sentTo stateCommands
+	// slots is the readings of the Cube's free slots, for the warning
+	// of slots that stay full (slots.go).
+	slots slotWatch
 }
 
 // lockStructure takes the Cube's structure lock, so that one change of
@@ -1002,6 +1009,9 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			}
 			if e.Kind == cubelan.EventConfig && len(ev.Changed) > 0 {
 				s.publishVirtualConfig(rt, e.Device, ev.Changed, ev.Etag)
+			}
+			if e.Kind == cubelan.EventConnected {
+				s.slotsGreeting(ctx, rt) // the greeting's free slots (slots.go)
 			}
 		}
 	}
@@ -1562,6 +1572,11 @@ type cubeView struct {
 	// ProxyFailing lists the Cube's proxy listeners that do not listen,
 	// and are tried again (runtimes.go).
 	ProxyFailing []proxyFailure `json:"proxy_failing,omitempty"`
+	// SlotsFull says that the Cube's memory slots stayed full, with
+	// nothing of the server's in flight, from its since on (slots.go):
+	// radiograms held for devices that do not answer, which a reboot of
+	// the Cube drops; absent otherwise.
+	SlotsFull *slotsFull `json:"slots_full,omitempty"`
 	// MAC and LastSeen come from discovery: the Cube's MAC address and
 	// when it last answered.
 	MAC      string     `json:"mac,omitempty"`
@@ -1646,6 +1661,7 @@ func (s *Server) summary(rt *runtime) cubeView {
 	}
 	v.Rooms, v.Devices = view.Counts(snap, rt.hidden())
 	v.Problems = s.problemsOf(rt)
+	v.SlotsFull = rt.slotsState()
 	return v
 }
 

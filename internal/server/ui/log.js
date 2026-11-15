@@ -24,7 +24,7 @@ const LOG_KINDS = ["connected", "disconnected", "hello", "metadata", "config", "
   "device_forgotten", "cube_found", "restore_step", "restore_done",
   "cube_gone", "address_changed", "server_started", "server_stopping", "settings_read", "restart", "reboot", "reboot_cancelled",
   "update", "update_result", "backup", "backup_deleted", "backups_pruned", "log_pruned", "log_rotated", "restore_started",
-  "change", "command", "hold", "structure", "login", "login_failed", "locked_out", "audit_pruned",
+  "change", "command", "hold", "structure", "slots", "login", "login_failed", "locked_out", "audit_pruned",
   "proxy_connected", "proxy_disconnected", "proxy_refused", "proxy_discarded", "proxy_deleted", "proxy_delete_refused", "proxy_pairing", "proxy_warning"];
 
 // LOG_RANGES are the choices of how far back the log goes: the newest
@@ -410,6 +410,11 @@ function logSummaryText(kind, s, serial) {
       if (s.flagged) parts.push(t("log.sum.structureFlagged", { devices: s.flagged.map(rfLabel).join(", ") }));
       if (s.link_error) parts.push(t("log.sum.structureLink", { devices: s.link_error.map(rfLabel).join(", ") }));
       return parts.join("; ");
+    }
+    case "slots": {
+      const since = s.since ? fmtLogTime(new Date(s.since)) : "–";
+      if (s.state === "full") return t("log.sum.slotsFull", { slots: num(s.free_slots), since });
+      return t("log.sum.slotsFree", { slots: num(s.free_slots), since });
     }
     case "hold":
       if (s.reason === "duty_cycle") return t("log.sum.holdDuty", { duty: num(s.duty_pct), until: s.until ? fmtLogTime(new Date(s.until)) : "–" });

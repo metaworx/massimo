@@ -2829,7 +2829,10 @@ paths:
         commands waiting); structure, source cube (a removal, placement or
         move read back from the Cube's free slots: action, outcome,
         before, free_slots, minutes, held or no_reading, flagged,
-        link_error in "summary"); the server's sign-ins, source server, for a
+        link_error in "summary"); slots, source cube (the Cube's memory
+        slots full for an hour with nothing of the server's in flight, at
+        warn, and free again, at info: state full or free, free_slots,
+        since in "summary"); the server's sign-ins, source server, for a
         user with audit alone: login, login_failed, locked_out; the LAN
         proxy's, source proxy: proxy_connected, proxy_disconnected,
         proxy_refused, proxy_discarded, proxy_deleted, proxy_delete_refused,
@@ -4295,6 +4298,14 @@ components:
         found_address: {type: string, description: "The host discovery last found the Cube at; differs from address where the server connects through a proxy or to a fixed address the Cube has left"}
         found_elsewhere: {$ref: '#/components/schemas/FoundElsewhere'}
         other_network: {type: boolean, description: "True where the address the server connects to lies in none of this machine's networks: it reaches the Cube only through a router; absent otherwise, and for a host name"}
+        slots_full:
+          type: object
+          description: "The Cube's memory slots full (one free or none) at two readings an hour apart with nothing of the server's in flight: radiograms held for devices that do not answer, which a reboot of the Cube drops; absent otherwise (docs/api-v1.md, GET /api/v1/cubes)"
+          required: [since, free_slots, warned]
+          properties:
+            since: {type: string, format: date-time, description: The first of the full readings}
+            free_slots: {type: integer, description: The free slots at the last reading}
+            warned: {type: string, format: date-time, description: When the log's slots warning was given}
         problems:
           type: array
           description: "The Cube's visible devices with a problem (a transmit or link error, a low battery, a window open), each with its room's name; absent where none"
