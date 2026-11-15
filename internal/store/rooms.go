@@ -106,7 +106,8 @@ func (s *Store) SyncRooms(ctx context.Context, cubeID int64, ids []uint8) ([]Roo
 		if named[r.RoomID] {
 			continue
 		}
-		if _, err := tx.ExecContext(ctx, `UPDATE rooms SET deleted_at = ?, updated_at = ?, version = version + 1 WHERE uuid = ?`, now, now, r.UUID); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE rooms SET deleted_at = ?, updated_at = ?, updated_by = NULL, origin = ?, version = version + 1 WHERE uuid = ?`,
+			now, now, s.nodeID, r.UUID); err != nil {
 			return nil, fmt.Errorf("store: rooms: %w", err)
 		}
 	}
@@ -115,8 +116,8 @@ func (s *Store) SyncRooms(ctx context.Context, cubeID int64, ids []uint8) ([]Roo
 			continue
 		}
 		live[id] = true
-		if _, err := tx.ExecContext(ctx, `INSERT INTO rooms (uuid, cube_id, room_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
-			newUUID(), cubeID, int(id), now, now); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO rooms (uuid, cube_id, room_id, created_at, updated_at, origin) VALUES (?, ?, ?, ?, ?, ?)`,
+			newUUID(), cubeID, int(id), now, now, s.nodeID); err != nil {
 			return nil, fmt.Errorf("store: rooms: %w", err)
 		}
 	}
@@ -145,13 +146,9 @@ func (s *Store) SetRoomSettings(ctx context.Context, cubeID int64, roomID uint8,
 	if a := set.RFAddress; a != nil && *a != "" && !rfAddressText.MatchString(*a) {
 		return Room{}, fmt.Errorf("store: rf_address %q: six hex digits in lower case", *a)
 	}
-	var user any
-	if by != 0 {
-		user = by
-	}
 	res, err := s.db.ExecContext(ctx, `UPDATE rooms SET temp_method = coalesce(?, temp_method), rf_address = coalesce(?, rf_address),
-		updated_at = ?, updated_by = ?, version = version + 1 WHERE cube_id = ? AND room_id = ? AND deleted_at IS NULL`,
-		set.TempMethod, set.RFAddress, s.nowText(), user, cubeID, int(roomID))
+		updated_at = ?, updated_by = ?, origin = ?, version = version + 1 WHERE cube_id = ? AND room_id = ? AND deleted_at IS NULL`,
+		set.TempMethod, set.RFAddress, s.nowText(), nullID(by), s.nodeID, cubeID, int(roomID))
 	if err != nil {
 		return Room{}, fmt.Errorf("store: room %d: %w", roomID, err)
 	}
