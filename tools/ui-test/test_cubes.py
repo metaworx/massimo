@@ -267,11 +267,14 @@ def test_proxy_not_listening(page, case):
     under the proxy address with the error and since when; an open
     panel drops the notice once the listener listens."""
     def failing(route):
-        cubes = route.fetch().json()
-        for c in cubes:
-            if c.get("serial") == "KEQ0000100":
-                c["proxy_failing"] = [FAILING]
-        route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes))
+        try:
+            cubes = route.fetch().json()
+            for c in cubes:
+                if c.get("serial") == "KEQ0000100":
+                    c["proxy_failing"] = [FAILING]
+            route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes))
+        except Exception:  # Route is already handled, or the page closed
+            pass
     page.route("**/api/v1/cubes", failing)
     try:
         show_view(page, "system")
