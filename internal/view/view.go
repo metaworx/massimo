@@ -369,11 +369,12 @@ func Counts(snap *cubelan.Snapshot, h Hidden) (rooms, devices int) {
 // Pending is the number of radiograms the Cube has sent and no device
 // has acknowledged yet (memory slots in use); their effect is not in the
 // device states yet. It comes from the budget when one was observed,
-// else from the greeting.
+// else from the greeting where that carries the slots; with no slot
+// free, every slot is in use.
 func Pending(snap *cubelan.Snapshot, b cubelan.Budget) int {
 	if b.UpdatedAt.IsZero() {
-		if h := snap.Hello(); h != nil {
-			b = cubelan.Budget{FreeMemorySlots: h.FreeMemorySlots, MaxSlots: h.FreeMemorySlots}
+		if h := snap.Hello(); h != nil && len(h.Fields) > 6 {
+			b = cubelan.Budget{FreeMemorySlots: h.FreeMemorySlots, MaxSlots: h.FreeMemorySlots, UpdatedAt: snap.HelloAt()}
 		}
 	}
 	return b.Pending()

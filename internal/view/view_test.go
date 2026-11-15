@@ -130,6 +130,11 @@ func TestPending(t *testing.T) {
 	if n := Pending(snap, b); n != 3 {
 		t.Fatalf("pending %d", n)
 	}
+	// No slot free: all 50 are in use.
+	b.FreeMemorySlots = 0
+	if n := Pending(snap, b); n != 50 {
+		t.Fatalf("pending with no slot free %d", n)
+	}
 }
 
 func TestAgesAndStale(t *testing.T) {

@@ -32,13 +32,16 @@ type Budget struct {
 const MemorySlots = 50
 
 // Pending returns how many radiograms the Cube still holds unanswered,
-// derived from the free memory slots.
+// derived from the free memory slots: every slot when none is free, as
+// on a Cube whose radiograms wait for devices that never answer, which
+// held all its slots for days (2026-02-19 to 23). A budget the Cube has
+// not reported yet (UpdatedAt zero) holds none.
 func (b Budget) Pending() int {
 	capacity := max(b.MaxSlots, MemorySlots)
-	if b.FreeMemorySlots <= 0 || b.FreeMemorySlots >= capacity {
+	if b.UpdatedAt.IsZero() || b.FreeMemorySlots >= capacity {
 		return 0
 	}
-	return capacity - b.FreeMemorySlots
+	return capacity - max(b.FreeMemorySlots, 0)
 }
 
 type budgetTracker struct {
@@ -61,8 +64,11 @@ func (t *budgetTracker) get() Budget {
 // Budget returns the latest radio budget, from the last H line or S reply.
 func (c *Client) Budget() Budget { return c.budget.get() }
 
+// noteBudget takes the budget of a greeting that carries it: the short H
+// of the portal connection has no fields 5 and 6, and says nothing about
+// the slots.
 func (c *Client) noteBudget(h *cube.Hello) {
-	if h != nil {
+	if h != nil && len(h.Fields) > 6 {
 		c.budget.update(h.DutyCycle, h.FreeMemorySlots, time.Now())
 	}
 }

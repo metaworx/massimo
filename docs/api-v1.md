@@ -1461,7 +1461,8 @@ Until then it is in `proxy_failing`, not in `proxy_listening`:
 the share of the hourly radio budget already used,
 and the free memory slots (each unacknowledged radiogram occupies one).
 `pending_radiograms` is the number of slots in use,
-that is commands the Cube has sent and no device has acknowledged yet;
+that is commands the Cube has sent and no device has acknowledged yet,
+all 50 when no slot is free, and 0 until the Cube has reported its budget;
 a setpoint shows in a device's state once that device has acknowledged it,
 and the mode follows only with its next report,
 so a non-zero value says the states may still change.

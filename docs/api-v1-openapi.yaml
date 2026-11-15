@@ -3478,7 +3478,7 @@ components:
               ok: {type: boolean}
               discarded: {type: boolean, description: Always false on 200; a discarded command answers 502}
               budget: {$ref: "#/components/schemas/Budget"}
-        pending_radiograms: {type: integer, description: Radiograms sent by the Cube and not yet acknowledged by a device (memory slots in use)}
+        pending_radiograms: {type: integer, description: "Radiograms sent by the Cube and not yet acknowledged by a device (memory slots in use): all of them when no slot is free, 0 until the Cube has reported its budget"}
     BadRequest:
       description: Bad input
       content:
