@@ -1,0 +1,594 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 The Massimo Authors
+
+# The map of tools/ui-split/split.py (README.md): for each script that
+# is cut, the scripts it is cut into in their load order, a sentence
+# for each new one's header, and every top-level item with the script
+# it belongs in, in the order the scripts get them. A declaration is
+# named by its name, anything else by "> " and its first line.
+
+[app.js] app.js header.js home.js prefs.js
+about header.js: The Massimo web UI, the header: the chosen Cube's radio budget, the time of the last update with the server's clock, the Cube choice with each Cube's network sign and the problems list, the version with the TLS notice, the facts that fit the header's width, and the server's sign, which follows the server's version and its updates.
+about home.js: The Massimo web UI, the home notice, which says on Rooms why it shows nothing or only what the server last had, and the search for Cubes on the LAN from the Cube choice, with the Cubes it finds.
+about prefs.js: The Massimo web UI, My settings: the switches that keep a setting on this device alone, the wiring of the settings' rows, and the choice of language.
+app.js    state
+app.js    $
+app.js    > // --- storage ----------------------------------------------------------
+app.js    readStored
+app.js    store
+app.js    appBridge
+app.js    readToken
+app.js    > // --- the scopes of the settings ----------------------------------------
+app.js    SETTING_KEYS
+app.js    SETTING_LABELS
+app.js    SETTING_STORE
+app.js    validSetting
+app.js    storedSettings
+app.js    deviceOverrides
+app.js    storeDeviceOverrides
+app.js    deviceOnly
+app.js    readSetting
+app.js    loadSettings
+app.js    storeUserSetting
+app.js    forgetUserSettings
+app.js    setSetting
+app.js    setDeviceOnly
+app.js    applyStoredSettings
+prefs.js  renderDeviceSwitches
+app.js    > // --- API --------------------------------------------------------------
+app.js    base
+app.js    apiRequest
+app.js    api
+app.js    apiRaw
+app.js    devicePath
+app.js    deviceDetail
+app.js    > // --- helpers ----------------------------------------------------------
+app.js    showMessage
+app.js    fmtTemp
+app.js    > // --- ages of values ---------------------------------------------------
+app.js    observedSince
+app.js    SINCE_MS
+app.js    fmtUnit
+app.js    fmtAge
+app.js    fmtShortTime
+app.js    ageEl
+app.js    fillAge
+app.js    refreshAges
+app.js    isThermostat
+app.js    deviceName
+app.js    localDateTimeValue
+app.js    tomorrowMorning
+app.js    > // --- help -------------------------------------------------------------
+app.js    helpOpen
+app.js    helpSeq
+app.js    helpParts
+app.js    initHelpSlots
+app.js    > // --- cube clock -------------------------------------------------------
+app.js    lastWeekday
+app.js    cubeOffset
+app.js    cubeInstant
+app.js    fmtInstant
+app.js    clockText
+header.js > // --- header -----------------------------------------------------------
+header.js budgetFacts
+header.js renderHeader
+header.js serverSkew
+header.js noteServerClock
+header.js fmtSince
+header.js updatedTimer
+header.js renderUpdated
+header.js LINK_SIGN
+header.js linkSign
+header.js linkWord
+header.js cubeSignEl
+header.js renderCubeSelect
+header.js cubeProblemEntries
+header.js foundEntry
+header.js cubeEntry
+header.js cubeSettingItems
+header.js problemsLabelOf
+header.js renderCubeProblems
+app.js    applySettings
+app.js    > // --- loading ----------------------------------------------------------
+app.js    loadCubes
+app.js    timeOf
+app.js    linkState
+app.js    linkText
+home.js   renderHomeNotice
+app.js    loadTimeZone
+app.js    fetchRooms
+app.js    loadRooms
+app.js    splitVirtual
+app.js    refresh
+home.js   > // --- Cube discovery ---------------------------------------------------
+home.js   DISCOVER
+home.js   discovery
+app.js    isConfigured
+home.js   showSearch
+home.js   discoverCubes
+home.js   addFound
+home.js   showFound
+app.js    selectCube
+header.js > // --- version ----------------------------------------------------------
+header.js somethingOpen
+header.js splitVersion
+header.js renderTLS
+header.js certText
+header.js renderVersionTitle
+header.js fitFacts
+header.js watchFacts
+header.js checkVersion
+header.js SERVER_SIGN
+header.js serverState
+header.js renderServerSign
+header.js serverSignClick
+header.js serverReached
+header.js updateDue
+app.js    > // --- polling ----------------------------------------------------------
+app.js    poll
+app.js    clearCubeData
+app.js    startPolling
+app.js    > // --- events -----------------------------------------------------------
+app.js    EVENTS_RETRY_MS
+app.js    EVENTS_RETRY_MAX_MS
+app.js    eventsGen
+app.js    eventsRetry
+app.js    eventsTimer
+app.js    eventsLast
+app.js    closeEvents
+app.js    retryEvents
+app.js    connectEvents
+prefs.js  > // --- settings panel ---------------------------------------------------
+prefs.js  initSettings
+app.js    > // --- wiring -----------------------------------------------------------
+prefs.js  renderLangSelect
+app.js    langError
+app.js    changeLanguage
+app.js    showLanguageError
+app.js    applyLanguage
+app.js    init
+app.js    > document.addEventListener("DOMContentLoaded", init);
+
+[tiles.js] rooms.js tiles.js devices.js unlisted.js house.js
+about rooms.js: The Massimo web UI, the rooms: a room's facts, the drawing of every room's tile into Rooms and again in place, a device's state event, the texts of a result, the actions behind a tile's controls, and what holds for every tile (Escape closes the open panels).
+about devices.js: The Massimo web UI, a tile's device rows: each device's badges and values, its row, the list of a room's devices, and the virtual thermostat's.
+about unlisted.js: The Massimo web UI, Devices without a room: the devices of the Cube that are in no room, each with Put into a room and Remove from the Cube.
+about house.js: The Massimo web UI, the House tile: the mode for the whole house or the rooms ticked, with its panel, and its wiring.
+rooms.js    STEP
+rooms.js    MIN_TEMP
+rooms.js    MAX_TEMP
+rooms.js    DEFAULT_TEMP
+rooms.js    SEND_DELAY_MS
+rooms.js    RESULT_FADE_MS
+rooms.js    > // --- room facts -------------------------------------------------------
+rooms.js    roomThermostat
+rooms.js    roomState
+rooms.js    roomModes
+rooms.js    roomActualDevice
+rooms.js    roomActual
+rooms.js    staleText
+rooms.js    received
+rooms.js    roomUI
+rooms.js    clampTemp
+rooms.js    apiUntil
+rooms.js    fmtUntil
+tiles.js    > // --- rendering --------------------------------------------------------
+rooms.js    renderRooms
+unlisted.js unlistedUI
+unlisted.js renderUnlisted
+unlisted.js showUnlistedResult
+unlisted.js removeFromCube
+tiles.js    renderRoom
+tiles.js    renderNotReady
+tiles.js    PROBLEM_KINDS
+tiles.js    PROBLEM_SIGNS
+tiles.js    problemIcon
+tiles.js    windowState
+tiles.js    WINDOW_TONE
+tiles.js    windowTimer
+tiles.js    planWindowRedraw
+tiles.js    MODE_TONE
+tiles.js    modeTone
+tiles.js    deviceIcon
+tiles.js    deviceProblems
+tiles.js    problemsLabel
+tiles.js    renderProblems
+tiles.js    renderStale
+tiles.js    renderSetpoint
+tiles.js    renderMore
+tiles.js    presetTemps
+tiles.js    presetBody
+tiles.js    presetLabel
+tiles.js    sendPreset
+tiles.js    drawSetpoint
+tiles.js    SENDING_BUTTON
+tiles.js    WRITE_BUTTONS
+tiles.js    sendingSelector
+tiles.js    markSending
+tiles.js    redrawSending
+tiles.js    tileWrite
+tiles.js    renderMenu
+tiles.js    renderTools
+tiles.js    closeMenu
+tiles.js    renderVacation
+tiles.js    leaveEditing
+tiles.js    openVacation
+tiles.js    closeVacation
+tiles.js    renderDeleteConfirm
+devices.js  > // --- devices ----------------------------------------------------------
+devices.js  deviceBadges
+devices.js  valueCell
+devices.js  deviceValues
+devices.js  renderDevice
+devices.js  fillDevices
+devices.js  renderVirtual
+tiles.js    toggleDevices
+rooms.js    rendering
+rooms.js    rerenderRoom
+rooms.js    configFocused
+rooms.js    updateDevice
+rooms.js    > // --- results ----------------------------------------------------------
+rooms.js    resultText
+rooms.js    errorText
+rooms.js    modeName
+rooms.js    typeName
+rooms.js    showTileResult
+rooms.js    > // --- actions ----------------------------------------------------------
+rooms.js    stepSetpoint
+rooms.js    cancelSetpoint
+rooms.js    flushSetpoint
+rooms.js    sendRoomSetpoint
+rooms.js    setpointRequest
+rooms.js    setLock
+rooms.js    lockRoom
+rooms.js    lockDevice
+rooms.js    deleteRoom
+house.js    > // --- house ------------------------------------------------------------
+house.js    housePanel
+house.js    houseMode
+house.js    houseDuration
+house.js    houseRoomRow
+house.js    renderHouseRooms
+house.js    houseSendCheck
+house.js    updateHousePanel
+house.js    openHouse
+house.js    closeHouse
+house.js    sendHouse
+house.js    houseRequests
+rooms.js    closePanels
+rooms.js    > // --- wiring -----------------------------------------------------------
+house.js    initHouse
+rooms.js    initRooms
+
+[cubes.js] cubes.js cube-panel.js pairing.js
+about cube-panel.js: The Massimo web UI, a Cube's panel: its head with its badges, its facts, its actions (save, add, reboot, remove), the editor of its hidden devices, and the panel itself, in System settings → Cubes and in Cube settings.
+about pairing.js: The Massimo web UI, pairing a device with a Cube: the time, Start, the countdown with Stop, each device that joins, and the form that puts a device into a room (pairDeviceForm, which Devices without a room uses too).
+cubes.js      cubesUI
+cubes.js      cubesMsg
+cubes.js      cubesVisible
+cubes.js      cubesPolled
+cube-panel.js hostPort
+cube-panel.js fillCubeFacts
+cube-panel.js fillLinkState
+cube-panel.js fillAddressState
+cube-panel.js fillProxyState
+cube-panel.js proxyFailing
+cube-panel.js valueText
+cube-panel.js deviceLabel
+cube-panel.js loadCubeDevices
+cube-panel.js cubeAction
+cube-panel.js saveCube
+cube-panel.js addCube
+cube-panel.js rebootRow
+cube-panel.js rebootCube
+cube-panel.js removeCube
+cube-panel.js fillHiddenEditor
+cube-panel.js fillHiddenList
+cube-panel.js fillDatalist
+cube-panel.js devicesLoaded
+cube-panel.js sameList
+pairing.js    > // --- pairing ----------------------------------------------------------
+pairing.js    cubePath
+pairing.js    pairingOf
+pairing.js    cubeRooms
+pairing.js    loadCubeRooms
+pairing.js    applyPairing
+pairing.js    loadPairing
+pairing.js    PAIRING_BUTTONS
+pairing.js    markPairing
+pairing.js    pairingWrite
+pairing.js    startPairing
+pairing.js    stopPairing
+pairing.js    startPairingTick
+pairing.js    stopPairingTick
+pairing.js    renderCountdown
+pairing.js    pairingEvent
+pairing.js    pairingJoined
+pairing.js    redrawPairing
+pairing.js    pairingSection
+pairing.js    pairedRow
+pairing.js    pairDeviceForm
+cube-panel.js cubeBadges
+cube-panel.js fillCubeHead
+cube-panel.js cubePanel
+cubes.js      foundRow
+cubes.js      foundWhat
+cubes.js      joinParts
+cubes.js      foundFold
+cubes.js      renderCubesBadges
+cubes.js      renderCubes
+cubes.js      renderCubePage
+cubes.js      foundHints
+cubes.js      initCubes
+cubes.js      > document.addEventListener("DOMContentLoaded", initCubes);
+
+[update.js] update.js maintenance.js system-info.js
+about maintenance.js: The Massimo web UI, Maintenance: the server's restart, the settings file's reload, the reboot of the computer, the card's badge, the announcement on the LAN and the Cube intervals.
+about system-info.js: The Massimo web UI, System info: the store and the settings in effect, the server's facts, its addresses, its proxies and their certificates.
+update.js      updState
+update.js      UPDATE_FLAVOURS
+update.js      updateBusy
+update.js      setUpdateBusy
+update.js      helperText
+update.js      stateText
+update.js      historyLine
+update.js      renderHistory
+update.js      renderUpdate
+update.js      updateOut
+update.js      updateLatest
+update.js      loadUpdate
+update.js      channelFixed
+update.js      channelNote
+update.js      renderChannel
+update.js      loadChannel
+update.js      setChannel
+update.js      followUpdate
+update.js      startUpdate
+update.js      runUpdate
+maintenance.js > // --- the restart ------------------------------------------------------
+maintenance.js RESTART_POLL_MS
+maintenance.js RESTART_WAIT_MS
+maintenance.js restartState
+maintenance.js showRestartText
+maintenance.js renderRestart
+maintenance.js reloadSettings
+maintenance.js loadRestart
+maintenance.js > // --- the reboot of the computer (with reboot) -------------------------
+maintenance.js REBOOT_WAIT_MS
+maintenance.js REBOOT_DELAY_MAX
+maintenance.js rebootState
+maintenance.js showRebootText
+maintenance.js renderReboot
+maintenance.js loadReboot
+maintenance.js rebootDelay
+maintenance.js startReboot
+maintenance.js runReboot
+maintenance.js cancelReboot
+maintenance.js followReboot
+system-info.js > // --- the store and the settings in effect (with settings) -------------
+system-info.js infoState
+system-info.js renderServerInfo
+system-info.js loadServerInfo
+maintenance.js startedAt
+maintenance.js startRestart
+maintenance.js runRestart
+maintenance.js followRestart
+system-info.js OS_NAMES
+system-info.js sysClock
+system-info.js knownZone
+system-info.js clockSpan
+system-info.js SECONDS
+system-info.js offsetOf
+system-info.js serverTime
+system-info.js browserTime
+system-info.js startSystemClock
+system-info.js fillStarted
+system-info.js fillHostName
+system-info.js fillAddresses
+system-info.js fillProxies
+system-info.js certRetry
+system-info.js certPending
+system-info.js certFollow
+system-info.js fillCertificate
+system-info.js loadSystemInfo
+maintenance.js renderMaintBadge
+maintenance.js > // --- the announcement on the LAN (the setting announce) ----------------
+maintenance.js announceUI
+maintenance.js renderAnnounce
+maintenance.js announceWaits
+maintenance.js loadAnnounce
+maintenance.js setAnnounce
+maintenance.js > // --- the Cube intervals (poll_interval, refresh_interval, discover_interval, duty_wait)
+maintenance.js INTERVALS
+maintenance.js intervalsUI
+maintenance.js parseGoDuration
+maintenance.js apiDuration
+maintenance.js intervalLabel
+maintenance.js intervalWaits
+maintenance.js renderInterval
+maintenance.js saveInterval
+update.js      initUpdate
+maintenance.js initMaintenance
+system-info.js initSystemInfo
+update.js      > document.addEventListener("DOMContentLoaded", initUpdate);
+maintenance.js > document.addEventListener("DOMContentLoaded", initMaintenance);
+system-info.js > document.addEventListener("DOMContentLoaded", initSystemInfo);
+
+[log.js] log.js pages.js
+about pages.js: The Massimo web UI, the pages and the main menu: which page is shown, who may open it, the page and the log's choices in the address, and the scroll each page keeps.
+log.js   LOG_MAX_LINES
+log.js   LOG_PAGE
+log.js   LOG_KINDS
+log.js   LOG_RANGES
+log.js   LOG_COUNT_RANGE
+log.js   LOG_COUNT
+log.js   LOG_POLL_MS
+log.js   logState
+log.js   LOG_SOURCES
+log.js   LOG_KIND_SOURCE
+log.js   LOG_LEVELS
+log.js   logAtLevel
+log.js   logOfChoices
+log.js   logLoadUsers
+log.js   logRoomsOf
+log.js   logDevicesOf
+log.js   logDevice
+log.js   logCubeName
+log.js   logLineCube
+log.js   logNamePath
+log.js   logDeviceKey
+log.js   logDeviceName
+log.js   logDeviceSerial
+log.js   logDeviceRoom
+log.js   upperFirst
+log.js   logOfDevice
+log.js   logStateText
+log.js   logChangesText
+log.js   logListText
+log.js   logValue
+log.js   logConfigText
+log.js   logSummaryText
+log.js   logTargetText
+log.js   logChangeText
+log.js   logWord
+log.js   logLine
+log.js   logText
+log.js   logOwnText
+log.js   logKind
+log.js   fmtLogTime
+log.js   logRangeStart
+log.js   logInQuery
+log.js   logLineMatches
+log.js   renderLogLine
+log.js   toggleLogCommand
+log.js   renderLogCommand
+log.js   renderLog
+log.js   renderOlder
+log.js   logCursor
+log.js   logURL
+log.js   logQuery
+log.js   appendLogEvent
+log.js   addLogLine
+log.js   loadLog
+log.js   loadOlder
+log.js   logSameLine
+log.js   pollLog
+log.js   logPollSet
+log.js   logLoadCubeRooms
+log.js   logCubesKey
+log.js   logCubesPolled
+log.js   pruneLogRange
+log.js   renderLogClear
+log.js   logChoicesChanged
+log.js   clearLogFilter
+log.js   fillLogSelects
+log.js   logCubeChanged
+pages.js > // The pages of the main area: Rooms ("tiles"), the header's one button,
+log.js   > // --- the log's unseen problems (AP LogAlerts) ---------------------------
+log.js   > // The log's button shows the worst of the log's warnings and errors that
+log.js   LOG_SEEN_KEY
+log.js   LOG_SEEN_LINES
+log.js   logAlerts
+log.js   logSeenOwner
+log.js   validSeen
+log.js   loadLogSeen
+log.js   saveLogSeen
+log.js   loadLogAlerts
+log.js   setLogAlerts
+log.js   renderLogSign
+log.js   markLogSeen
+log.js   markAllLogSeen
+pages.js VIEW_SECTION
+pages.js VIEW_BUTTON
+pages.js VIEW_HASH
+pages.js MENU_VIEWS
+pages.js SETTINGS_PAGES
+pages.js CARD_HASH
+pages.js currentView
+pages.js viewOfHash
+pages.js logHash
+pages.js readLogHash
+pages.js setAddress
+pages.js showAddress
+pages.js mayShow
+pages.js markSettingsPages
+pages.js fitSettingsPages
+pages.js isShown
+pages.js showView
+pages.js viewScroll
+pages.js restoreScroll
+pages.js onView
+pages.js initPages
+log.js   initLog
+
+[theme.js] theme.js appearance.js
+about appearance.js: The Massimo web UI, the Appearance card of My settings: the choices of mode and scheme, the scheme editor with its contrast hints, and a scheme's export and import as a file.
+theme.js      SCHEME_FORMAT
+theme.js      THEME_MODES
+theme.js      DEFAULT_SCHEME
+theme.js      THEME_TOKENS
+theme.js      CONTRAST_PAIRS
+theme.js      MARK_PAIRS
+theme.js      BUILTIN_SCHEMES
+theme.js      CUSTOM_PREFIX
+theme.js      SCHEME_NAME_MAX
+theme.js      themeState
+theme.js      darkQuery
+theme.js      > // --- colours ----------------------------------------------------------
+theme.js      hexColour
+theme.js      typedColour
+theme.js      luminance
+theme.js      contrastRatio
+theme.js      contrastClass
+theme.js      > // --- schemes ----------------------------------------------------------
+theme.js      tokenSet
+theme.js      schemeName
+theme.js      schemeById
+theme.js      validMode
+theme.js      validScheme
+theme.js      loadCustomSchemes
+theme.js      storeCustomSchemes
+theme.js      forgetCustomSchemes
+theme.js      schemesDocument
+theme.js      takeSchemes
+theme.js      putCustomScheme
+theme.js      schemeDoc
+theme.js      parseSchemeDoc
+theme.js      > // --- applying ---------------------------------------------------------
+theme.js      effectiveMode
+theme.js      applyTheme
+theme.js      reapplyTheme
+theme.js      BLINK_MODES
+theme.js      REDUCED_MOTION
+theme.js      applyBlink
+theme.js      chooseBlink
+theme.js      ICON_SELECTS
+theme.js      iconsDrawn
+theme.js      applyIcons
+theme.js      redrawSigns
+theme.js      chooseIcon
+theme.js      chooseMode
+theme.js      chooseScheme
+appearance.js > // --- settings page ----------------------------------------------------
+appearance.js renderSchemeSelect
+appearance.js applyAppearance
+appearance.js schemeMessage
+appearance.js initAppearance
+appearance.js > // --- the editor -------------------------------------------------------
+appearance.js openSchemeEditor
+appearance.js closeSchemeEditor
+appearance.js resetSchemeDraft
+appearance.js saveSchemeDraft
+appearance.js deleteSchemeDraft
+appearance.js tokenLabel
+appearance.js fillContrast
+appearance.js hexMessage
+appearance.js markHex
+appearance.js renderSchemeSet
+appearance.js renderSchemeEditor
+appearance.js > // --- export and import ------------------------------------------------
+appearance.js fileSlug
+appearance.js exportScheme
+appearance.js importSchemeFile
+theme.js      > loadCustomSchemes();
+theme.js      > applyTheme(readSetting("theme"), readSetting("scheme"));
