@@ -433,7 +433,7 @@ async function pairingWrite(serial, key, fn) {
 function startPairing(serial) {
   const p = pairingOf(serial);
   const secs = Number(p.seconds);
-  if (!Number.isInteger(secs) || secs < 1 || secs > 600) {
+  if (!Number.isInteger(secs) || secs < 1 || secs > 255) { // the longest a Cube keeps (cube.MaxInclusion)
     p.msg = { text: t("pairing.secondsBad"), ok: false };
     redrawPairing(serial);
     return;

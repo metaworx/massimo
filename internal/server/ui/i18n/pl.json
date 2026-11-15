@@ -668,7 +668,7 @@
   "pairing.how": "Start przełącza Cube w tryb parowania. Następnie naciśnij przycisk parowania nowego urządzenia, jak opisuje jego instrukcja; każde urządzenie, które się zgłosi, pojawi się tutaj.",
   "pairing.start": "Start",
   "pairing.stop": "Zatrzymaj",
-  "pairing.secondsBad": "Czas parowania wynosi od 1 do 600 sekund.",
+  "pairing.secondsBad": "Czas parowania wynosi od 1 do 255 sekund.",
   "pairing.failed": "Parowanie: {error}",
   "pairing.left": "Parowanie: jeszcze {seconds} s. Naciśnij teraz przycisk parowania urządzenia.",
   "pairing.ending": "Parowanie się kończy …",

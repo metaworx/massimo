@@ -376,6 +376,8 @@ No device joined in either.
 The original software (1.4.6) sends four hex digits as well
 (`Conversion.toHex16` of `inclusionModeTimeoutSeconds`);
 the time it is configured with was not found.
+Massimo asks for at most 255 s (`cube.MaxInclusion`),
+and a longer time from a proxy client is capped there.
 
 Massimo gives a thermostat it puts into a room, after pairing or in a move
 (`PUT /api/v1/cubes/{sn}/devices/{rf}`, 2026-11-06),

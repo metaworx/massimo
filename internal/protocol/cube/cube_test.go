@@ -375,6 +375,8 @@ func TestCommandExamples(t *testing.T) {
 		{"set group", CmdSetGroup(0x0fc380, 1, false), "s:AAAiAAAAD8OAAAE="},
 		{"remove group", CmdSetGroup(0x0fc380, 1, true), "s:AAAjAAAAD8OAAAE="},
 		{"inclusion", CmdInclusion(60 * time.Second), "n:003c"},
+		{"inclusion, the longest", CmdInclusion(MaxInclusion), "n:00ff"},
+		{"inclusion, capped", CmdInclusion(300 * time.Second), "n:00ff"},
 		{"wakeup", CmdWakeup(0x1e, WakeupRoom, "01"), "z:1e,G,01"},
 		{"delete", CmdDeleteDevices(true, 0x0a0204), "t:01,1,CgIE"},
 		{"portal on", CmdSetPortalInterval(0), "i:00000000,00000000"},

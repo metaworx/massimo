@@ -16,8 +16,10 @@ import (
 // line with the type, radio address and serial of each device that
 // joins. The client tracks the mode so that an N line that arrives long
 // after the n: was written still reaches whoever started it, and ends
-// it on an empty N line, which the Cube is expected to send when the mode
-// ends or is cancelled with x:, or on its own once the time is up.
+// it on an empty N line, which the Cube sends when the time is up (seen
+// on hardware) and is expected to send when x: cancels the mode, or on
+// its own inclusionGrace after the time asked for. The Cube keeps the
+// mode for at most cube.MaxInclusion.
 
 // ErrInclusionActive is returned when inclusion mode is already running.
 var ErrInclusionActive = errors.New("cubelan: pairing is already running")
