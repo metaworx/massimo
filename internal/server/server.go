@@ -189,9 +189,18 @@ type Options struct {
 	// last with a reconnect where none was read; nil takes
 	// DefaultStructureChecks.
 	StructureChecks []time.Duration
-	Logger          *slog.Logger
-	Version         string
-	Queue           engine.Options
+	// ResetSettle is how long after a repair's resets the device list is
+	// read for the flags they cleared (repair_api.go); 0 takes
+	// DefaultResetSettle.
+	ResetSettle time.Duration
+	Logger      *slog.Logger
+	Version     string
+	Queue       engine.Options
+	// driftClock is the room checks' clock (drift.go), for the tests;
+	// nil is time.Now. driftEvery is how often they run: 0 every
+	// minute, a negative value never (the tests run them).
+	driftClock func() time.Time
+	driftEvery time.Duration
 	// Proxy lists the LAN listeners on which the server itself answers
 	// as a Cube (see internal/proxy), one per Cube.
 	// One that cannot listen is tried again until it does.
@@ -462,6 +471,10 @@ type runtime struct {
 	// programs holds the week programmes written and not yet confirmed
 	// by the devices' configurations (etag.go).
 	programs pendingPrograms
+	// drift is the room checks' state: disagreeing members, programme
+	// drift, the re-sends and Massimo's last setpoint per room
+	// (drift.go).
+	drift driftState
 	// proxyVirtual is the Cube's option proxy_virtual: its proxy shows
 	// clients the virtual wall thermostats (proxy_virtual.go).
 	proxyVirtual atomic.Bool
@@ -1426,6 +1439,7 @@ func (s *Server) routes() {
 	api("GET /api/v1/store", "settings", s.getStore)
 	api("GET /api/v1/config", "settings", s.getConfig)
 	s.configRoutes(api)
+	s.repairRoutes(api)
 	s.uiRoutes(mux)
 	s.mux = mux
 	// A write that another site's page sent is refused before it is
@@ -1958,6 +1972,9 @@ func (s *Server) setpoint(w http.ResponseWriter, r *http.Request, rt *runtime, t
 		return err
 	}
 	rt.afterWrite()
+	if t.Room {
+		rt.intend(t.RoomID, mode, req.Temp, until, s.roomNow()) // the room's intended state (drift.go)
+	}
 	answer := rt.setpointConfirm(ctx, t, target, cube.SetTemperature{Mode: mode, Setpoint: req.Temp, Until: until}, "api")
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "discarded": res.Discarded, "budget": res.Budget, "confirmation": answer})
 	return nil

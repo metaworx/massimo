@@ -13,7 +13,7 @@
 // CAPABILITIES are the server's, in its order (docs/api-v1.md,
 // "Authentication"); each hides, as a class needs-<capability> in the
 // markup, what it alone allows.
-const CAPABILITIES = ["read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore",
+const CAPABILITIES = ["read", "preferences", "setpoint", "lock", "configure", "rename", "structure", "pair", "discover", "backup", "restore", "repair",
   "guests", "users", "roles", "roles.disable", "capabilities", "cubes", "cubes.reboot", "settings", "update", "restart", "reboot", "audit",
   "auth", "integrations"];
 

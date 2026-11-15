@@ -215,6 +215,7 @@ func (s *Server) startRuntime(rt *runtime) {
 	run(func() { s.followUps(ctx, rt) })
 	run(func() { s.backupLoop(ctx, rt) })
 	run(func() { s.batteryTicks(ctx, rt) })
+	run(func() { s.roomCheckLoop(ctx, rt) })
 	if s.opts.RefreshInterval > 0 {
 		run(func() { s.refresh(ctx, rt) })
 	}

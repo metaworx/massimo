@@ -21,7 +21,7 @@ const LOG_PAGE = 200;
 // LOG_KINDS are the kinds of event the server sends, in its order
 // (eventKinds in internal/server/log.go, which TestLogKinds compares).
 const LOG_KINDS = ["connected", "disconnected", "hello", "metadata", "config", "state", "pairing_started", "paired", "pairing_ended",
-  "device_forgotten", "cube_found", "restore_step", "restore_done",
+  "device_forgotten", "cube_found", "restore_step", "restore_done", "disagree", "drift",
   "cube_gone", "address_changed", "server_started", "server_stopping", "settings_read", "restart", "reboot", "reboot_cancelled",
   "update", "update_result", "backup", "backup_deleted", "backups_pruned", "log_pruned", "log_rotated", "restore_started",
   "change", "command", "hold", "structure", "unconfirmed", "error_reset", "login", "login_failed", "locked_out", "audit_pruned",
@@ -75,6 +75,7 @@ const LOG_KIND_SOURCE = {
   state: "device", config: "device", paired: "device", device_forgotten: "device", error_reset: "device", unconfirmed: "device",
   connected: "cube", disconnected: "cube", hello: "cube", metadata: "cube", pairing_started: "cube", pairing_ended: "cube",
   cube_found: "cube", cube_gone: "cube", address_changed: "cube",
+  disagree: "cube", drift: "device",
   change: "config",
   command: "queue", hold: "queue",
   login: "server", login_failed: "server", locked_out: "server",
@@ -424,6 +425,10 @@ function logSummaryText(kind, s, serial) {
       if (s.link_error) parts.push(t("log.sum.structureLink", { devices: s.link_error.map(rfLabel).join(", ") }));
       return parts.join("; ");
     }
+    case "disagree":
+      return logDisagreeText(s, serial);
+    case "drift":
+      return logDriftText(s);
     case "hold":
       if (s.reason === "duty_cycle") return t("log.sum.holdDuty", { duty: num(s.duty_pct), until: s.until ? fmtLogTime(new Date(s.until)) : "–" });
       return t("log.sum.holdSlots", { slots: num(s.free_slots), wait: num(s.wait_s) });
@@ -451,6 +456,74 @@ function logSummaryText(kind, s, serial) {
       return logWord("log.proxyWarn.", s.what);
     case "locked_out":
       return t("log.sum.lockedOut", { remote: s.remote || "–", for: s.for || "–", after: logWord("log.lockedAfter.", s.after) });
+  }
+  return "";
+}
+
+// logRoomName names a room of a line's Cube by its name, else its
+// number.
+function logRoomName(id, serial) {
+  const r = (logRoomsOf(serial) || { rooms: [] }).rooms.find((x) => x.id === id);
+  return r && r.name ? r.name : t("log.room", { id });
+}
+
+// logSettingText is a thermostat's setting as a room check names it: its
+// mode, its setpoint (or the week programme, for auto without one) and
+// its vacation's end.
+function logSettingText(m) {
+  const parts = [logWord("log.mode.", m.mode)];
+  if (m.setpoint !== undefined) parts.push(t("log.set", { v: fmtNum(m.setpoint, 1) }));
+  else if (m.mode === "auto") parts.push(t("log.disagree.program"));
+  if (m.until) parts.push(t("log.until", { until: m.until }));
+  return parts.join(" ");
+}
+
+// logDisagreeText is a room check's line of a room whose thermostats
+// disagree (drift.go): the report with each member's setting, the
+// room's state sent again and from where, or why not, and the members
+// agreeing again.
+function logDisagreeText(s, serial) {
+  const room = logRoomName(s.room, serial);
+  const num = (v) => (v === undefined || v === null ? "–" : String(v));
+  const member = (rf) => {
+    const d = logDevice(rf, serial);
+    return d ? deviceName(d) : rf;
+  };
+  switch (s.outcome) {
+    case "differ": {
+      const members = (s.members || []).map((m) => member(m.rf) + ": " + logSettingText(m)).join(", ");
+      const what = (s.differs || []).map((w) => logWord("log.disagree.what.", w)).join(", ");
+      return t("log.sum.disagreeDiffer", { room, what: what || "–", minutes: num(s.minutes), members: members || "–" });
+    }
+    case "resent":
+      return t("log.sum.disagreeResent", { room, state: logSettingText(s), from: logWord("log.disagree.from.", s.from) });
+    case "resend_failed":
+      return t("log.sum.disagreeFailed", { room, state: logSettingText(s) });
+    case "not_resent":
+      return t("log.sum.disagreeNotResent", { room, why: logWord("log.disagree.why.", s.why) });
+    case "agree":
+      return t("log.sum.disagreeAgree", { room, minutes: num(s.minutes) });
+  }
+  return "";
+}
+
+// logDriftText is a room check's line of a thermostat that does not
+// follow its week programme (drift.go): its setpoint and the
+// programme's, its clock an hour off, the radiogram that failed; and
+// its following again.
+function logDriftText(s) {
+  const num = (v) => (v === undefined || v === null ? "–" : String(v));
+  switch (s.outcome) {
+    case "not_following": {
+      const parts = [t("log.sum.driftNot", { setpoint: fmtNum(s.setpoint, 1), expected: fmtNum(s.expected, 1), at: s.switch_at || "–" })];
+      if (s.hour_off) parts.push(t(s.auto_dst === false ? "log.sum.driftHourNoDst" : "log.sum.driftHour"));
+      if (s.failed_radiogram) parts.push(t("log.errorRadiogram", { radiogram: radiogramName(s.failed_radiogram) })); // tiles.js
+      return parts.join("; ");
+    }
+    case "follows":
+      return t("log.sum.driftFollows", { minutes: num(s.minutes) });
+    case "left_auto":
+      return t("log.sum.driftLeftAuto", { mode: logWord("log.mode.", s.mode) });
   }
   return "";
 }

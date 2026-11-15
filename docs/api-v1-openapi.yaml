@@ -2525,6 +2525,319 @@ paths:
         "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
+  /api/v1/cubes/{sn}/repair/reset:
+    get:
+      summary: Preview the reset of every communication error of the Cube
+      x-capability: repair
+      description: |
+        One r: per device of the Cube whose error flag (byte 5's 0x08, the
+        communication error) is set, the hidden ones left out: the Cube's
+        bookkeeping, at no radio cost. Nothing to send where no device is flagged. The
+        run reads the device list about two seconds later and names the
+        devices still flagged (still_flagged).
+        The preview sends nothing: the lines a run would send and what they
+        cost, and the plan's hash for the run.
+      parameters: [{$ref: "#/components/parameters/sn"}]
+      responses:
+        "200": {$ref: "#/components/responses/RepairPreview"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NotConnected"}
+    post:
+      summary: Reset every communication error of the Cube
+      x-capability: repair
+      description: |
+        Runs what the preview of the same path showed, once the plan it
+        computes again has the preview's hash.
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/repairPlan"}, {$ref: "#/components/parameters/idempotencyKey"}]
+      responses:
+        "200": {$ref: "#/components/responses/RepairRun"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/RepairRefused"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "502": {$ref: "#/components/responses/RepairStopped"}
+        "503": {$ref: "#/components/responses/NotConnected"}
+  /api/v1/cubes/{sn}/rooms/{id}/repair/reset:
+    get:
+      summary: Preview the reset of the communication errors of a room
+      x-capability: repair
+      description: |
+        One r: per device whose C line names the room and whose error flag
+        is set, at no radio cost; as the Cube's reset, for the room.
+        The preview sends nothing: the lines a run would send and what they
+        cost, and the plan's hash for the run.
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}]
+      responses:
+        "200": {$ref: "#/components/responses/RepairPreview"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NotConnected"}
+    post:
+      summary: Reset the communication errors of a room
+      x-capability: repair
+      description: |
+        Runs what the preview of the same path showed, once the plan it
+        computes again has the preview's hash.
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}, {$ref: "#/components/parameters/repairPlan"}, {$ref: "#/components/parameters/idempotencyKey"}]
+      responses:
+        "200": {$ref: "#/components/responses/RepairRun"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/RepairRefused"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "502": {$ref: "#/components/responses/RepairStopped"}
+        "503": {$ref: "#/components/responses/NotConnected"}
+  /api/v1/cubes/{sn}/rooms/{id}/repair/master:
+    get:
+      summary: Preview naming a thermostat of the room as its master
+      x-capability: repair
+      description: |
+        Where the metadata's master of the room is no thermostat whose C line
+        names the room, the metadata is written with the room's wall
+        thermostat as master, else its first radiator thermostat
+        (AP DeviceUnPairingFix, D167); metadata only, no radio. Nothing to send where
+        the master is valid or the room has no thermostat.
+        The preview sends nothing: the lines a run would send and what they
+        cost, and the plan's hash for the run.
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}]
+      responses:
+        "200": {$ref: "#/components/responses/RepairPreview"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NotConnected"}
+    post:
+      summary: Name a thermostat of the room as its master
+      x-capability: repair
+      description: |
+        Runs what the preview of the same path showed, once the plan it
+        computes again has the preview's hash.
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}, {$ref: "#/components/parameters/repairPlan"}, {$ref: "#/components/parameters/idempotencyKey"}]
+      responses:
+        "200": {$ref: "#/components/responses/RepairRun"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/RepairRefused"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "502": {$ref: "#/components/responses/RepairStopped"}
+        "503": {$ref: "#/components/responses/NotConnected"}
+  /api/v1/cubes/{sn}/rooms/{id}/repair/relink:
+    get:
+      summary: Preview the re-link of a room, adding only
+      x-capability: repair
+      description: |
+        For each member that takes part in links (thermostats and window
+        contacts, by their C lines), after a wakeup of the room, the
+        placement's link half: one 0x20 with the room flag naming it to the
+        room's addressee, one to each window contact among its partners,
+        one to the member for each partner, then 0x22. Nothing is
+        unlinked. The room's flagged members are reset first. Nothing to send where the
+        room's list and its C lines disagree (place or list the devices
+        first) or fewer than two members take part in links. Read back as
+        a structure change (the log's device change).
+        The preview sends nothing: the lines a run would send and what they
+        cost, and the plan's hash for the run.
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}]
+      responses:
+        "200": {$ref: "#/components/responses/RepairPreview"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NotConnected"}
+    post:
+      summary: Re-link a room, adding only
+      x-capability: repair
+      description: |
+        Runs what the preview of the same path showed, once the plan it
+        computes again has the preview's hash.
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}, {$ref: "#/components/parameters/repairPlan"}, {$ref: "#/components/parameters/idempotencyKey"}]
+      responses:
+        "200": {$ref: "#/components/responses/RepairRun"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/RepairRefused"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "502": {$ref: "#/components/responses/RepairStopped"}
+        "503": {$ref: "#/components/responses/NotConnected"}
+  /api/v1/cubes/{sn}/devices/{rf}/repair/config:
+    get:
+      summary: Preview re-sending a thermostat's configuration from its room
+      x-capability: repair
+      description: |
+        The temperatures (comfort, eco, maximum, minimum, window open) and
+        the week programme that more than half of the room's other
+        thermostats share by their C lines, where the device's differ:
+        the days that differ (0x10), then 0x11 with the device's own offset
+        and window-open minutes. Nothing to send where the room has no other
+        thermostat, its others share no temperatures or programme by a
+        majority, the device agrees already, or its list and C line name
+        different rooms.
+        The preview sends nothing: the lines a run would send and what they
+        cost, and the plan's hash for the run.
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}]
+      responses:
+        "200": {$ref: "#/components/responses/RepairPreview"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NotConnected"}
+    post:
+      summary: Re-send a thermostat's configuration from its room
+      x-capability: repair
+      description: |
+        Runs what the preview of the same path showed, once the plan it
+        computes again has the preview's hash.
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}, {$ref: "#/components/parameters/repairPlan"}, {$ref: "#/components/parameters/idempotencyKey"}]
+      responses:
+        "200": {$ref: "#/components/responses/RepairRun"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/RepairRefused"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "502": {$ref: "#/components/responses/RepairStopped"}
+        "503": {$ref: "#/components/responses/NotConnected"}
+  /api/v1/cubes/{sn}/devices/{rf}/repair/place:
+    get:
+      summary: Preview placing a device in the room the metadata lists
+      x-capability: repair
+      description: |
+        Where the device's C line names another room than the metadata, or
+        none: a move from its C line's room (the removal's unlink half with
+        0x23 and the placement's link half), or the link half alone from
+        none. The metadata stays; the room's settings are not copied. Nothing
+        to send where the list does not list the device or has it where the Cube
+        has it, or a second wall thermostat.
+        The preview sends nothing: the lines a run would send and what they
+        cost, and the plan's hash for the run.
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}]
+      responses:
+        "200": {$ref: "#/components/responses/RepairPreview"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NotConnected"}
+    post:
+      summary: Place a device in the room the metadata lists
+      x-capability: repair
+      description: |
+        Runs what the preview of the same path showed, once the plan it
+        computes again has the preview's hash.
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}, {$ref: "#/components/parameters/repairPlan"}, {$ref: "#/components/parameters/idempotencyKey"}]
+      responses:
+        "200": {$ref: "#/components/responses/RepairRun"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/RepairRefused"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "502": {$ref: "#/components/responses/RepairStopped"}
+        "503": {$ref: "#/components/responses/NotConnected"}
+  /api/v1/cubes/{sn}/devices/{rf}/repair/list:
+    get:
+      summary: Preview listing a device where its C line has it
+      x-capability: repair
+      description: |
+        Metadata only, no radio: the device's entry moved to the room its C
+        line names, or one made for a device the list does not have. A room
+        the list does not have is made with room_name, its master the
+        room's wall thermostat, else its first radiator thermostat; without
+        the name the preview asks for it (details code room_name_needed and room).
+        The preview sends nothing: the lines a run would send and what they
+        cost, and the plan's hash for the run.
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}, {$ref: "#/components/parameters/repairRoomName"}]
+      responses:
+        "200": {$ref: "#/components/responses/RepairPreview"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NotConnected"}
+    post:
+      summary: List a device where its C line has it
+      x-capability: repair
+      description: |
+        Runs what the preview of the same path showed, once the plan it
+        computes again has the preview's hash.
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}, {$ref: "#/components/parameters/repairRoomName"}, {$ref: "#/components/parameters/repairPlan"}, {$ref: "#/components/parameters/idempotencyKey"}]
+      responses:
+        "200": {$ref: "#/components/responses/RepairRun"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/RepairRefused"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "502": {$ref: "#/components/responses/RepairStopped"}
+        "503": {$ref: "#/components/responses/NotConnected"}
+  /api/v1/cubes/{sn}/rooms/{id}/repair/unlink-relink:
+    get:
+      summary: Preview unlinking every link of a room and re-linking it
+      x-capability: repair
+      description: |
+        Needs structure as well as repair. For each member that takes part
+        in links, after a wakeup of the room, the 0x21s of a move's unlink
+        half without its 0x23: one with the room flag naming it to the
+        room's addressee, one to each window contact among its partners,
+        one to the member for each partner; then the re-link of every
+        member, as POST …/repair/relink. Not yet run on hardware
+        (untested): a run that stops halfway leaves the room's devices
+        without their partners until it is run again.
+        The preview sends nothing: the lines a run would send and what they
+        cost, and the plan's hash for the run.
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}]
+      responses:
+        "200": {$ref: "#/components/responses/RepairPreview"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/RepairRefused"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NotConnected"}
+    post:
+      summary: Unlink every link of a room, then re-link it
+      x-capability: repair
+      description: |
+        Runs what the preview of the same path showed, once the plan it
+        computes again has the preview's hash.
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}, {$ref: "#/components/parameters/repairPlan"}, {$ref: "#/components/parameters/idempotencyKey"}]
+      responses:
+        "200": {$ref: "#/components/responses/RepairRun"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/RepairRefused"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "502": {$ref: "#/components/responses/RepairStopped"}
+        "503": {$ref: "#/components/responses/NotConnected"}
   /api/v1/cubes/{sn}/reboot:
     post:
       summary: Reboot the Cube (UDP R), which drops the radiograms it has not delivered
@@ -2838,7 +3151,12 @@ paths:
         devices do not show in time: write (setpoint, lock, display, config,
         program), target, room, source, expected,
         outcome not_confirmed at warn with minutes, confirmed and devices,
-        or confirmed_late at info with seconds, in "summary"); the server's sign-ins, source server, for a
+        or confirmed_late at info with seconds, in "summary"); the room
+        checks' (docs/api-v1.md, "The room checks"): disagree, source cube
+        (a room whose thermostats differ: room and outcome differ, resent,
+        resend_failed, not_resent or agree in "summary") and drift, source
+        device (a thermostat off its week programme: outcome not_following,
+        follows or left_auto); the server's sign-ins, source server, for a
         user with audit alone: login, login_failed, locked_out; the LAN
         proxy's, source proxy: proxy_connected, proxy_disconnected,
         proxy_refused, proxy_discarded, proxy_deleted, proxy_delete_refused,
@@ -3415,6 +3733,17 @@ components:
       required: true
       description: Room number as the Cube assigns it
       schema: {type: integer, minimum: 1, maximum: 255}
+    repairPlan:
+      name: plan
+      in: query
+      required: true
+      description: The plan's hash from the repair's preview (GET of the same path)
+      schema: {type: string}
+    repairRoomName:
+      name: room_name
+      in: query
+      description: The name of a room the Cube's list does not have, to list the device there as a new room
+      schema: {type: string}
     restorePortal:
       name: portal
       in: query
@@ -3494,6 +3823,38 @@ components:
             vacation: {value: {mode: vacation, temp: 17, until: "2026-11-10 12:00"}}
             boost: {value: {mode: boost}}
   responses:
+    RepairPreview:
+      description: What a run would send and what it costs; nothing was sent
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/RepairPlan"}
+    RepairRefused:
+      description: >-
+        A run with nothing to send (what its preview's nothing says: no
+        device flagged, the room's list and C lines disagree, no majority
+        to take a configuration from), whose plan changed since its
+        preview (both hashes in the message), or that would reach the
+        queue's hold for the duty cycle or the memory slots (its preview's
+        refused). A listing into a room the list does not have carries
+        code room_name_needed and the room.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: {type: string}
+              code: {type: string, enum: [room_name_needed]}
+              room: {type: integer}
+    RepairRun:
+      description: The Cube accepted every line of the repair
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/RepairResult"}
+    RepairStopped:
+      description: The Cube discarded a line or the connection failed; the steps say how far the repair got
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/RepairResult"}
     ProgramChanged:
       description: The programme changed since its tag was read, or a write to it is still on its way
       headers:
@@ -4047,6 +4408,53 @@ components:
         error: {type: string}
         budget: {$ref: "#/components/schemas/Budget"}
         time: {type: string, format: date-time}
+    RepairPlan:
+      type: object
+      properties:
+        action: {type: string, enum: [reset, master, relink, unlink_relink, config, move, list]}
+        plan: {type: string, description: "SHA-256 over the action and the lines; the run takes it"}
+        steps:
+          type: array
+          items:
+            type: object
+            properties:
+              what: {type: string}
+              device: {type: string, description: "The device the command addresses, which the queue resets first where flagged"}
+              room: {type: integer, description: "The room woken up before the command"}
+              reset: {type: boolean, description: "The queue resets the device's error flag before the command"}
+              lines: {type: array, items: {type: string}, description: "The command's lines as they go to the Cube, the wakeup and the queue's reset not included"}
+        radiograms: {type: integer, description: "The s: lines"}
+        duty_cost_pct: {type: number, description: "About what they cost of the hourly radio budget, 1.25 % each"}
+        slots: {type: integer, description: "The memory slots they take, one each and a room radiogram one per member of the room"}
+        held_slots: {type: integer, description: "Those held until the members' next wakeup, about ten minutes, a room radiogram's but its addressee's"}
+        resets: {type: integer, description: "The r: lines, the queue's own included; free"}
+        wakeups: {type: integer}
+        metadata: {type: boolean, description: "A metadata write, no radio"}
+        budget: {$ref: "#/components/schemas/Budget"}
+        refused: {type: string, description: "Why a run would be refused now; absent where it fits the budget"}
+        nothing: {type: string, description: "Why the repair has nothing to send now, without plan and steps; its run is refused with 409. A listing into a room the list lacks has details code room_name_needed and room"}
+        notes: {type: array, items: {type: string}}
+        untested: {type: boolean, description: "Not yet run on hardware"}
+        details: {type: object, additionalProperties: true, description: "What the repair names: the devices reset, the room's masters, the agreement of a re-sent configuration, the rooms of a placement or listing"}
+    RepairResult:
+      type: object
+      properties:
+        ok: {type: boolean}
+        action: {type: string}
+        error: {type: string, description: "Where and why the repair stopped"}
+        steps:
+          type: array
+          items:
+            type: object
+            properties:
+              what: {type: string}
+              lines: {type: integer}
+              accepted: {type: integer, description: "The lines the Cube accepted"}
+              discarded: {type: boolean}
+              error: {type: string}
+        budget: {$ref: "#/components/schemas/Budget"}
+        confirmation: {type: string, enum: [pending], description: "Radiograms were sent: the log's device change line says when the Cube's free slots are back, or names the slots still held and the members left flagged"}
+        still_flagged: {type: array, items: {type: string}, description: "The devices reset whose flag the device list read after the resets still shows"}
     RestorePlan:
       type: object
       properties:
