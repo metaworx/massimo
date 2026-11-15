@@ -214,7 +214,10 @@ type Confirmation struct {
 	// Since is when the Cube took the oldest of the writes still open.
 	Since time.Time `json:"since"`
 	// Fields are the values not shown yet: mode, setpoint, until, locked
-	// and display_actual, from the device's L entry.
+	// and display_actual of the device's L entry, and the configuration's
+	// values of its C line by their API names (comfort_temp …
+	// valve_offset_pct), a day's programme as program.<day>, the second
+	// part of a long day's program.<day>.2.
 	Fields []string `json:"fields"`
 	// Devices are a room's: its members that do not show it, by radio
 	// address.

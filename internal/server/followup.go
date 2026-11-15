@@ -10,7 +10,8 @@ package server
 // in the H line of a new connection. After a configuration write, its
 // own or one a client of the LAN proxy sent (proxyWrote), the server
 // therefore re-reads the device's C line a few times with growing
-// pauses until it changes; after any radio write, once those re-reads
+// pauses until it shows what was written (confirm_config.go), or for a
+// write that does not decode until it changes; after any radio write, once those re-reads
 // are done, it reconnects once to get a fresh H line if radiograms were
 // still pending, at most every FollowUpReconnectGap and only with the
 // periodic refresh switched on. The changes reach the event stream as
@@ -131,9 +132,10 @@ func (rt *runtime) proxyWrote(c cube.RadioCommand) {
 		if c.Target.Room {
 			radiators, walls := roomThermostats(rt, c.Target.RoomID)
 			rt.afterWrite(append(radiators, walls...)...)
-			return
+		} else {
+			rt.afterWrite(c.Target.RFAddress)
 		}
-		rt.afterWrite(c.Target.RFAddress)
+		rt.proxyConfigConfirm(c) // the 0x10, 0x11 and 0x12 that decode
 	default:
 		rt.afterWrite()
 	}
@@ -210,12 +212,24 @@ func (s *Server) followUpStep(ctx context.Context, rt *runtime) {
 		line, _ := rt.client.Snapshot().ConfigLine(rf)
 		f.mu.Lock()
 		d := f.devices[rf]
+		last := d != nil && d.step+1 >= len(f.delays)
+		f.mu.Unlock()
+		// What was written, compared field by field where it decoded; else
+		// whether the line changed at all.
+		check := s.checkConfig(rt, rf, last)
+		f.mu.Lock()
+		d = f.devices[rf]
 		switch {
 		case d == nil:
-		case line.Data != d.baseline:
+		case check.expected && !check.waiting && !check.failed:
 			delete(f.devices, rf)
 			s.log.Info("device configuration taken over by the device", "cube", rt.cubeSerial(), "device", rf)
-		case d.step+1 >= len(f.delays):
+		case check.expected && !check.waiting:
+			delete(f.devices, rf) // not confirmed: its unconfirmed event says so
+		case !check.expected && line.Data != d.baseline:
+			delete(f.devices, rf)
+			s.log.Info("device configuration taken over by the device", "cube", rt.cubeSerial(), "device", rf)
+		case last:
 			delete(f.devices, rf)
 			s.log.Info("device configuration unchanged after the follow-up", "cube", rt.cubeSerial(), "device", rf)
 		default:
@@ -223,6 +237,9 @@ func (s *Server) followUpStep(ctx context.Context, rt *runtime) {
 			d.next = time.Now().Add(f.delays[d.step])
 		}
 		f.mu.Unlock()
+		for _, ev := range check.events {
+			rt.emit(ev)
+		}
 	}
 
 	f.mu.Lock()

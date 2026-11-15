@@ -2139,6 +2139,7 @@ paths:
                     type: array
                     items: {$ref: "#/components/schemas/DeviceResult"}
                   budget: {$ref: "#/components/schemas/Budget"}
+                  confirmation: {type: string, enum: [pending, confirmed], description: "Pending until each device that took the write shows it in its configuration; absent where none did"}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
@@ -2834,7 +2835,8 @@ paths:
         move read back from the Cube's free slots: action, outcome,
         before, free_slots, minutes, held or no_reading, flagged,
         link_error in "summary"); unconfirmed, source device (a write its
-        devices do not show in time: write, target, room, source, expected,
+        devices do not show in time: write (setpoint, lock, display, config,
+        program), target, room, source, expected,
         outcome not_confirmed at warn with minutes, confirmed and devices,
         or confirmed_late at info with seconds, in "summary"); the server's sign-ins, source server, for a
         user with audit alone: login, login_failed, locked_out; the LAN
@@ -3513,7 +3515,7 @@ components:
               ok: {type: boolean}
               discarded: {type: boolean, description: Always false on 200; a discarded command answers 502}
               budget: {$ref: "#/components/schemas/Budget"}
-              confirmation: {type: string, enum: [pending, confirmed], description: "A setpoint, a key lock or a display mode: pending until the devices' states show it (the devices' and the room's confirmation, the log's unconfirmed line after five minutes), confirmed where each shows it already. Absent for other writes"}
+              confirmation: {type: string, enum: [pending, confirmed], description: "A setpoint, a key lock or a display mode: pending until the devices' states show it (the devices' and the room's confirmation, the log's unconfirmed line after five minutes); a configuration or a week programme until their configurations show it (the line after the last re-read, about six minutes). Confirmed where each shows it already. Absent for other writes"}
         pending_radiograms: {type: integer, description: "Radiograms sent by the Cube and not yet acknowledged by a device (memory slots in use): all of them when no slot is free, 0 until the Cube has reported its budget"}
     BadRequest:
       description: Bad input
@@ -4410,7 +4412,7 @@ components:
       properties:
         state: {type: string, enum: [pending, unconfirmed], description: "pending until five minutes after the Cube's answer, then unconfirmed until the devices show it or a newer write of the same kind replaces it"}
         since: {type: string, format: date-time, description: "When the Cube took the oldest write still open"}
-        fields: {type: array, items: {type: string, enum: [mode, setpoint, until, locked, display_actual]}, description: "The values of the state not shown yet"}
+        fields: {type: array, items: {type: string}, description: "The values not shown yet: mode, setpoint, until, locked and display_actual of the state; the configuration's by their names (comfort_temp … valve_offset_pct); program.<day> for a day of the week programme, program.<day>.2 for a long day's second radiogram"}
         devices: {type: array, items: {type: string}, description: "A room's: the radio addresses of its members that do not show them"}
     DeviceType:
       type: string

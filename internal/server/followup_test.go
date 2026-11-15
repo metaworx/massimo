@@ -206,8 +206,8 @@ func proxyWrite(t *testing.T, conn net.Conn, r *cube.Reader, data string) {
 
 // A write that a client of the LAN proxy sends is followed up as the
 // API's own: a configuration write has the device's C line re-read until
-// it changes, then the budget reconnect; a setpoint gets the budget
-// reconnect only.
+// it shows what was written, then the budget reconnect; a setpoint gets
+// the budget reconnect only.
 func TestFollowUpAfterAProxyClientsWrite(t *testing.T) {
 	greeting, err := fakecube.LoadGreeting(fixture)
 	if err != nil {
@@ -249,11 +249,23 @@ func TestFollowUpAfterAProxyClientsWrite(t *testing.T) {
 		return rereads, others
 	}
 
-	// The original software's 0x11 (preset temperatures) to 0a010a.
+	// A 0x11 (preset temperatures) to 0a010a, as the original software
+	// sends it, with eco 17 and the device's other presets.
+	changed := withEco(t, greeting, 0x0a010a, 17)
+	cfg, err := cube.ParseConfig(changed.Data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	th := cfg.Thermostat
+	m, err := cube.CmdSetTemperatures(cube.Target{RFAddress: 0x0a010a}, cube.TemperatureSettings{Comfort: th.ComfortTemp, Eco: th.EcoTemp,
+		Max: th.MaxSetpoint, Min: th.MinSetpoint, Offset: th.TempOffset, WindowOpen: th.WindowOpenTemp, WindowOpenMinutes: th.WindowOpenMins})
+	if err != nil {
+		t.Fatal(err)
+	}
 	conn, r := proxyClient(t, proxyAddr)
-	proxyWrite(t, conn, r, "AAARAAAACgEKACwePQkDCgM=")
+	proxyWrite(t, conn, r, m.Data)
 	eventually(t, "a re-read", func() bool { n, _ := sent(); return n >= 1 })
-	fc.SetConfig(withEco(t, greeting, 0x0a010a, 17))
+	fc.SetConfig(changed)
 	eventually(t, "the device's new configuration", func() bool {
 		return strings.Contains(logs.String(), "device configuration taken over by the device")
 	})

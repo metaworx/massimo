@@ -113,7 +113,8 @@ A client's radio write (`s:`) that the Cube took is followed up as the server's
 own writes are (README, "Server"): after a configuration write (week programme,
 preset temperatures, valve settings,
 room group) the server reads the device's `C` line again for about six minutes
-until it changes,
+until it shows what was written (docs/api-v1.md, "Writes confirmed by the
+devices"), or for a write that does not decode, a room group's, until it changes,
 for every thermostat of the room when the write was addressed to the room;
 after any radio write it reconnects once for the budget if radiograms were pending.
 A setpoint, a key lock and a display mode are confirmed by the devices' states

@@ -717,11 +717,14 @@ func (s *Server) setDeviceConfig(w http.ResponseWriter, r *http.Request) error {
 	} else {
 		rt.afterWrite() // the display mode is no part of the C line
 	}
+	// The C line shows the presets and the valve settings, the L entry the
+	// display mode, once the device took them (confirm_config.go, confirm.go).
+	confirmation := rt.configConfirm(ctx, rf, lines, "device:"+rf.String(), 0)
 	if q.DisplayActual != nil {
-		// The L entry shows it once the device took it (confirm.go).
-		answer["confirmation"] = rt.beginConfirm(&confirmWrite{what: writeDisplay, target: "device:" + rf.String(), source: "api", command: commandOf(ctx),
-			want: map[string]any{fieldDisplay: *q.DisplayActual}}, []cube.RFAddress{rf})
+		confirmation = combineAnswers(confirmation, rt.beginConfirm(&confirmWrite{what: writeDisplay, target: "device:" + rf.String(), source: "api",
+			command: commandOf(ctx), want: map[string]any{fieldDisplay: *q.DisplayActual}}, []cube.RFAddress{rf}))
 	}
+	answer["confirmation"] = confirmation
 	writeJSON(w, http.StatusOK, answer)
 	return nil
 }
@@ -831,7 +834,22 @@ func (s *Server) setRoomConfig(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": okCount == len(out), "devices": out, "budget": rt.client.Budget()})
+	answer := map[string]any{"ok": okCount == len(out), "devices": out, "budget": rt.client.Budget()}
+	// Each device written is confirmed by its C line (confirm_config.go).
+	confirmation := ""
+	for _, rf := range written {
+		var own []cube.Message
+		for i, m := range lines {
+			if per[i] == rf {
+				own = append(own, m)
+			}
+		}
+		confirmation = combineAnswers(confirmation, rt.configConfirm(ctx, rf, own, roomTarget(room.ID), room.ID))
+	}
+	if confirmation != "" {
+		answer["confirmation"] = confirmation
+	}
+	writeJSON(w, http.StatusOK, answer)
 	return nil
 }
 
@@ -988,8 +1006,9 @@ func (s *Server) setDeviceProgram(w http.ResponseWriter, r *http.Request) error 
 	if prog, _, ok := rt.programOf(rf); ok && !res.Discarded {
 		rt.programs.note(rf, withDays(prog, body))
 	}
+	confirmation := rt.configConfirm(ctx, rf, lines, "device:"+rf.String(), 0) // confirm_config.go
 	after, _ := rt.programOfDevice(rf, c)
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "discarded": res.Discarded, "budget": res.Budget, "etag": after.etag})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "discarded": res.Discarded, "budget": res.Budget, "etag": after.etag, "confirmation": confirmation})
 	return nil
 }
 
@@ -1036,8 +1055,14 @@ func (s *Server) setRoomProgram(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 	}
+	// Every thermostat of the room takes the days, confirmed by its own C
+	// line (confirm_config.go).
+	confirmation := ""
+	for _, rf := range append(radiators, walls...) {
+		confirmation = combineAnswers(confirmation, rt.configConfirm(ctx, rf, lines, roomTarget(room.ID), room.ID))
+	}
 	after, _ := rt.programOfRoom(room.ID)
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "discarded": res.Discarded, "budget": res.Budget, "etag": after.etag})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "discarded": res.Discarded, "budget": res.Budget, "etag": after.etag, "confirmation": confirmation})
 	return nil
 }
 

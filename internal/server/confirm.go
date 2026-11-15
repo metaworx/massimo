@@ -17,7 +17,9 @@ package server
 // write of the same kind to them replaces it. An entry the Cube marks out
 // of date confirms nothing until the device is heard again (T131). It is
 // all kept in memory, for the writes of the API and of the LAN proxy's
-// clients whose payload decodes (proxyWrote).
+// clients whose payload decodes (proxyWrote). A configuration write is
+// confirmed by the device's C line instead, at the follow-up's re-reads
+// (Block 2, confirm_config.go).
 
 import (
 	"context"
@@ -28,6 +30,7 @@ import (
 	"sync"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/view"
 )
@@ -52,11 +55,13 @@ const (
 
 // The kinds of write confirmed, as the unconfirmed event names them; a
 // newer write of a kind replaces an older one of the same kind to the
-// same device.
+// same device, a configuration write the same fields of an older one.
 const (
 	writeSetpoint = "setpoint"
 	writeLock     = "lock"
 	writeDisplay  = "display"
+	writeConfig   = "config"  // 0x11 and 0x12, the presets and the valve
+	writeDays     = "program" // 0x10, days of the week programme
 )
 
 // The states of a confirmation, as the API shows them.
@@ -70,14 +75,17 @@ const (
 
 // confirmWrite is one write whose devices are to show it.
 type confirmWrite struct {
-	what    string         // writeSetpoint, writeLock or writeDisplay
-	target  string         // room:<id> or device:<rf>
-	room    uint8          // a room write's room; 0 for a device's
-	source  string         // api, or proxy for a client of the LAN proxy
-	command string         // the API command's uuid; "" for none
-	want    map[string]any // field → the value the devices are to show
-	at      time.Time      // when the Cube answered
-	due     time.Time      // the deadline
+	what string // writeSetpoint, writeLock, writeDisplay, writeConfig or writeDays
+	// byConfig marks a write the device's C line confirms, one device's,
+	// at the follow-up's re-reads (confirm_config.go): it has no due.
+	byConfig bool
+	target   string         // room:<id> or device:<rf>
+	room     uint8          // a room write's room; 0 for a device's
+	source   string         // api, or proxy for a client of the LAN proxy
+	command  string         // the API command's uuid; "" for none
+	want     map[string]any // field → the value the devices are to show
+	at       time.Time      // when the Cube answered
+	due      time.Time      // the deadline
 	// open are, per device, the fields it does not show yet.
 	open  map[cube.RFAddress][]string
 	shown int  // the devices that showed every field
@@ -167,11 +175,47 @@ func wantView(want map[string]any) map[string]any {
 			out[f] = v.String()
 		case cube.Until:
 			out[f] = v.String()
+		case cube.Weekday:
+			out[f] = v.String()
+		case cube.DayProgramPart:
+			out[f] = v.Points
 		default:
 			out[f] = v
 		}
 	}
 	return out
+}
+
+// missingOf are the fields of w's, or of fields where given, that rf does
+// not show: in its state, or for a configuration write in its C line.
+func (w *confirmWrite) missingOf(snap *cubelan.Snapshot, rf cube.RFAddress, fields []string) []string {
+	want := w.want
+	if fields != nil {
+		want = map[string]any{}
+		for _, f := range fields {
+			want[f] = w.want[f]
+		}
+	}
+	if w.byConfig {
+		return missingConfig(snap.Config(rf), want)
+	}
+	st, ok := snap.State(rf)
+	return missing(st, ok, want)
+}
+
+// shownOf is what rf shows of fields of w's; nil where the Cube holds
+// no state, or no C line, for it.
+func (w *confirmWrite) shownOf(snap *cubelan.Snapshot, rf cube.RFAddress, fields []string) map[string]any {
+	if w.byConfig {
+		if c := snap.Config(rf); c != nil {
+			return configShown(c, fields)
+		}
+		return nil
+	}
+	if st, ok := snap.State(rf); ok {
+		return shown(st, fields)
+	}
+	return nil
 }
 
 // beginConfirm starts confirming w, a write the Cube has just taken,
@@ -189,9 +233,8 @@ func (rt *runtime) beginConfirm(w *confirmWrite, devices []cube.RFAddress) strin
 		if _, dup := w.open[rf]; dup {
 			continue
 		}
-		c.replaceLocked(w.what, rf)
-		st, ok := snap.State(rf)
-		if m := missing(st, ok, w.want); len(m) > 0 {
+		c.replaceLocked(w, rf)
+		if m := w.missingOf(snap, rf, nil); len(m) > 0 {
 			w.open[rf] = m
 		} else {
 			w.shown++
@@ -215,14 +258,25 @@ func (rt *runtime) beginConfirm(w *confirmWrite, devices []cube.RFAddress) strin
 	return confirmPending
 }
 
-// replaceLocked drops rf from the open writes of kind what, which a newer
-// one replaces, and a write left with no device.
-func (c *confirmations) replaceLocked(what string, rf cube.RFAddress) {
-	c.writes = slices.DeleteFunc(c.writes, func(w *confirmWrite) bool {
-		if w.what == what {
-			delete(w.open, rf)
+// replaceLocked drops what w, a newer write, replaces of the open writes
+// to rf: those of its kind, or for a configuration write the fields it
+// sets; and a write left with no device.
+func (c *confirmations) replaceLocked(w *confirmWrite, rf cube.RFAddress) {
+	c.writes = slices.DeleteFunc(c.writes, func(o *confirmWrite) bool {
+		switch {
+		case o.byConfig && w.byConfig:
+			if fields, ok := o.open[rf]; ok {
+				fields = slices.DeleteFunc(fields, func(f string) bool { _, set := w.want[f]; return set })
+				if len(fields) == 0 {
+					delete(o.open, rf)
+				} else {
+					o.open[rf] = fields
+				}
+			}
+		case !o.byConfig && !w.byConfig && o.what == w.what:
+			delete(o.open, rf)
 		}
-		return len(w.open) == 0
+		return len(o.open) == 0
 	})
 }
 
@@ -242,7 +296,7 @@ func (c *confirmations) nextDue() (time.Time, bool) {
 	defer c.mu.Unlock()
 	var due time.Time
 	for _, w := range c.writes {
-		if !w.late && (due.IsZero() || w.due.Before(due)) {
+		if !w.late && !w.byConfig && (due.IsZero() || w.due.Before(due)) {
 			due = w.due
 		}
 	}
@@ -270,8 +324,8 @@ func report(w *confirmWrite, devices ...cube.RFAddress) confirmReport {
 // state event, and returns the lines of those it now shows after their
 // deadline.
 func (s *Server) confirmState(rt *runtime, rf cube.RFAddress) []event {
-	st, ok := rt.client.Snapshot().State(rf)
-	if !ok || !st.Valid {
+	snap := rt.client.Snapshot()
+	if st, ok := snap.State(rf); !ok || !st.Valid {
 		return nil
 	}
 	c := &rt.confirms
@@ -279,14 +333,10 @@ func (s *Server) confirmState(rt *runtime, rf cube.RFAddress) []event {
 	c.mu.Lock()
 	c.writes = slices.DeleteFunc(c.writes, func(w *confirmWrite) bool {
 		fields, open := w.open[rf]
-		if !open {
+		if !open || w.byConfig {
 			return false
 		}
-		sub := map[string]any{}
-		for _, f := range fields {
-			sub[f] = w.want[f]
-		}
-		if m := missing(st, true, sub); len(m) > 0 {
+		if m := w.missingOf(snap, rf, fields); len(m) > 0 {
 			w.open[rf] = m
 			return false
 		}
@@ -315,17 +365,12 @@ func (s *Server) confirmStep(rt *runtime) {
 	var due []confirmReport
 	c.mu.Lock()
 	c.writes = slices.DeleteFunc(c.writes, func(w *confirmWrite) bool {
-		if w.late || w.due.After(now) {
+		if w.late || w.byConfig || w.due.After(now) {
 			return false
 		}
 		var left []cube.RFAddress
 		for _, rf := range slices.Sorted(maps.Keys(w.open)) {
-			st, ok := snap.State(rf)
-			sub := map[string]any{}
-			for _, f := range w.open[rf] {
-				sub[f] = w.want[f]
-			}
-			if m := missing(st, ok, sub); len(m) > 0 {
+			if m := w.missingOf(snap, rf, w.open[rf]); len(m) > 0 {
 				w.open[rf] = m
 				left = append(left, rf)
 				continue
@@ -370,8 +415,10 @@ func (s *Server) unconfirmed(rt *runtime, r confirmReport) event {
 		if sn := snap.Serial(rf); sn != "" {
 			d["serial"] = sn
 		}
+		if sh := r.w.shownOf(snap, rf, r.fields[rf]); sh != nil {
+			d["shows"] = sh
+		}
 		if st, ok := snap.State(rf); ok {
-			d["shows"] = shown(st, r.fields[rf])
 			d["error"], d["link_error"], d["out_of_date"] = st.Error, st.LinkError, st.OutOfDate
 		} else {
 			d["reported"] = false
@@ -380,7 +427,7 @@ func (s *Server) unconfirmed(rt *runtime, r confirmReport) event {
 	}
 	summary["devices"] = devices
 	ev := event{Kind: "unconfirmed", Source: "device", Level: "warn", Time: time.Now(), Summary: summary, Command: s.commandRow(r.w.command)}
-	if r.w.room == 0 && len(r.devices) == 1 {
+	if len(r.devices) == 1 && (r.w.room == 0 || r.w.byConfig) {
 		ev.Device, ev.Serial = r.devices[0].String(), snap.Serial(r.devices[0])
 	}
 	return ev

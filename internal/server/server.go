@@ -956,6 +956,9 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 					ev.Serial = g.Serial
 					ev.State = view.Device{RFAddress: ev.Device, Type: g.Type, Name: g.Name, RoomID: g.RoomID, Serial: g.Serial}
 				}
+				if e.Kind == cubelan.EventConfig {
+					confirmed = s.checkConfig(rt, e.Device, false).events // confirm_config.go
+				}
 				if _, ok := rt.client.Snapshot().State(e.Device); ok {
 					dv := view.DeviceOf(rt.client.Snapshot(), e.Device, s.staleness())
 					dv.SetWindow(s.windowLimits())

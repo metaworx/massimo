@@ -21,8 +21,9 @@ const confirmBase = "/api/v1/cubes/KEQ0000100"
 // startConfirmCube starts a server over the fake Cube's rooms fixture
 // (fakecube.RoomsFixture), which applies the commands it takes after
 // applyAfter, polled often, a write's devices given within to show it
-// (AP RoomConfirm v1.0, Block 1).
-func startConfirmCube(t *testing.T, within, applyAfter time.Duration) (*fakecube.Server, *httptest.Server, *runtime) {
+// (AP RoomConfirm v1.0, Block 1), and a written C line re-read after
+// follow, nil for the defaults, without reconnects.
+func startConfirmCube(t *testing.T, within, applyAfter time.Duration, follow ...time.Duration) (*fakecube.Server, *httptest.Server, *runtime) {
 	t.Helper()
 	greeting, err := fakecube.RoomsFixture()
 	if err != nil {
@@ -34,7 +35,7 @@ func startConfirmCube(t *testing.T, within, applyAfter time.Duration) (*fakecube
 		t.Fatal(err)
 	}
 	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0000100", Addr: addr}}, Queue: engine.Options{Gap: time.Millisecond},
-		PollInterval: 50 * time.Millisecond, RefreshInterval: time.Hour, FollowUpReconnectGap: time.Hour, confirmWithin: within})
+		PollInterval: 50 * time.Millisecond, FollowUpDelays: follow, FollowUpReconnectGap: time.Hour, confirmWithin: within})
 	ctx, cancel := context.WithCancel(context.Background())
 	go s.Run(ctx)
 	ts := httptest.NewServer(s.Handler())
@@ -271,5 +272,137 @@ func TestSetpointWant(t *testing.T) {
 	st.Valid, st.OutOfDate = true, false
 	if m := missing(st, true, map[string]any{"mode": cube.ModeManual, "setpoint": 21.0}); len(m) != 0 {
 		t.Errorf("valid: %v", m)
+	}
+}
+
+// shortFollow re-reads a written C line three times within a fraction of
+// a second.
+var shortFollow = []time.Duration{50 * time.Millisecond, 50 * time.Millisecond, 100 * time.Millisecond}
+
+// A configuration write the C line shows at once, as the writer re-reads
+// it, is confirmed in the answer.
+func TestConfigWriteShownAtOnce(t *testing.T) {
+	_, ts, rt := startConfirmCube(t, time.Minute, 0, shortFollow...)
+	if code, out := do(t, ts, "PUT", confirmBase+"/devices/0a0206/config", `{"eco_temp":16}`); code != 200 || out["confirmation"] != "confirmed" {
+		t.Fatalf("config: %d %v", code, out)
+	}
+	if n := openWrites(rt); n != 0 {
+		t.Fatalf("%d writes open", n)
+	}
+}
+
+// A configuration write the C line shows is pending, then done.
+func TestConfigWriteConfirmed(t *testing.T) {
+	_, ts, rt := startConfirmCube(t, time.Minute, 150*time.Millisecond, shortFollow...)
+	code, out := do(t, ts, "PUT", confirmBase+"/devices/0a0204/config", `{"eco_temp":16.5,"boost_minutes":10}`)
+	if code != 200 || out["confirmation"] != "pending" {
+		t.Fatalf("config: %d %v", code, out)
+	}
+	eventually(t, "the C line shows it", func() bool { return openWrites(rt) == 0 })
+	if evs := unconfirmedEvents(t, ts, "not_confirmed"); len(evs) != 0 {
+		t.Fatalf("lines %+v", evs)
+	}
+}
+
+// A configuration write the device does not take is not confirmed after
+// the follow-up's last re-read, the fields that differ named.
+func TestConfigWriteNotConfirmed(t *testing.T) {
+	fc, ts, _ := startConfirmCube(t, time.Minute, 0, shortFollow...)
+	fc.SetDeaf(0x0a0205, true)
+	code, out := do(t, ts, "PUT", confirmBase+"/devices/0a0205/config", `{"eco_temp":16.5,"boost_minutes":10}`)
+	if code != 200 || out["confirmation"] != "pending" {
+		t.Fatalf("config: %d %v", code, out)
+	}
+	ev := waitUnconfirmed(t, ts, "not_confirmed")
+	devices, _ := ev.Summary["devices"].([]any)
+	if ev.Device != "0a0205" || ev.Summary["write"] != "config" || ev.Summary["target"] != "device:0a0205" || len(devices) != 1 {
+		t.Fatalf("event %+v", ev)
+	}
+	d := devices[0].(map[string]any)
+	shows, _ := d["shows"].(map[string]any)
+	if !reflect.DeepEqual(d["fields"], []any{"boost_minutes", "eco_temp"}) || shows["eco_temp"] == 16.5 || shows["boost_minutes"] == float64(10) || shows["eco_temp"] == nil {
+		t.Fatalf("device %v", d)
+	}
+	if c := confirmDevice(t, ts, "0a0205").Confirmation; c == nil || c.State != "unconfirmed" || !reflect.DeepEqual(c.Fields, []string{"boost_minutes", "eco_temp"}) {
+		t.Fatalf("device: %+v", c)
+	}
+}
+
+// A room's week programme is confirmed by each thermostat's C line: the
+// one that does not take the day is named with it.
+func TestProgramDayNotConfirmed(t *testing.T) {
+	fc, ts, rt := startConfirmCube(t, time.Minute, 0, shortFollow...)
+	fc.SetDeaf(0x0a0205, true)
+	body := `{"monday": [{"temp": 17, "until": "07:00"}, {"temp": 21, "until": "20:30"}, {"temp": 17, "until": "24:00"}]}`
+	if code, out := do(t, ts, "PUT", confirmBase+"/rooms/2/program", body); code != 200 || out["confirmation"] != "pending" {
+		t.Fatalf("program: %d %v", code, out)
+	}
+	ev := waitUnconfirmed(t, ts, "not_confirmed")
+	devices, _ := ev.Summary["devices"].([]any)
+	if ev.Device != "0a0205" || ev.Summary["write"] != "program" || ev.Summary["target"] != "room:2" || len(devices) != 1 ||
+		!reflect.DeepEqual(devices[0].(map[string]any)["fields"], []any{"program.monday"}) {
+		t.Fatalf("event %+v", ev)
+	}
+	eventually(t, "the others confirmed", func() bool { return openWrites(rt) == 1 })
+	if c := confirmRoom(t, ts, 2).Confirmation; c == nil || !reflect.DeepEqual(c.Devices, []string{"0a0205"}) || !reflect.DeepEqual(c.Fields, []string{"program.monday"}) {
+		t.Fatalf("room: %+v", c)
+	}
+}
+
+// A LAN proxy client's 0x11 to a room is compared with each thermostat's
+// C line: here none takes it.
+func TestProxyConfigWriteConfirmed(t *testing.T) {
+	_, ts, rt := startConfirmCube(t, time.Minute, 0, shortFollow...)
+	m, err := cube.CmdSetTemperatures(cube.Target{RFAddress: 0x0a0204, RoomID: 2, Room: true},
+		cube.TemperatureSettings{Comfort: 22.5, Eco: 16.5, Max: 30.5, Min: 4.5, WindowOpen: 12, WindowOpenMinutes: 15})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := cube.ParseRadioCommand(m.Data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt.proxyWrote(c) // as if the Cube had taken it
+	var evs []event
+	eventually(t, "three warnings", func() bool { evs = unconfirmedEvents(t, ts, "not_confirmed"); return len(evs) == 3 })
+	for _, ev := range evs {
+		if ev.Summary["source"] != "proxy" || ev.Summary["write"] != "config" || ev.Summary["target"] != "room:2" || ev.Device == "" {
+			t.Fatalf("event %+v", ev)
+		}
+	}
+}
+
+// What a C line shows of each field, and a newer write's field replaces
+// an older one's.
+func TestMissingConfig(t *testing.T) {
+	day := cube.DayProgram{{Temp: 17, Until: 420}, {Temp: 21, Until: 1230}, {Temp: 17, Until: 1440}}
+	var week cube.WeekProgram
+	week[cube.Monday] = day
+	c := &cube.DeviceConfig{Thermostat: &cube.ThermostatConfig{EcoTemp: 16.5, BoostMinutes: 10, DecalcDay: cube.Saturday, WeekProgram: week}}
+	want := map[string]any{"eco_temp": 16.5, "boost_minutes": 5, "decalc_day": cube.Saturday,
+		"program.monday":  cube.DayProgramPart{Day: cube.Monday, Points: day, Last: true},
+		"program.tuesday": cube.DayProgramPart{Day: cube.Tuesday, Points: day, Last: true}}
+	if m := missingConfig(c, want); !reflect.DeepEqual(m, []string{"boost_minutes", "program.tuesday"}) {
+		t.Errorf("missing %v", m)
+	}
+	if m := missingConfig(nil, map[string]any{"eco_temp": 16.5}); len(m) != 1 {
+		t.Errorf("without a C line: %v", m)
+	}
+	wall := &cube.DeviceConfig{Wall: &cube.WallConfig{EcoTemp: 16.5}}
+	if m := missingConfig(wall, map[string]any{"eco_temp": 16.5, "decalc_day": cube.Saturday}); !reflect.DeepEqual(m, []string{"decalc_day"}) {
+		t.Errorf("a wall thermostat's %v", m)
+	}
+
+	var cs confirmations
+	old := &confirmWrite{what: writeConfig, byConfig: true, want: map[string]any{"eco_temp": 16.5, "boost_minutes": 5},
+		open: map[cube.RFAddress][]string{0x0a0204: {"boost_minutes", "eco_temp"}}}
+	cs.writes = []*confirmWrite{old}
+	cs.replaceLocked(&confirmWrite{what: writeConfig, byConfig: true, want: map[string]any{"eco_temp": 17}}, 0x0a0204)
+	if len(cs.writes) != 1 || !reflect.DeepEqual(old.open[0x0a0204], []string{"boost_minutes"}) {
+		t.Errorf("after a newer eco: %v", old.open)
+	}
+	cs.replaceLocked(&confirmWrite{what: writeConfig, byConfig: true, want: map[string]any{"boost_minutes": 10}}, 0x0a0204)
+	if len(cs.writes) != 0 {
+		t.Errorf("after a newer boost: %d writes", len(cs.writes))
 	}
 }
