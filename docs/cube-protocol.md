@@ -1047,6 +1047,9 @@ kept here because they cost time to learn.
     for a device the Cube had not heard since its restart too.
     So `r:` is the Cube's bookkeeping, not a radiogram;
     a reset device stayed clear (3½ days and 17 hours, the longest watched).
+    Massimo's queue therefore sends a command of `r:` lines alone past its
+    holds for the duty cycle and the free slots (AP RadioHealth v1.2, D183-B),
+    and a command with a radiogram waits as before.
   - A Cube restart clears every flag.
     A Cube that does not hear a device by its first wakeup and time push
     flags it again within minutes (four devices within 6 minutes,

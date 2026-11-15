@@ -11,8 +11,9 @@ The server keeps one persistent connection and one command queue per Cube.
 Reads answer from the server's copy of the Cube's state,
 which the Cube refreshes on every change and which the server polls every 10 seconds.
 Writes go through the queue, which serialises commands, respects the
-radio duty cycle and the Cube's memory slots, and resets a device's
-communication error (`error`) before a command that reaches it:
+radio duty cycle and the Cube's memory slots
+(a command of `r:` lines alone, which take neither, does not wait for them),
+and resets a device's communication error (`error`) before a command that reaches it:
 one `r:`, which costs no radio time, for each device whose flag is set
 that a command names or sends a radiogram to directly,
 and for every member of the room a room command names whose flag is set.

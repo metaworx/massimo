@@ -419,13 +419,17 @@ func (q *Queue) execute(ctx context.Context, cmd Command) Result {
 		}
 		return Result{Err: rc.Reconnect(rctx), Budget: q.gw.Budget()}
 	}
-	needsRadio := false
+	needsRadio, radiograms := false, false
 	for _, l := range cmd.Lines {
-		if isRadio(l) {
-			needsRadio = true
-		}
+		needsRadio = needsRadio || isRadio(l)
+		radiograms = radiograms || l.Type == 's'
 	}
-	if needsRadio && !cmd.Passthrough {
+	// A command of r: lines alone, the Cube's bookkeeping, takes no memory
+	// slot and no air time (docs/cube-protocol.md), so it passes both
+	// holds: an automatic reset does not wait behind a Cube whose slots are
+	// few (AP RadioHealth v1.2, D183-B). A room's wakeup is radio traffic,
+	// and waits.
+	if needsRadio && !cmd.Passthrough && (radiograms || cmd.Wakeup) {
 		if err := q.waitForBudget(ctx); err != nil {
 			return Result{Err: err, Budget: q.gw.Budget()}
 		}
@@ -784,7 +788,8 @@ func (q *Queue) onHold(h Hold) {
 
 // waitForBudget blocks while the duty cycle or free slots are exhausted:
 // at a full duty cycle for DutyWait at a time, reading the budget again
-// after each, until it has fallen or cannot be read again.
+// after each, until it has fallen or cannot be read again. execute asks
+// it for a command with a radiogram or a wakeup, not for r: lines alone.
 func (q *Queue) waitForBudget(ctx context.Context) error {
 	b := q.gw.Budget()
 	for b.DutyCyclePct >= q.opts.MaxDutyPct {
