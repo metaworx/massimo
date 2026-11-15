@@ -275,21 +275,23 @@ func TestParseLogSize(t *testing.T) {
 	}
 }
 
-// countLines waits until serve has logged msg n times.
-func (s *builtServe) countLines(t *testing.T, msg string, n int) {
+// waitForAttr waits until serve has logged msg with the attribute key
+// set to value.
+func (s *builtServe) waitForAttr(t *testing.T, msg, key, value string) {
 	t.Helper()
 	for end := time.Now().Add(10 * time.Second); time.Now().Before(end); time.Sleep(20 * time.Millisecond) {
-		c := 0
 		for _, l := range s.log() {
-			if strings.Contains(l, `msg="`+msg+`"`) {
-				c++
+			if !strings.Contains(l, `msg="`+msg+`"`) {
+				continue
+			}
+			for _, m := range logAttr.FindAllStringSubmatch(l, -1) {
+				if m[1] == key && strings.Trim(m[2], `"`) == value {
+					return
+				}
 			}
 		}
-		if c >= n {
-			return
-		}
 	}
-	t.Fatalf("serve did not log %q %d times", msg, n)
+	t.Fatalf("serve did not log %q with %s=%s", msg, key, value)
 }
 
 // serve writes plain lines on stderr and JSON ones into its -log file,
@@ -303,10 +305,15 @@ func TestServeLogFile(t *testing.T) {
 	if a := s.waitFor(t, "log rotated"); a["reason"] != "format" || a["previous"] != "serve.log.1" {
 		t.Errorf("the start's rotation: %v", a)
 	}
+	// The SIGHUP once serve handles it: before, it would end serve, or be
+	// lost where SIGHUP was ignored at the start.
+	s.waitFor(t, "server started")
 	if err := s.cmd.Process.Signal(syscall.SIGHUP); err != nil {
 		t.Fatal(err)
 	}
-	s.countLines(t, "log rotated", 2)
+	// Its own rotation: the start's is logged twice, once as the
+	// log_rotated event (why=format), so two lines did not mean the SIGHUP's.
+	s.waitForAttr(t, "log rotated", "reason", "sighup")
 	s.stop(t)
 
 	lines := func(p string) []string {

@@ -58,6 +58,9 @@ After an interruption the page opens a new stream that resumes after the
 last event it read, so what happened meanwhile still arrives;
 where the server no longer holds it, the page reloads the rooms
 (docs/api-v1.md, "GET …/events").
+A room's tile whose configuration has the focus is not drawn again under a click
+or the user's typing, for a state event or a reload of the rooms alike;
+it is drawn once the focus has left the configuration.
 
 ## Header
 
@@ -148,6 +151,10 @@ the sign and the time a short line under it.
   The items of **☰** have the icons of their pages.
 - The page buttons, a house, a person, a sheet and a cog,
   switch between **Rooms**, **Personal settings**, **Log** and **System settings**.
+  The sheet turns amber with a triangle, or red with a cross,
+  while the log holds a warning or an error not yet settled or marked seen (see Log),
+  its name with the count;
+  on a phone ☰ carries the mark, and the log's entry in it the sign.
 - The page shown is in the address, Rooms without one:
   `#log`, `#me` (Personal settings, or at a card `#profile`, `#prefs` and
   `#notify`) and `#system` (System settings),
@@ -413,6 +420,21 @@ the oldest line, where an event of that same millisecond can be missed.
 A page that cannot load says so in the log, whatever is chosen;
 an answer that comes after **Clear**, another choice or another Cube is dropped,
 and another Cube in the header starts the log over with every device.
+
+A warning or an error of any Cube's log, or of the server's,
+stays a problem until a later line settles it
+or the person marks it seen (`docs/api-v1.md`, "GET /api/v1/log/alerts"):
+a lost connection until the next one,
+a failed command until the same one is acknowledged,
+a failed backup until the next, a hold until it ends;
+a device's transmit error, link error and low battery while the device has them,
+at the line that set them.
+Its line is highlighted, a bar and its mark in amber or red,
+with **Mark seen**; **Mark all as seen** beside **Clear** marks every one.
+Opening the log marks nothing.
+The marks follow a signed-in user with `preferences` (the preference `log.seen`);
+anyone else's stay in the browser.
+The page asks at every poll.
 The server keeps its log in its store across restarts and updates,
 for the days `log.keep_days` says (30 by default; docs/api-v1.md,
 "GET and PUT /api/v1/settings").
@@ -746,6 +768,13 @@ to the top of the page.
   (packaging/README.md, "Homebrew").
   While the helper works, **Check for updates** and **Update** are greyed out,
   also after a reload of the page, until it reports that it is done.
+  **Last updates** lists the last three under the version lines:
+  the version reached,
+  or the one asked for with "under way" until the next start,
+  when, and who started it,
+  or "outside Massimo" with apt or brew where Massimo did not start it;
+  one the helper ended without its version says how it ended (`docs/api-v1.md`,
+  "GET /api/v1/update?refresh=1").
 - **Maintenance** (with `restart`, `reboot` for its reboot,
   or `settings` for its announcement and its last two parts),
   in this order: **Announce on the LAN**, **Settings file**, **Restart**

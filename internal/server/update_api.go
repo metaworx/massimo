@@ -198,6 +198,8 @@ type updateView struct {
 	CanUpdate  bool           `json:"can_update"`
 	Blocked    string         `json:"blocked,omitempty"`
 	Helper     *update.Status `json:"helper,omitempty"`
+	// History is the last updates, newest first (update_history.go).
+	History []updateEntry `json:"history"`
 }
 
 func (s *Server) updateState(ctx context.Context, refresh bool) updateView {
@@ -232,6 +234,9 @@ func (s *Server) updateRelease(ctx context.Context, refresh bool) (updateView, *
 		}
 	}
 	v.CanUpdate = v.Blocked == "" && v.Available && (v.Helper == nil || !v.Helper.Running())
+	if v.History = s.updateHistory(ctx); v.History == nil {
+		v.History = []updateEntry{}
+	}
 	return v, found
 }
 
@@ -263,10 +268,11 @@ func (s *Server) startUpdate(w http.ResponseWriter, r *http.Request) error {
 	s.updateMu.Lock()
 	defer s.updateMu.Unlock()
 	s.keepChannel(r.Context(), v.Channel, rel)
+	asked := time.Now()
 	if err := update.WriteRequest(s.opts.Update.Request, v.Channel); err != nil {
 		return fail(http.StatusInternalServerError, "asking the update helper: %v", err)
 	}
-	asked := map[string]any{"from": v.Current, "to": v.Latest, "channel": v.Channel}
+	summary := map[string]any{"from": v.Current, "to": v.Latest, "channel": v.Channel}
 	if start := s.opts.Update.Start; start != nil {
 		switch err := start(); {
 		case errors.Is(err, update.ErrHelperRunning):
@@ -275,14 +281,15 @@ func (s *Server) startUpdate(w http.ResponseWriter, r *http.Request) error {
 			return fail(http.StatusConflict, "%v (starting)", err)
 		case err != nil:
 			os.Remove(s.opts.Update.Request)
-			failed := systemEvent("update", userIDOf(r), asked)
+			failed := systemEvent("update", userIDOf(r), summary)
 			failed.Level, failed.Error = "error", err.Error()
 			s.logServer(failed)
 			return fail(http.StatusInternalServerError, "starting the update helper: %v", err)
 		}
 	}
 	s.noteStop("update")
-	s.logServer(systemEvent("update", userIDOf(r), asked))
+	s.noteUpdateStart(r.Context(), asked, userIDOf(r), v.Current, v.Latest)
+	s.logServer(systemEvent("update", userIDOf(r), summary))
 	writeJSON(w, http.StatusAccepted, map[string]any{"ok": true, "requested": v.Latest, "channel": v.Channel})
 	return nil
 }

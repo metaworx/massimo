@@ -336,6 +336,9 @@ type Server struct {
 	updates updateCheck
 	// updateMu holds one update request at a time (startUpdate).
 	updateMu sync.Mutex
+	// historyMu holds the last updates' row while it is read and written
+	// again (editHistory).
+	historyMu sync.Mutex
 	// restartGate lets one restart through (restart_api.go), and
 	// pending lists what applies only at the next one.
 	restartGate restartGate
@@ -1325,6 +1328,7 @@ func (s *Server) routes() {
 	api("POST /api/v1/cubes/{sn}/events/ticket", "read", s.issueTicket)
 	api("GET /api/v1/cubes/{sn}/log", "read", s.getLog)
 	api("GET /api/v1/log", "read", s.getAllLog)
+	api("GET /api/v1/log/alerts", "read", s.getLogAlerts)
 	api("POST /api/v1/cubes/{sn}/pairing", "pair", s.startPairing)
 	api("GET /api/v1/cubes/{sn}/pairing", "read", s.getPairing)
 	api("DELETE /api/v1/cubes/{sn}/pairing", "pair", s.stopPairing)
