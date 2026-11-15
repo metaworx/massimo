@@ -2,7 +2,7 @@
 # Copyright (C) 2026 The Massimo Authors
 """Back to top (AP PageMenu, Block 4): ↑ filled in the accent's blue at
 the bottom right of every page once it is a screen down, and the
-header's ↑ left of ⚙ (☰ on a phone) while the header is compacted; each
+header's ↑ left of ☰ while the header is compacted; each
 takes the page back to its top."""
 from helpers import scroll_settled, show_view, wait_until
 
@@ -52,8 +52,8 @@ def test_to_top_on_every_page(page, case):
 
 
 def test_to_top_in_the_compacted_header(page, case):
-    """The header's ↑ shows while the header is compacted, left of ⚙ at
-    full width and of ☰ on a phone, and takes the page to its top."""
+    """The header's ↑ shows while the header is compacted, left of ☰, and
+    takes the page to its top."""
     btn = page.locator("#top-btn")
     long_page(page, "rooms")
     try:
@@ -61,7 +61,7 @@ def test_to_top_in_the_compacted_header(page, case):
         scrolled_to(page, 400)
         assert wait_until(page, "document.body.classList.contains('scrolled')", 3), "the header compacted"
         assert btn.is_visible(), "↑ in the compacted header"
-        last = "#view-gear" if case.width >= 600 else "#nav-menu > summary"
+        last = "#nav-menu > summary"
         b, n = btn.bounding_box(), page.locator(last).bounding_box()
         assert b["x"] + b["width"] <= n["x"] and abs(b["y"] - n["y"]) <= 1, f"left of {last}, level with it: {b} vs {n}"
         btn.click()

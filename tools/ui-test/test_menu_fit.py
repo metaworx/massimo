@@ -76,7 +76,7 @@ def test_problem_list_fits(page, case):
 
 
 def test_menus_fit(page, case):
-    """The Cube choice and, on a phone, ☰ open inside the window."""
+    """The Cube choice and ☰ open inside the window."""
     page.locator("#cube-choice").click()
     sel = "#cube-menu > .menu-items"
     assert wait_until(page, "document.querySelector(%r).getBoundingClientRect().width > 0" % sel, 3)
@@ -84,9 +84,8 @@ def test_menus_fit(page, case):
     b = page.evaluate(BOX, sel)
     assert inside(b), f"the Cube choice inside the window ({b})"
     page.keyboard.press("Escape")
-    if case.width < 600:
-        page.locator("#nav-menu > summary").click()
-        page.wait_for_timeout(100)
-        b = page.evaluate(BOX, "#nav-menu > .menu-items")
-        assert inside(b), f"☰ inside the window ({b})"
-        page.keyboard.press("Escape")
+    page.locator("#nav-menu > summary").click()
+    page.wait_for_timeout(100)
+    b = page.evaluate(BOX, "#nav-menu > .menu-items")
+    assert inside(b), f"☰ inside the window ({b})"
+    page.keyboard.press("Escape")

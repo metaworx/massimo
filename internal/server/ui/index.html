@@ -147,28 +147,24 @@
     </div>
     <nav class="nav" aria-label="pages" data-i18n-attr="aria-label:nav.pages">
       <button type="button" id="view-tiles" class="icon-btn nav-btn active" aria-current="page" aria-label="rooms" title="Rooms" data-i18n-attr="aria-label:nav.rooms title:nav.roomsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-house"/></svg></button>
-      <button type="button" id="view-me" class="icon-btn nav-btn" aria-label="personal settings" title="Personal settings" data-i18n-attr="aria-label:nav.user title:nav.userTitle"><svg class="ni" aria-hidden="true"><use href="#icon-user"/></svg></button>
-      <button type="button" id="view-log" class="icon-btn nav-btn" aria-label="log" title="Log" data-i18n-attr="aria-label:nav.log title:nav.logTitle"><svg class="ni" aria-hidden="true"><use href="#icon-log"/></svg></button>
-      <!-- back to top, left of ⚙ (☰ below 600 px) while the header is
-           compacted (components.js backToTop) -->
+      <!-- back to top, left of ☰ while the header is compacted
+           (components.js backToTop) -->
       <button type="button" id="top-btn" class="icon-btn nav-btn top-btn" aria-label="back to top" title="Back to top" data-i18n-attr="aria-label:page.toTop title:page.toTopTitle"><svg class="ni" aria-hidden="true"><use href="#icon-up"/></svg></button>
-      <!-- ⚙: the settings pages, each for the roles that may open it
-           (log.js mayShow); ☰ holds the same under Log below 600 px -->
-      <details id="gear-menu" class="menu nav-menu gear-menu needs-gear">
-        <summary id="view-gear" class="nav-btn" aria-label="settings" title="Settings" data-i18n-attr="aria-label:nav.gear title:nav.gearTitle"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg></summary>
-        <div class="menu-items">
-          <button type="button" id="gear-cube" class="needs-cubes-or-pair"><svg class="ni" aria-hidden="true"><use href="#icon-cube3d"/></svg><span data-i18n="nav.cubeTitle">Cube settings</span></button>
-          <button type="button" id="gear-system" class="needs-system"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg><span data-i18n="nav.settingsTitle">System settings</span></button>
-          <button type="button" id="gear-info" class="needs-read"><svg class="ni" aria-hidden="true"><use href="#icon-info"/></svg><span data-i18n="nav.infoTitle">System info</span></button>
-        </div>
-      </details>
+      <!-- ☰, every page but Rooms, at every width, each for the roles that
+           may open it (log.js mayShow, MENU_VIEWS): the log; the settings
+           pages; the personal page and Sign out (login.js renderMe). It
+           carries the log's mark (log.js renderLogSign). -->
       <details id="nav-menu" class="menu nav-menu">
-        <summary class="nav-btn" aria-label="more pages" title="More pages" data-i18n-attr="aria-label:nav.more title:nav.moreTitle"><svg class="ni" aria-hidden="true"><use href="#icon-menu"/></svg></summary>
+        <summary class="nav-btn" aria-label="menu" title="Menu"><svg class="ni" aria-hidden="true"><use href="#icon-menu"/></svg></summary>
         <div class="menu-items">
           <button type="button" id="menu-log"><svg class="ni" aria-hidden="true"><use href="#icon-log"/></svg><span data-i18n="nav.logTitle">Log</span></button>
+          <hr class="menu-sep">
           <button type="button" id="menu-cube" class="needs-cubes-or-pair"><svg class="ni" aria-hidden="true"><use href="#icon-cube3d"/></svg><span data-i18n="nav.cubeTitle">Cube settings</span></button>
           <button type="button" id="menu-system" class="needs-system"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg><span data-i18n="nav.settingsTitle">System settings</span></button>
           <button type="button" id="menu-info" class="needs-read"><svg class="ni" aria-hidden="true"><use href="#icon-info"/></svg><span data-i18n="nav.infoTitle">System info</span></button>
+          <hr class="menu-sep">
+          <button type="button" id="menu-me"><svg class="ni" aria-hidden="true"><use href="#icon-user"/></svg><span data-i18n="nav.userTitle">Personal settings</span></button>
+          <button type="button" id="menu-logout" class="hidden"><svg class="ni" aria-hidden="true"><use id="menu-logout-icon" href="#icon-signout"/></svg><span id="menu-logout-label" data-i18n="me.signOut">Sign out</span></button>
         </div>
       </details>
     </nav>
@@ -332,7 +328,7 @@
     </div>
   </section>
 
-  <!-- System info, the page ⚙ → System info opens, for every role with
+  <!-- System info, the page ☰ → System info opens, for every role with
        read: its row kept at the top under the header, with the title and
        the badges of what is wrong (update.js fillProxies), then the
        server's facts (system-info.html). -->
@@ -344,7 +340,7 @@
     <!-- partials: info -->
   </section>
 
-  <!-- Cube settings, the page ⚙ → Cube settings opens, for a role with
+  <!-- Cube settings, the page ☰ → Cube settings opens, for a role with
        cubes or with pair: its row kept at the top under the header, then
        the panel of the Cube chosen in the header, open (cubes.js
        renderCubePage), and the outcome of the last action under it. -->

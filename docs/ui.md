@@ -14,7 +14,7 @@ which is open from the start once the page has seen the server ask for no key
 The password form holds the one password field, its fields named,
 so that a password manager such as KeePassXC fills it.
 The page keeps the session in the browser for 30 days from its last use;
-**Sign out** on the personal settings (👤) ends it.
+**Sign out** in ☰, or on the personal settings, ends it.
 The card's ☰ sets the language and the appearance (light, dark, as the system)
 before anyone signs in, the same settings as My settings,
 kept in this browser.
@@ -68,15 +68,13 @@ The header's line reads, from the left:
 Massimo's logo with the server's version and the time of the last update with **↻**,
 all on one baseline where they fit beside it, the M as tall as the page buttons;
 then the Cube choice with the server's connection to the Cube as a plug;
-then the house, **👤**, the log and **⚙**, the menu of the settings pages.
+then the house, **Rooms**, and **☰**, the menu of every other page.
 Where the version, the server's sign and the time do not fit beside the logo
 on one line, they take a row of their own across the header,
 under the logo and the Cube choice, on a phone under the logo and the page buttons,
 the version on a line of its own where the row is too narrow for all three,
 so that it is cut only where it is wider than the header.
 On a screen narrower than 600 px the Cube choice takes a line of its own,
-**☰** beside the house and 👤 holds **Log** and ⚙'s pages,
-highlighted while one of them is shown,
 and the logo is the mark alone, the M with the clock in its V.
 
 The logo lies over the word "Massimo", which a screen reader reads:
@@ -94,7 +92,7 @@ without the version, and the lines under it go until the page is back
 at its top, expert mode's line of the Cube's radio budget apart;
 narrower than 600 px the Cube choice then takes the line of **Massimo**,
 the sign and the time a short line under it.
-The compacted header has **↑** left of ⚙ (of ☰ on a phone), back to the top.
+The compacted header has **↑** left of ☰, back to the top.
 
 - **Cube**:
   a menu that chooses the Cube when the server has several.
@@ -147,20 +145,20 @@ The compacted header has **↑** left of ⚙ (of ☰ on a phone), back to the to
   the Cube tells it when the server connects, to the minute,
   and the page moves it on from then;
   a clock that was off by 90 s or more says by how much ("3 min ahead").
-- **👤** opens the personal settings (see Personal settings);
-  its tooltip names whose they are, by display name and login.
-  The items of **☰** and of ⚙ have the icons of their pages.
-- The page buttons, a house, a person and a sheet,
-  switch between **Rooms**, **Personal settings** and **Log**.
-- **⚙** is a menu of the settings pages, each for the roles that may open it:
-  **Cube settings**, the chosen Cube's, for a role with `cubes` or with `pair`;
-  **System settings**, for a role with one of its capabilities;
-  and **System info**, for every role with `read`.
-  It is highlighted while one of them is shown, as a page button is.
-  The sheet turns amber with a triangle, or red with a cross,
-  while the log holds a warning or an error not yet settled or marked seen (see Log),
-  its name with the count;
-  on a phone ☰ carries the mark, and the log's entry in it the sign.
+- **The house** shows **Rooms**, the header's one page button.
+- **☰** holds every other page, at every width,
+  each for the roles that may open it and with the icon of its page:
+  **Log**;
+  **Cube settings**, the chosen Cube's, for a role with `cubes` or with `pair`,
+  **System settings**, for a role with one of its capabilities,
+  and **System info**, for every role with `read`;
+  **Personal settings**, its tooltip naming whose they are, by display name and login,
+  and **Sign out** (Forget key for an API key or the token, none on an open server).
+  It is highlighted while one of its pages is shown, as a page button is,
+  that page's entry marked current.
+  While the log holds a warning or an error not yet settled or marked seen (see Log),
+  ☰ carries an amber triangle or a red cross,
+  and the sheet of its Log entry turns amber or red, both named with the count.
 - The settings pages, Cube settings, System settings and System info,
   each have a title row kept under the header, and in it, right-aligned
   before the sections menu, a button for each of the others the role may
@@ -179,7 +177,7 @@ The compacted header has **↑** left of ⚙ (of ☰ on a phone), back to the to
   a page opened for the first time starts at its top.
 - **↑**, round and filled in the accent's blue at the bottom right,
   shows on every page once it is a screen down,
-  and another ↑ left of ⚙ (of ☰ on a phone) while the header is compacted;
+  and another ↑ left of ☰ while the header is compacted;
   each takes the page back to its top,
   the focus on the page's sections menu where it has one.
 - **The server's sign**, before the time of the last update,
@@ -197,7 +195,7 @@ The compacted header has **↑** left of ⚙ (of ☰ on a phone), back to the to
 - In expert mode a line under the first shows the chosen Cube's name,
   its duty cycle, free slots and radiograms pending,
   and the commands queued while there are any.
-  The server's facts are in ⚙ → **System info**,
+  The server's facts are in ☰ → **System info**,
   the Cube's in its panel under System settings → **Cubes**.
 - With a self-signed certificate (`massimo serve -tls self-signed`)
   the browser warned once, and a line under the header,
@@ -512,12 +510,12 @@ The filter's text is not in the address.
 
 ## Personal settings
 
-**👤** opens the personal settings, a page built as System settings is:
+☰ → **Personal settings** opens the personal settings, a page built as System settings is:
 its title stays under the header while the page scrolls,
 with who is signed in under it (with the role, or the API key and whose it is),
 **Sign out** at its right end, which ends the session,
-and **Sections** (☰) beside it, which lists the page's cards with their icons
-and brings the one chosen into view.
+and **Sections** (a bulleted list) beside it,
+which lists the page's cards with their icons and brings the one chosen into view.
 An API key or the server's token is only forgotten in this browser
 (**Forget key**, with a key),
 and an open server says that it is open to everyone and has nothing to sign out of.
@@ -712,7 +710,7 @@ It caches nothing else: the page loads from the server as before.
 
 ## Cube settings
 
-⚙ → **Cube settings** shows the panel of the Cube chosen in the header,
+☰ → **Cube settings** shows the panel of the Cube chosen in the header,
 as System settings → Cubes draws it, for a role with `cubes` or with `pair`
 (the pairing alone for `pair`).
 The page's title row, **Cube settings**, stays under the header as the page
@@ -727,7 +725,7 @@ while Cube settings is shown, System settings' list does not hold it.
 
 ## System info
 
-⚙ → **System info** is for every role with `read`, a viewer's too:
+☰ → **System info** is for every role with `read`, a viewer's too:
 its title stays under the header while the page scrolls.
 The facts are the server's, a Cube's in its panel under System settings → **Cubes**.
 The page is a table of the server's version and what it was built with,
@@ -781,9 +779,9 @@ token or a password as "set, not shown"
 
 ## System settings
 
-⚙ → **System settings** holds what is the server's,
+☰ → **System settings** holds what is the server's,
 each part for a role with its capability;
-a role with none of them (the viewer's, a guest's) has no such entry in ⚙.
+a role with none of them (the viewer's, a guest's) has no such entry in ☰.
 
 The page is a card per part, as wide as the page:
 Software update first, then Maintenance, Cubes, Users, Roles,
@@ -791,7 +789,7 @@ Software update first, then Maintenance, Cubes, Users, Roles,
 from 900 px Users, Roles and Capabilities flow in two columns,
 none split, the break where their heights put it.
 The title stays under the header while the page scrolls,
-with **Sections** at its right end (a bulleted list, apart from ☰):
+with **Sections** at its right end (a bulleted list):
 it lists the cards the role sees, marks the one in view and brings the one
 chosen into view, opened.
 A card folds with the button in its heading,

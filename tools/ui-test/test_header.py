@@ -25,9 +25,9 @@ SYMBOL_BOX = """(sel) => {
 
 
 def test_log_button_shows_a_sheet(page, case):
-    """The log button shows a sheet, taller than wide, its lines inside a
+    """☰'s log entry shows a sheet, taller than wide, its lines inside a
     frame: three lines alone read as a menu."""
-    width, height = page.evaluate(SYMBOL_BOX, "#view-log")
+    width, height = page.evaluate(SYMBOL_BOX, "#menu-log")
     assert height >= 16 and height > width, f"the log's symbol is a sheet, taller than wide: {width} x {height}"
 
 
@@ -40,14 +40,14 @@ CARD_ICONS = {"profile": "#icon-id", "prefs": "#icon-sliders", "notify": "#icon-
 
 
 def test_personal_page_says_who_is_in(page, case):
-    """👤 opens the personal page and is highlighted while it is shown: at
+    """☰ → Personal settings opens the personal page, ☰ highlighted while it is shown: at
     its top who is in, here the owner by the suite's API key, and Forget
     key left of ☰; ☰ lists My profile, My settings and Notifications with
     the icons their cards' heads show; the cards side by side from 900 px,
     one under the other on a phone."""
     open_personal_page(page)
     assert page.evaluate("location.hash") == "#me", "the page in the address"
-    assert active(page, "#view-me"), "👤 highlighted while the page is shown"
+    assert active(page, "#nav-menu > summary"), "☰ highlighted while the page is shown"
     line = page.locator("#me-line")
     assert line.is_visible() and "owner" in line.inner_text() and "MASSIMO_API_TOKEN" in line.inner_text(), \
         f"the page names the key's user and label: {line.inner_text()!r}"
@@ -71,7 +71,7 @@ def test_personal_page_says_who_is_in(page, case):
         assert len(lefts) == 1, f"one column on a phone ({lefts})"
     assert scroll_width(page) <= case.width, "no horizontal scroll on the personal page"
     show_view(page, "tiles")
-    assert not active(page, "#view-me"), "and not on Rooms"
+    assert not active(page, "#nav-menu > summary"), "and not on Rooms"
 
 
 def test_personal_page_on_an_open_server(page, case):
@@ -161,7 +161,7 @@ def test_an_address_the_user_may_not_open_shows_rooms(page, case):
         page.reload()
         page.wait_for_selector(".room", timeout=10000)
         assert wait_until(page, "location.hash === ''", 5), "the address drops System settings"
-        assert page.locator("#system").is_hidden() and css_hidden(page, "#gear-system"), "Rooms, and no System settings in ⚙"
+        assert page.locator("#system").is_hidden() and css_hidden(page, "#menu-system"), "Rooms, and no System settings in ☰"
     finally:
         page.unroute("**/api/v1/me")
 
@@ -177,39 +177,26 @@ def active(page, selector):
 def test_header_order_and_the_narrow_header(page, case):
     """At full width the brand and the time of the last update with ↻
     beside it at the left (the version and the time under the brand, both,
-    where they leave no room), then on the first line the Cube choice with the network
-    sign of its link, then 🏠 👤 📄 ⚙, without ☰. Below 600 px 🏠 👤 ☰
-    beside the brand and the Cube choice on a line of its own under them; ☰ holds Log and ⚙'s pages, opens each, and is
-    highlighted while one of them is shown."""
-    order = ["h1", "#updated", "#refresh-btn", "#refresh-btn svg", "#cube-choice", "#view-tiles", "#view-me"]
+    where they leave no room), then on the first line the Cube choice with
+    the network sign of its link, then 🏠 and ☰ alone. Below 600 px 🏠 ☰
+    beside the brand and the Cube choice on a line of its own under them."""
+    order = ["h1", "#updated", "#refresh-btn", "#refresh-btn svg", "#cube-choice", "#view-tiles", "#nav-menu > summary"]
     b = {sel: box(page, sel) for sel in order}
     assert b["#updated"]["x"] < b["#refresh-btn svg"]["x"], "↻ after the time it renews, in the same button"
     assert page.locator("#cube-choice .picker-icon .conn-sign use[href='#icon-net']").count() == 1, "the link, a network sign in the Cube choice"
-    assert b["#view-tiles"]["x"] < b["#view-me"]["x"], "🏠 left of 👤"
+    assert b["#view-tiles"]["x"] < b["#nav-menu > summary"]["x"], "🏠 left of ☰"
+    shown = page.locator(".nav > *").evaluate_all("(es) => es.filter((e) => e.offsetParent).map((e) => e.id)")
+    assert shown == ["view-tiles", "nav-menu"], f"🏠 and ☰ alone in the header: {shown}"
     if case.width >= 600:
-        right = ["#cube-choice", "#view-tiles", "#view-me", "#view-log", "#view-gear"]
-        b.update({sel: box(page, sel) for sel in ("#view-log", "#view-gear")})
+        right = ["#cube-choice", "#view-tiles", "#nav-menu > summary"]
         xs = [b[sel]["x"] for sel in right]
         assert xs == sorted(xs), f"left to right in this order: {right}"
         assert max(b[sel]["x"] + b[sel]["width"] for sel in ("h1", "#updated", "#refresh-btn")) < b["#cube-choice"]["x"], \
             f"the brand and the time left of the Cube choice: {b}"
         first_line = b["h1"]["y"] + b["h1"]["height"]
         assert all(b[sel]["y"] < first_line for sel in right), f"the Cube choice and the pages on the first line: {b}"
-        assert page.locator("#view-log").is_visible() and page.locator("#view-gear").is_visible(), "📄 and ⚙ shown"
-        assert page.locator("#nav-menu").is_hidden(), "no ☰"
         return
-    assert page.locator("#nav-menu").is_visible(), "☰ shown"
-    assert page.locator("#view-log").is_hidden() and page.locator("#view-gear").is_hidden(), "📄 and ⚙ in it"
-    assert b["#view-me"]["x"] < box(page, "#nav-menu summary")["x"], "🏠 👤 ☰"
     assert b["#cube-choice"]["y"] >= b["#view-tiles"]["y"] + b["#view-tiles"]["height"], "the Cube choice under them"
-    for view, section in (("log", "#logview"), ("cube", "#cube-page"), ("system", "#system"), ("info", "#info-page")):
-        page.locator("#nav-menu summary").click()
-        page.locator("#menu-" + view).click()
-        page.locator(section).wait_for(state="visible")
-        assert page.locator("#nav-menu").get_attribute("open") is None, "the choice closes ☰"
-        assert active(page, "#nav-menu summary"), f"☰ highlighted while {view} is shown"
-    show_view(page, "tiles")
-    assert not active(page, "#nav-menu summary"), "and not on Rooms"
 
 
 # The baseline of an element's text: the bottom of an empty inline-block
@@ -369,17 +356,15 @@ def test_cube_clock_in_its_facts(page, case):
 
 
 def test_menu_icons_and_user_title(page, case):
-    """Forget key shows a key's icon; ☰'s items each their page's; the 👤
-    button's tooltip names whose personal page it opens, here the owner
-    of the test's API key."""
+    """Forget key shows a key's icon; ☰'s items each their page's; ☰'s
+    Personal settings names whose personal page it opens in its tooltip,
+    here the owner of the test's API key."""
     open_personal_page(page)
     assert page.locator("#logout-btn > svg.ni").count() == 1, "Forget key shows its icon"
     assert page.locator("#logout-icon").get_attribute("href") == "#icon-key", "Forget key shows a key"
-    title = page.locator("#view-me").get_attribute("title") or ""
-    assert "owner" in title, f"the 👤 tooltip names the user ({title!r})"
-    assert page.locator("#view-me").get_attribute("aria-label") == title, "and says it to a screen reader"
-    page.keyboard.press("Escape")
-    for sel in ("#menu-log", "#menu-cube", "#menu-system", "#menu-info", "#gear-cube", "#gear-system", "#gear-info"):
+    title = page.locator("#menu-me").get_attribute("title") or ""
+    assert "owner" in title, f"Personal settings' tooltip names the user ({title!r})"
+    for sel in ("#menu-log", "#menu-cube", "#menu-system", "#menu-info", "#menu-me", "#menu-logout"):
         assert page.locator(sel + " > svg.ni").count() == 1, f"{sel} shows its icon"
 
 

@@ -964,7 +964,7 @@ function stickyHeader() {
 
 // backToTop wires the two back-to-top buttons: ↑ at the bottom right
 // of every page once it is a screen down (#to-top), and the header's,
-// left of ⚙ (☰ on a phone), while the header is compacted (#top-btn,
+// left of ☰, while the header is compacted (#top-btn,
 // style.css). Each takes the page back to its top, the focus on the
 // page's sections menu where it has one, else on its button in the
 // header.

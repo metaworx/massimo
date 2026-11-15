@@ -13,7 +13,7 @@
 // with Stop, and each device that joins with the form that puts it into
 // a room (pairDeviceForm, which Devices without a room uses too). A role
 // with pair but without cubes sees the panels with the pairing alone.
-// The page Cube settings (⚙) shows the chosen Cube's panel alone, open
+// The page Cube settings (☰) shows the chosen Cube's panel alone, open
 // (renderCubePage); a panel is drawn in one place at a time, as its ids
 // are its serial's.
 "use strict";

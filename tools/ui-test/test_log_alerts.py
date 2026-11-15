@@ -35,24 +35,27 @@ def sign(page, selector):
 
 
 def test_log_sign_by_level(page):
-    """No problem: the plain log. A warning: amber with the triangle, the
-    count in the button's name, ☰'s entry the same. An error: red with
-    the cross."""
+    """No problem: the plain log in ☰'s entry, no mark on ☰. A warning:
+    amber with the triangle, the count in the entry's name and ☰'s, ☰ with
+    the amber mark. An error: red with the cross."""
     alerts = []
     alerts_route(page, alerts)
     try:
         page.evaluate("loadLogAlerts()")
-        s = sign(page, "#view-log")
+        s = sign(page, "#menu-log")
         assert "tone-" not in s["cls"] and s["uses"] == ["#icon-log"], f"no problem: the plain log ({s})"
+        assert page.locator("#nav-menu > summary > .mark-sign").count() == 0, "no mark on ☰"
         alerts.append({"id": 900001, "kind": "disconnected", "level": "warn", "cube_serial": "KEQ0000100", "time": "2026-11-14T20:00:00Z"})
         page.evaluate("loadLogAlerts()")
-        s = sign(page, "#view-log")
+        s = sign(page, "#menu-log")
         assert "tone-warn" in s["cls"] and s["uses"] == ["#icon-log-small", "#mark-corner-warn"], f"a warning: amber, the triangle ({s})"
-        assert page.locator("#view-log").get_attribute("aria-label") == page.evaluate("t('nav.logAlerts', {count: 1})"), "the count named"
-        assert "tone-warn" in sign(page, "#menu-log")["cls"], "☰'s log entry amber too"
+        count = page.evaluate("t('nav.logAlerts', {count: 1})")
+        assert page.locator("#menu-log").get_attribute("aria-label") == count, "the count named"
+        assert count in (page.locator("#nav-menu > summary").get_attribute("aria-label") or ""), "in ☰'s name too"
+        assert "tone-warn" in (page.locator("#nav-menu > summary > .mark-sign").get_attribute("class") or ""), "☰ with the amber mark"
         alerts.append({"id": 900002, "kind": "restart", "level": "error", "time": "2026-11-14T20:01:00Z"})
         page.evaluate("loadLogAlerts()")
-        s = sign(page, "#view-log")
+        s = sign(page, "#menu-log")
         assert "tone-bad" in s["cls"] and s["uses"] == ["#icon-log-small", "#mark-corner-x"], f"an error: red, the cross ({s})"
     finally:
         page.unroute("**/api/v1/log/alerts*")
@@ -61,8 +64,8 @@ def test_log_sign_by_level(page):
 def test_log_marks(page):
     """Two lines of the log are problems, a warning and an error: both are
     highlighted, the error red. Opening the log and asking again marks
-    nothing. Mark seen on the error leaves the warning, the button amber,
-    and the mark is kept; Mark all as seen leaves none, the button plain,
+    nothing. Mark seen on the error leaves the warning, the entry amber,
+    and the mark is kept; Mark all as seen leaves none, the entry plain,
     and the next question asks after the newest."""
     puts = []
     page.on("request", lambda r: puts.append(r.url) if r.method == "PUT" and "log.seen" in r.url else None)
@@ -94,14 +97,14 @@ def test_log_marks(page):
             error_row.locator(".log-mark").click()
             assert json.loads(page.evaluate("localStorage.getItem('massimo.log.seen')"))["lines"] == [older], "the browser keeps the mark"
         assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.log-alert').length === 1", 5), "the error's line marked"
-        assert "tone-warn" in sign(page, "#view-log")["cls"], "the button amber"
+        assert "tone-warn" in sign(page, "#menu-log")["cls"], "the entry amber"
         page.evaluate("loadLogAlerts()")
         assert page.locator("#log-lines .log-line.log-alert").count() == 1, "marked, it stays marked"
 
         page.locator("#log-seen-all").click()
         assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.log-alert').length === 0", 5), "every line marked"
-        s = sign(page, "#view-log")
-        assert "tone-" not in s["cls"] and page.locator("#log-seen-all").is_hidden(), "the button plain, Mark all gone"
+        s = sign(page, "#menu-log")
+        assert "tone-" not in s["cls"] and page.locator("#log-seen-all").is_hidden(), "the entry plain, Mark all gone"
         assert page.evaluate("logAlerts.seen") == {"all": newer, "lines": []}, "all up to the newest, the line it covers gone"
         page.evaluate("loadLogAlerts()")
         assert asked[-1].endswith("after=%d" % newer), f"asked after the newest ({asked[-1]})"
