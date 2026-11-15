@@ -638,6 +638,30 @@ body.scrolled #pending { display: none !important; }
 body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8px -8px rgba(0, 0, 0, 0.25); }
 .page-bar h2 { font-size: 1.25rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .menu.sec-menu { margin-left: auto; }
+/* the other settings pages (components.js pageSwitch), right-aligned
+   before the sections menu, each its icon and its name, the icon alone
+   on a phone */
+.page-switch { display: flex; flex: none; gap: 6px; margin-left: auto; }
+.page-switch + .menu.sec-menu, .page-bar > .section-badges { margin-left: 0; }
+.page-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--fg);
+  font-size: 0.9rem;
+  line-height: 1;
+}
+.page-link:hover { border-color: var(--accent); }
+.page-link > .ni { width: 18px; height: 18px; flex: none; }
+@media (max-width: 599px) {
+  .page-link { width: 40px; padding: 0; justify-content: center; }
+  .page-link-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}
 .menu.sec-menu > summary {
   display: inline-flex;
   align-items: center;

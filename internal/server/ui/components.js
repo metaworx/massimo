@@ -798,6 +798,30 @@ function sectionButtons(page) {
   });
 }
 
+// pageSwitch puts into a settings page's row, before its sections menu,
+// a button for each of the other settings pages (pages, log.js
+// SETTINGS_PAGES): its icon and its name, the icon alone below 600 px
+// (style.css), each hidden from a role that may not open its page by
+// that page's needs class (login.js); open shows the page.
+function pageSwitch(page, current, pages, open) {
+  const bar = page.querySelector(".page-bar");
+  const nav = elem("nav", "page-switch");
+  nav.setAttribute("aria-label", t("page.switch"));
+  nav.dataset.i18nAttr = "aria-label:page.switch";
+  for (const p of pages) {
+    if (p.view === current) continue;
+    const label = textEl("span", t(p.key), "page-link-label");
+    label.dataset.i18n = p.key;
+    const b = button("", { cls: "page-link " + p.needs }, () => open(p.view));
+    b.dataset.view = p.view;
+    b.title = t(p.key);
+    b.dataset.i18nAttr = "title:" + p.key;
+    b.append(iconEl(p.icon, "ni"), label);
+    nav.appendChild(b);
+  }
+  bar.insertBefore(nav, bar.querySelector(".sec-menu"));
+}
+
 // pageBar fills a page's row kept at the top (its .page-bar) with the
 // sections menu (a dropdown of sectionButtons), marking the card in
 // view as the page scrolls (aria-current), and keeps the row's height

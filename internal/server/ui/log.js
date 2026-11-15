@@ -1270,6 +1270,15 @@ const VIEW_HASH = { tiles: "", log: "#log", me: "#me", system: "#system", info: 
 // GEAR_VIEWS are the pages of ⚙'s menu, with the ids of their entries
 // there and in ☰'s.
 const GEAR_VIEWS = { cube: ["gear-cube", "menu-cube"], system: ["gear-system", "menu-system"], info: ["gear-info", "menu-info"] };
+// SETTINGS_PAGES are the settings pages, in ☰'s order, each with its
+// icon, the key of its name and the class that hides it from a role that
+// may not open it (login.js, style.css); each page's row links to the
+// others (components.js pageSwitch).
+const SETTINGS_PAGES = [
+  { view: "cube", icon: "icon-cube3d", key: "nav.cubeTitle", needs: "needs-cubes-or-pair" },
+  { view: "system", icon: "icon-cog", key: "nav.settingsTitle", needs: "needs-system" },
+  { view: "info", icon: "icon-info", key: "nav.infoTitle", needs: "needs-read" },
+];
 const CARD_HASH = { "#profile": "profile", "#prefs": "prefs", "#notify": "notify" };
 let currentView = "tiles";
 
@@ -1448,6 +1457,7 @@ function initLog() {
   }
   dropdown($("gear-menu"));
   dropdown($("nav-menu"));
+  for (const p of SETTINGS_PAGES) pageSwitch($(VIEW_SECTION[p.view]), p.view, SETTINGS_PAGES, (v) => showView(v)); // components.js
   // back and forward, and a page named in the address bar
   window.addEventListener("popstate", () => showAddress());
   $("log-filter").addEventListener("input", (ev) => {

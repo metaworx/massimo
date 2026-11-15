@@ -161,6 +161,10 @@ The compacted header has **↑** left of ⚙ (of ☰ on a phone), back to the to
   while the log holds a warning or an error not yet settled or marked seen (see Log),
   its name with the count;
   on a phone ☰ carries the mark, and the log's entry in it the sign.
+- The settings pages, Cube settings, System settings and System info,
+  each have a title row kept under the header, and in it, right-aligned
+  before the sections menu, a button for each of the others the role may
+  open, with its icon and its name; on a phone the icon alone.
 - The page shown is in the address, Rooms without one:
   `#log`, `#me` (Personal settings, or at a card `#profile`, `#prefs` and
   `#notify`), `#cube` (Cube settings), `#system` (System settings)
