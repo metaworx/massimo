@@ -1524,6 +1524,7 @@
   "cap.discover": "szukać Cube w sieci",
   "cap.backup": "pobierać kopie zapasowe",
   "cap.restore": "przywracać kopie zapasowe",
+  "cap.repair": "naprawiać pomieszczenia i urządzenia: kasować błędy komunikacji, ponownie wysyłać ustawienia, ponownie łączyć pomieszczenia",
   "cap.guests": "zarządzać gośćmi",
   "cap.users": "zarządzać wszystkimi użytkownikami",
   "cap.passwords": "ustawiać hasła użytkowników, nie hasło właściciela",

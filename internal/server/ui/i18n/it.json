@@ -1473,6 +1473,7 @@
   "cap.discover": "cercare Cube nella rete",
   "cap.backup": "scaricare backup",
   "cap.restore": "ripristinare backup",
+  "cap.repair": "riparare stanze e dispositivi: azzerare gli errori di comunicazione, reinviare le impostazioni, ricollegare le stanze",
   "cap.guests": "gestire gli ospiti",
   "cap.users": "gestire tutti gli utenti",
   "cap.passwords": "impostare le password degli utenti, non quella di un proprietario",

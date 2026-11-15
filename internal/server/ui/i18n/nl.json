@@ -1472,6 +1472,7 @@
   "cap.discover": "Cubes op het netwerk zoeken",
   "cap.backup": "back-ups downloaden",
   "cap.restore": "back-ups terugzetten",
+  "cap.repair": "ruimtes en apparaten herstellen: communicatiefouten resetten, instellingen opnieuw verzenden, ruimtes opnieuw koppelen",
   "cap.guests": "gasten beheren",
   "cap.users": "alle gebruikers beheren",
   "cap.passwords": "wachtwoorden van gebruikers instellen, niet dat van een eigenaar",

@@ -1473,6 +1473,7 @@
   "cap.discover": "chercher des Cubes sur le réseau",
   "cap.backup": "télécharger des sauvegardes",
   "cap.restore": "restaurer des sauvegardes",
+  "cap.repair": "réparer les pièces et les appareils : réinitialiser les erreurs de communication, renvoyer les réglages, relier à nouveau les pièces",
   "cap.guests": "gérer les invités",
   "cap.users": "gérer tous les utilisateurs",
   "cap.passwords": "définir les mots de passe des utilisateurs, pas celui d'un propriétaire",

@@ -1471,6 +1471,7 @@
   "cap.discover": "search for Cubes on the LAN",
   "cap.backup": "download backups",
   "cap.restore": "restore backups",
+  "cap.repair": "repair rooms and devices: reset communication errors, re-send configurations, re-link rooms",
   "cap.guests": "manage guests",
   "cap.users": "manage every user",
   "cap.passwords": "set users' passwords, not an owner's",

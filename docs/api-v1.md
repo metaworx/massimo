@@ -214,6 +214,7 @@ the OpenAPI file carries each operation's as `x-capability`:
 | `discover` | search for Cubes on the LAN | `POST /api/v1/cubes/discover` |
 | `backup` | download a backup | `GET …/backup` |
 | `restore` | plan and run a restore | `POST …/restore/plan`, `POST …/restore` |
+| `repair` | the repairs of a Cube's rooms and devices: their communication errors reset, a device's configuration re-sent from its room, a device placed or listed where the Cube and its list disagree, a room's master named, a room re-linked ("Repairs", below) | `GET`/`POST …/repair/…` |
 | `guests` | create, change and remove users whose role is `guest` | the users routes, limited to guests |
 | `users` | every user: create, role, disable, password, tokens | `GET`/`POST /api/v1/users`, `…/users/{name}`, `…/users/{name}/tokens` |
 | `passwords` | set the password of a user (the manager's by default) | `GET /api/v1/users`, `PUT …/users/{name}` with a password, `POST …/users/{name}/register` |
@@ -239,7 +240,7 @@ The users routes say what the caller may do with each user they list
 The default roles and their sets are those of docs/store.md section 6:
 `owner` has every capability and cannot be changed,
 `manager` is `operator` plus guests, pairing, names, structure,
-restore and the restart,
+restore, the repairs and the restart,
 `operator` runs the heating, locks, configures, discovers and takes backups,
 `guest` is `operator` without the lock, backups, discovery and preferences,
 `viewer` reads, and `integration`, fixed like `owner`, is the role of the

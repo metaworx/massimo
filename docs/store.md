@@ -1006,6 +1006,7 @@ The capabilities, what each allows, and the routes it guards:
 | `discover` | search for Cubes on the LAN | `POST /api/v1/cubes/discover` |
 | `backup` | download a backup, list the stored ones | `GET …/backup`, the list of stage (e) |
 | `restore` | plan and run a restore | `POST …/restore/plan`, `POST …/restore` |
+| `repair` | the repairs of a Cube's rooms and devices: their communication errors reset, a device's configuration re-sent from its room, a device placed or listed where the Cube and its list disagree, a room's master named, a room re-linked (migration 0022; docs/api-v1.md, "Repairs") | `GET`/`POST …/repair/…` |
 | `guests` | create, invite, disable and remove users whose role is `guest`, with an end date | the users routes, limited to guests |
 | `users` | every user: create, role, disable, password reset, tokens | `GET`/`POST /api/v1/users`, `…/users/{name}`, `…/users/{name}/tokens` |
 | `passwords` | set the password of a user | the users routes, limited to a password |
@@ -1037,6 +1038,7 @@ The default roles, as seeded.
 | `discover` | ✓ | ✓ | | | ✓ |
 | `backup` | ✓ | ✓ | | | ✓ |
 | `restore` | ✓ | | | | ✓ |
+| `repair` | ✓ | | | | ✓ |
 | `guests` | ✓ | | | | ✓ |
 | `passwords` | ✓ | | | | |
 | `restart` | ✓ | | | | ✓ |
@@ -1045,8 +1047,10 @@ The default roles, as seeded.
 | `users`, `roles`, `roles.disable`, `capabilities`, `auth` | | | | | |
 
 So `manager` is `operator` plus guests, pairing, names, structure, restore,
-the server's restart (migration 0006, 2026-11-07)
-and the passwords of other users (migration 0008, 2026-11-08);
+the server's restart (migration 0006, 2026-11-07),
+the passwords of other users (migration 0008, 2026-11-08)
+and the repairs (migration 0022, 2026-11-15, AP RadioHealth, D166-A),
+which the role integration gains with its ceiling;
 `reboot` is seeded for no role (2026-11-08): restarting the server is not
 rebooting a computer that may run other services too;
 nor is `cubes.reboot` (2026-11-14):
