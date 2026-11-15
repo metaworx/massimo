@@ -1928,5 +1928,7 @@ massimo-week-program { display: contents; }
 .repair-lines pre { margin: 4px 0 0; white-space: pre-wrap; word-break: break-all; }
 .repair-lines summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; }
 .repair-actions { justify-content: flex-start; }
+.repair-warning { border-left: 3px solid var(--warn-mark); }
+.repair-warning p { margin: 0 0 8px; }
 .repair-result.ok { color: var(--ok); }
 .repair-result.bad, .repair-refused { color: var(--bad); }

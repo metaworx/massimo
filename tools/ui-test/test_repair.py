@@ -19,6 +19,8 @@ RELINK = {"action": "relink", "plan": "plan-relink", "radiograms": 9, "duty_cost
 RESETS = {"action": "reset", "plan": "plan-reset", "radiograms": 0, "duty_cost_pct": 0, "slots": 0, "held_slots": 0, "resets": 2,
           "wakeups": 0, "metadata": False, "notes": [], "budget": RELINK["budget"],
           "steps": [{"what": "reset", "lines": ["r:01,AAAA", "r:01,BBBB"]}]}
+UNLINK = dict(RELINK, action="unlink_relink", plan="plan-unlink", radiograms=25, duty_cost_pct=31.25, slots=37, held_slots=12,
+              wakeups=6, untested=True, notes=["not yet run on hardware"])
 LIST = dict(RESETS, action="list", plan="plan-list", resets=0, metadata=True, steps=[{"what": "list", "lines": ["m:00,AAAA"]}])
 NONE = "no device of room 1 has a communication error"
 
@@ -39,7 +41,7 @@ class RepairStub:
         if route.request.method == "POST":
             self.runs.append((url.path, query))
             body = {"ok": True, "action": repair, "steps": [{"what": "x", "lines": 3, "accepted": 3}], "budget": RELINK["budget"]}
-            if repair == "relink":
+            if repair in ("relink", "unlink-relink"):
                 body["confirmation"] = "pending"
             if repair == "reset":
                 body["still_flagged"] = []
@@ -162,3 +164,37 @@ def test_cube_repairs(page, case):
     finally:
         stub.close()
     show_view(page, "tiles")
+
+
+def test_unlink_relink_warns_and_asks_twice(page, case):
+    """"Unlink all and re-link" warns first, naming its cost and what a
+    run that stops halfway leaves; Continue asks once more, and only its
+    Yes sends the run; Cancel at either step sends nothing."""
+    stub = RepairStub(page, {"reset": NONE, "master": NONE, "relink": RELINK, "unlink-relink": UNLINK})
+    try:
+        tile = page.locator(".room").first
+        tile.locator(".tile-head .menu > summary").click()
+        tile.locator(".menu-repair").click()
+        item = tile.locator(".repair-item[data-repair=unlinkRelink]")
+        item.locator(".repair-run").wait_for(state="visible")
+        item.locator(".repair-run").click()
+        warning = item.locator(".repair-warning")
+        want = page.evaluate("t('repair.unlinkRelinkWarning', {cost: repairCost(%s)})" % json.dumps(UNLINK))
+        assert warning.locator(".repair-warning-text").inner_text() == want, "the warning names the cost and the risk"
+        assert scroll_width(page) <= case.width, "no horizontal scroll with the warning"
+        named_buttons(page, "the warning")
+        warning.locator(".repair-warning-no").click()
+        assert item.locator(".repair-warning").count() == 0 and not stub.runs, "Cancel sends nothing"
+        item.locator(".repair-run").click()
+        item.locator(".repair-warning-yes").click()
+        box = item.locator(".confirm-box")
+        assert box.locator(".confirm-text").inner_text() == page.evaluate("t('repair.unlinkRelinkConfirm')"), "the second question"
+        box.locator(".confirm-no").click()
+        assert not stub.runs and item.locator(".repair-run").is_visible(), "Cancel at the second question sends nothing"
+        item.locator(".repair-run").click()
+        item.locator(".repair-warning-yes").click()
+        item.locator(".confirm-yes").click()
+        assert wait_until(page, "document.querySelector('.repair-item[data-repair=unlinkRelink] .repair-result.ok') !== null", 5), "it ran"
+        assert len(stub.runs) == 1 and stub.runs[0][1].get("plan") == ["plan-unlink"], f"one run with its plan: {stub.runs}"
+    finally:
+        stub.close()

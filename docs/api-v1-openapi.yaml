@@ -2795,6 +2795,48 @@ paths:
         "429": {$ref: "#/components/responses/LockedOut"}
         "502": {$ref: "#/components/responses/RepairStopped"}
         "503": {$ref: "#/components/responses/NotConnected"}
+  /api/v1/cubes/{sn}/rooms/{id}/repair/unlink-relink:
+    get:
+      summary: Preview unlinking every link of a room and re-linking it
+      x-capability: repair
+      description: |
+        Needs structure as well as repair. For each member that takes part
+        in links, after a wakeup of the room, the 0x21s of a move's unlink
+        half without its 0x23: one with the room flag naming it to the
+        room's addressee, one to each window contact among its partners,
+        one to the member for each partner; then the re-link of every
+        member, as POST …/repair/relink. Not yet run on hardware
+        (untested): a run that stops halfway leaves the room's devices
+        without their partners until it is run again.
+        The preview sends nothing: the lines a run would send and what they
+        cost, and the plan's hash for the run.
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}]
+      responses:
+        "200": {$ref: "#/components/responses/RepairPreview"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/RepairRefused"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "503": {$ref: "#/components/responses/NotConnected"}
+    post:
+      summary: Unlink every link of a room, then re-link it
+      x-capability: repair
+      description: |
+        Runs what the preview of the same path showed, once the plan it
+        computes again has the preview's hash.
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/id"}, {$ref: "#/components/parameters/repairPlan"}, {$ref: "#/components/parameters/idempotencyKey"}]
+      responses:
+        "200": {$ref: "#/components/responses/RepairRun"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/RepairRefused"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "502": {$ref: "#/components/responses/RepairStopped"}
+        "503": {$ref: "#/components/responses/NotConnected"}
   /api/v1/cubes/{sn}/reboot:
     post:
       summary: Reboot the Cube (UDP R), which drops the radiograms it has not delivered
@@ -4354,7 +4396,7 @@ components:
     RepairPlan:
       type: object
       properties:
-        action: {type: string, enum: [reset, master, relink, config, move, list]}
+        action: {type: string, enum: [reset, master, relink, unlink_relink, config, move, list]}
         plan: {type: string, description: "SHA-256 over the action and the lines; the run takes it"}
         steps:
           type: array
@@ -4377,6 +4419,7 @@ components:
         refused: {type: string, description: "Why a run would be refused now; absent where it fits the budget"}
         nothing: {type: string, description: "Why the repair has nothing to send now, without plan and steps; its run is refused with 409. A listing into a room the list lacks has details code room_name_needed and room"}
         notes: {type: array, items: {type: string}}
+        untested: {type: boolean, description: "Not yet run on hardware"}
         details: {type: object, additionalProperties: true, description: "What the repair names: the devices reset, the room's masters, the agreement of a re-sent configuration, the rooms of a placement or listing"}
     RepairResult:
       type: object

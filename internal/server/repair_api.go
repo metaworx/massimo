@@ -45,7 +45,8 @@ const DefaultResetSettle = 2 * time.Second
 const repairRunTimeout = 10 * time.Minute
 
 // repairRoutes registers the repairs, each a GET (the preview) and a
-// POST (the run) under repair.
+// POST (the run) under repair; "unlink all and re-link" needs structure
+// as well, which its handler checks.
 func (s *Server) repairRoutes(api func(pattern, capability string, h func(http.ResponseWriter, *http.Request) error)) {
 	api("GET /api/v1/cubes/{sn}/repair/reset", "repair", s.repair("reset", s.buildCubeReset, false))
 	api("POST /api/v1/cubes/{sn}/repair/reset", "repair", s.repair("reset", s.buildCubeReset, true))
@@ -55,6 +56,8 @@ func (s *Server) repairRoutes(api func(pattern, capability string, h func(http.R
 	api("POST /api/v1/cubes/{sn}/rooms/{id}/repair/master", "repair", s.repair("master", s.buildMaster, true))
 	api("GET /api/v1/cubes/{sn}/rooms/{id}/repair/relink", "repair", s.repair("relink", s.buildRelink, false))
 	api("POST /api/v1/cubes/{sn}/rooms/{id}/repair/relink", "repair", s.repair("relink", s.buildRelink, true))
+	api("GET /api/v1/cubes/{sn}/rooms/{id}/repair/unlink-relink", "repair", s.repair("unlink_relink", s.buildUnlinkRelink, false))
+	api("POST /api/v1/cubes/{sn}/rooms/{id}/repair/unlink-relink", "repair", s.repair("unlink_relink", s.buildUnlinkRelink, true))
 	api("GET /api/v1/cubes/{sn}/devices/{rf}/repair/config", "repair", s.repair("config", s.buildResend, false))
 	api("POST /api/v1/cubes/{sn}/devices/{rf}/repair/config", "repair", s.repair("config", s.buildResend, true))
 	api("GET /api/v1/cubes/{sn}/devices/{rf}/repair/place", "repair", s.repair("move", s.buildPlace, false))
@@ -74,6 +77,7 @@ type repairAction struct {
 	reread   []cube.RFAddress // the C lines followed up after a run
 	resets   []cube.RFAddress // the devices whose flags the run resets
 	notes    []string
+	untested bool           // not yet run on hardware
 	details  map[string]any // what the preview says of the repair's own
 	// structure says the run holds the Cube's structure lock, as the
 	// moves and removals do.
@@ -112,9 +116,11 @@ type repairPlan struct {
 	Refused string         `json:"refused,omitempty"`
 	// Nothing says why the repair has nothing to send now, without a
 	// plan; a run of it is refused with 409.
-	Nothing string         `json:"nothing,omitempty"`
-	Notes   []string       `json:"notes"`
-	Details map[string]any `json:"details,omitempty"`
+	Nothing string   `json:"nothing,omitempty"`
+	Notes   []string `json:"notes"`
+	// Untested says that the repair has not yet run on hardware.
+	Untested bool           `json:"untested,omitempty"`
+	Details  map[string]any `json:"details,omitempty"`
 }
 
 // repairStep is one command of a preview: the device it addresses, the
@@ -201,7 +207,7 @@ func repairRefusal(w http.ResponseWriter, err error) error {
 func (s *Server) repairView(rt *runtime, a *repairAction) repairPlan {
 	snap := rt.client.Snapshot()
 	v := repairPlan{Action: a.name, Steps: []repairStep{}, Metadata: a.metadata != nil, Budget: rt.client.Budget(), Notes: a.notes,
-		Details: a.details}
+		Untested: a.untested, Details: a.details}
 	if v.Notes == nil {
 		v.Notes = []string{}
 	}
@@ -538,6 +544,39 @@ func (s *Server) buildRelink(r *http.Request, rt *runtime) (*repairAction, error
 	a := &repairAction{name: "relink", rooms: []uint8{room.ID}, structure: true}
 	for _, c := range cmds {
 		a.steps = append(a.steps, repairCmd{what: "link " + c.Target.String() + " with its partners in room " + fmt.Sprint(room.ID), cmd: c})
+	}
+	return a, nil
+}
+
+// buildUnlinkRelink is "unlink all and re-link" of a room (Block 12,
+// D163-B): every link removed, then built again. It needs structure as
+// well as repair, its preview included.
+func (s *Server) buildUnlinkRelink(r *http.Request, rt *runtime) (*repairAction, error) {
+	if err := s.require(r, "structure"); err != nil {
+		return nil, err
+	}
+	room, err := s.roomToLink(r, rt)
+	if err != nil {
+		return nil, err
+	}
+	cmds := cubeio.UnlinkRelinkCommands(rt.client.Snapshot(), room.ID, rt.hidden())
+	links := 0
+	for _, c := range cmds {
+		if strings.HasPrefix(c.Key, "repair-relink:") {
+			links++
+		}
+	}
+	if links < 2 {
+		return nil, fail(http.StatusConflict, "room %d has fewer than two devices to link", room.ID)
+	}
+	a := &repairAction{name: "unlink_relink", rooms: []uint8{room.ID}, structure: true, untested: true,
+		notes: []string{"not yet run on hardware: every link of the room is removed before it is built again, and a run that stops halfway leaves the room's devices without their partners until it is run again"}}
+	for _, c := range cmds {
+		what := fmt.Sprintf("link %s with its partners in room %d", c.Target, room.ID)
+		if strings.HasPrefix(c.Key, "repair-unlink:") {
+			what = fmt.Sprintf("unlink %s from its partners in room %d", c.Target, room.ID)
+		}
+		a.steps = append(a.steps, repairCmd{what: what, cmd: c})
 	}
 	return a, nil
 }

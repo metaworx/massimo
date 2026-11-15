@@ -1006,7 +1006,7 @@ The capabilities, what each allows, and the routes it guards:
 | `discover` | search for Cubes on the LAN | `POST /api/v1/cubes/discover` |
 | `backup` | download a backup, list the stored ones | `GET …/backup`, the list of stage (e) |
 | `restore` | plan and run a restore | `POST …/restore/plan`, `POST …/restore` |
-| `repair` | the repairs of a Cube's rooms and devices: their communication errors reset, a device's configuration re-sent from its room, a device placed or listed where the Cube and its list disagree, a room's master named, a room re-linked (migration 0022; docs/api-v1.md, "Repairs") | `GET`/`POST …/repair/…` |
+| `repair` | the repairs of a Cube's rooms and devices: their communication errors reset, a device's configuration re-sent from its room, a device placed or listed where the Cube and its list disagree, a room's master named, a room re-linked; "unlink all and re-link" needs `structure` as well (migration 0022; docs/api-v1.md, "Repairs") | `GET`/`POST …/repair/…` |
 | `guests` | create, invite, disable and remove users whose role is `guest`, with an end date | the users routes, limited to guests |
 | `users` | every user: create, role, disable, password reset, tokens | `GET`/`POST /api/v1/users`, `…/users/{name}`, `…/users/{name}/tokens` |
 | `passwords` | set the password of a user | the users routes, limited to a password |

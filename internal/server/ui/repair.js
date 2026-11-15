@@ -12,14 +12,17 @@
 "use strict";
 
 // REPAIRS are the repairs a box of each kind offers, in their order:
-// key names their texts (repair.<key>, repair.<key>Help) and route is
-// the end of their path.
+// key names their texts (repair.<key>, repair.<key>Help), route is the
+// end of their path, needs a capability they need besides repair, and
+// warn says that Run… warns first and asks twice ("unlink all and
+// re-link", D163-B).
 const REPAIRS = {
   cube: [{ key: "reset", route: "/repair/reset" }],
   room: [
     { key: "roomReset", route: "/repair/reset" },
     { key: "master", route: "/repair/master" },
     { key: "relink", route: "/repair/relink" },
+    { key: "unlinkRelink", route: "/repair/unlink-relink", needs: "structure", warn: true },
   ],
   device: [
     { key: "config", route: "/repair/config" },
@@ -52,9 +55,10 @@ function toggleRepair(scope, kind, path, skip) {
   redrawRepair(scope);
 }
 
-// repairsOf are the repairs a box offers.
+// repairsOf are the repairs a box offers: those the box does not skip,
+// for which the user has what they need besides repair.
 function repairsOf(box) {
-  return REPAIRS[box.kind].filter((r) => !box.skip.includes(r.key));
+  return REPAIRS[box.kind].filter((r) => !box.skip.includes(r.key) && (!r.needs || hasCap(r.needs)));
 }
 
 // loadRepairs reads every preview of a box, keeping a run's outcome.
@@ -221,7 +225,7 @@ function repairReady(scope, r, item) {
     return out;
   }
   const actions = elem("div", "actions repair-actions");
-  const run = button(t("repair.run"), "repair-run", () => askRepair(scope, r, item, actions));
+  const run = button(t("repair.run"), "repair-run", () => (r.warn ? warnRepair : askRepair)(scope, r, item, actions));
   actions.appendChild(run);
   if (item.state === "running") setBusy(run, true);
   out.push(actions);
@@ -233,6 +237,41 @@ function repairReady(scope, r, item) {
 function askRepair(scope, r, item, actions) {
   const text = t("repair.confirm", { what: t("repair." + r.key), cost: repairCost(item.preview) });
   confirmInPlace(actions, text, { yes: t("repair.runNow"), no: t("action.cancel") }, () => runRepair(scope, r, item), ".repair-run");
+}
+
+// warnRepair warns in place of Run… before "unlink all and re-link":
+// what it costs, that it has not yet run on hardware, and what a run
+// that stops halfway leaves; Continue asks once more, by its own words.
+function warnRepair(scope, r, item, actions) {
+  const p = item.preview;
+  const box = elem("div", "panel repair-warning");
+  box.setAttribute("role", "group");
+  const text = textEl("p", t("repair.unlinkRelinkWarning", { cost: repairCost(p) }), "repair-warning-text");
+  text.id = "repair-warning-" + ++fieldSeq;
+  box.setAttribute("aria-labelledby", text.id);
+  const back = () => {
+    box.replaceWith(actions);
+    actions.querySelector(".repair-run").focus();
+  };
+  const cancel = button(t("action.cancel"), "repair-warning-no", back);
+  const go = button(t("repair.continue"), "repair-warning-yes", () => {
+    const again = confirmBox(t("repair.unlinkRelinkConfirm"), { yes: t("repair.unlinkRelinkNow"), no: t("action.cancel") },
+      () => runRepair(scope, r, item), () => {
+        again.replaceWith(actions);
+        actions.querySelector(".repair-run").focus();
+      });
+    box.replaceWith(again);
+    again.focusFirst();
+  });
+  box.append(text, elem("div", "actions", cancel, go));
+  box.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Escape") return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    back();
+  });
+  actions.replaceWith(box);
+  cancel.focus();
 }
 
 // runRepair sends a repair with its preview's plan, says how it went,

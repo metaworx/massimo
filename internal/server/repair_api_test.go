@@ -563,7 +563,7 @@ func TestRepairPreviewsSendNothing(t *testing.T) {
 	sent := len(fc.Received())
 	const base = "/api/v1/cubes/KEQ0000100"
 	for _, path := range []string{"/repair/reset", "/rooms/1/repair/reset", "/rooms/1/repair/master", "/rooms/1/repair/relink",
-		"/devices/0a0b0c/repair/config", "/devices/0a0b0c/repair/place", "/devices/0a0b0c/repair/list"} {
+		"/rooms/1/repair/unlink-relink", "/devices/0a0b0c/repair/config", "/devices/0a0b0c/repair/place", "/devices/0a0b0c/repair/list"} {
 		if code, _, body := previewOf(t, ts, base+path); code >= 500 {
 			t.Fatalf("GET %s: %d %s", path, code, body)
 		}
@@ -574,7 +574,8 @@ func TestRepairPreviewsSendNothing(t *testing.T) {
 }
 
 // A role without repair is refused every repair, its preview included,
-// and sends nothing; one with repair alone is let through.
+// and sends nothing; one with repair alone is let through, but for
+// "unlink all and re-link", which needs structure as well.
 func TestRepairNeedsRepair(t *testing.T) {
 	fc, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
 	st := s.opts.Store
@@ -591,11 +592,40 @@ func TestRepairNeedsRepair(t *testing.T) {
 		if code != http.StatusForbidden || errorOf(text) != `capability "repair" required` {
 			t.Errorf("builder: %s %s: %d %s", r.method, r.path, code, text)
 		}
-		if code, text = callAPI(t, ts, r.method, fillRoute(r.path)+"?plan=0", fixer, ""); code == http.StatusForbidden {
+		code, text = callAPI(t, ts, r.method, fillRoute(r.path)+"?plan=0", fixer, "")
+		needsStructure := strings.HasSuffix(r.path, "/unlink-relink")
+		if refused := code == http.StatusForbidden; refused != needsStructure ||
+			needsStructure && errorOf(text) != `capability "structure" required` {
 			t.Errorf("fixer: %s %s: %d %s", r.method, r.path, code, text)
 		}
 	}
 	if got := sentSince(fc, sent); len(got) != 0 {
 		t.Fatalf("sent %v", lineStrings(got))
 	}
+}
+
+// "Unlink all and re-link" removes every link of room 1, one command per
+// member with the 0x21s of a move's unlink half and no 0x23, then sends
+// the re-link of every member; its preview says it has not yet run on
+// hardware, and its run sends exactly the lines it showed.
+func TestRepairUnlinkRelink(t *testing.T) {
+	fc, ts, _ := startRepairCube(t, func(fc *fakecube.Server) { withContactInRoom1(t, fc.Greeting) })
+	const path = "/api/v1/cubes/KEQ0000100/rooms/1/repair/unlink-relink"
+	sent := len(fc.Received())
+	code, p, body := previewOf(t, ts, path)
+	if code != 200 || p.Action != "unlink_relink" || !p.Untested || len(p.Notes) != 1 || len(p.Steps) != 6 {
+		t.Fatalf("preview: %d %s", code, body)
+	}
+	// 11 radiograms out, 14 in; six with the room flag to a room of three.
+	if p.Radiograms != 25 || p.Held != 12 || p.Wakeups != 6 || p.Refused != "" {
+		t.Fatalf("preview's cost: %s", body)
+	}
+	if got := sentSince(fc, sent); len(got) != 0 {
+		t.Fatalf("the preview sent %v", lineStrings(got))
+	}
+	code, out := do(t, ts, "POST", path+"?plan="+p.Plan, "")
+	if code != 200 || out["ok"] != true || out["confirmation"] != "pending" {
+		t.Fatalf("run: %d %v", code, out)
+	}
+	sameLines(t, sentSince(fc, sent), append(relinkLines(false), relinkLines(true)...))
 }

@@ -3,8 +3,8 @@
 
 package cubeio
 
-// The repairs of a Cube's rooms and devices (AP RadioHealth v1.2, Block
-// 11, D163): the commands each sends, built from the snapshot so
+// The repairs of a Cube's rooms and devices (AP RadioHealth v1.2, Blocks
+// 11 and 12, D163): the commands each sends, built from the snapshot so
 // that a preview shows exactly what a run sends. A room is its members by
 // their C lines, the Cube's own idea of it, as RoomAddressee takes it;
 // the server refuses a re-link of a room whose C lines and metadata
@@ -99,6 +99,40 @@ func RoomDisagreement(snap *cubelan.Snapshot, room uint8, skip view.Hidden) []cu
 // members are the devices whose C line names room, the devices in skip
 // left out.
 func RelinkCommands(snap *cubelan.Snapshot, room uint8, skip view.Hidden) []engine.Command {
+	return relink(snap, room, skip, true)
+}
+
+// relink is RelinkCommands; reset says that its first command resets
+// the room's flagged members.
+func relink(snap *cubelan.Snapshot, room uint8, skip view.Hidden, reset bool) []engine.Command {
+	members := ConfigMembers(snap, room, skip)
+	master := roomMaster(snap, room)
+	var out []engine.Command
+	for _, d := range members {
+		if !Linkable(d.Type) {
+			continue
+		}
+		var lines []cube.Message
+		if reset && len(out) == 0 {
+			lines = flaggedResets(snap, members, d.RFAddress)
+		}
+		lines = append(lines, linkLines(master, d.RFAddress, d.Type, room, members, true, true)...)
+		lines = append(lines, cube.CmdSetGroup(d.RFAddress, room, false))
+		out = append(out, engine.Command{Key: "repair-relink:" + d.RFAddress.String(), Target: d.RFAddress, RoomID: room, Wakeup: true, Lines: lines})
+	}
+	return out
+}
+
+// UnlinkRelinkCommands builds "unlink all and re-link" of room (D163-B,
+// a step of its own behind a warning): for each member that takes part
+// in links, after a wakeup of the room, the 0x21s of a move's unlink
+// half without its 0x23 (one with the room flag naming it, to the room's
+// addressee, one to each window contact among its partners, one to the
+// member for each partner), which leaves the member in its room, its
+// group kept, with no partner; then the re-link of every member
+// (RelinkCommands), whose 0x22 sets the group again. The first command
+// resets the room's other flagged members. Not yet run on hardware.
+func UnlinkRelinkCommands(snap *cubelan.Snapshot, room uint8, skip view.Hidden) []engine.Command {
 	members := ConfigMembers(snap, room, skip)
 	master := roomMaster(snap, room)
 	var out []engine.Command
@@ -110,11 +144,13 @@ func RelinkCommands(snap *cubelan.Snapshot, room uint8, skip view.Hidden) []engi
 		if len(out) == 0 {
 			lines = flaggedResets(snap, members, d.RFAddress)
 		}
-		lines = append(lines, linkLines(master, d.RFAddress, d.Type, room, members, true, true)...)
-		lines = append(lines, cube.CmdSetGroup(d.RFAddress, room, false))
-		out = append(out, engine.Command{Key: "repair-relink:" + d.RFAddress.String(), Target: d.RFAddress, RoomID: room, Wakeup: true, Lines: lines})
+		lines = append(lines, linkLines(master, d.RFAddress, d.Type, room, members, false, true)...)
+		if len(lines) == 0 {
+			continue // no partner: nothing to unlink
+		}
+		out = append(out, engine.Command{Key: "repair-unlink:" + d.RFAddress.String(), Target: d.RFAddress, RoomID: room, Wakeup: true, Lines: lines})
 	}
-	return out
+	return append(out, relink(snap, room, skip, len(out) == 0)...)
 }
 
 // MasterCandidate is the thermostat a room's metadata should name as its

@@ -443,7 +443,15 @@ or for resets whether the Cube's device list still shows the error.
   the room, the wall thermostat, else the first radiator thermostat,
   in the list only;
   **Re-link the room**, each device's links and room sent again,
-  adding only.
+  adding only;
+  **Unlink all and re-link**, with `structure` as well,
+  every link of the room removed and then built again:
+  its **Run…** first warns, naming the cost,
+  that it has not yet run on real hardware,
+  and that a run that stops halfway leaves the room's devices without their
+  partners until it is run again;
+  **Continue** asks once more, and only that question's
+  **Unlink all and re-link now** sends it.
 - At a device: **Re-send the configuration**, for a thermostat,
   the temperatures and week programme most of the room's other thermostats
   share, where its own differ;
