@@ -176,7 +176,7 @@ func TestParsePrefs(t *testing.T) {
 			t.Errorf("%s accepted", bad)
 		}
 	}
-	if got := Kinds(); len(got) != 10 || got[0] != KindBatteryLow {
+	if got := Kinds(); len(got) != 11 || got[0] != KindBatteryLow {
 		t.Errorf("kinds %v", got)
 	}
 }
@@ -250,6 +250,7 @@ func TestDeviceConditions(t *testing.T) {
 	}
 	h.push(ev(false, false, false))
 	h.push(ev(true, false, false))
+	h.push(batteryLevel("low"))
 	h.push(ev(true, false, false))
 	h.push(ev(true, false, true))
 	got := h.take()
@@ -280,7 +281,10 @@ func TestDeviceConditions(t *testing.T) {
 func TestCoalescing(t *testing.T) {
 	h := newHarness(t, user(1, `{}`))
 	low := func(on bool) Event {
-		return Event{Kind: "state", Cube: "KEQ0000100", Device: "0a0103", State: &State{BatteryLow: on}}
+		if on {
+			return batteryLevel("low")
+		}
+		return batteryLevel("ok")
 	}
 	for range 3 {
 		h.push(low(true))
@@ -302,7 +306,7 @@ func TestCoalescing(t *testing.T) {
 func TestEachUsersPreference(t *testing.T) {
 	h := newHarness(t, user(1, `{"window_open": {"on": true, "after_min": 5}}`), user(2, `{"window_open": {"on": false}, "battery_low": {"on": false}}`), user(3, `{}`))
 	h.push(state(true))
-	h.push(Event{Kind: "state", Cube: "KEQ0000100", Device: "0a0103", State: &State{BatteryLow: true}})
+	h.push(batteryLevel("low"))
 	h.advance(5 * time.Minute)
 	h.advance(25 * time.Minute)
 	var got []string
@@ -352,5 +356,51 @@ func TestOtherKinds(t *testing.T) {
 	}
 	if strings.Join(kinds, ",") != "device_stale,paired,cube_found,update" || got[1].n.Values["type"] != "radiator_thermostat" || got[3].n.Values["version"] != "v0.13.0" {
 		t.Fatalf("delivered %+v", got)
+	}
+}
+
+// batteryLevel is the server's event of a device's battery level that
+// changed (internal/battery).
+func batteryLevel(level string) Event {
+	return Event{Kind: "battery", Cube: "KEQ0000100", Device: "0a0103", Values: map[string]any{"level": level}}
+}
+
+// The battery levels (AP LegacyLogs v1.0, Block 11): weak sends
+// battery_weak once it has lasted 15 minutes, on by default; low sends
+// battery_low at once and drops a battery_weak still waiting, as for a
+// wall thermostat, which goes from weak to low within 15 minutes; ok
+// drops it too. The battery flag of a state event alone sends nothing.
+func TestBatteryLevels(t *testing.T) {
+	h := newHarness(t, user(1, `{}`), user(2, `{"battery_weak": {"on": false}}`))
+	h.push(Event{Kind: "state", Cube: "KEQ0000100", Device: "0a0103", State: &State{BatteryLow: true}})
+	h.push(batteryLevel("weak"))
+	h.advance(14 * time.Minute)
+	if k := h.kinds(); k != "" {
+		t.Fatalf("weak for 14 minutes: %q", k)
+	}
+	h.advance(time.Minute)
+	got := h.take()
+	if len(got) != 1 || got[0].n.Kind != KindBatteryWeak || got[0].user != 1 {
+		t.Fatalf("weak for 15 minutes: %+v", got)
+	}
+
+	h.advance(time.Hour)
+	h.push(Event{Kind: "battery", Cube: "KEQ0000100", Device: "0a0104", Values: map[string]any{"level": "weak"}})
+	h.advance(10 * time.Minute)
+	h.push(Event{Kind: "battery", Cube: "KEQ0000100", Device: "0a0104", Values: map[string]any{"level": "low"}})
+	h.advance(10 * time.Minute)
+	got = h.take()
+	if len(got) != 2 || got[0].n.Kind != KindBatteryLow || got[1].n.Kind != KindBatteryLow {
+		t.Fatalf("weak, then low within 15 minutes: %+v", got)
+	}
+
+	h.push(Event{Kind: "battery", Cube: "KEQ0000100", Device: "0a0105", Values: map[string]any{"level": "weak"}})
+	h.push(Event{Kind: "battery", Cube: "KEQ0000100", Device: "0a0105", Values: map[string]any{"level": "ok"}})
+	h.advance(30 * time.Minute)
+	if k := h.kinds(); k != "" {
+		t.Fatalf("weak, then ok: %q", k)
+	}
+	if !Defaults()[KindBatteryWeak].On {
+		t.Fatal("battery_weak off by default")
 	}
 }

@@ -394,14 +394,18 @@ function deviceIcon(d) {
 
 // deviceProblems are what is wrong with a device, as problemsEl's items:
 // a radio fault (the Cube could not send to it, or it lost its link) and
-// a low battery; withWindow, also an open window, with its age.
+// a weak or low battery; withWindow, also an open window, with its age.
 function deviceProblems(d, withWindow) {
   const s = d.state || {};
   const out = [];
   if (!d.reported) return out;
   if (s.error) out.push({ kind: "radio", icon: problemIcon("radio"), sign: PROBLEM_SIGNS.radio, tone: "bad", text: t("badge.transmitError") });
   if (s.link_error) out.push({ kind: "radio", icon: problemIcon("radio"), sign: PROBLEM_SIGNS.radio, tone: "warn", text: t("badge.linkError") });
-  if (s.battery_low) out.push({ kind: "battery", icon: PROBLEM_KINDS.battery, tone: "warn", text: t("badge.batteryLow"), at: received(d, "battery_low"), stale: d.stale });
+  // The battery's level, the server's (internal/battery): weak amber, low
+  // red; a device of a server without levels by its flag, amber.
+  if (d.battery === "low") out.push({ kind: "battery", icon: PROBLEM_KINDS.battery, tone: "bad", text: t("badge.batteryLow"), at: received(d, "battery_low"), stale: d.stale });
+  else if (d.battery === "weak") out.push({ kind: "battery", icon: PROBLEM_KINDS.battery, tone: "warn", text: t("badge.batteryWeak"), at: received(d, "battery_low"), stale: d.stale });
+  else if (d.battery === undefined && s.battery_low) out.push({ kind: "battery", icon: PROBLEM_KINDS.battery, tone: "warn", text: t("badge.batteryLow"), at: received(d, "battery_low"), stale: d.stale });
   if (withWindow && s.window_open === true) {
     out.push({ kind: "window", icon: problemIcon("window"), sign: PROBLEM_SIGNS.window, tone: WINDOW_TONE[windowState(d)], text: t("badge.open"), at: received(d, "window_open"), stale: d.stale });
   }
@@ -837,7 +841,9 @@ function deviceBadges(d) {
   const s = d.state || {};
   const out = [];
   if (!d.reported) {
-    out.push([t("badge.notReported"), "warn"]);
+    // A device the Cube has not heard for some minutes keeps its last
+    // values, out of date; one it never heard has none.
+    out.push([t(d.out_of_date ? "badge.outOfDate" : "badge.notReported"), "warn", d.out_of_date ? d.last_seen : undefined]);
     return out;
   }
   if (d.stale) out.push([staleText(d), "warn stale-badge"]);
@@ -937,11 +943,14 @@ function renderDevice(d) {
     if (sb) sb.title = line;
   }
   const grid = el.querySelector(".device-vals");
-  if (isThermostat(d) && d.reported) {
-    deviceValues(grid, d, undefined);
+  if (isThermostat(d) && (d.reported || (d.out_of_date && d.last_known))) {
+    // An out-of-date device shows the values of its last report.
+    const shown = d.reported ? d : Object.assign({}, d, { state: d.last_known });
+    if (!d.reported) grid.classList.add("out-of-date");
+    deviceValues(grid, shown, undefined);
     deviceDetail(d).then((detail) => {
       const cfg = detail.thermostat || detail.wall_thermostat;
-      if (cfg && cfg.temp_offset !== undefined) deviceValues(grid, d, cfg.temp_offset);
+      if (cfg && cfg.temp_offset !== undefined) deviceValues(grid, shown, cfg.temp_offset);
     }).catch(() => {});
   }
   const actions = el.querySelector(".device-actions");

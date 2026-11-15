@@ -279,7 +279,7 @@ func (s *Server) pushNotify(ev notify.Event) {
 // device's state, pairing, a device forgotten.
 func (s *Server) notifyEvent(rt *runtime, ev event) {
 	switch ev.Kind {
-	case "connected", "disconnected", "state", "paired", "device_forgotten":
+	case "connected", "disconnected", "state", "battery", "paired", "device_forgotten":
 	default:
 		return
 	}
@@ -291,6 +291,9 @@ func (s *Server) notifyEvent(rt *runtime, ev event) {
 			st := dv.State
 			n.State = &notify.State{WindowOpen: st.WindowOpen, BatteryLow: st.BatteryLow, Error: st.Error, LinkError: st.LinkError, ActualTemp: st.ActualTemp}
 		}
+	}
+	if ev.Kind == "battery" {
+		n.Values = map[string]any{"level": ev.Summary["level"]}
 	}
 	if ev.Paired != nil {
 		n.Serial = ev.Paired.Serial
@@ -347,7 +350,7 @@ func (s *Server) notifyDevices() []notify.Device {
 	var out []notify.Device
 	for _, rt := range s.runtimes() {
 		snap := rt.client.Snapshot()
-		for _, d := range view.Devices(snap, rt.hidden(), s.StaleAfter()) {
+		for _, d := range view.Devices(snap, rt.hidden(), s.staleness()) {
 			out = append(out, notify.Device{Cube: rt.cubeSerial(), Device: d.RFAddress, Serial: d.Serial, DeviceName: d.Name, Room: int(d.RoomID), RoomName: roomName(rt, d.RoomID), Stale: d.Stale})
 		}
 	}

@@ -16,6 +16,7 @@ const integrationsUI = {
   details: {}, // per uuid: GET /api/v1/integrations/{uuid}, with its users
   found: [], // GET /api/v1/integrations/found
   looks: false, // the server looks at the LAN
+  announce: null, // why it does not: the found answer's announce
   users: null, // the Massimo users to link to, where they may be read
   open: new Set(), // the uuids whose panel is open
 };
@@ -48,6 +49,28 @@ async function loadSeenIntegrations(refresh) {
   const f = (await api("GET", "api/v1/integrations/found" + (refresh ? "?refresh=1" : ""))) || {};
   integrationsUI.found = f.found || [];
   integrationsUI.looks = !!f.looks;
+  integrationsUI.announce = f.announce || null;
+}
+
+// NOT_LOOKING are the texts of why the server does not look on the LAN,
+// by the found answer's announce.why (AP LookReason).
+const NOT_LOOKING = { off: "integrations.foundOff", loopback: "integrations.foundLoopback", restart: "integrations.foundRestart", fixed: "integrations.foundFixed" };
+
+// renderNotLooking says why the server does not look on the LAN and,
+// where Maintenance can change it, opens Maintenance.
+function renderNotLooking(box) {
+  const a = integrationsUI.announce || {};
+  const key = NOT_LOOKING[a.why] || "integrations.foundNot";
+  box.appendChild(textEl("p", t(key, { by: a.fixed_by || "" }), "muted small"));
+  if (!NOT_LOOKING[a.why] || a.why === "fixed" || !hasCap("settings") || !mayShow("maint")) return; // log.js
+  const b = textEl("button", t("integrations.openMaintenance"));
+  b.type = "button";
+  b.id = "integrations-open-maint";
+  b.addEventListener("click", () => {
+    showView("maint"); // log.js
+    showCard($("sys-maint")); // components.js
+  });
+  box.appendChild(elem("div", "actions", elem("span", "actions-left", b)));
 }
 
 // loadLinkUsers reads the Massimo users an integration's user may be
@@ -273,7 +296,7 @@ function renderSeenIntegrations() {
   clear(box);
   $("integrations-look").classList.toggle("hidden", !integrationsUI.looks);
   if (!integrationsUI.looks) {
-    box.appendChild(textEl("p", t("integrations.foundOff"), "muted small"));
+    renderNotLooking(box);
     return;
   }
   if (!integrationsUI.found.length) {

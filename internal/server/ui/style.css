@@ -1256,6 +1256,7 @@ html.blink-first .server-sign[data-state="new"] use.mark, html.blink-first .serv
 .temp-age .age-exact { display: none; }
 .flag .age { color: inherit; opacity: 0.85; margin-left: 0.4em; }
 .device-vals.stale .num { color: var(--muted); }
+.device-vals.out-of-date .num { color: var(--muted); } /* the last report's values of a device the Cube no longer hears */
 /* In the device list a value's age takes the line under it: how old
    under the value's name, in expert mode the time under the value, on
    one line, so that the two columns fit a phone and each age stands

@@ -39,7 +39,7 @@ func runServe(args []string) error {
 	poll := fs.Duration("poll", server.DefaultPollInterval, "how often to ask each Cube for its device list, which costs no radio time (default the store's poll_interval, else 10s)")
 	refresh := fs.Duration("refresh", server.DefaultRefreshInterval, "how often to reconnect to each Cube to re-read everything it holds (0 = never; default the store's refresh_interval, else 6h)")
 	cubeHold := fs.Duration("cube-hold", cubelan.DefaultHold, "how long a Cube's lost connection is held open, so that it resumes on the same session when the network is back, before serve connects anew, which a Cube that still holds the old session refuses (0 = not at all; without -poll nothing is held)")
-	staleAfter := fs.Duration("stale-after", 0, "mark a thermostat stale once its entry has not changed for this long (default the store's stale_after, else 24h); short values are for tests")
+	staleAfter := fs.Duration("stale-after", 0, "mark a thermostat stale once its entry has not changed for this long, radiator and wall thermostats alike (default the store's stale_after and stale_after_wall, else 50h and 24h); short values are for tests")
 	discoverEvery := fs.Duration("discover-interval", server.DefaultDiscoverInterval, "how often to look for Cubes on the LAN, with a first run at the start (0 = only on request through the API; default the store's discover_interval, else 30m)")
 	var discoverTargets []string
 	fs.Func("discover-target", "send discovery requests to this host[:port] instead of broadcasting (repeatable; for another subnet, or a fake Cube's -discovery)", func(v string) error {

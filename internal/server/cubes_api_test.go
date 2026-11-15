@@ -419,8 +419,18 @@ func TestSettingsAPI(t *testing.T) {
 	poll, _ := out["poll_interval"].(map[string]any)
 	refresh, _ := out["refresh_interval"].(map[string]any)
 	node, _ := out["node.id"].(map[string]any)
-	if code != 200 || stale["value"] != "24h" || stale["set"] != false || stale["applies"] != "now" || node["value"] != st.NodeID() || node["read_only"] != true {
+	if code != 200 || stale["value"] != "50h" || stale["set"] != false || stale["applies"] != "now" || node["value"] != st.NodeID() || node["read_only"] != true {
 		t.Fatalf("get %d %v", code, out)
+	}
+	// The wall thermostats' own threshold, 24 h, set at once (AP LegacyLogs, D136-A).
+	if wall, _ := out["stale_after_wall"].(map[string]any); wall["value"] != "24h" || wall["applies"] != "now" {
+		t.Fatalf("stale_after_wall %v", wall)
+	}
+	if code, out := do(t, ts, "PUT", "/api/v1/settings", `{"stale_after_wall":"12h"}`); code != 200 || srv.StaleAfterWall() != 12*time.Hour || srv.StaleAfter() != view.StaleAfter {
+		t.Fatalf("stale_after_wall set %d %v", code, out)
+	}
+	if code, _ := do(t, ts, "PUT", "/api/v1/settings", `{"stale_after_wall":null}`); code != 200 || srv.StaleAfterWall() != view.StaleAfterWall {
+		t.Fatalf("stale_after_wall back to the default: %d", code)
 	}
 	if poll["value"] != "10s" || poll["default"] != "10s" || poll["in_effect"] != "2m" || poll["applies"] != "restart" || poll["fixed_by"] != "-poll" {
 		t.Fatalf("poll_interval %v", poll)
@@ -451,7 +461,7 @@ func TestSettingsAPI(t *testing.T) {
 	}
 	code, out = do(t, ts, "PUT", "/api/v1/settings", `{"stale_after":null}`)
 	stale, _ = out["stale_after"].(map[string]any)
-	if code != 200 || stale["set"] != false || stale["value"] != "24h" || srv.StaleAfter() != view.StaleAfter {
+	if code != 200 || stale["set"] != false || stale["value"] != "50h" || srv.StaleAfter() != view.StaleAfter {
 		t.Fatalf("back to the default %d %v", code, out)
 	}
 	// The log's retention: 30 days unset, 0 keeps everything, at most 3650.

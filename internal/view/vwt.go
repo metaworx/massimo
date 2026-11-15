@@ -375,12 +375,12 @@ func (s State) MarshalJSON() ([]byte, error) {
 
 // RoomsOf lists the visible rooms as the view kind shows them, each with
 // its uid; info holds the rooms' uids and settings.
-func RoomsOf(snap *cubelan.Snapshot, h Hidden, staleAfter time.Duration, kind Kind, info map[uint8]RoomInfo) []Room {
+func RoomsOf(snap *cubelan.Snapshot, h Hidden, stale Staleness, kind Kind, info map[uint8]RoomInfo) []Room {
 	md := snap.Metadata()
 	if md == nil {
 		return nil
 	}
-	rooms := Rooms(snap, h, staleAfter)
+	rooms := Rooms(snap, h, stale)
 	visible := h.VisibleRooms(md)
 	addrs := VirtualAddresses(snap, visible, info)
 	for i := range rooms {
@@ -396,13 +396,13 @@ func RoomsOf(snap *cubelan.Snapshot, h Hidden, staleAfter time.Duration, kind Ki
 // DevicesOf lists the visible devices as the view kind shows them: the
 // real ones in the Cube's order, then the virtual wall thermostats in the
 // rooms' order.
-func DevicesOf(snap *cubelan.Snapshot, h Hidden, staleAfter time.Duration, kind Kind, info map[uint8]RoomInfo) []Device {
-	devs := Devices(snap, h, staleAfter)
+func DevicesOf(snap *cubelan.Snapshot, h Hidden, stale Staleness, kind Kind, info map[uint8]RoomInfo) []Device {
+	devs := Devices(snap, h, stale)
 	if kind == KindReal {
 		return devs
 	}
 	var vwts []Device
-	for _, r := range RoomsOf(snap, h, staleAfter, kind, info) {
+	for _, r := range RoomsOf(snap, h, stale, kind, info) {
 		for _, d := range r.Devices {
 			if d.Virtual {
 				vwts = append(vwts, d)
@@ -466,9 +466,9 @@ func Shown(kind Kind, roomHasWall bool) bool {
 
 // RoomThermostats computes every visible room's virtual wall thermostat,
 // by room, with whether the room has a real wall thermostat.
-func RoomThermostats(snap *cubelan.Snapshot, h Hidden, staleAfter time.Duration, info map[uint8]RoomInfo) (map[uint8]Device, map[uint8]bool) {
+func RoomThermostats(snap *cubelan.Snapshot, h Hidden, stale Staleness, info map[uint8]RoomInfo) (map[uint8]Device, map[uint8]bool) {
 	out, walls := map[uint8]Device{}, map[uint8]bool{}
-	for _, r := range RoomsOf(snap, h, staleAfter, KindAll, info) {
+	for _, r := range RoomsOf(snap, h, stale, KindAll, info) {
 		for _, d := range r.Devices {
 			switch {
 			case d.Virtual:

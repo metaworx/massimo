@@ -32,7 +32,7 @@ func TestTimedOutPairingIsWithdrawn(t *testing.T) {
 	defer cancel()
 	// The duty cycle "resets" 600 ms after a command waits for it.
 	c := cubelan.New(cubelan.Options{Addr: addr})
-	q := engine.NewQueue(c, engine.Options{Gap: time.Millisecond, ResetAt: func(now time.Time) time.Time { return now.Add(600 * time.Millisecond) }})
+	q := engine.NewQueue(c, engine.Options{Gap: time.Millisecond, DutyWait: 600 * time.Millisecond})
 	go c.Run(ctx)
 	go q.Run(ctx)
 	<-c.Ready()

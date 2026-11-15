@@ -4,6 +4,7 @@
 package server
 
 import (
+	"cmp"
 	"context"
 	"net/http"
 	"slices"
@@ -120,13 +121,55 @@ func (s *Server) getFoundIntegrations(w http.ResponseWriter, r *http.Request) er
 		}
 	}
 	out := struct {
-		Found []FoundIntegration `json:"found"`
-		At    time.Time          `json:"at,omitzero"`
-		Look  bool               `json:"looks"` // the server looks at the LAN
-	}{found, at, s.opts.FindIntegrations != nil}
+		Found    []FoundIntegration `json:"found"`
+		At       time.Time          `json:"at,omitzero"`
+		Look     bool               `json:"looks"`              // the server looks at the LAN
+		Announce *notLooking        `json:"announce,omitempty"` // why not, where it does not
+	}{Found: found, At: at, Look: s.opts.FindIntegrations != nil}
 	if out.Found == nil {
 		out.Found = []FoundIntegration{}
 	}
+	if !out.Look {
+		ann, err := st.SettingString(r.Context(), store.AnnounceKey)
+		if err != nil {
+			return fail(http.StatusInternalServerError, "%v", err)
+		}
+		out.Announce = s.whyNotLooking(ann)
+	}
 	writeJSON(w, http.StatusOK, out)
 	return nil
+}
+
+// notLooking is why the server does not look for integrations on the LAN
+// (AP LookReason): the announcement off for this run, by the setting
+// announce as GET /api/v1/settings shows it, and the reason in Why.
+type notLooking struct {
+	Value    string `json:"value"`              // the setting stored, or auto
+	InEffect string `json:"in_effect"`          // this run's, off
+	FixedBy  string `json:"fixed_by,omitempty"` // -announce or MASSIMO_ANNOUNCE
+	// Why is fixed (FixedBy decides), restart (the setting stored
+	// announces from the next start), off (the setting is off) or
+	// loopback (the setting is auto and the server listens on a loopback
+	// address).
+	Why string `json:"why"`
+}
+
+// whyNotLooking says why a run that does not look on the LAN does not,
+// the setting announce stored now being ann: what decided at the start
+// wins over the setting, and a setting that announces at the next start
+// waits for the restart.
+func (s *Server) whyNotLooking(ann string) *notLooking {
+	v := cmp.Or(ann, store.AnnounceAuto)
+	n := &notLooking{Value: v, InEffect: store.AnnounceOff, FixedBy: s.opts.Announce.FixedBy}
+	switch {
+	case n.FixedBy != "":
+		n.Why = "fixed"
+	case v == store.AnnounceOn, v != store.AnnounceOff && !s.opts.Announce.Loopback:
+		n.Why = "restart"
+	case v == store.AnnounceOff:
+		n.Why = "off"
+	default:
+		n.Why = "loopback"
+	}
+	return n
 }

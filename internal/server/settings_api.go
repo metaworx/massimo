@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/update"
 	"go.metaworx.ch/massimo/internal/view"
@@ -90,12 +91,23 @@ var boolSettings = []boolSetting{
 var durationSettings = []durationSetting{
 	{key: store.StaleAfterKey, def: view.StaleAfter, min: time.Hour, max: 30 * 24 * time.Hour, now: true,
 		inEffect: func(s *Server) time.Duration { return s.StaleAfter() }},
+	{key: store.StaleAfterWallKey, def: view.StaleAfterWall, min: time.Hour, max: 30 * 24 * time.Hour, now: true,
+		inEffect: func(s *Server) time.Duration { return s.StaleAfterWall() }},
 	{key: store.PollIntervalKey, def: DefaultPollInterval, min: 10 * time.Second, max: time.Hour,
 		inEffect: func(s *Server) time.Duration { return s.opts.PollInterval }},
 	{key: store.RefreshIntervalKey, def: DefaultRefreshInterval, min: 10 * time.Minute, max: 7 * 24 * time.Hour, zero: true,
 		inEffect: func(s *Server) time.Duration { return s.opts.RefreshInterval }},
 	{key: store.DiscoverIntervalKey, def: DefaultDiscoverInterval, min: time.Minute, max: 24 * time.Hour, zero: true,
 		inEffect: func(s *Server) time.Duration { return s.opts.DiscoverInterval }},
+	// How long radio commands wait at a full duty cycle before the Cube's
+	// budget is read again (AP LegacyLogs, D143-A).
+	{key: store.DutyWaitKey, def: engine.DefaultDutyWait, min: time.Minute, max: time.Hour,
+		inEffect: func(s *Server) time.Duration {
+			if s.opts.Queue.DutyWait > 0 {
+				return s.opts.Queue.DutyWait
+			}
+			return engine.DefaultDutyWait
+		}},
 	// How long a window may stay open before the web UI shows it amber,
 	// then red; the second not under the first.
 	{key: store.WindowWarnKey, def: view.WindowWarnAfter, min: time.Minute, max: 24 * time.Hour, now: true,
@@ -105,11 +117,13 @@ var durationSettings = []durationSetting{
 }
 
 // AnnounceState is a run's announcement on the LAN: whether the server
-// announces itself, and what decided it where the setting announce did
-// not (-announce or MASSIMO_ANNOUNCE).
+// announces itself, what decided it where the setting announce did not
+// (-announce or MASSIMO_ANNOUNCE), and whether it listens on a loopback
+// address, which the setting's auto keeps off.
 type AnnounceState struct {
-	On      bool
-	FixedBy string
+	On       bool
+	FixedBy  string
+	Loopback bool
 }
 
 // announceValues are the setting announce's values.
@@ -395,11 +409,15 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 		case store.BackupsKeepDaysAutoKey, store.BackupsKeepDaysManualKey, store.BackupsKeepNewestKey:
 			pruneBackups = true
 		}
-		if wr.key == store.StaleAfterKey {
+		if wr.key == store.StaleAfterKey || wr.key == store.StaleAfterWallKey {
+			set := s.SetStaleAfter
+			if wr.key == store.StaleAfterWallKey {
+				set = s.SetStaleAfterWall
+			}
 			if wr.duration == nil {
-				s.SetStaleAfter(0)
+				set(0)
 			} else {
-				s.SetStaleAfter(*wr.duration)
+				set(*wr.duration)
 			}
 		}
 		if wr.key == store.WindowWarnKey || wr.key == store.WindowAlertKey {

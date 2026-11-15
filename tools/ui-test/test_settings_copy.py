@@ -83,7 +83,7 @@ def test_heads_explained(page, case):
 
 def test_maintenance_order(page, case):
     """Maintenance: Announce on the LAN, the three Cube intervals (AP
-    CubePoll v1.0), Settings file, Restart, Reboot the computer, their
+    CubePoll v1.0) and the duty cycle's hold (AP LegacyLogs v1.0), Settings file, Restart, Reboot the computer, their
     titles alike."""
     show_view(page, "maint")
     try:
@@ -91,7 +91,7 @@ def test_maintenance_order(page, case):
           const title = d.querySelector('.action-title');
           return [title ? title.dataset.i18n : '', title ? getComputedStyle(title).fontWeight : ''];
         })""")
-        assert [r[0] for r in rows] == ["maint.announce", "maint.poll", "maint.refresh", "maint.discover", "maint.file", "maint.restart", "maint.reboot"], \
+        assert [r[0] for r in rows] == ["maint.announce", "maint.poll", "maint.refresh", "maint.discover", "maint.dutyWait", "maint.file", "maint.restart", "maint.reboot"], \
             f"the owner's order ({rows})"
         assert len({r[1] for r in rows}) == 1, f"the titles alike ({rows})"
     finally:

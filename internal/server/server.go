@@ -95,6 +95,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/announce"
 	"go.metaworx.ch/massimo/internal/backup"
+	"go.metaworx.ch/massimo/internal/battery"
 	"go.metaworx.ch/massimo/internal/certs"
 	"go.metaworx.ch/massimo/internal/cubeio"
 	"go.metaworx.ch/massimo/internal/cubelan"
@@ -259,9 +260,11 @@ type Options struct {
 	// (-proxy): a proxy address changed through the API is stored, and
 	// takes effect at the next start without -proxy.
 	ProxyFixed bool
-	// StaleAfter is the stale threshold of the device views (0:
-	// view.StaleAfter); SetStaleAfter changes it while the server runs.
-	StaleAfter time.Duration
+	// StaleAfter and StaleAfterWall are the stale thresholds of the
+	// device views, of radiator and of wall thermostats (0:
+	// view.StaleAfter, view.StaleAfterWall); SetStaleAfter and
+	// SetStaleAfterWall change them while the server runs.
+	StaleAfter, StaleAfterWall time.Duration
 	// notifyClock is the notification rules' clock, for the tests; nil
 	// is the real one.
 	notifyClock notify.Clock
@@ -385,8 +388,9 @@ type Server struct {
 	discWake chan struct{} // wakeDiscovery
 	proxyMu  sync.Mutex
 	proxies  []*proxyRun
-	// staleAfter is the stale threshold in effect, in nanoseconds.
-	staleAfter atomic.Int64
+	// staleAfter and staleAfterWall are the stale thresholds in effect,
+	// in nanoseconds.
+	staleAfter, staleAfterWall atomic.Int64
 	// windowWarn and windowAlert are how long a window may stay open
 	// before it counts as open too long, in nanoseconds (SetWindowLimits).
 	windowWarn, windowAlert atomic.Int64
@@ -426,6 +430,11 @@ type runtime struct {
 	// last is each device's state as the last state event had it, for
 	// the changes of the next one; only the pump uses it.
 	last map[cube.RFAddress]*view.State
+	// battery keeps the devices' battery levels (battery.go).
+	battery *battery.Tracker
+	// walls is each wall thermostat's last mode, for wall_reset; only the
+	// pump uses it (wallreset.go).
+	walls map[cube.RFAddress]*wallMemo
 	// vwt is the rooms' uids and settings, and each room's virtual wall
 	// thermostat as its last event had it (vwt.go).
 	vwt vwtState
@@ -709,6 +718,7 @@ func New(opts Options) *Server {
 	s.pushSlots = make(chan struct{}, maxDeliveries)
 	s.reboot.allowed = opts.Reboot.Allowed
 	s.SetStaleAfter(opts.StaleAfter)
+	s.SetStaleAfterWall(opts.StaleAfterWall)
 	s.SetWindowLimits(0, 0)
 	if opts.Store != nil {
 		s.loadWindowLimits(context.Background())
@@ -863,6 +873,7 @@ func (s *Server) proxyRuntime(pl ProxyListener) (*runtime, error) {
 // pump forwards client events to the SSE subscribers and learns the
 // serial once the Cube is connected.
 func (s *Server) pump(ctx context.Context, rt *runtime) {
+	s.rebuildBattery(ctx, rt) // before the first state, so that the replay comes first
 	for {
 		select {
 		case <-ctx.Done():
@@ -904,6 +915,8 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 				continue
 			}
 			ev := event{Kind: e.Kind.String(), Time: time.Now()}
+			var batteryChanges []battery.Change
+			var wallBack *event
 			if e.Device != 0 {
 				ev.Device = e.Device.String()
 				snap := rt.client.Snapshot()
@@ -922,8 +935,15 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 					ev.State = view.Device{RFAddress: ev.Device, Type: g.Type, Name: g.Name, RoomID: g.RoomID, Serial: g.Serial}
 				}
 				if _, ok := rt.client.Snapshot().State(e.Device); ok {
-					dv := view.DeviceOf(rt.client.Snapshot(), e.Device, s.StaleAfter())
+					dv := view.DeviceOf(rt.client.Snapshot(), e.Device, s.staleness())
 					dv.SetWindow(s.windowLimits())
+					if r, ok := batteryReport(dv); ok && e.Kind == cubelan.EventState {
+						batteryChanges = rt.battery.Report(ev.Device, ev.Time, r)
+					}
+					if e.Kind == cubelan.EventState {
+						wallBack = rt.wallReset(dv, ev.Time)
+					}
+					rt.setBattery(&dv)
 					ev.State = dv
 					if e.Kind == cubelan.EventState {
 						if prev, had := rt.last[e.Device]; had {
@@ -939,6 +959,8 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			}
 			if e.Kind == cubelan.EventForgotten {
 				delete(rt.last, e.Device)
+				delete(rt.walls, e.Device)
+				rt.battery.Forget(e.Device.String())
 				rt.follow.forget(e.Device)
 			}
 			if e.Kind == cubelan.EventPaired {
@@ -960,6 +982,10 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			rt.subsMu.Unlock()
 			for _, a := range after {
 				rt.emit(a)
+			}
+			s.emitBattery(rt, batteryChanges)
+			if wallBack != nil {
+				rt.emit(*wallBack)
 			}
 			switch e.Kind {
 			case cubelan.EventState, cubelan.EventMetadata, cubelan.EventConnected, cubelan.EventConfig, cubelan.EventForgotten:
@@ -1109,8 +1135,8 @@ func stateAttrs(serial string, d view.Device) []any {
 	return attrs
 }
 
-// SetStaleAfter sets the stale threshold of the device views; 0 or less
-// goes back to view.StaleAfter.
+// SetStaleAfter sets the stale threshold of radiator thermostats in the
+// device views; 0 or less goes back to view.StaleAfter.
 func (s *Server) SetStaleAfter(d time.Duration) {
 	if d <= 0 {
 		d = view.StaleAfter
@@ -1118,8 +1144,25 @@ func (s *Server) SetStaleAfter(d time.Duration) {
 	s.staleAfter.Store(int64(d))
 }
 
-// StaleAfter returns the stale threshold in effect.
+// StaleAfter returns the radiator thermostats' stale threshold in effect.
 func (s *Server) StaleAfter() time.Duration { return time.Duration(s.staleAfter.Load()) }
+
+// SetStaleAfterWall sets the stale threshold of wall thermostats in the
+// device views; 0 or less goes back to view.StaleAfterWall.
+func (s *Server) SetStaleAfterWall(d time.Duration) {
+	if d <= 0 {
+		d = view.StaleAfterWall
+	}
+	s.staleAfterWall.Store(int64(d))
+}
+
+// StaleAfterWall returns the wall thermostats' stale threshold in effect.
+func (s *Server) StaleAfterWall() time.Duration { return time.Duration(s.staleAfterWall.Load()) }
+
+// staleness is the stale thresholds in effect, for the device views.
+func (s *Server) staleness() view.Staleness {
+	return view.Staleness{Radiator: s.StaleAfter(), Wall: s.StaleAfterWall()}
+}
 
 // SetWindowLimits sets how long a window may stay open before it counts
 // as open too long, a warning, then an alert; 0 or less goes back to
@@ -1670,8 +1713,9 @@ func (s *Server) getDevice(w http.ResponseWriter, r *http.Request) error {
 	if !ok && c == nil || rt.hidden()[rf] {
 		return fail(http.StatusNotFound, "no device %s", rf)
 	}
-	d := deviceDetail{Device: view.DeviceOf(snap, rf, s.StaleAfter())}
+	d := deviceDetail{Device: view.DeviceOf(snap, rf, s.staleness())}
 	d.SetWindow(s.windowLimits())
+	rt.setBattery(&d.Device)
 	if c != nil {
 		d.Firmware, d.Thermostat, d.Wall = c.Firmware, c.Thermostat, c.Wall
 		if d.Wall != nil && st.Valid {
@@ -1820,7 +1864,14 @@ func (s *Server) setRoomSetpoint(w http.ResponseWriter, r *http.Request) error {
 	if !ok {
 		return fail(http.StatusNotFound, "no room %d", id)
 	}
-	return s.setpoint(w, r, rt, cube.Target{RFAddress: room.RFAddress, RoomID: room.ID, Room: true}, 0, fmt.Sprintf("room:%d", id))
+	// The device the room command names (cubeio.RoomAddressee): every
+	// member of the room takes a room-flagged command whichever it names,
+	// but the named device takes it too, whatever its room.
+	addr, ok := cubeio.RoomAddressee(rt.client.Snapshot(), room.ID, rt.hidden())
+	if !ok {
+		return fail(http.StatusConflict, "room %d has no thermostat", room.ID)
+	}
+	return s.setpoint(w, r, rt, cube.Target{RFAddress: addr, RoomID: room.ID, Room: true}, 0, fmt.Sprintf("room:%d", id))
 }
 
 func (s *Server) setpoint(w http.ResponseWriter, r *http.Request, rt *runtime, t cube.Target, target cube.RFAddress, key string) error {

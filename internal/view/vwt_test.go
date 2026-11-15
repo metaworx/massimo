@@ -142,7 +142,7 @@ func TestViews(t *testing.T) {
 	}
 	info := map[uint8]RoomInfo{1: {UID: "u1"}, 2: {UID: "u2", TempMethod: TempMean}, 3: {UID: "u3"}}
 	count := func(kind Kind) (real, virtual, walls int) {
-		for _, r := range RoomsOf(snap, nil, 0, kind, info) {
+		for _, r := range RoomsOf(snap, nil, Staleness{}, kind, info) {
 			for _, d := range r.Devices {
 				switch {
 				case d.Virtual:
@@ -161,11 +161,11 @@ func TestViews(t *testing.T) {
 		if r, v, w := count(kind); [3]int{r, v, w} != want {
 			t.Errorf("%s: real %d, virtual %d, walls %d; want %v", kind, r, v, w, want)
 		}
-		if n := len(DevicesOf(snap, nil, 0, kind, info)); n != want[0]+want[1] {
+		if n := len(DevicesOf(snap, nil, Staleness{}, kind, info)); n != want[0]+want[1] {
 			t.Errorf("%s: %d devices", kind, n)
 		}
 	}
-	rooms := RoomsOf(snap, nil, 0, KindAll, info)
+	rooms := RoomsOf(snap, nil, Staleness{}, KindAll, info)
 	if rooms[0].UID != "u1" || !rooms[0].Devices[0].Virtual {
 		t.Fatalf("room 1 %+v", rooms[0])
 	}

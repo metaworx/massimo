@@ -329,6 +329,42 @@ and from serve's store on one of the owner's hosts (2026-11-11 to 14):
   and its memory slot back within 3 to 6 s once the members answered.
   A 0x40 to a room whose members did not answer held its slot for at least
   3.9 days at 0 % duty.
+- The valid bit (0x10 of the first flags byte) says the Cube heard the device
+  lately (2026-11-15, Cube firmware 1.1.3, two wall thermostats of one of the
+  owner's Cubes, their batteries taken out and put back by the owner):
+  a wall thermostat lost it 4¾ to 5¾ minutes after its batteries came out,
+  about two of its 3-minute reports, and had it again within a minute of the
+  batteries going back.
+  The entry is then "out of date", as the original software calls it: flag
+  0x02 alone, the values of the last report kept; Massimo shows them as
+  `last_known`.
+  Radiator thermostats, which report once a day when idle, kept it for more
+  than 23 hours of silence (2026-02-19/20); wall thermostats that missed a
+  report or two lost it for a minute (2026-11-12 and 13).
+- A device's battery flag (byte 6 bit 0x80), 2026-11-11 to 15 on the owner's Cubes:
+  - Two radiator thermostats showed it for 1 to 4 minutes at a time, ten and
+    four times in three days, each time with a report out of turn and
+    cleared by another: the device reports when its battery state changes.
+  - In the decalcification hour (Saturday 11:03 to 11:05 UTC), all three that
+    ever flickered showed it, and were the only radiator thermostats to
+    report then: the valve's full travel is the week's heaviest load.
+  - A wall thermostat, with no motor, went from clear to steady between two
+    reports.
+  - No device was seen going from flickering to steady in those days; in
+    February five devices had it steady for 4 to 7 days, until new batteries.
+  - A wall thermostat whose batteries go back in starts in auto mode on its
+    week programme: one that had been on manual 6 °C came back on auto 5.5 °C
+    (2026-11-15), its room's radiator thermostat still on manual; Massimo
+    warns of such a return in its log (`wall_reset`).
+  - Massimo keeps a level per device from this: weak at the first flag,
+    low when it stays 15 minutes, weak again ok after the next
+    decalcification without it.
+- The duty cycle falls within the hour: on one Cube from 21 % at 14:05 to 3 %
+  at 14:42 on 2026-11-13 with no client command, and 21 % five minutes after
+  a full hour; 3 of 19 falls between readings had no full hour between them.
+  It is probably the share of the last 60 minutes, not a counter reset on the
+  hour, so after a hold Massimo reads the budget again in steps (`duty_wait`)
+  rather than waiting for the next full hour.
 
 ## One LAN client at a time
 
@@ -362,6 +398,10 @@ A second capture (week program, presets, valve settings, renames):
 | Rename room or device, reorder rooms | `m:00,<base64 metadata>` (index only, no count) | `A:` |
 
 All of these match the builders in `internal/protocol/cube` byte for byte.
+A metadata write longer than one block of 1900 base64 characters numbers its
+`m:` lines in decimal, two digits below 10, as the original software 1.4.6
+builds them (`"0" + i`), so the eleventh block is `m:10`, not `m:0a`;
+from the bytecode only, since no Cube here needs more than one block.
 The `z:` duration `1e` has been read as 30 s; the original software 1.4.6 names
 the field `durationInMinutes`, and the byte is the same either way, so the unit
 is open.
@@ -655,12 +695,16 @@ logged as `arrangeNewDevice`, `removeDevices`,
 unnamed, and a power cycle of the Cube did not drop them.
 The FHEM project notes that `t:` makes the Cube send a factory reset to the device,
 so a device that never answers is apparently never dropped.
-Massimo deletes a device the same way (`DELETE /api/v1/cubes/{sn}/devices/{rf}`,
-2026-11-06):
-wakeup, 0x23 and 0x21 per partner in both directions for a device in a room,
+Massimo deletes a device as the original software removed one that answers
+on 2026-11-15 ("Lessons from the hardware days";
+`DELETE /api/v1/cubes/{sn}/devices/{rf}`):
+a wakeup of the device's room, one `r:` per flagged member of the room,
+one 0x21 with the room flag naming the device,
 `t:01,1,<rf>`, `m:` without it, and its copy forgets the device on the `A:`.
-That a device which answers is dropped from the C lines and the next `L:` is
-*unverified* on hardware.
+Until then it sent 0x23 and 0x21 per partner in both directions,
+which the Cube discarded twice that night, before the `t:`.
+The original software's removal dropped the device from the Cube's lists;
+Massimo's with the same sequence is *unverified* on hardware.
 
 Which room such a device blocks is decided by the room byte of its own C line,
 not by the metadata (experiment 2026-11-04, one never-reporting device 0a0101):
@@ -949,6 +993,9 @@ kept here because they cost time to learn.
   so `serve`'s discovery socket is dual-stack.
   With the service's udp4 socket, bound at boot, the original software on the PC
   found no Cube: all ten answers on the owner's LAN went to the service.
+  With the dual-stack socket, the service running beside it on Windows 11,
+  the original software found all ten
+  (2026-11-15, five Cubes on firmware 1.1.3 and another server's five proxies).
   Across Windows accounts, as between the service and a user,
   the port is shared only where the first socket set SO_REUSEADDR.
 - The original software 1.4.6 (`MaxLocalBackend-1.4.6.jar`):

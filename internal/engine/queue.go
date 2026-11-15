@@ -140,9 +140,17 @@ func (t *Ticket) Done() <-chan Result { return t.done }
 
 // Options tune the queue's policy.
 type Options struct {
-	// MaxDutyPct is the duty cycle above which radio commands wait for
-	// the hourly reset. The Cube reports 0..100.
+	// MaxDutyPct is the duty cycle above which radio commands wait. The
+	// Cube reports 0..100.
 	MaxDutyPct int
+	// DutyWait is how long radio commands wait while the duty cycle is
+	// at MaxDutyPct before the queue reads the Cube's budget again: by a
+	// reconnect, which costs no radio time, where the gateway can, else
+	// from the next command's reply. The duty cycle falls within the hour,
+	// probably the share of the last 60 minutes (docs/cube-protocol.md),
+	// so the queue does not wait for the next full hour.
+	// DefaultDutyWait where 0.
+	DutyWait time.Duration
 	// MinFreeSlots is the number of free memory slots below which radio
 	// commands wait, so unreachable devices cannot fill the Cube's memory.
 	MinFreeSlots int
@@ -154,10 +162,8 @@ type Options struct {
 	// WakeupSeconds is the z: duration before configuration writes.
 	WakeupSeconds uint8
 	Logger        *slog.Logger
-	// Now and ResetAt exist for tests; ResetAt returns when the duty
-	// cycle next resets (default: the next full hour plus a margin).
-	Now     func() time.Time
-	ResetAt func(now time.Time) time.Time
+	// Now exists for tests.
+	Now func() time.Time
 	// Observer, when set, is told of every command with an ID; the
 	// queue's own lines of such a command's outcome go to debug then,
 	// since the observer records it.
@@ -169,8 +175,8 @@ type Options struct {
 }
 
 // Hold is a wait of the radio commands: Reason HoldDutyCycle until
-// Until, with the duty cycle at DutyPct, or HoldMemorySlots for Wait,
-// with FreeSlots free.
+// Until, when the budget is read again, with the duty cycle at DutyPct,
+// or HoldMemorySlots for Wait, with FreeSlots free.
 type Hold struct {
 	Reason    string
 	DutyPct   int
@@ -225,12 +231,14 @@ func (o *Options) defaults() {
 	if o.Now == nil {
 		o.Now = time.Now
 	}
-	if o.ResetAt == nil {
-		o.ResetAt = func(now time.Time) time.Time {
-			return now.Truncate(time.Hour).Add(time.Hour + 15*time.Second)
-		}
+	if o.DutyWait == 0 {
+		o.DutyWait = DefaultDutyWait
 	}
 }
+
+// DefaultDutyWait is how long radio commands wait at a full duty cycle
+// before the budget is read again, where Options.DutyWait is 0.
+const DefaultDutyWait = 10 * time.Minute
 
 type entry struct {
 	cmd    Command
@@ -507,6 +515,24 @@ func (q *Queue) deviceInError(rf cube.RFAddress) bool {
 	return ok && (st.Error || st.LinkError)
 }
 
+// rereadBudget reads the Cube's budget again by reconnecting, which
+// costs no radio time: the Cube sends its H line with the duty cycle and
+// the free slots at every connection. It reports false where the gateway
+// cannot reconnect or the reconnect failed.
+func (q *Queue) rereadBudget(ctx context.Context) bool {
+	rc, ok := q.gw.(Reconnector)
+	if !ok {
+		return false
+	}
+	rctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	if err := rc.Reconnect(rctx); err != nil {
+		q.opts.Logger.Warn("radio budget not read again", "error", err)
+		return false
+	}
+	return true
+}
+
 // onHold tells OnHold, where set, that the radio commands wait.
 func (q *Queue) onHold(h Hold) {
 	if q.opts.OnHold != nil {
@@ -514,17 +540,23 @@ func (q *Queue) onHold(h Hold) {
 	}
 }
 
-// waitForBudget blocks while the duty cycle or free slots are exhausted.
+// waitForBudget blocks while the duty cycle or free slots are exhausted:
+// at a full duty cycle for DutyWait at a time, reading the budget again
+// after each, until it has fallen or cannot be read again.
 func (q *Queue) waitForBudget(ctx context.Context) error {
 	b := q.gw.Budget()
-	if b.DutyCyclePct >= q.opts.MaxDutyPct {
-		until := q.opts.ResetAt(q.opts.Now())
+	for b.DutyCyclePct >= q.opts.MaxDutyPct {
+		until := q.opts.Now().Add(q.opts.DutyWait)
 		q.onHold(Hold{Reason: HoldDutyCycle, DutyPct: b.DutyCyclePct, Until: until})
-		q.holdLog().Warn("radio duty cycle exhausted, waiting for the hourly reset", "duty_pct", b.DutyCyclePct, "until", until)
-		q.sleep(ctx, until.Sub(q.opts.Now()))
+		q.holdLog().Warn("radio duty cycle exhausted, holding radio commands until the budget is read again", "duty_pct", b.DutyCyclePct, "until", until)
+		q.sleep(ctx, q.opts.DutyWait)
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
+		if !q.rereadBudget(ctx) {
+			break // the next command's reply reads it
+		}
+		b = q.gw.Budget()
 	}
 	if b.UpdatedAt.IsZero() {
 		return nil // nothing known yet; the first command tells us

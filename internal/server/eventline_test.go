@@ -123,7 +123,7 @@ func TestEventMessages(t *testing.T) {
 		want string
 	}{
 		{event{Kind: "command", Summary: map[string]any{"state": "acknowledged"}}, "command acknowledged"},
-		{event{Kind: "hold", Summary: map[string]any{"reason": engine.HoldDutyCycle}}, "radio duty cycle exhausted, waiting for the hourly reset"},
+		{event{Kind: "hold", Summary: map[string]any{"reason": engine.HoldDutyCycle}}, "radio duty cycle exhausted, holding radio commands until the budget is read again"},
 		{event{Kind: "hold", Summary: map[string]any{"reason": engine.HoldMemorySlots}}, "few free memory slots on the cube, holding radio commands"},
 		{event{Kind: "login_failed"}, "login failed"},
 		{event{Kind: "restart", Error: "no"}, "restart not started"},

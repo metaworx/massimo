@@ -995,7 +995,7 @@ async function setAnnounce() {
   renderAnnounce();
 }
 
-// --- the Cube intervals (poll_interval, refresh_interval, discover_interval)
+// --- the Cube intervals (poll_interval, refresh_interval, discover_interval, duty_wait)
 
 // INTERVALS are the Cube intervals of the Maintenance card (AP CubePoll
 // v1.0, D119-B): the setting, its select and its explanation, and the
@@ -1004,6 +1004,9 @@ const INTERVALS = [
   { key: "poll_interval", id: "interval-poll", hint: "maint.pollHint", steps: [10, 15, 20, 30, 60, 120, 300, 600, 1800, 3600] },
   { key: "refresh_interval", id: "interval-refresh", hint: "maint.refreshHint", steps: [0, 1800, 3600, 7200, 10800, 21600, 43200, 86400, 172800, 604800] },
   { key: "discover_interval", id: "interval-discover", hint: "maint.discoverHint", steps: [0, 60, 300, 600, 900, 1800, 3600, 7200, 21600, 43200, 86400] },
+  // How long radio commands wait at a full duty cycle before the Cube's
+  // budget is read again (AP LegacyLogs v1.0, D143-A).
+  { key: "duty_wait", id: "interval-duty", hint: "maint.dutyWaitHint", steps: [60, 300, 600, 900, 1800, 3600] },
 ];
 
 // intervalsUI keeps the settings as GET /api/v1/settings answered them.

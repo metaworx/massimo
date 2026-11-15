@@ -19,6 +19,7 @@ const NOTIFY_KINDS = [
   ["window_open", { on: true, after_min: 30 }],
   ["frost", { on: true, below_c: 8 }],
   ["battery_low", { on: true }],
+  ["battery_weak", { on: true }],
   ["device_error", { on: true }],
   ["cube_offline", { on: true, after_min: 10 }],
   ["cube_online", { on: true }],

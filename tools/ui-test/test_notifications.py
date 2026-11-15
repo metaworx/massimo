@@ -130,7 +130,9 @@ def test_rules_kept_on_the_server(page, case):
     page reads them back."""
     show_view(page, "notify")
     rows = page.locator("#notify-rules .notify-row")
-    assert rows.count() == 10, "a row per kind"
+    assert rows.count() == 11, "a row per kind"
+    assert rule_row(page, "battery_weak").locator("input[type=checkbox]").is_checked(), \
+        "a weak battery is on by default (AP LegacyLogs v1.0, D152-A)"
     win = rule_row(page, "window_open")
     assert win.locator("input[type=checkbox]").is_checked(), "a window open is on by default"
     assert win.locator("input[type=number]").input_value() == "30"

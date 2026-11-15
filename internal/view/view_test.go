@@ -39,7 +39,7 @@ func snapshot(t *testing.T, extra ...cube.Message) *cubelan.Snapshot {
 
 func TestRoomsAndReady(t *testing.T) {
 	snap := snapshot(t)
-	rooms := Rooms(snap, nil, 0)
+	rooms := Rooms(snap, nil, Staleness{})
 	if len(rooms) != 6 {
 		t.Fatalf("rooms %d", len(rooms))
 	}
@@ -60,7 +60,7 @@ func TestRoomsAndReady(t *testing.T) {
 		t.Fatalf("hidden device counted as silent: %v", s)
 	}
 	snap = snapshot(t, reportedLine)
-	for _, r := range Rooms(snap, nil, 0) {
+	for _, r := range Rooms(snap, nil, Staleness{}) {
 		if r.Ready != (r.ID == 6) {
 			t.Errorf("after the report: room %d ready %v", r.ID, r.Ready)
 		}
@@ -88,7 +88,7 @@ func TestHiddenRoomsAndDevices(t *testing.T) {
 	if rooms != allRooms-1 || devices != allDevices-1 {
 		t.Fatalf("counts %d/%d of %d/%d", rooms, devices, allRooms, allDevices)
 	}
-	for _, d := range Devices(snap, h, 0) {
+	for _, d := range Devices(snap, h, Staleness{}) {
 		if d.RFAddress == silentDevice.String() {
 			t.Fatal("hidden device listed")
 		}
@@ -96,7 +96,7 @@ func TestHiddenRoomsAndDevices(t *testing.T) {
 			t.Fatal("the cube itself listed")
 		}
 	}
-	for _, r := range Rooms(snap, h, 0) {
+	for _, r := range Rooms(snap, h, Staleness{}) {
 		if r.ID == 6 {
 			t.Fatal("hidden room listed")
 		}
@@ -130,6 +130,11 @@ func TestPending(t *testing.T) {
 	if n := Pending(snap, b); n != 3 {
 		t.Fatalf("pending %d", n)
 	}
+	// No slot free: all 50 are in use.
+	b.FreeMemorySlots = 0
+	if n := Pending(snap, b); n != 50 {
+		t.Fatalf("pending with no slot free %d", n)
+	}
 }
 
 func TestAgesAndStale(t *testing.T) {
@@ -147,19 +152,29 @@ func TestAgesAndStale(t *testing.T) {
 	}
 	defer func() { now = time.Now }()
 	now = func() time.Time { return t0.Add(time.Hour) }
-	d := DeviceOf(snap, silentDevice, 0)
+	d := DeviceOf(snap, silentDevice, Staleness{})
 	if d.LastSeen == nil || !d.LastSeen.Equal(t0) || d.Stale || !d.Received["setpoint"].Equal(t0) || !d.Received["valve_pct"].Equal(t0) {
 		t.Fatalf("device %+v", d)
 	}
 	// Devices without state have no times.
-	if d := DeviceOf(snap, 0x0a010a, 0); d.LastSeen != nil || d.Received != nil || d.Stale {
+	if d := DeviceOf(snap, 0x0a010a, Staleness{}); d.LastSeen != nil || d.Received != nil || d.Stale {
 		t.Fatalf("unreported device %+v", d)
 	}
+	// A radiator thermostat goes stale only after 50 h, not after a wall
+	// thermostat's 24 h: an idle one changes its entry once a day and not
+	// on its decalcification day.
+	now = func() time.Time { return t0.Add(StaleAfterWall + time.Hour) }
+	if d := DeviceOf(snap, silentDevice, Staleness{}); d.Stale {
+		t.Fatal("a radiator thermostat stale after the wall thermostats' threshold")
+	}
+	if d := DeviceOf(snap, silentDevice, Staleness{Radiator: StaleAfterWall}); !d.Stale {
+		t.Fatal("the radiator thermostats' threshold given is not used")
+	}
 	now = func() time.Time { return t0.Add(StaleAfter + time.Minute) }
-	if d := DeviceOf(snap, silentDevice, 0); !d.Stale {
+	if d := DeviceOf(snap, silentDevice, Staleness{}); !d.Stale {
 		t.Fatal("not stale after StaleAfter")
 	}
-	for _, r := range Rooms(snap, nil, 0) {
+	for _, r := range Rooms(snap, nil, Staleness{}) {
 		if r.Stale != (r.ID == 6) {
 			t.Errorf("room %d stale %v", r.ID, r.Stale)
 		}
@@ -194,5 +209,17 @@ func TestChanges(t *testing.T) {
 	}
 	if c := Changes(after, nil); len(c) != 1+len(stateFields(after)) || !sameValue(c["reported"], Change{From: true, To: false}) {
 		t.Fatalf("state lost %v", c)
+	}
+}
+
+// Each type has its threshold, the defaults where none is given.
+func TestStalenessByType(t *testing.T) {
+	var s Staleness
+	if s.after(cube.DeviceRadiatorThermostat) != 50*time.Hour || s.after(cube.DeviceWallThermostat) != 24*time.Hour {
+		t.Fatalf("defaults %v %v", s.after(cube.DeviceRadiatorThermostat), s.after(cube.DeviceWallThermostat))
+	}
+	s = Staleness{Radiator: time.Hour, Wall: 2 * time.Hour}
+	if s.after(cube.DeviceRadiatorThermostatPlus) != time.Hour || s.after(cube.DeviceWallThermostat) != 2*time.Hour {
+		t.Fatalf("given %v %v", s.after(cube.DeviceRadiatorThermostatPlus), s.after(cube.DeviceWallThermostat))
 	}
 }

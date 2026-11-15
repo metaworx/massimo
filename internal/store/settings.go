@@ -15,10 +15,16 @@ import (
 // Keys of the server's settings. The durations are JSON strings in Go's
 // notation ("30m", "24h").
 const (
-	StaleAfterKey       = "stale_after"
+	StaleAfterKey = "stale_after"
+	// StaleAfterWallKey is the wall thermostats' stale threshold;
+	// StaleAfterKey the radiator thermostats'.
+	StaleAfterWallKey   = "stale_after_wall"
 	PollIntervalKey     = "poll_interval"
 	RefreshIntervalKey  = "refresh_interval"
 	DiscoverIntervalKey = "discover_interval"
+	// DutyWaitKey is how long radio commands wait at a full duty cycle
+	// before the Cube's budget is read again (engine.Options.DutyWait).
+	DutyWaitKey = "duty_wait"
 	// WindowWarnKey and WindowAlertKey are how long a window may stay
 	// open before the web UI shows it amber, then red.
 	WindowWarnKey  = "window_warn_after"
