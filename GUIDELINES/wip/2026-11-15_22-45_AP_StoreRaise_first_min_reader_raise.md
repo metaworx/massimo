@@ -1,4 +1,4 @@
-# AP StoreRaise v1.1: The store's first min_reader raise
+# AP StoreRaise v1.2: The store's first min_reader raise
 
 ## TL;DR
 
@@ -21,7 +21,8 @@ go back to a binary that is too old for it.
 - **Who did it:** `effective_user_id` and `real_user_id` in
   `user_identities`, `log` and `audit`; the log's backfilled.
 - **Removed rows:** one rule, a UNIQUE that ignores them; no more
-  `-del-…` names.
+  `-del-…` names; a removed Cube found again → "Add as new" or
+  "Restore <date>" (D11-A).
 - **Replicated:** `user_identities` gets the owned columns, `roles` a uuid.
 - **Shown:** "Home › Anna, as anna".
 
@@ -31,12 +32,14 @@ go back to a binary that is too old for it.
 2. Queries that use their indexes, writers that fill `updated_by`
 3. Migration 0023 and the store
 4. An integration's users under its name: API, UI, command line
+5. A removed Cube found again: add as new, or restore
 
 ## Discussion
 
 The owner, 2026-11-15, in an evaluation of the tables an integration and
 its users fill (AP IntegrationUsers' follow-ups), then `PLAN+ StoreRaise`,
-two EVALs of v1.0, and `PLAN+ v1.1 as recommended`. The analysis it rests
+two EVALs of v1.0, `PLAN+ v1.1 as recommended`, an EVAL of v1.1's
+Cube exception and `PLAN+ v1.2 D11-A`. The analysis it rests
 on, with a sub-agent's reading of the whole schema against the code:
 [ANALYSIS StoreRaise](2026-11-15_21-50_ANALYSIS_StoreRaise_store_schema_min_reader_raise.md)
 (its D189 to D198 were working labels; v1.0's Discussion maps them).
@@ -88,6 +91,12 @@ in a table of their own.
 - **D10-A:** one rule for a removed row's unique name: a partial UNIQUE
   `WHERE deleted_at IS NULL`, for `users`, `roles`, `auth_providers`,
   `integrations` and `rooms`; the users' `-del-…` suffixes stripped.
+- **D11-A:** `cubes` too: a partial UNIQUE on `serial`. A removed Cube
+  found again offers "Add as new" (a new row) or "Restore <date>", one per
+  removed row of that serial; restoring revives that row, so its log,
+  backups, rooms, commands and audit stay with it. A corrupt row is left
+  behind by adding the Cube as new. (Not a copy of the old row: the
+  history would stay on the old one.)
 
 **Not in this plan:** the other `*_at` names, `enabled` beside `disabled`,
 `log.device`; the backups' other columns.
@@ -137,7 +146,10 @@ comparing `sqlite_master`:
   and its triggers made again;
 - the renames reversed; `real_user_id` and the replication columns
   dropped; soft-deleted identities removed;
-- the removed users renamed `-del-<time>` again; `users.name` UNIQUE.
+- the removed users renamed `-del-<time>` again; `users.name` UNIQUE;
+- `cubes.serial` UNIQUE again: of several rows of one serial, the live one
+  is kept, else the newest removed; the others' rows go with what
+  references them (lossy).
 
 ### The migration's parts
 
@@ -170,8 +182,12 @@ comparing `sqlite_master`:
   `-del-YYYYMMDD-HHNN` and `-del-YYYYMMDD-HHNN-<id>` stripped.
 - **`roles`:** a uuid, written by an `afterMigration` step (SQL makes no
   UUIDv7), and the partial unique on `key`; `AddRole` adds a row instead of
-  taking a removed one over (`roles.go:172`). `cubes` keeps taking over
-  its removed row: a serial is the same device coming back.
+  taking a removed one over (`roles.go:172`).
+- **`cubes`** made again: `UNIQUE (serial)` → a partial unique index
+  `WHERE deleted_at IS NULL` (D11-A). `rowOf` (`cubes.go:137`) no longer
+  takes a removed row over: adding a serial makes a new row, unless the
+  call names a removed row to restore. Discovery's found Cubes list the
+  removed rows of their serial.
 - **`tokens`:** `deleted_at` dropped, `revoked_at` → `deleted_at`; the API
   keeps `revoked_at`.
 - **The rest of D9.**
@@ -255,7 +271,7 @@ comparing `sqlite_master`:
    this order: the view; `fillSources`' UPDATE; `cube_options`;
    `backup_data`; the log and the audit; the integration's users;
    `integrations`; `user_identities`; `users`; `roles` (and its
-   `afterMigration` step); `tokens`; the rest of D9.
+   `afterMigration` step); `cubes`; `tokens`; the rest of D9.
 2. **`0023_raise.down.sql`:** as "The down part of 0023".
 3. **The store's code:**
    - the new column names (`EffectiveUserID`, `RealUserID`, tokens'
@@ -270,6 +286,8 @@ comparing `sqlite_master`:
    - the log's and the audit's writers fill `real_user_id`;
    - `DeleteUser` no longer renames; `AddRole` adds a row; the identities'
      deletes become tombstones, their reads skip them;
+   - adding a Cube makes a new row, or revives the removed row it names;
+     `RemovedCubes(serial)` lists them;
    - `fillSources` removed.
 4. **`store.sql`** regenerated ("min_reader 23").
 5. **Tests:**
@@ -311,15 +329,34 @@ comparing `sqlite_master`:
 - **Verification:** as Block 1, plus the touched UI test files
   (`make ui-test` with `-k`).
 
+### Block 5: A removed Cube found again: add as new, or restore
+
+1. **The API:** a found Cube carries `removed: [{uuid, name, removed_at}]`
+   for the removed rows of its serial; adding a Cube takes
+   `restore: <uuid>`, else makes a new row.
+2. **The UI:** the found Cube's entry offers "Add as new" and one
+   "Restore <date>" per removed row; the texts in the six languages.
+3. **The command line:** the Cube command's add takes `-restore <uuid>`,
+   and its list shows the removed rows of a found serial.
+4. **Tests:** Go: add as new beside a removed row, restore one of two,
+   the history kept by the restored one; the UI's discovery tests at 1100
+   and 390 px.
+5. **Docs:** `docs/api-v1.md`, the OpenAPI file, `docs/ui.md`,
+   `README.md`.
+6. CHANGELOG fragment `Added`.
+
+- **Verification:** as Block 4.
+
 ## Proposed commit messages
 
-- `chore(aps): StoreRaise v1.1`: this revision.
+- `chore(aps): StoreRaise v1.2`: this revision.
 - Block 1: `feat(store): A store goes back to an older binary with massimo store downgrade`
 - Block 2: `perf(store): The pending commands and the audit's user filter use their indexes`
   and `fix(store): Changes to Cubes, settings and rooms say who made them`
 - Block 3: `feat(store)!: Schema 23, the first a release before it cannot read`,
   with a `BREAKING CHANGE:` trailer
 - Block 4: `feat(server): An integration's users are shown under its name`
+- Block 5: `feat(server): A removed Cube found again is added as new or restored`
 
 ## Change History
 
@@ -334,3 +371,6 @@ comparing `sqlite_master`:
   replicated), D7 (the owner's: `tokens.revoked_at` → `deleted_at`), D8-C
   (`integrations.user_id` dropped too), D9-A, and D10-A, new (one rule for
   removed rows).
+- **v1.2** (2026-11-15): the owner's `PLAN+ v1.2 D11-A`: cubes follow
+  D10's rule too, a removed Cube found again is added as new or restored
+  (Block 5, new); v1.1's exception for cubes is gone.
