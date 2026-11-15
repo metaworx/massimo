@@ -55,8 +55,9 @@ def test_copy(page, case):
 
 
 def test_proxies_copy(page, case):
-    """System Info's Cube proxies: each address copies, by its icon. The
-    test's server runs without proxies, so the system's answer gets one."""
+    """System Info's Cube proxies: each address copies, by its icon, the
+    line's last after the serials'. The test's server runs without
+    proxies, so the system's answer gets one."""
     import json
     from helpers import show_view
     page.context.grant_permissions(["clipboard-read", "clipboard-write"], origin=page.evaluate("location.origin"))
@@ -71,7 +72,7 @@ def test_proxies_copy(page, case):
         page.evaluate("loadSystemInfo()")
         assert wait_until(page, "!!document.querySelector('#info-proxies .copy-icon')", 5), "the proxy with its copy icon"
         page.evaluate("navigator.clipboard.writeText('')")
-        page.locator("#info-proxies .copy-icon").first.click()
+        page.locator("#info-proxies .sys-proxy .copy-icon").last.click()
         assert wait_until(page, "navigator.clipboard.readText().then((t) => t === '192.168.1.31:62910')", 3), "its address copies"
     finally:
         page.unroute("**/api/v1/system")

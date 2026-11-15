@@ -790,8 +790,12 @@ function fillProxies(v) {
   const list = v.cube_proxies || [];
   if (!list.length) cell.textContent = "–";
   for (const p of list) {
-    // the address the original software connects to, copyable (components.js)
-    const line = elem("div", "sys-proxy", textEl("span", p.serial || "", "mono"), " ", copyEl(p.addr, { label: p.addr, icon: true }));
+    // the Cube's serial, the serial the proxy answers discovery with, and
+    // the address the original software connects to, each copyable
+    // (components.js)
+    const line = elem("div", "sys-proxy", copyEl(p.serial || "", { label: p.serial, icon: true }));
+    if (p.discovery_serial) line.append(" ", ...tNodes("proxy.appearsAs", { serial: copyEl(p.discovery_serial, { label: p.discovery_serial, icon: true }) })); // i18n.js
+    line.append(" ", copyEl(p.addr, { label: p.addr, icon: true }));
     if (p.listening) line.append(" ", textEl("span", t("proxy.listening"), "muted"));
     else line.appendChild(noticeEl(t("proxy.notListening", { addr: p.addr, error: p.error || "" }), { since: p.since, next: p.next_try }));
     cell.appendChild(line);
@@ -800,17 +804,46 @@ function fillProxies(v) {
   sectionBadges($("sys-info"), failing ? [badgeEl(tn("proxy.badge.failing", failing), "warn")] : []);
 }
 
+// certRetry follows a proxy's certificate the server has not read yet
+// (it reads it within seconds of the first request): System Info asks
+// again every `every` ms while System settings is shown, `max` times;
+// after the last, the certificate could not be read. Opening System
+// settings starts it again.
+const certRetry = { tries: 0, timer: null, every: 2000, max: 15, last: null };
+
+// certPending reports whether the proxy's certificate is still to be read.
+function certPending(v) {
+  return !!(v && v.proxy && v.proxy.proto === "https" && !v.proxy.certificate);
+}
+
+// certFollow asks again while the certificate is being read and System
+// settings is shown (certRetry), a request that failed counting as a
+// try; after the last, it says the certificate could not be read.
+function certFollow(v) {
+  clearTimeout(certRetry.timer);
+  if (!certPending(v) || !isShown("system")) return;
+  if (certRetry.tries < certRetry.max) {
+    certRetry.tries++;
+    certRetry.timer = setTimeout(loadSystemInfo, certRetry.every);
+  } else fillCertificate(v);
+}
+
 // fillCertificate shows the certificate the browser sees: the proxy's,
 // "(proxied)", where a trusted proxy serves the page (its names, expiry
-// and issuer as the server last read them, or why it could not), with the
-// address the proxy serves, the page's own where the proxy names no
-// scheme, and the header it does not send; the page's own HTTPS while the
-// server serves none, which only a proxy does, with the setting that would
-// tell more; else the server's own (certText, app.js).
+// and issuer as the server last read them, or why it could not, "being
+// read…" while it reads it, "could not be read" once certRetry gave up),
+// with the address the proxy serves, a link and copyable, the page's own
+// where the proxy names no scheme, and the header it does not send; the
+// page's own HTTPS while the server serves none, which only a proxy does,
+// with the setting that would tell more; else the server's own (certText,
+// app.js).
 function fillCertificate(v) {
   const cell = $("info-tls");
   clear(cell);
   const line = (text, cls) => cell.appendChild(textEl("div", text, cls));
+  // an address: a link to it in a new window, and its copy icon
+  const address = (url) =>
+    cell.appendChild(elem("div", "mono muted small sys-url", elem("span", "copy-pair", linkEl(url, url), copyIcon(() => url, t("copy.what", { what: url })))));
   const p = v.proxy;
   if (p) {
     const c = p.certificate;
@@ -818,14 +851,14 @@ function fillCertificate(v) {
       // no scheme from the proxy: the page's own, which the browser knows
       const https = location.protocol === "https:";
       line(t(https ? "sysinfo.proxyHttps" : "sysinfo.proxyPlain") + " " + t("sysinfo.proxied"));
-      line(location.protocol + "//" + location.host, "mono muted small");
+      address(location.protocol + "//" + location.host);
       line(t("sysinfo.proxyNoScheme"), "muted small");
       if (v.tls) line(t("sysinfo.ownCert", { cert: certText(v.tls) }), "muted small");
       return;
     }
     let text;
     if (p.proto !== "https") text = t("sysinfo.proxyPlain");
-    else if (!c) text = t("sysinfo.proxyPending");
+    else if (!c) text = t(certRetry.tries >= certRetry.max ? "sysinfo.proxyUnread" : "sysinfo.proxyPending");
     else if (c.error) text = t("sysinfo.proxyError", { error: c.error });
     else {
       const until = Date.parse(c.not_after || "");
@@ -835,13 +868,13 @@ function fillCertificate(v) {
     line(text + " " + t("sysinfo.proxied"));
     // the scheme's own port left out, as the announcement's url has it
     const own = (p.proto === "https" && p.port === 443) || (p.proto === "http" && p.port === 80) || !p.port;
-    line(p.proto + "://" + (p.host.includes(":") ? "[" + p.host + "]" : p.host) + (own ? "" : ":" + p.port), "mono muted small");
+    address(p.proto + "://" + (p.host.includes(":") ? "[" + p.host + "]" : p.host) + (own ? "" : ":" + p.port));
     if (v.tls) line(t("sysinfo.ownCert", { cert: certText(v.tls) }), "muted small");
     return;
   }
   if (location.protocol === "https:" && !v.tls) {
     line(t("sysinfo.proxyHttps") + " " + t("sysinfo.proxied"));
-    line("https://" + location.host, "mono muted small");
+    address("https://" + location.host);
     line(t("sysinfo.proxyHint"), "muted small");
     return;
   }
@@ -851,19 +884,22 @@ function fillCertificate(v) {
 // loadSystemInfo fills System settings → System Info from GET
 // /api/v1/system: the version and what it was built with, when the
 // server started and how long ago, the server's clock (startSystemClock),
-// the certificate the browser sees (fillCertificate), how it was
-// installed, the operating system and processor, the host's full name
-// (fillHostName), the interfaces it listens on (fillAddresses), the Cube
-// proxies' listeners (fillProxies), and the address the server sees this
-// browser at.
+// the certificate the browser sees (fillCertificate, asked for again
+// while the server reads it, certFollow), how it was installed, the
+// operating system and processor, the host's full name (fillHostName),
+// the interfaces it listens on (fillAddresses), the Cube proxies'
+// listeners (fillProxies), and the address the server sees this browser
+// at.
 async function loadSystemInfo() {
   let v;
   try {
     v = await api("GET", "api/v1/system");
   } catch (e) {
-    return; // the rows keep their dashes
+    certFollow(certRetry.last);
+    return; // the rows keep their dashes, or what they showed
   }
   if (!v) return;
+  certRetry.last = v;
   const parts = splitVersion(v.version || "");
   // the short version shown, the whole one copied, by a click or the icon
   const name = t("copy.version");
@@ -874,6 +910,7 @@ async function loadSystemInfo() {
   fillStarted(v);
   startSystemClock(v);
   fillCertificate(v);
+  certFollow(v);
   // a kind this page has no text for, a package manager's, as it is
   const kind = v.install || "other";
   const label = t("sysinfo.install." + kind);
@@ -1086,6 +1123,7 @@ function initUpdate() {
     loadRestart();
     loadReboot();
     loadServerInfo();
+    Object.assign(certRetry, { tries: 0, last: null });
     loadSystemInfo();
   });
 }

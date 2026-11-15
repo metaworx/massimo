@@ -2949,8 +2949,8 @@ and that proxy, where the request came through one.
   ],
   "api_port": 8099,
   "cube_proxies": [
-    {"serial": "KEQ0000000", "addr": "192.168.1.31:62910", "listening": true},
-    {"serial": "KEQ0000001", "addr": "192.0.2.10:62910", "listening": false,
+    {"serial": "KEQ0000000", "discovery_serial": "LEQ0000000", "addr": "192.168.1.31:62910", "listening": true},
+    {"serial": "KEQ0000001", "discovery_serial": "KEQ0000001", "addr": "192.0.2.10:62910", "listening": false,
      "error": "listen tcp 192.0.2.10:62910: bind: cannot assign requested address",
      "since": "2026-11-13T08:00:00+01:00", "next_try": "2026-11-13T09:53:30+01:00", "tries": 230}
   ],
@@ -2979,7 +2979,10 @@ one on an address that address's interface;
 an interface comes with its MAC and its addresses but link-local ones,
 `api` marking those the API listens on, at `api_port`.
 `cube_proxies` are the Cubes' proxy listeners, listening or not,
-by Cube serial and address;
+by Cube serial and address, with `discovery_serial`, the serial a listener
+answers discovery with: the Cube's proxy serial where one is set, else the
+Cube's own; absent for a listener that answers no discovery
+(only one on the Cube port does, docs/proxy.md);
 one that does not listen has the fields of a Cube's `proxy_failing`
 (`GET /api/v1/cubes`), and is tried again.
 

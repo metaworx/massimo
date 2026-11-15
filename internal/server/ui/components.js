@@ -180,20 +180,54 @@ function iconEl(symbol, cls) {
 
 // SIGNS draw a kind of thing in a state: its icon alone where all is
 // well; else its drawing, smaller where the mark takes a corner, and the
-// mark, a triangle (warn) or a cross (bad). The radio (a Wi-Fi fan) and
-// the window carry the mark at the bottom right, as the original MAX!
-// software does; the network (a Cube's link) on top, in place of its
-// upper node; the cog (the settings) and the log (its unseen problems,
-// log.js renderLogSign) at the bottom right too. A battery has no mark:
-// it is amber or nothing.
+// mark, a triangle (warn) or a cross (bad). The radio and the window are
+// drawn as the person chooses (ICON_CHOICES); the network (a Cube's
+// link) carries the mark on top, in place of its upper node; the cog
+// (the settings) and the log (its unseen problems, log.js renderLogSign)
+// at the bottom right. A battery has no mark: it is amber or nothing.
 const SIGNS = {
-  radio: { icon: "icon-radio", base: "icon-radio-small", warn: "mark-corner-warn", bad: "mark-corner-x" },
-  window: { icon: "icon-window-open", base: "icon-window-open-small", warn: "mark-corner-warn", bad: "mark-corner-x" },
   net: { icon: "icon-net", base: "icon-net-base", warn: "mark-net-warn", bad: "mark-net-x" },
   cog: { icon: "icon-cog", base: "icon-cog-small", warn: "mark-corner-warn", bad: "mark-corner-x" },
   log: { icon: "icon-log", base: "icon-log-small", warn: "mark-corner-warn", bad: "mark-corner-x" },
   battery: { icon: "icon-battery" },
 };
+
+// ICON_CHOICES are the drawings a person chooses for the window and the
+// radio (My settings → Appearance, AP IconChoice), the first of each the
+// default: each its sign, as SIGNS has them, and the window's type icon,
+// a window contact's (closed). The opening sash carries its mark inside
+// its frame, at its size; the paned window of the original MAX! software
+// and the Wi-Fi fan at the bottom right, drawn smaller; the tower of the
+// thermostats' display moves aside for it.
+const ICON_CHOICES = {
+  window: {
+    sash: { type: "icon-window-sash", sign: { icon: "icon-window-sash-open", base: "icon-window-sash-open", warn: "mark-sash-warn", bad: "mark-sash-x" } },
+    paned: { type: "icon-window", sign: { icon: "icon-window-open", base: "icon-window-open-small", warn: "mark-corner-warn", bad: "mark-corner-x" } },
+  },
+  radio: {
+    wifi: { sign: { icon: "icon-radio", base: "icon-radio-small", warn: "mark-corner-warn", bad: "mark-corner-x" } },
+    tower: { sign: { icon: "icon-tower", base: "icon-tower-small", warn: "mark-tower-warn", bad: "mark-tower-x" } },
+  },
+};
+
+// ICON_SETTINGS name the person's setting of each kind of ICON_CHOICES
+// (app.js state.settings).
+const ICON_SETTINGS = { window: "iconWindow", radio: "iconRadio" };
+
+// iconChoice is the drawing of a kind of ICON_CHOICES that the person's
+// setting chooses, the default where it chooses none of them; the
+// default on a page without the settings.
+function iconChoice(kind) {
+  const set = ICON_CHOICES[kind];
+  const settings = (typeof state !== "undefined" && state.settings) || {}; // app.js; none on the connect page
+  return set[settings[ICON_SETTINGS[kind]]] || Object.values(set)[0];
+}
+
+// signOf is a kind's sign: the person's choice for the window and the
+// radio, SIGNS' for the others.
+function signOf(kind) {
+  return ICON_CHOICES[kind] ? iconChoice(kind).sign : SIGNS[kind];
+}
 
 // signEl is the icon of a kind of SIGNS in a state: "" or "ok" plain,
 // "warn" with a triangle, "bad" with a cross, coloured by the state
@@ -202,7 +236,7 @@ const SIGNS = {
 // is what blinks (html.blink-on, blink-first). cls adds classes; key
 // names the sign across redraws (keepBlink).
 function signEl(kind, state, cls, key) {
-  const s = SIGNS[kind];
+  const s = signOf(kind);
   const mark = s[state];
   const svg = iconEl(mark ? s.base : s.icon, "ni sign" + (state ? " tone-" + state : "") + (cls ? " " + cls : ""));
   if (mark) {
@@ -347,6 +381,18 @@ function copyEl(text, { label, icon, cls } = {}) {
   copyable(span, () => text, name);
   if (!icon) return span;
   return elem("span", "copy-pair", span, copyIcon(() => text, name));
+}
+
+// okPill stands in a problem pill's place where nothing is wrong (a
+// Cube's head, the header): a green check in the pill's frame, label
+// its name and tooltip, with no list behind it, so that a problem's pill
+// takes its place without moving what is beside it.
+function okPill(label) {
+  const pill = elem("span", "ok-pill", iconEl("icon-check", "ni ok-check"));
+  pill.setAttribute("role", "img");
+  pill.setAttribute("aria-label", label);
+  pill.title = label;
+  return pill;
 }
 
 // foundCountEl is the sign of the Cubes found on the network and not
@@ -1052,6 +1098,8 @@ function problemsEl(entries, label) {
   }
   const extra = entries.map((e) => e.summary).filter(Boolean);
   if (!kinds.size && !extra.length) return null;
+  // information alone: nothing wrong, said first (okPill's check)
+  if (!kinds.size) extra.unshift(iconEl("icon-check", "ni ok-check"));
   const details = elem("details", "menu problems");
   const summary = document.createElement("summary");
   summary.className = "problems-sum";
@@ -1115,21 +1163,52 @@ function problemEntry(e) {
 }
 
 // dropdown makes a <details class="menu"> a menu that drops down: one
-// open at a time, closed by a choice of one of its items, by Escape
-// (the focus back on its summary) and by a click outside it. The room
-// tiles' ⋯ and More and the header's 👤 and ☰ are such menus.
+// open at a time, kept in the window (placeMenu), closed by a choice of
+// one of its items, by Escape (the focus back on its summary) and by a
+// click outside it. The room tiles' ⋯ and More and the header's 👤 and ☰
+// are such menus.
 function dropdown(details) {
   details.addEventListener("toggle", () => {
     if (!details.open) return;
     for (const other of document.querySelectorAll("details.menu[open]")) {
       if (other !== details) other.open = false;
     }
+    // after the other toggle listeners, which may fill the list
+    requestAnimationFrame(() => placeMenu(details));
   });
   details.addEventListener("click", (ev) => {
     if (ev.target.closest(".menu-items button")) details.open = false;
   });
   return details;
 }
+
+// placeMenu keeps an open menu's list in the window: where it runs out
+// of the window as the style sheet places it, aligned to its summary's
+// other edge where it fits there, else moved just inside the window,
+// 16 px from its edges; its height capped to the room below it, with a
+// scroll of its own that the page does not take over (style.css
+// .menu-items).
+function placeMenu(details) {
+  const list = details.querySelector(":scope > .menu-items");
+  if (!list || !details.open) return;
+  const gap = 16;
+  const vw = document.documentElement.clientWidth;
+  Object.assign(list.style, { left: "", right: "", maxHeight: "" });
+  const box = details.getBoundingClientRect();
+  const r = list.getBoundingClientRect();
+  const fits = (x) => x >= gap - 0.5 && x + r.width <= vw - gap + 0.5;
+  if (!fits(r.left)) {
+    const other = Math.abs(r.right - box.right) < 1 ? box.left : box.right - r.width;
+    const x = fits(other) ? other : Math.max(gap, Math.min(r.left, vw - gap - r.width));
+    Object.assign(list.style, { left: x - box.left + "px", right: "auto" });
+  }
+  const top = list.getBoundingClientRect().top;
+  list.style.maxHeight = Math.max(160, window.innerHeight - top - gap) + "px";
+}
+
+addEventListener("resize", () => {
+  for (const m of document.querySelectorAll("details.menu[open]")) placeMenu(m);
+});
 
 // menuArrows lets the arrow keys move the focus between the items of
 // an open dropdown, the elements matching selector: down and up, round

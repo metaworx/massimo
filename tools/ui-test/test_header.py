@@ -248,23 +248,89 @@ DIGITS_MIDDLE = """(sel) => {
 VERSION_TITLE = {"en": "{v} (server version) · click to copy", "de": "{v} (Server-Version) · Klick kopiert"}
 
 
+# A build's version, as long as one between releases.
+BUILD = "v0.15.0-alpha.1-293-gd36148f"
+
+# The facts' state: the version cut or not, shown or not, the time shown,
+# all inside the window, and whether they have a row of their own.
+FACTS = """() => {
+  const v = document.getElementById("version-short");
+  const r = (e) => e.getBoundingClientRect();
+  const right = Math.max(r(v).right, r(document.getElementById("refresh-btn")).right);
+  return { cut: v.scrollWidth > v.clientWidth + 1, version: v.offsetParent !== null, time: document.getElementById("updated").offsetParent !== null,
+    inside: right <= document.documentElement.clientWidth + 0.5, row: document.querySelector(".top-line").classList.contains("facts-row") };
+}"""
+
+
+def test_version_never_hidden(page, case):
+    """A build's long version, at widths from a wide screen to a phone:
+    beside the logo where it fits, else on a row of its own, never cut,
+    inside the window; compacted, the version goes and the server's sign
+    and the time stay."""
+    size = page.viewport_size
+    page.evaluate("""(v) => { window.__version = [state.version, document.getElementById("version-short").textContent];
+      state.version = v; document.getElementById("version-short").textContent = v; renderVersionTitle(); }""", BUILD)
+    try:
+        rows = {}
+        for w in (1280, 1100, 900, 750, 600, 520, 430, 390):
+            page.set_viewport_size({"width": w, "height": size["height"]})
+            page.wait_for_timeout(150)
+            f = page.evaluate(FACTS)
+            rows[w] = f["row"]
+            assert f["version"] and not f["cut"] and f["time"] and f["inside"], f"at {w} px the version whole, the time, inside: {f}"
+            page.evaluate("document.body.classList.add('scrolled')")
+            f = page.evaluate(FACTS)
+            assert not f["version"] and f["time"], f"at {w} px compacted: the time, not the version: {f}"
+            page.evaluate("document.body.classList.remove('scrolled')")
+            page.wait_for_timeout(50)
+        assert rows[390], f"a row of their own on a phone: {rows}"
+    finally:
+        page.set_viewport_size(size)
+        page.evaluate("""() => { const [v, short] = window.__version; state.version = v;
+          document.getElementById("version-short").textContent = short; renderVersionTitle(); }""")
+        page.wait_for_timeout(150)
+
+
+def test_facts_fitted_again_when_the_time_comes(page, case):
+    """The version, the sign and the time are fitted again when what they
+    show changes: with a short version (a build's from a checkout without
+    tags, as CI's) they fit beside the logo on a phone before the time of
+    the last update has come, and the time then takes them to their row,
+    the version whole, not cut under the logo."""
+    page.evaluate("""() => { const v = document.getElementById('version-short'), u = document.getElementById('updated');
+      window.__facts = [v.textContent, u.textContent]; v.textContent = 'v0.0.0-dev'; u.textContent = ''; fitFacts(); }""")
+    try:
+        page.wait_for_timeout(100)
+        page.evaluate("document.getElementById('updated').textContent = 'updated 03:57:52'")
+        assert wait_until(page, "(() => { const v = document.getElementById('version-short'); "
+                          "return v.scrollWidth <= v.clientWidth + 1; })()", 3), "the version whole once the time came"
+    finally:
+        page.evaluate("""() => { const [v, u] = window.__facts; document.getElementById('version-short').textContent = v;
+          document.getElementById('updated').textContent = u; }""")
+
+
 def test_header_on_one_baseline(page, case):
     """The logo (the small mark under 600 px), the version and the time of
     the last update stand on one baseline, the drawing's bottom edge, and
     the M is as tall as the page buttons; on a phone the version and the
-    time stand together under the mark. ↻ stands on the digits' middle.
+    time stand under the mark, the version whole, on the time's line or a
+    line of its own above it. ↻ stands on the digits' middle.
     The time and ↻ are one button without a frame, larger to a finger
     than it looks; the version's tooltip is the whole version."""
     brand = page.evaluate(BRAND_BOX)
     button = box(page, "#view-tiles")
     assert abs(brand["height"] - button["height"]) <= 1, f"the M as tall as the page buttons: {brand} vs {button}"
     assert abs(brand["top"] - button["y"]) <= 1, f"and level with them: {brand} vs {button}"
+    # fitted once the version has come (app.js fitFacts)
+    assert wait_until(page, "(() => { const v = document.getElementById('version-short'); return v.textContent !== '' && v.scrollWidth <= v.clientWidth + 1; })()", 5), \
+        "the version whole"
     lines = {sel: page.evaluate(BASELINE, sel) for sel in ("#version-short", "#updated")}
-    assert abs(lines["#version-short"] - lines["#updated"]) <= 1, f"the version and the time on one line: {lines}"
     if case.width >= 600:
+        assert abs(lines["#version-short"] - lines["#updated"]) <= 1, f"the version and the time on one line: {lines}"
         assert abs(lines["#updated"] - brand["bottom"]) <= 1, f"on the logo's baseline: {lines} vs {brand['bottom']}"
     else:
-        assert lines["#updated"] > brand["bottom"] + 8, f"both under the mark: {lines} vs {brand['bottom']}"
+        assert lines["#version-short"] <= lines["#updated"] + 1, f"the version on the time's line or above it: {lines}"
+        assert lines["#version-short"] > brand["bottom"] + 8, f"both under the mark: {lines} vs {brand['bottom']}"
     icon = box(page, "#refresh-btn svg")
     digits = page.evaluate(DIGITS_MIDDLE, "#updated")
     assert abs(icon["y"] + icon["height"] / 2 - digits) <= 1, f"↻ on the digits' middle: {icon} vs {digits}"

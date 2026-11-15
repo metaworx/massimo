@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.53.0)
+# Massimo — CI Conventions (v1.54.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -195,13 +195,23 @@ the latest attempt of each, so that a failed job re-run green counts.
 A run's code jobs are all but What to test, Guidelines, Site, Code result,
 All tests passed, Deploy site and the called Build and Release.
 A run still going is waited for, up to an hour (D74-A).
-No verdict, and the walk goes on, comes from a cancelled run,
+No verdict comes from a cancelled run,
 one in which Code result ran (a verdict carried),
-and one that ran no code job and whose commit has no green Tested status:
+and one that ran no code job:
 a release commit's push runs nothing, and its tag's run on the same commit
 holds the verdict.
 A code job that failed, timed out or was cancelled is red, that run named;
 otherwise the code passed.
+Where no run on a commit gives a verdict and none carried one,
+its record does, read where What to test reads it:
+the Tested status on the commit, then on a merge's second parent,
+the pull request's head;
+green and opening with `HEAD`'s fingerprint, the code passed.
+`main`'s group keeps one run going and one waiting,
+so a push replaces the waiting run before it, which never starts;
+the merge it would have tested had passed as its pull request (owner,
+2026-11-15, D76-A, D77-A).
+Otherwise the walk goes on.
 Where the walk reaches a commit with other code, 100 commits
 or the end of the history first, no run tested this code, which is red.
 Red fails Code result on a push, and so All tests passed,

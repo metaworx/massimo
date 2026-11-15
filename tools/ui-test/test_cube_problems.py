@@ -32,7 +32,7 @@ def summary_icons(page):
 
 
 def test_header_problems(page, case):
-    """No problem: no pill. A device's failure: the radio's cross in the
+    """No problem: the green check in the pill's place. A device's failure: the radio's cross in the
     pill; its list has the Cube as the heading in green, the device under
     it as "Room › Device" with its badge. A held link: the Cube's sign
     with a triangle and its badge. A proxy that does not listen: the
@@ -40,7 +40,8 @@ def test_header_problems(page, case):
     keeps each Cube's sign."""
     try:
         page.evaluate(SET, [None, [], []])
-        assert page.locator("#cube-problems .problems").count() == 0, "nothing wrong: no pill"
+        assert page.locator("#cube-problems .problems").count() == 0, "nothing wrong: no problem pill"
+        assert page.locator("#cube-problems .ok-pill .ok-check").count() == 1, "the green check in its place"
         page.evaluate(SET, [None, [FAULTY], []])
         assert summary_icons(page) == ["#icon-radio-small+#mark-corner-x"], "the radio's cross"
         page.locator("#cube-problems .problems-sum").click()

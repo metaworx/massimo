@@ -1184,9 +1184,10 @@ jobs:
   # 2): that of the last run that tested this code, on main's first parents,
   # read and never run again. Red fails it on a push, so that All tests
   # passed fails and the nightly build takes nothing, and is a warning on a
-  # pull request, which adds no code. The whole history, for the walk;
-  # actions to read the runs and wait for one still going, statuses for the
-  # Tested status of a run that skipped its jobs on it.
+  # pull request, which adds no code. The whole history, for the walk, and
+  # the guidelines, for fingerprint.sh; actions to read the runs and wait
+  # for one still going, statuses for the Tested record where no run gives
+  # a verdict: a run cancelled while it waited, or one that skipped its jobs.
   code-result:
     name: Code result
     needs: changes
@@ -1201,6 +1202,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          submodules: true
 
       - name: The verdict of the last run that tested this code
         env:

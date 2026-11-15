@@ -1,4 +1,4 @@
-# AP SiteOnly v1.2: Site changes deploy alone
+# AP SiteOnly v1.3: Site changes deploy alone
 
 ## TL;DR
 
@@ -18,6 +18,9 @@ pushed to `main`, deploys Pages directly: no test jobs and no devel build.
 - v1.2: `code=false` → a **Code result** job, the verdict of the last run
   that tested this code; red → All tests passed red on `main`, a warning on a
   pull request; nothing re-run (D68-C, D73-A, D74-A, D75-A)
+- v1.3: no run's verdict on a commit (a queued run cancelled) → its Tested
+  status, or a merge's pull request head's, with `HEAD`'s fingerprint → green
+  (D76-A, D77-A)
 
 | Change | Guidelines | Site | Tests | Devel build | Pages deploy |
 |---|---|---|---|---|---|
@@ -32,6 +35,7 @@ pushed to `main`, deploys Pages directly: no test jobs and no devel build.
 3. CI.md section 2, the CHANGELOG fragment, checked against real commits
 4. `packaging/site/`'s pages in `[ci] site` and out of `project.shipped`
 5. The Code result job: a docs-only change carries the code's last verdict
+6. Code result reads the Tested status where no run gives a verdict
 
 ## Discussion
 
@@ -96,6 +100,22 @@ runs where the code jobs are skipped, and carries their last result.
 - **D75-A:** Code result is among All tests passed's needs, nothing more:
   What to release already takes only a commit whose All tests passed
   succeeded. Not B, a second source for Build's What to release.
+
+**v1.3** (`PLAN++ D76-A D77-A`, 2026-11-15): Code result was red on the
+push of `chore(aps): -LanPaths` (run 43673977102). The run on the merge of
+`Cap Cube pairing time at 255 seconds` (#273) before it, run 43673876936, had
+been cancelled while it waited, with no job run: "Canceling since a higher
+priority waiting request for CI-refs/heads/main exists". The group keeps one
+run going and one waiting, and the push a minute later replaced the waiting
+one. The walk took the cancelled run as no verdict and reached the merge of
+#274, other code. The owner: Code result should look for other results where
+a run was cancelled.
+
+- **D76-A:** a Block 6 of its own, on a branch from `main`, its own pull
+  request. Not B, on the What to test summary's pull request (#270).
+- **D77-A:** the fingerprint compared is `HEAD`'s, taken by `fingerprint.sh`
+  in Code result. Not B, What to test's `fp`, which it takes only where
+  `code=true`.
 
 ## Analysis
 
@@ -185,6 +205,21 @@ where history ends: no run tested this code, which is red. Red fails the job
 on a push and passes it with a warning on a pull request (D73-A); either way
 the summary names the run. It needs `actions: read` and `statuses: read`.
 
+**Where no run gives a verdict (v1.3).** The pull request's head of #273
+carries a green Tested status, `fp1:03d9dda1…`, and the merge commit and
+`-LanPaths` have that fingerprint: the run on the merge, had it started,
+would have found it as What to test's `prev` (a merge's second parent),
+skipped every code job and passed. Code result read a Tested status only for
+a run whose code jobs were skipped, and only on its own commit. So, once a
+commit's runs give no verdict (none, or all cancelled or skipped), it reads
+the Tested status where What to test reads it: on the commit, then, for a
+merge, on its second parent. Green, written by this workflow and opening
+with `HEAD`'s fingerprint → green, the status's run named. Anything else and
+the walk goes on. A run's red still comes first, since a commit's runs are
+read before its record. The fingerprint needs `fingerprint.sh`, so Code
+result's checkout takes the submodules. The per-run check of a run that
+skipped its jobs folds into it.
+
 **Not changed.** The nightly build may take a site-only commit; its code is
 that of the commit before, which was tested (CI.md section 2). Pages keeps
 the first deploy of a commit, so a nightly whose head `main` already
@@ -263,6 +298,22 @@ docs-only commits before it), on a docs-only commit after the merge of #264
 (green), as a pull request (red as a warning, exit 0); shellcheck;
 `make actionlint`.
 
+### Block 6: The Tested record where no run gives a verdict (v1.3)
+
+1. `packaging/code-result.sh`: `HEAD`'s fingerprint at the start; after a
+   commit's runs, its Tested status, then a merge's second parent's, matched
+   on that fingerprint; the header comment says it.
+2. `ci.yml`: Code result's checkout with `submodules: true`; its comment.
+3. `GUIDELINES/project/CI.md` section 2 (v1.54.0): the record where no run
+   gives a verdict.
+4. `CHANGELOG.d/Fixed/claude-code-result-record.md`.
+
+**Verification:** the script against `main`'s real runs: on
+`chore(aps): -LanPaths` (red before, green now, the status of #273's head
+named); on `chore(aps): -DiscoveryShare, -ANALYSIS DiscoveryShare` (red, as
+before); on a docs-only commit after the merge of #264 (green); a mismatched
+fingerprint (red); shellcheck; `make actionlint`.
+
 ## Proposed commit message
 
 ```
@@ -319,6 +370,22 @@ File-revision-v1: GUIDELINES/project/CI.md::v1.49.0::2026-11-14::2::a docs-only 
 Assisted-by: claude-code:claude-opus-5-5
 ```
 
+Block 6:
+
+```
+fix(pipeline): Code result reads the Tested record where a run was cancelled
+
+For AP SiteOnly v1.3, Block 6, with the owner's D76-A and D77-A: a run on main cancelled while it waited, replaced by the next push, gave no verdict, and Code result walked past code that had passed in its pull request; it now reads the Tested status where What to test reads it.
+
+Key changes:
+- packaging/code-result.sh: where a commit's runs give no verdict, its Tested status, or a merge's pull request head's, with HEAD's fingerprint is green
+- ci.yml: Code result checks out the guidelines, for fingerprint.sh
+- CI.md section 2 states it
+
+File-revision-v1: GUIDELINES/project/CI.md::v1.54.0::2026-11-15::2::Code result reads the Tested record where a run was cancelled
+Assisted-by: claude-code:claude-opus-5-5
+```
+
 ## Change History
 
 - v1.0 (2026-11-13): first revision, D62-A, D63-A, D64-C.
@@ -326,3 +393,5 @@ Assisted-by: claude-code:claude-opus-5-5
   Blocks 1 to 3 merged as pull request #199.
 - v1.2 (2026-11-14): Block 5, the Code result job, D68-C, D70-B, D73-A,
   D74-A, D75-A; Block 4 merged as pull request #214.
+- v1.3 (2026-11-15): Block 6, the Tested record where no run gives a verdict,
+  D76-A, D77-A; Block 5 merged as pull request #269.
