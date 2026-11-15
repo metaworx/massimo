@@ -1462,8 +1462,8 @@ the share of the hourly radio budget already used,
 and the free memory slots (each unacknowledged radiogram occupies one).
 `pending_radiograms` is the number of slots in use,
 that is commands the Cube has sent and no device has acknowledged yet;
-a setpoint shows in the states at once,
-but the mode follows only with the device's report,
+a setpoint shows in a device's state once that device has acknowledged it,
+and the mode follows only with its next report,
 so a non-zero value says the states may still change.
 `queued` is the number of commands waiting in the server.
 `observed_since` is when the server first heard from the Cube (see the
@@ -1802,13 +1802,16 @@ The Cube keeps no times and repeats every value in each device list,
 so these are the times the server saw a value change,
 which is as close as a client gets to when the device sent it.
 A device that reports the same value again does not move its time,
-and the Cube itself changes a setpoint in the list right after a set-temperature command,
-before the devices confirm it.
+and the Cube changes a setpoint in the list after a set-temperature command
+as each device acknowledges it, within seconds for a device that answers;
+a device that does not answer keeps its old setpoint.
 Values that were already there when the server first connected carry that time,
 the Cube's `observed_since`, and may be older;
 a reconnect keeps the times of values that did not change.
-Radiator thermostats report the measured temperature only now and then
-(after the valve moved), and not at all on vacation, when those bytes carry the end:
+Radiator thermostats report the measured temperature once a day in manual mode,
+at 12:00 with the default decalcification time (Saturday 12:00) and not on
+the decalcification day, at the programme's switch points in auto,
+and not at all on vacation, when those bytes carry the end:
 the server keeps the last one until a new one comes,
 and `received.actual_temp` says how old it is.
 `stale` is a hint: a thermostat out of range or with a flat battery goes quiet,
@@ -2020,7 +2023,7 @@ A metadata write; answers `{"ok": true}`.
 Rename a device and/or move it to another room:
 `{"name": "Thermostat Küche", "room_id": 2}`, either field alone is fine.
 A move is done as the original software does it:
-the device is unlinked from every partner of its old room and its group removed,
+the device's group is removed and it is unlinked from every partner of its old room,
 then linked with every partner of the new room and the new group set,
 each after a wakeup of the room concerned, then the metadata is written.
 `room_id` must name an existing room; 0 is refused,
@@ -2039,7 +2042,7 @@ two shutter contacts are not linked with each other), then 0x22 set group,
 then the metadata with the device listed under its name in the room,
 then a re-read of its C line.
 A device whose C line names another room (paired long ago and never listed) is
-first unlinked from that room with 0x21 remove link partner and 0x23 remove group,
+first unlinked from that room with 0x23 remove group and 0x21 remove link partner,
 as in a move.
 
 A thermostat put into a room, by an add or a move,
@@ -2102,9 +2105,9 @@ as the original software's "delete device" does,
 and also removes the device's group, which the original software leaves.
 A device in a room, the metadata's or else its C line's,
 is unlinked from that room first:
-after a wakeup of the room (`z:1e,G,<room>`),
-one 0x21 remove link partner radiogram per room member it is linked with,
-in each direction (addressed as 0x20 is in an add), then 0x23 remove group.
+after a wakeup of the room (`z:1e,G,<room>`), 0x23 remove group,
+then one 0x21 remove link partner radiogram per room member it is linked with,
+in each direction (addressed as 0x20 is in an add).
 Hidden devices are no partners,
 and a device whose C line names room 255 is not unlinked at all.
 Then `t:01,1,<rf>`, delete with the force flag,

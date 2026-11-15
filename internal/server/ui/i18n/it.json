@@ -660,7 +660,7 @@
   "pairing.how": "Avvia mette il Cube in modalità di associazione. Poi premere il tasto di associazione del nuovo dispositivo, come indicato nel suo manuale; ogni dispositivo che si annuncia compare qui.",
   "pairing.start": "Avvia",
   "pairing.stop": "Ferma",
-  "pairing.secondsBad": "La durata dell’associazione va da 1 a 255 secondi.",
+  "pairing.secondsRange": "solo da 1 a 255",
   "pairing.failed": "Associazione: {error}",
   "pairing.left": "Associazione: ancora {seconds} s. Premere ora il tasto di associazione del dispositivo.",
   "pairing.ending": "L’associazione sta terminando …",

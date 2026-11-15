@@ -108,6 +108,9 @@ func TestMoveCommands(t *testing.T) {
 	if out.RoomID != 6 || in.RoomID != 1 || !in.Wakeup || len(out.Lines) != 1 || len(in.Lines) != 1+2*len(members) {
 		t.Fatalf("out %+v in %+v", out, in)
 	}
+	if out.Lines[0].String() != cube.CmdSetGroup(0x0a010d, 6, true).String() {
+		t.Fatalf("out starts with %s, not 0x23", out.Lines[0])
+	}
 }
 
 // The copy of a room's settings: a thermostat alone in its room gets

@@ -182,10 +182,10 @@ type Device struct {
 }
 
 // StaleAfter is how long a thermostat's entry may stay unchanged before
-// the device counts as stale. Radiator thermostats report the measured
-// temperature only occasionally, but their valve or temperature changes
-// several times a day while heating; outside the heating season they
-// may well be quiet for longer, so stale is a hint, not a fault.
+// the device counts as stale. An idle radiator thermostat changes its
+// entry once a day, and not on its decalcification day, so it may pass
+// for stale over that day; while heating it changes more often. Stale is
+// a hint, not a fault.
 // It is the default; the functions below take the threshold as a
 // parameter (serve passes the store's stale_after), where 0 or less
 // means this default.

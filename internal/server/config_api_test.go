@@ -540,9 +540,9 @@ func TestRemoveListedDevice(t *testing.T) {
 		t.Fatalf("remove: %d %v", code, out)
 	}
 	sameLines(t, fc.Received()[sent:], []string{"z:1e,G,01",
+		cube.CmdSetGroup(0x0a010a, 1, true).String(),
 		cube.CmdLinkPartner(cube.Target{RFAddress: copyWall}, false, 0x0a010a, cube.DeviceRadiatorThermostat).String(),
 		cube.CmdLinkPartner(cube.Target{RFAddress: 0x0a010a}, false, copyWall, cube.DeviceWallThermostat).String(),
-		cube.CmdSetGroup(0x0a010a, 1, true).String(),
 		"t:01,1,CgEK", "m:"})
 	for _, d := range s.cubes["keq0000100"].client.Snapshot().Metadata().Devices {
 		if d.RFAddress == 0x0a010a {
@@ -593,11 +593,11 @@ func TestRemoveDeviceInARoomByItsConfig(t *testing.T) {
 		t.Fatalf("remove: %d %v", code, out)
 	}
 	sameLines(t, fc.Received()[sent:], []string{"z:1e,G,01",
+		cube.CmdSetGroup(copyContact, 1, true).String(),
 		cube.CmdLinkPartner(cube.Target{RFAddress: 0x0a010a, RoomID: 1, Room: true}, false, copyContact, cube.DeviceShutterContact).String(),
 		cube.CmdLinkPartner(cube.Target{RFAddress: copyContact}, false, 0x0a010a, cube.DeviceRadiatorThermostat).String(),
 		cube.CmdLinkPartner(cube.Target{RFAddress: copyWall}, false, copyContact, cube.DeviceShutterContact).String(),
 		cube.CmdLinkPartner(cube.Target{RFAddress: copyContact}, false, copyWall, cube.DeviceWallThermostat).String(),
-		cube.CmdSetGroup(copyContact, 1, true).String(),
 		"t:01,1,DQ4P"})
 }
 

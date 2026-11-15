@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"os"
 	"reflect"
 	"regexp"
@@ -434,18 +435,43 @@ func TestSetDayProgramExample(t *testing.T) {
 	if len(msgs) != 1 || msgs[0].String() != "s:AAQQAAAAD8OAAQJASUxuQMtNIE0gTSBNIA==" {
 		t.Fatalf("got %v", msgs)
 	}
-	// More than 7 points need a second telegram with bit 3 of the day byte set.
+	// More than 7 points need a second telegram with bit 4 of the day byte
+	// set, padded to 6 points; 13 points fill both without padding.
 	long := DayProgram{}
-	for i := 1; i <= 8; i++ {
-		long = append(long, SwitchPoint{Temp: 17, Until: i * 180})
+	for i := 1; i <= 13; i++ {
+		long = append(long, SwitchPoint{Temp: 17, Until: i * 100})
 	}
+	long[12].Until = 1440
 	msgs, err = CmdSetDayProgram(Target{RFAddress: 1}, Sunday, long)
 	if err != nil || len(msgs) != 2 {
 		t.Fatalf("got %v %v", msgs, err)
 	}
 	raw, _ := b64.DecodeString(msgs[1].Data)
-	if raw[10] != byte(Sunday)|0x08 || len(raw) != 11+2 {
+	if raw[10] != byte(Sunday)|0x10 || len(raw) != 11+12 || raw[11] != 0x44 || raw[12] != 0xa0 {
 		t.Errorf("second telegram: % x", raw)
+	}
+}
+
+// The lines of the test of 2026-11-15 (Cube firmware 1.1.3), the device's
+// address replaced: a Tuesday of 8 points, written to one radiator
+// thermostat by its address, which the device's C line then held. The
+// second telegram is marked 0x10 and padded to 6 points with the last.
+func TestSetDayProgramLongVerified(t *testing.T) {
+	prog := DayProgram{{17, 180}, {17, 360}, {21, 540}, {17, 780}, {17, 1020}, {21, 1200}, {21, 1380}, {17, 1440}}
+	msgs, err := CmdSetDayProgram(Target{RFAddress: 0x0a0101}, Tuesday, prog)
+	if err != nil || len(msgs) != 2 {
+		t.Fatalf("got %v %v", msgs, err)
+	}
+	head := "000010000000" + "0a0101" + "00"
+	want := []string{
+		head + "03" + "4424" + "4448" + "546c" + "449c" + "44cc" + "54f0" + "5514",
+		head + "13" + "4520" + "4520" + "4520" + "4520" + "4520" + "4520",
+	}
+	for i, m := range msgs {
+		raw, _ := b64.DecodeString(m.Data)
+		if m.Type != 's' || fmt.Sprintf("%x", raw) != want[i] {
+			t.Errorf("telegram %d: %c %x, want %s", i+1, m.Type, raw, want[i])
+		}
 	}
 }
 

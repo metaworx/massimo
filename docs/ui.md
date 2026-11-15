@@ -913,6 +913,8 @@ the browser keeps which cards are folded.
   and **Start**,
   which puts the Cube into pairing mode;
   then the device's pairing button is pressed, as its manual says.
+  A time out of range outlines the field in red as it is typed,
+  the range in amber before it, and **Start** goes back to the field instead.
   A countdown with **Stop** runs while the Cube pairs,
   and each device that joins is listed with its type and serial
   (in expert mode also its radio address) and a form:

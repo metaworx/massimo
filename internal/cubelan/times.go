@@ -20,8 +20,8 @@ import (
 type StateTimes struct {
 	// Changed is when the device's L entry last changed in any way: the
 	// closest a client gets to the device's last transmission. The Cube
-	// also changes the setpoint in the entry itself right after a
-	// set-temperature command.
+	// writes a new setpoint into the entry when the device acknowledges a
+	// set-temperature command, not before.
 	Changed time.Time
 	// Fields is, per value (named as in the API's state object: mode,
 	// setpoint, actual_temp, valve_pct, window_open, until, battery_low,

@@ -17,9 +17,9 @@ import (
 // "Pairing a device, as the original software does it"): unlink, the
 // out-part of MoveCommands for the room the device is in, the
 // metadata's or else its C line's, which after a wakeup of that room
-// unlinks it from every partner in both directions, the devices in skip,
-// the hidden ones, left out, and removes its group, which the original
-// software leaves; then del, t: with the force flag, which makes the
+// removes its group, which the original software leaves, and unlinks it
+// from every partner in both directions, the devices in skip, the hidden
+// ones, left out; then del, t: with the force flag, which makes the
 // Cube send the device a factory reset and drop it once it answered. ok
 // is false for a device in no room, which has nothing to unlink, and
 // for one in room 255, whose partners there are all hidden.

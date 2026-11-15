@@ -28,6 +28,7 @@ DEV = "0abcde"
 PANEL = ".cube-panel[data-serial='KEQ0000100']"
 ENDED = {"en": "Pairing ended; 1 device joined.", "de": "Anlernen beendet; 1 Gerät hat sich gemeldet."}
 LEFT = {"en": "s left", "de": "noch"}
+RANGE = {"en": "only 1 to 255", "de": "nur 1 bis 255"}
 IN_ROOM = "state.rooms.some((r) => r.id === %d && r.devices.some((d) => d.rf_address === '" + DEV + "'))"
 GONE = "!state.rooms.some((r) => r.devices.some((d) => d.rf_address === '" + DEV + "')) && !state.unlisted.some((d) => d.rf_address === '" + DEV + "')"
 
@@ -189,20 +190,52 @@ def test_pairing_without_the_capability_cubes(page, case):
     show_view(page, "tiles")
 
 
+def colour_of(page, var):
+    """The colour a CSS variable holds, as getComputedStyle gives it."""
+    return page.evaluate("""(v) => {
+        const probe = document.createElement("span");
+        probe.style.color = "var(" + v + ")";
+        document.body.append(probe);
+        const c = getComputedStyle(probe).color;
+        probe.remove();
+        return c;
+    }""", var)
+
+
 def test_pairing_time_at_most_255(page, case, clean):
-    """The pairing time is at most 255 seconds, the longest a Cube keeps
-    the mode: Start with 256 starts nothing."""
+    """The pairing time is 1 to 255 seconds, 255 the longest a Cube keeps
+    the mode: a time out of range outlines the field in red and shows the
+    range in amber before it as it is typed, without the browser's bubble;
+    Start then starts nothing and goes back to the field; a time in range
+    clears both."""
     show_view(page, "system")
     panel = page.locator(PANEL)
     panel.locator(":scope > summary").click()
     pairing = panel.locator(".cube-pairing")
     pairing.locator(".pair-open").click()
     secs = pairing.locator("input[name=seconds]")
+    hint = pairing.locator(".pairing-range")
     assert secs.get_attribute("max") == "255", "the field's limit"
-    secs.fill("256")
+    assert pairing.locator(".pairing-form").evaluate("(f) => f.noValidate"), "not the browser's bubble"
+    assert hint.is_hidden() and secs.get_attribute("aria-invalid") is None, "60 is in range"
+    secs.fill("660")
+    assert hint.is_visible() and hint.inner_text() == RANGE[case.lang], "the range, as it is typed"
+    assert secs.get_attribute("aria-invalid") == "true", "the field marked"
+    assert secs.get_attribute("aria-describedby") == hint.get_attribute("id"), "the range is the field's description"
+    assert hint.evaluate("(el) => getComputedStyle(el).color") == colour_of(page, "--warn"), "the range in amber"
+    assert secs.evaluate("(el) => getComputedStyle(el).borderTopColor") == colour_of(page, "--bad"), "the box in red"
+    box, before = secs.bounding_box(), hint.bounding_box()
+    assert before["x"] + before["width"] <= box["x"] + 1, "the range before the box"
+    assert before["y"] < box["y"] + box["height"] and box["y"] < before["y"] + before["height"], "on the box's line"
+    assert scroll_width(page) <= case.width, "no horizontal scroll with the range"
     pairing.locator(".pairing-form button[type=submit]").click()
     page.wait_for_timeout(500)
-    assert secs.evaluate("(el) => el.validity.rangeOverflow"), "256 is out of range"
+    assert secs.evaluate("(el) => el === document.activeElement"), "Start goes back to the field"
     assert pairing.locator(".pairing-running").is_hidden(), "no countdown"
     assert api("GET", CUBE + "/pairing")[1]["active"] is False, "no pairing started"
+    secs.fill("")
+    assert hint.is_visible() and secs.get_attribute("aria-invalid") == "true", "an empty field marked"
+    secs.fill("255")
+    assert hint.is_hidden(), "255 hides the range"
+    assert secs.get_attribute("aria-invalid") is None and secs.get_attribute("aria-describedby") is None, "255 clears the mark"
     show_view(page, "tiles")

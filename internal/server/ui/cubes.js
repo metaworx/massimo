@@ -443,15 +443,11 @@ async function pairingWrite(serial, key, fn) {
   }
 }
 
-// startPairing sends Start: POST …/pairing with the seconds.
+// startPairing sends Start: POST …/pairing with the seconds, which the
+// form checked (pairingSection).
 function startPairing(serial) {
   const p = pairingOf(serial);
   const secs = Number(p.seconds);
-  if (!Number.isInteger(secs) || secs < 1 || secs > 255) { // the longest a Cube keeps (cube.MaxInclusion)
-    p.msg = { text: t("pairing.secondsBad"), ok: false };
-    redrawPairing(serial);
-    return;
-  }
   return pairingWrite(serial, "start", async () => {
     let st;
     try {
@@ -560,12 +556,19 @@ function pairingSection(serial) {
     const panel = document.querySelector('.cube-panel[data-serial="' + serial + '"]');
     if (panel) panel.querySelector(".pairing-form input[name=seconds]").focus();
   });
+  // The time's field allows 1 to 255 s, the longest a Cube keeps
+  // (cube.MaxInclusion); a time it refuses is marked as it is typed, and
+  // Start then goes back to the field instead.
   const secs = form.querySelector("input[name=seconds]");
+  const range = form.querySelector(".pairing-range");
   secs.id = "pair-seconds-" + serial;
+  range.id = secs.id + "-range";
   secs.closest(".field").querySelector("label").htmlFor = secs.id;
   secs.value = String(p.seconds);
+  markRange(secs, range);
   secs.addEventListener("input", () => {
     p.seconds = secs.value;
+    markRange(secs, range);
   });
   form.querySelector(".pair-cancel").addEventListener("click", () => {
     p.form = false;
@@ -573,6 +576,10 @@ function pairingSection(serial) {
   });
   form.addEventListener("submit", (ev) => {
     ev.preventDefault();
+    if (!markRange(secs, range)) {
+      secs.focus();
+      return;
+    }
     startPairing(serial);
   });
   running.querySelector(".pair-stop").addEventListener("click", () => stopPairing(serial));
