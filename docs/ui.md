@@ -1181,12 +1181,13 @@ This section is for changing the UI;
 its rules are in the project contract (`AGENTS.md`, "The web UI").
 The page is plain HTML, CSS and JavaScript under `internal/server/ui/`,
 embedded in the binary, with no build step.
-`index.html` is the skeleton: the head, the icons, the header, the sections,
-the sign-in dialog, the first-owner form and the scripts,
-with marker comments.
+`index.html` is the skeleton: the head, the icons, the sections of the page
+and the scripts, with marker comments.
 At start the server replaces each marker, such as `<!-- partials: prefs -->`,
-with its partials, the panels of the settings pages and at the end
-`<!-- partials: templates -->` with the templates,
+with its partials: the header, the home notice, the first owner's form,
+the panels of the settings pages, the Cube page, the House tile,
+the devices without a room, the log, the sign-in dialog, the toast,
+and at the end `<!-- partials: templates -->` with the templates,
 from the files in `ui/partials/` in the order `uiPartials` in
 `internal/server/ui.go` lists them, and serves the result at `/`;
 System settings' cards fill three markers,
@@ -1267,6 +1268,49 @@ Every URL the page and the scripts use is relative to the page (`ui/style.css`,
 `api/v1/cubes`, `healthz`),
 so that a reverse proxy may serve the UI under a path prefix it strips
 (docs/reverse-proxy.md); `go test ./internal/server` refuses an absolute one.
+
+The scripts are classic scripts sharing the page's global scope,
+a script for each region of the page, in the order the page loads them:
+
+- `i18n.js`, the texts and `t()`; `components.js`, the shared builders,
+  the menus and the page's chrome;
+- `app.js`, the core: the state, the settings and their scopes, the API,
+  the helpers, the ages of values, help, the Cube clock, loading, polling,
+  the event stream, the language and `init`;
+- `header.js`, the header: the radio budget,
+  the last update and the server's clock, the Cube choice and the problems list,
+  the version, the TLS notice and the server's sign;
+  `home.js`, the home notice and the search for Cubes;
+  `prefs.js`, the wiring of My settings' rows and the language choice;
+- `rooms.js`, a room's facts, the drawing of Rooms, a device's state event
+  and the actions behind a tile; `tiles.js`, a room's tile;
+  `devices.js`, its device rows; `unlisted.js`, the devices without a room;
+  `house.js`, the House tile;
+- `week-program.js` and `config.js`, a room's configuration;
+- `log.js`, the log and its sign for unseen problems;
+  `pages.js`, the pages, the main menu, the address and the scroll;
+- `update.js`, Software update; `maintenance.js`, the Maintenance card;
+  `system-info.js`, System info;
+- `cubes.js`, System settings → Cubes, the found Cubes and the Cube page;
+  `cube-panel.js`, a Cube's panel; `pairing.js`, the pairing;
+- `login.js`, `users.js`, `providers.js`, `integrations.js`,
+  `backup.js` and `roles.js`, the sign-in and the cards of System settings;
+- `theme.js`, the mode and the colour schemes, applied as the script loads;
+  `appearance.js`, the Appearance card, the editor, export and import;
+- `notifytext.js` and `notify.js`, the notifications.
+
+A script's top-level code runs as it loads, and the `DOMContentLoaded`
+listeners in the order the scripts register them,
+so the order of the tags matters where one script's top-level code needs
+another's (`theme.js` after `app.js`, `config.js` after `week-program.js`).
+`go test ./internal/server` refuses a top-level name that two scripts declare,
+and a script embedded that the page does not load
+(but those of `uiScriptsOffPage` in `ui_test.go`).
+
+The six scripts that held several regions were cut along them by
+`tools/ui-split` (its `README.md`), by moves alone,
+and a branch that was open meanwhile makes the same moves with it.
+The tool is there while the plan UiParts lasts, and goes with it.
 
 `ui/connect.html` is a second page, the apps' (docs/app.md),
 served at `/ui/connect.html` as it is, not assembled:
