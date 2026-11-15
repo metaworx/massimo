@@ -3146,7 +3146,12 @@ paths:
         commands waiting); structure, source cube (a removal, placement or
         move read back from the Cube's free slots: action, outcome,
         before, free_slots, minutes, held or no_reading, flagged,
-        link_error in "summary"); the server's sign-ins, source server, for a
+        link_error in "summary"); the room checks' (docs/api-v1.md, "The
+        room checks"): disagree, source cube (a room whose thermostats
+        differ: room and outcome differ, resent, resend_failed, not_resent
+        or agree in "summary") and drift, source device (a thermostat off
+        its week programme: outcome not_following, follows or left_auto);
+        the server's sign-ins, source server, for a
         user with audit alone: login, login_failed, locked_out; the LAN
         proxy's, source proxy: proxy_connected, proxy_disconnected,
         proxy_refused, proxy_discarded, proxy_deleted, proxy_delete_refused,
