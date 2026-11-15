@@ -206,8 +206,17 @@ jobs:
             row site "$site" "the site's documents alone: Site runs, and a push to main deploys them" "-"
             row tested "$tested" "this code passed before: what passed is skipped" "no green record for this code"
             echo "| fp | \`${fp:-none}\` | $([ -n "$fp" ] && echo "the code's fingerprint" || echo "not taken") |"
-            row ui "$ui" "the UI tests are wanted" "the UI tests are not wanted"
-            row lan "$lan" "LAN against avahi is wanted" "LAN against avahi is not wanted"
+            # What a run does with a job the answer picks: skipped without a
+            # code test, not needed, passed before, or run (AP SiteOnly, D80-A).
+            job_row() { # <answer> <value> <done> <job>
+              if [ "$suite" != true ] || [ "$code" != true ]; then so="no code test: ${4} is skipped"
+              elif [ "$2" != true ]; then so="${4} is not needed for this change: skipped"
+              elif [ "$3" = true ]; then so="${4} passed for this code before: skipped"
+              else so="${4} runs"; fi
+              echo "| $1 | \`$2\` | ${so} |"
+            }
+            job_row ui "$ui" "$ui_done" "UI test"
+            job_row lan "$lan" "$lan_done" "LAN against avahi"
             row ui_done "$ui_done" "the UI tests passed for this code before" "-"
             row lan_done "$lan_done" "LAN passed for this code before" "-"
             row fuzz_done "$fuzz_done" "Fuzz passed for this code before" "-"
