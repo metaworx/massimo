@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.55.0)
+# Massimo — CI Conventions (v1.56.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -34,7 +34,7 @@ There is no other platform.
 
 | Trigger | Jobs |
 |---------|------|
-| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test, the store's benchmarks once each with `-short`, `make cross`); actionlint (`make actionlint`: the workflows by actionlint, their `run:` scripts by the runner's shellcheck); Race (`make race`, the race detector on `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve`, `internal/announce` and `internal/notify`); Test (armv6, QEMU) (`make test-armv6`, every package's tests with `-short` on 32-bit ARM, run by Ubuntu's `qemu-user` as the Raspberry Pi 1's core); Fuzz on a push to `main` only (`make fuzz`, every fuzz target for 10 s, a crash's input kept as the artifact `fuzz-crash`, Go 1.26's own deadline passed with a warning); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, then under systemd, each case in a container of its own (`make deb-systemd-test`: the first start, the restart, the upgrade from v0.12.0-alpha.1 with the service running), and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Windows service (the unit tests of the update, the installer, the command line, discovery and `internal/safefile`; install, run, update from the API and by hand, roll back, remove, on a Windows runner; then a second `serve` announcing itself beside Windows' own mDNS, found by `massimo discover`); macOS LaunchDaemon (the unit tests of the update, the installer, the command line and `internal/safefile`; first `install` on the template's settings, `packaging/launchd/template-test.sh`: the message and its owner line run as printed, a loaded job restarted, a booted-out one left stopped, the web UI's way, the purge; then the same as Windows on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`; then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker; then a second `serve` beside Apple's mDNSResponder, found and resolved by `dns-sd`); UI test (the web UI's pytest suite, a job per width with both languages, "UI test (1100 px, screenshots)" and "UI test (390 px)", each its two cases in four workers; in the 1100 px job then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only; on failure the failed tests' screenshots and videos and the traces of their run once more as `ui-test-results-<width>`; on a pull request only when it changes the UI, its suite or `ci.yml`, as the job What to test answers); LAN against avahi (`make lan-test`: a second `serve`'s searches finding a fake Cube, losing it with its cable pulled and finding it again, then from a box's proxy too; `serve` beside avahi-daemon, `avahi-browse` and `massimo discover` on a client; a third `serve` following the Cube by its serial to another address after the loss; in Docker; on a pull request only when it changes the announcement, discovery, the server's own files, the proxy, the LAN test or `ci.yml`, as the job What to test answers); Guidelines (section 4); Site (`packaging/site/build.sh --no-apt`: the site's pages and the docs of the commit, every link checked, a document under `docs/` missing from `docs/fragments/_documents.md` failing it; never deployed; also for a change to the site's documents alone); Code result, for a change to documents alone only (`packaging/code-result.sh`: the verdict of the last run that tested the code, below) |
+| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test, the store's benchmarks once each with `-short`, `make cross`); actionlint (`make actionlint`: the workflows by actionlint, their `run:` scripts by the runner's shellcheck); Race (`make race`, the race detector on `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve`, `internal/announce` and `internal/notify`); Test (armv6, QEMU) (`make test-armv6`, every package's tests with `-short` on 32-bit ARM, run by Ubuntu's `qemu-user` as the Raspberry Pi 1's core); Fuzz on a push to `main` only (`make fuzz`, every fuzz target for 10 s, a crash's input kept as the artifact `fuzz-crash`, Go 1.26's own deadline passed with a warning); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, then under systemd, each case in a container of its own (`make deb-systemd-test`: the first start, the restart, the upgrade from v0.12.0-alpha.1 with the service running), and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Windows service (the unit tests of the update, the installer, the command line, discovery and `internal/safefile`; install, run, update from the API and by hand, roll back, remove, on a Windows runner; then a second `serve` announcing itself beside Windows' own mDNS, found by `massimo discover`); macOS LaunchDaemon (the unit tests of the update, the installer, the command line and `internal/safefile`; first `install` on the template's settings, `packaging/launchd/template-test.sh`: the message and its owner line run as printed, a loaded job restarted, a booted-out one left stopped, the web UI's way, the purge; then the same as Windows on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`; then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker; then a second `serve` beside Apple's mDNSResponder, found and resolved by `dns-sd`); UI test (the web UI's pytest suite, a job per width with both languages, "UI test (1100 px, screenshots)" and "UI test (390 px)", each its two cases in four workers; in the 1100 px job then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only; on failure the failed tests' screenshots and videos and the traces of their run once more as `ui-test-results-<width>`; on a pull request only when it changes the UI, its suite or `ci.yml`, as the job What to test answers); LAN against avahi (`make lan-test`: a second `serve`'s searches finding a fake Cube, losing it with its cable pulled and finding it again, then from a box's proxy too; `serve` beside avahi-daemon, `avahi-browse` and `massimo discover` on a client; a third `serve` following the Cube by its serial to another address after the loss; in Docker; on a pull request only when it changes the announcement, discovery, the shared port, the server's own files, the proxy, the Go module, the LAN test or `ci.yml`, as the job What to test answers, and not on the merge of a pull request that found it not needed); Guidelines (section 4); Site (`packaging/site/build.sh --no-apt`: the site's pages and the docs of the commit, every link checked, a document under `docs/` missing from `docs/fragments/_documents.md` failing it; never deployed; also for a change to the site's documents alone); Code result, for a change to documents alone only (`packaging/code-result.sh`: the verdict of the last run that tested the code, below) |
 | beside the jobs above, on a push | Build (build.yml): What to release decides what the run releases, then every target built without cgo with the Debian packages, the build record, `SHA256SUMS` and the manifest, the provenance attested; nothing signed (section 6) |
 | after every job above | All tests passed: fails unless none of them failed or was cancelled, and names each with its result in its summary, an annotation for each that did not pass, and on a pull request in one comment; then, on a push, once Build is done, Release (release.yml): a push to `main` becomes the `devel` build, the GitHub release `release/devel` replaced in place, signed with the rolling key (section 6); then, at every run of release.yml, Site (site.yml): the site built with the newest release's signed apt index and the docs of every channel, and deployed to GitHub Pages; nothing where no release carries the index yet; for a push to `main` of the site's documents alone, which has no Build and so no Release, Deploy site (site.yml) instead |
 | push to a release branch (`release/alpha`, later `release/beta` and `release/stable`) | nothing: ci.yml listens to `main` and the tags; the release moved the branch to a commit ci.yml had tested |
@@ -112,7 +112,9 @@ a pull request's head, or the commit pushed to `main`.
 It holds `fingerprint.sh fingerprint` of the tree that ran,
 a pull request's merge commit in its run,
 and whether the UI tests, LAN and Fuzz passed for that code
-(`fp1:<hex> ui=… lan=… fuzz=…`).
+(`fp1:<hex> ui=… lan=… fuzz=…`);
+LAN is `unneeded` where What to test answered `lan=false`, a pull request's
+filter finding it not needed, and it did not pass.
 What to test reads the status on the commit the run before tested:
 for a pull request its head's first parent,
 for a merge into `main` its second parent, the pull request's head.
@@ -121,6 +123,8 @@ it answers `tested=true`:
 the jobs that passed for that code are skipped,
 Fuzz, which a pull request never runs,
 and the UI tests and LAN run where they had not passed,
+but for LAN on a push where the record says `unneeded` (owner,
+2026-11-15, AP SiteOnly, D78-C),
 and Guidelines, All tests passed, Build and Release run as always;
 the run's own Tested status then carries the record on.
 So a branch's retirement after its green run tests nothing again,
@@ -349,12 +353,19 @@ the macOS and Windows jobs add Apple's mDNSResponder and Windows' mDNS,
 with a second `serve` on every address in a step of their own,
 the macOS one as a launchd daemon (section 7).
 A pull request runs the job only when it changes `internal/announce/`,
-`internal/serve/`, `internal/proxy/`, `internal/cubelan/`,
-a file directly in `internal/server/`,
-`cmd/massimo/discover.go`, `cmd/massimo/serve.go`, `tools/lan-test/`
-or `.github/workflows/ci.yml`,
+`internal/serve/`, `internal/sharedport/`, `internal/proxy/`,
+`internal/cubelan/`, a file directly in `internal/server/`,
+`cmd/massimo/discover.go`, `cmd/massimo/serve.go`, `go.mod`, `go.sum`,
+`tools/lan-test/` or `.github/workflows/ci.yml`,
 as the job What to test answers, and a push to `main` always,
-as the UI test jobs do.
+as the UI test jobs do,
+but for the merge of a pull request that found it not needed for the same code
+(section 2, `lan=unneeded`; D78-C).
+The announcement and discovery share their UDP ports through `internal/sharedport/`,
+and the Go module pins `golang.org/x/net`, whose multicast the announcement uses (owner,
+2026-11-15, D79-A);
+a change the list misses never runs the job,
+since nothing runs it on `main` then.
 The server's own files are among them because discovery's runs are decided there
 (`discovery.go`, and `server.go` waking a search at a Cube's loss),
 which the follower's step checks;
