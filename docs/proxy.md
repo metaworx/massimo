@@ -204,8 +204,10 @@ and the `c:` the original software sends next is answered as well.
 The rest of the original software's sequence, the wakeup, the links, the group,
 the presets and the metadata write that puts the device into a room,
 is passed through as usual.
-Without a time, or with more than ten minutes,
-the proxy asks for 60 seconds or ten minutes.
+Without a time, or with more than 255 seconds,
+the proxy asks for 60 or 255 seconds, the longest a Cube keeps the mode
+(docs/cube-protocol.md, "Pairing a device, as the original software does it");
+its log names the time a client asked for where it was more.
 
 ## Firewall
 

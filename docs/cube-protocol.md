@@ -349,14 +349,35 @@ which held a radiator thermostat (0a0103) and two shutter contacts (005447,
 8. `m:` with the device added to the room and device list.
 
 Massimo pairs the same way (`POST /api/v1/cubes/{sn}/pairing`,
-or `n:` through the proxy) and relies on the following,
+or `n:` through the proxy).
+The Cube sends an empty `N` line when the time is up (seen on hardware, below).
+Massimo relies on the following,
 which comes from other implementations and is *unverified* on hardware:
 `n:` and `x:` get no immediate reply; the Cube sends one `N` line (type,
 address, ten characters of serial,
-0xff) per device as it joins and an empty `N` line when the mode ends,
-by its time or by `x:`; the metadata does not change by pairing;
+0xff) per device as it joins and an empty `N` line when `x:` ends the mode;
+the metadata does not change by pairing;
 commands such as `c:` work while the mode lasts.
 Massimo also ends the mode itself ten seconds after the requested time.
+
+The pairing time (2026-11-14, Cube firmware 1.1.3, one of the owner's Cubes,
+from the log of its `serve`):
+`POST …/pairing` with 60 s sent `n:003c`,
+and the Cube's empty `N` line came 60.1 s later;
+with 300 s it sent `n:012c`, and the empty `N` line came 44.2 s later.
+44 is 0x2c, the low byte of 0x012c:
+the Cube reads only the low byte of the four hex digits,
+so pairing lasts at most 255 s,
+and `n:0100` (256 s) is presumably read as 0.
+What the Cube does with 0, or with `n:` without a time, is *unverified*.
+Both ends were the Cube's own:
+no `x:` was sent, and Massimo's own end would have come ten seconds later.
+No device joined in either.
+The original software (1.4.6) sends four hex digits as well
+(`Conversion.toHex16` of `inclusionModeTimeoutSeconds`);
+the time it is configured with was not found.
+Massimo asks for at most 255 s (`cube.MaxInclusion`),
+and a longer time from a proxy client is capped there.
 
 Massimo gives a thermostat it puts into a room, after pairing or in a move
 (`PUT /api/v1/cubes/{sn}/devices/{rf}`, 2026-11-06),

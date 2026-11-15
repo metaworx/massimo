@@ -18,12 +18,22 @@ var (
 	CmdCancelInclusion = Message{Type: 'x'} // stop pairing mode
 )
 
-// CmdInclusion starts pairing mode. A zero timeout means "no timeout".
+// MaxInclusion is the longest pairing mode a Cube keeps: it reads only
+// the low byte of n:'s four hex digits, so that n:012c (300 s) lasts
+// 44 s (firmware 1.1.3, 2026-11-14; docs/cube-protocol.md, "Pairing a
+// device, as the original software does it").
+const MaxInclusion = 255 * time.Second
+
+// CmdInclusion starts pairing mode for timeout in whole seconds, as four
+// hex digits like the original software; a longer timeout is sent as
+// MaxInclusion. A zero timeout sends n: without a time, which other
+// implementations read as "no timeout"; what the Cube does with it is
+// not verified.
 func CmdInclusion(timeout time.Duration) Message {
 	if timeout <= 0 {
 		return Message{Type: 'n'}
 	}
-	return Message{Type: 'n', Data: fmt.Sprintf("%04x", int(timeout.Seconds()))}
+	return Message{Type: 'n', Data: fmt.Sprintf("%04x", int(min(timeout, MaxInclusion).Seconds()))}
 }
 
 // CmdSetNTP sets the Cube's NTP servers.
