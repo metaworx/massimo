@@ -849,6 +849,11 @@ async function connectEvents() {
   on("device_forgotten", logged(() => loadRooms()));
   on("connected", logged(() => refresh()));
   on("disconnected", logged(() => loadCubes()));
+  // the Cube's memory slots full, or free again: its panel says so
+  on("slots", logged(() => loadCubes()));
+  // a C line and the room list, or a room's members, that differ or
+  // agree again: the tiles' marks
+  on("mismatch", logged(() => loadRooms()));
   on("config", logged((data) => {
     // a device that just joined pairing: its C line makes it a device without a room
     if (data && data.device && !state.unlisted.some((d) => d.rf_address === data.device) &&
@@ -870,7 +875,7 @@ async function connectEvents() {
   // Cube's address and its leaving the LAN, the changes, for the log
   // alone.
   const handled = new Set(["state", "hello", "metadata", "pairing_started", "pairing_ended", "paired", "device_forgotten",
-    "connected", "disconnected", "config", "cube_found", "restore_step", "restore_done"]);
+    "connected", "disconnected", "slots", "mismatch", "config", "cube_found", "restore_step", "restore_done"]);
   for (const kind of LOG_KINDS) if (!handled.has(kind)) on(kind, logged(() => {}));
   es.onerror = () => {
     if (gen !== eventsGen) return;

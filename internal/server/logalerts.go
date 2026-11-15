@@ -41,13 +41,17 @@ const (
 // settleRule says how a warning or an error of a kind is settled.
 type settleRule struct {
 	// by are the kinds that settle it: a later event of one of them, of
-	// the same Cube (or the server's, for the server's own), below warn.
+	// the same Cube (or the server's, for the server's own), below warn
+	// but with any.
 	by []string
 	// match, where set, says whether such a later event settles this
 	// one: the same command, the same user.
 	match func(alert, later *event) bool
 	// ends, where set, is when it settles by itself.
 	ends func(alert *event) time.Time
+	// any lets a later event of by settle it whatever its level, so that
+	// the newest of them is the alert.
+	any bool
 }
 
 // settleRules are the kinds the server writes at warn or error, with
@@ -62,6 +66,13 @@ var settleRules = map[string]settleRule{
 	"command": {by: []string{"command"}, match: sameCommand},
 	// the radio held for the duty cycle or the memory slots, till then
 	"hold": {ends: holdEnds},
+	// the Cube's memory slots short or full for an hour: the next slots
+	// event, a step to full or back to short, or the reading that has
+	// them free again (slots.go)
+	"slots": {by: []string{"slots"}, any: true},
+	// a C line and the metadata, or the members of a room, that differ:
+	// the check that finds them agree again (congruence.go)
+	"mismatch": {by: []string{"mismatch"}, match: sameMismatch},
 	// an automatic backup failed: the next one taken
 	"backup": {by: []string{"backup"}},
 	// a restore failed: the next one done
@@ -201,7 +212,7 @@ func unsettled(lines, settling []event, now time.Time) []logAlert {
 		settled := false
 		for j := range settling {
 			l := &settling[j]
-			if l.ID > a.ID && l.CubeSerial == a.CubeSerial && belowWarn(l) && slices.Contains(rule.by, l.Kind) && (rule.match == nil || rule.match(a, l)) {
+			if l.ID > a.ID && l.CubeSerial == a.CubeSerial && (belowWarn(l) || rule.any) && slices.Contains(rule.by, l.Kind) && (rule.match == nil || rule.match(a, l)) {
 				settled = true
 				break
 			}
