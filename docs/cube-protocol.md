@@ -82,8 +82,15 @@ its decompiled code or public analyses, and says so.
   so it is parked in room 255 and hidden.
 - **Budget**:
   the Cube still accepts commands at 100 % duty cycle,
-  and every unacknowledged radiogram holds a memory slot;
+  and every unacknowledged radiogram holds a memory slot
+  until the device answers or the Cube restarts;
   the Cube also spends radio time on its own retries.
+- **Transmit error**:
+  the error flag of an L entry says that the Cube's last radiogram to the
+  device failed, and byte 4 gives that radiogram's type;
+  it stays until `r:`, which costs no radio time and no slot,
+  or a Cube restart.
+  A room command to a room whose members are all flagged is accepted and lost.
 - **Key lock state** is bit 0x20 of the second flags byte of an L entry.
 - **Network configuration over UDP 23272**:
   `c` reads the stored static configuration and the DHCP flag,
@@ -260,6 +267,8 @@ In the same capture the duty cycle went from 0 to 68 % and all six
 thermostats got the error flag (L entry byte 5 = 0x0c, byte 4 = 0x03)
 between 02:05 and 02:10 without any LAN command: the Cube spends radio
 time on its own retries to unreachable devices (they were not mounted).
+Byte 4 = 0x03 names the radiogram that failed, the Cube's own
+TimeInformation push (see the byte at offset 4, below).
 A client must expect budget to disappear without having sent anything.
 
 **Commands in the reply are ignored.**
@@ -337,7 +346,7 @@ Captured on 2026-11-04 while operating the original UI:
 | UI action | Line sent | Reply |
 |---|---|---|
 | Set time zone | `v:<base64 of winter rule + summer rule>` (24 bytes, **no time field**) | `A:` |
-| Any command to a device in error state | `r:<count>,<base64 addresses>` first | `S:` |
+| Any command to a device in error state, or to its room | `r:<count>,<base64 addresses>` first, one `r:01` per flagged device (below) | `S:` |
 | Room 1 manual 15 °C | `s:AARAAAAACgEKAV4=` | `S:` |
 | Room 3 auto | `s:AARAAAAACgEIAwA=` | `S:` |
 | All rooms 6.5 °C until 04.11.2026 02:00 | `s:AARAAAAACgEKAY2kmgQ=` … | `S:` |
@@ -370,6 +379,20 @@ Two wakeups and three telegrams (the test and the restore) cost 3 % of the
 duty cycle; up to three memory slots were held, one still two minutes later.
 A 0x11 command to a device in error state that was **not** preceded by `r:` came
 back as discarded (`S:14,1,31`); the software then reports "Command discarded".
+When the software sends `r:`, from its bytecode (`ResetRadiogramBuilder`) and
+its logs of 2026-02-19 (Cube firmware 1.1.3):
+in front of every command that makes radiograms, one `r:01,<address>` for
+each device in the command's scope whose error flag is set,
+silent devices included.
+The scope of a room setpoint or mode is every device of the room,
+of a link change or a removal the device itself.
+Byte 4, the failed radiogram's type, decides by its category (below):
+a device whose failed radiogram has no category (such as TimeInformation
+or WakeUp) or is a configuration or control radiogram is reset before any
+command; one whose failed radiogram is a link change (0x20–0x23) only
+before a link change, a Reset (0xF0) only before a removal;
+the `link_error` bit alone is never reset.
+The software never resets on its own: no timer, nothing on a device's report.
 While the UI is open it calls the backend every 10 s, and each call sends one `l:`
 (2026-02-23 to 03-05: 88 000 polls of one Cube, 99.8 % 10 s apart).
 The backend sends `q:` when the UI stops calling for a time set outside the jars,
@@ -534,11 +557,19 @@ every radiogram the system knows, with the codes:
 0x11 ConfigTemperatures, 0x12 ConfigValveFunctions, 0x20 AddLinkPartner,
 0x21 RemoveLinkPartner, 0x22 SetGroupAddress, 0x23 RemoveGroupAddress,
 0x30 ShutterContactState, 0x40 ControlMode (set temperature),
+0x41 SetPointTemperature,
 0x42 SetPointAndCurrentTemperature (wall thermostat), 0x43 ComfortTemperature,
-0x44 EcoTemperature, 0x50 PushButtonState, 0x60 HeatingThermostatState,
-0x70 CurrentTemperatureAndHumidity, **0x80 LockManualControls**,
-0x81 DaylightSavingTimeMode, 0x82 SwitchDisplaySetPointActual, 0xF0 WakeUp,
-0xF1 Reset.
+0x44 EcoTemperature, 0x45 CurrentTemperatureAndHumidity, 0x50 PushButtonState,
+0x60 HeatingThermostatState, **0x80 LockManualControls**,
+0x81 DaylightSavingTimeMode, 0x82 SwitchDisplaySetPointActual, 0xF0 Reset,
+0xF1 WakeUp, 0xFF Test
+(read again from the jar on 2026-11-15: this list had 0xF0 and 0xF1 the
+other way round and 0x70 for 0x45; no code of Massimo uses these two).
+Each type has a category, which decides when the software resets a device
+whose radiogram of that type failed (above):
+Configuration for 0x10–0x12 and 0x82, Control for 0x40, 0x41, 0x43, 0x44
+and 0x80, Assignment for 0x20–0x23, Remove for 0xF0, none for the rest.
+The same code is byte 4 of an L entry whose error flag is set (below).
 Only `FrameType` itself references `LockManualControls`:
 the software has no UI for the key lock and never sends 0x80.
 The lock state is readable,
@@ -641,8 +672,22 @@ A window contact showed the link-error bit (0x40 of the second flags byte) after
 its room's wall thermostat had been moved out and back in;
 the bit cleared with the contact's next transmission (one open and close of the window).
 
-The byte at offset 4 of an `L` entry (undocumented) was observed as 0x09,
-0x03, 0xf1 and 0xf6; it changed after failed transmissions to that device.
+The byte at offset 4 of an `L` entry is the type of the last radiogram to the
+device that failed, its `FrameType` code (above), as the original software
+reads it (`DeviceStateSerializer`, 1.4.6), and only while the error flag
+(0x08 of the first flags byte) is set.
+Seen on Cubes with firmware 1.1.3: 0x09 in every entry after a Cube restart;
+with the flag, 0x03 TimeInformation (15 of 16 flagged entries on four of the
+owner's Cubes on 2026-11-14, the Cube's own time push), 0xF1 WakeUp,
+0x81 DaylightSavingTimeMode (six devices of one Cube on 2026-02-12;
+the original software has a builder for 0x81, `SetDeviceDaylightSavingMode`,
+but no class of its two backend jars uses it),
+0x21 RemoveLinkPartner (a room's four radiator thermostats, one of which
+was being removed, after the Cube discarded the removal, 2026-11-15),
+and 0xf6, which the list lacks.
+After an `r:` the byte kept the failed type (0x03 in four of four resets,
+the original software's logs of 2026-02-19),
+so without the flag it says nothing.
 
 Duty cycle and memory slots: with the thermostats out of range,
 each command raised the duty cycle (0x44 → 0x64 = 100 %) and consumed one free
@@ -889,17 +934,52 @@ kept here because they cost time to learn.
   which is unrelated to Cubes but was learned the same night.
 - After a Cube restart, the eco switch stays "not reported" until someone presses it;
   harmless.
-- A device's transmit error (the L entry's error flag) stays while the device
-  reports, and `r:` clears it at no radio cost
-  (2026-11-14, Cube firmware 1.1.3, one wall thermostat of one of the owner's
-  Cubes, through `serve`'s proxy):
-  the device had carried the flag for a day while reporting every few minutes;
-  one `r:01,<radio address>` was answered `S:03,0,32`, the duty cycle and the
-  50 free memory slots as before, so no radiogram was queued,
-  and the next device list, 13 s later, had the flag cleared.
-  So the device's own reports never clear it.
-  The same evening a second Cube held ten devices in error with one slot of 50
-  free, retrying them on its own.
+- A device's transmit error (the L entry's error flag, 0x08 of the first flags
+  byte) says that the Cube's last radiogram to the device failed,
+  and it stays until `r:` or a Cube restart
+  (Cube firmware 1.1.3, the owner's Cubes, 2026-11-13 to 15,
+  and the original software's logs of 2026-02-12 to 03-05):
+  - A radiogram the device does not answer sets it:
+    nearly always the Cube's own time push after its restart,
+    to a device it has not heard yet (byte 4 0x03),
+    and also a client's radiograms, such as a removal's link changes (0x21).
+  - The device's own reports never clear it:
+    one wall thermostat carried it for a day while reporting every few minutes,
+    and the original software's logs show no change in 19 hours on one Cube
+    and in 10½ days on another.
+  - `r:` clears it at no radio cost:
+    five of five resets were answered with the duty cycle and the free memory
+    slots as before (one `r:01,<radio address>` through `serve`'s proxy answered
+    `S:03,0,32`, and four in the original software's logs, one of them on a
+    Cube with a single slot free),
+    and the next device list, 2–13 s later, had the flag cleared,
+    for a device the Cube had not heard since its restart too.
+    So `r:` is the Cube's bookkeeping, not a radiogram;
+    a reset device stayed clear (3½ days and 17 hours, the longest watched).
+  - A Cube restart clears every flag.
+    A Cube that does not hear a device by its first wakeup and time push
+    flags it again within minutes (four devices within 6 minutes,
+    2026-02-19); one that hears them does not:
+    a Cube whose thermostats all reported within 5 minutes of its restart
+    flagged nothing in the next 13 hours (2026-11-14),
+    nor its six window contacts without batteries.
+  - A room command to a room whose members were all flagged was accepted
+    (not discarded, one slot) and never carried out, twice
+    (2026-11-13 and 14);
+    the original software resets every flagged device of the room before a
+    room command (the LAN commands verified against it, above).
+- A radiogram for a device that does not answer holds its memory slot,
+  without radio time, until the device answers or the Cube restarts,
+  and a Cube with no slot left discards every command
+  (the original software's logs of 2026-02-19, Cube firmware 1.1.3:
+  a room setpoint took a Cube's last slot of 50 and held it at 0 % duty
+  for at least 4 hours, and the next room setpoint was discarded).
+  The same Cube still had one slot free when it was restarted on 2026-11-14;
+  the restart freed all 50, and they stayed free at its eleven greetings of
+  the next 13 hours, a command taking a few of them for minutes.
+  A window contact woken with a new battery and three window cycles before the
+  restart had freed none, so the radiograms were for other devices;
+  the Cube does not say which.
 - A wall thermostat with new batteries reports a measured temperature of 0
   in its L entry until it has measured (2026-11-13, Cube firmware 1.1.3,
   seen as 0.0 °C in a room on the owner's Cube):
