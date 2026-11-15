@@ -105,11 +105,13 @@ var durationSettings = []durationSetting{
 }
 
 // AnnounceState is a run's announcement on the LAN: whether the server
-// announces itself, and what decided it where the setting announce did
-// not (-announce or MASSIMO_ANNOUNCE).
+// announces itself, what decided it where the setting announce did not
+// (-announce or MASSIMO_ANNOUNCE), and whether it listens on a loopback
+// address, which the setting's auto keeps off.
 type AnnounceState struct {
-	On      bool
-	FixedBy string
+	On       bool
+	FixedBy  string
+	Loopback bool
 }
 
 // announceValues are the setting announce's values.

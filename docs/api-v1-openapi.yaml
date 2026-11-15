@@ -1284,7 +1284,11 @@ paths:
         What the last look at the LAN saw: Home Assistant's zeroconf
         records, looked for at the start and every 30 minutes by a server
         that announces itself. ?refresh=1 looks now (about two seconds).
-        looks is false where the server does not look.
+        looks is false where the server does not look, and announce then
+        says why: the setting announce, and why, the first that holds of
+        fixed (-announce or MASSIMO_ANNOUNCE decides), restart (the stored
+        setting announces from the next start), off (the setting is off)
+        and loopback (auto, on a loopback address).
       parameters:
         - {name: refresh, in: query, schema: {type: string, enum: ["1"]}}
       responses:
@@ -1310,6 +1314,14 @@ paths:
                         integration: {type: string, description: "The uuid of the integration or request of this installation id, if any"}
                   at: {type: string, format: date-time}
                   looks: {type: boolean}
+                  announce:
+                    type: object
+                    description: Why the server does not look; only where looks is false
+                    properties:
+                      value: {type: string, enum: [auto, "on", "off"], description: "The setting announce stored, or auto"}
+                      in_effect: {type: string, enum: ["off"]}
+                      fixed_by: {type: string, description: "-announce or MASSIMO_ANNOUNCE, where one decides"}
+                      why: {type: string, enum: [fixed, restart, "off", loopback]}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
         "502": {description: The LAN could not be asked}

@@ -1004,7 +1004,12 @@ the browser keeps which cards are folded.
   last, and **Acts as**: its own user or a Massimo user, the one of the
   same name proposed, with **Link**; and **Revoke**, which asks first.
   Under them the Home Assistant installations the server saw on the LAN,
-  each **registered** or **not registered**, with **Look again**.
+  each **registered** or **not registered**, with **Look again**;
+  where the server does not look, why, naming Announce on the LAN and
+  what to change: Off, Automatic on the loopback, a change waiting for
+  the restart, or `-announce` or `MASSIMO_ANNOUNCE`, which decides;
+  with `settings`, **Open Maintenance**, but where the flag or the
+  variable decides.
   In **Users**, an integration's users carry **user of** its key (the
   integration's own **integration** and its key), and a linked one
   **acts as** the user; a user that integration users act as counts them
