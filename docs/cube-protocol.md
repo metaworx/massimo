@@ -362,6 +362,10 @@ A second capture (week program, presets, valve settings, renames):
 | Rename room or device, reorder rooms | `m:00,<base64 metadata>` (index only, no count) | `A:` |
 
 All of these match the builders in `internal/protocol/cube` byte for byte.
+A metadata write longer than one block of 1900 base64 characters numbers its
+`m:` lines in decimal, two digits below 10, as the original software 1.4.6
+builds them (`"0" + i`), so the eleventh block is `m:10`, not `m:0a`;
+from the bytecode only, since no Cube here needs more than one block.
 The `z:` duration `1e` has been read as 30 s; the original software 1.4.6 names
 the field `durationInMinutes`, and the byte is the same either way, so the unit
 is open.

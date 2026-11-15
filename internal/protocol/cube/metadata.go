@@ -189,10 +189,17 @@ func WriteMetadataCommands(m *Metadata) ([]Message, error) {
 	var out []Message
 	for i := 0; len(enc) > 0; i++ {
 		n := min(MetadataBlockSize, len(enc))
-		out = append(out, Message{Type: 'm', Data: fmt.Sprintf("%02x,%s", i, enc[:n])})
+		out = append(out, Message{Type: 'm', Data: metadataIndex(i) + "," + enc[:n]})
 		enc = enc[n:]
 	}
 	return out, nil
+}
+
+// metadataIndex is an m: line's block index as the original software 1.4.6
+// writes it: decimal, two digits below 10 ("0" + i), so the eleventh block
+// is "10", not "0a".
+func metadataIndex(i int) string {
+	return fmt.Sprintf("%02d", i)
 }
 
 // byteReader is a small cursor that records the first error and then

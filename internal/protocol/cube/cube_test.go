@@ -852,3 +852,17 @@ func TestEncodeWeekProgram(t *testing.T) {
 		t.Fatal("an empty programme encoded")
 	}
 }
+
+// The m: block index is decimal, as the original software writes it: the
+// eleventh block of a metadata write is "10".
+func TestMetadataIndex(t *testing.T) {
+	for i, want := range map[int]string{0: "00", 9: "09", 10: "10", 15: "15"} {
+		if got := metadataIndex(i); got != want {
+			t.Errorf("block %d: %q, want %q", i, got, want)
+		}
+	}
+	msgs, err := WriteMetadataCommands(&Metadata{Header: [2]byte{'V', 2}})
+	if err != nil || len(msgs) != 1 || !strings.HasPrefix(msgs[0].Data, "00,") {
+		t.Errorf("one block: %v %v", msgs, err)
+	}
+}
