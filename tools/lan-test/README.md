@@ -49,6 +49,7 @@ bridge has both.
   which is how an outage of its network is staged.
 
 `run.sh` builds a static `massimo` into a temporary directory,
+the page's parts first (`make ui`),
 which every host mounts at `/m`,
 and brings up the Cube, the searcher and the client.
 With no proxy on the LAN, it checks:

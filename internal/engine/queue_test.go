@@ -6,7 +6,6 @@ package engine
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"log/slog"
 	"strings"
 	"sync"
@@ -23,23 +22,7 @@ const fixture = "../protocol/cube/testdata/cube-fw0113-greeting.txt"
 // withError returns the greeting with the error flag set on rf's L entry.
 func withError(t *testing.T, greeting []cube.Message, rf cube.RFAddress) []cube.Message {
 	t.Helper()
-	out := append([]cube.Message(nil), greeting...)
-	for i, m := range out {
-		if m.Type != 'L' {
-			continue
-		}
-		b, err := base64.StdEncoding.DecodeString(m.Data)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for off := 0; off < len(b); off += 1 + int(b[off]) {
-			if cube.RFAddressFromBytes(b[off+1:off+4]) == rf {
-				b[off+5] |= 0x08
-			}
-		}
-		out[i].Data = base64.StdEncoding.EncodeToString(b)
-	}
-	return out
+	return withFlags(t, greeting, rf, 0x08, 0)
 }
 
 // waitFor polls until the fake cube received a command of type typ.

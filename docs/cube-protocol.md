@@ -86,12 +86,16 @@ its decompiled code or public analyses, and says so.
   and every unacknowledged radiogram holds a memory slot
   until the device answers or the Cube restarts;
   the Cube also spends radio time on its own retries.
-- **Transmit error**:
-  the error flag of an L entry says that the Cube's last radiogram to the
-  device failed, and byte 4 gives that radiogram's type;
+- **Communication error** (until 2026-11-15 Massimo's "transmit error"):
+  the error flag of an L entry (0x08 of the first flags byte) says that the
+  Cube's last radiogram to the device failed,
+  and byte 4 gives that radiogram's type;
   it stays until `r:`, which costs no radio time and no slot,
   or a Cube restart.
   A room command to a room whose members are all flagged is accepted and lost.
+  Massimo calls it the communication error, as the original software's UI does
+  ("Communication error!", "Kommunikationsstörung!"),
+  and byte 6's 0x40, which the original names `transmitError`, the link error.
 - **Key lock state** is bit 0x20 of the second flags byte of an L entry.
 - **Network configuration over UDP 23272**:
   `c` reads the stored static configuration and the DHCP flag,
@@ -761,6 +765,9 @@ After an `r:` the byte kept the failed type (0x03 in four of four resets,
 the original software's logs of 2026-02-19; 0x21 in four of four on
 2026-11-15, after the reset and a room command the devices took),
 so without the flag it says nothing.
+Massimo reads it so (`cube.DeviceState.FailedRadiogram`, the codes and names
+of the list above in `cube.RadiogramType`) and gives it with the flag alone,
+as the device state's `failed_radiogram` (docs/api-v1.md).
 
 Duty cycle and memory slots: with the thermostats out of range,
 each command raised the duty cycle (0x44 → 0x64 = 100 %) and consumed one free
@@ -1051,6 +1058,13 @@ kept here because they cost time to learn.
     (2026-11-13 and 14);
     the original software resets every flagged device of the room before a
     room command (the LAN commands verified against it, above).
+    Massimo's queue does the same since AP RadioHealth v1.2: before a
+    room-flagged radiogram, one `r:01` for each device whose C line names
+    the room and whose error flag is set, none for the link error alone,
+    and after a discard the same resets and one retry.
+    And `serve` resets a flagged device that reports, at most once a day
+    (the log's `error_reset`): the device answers again, so the Cube's next
+    radiogram to it has a chance, and nothing else would clear the flag.
 - A radiogram for a device that does not answer holds its memory slot,
   without radio time, until the device answers or the Cube restarts,
   and a Cube with no slot left discards every command

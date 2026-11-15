@@ -124,10 +124,43 @@ def rule_row(page, kind):
     return page.locator(f"#notify-rules .notify-row[data-kind={kind}]")
 
 
+def set_value(box, value):
+    """A delay or threshold typed and left, as a change."""
+    box.fill(value)
+    box.dispatch_event("change")
+
+
+def assert_refused(page, row, bounds):
+    """The row's value is refused on its field (markRange): the box
+    marked invalid, the range in amber before it, which the box names
+    as its description."""
+    box = row.locator("input[type=number]")
+    hint = row.locator(".warn-text")
+    hint.wait_for(state="visible")
+    assert hint.inner_text() == t(page, "notify.range", bounds)
+    assert box.get_attribute("aria-invalid") == "true"
+    assert box.get_attribute("aria-describedby") == hint.get_attribute("id")
+
+
+def assert_taken(row):
+    """The row's value is taken: no mark, no range."""
+    row.locator(".warn-text").wait_for(state="hidden")
+    box = row.locator("input[type=number]")
+    assert box.get_attribute("aria-invalid") is None and box.get_attribute("aria-describedby") is None
+
+
+def frost_off_saved(request):
+    """The page's save of the rules with frost off."""
+    if request.method != "PUT" or not request.url.endswith("/api/v1/me/preferences/notify"):
+        return False
+    return json.loads(request.post_data or "{}").get("frost", {}).get("on") is False
+
+
 def test_rules_kept_on_the_server(page, case):
     """The rules show their defaults, a delay and a switch changed go to
-    the preference notify, a delay out of bounds is refused, and the
-    page reads them back."""
+    the preference notify, a delay or threshold out of bounds is marked
+    on its field and not sent, its mark kept through a save until the
+    field holds a value inside, and the page reads them back."""
     show_view(page, "notify")
     rows = page.locator("#notify-rules .notify-row")
     assert rows.count() == 11, "a row per kind"
@@ -149,15 +182,30 @@ def test_rules_kept_on_the_server(page, case):
     assert rules["window_open"] == {"on": True, "after_min": 45} and rules["device_stale"]["on"] is True, rules
 
     frost = rule_row(page, "frost")
-    frost.locator(".switch").click()
-    assert frost.locator("input[type=number]").is_disabled(), "the threshold is off with its kind"
-    win.locator("input[type=number]").fill("2000")
-    win.locator("input[type=number]").dispatch_event("change")
+    below = frost.locator("input[type=number]")
+    set_value(below, "50")
+    assert_refused(page, frost, {"min": -10, "max": 20})
+    set_value(below, "8")
+    assert_taken(frost)
+
+    # frost switched off, and within its save's second a delay out of
+    # bounds: the save's success leaves the delay's mark alone, whichever
+    # comes first (a save once cleared the range error, 390-de)
     msg = page.locator("#notify-msg")
-    msg.wait_for(state="visible")
-    assert msg.inner_text() == t(page, "notify.badAfter", {"min": 1, "max": 1440})
+    minutes = win.locator("input[type=number]")
+    with page.expect_request_finished(frost_off_saved, timeout=10000):
+        frost.locator(".switch").click()
+        assert below.is_disabled(), "the threshold is off with its kind"
+        set_value(minutes, "2000")
+        assert_refused(page, win, {"min": 1, "max": 1440})
+    page.wait_for_timeout(300)  # the page takes the save's answer
+    assert_refused(page, win, {"min": 1, "max": 1440})
+    assert msg.is_hidden(), "the line has no word of a refused value, nor of a save that went well"
+    assert_axe(page, "a delay refused")
     rules = wait_rules(page, lambda r: r.get("frost", {}).get("on") is False)
     assert rules["window_open"]["after_min"] == 45, "a delay out of bounds is not sent"
+    set_value(minutes, "45")
+    assert_taken(win)
 
     reload_with(page)
     show_view(page, "notify")
@@ -184,6 +232,10 @@ def test_this_browser_on_and_off(page, case):
         page.locator("#notify-on").click()
         page.locator("#notify-off").wait_for(state="visible")
         assert state.inner_text() == t(page, "notify.isOn")
+        # Turn off shows only once the lists are read again, the read
+        # that used to clear the line
+        msg = page.locator("#notify-msg")
+        assert msg.is_visible() and msg.inner_text() == t(page, "notify.turnedOn"), "the outcome stays after the reload"
         assert page.evaluate("window.__push.registered") == "sw.js", "the worker beside the page"
         assert {"type": "lang", "lang": case.lang} in page.evaluate("window.__push.messages"), "the worker is told the language"
         subs = [s for s in api_call("GET", "api/v1/me/push") if "/push/ui-test/" in s["endpoint"]]
@@ -196,6 +248,8 @@ def test_this_browser_on_and_off(page, case):
         page.locator("#notify-off").click()
         page.locator("#notify-on").wait_for(state="visible")
         assert state.inner_text() == t(page, "notify.isOff")
+        device.wait_for(state="detached")  # the lists read again
+        assert msg.is_visible() and msg.inner_text() == t(page, "notify.turnedOff"), "the outcome stays after the reload"
         assert page.evaluate("window.__push.unsubscribed"), "the browser's subscription ends"
         assert not [s for s in api_call("GET", "api/v1/me/push") if "/push/ui-test/" in s["endpoint"]], "and the server's"
     finally:

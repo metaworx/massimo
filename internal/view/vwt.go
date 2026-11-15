@@ -266,8 +266,8 @@ func RoomThermostat(room cube.RoomMeta, members []Device, info RoomInfo, addr cu
 	// theirs.
 	if len(walls) > 0 && walls[0].State != nil {
 		w := walls[0].State
-		st.BatteryLow, st.Error, st.LinkError, st.PanelLocked = w.BatteryLow, w.Error, w.LinkError, w.PanelLocked
-		for _, k := range []string{"battery_low", "error", "link_error", "panel_locked"} {
+		st.BatteryLow, st.Error, st.FailedRadiogram, st.LinkError, st.PanelLocked = w.BatteryLow, w.Error, w.FailedRadiogram, w.LinkError, w.PanelLocked
+		for _, k := range []string{"battery_low", "error", "failed_radiogram", "link_error", "panel_locked"} {
 			newest(k, walls[0].Received[k])
 		}
 	}

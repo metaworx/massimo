@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -104,8 +105,9 @@ type Mover interface {
 // Result is the outcome of a Command.
 type Result struct {
 	Discarded bool // the Cube rejected a radio command (budget exhausted)
-	// Retried says the Cube discarded a radio command to a device in
-	// error state, and the queue reset the state and sent it again.
+	// Retried says the Cube discarded a radio command, and the queue
+	// reset the communication error of the devices it reaches and sent
+	// it again.
 	Retried bool
 	Budget  cubelan.Budget
 	Err     error
@@ -439,9 +441,20 @@ func (q *Queue) execute(ctx context.Context, cmd Command) Result {
 	}
 	if needsRadio && !cmd.Passthrough && cmd.Target != 0 && q.deviceInError(cmd.Target) {
 		if _, err := q.gw.SendRadio(ctx, cube.CmdResetError(cmd.Target)); err != nil {
-			return Result{Err: fmt.Errorf("reset error state: %w", err), Budget: q.gw.Budget()}
+			return Result{Err: fmt.Errorf("reset the communication error: %w", err), Budget: q.gw.Budget()}
 		}
+		q.opts.Logger.Info("communication error reset before a command", "device", cmd.Target, "room", cmd.RoomID)
 		q.sleep(ctx, q.opts.Gap)
+	}
+	var members map[uint8][]cube.RFAddress
+	if needsRadio && !cmd.Passthrough {
+		var rooms []uint8
+		rooms, members = q.flaggedMembers(cmd)
+		for _, room := range rooms {
+			if err := q.resetMembers(ctx, room, members[room]); err != nil {
+				return Result{Err: fmt.Errorf("reset the communication error: %w", err), Budget: q.gw.Budget()}
+			}
+		}
 	}
 	for i, l := range cmd.Lines {
 		if i > 0 {
@@ -468,17 +481,26 @@ func (q *Queue) execute(ctx context.Context, cmd Command) Result {
 				"duty_pct", r.DutyCycle, "free_slots", r.FreeMemorySlots)
 			continue
 		}
-		if r.Discarded && cmd.Target != 0 {
-			// Observed on hardware: a command to a device in error state is
-			// discarded unless r: was sent first. Reset once and retry.
-			q.stepLog(cmd).Info("command discarded, resetting error state and retrying", "target", cmd.Target, "command", l.String(),
+		room := lineRoom(l)
+		if again := members[room]; r.Discarded && (cmd.Target != 0 || len(again) > 0) {
+			// Observed on hardware: a command to a device with a
+			// communication error is discarded unless r: was sent first.
+			// Reset once and retry: the target, and the flagged members of
+			// the room a room-flagged line names, those the prelude reset.
+			q.stepLog(cmd).Info("command discarded, resetting the communication error and retrying", "target", cmd.Target, "room", room, "command", l.String(),
 				"duty_pct", r.DutyCycle, "free_slots", r.FreeMemorySlots)
 			res.Retried = true
-			if _, err := q.gw.SendRadio(ctx, cube.CmdResetError(cmd.Target)); err != nil {
+			if cmd.Target != 0 {
+				if _, err := q.gw.SendRadio(ctx, cube.CmdResetError(cmd.Target)); err != nil {
+					res.Err = err
+					break
+				}
+				q.sleep(ctx, q.opts.Gap)
+			}
+			if err := q.resetMembers(ctx, room, again); err != nil {
 				res.Err = err
 				break
 			}
-			q.sleep(ctx, q.opts.Gap)
 			if r, err = q.gw.SendRadio(ctx, l); err != nil {
 				res.Err = err
 				break
@@ -510,9 +532,138 @@ func sendResultLine(r *cube.SendResult) cube.Message {
 	return cube.Message{Type: 'S', Data: fmt.Sprintf("%02x,%d,%02x", r.DutyCycle, d, r.FreeMemorySlots)}
 }
 
+// deviceInError reports whether rf's communication error, the error
+// flag (byte 5's 0x08), is set: the Cube's last radiogram to it failed,
+// and the Cube may hold back the next one until an r:. The link error
+// (byte 6's 0x40) is the device's own report of its partners, which r:
+// does not touch, so it calls for none (AP RadioHealth v1.2, D111-A).
 func (q *Queue) deviceInError(rf cube.RFAddress) bool {
 	st, ok := q.gw.Snapshot().State(rf)
-	return ok && (st.Error || st.LinkError)
+	return ok && st.Error
+}
+
+// flaggedMembers finds the members a command's room-flagged radio lines
+// reach (AP RadioHealth v1.2, Block 2, D110-A): a room-flagged s: line
+// sets every device whose C line names its room, whichever member its
+// header names (T135, docs/cube-protocol.md), and the Cube may hold one
+// back for a member whose communication error is set, so each such
+// member is reset first, as the original software does. It returns the
+// rooms in the order the lines name them and, by room, the members
+// whose error flag is set, in the Cube's order; the command's Target,
+// which its own prelude resets, and the devices the command's own r:
+// lines reset (cubeio's removals and moves) are left out.
+func (q *Queue) flaggedMembers(cmd Command) ([]uint8, map[uint8][]cube.RFAddress) {
+	var rooms []uint8
+	skip := map[cube.RFAddress]bool{cmd.Target: true}
+	for _, l := range cmd.Lines {
+		switch l.Type {
+		case 'r':
+			addrs, _ := cube.ParseResetError(l.Data)
+			for _, a := range addrs {
+				skip[a] = true
+			}
+		case 's':
+			if room := lineRoom(l); room != 0 && !slices.Contains(rooms, room) {
+				rooms = append(rooms, room)
+			}
+		}
+	}
+	if len(rooms) == 0 {
+		return nil, nil
+	}
+	snap := q.gw.Snapshot()
+	members := map[uint8][]cube.RFAddress{}
+	for _, rf := range snap.Devices() {
+		c := snap.Config(rf)
+		if c == nil || c.Type == cube.DeviceCube || skip[rf] || !slices.Contains(rooms, c.RoomID) {
+			continue
+		}
+		if st, ok := snap.State(rf); ok && st.Error {
+			members[c.RoomID] = append(members[c.RoomID], rf)
+		}
+	}
+	return rooms, members
+}
+
+// resetMembers sends one r: for each of devs, flagged members of room,
+// and logs each.
+func (q *Queue) resetMembers(ctx context.Context, room uint8, devs []cube.RFAddress) error {
+	for _, rf := range devs {
+		if _, err := q.gw.SendRadio(ctx, cube.CmdResetError(rf)); err != nil {
+			return err
+		}
+		q.opts.Logger.Info("communication error reset before a room command", "device", rf, "room", room)
+		q.sleep(ctx, q.opts.Gap)
+	}
+	return nil
+}
+
+// lineRoom is the room a room-flagged s: line names; 0 for any other
+// line.
+func lineRoom(l cube.Message) uint8 {
+	if l.Type != 's' {
+		return 0
+	}
+	rc, err := cube.ParseRadioCommand(l.Data)
+	if err != nil || !rc.Target.Room {
+		return 0
+	}
+	return rc.Target.RoomID
+}
+
+// Concerns reports whether a command of Massimo's own that is waiting
+// or in flight addresses rf or its room (the room of its C line): by
+// its Target or its RoomID, or by one of its lines, a room-flagged s:
+// by its room, any other s: or an r: by its device. Commands of the
+// LAN proxy's clients (Passthrough) and reconnects do not count. The
+// server's automatic resets ask it, so that they leave a device alone
+// while a command to it or its room may reset it (AP RadioHealth v1.2,
+// Block 4).
+func (q *Queue) Concerns(rf cube.RFAddress) bool {
+	var room uint8
+	if c := q.gw.Snapshot().Config(rf); c != nil {
+		room = c.RoomID
+	}
+	q.mu.Lock()
+	cmds := make([]Command, 0, len(q.items)+1)
+	for _, e := range q.items {
+		cmds = append(cmds, e.cmd)
+	}
+	if q.inFlght != nil {
+		cmds = append(cmds, q.inFlght.cmd)
+	}
+	q.mu.Unlock()
+	for _, cmd := range cmds {
+		if concerns(cmd, rf, room) {
+			return true
+		}
+	}
+	return false
+}
+
+// concerns reports whether cmd addresses rf or room (0 for none).
+func concerns(cmd Command, rf cube.RFAddress, room uint8) bool {
+	if cmd.Passthrough || cmd.Reconnect {
+		return false
+	}
+	if cmd.Target == rf || room != 0 && cmd.RoomID == room {
+		return true
+	}
+	for _, l := range cmd.Lines {
+		switch l.Type {
+		case 's':
+			rc, err := cube.ParseRadioCommand(l.Data)
+			if err == nil && (rc.Target.Room && room != 0 && rc.Target.RoomID == room || !rc.Target.Room && rc.Target.RFAddress == rf) {
+				return true
+			}
+		case 'r':
+			addrs, _ := cube.ParseResetError(l.Data)
+			if slices.Contains(addrs, rf) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // rereadBudget reads the Cube's budget again by reconnecting, which

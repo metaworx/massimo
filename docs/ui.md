@@ -267,8 +267,13 @@ Every room has a tile:
 - **Icons in the tile's head** say what is wrong in the room, each in its colour
   and with its mark (see Signs, below):
   the radio, a Wi-Fi fan or a tower as you choose (My settings),
-  a device that lost its link (amber, a triangle),
-  or the Cube could not reach (red, a cross);
+  a device that lost its link (amber, a triangle, the badge **link error**,
+  its tooltip the original software's sentence:
+  "The radio communication with another MAX! device in this room is disturbed."),
+  or the Cube could not reach (red, a cross, the badge **communication error**,
+  its tooltip the radiogram that failed, where the server gives it,
+  by its technical name and code:
+  "Last radiogram that failed: TimeInformation (0x03)");
   a battery, one getting weak (amber) or low (red), as the server keeps its level;
   an open window, the opening sash or the paned window as you choose,
   a window contact reporting it:
@@ -317,7 +322,8 @@ Every room has a tile:
 - The **⋯** menu starts a **Boost** (the valves open by the thermostats' boost
   settings for their boost time, then the room returns to its mode),
   locks or unlocks the buttons on the room's thermostats,
-  and deletes a room that has no devices.
+  deletes a room that has no devices,
+  and with **Repair…** opens the room's repairs under the tile (Repairs, below).
 - The room name or the **i** button opens the device list:
   every device with its type's icon before its name (a radiator, a wall
   thermostat, a window, a leaf for the eco button), its values (valve, set
@@ -368,7 +374,7 @@ Every room has a tile:
     and that the log says when it is done:
     the log's **device change** line, within about 15 minutes,
     a warning where the Cube still holds memory slots for it
-    or a device of the room was left with an error.
+    or a device of the room was left with a communication error or a link error.
   - **Week programme**:
     one bar per day.
     - A click on a day selects it together with every day that has the same programme.
@@ -411,6 +417,54 @@ a value of the chevrons stays shown, with **Save** turning, until the answer.
 The tile shows the result when it is done: "ok", or what failed.
 While radio commands wait for the devices' acknowledgement,
 the header says how many are pending.
+
+### Repairs
+
+For a role with `repair` (the owner's and the manager's),
+**Repair…** opens a box of repairs:
+in a room tile's **⋯** menu, under the tile;
+in a device's row of the device list and of the devices without a room,
+under the row;
+in a Cube's panel (Cube settings, System settings → Cubes), under its actions.
+Each repair is named and says what it does;
+the box asks the server what each would send now, sending nothing,
+and shows its cost under it:
+the radiograms, about how much of the hourly radio budget they take,
+the memory slots, those held until the devices' next wakeup, and the wakeups;
+or that it costs no radio time, a reset or a list write.
+Expert mode adds the lines themselves.
+A repair with nothing to do says why, as the server words it,
+and one the Cube's budget would stop halfway says that it cannot run now.
+**Run…** asks in its place, naming the cost again;
+**Run now** sends exactly what was shown,
+and the box says how many lines the Cube accepted,
+that the devices take radiograms at their next wakeup and the log says when
+it is done (its **device change** line),
+or for resets whether the Cube's device list still shows the error.
+**Close** closes the box; it stays open while the tile is drawn again.
+
+- In a room: **Reset the communication errors** of its devices, free;
+  **Name the room's master**, where the Cube's list names no thermostat of
+  the room, the wall thermostat, else the first radiator thermostat,
+  in the list only;
+  **Re-link the room**, each device's links and room sent again,
+  adding only;
+  **Unlink all and re-link**, with `structure` as well,
+  every link of the room removed and then built again:
+  its **Run…** first warns, naming the cost,
+  that it has not yet run on real hardware,
+  and that a run that stops halfway leaves the room's devices without their
+  partners until it is run again;
+  **Continue** asks once more, and only that question's
+  **Unlink all and re-link now** sends it.
+- At a device: **Re-send the configuration**, for a thermostat,
+  the temperatures and week programme most of the room's other thermostats
+  share, where its own differ;
+  **Place in its listed room**, by radio, where the Cube has it in another
+  room or none;
+  **List where the Cube has it**, in the list only,
+  asking first for the name of a room the list does not have.
+- In a Cube's panel: **Reset the communication errors** of every device.
 
 ## Log
 
@@ -494,14 +548,18 @@ or the person marks it seen (`docs/api-v1.md`, "GET /api/v1/log/alerts"):
 a lost connection until the next one,
 a failed command until the same one is acknowledged,
 a failed backup until the next, a hold until it ends;
-a device's transmit error, link error and low battery while the device has them,
-at the line that set them.
+a device's communication error, link error and low battery
+while the device has them, at the line that set them;
+a communication error's line names the radiogram that failed,
+"communication error: TimeInformation (0x03)", as the badge's tooltip does.
 Its line is highlighted, a bar and its mark in amber or red,
 with **Mark seen**; **Mark all as seen** beside **Clear** marks every one.
 Opening the log marks nothing.
 The marks follow a signed-in user with `preferences` (the preference `log.seen`);
 anyone else's stay in the browser.
 The page asks at every poll.
+A device that reports while its communication error is set is reset by the server,
+once a day at most: the log's **communication error reset** line.
 The server keeps its log in its store across restarts and updates,
 for the days `log.keep_days` says (30 by default; docs/api-v1.md,
 "GET and PUT /api/v1/settings").
@@ -713,7 +771,10 @@ also while no page is open.
   and, off by default, a device that sends no news, a device paired,
   a new Cube on the network and a new version of Massimo.
   A change is saved a second after the last one;
-  a delay is 1 to 1440 minutes, the threshold −10 to 20 °C.
+  a delay is 1 to 1440 minutes, the threshold −10 to 20 °C,
+  and a value outside is not saved:
+  its box turns red, with the range in amber before it,
+  until it holds one inside, whatever a save meanwhile says.
   One kind notifies once per device per half hour.
 - **Your devices**:
   every browser and app notified for you,
@@ -721,6 +782,12 @@ also while no page is open.
   and the deliveries that failed since;
   this browser is marked, and **Remove** ends one.
   Revoking a session or a key under My profile removes the devices it subscribed.
+
+A line under the lists says what came of reading them, of a save,
+and of turning this browser on or off or removing a device.
+Each clears only its own outcome when it next succeeds,
+so the outcome of turning on stays after the lists are read again,
+and the page opened again starts with the line empty.
 
 While the page is open,
 a notification shows at its foot for ten seconds instead,
@@ -902,6 +969,9 @@ the browser keeps which cards are folded.
   sends the changes, which apply at once:
   a hidden device leaves the tiles, the API and the original software,
   and a room that holds only hidden devices goes with it.
+  **Repair…**, in the panel's actions for a role with `repair`,
+  opens the Cube's repairs under them (Rooms, Repairs):
+  the reset of every communication error of the Cube.
   **Reboot the Cube**, in the panel's actions for a role with `cubes.reboot`,
   restarts the Cube (`POST /api/v1/cubes/{sn}/reboot`),
   which frees one that still holds the server's old connection at once:
@@ -1204,14 +1274,17 @@ behind the phone's fingerprint or PIN where the server's settings in the app ask
 
 This section is for changing the UI;
 its rules are in the project contract (`AGENTS.md`, "The web UI").
-The page is plain HTML, CSS and JavaScript under `internal/server/ui/`,
-embedded in the binary, with no build step.
-`index.html` is the skeleton: the head, the icons, the header, the sections,
-the sign-in dialog, the first-owner form and the scripts,
-with marker comments.
+The page is HTML, CSS and JavaScript under `internal/server/ui/`,
+embedded in the binary.
+Its regions move from plain scripts to parts, one region at a time,
+and the parts are the one thing that is built (below).
+`index.html` is the skeleton: the head, the icons, the sections of the page
+and the scripts, with marker comments.
 At start the server replaces each marker, such as `<!-- partials: prefs -->`,
-with its partials, the panels of the settings pages and at the end
-`<!-- partials: templates -->` with the templates,
+with its partials: the header, the home notice, the first owner's form,
+the panels of the settings pages, the Cube page, the House tile,
+the devices without a room, the log, the sign-in dialog, the toast,
+and at the end `<!-- partials: templates -->` with the templates,
 from the files in `ui/partials/` in the order `uiPartials` in
 `internal/server/ui.go` lists them, and serves the result at `/`;
 System settings' cards fill three markers,
@@ -1242,7 +1315,7 @@ its heading's `button.section-fold` folding it):
 `sectionBadges` shows what a card holds in its head,
 `pageBar` fills the sections menu of its title's row kept at the top
 (with a part without a fold marked `.page-section`, as Cube settings' panel),
-`pageSwitch` puts the settings pages in its title's place (`SETTINGS_PAGES` in `log.js`,
+`pageSwitch` puts the settings pages in its title's place (`SETTINGS_PAGES` in `pages.js`,
 as ☰'s pages are `MENU_VIEWS`; `markSettingsPages` shows the title for one page alone),
 `fitPageTabs` gives the page shown's button the longest name's width,
 and `backToTop` wires the two ↑, the floating one and the compacted header's;
@@ -1294,6 +1367,74 @@ Every URL the page and the scripts use is relative to the page (`ui/style.css`,
 so that a reverse proxy may serve the UI under a path prefix it strips
 (docs/reverse-proxy.md); `go test ./internal/server` refuses an absolute one.
 
+The scripts are classic scripts sharing the page's global scope,
+a script for each region of the page, in the order the page loads them:
+
+- `i18n.js`, the texts and `t()`; `components.js`, the shared builders,
+  the menus and the page's chrome;
+- `app.js`, the core: the state, the settings and their scopes, the API,
+  the helpers, the ages of values, help, the Cube clock, loading, polling,
+  the event stream, the language and `init`;
+- `header.js`, the header: the radio budget,
+  the last update and the server's clock, the Cube choice and the problems list,
+  the version, the TLS notice and the server's sign;
+  `home.js`, the home notice and the search for Cubes;
+  `prefs.js`, the wiring of My settings' rows and the language choice;
+- `rooms.js`, a room's facts, the drawing of Rooms, a device's state event
+  and the actions behind a tile; `tiles.js`, a room's tile;
+  `devices.js`, its device rows; `unlisted.js`, the devices without a room;
+  `house.js`, the House tile;
+- `week-program.js` and `config.js`, a room's configuration;
+- `log.js`, the log and its sign for unseen problems;
+  `pages.js`, the pages, the main menu, the address and the scroll;
+- `update.js`, Software update; `maintenance.js`, the Maintenance card;
+  `system-info.js`, System info;
+- `cubes.js`, System settings → Cubes, the found Cubes and the Cube page;
+  `cube-panel.js`, a Cube's panel; `repair.js`, the repairs of a room,
+  a device and a Cube; `pairing.js`, the pairing;
+- `login.js`, `users.js`, `providers.js`, `integrations.js`,
+  `backup.js` and `roles.js`, the sign-in and the cards of System settings;
+- `theme.js`, the mode and the colour schemes, applied as the script loads;
+  `appearance.js`, the Appearance card, the editor, export and import;
+- `notifytext.js` and `notify.js`, the notifications.
+
+A script's top-level code runs as it loads, and the `DOMContentLoaded`
+listeners in the order the scripts register them,
+so the order of the tags matters where one script's top-level code needs
+another's (`theme.js` after `app.js`, `config.js` after `week-program.js`).
+`go test ./internal/server` refuses a top-level name that two scripts declare,
+and a script embedded that the page does not load
+(but those of `uiScriptsOffPage` in `ui_test.go`).
+
+The six scripts that held several regions were cut along them by
+`tools/ui-split` (its `README.md`), by moves alone,
+and a branch that was open meanwhile makes the same moves with it.
+The tool is there while the plan UiParts lasts, and goes with it.
+
+A region that has moved is a part:
+Preact with its signals, written in TSX under `ui/src/<region>/`,
+built once and updated in place.
+`ui/src/index.ts` is the entry point; it registers `window.MassimoParts`,
+by region the functions the plain code calls,
+and no region is a part yet.
+`make ui` bundles it with esbuild, through esbuild's Go API (`tools/uibundle`,
+a module of its own, its `README.md`),
+into `ui/parts.js`: one classic script, minified, for ES2022,
+with the vendored packages' licence comments at its end.
+The page loads it after the plain scripts, whose globals a part calls.
+git does not keep the bundle:
+every target of the Makefile that compiles Go makes it first,
+and so do the scripts of the UI suite, the LAN test and the store fixture,
+CI and the Homebrew formula;
+`go build` without it stops at the `go:embed` line of `ui.go`, which names it.
+Preact 11.2.0 and @preact/signals 2.11.4 are vendored under
+`third_party/preact/` (its `README.md`);
+the bundler takes them from there and refuses any other import.
+`make ui-check` type-checks `ui/src/` with `tsc --noEmit` (its `tsconfig.json`:
+strict, the vendored types by `paths`),
+with the TypeScript `tools/ui-check/` locks (its `README.md`),
+and CI's job UI types runs it.
+
 `ui/connect.html` is a second page, the apps' (docs/app.md),
 served at `/ui/connect.html` as it is, not assembled:
 its markup, its templates and `<base href="../">`,
@@ -1310,3 +1451,5 @@ which the sign-in needs and which the browser does not offer
 and the page's `Content-Security-Policy` allows WebAssembly to compile
 (`'wasm-unsafe-eval'`) for it;
 `go test ./internal/server` checks the file's SHA-256.
+Nor is the Preact the bundle holds, which `go test ./internal/server`
+checks the same way (`third_party/preact/README.md`).

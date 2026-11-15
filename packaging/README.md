@@ -1303,8 +1303,11 @@ one is installed at a time, and another channel's replaces it
 (`brew uninstall massimo-alpha && brew install metaworx/massimo-rolling/massimo-devel`,
 then `brew services start massimo-devel`).
 
-The formula builds `bin/massimo` with Go,
-writes the settings template to `$(brew --prefix)/etc/massimo/env` when there is none,
+The formula builds `bin/massimo` with Go, its one build dependency,
+and the web UI's parts first where the release has them
+(`go -C tools/uibundle run .`, as `make ui` does),
+since the archive git makes of a tag holds no bundle;
+it writes the settings template to `$(brew --prefix)/etc/massimo/env` when there is none,
 keeps the store in `$(brew --prefix)/var/massimo` and the log in
 `$(brew --prefix)/var/log/massimo/serve.log`,
 which serve writes and rotates itself (`-log`, `-log-process-format none`;

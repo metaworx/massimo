@@ -160,9 +160,10 @@ func CmdSetTime(winter, summer TimeZoneRule, now time.Time) (Message, error) {
 	return m, nil
 }
 
-// CmdResetError clears the transmit-error state of devices. The original
-// software sends it right before a radio command to a device whose last
-// transmission failed. The Cube answers with an S line. Verified on hardware.
+// CmdResetError clears the communication error (the error flag) of
+// devices. The original software sends it right before a radio command
+// to a device whose last radiogram failed. The Cube answers with an S
+// line. Verified on hardware.
 func CmdResetError(addrs ...RFAddress) Message {
 	var raw []byte
 	for _, a := range addrs {
@@ -172,18 +173,44 @@ func CmdResetError(addrs ...RFAddress) Message {
 	return Message{Type: 'r', Data: fmt.Sprintf("%02x,%s", len(addrs), b64.EncodeToString(raw))}
 }
 
-// Radio command codes used in s messages.
+// ParseResetError decodes the data of an r: command, as CmdResetError
+// builds it and the original software sends it: the devices it resets.
+func ParseResetError(data string) ([]RFAddress, error) {
+	n, b, ok := strings.Cut(strings.TrimSpace(data), ",")
+	if !ok {
+		return nil, fmt.Errorf("r: want count,addresses, got %q", data)
+	}
+	count, err := strconv.ParseUint(n, 16, 8)
+	if err != nil {
+		return nil, fmt.Errorf("r: bad count %q", n)
+	}
+	raw, err := b64.DecodeString(b)
+	if err != nil {
+		return nil, fmt.Errorf("r: bad addresses: %w", err)
+	}
+	if len(raw) != 3*int(count) {
+		return nil, fmt.Errorf("r: count %d but %d address bytes", count, len(raw))
+	}
+	var addrs []RFAddress
+	for i := 0; i < len(raw); i += 3 {
+		addrs = append(addrs, RFAddressFromBytes(raw[i:i+3]))
+	}
+	return addrs, nil
+}
+
+// Radio command codes used in s messages: the radiogram types
+// (RadiogramType) Massimo sends, as the byte of the frame's header.
 const (
-	RFSetTemperature  = 0x40
-	RFSetWeekProgram  = 0x10
-	RFSetTemperatures = 0x11
-	RFSetValveConfig  = 0x12
-	RFAddLinkPartner  = 0x20
-	RFRemoveLink      = 0x21
-	RFSetGroupAddress = 0x22
-	RFRemoveGroup     = 0x23
-	RFLockControls    = 0x80 // "LockManualControls" in the original software
-	RFSetDisplayMode  = 0x82
+	RFSetTemperature  = byte(RadiogramControlMode)
+	RFSetWeekProgram  = byte(RadiogramConfigWeekTemperatureProfile)
+	RFSetTemperatures = byte(RadiogramConfigTemperatures)
+	RFSetValveConfig  = byte(RadiogramConfigValveFunctions)
+	RFAddLinkPartner  = byte(RadiogramAddLinkPartner)
+	RFRemoveLink      = byte(RadiogramRemoveLinkPartner)
+	RFSetGroupAddress = byte(RadiogramSetGroupAddress)
+	RFRemoveGroup     = byte(RadiogramRemoveGroupAddress)
+	RFLockControls    = byte(RadiogramLockManualControls)
+	RFSetDisplayMode  = byte(RadiogramSwitchDisplaySetPointActual)
 )
 
 // Target addresses a radio command to a single device or to a room.

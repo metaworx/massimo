@@ -152,7 +152,7 @@ body:not(.expert) .expert-only { display: none !important; }
   cursor: pointer;
 }
 .refresh-btn::before { content: ""; position: absolute; inset: -10px -6px; }
-/* The server's sign before the time of the last update (app.js
+/* The server's sign before the time of the last update (header.js
    renderServerSign): its icon in a frame, green, blue, amber or filled
    red; on the digits' middle, as ↻ is (an SVG's baseline is its bottom
    edge), its tap area larger than it. */
@@ -196,7 +196,7 @@ body.server-down main .ni.sign, body.server-down .problems-sum, body.server-down
   .top-line { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "left nav" "cube cube"; }
 }
 /* The version, the server's sign and the time on a row of their own where
-   they do not fit beside the logo on one line (app.js fitFacts): across
+   they do not fit beside the logo on one line (header.js fitFacts): across
    the header under the logo and the Cube choice, on a phone under the
    logo and the pages; the version a line of its own where the row is too
    narrow for all three, cut only where it is wider than the header. */
@@ -347,7 +347,7 @@ button.copy-icon .ni { width: 16px; height: 16px; }
   .cube-menu { flex: 1 1 160px; }
   .menu.cube-menu > summary { width: 100%; max-width: 100%; }
 }
-/* a Cube's network sign (app.js cubeSignEl): its link's state, the colour
+/* a Cube's network sign (header.js cubeSignEl): its link's state, the colour
    of its tone over the list's muted icons */
 .ni.conn-sign { width: 18px; height: 18px; }
 .ni.conn-sign.tone-ok, .menu-items button > .ni.conn-sign.tone-ok { color: var(--ok); }
@@ -646,7 +646,7 @@ body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8p
    filled; each its icon and its name, below 900 px the icon alone but for
    the page shown, as wide on every page, whose name ends in "…" where the
    row is too narrow. The title stays for a screen reader, and shows in
-   their place where the role has one settings page alone (log.js
+   their place where the role has one settings page alone (pages.js
    markSettingsPages). */
 .page-bar.has-switch:not(.single-page) > h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .page-bar.single-page > .page-switch { display: none; }
@@ -782,7 +782,7 @@ body.scrolled .top-btn { display: inline-flex; }
   .fold-i { transition: none; }
 }
 
-/* System settings → Cubes (cubes.js): a Cube's panel in three groups, its
+/* System settings → Cubes (cube-panel.js): a Cube's panel in three groups, its
    facts (Info), its settings (the form, Hidden devices last, then Save)
    and its actions in one row last; Info and the settings side by side
    where there is room, one after the other on a phone. The pairing lends
@@ -793,7 +793,7 @@ body.scrolled .top-btn { display: inline-flex; }
 .cube-cols > .cube-info { grid-area: info; margin-bottom: 10px; align-self: start; }
 /* a Cube's radio budget in its head, between its serial and its badges */
 .cube-head-stats { font-variant-numeric: tabular-nums; }
-/* a Cube's panel's head (cubes.js cubePanel, fillCubeHead): its sign,
+/* a Cube's panel's head (cube-panel.js cubePanel, fillCubeHead): its sign,
    name, serial and radio budget at the left, wrapping; its problems in
    one pill top-right, whatever wraps, a green check where nothing is
    wrong; the neutral source badge a line of its own under them; its own
@@ -808,7 +808,7 @@ body.scrolled .top-btn { display: inline-flex; }
 .panel.cube-panel > summary > .panel-badges { grid-column: 2 / -1; grid-row: 2; justify-content: flex-start; margin-left: 0; }
 .cube-top-line { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 8px; }
 /* a field's value changed on the server while a draft of it is open
-   (cubes.js syncForm): the notice and Take theirs under the field */
+   (cube-panel.js syncForm): the notice and Take theirs under the field */
 .cube-conflict { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: -4px 0 8px; }
 .cube-conflict .notice { margin: 0; flex: 1 1 220px; }
 .cube-top-line:empty { display: none; }
@@ -873,9 +873,9 @@ body.scrolled .top-btn { display: inline-flex; }
 /* A Cube proxy that does not listen (noticeEl): under the proxy address,
    and in System Info's line of the listener. */
 .cube-proxy-state .notice { margin: -6px 0 12px; overflow-wrap: anywhere; }
-/* A Cube's Reboot, alone at the bottom of its panel (cubes.js rebootRow). */
+/* A Cube's Reboot, alone at the bottom of its panel (cube-panel.js rebootRow). */
 .cube-reboot { margin-top: 12px; }
-/* Why a Cube is not connected, where the server knows (cubes.js
+/* Why a Cube is not connected, where the server knows (cube-panel.js
    fillLinkState): above its facts. */
 .cube-link-state .notice { margin: 4px 0 12px; overflow-wrap: anywhere; }
 .cube-address-state .notice { margin: 4px 0 8px; overflow-wrap: anywhere; }
@@ -897,8 +897,8 @@ body.scrolled .top-btn { display: inline-flex; }
 .cubes-msg { margin: 4px 0 0; overflow-wrap: anywhere; }
 .cubes-msg.ok { color: var(--ok); }
 .cubes-msg.bad { color: var(--bad); }
-/* pairing in a Cube's panel (cubes.js), and the form that puts a device
-   into a room, there and under Devices without a room (tiles.js) */
+/* pairing in a Cube's panel (pairing.js), and the form that puts a device
+   into a room, there and under Devices without a room (unlisted.js) */
 .cube-pairing { margin: 0 0 12px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
 .no-cubes .cube-pairing { border-bottom: none; padding-bottom: 0; }
 .pairing-form, .pairing-running { margin-top: 2px; }
@@ -917,7 +917,7 @@ body.scrolled .top-btn { display: inline-flex; }
 .device .vwt-settings { margin-top: 8px; }
 .unlisted-msg { margin: 0; padding: 0 14px 12px; }
 
-/* appearance: mode and colour scheme (theme.js), the scheme editor */
+/* appearance: mode and colour scheme (appearance.js), the scheme editor */
 .scheme-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; }
 .scheme-msg { margin: 0 0 10px; }
 .scheme-msg.ok { color: var(--ok); }
@@ -1110,7 +1110,7 @@ button.subtle { color: var(--muted); }
 .menu-items button:hover > .ni { color: var(--accent); }
 
 .tile .notice { margin: 10px 14px 0; width: auto; font-size: 0.9rem; }
-/* Rooms without a connected Cube (app.js renderHomeNotice) */
+/* Rooms without a connected Cube (home.js renderHomeNotice) */
 .home-notice { padding: 12px 14px; }
 .home-notice p { margin: 0 0 6px; overflow-wrap: anywhere; }
 .home-notice .home-notice-title { font-weight: 600; }
@@ -1761,12 +1761,12 @@ massimo-week-program { display: contents; }
    (Maintenance), and with needs-system what one of System settings' does */
 .no-read .needs-read, .no-setpoint .needs-setpoint, .no-lock .needs-lock, .no-configure .needs-configure,
 .no-rename .needs-rename, .no-structure .needs-structure, .no-pair .needs-pair, .no-discover .needs-discover,
-.no-backup .needs-backup, .no-restore .needs-restore, .no-users-admin .needs-users-admin, .no-roles .needs-roles,
+.no-backup .needs-backup, .no-restore .needs-restore, .no-repair .needs-repair, .no-users-admin .needs-users-admin, .no-roles .needs-roles,
 .no-roles-disable .needs-roles-disable, .no-capabilities .needs-capabilities, .no-cubes .needs-cubes, .no-cubes-reboot .needs-cubes-reboot,
 .no-settings .needs-settings, .no-auth .needs-auth, .no-integrations .needs-integrations, .no-update .needs-update, .no-restart .needs-restart, .no-reboot .needs-reboot, .no-sync .needs-sync,
 .no-system .needs-system, .no-maint .needs-maint,
 .no-cubes.no-pair .needs-cubes-or-pair, .no-restart.no-settings.no-reboot .needs-maintenance { display: none !important; }
-.no-lock.no-structure .room .menu { display: none; }
+.no-lock.no-structure.no-repair .room .menu { display: none; }
 
 /* the sign-in dialog, the first-owner form, System settings → Users and Roles */
 .login-token summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; margin-bottom: 8px; }
@@ -1813,7 +1813,7 @@ massimo-week-program { display: contents; }
 .integrations-found-list li { overflow-wrap: anywhere; }
 .integration-request .kv dd:first-of-type { font-size: 1.3rem; letter-spacing: 0.15em; }
 .user-integration-links { margin: 0 0 8px; }
-/* System settings → Maintenance: the announcement on the LAN and the Cube intervals (update.js) */
+/* System settings → Maintenance: the announcement on the LAN and the Cube intervals (maintenance.js) */
 .announce-row, .interval-row { padding: 10px 0; border-top: 1px solid var(--line); }
 .announce-row:first-child { border-top: none; padding-top: 0; } /* Maintenance's first row */
 .announce-row p, .interval-row p { margin: 0; overflow-wrap: anywhere; }
@@ -1916,3 +1916,19 @@ massimo-week-program { display: contents; }
 .toast-title { display: block; }
 /* its action (components.js showToast): Show for the Cubes a search found */
 .toast-action { flex: none; align-self: center; padding: 4px 10px; color: var(--accent); border-color: var(--accent); font-weight: 600; }
+
+/* the repairs of a room, a device or a Cube (repair.js): a box under the
+   tile, the device's row or the panel's actions, a repair per block */
+.repair-box { margin-top: 8px; display: flex; flex-direction: column; gap: 10px; }
+.repair-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.repair-title { margin: 0; font-size: 1rem; }
+.repair-item { border-top: 1px solid var(--line); padding-top: 8px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.repair-name { margin: 0; font-size: 0.95rem; }
+.repair-item p { margin: 0; overflow-wrap: anywhere; }
+.repair-lines pre { margin: 4px 0 0; white-space: pre-wrap; word-break: break-all; }
+.repair-lines summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; }
+.repair-actions { justify-content: flex-start; }
+.repair-warning { border-left: 3px solid var(--warn-mark); }
+.repair-warning p { margin: 0 0 8px; }
+.repair-result.ok { color: var(--ok); }
+.repair-result.bad, .repair-refused { color: var(--bad); }

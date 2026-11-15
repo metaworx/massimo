@@ -112,107 +112,15 @@
   <symbol id="icon-tool" viewBox="0 0 24 24"><path d="M7 10h3v-3l-3.5 -3.5a6 6 0 0 1 8 8l6 6a2 2 0 0 1 -3 3l-6 -6a6 6 0 0 1 -8 -8l3.5 3.5"/></symbol>
   <symbol id="icon-cog" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
 </svg>
-<header class="top">
-  <div class="top-line">
-    <div class="top-left">
-      <div class="brand">
-        <!-- the word, under Massimo's logo once its sprite has come (components.js brandMarks) -->
-        <h1 class="brand-name" data-brand><span class="brand-word"><span class="brand-initial">M</span><span class="brand-rest">assimo</span></span></h1>
-      </div>
-      <!-- the version, the server's sign and the time of the last update,
-           which wrap as one -->
-      <div class="top-facts">
-        <span id="version-short" class="muted mono small"></span>
-        <span class="sign-updated">
-          <!-- the server's sign (app.js renderServerSign): connected, an
-               update out (a click opens Software update), a new version
-               running (a click reloads), unreachable (a click tries again) -->
-          <button type="button" id="server-sign" class="server-sign" data-state="up" aria-label="connected to the server" title="Connected to the server"><svg class="ni" aria-hidden="true"><use href="#icon-plug-on"/></svg></button>
-          <!-- the time of the last successful poll and the refresh icon, one
-               button without a frame, its tap area larger than it (app.js
-               renderUpdated) -->
-          <button type="button" id="refresh-btn" class="refresh-btn" aria-label="refresh now" title="Refresh now" data-i18n-attr="title:header.refreshTitle"><span id="updated"></span><svg class="ni" aria-hidden="true"><use href="#icon-refresh"/></svg></button>
-        </span>
-      </div>
-    </div>
-    <div class="cube">
-      <!-- the Cube choice, a menu of the page (components.js pickerMenu):
-           the chosen Cube's network sign and its name; the list each Cube
-           with its sign, serial and address -->
-      <details id="cube-menu" class="menu cube-menu">
-        <summary id="cube-choice" class="cube-choice" aria-label="Cube" data-i18n-attr="aria-label:header.cube"><span class="picker-icon"></span><span class="picker-label"></span><svg class="ni caret" aria-hidden="true"><use href="#icon-chevron-down"/></svg></summary>
-        <div class="menu-items"></div>
-      </details>
-      <!-- every Cube's problems (app.js renderCubeProblems) -->
-      <span id="cube-problems" class="cube-problems"></span>
-    </div>
-    <nav class="nav" aria-label="pages" data-i18n-attr="aria-label:nav.pages">
-      <button type="button" id="view-tiles" class="icon-btn nav-btn active" aria-current="page" aria-label="rooms" title="Rooms" data-i18n-attr="aria-label:nav.rooms title:nav.roomsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-house"/></svg></button>
-      <!-- back to top, left of ☰ while the header is compacted
-           (components.js backToTop) -->
-      <button type="button" id="top-btn" class="icon-btn nav-btn top-btn" aria-label="back to top" title="Back to top" data-i18n-attr="aria-label:page.toTop title:page.toTopTitle"><svg class="ni" aria-hidden="true"><use href="#icon-up"/></svg></button>
-      <!-- ☰, every page but Rooms, at every width, each for the roles that
-           may open it (log.js mayShow, MENU_VIEWS): the log; the settings
-           pages; the personal page and Sign out (login.js renderMe). It
-           carries the log's mark (log.js renderLogSign). -->
-      <details id="nav-menu" class="menu nav-menu">
-        <summary class="nav-btn" aria-label="menu" title="Menu"><svg class="ni" aria-hidden="true"><use href="#icon-menu"/></svg></summary>
-        <div class="menu-items">
-          <button type="button" id="menu-log"><svg class="ni" aria-hidden="true"><use href="#icon-log"/></svg><span data-i18n="nav.logTitle">Log</span></button>
-          <hr class="menu-sep">
-          <button type="button" id="menu-cube" class="needs-cubes-or-pair"><svg class="ni" aria-hidden="true"><use href="#icon-cube3d"/></svg><span data-i18n="nav.cubeTitle">Cube settings</span></button>
-          <button type="button" id="menu-system" class="needs-system"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg><span data-i18n="nav.settingsTitle">System settings</span></button>
-          <button type="button" id="menu-maint" class="needs-maint"><svg class="ni" aria-hidden="true"><use href="#icon-tool"/></svg><span data-i18n="nav.maintTitle">Maintenance</span></button>
-          <button type="button" id="menu-info" class="needs-read"><svg class="ni" aria-hidden="true"><use href="#icon-info"/></svg><span data-i18n="nav.infoTitle">System info</span></button>
-          <hr class="menu-sep">
-          <button type="button" id="menu-me"><svg class="ni" aria-hidden="true"><use href="#icon-user"/></svg><span data-i18n="nav.userTitle">Personal settings</span></button>
-          <button type="button" id="menu-logout" class="hidden"><svg class="ni" aria-hidden="true"><use id="menu-logout-icon" href="#icon-signout"/></svg><span id="menu-logout-label" data-i18n="me.signOut">Sign out</span></button>
-        </div>
-      </details>
-    </nav>
-  </div>
-  <p id="tls-notice" class="notice hidden" role="status"><span id="tls-notice-text"></span></p>
-  <!-- in expert mode, the chosen Cube's radio budget: its name, the duty
-       cycle, the free slots and the radiograms pending, and the commands
-       queued while there are any (app.js renderHeader); the server's facts
-       are System info's, the Cube's its panel's -->
-  <p id="cube-stats" class="cube-stats expert-only"><span id="stats-cube" class="stats-cube"></span><span class="stat"><span data-i18n="budget.duty">Duty cycle</span> <span id="duty">–</span></span><span class="stat"><span data-i18n="budget.slots">Free slots</span> <span id="slots">–</span></span><span class="stat"><span data-i18n="budget.pending">Pending</span> <span id="pending-n">–</span></span><span id="stat-queued" class="stat hidden"><span data-i18n="budget.queued">Queued</span> <span id="queued">–</span></span></p>
-  <p id="pending" class="notice hidden"></p>
-</header>
+<!-- partials: header -->
 
 <main>
   <p id="open-banner" class="open-banner hidden" role="note"><strong data-i18n="open.title">Open server.</strong> <span id="open-banner-text"></span></p>
   <p id="message" class="message hidden"></p>
 
-  <div id="home-notice" class="notice home-notice hidden" role="status">
-    <p class="home-notice-title"></p>
-    <p class="home-notice-detail small"></p>
-    <p class="home-notice-check small"></p>
-    <button type="button" id="home-notice-cubes" class="needs-cubes" data-i18n="home.toCubes">Open System settings → Cubes</button>
-  </div>
+  <!-- partials: home -->
 
-  <section id="setup" class="tile setup hidden" aria-labelledby="setup-title">
-    <div class="brand-name brand-big" data-brand><span class="brand-word"><span class="brand-initial">M</span><span class="brand-rest">assimo</span></span></div>
-    <header class="tile-head"><h2 id="setup-title" data-i18n="setup.title">No users yet</h2></header>
-    <form id="setup-form" class="setup-form">
-      <p class="muted small" data-i18n="setup.text">This server has no users, so anyone on the network may do everything. Create the owner here, from the local network, or on the box with massimo user add.</p>
-      <div class="field wide">
-        <label for="setup-user" data-i18n="users.name">Name</label>
-        <input type="text" id="setup-user" class="field-control" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="64" required>
-        <p id="setup-name-msg" class="small cubes-msg field-hint hidden" role="status"></p>
-      </div>
-      <div class="field wide">
-        <label for="setup-password" data-i18n="login.password">Password</label>
-        <input type="password" id="setup-password" class="field-control" autocomplete="new-password" required>
-      </div>
-      <div class="field wide">
-        <label for="setup-again" data-i18n="setup.again">Again</label>
-        <input type="password" id="setup-again" class="field-control" autocomplete="new-password" required>
-      </div>
-      <div class="actions"><span class="actions-right"><button type="submit" class="primary" data-i18n="setup.create">Create the owner</button></span></div>
-      <p id="setup-msg" class="small cubes-msg hidden" role="status"></p>
-    </form>
-  </section>
+  <!-- partials: setup -->
 
   <!-- Personal settings, the page 👤 opens: its row kept at the top under
        the header, with who is signed in, Sign out (or Forget key, none on
@@ -250,49 +158,6 @@
           <h3 id="prefs-title"><button type="button" class="section-fold" aria-expanded="true" aria-controls="prefs-sec"><svg class="fold-i" aria-hidden="true"><use href="#icon-chevron"/></svg><svg class="ni section-icon" aria-hidden="true"><use href="#icon-sliders"/></svg><span class="section-title" data-i18n="nav.prefs">My settings</span></button></h3>
         </header>
         <div id="prefs-sec" class="section-body settings-body">
-          <div class="dev-head needs-sync">
-            <span></span>
-            <span class="dev-cell dev-colhead" title="A setting switched on here keeps its value in this browser; switched off, your value applies again." data-i18n="settings.thisDevice" data-i18n-attr="title:settings.thisDeviceTitle">only on this device</span>
-          </div>
-          <div class="dev-row">
-            <div class="field">
-              <label for="poll-input" data-i18n="settings.poll">Poll every</label>
-              <span data-help="poll" data-help-label="settings.poll"></span>
-              <span class="inline field-control"><input type="number" id="poll-input" min="2" max="3600" step="1" value="10"> <span data-i18n="settings.seconds">s</span></span>
-            </div>
-            <span class="dev-cell needs-sync"><label class="switch"><input type="checkbox" data-device-only="poll"><span class="slider" aria-hidden="true"></span></label></span>
-          </div>
-          <div class="dev-row">
-            <div class="field">
-              <label class="switch">
-                <input type="checkbox" id="expert-toggle">
-                <span class="slider" aria-hidden="true"></span>
-                <span class="switch-label" data-i18n="settings.expert">Expert mode (addresses, types, budget, version)</span>
-              </label>
-              <span data-help="expert" data-help-label="settings.expertShort"></span>
-            </div>
-            <span class="dev-cell needs-sync"><label class="switch"><input type="checkbox" data-device-only="expert"><span class="slider" aria-hidden="true"></span></label></span>
-          </div>
-          <div class="dev-row">
-            <div class="field wide">
-              <label for="clock-select" data-i18n="settings.clock">Cube clock shown in</label>
-              <span data-help="clock" data-help-label="settings.clock"></span>
-              <select id="clock-select" class="field-control">
-                <option value="browser" data-i18n="settings.clockBrowser">the browser's time zone</option>
-                <option value="cube" data-i18n="settings.clockCube">the Cube's time zone</option>
-              </select>
-            </div>
-            <span class="dev-cell needs-sync"><label class="switch"><input type="checkbox" data-device-only="clock"><span class="slider" aria-hidden="true"></span></label></span>
-          </div>
-          <div class="dev-row">
-            <div class="field wide">
-              <label for="lang-select" data-i18n="settings.language">Language</label>
-              <span data-help="language" data-help-label="settings.language"></span>
-              <select id="lang-select" class="field-control"></select>
-              <p id="lang-note" class="muted small lang-note hidden"></p>
-            </div>
-            <span class="dev-cell needs-sync"><label class="switch"><input type="checkbox" data-device-only="lang"><span class="slider" aria-hidden="true"></span></label></span>
-          </div>
           <!-- partials: prefs -->
         </div>
       </section>
@@ -332,7 +197,7 @@
 
   <!-- Maintenance, the page ☰ → Maintenance opens, for a role with one
        of System settings' capabilities or with update, restart or reboot
-       (log.js mayShow): its row kept at the top under the header, with the
+       (pages.js mayShow): its row kept at the top under the header, with the
        sections menu (components.js pageBar), and two section cards,
        Software update and Maintenance. -->
   <section id="maint-page" class="settings settings-page maint-page hidden" aria-labelledby="maint-title">
@@ -350,7 +215,7 @@
 
   <!-- System info, the page ☰ → System info opens, for every role with
        read: its row kept at the top under the header, with the title and
-       the badges of what is wrong (update.js fillProxies), then the
+       the badges of what is wrong (system-info.js fillProxies), then the
        server's facts (system-info.html). -->
   <section id="info-page" class="settings settings-page info-page hidden" aria-labelledby="info-title">
     <div class="page-bar">
@@ -360,172 +225,48 @@
     <!-- partials: info -->
   </section>
 
-  <!-- Cube settings, the page ☰ → Cube settings opens, for a role with
-       cubes or with pair: its row kept at the top under the header, with
-       the settings pages and the sections menu (components.js pageSwitch,
-       pageBar), then the panel of the Cube chosen in the header, open
-       (cubes.js renderCubePage), the outcome of the last action under it,
-       and the Cube's Backup and restore. -->
-  <section id="cube-page" class="settings settings-page cube-page hidden" aria-labelledby="cube-page-title">
-    <div class="page-bar">
-      <h2 id="cube-page-title" data-i18n="nav.cubeTitle">Cube settings</h2>
-      <details class="menu sec-menu">
-        <summary aria-label="sections" title="Sections" data-i18n-attr="aria-label:page.sections title:page.sectionsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-list"/></svg></summary>
-        <div class="menu-items"></div>
-      </details>
-    </div>
-    <div id="cube-page-body" class="page-section" data-toc="header.cube" aria-live="polite"></div>
-    <p id="cube-page-msg" class="small cubes-msg hidden" role="status"></p>
-    <!-- the chosen Cube's Backup and restore (backup.js renderCubeBackup) -->
-    <section id="cube-backup" class="tile section-card backup-settings needs-backup" aria-labelledby="cube-backup-h">
-      <header class="tile-head section-head">
-        <h3 id="cube-backup-h"><button type="button" class="section-fold" aria-expanded="true" aria-controls="cube-backup-body"><svg class="fold-i" aria-hidden="true"><use href="#icon-chevron"/></svg><span class="section-title" data-i18n="backup.title">Backup and restore</span></button></h3>
-        <span class="section-badges"></span>
-        <span data-help="backup" data-help-label="backup.title"></span>
-      </header>
-      <div id="cube-backup-body" class="section-body" aria-live="polite"></div>
-    </section>
-  </section>
+  <!-- partials: cube-page -->
 
-  <section id="house" class="tile house needs-setpoint hidden">
-    <header class="tile-head"><h2 data-i18n="house.title">House</h2></header>
-    <div class="house-modes">
-      <span class="muted" data-i18n="house.mode">Mode</span>
-      <button type="button" id="house-eco" data-i18n="mode.eco">ECO</button>
-      <button type="button" id="house-auto" data-i18n="mode.auto">AUTO</button>
-      <button type="button" id="house-comfort" data-i18n="mode.comfort">COMFORT</button>
-      <button type="button" id="house-manu" data-i18n="mode.manu">MANU</button>
-    </div>
-    <form id="house-panel" class="panel hidden">
-      <div class="panel-row">
-        <span class="muted" data-i18n="house.mode">Mode</span>
-        <span class="seg" id="house-mode">
-          <label><input type="radio" name="house-mode" value="eco"> <span data-i18n="mode.eco">ECO</span></label>
-          <label><input type="radio" name="house-mode" value="auto"> <span data-i18n="mode.auto">AUTO</span></label>
-          <label><input type="radio" name="house-mode" value="comfort"> <span data-i18n="mode.comfort">COMFORT</span></label>
-          <label><input type="radio" name="house-mode" value="manual"> <span data-i18n="mode.manu">MANU</span></label>
-        </span>
-        <span id="house-temp-row" class="inline hidden">
-          <button type="button" class="step small" id="house-temp-minus" aria-label="0.5 degrees less" data-i18n-attr="aria-label:temp.less">−</button>
-          <input type="number" id="house-temp" min="4.5" max="30.5" step="0.5" value="20">
-          <button type="button" class="step small" id="house-temp-plus" aria-label="0.5 degrees more" data-i18n-attr="aria-label:temp.more">+</button>
-          <span class="muted">°C</span>
-        </span>
-      </div>
-      <div class="panel-row" id="house-duration-row">
-        <span class="muted" data-i18n="house.duration">Duration</span>
-        <span class="seg">
-          <label><input type="radio" name="house-duration" value="permanent" checked> <span data-i18n="house.permanent">Permanently</span></label>
-          <label><input type="radio" name="house-duration" value="until"> <span data-i18n="house.until">Until</span></label>
-        </span>
-        <input type="datetime-local" id="house-until" step="1800">
-      </div>
-      <div class="panel-row rooms-row">
-        <span class="muted" data-i18n="house.rooms">Rooms</span>
-        <div id="house-rooms" class="checks"></div>
-      </div>
-      <div class="actions">
-        <button type="button" id="house-cancel" data-i18n="action.cancel">Cancel</button>
-        <button type="submit" class="primary" data-i18n="action.send">Send</button>
-      </div>
-      <p id="house-result" class="tile-result hidden"></p>
-    </form>
-  </section>
+  <!-- partials: house -->
 
   <section id="rooms" class="tiles"></section>
 
-  <section id="unlisted" class="tile hidden">
-    <header class="tile-head"><h2 data-i18n="unlisted.title">Devices without a room</h2></header>
-    <div id="unlisted-devices" class="devices"></div>
-    <p id="unlisted-msg" class="small unlisted-msg hidden" role="status"></p>
-  </section>
+  <!-- partials: unlisted -->
 
-  <section id="logview" class="tile log hidden" aria-label="event log" data-i18n-attr="aria-label:log.aria">
-    <header class="tile-head">
-      <h2 data-i18n="log.title">Log</h2>
-      <input type="search" id="log-filter" placeholder="filter" aria-label="filter the log" data-i18n-attr="placeholder:log.filter aria-label:log.filterAria">
-      <select id="log-cubes" class="hidden" aria-label="Cubes" data-i18n-attr="aria-label:log.cubesAria"></select>
-      <select id="log-kind" aria-label="kind of event" data-i18n-attr="aria-label:log.kindAria"></select>
-      <select id="log-device" aria-label="source or device" data-i18n-attr="aria-label:log.deviceAria"></select>
-      <select id="log-level" aria-label="level" data-i18n-attr="aria-label:log.levelAria"></select>
-      <select id="log-user" class="hidden" aria-label="who" data-i18n-attr="aria-label:log.userAria"></select>
-      <select id="log-range" aria-label="how far back" data-i18n-attr="aria-label:log.rangeAria"></select>
-      <button type="button" id="log-clear" data-i18n="log.clear">Clear</button>
-      <button type="button" id="log-seen-all" class="hidden" data-i18n="log.markAllSeen">Mark all as seen</button>
-    </header>
-    <div id="log-lines" class="log-lines"></div>
-    <div class="log-older"><button type="button" id="log-older" class="subtle" data-i18n="log.older">Older events</button></div>
-  </section>
+  <!-- partials: logview -->
   <!-- back to top, at the bottom right of every page a screen down
        (components.js backToTop) -->
   <button type="button" id="to-top" class="icon-btn to-top hidden" aria-label="back to top" title="Back to top" data-i18n-attr="aria-label:page.toTop title:page.toTopTitle"><svg class="ni" aria-hidden="true"><use href="#icon-up"/></svg></button>
 </main>
 
-<dialog id="login-dialog">
-  <!-- the sign-in, a card in the signed-out page (login.js askLogin); the
-       password form holds the one password field, the API key a form of its own -->
-  <div class="brand-name brand-big" data-brand><span class="brand-word"><span class="brand-initial">M</span><span class="brand-rest">assimo</span></span></div>
-  <div class="login-head">
-    <h3 data-i18n="login.title">Sign in</h3>
-    <!-- the language and the mode before anyone signs in, the settings of My settings -->
-    <details id="login-menu" class="menu nav-menu login-menu">
-      <summary class="nav-btn" aria-label="Language and appearance" title="Language and appearance" data-i18n-attr="aria-label:login.menu title:login.menu"><svg class="ni" aria-hidden="true"><use href="#icon-menu"/></svg></summary>
-      <div class="menu-items">
-        <div class="field wide">
-          <label for="login-lang" data-i18n="settings.language">Language</label>
-          <select id="login-lang" class="field-control"></select>
-        </div>
-        <div class="field wide">
-          <label for="login-mode" data-i18n="appearance.title">Appearance</label>
-          <select id="login-mode" class="field-control">
-            <option value="system" data-i18n="appearance.modeSystem">as the system</option>
-            <option value="light" data-i18n="appearance.modeLight">light</option>
-            <option value="dark" data-i18n="appearance.modeDark">dark</option>
-          </select>
-        </div>
-      </div>
-    </details>
-  </div>
-  <div id="login-providers" class="login-providers hidden">
-    <div id="login-provider-buttons" class="login-provider-buttons"></div>
-    <p id="login-providers-error" class="small hidden" role="alert"></p>
-  </div>
-  <form id="login-form" method="post">
-    <p class="muted" data-i18n="login.text">This server asks who you are.</p>
-    <p id="login-tls" class="notice small hidden" role="note" data-i18n="header.selfSigned">Self-signed certificate: before signing in, compare the SHA-256 fingerprint in your browser's certificate details with the one massimo tls show prints on the server.</p>
-    <label><span data-i18n="login.user">Name</span> <input type="text" id="login-user" name="username" autocomplete="username" autocapitalize="none" spellcheck="false"></label>
-    <label><span data-i18n="login.password">Password</span> <input type="password" id="login-password" name="password" autocomplete="current-password"></label>
-    <p id="login-error" class="small hidden" role="alert"></p>
-    <div class="actions"><button type="submit" class="primary" data-i18n="login.submit">Sign in</button></div>
-  </form>
-  <details class="login-token">
-    <summary data-i18n="login.tokenInstead">Or an API key</summary>
-    <form id="login-key-form">
-      <label><span data-i18n="login.token">API key</span> <input type="password" id="login-token" name="api-key" autocomplete="off"></label>
-      <div class="actions"><button type="submit" data-i18n="login.submit">Sign in</button></div>
-    </form>
-  </details>
-</dialog>
+<!-- partials: login -->
 
-<!-- The page's toast (components.js showToast): a notification while the
-     page is open (notify.js notifyToast), the Cube search's outcome
-     (app.js discoverCubes) -->
-<div id="toast" class="toast hidden" role="status" aria-live="polite">
-  <p class="toast-text"><strong id="toast-title" class="toast-title"></strong> <span id="toast-body"></span></p>
-  <button type="button" id="toast-close" class="icon-btn toast-close" aria-label="close" title="Close" data-i18n-attr="aria-label:action.close title:action.close">×</button>
-</div>
+<!-- partials: toast -->
 
 <!-- partials: templates -->
 
 <script src="ui/i18n.js"></script>
 <script src="ui/components.js"></script>
 <script src="ui/app.js"></script>
+<script src="ui/header.js"></script>
+<script src="ui/home.js"></script>
+<script src="ui/prefs.js"></script>
+<script src="ui/rooms.js"></script>
 <script src="ui/tiles.js"></script>
+<script src="ui/devices.js"></script>
+<script src="ui/unlisted.js"></script>
+<script src="ui/house.js"></script>
 <script src="ui/week-program.js"></script>
 <script src="ui/config.js"></script>
 <script src="ui/log.js"></script>
+<script src="ui/pages.js"></script>
 <script src="ui/update.js"></script>
+<script src="ui/maintenance.js"></script>
+<script src="ui/system-info.js"></script>
 <script src="ui/cubes.js"></script>
+<script src="ui/cube-panel.js"></script>
+<script src="ui/repair.js"></script>
+<script src="ui/pairing.js"></script>
 <script src="ui/login.js"></script>
 <script src="ui/users.js"></script>
 <script src="ui/providers.js"></script>
@@ -533,7 +274,9 @@
 <script src="ui/backup.js"></script>
 <script src="ui/roles.js"></script>
 <script src="ui/theme.js"></script>
+<script src="ui/appearance.js"></script>
 <script src="ui/notifytext.js"></script>
 <script src="ui/notify.js"></script>
+<script src="ui/parts.js"></script>
 </body>
 </html>

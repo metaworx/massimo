@@ -56,7 +56,7 @@ Editing a generated file is wasted work — change the fragment and re-run
 ---
 
 
-# Massimo — Project Contract (v1.11.0)
+# Massimo — Project Contract (v1.12.0)
 
 What binds work in this project, for everyone working on it.
 Inlined into `/AGENTS.md` for agents and into `GUIDELINES/README.md` for people,
@@ -82,8 +82,8 @@ so that the two cannot drift apart.
 | Source directories    | `cmd/massimo/` (the command line and `serve`), `internal/` (the packages: `protocol/cube`, `cubelan`, `engine`, `server` with the web UI in `server/ui/`, `proxy`, `backup`, `store`, `update`, `install`, …), `packaging/` (unit files, plists, the installers' assets), `tools/ui-test/` (the Playwright smoke test), `tools/brand/` (the generator of the mark and every file made from it), `docs/` (the protocol findings, the API, the designs, the handovers) |
 | Shipped-code paths    | declared as `project.shipped` in `GUIDELINES/config.ini` and listed below; kept honest by `GUIDELINES/shared/tools/changelog.sh check` (rule: `GUIDELINES/shared/COMMIT.md` §5) |
 | Version manifest      | none: the version is the nearest git tag (`git describe --tags`, baked in by `make`); a release is cut with `make release <flavour>`, the flavour `alpha`, `beta`, `rc` or `stable` (`BUMP=minor` for a feature, `BUMP=patch` for a fix of a stable release, `DRY=1` to see it first; `make build-release` is the build) on a clean `main` equal to `origin/main`: `changelog.sh cut` moves `[Unreleased]` into the release's section in a `chore(release):` commit, tags it with that section as the message, and `main` and the tag are pushed atomically; CI tests the tag, releases it and then fast-forwards `release/<flavour>` to it; `README.md`, "Versions" |
-| Test gate command     | `MASSIMO_ENV_FILE=/dev/null go test ./...` (the gate of `GUIDELINES/shared/lang/go/TESTING.md`; `make race`, `-race` for `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve`, `internal/announce` and `internal/notify`, is recommended, and CI's Race job runs it), then `make cross` (every platform compiles), and `make ui-test` for a change under `internal/server/ui/` (the pytest suite of `tools/ui-test/`, needs the Playwright venv, `tools/ui-test/README.md`; one test with `PYTEST_ADDOPTS='-k "<test name> and 390-de"' make ui-test`), and `make lan-test` for a change to discovery, the mDNS announcement (`internal/announce`), `discover` or the proxy's discovery answers (Docker with Compose v2, `tools/lan-test/README.md`) |
-| Lint command          | `gofmt -l .` prints nothing and `go vet ./... && GOOS=windows go vet ./... && GOOS=darwin go vet ./...` exits 0, as `GUIDELINES/shared/lang/go/LINTING.md` requires per platform; `make actionlint` exits 0 for a change under `.github/` (actionlint pinned in `tools/actionlint/`, the `run:` scripts by shellcheck where it is installed, as CI's job is); `govulncheck ./...` runs in CI for linux and windows; no other linter |
+| Test gate command     | `make ui` first, the web UI's bundle the server embeds (every Makefile target that compiles Go runs it), then `MASSIMO_ENV_FILE=/dev/null go test ./...` (the gate of `GUIDELINES/shared/lang/go/TESTING.md`; `make race`, `-race` for `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve`, `internal/announce` and `internal/notify`, is recommended, and CI's Race job runs it), then `make cross` (every platform compiles), and `make ui-test` for a change under `internal/server/ui/` (the pytest suite of `tools/ui-test/`, needs the Playwright venv, `tools/ui-test/README.md`; one test with `PYTEST_ADDOPTS='-k "<test name> and 390-de"' make ui-test`), and `make lan-test` for a change to discovery, the mDNS announcement (`internal/announce`), `discover` or the proxy's discovery answers (Docker with Compose v2, `tools/lan-test/README.md`) |
+| Lint command          | `gofmt -l .` prints nothing and `go vet ./... && GOOS=windows go vet ./... && GOOS=darwin go vet ./...` exits 0, as `GUIDELINES/shared/lang/go/LINTING.md` requires per platform; `make actionlint` exits 0 for a change under `.github/` (actionlint pinned in `tools/actionlint/`, the `run:` scripts by shellcheck where it is installed, as CI's job is); `make ui-check` exits 0 for a change under `internal/server/ui/src/` (`tsc --noEmit`, TypeScript locked in `tools/ui-check/`, needs Node.js and npm, as CI's job UI types runs it); `govulncheck ./...` runs in CI for linux and windows; no other linter |
 | Commit summary        | declared as `[commit]` in `GUIDELINES/config.ini` and shown below; held to it by `GUIDELINES/shared/tools/commit-msg.sh` (rule: `GUIDELINES/shared/COMMIT.md` §3.1) |
 
 A commit touching any path listed below must carry a `CHANGELOG.md` bullet.
@@ -223,20 +223,43 @@ the ones an agent trips over most come first:
   A client needs a token: `MASSIMO_API_TOKEN` is the owner's key,
   every other user has one of their own (`docs/api-v1.md`, "Authentication");
   without one the API answers 401.
-- **The web UI** is plain HTML, CSS and JavaScript under `internal/server/ui/`,
-  embedded with `go:embed`: no build step, no framework, no inline handlers,
-  no `innerHTML`, API text only through `textContent`.
-  `index.html` is the page's skeleton; a feature's markup (its settings panel,
-  the `<template>`s its script clones) is its partial under `ui/partials/`,
-  listed in `uiPartials` in `ui.go`.
-  Shared elements come from `components.js`,
-  and a label with its control is the one row style, `.field`,
-  or `.field.wide` for a control on a line of its own.
-  Every icon-only control is labelled, and every control keyboard operable.
-  Every text goes through `t()` or `data-i18n`, its key in all six
-  `ui/i18n/<lang>.json` (FR/IT/NL/PL machine-translated and marked);
-  CSS variables for light and dark, phone width first (390 px),
-  verified with `make ui-test` at 1100 and 390 px.
+- **The web UI** is under `internal/server/ui/`, embedded with `go:embed`,
+  and is being moved from plain scripts to parts, a region at a time (AP UiParts):
+  a region of the page is plain or a part, not both.
+  - **A part** is Preact with signals, in TSX under `internal/server/ui/src/<region>/`,
+    bundled by `make ui` (esbuild as a Go tool, `tools/uibundle`) into `ui/parts.js`,
+    which is not committed.
+    Preact is vendored under `third_party/preact/`;
+    no other library and no other build step.
+    A part is built once per key and updated in place:
+    data never replaces an element the user can hold.
+    A field that shows stored data keeps a draft.
+    A part that reads a signal reads everything it depends on as signals.
+    A part calls `t()` and carries no `data-i18n`.
+    `make ui-check` type-checks the parts.
+    A file under `ui/src/` opens with the SPDX and copyright lines,
+    then the `@file` header of `GUIDELINES/shared/lang/ts/LINTING.md`;
+    `make ui-check` is the parts' lint and `make ui-test` their test:
+    they have no unit-test runner.
+  - **A plain region**:
+    `index.html` is the page's skeleton;
+    a feature's markup (its settings panel,
+    the `<template>`s its script clones) is its partial under `ui/partials/`,
+    listed in `uiPartials` in `ui.go`.
+    Shared elements come from `components.js`,
+    texts through `t()` or `data-i18n`,
+    and each region has a script of its own (`docs/ui.md`,
+    "How the page is built").
+  - **Both**:
+    no inline handlers, no `innerHTML`,
+    API text only as text (`textContent`, in a part a JSX text child).
+    A label with its control is the one row style, `.field`,
+    or `.field.wide` for a control on a line of its own.
+    Every icon-only control is labelled, and every control keyboard operable.
+    Every text's key is in all six
+    `ui/i18n/<lang>.json` (FR/IT/NL/PL machine-translated and marked);
+    CSS variables for light and dark, phone width first (390 px),
+    verified with `make ui-test` at 1100 and 390 px.
 - **Documents move with the code**:
   `README.md` for the command line,
   `docs/api-v1.md` and the OpenAPI file for every route,

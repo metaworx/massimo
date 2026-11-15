@@ -189,9 +189,13 @@ type Options struct {
 	// last with a reconnect where none was read; nil takes
 	// DefaultStructureChecks.
 	StructureChecks []time.Duration
-	Logger          *slog.Logger
-	Version         string
-	Queue           engine.Options
+	// ResetSettle is how long after a repair's resets the device list is
+	// read for the flags they cleared (repair_api.go); 0 takes
+	// DefaultResetSettle.
+	ResetSettle time.Duration
+	Logger      *slog.Logger
+	Version     string
+	Queue       engine.Options
 	// Proxy lists the LAN listeners on which the server itself answers
 	// as a Cube (see internal/proxy), one per Cube.
 	// One that cannot listen is tried again until it does.
@@ -273,6 +277,9 @@ type Options struct {
 	// notifyClock is the notification rules' clock, for the tests; nil
 	// is the real one.
 	notifyClock notify.Clock
+	// clock is the time of the automatic resets (autoreset.go), for the
+	// tests; nil is time.Now.
+	clock func() time.Time
 	// Deliverers take a user's notifications beside Web Push: an app
 	// embedding the server shows them itself (push.Local).
 	Deliverers []push.Deliverer
@@ -444,6 +451,9 @@ type runtime struct {
 	// walls is each wall thermostat's last mode, for wall_reset; only the
 	// pump uses it (wallreset.go).
 	walls map[cube.RFAddress]*wallMemo
+	// resets are the devices' automatic resets of their communication
+	// error (autoreset.go).
+	resets autoResets
 	// vwt is the rooms' uids and settings, and each room's virtual wall
 	// thermostat as its last event had it (vwt.go).
 	vwt vwtState
@@ -960,6 +970,7 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 						}
 						rt.last[e.Device] = dv.State
 						ev.Command = rt.sentTo.take(e.Device)
+						s.autoReset(ctx, rt, e.Device, dv, ev.Changes)
 					}
 				}
 			}
@@ -1134,6 +1145,9 @@ func stateAttrs(serial string, d view.Device) []any {
 	}
 	if st.Error {
 		attrs = append(attrs, "error", true)
+	}
+	if st.FailedRadiogram != nil {
+		attrs = append(attrs, "failed_radiogram", st.FailedRadiogram.String())
 	}
 	if st.LinkError {
 		attrs = append(attrs, "link_error", true)
@@ -1400,6 +1414,7 @@ func (s *Server) routes() {
 	api("GET /api/v1/store", "settings", s.getStore)
 	api("GET /api/v1/config", "settings", s.getConfig)
 	s.configRoutes(api)
+	s.repairRoutes(api)
 	s.uiRoutes(mux)
 	s.mux = mux
 	// A write that another site's page sent is refused before it is

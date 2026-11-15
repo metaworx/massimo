@@ -420,7 +420,7 @@ function backupFold(c) {
   const d = detailsPanel({ name: c.name || undefined, mono: c.serial, open: state.cubes.length === 1, cls: "backup-fold" }, backupBox(c.serial, "sys"));
   d.dataset.serial = c.serial;
   const sum = d.querySelector("summary");
-  sum.prepend(cubeSignEl(c)); // app.js
+  sum.prepend(cubeSignEl(c)); // header.js
   sum.appendChild(elem("span", "panel-badges"));
   return d;
 }

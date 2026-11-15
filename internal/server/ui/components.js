@@ -154,7 +154,7 @@ function badgeState(kind) {
 
 // noticeEl is a lasting warning (.notice) of a text, for a state the
 // server keeps trying to leave, such as a Cube proxy that does not listen
-// (cubes.js, update.js): since, an API time, adds from when it holds;
+// (cube-panel.js, system-info.js): since, an API time, adds from when it holds;
 // next, an API time, when the server tries again, as its tooltip. Times,
 // not ages: a try comes every few seconds, and refreshAges runs once a
 // minute.
@@ -635,12 +635,13 @@ function showResult(el, text, ok) {
 }
 
 // markRange marks a number field by what its required, min, max and step
-// allow: a value they refuse sets aria-invalid, which style.css outlines
-// in red, and shows hint, the amber range before the box, which the
-// field then names as its description; a good value clears both. It
-// returns whether the value is good.
-function markRange(input, hint) {
-  const ok = input.validity.valid;
+// allow, or by ok where the caller judges the value itself (the
+// notifications' threshold takes any number in its range, not only its
+// step): a value refused sets aria-invalid, which style.css outlines in
+// red, and shows hint, the amber range before the box, which the field
+// then names as its description; a good value clears both. It returns
+// whether the value is good.
+function markRange(input, hint, ok = input.validity.valid) {
   if (ok) {
     input.removeAttribute("aria-invalid");
     input.removeAttribute("aria-describedby");
@@ -869,14 +870,14 @@ function sectionButtons(page) {
 }
 
 // pageSwitch puts into a settings page's row, in its title's place, a
-// button for every settings page (pages, log.js SETTINGS_PAGES), in the
+// button for every settings page (pages, pages.js SETTINGS_PAGES), in the
 // same order on every page, so that each keeps its place: its icon and
 // its name, the icon alone below 900 px but for the page shown
 // (style.css); the page shown filled and marked current, a click on it
 // opening nothing; each hidden from a role that may not open its page by
 // that page's needs class (login.js). The title stays in the row, hidden
 // but the page's name for a screen reader, and shows in the buttons'
-// place where the role may open no other settings page (log.js
+// place where the role may open no other settings page (pages.js
 // markSettingsPages). open shows a page.
 function pageSwitch(page, current, pages, open) {
   const bar = page.querySelector(".page-bar");
@@ -905,7 +906,7 @@ function pageSwitch(page, current, pages, open) {
 // after it keep their places; style.css applies it below 900 px, where
 // the others show their icon alone, no wider than the row leaves beside
 // the sections menu's place. It measures the names of a page shown
-// (log.js fitSettingsPages: when one is shown, after a change of
+// (pages.js fitSettingsPages: when one is shown, after a change of
 // language or of the signed-in user); a hidden name still has its width.
 function fitPageTabs(page) {
   const nav = page.querySelector(".page-switch");
@@ -1208,8 +1209,8 @@ function pickerMenu(details, { items, value, onPick, shown }) {
 // them, is not monospaced), its items, and subs, entries under it (a
 // Cube's devices); info lists the entry and those under it without an
 // item, as information, and summary is an element the summary shows
-// after the kinds' icons (the found Cubes' sign). An item is { kind, icon, sign, tone, mark, text, at,
-// stale }: kind groups the summary's icons (sign, a kind of SIGNS, draws
+// after the kinds' icons (the found Cubes' sign). An item is { kind, icon, sign, tone, mark, text, title, at,
+// stale }: title, where set, is its badge's tooltip; kind groups the summary's icons (sign, a kind of SIGNS, draws
 // it with its state's mark), an item without one is listed but adds no
 // icon (a device's mode beside its problems); tone is a badgeEl kind
 // ("bad", "warn", "fill-ok", …), which colours the badge and, without
@@ -1288,6 +1289,7 @@ function problemEntry(e) {
       // A warning's or a failure's badge is led by its mark, which takes
       // the place of its kind's icon; another state keeps the icon.
       const b = badgeEl("", it.tone || "mode", [e.title, e.sub, it.kind, it.text].join(":"));
+      if (it.title) b.title = it.title; // what the badge means, as a radio fault's says
       if (it.icon && !badgeState(it.tone)) b.appendChild(iconEl(it.icon, "ni"));
       b.appendChild(document.createTextNode(it.text));
       const age = it.at ? ageEl(it.at, it.stale) : null; // app.js
