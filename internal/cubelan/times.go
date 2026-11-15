@@ -25,8 +25,9 @@ type StateTimes struct {
 	Changed time.Time
 	// Fields is, per value (named as in the API's state object: mode,
 	// setpoint, actual_temp, valve_pct, window_open, until, battery_low,
-	// error, link_error, panel_locked, display_actual), when its current
-	// value appeared. Only the values the device has are present.
+	// error, failed_radiogram, link_error, panel_locked, display_actual),
+	// when its current value appeared. Only the values the device has are
+	// present.
 	Fields map[string]time.Time
 }
 
@@ -41,6 +42,9 @@ func stateValues(st cube.DeviceState) map[string]string {
 	v["mode"] = st.Mode.String()
 	v["battery_low"] = fmt.Sprint(st.BatteryLow)
 	v["error"] = fmt.Sprint(st.Error)
+	if st.FailedRadiogram != nil {
+		v["failed_radiogram"] = st.FailedRadiogram.String()
+	}
 	v["link_error"] = fmt.Sprint(st.LinkError)
 	v["panel_locked"] = fmt.Sprint(st.PanelLocked)
 	if st.Setpoint != nil {

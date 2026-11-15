@@ -1135,6 +1135,9 @@ func stateAttrs(serial string, d view.Device) []any {
 	if st.Error {
 		attrs = append(attrs, "error", true)
 	}
+	if st.FailedRadiogram != nil {
+		attrs = append(attrs, "failed_radiogram", st.FailedRadiogram.String())
+	}
 	if st.LinkError {
 		attrs = append(attrs, "link_error", true)
 	}

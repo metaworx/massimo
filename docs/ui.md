@@ -267,8 +267,13 @@ Every room has a tile:
 - **Icons in the tile's head** say what is wrong in the room, each in its colour
   and with its mark (see Signs, below):
   the radio, a Wi-Fi fan or a tower as you choose (My settings),
-  a device that lost its link (amber, a triangle),
-  or the Cube could not reach (red, a cross);
+  a device that lost its link (amber, a triangle, the badge **link error**,
+  its tooltip the original software's sentence:
+  "The radio communication with another MAX! device in this room is disturbed."),
+  or the Cube could not reach (red, a cross, the badge **communication error**,
+  its tooltip the radiogram that failed, where the server gives it,
+  by its technical name and code:
+  "Last radiogram that failed: TimeInformation (0x03)");
   a battery, one getting weak (amber) or low (red), as the server keeps its level;
   an open window, the opening sash or the paned window as you choose,
   a window contact reporting it:
@@ -368,7 +373,7 @@ Every room has a tile:
     and that the log says when it is done:
     the log's **device change** line, within about 15 minutes,
     a warning where the Cube still holds memory slots for it
-    or a device of the room was left with an error.
+    or a device of the room was left with a communication error or a link error.
   - **Week programme**:
     one bar per day.
     - A click on a day selects it together with every day that has the same programme.
@@ -494,8 +499,10 @@ or the person marks it seen (`docs/api-v1.md`, "GET /api/v1/log/alerts"):
 a lost connection until the next one,
 a failed command until the same one is acknowledged,
 a failed backup until the next, a hold until it ends;
-a device's transmit error, link error and low battery while the device has them,
-at the line that set them.
+a device's communication error, link error and low battery
+while the device has them, at the line that set them;
+a communication error's line names the radiogram that failed,
+"communication error: TimeInformation (0x03)", as the badge's tooltip does.
 Its line is highlighted, a bar and its mark in amber or red,
 with **Mark seen**; **Mark all as seen** beside **Clear** marks every one.
 Opening the log marks nothing.

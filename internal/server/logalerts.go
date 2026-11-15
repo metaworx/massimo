@@ -12,9 +12,10 @@ package server
 // disconnect by the next connect, also one the link held. settleRules
 // lists them; a kind without a counterpart is settled by a mark alone,
 // and a hold and a lockout settle by themselves once they end. A device's
-// transmit error, link error and low battery are in the log at info, in
-// its state's changes: each is an alert at warn while the device has the
-// flag, at the line that set it.
+// communication error, link error and low battery are in the log at info,
+// in its state's changes: each is an alert at warn while the device has
+// the flag, at the line that set it, a communication error with the type
+// of the radiogram that failed.
 
 import (
 	"context"
@@ -25,6 +26,7 @@ import (
 	"strconv"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/store"
 )
 
@@ -136,16 +138,18 @@ func lockoutEnds(ev *event) time.Time {
 }
 
 // logAlert is an unsettled warning or error of the log: its line, and
-// for a device's flag, which.
+// for a device's flag, which; for its communication error, the type of
+// the radiogram that failed, as the device shows it now.
 type logAlert struct {
-	ID         int64     `json:"id"`
-	Kind       string    `json:"kind"`
-	Level      string    `json:"level"`
-	CubeSerial string    `json:"cube_serial,omitempty"`
-	Device     string    `json:"device,omitempty"`
-	Serial     string    `json:"serial,omitempty"`
-	Flag       string    `json:"flag,omitempty"`
-	Time       time.Time `json:"time"`
+	ID              int64               `json:"id"`
+	Kind            string              `json:"kind"`
+	Level           string              `json:"level"`
+	CubeSerial      string              `json:"cube_serial,omitempty"`
+	Device          string              `json:"device,omitempty"`
+	Serial          string              `json:"serial,omitempty"`
+	Flag            string              `json:"flag,omitempty"`
+	FailedRadiogram *cube.RadiogramType `json:"failed_radiogram,omitempty"`
+	Time            time.Time           `json:"time"`
 }
 
 // logAlertsView is GET /api/v1/log/alerts' answer.
@@ -255,7 +259,11 @@ func (s *Server) flagAlerts(ctx context.Context, st *store.Store, id int64, rt *
 				}
 			}
 			if line := flagLine(states, flag); line != nil {
-				out = append(out, alertOf(line, "warn", flag))
+				a := alertOf(line, "warn", flag)
+				if flag == "error" {
+					a.FailedRadiogram = p.State.FailedRadiogram
+				}
+				out = append(out, a)
 			}
 		}
 	}

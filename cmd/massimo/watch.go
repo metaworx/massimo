@@ -103,6 +103,9 @@ func printState(s *cubelan.Snapshot, rf cube.RFAddress, name string) {
 	}
 	if st.Error {
 		line += " ERROR"
+		if st.FailedRadiogram != nil {
+			line += "(" + st.FailedRadiogram.String() + ")"
+		}
 	}
 	if st.LinkError {
 		line += " link-error"
