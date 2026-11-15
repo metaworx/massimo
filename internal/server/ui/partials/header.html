@@ -1,0 +1,69 @@
+<!-- The header: Massimo's word, the version, the server's sign and the time of the last update, the Cube choice and every Cube's problems, the TLS notice and the radio budget (header.js); the Rooms button and ☰ (pages.js); back to top (components.js). -->
+<header class="top">
+  <div class="top-line">
+    <div class="top-left">
+      <div class="brand">
+        <!-- the word, under Massimo's logo once its sprite has come (components.js brandMarks) -->
+        <h1 class="brand-name" data-brand><span class="brand-word"><span class="brand-initial">M</span><span class="brand-rest">assimo</span></span></h1>
+      </div>
+      <!-- the version, the server's sign and the time of the last update,
+           which wrap as one -->
+      <div class="top-facts">
+        <span id="version-short" class="muted mono small"></span>
+        <span class="sign-updated">
+          <!-- the server's sign (app.js renderServerSign): connected, an
+               update out (a click opens Software update), a new version
+               running (a click reloads), unreachable (a click tries again) -->
+          <button type="button" id="server-sign" class="server-sign" data-state="up" aria-label="connected to the server" title="Connected to the server"><svg class="ni" aria-hidden="true"><use href="#icon-plug-on"/></svg></button>
+          <!-- the time of the last successful poll and the refresh icon, one
+               button without a frame, its tap area larger than it (app.js
+               renderUpdated) -->
+          <button type="button" id="refresh-btn" class="refresh-btn" aria-label="refresh now" title="Refresh now" data-i18n-attr="title:header.refreshTitle"><span id="updated"></span><svg class="ni" aria-hidden="true"><use href="#icon-refresh"/></svg></button>
+        </span>
+      </div>
+    </div>
+    <div class="cube">
+      <!-- the Cube choice, a menu of the page (components.js pickerMenu):
+           the chosen Cube's network sign and its name; the list each Cube
+           with its sign, serial and address -->
+      <details id="cube-menu" class="menu cube-menu">
+        <summary id="cube-choice" class="cube-choice" aria-label="Cube" data-i18n-attr="aria-label:header.cube"><span class="picker-icon"></span><span class="picker-label"></span><svg class="ni caret" aria-hidden="true"><use href="#icon-chevron-down"/></svg></summary>
+        <div class="menu-items"></div>
+      </details>
+      <!-- every Cube's problems (app.js renderCubeProblems) -->
+      <span id="cube-problems" class="cube-problems"></span>
+      <span id="cube-search" class="muted small hidden" role="status"></span>
+    </div>
+    <nav class="nav" aria-label="pages" data-i18n-attr="aria-label:nav.pages">
+      <button type="button" id="view-tiles" class="icon-btn nav-btn active" aria-current="page" aria-label="rooms" title="Rooms" data-i18n-attr="aria-label:nav.rooms title:nav.roomsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-house"/></svg></button>
+      <!-- back to top, left of ☰ while the header is compacted
+           (components.js backToTop) -->
+      <button type="button" id="top-btn" class="icon-btn nav-btn top-btn" aria-label="back to top" title="Back to top" data-i18n-attr="aria-label:page.toTop title:page.toTopTitle"><svg class="ni" aria-hidden="true"><use href="#icon-up"/></svg></button>
+      <!-- ☰, every page but Rooms, at every width, each for the roles that
+           may open it (log.js mayShow, MENU_VIEWS): the log; the settings
+           pages; the personal page and Sign out (login.js renderMe). It
+           carries the log's mark (log.js renderLogSign). -->
+      <details id="nav-menu" class="menu nav-menu">
+        <summary class="nav-btn" aria-label="menu" title="Menu"><svg class="ni" aria-hidden="true"><use href="#icon-menu"/></svg></summary>
+        <div class="menu-items">
+          <button type="button" id="menu-log"><svg class="ni" aria-hidden="true"><use href="#icon-log"/></svg><span data-i18n="nav.logTitle">Log</span></button>
+          <hr class="menu-sep">
+          <button type="button" id="menu-cube" class="needs-cubes-or-pair"><svg class="ni" aria-hidden="true"><use href="#icon-cube3d"/></svg><span data-i18n="nav.cubeTitle">Cube settings</span></button>
+          <button type="button" id="menu-system" class="needs-system"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg><span data-i18n="nav.settingsTitle">System settings</span></button>
+          <button type="button" id="menu-maint" class="needs-maint"><svg class="ni" aria-hidden="true"><use href="#icon-tool"/></svg><span data-i18n="nav.maintTitle">Maintenance</span></button>
+          <button type="button" id="menu-info" class="needs-read"><svg class="ni" aria-hidden="true"><use href="#icon-info"/></svg><span data-i18n="nav.infoTitle">System info</span></button>
+          <hr class="menu-sep">
+          <button type="button" id="menu-me"><svg class="ni" aria-hidden="true"><use href="#icon-user"/></svg><span data-i18n="nav.userTitle">Personal settings</span></button>
+          <button type="button" id="menu-logout" class="hidden"><svg class="ni" aria-hidden="true"><use id="menu-logout-icon" href="#icon-signout"/></svg><span id="menu-logout-label" data-i18n="me.signOut">Sign out</span></button>
+        </div>
+      </details>
+    </nav>
+  </div>
+  <p id="tls-notice" class="notice hidden" role="status"><span id="tls-notice-text"></span></p>
+  <!-- in expert mode, the chosen Cube's radio budget: its name, the duty
+       cycle, the free slots and the radiograms pending, and the commands
+       queued while there are any (app.js renderHeader); the server's facts
+       are System info's, the Cube's its panel's -->
+  <p id="cube-stats" class="cube-stats expert-only"><span id="stats-cube" class="stats-cube"></span><span class="stat"><span data-i18n="budget.duty">Duty cycle</span> <span id="duty">–</span></span><span class="stat"><span data-i18n="budget.slots">Free slots</span> <span id="slots">–</span></span><span class="stat"><span data-i18n="budget.pending">Pending</span> <span id="pending-n">–</span></span><span id="stat-queued" class="stat hidden"><span data-i18n="budget.queued">Queued</span> <span id="queued">–</span></span></p>
+  <p id="pending" class="notice hidden"></p>
+</header>
