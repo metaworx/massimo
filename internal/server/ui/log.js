@@ -1268,8 +1268,8 @@ const VIEW_HASH = { tiles: "", log: "#log", me: "#me", system: "#system", maint:
 const MENU_VIEWS = { log: "menu-log", cube: "menu-cube", system: "menu-system", maint: "menu-maint", info: "menu-info", me: "menu-me" };
 // SETTINGS_PAGES are the settings pages, in ☰'s order, each with its
 // icon, the key of its name and the class that hides it from a role that
-// may not open it (login.js, style.css); each page's row links to the
-// others (components.js pageSwitch).
+// may not open it (login.js, style.css); each page's row holds them all
+// in this order (components.js pageSwitch).
 const SETTINGS_PAGES = [
   { view: "cube", icon: "icon-cube3d", key: "nav.cubeTitle", needs: "needs-cubes-or-pair" },
   { view: "system", icon: "icon-cog", key: "nav.settingsTitle", needs: "needs-system" },
@@ -1361,6 +1361,23 @@ function mayShow(view) {
   return view in VIEW_BUTTON || view in VIEW_SECTION;
 }
 
+// markSettingsPages shows each settings page's title in place of its
+// buttons (components.js pageSwitch) where the signed-in user may open
+// no other settings page (mayShow); login.js applyCaps calls it.
+function markSettingsPages() {
+  const single = SETTINGS_PAGES.filter((p) => mayShow(p.view)).length < 2;
+  for (const p of SETTINGS_PAGES) $(VIEW_SECTION[p.view]).querySelector(".page-bar").classList.toggle("single-page", single);
+  fitSettingsPages();
+}
+
+// fitSettingsPages measures the names in the row of the settings page
+// shown, for the width of its page's button (components.js fitPageTabs);
+// a page shown, a change of language (app.js applyLanguage) and of the
+// signed-in user (markSettingsPages) call it.
+function fitSettingsPages() {
+  for (const p of SETTINGS_PAGES) fitPageTabs($(VIEW_SECTION[p.view]));
+}
+
 // isShown reports whether a page is the one shown.
 function isShown(view) {
   return currentView === view;
@@ -1445,6 +1462,7 @@ function initLog() {
   for (const [view, id] of Object.entries(MENU_VIEWS)) $(id).addEventListener("click", () => showView(view));
   dropdown($("nav-menu"));
   for (const p of SETTINGS_PAGES) pageSwitch($(VIEW_SECTION[p.view]), p.view, SETTINGS_PAGES, (v) => showView(v)); // components.js
+  for (const p of SETTINGS_PAGES) onView(p.view, fitSettingsPages);
   // back and forward, and a page named in the address bar
   window.addEventListener("popstate", () => showAddress());
   $("log-filter").addEventListener("input", (ev) => {

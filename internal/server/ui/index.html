@@ -362,15 +362,20 @@
   </section>
 
   <!-- Cube settings, the page ☰ → Cube settings opens, for a role with
-       cubes or with pair: its row kept at the top under the header, then
-       the panel of the Cube chosen in the header, open (cubes.js
-       renderCubePage), the outcome of the last action under it, and the
-       Cube's Backup and restore. -->
+       cubes or with pair: its row kept at the top under the header, with
+       the settings pages and the sections menu (components.js pageSwitch,
+       pageBar), then the panel of the Cube chosen in the header, open
+       (cubes.js renderCubePage), the outcome of the last action under it,
+       and the Cube's Backup and restore. -->
   <section id="cube-page" class="settings settings-page cube-page hidden" aria-labelledby="cube-page-title">
     <div class="page-bar">
       <h2 id="cube-page-title" data-i18n="nav.cubeTitle">Cube settings</h2>
+      <details class="menu sec-menu">
+        <summary aria-label="sections" title="Sections" data-i18n-attr="aria-label:page.sections title:page.sectionsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-list"/></svg></summary>
+        <div class="menu-items"></div>
+      </details>
     </div>
-    <div id="cube-page-body" aria-live="polite"></div>
+    <div id="cube-page-body" class="page-section" data-toc="header.cube" aria-live="polite"></div>
     <p id="cube-page-msg" class="small cubes-msg hidden" role="status"></p>
     <!-- the chosen Cube's Backup and restore (backup.js renderCubeBackup) -->
     <section id="cube-backup" class="tile section-card backup-settings needs-backup" aria-labelledby="cube-backup-h">
