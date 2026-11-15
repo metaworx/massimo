@@ -160,7 +160,11 @@ type Options struct {
 	AuthFailures int
 	AuthWindow   time.Duration
 	AuthLockout  time.Duration
-	PollInterval time.Duration // L polling; 0 keeps the driver default of one minute
+	PollInterval time.Duration // L polling; 0 is DefaultPollInterval
+	// SettingsFixedBy names, by a setting's key, the flag that decides
+	// its value for this run instead of the store (serve -poll for
+	// poll_interval), for GET /api/v1/settings' fixed_by.
+	SettingsFixedBy map[string]string
 	// CubeHold is how long a Cube's lost connection is held open, so that
 	// it resumes when the network is back (cubelan.Options.Hold): 0 is
 	// cubelan.DefaultHold, a negative value holds nothing.
@@ -691,7 +695,7 @@ func New(opts Options) *Server {
 		opts.Logger = slog.Default()
 	}
 	if opts.PollInterval == 0 {
-		opts.PollInterval = time.Minute
+		opts.PollInterval = DefaultPollInterval
 	}
 	// The server's own lines are source server; the parts it starts get
 	// the logger with their own (cube, queue, proxy, push).

@@ -9,7 +9,7 @@ The machine-readable description is in [api-v1-openapi.yaml](api-v1-openapi.yaml
 
 The server keeps one persistent connection and one command queue per Cube.
 Reads answer from the server's copy of the Cube's state,
-which the Cube refreshes on every change and which the server polls once a minute.
+which the Cube refreshes on every change and which the server polls every 10 seconds.
 Writes go through the queue, which serialises commands, respects the
 radio duty cycle and the Cube's memory slots, and resets a device's error
 state when needed.
@@ -1546,7 +1546,7 @@ The server's settings in the store:
 ```json
 {
   "stale_after":       {"value": "24h", "default": "24h", "set": false, "in_effect": "24h", "applies": "now"},
-  "poll_interval":     {"value": "1m",  "default": "1m",  "set": false, "in_effect": "1m",  "applies": "restart"},
+  "poll_interval":     {"value": "10s", "default": "10s", "set": false, "in_effect": "10s", "applies": "restart"},
   "refresh_interval":  {"value": "6h",  "default": "6h",  "set": false, "in_effect": "6h",  "applies": "restart"},
   "discover_interval": {"value": "30m", "default": "30m", "set": false, "in_effect": "30m", "applies": "restart"},
   "window_warn_after": {"value": "5m",  "default": "5m",  "set": false, "in_effect": "5m",  "applies": "now"},
@@ -1559,7 +1559,13 @@ The server's settings in the store:
 
 `value` is the store's, or the default when `set` is false;
 `in_effect` is what this run uses, which a serve flag (`-poll`, `-refresh`,
-`-discover-interval`) overrides for one run.
+`-discover-interval`, `-stale-after`) overrides for one run;
+`fixed_by` then names the flag.
+`poll_interval` is how often the server asks each Cube for its device list,
+10 seconds by default, which costs no radio time;
+`refresh_interval` how often it connects to each Cube anew and reads
+everything the Cube holds, 6 hours by default;
+`discover_interval` how often it looks for Cubes on the LAN, 30 minutes by default.
 `stale_after` is when a thermostat that has not changed counts as stale,
 and applies at once; the intervals apply at the next start.
 `window_warn_after` and `window_alert_after` are how long a window may stay open
@@ -2885,7 +2891,7 @@ which has no `changes`; a reconnect compares with the state before it.
 `GET …/log` keeps `changes` as well.
 A change shows when the Cube's device list has it:
 when the Cube sends the list on its own, or at the server's next poll,
-at most a minute later (`serve -poll`);
+at most 10 seconds later by default (`serve -poll`);
 a thermostat reports some values only later than others,
 for example its window-open temperature after the contact.
 

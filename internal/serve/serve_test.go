@@ -186,8 +186,9 @@ func TestCloseWithoutRun(t *testing.T) {
 	}
 }
 
-// An interval given wins over the store's setting, 0 included; one not
-// given takes the store's, else the default. The stale threshold too.
+// An interval given wins over the store's setting, 0 included, and the
+// settings name its flag; one not given takes the store's, else the
+// default. The stale threshold too.
 func TestOpenIntervals(t *testing.T) {
 	clearCubeEnv(t)
 	data := t.TempDir()
@@ -212,11 +213,17 @@ func TestOpenIntervals(t *testing.T) {
 	defer ts.Close()
 	var settings map[string]struct {
 		InEffect string `json:"in_effect"`
+		FixedBy  string `json:"fixed_by"`
 	}
 	getJSON(t, ts.URL+"/api/v1/settings", &settings)
 	for k, want := range map[string]string{store.PollIntervalKey: "5m", store.RefreshIntervalKey: "0", store.DiscoverIntervalKey: "30m"} {
 		if got := settings[k].InEffect; got != want {
 			t.Errorf("%s in effect %q, want %q", k, got, want)
+		}
+	}
+	for k, want := range map[string]string{store.PollIntervalKey: "", store.RefreshIntervalKey: "-refresh", store.DiscoverIntervalKey: "", store.StaleAfterKey: "-stale-after"} {
+		if got := settings[k].FixedBy; got != want {
+			t.Errorf("%s fixed by %q, want %q", k, got, want)
 		}
 	}
 }

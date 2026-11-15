@@ -762,11 +762,13 @@ Writes that a client of the proxy (below) sends,
 such as the original software's, are followed up the same way.
 The log lists every wakeup and every radio command the Cube accepted,
 with its duty cycle and free slots.
-`serve` asks each Cube for its device list every minute (`-poll`),
-and between these polls the connection's TCP keepalive probes the Cube.
+`serve` asks each Cube for its device list every 10 seconds (`-poll`),
+as the original software does: the Cube answers it from its memory,
+without radio time.
+Between these polls the connection's TCP keepalive probes the Cube.
 A Cube that stops answering, as one whose network cable is out, is lost
 once it leaves two polls in a row unanswered,
-within two polls and ten seconds,
+within two polls and ten seconds (30 seconds by default),
 and on Linux already when three keepalive probes go unanswered,
 about 30 seconds after the last traffic:
 `serve` logs `cube connection lost`,
@@ -1144,7 +1146,9 @@ and followed to its new address where it follows discovery.
 `-poll`, `-refresh` and `-discover-interval` win for one run over the store's
 settings `poll_interval`, `refresh_interval` and `discover_interval`,
 and `-stale-after` over `stale_after`,
-also below the hour the API allows, so that a test sees a thermostat go stale.
+also below the hour the API allows, so that a test sees a thermostat go stale;
+the settings then name the flag (`fixed_by`),
+and System settings → Maintenance shows those intervals read-only.
 
 Room 255 is the room for hidden devices:
 a device that is paired but never reports blocks every command to the room the
