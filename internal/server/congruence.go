@@ -12,8 +12,7 @@ package server
 // (view.Mismatch names the findings): a device whose C line names another
 // room than the metadata; a C line in a room for a device the metadata
 // does not list; a device the metadata lists that the Cube has no C line
-// for and does not report, one it no longer holds; a type
-// that differs; a room whose master in the metadata, the address of its
+// for, whatever its device list says (D194-A); a type that differs; a room whose master in the metadata, the address of its
 // M entry, is no device of the Cube, a device of another room or no
 // thermostat, where the room has a thermostat at all. Then, within each
 // room, the thermostats by their C lines (D162-A, third tier): a member
@@ -213,7 +212,7 @@ func findMismatches(snap *cubelan.Snapshot, md *cube.Metadata, hidden view.Hidde
 		switch {
 		case hidden[rf], c != nil && (c.Type == cube.DeviceCube || c.RoomID == cube.HiddenRoom), isListed && d.RoomID == cube.HiddenRoom:
 			continue
-		case c == nil && isListed && !reports(snap, rf):
+		case c == nil && isListed:
 			out = append(out, view.Mismatch{Finding: view.MismatchNoConfig, Device: rf.String(), Name: d.Name, Room: d.RoomID, RoomName: names[d.RoomID],
 				ListRoom: at(d.RoomID), ListRoomName: names[d.RoomID], ListType: d.Type.String()})
 			continue
@@ -250,15 +249,6 @@ func findMismatches(snap *cubelan.Snapshot, md *cube.Metadata, hidden view.Hidde
 		}
 	}
 	return out
-}
-
-// reports reports whether the Cube's device list has an entry for a
-// device: one it reports is a device of the Cube, with a C line in its
-// greeting on hardware; a listed device without either is no longer on
-// the Cube.
-func reports(snap *cubelan.Snapshot, rf cube.RFAddress) bool {
-	_, ok := snap.State(rf)
-	return ok
 }
 
 // masterMismatch is the finding of a room's master in the metadata that

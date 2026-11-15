@@ -19,7 +19,7 @@ const (
 	// does not list, which can block the room's commands.
 	MismatchUnlisted = "unlisted"
 	// MismatchNoConfig is a device the metadata lists and the Cube has
-	// no C line for and does not report in its device list.
+	// no C line for.
 	MismatchNoConfig = "no_config"
 	// MismatchType is a device whose C line gives another type than the
 	// metadata.

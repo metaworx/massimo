@@ -81,6 +81,12 @@ func (f *fixtureLines) addConfig(rf, from cube.RFAddress, room uint8, serial str
 	f.order = append(f.order, rf)
 }
 
+// dropConfig takes a device's C line out of the greeting; its L entry
+// stays.
+func (f *fixtureLines) dropConfig(rf cube.RFAddress) {
+	f.order = slices.DeleteFunc(f.order, func(x cube.RFAddress) bool { return x == rf })
+}
+
 // list adds a device to the metadata.
 func (f *fixtureLines) list(rf cube.RFAddress, typ cube.DeviceType, room uint8, serial, name string) {
 	f.md.Devices = append(f.md.Devices, cube.DeviceMeta{Type: typ, RFAddress: rf, Serial: serial, Name: name, RoomID: room})
@@ -341,15 +347,20 @@ func TestMismatchRoomAndClear(t *testing.T) {
 }
 
 // The C line cases: a C line in room 4 for a device the metadata does not
-// list; a device the metadata lists in room 3 without a C line; a type
-// that differs; each warned of with its rooms, and marked.
+// list; a device the metadata lists in room 3 without a C line, and one
+// in room 6 without a C line though it has an L entry; a type that
+// differs; each warned of with its rooms, and marked.
 func TestMismatchLineCases(t *testing.T) {
 	f := loadFixtureLines(t)
 	f.addConfig(0x0a0a01, 0x0a010b, 4, "MEQ0000201")
 	f.list(0x0a0a02, cube.DeviceRadiatorThermostat, 3, "MEQ0000202", "Listed only")
 	f.listed(0x0a010c).Type = cube.DeviceWallThermostat
+	f.dropConfig(0x0a010d) // listed, in the device list, without a C line (D194-A)
 	c := startMismatchCube(t, f.greeting(), nil, nil)
 
+	if nc := c.event(t, view.MismatchNoConfig, "0a010d", "found"); nc == nil || nc.Summary["list_room"] != float64(6) {
+		t.Fatalf("no C line, an L entry %+v", nc)
+	}
 	un := c.event(t, view.MismatchUnlisted, "0a0a01", "found")
 	if un == nil || un.Summary["room"] != float64(4) || un.Summary["cube_room"] != float64(4) || un.Summary["cube_room_name"] != "Kind 2" {
 		t.Fatalf("unlisted %+v", un)

@@ -1927,7 +1927,7 @@ a list of what it found, absent where nothing:
 |-----------|--------------|
 | `room` | the device's C line names another room (`cube_room`) than the room list (`list_room`) |
 | `unlisted` | a C line in a room (`cube_room`) for a device the room list does not have, which can block the room's commands |
-| `no_config` | a device the room list has in `list_room`, that the Cube has no C line for and does not report: one it no longer holds |
+| `no_config` | a device the room list has in `list_room`, that the Cube has no C line for, whatever its device list says: one it no longer holds, as a Cube sends a C line for every device it has |
 | `type` | the C line's type (`cube_type`) and the room list's (`list_type`) differ |
 | `master` | the room's master in the room list, the address of its entry (`device`), is no device of the Cube (`why` `no_device`), a device of another room (`other_room`, that room in `cube_room`) or no thermostat (`not_thermostat`); a room without a thermostat is not looked at |
 | `programme`, `temperatures` | a thermostat of the room, by its C line, whose week programme, or whose comfort, eco, maximum, minimum or window-open temperature, differs from the room's: those most of its thermostats share, on a tie those of the thermostat a room command names (the master where it is a thermostat of the room, else the wall thermostat, else the first radiator thermostat); the window-open minutes, which a wall thermostat does not keep, are not compared |
