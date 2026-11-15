@@ -633,6 +633,33 @@ func TestRemoveResetsFlaggedMembers(t *testing.T) {
 		cube.CmdDeleteDevices(true, copyWall).String(), "m:"})
 }
 
+// A room setpoint resets every flagged member of the room first, by the
+// members' C lines (AP RadioHealth v1.2, Block 2, D110-A): 0a0109, put
+// into room 1 by its C line, and 0a010a, the room's master, which the
+// command names; the wall thermostat, unflagged, is left alone.
+func TestRoomSetpointResetsFlaggedMembers(t *testing.T) {
+	fc, ts, _ := startCopyCube(t, func(fc *fakecube.Server) {
+		withConfigRoom(t, fc.Greeting, 0x0a0109, 1)
+		withErrorFlag(t, fc.Greeting, 0x0a0109, 0x03)
+		withErrorFlag(t, fc.Greeting, 0x0a010a, 0x03)
+	})
+	sent := len(fc.Received())
+	if code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/rooms/1/setpoint", `{"mode":"auto"}`); code != 200 {
+		t.Fatalf("room setpoint: %d %v", code, out)
+	}
+	m, err := cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a010a, RoomID: 1, Room: true}, 0, cube.ModeAuto, cube.Until{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var radio []cube.Message
+	for _, l := range fc.Received()[sent:] {
+		if l.Type == 'r' || l.Type == 's' {
+			radio = append(radio, l)
+		}
+	}
+	sameLines(t, radio, []string{cube.CmdResetError(0x0a0109).String(), cube.CmdResetError(0x0a010a).String(), m.String()})
+}
+
 // A step's result gives each line's answer, and the line the Cube
 // discarded: here the removal's 0x21.
 func TestStepNamesTheDiscardedLine(t *testing.T) {

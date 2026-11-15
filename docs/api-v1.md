@@ -11,8 +11,10 @@ The server keeps one persistent connection and one command queue per Cube.
 Reads answer from the server's copy of the Cube's state,
 which the Cube refreshes on every change and which the server polls every 10 seconds.
 Writes go through the queue, which serialises commands, respects the
-radio duty cycle and the Cube's memory slots, and resets a device's error
-state when needed.
+radio duty cycle and the Cube's memory slots, and resets a device's
+communication error (`error`) before a command that reaches it:
+one `r:`, which costs no radio time, for the device a command names,
+and for every member of the room a room command names whose flag is set.
 
 ## Web UI
 
@@ -1378,7 +1380,7 @@ The networks are read again at most every 30 seconds.
 
 `problems` lists, where there are any, the Cube's visible devices with a problem,
 as `GET …/devices` shows them, each with its room's name (`room`):
-a transmit or link error, a low battery, a window open (with its `window` times);
+a communication or link error, a low battery, a window open (with its `window` times);
 a client that shows every Cube's problems, such as the web UI's header,
 needs no other request.
 It is the server's last state, also while the Cube is not connected.
@@ -1825,9 +1827,28 @@ Thermostats carry `mode` (`auto`, `manual`, `vacation`, `boost`), `setpoint`,
 its entries carry none),
 `valve_pct` for radiator thermostats, `until` for vacation mode;
 shutter contacts carry `window_open`.
-`error` is the Cube's transmit error flag,
-`link_error` a failed link with a partner device,
-`panel_locked` (present when true) the key lock on the device.
+`error` is the device's communication error,
+as the original software's UI calls it ("Communication error!"):
+the Cube's last radiogram to the device failed,
+and the flag stays until it is reset (`r:`) or the Cube restarts,
+whatever the device reports meanwhile;
+`failed_radiogram`, present with it alone, is
+the type of the Cube's last radiogram to the device that failed,
+`{"code": 3, "name": "TimeInformation"}`:
+the code is byte 4 of the device's entry,
+the name the original software's (docs/cube-protocol.md, its `FrameType` list),
+absent for a code the list lacks, such as `{"code": 246}`;
+nearly always the Cube's own time push (`TimeInformation`),
+also a client's radiograms, such as a removal's `RemoveLinkPartner`.
+`link_error` is the device's link error, its own report,
+in the original software's words
+"The radio communication with another MAX! device in this room is disturbed";
+it clears with a later report of the device.
+The original software names it `transmitError`,
+which this API's names do not follow:
+they stay `error` and `link_error`
+(docs/cube-protocol.md, "Lessons from the hardware days").
+`panel_locked` (present when true) is the key lock on the device.
 `battery_low` is the device's battery flag as the Cube shows it now;
 `battery`, beside `state`, is the level the server keeps from its history:
 `ok`; `weak` once the flag has been seen, as a radiator thermostat shows it for
@@ -1942,8 +1963,8 @@ whichever client shows it.
 - `valve_pct` is the highest of the radiator thermostats',
   `window_open` true while any shutter contact of the room is open;
   both are given so that a client need not compute them.
-  `battery_low`, `error`, `link_error` and `panel_locked` are the real wall
-  thermostat's; the radiator thermostats show their own.
+  `battery_low`, `error`, `failed_radiogram`, `link_error` and `panel_locked`
+  are the real wall thermostat's; the radiator thermostats show their own.
 - `reported` is true once a thermostat of the room has reported;
   a room without one has a virtual wall thermostat with `window_open` alone.
 - It has a `state` event whenever its computed state changes,
@@ -2073,6 +2094,14 @@ else the room's wall thermostat, else its first radiator thermostat,
 never a device of another room, which would take the command as well
 (docs/cube-protocol.md, "Set temperature (0x40) addressing").
 A room without a thermostat is refused with `409`.
+Before the radiogram, every member of the room whose communication error
+(`error`) is set gets one `r:`, the room taken from each device's C line,
+as the Cube takes it, so that the Cube does not hold the command back
+for a flagged member, as the original software does;
+the link error alone (`link_error`) gets none.
+A device's setpoint, a room command too, and a room's programme do the same.
+Where the Cube discards the radiogram, the same members are reset once more
+and it is sent once more.
 
 ### DELETE /api/v1/cubes/{sn}/rooms/{id}
 
@@ -2873,7 +2902,8 @@ and the worst of them, for the web UI's log button:
 {
   "level": "error",
   "alerts": [
-    {"id": 4720, "kind": "state", "level": "warn", "cube_serial": "KEQ0000100", "device": "0a0101", "serial": "MEQ0000101", "flag": "error", "time": "…"},
+    {"id": 4720, "kind": "state", "level": "warn", "cube_serial": "KEQ0000100", "device": "0a0101", "serial": "MEQ0000101", "flag": "error",
+     "failed_radiogram": {"code": 3, "name": "TimeInformation"}, "time": "…"},
     {"id": 4715, "kind": "restart", "level": "error", "time": "…"}
   ]
 }
@@ -2900,10 +2930,11 @@ The alerts the signed-in user marked seen are left out:
 the preference `log.seen` (see "Preferences"),
 which the web UI writes and opening the log does not;
 a browser without a user keeps its marks itself and asks with `after`.
-A device's transmit error, link error and low battery are in the log at info,
+A device's communication error, link error and low battery are in the log at info,
 in its state's changes:
 each is an alert at warn while the device has it,
-at the state line that set it (`flag`).
+at the state line that set it (`flag`),
+the `error` flag's with the device's `failed_radiogram` now, as its state gives it.
 `after` leaves out the alerts up to that id.
 The audit's lines (`login_failed`, `locked_out`)
 are there for a holder of `audit` only.
@@ -2937,6 +2968,13 @@ and sends `connected` when the Cube is back),
 `wall_reset` (a wall thermostat came back after five minutes or more without a
 state on another mode than it had, as after new batteries, at warn: its
 `summary` has the `mode` and the `was_mode`, the setpoints and `silent_min`),
+`error_reset` (the server reset a device's communication error,
+its `error` flag, with one `r:`, which costs no radio time,
+because the device reported while flagged:
+at most once a day per device,
+never while a command to the device or its room waits or runs in the queue,
+at info;
+its `summary` has `automatic`: `true` and the `room` of the device's C line),
 `pairing_started`, `paired` (with `paired`, the device that joined),
 `pairing_ended` (see Pairing),
 `device_forgotten` (a device deleted from the Cube, through the API or a client
@@ -2981,7 +3019,8 @@ The queue's, source `queue`:
 request (`GET /api/v1/commands/{id}`) and its `summary` the `step`'s id, its
 `key` and its `state`: `queued` and `sent` at `debug`, `acknowledged` at `info`
 with the budget (`duty_pct`, `free_slots`), and at `warn` `retried` (the Cube
-discarded it, the device's error state was reset and it was sent again),
+discarded it, the communication error of the devices it reaches was reset
+and it was sent again),
 `dropped` and `failed` with their `error`;
 `hold` at `warn`, the radio commands waiting (`reason` `duty_cycle` with
 `duty_pct` and `until`, or `memory_slots` with `free_slots` and `wait_s`).
@@ -3108,10 +3147,13 @@ data: {"kind":"state","device":"05cdc6","state":{…},
 
 `changes` has one entry per value of `state` that differs (the same names:
 `mode`, `setpoint`, `actual_temp`, `valve_pct`, `window_open`, `until`,
-`battery_low`, `error`, `link_error`, `panel_locked`), with `from` and `to`;
+`battery_low`, `error`, `failed_radiogram`, `link_error`, `panel_locked`),
+with `from` and `to`;
 a value the device did not have is `null`,
 so a measured temperature the thermostat stopped reporting is
-`{"from": 19.9, "to": null}`.
+`{"from": 19.9, "to": null}`,
+and the line that sets `error` has the radiogram that failed,
+`"failed_radiogram": {"from": null, "to": {"code": 3, "name": "TimeInformation"}}`.
 `reported` appears when the Cube gained or lost the device's state
 (`{"from": false, "to": true}` for a device that reported for the first time
 since the Cube's restart).
