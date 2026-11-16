@@ -316,10 +316,11 @@ jobs:
       - name: make actionlint
         run: make actionlint
 
-  # The types of the web UI's parts (make ui-check, GUIDELINES/project/CI.md,
-  # section 2): tsc --noEmit over internal/server/ui/src/, with the
-  # TypeScript tools/ui-check/package-lock.json locks, installed by npm ci
-  # without running a package's scripts; the runner's Node.js runs it.
+  # The types and the hooks of the web UI's parts (make ui-check,
+  # GUIDELINES/project/CI.md, section 2): tsc --noEmit, then biome lint's
+  # two hooks rules, over internal/server/ui/src/, with the TypeScript and
+  # the Biome tools/ui-check/package-lock.json locks, installed by npm ci
+  # without running a package's scripts; the runner's Node.js runs them.
   ui-types:
     name: UI types
     needs: changes

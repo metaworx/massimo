@@ -1,9 +1,10 @@
 {
   "name": "massimo-ui-check",
   "private": true,
-  "description": "The type check of the web UI's parts (make ui-check): TypeScript alone. The bundle is made by tools/uibundle, not from here.",
+  "description": "The type check and the hooks lint of the web UI's parts (make ui-check): TypeScript and Biome alone. The bundle is made by tools/uibundle, not from here.",
   "license": "AGPL-3.0-or-later",
   "devDependencies": {
+    "@biomejs/biome": "2.6.8",
     "typescript": "7.0.2"
   }
 }

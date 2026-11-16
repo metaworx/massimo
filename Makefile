@@ -181,13 +181,15 @@ ui:
 	GOOS= GOARCH= GOARM= go -C tools/uibundle run .
 
 # The parts' types (tsc --noEmit over internal/server/ui/src/, its
-# tsconfig.json), with the TypeScript tools/ui-check/package-lock.json
-# locks, installed there by npm without running a package's scripts.
-# Needs Node.js and npm; CI's job UI types runs it
-# (GUIDELINES/project/CI.md, section 2).
+# tsconfig.json), then their hooks (biome lint, the two rules of
+# tools/ui-check/biome.jsonc), with the TypeScript and the Biome
+# tools/ui-check/package-lock.json locks, installed there by npm without
+# running a package's scripts. Needs Node.js and npm; CI's job UI types
+# runs it (GUIDELINES/project/CI.md, section 2).
 ui-check:
 	npm ci --prefix tools/ui-check --ignore-scripts --no-audit --no-fund --loglevel=error --no-update-notifier
 	tools/ui-check/node_modules/.bin/tsc --noEmit -p internal/server/ui/src
+	tools/ui-check/node_modules/.bin/biome lint --config-path=tools/ui-check --no-errors-on-unmatched internal/server/ui/src
 
 # The API's shapes as TypeScript for the parts' type check: tools/apitypes
 # writes internal/server/ui/src/api.d.ts, one declaration per schema of

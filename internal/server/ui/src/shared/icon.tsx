@@ -37,7 +37,7 @@ function MarkUse({ href, bad, blink }: { href: string; bad: boolean; blink?: str
   const ref = useRef<SVGUseElement>(null);
   useLayoutEffect(() => {
     if (ref.current) keepBlink(ref.current, blink);
-  }, []);
+  }, [blink]);
   return <use ref={ref} href={"#" + href} class={bad ? "mark x" : "mark"} />;
 }
 

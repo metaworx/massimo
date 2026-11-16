@@ -1691,7 +1691,11 @@ Preact 11.2.0 and @preact/signals 2.11.4 are vendored under
 the bundler takes them from there and refuses any other import.
 `make ui-check` type-checks `ui/src/` with `tsc --noEmit` (its `tsconfig.json`:
 strict, the vendored types by `paths`),
-with the TypeScript `tools/ui-check/` locks (its `README.md`),
+then checks its hooks with Biome's two rules (`tools/ui-check/biome.jsonc`):
+a hook at the top of a part's drawing, never after an early return or in a branch,
+and an effect that lists what it reads,
+or says why not in a `biome-ignore` comment with its reason;
+with the TypeScript and the Biome `tools/ui-check/` locks (its `README.md`),
 and CI's job UI types runs it.
 What a part reads from the API is typed by `ui/src/api.d.ts`,
 one declaration per schema of `docs/api-v1-openapi.yaml`,
