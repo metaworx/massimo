@@ -77,12 +77,24 @@ func (m meta) apply(_ *os.File, tmp string, keep *bool) error {
 // scanner's look; such a refusal is retried for wait, renameHeldWait if
 // 0.
 func renameOver(tmp, path string, wait time.Duration) error {
+	return whileHeld(wait, func() error { return os.Rename(tmp, path) })
+}
+
+// removeHeld removes path, retrying for wait while another process holds
+// it, as renameOver does.
+func removeHeld(path string, wait time.Duration) error {
+	return whileHeld(wait, func() error { return os.Remove(path) })
+}
+
+// whileHeld runs op until it succeeds, fails otherwise than by a held
+// file, or wait (renameHeldWait if 0) has passed.
+func whileHeld(wait time.Duration, op func() error) error {
 	if wait <= 0 {
 		wait = renameHeldWait
 	}
 	deadline := time.Now().Add(wait)
 	for {
-		err := os.Rename(tmp, path)
+		err := op()
 		if err == nil || !renameHeld(err) || time.Now().After(deadline) {
 			return err
 		}

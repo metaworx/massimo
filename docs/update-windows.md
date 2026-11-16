@@ -62,7 +62,9 @@ the smoke test (`<new binary> version` in an empty temporary directory must
 print the tag), the swap (`swapRenaming`:
 `massimo.exe` is renamed to `massimo.exe.prev`,
 the staged file to `massimo.exe`;
-Windows lets a running executable be renamed but not replaced),
+Windows lets a running executable be renamed but not replaced,
+and a rename it refuses while another process holds the file for a moment,
+a virus scanner reading the new binary, is retried for five seconds),
 the restart (`install.RestartService`: `Control(Stop)`,
 wait for `Stopped` for up to a minute, `Start`,
 wait for `Running` for up to a minute),

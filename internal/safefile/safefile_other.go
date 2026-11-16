@@ -20,4 +20,5 @@ type meta struct{}
 func readMeta(string, fs.FileInfo) (meta, error)         { return meta{}, nil }
 func (meta) apply(*os.File, string, *bool) error         { return nil }
 func renameOver(tmp, path string, _ time.Duration) error { return os.Rename(tmp, path) }
+func removeHeld(path string, _ time.Duration) error      { return os.Remove(path) }
 func syncDir(string)                                     {}
