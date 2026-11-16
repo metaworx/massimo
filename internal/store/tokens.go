@@ -153,7 +153,7 @@ func (s *Store) RevokeToken(ctx context.Context, id int64) error {
 	if err := s.writable(); err != nil {
 		return err
 	}
-	res, err := s.db.ExecContext(ctx, `UPDATE tokens SET revoked_at = ?, version = version + 1 WHERE id = ? AND revoked_at IS NULL`, s.nowText(), id)
+	res, err := s.db.ExecContext(ctx, `UPDATE tokens SET revoked_at = ?, origin = ?, version = version + 1 WHERE id = ? AND revoked_at IS NULL`, s.nowText(), s.nodeID, id)
 	if err != nil {
 		return fmt.Errorf("store: token %d: %w", id, err)
 	}
@@ -173,7 +173,7 @@ func (s *Store) RevokeSessions(ctx context.Context, userID int64) error {
 	if err := s.writable(); err != nil {
 		return err
 	}
-	if _, err := s.db.ExecContext(ctx, `UPDATE tokens SET revoked_at = ?, version = version + 1 WHERE user_id = ? AND kind = ? AND revoked_at IS NULL`, s.nowText(), userID, TokenSession); err != nil {
+	if _, err := s.db.ExecContext(ctx, `UPDATE tokens SET revoked_at = ?, origin = ?, version = version + 1 WHERE user_id = ? AND kind = ? AND revoked_at IS NULL`, s.nowText(), s.nodeID, userID, TokenSession); err != nil {
 		return fmt.Errorf("store: sessions of %d: %w", userID, err)
 	}
 	if _, err := s.db.ExecContext(ctx, `DELETE FROM push_subscriptions WHERE token_id IN (SELECT id FROM tokens WHERE user_id = ? AND kind = ? AND revoked_at IS NOT NULL)`, userID, TokenSession); err != nil {

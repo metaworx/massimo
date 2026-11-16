@@ -65,7 +65,7 @@ func TestSeedAndPrecedence(t *testing.T) {
 	if _, err := s.UpdateCube(ctx, "KEQ0000001", func(c *Cube) error {
 		c.Name, c.Hidden, c.Source = "Basement", []string{"0abc13", "0abc12", "0abc14"}, SourceUI
 		return nil
-	}); err != nil {
+	}, 0); err != nil {
 		t.Fatal(err)
 	}
 	file = append(file, fileCube("KEQ0000003", FieldAddress, "10.0.0.3"))
@@ -104,7 +104,7 @@ func TestSeedFoundAndRemoved(t *testing.T) {
 	if _, err := s.AddCube(ctx, Cube{Serial: "KEQ0000002", Configured: true, Address: "10.0.0.2"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.UpdateCube(ctx, "KEQ0000002", func(c *Cube) error { c.Configured = false; return nil }); err != nil {
+	if _, err := s.UpdateCube(ctx, "KEQ0000002", func(c *Cube) error { c.Configured = false; return nil }, 0); err != nil {
 		t.Fatal(err)
 	}
 	res, err := s.Seed(ctx, "x.env", []FileCube{fileCube("KEQ0000001", FieldName, "Cellar"), fileCube("KEQ0000002", FieldAddress, "10.0.0.2")})
@@ -147,7 +147,7 @@ func TestFoundCubeSurvivesRestart(t *testing.T) {
 	if _, err := s.AddCube(ctx, Cube{Serial: "KEQ0000009"}); !errors.Is(err, ErrExists) {
 		t.Fatalf("add over a row: %v", err)
 	}
-	if _, err := s.UpdateCube(ctx, "KEQ0000008", func(*Cube) error { return nil }); !errors.Is(err, ErrNotFound) {
+	if _, err := s.UpdateCube(ctx, "KEQ0000008", func(*Cube) error { return nil }, 0); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("update without a row: %v", err)
 	}
 }
