@@ -54,10 +54,15 @@ func TestFailedRadiogram(t *testing.T) {
 		raw, _ := json.Marshal(ev.Changes[key])
 		return string(raw)
 	}
+	// stateLines are the state lines of 0a010d, oldest first.
+	stateLines := func() []event {
+		var evs []event
+		getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log?kind=state&device=0a010d", &evs)
+		return evs
+	}
 	// stateLine is a state line of 0a010d whose change of key is want.
 	stateLine := func(key, want string) *event {
-		var evs []event
-		getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log?kind=state&limit=500", &evs)
+		evs := stateLines()
 		for i := range evs {
 			if evs[i].Device == "0a010d" && change(&evs[i], key) == want {
 				return &evs[i]
@@ -65,9 +70,31 @@ func TestFailedRadiogram(t *testing.T) {
 		}
 		return nil
 	}
+	// caughtUp waits until the newest state line of 0a010d shows the
+	// list set last: the flag as flagged, the failed radiogram as want.
+	// The device's state and the alert's radiogram of now are the
+	// snapshot's, but a line is the pump's: it reads the snapshot when it
+	// takes the event, which a loaded host can delay past the test's next
+	// list. That list's change then comes in the line of the one before,
+	// measured from the one before that, and a line the test waits for or
+	// the alert reads is never written. So before it sets the next list,
+	// the test waits for the line of the last.
+	caughtUp := func(what string, flagged bool, want string) {
+		t.Helper()
+		waitFor(t, what, func() bool {
+			evs := stateLines()
+			if len(evs) == 0 {
+				return false
+			}
+			d, _ := evs[len(evs)-1].State.(map[string]any)
+			st, _ := d["state"].(map[string]any)
+			return st != nil && st["error"] == flagged && failed(st) == want
+		})
+	}
 
 	list(0x09, false)
 	waitFor(t, "the report", func() bool { st := state("0a010d"); return st != nil && st["failed_radiogram"] == nil })
+	caughtUp("the report's line", false, "null")
 	list(0x03, true)
 	waitFor(t, "the communication error", func() bool { return state("0a010d")["error"] == true })
 	if got := failed(state("0a010d")); got != `{"code":3,"name":"TimeInformation"}` {
@@ -128,9 +155,11 @@ func TestFailedRadiogram(t *testing.T) {
 	}
 	alertNames("the time push, as severe as the unknown code and older", cube.RadiogramTimeInformation)
 	list(0x40, true)
+	caughtUp("the setpoint's line", true, `{"code":64,"name":"ControlMode"}`)
 	alertNames("the setpoint's, more severe", cube.RadiogramControlMode)
 	list(0xf6, true)
 	waitFor(t, "the unknown code again", func() bool { return failed(state("0a010d")) == `{"code":246}` })
+	caughtUp("its line again", true, `{"code":246}`)
 	alertNames("the setpoint's still", cube.RadiogramControlMode)
 
 	// The flag cleared, byte 4 kept: no failed radiogram.
