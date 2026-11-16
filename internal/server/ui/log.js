@@ -553,11 +553,27 @@ function logDisagreeText(s, serial) {
 
 // logUnconfirmedText is the line of a write its devices did not show by
 // its deadline (confirm.go): the write, its room, each device by name with
-// what it shows; or a device that showed it late.
+// what it shows; or a device that showed it late; or, for a room's
+// setpoint, its re-send (resend.go): sent once more or why not, then
+// shown by every thermostat or still not, again with each device.
 function logUnconfirmedText(s, serial) {
   const num = (v) => (v === undefined || v === null ? "–" : String(v));
   const write = logWord("log.write.", s.write);
-  if (s.outcome === "confirmed_late") return t("log.sum.confirmedLate", { write, seconds: num(s.seconds) });
+  const room = s.room ? logRoomName(s.room, serial) : "–";
+  switch (s.outcome) {
+    case "confirmed_late":
+      return t("log.sum.confirmedLate", { write, seconds: num(s.seconds) });
+    case "resent": {
+      const text = t("log.sum.unconfirmedResent", { write, room });
+      return s.program ? text + ", " + t("log.disagree.program") : text;
+    }
+    case "not_resent":
+      return t("log.sum.unconfirmedNotResent", { write, room, why: logWord("log.unconfirmed.why.", s.why) });
+    case "resend_failed":
+      return t("log.sum.unconfirmedResendFailed", { write, room });
+    case "resend_confirmed":
+      return t("log.sum.unconfirmedResendConfirmed", { write, room, seconds: num(s.seconds) });
+  }
   const value = (k, v) => {
     if (Array.isArray(v)) return ""; // a day's switch points: its name says it
     if (k === "mode") return logWord("log.mode.", v);
@@ -573,7 +589,8 @@ function logUnconfirmedText(s, serial) {
   }).join(", ");
   const args = { write, minutes: num(s.minutes), devices: devices || "–" };
   if (!s.room) return t("log.sum.unconfirmed", args);
-  return t("log.sum.unconfirmedRoom", Object.assign(args, { room: logRoomName(s.room, serial) }));
+  if (s.outcome === "resend_not_confirmed") return t("log.sum.unconfirmedResendNot", Object.assign(args, { room }));
+  return t("log.sum.unconfirmedRoom", Object.assign(args, { room }));
 }
 
 // logDriftText is a room check's line of a thermostat that does not

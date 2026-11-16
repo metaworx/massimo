@@ -631,6 +631,15 @@ and the sign-in dialog (a page without a token loads no data while it is open).
 The other regions passed although none had moved:
 they are filled in place, or drawn again only by the user's own action,
 which the guard does not apply.
+The Cubes list and Cube settings left the list with their move to parts
+(AP UiParts, Block 5).
+Since the fixture has nothing in a Cube's problem list from the start and
+finds no Cube without a search, which is a POST, their views answer
+`GET /api/v1/cubes` with the server's answer and, the same at every load,
+a device with a low battery, a line of the settings file that differs, an
+address found elsewhere, a proxy that does not listen, and a Cube and a
+Massimo proxy found (`CUBES_STUB`, `FOUND_STUB`): a region whose fixture
+lacks what it shows can be given it so, with GETs alone.
 
 ### Taking a region off the list
 

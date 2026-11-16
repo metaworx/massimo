@@ -34,6 +34,10 @@ SAYS = {
         "kind": "not confirmed",
         "line": "setpoint to {room}: not confirmed after 5 min: {name} (mode auto, setpoint 20.0)",
         "late": "setpoint: confirmed after 70 s",
+        "resent": "setpoint to {room}: sent once more to its thermostats",
+        "resend_not": "setpoint to {room}: sent once more, still not confirmed after 5 min: {name} (mode auto, setpoint 20.0)",
+        "not_resent": "setpoint to {room}: not sent once more: once a day at most, and it was today",
+        "resend_ok": "setpoint to {room}: sent once more, confirmed by every thermostat after 25 s",
     },
     "de": {
         "badge": "nicht bestätigt",
@@ -42,6 +46,10 @@ SAYS = {
         "kind": "nicht bestätigt",
         "line": "Solltemperatur für {room}: nach 5 min nicht bestätigt: {name} (Modus Auto, Solltemperatur 20,0)",
         "late": "Solltemperatur: nach 70 s bestätigt",
+        "resent": "Solltemperatur für {room}: nochmals an die Thermostate gesendet",
+        "resend_not": "Solltemperatur für {room}: nochmals gesendet, nach 5 min weiterhin nicht bestätigt: {name} (Modus Auto, Solltemperatur 20,0)",
+        "not_resent": "Solltemperatur für {room}: nicht nochmals gesendet: höchstens einmal am Tag, und heute schon geschehen",
+        "resend_ok": "Solltemperatur für {room}: nochmals gesendet, nach 25 s von jedem Thermostat bestätigt",
     },
 }
 
@@ -120,4 +128,33 @@ def test_unconfirmed_log_lines(page, case):
     assert lines.nth(0).locator(".log-kind").inner_text().strip() == says["kind"]
     assert lines.nth(1).locator(".log-text").inner_text() == says["line"].format(**dev), lines.nth(1).locator(".log-text").inner_text()
     assert lines.nth(0).locator(".log-text").inner_text() == says["late"], lines.nth(0).locator(".log-text").inner_text()
+    show_view(page, "tiles")
+
+
+def test_resend_log_lines(page, case):
+    """A room setpoint's re-send (AP RadioHealth v1.3, Block 8): sent once
+    more, still not confirmed with each device and what it shows, not
+    sent and why, and confirmed by every thermostat."""
+    says = SAYS[case.lang]
+    dev = page.evaluate(CONFIRMATION, [None, []])
+    assert dev, "a reported thermostat"
+    show_view(page, "log")
+    page.wait_for_timeout(1600)
+    page.evaluate("""(dev) => {
+      const now = () => new Date().toISOString();
+      const send = (kind, ev) => state.events.dispatchEvent(new MessageEvent(kind, { data: JSON.stringify(Object.assign({ kind, time: now() }, ev)) }));
+      const write = { write: "setpoint", target: "room:" + dev.id, room: dev.id, source: "api", expected: { mode: "manual", setpoint: 22 } };
+      const line = (level, summary) => send("unconfirmed", { source: "device", level, summary: Object.assign({}, write, summary) });
+      line("info", { outcome: "resent", duty_pct: 3, free_slots: 49 });
+      line("warn", { outcome: "resend_not_confirmed", minutes: 5, confirmed: 2,
+        devices: [{ rf_address: dev.rf, fields: ["mode", "setpoint"], shows: { mode: "auto", setpoint: 20 }, error: true, link_error: false, out_of_date: false }] });
+      line("info", { outcome: "not_resent", why: "today" });
+      line("info", { outcome: "resend_confirmed", confirmed: 3, seconds: 25 });
+    }""", dev)
+    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-unconfirmed').length === 4", 5), "the four lines"
+    lines = page.locator("#log-lines .log-line.kind-unconfirmed")
+    for i, key in enumerate(["resend_ok", "not_resent", "resend_not", "resent"]):
+        text = lines.nth(i).locator(".log-text").inner_text()
+        assert text == says[key].format(**dev), (key, text)
+    assert scroll_width(page) <= case.width, "no horizontal scroll"
     show_view(page, "tiles")

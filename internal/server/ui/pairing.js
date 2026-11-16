@@ -14,28 +14,32 @@ function cubePath(serial) {
   return "api/v1/cubes/" + encodeURIComponent(serial);
 }
 
+// pairingUI is what the pairing keeps per Cube: its flow (pairingOf)
+// and, for a Cube that is not the one shown, its rooms (loadCubeRooms).
+const pairingUI = { flows: {}, rooms: {} };
+
 // pairingOf is the pairing flow of a Cube's panel, which outlives a
 // redraw: form (the time and Start shown), seconds, active and until
 // (the server's state), paired (the devices that joined while this page
 // watched), msg (the last outcome), edits (per device, what its form
 // holds), tick (the countdown's timer).
 function pairingOf(serial) {
-  return cubesUI.pairing[serial] || (cubesUI.pairing[serial] = { form: false, seconds: 60, active: false, until: 0, paired: [], msg: null, edits: {}, tick: null });
+  return pairingUI.flows[serial] || (pairingUI.flows[serial] = { form: false, seconds: 60, active: false, until: 0, paired: [], msg: null, edits: {}, tick: null });
 }
 
 // cubeRooms are the rooms a device of the Cube can be put into: the
 // page's for the Cube shown, else those loadCubeRooms read.
 function cubeRooms(serial) {
-  return serial === state.serial ? state.rooms : cubesUI.rooms[serial] || [];
+  return serial === state.serial ? state.rooms : pairingUI.rooms[serial] || [];
 }
 
 async function loadCubeRooms(serial) {
   if (serial === state.serial) return;
   try {
-    cubesUI.rooms[serial] = (await api("GET", cubePath(serial) + "/rooms?devices=real")) || [];
+    pairingUI.rooms[serial] = (await api("GET", cubePath(serial) + "/rooms?devices=real")) || [];
     redrawPairing(serial);
   } catch (e) {
-    cubesUI.rooms[serial] = [];
+    pairingUI.rooms[serial] = [];
   }
 }
 
@@ -192,15 +196,17 @@ function pairingJoined(serial, dev) {
   redrawPairing(serial);
 }
 
-// redrawPairing draws a panel's pairing again, in place, so that the
-// Cube's form keeps what is typed in it.
+// redrawPairing draws a panel's pairing again inside its .cube-pairing,
+// the element the Cube's panel (ui/src/cubes/Actions.tsx) leaves to it,
+// so that the Cube's form keeps what is typed in it.
 function redrawPairing(serial) {
   const panel = document.querySelector('.cube-panel[data-serial="' + serial + '"]');
-  const old = panel && panel.querySelector(".cube-pairing");
-  if (old) old.replaceWith(pairingSection(serial));
+  const box = panel && panel.querySelector(".cube-pairing");
+  if (box) box.replaceChildren(...pairingSection(serial).childNodes);
 }
 
-// pairingSection is a panel's pairing (tpl-pairing): Pair a device; the
+// pairingSection is a panel's pairing (tpl-pairing), whose children
+// redrawPairing puts into the panel's .cube-pairing: Pair a device; the
 // time and Start; while pairing runs, the countdown and Stop; the last
 // outcome; the devices that joined.
 function pairingSection(serial) {
@@ -275,23 +281,41 @@ function pairedRow(serial, d) {
   return row;
 }
 
+// pairDefaultName is the name the form offers a device put into a room
+// (D200-A), as a repair's listing offers one: defaultDeviceName's
+// (config.js) with the room's name and the device type's word in the
+// page's language; "" for a room the page does not hold.
+function pairDefaultName(serial, dev, room) {
+  const r = cubeRooms(serial).find((x) => x.id === room);
+  return r ? defaultDeviceName(r.name, typeName(dev.type), roomDeviceNames(serial, room)) : ""; // rooms.js
+}
+
 // pairDeviceForm is the form that puts a device that is in no room into
 // one (tpl-pair-device, capability structure): its name (with rename),
-// the room, and for a thermostat the switch that copies the room's
-// settings (with configure, which the copy needs as well), on by
-// default; PUT …/devices/{rf}. e keeps what is typed
-// across redraws, the result, and done once the device is in the room;
-// onDone runs then, onFail after a refusal, and onCancel, when given,
-// is the form's Cancel.
+// offered by default (pairDefaultName) for the room chosen until one is
+// typed, one too long for the Cube marked on its field and not sent
+// (markNameBytes), the room, and for a thermostat the switch that
+// copies the room's settings (with configure, which the copy needs as
+// well), on by default; PUT …/devices/{rf}. e keeps what is typed
+// (typed, once the name was) across redraws, the result, and done once
+// the device is in the room; onDone runs then, onFail after a refusal,
+// and onCancel, when given, is the form's Cancel.
 function pairDeviceForm(serial, dev, e, { onDone, onFail, onCancel } = {}) {
   const form = fromTemplate("tpl-pair-device");
   const id = "pair-" + serial + "-" + dev.rf_address;
   const name = form.querySelector("input[name=name]");
   name.id = id + "-name";
-  name.previousElementSibling.htmlFor = name.id;
-  name.value = e.name || "";
+  name.closest(".field").querySelector("label").htmlFor = name.id;
+  // A name longer than the Cube keeps, the one offered included, stays as
+  // it is, marked as it is typed, and is not sent until it is shortened
+  // (D201).
+  const long = form.querySelector(".pair-name-long");
+  long.id = name.id + "-long";
+  long.textContent = t("cfg.nameLong", { n: NAME_BYTES });
   name.addEventListener("input", () => {
     e.name = name.value;
+    e.typed = true;
+    markNameBytes(name, long); // config.js
   });
   const rooms = cubeRooms(serial);
   const select = form.querySelector("select[name=room]");
@@ -300,8 +324,16 @@ function pairDeviceForm(serial, dev, e, { onDone, onFail, onCancel } = {}) {
   fillOptions(select, rooms.map((r) => [String(r.id), r.name]));
   if (!rooms.some((r) => r.id === e.room) && rooms.length) e.room = rooms[0].id;
   if (e.room !== undefined) select.value = String(e.room);
+  // The name offered follows the room until the user types one.
+  const offer = () => {
+    if (!e.typed) e.name = pairDefaultName(serial, dev, e.room);
+    name.value = e.name || "";
+    markNameBytes(name, long);
+  };
+  offer();
   select.addEventListener("change", () => {
     e.room = Number(select.value);
+    offer();
   });
   const copyRow = form.querySelector(".pair-copy");
   const copy = copyRow.querySelector("input[name=copy]");
@@ -329,14 +361,15 @@ function pairDeviceForm(serial, dev, e, { onDone, onFail, onCancel } = {}) {
   form.addEventListener("submit", async (ev) => {
     ev.preventDefault();
     if (e.busy || !rooms.length) return;
-    const nm = (e.name || "").trim();
+    // Without rename the field is hidden: the server names the device by
+    // its default.
+    const nm = hasCap("rename") ? (e.name || "").trim() : "";
     const label = nm || deviceName(dev);
     const body = { room_id: e.room };
     if (isThermostat(dev)) body.copy = hasCap("configure") && e.copy !== false;
-    if (nm && hasCap("rename")) {
-      if (byteLength(nm) > NAME_BYTES) {
-        e.result = { text: t("cfg.devNameTooLong", { name: nm, n: NAME_BYTES }), ok: false };
-        showResult(result, e.result.text, false);
+    if (nm) {
+      if (!markNameBytes(name, long)) {
+        name.focus(); // its field says why, as the pairing time's does
         return;
       }
       body.name = nm;

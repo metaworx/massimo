@@ -1886,10 +1886,12 @@ paths:
         the metadata. room_id 0 is refused. A device in no room yet
         (unlisted, for example just paired) needs room_id and is linked
         with the room's members (0x20 both ways, after a wakeup), given
-        the room's group (0x22) and listed under name; without room_id it
-        answers 409. A thermostat put into a room, by an add or a move,
-        then gets the room's settings from its first other thermostat:
-        0x40 auto, 0x11 to every thermostat of the room, 0x12, and 0x10
+        the room's group (0x22) and listed under name, without name under
+        the default "<room name> <type> <n>" a repair's listing gives;
+        without room_id it answers 409. A thermostat put into a room, by
+        an add or a move, then gets the room's settings from its first
+        other thermostat: 0x40 auto, 0x11 to every thermostat of the
+        room, 0x12, and 0x10
         for each day of the programme that differs, then 0x11 again;
         hidden devices are left out. The copy needs the capability
         configure as well (403 without it); copy false skips it. A
@@ -2770,8 +2772,9 @@ paths:
         the name the preview asks for it (details code room_name_needed and room).
         A device the list does not have gets the name name gives, else
         "<room name> <type> <n>", the type in English and n the lowest
-        number no device of the room takes in a name of that form; details
-        name, room_name and type say which.
+        number no device of the room takes in a name of that form, and
+        "<type> <n>" where that would pass 32 bytes; details name,
+        room_name and type say which.
         The preview sends nothing: the lines a run would send and what they
         cost, and the plan's hash for the run.
       parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}, {$ref: "#/components/parameters/repairRoomName"}, {$ref: "#/components/parameters/repairDeviceName"}]
@@ -3163,7 +3166,11 @@ paths:
         devices do not show in time: write (setpoint, lock, display, config,
         program), target, room, source, expected,
         outcome not_confirmed at warn with minutes, confirmed and devices,
-        or confirmed_late at info with seconds, in "summary"); slots, source cube (the Cube's memory
+        or confirmed_late at info with seconds, and a room setpoint's
+        re-send: resent with duty_pct, free_slots and program, not_resent
+        with why (superseded, changed, busy, boost, today), resend_failed
+        at warn, resend_confirmed with confirmed and seconds, or
+        resend_not_confirmed at warn as not_confirmed, in "summary"); slots, source cube (the Cube's memory
         slots held for an hour with nothing of the server's in flight,
         fewer than 5 free at warn, fewer than 2 at error, and free again,
         at info: state low, full or free, from for a step, free_slots,
@@ -3902,7 +3909,6 @@ components:
               discarded: {type: boolean, description: Always false on 200; a discarded command answers 502}
               budget: {$ref: "#/components/schemas/Budget"}
               confirmation: {type: string, enum: [pending, confirmed], description: "A setpoint, a key lock or a display mode: pending until the devices' states show it (the devices' and the room's confirmation, the log's unconfirmed line after five minutes); a configuration or a week programme until their configurations show it (the line after the last re-read, about six minutes). Confirmed where each shows it already. Absent for other writes"}
-        pending_radiograms: {type: integer, description: "Radiograms sent by the Cube and not yet acknowledged by a device (memory slots in use): all of them when no slot is free, 0 until the Cube has reported its budget"}
     BadRequest:
       description: Bad input
       content:
@@ -4444,15 +4450,15 @@ components:
             type: object
             properties:
               what: {type: string}
-              device: {type: string, description: "The device the command addresses, which the queue resets first where flagged"}
+              device: {type: string, description: "The device the command addresses"}
               room: {type: integer, description: "The room woken up before the command"}
-              reset: {type: boolean, description: "The queue resets the device's error flag before the command"}
-              lines: {type: array, items: {type: string}, description: "The command's lines as they go to the Cube, the wakeup and the queue's reset not included"}
+              reset: {type: boolean, description: "The queue resets error flags before the command: the device's, the flagged members its room lines reach, the flagged devices its direct lines address"}
+              lines: {type: array, items: {type: string}, description: "The command's lines as they go to the Cube, the wakeup and the queue's resets not included"}
         radiograms: {type: integer, description: "The s: lines"}
         duty_cost_pct: {type: number, description: "About what they cost of the hourly radio budget, 1.25 % each"}
         slots: {type: integer, description: "The memory slots they take, one each and a room radiogram one per member of the room"}
         held_slots: {type: integer, description: "Those held until the members' next wakeup, about ten minutes, a room radiogram's but its addressee's"}
-        resets: {type: integer, description: "The r: lines, the queue's own included; free"}
+        resets: {type: integer, description: "The r: lines, those the queue sends before each command included; free"}
         wakeups: {type: integer}
         metadata: {type: boolean, description: "A metadata write, no radio"}
         budget: {$ref: "#/components/schemas/Budget"}
@@ -4576,6 +4582,7 @@ components:
     ProxyFailure:
       type: object
       description: A proxy listener that does not listen, and is tried again
+      required: [addr, error, since, next_try]
       properties:
         addr: {type: string}
         error: {type: string, description: The last try's error}
@@ -4585,6 +4592,7 @@ components:
     FoundElsewhere:
       type: object
       description: "A Cube with a fixed address that answered the latest discovery at another one, neither it nor a proxy answering at its own; absent otherwise"
+      required: [address, configured, since]
       properties:
         address: {type: string, description: "Where it answers, with the configured address's port: the address a PUT takes"}
         configured: {type: string, description: The configured address}
@@ -4668,6 +4676,7 @@ components:
     Budget:
       type: object
       description: What the Cube last reported about its radio limits
+      required: [updated_at]
       properties:
         duty_cycle_pct: {type: integer, description: Share of the hourly radio budget already used}
         free_memory_slots: {type: integer, description: Free slots for unacknowledged radiograms (about 50)}
@@ -4675,6 +4684,7 @@ components:
     FoundCube:
       type: object
       description: A Cube that answered discovery
+      required: [serial, address, rf_address, firmware, last_seen]
       properties:
         serial: {type: string}
         kind: {type: string, enum: [cube, proxy, unknown], description: "What answered: a Cube, a massimo proxy (also one at an announced server's address), or neither"}
@@ -4682,6 +4692,7 @@ components:
         host:
           type: object
           description: "The massimo server that serves it, announced on the LAN: the one at a proxy's address, or the one a proxy of a Cube runs on; absent where none matched"
+          required: [name, url]
           properties:
             name: {type: string, description: Its instance name}
             url: {type: string, description: "The url its announcement gives, else http(s)://<address>:<port>"}
@@ -4706,6 +4717,7 @@ components:
         last_seen: {type: string, format: date-time, description: Its latest answer}
     Cube:
       type: object
+      required: [serial, address, configured_address, follow_discovery, proxy_virtual, hidden, connected, link, budget, pending_radiograms]
       properties:
         serial: {type: string}
         name: {type: string, description: "User-friendly name from the store (seeded from MASSIMO_CUBE_<SN>_NAME), when set"}
@@ -4772,6 +4784,7 @@ components:
         firmware: {type: string, example: "1.1.3"}
         rf_address: {type: string}
         budget: {$ref: "#/components/schemas/Budget"}
+        pending_radiograms: {type: integer, description: "Radiograms sent by the Cube and not yet acknowledged by a device (memory slots in use): all of them when no slot is free, 0 until the Cube has reported its budget"}
         updated: {type: string, format: date-time}
         observed_since: {type: string, format: date-time, description: When the server first heard from the Cube; a device value received at that time was already there and may be older}
         rooms: {type: integer}
@@ -4805,6 +4818,7 @@ components:
         fixed_by: {type: string, description: "What decides this run's value instead of the setting: -announce or MASSIMO_ANNOUNCE (announce), -poll, -refresh, -discover-interval or -stale-after (the intervals)"}
     FileDifference:
       type: object
+      required: [field, variable, file, store]
       properties:
         field: {type: string, enum: [name, address, proxy_address, proxy_serial, hidden]}
         variable: {type: string, example: MASSIMO_CUBE_KEQ0000000_NAME}
@@ -4857,7 +4871,7 @@ components:
       description: "A write not confirmed yet: the device, or members of the room, do not show what it set. Present while one is open"
       required: [state, since, fields]
       properties:
-        state: {type: string, enum: [pending, unconfirmed], description: "pending until five minutes after the Cube's answer, then unconfirmed until the devices show it or a newer write of the same kind replaces it"}
+        state: {type: string, enum: [pending, unconfirmed], description: "pending until five minutes after the Cube's answer, then unconfirmed until the devices show it or a newer write of the same kind replaces it; a room setpoint sent once more is pending again for five minutes after the re-send's answer"}
         since: {type: string, format: date-time, description: "When the Cube took the oldest write still open"}
         fields: {type: array, items: {type: string}, description: "The values not shown yet: mode, setpoint, until, locked and display_actual of the state; the configuration's by their names (comfort_temp … valve_offset_pct); program.<day> for a day of the week programme, program.<day>.2 for a long day's second radiogram"}
         devices: {type: array, items: {type: string}, description: "A room's: the radio addresses of its members that do not show them"}
@@ -4910,6 +4924,7 @@ components:
         consistent: {type: boolean, description: "A virtual wall thermostat's alone: false while the room's thermostats disagree on mode, setpoint or until"}
     Device:
       type: object
+      required: [rf_address, name]
       properties:
         rf_address: {type: string}
         type: {$ref: "#/components/schemas/DeviceType"}

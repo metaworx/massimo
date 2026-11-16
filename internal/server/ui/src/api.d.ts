@@ -624,18 +624,19 @@ export interface RepairPlan {
   plan?: string;
   steps?: {
     what?: string;
-    /**
-     * The device the command addresses, which the queue resets first where
-     * flagged
-     */
+    /** The device the command addresses */
     device?: string;
     /** The room woken up before the command */
     room?: number;
-    /** The queue resets the device's error flag before the command */
+    /**
+     * The queue resets error flags before the command: the device's, the
+     * flagged members its room lines reach, the flagged devices its direct
+     * lines address
+     */
     reset?: boolean;
     /**
      * The command's lines as they go to the Cube, the wakeup and the queue's
-     * reset not included
+     * resets not included
      */
     lines?: string[];
   }[];
@@ -653,7 +654,7 @@ export interface RepairPlan {
    * radiogram's but its addressee's
    */
   held_slots?: number;
-  /** The r: lines, the queue's own included; free */
+  /** The r: lines, those the queue sends before each command included; free */
   resets?: number;
   wakeups?: number;
   /** A metadata write, no radio */
@@ -839,16 +840,16 @@ export interface StoreInfo {
 
 /** A proxy listener that does not listen, and is tried again */
 export interface ProxyFailure {
-  addr?: string;
+  addr: string;
   /** The last try's error */
-  error?: string;
+  error: string;
   /**
    * The first failure
    * @format date-time
    */
-  since?: string;
+  since: string;
   /** @format date-time */
-  next_try?: string;
+  next_try: string;
   tries?: number;
 }
 
@@ -861,14 +862,14 @@ export interface FoundElsewhere {
    * Where it answers, with the configured address's port: the address a PUT
    * takes
    */
-  address?: string;
+  address: string;
   /** The configured address */
-  configured?: string;
+  configured: string;
   /**
    * The run that first found it there
    * @format date-time
    */
-  since?: string;
+  since: string;
 }
 
 export interface ConfigView {
@@ -1001,12 +1002,12 @@ export interface Budget {
   /** Free slots for unacknowledged radiograms (about 50) */
   free_memory_slots?: number;
   /** @format date-time */
-  updated_at?: string;
+  updated_at: string;
 }
 
 /** A Cube that answered discovery */
 export interface FoundCube {
-  serial?: string;
+  serial: string;
   /**
    * What answered: a Cube, a massimo proxy (also one at an announced server's
    * address), or neither
@@ -1024,9 +1025,9 @@ export interface FoundCube {
    */
   host?: {
     /** Its instance name */
-    name?: string;
+    name: string;
     /** The url its announcement gives, else http(s)://<address>:<port> */
-    url?: string;
+    url: string;
   };
   configured?: boolean;
   /**
@@ -1038,11 +1039,11 @@ export interface FoundCube {
   /**
    * The IP it answered from, its own where a massimo proxy answers for it too
    */
-  address?: string;
+  address: string;
   /** From the host's ARP cache; absent when unknown */
   mac?: string;
-  rf_address?: string;
-  firmware?: string;
+  rf_address: string;
+  firmware: string;
   /**
    * Whether the Cube takes its address by DHCP, from its answer to the c
    * request in this server run's latest discovery that had one; absent until it
@@ -1072,17 +1073,17 @@ export interface FoundCube {
    * Its latest answer
    * @format date-time
    */
-  last_seen?: string;
+  last_seen: string;
 }
 
 export interface Cube {
-  serial?: string;
+  serial: string;
   /**
    * User-friendly name from the store (seeded from MASSIMO_CUBE_<SN>_NAME),
    * when set
    */
   name?: string;
-  address?: string;
+  address: string;
   /** Always true here; found Cubes are FoundCube */
   configured?: boolean;
   /** Where the configuration comes from; absent without a store */
@@ -1096,13 +1097,13 @@ export interface Cube {
    * The stored address; empty: from discovery (address is where it connects
    * now)
    */
-  configured_address?: string;
-  follow_discovery?: boolean;
+  configured_address: string;
+  follow_discovery: boolean;
   /** The configured proxy address; empty: the default */
   proxy_address?: string;
   proxy_serial?: string;
   /** The proxy shows clients the rooms' virtual wall thermostats */
-  proxy_virtual?: boolean;
+  proxy_virtual: boolean;
   /** The addresses the Cube's proxy listens on now */
   proxy_listening?: string[];
   /**
@@ -1111,7 +1112,7 @@ export interface Cube {
    */
   proxy_failing?: ProxyFailure[];
   /** The hidden list (radio addresses), besides room 255 */
-  hidden?: string[];
+  hidden: string[];
   /** From discovery, once it saw the Cube */
   mac?: string;
   /**
@@ -1166,12 +1167,12 @@ export interface Cube {
     room?: string;
   })[];
   /** The server is connected to the Cube and has its complete greeting */
-  connected?: boolean;
+  connected: boolean;
   /**
    * How the server stands with a configured Cube beyond connected
    * (docs/api-v1.md, GET /api/v1/cubes)
    */
-  link?: {
+  link: {
     /**
      * held: a lost connection held open; stale: the Cube answers discovery but
      * refuses a new connection while it holds the server's old one; busy: the
@@ -1191,7 +1192,13 @@ export interface Cube {
   };
   firmware?: string;
   rf_address?: string;
-  budget?: Budget;
+  budget: Budget;
+  /**
+   * Radiograms sent by the Cube and not yet acknowledged by a device (memory
+   * slots in use): all of them when no slot is free, 0 until the Cube has
+   * reported its budget
+   */
+  pending_radiograms: number;
   /** @format date-time */
   updated?: string;
   /**
@@ -1258,12 +1265,12 @@ export interface Setting {
 }
 
 export interface FileDifference {
-  field?: "name" | "address" | "proxy_address" | "proxy_serial" | "hidden";
-  variable?: string;
+  field: "name" | "address" | "proxy_address" | "proxy_serial" | "hidden";
+  variable: string;
   /** The file's value; a list of radio addresses for hidden */
-  file?: unknown;
+  file: unknown;
   /** The store's value, in effect; a list for hidden */
-  store?: unknown;
+  store: unknown;
 }
 
 export interface CubeDetail extends Cube {
@@ -1320,7 +1327,9 @@ export interface Room {
 export interface Confirmation {
   /**
    * pending until five minutes after the Cube's answer, then unconfirmed until
-   * the devices show it or a newer write of the same kind replaces it
+   * the devices show it or a newer write of the same kind replaces it; a room
+   * setpoint sent once more is pending again for five minutes after the
+   * re-send's answer
    */
   state: "pending" | "unconfirmed";
   /**
@@ -1437,9 +1446,9 @@ export interface State {
 }
 
 export interface Device {
-  rf_address?: string;
+  rf_address: string;
   type?: DeviceType;
-  name?: string;
+  name: string;
   room_id?: number;
   serial?: string;
   /** Paired but not assigned to a room */

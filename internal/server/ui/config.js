@@ -215,6 +215,53 @@ function byteLength(s) {
   return new TextEncoder().encode(s).length;
 }
 
+// --- a device's default name --------------------------------------------
+
+// defaultDeviceName is the name a device is offered where it is put into
+// a room (pairing.js, D200-A) or listed there (repair.js, D185), as the
+// server's default (repair_api.go, defaultDeviceName) with the type's
+// word in the page's language: "<room name> <type> <n>", n the lowest
+// number from 1 that no name of the room's (taken) has in that form,
+// whatever its case. One longer than NAME_BYTES is offered as it is: its
+// field says so (markNameBytes), and the user shortens it before it is
+// sent (D201), where the server, with nobody to ask, drops the room's
+// name.
+function defaultDeviceName(room, word, taken) {
+  const prefix = (String(room || "").trim() + " " + word).trim();
+  return prefix + " " + freeNameNumber(prefix, taken);
+}
+
+// markNameBytes marks a name's field, as markRange marks a number's
+// (components.js): a name longer than NAME_BYTES outlines it in red and
+// shows hint, the amber limit before the box; it returns whether the
+// name fits.
+function markNameBytes(input, hint) {
+  return markRange(input, hint, byteLength(input.value.trim()) <= NAME_BYTES);
+}
+
+// freeNameNumber is the lowest number from 1 that no name of taken has
+// in the form "<prefix> <n>", whatever its case.
+function freeNameNumber(prefix, taken) {
+  const p = prefix.toLowerCase() + " ";
+  const used = new Set();
+  for (const name of taken) {
+    const s = String(name || "").trim();
+    if (!s.toLowerCase().startsWith(p)) continue;
+    const rest = s.slice(p.length);
+    if (/^[0-9]+$/.test(rest) && Number(rest) > 0) used.add(Number(rest));
+  }
+  let n = 1;
+  while (used.has(n)) n++;
+  return n;
+}
+
+// roomDeviceNames are the names of the devices a Cube's list has in a
+// room, as the page holds them.
+function roomDeviceNames(serial, room) {
+  const r = cubeRooms(serial).find((x) => x.id === room); // pairing.js
+  return r ? (r.devices || []).map((d) => d.name || "") : [];
+}
+
 async function sendRoomName(room, c) {
   const name = c.edit.name.trim();
   if (!name) return setConfigResult(room, c, t("cfg.nameRequired"), false);

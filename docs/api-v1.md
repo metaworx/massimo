@@ -1048,7 +1048,7 @@ keep the default:
 | `window_open` | a window opened and is still open after `after_min` | on, 30 min |
 | `battery_low` | a device's battery flag held for 15 minutes: change the batteries (its `battery` `low`) | on |
 | `battery_weak` | a device's battery flag seen, as under the valve motor's load, and still weak after 15 minutes (its `battery` `weak`); once until a long valve move goes by without it | on |
-| `device_error` | a device reports a communication error (its state's `error`) or a link error (`link_error`), when the first of them is set | on |
+| `device_error` | a device reports a communication error (its state's `error`) or a link error (`link_error`), when each of them is set, a second while the first stays set as well | on |
 | `frost` | a device's measured temperature fell under `below_c`; again once it rose half a degree above | on, 8 °C |
 | `device_stale` | a thermostat went past the stale threshold (`stale_after`, `stale_after_wall`) | off |
 | `paired` | a device joined by pairing | off |
@@ -1058,7 +1058,9 @@ keep the default:
 `after_min` is 1 to 1440, `below_c` −10 to 20.
 A `PUT` of a document the rules cannot read (an unknown kind,
 a value out of bounds, `after_min` on a kind without a delay) is `400`.
-One kind is told once per device per half hour;
+One kind is told once per device per half hour,
+a `device_error` once per flag,
+so that the other flag's start is told while the first's half hour runs;
 a delay ends when its condition does.
 The rules keep their state in memory:
 a restart costs at most one repeated notification.
@@ -2141,8 +2143,11 @@ a thermostat in boost and one whose entry is out of date;
 a room while one of its windows is open
 (its thermostats then hold their own window-open temperature),
 while a structure change of Massimo's concerns it
-(see "Structure changes read back")
-and while a command to it waits or runs in the queue;
+(see "Structure changes read back"),
+while a command to it waits or runs in the queue
+and while a write to it is open or not confirmed, its `confirmation` set
+(see "Writes confirmed by the devices": a room setpoint not confirmed is
+sent once more there);
 a difference not yet reported then starts again.
 
 - **Thermostats that disagree:** they differ in mode, setpoint or `until`,
@@ -2171,8 +2176,11 @@ a difference not yet reported then starts again.
   3. `wall_thermostat`: else the room's wall thermostat's state,
      its week programme where it follows it;
   4. else nothing, the warning alone (`not_resent`, `no_state`).
-  It is sent at most once a day per room, the day's re-sends read back from the
-  log after a restart, and never while the queue holds the radio for the duty
+  It is sent at most once a day per room, a day shared with the re-send of a
+  room setpoint not confirmed (one lost room command, one extra write):
+  a room sent its state once more by either is not by the other that day;
+  the day's re-sends of both are read back from the log after a restart.
+  It is never sent while the queue holds the radio for the duty
   cycle or the memory slots: it waits for a later check then.
   Once they agree, an `agree` line settles the warning.
 - **A thermostat off its week programme:** in a room in auto,
@@ -2337,6 +2345,38 @@ radiogram decodes (docs/proxy.md).
 It costs no radio time: the states come with the server's poll of the Cube.
 The confirmations are kept in memory: a restart forgets them.
 
+**A room setpoint sent once more.**
+A room's setpoint of the API's (`PUT …/rooms/{id}/setpoint`)
+that a thermostat of the room does not show at the deadline is sent once more,
+the same room command (`0x40`), through the queue at low priority,
+behind its holds for the duty cycle and the memory slots,
+the room's thermostats with a communication error reset first,
+as before every room command.
+Auto with a temperature is sent as auto on the week programme
+where a switch point of a thermostat's programme has passed since,
+at the Cube's time.
+While the re-send is open, the room's `confirmation` is `pending` again,
+and the re-send is confirmed as the write was:
+shown by every thermostat by its deadline,
+a line at `info` says so and settles the write's warning;
+else a warning names each thermostat that still does not show it,
+and what it shows.
+Nothing more is sent for it.
+It is not sent where a newer setpoint to the room or to one of its devices
+has been asked for since (`superseded`);
+where a thermostat that showed it shows something else now,
+a person's change passed on in the room or its window open (`changed`);
+while a command of Massimo's to the room waits or runs in the queue (`busy`);
+for a boost, which ends by itself (`boost`);
+and where the room was sent a state once more within the day,
+by this or by the room checks (`today`, see "The room checks").
+`superseded` and `changed` are asked again when the queue's turn comes:
+dropped then, nothing is sent and the room's day stays free.
+A device's setpoint and a LAN proxy client's write are only reported,
+as the proxy's clients' writes are left to them.
+It costs one room command, about 3 % of the duty cycle and a memory slot
+(docs/cube-protocol.md), once a day per room at most.
+
 ### DELETE /api/v1/cubes/{sn}/rooms/{id}
 
 Removes an empty room by writing the metadata without it;
@@ -2381,6 +2421,11 @@ and one to the new device for each partner
 (two shutter contacts are not linked with each other), then 0x22 set group,
 then the metadata with the device listed under its name in the room,
 then a re-read of its C line.
+Without `name` it is listed under the default a repair's listing gives (D200-A):
+`<room name> <type> <n>`, such as `Bath radiator thermostat 2`
+beside `Bath radiator thermostat 1`,
+and `<type> <n>` where that would pass 32 bytes ("A listed device's name",
+under Repairs).
 A device whose C line names another room (paired long ago and never listed) is
 first unlinked from that room with 0x23 remove group and 0x21 remove link partner,
 as in a move.
@@ -2960,8 +3005,11 @@ and what they cost:
 ```
 
 `steps` are the commands in the order they would be sent:
-each with the device it addresses, which the queue resets first where its
-error flag is set (`reset`),
+each with the device it addresses,
+whether the queue resets error flags first (`reset`, the `r:` not among
+`lines`): the device's, the flagged members its room-flagged lines reach,
+the flagged devices its direct lines address, as the queue's prelude does
+for every command (D204-A),
 the room woken up before it (`z:1e,G,<room>`, not among `lines`),
 and its `lines` as they go to the Cube;
 a metadata write is a step of its own.
@@ -2971,8 +3019,9 @@ a metadata write is a step of its own.
 a radiogram with the room flag one per member of the room (T134),
 and `held_slots` those that stay taken until the members' next wakeup,
 about ten minutes: a room radiogram's but its addressee's.
-`resets` counts the `r:` lines, the queue's own included, which cost no radio
-time; `wakeups` the room wakeups; `metadata` a metadata write, no radio.
+`resets` counts the `r:` lines, those the queue sends before each step included,
+by the device list as it is now, which cost no radio time;
+`wakeups` the room wakeups; `metadata` a metadata write, no radio.
 `budget` is what the Cube last reported.
 `untested` marks a repair not yet run on hardware.
 `refused` says why a run would be refused now:
@@ -3051,9 +3100,13 @@ the device type in English (`radiator thermostat`, `radiator thermostat plus`,
 `n` the lowest number from 1 that no device the list has in that room
 takes in a name of that form, whatever its case,
 such as `Bath radiator thermostat 2` beside `Bath radiator thermostat 1`.
-A room's name too long for the whole to fit 32 bytes is cut, at a character.
+Where the whole would pass 32 bytes, nobody being there to shorten it,
+the room's name is dropped (D201):
+`<type> <n>`, `n` the lowest free in that form,
+such as `radiator thermostat 1` for a room `Wohnzimmer Süd`.
 A device the list has keeps its name, `name` or not.
-The web UI offers the same default with the type in the page's language.
+The web UI offers the same default with the type in the page's language,
+one past 32 bytes whole, which its user shortens before it is sent.
 The log's **device change** names a re-link `relink`, "unlink all and re-link"
 `unlink_relink`, a re-sent configuration `config` and a placement `move`;
 one of a room has no device and names its `rooms`.
@@ -3190,6 +3243,7 @@ of the same Cube, or of the server for the server's own:
 | `locked_out` | its end |
 | `restart`, `reboot`, `update` not started | `server_started`; for `update`, also an `update` started |
 | `error_watch` `back` or `lasting` | the same device's `error_watch` `clear` of the same `flag` |
+| `unconfirmed`, a room's setpoint or its re-send not confirmed, its re-send failed | an `unconfirmed` of the same `target` whose `outcome` is `resend_confirmed` |
 
 Any other, such as `proxy_discarded` and `proxy_delete_refused`,
 is settled only by a person's mark.
@@ -3379,9 +3433,17 @@ devices showed it (`confirmed`), and the `devices` that do not, each with its
 `rf_address`, `serial`, the `fields` it does not show, what it `shows`, and its
 `error`, `link_error` and `out_of_date`;
 or `confirmed_late` at `info`, one device's, with the `seconds` it took.
+A room setpoint's re-send (see "A room setpoint sent once more") has these:
+`resent` at `info` (the budget's `duty_pct` and `free_slots`, and `program`
+where auto with a temperature went as auto on the week programme),
+`not_resent` at `info` (`why`: `superseded`, `changed`, `busy`, `boost` or
+`today`), `resend_failed` at `warn` with its `error`,
+then `resend_confirmed` at `info` (`confirmed`, the `seconds` it took) or
+`resend_not_confirmed` at `warn`, with what `not_confirmed` has.
 A device's write has the device in `device`, and so has each device's of a
 configuration; a room's setpoint none.
-Its warning is settled only by a person's mark.
+A room setpoint's warning, its re-send's included, is settled by a later
+`resend_confirmed` of the same room; any other only by a person's mark.
 The server's sign-ins, source `server`, only on the pages and streams of a
 user with `audit`: `login` (`user`, `remote`), `login_failed` at `warn`,
 and `locked_out` at `warn` (`remote`, `for`, `after`: `logins` or `tokens`).

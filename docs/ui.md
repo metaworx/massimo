@@ -434,7 +434,7 @@ its **Send** is off while no room is ticked.
 a device just paired, or one the original software paired through the proxy
 and never put into a room.
 **Put into a room…** opens the form of System settings → Cubes' pairing under the row,
-with name, room and **Copy the room's settings**,
+with name (offered as there), room and **Copy the room's settings**,
 and **Remove from the Cube** asks in the row, then deletes it from the Cube.
 
 Every change goes to the Cube as a radio command.
@@ -495,8 +495,11 @@ or for resets whether the Cube's device list still shows the error.
   offers, which can be changed before Run…:
   the room's name, the device's type in the page's language,
   and the lowest number from 1 that no device of the room takes
-  in a name of that form ("Bath radiator thermostat 2"),
-  the room's name cut where the whole would pass 32 bytes (D185).
+  in a name of that form ("Bath radiator thermostat 2") (D185).
+  One longer than the 32 bytes the Cube keeps
+  ("Wohnzimmer Heizkörperthermostat 1" is 34) stays in its field as it is,
+  outlined in red with the limit in amber above it, as it is typed too,
+  and the listing shows no cost and no **Run…** until it is shortened (D201).
   **Show what it sends** reads the preview again with a name changed.
 - In a Cube's panel: **Reset the communication errors** of every device.
 
@@ -546,7 +549,14 @@ A write its devices do not show by its deadline is a **not confirmed** line,
 a warning that names the write, the room and each device with what it shows
 ("setpoint to Bedroom: not confirmed after 5 min: Window (mode auto, setpoint
 20.0)"); a device that shows it later has a line of its own ("setpoint:
-confirmed after 70 s"). The warning is settled by a mark alone.
+confirmed after 70 s").
+A room's setpoint is sent once more then (`docs/api-v1.md`, "A room setpoint
+sent once more"), with lines of the same kind: "setpoint to Bedroom: sent once
+more to its thermostats", or why not ("not sent once more: once a day at most,
+and it was today"), then "sent once more, confirmed by every thermostat after
+25 s", which settles the warning, or a warning "sent once more, still not
+confirmed after 5 min: Window (mode auto, setpoint 20.0)".
+Any other write's warning is settled by a mark alone.
 The LAN proxy's clients have lines of their own: a client connected or gone,
 turned away, its deletes, a pairing for it and the proxy's warnings;
 a line a client passes on to the Cube is a command like the web UI's.
@@ -600,7 +610,8 @@ a lost connection until the next one,
 a failed command until the same one is acknowledged,
 a failed backup until the next, a hold until it ends,
 a room whose thermostats disagree until they agree again,
-a thermostat off its week programme until it follows it again;
+a thermostat off its week programme until it follows it again,
+a room's setpoint not confirmed until every thermostat shows its re-send;
 a device's communication error, link error and low battery
 while the device has them, at the line that set them;
 a communication error's line names the radiogram that failed,
@@ -839,7 +850,9 @@ also while no page is open.
   and a value outside is not saved:
   its box turns red, with the range in amber before it,
   until it holds one inside, whatever a save meanwhile says.
-  One kind notifies once per device per half hour.
+  One kind notifies once per device per half hour,
+  a device's error once per flag:
+  a link error set while the communication error lasts notifies too.
 - **Your devices**:
   every browser and app notified for you,
   with its name, when it was added and last notified,
@@ -895,6 +908,14 @@ serial, radio budget and pill, is its first row, and a click on it folds
 nothing.
 The page follows the Cube choice and every poll, as the card does,
 and what it saves shows in System settings.
+The panel is built once and follows every poll in place:
+its problem list stays open and follows the data, a focused button keeps the focus,
+and what is typed stays, each field with the "changed meanwhile" of System settings;
+Reboot's question names the radiograms pending as the Cube says now,
+and a line of the settings file that comes to differ while the panel is shown
+gets its notice with **Take the file's value**.
+Pair a device and Repair… keep their own drawing inside the panel
+until their own move to parts.
 A panel is drawn in one place at a time:
 while Cube settings is shown, System settings' list does not hold it.
 Under the panel the Cube's **Backup and restore** (with `backup`),
@@ -989,13 +1010,14 @@ the browser keeps which cards are folded.
   and its devices with theirs, as the header's), top-right whatever wraps,
   a green check where nothing is wrong, whose click opens its list
   and not the panel, and under them where its settings come from,
-  all of it drawn again at every poll, and opens with a click:
+  all of it following every poll in place, whether the panel is open or not,
+  so that an open problem list stays open, and opens with a click:
   its own badges as its top line (its link where it is not connected,
   a proxy that does not listen, a settings file that differs,
   a Cube found elsewhere than its fixed address, the source),
   a table of its facts for everyone who sees the panel
   (serial, address, port, firmware, radio address, the Cube's clock,
-  duty cycle, free slots, pending and queued, refreshed while it is open;
+  duty cycle, free slots, pending and queued, following every poll;
   the serial, the address and the radio address copy with a click on them
   or their copy icon),
   and above the facts a notice with since when where the server knows why it
@@ -1037,7 +1059,7 @@ the browser keeps which cards are folded.
   each with its name, serial number and radio address and **Show again**;
   **Hide** takes a radio address,
   with the Cube's devices to choose from.
-  While the panel is open, a field not touched follows a value stored meanwhile
+  A field not touched follows a value stored meanwhile
   (by another browser or the settings file);
   a field being edited keeps what is typed and says under it that the stored value
   changed, with the new value and **Take theirs**.
@@ -1102,6 +1124,13 @@ the browser keeps which cards are folded.
   and each device that joins is listed with its type and serial
   (in expert mode also its radio address) and a form:
   **Name**, **Room** (one of the Cube's rooms),
+  the name offered as a repair's listing offers one (Rooms, Repairs; D200-A),
+  the room's name, the device's type in the page's language and the lowest
+  free number ("Bath radiator thermostat 2"), following the room chosen until
+  a name is typed;
+  a name longer than the 32 bytes the Cube keeps, the one offered included,
+  stays as it is, outlined in red with the limit in amber above it,
+  and **Put into a room** goes back to the field until it is shortened (D201);
   and for a thermostat **Copy the room's settings**, on by default,
   shown where the role has `configure`, which the copy needs.
   **Put into a room** links the device with the room's other devices and lists it there;
@@ -1379,7 +1408,7 @@ before, in and after the cards that flow in two columns,
 and Maintenance's two cards one, `maint`.
 A partial is a file per feature,
 and its first line names the script that uses it.
-What a script builds again and again, a Cube's panel, a log line, a scheme row,
+What a script builds again and again, a log line, a scheme row,
 is a `<template>` there, which the script clones with `fromTemplate`,
 fills with `textContent` and wires with `addEventListener`.
 The shared pieces (buttons, the `.field` rows, forms, confirmations in the page)
@@ -1390,7 +1419,7 @@ it holds the editor's behaviour, works on a model the page keeps,
 builds its controls with a kit the page gives it (`components.js`, `t()`),
 and tells the page of every edit with a `change` event;
 the programme tab puts it in a form with Cancel, Send and the two resets.
-A panel that opens, a Cube's, a user's or a role's, is a `detailsPanel`:
+A plain panel that opens, a user's or a role's, is a `detailsPanel`:
 its head the name, the serial, login or key, and the badges,
 its body the form cloned from the feature's template.
 Backup and restore is a box per Cube (`backupBox` in `backup.js`),
@@ -1476,8 +1505,9 @@ a script for each region of the page, in the order the page loads them:
   `pages.js`, the pages, the main menu, the address and the scroll;
 - `update.js`, Software update; `maintenance.js`, the Maintenance card;
   `system-info.js`, System info;
-- `cubes.js`, System settings → Cubes, the found Cubes and the Cube page;
-  `cube-panel.js`, a Cube's panel; `repair.js`, the repairs of a room,
+- `cubes.js`, the plain names of System settings → Cubes and Cube settings,
+  which call their part (`ui/src/cubes/`), and the Cubes card's badges;
+  `repair.js`, the repairs of a room,
   a device and a Cube; `pairing.js`, the pairing;
 - `login.js`, `users.js`, `providers.js`, `integrations.js`,
   `backup.js` and `roles.js`, the sign-in and the cards of System settings;
@@ -1502,8 +1532,100 @@ A region that has moved is a part:
 Preact with its signals, written in TSX under `ui/src/<region>/`,
 built once and updated in place.
 `ui/src/index.ts` is the entry point; it registers `window.MassimoParts`,
-by region the functions the plain code calls,
-and no region is a part yet.
+by region the functions the plain code calls;
+the first region that is a part is the Cubes (`ui/src/cubes/`, below).
+What the parts share is under `ui/src/shared/`; read it before writing a part.
+A region uses these and writes no copy of their markup.
+A shared part knows no region:
+its data come as properties or signals, its texts as text or as its own keys.
+A part calls the plain scripts' globals,
+each declared to TypeScript in `ui/src/plain/<script>.d.ts`,
+with what the parts call alone.
+
+| Part or helper | File | For | Properties or arguments |
+|---|---|---|---|
+| `counter` | `counter.ts` | a region's load counter: "draw the region again" while its data stay plain objects | gives `bump()`, after a load, and `use()`, in every part of the region, which reads the counter, the language and the icons chosen |
+| `register`, `mounter` | `region.ts` | a region's functions as `MassimoParts.<name>`; its root drawn once into the page's container | `name`, `fns`; `id`, `root` |
+| `live`, `liveMap` | `live.ts` | objects whose properties are signals, for what a region keeps per place; the plain code reads and writes them as before | `init`; `make`, then `of(key)`, `clear()` |
+| `lang`, `useLang`, `tParts` | `lang.ts` | the page's language as a signal, raised by `applyLanguage` (`MassimoParts.language`); a text with parts in it (`tNodes`) | `key`, `texts`, `parts` |
+| `useIcons` | `look.ts` | the icons chosen for the window and the radio as a signal, raised by `redrawSigns` (`MassimoParts.icons`); `Sign` reads it | – |
+| `Island` | `island.tsx` | a plain piece inside a part: an element the part draws empty and plain code fills, again where a key or the language changed | `tag` (div, p, span), `cls`, `keys`, `fill(el)` |
+| `Fold`, `FoldHead` | `fold.tsx` | a details that opens and closes (`detailsPanel`), the toggle of its making not passed on; a panel's head | `cls`, `open`, `onToggle(open)`, `summary`, `summaryProps`, `data`, the body as children; `before`, `name`, `mono`, `badges` |
+| `Dropdown` | `menu.tsx` | a menu that drops down (`dropdown`) | `cls`, `summaryCls`, `label`, `summary`, `listCls`, `onClick`, the items as children |
+| `actionRunner` | `action.ts` | a request, a reload, and its outcome in the region's message line (`showResult`) | `where()`, `reload()`; gives `run(fn, ok, fail)`, `say(text, ok)` |
+| `Icon` | `icon.tsx` | a symbol of the page (`iconEl`) | `symbol`, `cls` |
+| `Sign` | `icon.tsx` | a kind of `SIGNS` in a state, its mark blinking (`signEl`) | `kind`, `state` ("", ok, warn, bad, open), `cls`, `blink` (the mark's key), `label` (named for a screen reader, else hidden) |
+| `Mark` | `icon.tsx` | a mark alone (`markEl`) | `state` (warn, bad), `blink` |
+| `CountIcon` | `icon.tsx` | an icon with a number in its corner (`foundCountEl`) | `symbol`, `n`, `cls` |
+| `Badge` | `badge.tsx` | a `.flag` led by its mark for a warning or a failure (`badgeEl`) | `kind`, `text`, `blink`, `title`, children after the text |
+| `Notice` | `badge.tsx` | a lasting warning with since when (`noticeEl`) | `text`, `since`, `next`, `cls`, children after |
+| `Age` | `badge.tsx` | how old a value is, filled by `fillAge` (`ageEl`) | `at`, `stale`, `plain` |
+| `Problems` | `problems.tsx` | the problem list, entries under entries (`problemsEl`) | `entries`, `label`, `ok` (the green check's label where nothing is wrong), `onClick` |
+| `KindIcons` | `problems.tsx` | the kinds' icons of entries without the list (`kindIcons`) | `entries`, `skip` |
+| `OkPill` | `problems.tsx` | the green check in a list's place (`okPill`) | `label` |
+| `Field` | `field.tsx` | a label and its control, `.field` or `.field.wide` (`fieldRow`) | `label`, `id`, `wide`, `unit`, `hint`, `draft`, `show`, the control as children |
+| `TextField` | `field.tsx` | a row with a text input that shows a stored text, from its draft | `label`, `id`, `name`, `draft`, `show`, `wide` (on by default), `unit`, `hint`, `placeholder`, `type`, `maxLength` |
+| `Switch` | `field.tsx` | a checkbox drawn as a switch (`switchEl`) | `name`, `label`, `checked` and `onChange`, or `draft` and `show`; `row`, `id`, `disabled`, `title`, children after the label |
+| `useDraft`, `Meanwhile` | `field.tsx` | a field that shows stored data keeps a draft: untouched it follows, changed it says "changed meanwhile" with Take theirs (D59-A) | `stored`, `norm`; gives `value`, `stored`, `set`, `changed`, `meanwhile`, `take`; `draft`, `show` |
+| `FormFooter` | `field.tsx` | a form's row of actions (`formFooter`, `sendWhenChanged`) | `submit`, `busy`, `off`, `cancel`, `cancelLabel`, `extra` |
+| `Question` | `question.tsx` | a question in the page, No and Yes, Escape for No (`confirmBox`) | `text`, `yes`, `no`, `onYes` (its request's promise), `onNo` |
+| `useAsk` | `question.tsx` | a row that asks in its own place, the focus back on its button (`confirmInPlace`) | gives `asking`, `ask`, `done`, `ref` |
+| `useBusy`, `busyProps` | `question.tsx` | a button's request under way: busy, off, `aria-busy` (`whileBusy`, `setBusy`) | `run(fn)`; `busyProps(cls, busy, off)` |
+| `Copy`, `CopyIcon` | `copy.tsx` | a text that copies itself, a copy icon (`copyEl`, `copyIcon`) | `text`, `value` (what it copies, where it is not the text), `label`, `icon`, `cls`; `get`, `label` |
+| `Link` | `link.tsx` | a link in a tab of its own, the text alone for a url that is not http(s) (`linkEl`) | `url`, `text`, `cls` |
+| `DeviceIds` | `device.tsx` | a device's serial and radio address (`deviceIds`) | `serial`, `rf`, `always` |
+
+What the table cannot say:
+
+- An entry of `Problems` is `{ icon, sign, node, title, sub, items, subs, info, summary }`:
+  its icon, or `sign` (`{ kind, state }`) where its own state shows,
+  or `node`, a part of its own with the class `problem-icon`;
+  its name, a grey detail (a text, monospaced, or parts that are not),
+  its items, the entries under it, `info` to list it and those under it
+  without an item, and `summary`, shown in the list's summary after the icons.
+  An item is `{ kind, icon, sign, tone, mark, text, title, at, stale }`, one badge:
+  `kind` groups the summary's icons (`sign` draws it as a sign), an item
+  without one adds no icon; `tone` is the badge's kind, `mark` how its icon is
+  coloured where that differs; `title` its tooltip, `at` and `stale` its age.
+- `Field` draws the row and the label for `id`; its control comes as children
+  and carries that id and, without a unit, the class `field-control`.
+  `TextField` makes the input itself.
+- `Switch` draws its own `.field` row; with `row={false}` it is the switch alone,
+  inside a row of the caller's.
+- `useDraft` and `useBusy` are the component's state and go with it;
+  what must outlive the component (a request a tile keeps across its being
+  drawn again) is live state (`live`).
+
+These builders of `components.js` and `app.js` have no part yet, since no region
+that has moved uses them: the help button (`helpParts`) and a field row without
+a label, `numberInput`, `stepper`, `selectInput`, `markRange`, `kvList`,
+`countList`, `iconButton`, `pickerMenu` and `sectionBadges`.
+The block that first needs one writes it under `ui/src/shared/`,
+knowing no region, and adds its row to the table above; no region writes its own.
+A section card's badges (`sectionBadges`) stay plain until the page's chrome moves
+(Block 14): the Cubes' card badges are drawn by `cubes.js`.
+
+A region that moves calls these, in this order:
+
+- `counter()` for its load counter, bumped by its plain names,
+  which other scripts call and which call the part,
+  and after each of its requests; `use()` in each of its parts;
+- `register` for `MassimoParts.<region>`, whose functions its plain names call,
+  and `mounter` for each root, drawn into the container the page has for it;
+- `liveMap` for what it keeps per item and place (a panel open, by its key);
+- `Fold` for a panel or a fold, `Island` for a plain piece it keeps inside;
+- `actionRunner` for its requests and their message line, `useBusy` for the button;
+- `useDraft` with `TextField`, `Switch` or `Field` for a field that shows stored data,
+  `FormFooter` for its Save, `useAsk` and `Question` for an action that asks first.
+
+The Cubes (`ui/src/cubes/`) are the first such region:
+`index.tsx` mounts System settings' list in `#cubes-list` and Cube settings' panel
+in `#cube-page-body`, a panel in one place at a time,
+and registers `render`, `polled` and `openFound`,
+which `cubes.js` calls as `renderCubes`, `cubesPolled` and `showFoundFold`;
+`store.ts` holds its counter, each panel's `open` by serial, the folds
+and the devices loaded for the hide choice;
+`send.ts` holds its requests, run by its action runner.
 `make ui` bundles it with esbuild, through esbuild's Go API (`tools/uibundle`,
 a module of its own, its `README.md`),
 into `ui/parts.js`: one classic script, minified, for ES2022,

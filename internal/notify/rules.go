@@ -9,8 +9,8 @@ import (
 )
 
 // coalesce is how long a kind stays quiet for one device after it was
-// sent: a window that opens and closes all morning is one notification
-// per half hour.
+// sent, device_error per flag (sendFlags): a window that opens and
+// closes all morning is one notification per half hour.
 const coalesce = 30 * time.Minute
 
 // frostHysteresis is how far above the threshold the temperature must
@@ -151,16 +151,25 @@ func (e *engine) state(ev Event, st State) {
 		e.delay("window|"+key, p.after(KindWindowOpen), n)
 	}
 
-	if (st.Error || st.LinkError) && !(had && (prev.Error || prev.LinkError)) && p.on(KindDeviceError) {
-		// The flags it names (D180-B): the communication error, with the
-		// radiogram that failed where the device gives it, the link
-		// error, or both.
+	// Each flag's start is told (D202-A), the communication error's and
+	// the link error's, a second flag set while the first stays set as
+	// well; the notification names the flags set then (D180-B): the
+	// communication error, with the radiogram that failed where the
+	// device gives it, the link error, or both.
+	var started []string
+	if st.Error && !(had && prev.Error) {
+		started = append(started, "error")
+	}
+	if st.LinkError && !(had && prev.LinkError) {
+		started = append(started, "link_error")
+	}
+	if len(started) > 0 && p.on(KindDeviceError) {
 		n := device(ev, KindDeviceError)
 		n.Values = map[string]any{"error": st.Error, "link_error": st.LinkError}
 		if st.Error && st.FailedRadiogram != nil {
 			n.Values["failed_radiogram"] = *st.FailedRadiogram
 		}
-		e.send(n)
+		e.sendFlags(n, started)
 	}
 
 	if t := st.ActualTemp; t != nil && p[KindFrost].BelowC != nil {
@@ -238,12 +247,38 @@ func (e *engine) stop() {
 // send hands n to the deliverer, unless the same kind was sent for the
 // same device within coalesce; it reports whether it did.
 func (e *engine) send(n Notification) bool {
+	return e.sendDue(n, n.Kind+"|"+n.Cube+"|"+n.Device)
+}
+
+// sendFlags hands a device_error to the deliverer for the flags that
+// started, unless each of them was told for the same device within
+// coalesce: the half hour runs per flag, so that one flag flickering is
+// one notification per half hour, and the other flag's start is told
+// while it runs (D202-A). It reports whether it did.
+func (e *engine) sendFlags(n Notification, started []string) bool {
+	keys := make([]string, len(started))
+	for i, f := range started {
+		keys[i] = n.Kind + "|" + n.Cube + "|" + n.Device + "|" + f
+	}
+	return e.sendDue(n, keys...)
+}
+
+// sendDue hands n to the deliverer where one of keys was not sent within
+// coalesce, and marks those sent now; it reports whether it did.
+func (e *engine) sendDue(n Notification, keys ...string) bool {
 	now := e.s.o.Clock.Now()
-	key := n.Kind + "|" + n.Cube + "|" + n.Device
-	if last, ok := e.sent[key]; ok && now.Sub(last) < coalesce {
+	var due []string
+	for _, key := range keys {
+		if last, ok := e.sent[key]; !ok || now.Sub(last) >= coalesce {
+			due = append(due, key)
+		}
+	}
+	if len(due) == 0 {
 		return false
 	}
-	e.sent[key] = now
+	for _, key := range due {
+		e.sent[key] = now
+	}
 	n.Time, n.URL = now, "/"
 	e.s.o.Deliver(e.user.ID, n)
 	return true

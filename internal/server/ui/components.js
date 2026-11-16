@@ -154,7 +154,7 @@ function badgeState(kind) {
 
 // noticeEl is a lasting warning (.notice) of a text, for a state the
 // server keeps trying to leave, such as a Cube proxy that does not listen
-// (cube-panel.js, system-info.js): since, an API time, adds from when it holds;
+// (system-info.js; ui/src/shared/badge.tsx Notice for a part): since, an API time, adds from when it holds;
 // next, an API time, when the server tries again, as its tooltip. Times,
 // not ages: a try comes every few seconds, and refreshAges runs once a
 // minute.

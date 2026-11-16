@@ -782,7 +782,7 @@ body.scrolled .top-btn { display: inline-flex; }
   .fold-i { transition: none; }
 }
 
-/* System settings → Cubes (cube-panel.js): a Cube's panel in three groups, its
+/* System settings → Cubes (ui/src/cubes/): a Cube's panel in three groups, its
    facts (Info), its settings (the form, Hidden devices last, then Save)
    and its actions in one row last; Info and the settings side by side
    where there is room, one after the other on a phone. The pairing lends
@@ -793,7 +793,7 @@ body.scrolled .top-btn { display: inline-flex; }
 .cube-cols > .cube-info { grid-area: info; margin-bottom: 10px; align-self: start; }
 /* a Cube's radio budget in its head, between its serial and its badges */
 .cube-head-stats { font-variant-numeric: tabular-nums; }
-/* a Cube's panel's head (cube-panel.js cubePanel, fillCubeHead): its sign,
+/* a Cube's panel's head (ui/src/cubes/Panel.tsx Head): its sign,
    name, serial and radio budget at the left, wrapping; its problems in
    one pill top-right, whatever wraps, a green check where nothing is
    wrong; the neutral source badge a line of its own under them; its own
@@ -808,9 +808,10 @@ body.scrolled .top-btn { display: inline-flex; }
 .panel.cube-panel > summary > .panel-badges { grid-column: 2 / -1; grid-row: 2; justify-content: flex-start; margin-left: 0; }
 .cube-top-line { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 8px; }
 /* a field's value changed on the server while a draft of it is open
-   (cube-panel.js syncForm): the notice and Take theirs under the field */
-.cube-conflict { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: -4px 0 8px; }
-.cube-conflict .notice { margin: 0; flex: 1 1 220px; }
+   (ui/src/shared/field.tsx Meanwhile, for every part's field): the notice
+   and Take theirs under the field */
+.field-meanwhile { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: -4px 0 8px; }
+.field-meanwhile .notice { margin: 0; flex: 1 1 220px; }
 .cube-top-line:empty { display: none; }
 .cube-panel:not([open]) > .cube-top-line { display: none; }
 .cube-panel[open] > summary > .panel-badges { display: none; } /* the source is on the top line then */
@@ -873,10 +874,10 @@ body.scrolled .top-btn { display: inline-flex; }
 /* A Cube proxy that does not listen (noticeEl): under the proxy address,
    and in System Info's line of the listener. */
 .cube-proxy-state .notice { margin: -6px 0 12px; overflow-wrap: anywhere; }
-/* A Cube's Reboot, alone at the bottom of its panel (cube-panel.js rebootRow). */
+/* A Cube's Reboot, alone at the bottom of its panel (ui/src/cubes/Actions.tsx Reboot). */
 .cube-reboot { margin-top: 12px; }
-/* Why a Cube is not connected, where the server knows (cube-panel.js
-   fillLinkState): above its facts. */
+/* Why a Cube is not connected, where the server knows (ui/src/cubes/Panel.tsx
+   LinkState): above its facts. */
 .cube-link-state .notice { margin: 4px 0 12px; overflow-wrap: anywhere; }
 .cube-address-state .notice { margin: 4px 0 8px; overflow-wrap: anywhere; }
 .cube-elsewhere-fix { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
@@ -1565,6 +1566,9 @@ massimo-week-program { display: contents; }
    amber (.warn-text) before it, twice as far from the box as the unit */
 .field input[type="number"][aria-invalid="true"] { border-color: var(--bad); outline-color: var(--bad); }
 .field .inline > .warn-text { margin-right: 6px; }
+/* a name longer than the Cube keeps (markNameBytes): the box red, the
+   limit in amber after the label, before the box on its own line */
+.field input.name-bytes[aria-invalid="true"] { border-color: var(--bad); outline-color: var(--bad); }
 .field.wide > .field-control { flex: 1 1 100%; margin-left: 0; min-width: 0; width: 100%; }
 .field-hint { flex-basis: 100%; margin: 0; }
 /* the window's and the radio's drawing as chosen, beside its choice
