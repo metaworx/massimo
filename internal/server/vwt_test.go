@@ -278,17 +278,23 @@ func TestVirtualViewLeavesOutTheRealWallsEvents(t *testing.T) {
 		return evs
 	}
 	all, virtual := stream("all", 10), stream("virtual", 9)
+	// The test's own mismatches carry a finding of their own: a pump
+	// slow to come to the greeting (armv6 under QEMU) publishes the
+	// greeting's mismatches after the streams opened.
 	mismatch := func(device string) event {
-		return event{Kind: "mismatch", Source: "cube", Level: "warn", Device: device, Time: time.Now(), Summary: map[string]any{"finding": "programme"}}
+		return event{Kind: "mismatch", Source: "cube", Level: "warn", Device: device, Time: time.Now(), Summary: map[string]any{"finding": "test"}}
 	}
 	rt.send(mismatch("0a0201")) // the real wall thermostat
 	rt.send(mismatch("0a0204")) // a radiator thermostat, in every view
-	upTo := func(evs <-chan sseEvent, device string) []string {
+	// upTo reads a stream up to the test's mismatch of device: the
+	// devices of the test's mismatches, and whether any event named the
+	// real wall thermostat.
+	upTo := func(evs <-chan sseEvent, device string) (got []string, wall bool) {
 		t.Helper()
-		var got []string
 		for {
 			ev := next(t, evs)
-			if ev.kind != "mismatch" {
+			wall = wall || strings.Contains(ev.data, `"device":"0a0201"`)
+			if ev.kind != "mismatch" || !strings.Contains(ev.data, `"finding":"test"`) {
 				continue
 			}
 			for _, d := range []string{"0a0201", "0a0204"} {
@@ -297,14 +303,14 @@ func TestVirtualViewLeavesOutTheRealWallsEvents(t *testing.T) {
 				}
 			}
 			if strings.Contains(ev.data, `"device":"`+device+`"`) {
-				return got
+				return got, wall
 			}
 		}
 	}
-	if got := upTo(virtual, "0a0204"); !slices.Equal(got, []string{"0a0204"}) {
-		t.Fatalf("the virtual view's mismatches: %v", got)
+	if got, wall := upTo(virtual, "0a0204"); !slices.Equal(got, []string{"0a0204"}) || wall {
+		t.Fatalf("the virtual view's mismatches: %v, the real wall thermostat's event %v", got, wall)
 	}
-	if got := upTo(all, "0a0204"); !slices.Equal(got, []string{"0a0201", "0a0204"}) {
+	if got, _ := upTo(all, "0a0204"); !slices.Equal(got, []string{"0a0201", "0a0204"}) {
 		t.Fatalf("the view all's mismatches: %v", got)
 	}
 }
