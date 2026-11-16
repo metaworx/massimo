@@ -1310,6 +1310,33 @@ export interface Room {
    * against its room list"); absent where none
    */
   mismatches?: Mismatch[];
+  confirmation?: Confirmation;
+}
+
+/**
+ * A write not confirmed yet: the device, or members of the room, do not show
+ * what it set. Present while one is open
+ */
+export interface Confirmation {
+  /**
+   * pending until five minutes after the Cube's answer, then unconfirmed until
+   * the devices show it or a newer write of the same kind replaces it
+   */
+  state: "pending" | "unconfirmed";
+  /**
+   * When the Cube took the oldest write still open
+   * @format date-time
+   */
+  since: string;
+  /**
+   * The values not shown yet: mode, setpoint, until, locked and display_actual
+   * of the state; the configuration's by their names (comfort_temp …
+   * valve_offset_pct); program.<day> for a day of the week programme,
+   * program.<day>.2 for a long day's second radiogram
+   */
+  fields: string[];
+  /** A room's: the radio addresses of its members that do not show them */
+  devices?: string[];
 }
 
 /**
@@ -1485,6 +1512,7 @@ export interface Device {
     actual_temp?: string[];
     mode?: string[];
   };
+  confirmation?: Confirmation;
   /**
    * The findings of the device's C line against the room list, and of its
    * room's members, that name it (docs/api-v1.md, "The Cube's lines against its
@@ -1651,7 +1679,11 @@ export interface Integration {
   user?: string;
   /** A request's short code */
   request_code?: string;
-  /** @format date-time */
+  /**
+   * Until when a request waits, or an approved integration may collect its key;
+   * absent once collected
+   * @format date-time
+   */
   request_expires?: string;
   /** The address the request came from */
   request_remote?: string;
