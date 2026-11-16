@@ -22,6 +22,7 @@ import { useLang } from "./lang";
 export function Island({ tag, cls, keys, fill }: { tag?: "div" | "p" | "span"; cls: string; keys: unknown[]; fill: (el: HTMLElement) => void }) {
   const ref = useRef<HTMLElement>(null);
   const lang = useLang();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keys are the island's dependencies by design, and the language, which fill reads; fill is a new function at every draw, and listed it would fill the island again at every poll and lose what the user holds in it.
   useLayoutEffect(() => {
     if (ref.current) fill(ref.current);
   }, [...keys, lang]);

@@ -15,9 +15,9 @@
 
 import type { TargetedMouseEvent } from "preact";
 import type { Cube, FoundCube } from "../api";
+import { CubeSign, cubeEntry, hostPort, problemsLabelOf } from "../model/cube";
 import { Badge, Notice } from "../shared/badge";
 import { Fold } from "../shared/fold";
-import { Sign } from "../shared/icon";
 import { Island } from "../shared/island";
 import { Problems } from "../shared/problems";
 import { useBusy, busyProps } from "../shared/question";
@@ -26,7 +26,6 @@ import { Facts } from "./Facts";
 import { Form } from "./Form";
 import { saveCube } from "./send";
 import { cubeUI, load, panelLoads } from "./store";
-import { hostPort } from "./util";
 
 /** proxyFailing counts a Cube's proxy listeners that do not listen. */
 function proxyFailing(c: Cube): number {
@@ -137,7 +136,7 @@ function Head({ c }: { c: Cube }) {
   return (
     <>
       <span class="cube-head-who">
-        <Sign kind="net" state={linkSign(c)} cls="conn-sign" blink={"cube:" + c.serial} label={linkWord(c)} />
+        <CubeSign c={c} />
         {c.name && <span class="panel-name">{c.name}</span>}
         <span class="mono">{host ? c.serial + " · " + host : c.serial}</span>
         <span class="cube-head-stats muted small">
@@ -168,7 +167,7 @@ function keepOpen(ev: TargetedMouseEvent<HTMLElement>) {
  * order, and a click on its head folds nothing.
  */
 export function Panel({ c, page }: { c: Cube; page: boolean }) {
-  load.use();
+  load.useLoad();
   const ui = cubeUI.of(c.serial);
   const toggle = (open: boolean) => {
     if (page) return;

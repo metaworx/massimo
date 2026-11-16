@@ -14,6 +14,7 @@
 
 import { useEffect } from "preact/hooks";
 import type { Cube } from "../api";
+import { chosenCube } from "../model/cube";
 import { mounter, register } from "../shared/region";
 import { msg } from "./send";
 import { Found } from "./Found";
@@ -22,7 +23,7 @@ import { cubeUI, folds, load, loadDevices, panelLoads, place } from "./store";
 
 /** List is System settings → Cubes: a panel per served Cube, then the fold of those found; empty while Cube settings holds the panel. */
 function List() {
-  load.use();
+  load.useLoad();
   if (place.value !== "list") return null;
   return (
     <>
@@ -48,9 +49,9 @@ function PagePanel({ c }: { c: Cube }) {
 
 /** Page is Cube settings: the panel of the Cube chosen in the header, open, or that no Cube is configured. */
 function Page() {
-  load.use();
+  load.useLoad();
   if (place.value !== "page") return null;
-  const c = state.cubes.find((x) => x.serial === state.serial);
+  const c = chosenCube();
   if (!c) return <p class="muted small">{t("cubes.none")}</p>;
   return <PagePanel key={c.serial} c={c} />;
 }

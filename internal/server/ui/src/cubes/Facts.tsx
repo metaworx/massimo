@@ -10,8 +10,8 @@
  */
 
 import type { Cube } from "../api";
+import { hostPort } from "../model/cube";
 import { Copy } from "../shared/copy";
-import { hostPort } from "./util";
 
 /** Facts is the table of a Cube's facts, "–" for one not known. */
 export function Facts({ c }: { c: Cube }) {

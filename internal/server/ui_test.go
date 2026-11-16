@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -584,7 +585,45 @@ func TestUIScriptGlobals(t *testing.T) {
 // can use it. They are read from the disk: the bundle is made from them,
 // and they are not embedded.
 func TestSharedPartsKnowNoRegion(t *testing.T) {
-	const dir = "ui/src/shared"
+	partsImportOnly(t, "ui/src/shared")
+}
+
+// What the parts read of the API's data beside its fields (ui/src/model/)
+// knows no region either: it imports from itself, from the shared parts,
+// from Preact and from the API's types alone, so that two regions that
+// both need it never import from each other.
+func TestModelKnowsNoRegion(t *testing.T) {
+	partsImportOnly(t, "ui/src/model", "shared")
+}
+
+// No region of the parts imports from another (docs/ui.md, "How the
+// page is built"): every directory of ui/src/ but shared, model and plain
+// is a region, and imports from itself, from the shared parts, from the
+// model, from Preact and from the API's types alone.
+func TestRegionsKnowNoOtherRegion(t *testing.T) {
+	dirs, err := os.ReadDir("ui/src")
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, d := range dirs {
+		if !d.IsDir() || d.Name() == "shared" || d.Name() == "model" || d.Name() == "plain" {
+			continue
+		}
+		n++
+		partsImportOnly(t, "ui/src/"+d.Name(), "shared", "model")
+	}
+	if n == 0 {
+		t.Fatal("ui/src holds no region")
+	}
+}
+
+// partsImportOnly holds the TypeScript files under dir, a directory of
+// ui/src/, to their imports: from dir itself, from the directories of
+// ui/src/ named in also, from Preact and its signals, and from the API's
+// types.
+func partsImportOnly(t *testing.T, dir string, also ...string) {
+	t.Helper()
 	spec := regexp.MustCompile(`(?:\bfrom\s*|\bimport\s*\(?\s*)["']([^"']+)["']`)
 	files := 0
 	err := fs.WalkDir(os.DirFS(dir), ".", func(name string, d fs.DirEntry, err error) error {
@@ -601,12 +640,16 @@ func TestSharedPartsKnowNoRegion(t *testing.T) {
 				from := m[1]
 				allowed := from == "preact" || strings.HasPrefix(from, "preact/") || from == "@preact/signals"
 				if strings.HasPrefix(from, ".") {
-					// A relative import stays inside the shared directory, but for the API's types.
+					// A relative import stays inside the directory, but for
+					// the API's types and the directories also names.
 					target := path.Join(path.Dir(name), from)
 					allowed = target == "../api" || !strings.HasPrefix(target, "..")
+					for _, a := range also {
+						allowed = allowed || strings.HasPrefix(target, "../"+a+"/")
+					}
 				}
 				if !allowed {
-					t.Errorf("%s/%s:%d imports %q: a shared part imports from %s, from Preact and from ../api alone", dir, name, n+1, from, dir)
+					t.Errorf("%s/%s:%d imports %q: a file of %s imports from it, %sfrom Preact and from ../api alone", dir, name, n+1, from, dir, alsoText(also))
 				}
 			}
 		}
@@ -620,10 +663,235 @@ func TestSharedPartsKnowNoRegion(t *testing.T) {
 	}
 }
 
+// alsoText names the directories partsImportOnly allows beside its own.
+func alsoText(also []string) string {
+	s := ""
+	for _, a := range also {
+		s += "from ui/src/" + a + ", "
+	}
+	return s
+}
+
+// Every file of the web UI opens with its licence lines (the contract,
+// "Go code"; docs/ui.md, "How the page is built"): a plain script or
+// style sheet with the SPDX line and the copyright line, in either
+// comment form; a file of the parts, under ui/src/, with both as line
+// comments and then the @file header of GUIDELINES/shared/lang/ts/
+// LINTING.md, which names the file's own path from the repository root
+// and says in a sentence what the file is for.
+func TestUIFileHeaders(t *testing.T) {
+	spdx := regexp.MustCompile(`^(?://|/\*) SPDX-License-Identifier: AGPL-3\.0-or-later$`)
+	copyright := regexp.MustCompile(`^(?://|\s*) ?Copyright \(C\) \d{4}(?:-\d{4})? The Massimo Authors(?: \*/)?$`)
+	plain := 0
+	for _, glob := range []string{"ui/*.js", "ui/*.css"} {
+		names, err := filepath.Glob(glob)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, name := range names {
+			if name == "ui/parts.js" {
+				continue // the bundle make ui makes, not a file a person writes
+			}
+			plain++
+			lines := fileLines(t, name)
+			if len(lines) < 2 || !spdx.MatchString(lines[0]) || !copyright.MatchString(lines[1]) {
+				t.Errorf("%s: the first two lines are not the SPDX line and the copyright line", name)
+			}
+		}
+	}
+	if plain == 0 {
+		t.Fatal("ui holds no script and no style sheet")
+	}
+	parts := 0
+	err := fs.WalkDir(os.DirFS("ui/src"), ".", func(name string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !(strings.HasSuffix(name, ".ts") || strings.HasSuffix(name, ".tsx")) {
+			return err
+		}
+		parts++
+		file := path.Join("ui/src", name)
+		lines := fileLines(t, file)
+		if msg := partHeader(lines, "internal/server/"+file); msg != "" {
+			t.Errorf("%s: %s", file, msg)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parts == 0 {
+		t.Fatal("ui/src holds no part")
+	}
+}
+
+// partHeader says what is wrong with the opening of a file of the parts
+// whose path from the repository root is want, or "" when nothing is.
+func partHeader(lines []string, want string) string {
+	if len(lines) < 2 || lines[0] != "// SPDX-License-Identifier: AGPL-3.0-or-later" {
+		return "line 1 is not the SPDX line, // SPDX-License-Identifier: AGPL-3.0-or-later"
+	}
+	if !regexp.MustCompile(`^// Copyright \(C\) \d{4}(?:-\d{4})? The Massimo Authors$`).MatchString(lines[1]) {
+		return "line 2 is not the copyright line, // Copyright (C) <year> The Massimo Authors"
+	}
+	i := 2
+	for i < len(lines) && strings.TrimSpace(lines[i]) == "" {
+		i++
+	}
+	if i+1 >= len(lines) || lines[i] != "/**" || lines[i+1] != " * @file "+want {
+		return fmt.Sprintf("line %d does not open the @file header, /** and then * @file %s", i+1, want)
+	}
+	for j := i + 2; j < len(lines); j++ {
+		text := strings.TrimSpace(lines[j])
+		if strings.HasSuffix(text, "*/") {
+			return fmt.Sprintf("the @file header, lines %d to %d, says nothing of what the file is for", i+1, j+1)
+		}
+		if strings.TrimSpace(strings.TrimPrefix(text, "*")) != "" {
+			return ""
+		}
+	}
+	return fmt.Sprintf("the @file header from line %d is never closed", i+1)
+}
+
+// No file of the web UI puts markup into the page from a string, and
+// none sets an inline handler (the contract, "The web UI", both kinds of
+// region): API text goes in only as text, and the security policy allows
+// no inline script. A part carries no data-i18n either, since applyI18n
+// would write over the text the part owns (rule 3 of AP UiParts). Comments
+// are left out, so that prose may name what the code must not do.
+func TestUINoHTMLInjection(t *testing.T) {
+	banned := []struct {
+		re   *regexp.Regexp
+		what string
+	}{
+		{regexp.MustCompile(`\.(?:inner|outer)HTML\b`), "innerHTML or outerHTML"},
+		{regexp.MustCompile(`\.insertAdjacentHTML\s*\(`), "insertAdjacentHTML"},
+		{regexp.MustCompile(`\bdocument\.write(?:ln)?\s*\(`), "document.write"},
+		{regexp.MustCompile(`\bdangerouslySetInnerHTML\b`), "dangerouslySetInnerHTML"},
+		{regexp.MustCompile("\\.setAttribute\\s*\\(\\s*[\"'`]on"), "an inline handler set by setAttribute"},
+	}
+	i18n := regexp.MustCompile("\\bdata-i18n(?:-attr)?\\s*=|\\.dataset\\.i18n|setAttribute\\s*\\(\\s*[\"'`]data-i18n")
+	handler := regexp.MustCompile(`<[a-zA-Z][^>]*\son[a-z]+\s*=`)
+	check := func(file string, code []string, part bool) {
+		for n, line := range code {
+			for _, b := range banned {
+				if b.re.MatchString(line) {
+					t.Errorf("%s:%d: %s puts markup or script into the page from a string", file, n+1, b.what)
+				}
+			}
+			if part && i18n.MatchString(line) {
+				t.Errorf("%s:%d: a part carries no data-i18n; it calls t()", file, n+1)
+			}
+		}
+	}
+	scripts, err := filepath.Glob("ui/*.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(scripts) == 0 {
+		t.Fatal("ui holds no script")
+	}
+	for _, name := range scripts {
+		if name == "ui/parts.js" {
+			continue // the bundle make ui makes, Preact's own code in it
+		}
+		check(name, jsCode(fileLines(t, name)), false)
+	}
+	parts := 0
+	err = fs.WalkDir(os.DirFS("ui/src"), ".", func(name string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !(strings.HasSuffix(name, ".ts") || strings.HasSuffix(name, ".tsx")) {
+			return err
+		}
+		parts++
+		file := path.Join("ui/src", name)
+		check(file, jsCode(fileLines(t, file)), true)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parts == 0 {
+		t.Fatal("ui/src holds no part")
+	}
+	pages, err := filepath.Glob("ui/*.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	partials, err := filepath.Glob("ui/partials/*.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pages) == 0 || len(partials) == 0 {
+		t.Fatal("ui holds no page or no partial")
+	}
+	for _, name := range append(pages, partials...) {
+		for n, line := range fileLines(t, name) {
+			if handler.MatchString(line) {
+				t.Errorf("%s:%d: an inline handler; a region's script adds its listener", name, n+1)
+			}
+		}
+	}
+}
+
+// fileLines reads a file from the disk as its lines.
+func fileLines(t *testing.T, name string) []string {
+	t.Helper()
+	b, err := os.ReadFile(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.Split(string(b), "\n")
+}
+
+// jsCode is a script's lines with its comments blanked and its strings
+// kept, line for line, so that a match names the right line. It knows
+// strings in its three quotes and both kinds of comment; a regular
+// expression holding a quote may make it take code for a string, which
+// keeps that code.
+func jsCode(lines []string) []string {
+	out := make([]string, len(lines))
+	var quote byte // the quote of the string the scan is in, or 0
+	block := false // in a block comment
+	for n, line := range lines {
+		var b strings.Builder
+		for i := 0; i < len(line); i++ {
+			c := line[i]
+			switch {
+			case block:
+				if c == '*' && i+1 < len(line) && line[i+1] == '/' {
+					block = false
+					i++
+				}
+			case quote != 0:
+				b.WriteByte(c)
+				if c == '\\' && i+1 < len(line) {
+					b.WriteByte(line[i+1])
+					i++
+				} else if c == quote {
+					quote = 0
+				}
+			case c == '/' && i+1 < len(line) && line[i+1] == '/':
+				i = len(line)
+			case c == '/' && i+1 < len(line) && line[i+1] == '*':
+				block = true
+				i++
+			default:
+				if c == '"' || c == '\'' || c == '`' {
+					quote = c
+				}
+				b.WriteByte(c)
+			}
+		}
+		if quote != '`' {
+			quote = 0 // only a template literal spans lines
+		}
+		out[n] = b.String()
+	}
+	return out
+}
+
 // The translation files hold the texts of the page: each parses, the
 // other languages have no key English lacks (but their own plural forms
 // and the machine-translation note), and English has every key the
-// markup and the scripts ask for.
+// markup, the scripts and the parts ask for.
 func TestUITranslations(t *testing.T) {
 	js, err := uiFiles.ReadFile("ui/i18n.js")
 	if err != nil {
@@ -722,8 +990,38 @@ func TestUITranslations(t *testing.T) {
 			}
 		}
 	}
+	// The parts ask as the scripts do, with t("…"), tn("…") and
+	// tParts("…"). Their files are read from the disk: the bundle is made
+	// from them, and they are not embedded.
+	partCall := regexp.MustCompile(`\b(tn?|tParts)\(\s*"([^"]+)"\s*[,)]`)
+	asked := 0
+	err = fs.WalkDir(os.DirFS("ui/src"), ".", func(name string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || strings.HasSuffix(name, ".d.ts") || !(strings.HasSuffix(name, ".ts") || strings.HasSuffix(name, ".tsx")) {
+			return err
+		}
+		b, err := os.ReadFile(path.Join("ui/src", name))
+		if err != nil {
+			return err
+		}
+		for _, m := range partCall.FindAllStringSubmatch(string(b), -1) {
+			asked++
+			if m[1] == "tn" {
+				used[m[2]+".one"] = "src/" + name
+				used[m[2]+".other"] = "src/" + name
+			} else {
+				used[m[2]] = "src/" + name
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if asked < 20 {
+		t.Fatalf("only %d texts found in the parts under ui/src", asked)
+	}
 	if len(used) < 100 {
-		t.Fatalf("only %d keys found in the markup and the scripts", len(used))
+		t.Fatalf("only %d keys found in the markup, the scripts and the parts", len(used))
 	}
 	for _, k := range slices.Sorted(maps.Keys(used)) {
 		if _, ok := en[k]; !ok {

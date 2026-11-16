@@ -76,7 +76,7 @@ def test_found_cube_added_and_removed(page):
     search found; where nothing was searched yet, this test searches."""
     if not page.evaluate("state.found.some((c) => c.serial === 'KEQ0000000')"):
         choose_cube(page, "__discover")
-        wait_until(page, "!discovery.running", 10)
+        wait_until(page, "!document.querySelector(\"#cube-menu button[data-value='__discover']\").disabled", 10)
     show_view(page, "system")
     open_found(page)
     found = page.locator(".cube-found-row[data-serial='KEQ0000000']")
