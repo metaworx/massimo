@@ -17,6 +17,8 @@ import "./cubes";
 import type { CubesPart } from "./cubes";
 import "./header";
 import type { HeaderPart } from "./header";
+import "./rooms";
+import type { RoomsPart } from "./rooms";
 import { languageChanged } from "./shared/lang";
 import { iconsChanged } from "./shared/look";
 import { parts, register } from "./shared/region";
@@ -31,6 +33,8 @@ export interface MassimoParts {
   cubes: CubesPart;
   /** The header: the Cube choice, the problems, the age, the server's sign, the certificate's line, the home notice (header/). */
   header: HeaderPart;
+  /** The rooms: a tile per room with its device list (rooms/). */
+  rooms: RoomsPart;
 }
 
 declare global {

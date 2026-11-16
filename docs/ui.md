@@ -434,6 +434,8 @@ Every room has a tile:
 The **House** tile sets several rooms at once: ECO, AUTO,
 COMFORT or MANU with a temperature, permanently or until a date and time;
 its **Send** is off while no room is ticked.
+What its panel holds stays when the rooms load again and when it closes:
+the rooms ticked, the mode, the end typed.
 
 **Devices without a room** are listed at the end:
 a device just paired, or one the original software paired through the proxy
@@ -449,6 +451,13 @@ a value of the chevrons stays shown, with **Save** turning, until the answer.
 The tile shows the result when it is done: "ok", or what failed.
 While radio commands wait for the devices' acknowledgement,
 the header says how many are pending.
+
+A tile is drawn once and follows the data in place:
+a menu open, the focus, a click under way, a text selected, the result line,
+the holiday form and what is typed in it stay
+when a device reports or the rooms are loaded again.
+The configuration is drawn again at such a time, but not while the focus is in it:
+then once the focus has left it.
 
 ### Repairs
 
@@ -1472,11 +1481,14 @@ element of it.
 The icons draw in the token `warn-mark`, a brighter amber than the text's `warn`,
 at a contrast of 3 on a tile, the text at 4.5 (`TestUIDefaultSchemeMatchesCSS`);
 the filled amber, `fill-warn`, is the Manual mode's alone.
-`problemsEl` is the list of what is wrong in a place, wherever it is put,
-its entries one format at every level (`problemEntry`):
+The list of what is wrong in a place is the shared part `Problems`, wherever it is put,
+its entries one format at every level:
 the icon in a column of its own, the name and a grey detail beside it,
 the badges under the name, and the entries under it (`subs`) indented to the name,
-a line down from its icon.
+a line down from its icon;
+its plain twins in `components.js`
+(`problemsEl`, `problemEntry`, `kindIcons`, `entryItems`)
+have no caller left and wait for Block 15.
 A button that sends a request is busy from its click until the answer:
 off, with a turning ring after its text, and `aria-busy`
 (`setBusy` and `whileBusy`),
@@ -1511,10 +1523,12 @@ a script for each region of the page, in the order the page loads them:
   `home.js`, the home notice's place shown or hidden, the Cubes a `cube_found` event adds
   and the way to them;
   `prefs.js`, the wiring of My settings' rows and the language choice;
-- `rooms.js`, a room's facts, the drawing of Rooms, a device's state event
-  and the actions behind a tile; `tiles.js`, a room's tile;
-  `devices.js`, its device rows; `unlisted.js`, the devices without a room;
-  `house.js`, the House tile;
+- `rooms.js`, a room's facts, the plain names of the rooms' drawing,
+  which call their parts (`ui/src/rooms/`), a device's state event
+  and the actions behind a tile; `tiles.js`, the tile's actions that stay plain
+  and a finding of the Cube's lines in words;
+  `unlisted.js`, a device removed from the Cube;
+  `house.js`, the House tile's plain names, which call its part;
 - `week-program.js` and `config.js`, a room's configuration;
 - `log.js`, the log and its sign for unseen problems;
   `pages.js`, the pages, the main menu, the address and the scroll;
@@ -1570,9 +1584,14 @@ and what is not about the API's data is a shared part.
 a Cube's address split into host and port (`hostPort`), its network sign (`CubeSign`)
 and its problems as an entry of `Problems` (`cubeEntry`, `cubeSettingItems`)
 with the label naming their kinds and the Cubes found (`problemsLabelOf`);
-`found.tsx` what a Cube or a Massimo proxy found is and who serves it (`foundWhat`).
-`cubeEntry` calls `deviceProblems` and `deviceIcon` of `tiles.js` today;
-the rooms' move puts them into `model/`, since `model/` may not import a region.
+`found.tsx` what a Cube or a Massimo proxy found is and who serves it (`foundWhat`);
+`device.ts` a device's type as its icon (`deviceIcon`), an open window's state
+by the page's clock (`windowState`, `WINDOW_TONE`) and what is wrong with a device
+as items of `Problems` (`deviceProblems`),
+and a device as an entry of `Problems` (`deviceEntry`),
+which the rooms list in a tile and a device's row,
+and a Cube's entry under the Cube;
+a value's age it takes from `received` of `rooms.js`, as the rooms do.
 
 | Part or helper | File | For | Properties or arguments |
 |---|---|---|---|
@@ -1583,25 +1602,30 @@ the rooms' move puts them into `model/`, since `model/` may not import a region.
 | `useIcons` | `look.ts` | the icons chosen for the window and the radio as a signal, raised by `redrawSigns` (`MassimoParts.icons`); `Sign` reads it | – |
 | `Island` | `island.tsx` | a plain piece inside a part: an element the part draws empty and plain code fills, again where a key or the language changed | `tag` (div, p, span), `cls`, `keys`, `fill(el)` |
 | `Fold`, `FoldHead` | `fold.tsx` | a details that opens and closes (`detailsPanel`), the toggle of its making not passed on; a panel's head | `cls`, `open`, `onToggle(open)`, `summary`, `summaryProps`, `data`, the body as children; `before`, `name`, `mono`, `badges` |
-| `Dropdown` | `menu.tsx` | a menu that drops down (`dropdown`), with `arrows` its arrow keys (`menuArrows`) and with `focusCurrent` the focus on its current item when it opens (among `arrows`' items, else its list's buttons that are on); a click on any button of its list closes it, as `dropdown()` of `components.js` does for every menu of the page | `id`, `cls`, `summaryId`, `summaryCls`, `label`, `title` (where the tooltip is not the label), `summary`, `listCls`, `arrows` (a selector of its items), `focusCurrent`, `onClick`, the items as children |
-| `MenuItem` | `menu.tsx` | a menu's button, its icon, label, the icons after it and a grey second line (`menuItem`) | `icon`, `blank`, `label`, `icons`, `sub`, `value` (its `data-value`), `current`, `disabled`, `onClick` |
+| `Dropdown` | `menu.tsx` | a menu that drops down (`dropdown`), with `arrows` its arrow keys (`menuArrows`) and with `focusCurrent` the focus on its current item when it opens (among `arrows`' items, else its list's buttons that are on); a click on any button of its list closes it, as `dropdown()` of `components.js` does for every menu of the page | `id`, `cls`, `summaryId`, `summaryCls`, `label` (without it the summary is named by its text), `title` (where the tooltip is not the label), `summary`, `listCls`, `arrows` (a selector of its items), `focusCurrent`, `busy` (the summary turning while a request sent from its list runs), `onClick`, `onOpen` (told each time it opens), the items as children |
+| `MenuItem` | `menu.tsx` | a menu's button, its icon, label, the icons after it and a grey second line (`menuItem`) | `icon`, `blank`, `label`, `icons`, `sub` (the second line, there whenever given, empty too), `subCls` (its class), `cls`, `value` (its `data-value`), `current`, `disabled`, `busy`, `onClick` |
 | `Picker` | `menu.tsx` | a menu that chooses one item, its summary the chosen one (`pickerMenu`) | `id`, `cls`, `summaryId`, `summaryCls`, `entries` (an item `{ value, label, sub, icon, icons, disabled }`, `{ group }` or `{ separator: true }`), `value`, `onPick(value)`, `shown` (`{ icon, label, title, aria }`) |
-| `actionRunner` | `action.ts` | a request, a reload, and its outcome in the region's message line (`showResult`) | `where()`, `reload()`; gives `run(fn, ok, fail)`, `say(text, ok)` |
+| `actionRunner`, `fader` | `action.ts` | a request, a reload, and its outcome (`Outcome`, `{ text, ok }`) in the region's message line (`showResult`) or in a part's state that a `ResultLine` draws, a success fading where a fade is given; `fader` is that fade alone, for a result set by other means | `where()`, `set(res)`, `fade` (ms), `reload()`; gives `run(fn, ok, fail)`, `say(text, ok)`; `set`, `ms` |
 | `Icon` | `icon.tsx` | a symbol of the page (`iconEl`) | `symbol`, `cls`, `mark` (the symbol is a mark, which blinks where the style makes it) |
 | `Sign` | `icon.tsx` | a kind of `SIGNS` in a state, its mark blinking (`signEl`) | `kind`, `state` ("", ok, warn, bad, open), `cls`, `blink` (the mark's key), `label` (named for a screen reader, else hidden) |
 | `Mark` | `icon.tsx` | a mark alone (`markEl`) | `state` (warn, bad), `blink` |
 | `CountIcon` | `icon.tsx` | an icon with a number in its corner (`foundCountEl`) | `symbol`, `n`, `cls` |
+| `IconButton` | `icon.tsx` | a button that is an icon alone, named for a screen reader (`iconButton`): a tile's info and cog, the server's sign, the copy icon | `symbol`, `label` (its name, and its tooltip without `title`), `title`, `cls`, `mark`, and the button's own attributes (`id`, `aria-expanded`, `data-…`, the handlers) |
 | `Badge` | `badge.tsx` | a `.flag` led by its mark for a warning or a failure (`badgeEl`) | `kind`, `text`, `blink`, `title`, children after the text |
 | `Notice` | `badge.tsx` | a lasting warning with since when (`noticeEl`) | `text`, `since`, `next`, `cls`, `id`, `role`, `hidden` (the class `hidden`, the line kept in its place), children after |
 | `Age` | `badge.tsx` | how old a value is, filled by `fillAge` (`ageEl`) | `at`, `stale`, `plain` |
+| `ResultLine` | `badge.tsx` | the line that says how an action went, green or red, hidden while there is none (`showResult`), as an `actionRunner`'s `set` gives it | `res` (an `Outcome` or null), `cls` |
 | `Problems` | `problems.tsx` | the problem list, entries under entries (`problemsEl`) | `entries`, `label`, `ok` (the green check's label where nothing is wrong), `onClick` |
 | `KindIcons`, `problemKinds`, `kindsLabel` | `problems.tsx` | the kinds' icons of entries without the list (`kindIcons`); the kinds themselves, to know whether there are any; the label naming the kinds among items in an order of kinds, "" for none | `entries`, `skip`; `entries`, `skip`; `items`, `kinds` |
 | `OkPill` | `problems.tsx` | the green check in a list's place (`okPill`) | `label` |
 | `Field` | `field.tsx` | a label and its control, `.field` or `.field.wide` (`fieldRow`) | `label`, `id`, `wide`, `unit`, `hint`, `draft`, `show`, the control as children |
-| `TextField` | `field.tsx` | a row with a text input that shows a stored text, from its draft | `label`, `id`, `name`, `draft`, `show`, `wide` (on by default), `unit`, `hint`, `placeholder`, `type`, `maxLength` |
-| `Switch` | `field.tsx` | a checkbox drawn as a switch (`switchEl`) | `name`, `label`, `checked` and `onChange`, or `draft` and `show`; `row`, `id`, `disabled`, `title`, children after the label |
+| `TextField` | `field.tsx` | a row with a text input that shows a stored text, from its draft | `label`, `id`, `name`, `draft`, `show`, `wide` (on by default), `unit`, `hint`, `placeholder`, `type`, `maxLength`, `pattern` |
+| `Select` | `field.tsx` | a row with a select (`selectInput`), its options as `fillOptions` takes them | `label`, `id`, `name`, `options` (`[value, label, disabled]` or `{ group, options }`), `value` and `onChange`, or `draft` and `show`; `wide`, `unit`, `hint` |
+| `DateTime` | `field.tsx` | a date and time field (`datetime-local`), its value as the input takes it | `value`, `set`, `id`, `cls`, `step`, `required`, `disabled`, `inputRef` |
+| `Switch` | `field.tsx` | a checkbox drawn as a switch (`switchEl`) | `name`, `label`, `checked` and `onChange`, or `draft` and `show`; `row`, `cls` (the switch's classes), `id`, `disabled`, `title`, children after the label |
+| `Stepper` | `field.tsx` | a number field between − and + (`stepper`), the step within its range; its buttons are named for a temperature, half a degree less and more, and the first user of another unit adds their names | `value`, `set`, `min`, `max`, `step`, `id` and `cls` of the field, `hidden` (the whole kept in its place unseen), children after the + (a unit) |
 | `useDraft`, `Meanwhile` | `field.tsx` | a field that shows stored data keeps a draft: untouched it follows, changed it says "changed meanwhile" with Take theirs (D59-A) | `stored`, `norm`; gives `value`, `stored`, `set`, `changed`, `meanwhile`, `take`; `draft`, `show` |
-| `FormFooter` | `field.tsx` | a form's row of actions (`formFooter`, `sendWhenChanged`) | `submit`, `busy`, `off`, `cancel`, `cancelLabel`, `extra` |
+| `FormFooter` | `field.tsx` | a form's row of actions (`formFooter`, `sendWhenChanged`) | `submit`, `busy`, `off`, `cancel` (its button of the class `form-cancel`, as the plain footer's), `cancelLabel`, `extra` |
 | `Question` | `question.tsx` | a question in the page, No and Yes, Escape for No (`confirmBox`) | `text`, `yes`, `no`, `onYes` (its request's promise), `onNo` |
 | `useAsk` | `question.tsx` | a row that asks in its own place, the focus back on its button (`confirmInPlace`) | gives `asking`, `ask`, `done`, `ref` |
 | `useBusy`, `busyProps` | `question.tsx` | a button's request under way: busy, off, `aria-busy` (`whileBusy`, `setBusy`) | `run(fn)`; `busyProps(cls, busy, off)` |
@@ -1630,15 +1654,23 @@ What the table cannot say:
   what must outlive the component (a request a tile keeps across its being
   drawn again) is live state (`live`).
 
-Left for the regions that need them first:
-`MenuItem` has no `cls` or `id`, `Dropdown` does not tell when it opens,
-and its summary is named by `label`, not by its text;
-the rooms meet these first, and add them as properties.
-
 These builders of `components.js` and `app.js` have no part yet, since no region
 that has moved uses them: the help button (`helpParts`) and a field row without
-a label, `numberInput`, `stepper`, `selectInput`, `markRange`, `kvList`,
-`countList`, `iconButton` and `sectionBadges`.
+a label, `numberInput` (but the one of `Stepper`), `markRange`, `kvList`,
+`countList` and `sectionBadges`.
+Known gaps, for the blocks that meet them:
+a `ResultLine` with something after its text (`config.js`'s Load the current programme);
+a `Select` without a row of its own, beside another control in the caller's row
+(`config.js`'s day and hour);
+the conversion of a `DateTime`'s value to the API's time, which stays with its users
+(`apiUntil` of `rooms.js`), and which the block that moves the users' expiry fields
+(`users-panel.html`, `users.js`, `app.js`'s `localDateTimeValue`) brings to the part;
+a device row's head (icon, name, type, identifiers), which `pairing.js` draws a twin of,
+taken into `model/` by the block that moves the pairing, since no region imports another;
+choosing rooms, checkboxes with All in the House panel and switches with All and None
+in the configuration's Copy tab, one shared list once the configuration moves;
+a room's write's outcome in words, built in three places
+(`House.tsx` `houseRequests`, `rooms.js` `resultText`, `config.js`'s copy).
 The block that first needs one writes it under `ui/src/shared/`,
 knowing no region, and adds its row to the table above; no region writes its own.
 A section card's badges (`sectionBadges`) stay plain until the page's chrome moves
@@ -1675,14 +1707,61 @@ which `header.js` calls as `renderCubeSelect`, `renderUpdated`, `renderServerSig
 and `renderTLS`, and `home.js` as `renderHomeNotice`;
 `store.ts` holds its counter, the search under way and the certificate,
 `send.ts` the search and the poll the server's sign asks for.
-The choice is a `Picker`, the problems a `Problems`, the certificate's line a `Notice`;
-the server's sign is a button written by hand, since `iconButton` has no part yet
-and the next change to the header takes the button away:
-the rooms' icon buttons (a tile's info and cog) bring that part.
+The choice is a `Picker`, the problems a `Problems`, the certificate's line a `Notice`,
+the server's sign an `IconButton`.
 The facts row with its fitting, the version and the refresh button stay plain,
 around the parts' places and not in them,
 and the home notice's place is shown and hidden by the plain code (and by `pages.js`),
 the part drawing inside it.
+The rooms (`ui/src/rooms/`) are the third:
+`index.tsx` draws the House tile's modes and panel in `#house-slot`,
+a tile per room of the chosen Cube in `#rooms`,
+kept by the Cube and the room's id, and the devices without a room in `#unlisted-devices`,
+and registers `render`, `data`, `unlisted`, `room`, `result`, `ui`,
+`houseOpen` and `closeHouse`,
+which `rooms.js` calls as `renderRooms`, `updateDevice` (`data` for a room's device,
+`unlisted` for one in no room), `rerenderRoom`, `showTileResult` and `roomUI`,
+and `house.js` by their own names;
+`store.ts` holds its counter, a counter per room that a state event of one of its
+devices raises and one per room's configuration, what a tile keeps (`newUI`,
+the live object `roomUI` gives the plain actions, which set it as before)
+and what the House tile's panel keeps (`house`: the mode, the duration,
+the temperature and the end typed, the rooms unticked, the last result),
+across its close too,
+and the timer of an open window's next state by the clock;
+`facts.ts` what the rooms alone read of a room and its devices
+(a mode's badge, the problems of a tile's head and of a device's row with their label,
+a device's badges in words, the note of devices not seen for long);
+`Tile.tsx` the tile, `Devices.tsx` a device's row and a tile's device list,
+`House.tsx` the House tile, its temperature a `Stepper`, its end a `DateTime`,
+its mode and its duration a choice of radio buttons side by side of its own (`Segments`),
+its Send and Cancel a `FormFooter`;
+`Unlisted.tsx` the devices without a room, each row a device's row with
+Put into a room… and Remove from the Cube;
+the section of the devices without a room is shown and hidden by `rooms.js`,
+its message line, `#unlisted-msg` of the partial, an `actionRunner`'s, a success fading,
+and the House tile's section, with its title, is shown and hidden by `rooms.js` too.
+The tile's actions stay plain (`rooms.js`, `tiles.js`) and set `roomUI`,
+which the tile follows: a write running turns its button and keeps the others off,
+a stepper value waiting to be sent shows with Save and Cancel.
+The configuration stays plain inside the tile (`config.js`, AP UiParts Block 8),
+an `Island` that `renderConfig` fills: again where the configuration asks for it
+(`rerenderRoom`), where it opens or closes, and at a data event,
+but while the focus is in it,
+where the fill waits until the focus has left it (`configFocused`).
+A room's repairs and a device's Repair… stay plain too (`repair.js`), each an `Island`,
+and so does the form that puts a device without a room into one
+(`pairDeviceForm`, Block 9),
+its typing kept across a fill by the object it is given.
+The menus are `Dropdown`s, their items `MenuItem`s, the problems a `Problems`,
+the info and the cog `IconButton`s, the holiday form's temperature a `Stepper`
+and its end a `DateTime`,
+the deletion's question a `Question`, the notices `Notice`s,
+the result lines `ResultLine`s,
+a device's badges `Badge`s with their `Age`, its identifiers a `DeviceIds`,
+the virtual thermostat's two settings a `Select` and a `TextField` with their drafts (`useDraft`),
+a `FormFooter` and a `ResultLine` that its `actionRunner` sets;
+the tile's result line is a `ResultLine` too, its success fading by `fader`.
 A part's place among plain siblings is an element of the class `part-slot`,
 which takes no box of its own (`display: contents`),
 so that the part's element is laid out as if it stood there itself.

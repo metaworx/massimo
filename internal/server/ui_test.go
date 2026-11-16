@@ -624,7 +624,8 @@ func TestRegionsKnowNoOtherRegion(t *testing.T) {
 // types.
 func partsImportOnly(t *testing.T, dir string, also ...string) {
 	t.Helper()
-	spec := regexp.MustCompile(`(?:\bfrom\s*|\bimport\s*\(?\s*)["']([^"']+)["']`)
+	// from is a word of its own, not the end of a text's key ("vwt.from").
+	spec := regexp.MustCompile(`(?:(?:^|[^.\w])from\s*|\bimport\s*\(?\s*)["']([^"']+)["']`)
 	files := 0
 	err := fs.WalkDir(os.DirFS(dir), ".", func(name string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !(strings.HasSuffix(name, ".ts") || strings.HasSuffix(name, ".tsx")) {

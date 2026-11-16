@@ -341,9 +341,11 @@ def test_eco_button(page, case):
 
 
 def test_typing_in_the_configuration_survives_a_state_event(page, case):
-    """A state event for a room whose configuration has the focus waits:
-    the tile is not drawn again under the user's typing, and is once the
-    focus leaves the configuration, with the new state. Nothing is sent."""
+    """A state event for a room whose configuration has the focus takes
+    nothing from the user's typing: every key typed is in the name, the
+    state is taken all the same, and the tile is the one it was, also once
+    the focus has left the configuration, which still shows. Nothing is
+    sent."""
     tile = page.locator(".room").first
     tile.locator(".tile-cog").click()
     page.wait_for_selector(".room .config-body", timeout=5000)
@@ -362,7 +364,9 @@ def test_typing_in_the_configuration_survives_a_state_event(page, case):
     assert page.evaluate("document.querySelector('.room').dataset.mark") == "before", "the tile is not drawn again while typed in"
     assert page.evaluate("state.rooms[0].devices[0].state.valve_pct") == 77, "the state is taken all the same"
     page.evaluate("document.activeElement.blur()")
-    assert wait_until(page, "document.querySelector('.room').dataset.mark === undefined", 5), "the tile is drawn once the focus leaves"
+    page.wait_for_timeout(200)  # the configuration is filled again once the focus has left it
+    assert page.evaluate("document.querySelector('.room').dataset.mark") == "before", "the tile is the one it was once the focus left"
+    assert tile.locator(".config-body").is_visible(), "the configuration still shows"
     tile.locator(".config-tabs .close").click()
     assert tile.locator(".config-body").count() == 0, "the configuration closes, nothing sent"
 

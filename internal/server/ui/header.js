@@ -132,7 +132,7 @@ function renderCubeSelect() {
 // panel, a dialog, a device list, or a stepper value not yet sent.
 function somethingOpen() {
   if (isShown("me") || isShown("system") || isShown("maint") || isShown("cube")) return true;
-  if (!$("house-panel").classList.contains("hidden")) return true;
+  if (houseOpen()) return true; // house.js
   if ($("login-dialog").open) return true;
   for (const ui of Object.values(state.ui)) {
     if (ui.pending !== null || ui.vacation || ui.confirm || ui.open || ui.config) return true;

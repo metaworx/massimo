@@ -12,7 +12,7 @@
  * updated in place.
  */
 
-import { Icon } from "../shared/icon";
+import { IconButton } from "../shared/icon";
 import { pollNow } from "./send";
 import { load } from "./store";
 
@@ -44,14 +44,10 @@ function serverAct(): void {
   } else pollNow();
 }
 
-/** ServerSign is the server's sign, a button. */
+/** ServerSign is the server's sign, an icon button. */
 export function ServerSign() {
   load.useLoad();
   const st = serverState();
   const label = t("server." + st, { version: updateLatest(), seconds: state.settings.poll });
-  return (
-    <button type="button" id="server-sign" class="server-sign" data-state={st} title={label} aria-label={label} onClick={serverAct}>
-      <Icon symbol={SERVER_ICON[st]} cls="ni" mark={st === "new"} />
-    </button>
-  );
+  return <IconButton id="server-sign" cls="server-sign" data-state={st} symbol={SERVER_ICON[st]} mark={st === "new"} label={label} onClick={serverAct} />;
 }

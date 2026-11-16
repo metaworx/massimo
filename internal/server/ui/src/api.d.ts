@@ -1365,8 +1365,8 @@ export interface TimeZoneRule {
 }
 
 export interface Room {
-  id?: number;
-  name?: string;
+  id: number;
+  name: string;
   /**
    * The room's uid, kept for the room's life and never given to another room;
    * absent before the server has read the room
@@ -1376,10 +1376,10 @@ export interface Room {
    * Every device of the room has reported since the Cube restarted, so the Cube
    * accepts room commands
    */
-  ready?: boolean;
+  ready: boolean;
   /** A device of the room is stale; present when true */
   stale?: boolean;
-  devices?: Device[];
+  devices: Device[];
   /**
    * The findings of the Cube's C lines against its room list that concern the
    * room, and of its members that differ (docs/api-v1.md, "The Cube's lines
@@ -1516,9 +1516,9 @@ export interface State {
 
 export interface Device {
   rf_address: string;
-  type?: DeviceType;
+  type: DeviceType;
   name: string;
-  room_id?: number;
+  room_id: number;
   serial?: string;
   /** Paired but not assigned to a room */
   unlisted?: boolean;
@@ -1526,7 +1526,7 @@ export interface Device {
    * The Cube holds state for the device (it transmitted since the Cube
    * restarted)
    */
-  reported?: boolean;
+  reported: boolean;
   state?: State;
   /**
    * The Cube marks the device's entry out of date, as after some minutes of
@@ -1555,11 +1555,11 @@ export interface Device {
    */
   window?: {
     /** @format date-time */
-    open_since?: string;
+    open_since: string;
     /** @format date-time */
-    warn_at?: string;
+    warn_at: string;
     /** @format date-time */
-    alert_at?: string;
+    alert_at: string;
   };
   /**
    * A reported device's battery level, from the history of its flag: weak once

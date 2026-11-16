@@ -8,14 +8,15 @@ kept as the other settings are, for the person or for this device.
 
 The states come from state events applied in the page (updateDevice),
 since the fake Cube does not change its states; the first tests set the
-choice in the page's settings and draw the rooms again."""
+choice in the page's settings and draw the signs again."""
 from helpers import show_view, wait_until
 
-# Chooses the drawings in the page's settings and draws the rooms again.
+# Chooses the drawings in the page's settings and draws what shows them
+# again, as a change of the choice does (theme.js redrawSigns).
 CHOOSE = """([win, radio]) => {
   if (win) state.settings.iconWindow = win; else delete state.settings.iconWindow;
   if (radio) state.settings.iconRadio = radio; else delete state.settings.iconRadio;
-  renderRooms();
+  redrawSigns();
 }"""
 
 # Gives the room with the window contact a window open for `ago` minutes

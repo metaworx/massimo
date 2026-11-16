@@ -155,7 +155,7 @@ hence `failed_checks_forgotten`.
   with the type, the radio address, the exact times
   and the server's start time in expert mode;
   a state event while a device's name is typed in the configuration keeps every key,
-  and the tile is drawn with the new state once the focus leaves;
+  and the tile is the one it was, also once the focus has left;
   a switch point's time typed part by part keeps the focus,
   marks the day as changed, and Send right after it sends the time (stubbed).
 - `test_header.py`:
@@ -186,6 +186,20 @@ hence `failed_checks_forgotten`.
   a poll and lists the device with a problem the poll brought;
   the Cube choice, open, stays open with the focus on the chosen Cube
   and shows the Cube's new name and the settings' cog the poll brought.
+- `test_room_updates.py`, the room tiles as parts (AP UiParts, Block 7),
+  each case of the fresh look's probe a test, with a state event or a
+  reload of the rooms between: More, ⋯ and a problem list stay open;
+  the focus stays on +, also after Enter on it, and on a device's Lock;
+  a text selected stays selected; a failed write's result line stays;
+  the holiday form's temperature typed and its focus stay, also through a
+  reload; the device list stays open; the virtual thermostat's address
+  typed stays; a name typed in the configuration stays, also once the
+  focus has left; a click on + counts with a state event or a reload
+  between its press and its release, and from the configuration; the tile
+  is the element it was; a new setpoint is shown;
+  in the House panel a room unticked and the focus on its checkbox stay
+  through a reload of the rooms.
+  Seventeen of them failed on the page before the move.
 - `test_stream.py`:
   the event stream opens with tickets only, never with the token,
   and after a refused stream (the test hands out a used ticket first,

@@ -17,6 +17,8 @@ declare global {
   function t(key: string, params?: Record<string, string | number>): string;
   /** The plural form of a key for n, {n} filled. */
   function tn(key: string, n: number, params?: Record<string, string | number>): string;
+  /** A number with digits decimals in the page's language. */
+  function fmtNum(v: number, digits: number): string;
 }
 
 export {};

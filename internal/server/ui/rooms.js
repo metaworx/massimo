@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 The Massimo Authors
 
-// The Massimo web UI, the rooms: a room's facts, the drawing of every
-// room's tile into Rooms and again in place, a device's state event,
-// the texts of a result, the actions behind a tile's controls, and what
-// holds for every tile (Escape closes the open panels).
+// The Massimo web UI, the rooms: a room's facts, the plain names of the
+// rooms' drawing, which call their parts (ui/src/rooms/, MassimoParts.rooms),
+// a device's state event, the texts of a result, the actions behind a
+// tile's controls, which set the tile's live state (roomUI) that the tile
+// follows, and what holds for every tile (Escape closes the open panels).
 "use strict";
 
 const STEP = 0.5;
@@ -71,8 +72,16 @@ function received(d, field) {
   return d.received ? d.received[field] : undefined;
 }
 
+// roomUI is what the room's tile keeps, made the first time it is asked
+// for: a live object (ui/src/rooms/store.ts newUI), whose properties the
+// plain actions set as before and the tile follows. open is its device
+// list, pending and timer a stepper value waiting to be sent, vacation
+// and confirm the holiday form and the deletion's question, config the
+// configuration (config.js), deferred a state event waiting for the focus
+// to leave the configuration, sending the write running (tileWrite), hold
+// the Hold switch, result the result line (showTileResult).
 function roomUI(room) {
-  if (!state.ui[room.id]) state.ui[room.id] = { open: false, pending: null, timer: null, vacation: false, confirm: false, config: null, deferred: false, sending: null, hold: false };
+  if (!state.ui[room.id]) state.ui[room.id] = MassimoParts.rooms.ui();
   return state.ui[room.id];
 }
 
@@ -97,84 +106,43 @@ function fmtUntil(text) {
   return new Intl.DateTimeFormat(i18n.lang, opts).format(new Date(y, mo - 1, d, hh, mm));
 }
 
+// renderRooms draws the rooms as the page has them now: every tile and
+// every row of the devices without a room follows in place
+// (MassimoParts.rooms.render), a tile's configuration filled again unless
+// the focus is in it, where that waits for the focus to leave; the House
+// tile and the devices without a room are shown where they have
+// something.
 function renderRooms() {
-  const section = $("rooms");
-  // A tile whose configuration has the focus stays as it is, as for a
-  // state event (updateDevice), and the others are drawn around it: a
-  // redraw between the press and the release of a click (a reload after
-  // a metadata event) swallowed the click, and one under the user's
-  // typing took the focus away. It is drawn once the focus leaves the
-  // configuration (renderRoom).
-  const kept = state.rooms.find(configFocused);
-  const keep = kept && section.querySelector('.room[data-id="' + kept.id + '"]');
-  if (keep) {
-    roomUI(kept).deferred = true;
-    for (const el of [...section.children]) if (el !== keep) el.remove();
-    let before = true;
-    for (const r of state.rooms) {
-      if (r === kept) before = false;
-      else if (before) section.insertBefore(renderRoom(r), keep);
-      else section.appendChild(renderRoom(r));
-    }
-  } else {
-    clear(section);
-    for (const r of state.rooms) section.appendChild(renderRoom(r));
-  }
+  MassimoParts.rooms.render();
   $("house").classList.toggle("hidden", !state.rooms.some(roomThermostat));
-  renderHouseRooms();
-  const unl = $("unlisted");
-  const list = $("unlisted-devices");
-  clear(list);
-  for (const rf of Object.keys(unlistedUI)) {
-    if (!state.unlisted.some((d) => d.rf_address === rf)) delete unlistedUI[rf];
-  }
-  if (state.unlisted.length) {
-    for (const d of state.unlisted) list.appendChild(renderUnlisted(d));
-    unl.classList.remove("hidden");
-  } else {
-    unl.classList.add("hidden");
-  }
-  planWindowRedraw();
+  $("unlisted").classList.toggle("hidden", !state.unlisted.length);
 }
 
-// rerenderRoom replaces a room's tile in place, keeping its UI state.
-// Removing a tile blurs a focused input, whose change handler may ask
-// for another render; that request is deferred until this one is done.
-let rendering = false;
+// rerenderRoom draws a room's tile again after a change of the room or of
+// its configuration, and fills its configuration (config.js) again at
+// once (MassimoParts.rooms.room).
 function rerenderRoom(room) {
-  if (rendering) {
-    queueMicrotask(() => rerenderRoom(room));
-    return;
-  }
-  const old = document.querySelector('.room[data-id="' + room.id + '"]');
-  if (!old) return;
-  rendering = true;
-  try {
-    old.replaceWith(renderRoom(room));
-  } finally {
-    rendering = false;
-  }
-  planWindowRedraw();
+  MassimoParts.rooms.room(room.id);
 }
 
 // configFocused reports whether the focus is in a room tile's
-// configuration.
+// configuration, which a state event then does not fill again until the
+// focus has left it (ui/src/rooms/store.ts changed).
 function configFocused(room) {
   const area = document.querySelector('.room[data-id="' + room.id + '"] .config-area');
   return !!(area && area.contains(document.activeElement));
 }
 
 // updateDevice applies a state event to the room or the unlisted list.
-// A tile whose configuration has the focus is not drawn again under the
-// user's typing: the state is taken, and drawn once the focus leaves the
-// configuration (renderRoom).
+// The room's tile follows in place (MassimoParts.rooms.data); its
+// configuration is not filled again under the user's typing: the state is
+// taken, and the configuration filled once the focus leaves it.
 function updateDevice(d) {
   if (d.virtual) {
     const r = state.rooms.find((x) => x.id === d.room_id);
     if (!r) return;
     r.vwt = d;
-    if (configFocused(r)) roomUI(r).deferred = true;
-    else rerenderRoom(r);
+    MassimoParts.rooms.data(r.id);
     return;
   }
   for (const r of state.rooms) {
@@ -183,17 +151,14 @@ function updateDevice(d) {
       r.devices[i] = d;
       r.ready = r.devices.every((x) => x.reported);
       r.stale = r.devices.some((x) => x.stale);
-      if (configFocused(r)) roomUI(r).deferred = true;
-      else rerenderRoom(r);
+      MassimoParts.rooms.data(r.id);
       return;
     }
   }
   const j = state.unlisted.findIndex((x) => x.rf_address === d.rf_address);
   if (j >= 0) {
     state.unlisted[j] = d;
-    const old = document.querySelector('#unlisted-devices .device[data-rf="' + d.rf_address + '"]');
-    // A form being typed in keeps its row; the next render brings the state.
-    if (old && !(unlistedUI[d.rf_address] || {}).form) old.replaceWith(renderUnlisted(d));
+    MassimoParts.rooms.unlisted(); // its row follows, the form under it as it is
   }
 }
 
@@ -284,21 +249,11 @@ function typeName(type) {
   return s === key ? type.replace(/_/g, " ") : s;
 }
 
-// showTileResult says how an action went on the room's tile (or the
-// page's message line when the tile is gone); a success fades.
+// showTileResult says how an action went on the room's tile (roomUI's
+// result, MassimoParts.rooms.result), or on the page's message line when
+// the tile is gone; a success fades.
 function showTileResult(roomId, text, ok) {
-  const tile = document.querySelector('.room[data-id="' + roomId + '"]');
-  if (!tile) {
-    showMessage(text, ok);
-    return;
-  }
-  const p = tile.querySelector(".tile-result");
-  showResult(p, text, ok);
-  if (ok) {
-    setTimeout(() => {
-      if (p.textContent === text) p.classList.add("hidden");
-    }, RESULT_FADE_MS);
-  }
+  if (!MassimoParts.rooms.result(roomId, text, ok)) showMessage(text, ok);
 }
 
 // --- actions ----------------------------------------------------------
@@ -310,7 +265,6 @@ function stepSetpoint(room, delta) {
   ui.pending = clampTemp(from + delta);
   if (ui.timer) clearTimeout(ui.timer);
   ui.timer = setTimeout(() => flushSetpoint(room), SEND_DELAY_MS);
-  rerenderRoom(room);
 }
 
 function cancelSetpoint(room) {
@@ -318,7 +272,6 @@ function cancelSetpoint(room) {
   if (ui.timer) clearTimeout(ui.timer);
   ui.timer = null;
   ui.pending = null;
-  rerenderRoom(room);
 }
 
 // flushSetpoint sends the stepper's value, which stays shown, with Save
@@ -406,16 +359,13 @@ async function deleteRoom(room) {
 // closePanels closes every inline panel (vacation, delete confirm,
 // House), for the Escape key; dropdown (components.js) closes the menus.
 function closePanels() {
-  if (!housePanel().classList.contains("hidden")) closeHouse();
+  if (houseOpen()) closeHouse(); // house.js
   for (const room of state.rooms) {
     const ui = state.ui[room.id];
     if (!ui) continue;
     if (ui.vacation || ui.confirm) {
       ui.vacation = false;
-      ui.vacationTemp = undefined;
-      ui.vacationUntil = undefined;
       ui.confirm = false;
-      rerenderRoom(room);
     }
   }
 }

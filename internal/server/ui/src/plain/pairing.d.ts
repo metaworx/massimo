@@ -6,8 +6,11 @@
  *
  * The globals of the plain script ui/pairing.js that the parts call: a
  * Cube's pairing, which stays plain inside its panel until its own block
- * (AP UiParts, Block 9), filled into the panel's .cube-pairing.
+ * (AP UiParts, Block 9), filled into the panel's .cube-pairing, and the
+ * form that puts a device without a room into one.
  */
+
+import type { Device } from "../api";
 
 declare global {
   /** Asks for a Cube's pairing state and draws its pairing again. */
@@ -16,6 +19,14 @@ declare global {
   function loadCubeRooms(serial: string): Promise<void>;
   /** Fills the .cube-pairing of the Cube's panel with its pairing, as it stands. */
   function redrawPairing(serial: string): void;
+  /**
+   * The form that puts a device in no room into one: e keeps what is typed
+   * across a new form, the result and whether it is being sent; onDone
+   * runs once the device is in its room, onFail after a refusal, onCancel
+   * is its Cancel.
+   */
+  function pairDeviceForm(serial: string, dev: Device, e: Record<string, unknown>,
+    on?: { onDone?: () => void; onFail?: () => void; onCancel?: () => void }): HTMLFormElement;
 }
 
 export {};

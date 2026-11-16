@@ -903,7 +903,7 @@ body.scrolled .top-btn { display: inline-flex; }
 .cubes-msg.ok { color: var(--ok); }
 .cubes-msg.bad { color: var(--bad); }
 /* pairing in a Cube's panel (pairing.js), and the form that puts a device
-   into a room, there and under Devices without a room (unlisted.js) */
+   into a room, there and under Devices without a room (ui/src/rooms/Unlisted.tsx) */
 .cube-pairing { margin: 0 0 12px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
 .no-cubes .cube-pairing { border-bottom: none; padding-bottom: 0; }
 .pairing-form, .pairing-running { margin-top: 2px; }
@@ -1328,7 +1328,7 @@ html.blink-first .server-sign[data-state="new"] use.mark, html.blink-first .serv
    both rather than on a line of their own. */
 .mode-group { display: inline-flex; flex-wrap: wrap; gap: 8px; flex: 1 1 0; }
 .mode-row .mode-group > button.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
-/* More (tiles.js renderMore): a mode button whose menu drops down, Eco,
+/* More (ui/src/rooms/Tile.tsx More): a mode button whose menu drops down, Eco,
    Comfort, the Hold switch and Holiday…, its items those of a menu */
 .mode-group .more-sum {
   display: inline-flex;

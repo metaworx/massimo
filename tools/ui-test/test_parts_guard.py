@@ -160,6 +160,34 @@ def room_config(tab):
     return show
 
 
+# A device without a room, as GET …/devices gives one the original
+# software paired and never put into a room: the fixture has none, and one
+# joins only through pairing, a write to the fake Cube.
+UNLISTED_STUB = {"rf_address": "0a0f01", "type": "radiator_thermostat", "name": "", "room_id": 0, "serial": "MEQ0000901",
+                 "unlisted": True, "reported": False}
+
+
+def unlisted_form(page):
+    """The devices without a room with UNLISTED_STUB, GET …/devices
+    answered with the server's answer and it at every load, and its form
+    that puts it into a room open."""
+    on_rooms(page)
+
+    def handle(route):
+        try:
+            devices = route.fetch().json() or []
+            route.fulfill(status=200, content_type="application/json", body=json.dumps(devices + [UNLISTED_STUB]))
+        except Exception:  # the route is already handled, or the page closed
+            pass
+    page.route("**/api/v1/cubes/*/devices?devices=real", handle)
+    page.evaluate("loadRooms()")
+    row = page.locator("#unlisted .device[data-rf='0a0f01']")
+    row.wait_for(state="visible")
+    row.locator(".put-open").click()
+    row.locator("form input[name=name]").wait_for(state="visible")
+    settle(page)
+
+
 def house_panel(page):
     on_rooms(page)
     page.locator("#house-auto").click()
@@ -421,8 +449,7 @@ REGIONS = (
     Region("room-config", ("#rooms .room .config-area",),
            tuple(View(f"a tile's configuration, tab {tab}", room_config(tab)) for tab in ("room", "temps", "devices", "program", "copy"))),
     Region("house", ("#house",), (View("the House panel open", house_panel),)),
-    Region("unlisted", ("#unlisted",),
-           gap="the fixture has no device without a room; one joins only through pairing, which is a write to the fake Cube"),
+    Region("unlisted", ("#unlisted",), (View("a device without a room, its form that puts it into a room open", unlisted_form),)),
     Region("cubes-list", ("#cubes-list", "#cubes-msg"), (
         View("every panel closed", cubes_closed, focus=".cube-panel > summary"),
         View("a closed Cube's problem list open", cubes_problems),
@@ -466,13 +493,13 @@ REGIONS = (
 # (2026-11-15), although none has moved: they are filled in place, or
 # drawn again only by the user's own action (Create key, a backup, a
 # command's detail), which the guard does not apply. The block that
-# moves one of them keeps it passing. The two regions the fixture
-# cannot show stay here until it can.
+# moves one of them keeps it passing. The sign-in, which the fixture
+# cannot show, stays here until it can; the devices without a room,
+# which it cannot show either, are given one by their view's stub.
 NOT_MOVED = {
-    "rooms": "a state event builds the tile again, a rooms reload every tile: the menus close, the focus goes, typing is set back",
-    "room-config": "kept while the focus is in it; the redraw put off meanwhile replaces the tile once the focus leaves",
-    "house": "a rooms reload builds the rooms' checkboxes again (renderHouseRooms): the ticks are carried over, the focus is not",
-    "unlisted": "a rooms reload builds every row again, a state event its row unless its form is open",
+    "room-config": "plain inside its tile (config.js, Block 8): a data event fills it again, but while the focus is in it; "
+                   "once the focus leaves, the fill put off comes: every element is new, and what is typed and not yet "
+                   "taken by a change event is gone",
     "sign-in": "the dialog is filled again at each askLogin",
 }
 

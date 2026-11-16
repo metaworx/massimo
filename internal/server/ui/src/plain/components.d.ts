@@ -20,6 +20,8 @@ declare global {
     warn?: string;
     bad?: string;
   }
+  /** The drawing of the window or the radio the person chose: the window's closed type icon, and the sign. */
+  function iconChoice(kind: "window" | "radio"): { type?: string; sign: SignDrawing };
   /** The sign of a kind of SIGNS, or of the person's choice for the window and the radio. */
   function signOf(kind: string): SignDrawing;
   /** The state a badge's kind stands for, where a mark shows it: "warn" or "bad". */

@@ -17,6 +17,7 @@
 import type { Cube } from "../api";
 import { Sign } from "../shared/icon";
 import { entryItems, kindsLabel, type Entry, type Item } from "../shared/problems";
+import { deviceEntry, deviceProblems } from "./device";
 
 /** chosenCube is the Cube chosen in the header, undefined before there is one. */
 export function chosenCube(): Cube | undefined {
@@ -69,12 +70,8 @@ export function cubeEntry(c: Cube, own?: boolean): Entry {
   const st = linkSign(c);
   const items: Item[] = st === "ok" ? [] : [{ kind: "net", icon: "icon-net", sign: "net", tone: st === "bad" ? "bad" : "warn", text: linkWord(c) }];
   if (own) items.push(...cubeSettingItems(c, ""));
-  const subs = (c.problems || []).map((d) => ({
-    icon: deviceIcon(d),
-    title: [d.room, deviceName(d)].filter(Boolean).join(" › "),
-    sub: d.serial || d.rf_address,
-    items: deviceProblems(d, true).filter((it) => it.tone !== "fill-open"),
-  }));
+  const subs = (c.problems || []).map((d) =>
+    deviceEntry(d, deviceProblems(d, true).filter((it) => it.tone !== "fill-open"), [d.room, deviceName(d)].filter(Boolean).join(" › ")));
   return { sign: { kind: "net", state: st }, title: c.name || c.serial, sub: c.name ? c.serial : "", items, subs };
 }
 
