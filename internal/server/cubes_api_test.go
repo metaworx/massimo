@@ -21,7 +21,8 @@ import (
 )
 
 // startStored starts a server whose one Cube, the fake Cube KEQ0000100,
-// is a row of a store in a temporary directory.
+// is a row of a store in a temporary directory, once the Cube is connected
+// and the server's start is written.
 func startStored(t *testing.T, opts Options) (*fakecube.Server, *httptest.Server, *Server, *store.Store) {
 	t.Helper()
 	greeting, err := fakecube.LoadGreeting(fixture)
@@ -50,6 +51,12 @@ func startStored(t *testing.T, opts Options) (*fakecube.Server, *httptest.Server
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
 	waitConnected(t, ts, "KEQ0000100")
+	// server_started waits in the writer's batch, and a line the test
+	// writes itself does not: written after that line, in its
+	// millisecond, it would settle a restart the test adds (logAlerts).
+	if err := st.FlushEvents(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 	return fc, ts, s, st
 }
 
