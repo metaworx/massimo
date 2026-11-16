@@ -577,7 +577,7 @@ paths:
       parameters:
         - {name: before, in: query, description: "Rows before this time, RFC 3339", schema: {type: string, format: date-time}}
         - {name: limit, in: query, description: At most this many rows (100), schema: {type: integer, minimum: 1, maximum: 1000, default: 100}}
-        - {name: user, in: query, description: Rows of this user's login name, schema: {type: string}}
+        - {name: user, in: query, description: "Rows of this user's login name: made with its rights (effective_user) or by it (real_user)", schema: {type: string}}
       responses:
         "200":
           description: The rows
@@ -1244,7 +1244,7 @@ paths:
               type: object
               additionalProperties: false
               properties:
-                name: {type: string, maxLength: 64}
+                name: {type: string, maxLength: 64, description: "Its name as the owner gives it: its own user's display name, which the chain of each of its users begins with"}
                 max_caps: {type: array, items: {type: string}}
                 state: {type: string, enum: [active, disabled]}
       responses:
@@ -2971,7 +2971,7 @@ paths:
         - {name: source, in: query, description: "Only events of this source: a device's, the Cube's own, the server's own jobs, a change of the configuration, the queue's (a command's steps, its holds), the server's sign-ins, the LAN proxy's", schema: {type: string, enum: [device, cube, system, config, queue, server, proxy]}}
         - {name: level, in: query, description: "Only events of this level and above; info by default", schema: {type: string, enum: [debug, info, warn, error], default: info}}
         - {name: device, in: query, description: "Only events of this device, by its serial number or its radio address, also one the Cube no longer has", schema: {type: string, pattern: "^([0-9a-fA-F]{6}|[A-Za-z]{3}[0-9]{7})$", example: MEQ0000101}}
-        - {name: user, in: query, description: "Only events this user started, by the login name, a removed user's too; a name the server does not know answers an empty page", schema: {type: string, example: anna}}
+        - {name: user, in: query, description: "Only events this user started, by the login name, a removed user's too: those started with its rights (effective_user) or by it (real_user); a name the server does not know answers an empty page", schema: {type: string, example: anna}}
         - {name: command, in: query, description: "Only the events of this command (GET /api/v1/commands/{id}): its attempt, a discard and a retry, its outcome", schema: {type: integer, minimum: 1, example: 42}}
       responses:
         "200":
@@ -3008,10 +3008,12 @@ paths:
                     command: {type: integer, description: "The command the event belongs to (GET /api/v1/commands/{id}); absent for none, and once the command is pruned"}
                     by:
                       type: object
-                      description: Who started it, as the user is named now; absent for the Cube, the server's own jobs and a server without users
+                      description: Who started it, the user whose rights it had, as the user is named now; absent for the Cube, the server's own jobs and a server without users
                       properties:
                         name: {type: string}
                         display_name: {type: string}
+                    effective_user: {$ref: "#/components/schemas/RowUser"}
+                    real_user: {$ref: "#/components/schemas/RowUser"}
                     time: {type: string, format: date-time}
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
@@ -3039,7 +3041,7 @@ paths:
         - {name: source, in: query, description: "Only events of this source", schema: {type: string, enum: [device, cube, system, config, queue, server, proxy]}}
         - {name: level, in: query, description: "Only events of this level and above; info by default", schema: {type: string, enum: [debug, info, warn, error], default: info}}
         - {name: device, in: query, description: "Only events of this device: by its serial number, or by its radio address on every Cube", schema: {type: string, pattern: "^([0-9a-fA-F]{6}|[A-Za-z]{3}[0-9]{7})$", example: MEQ0000101}}
-        - {name: user, in: query, description: "Only events this user started, by the login name", schema: {type: string, example: anna}}
+        - {name: user, in: query, description: "Only events this user started, by the login name: with its rights or by it", schema: {type: string, example: anna}}
         - {name: command, in: query, description: "Only the events of this command", schema: {type: integer, minimum: 1, example: 42}}
       responses:
         "200":
@@ -4082,7 +4084,9 @@ components:
       properties:
         id: {type: integer}
         time: {type: string, format: date-time}
-        user: {type: string, description: "The login name; absent for no authentication, a failed login or the command line"}
+        user: {type: string, description: "The login name of the user whose rights it had; absent for no authentication, a failed login or the command line"}
+        effective_user: {$ref: "#/components/schemas/RowUser"}
+        real_user: {$ref: "#/components/schemas/RowUser"}
         token_id: {type: integer, description: The session or key used}
         remote: {type: string, description: "The client's address, or cli"}
         action: {type: string, description: "setpoint, room.config, device.update, cube.add, user.add, login, login.failed, …", example: setpoint}
@@ -4320,11 +4324,34 @@ components:
             With login, for a user of auth_version 1: a proof, good once for five minutes, to set the user's own
             record with in PUT /api/v1/users/{name} without the password
         provider: {type: string, description: "After a sign-in through an OpenID Connect provider: the provider's key"}
+    RowUser:
+      type: object
+      description: >-
+        A user of a row of the log or the audit, as it is named now: effective_user the user whose rights it had,
+        real_user who made it, the same user but for a call of an integration's user linked to a Massimo user, which the
+        effective user then is. Absent for no authentication, the Cube and the server's own jobs.
+      properties:
+        name: {type: string, description: "The login name; an integration's user's is <the integration's uuid>:<its id there>"}
+        display_name: {type: string}
+        integration: {type: string, description: "The uuid of the integration whose user it is; absent for any other user"}
+        display:
+          type: string
+          description: >-
+            How it is shown: its display name, else its login name; an integration's user by the chain
+            "<the integration's name> › <its display name>"; real_user's with ", as <the effective user's login name>"
+            where the two differ.
+          example: "Home › Anna, as anna"
     User:
       type: object
       properties:
-        name: {type: string, description: "The login name, lower case"}
+        name: {type: string, description: "The login name, lower case; an integration's users' are <the integration's uuid>:, <uuid>:system and <uuid>:<its id there>"}
         display_name: {type: string}
+        display:
+          type: string
+          description: >-
+            How the user is shown: its display name, else its login name; an integration's user by the chain
+            "<the integration's name> › <its display name>", with ", as <login name>" where it is linked to a Massimo user
+          example: "Home › Anna, as anna"
         role: {type: string, description: The role's key}
         disabled: {type: boolean}
         has_password: {type: boolean, description: False for a user with keys only}
@@ -4336,9 +4363,8 @@ components:
         last_login_at: {type: string, format: date-time}
         integration:
           type: object
-          description: "In GET /api/v1/users: an integration's user. id, name and linked_to for one of its users, absent for the integration's own"
+          description: "An integration's user, with its integration's uuid; in GET /api/v1/users id, name and linked_to for one of its users, absent for the integration's own"
           properties:
-            key: {type: string}
             uuid: {type: string}
             id: {type: string}
             name: {type: string}
@@ -4349,9 +4375,10 @@ components:
           items:
             type: object
             properties:
-              integration: {type: string, description: The integration's key}
+              integration: {type: string, description: The integration's uuid}
               id: {type: string}
               name: {type: string}
+              display: {type: string, description: "Its chain, <the integration's name> › <its display name>"}
     RoleRef:
       type: object
       properties:
@@ -4391,8 +4418,8 @@ components:
           description: "The registered integration whose key it is; null for any other key"
           properties:
             uuid: {type: string}
-            key: {type: string}
-            name: {type: string}
+            name: {type: string, description: "Its name as the owner gives it, its own user's display name"}
+            reported_name: {type: string, description: The name it reports}
             state: {type: string}
             instance_id: {type: string}
         acts_for:
@@ -5108,15 +5135,18 @@ components:
       properties:
         uuid: {type: string}
         kind: {type: string}
-        key: {type: string, description: "Lower case, its users' names begin with it; absent for a request"}
-        name: {type: string}
+        name:
+          type: string
+          description: >-
+            Its name as the owner gives it (PUT), its own user's display name; it follows reported_name while it is the
+            name reported before. A request's is the name it reported.
+        reported_name: {type: string, description: "The name the integration reports, when it asks and when a request is attached to it"}
         state: {type: string, enum: [pending, active, disabled]}
         instance_id: {type: string}
         pending_instance: {type: string, description: "An installation id a call came with, not accepted yet"}
         url: {type: string}
         version: {type: string}
         max_caps: {type: array, items: {type: string}, description: "The key's maximum, within the role integration"}
-        user: {type: string, description: "Its own user, holding its key"}
         request_code: {type: string, description: "A request's short code"}
         request_expires: {type: string, format: date-time, description: "Until when a request waits, or an approved integration may collect its key; absent once collected"}
         request_remote: {type: string, description: The address the request came from}
@@ -5132,6 +5162,7 @@ components:
       properties:
         id: {type: string, description: "Its id at the integration, or system"}
         name: {type: string, description: "Its name there, from its last call"}
+        display: {type: string, description: "Its chain, <the integration's name> › <its user's display name>, with \", as <login name>\" where linked", example: "Home › Anna, as anna"}
         user: {type: string, description: The user its calls act as}
         own_user: {type: string, description: The user made at its first call}
         linked: {type: boolean}

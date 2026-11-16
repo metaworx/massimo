@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -371,6 +372,14 @@ func TestEventsPageQuery(t *testing.T) {
 	if _, err := s.db.Exec(`UPDATE log SET effective_user_id = ?, real_user_id = ? WHERE cube_id = ? AND id % 211 = 0`, anna.ID, anna.ID, a.ID); err != nil {
 		t.Fatal(err)
 	}
+	// Anna's rows acting as bruno, as an integration's user linked to him.
+	bruno, err := s.AddUser(ctx, User{Name: "bruno", Role: RoleViewer}, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`UPDATE log SET effective_user_id = ?, real_user_id = ? WHERE cube_id = ? AND id % 223 = 0`, bruno.ID, anna.ID, a.ID); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := s.db.Exec(`UPDATE log SET level = 8 WHERE level = 0 AND id % 997 = 0`); err != nil {
 		t.Fatal(err)
 	}
@@ -424,24 +433,35 @@ func TestEventsPageQuery(t *testing.T) {
 		if sh.q.Server && sh.q.CubeID != 0 {
 			walks = append(walks, 0)
 		}
+		queries := []EventQuery{sh.q}
+		if sh.q.UserID != 0 {
+			byReal := sh.q
+			byReal.byReal = true
+			queries = append(queries, byReal)
+		}
 		var plan []string
 		for _, cube := range walks {
-			query, args := eventsQuery(sh.q, cube, 200)
-			rows, err := s.db.QueryContext(ctx, "EXPLAIN QUERY PLAN "+query, args...)
-			if err != nil {
-				t.Fatal(err)
-			}
-			for rows.Next() {
-				var id, parent, unused int
-				var detail string
-				if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
+			for _, wq := range queries {
+				query, args := eventsQuery(wq, cube, 200)
+				rows, err := s.db.QueryContext(ctx, "EXPLAIN QUERY PLAN "+query, args...)
+				if err != nil {
 					t.Fatal(err)
 				}
-				plan = append(plan, detail)
+				for rows.Next() {
+					var id, parent, unused int
+					var detail string
+					if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
+						t.Fatal(err)
+					}
+					plan = append(plan, detail)
+				}
+				rows.Close()
 			}
-			rows.Close()
 		}
 		joined := strings.Join(plan, "; ")
+		if sh.q.UserID != 0 && (!strings.Contains(joined, "log_user") || !strings.Contains(joined, "log_real_user")) {
+			t.Errorf("%s: not by log_user and log_real_user: %s", sh.name, joined)
+		}
 		if strings.Contains(joined, "TEMP B-TREE") || strings.Contains(joined, "SCAN log") {
 			t.Errorf("%s: %s", sh.name, joined)
 		}
@@ -458,12 +478,15 @@ func TestEventsPageQuery(t *testing.T) {
 		}
 		for i, e := range page {
 			if e.CubeID != q.CubeID && !(q.Server && e.CubeID == 0) || (q.Kind != "" && e.Kind != q.Kind) || (q.Serial != "" && e.Serial != q.Serial) ||
-				(q.Source != "" && e.Source != q.Source) || (q.UserID != 0 && e.EffectiveUserID != q.UserID) || (q.MinLevel != nil && e.Level < *q.MinLevel) ||
+				(q.Source != "" && e.Source != q.Source) || (q.UserID != 0 && e.EffectiveUserID != q.UserID && e.RealUserID != q.UserID) || (q.MinLevel != nil && e.Level < *q.MinLevel) ||
 				(q.BeforeID > 0 && e.ID >= q.BeforeID) || (!q.Before.IsZero() && !e.Time.Before(q.Before)) ||
 				(!q.Since.IsZero() && e.Time.Before(q.Since)) ||
 				(i > 0 && e.ID >= page[i-1].ID) {
 				t.Fatalf("%s: event %d: %+v", sh.name, i, e)
 			}
+		}
+		if q.UserID != 0 && !slices.ContainsFunc(page, func(e Event) bool { return e.EffectiveUserID == bruno.ID && e.RealUserID == anna.ID }) {
+			t.Errorf("%s: anna's rows acting as bruno left out", sh.name)
 		}
 		t.Logf("%-16s %3d events in %8v: %s", sh.name, len(page), took, joined)
 	}

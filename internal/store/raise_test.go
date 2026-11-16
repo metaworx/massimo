@@ -602,8 +602,8 @@ func TestRaiseDownLosses(t *testing.T) {
 	if _, err := s.AddUser(ctx, User{Name: "dora"}, "", 0); err != nil {
 		t.Fatal(err)
 	}
-	// L4
-	if _, err := s.SetIntegration(ctx, integ, func(i *Integration) error { i.Name = "Villa Rossa"; return nil }, 0); err != nil {
+	// L4: a name the integration reports anew, as an attached request's.
+	if _, err := s.db.Exec(`UPDATE integrations SET name = 'Villa Rossa' WHERE uuid = ?`, integ); err != nil {
 		t.Fatal(err)
 	}
 	// L1: a row through the integration, its real user its own.

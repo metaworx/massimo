@@ -169,7 +169,8 @@ func (s *Store) AuditList(ctx context.Context, before time.Time, limit int, user
 	if user == "" {
 		return s.auditRows(ctx, `(? = '' OR a.time < ?)`, bound, bound, limit)
 	}
-	// By the user's id, which the index audit_user serves; a join on
+	// By the user's id, which the indexes audit_user and audit_real_user
+	// serve; a join on
 	// the name would read the whole audit. A name is the user's that is
 	// not removed, else the one removed last.
 	id, ok, err := s.UserIDByName(ctx, user)
@@ -179,13 +180,14 @@ func (s *Store) AuditList(ctx context.Context, before time.Time, limit int, user
 	if !ok {
 		return []AuditEntry{}, nil
 	}
-	return s.auditRows(ctx, auditByUser, id, bound, bound, limit)
+	return s.auditRows(ctx, auditByUser, id, id, bound, bound, limit)
 }
 
 // auditByUser is the WHERE of one user's rows before a time (the empty
-// text: from the newest), its arguments the user's id and the time
-// twice.
-const auditByUser = `a.effective_user_id = ? AND (? = '' OR a.time < ?)`
+// text: from the newest): the rows made with its rights or by it, as an
+// integration's user acting as a Massimo user (real_user_id). Its
+// arguments are the user's id twice and the time twice.
+const auditByUser = `(a.effective_user_id = ? OR a.real_user_id = ?) AND (? = '' OR a.time < ?)`
 
 // AuditOfCommand returns the audit's row of a command, the request that
 // is the command; false for none (a proxy client's, or one pruned).

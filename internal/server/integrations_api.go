@@ -74,17 +74,22 @@ func newRequestCode() (string, error) {
 
 // integrationView is an integration as the API shows it.
 type integrationView struct {
-	UUID            string    `json:"uuid"`
-	Kind            string    `json:"kind"`
-	Key             string    `json:"key,omitempty"` // its uuid: migration 0024 dropped the key, AP StoreRaise v1.2, Block 4 drops this
+	UUID string `json:"uuid"`
+	Kind string `json:"kind"`
+	Key  string `json:"key,omitempty"` // undocumented, for older clients: its uuid since migration 0024 dropped the key
+	// Name is the integration's name as the owner gives it, its own
+	// user's display name (PUT …/integrations/{uuid}); ReportedName the
+	// one the integration reports, which Name follows while it is the
+	// one reported before (store.copyReportedName).
 	Name            string    `json:"name"`
+	ReportedName    string    `json:"reported_name"`
 	State           string    `json:"state"`
 	InstanceID      string    `json:"instance_id"`
 	PendingInstance string    `json:"pending_instance,omitempty"`
 	URL             string    `json:"url,omitempty"`
 	Version         string    `json:"version,omitempty"`
 	MaxCaps         []string  `json:"max_caps"`
-	User            string    `json:"user,omitempty"`
+	User            string    `json:"user,omitempty"` // undocumented, for older clients: its own user's login name, <uuid>:
 	RequestCode     string    `json:"request_code,omitempty"`
 	RequestExpires  time.Time `json:"request_expires,omitzero"`
 	RequestRemote   string    `json:"request_remote,omitempty"`
@@ -100,7 +105,7 @@ type integrationView struct {
 // viewIntegration is i as the API shows it; a request shows its code and
 // where it came from.
 func (s *Server) viewIntegration(r *http.Request, i store.Integration) integrationView {
-	v := integrationView{UUID: i.UUID, Kind: i.Kind, Name: i.Name, State: i.State, InstanceID: i.InstanceID, PendingInstance: i.PendingInstance,
+	v := integrationView{UUID: i.UUID, Kind: i.Kind, Name: store.IntegrationName(i), ReportedName: i.Name, State: i.State, InstanceID: i.InstanceID, PendingInstance: i.PendingInstance,
 		URL: i.URL, Version: i.AppVersion, MaxCaps: i.MaxCaps, KeyIssuedAt: i.KeyIssuedAt, CreatedAt: i.CreatedAt, Seen: s.instanceSeen(i.InstanceID)}
 	if i.State == store.IntegrationPending {
 		v.RequestCode, v.RequestExpires, v.RequestRemote = i.RequestCode, i.RequestExpires, i.RequestRemote
@@ -288,7 +293,8 @@ func (s *Server) acceptInstance(w http.ResponseWriter, r *http.Request) error {
 }
 
 // putIntegration handles PUT /api/v1/integrations/{uuid}: {"name",
-// "max_caps", "state"}, each optional.
+// "max_caps", "state"}, each optional; name is its own user's display
+// name, the integration's name as the owner gives it.
 func (s *Server) putIntegration(w http.ResponseWriter, r *http.Request) error {
 	st, err := s.userStore()
 	if err != nil {
@@ -312,12 +318,12 @@ func (s *Server) putIntegration(w http.ResponseWriter, r *http.Request) error {
 	if req.State != nil && *req.State != store.IntegrationActive && *req.State != store.IntegrationDisabled {
 		return fail(http.StatusBadRequest, "state is active or disabled")
 	}
-	if req.Name != nil && (strings.TrimSpace(*req.Name) == "" || len(*req.Name) > 64) {
-		return fail(http.StatusBadRequest, "name is 1 to 64 characters")
+	if req.Name != nil && (strings.TrimSpace(*req.Name) == "" || len(*req.Name) > maxDisplayName) {
+		return fail(http.StatusBadRequest, "name is 1 to %d bytes", maxDisplayName)
 	}
 	i, err := st.SetIntegration(r.Context(), r.PathValue("uuid"), func(i *store.Integration) error {
 		if req.Name != nil {
-			i.Name = *req.Name
+			i.DisplayName = strings.TrimSpace(*req.Name)
 		}
 		if req.MaxCaps != nil {
 			i.MaxCaps = *req.MaxCaps
@@ -353,6 +359,7 @@ func (s *Server) deleteIntegration(w http.ResponseWriter, r *http.Request) error
 type integrationUserView struct {
 	ID              string    `json:"id"` // its id at the integration, or system
 	Name            string    `json:"name"`
+	Display         string    `json:"display"`  // its chain, with whom it acts as where linked (names.go)
 	User            string    `json:"user"`     // the user its calls act as
 	OwnUser         string    `json:"own_user"` // the user made at its first call
 	Linked          bool      `json:"linked"`
@@ -405,9 +412,12 @@ func (s *Server) getIntegration(w http.ResponseWriter, r *http.Request) error {
 	for _, u := range users {
 		byID[u.ID] = u
 	}
+	n := st.Namer()
+	n.Seed(users...)
 	out := []integrationUserView{}
 	for _, id := range ids {
-		v := integrationUserView{ID: id.Subject, Name: id.Name, User: byID[id.EffectiveUserID].Name, OwnUser: byID[id.RealUserID].Name, Linked: id.Linked(),
+		v := integrationUserView{ID: id.Subject, Name: id.Name, Display: n.Display(r.Context(), id.RealUserID, id.EffectiveUserID),
+			User: byID[id.EffectiveUserID].Name, OwnUser: byID[id.RealUserID].Name, Linked: id.Linked(),
 			SystemGenerated: id.SystemGenerated, LastLevel: id.LastLevel, LastUsedAt: id.LastUsedAt}
 		if !id.Linked() && id.Subject != "system" && id.Name != "" {
 			for _, u := range users {
@@ -484,6 +494,8 @@ func integrationMarks(ctx context.Context, st *store.Store, users []store.User) 
 	for _, u := range users {
 		names[u.ID] = u.Name
 	}
+	n := st.Namer()
+	n.Seed(users...)
 	byID := map[int64]store.Integration{}
 	marks := map[int64]*userIntegration{}
 	for _, i := range integs {
@@ -498,7 +510,11 @@ func integrationMarks(ctx context.Context, st *store.Store, users []store.User) 
 		m := &userIntegration{Key: i.UUID, UUID: i.UUID, ID: id.Subject, Name: id.Name}
 		if id.Linked() {
 			m.LinkedTo = names[id.EffectiveUserID]
-			links[id.EffectiveUserID] = append(links[id.EffectiveUserID], userLink{Integration: i.UUID, ID: id.Subject, Name: id.Name})
+			link := userLink{Integration: i.UUID, ID: id.Subject, Name: id.Name}
+			if u, ok := n.User(ctx, id.RealUserID); ok {
+				link.Display = n.Chain(ctx, u)
+			}
+			links[id.EffectiveUserID] = append(links[id.EffectiveUserID], link)
 		}
 		marks[id.RealUserID] = m
 	}

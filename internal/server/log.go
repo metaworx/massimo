@@ -57,7 +57,7 @@ func storedEvent(cubeID int64, ev event) store.Event {
 	ev.settle()
 	level, _ := store.ParseLevel(ev.Level)
 	userID := ev.userID
-	ev.By = nil // the row keeps the user's id, the page names them
+	ev.By, ev.EffectiveUser, ev.RealUser = nil, nil, nil // the row keeps the users' ids, the page names them
 	data, _ := json.Marshal(ev)
 	vis := store.VisibilityRead
 	if ev.audit {
@@ -308,7 +308,8 @@ func (s *Server) logUser(ctx context.Context, lq *logQuery) (none bool, err erro
 // (each Cube's row id to the S/N its events carry as cube_serial, "" for
 // none) and the server's, after the writer wrote what is pending, and
 // turns it round, oldest first; who started an event is named as the
-// users table names them now. Without a Cube, the server's rows alone.
+// users table names them now, each with its chain (names.go). Without a
+// Cube, the server's rows alone.
 func (s *Server) storedLog(ctx context.Context, st *store.Store, cubes map[int64]string, lq logQuery) ([]event, error) {
 	if err := st.FlushEvents(ctx); err != nil {
 		s.log.Warn("api: the log's pending events not written", "error", err)
@@ -321,7 +322,7 @@ func (s *Server) storedLog(ctx context.Context, st *store.Store, cubes map[int64
 	if err != nil {
 		return nil, fail(http.StatusInternalServerError, "%v", err)
 	}
-	users := map[int64]*eventUser{}
+	n := st.Namer()
 	out := make([]event, 0, len(rows))
 	for i := len(rows) - 1; i >= 0; i-- {
 		var ev event
@@ -329,7 +330,7 @@ func (s *Server) storedLog(ctx context.Context, st *store.Store, cubes map[int64
 			s.log.Warn("api: a stored event not read", "id", rows[i].ID, "error", err)
 			continue
 		}
-		ev.ID, ev.Source, ev.Level, ev.By = rows[i].ID, rows[i].Source, store.LevelName(rows[i].Level), nil
+		ev.ID, ev.Source, ev.Level, ev.By, ev.EffectiveUser, ev.RealUser = rows[i].ID, rows[i].Source, store.LevelName(rows[i].Level), nil, nil, nil
 		ev.Command = rows[i].CommandID
 		if ev.Serial == "" {
 			ev.Serial = rows[i].Serial
@@ -338,13 +339,8 @@ func (s *Server) storedLog(ctx context.Context, st *store.Store, cubes map[int64
 			ev.CubeSerial = cubes[id]
 		}
 		if id := rows[i].EffectiveUserID; id != 0 {
-			by, seen := users[id]
-			if !seen {
-				named := event{userID: id}
-				s.nameUser(ctx, &named)
-				by, users[id] = named.By, named.By
-			}
-			ev.By = by
+			ev.userID, ev.realUserID = id, rows[i].RealUserID
+			nameUsers(ctx, n, &ev)
 		}
 		out = append(out, ev)
 	}
@@ -366,7 +362,7 @@ func filterEvents(all []event, lq logQuery) []event {
 		if !lq.before.IsZero() && !ev.Time.Before(lq.before) || !lq.since.IsZero() && ev.Time.Before(lq.since) ||
 			lq.kind != "" && ev.Kind != lq.kind || lq.source != "" && ev.Source != lq.source ||
 			lq.serial != "" && ev.Serial != lq.serial || lq.device != "" && ev.Device != lq.device ||
-			lq.userID != 0 && ev.userID != lq.userID || lq.command != 0 && ev.Command != lq.command ||
+			lq.userID != 0 && ev.userID != lq.userID && ev.realUserID != lq.userID || lq.command != 0 && ev.Command != lq.command ||
 			ev.audit && !lq.audit || level < lq.minLevel {
 			continue
 		}
