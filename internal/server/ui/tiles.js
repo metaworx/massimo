@@ -157,7 +157,8 @@ function modeTone(mode) {
 
 // deviceIcon is the icon of a device's type: a radiator, a wall
 // thermostat, a window as the person chooses it, closed, or a leaf for
-// the eco button.
+// the eco button. The parts take its TypeScript twin of
+// ui/src/model/device.ts; this one goes with the tile's drawing.
 function deviceIcon(d) {
   if (d.type === "wall_thermostat") return "icon-wall";
   if (d.type === "shutter_contact") return iconChoice("window").type; // components.js
@@ -186,7 +187,9 @@ function communicationErrorTitle(s) {
 // a radio fault (the Cube could not reach it, its communication error,
 // or its link to another device of the room is disturbed, its link
 // error), each explained in its title, and a weak or low battery;
-// withWindow, also an open window, with its age.
+// withWindow, also an open window, with its age. The parts take its
+// TypeScript twin of ui/src/model/device.ts; this one goes with the
+// tile's drawing.
 function deviceProblems(d, withWindow) {
   const s = d.state || {};
   const out = [];

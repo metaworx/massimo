@@ -4,19 +4,15 @@
 /**
  * @file internal/server/ui/src/plain/tiles.d.ts
  *
- * The globals of the plain script ui/tiles.js that the parts call: a
- * device's type icon and its problems as items of a problem list, which
- * a Cube's entry lists under it (model/cube.tsx).
+ * The globals of the plain script ui/tiles.js that the parts call: the
+ * name of a radiogram that failed, which the log names it by too.
  */
 
-import type { Device } from "../api";
-import type { Item } from "../shared/problems";
+import type { FailedRadiogram } from "../api";
 
 declare global {
-  /** The symbol of a device's type: a radiator, a wall thermostat, a window as the person chooses it, the eco button's leaf. */
-  function deviceIcon(d: Device): string;
-  /** What is wrong with a device, as items of a problem list; withWindow, an open window too. */
-  function deviceProblems(d: Device, withWindow?: boolean): Item[];
+  /** A failed radiogram's type by the original software's name and its code, "TimeInformation (0x03)". */
+  function radiogramName(r: FailedRadiogram): string;
 }
 
 export {};

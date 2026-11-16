@@ -1462,11 +1462,14 @@ element of it.
 The icons draw in the token `warn-mark`, a brighter amber than the text's `warn`,
 at a contrast of 3 on a tile, the text at 4.5 (`TestUIDefaultSchemeMatchesCSS`);
 the filled amber, `fill-warn`, is the Manual mode's alone.
-`problemsEl` is the list of what is wrong in a place, wherever it is put,
-its entries one format at every level (`problemEntry`):
+The list of what is wrong in a place is the shared part `Problems`, wherever it is put,
+its entries one format at every level:
 the icon in a column of its own, the name and a grey detail beside it,
 the badges under the name, and the entries under it (`subs`) indented to the name,
-a line down from its icon.
+a line down from its icon;
+its plain twins in `components.js`
+(`problemsEl`, `problemEntry`, `kindIcons`, `entryItems`)
+have no caller left and wait for Block 15.
 A button that sends a request is busy from its click until the answer:
 off, with a turning ring after its text, and `aria-busy`
 (`setBusy` and `whileBusy`),
@@ -1560,9 +1563,14 @@ and what is not about the API's data is a shared part.
 a Cube's address split into host and port (`hostPort`), its network sign (`CubeSign`)
 and its problems as an entry of `Problems` (`cubeEntry`, `cubeSettingItems`)
 with the label naming their kinds and the Cubes found (`problemsLabelOf`);
-`found.tsx` what a Cube or a Massimo proxy found is and who serves it (`foundWhat`).
-`cubeEntry` calls `deviceProblems` and `deviceIcon` of `tiles.js` today;
-the rooms' move puts them into `model/`, since `model/` may not import a region.
+`found.tsx` what a Cube or a Massimo proxy found is and who serves it (`foundWhat`);
+`device.ts` a device's type as its icon (`deviceIcon`), an open window's state
+by the page's clock (`windowState`, `WINDOW_TONE`) and what is wrong with a device
+as items of `Problems` (`deviceProblems`),
+and a device as an entry of `Problems` (`deviceEntry`),
+which the rooms list in a tile and a device's row,
+and a Cube's entry under the Cube;
+a value's age it takes from `received` of `rooms.js`, as the rooms do.
 
 | Part or helper | File | For | Properties or arguments |
 |---|---|---|---|
@@ -1576,7 +1584,7 @@ the rooms' move puts them into `model/`, since `model/` may not import a region.
 | `Dropdown` | `menu.tsx` | a menu that drops down (`dropdown`), with `arrows` its arrow keys (`menuArrows`) and with `focusCurrent` the focus on its current item when it opens (among `arrows`' items, else its list's buttons that are on); a click on any button of its list closes it, as `dropdown()` of `components.js` does for every menu of the page | `id`, `cls`, `summaryId`, `summaryCls`, `label`, `title` (where the tooltip is not the label), `summary`, `listCls`, `arrows` (a selector of its items), `focusCurrent`, `onClick`, the items as children |
 | `MenuItem` | `menu.tsx` | a menu's button, its icon, label, the icons after it and a grey second line (`menuItem`) | `icon`, `blank`, `label`, `icons`, `sub`, `value` (its `data-value`), `current`, `disabled`, `onClick` |
 | `Picker` | `menu.tsx` | a menu that chooses one item, its summary the chosen one (`pickerMenu`) | `id`, `cls`, `summaryId`, `summaryCls`, `entries` (an item `{ value, label, sub, icon, icons, disabled }`, `{ group }` or `{ separator: true }`), `value`, `onPick(value)`, `shown` (`{ icon, label, title, aria }`) |
-| `actionRunner` | `action.ts` | a request, a reload, and its outcome in the region's message line (`showResult`) | `where()`, `reload()`; gives `run(fn, ok, fail)`, `say(text, ok)` |
+| `actionRunner`, `fader` | `action.ts` | a request, a reload, and its outcome (`Outcome`, `{ text, ok }`) in the region's message line (`showResult`) or in a part's state that a `ResultLine` draws, a success fading where a fade is given; `fader` is that fade alone, for a result set by other means | `where()`, `set(res)`, `fade` (ms), `reload()`; gives `run(fn, ok, fail)`, `say(text, ok)`; `set`, `ms` |
 | `Icon` | `icon.tsx` | a symbol of the page (`iconEl`) | `symbol`, `cls`, `mark` (the symbol is a mark, which blinks where the style makes it) |
 | `Sign` | `icon.tsx` | a kind of `SIGNS` in a state, its mark blinking (`signEl`) | `kind`, `state` ("", ok, warn, bad, open), `cls`, `blink` (the mark's key), `label` (named for a screen reader, else hidden) |
 | `Mark` | `icon.tsx` | a mark alone (`markEl`) | `state` (warn, bad), `blink` |
@@ -1588,7 +1596,9 @@ the rooms' move puts them into `model/`, since `model/` may not import a region.
 | `KindIcons`, `problemKinds`, `kindsLabel` | `problems.tsx` | the kinds' icons of entries without the list (`kindIcons`); the kinds themselves, to know whether there are any; the label naming the kinds among items in an order of kinds, "" for none | `entries`, `skip`; `entries`, `skip`; `items`, `kinds` |
 | `OkPill` | `problems.tsx` | the green check in a list's place (`okPill`) | `label` |
 | `Field` | `field.tsx` | a label and its control, `.field` or `.field.wide` (`fieldRow`) | `label`, `id`, `wide`, `unit`, `hint`, `draft`, `show`, the control as children |
-| `TextField` | `field.tsx` | a row with a text input that shows a stored text, from its draft | `label`, `id`, `name`, `draft`, `show`, `wide` (on by default), `unit`, `hint`, `placeholder`, `type`, `maxLength` |
+| `TextField` | `field.tsx` | a row with a text input that shows a stored text, from its draft | `label`, `id`, `name`, `draft`, `show`, `wide` (on by default), `unit`, `hint`, `placeholder`, `type`, `maxLength`, `pattern` |
+| `Select` | `field.tsx` | a row with a select (`selectInput`), its options as `fillOptions` takes them | `label`, `id`, `name`, `options` (`[value, label, disabled]` or `{ group, options }`), `value` and `onChange`, or `draft` and `show`; `wide`, `unit`, `hint`; `row` (false: the select alone, in a row of the caller's beside other controls) |
+| `DateTime` | `field.tsx` | a date and time field (`datetime-local`), its value as the input takes it | `value`, `set`, `id`, `cls`, `step`, `required`, `disabled`, `inputRef` |
 | `Switch` | `field.tsx` | a checkbox drawn as a switch (`switchEl`) | `name`, `label`, `checked` and `onChange`, or `draft` and `show`; `row`, `id`, `disabled`, `title`, children after the label |
 | `useDraft`, `Meanwhile` | `field.tsx` | a field that shows stored data keeps a draft: untouched it follows, changed it says "changed meanwhile" with Take theirs (D59-A) | `stored`, `norm`; gives `value`, `stored`, `set`, `changed`, `meanwhile`, `take`; `draft`, `show` |
 | `FormFooter` | `field.tsx` | a form's row of actions (`formFooter`, `sendWhenChanged`) | `submit`, `busy`, `off`, `cancel`, `cancelLabel`, `extra` |
