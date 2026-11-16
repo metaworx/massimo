@@ -797,6 +797,9 @@ An integration is registered by the owner, without a key typed anywhere:
    the same call answers a new key, the one before revoked,
    as long as that key was never used and ten minutes since the approval
    have not passed.
+   Until then the approved integration carries `request_expires`,
+   the end of those ten minutes; once they are over, Home Assistant
+   registers again and the owner approves the new request.
 
 The key belongs to the integration's own user, named by the integration's
 `key` (lower case, from its name: `casa-leone`), with the role

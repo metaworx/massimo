@@ -5099,7 +5099,7 @@ components:
         max_caps: {type: array, items: {type: string}, description: "The key's maximum, within the role integration"}
         user: {type: string, description: Its own user, holding its key}
         request_code: {type: string, description: "A request's short code"}
-        request_expires: {type: string, format: date-time}
+        request_expires: {type: string, format: date-time, description: "Until when a request waits, or an approved integration may collect its key; absent once collected"}
         request_remote: {type: string, description: The address the request came from}
         key_issued_at: {type: string, format: date-time}
         created_at: {type: string, format: date-time}

@@ -1176,8 +1176,13 @@ the browser keeps which cards are folded.
   **Registered before as**, where an integration of its kind is
   registered, the same installation chosen,
   **Refuse**, which asks first, and **Approve**.
-  Every integration in a panel, its name and key, **disabled** and
-  **new installation** as badges:
+  Approved, the integration's panel says until when Home Assistant may
+  collect its key, and the page reads that integration again, every 3 s
+  in the first minute, then every 15 s, until it has: then it says so;
+  once that time has passed, **approval expired** as a badge, why, and
+  **Register**.
+  Every integration in a panel, its name and key, **disabled**,
+  **new installation** and **approval expired** as badges:
   its key, installation id, address, version, when its key was issued and
   whether the LAN saw it;
   for a call from another installation, **Accept the new installation**;
@@ -1187,7 +1192,13 @@ the browser keeps which cards are folded.
   last, and **Acts as**: its own user or a Massimo user, the one of the
   same name proposed, with **Link**; and **Revoke**, which asks first.
   Under them the Home Assistant installations the server saw on the LAN,
-  each **registered** or **not registered**, with **Look again**;
+  each with its address as a link, or as text where it announced none,
+  either with a copy icon, and **registered** or **not registered**;
+  one not registered has **Register**, which opens Home Assistant's page
+  that adds the Massimo integration
+  (`<address>/_my_redirect/config_flow_start?domain=massimo`), and where
+  Home Assistant announced no address first asks for it, filled in with
+  `http://<its IP address>:8123`; with **Look again**;
   where the server does not look, why, naming Announce on the LAN and
   what to change: Off, Automatic on the loopback, a change waiting for
   the restart, or `-announce` or `MASSIMO_ANNOUNCE`, which decides;
