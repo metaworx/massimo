@@ -42,7 +42,7 @@ func userUsage() {
 
   add <name> [-role <key>] [-display-name <text>] [-expires <time>] [-no-password | -password-stdin]
                      create a user; the password is asked twice on the terminal
-  list               every user with its role, state, password and tokens
+  list               every user, as the page shows it, with its role, state, password and tokens
   passwd <name> [-password-stdin]
                      set a user's password, which ends its sessions
   rename <name> <new name> [-no-password | -password-stdin]
@@ -298,8 +298,12 @@ func (u *userCmd) list(args []string) error {
 		return err
 	}
 	w := tabwriter.NewWriter(stdout, 0, 8, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tROLE\tSTATE\tPASSWORD\tTOKENS\tLAST LOGIN")
+	fmt.Fprintln(w, "NAME\tSHOWN AS\tROLE\tSTATE\tPASSWORD\tTOKENS\tLAST LOGIN")
 	now := time.Now()
+	// SHOWN AS is the page's name for the user: an integration's user
+	// by its chain, "<the integration's name> › <its display name>".
+	namer := u.st.Namer()
+	namer.Seed(users...)
 	for _, us := range users {
 		state := "enabled"
 		switch {
@@ -322,7 +326,7 @@ func (u *userCmd) list(args []string) error {
 		if !us.LastLoginAt.IsZero() {
 			last = us.LastLoginAt.Local().Format("2006-01-02 15:04")
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\t%s\n", us.Name, us.Role, state, password, len(tokens), last)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%d\t%s\n", us.Name, namer.Current(u.ctx, us), us.Role, state, password, len(tokens), last)
 	}
 	return w.Flush()
 }

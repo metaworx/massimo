@@ -3,6 +3,8 @@
 """System settings → Users and Roles as the owner (the test token is the
 owner's): the operator run.sh creates is listed with the owner, the
 roles with the six default ones."""
+import json
+
 from conftest import URL, api_call
 from helpers import NAME_BAD, NAME_TAKEN, assert_busy, hold, named_buttons, scroll_width, show_view, sign_out, wait_held, wait_until
 
@@ -54,6 +56,54 @@ def test_panel_heads(page, case):
         assert geo["right"] <= 1, f"{sel}: the badges at the right edge ({geo})"
     first = page.locator(".user-panel[data-name='owner'] .panel-badges > :first-child")
     assert "ok" in (first.get_attribute("class") or ""), "you is the first of the owner's badges"
+    show_view(page, "tiles")
+
+
+INTEGRATION = "01a1e000-0000-7000-8000-000000000001"
+PHONE = INTEGRATION + ":" + "a" * 32
+INTEGRATION_USERS = [
+    {"name": INTEGRATION + ":", "display_name": "Home", "display": "Home", "role": "integration", "disabled": False, "has_password": False,
+     "auth_version": 1, "created_at": "2026-11-16T10:00:00Z", "updated_at": "2026-11-16T10:00:00Z",
+     "may": {"manage": True, "password": True}, "integration": {"key": INTEGRATION, "uuid": INTEGRATION}},
+    {"name": PHONE, "display_name": "Anna's phone", "display": "Home › Anna's phone, as operator", "role": "integration",
+     "disabled": False, "has_password": False, "auth_version": 1, "created_at": "2026-11-16T10:00:00Z", "updated_at": "2026-11-16T10:00:00Z",
+     "may": {"manage": True, "password": True},
+     "integration": {"key": INTEGRATION, "uuid": INTEGRATION, "id": "a" * 32, "name": "Anna's phone", "linked_to": "operator"}},
+]
+
+
+def test_integration_users_by_their_chain(page, case):
+    """An integration's users (the list stubbed) are shown by their
+    chain, "<the integration's name> › <the user's>, as <login name>",
+    without their login name, the uuid and the id; the user they act as
+    names them so (AP StoreRaise v1.2, Block 4)."""
+    def answer(route):
+        try:
+            resp = route.fetch()
+            body = resp.json()
+            for u in body:
+                if u["name"] == "operator":
+                    u["links"] = [{"integration": INTEGRATION, "id": "a" * 32, "name": "Anna's phone", "display": "Home › Anna's phone"}]
+            route.fulfill(response=resp, body=json.dumps(body + INTEGRATION_USERS))
+        except Exception:  # Route is already handled, or the page closed
+            pass
+
+    page.route("**/api/v1/users", answer)
+    try:
+        show_view(page, "system")
+        phone = f".user-panel[data-name='{PHONE}']"
+        assert wait_until(page, f"!!document.querySelector(\"{phone}\")", 5), "the integration's user listed"
+        assert page.locator(f"{phone} > summary .panel-name").inner_text() == "Home › Anna's phone, as operator", "by its chain"
+        assert page.locator(f"{phone} > summary .mono").count() == 0, "without its login name"
+        assert page.evaluate("t('users.integrationUser')") in page.locator(f"{phone} > summary").inner_text(), "marked an integration's user"
+        own = f".user-panel[data-name='{INTEGRATION}:']"
+        assert page.locator(f"{own} > summary .panel-name").inner_text() == "Home", "the integration's own by its name"
+        links = page.locator(".user-panel[data-name='operator'] .user-integration-links").text_content()
+        assert "Home › Anna's phone" in links and INTEGRATION not in links, f"the operator's panel names it by its chain: {links}"
+        named_buttons(page, "System settings → Users, an integration's users")
+        assert scroll_width(page) <= case.width, "no horizontal scroll with an integration's users"
+    finally:
+        page.unroute("**/api/v1/users", answer)
     show_view(page, "tiles")
 
 

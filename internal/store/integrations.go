@@ -63,10 +63,14 @@ func ValidInstanceID(s string) bool { return instanceID.MatchString(s) }
 
 // Integration is one row of integrations.
 type Integration struct {
-	ID              int64
-	UUID            string
-	Kind            string
-	Name            string // as reported
+	ID   int64
+	UUID string
+	Kind string
+	Name string // as reported
+	// DisplayName is the integration's name as the owner gives it: its
+	// own user's display name, which follows Name while it is the name
+	// reported before (copyReportedName).
+	DisplayName     string
 	InstanceID      string
 	PendingInstance string
 	URL             string
@@ -87,8 +91,10 @@ type Integration struct {
 
 // integrationColumns are the columns scanIntegration reads, of
 // integrations g: its own user and its system user found by their names
-// (integrationUserName).
+// (integrationUserName), and its own user's display name, first: the
+// content-column rule (rule_test.go) reads a query from its first WHERE.
 const integrationColumns = `g.id, g.uuid, g.kind, g.name, g.instance_id, g.pending_instance, g.url, g.app_version, g.max_caps,
+	coalesce((SELECT u.display_name FROM users u WHERE u.integration_id = g.id AND u.name = g.uuid || ':' AND u.deleted_at IS NULL), ''),
 	coalesce((SELECT u.id FROM users u WHERE u.integration_id = g.id AND u.name = g.uuid || ':' AND u.deleted_at IS NULL), 0),
 	coalesce((SELECT u.id FROM users u WHERE u.integration_id = g.id AND u.name = g.uuid || ':system' AND u.deleted_at IS NULL), 0),
 	g.state, g.request_code, g.request_expires_at, g.request_remote, g.key_issued_at,
@@ -109,7 +115,7 @@ func scanIntegration(row scanner) (Integration, error) {
 	var i Integration
 	var caps string
 	var expires, issued, created, updated sql.NullString
-	if err := row.Scan(&i.ID, &i.UUID, &i.Kind, &i.Name, &i.InstanceID, &i.PendingInstance, &i.URL, &i.AppVersion, &caps,
+	if err := row.Scan(&i.ID, &i.UUID, &i.Kind, &i.Name, &i.InstanceID, &i.PendingInstance, &i.URL, &i.AppVersion, &caps, &i.DisplayName,
 		&i.UserID, &i.SystemUserID, &i.State, &i.RequestCode, &expires, &i.RequestRemote, &issued,
 		&i.MergedInto, &created, &updated, &i.Version); err != nil {
 		return Integration{}, err
@@ -190,6 +196,11 @@ func (s *Store) Integrations(ctx context.Context) ([]Integration, error) {
 // state.
 func (s *Store) IntegrationByUUID(ctx context.Context, uuid string) (Integration, bool, error) {
 	return s.integrationBy(ctx, s.db, "uuid", uuid)
+}
+
+// IntegrationByID returns an integration by its row, whatever its state.
+func (s *Store) IntegrationByID(ctx context.Context, id int64) (Integration, bool, error) {
+	return s.integrationBy(ctx, s.db, "id", id)
 }
 
 // IntegrationOfUser returns the integration whose own user userID is,
@@ -421,8 +432,9 @@ func (s *Store) CollectIntegrationKey(ctx context.Context, uuid, code string) (s
 	return secret, i, nil
 }
 
-// SetIntegration changes an integration's Name, MaxCaps and State
-// (active or disabled) with change.
+// SetIntegration changes an integration's DisplayName (its own user's
+// display name), MaxCaps and State (active or disabled) with change; Name
+// is the one the integration reports, which change does not set.
 func (s *Store) SetIntegration(ctx context.Context, uuid string, change func(*Integration) error, by int64) (Integration, error) {
 	if err := s.writable(); err != nil {
 		return Integration{}, err
@@ -434,15 +446,35 @@ func (s *Store) SetIntegration(ctx context.Context, uuid string, change func(*In
 	if !ok || i.State == IntegrationPending || i.State == IntegrationRefused {
 		return Integration{}, fmt.Errorf("%w: %s", ErrNoIntegration, uuid)
 	}
+	was := i
 	if err := change(&i); err != nil {
 		return Integration{}, err
 	}
 	if i.State != IntegrationActive && i.State != IntegrationDisabled {
 		return Integration{}, fmt.Errorf("store: integration state %q: active or disabled", i.State)
 	}
+	display := strings.TrimSpace(i.DisplayName)
+	if display != was.DisplayName && (display == "" || i.UserID == 0) {
+		return Integration{}, fmt.Errorf("%w: integration %s: a name of its own user", ErrBadName, uuid)
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Integration{}, fmt.Errorf("store: integration %s: %w", uuid, err)
+	}
+	defer tx.Rollback()
+	now := s.nowText()
 	raw, _ := json.Marshal(normalCaps(i.MaxCaps))
-	if _, err := s.db.ExecContext(ctx, `UPDATE integrations SET name = ?, max_caps = ?, state = ?, updated_at = ?, updated_by = ?, origin = ?,
-		version = version + 1 WHERE id = ?`, strings.TrimSpace(i.Name), string(raw), i.State, s.nowText(), nullID(by), s.nodeID, i.ID); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE integrations SET max_caps = ?, state = ?, updated_at = ?, updated_by = ?, origin = ?,
+		version = version + 1 WHERE id = ?`, string(raw), i.State, now, nullID(by), s.nodeID, i.ID); err != nil {
+		return Integration{}, fmt.Errorf("store: integration %s: %w", uuid, err)
+	}
+	if display != was.DisplayName {
+		if _, err := tx.ExecContext(ctx, `UPDATE users SET display_name = ?, updated_at = ?, updated_by = ?, origin = ?, version = version + 1 WHERE id = ?`,
+			display, now, nullID(by), s.nodeID, i.UserID); err != nil {
+			return Integration{}, fmt.Errorf("store: integration %s: %w", uuid, err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
 		return Integration{}, fmt.Errorf("store: integration %s: %w", uuid, err)
 	}
 	out, _, err := s.IntegrationByUUID(ctx, uuid)

@@ -575,6 +575,14 @@ Every one answers `503` on a server without a store.
 
 `GET /api/v1/users` lists the users by name, as `GET /api/v1/me` shows a user;
 a `guests` holder sees the guests and itself.
+Each user carries `display`, how it is shown:
+its `display_name`, else its `name`;
+an integration's user ("Integrations", below) by the chain
+`"<the integration's name> › <its display name>"`,
+with `", as <login name>"` where it is linked to a Massimo user
+(`"Home › Anna, as anna"`),
+and `integration`, with the integration's `uuid`.
+`display_name` stays as it is.
 
 `POST /api/v1/users` creates one:
 
@@ -803,14 +811,28 @@ An integration is registered by the owner, without a key typed anywhere:
    the end of those ten minutes; once they are over, Home Assistant
    registers again and the owner approves the new request.
 
-The key belongs to the integration's own user, named by the integration's
-`key` (lower case, from its name: `casa-leone`), with the role
-`integration`; the user `<key>.system` stands for its calls that no user
-started.
+The key belongs to the integration's own user, named `<uuid>:`
+after the integration's `uuid`, with the role `integration`;
+the user `<uuid>:system` stands for its calls that no user started.
+An integration's `name` is its own user's `display_name`,
+the name the owner gives it,
+and `reported_name` the one the integration reports,
+when it asks and when a request is attached to it;
+`name` follows `reported_name` as long as it is the name reported before,
+so that a name the owner gave stays.
+The chain each of its users is shown by begins with `name`
+("Acting for an integration's users", below).
 `GET /api/v1/integrations` lists the integrations and the requests
 waiting, a request with its code and the address it came from;
 `PUT /api/v1/integrations/{uuid}` changes `name`, `max_caps` and `state`
-(`active`, `disabled`);
+(`active`, `disabled`):
+
+```json
+{"name": "Home"}
+```
+
+answers the integration with `"name": "Home"` and `reported_name` as it was;
+`name` is 1 to 64 bytes, its spaces at either end dropped;
 `DELETE` revokes it: its key revoked and the integration disabled,
 its users, links and maximum kept for a request from the same installation.
 A call that came with another installation id than the accepted one is
@@ -867,8 +889,13 @@ acts for one of the integration's users.
     (Home Assistant's Supervisor, Cloud, …).
 - **The user** is made at its first call,
   with the role `integration` and no password,
-  named `<integration key>.<the id's first 8 characters>`
-  (longer where two ids begin alike).
+  named `<the integration's uuid>:<the id>`,
+  its `display_name` its name there, which follows the name
+  while it is the one reported before.
+  It is shown by the chain `"<the integration's name> › <its display name>"`
+  (`"Home › Anna"`), and where it is linked to a Massimo user,
+  `", as <that user's login name>"` after it (`"Home › Anna, as anna"`):
+  the page, `massimo user list` and the server's own log lines alike.
   Several of the integration's users may be linked to one Massimo user.
 - **What the call may do** is what every link of the chain allows:
   1. the integration user's role, `integration` at first,
@@ -881,7 +908,9 @@ acts for one of the integration's users.
 - **Without the header** the key acts as the integration itself:
   its role and its maximum (an integration's own polls and stream).
 - **The audit and the log** name the user the call acted as,
-  with `"via"`, the integration's key,
+  `effective_user`, and the integration's user, `real_user`
+  (GET /api/v1/audit, "Who did it");
+  the audit's `detail` adds `"via"`, the integration's uuid,
   and `"for"`, the integration's user (id, name, level).
 
 A refusal says which link refused, in `code`:
@@ -896,7 +925,7 @@ A refusal says which link refused, in `code`:
 | 403 | `forbidden` | a capability the chain did not leave |
 
 `GET /api/v1/me` answers, for an integration's key, `integration`
-(`uuid`, `key`, `name`, `state`, `instance_id`, null for any other key),
+(`uuid`, `name`, `reported_name`, `state`, `instance_id`, null for any other key),
 with the header `acts_for` (`id`, `name`, `level`, `linked`,
 `system_generated`), and `capabilities`, what the chain leaves.
 So an integration knows before naming a user whether its key is a
@@ -906,8 +935,8 @@ the header.
 **Links.**
 `GET /api/v1/integrations/{uuid}` answers the integration with `users`,
 its users, the system user first:
-`id`, `name`, the `user` its calls act as, its `own_user`, `linked`,
-`system_generated`, `last_level`, `last_used_at`,
+`id`, `name`, `display` (its chain), the `user` its calls act as,
+its `own_user`, `linked`, `system_generated`, `last_level`, `last_used_at`,
 and for one not linked a `proposal`, a Massimo user whose name or display
 name is its name at the integration.
 The owner confirms a link (capability `integrations`):
@@ -918,8 +947,9 @@ Several of an integration's users may be linked to one user.
 The system user stays its own, a user of an integration is no user to
 link to (`400`), and the caller must outrank the user linked to (`403`).
 `GET /api/v1/users` marks an integration's user with `integration`
-(`key`, `uuid`, and for one of its users `id`, `name`, `linked_to`)
-and lists under `links` the integrations' users linked to a user.
+(`uuid`, and for one of its users `id`, `name`, `linked_to`)
+and lists under `links` the integrations' users linked to a user
+(`integration`, its uuid, `id`, `name` and `display`, its chain).
 
 ### Providers: /api/v1/providers
 
@@ -1202,6 +1232,8 @@ Every route but the `GET`s and the stream ticket leaves a row:
 room, user, role, token or Cube concerned, `user` and `token_id` who asked
 (absent without authentication, for a failed login,
 and for `massimo user` on the box, whose `remote` is `cli`),
+`effective_user` and `real_user` the users of the row
+("Who did it", below),
 and `result` how it went: `ok` for a 2xx, `refused` for a `401`,
 `403` or `429`, `failed` otherwise.
 `detail` keeps the method, the path, the status, the milliseconds,
@@ -1228,8 +1260,31 @@ Nothing in a row is a secret.
 
 `before`
 (RFC 3339) pages: the rows before that time, a time only, unlike the log's;
-`limit` is 100 by default and at most 1000; `user` filters by login name.
+`limit` is 100 by default and at most 1000; `user` filters by login name,
+the rows made with that user's rights or by it.
 The rows are append-only; a later stage prunes them by age.
+
+**Who did it.**
+A row of the audit or the log names two users,
+each as it is named now:
+`effective_user`, whose rights the request had,
+and `real_user`, who made it.
+They are the same user but for a call of an integration's user
+linked to a Massimo user ("Integrations", below):
+its rights are that user's, `effective_user`,
+and `real_user` is the integration's user.
+Each carries `name`, `display_name`, `integration` (an integration's user's)
+and `display`, how it is shown;
+`real_user`'s says `", as <the effective user's login name>"`
+where the two differ:
+
+```json
+"user": "anna",
+"effective_user": {"name": "anna", "display_name": "Anna", "display": "Anna"},
+"real_user": {"name": "<uuid>:<id>", "display_name": "Anna", "integration": "<uuid>", "display": "Home › Anna, as anna"}
+```
+
+`user`, the effective user's login name, stays as before.
 
 ### Commands and Idempotency-Key: GET /api/v1/commands/{id}
 
@@ -3150,6 +3205,7 @@ sign-ins) or `proxy` (the LAN proxy's clients).
 `info` by default, so that a client asks for `level=debug` to see the
 debug lines (the Cube's `hello`).
 `user` keeps the events a user started, by the login name,
+started with its rights or by it,
 a removed user's too, under the name its removal gave it;
 a name the server does not know answers an empty page.
 `command` keeps the events of one command, by its id
@@ -3163,7 +3219,9 @@ The page holds the server's own events too, kept once with no Cube,
 in every Cube's log.
 Each event says its `source` and its `level`,
 and `by` names who started it, as the user is named now
-(`{"name": "anna", "display_name": "Anna"}`):
+(`{"name": "anna", "display_name": "Anna"}`),
+with `effective_user` and `real_user` as the audit names them
+(GET /api/v1/audit, "Who did it"):
 absent for the Cube, the server's own jobs and a server without users;
 the bootstrap token is a key of the first owner, whom it names, as the audit does.
 A client pages back with `before` set to the `id` of the oldest event it has,

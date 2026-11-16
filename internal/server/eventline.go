@@ -191,8 +191,8 @@ func eventLine(log *slog.Logger, serial string, ev event) {
 		add("command", ev.Command)
 	}
 	switch {
-	case ev.By != nil:
-		add("by", ev.By.Name)
+	case ev.By != nil || ev.RealUser != nil:
+		add("by", chainName(ev)) // an integration's user by its chain
 	case ev.userID != 0:
 		add("user_id", ev.userID)
 	}

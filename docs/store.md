@@ -954,9 +954,16 @@ who made a row where an integration acted for a linked user (L1),
 the removed identities (L2), the integration users' and the removed users'
 names, made again by the rules of 23 (L3, L5), an integration's key, made again
 from its name (L4), the role's uuid and a second row of one key (L6),
-the time of a Cube's option and a second row of one serial with its log,
-backups and rooms (L7), and the never written `deleted_at` of tokens and
-commands (L8).
+the time and the user of a Cube's option (L7), and the never written
+`deleted_at` of tokens and commands (L8).
+Several rows of one serial (a Cube added again after its removal, D15-C) are
+all kept: the one not removed keeps the serial, else the newest removed, and
+each other, removed, is `<serial>~<its id>` in `cubes.serial` alone, with its
+log, backups, rooms, commands and audit rows;
+`log.serial` and the serials in the rows' JSON stay as written.
+A binary for 23 reads only the Cubes not removed, and every read of the log
+is by `cube_id`, so their lines do not meet;
+0024 takes the `~<id>` off again.
 On a store of 500 000 log rows (149 MB, a tenth with a user) a desktop took
 2.0 s for the raise, its copy `massimo.db.before-24` included, and 2.2 s for the
 down part, its copy included (`TestRaiseTimes` with
@@ -1028,7 +1035,10 @@ Rules:
   for the columns of the losses (`losses0024`, which names them by L1 to L8);
   a store of version 23 with a row of every kind 0024 changes goes up and down
   again so, and the losses themselves are checked where the raised schema
-  holds what 23 cannot.
+  holds what 23 cannot; two rows of one serial go down and up again with all
+  their rows, the log byte for byte.
+  The comparison takes `sqlite_sequence` as a table like any other, so the
+  AUTOINCREMENT counters of `backups` and `commands` are compared too.
 - The stores the releases wrote: `internal/store/testdata/releases/<tag>.sql`
   is the text dump of the store a release's `serve` wrote against the fake Cube,
   one for each release since the store came (v0.7.0-alpha.1),

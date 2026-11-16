@@ -5,7 +5,8 @@
 // "Integrations"), with the capability integrations: the requests that
 // wait, each with its code, where it came from and whether the LAN saw its
 // installation, approved with a maximum or refused; each integration with
-// its maximum, its state, a new installation to accept, Revoke, and its
+// its name, the one Home Assistant reports where the two differ, its
+// maximum, its state, a new installation to accept, Revoke, and its
 // users, each linked to a Massimo user or acting as its own; the Home
 // Assistant installations seen on the LAN; and, with settings, the switch
 // that lets integrations ask at all.
@@ -261,7 +262,7 @@ function requestPanel(r) {
   const earlier = integrationsUI.list.filter((i) => i.kind === r.kind && i.state !== "pending" && i.state !== "refused")
     .sort((a, b) => (b.instance_id === r.instance_id) - (a.instance_id === r.instance_id));
   const attach = fillOptions(document.createElement("select"),
-    [["", t("integrations.attachNone")], ...earlier.map((i) => [i.uuid, i.name + " (" + i.key + ")"])]);
+    [["", t("integrations.attachNone")], ...earlier.map((i) => [i.uuid, i.name + " (" + i.uuid.slice(0, 8) + ")"])]);
   if (earlier.length && earlier[0].instance_id === r.instance_id) attach.value = earlier[0].uuid;
   const attachRow = fieldRow(t("integrations.attach"), attach, { wide: true, hint: t("integrations.attachHint") });
   attachRow.classList.toggle("hidden", !earlier.length);
@@ -288,7 +289,7 @@ function requestPanel(r) {
 // linkOptions are the Massimo users an integration's user may act as:
 // its own user first, then the users, the proposal marked.
 function linkOptions(u) {
-  const out = [["", t("integrations.ownUser", { name: u.own_user })]];
+  const out = [["", t("integrations.ownUser", { name: u.name || u.id.slice(0, 8) })]];
   for (const m of integrationsUI.users || []) {
     const label = (m.display_name ? m.display_name + " (" + m.name + ")" : m.name);
     out.push([m.name, m.name === u.proposal ? t("integrations.proposed", { name: label }) : label]);
@@ -316,7 +317,7 @@ function integrationUserRow(i, u) {
   else when.textContent = t("users.neverUsed");
   li.appendChild(when);
   if (system || !integrationsUI.users) {
-    li.appendChild(textEl("p", t("integrations.actsAsUser", { name: u.user }), "small"));
+    li.appendChild(textEl("p", t("integrations.actsAsUser", { name: u.linked ? u.user : u.display || u.user }), "small"));
     return li;
   }
   const select = fillOptions(document.createElement("select"), linkOptions(u));
@@ -343,8 +344,33 @@ function fillIntegrationUsers(i, ul) {
   for (const u of users) ul.appendChild(integrationUserRow(i, u));
 }
 
-// integrationPanel is an integration: what it is, a new installation
-// to accept, Enabled, its maximum, its users, Revoke.
+// nameRow is an integration's name with Save: the name the owner gives
+// it, which its users' names begin with on the page; Save is off while
+// the name is as stored.
+function nameRow(i) {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.name = "integration-name";
+  input.id = "integration-name-" + i.uuid;
+  input.maxLength = 64;
+  input.value = i.name || "";
+  const save = button(t("integrations.saveName"), "save-name");
+  const changed = () => input.value.trim() !== "" && input.value.trim() !== (i.name || "");
+  save.disabled = true;
+  input.addEventListener("input", () => {
+    save.disabled = !changed();
+  });
+  save.addEventListener("click", () => {
+    const name = input.value.trim();
+    integrationAction(() => api("PUT", integrationPath(i), { name }), t("integrations.nameSaved", { name }), i.name, save);
+  });
+  const row = fieldRow(t("integrations.name"), elem("span", "inline", input, save), { wide: true, hint: t("integrations.nameHint") });
+  row.classList.add("integration-name");
+  return row;
+}
+
+// integrationPanel is an integration: what it is, its name, a new
+// installation to accept, Enabled, its maximum, its users, Revoke.
 function integrationPanel(i) {
   const badges = [];
   if (i.state === "disabled") badges.push(badgeEl(t("integrations.disabled"), "bad"));
@@ -359,8 +385,10 @@ function integrationPanel(i) {
       registerControl(i.url, "", i.name)));
   }
   const issued = Date.parse(i.key_issued_at || "");
+  body.appendChild(nameRow(i));
   body.appendChild(kvList([
-    [t("integrations.key"), i.key, true],
+    [t("integrations.reportedName"), i.reported_name && i.reported_name !== i.name ? i.reported_name : ""],
+    [t("integrations.uuid"), i.uuid, true],
     [t("integrations.instance"), i.instance_id, true],
     [t("integrations.url"), i.url || ""],
     [t("integrations.version"), i.version || ""],
@@ -397,7 +425,7 @@ function integrationPanel(i) {
     confirmInPlace(actions, t("integrations.revokeConfirm", { name: i.name }), { yes: t("integrations.revoke"), no: t("action.keep") },
       () => integrationAction(() => api("DELETE", integrationPath(i)), t("integrations.revoked", { name: i.name }), i.name), ".revoke-integration");
   });
-  const d = detailsPanel({ name: i.name, mono: i.key, badges, open: integrationsUI.open.has(i.uuid), cls: "integration-panel" }, body);
+  const d = detailsPanel({ name: i.name, badges, open: integrationsUI.open.has(i.uuid), cls: "integration-panel" }, body);
   d.dataset.uuid = i.uuid;
   d.addEventListener("toggle", async () => {
     if (!d.open) {

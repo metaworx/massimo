@@ -598,24 +598,28 @@ func (s *Server) writeRefusal(f refusal) {
 	}
 }
 
-// auditView is one row as GET /api/v1/audit shows it.
+// auditView is one row as GET /api/v1/audit shows it: User the login
+// name of the user whose rights it had, as before; EffectiveUser that
+// user and RealUser who made it, each with its chain (names.go).
 type auditView struct {
-	ID        int64           `json:"id"`
-	Time      time.Time       `json:"time"`
-	User      string          `json:"user,omitempty"`
-	TokenID   int64           `json:"token_id,omitempty"`
-	Remote    string          `json:"remote"`
-	Action    string          `json:"action"`
-	Cube      string          `json:"cube,omitempty"`
-	Target    string          `json:"target,omitempty"`
-	Detail    json.RawMessage `json:"detail"`
-	Result    string          `json:"result"`
-	CommandID int64           `json:"command_id,omitempty"`
+	ID            int64           `json:"id"`
+	Time          time.Time       `json:"time"`
+	User          string          `json:"user,omitempty"`
+	EffectiveUser *eventUser      `json:"effective_user,omitempty"`
+	RealUser      *eventUser      `json:"real_user,omitempty"`
+	TokenID       int64           `json:"token_id,omitempty"`
+	Remote        string          `json:"remote"`
+	Action        string          `json:"action"`
+	Cube          string          `json:"cube,omitempty"`
+	Target        string          `json:"target,omitempty"`
+	Detail        json.RawMessage `json:"detail"`
+	Result        string          `json:"result"`
+	CommandID     int64           `json:"command_id,omitempty"`
 }
 
 // getAudit handles GET /api/v1/audit?before=&limit=&user=: the newest
 // rows first, before a time, at most limit (100; at most 1000), of one
-// user.
+// user, made with its rights or by it.
 func (s *Server) getAudit(w http.ResponseWriter, r *http.Request) error {
 	st, err := s.userStore()
 	if err != nil {
@@ -639,9 +643,18 @@ func (s *Server) getAudit(w http.ResponseWriter, r *http.Request) error {
 		return userFail(err)
 	}
 	out := []auditView{}
+	n := st.Namer()
 	for _, e := range rows {
-		out = append(out, auditView{ID: e.ID, Time: e.Time, User: e.User, TokenID: e.TokenID, Remote: e.Remote, Action: e.Action, Cube: e.Cube, Target: e.Target, Detail: e.Detail, Result: e.Result, CommandID: e.CommandID})
+		out = append(out, viewAudit(r.Context(), n, e))
 	}
 	writeJSON(w, http.StatusOK, out)
 	return nil
+}
+
+// viewAudit is an audit row as the API shows it, its users named by n.
+func viewAudit(ctx context.Context, n *store.Namer, e store.AuditEntry) auditView {
+	v := auditView{ID: e.ID, Time: e.Time, User: e.User, TokenID: e.TokenID, Remote: e.Remote, Action: e.Action, Cube: e.Cube, Target: e.Target,
+		Detail: e.Detail, Result: e.Result, CommandID: e.CommandID}
+	v.EffectiveUser, v.RealUser = rowUsers(ctx, n, e.EffectiveUserID, e.RealUserID)
+	return v
 }

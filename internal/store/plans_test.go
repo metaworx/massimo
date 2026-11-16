@@ -51,11 +51,12 @@ func TestPendingUsesItsIndex(t *testing.T) {
 	}
 }
 
-// The audit's filter by user finds the rows by the index audit_user, by
-// the user's id rather than a join on the name.
+// The audit's filter by user finds the rows by the indexes audit_user
+// and audit_real_user, by the user's id rather than a join on the name.
 func TestAuditUserFilterUsesItsIndex(t *testing.T) {
 	s := open(t, t.TempDir())
-	if plan := queryPlan(t, s, auditSelect+` WHERE `+auditByUser+` ORDER BY a.id DESC LIMIT ?`, int64(1), "", "", 10); !strings.Contains(plan, "audit_user") {
+	if plan := queryPlan(t, s, auditSelect+` WHERE `+auditByUser+` ORDER BY a.id DESC LIMIT ?`, int64(1), int64(1), "", "", 10); !strings.Contains(plan, "audit_user") ||
+		!strings.Contains(plan, "audit_real_user") {
 		t.Fatalf("plan %s", plan)
 	}
 }
