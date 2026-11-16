@@ -152,7 +152,7 @@ func TestUserCommands(t *testing.T) {
 	rows, _ := st.AuditList(ctx, time.Time{}, 100, "")
 	actions := map[string]int{}
 	for _, r := range rows {
-		if r.Remote != store.RemoteCLI || r.UserID != 0 {
+		if r.Remote != store.RemoteCLI || r.EffectiveUserID != 0 {
 			t.Fatalf("audit row %+v", r)
 		}
 		actions[r.Action+":"+r.Result]++
@@ -248,7 +248,7 @@ func TestUserCommandsLog(t *testing.T) {
 		if err := json.Unmarshal(r.Data, &ev); err != nil {
 			t.Fatal(err)
 		}
-		if r.CubeID != 0 || r.Source != "config" || ev.Source != "config" || ev.Summary["via"] != "cli" || r.UserID != 0 {
+		if r.CubeID != 0 || r.Source != "config" || ev.Source != "config" || ev.Summary["via"] != "cli" || r.EffectiveUserID != 0 {
 			t.Fatalf("line %d: %+v %s", i, r, r.Data)
 		}
 		actions = append(actions, ev.Summary["action"].(string))

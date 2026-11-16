@@ -48,7 +48,7 @@ func TestLogMigration(t *testing.T) {
 	clock := func() time.Time { return at }
 	dir := t.TempDir()
 	old := openBefore(t, dir, 14, clock)
-	c, _ := old.AddCube(ctx, Cube{Serial: "KEQ0000001", Configured: true})
+	c := Cube{ID: oldCube(t, old, "KEQ0000001")}
 	first, err := old.AddCommand(ctx, Command{CubeID: c.ID, Action: "setpoint", Target: "device:0a0101"})
 	if err != nil {
 		t.Fatal(err)
@@ -66,7 +66,9 @@ func TestLogMigration(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := old.Audit(ctx, AuditEntry{Action: "setpoint", CubeID: c.ID, CommandID: newest.ID}); err != nil {
+	// The audit's row as a binary of version 13 wrote it.
+	if _, err := old.db.ExecContext(ctx, `INSERT INTO audit (uuid, time, action, cube_id, command_id) VALUES (?, ?, 'setpoint', ?, ?)`,
+		newUUID(), formatTime(at), c.ID, newest.ID); err != nil {
 		t.Fatal(err)
 	}
 	// The writer of this binary writes the log; the older binary's wrote
@@ -128,51 +130,6 @@ func TestLogMigration(t *testing.T) {
 	}
 	if rows, err := s.Events(ctx, EventQuery{CubeID: c.ID, Kind: "command"}); err != nil || len(rows) != 1 || rows[0].CommandID != 0 {
 		t.Fatalf("the pruned command's row: %+v %v", rows, err)
-	}
-}
-
-// A binary built before migration 0014 reads and writes the log through
-// the view events, with its own statements: its writer's insert (and
-// one before 0009, without source, level and serial), the update of its
-// start and its prune's delete, which goes on chunk by chunk.
-func TestEventsViewForOlderBinaries(t *testing.T) {
-	ctx := context.Background()
-	s := open(t, t.TempDir())
-	c, _ := s.AddCube(ctx, Cube{Serial: "KEQ0000001", Configured: true})
-	old := time.Now().Add(-90 * 24 * time.Hour)
-	for i := range 3 {
-		if _, err := s.db.ExecContext(ctx, `INSERT INTO events (uuid, cube_id, time, kind, source, level, device, serial, user_id, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			newUUID(), c.ID, formatTime(old.Add(time.Duration(i)*time.Second)), "state", "", 0, "0a0101", "", nil, `{"source":"device","serial":"MEQ0000001"}`); err != nil {
-			t.Fatalf("v13's insert: %v", err)
-		}
-	}
-	if _, err := s.db.ExecContext(ctx, `INSERT INTO events (uuid, cube_id, time, kind, device, data) VALUES (?, ?, ?, ?, ?, ?)`,
-		newUUID(), c.ID, formatTime(time.Now()), "hello", "", `{}`); err != nil {
-		t.Fatalf("v8's insert: %v", err)
-	}
-	if err := s.fillSources(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.db.ExecContext(ctx, `UPDATE events SET source = 'cube' WHERE cube_id = ? AND source = 'device' AND kind = 'state' AND id = (SELECT min(id) FROM events)`, c.ID); err != nil {
-		t.Fatalf("v13's update: %v", err)
-	}
-	var unsourced, viewed, logged, cubeRows int
-	s.db.QueryRow(`SELECT count(*) FROM log WHERE source = ''`).Scan(&unsourced)
-	s.db.QueryRow(`SELECT count(*) FROM events`).Scan(&viewed)
-	s.db.QueryRow(`SELECT count(*) FROM log WHERE visibility = 'read'`).Scan(&logged)
-	s.db.QueryRow(`SELECT count(*) FROM events WHERE source = 'cube'`).Scan(&cubeRows)
-	if unsourced != 0 || viewed != 4 || logged != 4 || cubeRows != 2 {
-		t.Fatalf("through the view: %d unsourced, %d viewed, %d in the log, %d of the Cube", unsourced, viewed, logged, cubeRows)
-	}
-	// v13's prune, chunk by chunk: the view counts no row, so it removes
-	// one chunk a pass.
-	cutoff := formatTime(time.Now().Add(-30 * 24 * time.Hour))
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM events WHERE id IN (SELECT id FROM events WHERE cube_id = ? AND time < ? LIMIT ?)`, c.ID, cutoff, 2); err != nil {
-		t.Fatalf("v13's prune: %v", err)
-	}
-	s.db.QueryRow(`SELECT count(*) FROM log`).Scan(&logged)
-	if logged != 2 {
-		t.Fatalf("%d rows after one chunk of 2, want 2", logged)
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/proxy"
+	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
@@ -16,28 +17,31 @@ import (
 // "Virtual wall thermostats"): with the Cube's option proxy_virtual on,
 // the proxy shows each room's virtual wall thermostat in place of the
 // real wall thermostats, as the API's view "virtual" does. The option is
-// kept in the store's cube_options, off by default.
+// the column proxy_virtual of the Cube's row (migration 0024), off by
+// default.
 
-// loadOptions reads the Cube's options from the store.
+// loadOptions reads the Cube's options from its row in the store.
 func (rt *runtime) loadOptions(ctx context.Context) {
 	id := rt.storeID.Load()
 	if rt.store == nil || id == 0 {
 		return
 	}
-	if o, err := rt.store.CubeOptions(ctx, id); err == nil {
-		rt.proxyVirtual.Store(o.ProxyVirtual)
+	if c, ok, err := rt.store.CubeByID(ctx, id); err == nil && ok {
+		rt.proxyVirtual.Store(c.ProxyVirtual)
 	}
 }
 
-// setProxyVirtual keeps the option proxy_virtual for a Cube's row. A
+// setProxyVirtual keeps the option proxy_virtual in a Cube's row. A
 // client connected before sees the change at its next connection.
 func (s *Server) setProxyVirtual(r *http.Request, rt *runtime, cubeID int64, on bool) error {
-	o, err := rt.store.CubeOptions(r.Context(), cubeID)
+	c, ok, err := rt.store.CubeByID(r.Context(), cubeID)
 	if err != nil {
 		return fail(http.StatusInternalServerError, "%v", err)
 	}
-	o.ProxyVirtual = on
-	if err := rt.store.SetCubeOptions(r.Context(), cubeID, o, principalOf(r).userID()); err != nil {
+	if !ok {
+		return fail(http.StatusNotFound, "cube %d has no row", cubeID)
+	}
+	if _, err := rt.store.UpdateCube(r.Context(), c.Serial, func(c *store.Cube) error { c.ProxyVirtual = on; return nil }, principalOf(r).userID()); err != nil {
 		return fail(http.StatusInternalServerError, "%v", err)
 	}
 	rt.proxyVirtual.Store(on)

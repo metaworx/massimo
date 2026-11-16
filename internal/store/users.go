@@ -5,9 +5,10 @@ package store
 
 // Users (docs/store.md section 6): a login name, a display name, a
 // password hash or none, one role, and for guests an end date. A
-// removed user is a tombstone (deleted_at) that keeps its identifier for
-// the audit; adding the name again takes the row over, as AddCube does
-// with a Cube.
+// removed user is a tombstone (deleted_at) that keeps its identifier and
+// its name for the audit; a name is unique among the users that are not
+// removed (migration 0024), so a user added under a removed one's name is
+// a row of its own.
 
 import (
 	"context"
@@ -15,7 +16,6 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -47,19 +47,22 @@ type User struct {
 	Disabled    bool
 	ExpiresAt   time.Time // guests: disabled from then on; zero for none
 	InvitedBy   int64     // the user that created this one; 0 for none
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-	LastLoginAt time.Time
-	AuthVersion int // 1: the server hashes the password; 2: OPAQUE (opaque.go)
-	Version     int64
-	Origin      string
+	// IntegrationID is the integration whose user this is, 0 for none
+	// (integrations.go).
+	IntegrationID int64
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	LastLoginAt   time.Time
+	AuthVersion   int // 1: the server hashes the password; 2: OPAQUE (opaque.go)
+	Version       int64
+	Origin        string
 }
 
 // Expired reports whether the user's end date has passed at now.
 func (u User) Expired(now time.Time) bool { return !u.ExpiresAt.IsZero() && !now.Before(u.ExpiresAt) }
 
 const userColumns = `u.id, u.uuid, u.name, u.display_name, (u.password_hash <> '' OR u.opaque_record IS NOT NULL), u.role_id, r.key, u.disabled, u.expires_at, u.invited_by,
-	u.created_at, u.updated_at, u.last_login_at, u.auth_version, u.version, u.origin`
+	coalesce(u.integration_id, 0), u.created_at, u.updated_at, u.last_login_at, u.auth_version, u.version, u.origin`
 
 const userFrom = ` FROM users u JOIN roles r ON r.id = u.role_id `
 
@@ -68,7 +71,7 @@ func scanUser(row scanner) (User, error) {
 	var expires, created, updated, last sql.NullString
 	var invited sql.NullInt64
 	if err := row.Scan(&u.ID, &u.UUID, &u.Name, &u.DisplayName, &u.HasPassword, &u.RoleID, &u.Role, &u.Disabled, &expires, &invited,
-		&created, &updated, &last, &u.AuthVersion, &u.Version, &u.Origin); err != nil {
+		&u.IntegrationID, &created, &updated, &last, &u.AuthVersion, &u.Version, &u.Origin); err != nil {
 		return User{}, err
 	}
 	u.ExpiresAt, u.CreatedAt, u.UpdatedAt, u.LastLoginAt = parseTime(expires), parseTime(created), parseTime(updated), parseTime(last)
@@ -141,11 +144,11 @@ func (s *Store) UserByID(ctx context.Context, id int64) (User, bool, error) {
 	return u, true, nil
 }
 
-// UserIDByName returns the row identifier of a login name, a removed
-// user's too, under the name its removal gave it (removedName).
+// UserIDByName returns the row identifier of a login name: the user's
+// that is not removed, else the one removed last of that name.
 func (s *Store) UserIDByName(ctx context.Context, name string) (int64, bool, error) {
 	var id int64
-	err := s.db.QueryRowContext(ctx, `SELECT id FROM users WHERE name = ?`, NormalName(name)).Scan(&id)
+	err := s.db.QueryRowContext(ctx, `SELECT id FROM users WHERE name = ? ORDER BY deleted_at IS NOT NULL, deleted_at DESC, id DESC LIMIT 1`, NormalName(name)).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, false, nil
 	}
@@ -212,9 +215,8 @@ func (s *Store) newUser(u User) (User, error) {
 
 // AddUser adds a user with u's Name, DisplayName, Role (a key),
 // Disabled and ExpiresAt, and the password (none when empty), created
-// by the user by (0: nobody, the command line). A removed user gave its
-// name up at the removal (removedName), so a user added under it is a
-// row of its own.
+// by the user by (0: nobody, the command line). A removed user's name is
+// free, and a user added under it is a row of its own.
 func (s *Store) AddUser(ctx context.Context, u User, password string, by int64) (User, error) {
 	u, err := s.newUser(u)
 	if err != nil {
@@ -243,11 +245,11 @@ func (s *Store) addable(ctx context.Context, u User) error {
 	return s.nameFree(ctx, s.db, u.Name)
 }
 
-// nameFree reports ErrUserExists where a row has the name: a user's, or
-// a removed one's under the name its removal gave it.
+// nameFree reports ErrUserExists where a user that is not removed has
+// the name.
 func (s *Store) nameFree(ctx context.Context, q queryer, name string) error {
 	var n int
-	if err := q.QueryRowContext(ctx, `SELECT count(*) FROM users WHERE name = ?`, name).Scan(&n); err != nil {
+	if err := q.QueryRowContext(ctx, `SELECT count(*) FROM users WHERE name = ? AND deleted_at IS NULL`, name).Scan(&n); err != nil {
 		return fmt.Errorf("store: user %s: %w", name, err)
 	}
 	if n > 0 {
@@ -492,11 +494,11 @@ func (s *Store) NoteLogin(ctx context.Context, id int64) error {
 	return nil
 }
 
-// DeleteUser removes a user: a tombstone under a name of its own
-// (removedName), with every token of the user revoked, every preference
-// a tombstone too, and its identities at the providers deleted. The name is free again, and a user added
-// under it later is a row of its own, with none of the removed one's
-// history. The last owner without an end date is ErrLastOwner.
+// DeleteUser removes a user: a tombstone that keeps its name, with every
+// token of the user revoked, every preference and every identity a
+// tombstone too. The name is free again, and a user added under it later
+// is a row of its own, with none of the removed one's history. The last
+// owner without an end date is ErrLastOwner.
 func (s *Store) DeleteUser(ctx context.Context, name string, by int64) error {
 	if err := s.writable(); err != nil {
 		return err
@@ -520,16 +522,11 @@ func (s *Store) DeleteUser(ctx context.Context, name string, by int64) error {
 			return ErrLastOwner
 		}
 	}
-	at := s.now()
-	now := formatTime(at)
-	gone := removedName(u.Name, at)
-	if s.nameFree(ctx, tx, gone) != nil {
-		gone += "-" + strconv.FormatInt(u.ID, 10)
-	}
-	if _, err := tx.ExecContext(ctx, `UPDATE users SET name = ?, deleted_at = ?, updated_at = ?, updated_by = ?, origin = ?, version = version + 1 WHERE id = ?`, gone, now, now, nullID(by), s.nodeID, u.ID); err != nil {
+	now := s.nowText()
+	if _, err := tx.ExecContext(ctx, `UPDATE users SET deleted_at = ?, updated_at = ?, updated_by = ?, origin = ?, version = version + 1 WHERE id = ?`, now, now, nullID(by), s.nodeID, u.ID); err != nil {
 		return fmt.Errorf("store: user %s: %w", u.Name, err)
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE tokens SET revoked_at = ?, origin = ?, version = version + 1 WHERE user_id = ? AND revoked_at IS NULL`, now, s.nodeID, u.ID); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE tokens SET deleted_at = ?, origin = ?, version = version + 1 WHERE user_id = ? AND deleted_at IS NULL`, now, s.nodeID, u.ID); err != nil {
 		return fmt.Errorf("store: user %s: %w", u.Name, err)
 	}
 	if err := s.removePreferences(ctx, tx, u.ID, now); err != nil {
@@ -538,8 +535,9 @@ func (s *Store) DeleteUser(ctx context.Context, name string, by int64) error {
 	if err := removePushSubscriptions(ctx, tx, u.ID, 0); err != nil {
 		return fmt.Errorf("store: user %s: %w", u.Name, err)
 	}
-	// its identities at the providers: no sign-in finds it any more
-	if _, err := tx.ExecContext(ctx, `DELETE FROM user_identities WHERE user_id = ?`, u.ID); err != nil {
+	// its identities: no sign-in finds it any more
+	if _, err := tx.ExecContext(ctx, `UPDATE user_identities SET deleted_at = ?, updated_at = ?, origin = ?, version = version + 1
+		WHERE effective_user_id = ? AND deleted_at IS NULL`, now, now, s.nodeID, u.ID); err != nil {
 		return fmt.Errorf("store: user %s: %w", u.Name, err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -548,21 +546,13 @@ func (s *Store) DeleteUser(ctx context.Context, name string, by int64) error {
 	return nil
 }
 
-// removedName is the name a user's row takes at its removal at, so that
-// the name is free for another: <name>-del-YYYYMMDD-HHNN in UTC, as the
-// store keeps its times; DeleteUser adds -<id> where that is taken, and
-// migration 0015 named the rows removed before it the same way.
-func removedName(name string, at time.Time) string {
-	return name + "-del-" + at.UTC().Format("20060102-1504")
-}
-
 // RenameUser gives a user the login name to, with the password password
 // under it, or none when empty. The password goes with the name: a
 // record of version 2 holds the name it was registered under (the
 // credential identifier, credentialID), so it is registered here again,
 // both halves, as AddUserOpaque does. Sessions are the caller's to
 // revoke, as with SetPassword; keys, preferences and push subscriptions
-// stay with the row. A name taken by a user, or by a removed one, is
+// stay with the row. A name taken by a user that is not removed is
 // ErrUserExists.
 func (s *Store) RenameUser(ctx context.Context, from, to, password string, by int64) (User, error) {
 	if err := s.writable(); err != nil {

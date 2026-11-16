@@ -113,7 +113,7 @@ func TestDowngrade(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d.From != raise+1 || d.To != raise-1 || d.MinReader != 1 || !slices.Equal(d.Undone, []int{raise + 1, raise}) {
+	if d.From != raise+1 || d.To != raise-1 || d.MinReader != binaryMinReader(t) || !slices.Equal(d.Undone, []int{raise + 1, raise}) {
 		t.Fatalf("downgraded %+v", d)
 	}
 	if d.Copy != Path(dir)+".before-downgrade-"+strconv.Itoa(raise+1) {

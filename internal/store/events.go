@@ -114,8 +114,13 @@ type Event struct {
 	Level  int    // LevelDebug … LevelError
 	Device string // a radio address, "" for an event of no device
 	Serial string // the device's serial number, or the Cube's for its own lines
-	UserID int64  // who started it, 0 for nobody
-	Data   json.RawMessage
+	// EffectiveUserID is the user whose rights it was started with, 0 for
+	// nobody; RealUserID who started it, the same user but where an
+	// integration acted for a user linked to its own (migration 0024),
+	// EffectiveUserID where 0.
+	EffectiveUserID int64
+	RealUserID      int64
+	Data            json.RawMessage
 	// CommandID is the command the row belongs to, 0 for none; the
 	// prune of the command clears it.
 	CommandID int64
@@ -141,7 +146,7 @@ type EventQuery struct {
 	Source    string    // "": every source
 	Device    string    // "": every device; a radio address, which no index serves
 	Serial    string    // "": every device; a serial number
-	UserID    int64     // 0: anyone's and no one's
+	UserID    int64     // 0: anyone's and no one's; else the rows of its effective user
 	CommandID int64     // 0: any command's and none's
 	MinLevel  *int      // nil: every level
 	Audit     bool      // the rows of the audit visibility too
@@ -297,9 +302,6 @@ func (s *Store) RunEvents(ctx context.Context) {
 			s.log.Error("store: audit not pruned", "error", err)
 		}
 	}
-	if err := s.fillSources(ctx); err != nil {
-		s.log.Error("store: the events of an older binary keep no source", "error", err)
-	}
 	prune()
 	ticker := time.NewTicker(pruneEvery)
 	defer ticker.Stop()
@@ -343,7 +345,8 @@ func (s *Store) writeEvents(ctx context.Context, batch []Event) error {
 			return err
 		}
 		defer tx.Rollback()
-		stmt, err := tx.PrepareContext(ctx, `INSERT INTO log (uuid, cube_id, time, kind, source, level, device, serial, user_id, data, command_id, visibility) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		stmt, err := tx.PrepareContext(ctx, `INSERT INTO log (uuid, cube_id, time, kind, source, level, device, serial, effective_user_id, real_user_id, data, command_id, visibility)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 		if err != nil {
 			return err
 		}
@@ -357,8 +360,12 @@ func (s *Store) writeEvents(ctx context.Context, batch []Event) error {
 			if vis == "" {
 				vis = VisibilityRead
 			}
-			if _, err := stmt.ExecContext(ctx, newUUID(), nullID(e.CubeID), formatTime(at), e.Kind, e.Source, e.Level, e.Device, e.Serial, nullID(e.UserID), string(e.Data),
-				nullID(e.CommandID), vis); err != nil {
+			realID := e.RealUserID
+			if realID == 0 {
+				realID = e.EffectiveUserID
+			}
+			if _, err := stmt.ExecContext(ctx, newUUID(), nullID(e.CubeID), formatTime(at), e.Kind, e.Source, e.Level, e.Device, e.Serial,
+				nullID(e.EffectiveUserID), nullID(realID), string(e.Data), nullID(e.CommandID), vis); err != nil {
 				return err
 			}
 		}
@@ -540,31 +547,6 @@ func cubeArgs(cube int64, args ...any) []any {
 	return append([]any{cube}, args...)
 }
 
-// fillSources gives the rows a binary before migration 0009 wrote (an
-// older binary run on this file after a rollback) the source, level and
-// serial that 0009 gives the rows it copies, from their own JSON; per
-// Cube, on the index of (cube_id, source).
-func (s *Store) fillSources(ctx context.Context) error {
-	cubes, err := s.cubeIDs(ctx)
-	if err != nil {
-		return err
-	}
-	for _, cube := range cubes {
-		if _, err := s.db.ExecContext(ctx, `UPDATE log SET
-			source = CASE
-				WHEN coalesce(json_extract(data, '$.source'), '') != '' THEN json_extract(data, '$.source')
-				WHEN kind IN ('restore_step', 'restore_done') THEN 'system'
-				WHEN device = '' THEN 'cube'
-				ELSE 'device' END,
-			level = CASE kind WHEN 'disconnected' THEN 4 WHEN 'hello' THEN -4 ELSE 0 END,
-			serial = coalesce(nullif(json_extract(data, '$.serial'), ''), nullif(json_extract(data, '$.state.serial'), ''), '')
-			WHERE cube_id = ? AND source = ''`, cube); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // Events returns a page of a Cube's events, or of the Cubes of
 // q.CubeIDs, and with q.Server the server's as well, newest first: at
 // most q.Limit (MaxEventsPage, 1 at least) before q.BeforeID and
@@ -634,13 +616,13 @@ func (s *Store) eventsWalk(ctx context.Context, q EventQuery, cube int64, limit 
 	out := []Event{}
 	for rows.Next() {
 		var e Event
-		var cubeID, userID, commandID sql.NullInt64
+		var cubeID, userID, realID, commandID sql.NullInt64
 		var at sql.NullString
 		var data string
-		if err := rows.Scan(&e.ID, &cubeID, &at, &e.Kind, &e.Source, &e.Level, &e.Device, &e.Serial, &userID, &data, &commandID, &e.Visibility); err != nil {
+		if err := rows.Scan(&e.ID, &cubeID, &at, &e.Kind, &e.Source, &e.Level, &e.Device, &e.Serial, &userID, &realID, &data, &commandID, &e.Visibility); err != nil {
 			return nil, fmt.Errorf("store: events: %w", err)
 		}
-		e.CubeID, e.UserID, e.CommandID = cubeID.Int64, userID.Int64, commandID.Int64
+		e.CubeID, e.EffectiveUserID, e.RealUserID, e.CommandID = cubeID.Int64, userID.Int64, realID.Int64, commandID.Int64
 		e.Time, e.Data = parseTime(at), json.RawMessage(data)
 		out = append(out, e)
 	}
@@ -687,7 +669,7 @@ func eventsQuery(q EventQuery, cube int64, limit int) (string, []any) {
 		where, args = append(where, "serial = ?"), append(args, q.Serial)
 	}
 	if q.UserID != 0 {
-		where, args = append(where, "user_id = ?"), append(args, q.UserID)
+		where, args = append(where, "effective_user_id = ?"), append(args, q.UserID)
 	}
 	if q.CommandID != 0 {
 		where, args = append(where, "command_id = ?"), append(args, q.CommandID)
@@ -702,6 +684,6 @@ func eventsQuery(q EventQuery, cube int64, limit int) (string, []any) {
 		}
 		where, args = append(where, "+level >= ?"), append(args, *q.MinLevel)
 	}
-	return `SELECT id, cube_id, time, kind, source, level, device, serial, user_id, data, command_id, visibility FROM log WHERE ` + strings.Join(where, " AND ") +
+	return `SELECT id, cube_id, time, kind, source, level, device, serial, effective_user_id, real_user_id, data, command_id, visibility FROM log WHERE ` + strings.Join(where, " AND ") +
 		` ORDER BY id DESC LIMIT ?`, append(args, limit)
 }

@@ -59,8 +59,9 @@ func tombstone(t *testing.T, s *Store, serial string) {
 	}
 }
 
-// A tombstoned row comes back as found through discovery, and as the
-// new values through AddCube, keeping its identifier.
+// A tombstoned row stays removed (D11-A): discovery finds the Cube as a
+// new row, and AddCube makes one too, unless it names the removed row to
+// restore, which keeps its identifier.
 func TestTombstonedCubeComesBack(t *testing.T) {
 	s := open(t, t.TempDir())
 	ctx := context.Background()
@@ -73,14 +74,19 @@ func TestTombstonedCubeComesBack(t *testing.T) {
 		t.Fatalf("tombstoned row listed: %+v", all)
 	}
 	c, isNew, err := s.NoteDiscovered(ctx, Discovered{Serial: "KEQ0000001", Address: "10.0.0.1", RFAddress: "0aa001"})
-	if err != nil || !isNew || c.Serial != "KEQ0000001" || c.Configured || c.Source != SourceDiscovery || c.UUID != first.UUID || c.Version != first.Version+1 {
-		t.Fatalf("discovery of a tombstoned row: %+v %v %v", c, isNew, err)
+	if err != nil || !isNew || c.Serial != "KEQ0000001" || c.Configured || c.Source != SourceDiscovery || c.UUID == first.UUID || c.Version != 1 {
+		t.Fatalf("discovery beside a tombstoned row: %+v %v %v", c, isNew, err)
 	}
 
 	tombstone(t, s, "KEQ0000001")
 	c, err = s.AddCube(ctx, Cube{Serial: "KEQ0000001", Configured: true, Name: "New", Source: SourceUI})
-	if err != nil || c.Name != "New" || !c.Configured || c.UUID != first.UUID || c.Version != first.Version+2 {
-		t.Fatalf("add over a tombstoned row: %+v %v", c, err)
+	if err != nil || c.Name != "New" || !c.Configured || c.UUID == first.UUID || c.Version != 1 {
+		t.Fatalf("add beside tombstoned rows: %+v %v", c, err)
+	}
+	tombstone(t, s, "KEQ0000001")
+	c, err = s.AddCube(ctx, Cube{UUID: first.UUID, Serial: "KEQ0000001", Configured: true, Name: "Back", Source: SourceUI})
+	if err != nil || c.Name != "Back" || c.ID != first.ID || c.Version != first.Version+1 {
+		t.Fatalf("restore of a tombstoned row: %+v %v", c, err)
 	}
 	if _, err := s.AddCube(ctx, Cube{Serial: "KEQ0000001"}); !errors.Is(err, ErrExists) {
 		t.Fatalf("add over a live row: %v", err)

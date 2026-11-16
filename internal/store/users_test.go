@@ -96,8 +96,8 @@ func TestUsers(t *testing.T) {
 		t.Fatal("login not noted")
 	}
 
-	// Removal tombstones the row under a name of its own and revokes its
-	// tokens; the name is free for a user of its own.
+	// Removal tombstones the row, which keeps its name, and revokes its
+	// tokens; the name is free for a user of its own (migration 0024).
 	tok, _, err := s.AddToken(ctx, bob.ID, TokenAPI, "k", zeroTime)
 	if err != nil {
 		t.Fatal(err)
@@ -109,10 +109,10 @@ func TestUsers(t *testing.T) {
 		t.Fatal("removed user still found by name")
 	}
 	gone, ok, _ := s.UserByID(ctx, bob.ID)
-	if want := removedName("bob", gone.UpdatedAt); !ok || gone.Name != want || !strings.HasPrefix(want, "bob-del-") {
-		t.Fatalf("removed user by id: %+v %v, want the name %s", gone, ok, want)
+	if !ok || gone.Name != "bob" {
+		t.Fatalf("removed user by id: %+v %v", gone, ok)
 	}
-	if tk, _, _ := s.Token(ctx, tok.ID); tk.RevokedAt.IsZero() {
+	if tk, _, _ := s.Token(ctx, tok.ID); tk.DeletedAt.IsZero() {
 		t.Fatal("token of a removed user not revoked")
 	}
 	if err := s.DeleteUser(ctx, "bob", 0); !errors.Is(err, ErrNoUser) {
@@ -122,25 +122,31 @@ func TestUsers(t *testing.T) {
 	if err != nil || back.ID == bob.ID || back.UUID == bob.UUID || back.Role != RoleGuest || !back.HasPassword || back.Version != 1 {
 		t.Fatalf("a new bob %+v %v (was %+v)", back, err, bob)
 	}
-	if again, ok, _ := s.UserByID(ctx, bob.ID); !ok || again.Name != gone.Name {
+	if again, ok, _ := s.UserByID(ctx, bob.ID); !ok || again.Name != "bob" {
 		t.Fatalf("the removed bob: %+v", again)
 	}
-	// Removed again within the minute: the id tells the two apart.
+	if id, ok, _ := s.UserIDByName(ctx, "bob"); !ok || id != back.ID {
+		t.Fatalf("bob's id by name: %d, want the live one's %d", id, back.ID)
+	}
+	if _, err := s.AddUser(ctx, User{Name: "bob"}, "", 0); !errors.Is(err, ErrUserExists) {
+		t.Fatalf("a live user's name: %v", err)
+	}
+	// Removed again: two removed rows of the name, the newest found by it.
 	if err := s.DeleteUser(ctx, "bob", 0); err != nil {
 		t.Fatal(err)
 	}
-	if second, _, _ := s.UserByID(ctx, back.ID); second.Name != removedName("bob", second.UpdatedAt) && second.Name != gone.Name+"-"+strconv.FormatInt(back.ID, 10) {
-		t.Fatalf("the second removed bob: %q (the first %q)", second.Name, gone.Name)
+	if second, _, _ := s.UserByID(ctx, back.ID); second.Name != "bob" {
+		t.Fatalf("the second removed bob: %q", second.Name)
 	}
-	if _, err := s.AddUser(ctx, User{Name: gone.Name}, "", 0); !errors.Is(err, ErrUserExists) {
-		t.Fatalf("a removed user's name: %v", err)
+	if id, ok, _ := s.UserIDByName(ctx, "bob"); !ok || id != back.ID {
+		t.Fatalf("bob's id by name: %d, want the last removed %d", id, back.ID)
 	}
 }
 
 // A rename moves the user and its password to the new name: the record
 // is registered under it, the old name signs in no more; keys and
-// preferences stay with the row. A taken name, a removed user's among
-// them, a bad one and an unknown user are refused; no password leaves
+// preferences stay with the row. A name taken by a live user, a bad
+// one and an unknown or removed user are refused; no password leaves
 // none.
 func TestRenameUser(t *testing.T) {
 	s := open(t, t.TempDir())
@@ -152,15 +158,14 @@ func TestRenameUser(t *testing.T) {
 	tok, _, _ := s.AddToken(ctx, anna.ID, TokenAPI, "k", zeroTime)
 	s.SetPreference(ctx, anna.ID, "ui", json.RawMessage(`{"theme":"dark"}`))
 	s.AddUser(ctx, User{Name: "bob"}, "", 0)
-	g, _ := s.AddUser(ctx, User{Name: "gone"}, "", 0)
+	s.AddUser(ctx, User{Name: "gone"}, "", 0)
 	s.DeleteUser(ctx, "gone", 0)
-	removed, _, _ := s.UserByID(ctx, g.ID)
 
 	for _, c := range []struct {
 		from, to string
 		want     error
 	}{
-		{"anna", "bob", ErrUserExists}, {"anna", removed.Name, ErrUserExists},
+		{"anna", "bob", ErrUserExists},
 		{"anna", "Bad Name", ErrBadName}, {"nobody", "carl", ErrNoUser}, {"gone", "carl", ErrNoUser},
 	} {
 		if _, err := s.RenameUser(ctx, c.from, c.to, "x", 0); !errors.Is(err, c.want) {
@@ -177,7 +182,7 @@ func TestRenameUser(t *testing.T) {
 	if _, ok, _ := s.User(ctx, "anna"); ok {
 		t.Fatal("the old name still found")
 	}
-	if tk, ok, _ := s.Token(ctx, tok.ID); !ok || !tk.RevokedAt.IsZero() || tk.UserID != anna.ID {
+	if tk, ok, _ := s.Token(ctx, tok.ID); !ok || !tk.DeletedAt.IsZero() || tk.UserID != anna.ID {
 		t.Fatalf("the key: %+v", tk)
 	}
 	if list, _ := s.Preferences(ctx, anna.ID); len(list) != 1 {
@@ -287,9 +292,10 @@ func opaqueSignsIn(t *testing.T, s *Store, name, password string) bool {
 	return ke3 != nil && s.FinishOpaque(start, ke3) == nil
 }
 
-// Migration 0015 renames the users removed before it as DeleteUser now
-// does, -<id> added where a user has that name already, and leaves the
-// live ones; the name is then free (AP UserCli v1.0, Block 2).
+// Migration 0015 renamed the users removed before it as DeleteUser did
+// then, -<id> added where a user had that name already, and left the
+// live ones (AP UserCli v1.0, Block 2); 0024 takes the suffixes off
+// again, a name being unique among the users not removed from then on.
 func TestMigration15(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -305,27 +311,41 @@ func TestMigration15(t *testing.T) {
 		}
 	}
 	s14.Close()
-	s := open(t, dir)
-	names := map[string]string{}
-	rows, err := s.db.QueryContext(ctx, `SELECT uuid, name, id FROM users WHERE uuid LIKE 'u_'`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var bobID int64
-	for rows.Next() {
-		var uuid, name string
-		var id int64
-		rows.Scan(&uuid, &name, &id)
-		names[uuid] = name
-		if uuid == "u2" {
-			bobID = id
+	names := func(s *Store) (map[string]string, int64) {
+		t.Helper()
+		out := map[string]string{}
+		rows, err := s.db.QueryContext(ctx, `SELECT uuid, name, id FROM users WHERE uuid LIKE 'u_'`)
+		if err != nil {
+			t.Fatal(err)
 		}
+		defer rows.Close()
+		var bobID int64
+		for rows.Next() {
+			var uuid, name string
+			var id int64
+			rows.Scan(&uuid, &name, &id)
+			out[uuid] = name
+			if uuid == "u2" {
+				bobID = id
+			}
+		}
+		return out, bobID
 	}
-	rows.Close()
+	s15 := openAt(t, dir, 15)
+	got, bobID := names(s15)
 	want := map[string]string{"u1": "anna-del-20261102-0805", "u2": "bob-del-20261103-2359-" + strconv.FormatInt(bobID, 10), "u3": "bob-del-20261103-2359", "u4": "carl"}
 	for k, v := range want {
-		if names[k] != v {
-			t.Errorf("%s: %q, want %q", k, names[k], v)
+		if got[k] != v {
+			t.Errorf("0015, %s: %q, want %q", k, got[k], v)
+		}
+	}
+	s15.Close()
+	s := open(t, dir)
+	got, _ = names(s)
+	want = map[string]string{"u1": "anna", "u2": "bob", "u3": "bob-del-20261103-2359", "u4": "carl"}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("0024, %s: %q, want %q", k, got[k], v)
 		}
 	}
 	if _, err := s.AddUser(ctx, User{Name: "anna"}, "", 0); err != nil {

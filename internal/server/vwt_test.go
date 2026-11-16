@@ -407,7 +407,7 @@ func TestProxyVirtualOption(t *testing.T) {
 	if code, body := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100", `{"proxy_virtual":true}`); code != 200 || body["proxy_virtual"] != true {
 		t.Fatalf("PUT: %d %v", code, body)
 	}
-	if o, _ := st.CubeOptions(context.Background(), 1); !o.ProxyVirtual {
+	if c, _, _ := st.CubeByID(context.Background(), 1); !c.ProxyVirtual {
 		t.Fatal("not kept in the store")
 	}
 	vs := s.proxyVirtuals(rt)

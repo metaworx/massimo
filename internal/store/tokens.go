@@ -6,7 +6,8 @@ package store
 // Tokens (docs/store.md section 6): a session the web UI holds for 30
 // days, extended on use, or an API key that never expires. A token is
 // 32 random bytes shown once; the store keeps its SHA-256. A revoked
-// token keeps its row (revoked_at), so that the audit's token_id still
+// token is a tombstone (deleted_at, revoked_at before migration 0024)
+// that keeps its row, so that the audit's token_id still
 // points at something.
 
 import (
@@ -40,7 +41,7 @@ type Token struct {
 	ExpiresAt    time.Time // zero: never
 	LastUsedAt   time.Time
 	LastUsedFrom string
-	RevokedAt    time.Time
+	DeletedAt    time.Time // when it was revoked; zero while it lives
 	Version      int64
 }
 
@@ -62,15 +63,15 @@ func NewSecret() (string, error) {
 	return hex.EncodeToString(b[:]), nil
 }
 
-const tokenColumns = `t.id, t.uuid, t.user_id, t.kind, t.label, t.created_at, t.expires_at, t.last_used_at, t.last_used_from, t.revoked_at, t.version`
+const tokenColumns = `t.id, t.uuid, t.user_id, t.kind, t.label, t.created_at, t.expires_at, t.last_used_at, t.last_used_from, t.deleted_at, t.version`
 
 func scanToken(row scanner) (Token, error) {
 	var t Token
-	var created, expires, used, revoked sql.NullString
-	if err := row.Scan(&t.ID, &t.UUID, &t.UserID, &t.Kind, &t.Label, &created, &expires, &used, &t.LastUsedFrom, &revoked, &t.Version); err != nil {
+	var created, expires, used, deleted sql.NullString
+	if err := row.Scan(&t.ID, &t.UUID, &t.UserID, &t.Kind, &t.Label, &created, &expires, &used, &t.LastUsedFrom, &deleted, &t.Version); err != nil {
 		return Token{}, err
 	}
-	t.CreatedAt, t.ExpiresAt, t.LastUsedAt, t.RevokedAt = parseTime(created), parseTime(expires), parseTime(used), parseTime(revoked)
+	t.CreatedAt, t.ExpiresAt, t.LastUsedAt, t.DeletedAt = parseTime(created), parseTime(expires), parseTime(used), parseTime(deleted)
 	return t, nil
 }
 
@@ -120,7 +121,7 @@ func (s *Store) Token(ctx context.Context, id int64) (Token, bool, error) {
 // TokenByHash finds a live token by the hash of its secret: not revoked,
 // its user not removed. Whether it has expired is the caller's check.
 func (s *Store) TokenByHash(ctx context.Context, hash string) (Token, bool, error) {
-	t, err := scanToken(s.db.QueryRowContext(ctx, `SELECT `+tokenColumns+` FROM tokens t JOIN users u ON u.id = t.user_id WHERE t.hash = ? AND t.revoked_at IS NULL AND u.deleted_at IS NULL`, hash))
+	t, err := scanToken(s.db.QueryRowContext(ctx, `SELECT `+tokenColumns+` FROM tokens t JOIN users u ON u.id = t.user_id WHERE t.hash = ? AND t.deleted_at IS NULL AND u.deleted_at IS NULL`, hash))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Token{}, false, nil
 	}
@@ -132,7 +133,7 @@ func (s *Store) TokenByHash(ctx context.Context, hash string) (Token, bool, erro
 
 // Tokens lists a user's live tokens, oldest first.
 func (s *Store) Tokens(ctx context.Context, userID int64) ([]Token, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+tokenColumns+` FROM tokens t WHERE t.user_id = ? AND t.revoked_at IS NULL ORDER BY t.id`, userID)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+tokenColumns+` FROM tokens t WHERE t.user_id = ? AND t.deleted_at IS NULL ORDER BY t.id`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("store: tokens: %w", err)
 	}
@@ -153,7 +154,7 @@ func (s *Store) RevokeToken(ctx context.Context, id int64) error {
 	if err := s.writable(); err != nil {
 		return err
 	}
-	res, err := s.db.ExecContext(ctx, `UPDATE tokens SET revoked_at = ?, origin = ?, version = version + 1 WHERE id = ? AND revoked_at IS NULL`, s.nowText(), s.nodeID, id)
+	res, err := s.db.ExecContext(ctx, `UPDATE tokens SET deleted_at = ?, origin = ?, version = version + 1 WHERE id = ? AND deleted_at IS NULL`, s.nowText(), s.nodeID, id)
 	if err != nil {
 		return fmt.Errorf("store: token %d: %w", id, err)
 	}
@@ -173,10 +174,10 @@ func (s *Store) RevokeSessions(ctx context.Context, userID int64) error {
 	if err := s.writable(); err != nil {
 		return err
 	}
-	if _, err := s.db.ExecContext(ctx, `UPDATE tokens SET revoked_at = ?, origin = ?, version = version + 1 WHERE user_id = ? AND kind = ? AND revoked_at IS NULL`, s.nowText(), s.nodeID, userID, TokenSession); err != nil {
+	if _, err := s.db.ExecContext(ctx, `UPDATE tokens SET deleted_at = ?, origin = ?, version = version + 1 WHERE user_id = ? AND kind = ? AND deleted_at IS NULL`, s.nowText(), s.nodeID, userID, TokenSession); err != nil {
 		return fmt.Errorf("store: sessions of %d: %w", userID, err)
 	}
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM push_subscriptions WHERE token_id IN (SELECT id FROM tokens WHERE user_id = ? AND kind = ? AND revoked_at IS NOT NULL)`, userID, TokenSession); err != nil {
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM push_subscriptions WHERE token_id IN (SELECT id FROM tokens WHERE user_id = ? AND kind = ? AND deleted_at IS NOT NULL)`, userID, TokenSession); err != nil {
 		return fmt.Errorf("store: sessions of %d: %w", userID, err)
 	}
 	return nil

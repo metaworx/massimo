@@ -52,7 +52,7 @@ type userView struct {
 // and for one of its users the id and name there and the Massimo user it
 // is linked to. The integration's own user has no id.
 type userIntegration struct {
-	Key      string `json:"key"`
+	Key      string `json:"key"` // the integration's uuid since migration 0024 dropped its key
 	UUID     string `json:"uuid"`
 	ID       string `json:"id,omitempty"`
 	Name     string `json:"name,omitempty"`
@@ -61,7 +61,7 @@ type userIntegration struct {
 
 // userLink is an integration's user linked to a Massimo user.
 type userLink struct {
-	Integration string `json:"integration"` // its key
+	Integration string `json:"integration"` // the integration's uuid since migration 0024 dropped its key
 	ID          string `json:"id"`
 	Name        string `json:"name,omitempty"`
 }
@@ -392,7 +392,7 @@ func (s *Server) meOf(r *http.Request, p *principal) (meView, error) {
 	tok := viewToken(p.token)
 	me.User, me.Role, me.Capabilities, me.Token = &u, &roleRef{Key: role.Key, Name: role.Name, Disabled: role.Disabled}, caps, &tok
 	if i := p.integration; i != nil {
-		me.Integration = &meIntegration{UUID: i.UUID, Key: i.Key, Name: i.Name, State: i.State, InstanceID: i.InstanceID}
+		me.Integration = &meIntegration{UUID: i.UUID, Key: i.UUID, Name: i.Name, State: i.State, InstanceID: i.InstanceID}
 		me.Capabilities = integrationCaps(p)
 		if me.Capabilities == nil {
 			me.Capabilities = []string{}
@@ -407,7 +407,7 @@ func (s *Server) meOf(r *http.Request, p *principal) (meView, error) {
 // meIntegration is a key's integration in GET /api/v1/me.
 type meIntegration struct {
 	UUID       string `json:"uuid"`
-	Key        string `json:"key"`
+	Key        string `json:"key"` // its uuid since migration 0024 dropped its key
 	Name       string `json:"name"`
 	State      string `json:"state"`
 	InstanceID string `json:"instance_id"`

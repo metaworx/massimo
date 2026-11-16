@@ -9,7 +9,10 @@ package store
 // disabled or removed. integration is fixed as well, at the ceiling of
 // every call through an integration (migration 0021): it is the role of
 // integrations and their users, and never changes. The capability keys themselves are the server's
-// (internal/server/auth.go); the store keeps what it is given.
+// (internal/server/auth.go); the store keeps what it is given. A role
+// replicates by its uuid (migration 0024); a removed role keeps its row
+// and its key, which is unique among the roles that are not removed, so
+// a role added under it later is a row of its own.
 
 import (
 	"context"
@@ -57,6 +60,7 @@ var roleKey = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
 // Role is one row of roles with its set.
 type Role struct {
 	ID           int64
+	UUID         string
 	Key          string
 	Name         string // display name; "" shows the key's translated default
 	Builtin      bool
@@ -83,7 +87,7 @@ func normalCaps(list []string) []string {
 	return out
 }
 
-const roleColumns = `r.id, r.key, r.name, r.builtin, r.disabled, r.created_at, r.updated_at, r.version,
+const roleColumns = `r.id, r.uuid, r.key, r.name, r.builtin, r.disabled, r.created_at, r.updated_at, r.version,
 	coalesce((SELECT group_concat(c.capability) FROM role_capabilities c WHERE c.role_id = r.id), ''),
 	(SELECT count(*) FROM users u WHERE u.role_id = r.id AND u.deleted_at IS NULL)`
 
@@ -91,7 +95,7 @@ func scanRole(row scanner) (Role, error) {
 	var r Role
 	var created, updated sql.NullString
 	var caps string
-	if err := row.Scan(&r.ID, &r.Key, &r.Name, &r.Builtin, &r.Disabled, &created, &updated, &r.Version, &caps, &r.Users); err != nil {
+	if err := row.Scan(&r.ID, &r.UUID, &r.Key, &r.Name, &r.Builtin, &r.Disabled, &created, &updated, &r.Version, &caps, &r.Users); err != nil {
 		return Role{}, err
 	}
 	r.CreatedAt, r.UpdatedAt = parseTime(created), parseTime(updated)
@@ -152,7 +156,8 @@ func writeCaps(ctx context.Context, tx *sql.Tx, roleID int64, caps []string) err
 }
 
 // AddRole creates a role with r's Key, Name and Capabilities, created
-// by the user by. A removed role of the key is taken over.
+// by the user by: a row of its own, also where a removed role had the
+// key.
 func (s *Store) AddRole(ctx context.Context, r Role, by int64) (Role, error) {
 	if err := s.writable(); err != nil {
 		return Role{}, err
@@ -167,27 +172,18 @@ func (s *Store) AddRole(ctx context.Context, r Role, by int64) (Role, error) {
 		return Role{}, fmt.Errorf("store: add role %s: %w", r.Key, err)
 	}
 	defer tx.Rollback()
-	var id int64
-	var deleted sql.NullString
-	now := s.nowText()
-	switch err := tx.QueryRowContext(ctx, `SELECT id, deleted_at FROM roles WHERE key = ?`, r.Key).Scan(&id, &deleted); {
-	case errors.Is(err, sql.ErrNoRows):
-		res, err := tx.ExecContext(ctx, `INSERT INTO roles (key, name, builtin, created_at, updated_at, updated_by, created_by, origin) VALUES (?, ?, 0, ?, ?, ?, ?, ?)`,
-			r.Key, r.Name, now, now, nullID(by), nullID(by), s.nodeID)
-		if err != nil {
-			return Role{}, fmt.Errorf("store: add role %s: %w", r.Key, err)
-		}
-		id, _ = res.LastInsertId()
-	case err != nil:
-		return Role{}, fmt.Errorf("store: add role %s: %w", r.Key, err)
-	case !deleted.Valid:
+	if _, ok, err := s.role(ctx, tx, r.Key); err != nil {
+		return Role{}, err
+	} else if ok {
 		return Role{}, fmt.Errorf("%w: %s", ErrRoleExists, r.Key)
-	default:
-		if _, err := tx.ExecContext(ctx, `UPDATE roles SET name = ?, disabled = 0, deleted_at = NULL, updated_at = ?, updated_by = ?, origin = ?, version = version + 1 WHERE id = ?`,
-			r.Name, now, nullID(by), s.nodeID, id); err != nil {
-			return Role{}, fmt.Errorf("store: add role %s: %w", r.Key, err)
-		}
 	}
+	now := s.nowText()
+	res, err := tx.ExecContext(ctx, `INSERT INTO roles (uuid, key, name, builtin, created_at, updated_at, updated_by, created_by, origin) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?)`,
+		newUUID(), r.Key, r.Name, now, now, nullID(by), nullID(by), s.nodeID)
+	if err != nil {
+		return Role{}, fmt.Errorf("store: add role %s: %w", r.Key, err)
+	}
+	id, _ := res.LastInsertId()
 	if err := writeCaps(ctx, tx, id, caps); err != nil {
 		return Role{}, fmt.Errorf("store: add role %s: %w", r.Key, err)
 	}

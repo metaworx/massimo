@@ -7,9 +7,10 @@ package store
 // programs such as Home Assistant that act for users of their own. An
 // integration asks to be registered without a key (AddIntegrationRequest);
 // the owner compares the short code both sides show and approves it
-// (ApproveIntegration), which makes its own user, holding its key, and
-// its user "system", and the integration collects its key with the code
-// (CollectIntegrationKey). A request from an installation that was
+// (ApproveIntegration), which makes its own user <uuid>:, holding its
+// key, and its user <uuid>:system, and the integration collects its key
+// with the code (CollectIntegrationKey). Each of its users names it in
+// users.integration_id (migration 0024). A request from an installation that was
 // registered before can be attached to that integration instead, keeping
 // its users and links. Revoking deletes the key and disables the
 // integration; its rows stay.
@@ -65,15 +66,14 @@ type Integration struct {
 	ID              int64
 	UUID            string
 	Kind            string
-	Key             string // lower case; its users' names begin with it
-	Name            string
+	Name            string // as reported
 	InstanceID      string
 	PendingInstance string
 	URL             string
 	AppVersion      string
 	MaxCaps         []string
-	UserID          int64 // its own user, holding its key
-	SystemUserID    int64 // its user "system"
+	UserID          int64 // its own user, <uuid>:, holding its key
+	SystemUserID    int64 // its user <uuid>:system
 	State           string
 	RequestCode     string
 	RequestExpires  time.Time
@@ -85,15 +85,31 @@ type Integration struct {
 	Version         int64
 }
 
-const integrationColumns = `id, uuid, kind, key, name, instance_id, pending_instance, url, app_version, max_caps,
-	coalesce(user_id, 0), coalesce(system_user_id, 0), state, request_code, request_expires, request_remote, key_issued_at,
-	coalesce(merged_into, 0), created_at, updated_at, version`
+// integrationColumns are the columns scanIntegration reads, of
+// integrations g: its own user and its system user found by their names
+// (integrationUserName).
+const integrationColumns = `g.id, g.uuid, g.kind, g.name, g.instance_id, g.pending_instance, g.url, g.app_version, g.max_caps,
+	coalesce((SELECT u.id FROM users u WHERE u.integration_id = g.id AND u.name = g.uuid || ':' AND u.deleted_at IS NULL), 0),
+	coalesce((SELECT u.id FROM users u WHERE u.integration_id = g.id AND u.name = g.uuid || ':system' AND u.deleted_at IS NULL), 0),
+	g.state, g.request_code, g.request_expires_at, g.request_remote, g.key_issued_at,
+	coalesce(g.merged_into, 0), g.created_at, g.updated_at, g.version`
+
+// integrationName matches the name of an integration's user:
+// <integrations.uuid>:, its own, <uuid>:system, and <uuid>:<subject>,
+// the subject its user's id there, lower case (docs/store.md section 6,
+// "Integrations"). Only the store names them so: userName, the rule of
+// every other name, has no ':'.
+var integrationName = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:([a-z0-9]{1,64}|system)?$`)
+
+// integrationUserName is the name of integration uuid's user of subject:
+// "" its own, "system" its system user.
+func integrationUserName(uuid, subject string) string { return uuid + ":" + subject }
 
 func scanIntegration(row scanner) (Integration, error) {
 	var i Integration
 	var caps string
 	var expires, issued, created, updated sql.NullString
-	if err := row.Scan(&i.ID, &i.UUID, &i.Kind, &i.Key, &i.Name, &i.InstanceID, &i.PendingInstance, &i.URL, &i.AppVersion, &caps,
+	if err := row.Scan(&i.ID, &i.UUID, &i.Kind, &i.Name, &i.InstanceID, &i.PendingInstance, &i.URL, &i.AppVersion, &caps,
 		&i.UserID, &i.SystemUserID, &i.State, &i.RequestCode, &expires, &i.RequestRemote, &issued,
 		&i.MergedInto, &created, &updated, &i.Version); err != nil {
 		return Integration{}, err
@@ -131,7 +147,7 @@ func (s *Store) AddIntegrationRequest(ctx context.Context, r IntegrationRequest,
 	}
 	now := s.now()
 	var waiting int
-	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM integrations WHERE state = ? AND request_expires > ? AND deleted_at IS NULL`,
+	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM integrations WHERE state = ? AND request_expires_at > ? AND deleted_at IS NULL`,
 		IntegrationPending, formatTime(now)).Scan(&waiting); err != nil {
 		return Integration{}, fmt.Errorf("store: integration request: %w", err)
 	}
@@ -139,9 +155,9 @@ func (s *Store) AddIntegrationRequest(ctx context.Context, r IntegrationRequest,
 		return Integration{}, ErrTooManyRequests
 	}
 	uuid := newUUID()
-	if _, err := s.db.ExecContext(ctx, `INSERT INTO integrations (uuid, kind, key, name, instance_id, url, app_version, state, request_code, request_expires,
-		request_remote, created_at, updated_at, origin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		uuid, r.Kind, "request-"+uuid, strings.TrimSpace(r.Name), r.InstanceID, r.URL, r.AppVersion, IntegrationPending, code,
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO integrations (uuid, kind, name, instance_id, url, app_version, state, request_code, request_expires_at,
+		request_remote, created_at, updated_at, origin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		uuid, r.Kind, strings.TrimSpace(r.Name), r.InstanceID, r.URL, r.AppVersion, IntegrationPending, code,
 		formatTime(now.Add(RequestLife)), r.Remote, formatTime(now), formatTime(now), s.nodeID); err != nil {
 		return Integration{}, fmt.Errorf("store: integration request: %w", err)
 	}
@@ -152,8 +168,8 @@ func (s *Store) AddIntegrationRequest(ctx context.Context, r IntegrationRequest,
 // Integrations lists the integrations and the requests still waiting,
 // by name; refused requests and expired ones are left out.
 func (s *Store) Integrations(ctx context.Context) ([]Integration, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+integrationColumns+` FROM integrations WHERE deleted_at IS NULL
-		AND (state IN (?, ?) OR state = ? AND request_expires > ?) ORDER BY name, id`,
+	rows, err := s.db.QueryContext(ctx, `SELECT `+integrationColumns+` FROM integrations g WHERE g.deleted_at IS NULL
+		AND (g.state IN (?, ?) OR g.state = ? AND g.request_expires_at > ?) ORDER BY g.name, g.id`,
 		IntegrationActive, IntegrationDisabled, IntegrationPending, s.nowText())
 	if err != nil {
 		return nil, fmt.Errorf("store: integrations: %w", err)
@@ -177,13 +193,10 @@ func (s *Store) IntegrationByUUID(ctx context.Context, uuid string) (Integration
 }
 
 // IntegrationOfUser returns the integration whose own user userID is,
-// the holder of its key.
+// the holder of its key: its user <uuid>:.
 func (s *Store) IntegrationOfUser(ctx context.Context, userID int64) (Integration, bool, error) {
-	return s.integrationBy(ctx, s.db, "user_id", userID)
-}
-
-func (s *Store) integrationBy(ctx context.Context, q queryer, col string, v any) (Integration, bool, error) {
-	i, err := scanIntegration(q.QueryRowContext(ctx, `SELECT `+integrationColumns+` FROM integrations WHERE `+col+` = ? AND deleted_at IS NULL`, v))
+	i, err := scanIntegration(s.db.QueryRowContext(ctx, `SELECT `+integrationColumns+` FROM integrations g JOIN users o ON o.integration_id = g.id
+		WHERE o.id = ? AND o.name = g.uuid || ':' AND g.deleted_at IS NULL`, userID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Integration{}, false, nil
 	}
@@ -193,26 +206,17 @@ func (s *Store) integrationBy(ctx context.Context, q queryer, col string, v any)
 	return i, true, nil
 }
 
-// integrationKey is the key an integration of name gets: lower case, the
-// characters of a user name, "integration" for a name without any.
-func integrationKey(name string) string {
-	var b strings.Builder
-	for _, r := range strings.ToLower(name) {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
-			b.WriteRune(r)
-		case b.Len() > 0 && !strings.HasSuffix(b.String(), "-"):
-			b.WriteByte('-')
-		}
+// integrationBy returns the integration whose column col is v; col is
+// the caller's own text, never input.
+func (s *Store) integrationBy(ctx context.Context, q queryer, col string, v any) (Integration, bool, error) {
+	i, err := scanIntegration(q.QueryRowContext(ctx, `SELECT `+integrationColumns+` FROM integrations g WHERE g.`+col+` = ? AND g.deleted_at IS NULL`, v))
+	if errors.Is(err, sql.ErrNoRows) {
+		return Integration{}, false, nil
 	}
-	k := strings.Trim(b.String(), "-")
-	if len(k) > 40 {
-		k = strings.Trim(k[:40], "-")
+	if err != nil {
+		return Integration{}, false, fmt.Errorf("store: integration: %w", err)
 	}
-	if k == "" {
-		k = "integration"
-	}
-	return k
+	return i, true, nil
 }
 
 // ApproveIntegration registers a pending request with the maximum caps
@@ -249,8 +253,17 @@ func (s *Store) ApproveIntegration(ctx context.Context, uuid string, caps []stri
 		if !ok || target.Kind != req.Kind || (target.State != IntegrationActive && target.State != IntegrationDisabled) {
 			return Integration{}, fmt.Errorf("%w: %s", ErrNoIntegration, attach)
 		}
-		set := `instance_id = ?, pending_instance = '', url = ?, app_version = ?, state = ?, request_code = ?, request_expires = ?, key_issued_at = NULL`
+		set := `instance_id = ?, pending_instance = '', url = ?, app_version = ?, state = ?, request_code = ?, request_expires_at = ?, key_issued_at = NULL`
 		args := []any{req.InstanceID, req.URL, req.AppVersion, IntegrationActive, req.RequestCode, expires}
+		if req.Name != "" && req.Name != target.Name {
+			// The name the installation reports now; its own user's
+			// display name follows while it is the one reported before.
+			set += `, name = ?`
+			args = append(args, req.Name)
+			if err := copyReportedName(ctx, tx, target.UserID, target.Name, req.Name, now); err != nil {
+				return Integration{}, err
+			}
+		}
 		if caps != nil {
 			raw, _ := json.Marshal(normalCaps(caps))
 			set += `, max_caps = ?`
@@ -269,15 +282,10 @@ func (s *Store) ApproveIntegration(ctx context.Context, uuid string, caps []stri
 		}
 		result = target.UUID
 	} else {
-		key, err := s.freeIntegrationKey(ctx, tx, integrationKey(req.Name))
-		if err != nil {
-			return Integration{}, err
-		}
-		own, err := s.addUserTx(ctx, tx, User{Name: key, DisplayName: req.Name, Role: RoleIntegration}, by)
-		if err != nil {
+		if _, err := s.addUserTx(ctx, tx, User{Name: integrationUserName(req.UUID, ""), DisplayName: req.Name, Role: RoleIntegration, IntegrationID: req.ID}, by); err != nil {
 			return Integration{}, fmt.Errorf("store: approve integration: %w", err)
 		}
-		sys, err := s.addUserTx(ctx, tx, User{Name: key + ".system", DisplayName: "system", Role: RoleIntegration}, by)
+		sys, err := s.addUserTx(ctx, tx, User{Name: integrationUserName(req.UUID, "system"), DisplayName: "system", Role: RoleIntegration, IntegrationID: req.ID}, by)
 		if err != nil {
 			return Integration{}, fmt.Errorf("store: approve integration: %w", err)
 		}
@@ -285,13 +293,14 @@ func (s *Store) ApproveIntegration(ctx context.Context, uuid string, caps []stri
 			caps = []string{}
 		}
 		raw, _ := json.Marshal(normalCaps(caps))
-		if _, err := tx.ExecContext(ctx, `UPDATE integrations SET key = ?, state = ?, max_caps = ?, user_id = ?, system_user_id = ?, request_expires = ?,
+		if _, err := tx.ExecContext(ctx, `UPDATE integrations SET state = ?, max_caps = ?, request_expires_at = ?,
 			updated_at = ?, updated_by = ?, origin = ?, version = version + 1 WHERE id = ?`,
-			key, IntegrationActive, string(raw), own.ID, sys.ID, expires, formatTime(now), nullID(by), s.nodeID, req.ID); err != nil {
+			IntegrationActive, string(raw), expires, formatTime(now), nullID(by), s.nodeID, req.ID); err != nil {
 			return Integration{}, fmt.Errorf("store: approve integration: %w", err)
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO user_identities (uuid, user_id, integration_id, subject, name, own_user_id, created_at, created_by, bound_at)
-			VALUES (?, ?, ?, 'system', 'system', ?, ?, ?, ?)`, newUUID(), sys.ID, req.ID, sys.ID, formatTime(now), nullID(by), formatTime(now)); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO user_identities (uuid, effective_user_id, integration_id, subject, name, real_user_id, created_at, created_by,
+			bound_at, updated_at, origin) VALUES (?, ?, ?, 'system', 'system', ?, ?, ?, ?, ?, ?)`,
+			newUUID(), sys.ID, req.ID, sys.ID, formatTime(now), nullID(by), formatTime(now), formatTime(now), s.nodeID); err != nil {
 			return Integration{}, fmt.Errorf("store: approve integration: %w", err)
 		}
 	}
@@ -302,24 +311,27 @@ func (s *Store) ApproveIntegration(ctx context.Context, uuid string, caps []stri
 	return i, err
 }
 
-// freeIntegrationKey is base, or base-2, base-3 …, the first that no
-// integration and no user has.
-func (s *Store) freeIntegrationKey(ctx context.Context, tx *sql.Tx, base string) (string, error) {
-	for n := 1; n < 1000; n++ {
-		key := base
-		if n > 1 {
-			key = fmt.Sprintf("%s-%d", base, n)
-		}
-		var taken int
-		if err := tx.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM integrations WHERE key = ? AND deleted_at IS NULL)
-			+ (SELECT count(*) FROM users WHERE name IN (?, ?))`, key, key, key+".system").Scan(&taken); err != nil {
-			return "", fmt.Errorf("store: integration key: %w", err)
-		}
-		if taken == 0 {
-			return key, nil
-		}
+// copyReportedName copies a name an integration reports anew into the
+// display name of its user userID, as long as that display name is still
+// the name reported before (was): a name the owner gave stays.
+func copyReportedName(ctx context.Context, tx *sql.Tx, userID int64, was, name string, now time.Time) error {
+	if userID == 0 || name == "" || name == was {
+		return nil
 	}
-	return "", fmt.Errorf("store: no free integration key for %q", base)
+	// Compared here, not in a WHERE: display_name is a content column
+	// (rule_test.go).
+	var display string
+	if err := tx.QueryRowContext(ctx, `SELECT display_name FROM users WHERE id = ?`, userID).Scan(&display); err != nil {
+		return fmt.Errorf("store: integration user %d: %w", userID, err)
+	}
+	if display != was {
+		return nil
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE users SET display_name = ?, updated_at = ?, version = version + 1 WHERE id = ?`,
+		name, formatTime(now), userID); err != nil {
+		return fmt.Errorf("store: integration user %d: %w", userID, err)
+	}
+	return nil
 }
 
 // enableUsers enables the users given, those of an integration attached
@@ -388,7 +400,7 @@ func (s *Store) CollectIntegrationKey(ctx context.Context, uuid, code string) (s
 		return "", Integration{}, err
 	}
 	for _, t := range tokens {
-		if t.Kind != TokenAPI || !t.RevokedAt.IsZero() {
+		if t.Kind != TokenAPI || !t.DeletedAt.IsZero() {
 			continue
 		}
 		if !t.LastUsedAt.IsZero() {
@@ -477,7 +489,7 @@ func (s *Store) RevokeIntegration(ctx context.Context, uuid string, by int64) er
 		return err
 	}
 	for _, t := range tokens {
-		if t.RevokedAt.IsZero() {
+		if t.DeletedAt.IsZero() {
 			if err := s.RevokeToken(ctx, t.ID); err != nil && !errors.Is(err, ErrNoToken) {
 				return err
 			}
@@ -487,11 +499,15 @@ func (s *Store) RevokeIntegration(ctx context.Context, uuid string, by int64) er
 }
 
 // addUserTx adds a user without a password inside tx, for an integration
-// and its users: no sign-in, only what acts through the integration.
+// and its users: no sign-in, only what acts through the integration. Its
+// name is integrationName's, and u.IntegrationID its integration.
 func (s *Store) addUserTx(ctx context.Context, tx *sql.Tx, u User, by int64) (User, error) {
-	u, err := s.newUser(u)
-	if err != nil {
+	if err := s.writable(); err != nil {
 		return User{}, err
+	}
+	u.Name = NormalName(u.Name)
+	if !integrationName.MatchString(u.Name) || u.IntegrationID == 0 {
+		return User{}, fmt.Errorf("%w: %q", ErrBadName, u.Name)
 	}
 	role, err := s.roleID(ctx, tx, u.Role)
 	if err != nil {
@@ -502,8 +518,8 @@ func (s *Store) addUserTx(ctx context.Context, tx *sql.Tx, u User, by int64) (Us
 	}
 	now := s.nowText()
 	uuid := newUUID()
-	res, err := tx.ExecContext(ctx, `INSERT INTO users (uuid, name, display_name, role_id, created_at, updated_at, updated_by, origin)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, uuid, u.Name, u.DisplayName, role, now, now, nullID(by), s.nodeID)
+	res, err := tx.ExecContext(ctx, `INSERT INTO users (uuid, name, display_name, role_id, integration_id, created_at, updated_at, updated_by, origin)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, uuid, u.Name, u.DisplayName, role, u.IntegrationID, now, now, nullID(by), s.nodeID)
 	if err != nil {
 		return User{}, fmt.Errorf("store: add user %s: %w", u.Name, err)
 	}
@@ -520,8 +536,8 @@ type IntegrationIdentity struct {
 	IntegrationID   int64
 	Subject         string // the user's id at the integration, or "system"
 	Name            string // its name there, from its last call
-	UserID          int64  // the user it acts as: OwnUserID, or the Massimo user it is linked to
-	OwnUserID       int64  // the user made at its first call
+	EffectiveUserID int64  // the user it acts as: RealUserID, or the Massimo user it is linked to
+	RealUserID      int64  // the user made at its first call, <uuid>:<subject>
 	SystemGenerated bool
 	LastLevel       string
 	CreatedAt       time.Time
@@ -529,15 +545,15 @@ type IntegrationIdentity struct {
 }
 
 // Linked reports whether the identity acts as a Massimo user of its own.
-func (i IntegrationIdentity) Linked() bool { return i.UserID != i.OwnUserID }
+func (i IntegrationIdentity) Linked() bool { return i.EffectiveUserID != i.RealUserID }
 
-const integrationIdentityColumns = `id, uuid, integration_id, coalesce(subject, ''), name, user_id, coalesce(own_user_id, user_id), system_generated,
-	last_level, created_at, last_used_at`
+const integrationIdentityColumns = `id, uuid, integration_id, coalesce(subject, ''), name, effective_user_id, coalesce(real_user_id, effective_user_id),
+	system_generated, last_level, created_at, last_used_at`
 
 func scanIntegrationIdentity(row scanner) (IntegrationIdentity, error) {
 	var i IntegrationIdentity
 	var created, used sql.NullString
-	if err := row.Scan(&i.ID, &i.UUID, &i.IntegrationID, &i.Subject, &i.Name, &i.UserID, &i.OwnUserID, &i.SystemGenerated,
+	if err := row.Scan(&i.ID, &i.UUID, &i.IntegrationID, &i.Subject, &i.Name, &i.EffectiveUserID, &i.RealUserID, &i.SystemGenerated,
 		&i.LastLevel, &created, &used); err != nil {
 		return IntegrationIdentity{}, err
 	}
@@ -557,11 +573,12 @@ type IntegrationSeen struct {
 
 // IntegrationUser finds the user a call through integration i acts for,
 // making it at its first call: an identity with a user of the role
-// integration, without a password, named "<key>.<the id's first 8
-// characters>" (longer where that name is taken). Its name, level and
-// time of use are kept current; a name only where the call brings one.
-// The subject "system" is the integration's user for the calls no user
-// started.
+// integration, without a password, named <uuid>:<subject>; a subject
+// that makes no such name (integrationName) is ErrBadName. Its name,
+// level and time of use are kept current, a name only where the call
+// brings one, and the display name of its user follows the name while
+// that is still the one reported before (copyReportedName). The subject
+// "system" is the integration's user for the calls no user started.
 func (s *Store) IntegrationUser(ctx context.Context, i Integration, seen IntegrationSeen) (IntegrationIdentity, error) {
 	if err := s.writable(); err != nil {
 		return IntegrationIdentity{}, err
@@ -572,20 +589,20 @@ func (s *Store) IntegrationUser(ctx context.Context, i Integration, seen Integra
 	}
 	defer tx.Rollback()
 	now := s.nowText()
-	id, err := scanIntegrationIdentity(tx.QueryRowContext(ctx, `SELECT `+integrationIdentityColumns+` FROM user_identities WHERE integration_id = ? AND subject = ?`,
-		i.ID, seen.Subject))
+	id, err := scanIntegrationIdentity(tx.QueryRowContext(ctx, `SELECT `+integrationIdentityColumns+` FROM user_identities
+		WHERE integration_id = ? AND subject = ? AND deleted_at IS NULL`, i.ID, seen.Subject))
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		if seen.Subject == "system" {
-			return IntegrationIdentity{}, fmt.Errorf("%w: integration %s has no system user", ErrNoIntegration, i.Key)
+			return IntegrationIdentity{}, fmt.Errorf("%w: integration %s has no system user", ErrNoIntegration, i.UUID)
 		}
 		own, err := s.integrationUserTx(ctx, tx, i, seen)
 		if err != nil {
 			return IntegrationIdentity{}, err
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO user_identities (uuid, user_id, integration_id, subject, name, own_user_id, system_generated,
-			last_level, created_at, bound_at, last_used_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			newUUID(), own.ID, i.ID, seen.Subject, seen.Name, own.ID, seen.SystemGenerated, seen.Level, now, now, now); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO user_identities (uuid, effective_user_id, integration_id, subject, name, real_user_id, system_generated,
+			last_level, created_at, bound_at, last_used_at, updated_at, origin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			newUUID(), own.ID, i.ID, seen.Subject, seen.Name, own.ID, seen.SystemGenerated, seen.Level, now, now, now, now, s.nodeID); err != nil {
 			return IntegrationIdentity{}, fmt.Errorf("store: integration user: %w", err)
 		}
 	case err != nil:
@@ -594,8 +611,8 @@ func (s *Store) IntegrationUser(ctx context.Context, i Integration, seen Integra
 		name := id.Name
 		if seen.Name != "" && seen.Name != id.Name {
 			name = seen.Name
-			if _, err := tx.ExecContext(ctx, `UPDATE users SET display_name = ?, updated_at = ?, version = version + 1 WHERE id = ?`, name, now, id.OwnUserID); err != nil {
-				return IntegrationIdentity{}, fmt.Errorf("store: integration user: %w", err)
+			if err := copyReportedName(ctx, tx, id.RealUserID, id.Name, name, s.now()); err != nil {
+				return IntegrationIdentity{}, err
 			}
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE user_identities SET name = ?, last_level = ?, system_generated = ?, last_used_at = ? WHERE id = ?`,
@@ -603,8 +620,8 @@ func (s *Store) IntegrationUser(ctx context.Context, i Integration, seen Integra
 			return IntegrationIdentity{}, fmt.Errorf("store: integration user: %w", err)
 		}
 	}
-	out, err := scanIntegrationIdentity(tx.QueryRowContext(ctx, `SELECT `+integrationIdentityColumns+` FROM user_identities WHERE integration_id = ? AND subject = ?`,
-		i.ID, seen.Subject))
+	out, err := scanIntegrationIdentity(tx.QueryRowContext(ctx, `SELECT `+integrationIdentityColumns+` FROM user_identities
+		WHERE integration_id = ? AND subject = ? AND deleted_at IS NULL`, i.ID, seen.Subject))
 	if err != nil {
 		return IntegrationIdentity{}, fmt.Errorf("store: integration user: %w", err)
 	}
@@ -612,24 +629,14 @@ func (s *Store) IntegrationUser(ctx context.Context, i Integration, seen Integra
 }
 
 // integrationUserTx makes the user of an integration's user's first call,
-// its name the integration's key and as much of the id as makes it free.
+// named <uuid>:<subject>, the subject lower case.
 func (s *Store) integrationUserTx(ctx context.Context, tx *sql.Tx, i Integration, seen IntegrationSeen) (User, error) {
-	short := strings.ToLower(seen.Subject)
-	for n := 8; ; n += 4 {
-		name := i.Key + "." + short[:min(n, len(short))]
-		if err := s.nameFree(ctx, tx, name); err == nil {
-			display := seen.Name
-			if display == "" {
-				display = seen.Subject
-			}
-			return s.addUserTx(ctx, tx, User{Name: name, DisplayName: display, Role: RoleIntegration}, 0)
-		} else if !errors.Is(err, ErrUserExists) {
-			return User{}, err
-		}
-		if n >= len(short) {
-			return User{}, fmt.Errorf("%w: no free name for %s's user %s", ErrUserExists, i.Key, seen.Subject)
-		}
+	display := seen.Name
+	if display == "" {
+		display = seen.Subject
 	}
+	return s.addUserTx(ctx, tx, User{Name: integrationUserName(i.UUID, strings.ToLower(seen.Subject)), DisplayName: display, Role: RoleIntegration,
+		IntegrationID: i.ID}, 0)
 }
 
 // ErrBadLink is a link the store refuses: to a user of an integration,
@@ -639,12 +646,12 @@ var ErrBadLink = errors.New("store: an integration's user links to a Massimo use
 // IntegrationIdentities lists an integration's users, the system user
 // first, then by name.
 func (s *Store) IntegrationIdentities(ctx context.Context, integrationID int64) ([]IntegrationIdentity, error) {
-	return s.integrationIdentities(ctx, `integration_id = ?`, integrationID)
+	return s.integrationIdentities(ctx, `integration_id = ? AND deleted_at IS NULL`, integrationID)
 }
 
 // AllIntegrationIdentities lists every integration's users.
 func (s *Store) AllIntegrationIdentities(ctx context.Context) ([]IntegrationIdentity, error) {
-	return s.integrationIdentities(ctx, `integration_id IS NOT NULL`)
+	return s.integrationIdentities(ctx, `integration_id IS NOT NULL AND deleted_at IS NULL`)
 }
 
 func (s *Store) integrationIdentities(ctx context.Context, where string, args ...any) ([]IntegrationIdentity, error) {
@@ -674,22 +681,21 @@ func (s *Store) LinkIntegrationUser(ctx context.Context, integrationID int64, su
 	if err := s.writable(); err != nil {
 		return IntegrationIdentity{}, err
 	}
-	id, err := scanIntegrationIdentity(s.db.QueryRowContext(ctx, `SELECT `+integrationIdentityColumns+` FROM user_identities WHERE integration_id = ? AND subject = ?`,
-		integrationID, subject))
+	id, err := scanIntegrationIdentity(s.db.QueryRowContext(ctx, `SELECT `+integrationIdentityColumns+` FROM user_identities
+		WHERE integration_id = ? AND subject = ? AND deleted_at IS NULL`, integrationID, subject))
 	if errors.Is(err, sql.ErrNoRows) {
 		return IntegrationIdentity{}, fmt.Errorf("%w: user %s", ErrNoIntegration, subject)
 	}
 	if err != nil {
 		return IntegrationIdentity{}, fmt.Errorf("store: integration user: %w", err)
 	}
-	target := id.OwnUserID
+	target := id.RealUserID
 	if userID != 0 {
 		if subject == "system" {
 			return IntegrationIdentity{}, fmt.Errorf("%w: the system user", ErrBadLink)
 		}
 		var ofIntegration int
-		if err := s.db.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM user_identities WHERE own_user_id = ?) + (SELECT count(*) FROM integrations WHERE user_id = ?)`,
-			userID, userID).Scan(&ofIntegration); err != nil {
+		if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM users WHERE id = ? AND integration_id IS NOT NULL`, userID).Scan(&ofIntegration); err != nil {
 			return IntegrationIdentity{}, fmt.Errorf("store: integration user: %w", err)
 		}
 		if ofIntegration > 0 {
@@ -697,9 +703,10 @@ func (s *Store) LinkIntegrationUser(ctx context.Context, integrationID int64, su
 		}
 		target = userID
 	}
-	if _, err := s.db.ExecContext(ctx, `UPDATE user_identities SET user_id = ?, created_by = coalesce(created_by, ?) WHERE id = ?`, target, nullID(by), id.ID); err != nil {
+	if _, err := s.db.ExecContext(ctx, `UPDATE user_identities SET effective_user_id = ?, created_by = coalesce(created_by, ?), updated_at = ?, origin = ?,
+		version = version + 1 WHERE id = ?`, target, nullID(by), s.nowText(), s.nodeID, id.ID); err != nil {
 		return IntegrationIdentity{}, fmt.Errorf("store: integration user: %w", err)
 	}
-	id.UserID = target
+	id.EffectiveUserID = target
 	return id, nil
 }

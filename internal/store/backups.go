@@ -4,12 +4,14 @@
 package store
 
 // Backups (docs/store.md section 9 (e)): the backup files of a Cube as
-// the server took or received them, gzip in the row, with when, why and
-// for whom. The server takes one after a change of the Cube's
-// configuration (auto), by hand (manual), before every restore
-// (before_restore), and keeps the file a restore was sent (upload).
-// Retention is by reason and age, the newest of each Cube kept whatever
-// their age; a deleted backup is a tombstone without its body.
+// the server took or received them, with when, why and for whom; the
+// file itself, gzip, is a row of backup_data of the same id (migration
+// 0024), so that a list of backups does not walk the files. The server
+// takes one after a change of the Cube's configuration (auto), by hand
+// (manual), before every restore (before_restore), and keeps the file a
+// restore was sent (upload). Retention is by reason and age, the newest
+// of each Cube kept whatever their age; a deleted backup is a tombstone
+// without its file.
 
 import (
 	"bytes"
@@ -154,13 +156,24 @@ func (s *Store) AddBackup(ctx context.Context, b Backup, body []byte) (Backup, e
 	if at.IsZero() {
 		at = s.now()
 	}
-	res, err := s.db.ExecContext(ctx, `INSERT INTO backups (uuid, cube_id, taken_at, reason, format, tool, size, sha256, body, user_id, note, origin)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		newUUID(), b.CubeID, formatTime(at), b.Reason, b.Format, b.Tool, len(body), hex.EncodeToString(sum[:]), z.Bytes(), nullID(b.UserID), b.Note, s.nodeID)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Backup{}, fmt.Errorf("store: backup: %w", err)
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, `INSERT INTO backups (uuid, cube_id, taken_at, reason, format, tool, size, sha256, user_id, note, origin)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		newUUID(), b.CubeID, formatTime(at), b.Reason, b.Format, b.Tool, len(body), hex.EncodeToString(sum[:]), nullID(b.UserID), b.Note, s.nodeID)
 	if err != nil {
 		return Backup{}, fmt.Errorf("store: backup: %w", err)
 	}
 	id, _ := res.LastInsertId()
+	if _, err := tx.ExecContext(ctx, `INSERT INTO backup_data (id, data) VALUES (?, ?)`, id, z.Bytes()); err != nil {
+		return Backup{}, fmt.Errorf("store: backup: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return Backup{}, fmt.Errorf("store: backup: %w", err)
+	}
 	out, _, err := s.StoredBackup(ctx, b.CubeID, id)
 	return out, err
 }
@@ -211,7 +224,8 @@ func (s *Store) NewestBackup(ctx context.Context, cubeID int64) (Backup, bool, e
 // given, and whether it is there.
 func (s *Store) BackupBody(ctx context.Context, cubeID, id int64) ([]byte, bool, error) {
 	var z []byte
-	err := s.db.QueryRowContext(ctx, `SELECT body FROM backups WHERE cube_id = ? AND id = ? AND deleted_at IS NULL`, cubeID, id).Scan(&z)
+	err := s.db.QueryRowContext(ctx, `SELECT d.data FROM backups b JOIN backup_data d ON d.id = b.id WHERE b.cube_id = ? AND b.id = ? AND b.deleted_at IS NULL`,
+		cubeID, id).Scan(&z)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, false, nil
 	}
@@ -230,18 +244,32 @@ func (s *Store) BackupBody(ctx context.Context, cubeID, id int64) ([]byte, bool,
 }
 
 // DeleteBackup removes one of a Cube's backups, leaving a tombstone
-// without its body, and reports whether there was one.
+// without its file, and reports whether there was one.
 func (s *Store) DeleteBackup(ctx context.Context, cubeID, id int64) (bool, error) {
 	if err := s.writable(); err != nil {
 		return false, err
 	}
-	res, err := s.db.ExecContext(ctx, `UPDATE backups SET deleted_at = ?, body = x'', origin = ?, version = version + 1 WHERE cube_id = ? AND id = ? AND deleted_at IS NULL`,
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, fmt.Errorf("store: delete backup %d: %w", id, err)
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, `UPDATE backups SET deleted_at = ?, origin = ?, version = version + 1 WHERE cube_id = ? AND id = ? AND deleted_at IS NULL`,
 		s.nowText(), s.nodeID, cubeID, id)
 	if err != nil {
 		return false, fmt.Errorf("store: delete backup %d: %w", id, err)
 	}
 	n, _ := res.RowsAffected()
-	return n > 0, nil
+	if n == 0 {
+		return false, nil
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM backup_data WHERE id = ?`, id); err != nil {
+		return false, fmt.Errorf("store: delete backup %d: %w", id, err)
+	}
+	if err := tx.Commit(); err != nil {
+		return false, fmt.Errorf("store: delete backup %d: %w", id, err)
+	}
+	return true, nil
 }
 
 // PruneBackups removes, per Cube, the backups past the newest

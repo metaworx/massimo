@@ -17,22 +17,20 @@ func TestMigration21(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	s20 := openAt(t, dir, 20)
-	p, err := s20.AddProvider(ctx, AuthProvider{Key: "cloud", Issuer: "https://id.example.com", ClientID: "massimo", Enabled: true}, 0)
-	if err != nil {
+	// As a binary of version 20 wrote them: this one's code writes the
+	// columns of 0024.
+	var p AuthProvider
+	if err := s20.db.QueryRowContext(ctx, `INSERT INTO auth_providers (uuid, key, issuer, client_id, created_at, updated_at)
+		VALUES (?, 'cloud', 'https://id.example.com', 'massimo', ?, ?) RETURNING id`, newUUID(), s20.nowText(), s20.nowText()).Scan(&p.ID); err != nil {
 		t.Fatal(err)
 	}
-	anna, err := s20.AddUser(ctx, User{Name: "anna", Role: RoleViewer}, "", 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s20.AddSubjectIdentity(ctx, anna.ID, p.Key, "sub-1", 0); err != nil {
+	anna := User{ID: oldUser(t, s20, "anna", RoleViewer)}
+	if _, err := s20.db.ExecContext(ctx, `INSERT INTO user_identities (uuid, user_id, provider_id, subject, created_at, bound_at) VALUES (?, ?, ?, 'sub-1', ?, ?)`,
+		newUUID(), anna.ID, p.ID, s20.nowText(), s20.nowText()); err != nil {
 		t.Fatal(err)
 	}
 	// A key made by hand for an integration, its role narrowed by the owner.
-	key, err := s20.AddUser(ctx, User{Name: "loxone", Role: RoleIntegration}, "", 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	key := User{ID: oldUser(t, s20, "loxone", RoleIntegration)}
 	if _, err := s20.db.ExecContext(ctx, `DELETE FROM role_capabilities WHERE capability = 'lock' AND role_id = (SELECT id FROM roles WHERE key = 'integration')`); err != nil {
 		t.Fatal(err)
 	}
@@ -60,8 +58,8 @@ func TestMigration21(t *testing.T) {
 	}
 	// An identity names a provider or an integration, never both or none.
 	for _, q := range []string{
-		`INSERT INTO user_identities (uuid, user_id, created_at) VALUES ('u1', 1, '2026-11-14T00:00:00Z')`,
-		`INSERT INTO user_identities (uuid, user_id, provider_id, integration_id, created_at) VALUES ('u2', 1, 1, 1, '2026-11-14T00:00:00Z')`,
+		`INSERT INTO user_identities (uuid, effective_user_id, created_at, updated_at) VALUES ('u1', 1, '2026-11-14T00:00:00Z', '2026-11-14T00:00:00Z')`,
+		`INSERT INTO user_identities (uuid, effective_user_id, provider_id, integration_id, created_at, updated_at) VALUES ('u2', 1, 1, 1, '2026-11-14T00:00:00Z', '2026-11-14T00:00:00Z')`,
 	} {
 		if _, err := s.db.ExecContext(ctx, q); err == nil {
 			t.Fatalf("taken: %s", q)

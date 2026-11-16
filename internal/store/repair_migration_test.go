@@ -20,8 +20,14 @@ func TestMigration22(t *testing.T) {
 	if _, err := s21.db.ExecContext(ctx, `DELETE FROM role_capabilities WHERE capability = 'pair' AND role_id = (SELECT id FROM roles WHERE key = 'manager')`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s21.AddRole(ctx, Role{Key: "house", Capabilities: []string{"read", "structure"}}, 0); err != nil {
-		t.Fatal(err)
+	// As a binary of version 21 wrote it: this one's writes the uuid of 0024.
+	for _, q := range []string{
+		`INSERT INTO roles (key, created_at, updated_at) VALUES ('house', '2026-11-15T00:00:00.000Z', '2026-11-15T00:00:00.000Z')`,
+		`INSERT INTO role_capabilities (role_id, capability) SELECT id, c FROM roles, (SELECT 'read' AS c UNION ALL SELECT 'structure') WHERE key = 'house'`,
+	} {
+		if _, err := s21.db.ExecContext(ctx, q); err != nil {
+			t.Fatal(err)
+		}
 	}
 	s21.Close()
 	s := open(t, dir)

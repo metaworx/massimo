@@ -49,7 +49,7 @@ func TestOpenMigratesAnEmptyFile(t *testing.T) {
 		t.Error("not reported as created")
 	}
 	v, mr := s.SchemaVersion()
-	if v != SchemaVersion() || v < 1 || mr != 1 {
+	if v != SchemaVersion() || v < 1 || mr != binaryMinReader(t) {
 		t.Fatalf("schema %d min_reader %d, binary %d", v, mr, SchemaVersion())
 	}
 	if runtime.GOOS != "windows" {
@@ -119,12 +119,12 @@ func TestSyncColumns(t *testing.T) {
 		}
 		return out
 	}
-	for _, table := range []string{"users", "tokens", "cubes", "preferences", "events", "audit", "backups"} {
+	for _, table := range []string{"users", "tokens", "cubes", "preferences", "log", "audit", "backups", "roles", "user_identities"} {
 		if !cols(table)["uuid"] {
 			t.Errorf("%s has no uuid", table)
 		}
 	}
-	for _, table := range []string{"users", "tokens", "cubes", "settings", "preferences", "backups", "roles"} {
+	for _, table := range []string{"users", "tokens", "cubes", "settings", "preferences", "backups", "roles", "user_identities"} {
 		c := cols(table)
 		for _, want := range []string{"version", "deleted_at", "origin"} {
 			if !c[want] {
@@ -141,7 +141,7 @@ func TestSyncColumns(t *testing.T) {
 	if c := cols("tenants"); len(c) != 0 {
 		t.Error("a tenants table")
 	}
-	for _, table := range []string{"users", "cubes", "events", "audit", "backups"} {
+	for _, table := range []string{"users", "cubes", "log", "audit", "backups"} {
 		if cols(table)["tenant_id"] {
 			t.Errorf("%s has tenant_id", table)
 		}
@@ -563,7 +563,7 @@ func TestMigratesAVersionOneFile(t *testing.T) {
 	}
 	s1.Close()
 	s := open(t, dir)
-	if v, mr := s.SchemaVersion(); v != SchemaVersion() || v < 2 || mr != 1 {
+	if v, mr := s.SchemaVersion(); v != SchemaVersion() || v < 2 || mr != binaryMinReader(t) {
 		t.Fatalf("schema %d min_reader %d", v, mr)
 	}
 	has := func(table, col string) bool {

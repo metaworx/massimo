@@ -36,10 +36,7 @@ func TestMigration9(t *testing.T) {
 	dir := t.TempDir()
 	ctx := context.Background()
 	s8 := openAt(t, dir, 8)
-	cube, err := s8.AddCube(ctx, Cube{Serial: "KEQ0000001", Configured: true})
-	if err != nil {
-		t.Fatal(err)
-	}
+	cube := Cube{ID: oldCube(t, s8, "KEQ0000001")}
 	if _, err := s8.db.Exec(`UPDATE cubes SET rf_address = '0a0001' WHERE id = ?`, cube.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -63,8 +60,8 @@ func TestMigration9(t *testing.T) {
 	s8.Close()
 
 	s := open(t, dir)
-	if v, mr := s.SchemaVersion(); v != SchemaVersion() || mr != 1 {
-		t.Fatalf("schema %d min_reader %d", v, mr)
+	if v, _ := s.SchemaVersion(); v != SchemaVersion() {
+		t.Fatalf("schema %d", v)
 	}
 	page, err := s.Events(ctx, EventQuery{CubeID: cube.ID, Limit: 100})
 	if err != nil || len(page) != len(rows) {
@@ -86,7 +83,7 @@ func TestMigration9(t *testing.T) {
 	}
 	for i, e := range page {
 		w := want[e.Kind+e.Device]
-		if e.Source != w.source || e.Serial != w.serial || e.Level != w.level || e.UserID != 0 {
+		if e.Source != w.source || e.Serial != w.serial || e.Level != w.level || e.EffectiveUserID != 0 {
 			t.Errorf("%s %s: source %q serial %q level %d, want %+v", e.Kind, e.Device, e.Source, e.Serial, e.Level, w)
 		}
 		if e.ID != int64(len(rows)-i) {
@@ -94,7 +91,7 @@ func TestMigration9(t *testing.T) {
 		}
 	}
 	var uuid string
-	if err := s.db.QueryRow(`SELECT uuid FROM events WHERE kind = 'hello'`).Scan(&uuid); err != nil || uuid != "uuid-hello" {
+	if err := s.db.QueryRow(`SELECT uuid FROM log WHERE kind = 'hello'`).Scan(&uuid); err != nil || uuid != "uuid-hello" {
 		t.Fatalf("uuid %q %v", uuid, err)
 	}
 	startWriter(t, s)
@@ -102,57 +99,6 @@ func TestMigration9(t *testing.T) {
 	flush(t, s)
 	if got, err := s.Events(ctx, EventQuery{Kind: "server_started", Limit: 1}); err != nil || len(got) != 1 || got[0].CubeID != 0 {
 		t.Fatalf("a row of the server: %+v %v", got, err)
-	}
-}
-
-// A binary of version 8 opens a file of version 9 (min_reader 1), reads
-// its Cube's rows and writes rows without the new columns; this binary's
-// writer fills those at its start.
-func TestOlderReaderOnNine(t *testing.T) {
-	dir := t.TempDir()
-	ctx := context.Background()
-	s9 := open(t, dir)
-	cube, err := s9.AddCube(ctx, Cube{Serial: "KEQ0000001", Configured: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	startWriter(t, s9)
-	s9.AddEvent(Event{CubeID: cube.ID, Kind: "connected", Source: "cube", Data: json.RawMessage(`{"kind":"connected"}`)})
-	s9.AddEvent(Event{Kind: "server_started", Source: "system", Data: json.RawMessage(`{}`)})
-	flush(t, s9)
-	s9.Close()
-
-	s8, err := Open(dir, Options{Version: "test", Logger: quiet(), readerVersion: 8})
-	if err != nil {
-		t.Fatalf("a binary of version 8: %v", err)
-	}
-	// Its queries, as events.go of version 8 had them.
-	var n int
-	if err := s8.db.QueryRow(`SELECT count(*) FROM events WHERE cube_id = ?`, cube.ID).Scan(&n); err != nil || n != 1 {
-		t.Fatalf("its Cube's rows: %d %v", n, err)
-	}
-	if _, err := s8.db.Exec(`INSERT INTO events (uuid, cube_id, time, kind, device, data) VALUES (?, ?, ?, ?, ?, ?)`,
-		"old-1", cube.ID, formatTime(time.Now()), "state", "0a0101", `{"kind":"state","device":"0a0101","state":{"serial":"MEQ0000101"}}`); err != nil {
-		t.Fatalf("its insert: %v", err)
-	}
-	if _, err := s8.db.Exec(`INSERT INTO events (uuid, cube_id, time, kind, device, data) VALUES (?, ?, ?, ?, ?, ?)`,
-		"old-2", cube.ID, formatTime(time.Now()), "disconnected", "", `{"kind":"disconnected"}`); err != nil {
-		t.Fatalf("its insert: %v", err)
-	}
-	s8.Close()
-
-	s := open(t, dir)
-	startWriter(t, s)
-	flush(t, s)
-	page, err := s.Events(ctx, EventQuery{CubeID: cube.ID, Limit: 10})
-	if err != nil || len(page) != 3 {
-		t.Fatalf("%d rows %v", len(page), err)
-	}
-	if e := page[1]; e.Kind != "state" || e.Source != "device" || e.Serial != "MEQ0000101" || e.Level != LevelInfo {
-		t.Fatalf("the older binary's state row, filled: %+v", e)
-	}
-	if e := page[0]; e.Kind != "disconnected" || e.Source != "cube" || e.Level != LevelWarn {
-		t.Fatalf("the older binary's disconnected row, filled: %+v", e)
 	}
 }
 

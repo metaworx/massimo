@@ -39,8 +39,12 @@ type Cube struct {
 	FollowDiscovery bool
 	ProxyAddress    string // the server's listener for this Cube; "" is the default
 	ProxySerial     string // the serial in discovery replies; "" is the Cube's
-	Hidden          []string
-	Source          string
+	// ProxyVirtual makes the LAN proxy show its clients the rooms'
+	// virtual wall thermostats in place of the real wall thermostats
+	// (docs/proxy.md); cube_options before migration 0024.
+	ProxyVirtual bool
+	Hidden       []string
+	Source       string
 
 	// What discovery reported last.
 	MAC               string
@@ -57,7 +61,7 @@ type Cube struct {
 }
 
 // cubeColumns are the columns scanCube reads, in its order.
-const cubeColumns = `id, uuid, serial, configured, name, address, follow_discovery, proxy_address, proxy_serial, hidden, source,
+const cubeColumns = `id, uuid, serial, configured, name, address, follow_discovery, proxy_address, proxy_serial, proxy_virtual, hidden, source,
 	mac, rf_address, firmware, discovered_address, first_seen, last_seen, created_at, updated_at, version, origin`
 
 type scanner interface{ Scan(dest ...any) error }
@@ -66,7 +70,7 @@ func scanCube(r scanner) (Cube, error) {
 	var c Cube
 	var hidden string
 	var first, last, created, updated sql.NullString
-	err := r.Scan(&c.ID, &c.UUID, &c.Serial, &c.Configured, &c.Name, &c.Address, &c.FollowDiscovery, &c.ProxyAddress, &c.ProxySerial, &hidden, &c.Source,
+	err := r.Scan(&c.ID, &c.UUID, &c.Serial, &c.Configured, &c.Name, &c.Address, &c.FollowDiscovery, &c.ProxyAddress, &c.ProxySerial, &c.ProxyVirtual, &hidden, &c.Source,
 		&c.MAC, &c.RFAddress, &c.Firmware, &c.DiscoveredAddress, &first, &last, &created, &updated, &c.Version, &c.Origin)
 	if err != nil {
 		return Cube{}, err
@@ -134,25 +138,15 @@ func (s *Store) cube(ctx context.Context, q queryer, serial string) (Cube, bool,
 	return c, true, nil
 }
 
-// rowOf finds the row of a serial, a tombstoned one (deleted_at set)
-// included: its id, and whether it is tombstoned.
-func (s *Store) rowOf(ctx context.Context, q queryer, serial string) (id int64, tombstoned, ok bool, err error) {
-	var deleted sql.NullString
-	err = q.QueryRowContext(ctx, `SELECT id, deleted_at FROM cubes WHERE serial = ?`, serial).Scan(&id, &deleted)
-	if errors.Is(err, sql.ErrNoRows) {
-		return 0, false, false, nil
-	}
-	if err != nil {
-		return 0, false, false, fmt.Errorf("store: cube %s: %w", serial, err)
-	}
-	return id, deleted.Valid, true, nil
-}
-
 // AddCube inserts a row for c.Serial; a serial that has a live row is
-// ErrExists. A tombstoned row of the serial is taken over: it gets c's
-// values, its tombstone cleared and its version bumped, and keeps its
-// identifier, so that what referred to it still does. The identifier,
-// the times, the version and the origin are set by the store.
+// ErrExists. A removed row of the serial (deleted_at set) stays as it
+// is, with its history, and the Cube gets a row of its own; unless c.UUID
+// names that removed row, which is restored instead: it gets c's values,
+// its tombstone cleared and its version bumped, and keeps its identifier,
+// so that its log, backups, rooms, commands and audit rows are the
+// Cube's again (D11-A). A c.UUID that names no removed row of the serial
+// is ErrNotFound. The identifier, the times, the version and the origin
+// are set by the store.
 func (s *Store) AddCube(ctx context.Context, c Cube) (Cube, error) {
 	if err := s.writable(); err != nil {
 		return Cube{}, err
@@ -178,23 +172,28 @@ func (s *Store) AddCube(ctx context.Context, c Cube) (Cube, error) {
 		return Cube{}, fmt.Errorf("store: add cube %s: %w", c.Serial, err)
 	}
 	defer tx.Rollback()
-	id, tombstoned, ok, err := s.rowOf(ctx, tx, c.Serial)
-	switch {
-	case err != nil:
+	if _, ok, err := s.cube(ctx, tx, c.Serial); err != nil {
 		return Cube{}, err
-	case ok && !tombstoned:
+	} else if ok {
 		return Cube{}, fmt.Errorf("%w: %s", ErrExists, c.Serial)
-	case ok:
-		_, err = tx.ExecContext(ctx, `UPDATE cubes SET configured = ?, name = ?, address = ?, follow_discovery = ?, proxy_address = ?, proxy_serial = ?, hidden = ?, source = ?,
-			mac = ?, rf_address = ?, firmware = ?, discovered_address = ?, first_seen = coalesce(?, first_seen), last_seen = coalesce(?, last_seen),
-			deleted_at = NULL, updated_at = ?, origin = ?, version = version + 1 WHERE id = ?`,
-			c.Configured, c.Name, c.Address, c.FollowDiscovery, c.ProxyAddress, c.ProxySerial, string(hidden), c.Source,
-			c.MAC, c.RFAddress, c.Firmware, c.DiscoveredAddress, first, last, now, s.nodeID, id)
-	default:
-		_, err = tx.ExecContext(ctx, `INSERT INTO cubes (uuid, serial, configured, name, address, follow_discovery, proxy_address, proxy_serial, hidden, source,
+	}
+	if c.UUID != "" {
+		var res sql.Result
+		res, err = tx.ExecContext(ctx, `UPDATE cubes SET configured = ?, name = ?, address = ?, follow_discovery = ?, proxy_address = ?, proxy_serial = ?, proxy_virtual = ?,
+			hidden = ?, source = ?, mac = ?, rf_address = ?, firmware = ?, discovered_address = ?, first_seen = coalesce(?, first_seen), last_seen = coalesce(?, last_seen),
+			deleted_at = NULL, updated_at = ?, origin = ?, version = version + 1 WHERE uuid = ? AND serial = ? AND deleted_at IS NOT NULL`,
+			c.Configured, c.Name, c.Address, c.FollowDiscovery, c.ProxyAddress, c.ProxySerial, c.ProxyVirtual, string(hidden), c.Source,
+			c.MAC, c.RFAddress, c.Firmware, c.DiscoveredAddress, first, last, now, s.nodeID, c.UUID, c.Serial)
+		if err == nil {
+			if n, _ := res.RowsAffected(); n == 0 {
+				return Cube{}, fmt.Errorf("%w: no removed row %s of %s", ErrNotFound, c.UUID, c.Serial)
+			}
+		}
+	} else {
+		_, err = tx.ExecContext(ctx, `INSERT INTO cubes (uuid, serial, configured, name, address, follow_discovery, proxy_address, proxy_serial, proxy_virtual, hidden, source,
 			mac, rf_address, firmware, discovered_address, first_seen, last_seen, created_at, updated_at, origin)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			newUUID(), c.Serial, c.Configured, c.Name, c.Address, c.FollowDiscovery, c.ProxyAddress, c.ProxySerial, string(hidden), c.Source,
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			newUUID(), c.Serial, c.Configured, c.Name, c.Address, c.FollowDiscovery, c.ProxyAddress, c.ProxySerial, c.ProxyVirtual, string(hidden), c.Source,
 			c.MAC, c.RFAddress, c.Firmware, c.DiscoveredAddress, first, last, now, now, s.nodeID)
 	}
 	if err != nil {
@@ -207,9 +206,61 @@ func (s *Store) AddCube(ctx context.Context, c Cube) (Cube, error) {
 	return out, err
 }
 
+// RemovedCubes lists the removed rows of a serial, newest removal first:
+// what AddCube can restore.
+func (s *Store) RemovedCubes(ctx context.Context, serial string) ([]RemovedCube, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT `+cubeColumns+`, deleted_at FROM cubes WHERE serial = ? AND deleted_at IS NOT NULL ORDER BY deleted_at DESC, id DESC`,
+		NormalSerial(serial))
+	if err != nil {
+		return nil, fmt.Errorf("store: removed cubes: %w", err)
+	}
+	defer rows.Close()
+	out := []RemovedCube{}
+	for rows.Next() {
+		var r RemovedCube
+		var at sql.NullString
+		c, err := scanCube(scannerPlus{rows, &at})
+		if err != nil {
+			return nil, fmt.Errorf("store: removed cubes: %w", err)
+		}
+		r.Cube, r.RemovedAt = c, parseTime(at)
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// RemovedCube is a removed row of cubes, with the time of its removal.
+type RemovedCube struct {
+	Cube
+	RemovedAt time.Time
+}
+
+// scannerPlus scans a row whose first columns are another scan's and
+// whose last ones go to extra.
+type scannerPlus struct {
+	row   scanner
+	extra *sql.NullString
+}
+
+func (p scannerPlus) Scan(dest ...any) error { return p.row.Scan(append(dest, p.extra)...) }
+
+// CubeByID returns the row of an identifier that is not removed, and
+// whether there is one.
+func (s *Store) CubeByID(ctx context.Context, id int64) (Cube, bool, error) {
+	c, err := scanCube(s.db.QueryRowContext(ctx, `SELECT `+cubeColumns+` FROM cubes WHERE id = ? AND deleted_at IS NULL`, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return Cube{}, false, nil
+	}
+	if err != nil {
+		return Cube{}, false, fmt.Errorf("store: cube %d: %w", id, err)
+	}
+	return c, true, nil
+}
+
 // UpdateCube changes the row of a serial with change, in one
 // transaction, and writes back the configuration (Configured, Name,
-// Address, FollowDiscovery, ProxyAddress, ProxySerial, Hidden, Source);
+// Address, FollowDiscovery, ProxyAddress, ProxySerial, ProxyVirtual,
+// Hidden, Source);
 // the discovery columns are NoteDiscovered's. by is the user who made
 // the change, 0 for the server itself. A serial without a row is
 // ErrNotFound; an error from change leaves the row as it was.
@@ -233,9 +284,9 @@ func (s *Store) UpdateCube(ctx context.Context, serial string, change func(*Cube
 		return Cube{}, err
 	}
 	hidden, _ := json.Marshal(normalHidden(c.Hidden))
-	if _, err := tx.ExecContext(ctx, `UPDATE cubes SET configured = ?, name = ?, address = ?, follow_discovery = ?, proxy_address = ?, proxy_serial = ?, hidden = ?, source = ?,
-		updated_at = ?, updated_by = ?, origin = ?, version = version + 1 WHERE id = ?`,
-		c.Configured, c.Name, c.Address, c.FollowDiscovery, c.ProxyAddress, c.ProxySerial, string(hidden), c.Source, s.nowText(), nullID(by), s.nodeID, c.ID); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE cubes SET configured = ?, name = ?, address = ?, follow_discovery = ?, proxy_address = ?, proxy_serial = ?, proxy_virtual = ?,
+		hidden = ?, source = ?, updated_at = ?, updated_by = ?, origin = ?, version = version + 1 WHERE id = ?`,
+		c.Configured, c.Name, c.Address, c.FollowDiscovery, c.ProxyAddress, c.ProxySerial, c.ProxyVirtual, string(hidden), c.Source, s.nowText(), nullID(by), s.nodeID, c.ID); err != nil {
 		return Cube{}, fmt.Errorf("store: cube %s: %w", c.Serial, err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -255,10 +306,10 @@ type Discovered struct {
 	At        time.Time
 }
 
-// NoteDiscovered records a discovery answer. A Cube without a row gets
-// one with configured = 0 and source 'discovery', which survives a
-// restart as the found Cube; a tombstoned row comes back that way. Both
-// report the row as new.
+// NoteDiscovered records a discovery answer. A Cube without a live row
+// gets one with configured = 0 and source 'discovery', which survives a
+// restart as the found Cube, and is reported as new; a removed row of the
+// serial stays removed (RemovedCubes).
 //
 // A known row is not a configuration change: its version, updated_at
 // and origin stay, which keep meaning "last changed by a user or a
@@ -281,7 +332,7 @@ func (s *Store) NoteDiscovered(ctx context.Context, d Discovered) (Cube, bool, e
 		at = s.now()
 	}
 	seen := formatTime(at)
-	id, tombstoned, ok, err := s.rowOf(ctx, s.db, serial)
+	row, ok, err := s.Cube(ctx, serial)
 	if err != nil {
 		return Cube{}, false, err
 	}
@@ -291,16 +342,8 @@ func (s *Store) NoteDiscovered(ctx context.Context, d Discovered) (Cube, bool, e
 		_, err = s.db.ExecContext(ctx, `INSERT INTO cubes (uuid, serial, configured, source, mac, rf_address, firmware, discovered_address, first_seen, last_seen, created_at, updated_at, origin)
 			VALUES (?, ?, 0, 'discovery', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			newUUID(), serial, d.MAC, d.RFAddress, d.Firmware, d.Address, seen, seen, now, now, s.nodeID)
-	case tombstoned:
-		_, err = s.db.ExecContext(ctx, `UPDATE cubes SET configured = 0, source = 'discovery', deleted_at = NULL,
-			mac = CASE ? WHEN '' THEN mac ELSE ? END, rf_address = ?, firmware = ?, discovered_address = ?,
-			first_seen = coalesce(first_seen, ?), last_seen = ?, updated_at = ?, origin = ?, version = version + 1 WHERE id = ?`,
-			d.MAC, d.MAC, d.RFAddress, d.Firmware, d.Address, seen, seen, s.nowText(), s.nodeID, id)
 	default:
-		row, _, err := s.Cube(ctx, serial)
-		if err != nil {
-			return Cube{}, false, err
-		}
+		id := row.ID
 		mac := row.MAC
 		if d.MAC != "" {
 			mac = d.MAC

@@ -15,7 +15,8 @@ package store
 // referenced table again, and has them checked before its commit. A
 // migration that raises min_reader comes with NNNN_<name>.down.sql, the
 // SQL that undoes it, which the store also keeps in schema_version
-// (migration 0023) and massimo store downgrade runs (downgrade.go). Only
+// (migration 0023) and massimo store downgrade runs (downgrade.go); so
+// does every migration after the first that raised it, 0024. Only
 // the numbered files are embedded: migrations/store.sql beside them is
 // the schema they make, generated for reading (migrate_test.go,
 // TestStoreSQL).
@@ -174,8 +175,8 @@ func (s *Store) readable(ctx context.Context, version, minReader, reader int) er
 	// the copy before it.
 	copyAt := version
 	s.db.QueryRowContext(ctx, `SELECT min(version) FROM schema_version WHERE min_reader > ?`, reader).Scan(&copyAt)
-	return fmt.Errorf("%w: %s is at schema version %d and needs a binary for version %d or later; this one is for version %d. Install the newer release again, or put %s.before-%d in its place to go back to the state before that migration",
-		ErrRefused, s.path, version, minReader, reader, s.path, copyAt)
+	return fmt.Errorf("%w: %s is at schema version %d and needs a binary for version %d or later; this one is for version %d. Install the newer release again, or take the file back for this one with the newer binary's massimo store downgrade -to %d, or put %s.before-%d in its place to go back to the state before that migration",
+		ErrRefused, s.path, version, minReader, reader, reader, s.path, copyAt)
 }
 
 // check opens nothing new: it reads the file's version and refuses what
@@ -362,9 +363,39 @@ func foreignKeyCheck(ctx context.Context, tx *sql.Tx) error {
 }
 
 // afterMigration holds what a migration needs beyond SQL, run in its
-// transaction: the first seeds the node and tenant identifiers.
+// transaction: the first seeds the node and tenant identifiers, 0024
+// gives the roles their uuids.
 var afterMigration = map[int]func(context.Context, *Store, *sql.Tx) error{
-	1: seedIdentifiers,
+	1:  seedIdentifiers,
+	24: roleUUIDs,
+}
+
+// roleUUIDs gives every role the UUIDv7 that migration 0024 left as
+// raise-<id>, since SQL makes none.
+func roleUUIDs(ctx context.Context, _ *Store, tx *sql.Tx) error {
+	rows, err := tx.QueryContext(ctx, `SELECT id FROM roles WHERE uuid = 'raise-' || id`)
+	if err != nil {
+		return err
+	}
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if _, err := tx.ExecContext(ctx, `UPDATE roles SET uuid = ? WHERE id = ?`, newUUID(), id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // copyBefore writes a consistent copy of the file, as it is before the

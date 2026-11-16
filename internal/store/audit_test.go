@@ -23,9 +23,9 @@ func TestAudit(t *testing.T) {
 	anna, _ := s.AddUser(ctx, User{Name: "anna", Role: RoleOperator}, "pw", 0)
 	cube, _ := s.AddCube(ctx, Cube{Serial: "KEQ0000001", Configured: true})
 	for i, e := range []AuditEntry{
-		{UserID: anna.ID, Remote: "10.0.0.5", Action: "setpoint", CubeID: cube.ID, Target: "room:3", Detail: json.RawMessage(`{"temp":21}`)},
+		{EffectiveUserID: anna.ID, Remote: "10.0.0.5", Action: "setpoint", CubeID: cube.ID, Target: "room:3", Detail: json.RawMessage(`{"temp":21}`)},
 		{Remote: RemoteCLI, Action: "user.add", Target: "user:bob"},
-		{UserID: anna.ID, Remote: "10.0.0.5", Action: "pairing.start", CubeID: cube.ID, Result: ResultRefused},
+		{EffectiveUserID: anna.ID, Remote: "10.0.0.5", Action: "pairing.start", CubeID: cube.ID, Result: ResultRefused},
 	} {
 		clock = clock.Add(time.Minute)
 		if _, err := s.Audit(ctx, e); err != nil {

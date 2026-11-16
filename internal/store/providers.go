@@ -78,7 +78,9 @@ func scanProvider(row scanner) (AuthProvider, error) {
 		return AuthProvider{}, err
 	}
 	p.kept = p.ClientSecret
-	p.AutoDomains = splitDomains(domains)
+	var list []string
+	json.Unmarshal([]byte(domains), &list) // a JSON list (migration 0024); anything else is none
+	p.AutoDomains = splitDomains(strings.Join(list, ","))
 	if json.Unmarshal([]byte(allowed), &p.AllowedGroups) != nil || p.AllowedGroups == nil {
 		p.AllowedGroups = []string{}
 	}
@@ -86,7 +88,8 @@ func scanProvider(row scanner) (AuthProvider, error) {
 	return p, nil
 }
 
-// splitDomains reads auto_domains: lower case, without blanks or repeats.
+// splitDomains reads a comma-separated list of domains: lower case,
+// without blanks or repeats.
 func splitDomains(v string) []string {
 	out := []string{}
 	for _, d := range strings.Split(v, ",") {
@@ -278,7 +281,7 @@ func (s *Store) AddProvider(ctx context.Context, p AuthProvider, by int64) (Auth
 	if _, err := tx.ExecContext(ctx, `INSERT INTO auth_providers (uuid, key, name, issuer, client_id, client_secret, scopes, auto_create, auto_role_id, auto_domains,
 		groups_claim, allowed_groups, enabled, created_at, updated_at, updated_by, origin)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		uuid, p.Key, p.Name, p.Issuer, p.ClientID, sealed, p.Scopes, p.AutoCreate, role, strings.Join(p.AutoDomains, ","),
+		uuid, p.Key, p.Name, p.Issuer, p.ClientID, sealed, p.Scopes, p.AutoCreate, role, groupsText(p.AutoDomains),
 		p.GroupsClaim, groupsText(p.AllowedGroups), p.Enabled, now, now, nullID(by), s.nodeID); err != nil {
 		return AuthProvider{}, fmt.Errorf("store: add provider %s: %w", p.Key, err)
 	}
@@ -329,7 +332,7 @@ func (s *Store) UpdateProvider(ctx context.Context, key string, change func(*Aut
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE auth_providers SET name = ?, issuer = ?, client_id = ?, client_secret = ?, scopes = ?, auto_create = ?, auto_role_id = ?, auto_domains = ?,
 		groups_claim = ?, allowed_groups = ?, enabled = ?, updated_at = ?, updated_by = ?, origin = ?, version = version + 1 WHERE id = ?`,
-		p.Name, p.Issuer, p.ClientID, sealed, p.Scopes, p.AutoCreate, role, strings.Join(p.AutoDomains, ","),
+		p.Name, p.Issuer, p.ClientID, sealed, p.Scopes, p.AutoCreate, role, groupsText(p.AutoDomains),
 		p.GroupsClaim, groupsText(p.AllowedGroups), p.Enabled, s.nowText(), nullID(by), s.nodeID, p.ID); err != nil {
 		return AuthProvider{}, fmt.Errorf("store: provider %s: %w", p.Key, err)
 	}
@@ -360,7 +363,8 @@ func (s *Store) DeleteProvider(ctx context.Context, key string, by int64) error 
 		return fmt.Errorf("%w: %s", ErrNoProvider, key)
 	}
 	now := s.nowText()
-	if _, err := tx.ExecContext(ctx, `DELETE FROM user_identities WHERE provider_id = ?`, p.ID); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE user_identities SET deleted_at = ?, updated_at = ?, origin = ?, version = version + 1 WHERE provider_id = ? AND deleted_at IS NULL`,
+		now, now, s.nodeID, p.ID); err != nil {
 		return fmt.Errorf("store: provider %s: %w", p.Key, err)
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE auth_providers SET deleted_at = ?, client_secret = '', updated_at = ?, updated_by = ?, origin = ?, version = version + 1 WHERE id = ?`,
