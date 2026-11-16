@@ -36,7 +36,7 @@ function tlsTexts(tls: CertStatus): string[] {
 
 /** TlsNotice is the line, a shared Notice, kept in its place and hidden where it has nothing to say. */
 export function TlsNotice() {
-  load.use();
+  load.useLoad();
   const texts = cert.value ? tlsTexts(cert.value) : [];
   return (
     <Notice id="tls-notice" role="status" hidden={!texts.length}>

@@ -30,7 +30,7 @@ function fmtSince(ms: number): string {
 
 /** Updated is the chosen Cube's age, nothing where it has no such time; drawn again when the shown age's last unit has passed. */
 export function Updated() {
-  load.use();
+  load.useLoad();
   const [, tick] = useState(0);
   const cube = chosenCube();
   const at = cube ? Date.parse(cube.updated || "") : NaN;

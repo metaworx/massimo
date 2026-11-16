@@ -48,7 +48,7 @@ function Check({ cube }: { cube?: Cube }) {
 
 /** HomeNotice is the notice's content, nothing while the Cube chosen is connected. */
 export function HomeNotice() {
-  load.use();
+  load.useLoad();
   const cube = chosenCube();
   if (cube && cube.connected) return null;
   return (

@@ -125,7 +125,7 @@ const asSet = (l: string[]) => [...l].sort().join(",");
  * the fields that differ from the Cube as the list last gave it.
  */
 export function Form({ c }: { c: Cube }) {
-  load.use();
+  load.useLoad();
   const name = useDraft(c.name || "", trim);
   const address = useDraft(c.configured_address || "", trim);
   const follow = useDraft(!!c.follow_discovery);

@@ -55,7 +55,7 @@ function pick(v: string): void {
  * Its tooltip names the chosen Cube's serial, address and link.
  */
 export function Choice() {
-  load.use();
+  load.useLoad();
   const entries: PickEntry[] = state.cubes.map(entryOf);
   if (state.found.length) {
     entries.push({ group: t("discover.group") });

@@ -1566,7 +1566,7 @@ the rooms' move puts them into `model/`, since `model/` may not import a region.
 
 | Part or helper | File | For | Properties or arguments |
 |---|---|---|---|
-| `counter` | `counter.ts` | a region's load counter: "draw the region again" while its data stay plain objects | gives `bump()`, after a load, and `use()`, in every part of the region, which reads the counter, the language and the icons chosen |
+| `counter` | `counter.ts` | a region's load counter: "draw the region again" while its data stay plain objects | gives `bump()`, after a load, and `useLoad()`, in every part of the region, which reads the counter, the language and the icons chosen |
 | `register`, `mounter` | `region.ts` | a region's functions as `MassimoParts.<name>`; its root drawn once into the page's container | `name`, `fns`; `id`, `root` |
 | `live`, `liveMap` | `live.ts` | objects whose properties are signals, for what a region keeps per place; the plain code reads and writes them as before | `init`; `make`, then `of(key)`, `clear()` |
 | `lang`, `useLang`, `tParts`, `joinParts` | `lang.ts` | the page's language as a signal, raised by `applyLanguage` (`MassimoParts.language`); a text with parts in it (`tNodes`); parts joined with " · ", the empty ones left out | `key`, `texts`, `parts`; `parts`, `lead` (" · " before the first too) |
@@ -1638,7 +1638,8 @@ A region that moves calls these, in this order:
 
 - `counter()` for its load counter, bumped by its plain names,
   which other scripts call and which call the part,
-  and after each of its requests; `use()` in each of its parts;
+  and after each of its requests;
+  `useLoad()` in each of its parts, at the top of its drawing;
 - `register` for `MassimoParts.<region>`, whose functions its plain names call,
   and `mounter` for each root, drawn into the container the page has for it;
 - `liveMap` for what it keeps per item and place (a panel open, by its key);
