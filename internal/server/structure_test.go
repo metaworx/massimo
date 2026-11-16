@@ -76,6 +76,24 @@ func TestStructureDone(t *testing.T) {
 	}
 }
 
+// A room's repair names its rooms in its structure line as numbers, not
+// as the base64 string JSON makes of a []uint8 ("BQ==" for room 5, seen
+// on hardware 2026-11-16).
+func TestStructureRoomsOfARoomRepair(t *testing.T) {
+	_, ts := startStructureCube(t, func(fc *fakecube.Server) { withContactInRoom1(t, fc.Greeting) })
+	const path = "/api/v1/cubes/KEQ0000100/rooms/1/repair/relink"
+	if _, p, body := previewOf(t, ts, path); p.Plan == "" {
+		t.Fatalf("preview: %s", body)
+	} else if code, out := do(t, ts, "POST", path+"?plan="+p.Plan, ""); code != 200 || out["ok"] != true {
+		t.Fatalf("run: %d %v", code, out)
+	}
+	ev := structureEvent(t, ts, "")
+	rooms, ok := ev.Summary["rooms"].([]any)
+	if ev.Summary["action"] != "relink" || !ok || len(rooms) != 1 || rooms[0] != float64(1) {
+		t.Fatalf("event %+v", ev)
+	}
+}
+
 // A move whose radiograms the Cube still holds after the last check is
 // not confirmed, with the slots named, and a member the move left
 // flagged is named too.
