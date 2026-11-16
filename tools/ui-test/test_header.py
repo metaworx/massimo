@@ -283,20 +283,24 @@ def test_facts_fitted_again_when_the_time_comes(page, case):
     show changes: with a short version (a build's from a checkout without
     tags, as CI's) they fit beside the logo on a phone before the time of
     the last update has come, and the time then takes them to their row,
-    the version whole, not cut under the logo. The Cube's age is held
-    meanwhile (its timer stopped, the poll too), so that the test alone
-    writes the time."""
-    page.evaluate("""() => { clearInterval(state.pollTimer); clearTimeout(updatedTimer);
-      const v = document.getElementById('version-short'), u = document.getElementById('updated');
-      window.__facts = [v.textContent, u.textContent]; v.textContent = 'v0.0.0-dev'; u.textContent = ''; fitFacts(); }""")
+    the version whole, not cut under the logo. The poll is held meanwhile
+    and the chosen Cube has no time of its own until the test gives it
+    one, so that the test alone brings the time (the age is a part,
+    ui/src/header/Updated.tsx, drawn from the Cube's updated)."""
+    page.evaluate("""() => { clearInterval(state.pollTimer);
+      const v = document.getElementById('version-short'), c = state.cubes.find((x) => x.serial === state.serial);
+      window.__facts = [v.textContent, c.updated]; v.textContent = 'v0.0.0-dev'; c.updated = ''; renderUpdated(); fitFacts(); }""")
     try:
+        assert wait_until(page, "document.getElementById('updated').textContent === ''", 3), "no time before it comes"
         page.wait_for_timeout(100)
-        page.evaluate("document.getElementById('updated').textContent = '59 sec'")
+        page.evaluate("""() => { const c = state.cubes.find((x) => x.serial === state.serial);
+          c.updated = new Date(Date.now() - 59000).toISOString(); renderUpdated(); }""")
+        assert wait_until(page, "document.getElementById('updated').textContent !== ''", 3), "the time came"
         assert wait_until(page, "(() => { const v = document.getElementById('version-short'); "
                           "return v.scrollWidth <= v.clientWidth + 1; })()", 3), "the version whole once the time came"
     finally:
         page.evaluate("""() => { const [v, u] = window.__facts; document.getElementById('version-short').textContent = v;
-          document.getElementById('updated').textContent = u; renderUpdated(); startPolling(); }""")
+          state.cubes.find((x) => x.serial === state.serial).updated = u; renderUpdated(); startPolling(); }""")
 
 
 def test_header_on_one_baseline(page, case):
@@ -514,11 +518,12 @@ def test_versions_copy(page, case):
 
 
 AGES = ((5, 5, "second"), (125, 2, "minute"), (3 * 3600 + 5, 3, "hour"), (3 * 86400, 3, "day"))
-SET_AGE = """([ago, skew]) => {
+SET_AGE = """async ([ago, skew]) => {
   serverSkew = skew;
   const c = state.cubes.find((x) => x.serial === state.serial);
   c.updated = new Date(Date.now() - ago * 1000).toISOString();
   renderUpdated();
+  await new Promise((done) => setTimeout(done)); // the part draws the age after the call
   const d = new Date(Date.parse(c.updated)), pad = (n) => String(n).padStart(2, '0');
   const time = pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
   return [document.getElementById('updated').textContent, document.getElementById('refresh-btn').title,

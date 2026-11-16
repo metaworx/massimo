@@ -6,7 +6,9 @@
  *
  * The globals of the plain script ui/components.js that the parts call:
  * the signs' drawings, the blink of a mark, a menu that drops down with
- * its arrow keys, the clipboard, and the result line of an action.
+ * its arrow keys, the clipboard, the result line of an action, a button
+ * busy while it sends, the page's toast and a section card brought into
+ * view.
  * The builders of elements stay out: a part draws its own.
  */
 
@@ -34,6 +36,12 @@ declare global {
   function copied(el: HTMLElement, ok: boolean): void;
   /** Says how an action went in a message element; no text hides it. */
   function showResult(el: HTMLElement, text: string, ok?: boolean): void;
+  /** Runs fn, which sends a request, with btn busy; nothing while it is busy. */
+  function whileBusy<T>(btn: HTMLElement | null, fn: () => Promise<T>): Promise<T | undefined>;
+  /** Shows a message in the page's toast for ms milliseconds, with an action's button where given. */
+  function showToast(text: string, opts?: { title?: string; ms?: number; tone?: string; action?: { label: string; run: () => void } | null }): void;
+  /** Brings a section card into view, unfolded. */
+  function showCard(card: HTMLElement | null, instant?: boolean): void;
 }
 
 export {};

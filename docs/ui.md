@@ -107,6 +107,8 @@ The compacted header has **↑** left of ☰, back to the top.
   device's link and, for one who may change the settings, the cog), each in
   its worst colour, and under it its serial and address,
   the list as wide as they need; the arrow keys move between them.
+  Open, it stays open when data comes in, the focus where it was,
+  and shows what came: a Cube's new name, a problem, a Cube found.
   The last entry, **Search for new Cubes…**,
   asks the server to look for Cubes on the LAN (about two seconds;
   the server also looks every 30 minutes by itself),
@@ -147,6 +149,9 @@ The compacted header has **↑** left of ☰, back to the top.
   A window open briefly is not listed: it is a state, not a problem.
   Its list, as every menu of the page, opens inside the window,
   no higher than the room below it, and scrolls in itself, not the page.
+  An open list stays open when data comes in, and follows it:
+  a problem that comes is listed, one that goes leaves the list,
+  until nothing is left to list and the green check takes its place.
 - **How long ago the chosen Cube was heard from** and **↻**, one button without a frame,
   which asks the server for the current state now:
   "8 sec" since the server last took a message from the Cube,
@@ -1436,8 +1441,7 @@ as ☰'s pages are `MENU_VIEWS`; `markSettingsPages` shows the title for one pag
 `fitPageTabs` gives the page shown's button the longest name's width,
 and `backToTop` wires the two ↑, the floating one and the compacted header's;
 `showToast` shows the page's one toast at its foot (a notification, the search's outcome),
-`pickerMenu` makes a dropdown the choice of one item (the Cube choice),
-its items `menuItem`s, a Cube's link its network sign (`cubeSignEl`, `LINK_SIGN`);
+a Cube's link is its network sign (`cubeSignEl`, `LINK_SIGN`), for the plain regions;
 a device's serial and radio address are a `deviceIds`;
 a list of facts is a `kvList`, of counts a `countList`;
 an action with what it does and its button is an `.action-row`;
@@ -1491,10 +1495,11 @@ a script for each region of the page, in the order the page loads them:
 - `app.js`, the core: the state, the settings and their scopes, the API,
   the helpers, the ages of values, help, the Cube clock, loading, polling,
   the event stream, the language and `init`;
-- `header.js`, the header: the radio budget,
-  the last update and the server's clock, the Cube choice and the problems list,
-  the version, the TLS notice and the server's sign;
-  `home.js`, the home notice and the search for Cubes;
+- `header.js`, the plain names of the header, which call its parts (`ui/src/header/`),
+  and what stays plain there: the radio budget, the refresh button and the server's clock,
+  the version and the facts' fitting, the server's state;
+  `home.js`, the home notice's place shown or hidden, the Cubes a `cube_found` event adds
+  and the way to them;
   `prefs.js`, the wiring of My settings' rows and the language choice;
 - `rooms.js`, a room's facts, the drawing of Rooms, a device's state event
   and the actions behind a tile; `tiles.js`, a room's tile;
@@ -1650,6 +1655,26 @@ which `cubes.js` calls as `renderCubes`, `cubesPolled` and `showFoundFold`;
 `store.ts` holds its counter, each panel's `open` by serial, the folds
 and the devices loaded for the hide choice;
 `send.ts` holds its requests, run by its action runner.
+The header (`ui/src/header/`) is the second:
+`index.tsx` draws the Cube choice with every Cube's problems in `#header-cube`,
+the chosen Cube's age in the refresh button's `#updated`,
+the server's sign in `#server-sign-slot`, the certificate's line in `#tls-slot`
+and the home notice inside `#home-notice`, and registers `render` and `tls`,
+which `header.js` calls as `renderCubeSelect`, `renderUpdated`, `renderServerSign`
+and `renderTLS`, and `home.js` as `renderHomeNotice`;
+`store.ts` holds its counter, the search under way and the certificate,
+`send.ts` the search and the poll the server's sign asks for.
+The choice is a `Picker`, the problems a `Problems`, the certificate's line a `Notice`;
+the server's sign is a button written by hand, since `iconButton` has no part yet
+and the next change to the header takes the button away:
+the rooms' icon buttons (a tile's info and cog) bring that part.
+The facts row with its fitting, the version and the refresh button stay plain,
+around the parts' places and not in them,
+and the home notice's place is shown and hidden by the plain code (and by `pages.js`),
+the part drawing inside it.
+A part's place among plain siblings is an element of the class `part-slot`,
+which takes no box of its own (`display: contents`),
+so that the part's element is laid out as if it stood there itself.
 `make ui` bundles it with esbuild, through esbuild's Go API (`tools/uibundle`,
 a module of its own, its `README.md`),
 into `ui/parts.js`: one classic script, minified, for ES2022,

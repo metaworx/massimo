@@ -1,4 +1,4 @@
-<!-- The header: Massimo's word, the version, the server's sign and the time of the last update, the Cube choice and every Cube's problems, the TLS notice and the radio budget (header.js); the Rooms button and ☰ (pages.js); back to top (components.js). -->
+<!-- The header: Massimo's word, the version, the refresh button and the radio budget (header.js); the server's sign, the time of the last update, the Cube choice and every Cube's problems and the TLS notice, parts (ui/src/header/), each in its place here; the Rooms button and ☰ (pages.js); back to top (components.js). -->
 <header class="top">
   <div class="top-line">
     <div class="top-left">
@@ -11,28 +11,24 @@
       <div class="top-facts">
         <span id="version-short" class="muted mono small"></span>
         <span class="sign-updated">
-          <!-- the server's sign (header.js renderServerSign): connected, an
-               update out (a click opens Software update), a new version
-               running (a click reloads), unreachable (a click tries again) -->
-          <button type="button" id="server-sign" class="server-sign" data-state="up" aria-label="connected to the server" title="Connected to the server"><svg class="ni" aria-hidden="true"><use href="#icon-plug-on"/></svg></button>
-          <!-- the time of the last successful poll and the refresh icon, one
-               button without a frame, its tap area larger than it (header.js
-               renderUpdated) -->
+          <!-- the server's sign, button#server-sign (ui/src/header/ServerSign.tsx):
+               connected, an update out (a click opens Software update), a new
+               version running (a click reloads), unreachable (a click tries
+               again) -->
+          <span id="server-sign-slot" class="part-slot"></span>
+          <!-- the time of the last successful poll (ui/src/header/Updated.tsx)
+               and the refresh icon, one button without a frame, its tap area
+               larger than it (header.js renderUpdated) -->
           <button type="button" id="refresh-btn" class="refresh-btn" aria-label="refresh now" title="Refresh now" data-i18n-attr="title:header.refreshTitle"><span id="updated"></span><svg class="ni" aria-hidden="true"><use href="#icon-refresh"/></svg></button>
         </span>
       </div>
     </div>
-    <div class="cube">
-      <!-- the Cube choice, a menu of the page (components.js pickerMenu):
-           the chosen Cube's network sign and its name; the list each Cube
-           with its sign, serial and address -->
-      <details id="cube-menu" class="menu cube-menu">
-        <summary id="cube-choice" class="cube-choice" aria-label="Cube" data-i18n-attr="aria-label:header.cube"><span class="picker-icon"></span><span class="picker-label"></span><svg class="ni caret" aria-hidden="true"><use href="#icon-chevron-down"/></svg></summary>
-        <div class="menu-items"></div>
-      </details>
-      <!-- every Cube's problems (header.js renderCubeProblems) -->
-      <span id="cube-problems" class="cube-problems"></span>
-    </div>
+    <!-- the Cube choice, a menu of the page, details#cube-menu with its
+         summary#cube-choice (ui/src/header/Choice.tsx): the chosen Cube's
+         network sign and its name; the list each Cube with its sign, serial
+         and address; and every Cube's problems, span#cube-problems
+         (CubeProblems.tsx) -->
+    <div id="header-cube" class="cube"></div>
     <nav class="nav" aria-label="pages" data-i18n-attr="aria-label:nav.pages">
       <button type="button" id="view-tiles" class="icon-btn nav-btn active" aria-current="page" aria-label="rooms" title="Rooms" data-i18n-attr="aria-label:nav.rooms title:nav.roomsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-house"/></svg></button>
       <!-- back to top, left of ☰ while the header is compacted
@@ -58,7 +54,8 @@
       </details>
     </nav>
   </div>
-  <p id="tls-notice" class="notice hidden" role="status"><span id="tls-notice-text"></span></p>
+  <!-- the TLS notice, p#tls-notice (ui/src/header/Tls.tsx) -->
+  <div id="tls-slot" class="part-slot"></div>
   <!-- in expert mode, the chosen Cube's radio budget: its name, the duty
        cycle, the free slots and the radiograms pending, and the commands
        queued while there are any (header.js renderHeader); the server's facts

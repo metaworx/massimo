@@ -172,6 +172,26 @@ def cube_choice(page):
     page.locator("#cube-menu .menu-items").wait_for(state="visible")
 
 
+def cube_choice_found(page):
+    """The Cube choice open, the Cube with problems and the Cubes found
+    listed (stub_cubes)."""
+    stub_cubes(page)
+    on_rooms(page)
+    if page.locator("#cube-menu").get_attribute("open") is None:
+        page.locator("#cube-choice").click()
+    page.locator("#cube-menu .menu-items button[data-value^='found:']").first.wait_for(state="visible")
+
+
+def header_problems(page):
+    """Every Cube's problem list open beside the Cube choice, with a
+    device, the settings and the Cubes found in it (stub_cubes): the fault
+    of AP UiParts Block 6."""
+    stub_cubes(page)
+    on_rooms(page)
+    page.locator("#cube-problems .problems-sum").click()
+    page.locator("#cube-problems .problems-list").wait_for(state="visible")
+
+
 def main_menu(page):
     on_rooms(page)
     open_main_menu(page)
@@ -197,13 +217,13 @@ def system(page):
 
 # The fake Cube's fixture lists nothing in a Cube's problem list until
 # its open window is five minutes old, and finds no Cube until a search,
-# which is a POST. The Cubes' views therefore answer GET /api/v1/cubes
-# with the server's answer and, from the start, a device with a low
-# battery, a line of the settings file that differs, an address found
-# elsewhere and a proxy that does not listen on the fake Cube, and a
-# Cube and a Massimo proxy found on the network, the Cube outside this
-# machine's networks: the same answer at every load, so that the data
-# stay as they were.
+# which is a POST. The Cubes' views and the header's therefore answer
+# GET /api/v1/cubes with the server's answer and, from the start, a
+# device with a low battery, a line of the settings file that differs,
+# an address found elsewhere and a proxy that does not listen on the
+# fake Cube, and a Cube and a Massimo proxy found on the network, the
+# Cube outside this machine's networks: the same answer at every load,
+# so that the data stay as they were.
 CUBES_STUB = {
     "problems": [{"rf_address": "0a0101", "type": "radiator_thermostat", "name": "Radiator", "room": "Kitchen", "serial": "MEQ0000101",
                   "reported": True, "state": {"error": False, "battery_low": True, "link_error": False}}],
@@ -384,10 +404,11 @@ def sections_menu(page):
 # views run one after the other in one page, each from where the one
 # before left it.
 REGIONS = (
-    Region("cube-choice", ("#cube-menu",), (View("the Cube choice open", cube_choice),)),
-    Region("cube-problems", ("#cube-problems",),
-           gap="the fixture's Cube has nothing wrong that the header lists until its open window is five minutes old, "
-               "a time into the run, not a state the test sets; before, the header shows the OK sign alone and no list"),
+    Region("cube-choice", ("#cube-menu",), (
+        View("the Cube choice open", cube_choice),
+        View("the Cube choice open with the Cubes found", cube_choice_found),
+    )),
+    Region("cube-problems", ("#cube-problems",), (View("every Cube's problem list open", header_problems),)),
     Region("main-menu", ("header.top .top-facts", "header.top nav.nav"), (View("☰ open", main_menu),)),
     Region("home-notice", ("#home-notice",), (View("on the second server, its Cube not connected", home_notice),)),
     Region("rooms", ("#rooms",), (
@@ -445,10 +466,9 @@ REGIONS = (
 # (2026-11-15), although none has moved: they are filled in place, or
 # drawn again only by the user's own action (Create key, a backup, a
 # command's detail), which the guard does not apply. The block that
-# moves one of them keeps it passing. The three regions the fixture
+# moves one of them keeps it passing. The two regions the fixture
 # cannot show stay here until it can.
 NOT_MOVED = {
-    "cube-problems": "not drawn again while its list is open (renderCubeProblems); the open list stops following the data",
     "rooms": "a state event builds the tile again, a rooms reload every tile: the menus close, the focus goes, typing is set back",
     "room-config": "kept while the focus is in it; the redraw put off meanwhile replaces the tile once the focus leaves",
     "house": "a rooms reload builds the rooms' checkboxes again (renderHouseRooms): the ticks are carried over, the focus is not",

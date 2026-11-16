@@ -180,6 +180,12 @@ hence `failed_checks_forgotten`.
   with the Cube list stubbed, it says that no Cube is configured,
   and for a Cube that dropped after its rooms loaded it stands above the rooms,
   with when the last data came.
+- `test_header_updates.py`, the header as parts (AP UiParts, Block 6),
+  the Cubes' list stubbed:
+  every Cube's problem list, open, stays the same element and open through
+  a poll and lists the device with a problem the poll brought;
+  the Cube choice, open, stays open with the focus on the chosen Cube
+  and shows the Cube's new name and the settings' cog the poll brought.
 - `test_stream.py`:
   the event stream opens with tickets only, never with the token,
   and after a refused stream (the test hands out a used ticket first,

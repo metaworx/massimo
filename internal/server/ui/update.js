@@ -113,7 +113,7 @@ function renderUpdate(u) {
 }
 
 // updateOut tells whether an update is out, for one who may install it
-// (the server's sign, header.js renderServerSign).
+// (the server's sign, ui/src/header/ServerSign.tsx).
 function updateOut() {
   const u = updState.info;
   return !!u && !!u.available && hasCap("settings"); // login.js

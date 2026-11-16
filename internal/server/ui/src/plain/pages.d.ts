@@ -5,7 +5,7 @@
  * @file internal/server/ui/src/plain/pages.d.ts
  *
  * The globals of the plain script ui/pages.js that the parts call: which
- * page is shown, and a call each time one is.
+ * page is shown, a call each time one is, and showing one.
  */
 
 declare global {
@@ -13,6 +13,8 @@ declare global {
   function isShown(view: string): boolean;
   /** Runs fn each time the page of view is shown. */
   function onView(view: string, fn: () => void): void;
+  /** Shows the page of view (tiles, system, maint, …), as its button does. */
+  function showView(view: string): void;
 }
 
 export {};

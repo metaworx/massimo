@@ -267,8 +267,8 @@ const toastState = { timer: null, action: null };
 // bold where it has one, its text, its tone ("bad" for what failed, a red
 // edge) and an action, { label, run }, a button drawn for it alone that
 // runs it and closes the toast; × closes it at once. Notifications
-// (notify.js notifyToast) and the Cube search's outcome (app.js
-// discoverCubes) show here.
+// (notify.js notifyToast) and the Cube search's outcome
+// (ui/src/header/send.ts discoverCubes) show here.
 function showToast(text, { title = "", ms = 10000, tone = "", action = null } = {}) {
   const toast = $("toast");
   if (!toast.dataset.wired) {
@@ -429,10 +429,10 @@ function copyEl(text, { label, icon, cls } = {}) {
   return elem("span", "copy-pair", span, copyIcon(() => text, name));
 }
 
-// okPill stands in a problem pill's place where nothing is wrong (a
-// Cube's head, the header): a green check in the pill's frame, label
-// its name and tooltip, with no list behind it, so that a problem's pill
-// takes its place without moving what is beside it.
+// okPill stands in a problem pill's place where nothing is wrong: a
+// green check in the pill's frame, label its name and tooltip, with no
+// list behind it, so that a problem's pill takes its place without moving
+// what is beside it.
 function okPill(label) {
   const pill = elem("span", "ok-pill", iconEl("icon-check", "ni ok-check"));
   pill.setAttribute("role", "img");
@@ -444,7 +444,9 @@ function okPill(label) {
 // foundCountEl is the sign of the Cubes found on the network and not
 // served: a cube with their number in a corner badge, in the accent's
 // blue, as information rather than a problem; hidden from a screen
-// reader, which the label beside it tells.
+// reader, which the label beside it tells. Nothing calls okPill and
+// foundCountEl since the header is a part (ui/src/shared/problems.tsx
+// OkPill, icon.tsx CountIcon); they go with Block 15.
 function foundCountEl(n) {
   const w = elem("span", "found-count", iconEl("icon-cube3d", "ni"), textEl("b", String(n)));
   w.setAttribute("aria-hidden", "true");
@@ -1134,7 +1136,11 @@ function countList(counts) {
   return ul;
 }
 
-// --- a choice of one in a menu (the Cube choice) -----------------------
+// --- a choice of one in a menu -------------------------------------------
+
+// menuItem and pickerMenu made the Cube choice, which is a part since AP
+// UiParts Block 6 (ui/src/shared/menu.tsx MenuItem and Picker); nothing
+// calls them now, and they go with the builders nobody calls (Block 15).
 
 // menuItem is an item of a dropdown's list: a button with its icon (a
 // symbol's name, or an element such as a Cube's sign; with blank and no icon
