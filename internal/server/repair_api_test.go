@@ -228,6 +228,42 @@ func TestRepairRelink(t *testing.T) {
 	}
 }
 
+// A preview counts the resets the queue's prelude sends, by the
+// engine's list (AP RadioHealth v1.3, D204-A): with 0a010a's
+// communication error set, the re-link's first step resets it as its
+// Target, and each later step as the flagged member its room-flagged
+// line reaches; the run sends exactly those r:, after each wakeup, the
+// fake keeping the flag.
+func TestRepairPreviewCountsTheQueuesResets(t *testing.T) {
+	fc, ts, _ := startRepairCube(t, func(fc *fakecube.Server) {
+		withContactInRoom1(t, fc.Greeting)
+		withErrorFlag(t, fc.Greeting, 0x0a010a, 0x03)
+	})
+	const path = "/api/v1/cubes/KEQ0000100/rooms/1/repair/relink"
+	sent := len(fc.Received())
+	code, p, body := previewOf(t, ts, path)
+	if code != 200 || len(p.Steps) != 3 || p.Resets != 3 || p.Radiograms != 14 {
+		t.Fatalf("preview: %d %s", code, body)
+	}
+	for i, st := range p.Steps {
+		if !st.Reset {
+			t.Fatalf("step %d without its reset: %s", i, body)
+		}
+	}
+	if code, out := do(t, ts, "POST", path+"?plan="+p.Plan, ""); code != 200 || out["ok"] != true {
+		t.Fatalf("run: %d %v", code, out)
+	}
+	reset := cube.CmdResetError(0x0a010a).String()
+	var want []string
+	for _, l := range relinkLines(true) {
+		want = append(want, l)
+		if l == "z:1e,G,01" {
+			want = append(want, reset)
+		}
+	}
+	sameLines(t, sentSince(fc, sent), want)
+}
+
 // nothingOf asserts that a repair's preview has nothing to send, why
 // naming want, and that its run is refused with 409.
 func nothingOf(t *testing.T, ts *httptest.Server, path, want string) repairPlan {

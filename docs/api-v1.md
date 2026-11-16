@@ -2961,8 +2961,11 @@ and what they cost:
 ```
 
 `steps` are the commands in the order they would be sent:
-each with the device it addresses, which the queue resets first where its
-error flag is set (`reset`),
+each with the device it addresses,
+whether the queue resets error flags first (`reset`, the `r:` not among
+`lines`): the device's, the flagged members its room-flagged lines reach,
+the flagged devices its direct lines address, as the queue's prelude does
+for every command (D204-A),
 the room woken up before it (`z:1e,G,<room>`, not among `lines`),
 and its `lines` as they go to the Cube;
 a metadata write is a step of its own.
@@ -2972,8 +2975,9 @@ a metadata write is a step of its own.
 a radiogram with the room flag one per member of the room (T134),
 and `held_slots` those that stay taken until the members' next wakeup,
 about ten minutes: a room radiogram's but its addressee's.
-`resets` counts the `r:` lines, the queue's own included, which cost no radio
-time; `wakeups` the room wakeups; `metadata` a metadata write, no radio.
+`resets` counts the `r:` lines, those the queue sends before each step included,
+by the device list as it is now, which cost no radio time;
+`wakeups` the room wakeups; `metadata` a metadata write, no radio.
 `budget` is what the Cube last reported.
 `untested` marks a repair not yet run on hardware.
 `refused` says why a run would be refused now:

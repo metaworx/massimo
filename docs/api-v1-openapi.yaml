@@ -4446,15 +4446,15 @@ components:
             type: object
             properties:
               what: {type: string}
-              device: {type: string, description: "The device the command addresses, which the queue resets first where flagged"}
+              device: {type: string, description: "The device the command addresses"}
               room: {type: integer, description: "The room woken up before the command"}
-              reset: {type: boolean, description: "The queue resets the device's error flag before the command"}
-              lines: {type: array, items: {type: string}, description: "The command's lines as they go to the Cube, the wakeup and the queue's reset not included"}
+              reset: {type: boolean, description: "The queue resets error flags before the command: the device's, the flagged members its room lines reach, the flagged devices its direct lines address"}
+              lines: {type: array, items: {type: string}, description: "The command's lines as they go to the Cube, the wakeup and the queue's resets not included"}
         radiograms: {type: integer, description: "The s: lines"}
         duty_cost_pct: {type: number, description: "About what they cost of the hourly radio budget, 1.25 % each"}
         slots: {type: integer, description: "The memory slots they take, one each and a room radiogram one per member of the room"}
         held_slots: {type: integer, description: "Those held until the members' next wakeup, about ten minutes, a room radiogram's but its addressee's"}
-        resets: {type: integer, description: "The r: lines, the queue's own included; free"}
+        resets: {type: integer, description: "The r: lines, those the queue sends before each command included; free"}
         wakeups: {type: integer}
         metadata: {type: boolean, description: "A metadata write, no radio"}
         budget: {$ref: "#/components/schemas/Budget"}

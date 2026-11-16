@@ -107,8 +107,9 @@ type repairPlan struct {
 	// ten minutes: a room radiogram's but the addressee's.
 	Slots int `json:"slots"`
 	Held  int `json:"held_slots"`
-	// Resets counts the r: lines, the queue's own included, which cost
-	// no radio time; Wakeups the room wakeups before the commands.
+	// Resets counts the r: lines, those the queue's prelude sends before
+	// each command included (engine.PreludeOf), which cost no radio
+	// time; Wakeups the room wakeups before the commands.
 	Resets   int  `json:"resets"`
 	Wakeups  int  `json:"wakeups"`
 	Metadata bool `json:"metadata"`
@@ -126,8 +127,10 @@ type repairPlan struct {
 }
 
 // repairStep is one command of a preview: the device it addresses, the
-// room woken up before it, whether the queue resets the device's flag
-// first, and its lines as they go to the Cube.
+// room woken up before it, whether the queue's prelude resets flags
+// first (the device's, the flagged members its room lines reach, the
+// flagged devices its direct lines address), and its lines as they go
+// to the Cube.
 type repairStep struct {
 	What   string   `json:"what"`
 	Device string   `json:"device,omitempty"`
@@ -217,11 +220,9 @@ func (s *Server) repairView(rt *runtime, a *repairAction) repairPlan {
 	fmt.Fprintf(h, "%s\n", a.name)
 	for _, st := range a.steps {
 		step := repairStep{What: st.what, Lines: wireLines(st.cmd.Lines)}
-		radio := false
 		for _, l := range st.cmd.Lines {
 			switch l.Type {
 			case 's':
-				radio = true
 				v.Radiograms++
 				v.Slots++
 				if rc, err := cube.ParseRadioCommand(l.Data); err == nil && rc.Target.Room {
@@ -231,16 +232,19 @@ func (s *Server) repairView(rt *runtime, a *repairAction) repairPlan {
 					}
 				}
 			case 'r':
-				radio = true
 				v.Resets++
 			}
 		}
 		if st.cmd.Target != 0 {
 			step.Device = st.cmd.Target.String()
-			if stt, ok := snap.State(st.cmd.Target); radio && ok && stt.Error {
-				step.Reset = true // the queue's prelude (engine.Queue)
-				v.Resets++
-			}
+		}
+		// The resets the queue's prelude sends before the step, by the
+		// engine's own list (AP RadioHealth v1.3, D204-A): the Target's,
+		// the flagged members its room lines reach, the flagged devices
+		// its direct lines address.
+		if n := len(engine.PreludeOf(snap, st.cmd).Resets()); n > 0 {
+			step.Reset = true
+			v.Resets += n
 		}
 		if st.cmd.Wakeup {
 			step.Room = st.cmd.RoomID
