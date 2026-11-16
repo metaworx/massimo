@@ -1521,6 +1521,11 @@ the bundler takes them from there and refuses any other import.
 strict, the vendored types by `paths`),
 with the TypeScript `tools/ui-check/` locks (its `README.md`),
 and CI's job UI types runs it.
+What a part reads from the API is typed by `ui/src/api.d.ts`,
+one declaration per schema of `docs/api-v1-openapi.yaml`,
+`Cube`, `Room` or `Device`, which a part imports with `import type`:
+`make api-types` writes it (`tools/apitypes`, its `README.md`),
+git keeps it, and `go test` fails while it does not follow the OpenAPI file.
 
 `ui/connect.html` is a second page, the apps' (docs/app.md),
 served at `/ui/connect.html` as it is, not assembled:

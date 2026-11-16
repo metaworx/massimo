@@ -30,7 +30,7 @@ paths:
                   ok: {type: boolean}
                   version: {type: string}
                   started_at: {type: string, format: date-time, description: When the server process started.}
-                  node_id: {type: string, format: uuid, description: The box's node.id from its store, the same across restarts}
+                  node_id: {type: string, format: uuid, description: "The box's node.id from its store, the same across restarts"}
                   features:
                     type: object
                     description: "What this server can do, by name, each its version MAJOR.MINOR: event_ids, idempotency, commands, vwt, program_etag, boost, proxy_virtual; without a store idempotency, commands and proxy_virtual are left out. A name never changes meaning."
@@ -42,7 +42,7 @@ paths:
                       source: {type: string, description: "Where the certificate comes from: files, self-signed, or acme."}
                       names: {type: array, items: {type: string}, description: The certificate's names and addresses.}
                       not_after: {type: string, format: date-time}
-                      fingerprint: {type: string, description: The SHA-256 of the certificate, as browsers show it.}
+                      fingerprint: {type: string, description: "The SHA-256 of the certificate, as browsers show it."}
                       self_signed: {type: boolean}
                       warning: {type: string, description: Set while something needs the owner.}
   /api/v1/login:
@@ -584,7 +584,7 @@ paths:
         where, what, the request with its secrets removed, and how it
         went. Paged by time with before, filtered by user.
       parameters:
-        - {name: before, in: query, description: Rows before this time, RFC 3339, schema: {type: string, format: date-time}}
+        - {name: before, in: query, description: "Rows before this time, RFC 3339", schema: {type: string, format: date-time}}
         - {name: limit, in: query, description: At most this many rows (100), schema: {type: integer, minimum: 1, maximum: 1000, default: 100}}
         - {name: user, in: query, description: Rows of this user's login name, schema: {type: string}}
       responses:
@@ -793,7 +793,7 @@ paths:
               schema:
                 type: object
                 properties:
-                  token: {type: string, description: The secret, shown once}
+                  token: {type: string, description: "The secret, shown once"}
                   id: {type: integer}
                   kind: {type: string, enum: [api]}
                   label: {type: string}
@@ -1152,7 +1152,7 @@ paths:
                   integration: {$ref: "#/components/schemas/Integration"}
         "202": {description: The request waits for the owner}
         "404": {$ref: "#/components/responses/NotFound"}
-        "410": {description: Refused, expired, or its key collected and used}
+        "410": {description: "Refused, expired, or its key collected and used"}
   /api/v1/integrations:
     get:
       summary: The integrations and the requests waiting
@@ -2161,7 +2161,7 @@ paths:
         "200":
           description: Programme keyed by weekday, plus source (the device it comes from), its tag, pending and program_consistent
           headers:
-            ETag: {description: The programme's tag, quoted, schema: {type: string}}
+            ETag: {description: "The programme's tag, quoted", schema: {type: string}}
           content:
             application/json:
               schema: {$ref: "#/components/schemas/ProgramWithTag"}
@@ -2217,7 +2217,7 @@ paths:
         "200":
           description: Programme keyed by weekday, plus source (the device it comes from), its tag, pending and program_consistent
           headers:
-            ETag: {description: The programme's tag, quoted, schema: {type: string}}
+            ETag: {description: "The programme's tag, quoted", schema: {type: string}}
           content:
             application/json:
               schema: {$ref: "#/components/schemas/ProgramWithTag"}
@@ -3358,7 +3358,7 @@ paths:
               schema:
                 type: object
                 properties:
-                  version: {type: string, description: The build version with the Go details, as /healthz has it}
+                  version: {type: string, description: "The build version with the Go details, as /healthz has it"}
                   started_at: {type: string, format: date-time, description: When the server process started.}
                   tls:
                     type: object
@@ -3883,7 +3883,7 @@ components:
     ProgramChanged:
       description: The programme changed since its tag was read, or a write to it is still on its way
       headers:
-        ETag: {description: The current tag, quoted, schema: {type: string}}
+        ETag: {description: "The current tag, quoted", schema: {type: string}}
       content:
         application/json:
           schema:
@@ -4066,8 +4066,8 @@ components:
         user: {type: string, description: The login name of who asked}
         state: {$ref: "#/components/schemas/CommandState"}
         status: {type: integer, description: The HTTP status answered; absent while running}
-        request: {type: object, description: The method, the path, the query and a hash of the body}
-        result: {type: object, description: The answer's body; for a restore, the run's id, state and counts}
+        request: {type: object, description: "The method, the path, the query and a hash of the body"}
+        result: {type: object, description: "The answer's body; for a restore, the run's id, state and counts"}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
         finished_at: {type: string, format: date-time}
@@ -4084,7 +4084,7 @@ components:
         id: {type: string, format: uuid}
         target: {type: string, description: "device:0a010d or room:6"}
         state: {$ref: "#/components/schemas/CommandState"}
-        request: {type: object, description: The queue key, the priority, the number of lines and of radio lines, the wakeup, the room}
+        request: {type: object, description: "The queue key, the priority, the number of lines and of radio lines, the wakeup, the room"}
         result: {type: object, description: "discarded, the budget the Cube reported, the error, answers (the Cube's answer to each line, in order, up to the first failure) and discarded_line (the line the Cube discarded)"}
         created_at: {type: string, format: date-time}
         finished_at: {type: string, format: date-time}
@@ -4093,11 +4093,11 @@ components:
       properties:
         id: {type: integer}
         time: {type: string, format: date-time}
-        user: {type: string, description: The login name; absent for no authentication, a failed login or the command line}
+        user: {type: string, description: "The login name; absent for no authentication, a failed login or the command line"}
         token_id: {type: integer, description: The session or key used}
-        remote: {type: string, description: The client's address, or cli}
+        remote: {type: string, description: "The client's address, or cli"}
         action: {type: string, description: "setpoint, room.config, device.update, cube.add, user.add, login, login.failed, …", example: setpoint}
-        cube: {type: string, description: The Cube's serial, for a Cube's route}
+        cube: {type: string, description: "The Cube's serial, for a Cube's route"}
         target: {type: string, description: "device:0a010d, room:6, user:anna, role:night, token:4, cube:KEQ0000000", example: "room:6"}
         detail:
           type: object
@@ -4108,14 +4108,14 @@ components:
             minute, without their bodies: the first one's method, path and status, the count of requests within
             the minute, the count of each status in statuses, and the time of the last.
         result: {type: string, enum: [ok, refused, failed]}
-        command_id: {type: integer, description: The command the request is, when it is one}
+        command_id: {type: integer, description: "The command the request is, when it is one"}
     UserCreate:
       type: object
       required: [name]
       properties:
         name: {type: string, description: "The login name: 1 to 64 of letters, digits, '.', '_', '-' and '@', case does not matter", example: anna}
         display_name: {type: string, maxLength: 64}
-        role: {type: string, description: A role's key; viewer when absent, owner for the first owner}
+        role: {type: string, description: "A role's key; viewer when absent, owner for the first owner"}
         password: {type: string, description: Absent for a user with keys only; this or record for the first owner}
         record: {type: string, description: "A password of auth_version 2 in place of password: the registration record, base64url (POST /api/v1/users/{name}/register)"}
         ksf: {type: string, description: "The record's key stretching, as the registration answered it: m=<KiB>,t=<passes>,p=<lanes>", example: "m=19456,t=2,p=1"}
@@ -4129,7 +4129,7 @@ components:
         disabled: {type: boolean}
         expires_at: {type: string, format: date-time, nullable: true, description: null clears the end date}
         password: {type: string, description: Empty removes the password}
-        current_password: {type: string, description: Required when a user sets its own password, unless proof is given}
+        current_password: {type: string, description: "Required when a user sets its own password, unless proof is given"}
         record: {type: string, description: "A password of auth_version 2 in place of password: the registration record, base64url"}
         ksf: {type: string, description: "The record's key stretching: m=<KiB>,t=<passes>,p=<lanes>", example: "m=19456,t=2,p=1"}
         proof: {type: string, description: "A proof of the current password from POST /api/v1/login/finish with the purpose proof, in place of current_password"}
@@ -4138,7 +4138,7 @@ components:
       properties:
         key: {type: string}
         name: {type: string, description: The display name; empty shows the key's translated default}
-        builtin: {type: boolean, description: One of the six default roles, which keep their keys}
+        builtin: {type: boolean, description: "One of the six default roles, which keep their keys"}
         disabled: {type: boolean}
         capabilities:
           type: array
@@ -4219,9 +4219,9 @@ components:
         has_secret: {type: boolean, description: The client secret is set; it is never answered}
         scopes: {type: string, example: openid email profile}
         auto_create: {type: boolean, description: A sign-in without an identity creates the user}
-        auto_role: {type: string, description: The role of a user created so, viewer by default}
+        auto_role: {type: string, description: "The role of a user created so, viewer by default"}
         auto_domains: {type: array, items: {type: string}, description: The e-mail domains it creates users for; none for any}
-        groups_claim: {type: string, description: The claim of the account's groups, groups by default}
+        groups_claim: {type: string, description: "The claim of the account's groups, groups by default"}
         allowed_groups: {type: array, items: {type: string}, description: "The groups it admits: an account in none of them neither signs in nor links; none for any"}
         enabled: {type: boolean}
         callback: {type: string, description: "The redirect URI's path under the page's address", example: api/v1/login/oidc/callback}
@@ -4251,9 +4251,9 @@ components:
         email: {type: string, description: Lower case}
         subject: {type: string, description: The user id at the provider (sub); empty until bound}
         bound: {type: boolean, description: The identity has the provider's subject}
-        name: {type: string, description: The name at the provider, from the last sign-in or link}
-        username: {type: string, description: The user name at the provider (preferred_username), likewise}
-        groups: {type: array, items: {type: string}, description: The groups at the provider, likewise}
+        name: {type: string, description: "The name at the provider, from the last sign-in or link"}
+        username: {type: string, description: "The user name at the provider (preferred_username), likewise"}
+        groups: {type: array, items: {type: string}, description: "The groups at the provider, likewise"}
         created_at: {type: string, format: date-time}
         bound_at: {type: string, format: date-time}
         last_used_at: {type: string, format: date-time}
@@ -4291,7 +4291,7 @@ components:
     OIDCStarted:
       type: object
       properties:
-        url: {type: string, description: The provider's authorization URL, to open in the browser}
+        url: {type: string, description: "The provider's authorization URL, to open in the browser"}
         expires_at: {type: string, format: date-time, description: Ten minutes from now}
     OIDCFinish:
       type: object
@@ -4317,8 +4317,8 @@ components:
     Session:
       type: object
       properties:
-        token: {type: string, description: The session token, shown once; sent as the bearer header}
-        expires_at: {type: string, format: date-time, description: 30 days from now, moved by use}
+        token: {type: string, description: "The session token, shown once; sent as the bearer header"}
+        expires_at: {type: string, format: date-time, description: "30 days from now, moved by use"}
         user: {$ref: "#/components/schemas/User"}
         role: {$ref: "#/components/schemas/RoleRef"}
         capabilities:
@@ -4334,7 +4334,7 @@ components:
     User:
       type: object
       properties:
-        name: {type: string, description: The login name, lower case}
+        name: {type: string, description: "The login name, lower case"}
         display_name: {type: string}
         role: {type: string, description: The role's key}
         disabled: {type: boolean}
@@ -4420,9 +4420,9 @@ components:
       description: One command of a restore plan
       properties:
         what: {type: string, description: The step as massimo restore prints it}
-        radio: {type: boolean, description: Sends radio commands, which cost budget; false for a Cube command (names, NTP, time zone)}
-        device: {type: string, description: The device the command addresses, when it has one}
-        room: {type: integer, description: The room woken up before the command, when there is one}
+        radio: {type: boolean, description: "Sends radio commands, which cost budget; false for a Cube command (names, NTP, time zone)"}
+        device: {type: string, description: "The device the command addresses, when it has one"}
+        room: {type: integer, description: "The room woken up before the command, when there is one"}
         result: {$ref: "#/components/schemas/RestoreStepResult"}
     RestoreStepResult:
       type: object
@@ -4493,7 +4493,7 @@ components:
           description: Differences a restore cannot write, such as devices that have to be paired again
           items: {type: string}
         radio_commands: {type: integer, description: Radiograms of all steps}
-        duty_cost_pct: {type: number, description: About what the radio commands will cost of the hourly radio budget, 1.25 % each}
+        duty_cost_pct: {type: number, description: "About what the radio commands will cost of the hourly radio budget, 1.25 % each"}
         budget: {$ref: "#/components/schemas/Budget"}
     RestoreState:
       type: object
@@ -4510,7 +4510,7 @@ components:
           items: {$ref: "#/components/schemas/RestoreStep"}
         sent: {type: integer, description: Steps the Cube accepted}
         radio_commands: {type: integer}
-        error: {type: string, description: Which step failed and why, for a failed restore}
+        error: {type: string, description: "Which step failed and why, for a failed restore"}
     RestoreProgress:
       type: object
       description: The restore field of restore_step and restore_done events
@@ -4536,7 +4536,7 @@ components:
           items: {type: string}
           description: The settings file's variables that changed since the start and apply only at the next one; names, never values
         file: {type: string, description: The settings file serve reads}
-        read_at: {type: string, format: date-time, description: When the settings file was last read, at the start or since}
+        read_at: {type: string, format: date-time, description: "When the settings file was last read, at the start or since"}
     RebootInfo:
       type: object
       required: [available]
@@ -4544,7 +4544,7 @@ components:
         available: {type: boolean, description: Whether this caller's POST would reboot the computer now}
         by: {type: string, enum: [systemd, launchd, windows], description: Who reboots; absent when nobody can}
         blocked: {type: string, description: Why the reboot is not available}
-        at: {type: string, format: date-time, description: When a reboot that waits, or has begun, is asked for}
+        at: {type: string, format: date-time, description: "When a reboot that waits, or has begun, is asked for"}
         begun: {type: boolean, description: The delay is over and the helper or the system was asked}
         error: {type: string, description: Why the last reboot failed}
     ReloadResult:
@@ -4607,8 +4607,8 @@ components:
               name: {type: string}
               value: {type: string, description: Absent for a secret}
               secret: {type: boolean}
-              source: {type: string, description: Where the value came from, the environment or the settings file}
-              unknown: {type: boolean, description: A name Massimo does not know, perhaps a typo}
+              source: {type: string, description: "Where the value came from, the environment or the settings file"}
+              unknown: {type: boolean, description: "A name Massimo does not know, perhaps a typo"}
     UpdateInfo:
       type: object
       properties:
@@ -4623,7 +4623,7 @@ components:
         checked_at: {type: string, format: date-time}
         check_error: {type: string}
         can_update: {type: boolean, description: POST would start an update}
-        blocked: {type: string, description: Why an update cannot be started from the API (a package manager owning the binary without a helper of its own, no token, no helper, a development build)}
+        blocked: {type: string, description: "Why an update cannot be started from the API (a package manager owning the binary without a helper of its own, no token, no helper, a development build)"}
         helper: {$ref: "#/components/schemas/UpdateStatus"}
         history:
           type: array
@@ -4633,7 +4633,7 @@ components:
       type: object
       description: "An update: started in Massimo (by, to), or found at a start (outside); completed by the next start with another version"
       properties:
-        at: {type: string, format: date-time, description: When it was started, or found at a start}
+        at: {type: string, format: date-time, description: "When it was started, or found at a start"}
         by:
           type: object
           description: The user who started it; absent for the owner's key and an update from outside Massimo
@@ -4643,7 +4643,7 @@ components:
         outside: {type: boolean, description: "Massimo did not start it: apt, brew or a person on the box"}
         manager: {type: string, description: "The box's package manager (apt, brew), for an update from outside"}
         from: {type: string, description: The version that ran before}
-        to: {type: string, description: The version asked for, where Massimo started it}
+        to: {type: string, description: "The version asked for, where Massimo started it"}
         reached: {type: string, description: The version the next start ran; absent while the update runs}
         reached_at: {type: string, format: date-time}
         result: {type: string, enum: [failed, rolled-back, up-to-date], description: "The update helper's outcome where it ended without reaching to"}
@@ -4693,7 +4693,7 @@ components:
         firmware: {type: string, example: "1.1.3"}
         dhcp: {type: boolean, description: "Whether the Cube takes its address by DHCP, from its answer to the c request in this server run's latest discovery that had one; absent until it has answered c"}
         gateway: {type: string, description: "The gateway the Cube uses, from its answer to the N request in this server run's latest discovery that had one; absent until then"}
-        netmask: {type: string, description: The netmask the Cube uses, as gateway}
+        netmask: {type: string, description: "The netmask the Cube uses, as gateway"}
         dns:
           type: array
           items: {type: string}
@@ -4708,7 +4708,7 @@ components:
       type: object
       properties:
         serial: {type: string}
-        name: {type: string, description: User-friendly name from the store (seeded from MASSIMO_CUBE_<SN>_NAME), when set}
+        name: {type: string, description: "User-friendly name from the store (seeded from MASSIMO_CUBE_<SN>_NAME), when set"}
         address: {type: string}
         configured: {type: boolean, description: Always true here; found Cubes are FoundCube}
         source: {type: string, enum: [env, ui, flag], description: Where the configuration comes from; absent without a store}
@@ -4733,7 +4733,7 @@ components:
           type: array
           description: The hidden list (radio addresses), besides room 255
           items: {type: string}
-        mac: {type: string, description: From discovery, once it saw the Cube}
+        mac: {type: string, description: "From discovery, once it saw the Cube"}
         last_seen: {type: string, format: date-time, description: When the Cube last answered discovery}
         found_address: {type: string, description: "The host discovery last found the Cube at; differs from address where the server connects through a proxy or to a fixed address the Cube has left"}
         found_elsewhere: {$ref: '#/components/schemas/FoundElsewhere'}
@@ -4809,7 +4809,7 @@ components:
         field: {type: string, enum: [name, address, proxy_address, proxy_serial, hidden]}
         variable: {type: string, example: MASSIMO_CUBE_KEQ0000000_NAME}
         file: {description: The file's value; a list of radio addresses for hidden}
-        store: {description: The store's value, in effect; a list for hidden}
+        store: {description: "The store's value, in effect; a list for hidden"}
     CubeDetail:
       allOf:
         - {$ref: "#/components/schemas/Cube"}
@@ -4842,7 +4842,7 @@ components:
         id: {type: integer}
         name: {type: string}
         room_uid: {type: string, description: "The room's uid, kept for the room's life and never given to another room; absent before the server has read the room"}
-        ready: {type: boolean, description: Every device of the room has reported since the Cube restarted, so the Cube accepts room commands}
+        ready: {type: boolean, description: "Every device of the room has reported since the Cube restarted, so the Cube accepts room commands"}
         stale: {type: boolean, description: A device of the room is stale; present when true}
         devices:
           type: array
@@ -4968,13 +4968,13 @@ components:
         temp_offset: {type: number, description: -3.5 to 3.5 in steps of 0.5; per device only}
         window_open_temp: {type: number}
         window_open_minutes: {type: integer, description: 0 to 60 in steps of 5}
-        boost_minutes: {type: integer, description: 0 to 30 in steps of 5, or 60}
+        boost_minutes: {type: integer, description: "0 to 30 in steps of 5, or 60"}
         boost_valve_pct: {type: integer, description: 0 to 100 in steps of 5}
         decalc_day: {type: string, enum: [monday, tuesday, wednesday, thursday, friday, saturday, sunday]}
         decalc_hour: {type: integer, minimum: 0, maximum: 23}
         max_valve_pct: {type: integer, minimum: 0, maximum: 100}
         valve_offset_pct: {type: integer, minimum: 0, maximum: 100}
-        display_actual: {type: boolean, description: Wall thermostats only, per device only}
+        display_actual: {type: boolean, description: "Wall thermostats only, per device only"}
     DeviceResult:
       type: object
       properties:
@@ -5093,11 +5093,11 @@ components:
         name: {type: string}
         state: {type: string, enum: [pending, active, disabled]}
         instance_id: {type: string}
-        pending_instance: {type: string, description: An installation id a call came with, not accepted yet}
+        pending_instance: {type: string, description: "An installation id a call came with, not accepted yet"}
         url: {type: string}
         version: {type: string}
         max_caps: {type: array, items: {type: string}, description: "The key's maximum, within the role integration"}
-        user: {type: string, description: Its own user, holding its key}
+        user: {type: string, description: "Its own user, holding its key"}
         request_code: {type: string, description: "A request's short code"}
         request_expires: {type: string, format: date-time, description: "Until when a request waits, or an approved integration may collect its key; absent once collected"}
         request_remote: {type: string, description: The address the request came from}
@@ -5112,7 +5112,7 @@ components:
       type: object
       properties:
         id: {type: string, description: "Its id at the integration, or system"}
-        name: {type: string, description: Its name there, from its last call}
+        name: {type: string, description: "Its name there, from its last call"}
         user: {type: string, description: The user its calls act as}
         own_user: {type: string, description: The user made at its first call}
         linked: {type: boolean}
