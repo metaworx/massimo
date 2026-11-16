@@ -11,8 +11,10 @@ package server
 // entry is out of date are left out. A room is left out while a window
 // of it is open (its thermostats then hold their own window-open
 // temperature), while a structure change of Massimo's concerns it
-// (structure.go) and while a command to it waits or runs in the queue;
-// a disagreement not yet reported starts again after that.
+// (structure.go), while a command to it waits or runs in the queue and
+// while a write to it is open or not confirmed (confirm.go: Block 8's
+// re-send, D199-A); a disagreement not yet reported starts again after
+// that.
 //
 // Disagreement: the members differ in mode, setpoint or until, the rule
 // of the virtual wall thermostat's Consistent (view.SameSetting), two
@@ -30,8 +32,9 @@ package server
 // thermostat's state; else none, the Warn alone.
 // It goes through the queue at low priority, never while the queue holds
 // the radio for the duty cycle or the memory slots, and at most once a
-// day per room, the day's re-sends seeded from the log at the first
-// check. Agreeing again, an Info says so.
+// day per room, a day shared with Block 8's re-send of an unconfirmed
+// room setpoint (resend.go, D199-A), the day's re-sends of both seeded
+// from the log at the first check. Agreeing again, an Info says so.
 //
 // Programme drift: in a room in auto, a member whose setpoint has not
 // been its own programme's temperature at the Cube's time for
@@ -108,6 +111,13 @@ type driftState struct {
 	warned  map[cube.RFAddress]time.Time
 	intent  map[uint8]roomIntent
 	seeded  bool // the day's re-sends and Warns read from the log
+}
+
+// initLocked makes the maps of a runtime's first check, with d.mu held.
+func (d *driftState) initLocked() {
+	if d.rooms == nil {
+		d.rooms, d.members, d.resent, d.warned = map[uint8]*disagreement{}, map[cube.RFAddress]*driftEpisode{}, map[uint8]time.Time{}, map[cube.RFAddress]time.Time{}
+	}
 }
 
 // disagreement is a room whose members differ.
@@ -528,15 +538,13 @@ func (s *Server) roomChecks(ctx context.Context, rt *runtime) {
 			continue
 		}
 		sc := scanRoom(snap, r.ID, skip, cubeNow, clock)
-		pause := busy || sc.window || watched[r.ID] || rt.queue.Pending(toRoom(r.ID, sc.all))
+		pause := busy || sc.window || watched[r.ID] || rt.queue.Pending(toRoom(r.ID, sc.all)) || rt.roomConfirmation(r.ID) != nil
 		rooms = append(rooms, room{r.ID, sc, pause})
 	}
 
 	d := &rt.drift
 	d.mu.Lock()
-	if d.rooms == nil {
-		d.rooms, d.members, d.resent, d.warned = map[uint8]*disagreement{}, map[cube.RFAddress]*driftEpisode{}, map[uint8]time.Time{}, map[cube.RFAddress]time.Time{}
-	}
+	d.initLocked()
 	var evs []event
 	var sends []resend
 	seen := map[uint8]bool{}
@@ -787,9 +795,11 @@ func (s *Server) resendRoom(ctx context.Context, rt *runtime, r resend) {
 	rt.emit(ev)
 }
 
-// seedRoomChecks reads the day's re-sends and drift Warns from the
-// store's log once, at the first check of a Cube with a row there, so
-// that a restart does not lift their limits.
+// seedRoomChecks reads the day's re-sends, the room checks' and Block
+// 8's of an unconfirmed room setpoint (resend.go), and the drift Warns
+// from the store's log once, at the first check of a Cube with a row
+// there or at Block 8's first decision, so that a restart does not lift
+// their limits.
 func (s *Server) seedRoomChecks(ctx context.Context, rt *runtime, now time.Time) {
 	d := &rt.drift
 	d.mu.Lock()
@@ -803,7 +813,7 @@ func (s *Server) seedRoomChecks(ctx context.Context, rt *runtime, now time.Time)
 		return // no log to read, or not yet: the next check tries again
 	}
 	resent, warned := map[uint8]time.Time{}, map[cube.RFAddress]time.Time{}
-	for _, kind := range []string{"disagree", "drift"} {
+	for _, kind := range []string{"disagree", "drift", "unconfirmed"} {
 		q := store.EventQuery{CubeID: id, Kind: kind, Since: now.Add(-resendGap), Limit: store.MaxEventsPage}
 		rows, err := rt.store.Events(ctx, q)
 		if err != nil {
@@ -818,7 +828,7 @@ func (s *Server) seedRoomChecks(ctx context.Context, rt *runtime, now time.Time)
 				continue
 			}
 			switch outcome, _ := ev.Summary["outcome"].(string); {
-			case kind == "disagree" && (outcome == "resent" || outcome == "resend_failed"):
+			case kind != "drift" && (outcome == "resent" || outcome == "resend_failed"): // the room checks' and Block 8's (D199-A)
 				if room, ok := ev.Summary["room"].(float64); ok && row.Time.After(resent[uint8(room)]) {
 					resent[uint8(room)] = row.Time
 				}
@@ -831,9 +841,7 @@ func (s *Server) seedRoomChecks(ctx context.Context, rt *runtime, now time.Time)
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if d.resent == nil {
-		d.rooms, d.members, d.resent, d.warned = map[uint8]*disagreement{}, map[cube.RFAddress]*driftEpisode{}, map[uint8]time.Time{}, map[cube.RFAddress]time.Time{}
-	}
+	d.initLocked()
 	for room, t := range resent {
 		if t.After(d.resent[room]) {
 			d.resent[room] = t

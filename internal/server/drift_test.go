@@ -45,9 +45,9 @@ type driftRig struct {
 // thermostats, room 3 a window contact; every thermostat in auto at
 // 20 °C; the Cube's clock Tuesday 19:51, when the radiator thermostats'
 // programme says 21 °C since 18:20 and 17 °C from 20:15), change
-// applied to its lines first. The fake Cube applies the commands it
-// takes.
-func startDrift(t *testing.T, change func([]cube.Message) []cube.Message) *driftRig {
+// applied to its lines first, and edit to the server's options. The
+// fake Cube applies the commands it takes.
+func startDrift(t *testing.T, change func([]cube.Message) []cube.Message, edit ...func(*Options)) *driftRig {
 	t.Helper()
 	greeting, err := fakecube.RoomsFixture()
 	if err != nil {
@@ -71,8 +71,12 @@ func startDrift(t *testing.T, change func([]cube.Message) []cube.Message) *drift
 		t.Fatal(err)
 	}
 	clock := &checkClock{}
-	s := New(Options{Cubes: []CubeConfig{cfg}, Store: st, Queue: engine.Options{Gap: time.Millisecond}, PollInterval: 50 * time.Millisecond,
-		driftClock: clock.now, driftEvery: -1})
+	opts := Options{Cubes: []CubeConfig{cfg}, Store: st, Queue: engine.Options{Gap: time.Millisecond}, PollInterval: 50 * time.Millisecond,
+		driftClock: clock.now, driftEvery: -1}
+	for _, e := range edit {
+		e(&opts)
+	}
+	s := New(opts)
 	ctx, cancel := context.WithCancel(context.Background())
 	go s.Run(ctx)
 	ts := httptest.NewServer(s.Handler())

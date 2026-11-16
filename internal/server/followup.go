@@ -195,7 +195,7 @@ func (f *followUp) nextDue(now time.Time, rt *runtime) time.Time {
 // budget when nothing else is left.
 func (s *Server) followUpStep(ctx context.Context, rt *runtime) {
 	s.structureStep(ctx, rt)
-	s.confirmStep(rt)
+	s.confirmStep(ctx, rt)
 	f := rt.follow
 	now := time.Now()
 	f.mu.Lock()

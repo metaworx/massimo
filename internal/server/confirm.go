@@ -19,7 +19,8 @@ package server
 // all kept in memory, for the writes of the API and of the LAN proxy's
 // clients whose payload decodes (proxyWrote). A configuration write is
 // confirmed by the device's C line instead, at the follow-up's re-reads
-// (Block 2, confirm_config.go).
+// (Block 2, confirm_config.go). A room setpoint of the API's that is not
+// confirmed is sent once more (AP RadioHealth v1.3, Block 8, resend.go).
 
 import (
 	"context"
@@ -90,6 +91,14 @@ type confirmWrite struct {
 	open  map[cube.RFAddress][]string
 	shown int  // the devices that showed every field
 	late  bool // past the deadline: the unconfirmed event is out
+	// devices are the devices the write is for, each once.
+	devices []cube.RFAddress
+	// sent is a room setpoint of the API's as it went, which is sent once
+	// more where its members do not show it (resend.go); nil for every
+	// other write.
+	sent *roomSetpoint
+	// resend marks that re-send's own write: never sent again.
+	resend bool
 }
 
 // confirmations are a Cube's writes not confirmed yet, in the order of
@@ -98,6 +107,10 @@ type confirmations struct {
 	mu     sync.Mutex
 	within time.Duration
 	writes []*confirmWrite
+	// setAt is, per room, when a setpoint to it or to one of its devices
+	// was last asked for, by the API or a client of the LAN proxy: a
+	// newer write that supersedes an older one's re-send (resend.go).
+	setAt map[uint8]time.Time
 }
 
 // setpointWant is what a 0x40 write sets in the devices' L entries: the
@@ -228,11 +241,12 @@ func (rt *runtime) beginConfirm(w *confirmWrite, devices []cube.RFAddress) strin
 	c := &rt.confirms
 	snap := rt.client.Snapshot()
 	c.mu.Lock()
-	w.at, w.due, w.open = now, now.Add(c.within), map[cube.RFAddress][]string{}
+	w.at, w.due, w.open, w.devices = now, now.Add(c.within), map[cube.RFAddress][]string{}, nil
 	for _, rf := range devices {
-		if _, dup := w.open[rf]; dup {
+		if slices.Contains(w.devices, rf) {
 			continue
 		}
+		w.devices = append(w.devices, rf)
 		c.replaceLocked(w, rf)
 		if m := w.missingOf(snap, rf, nil); len(m) > 0 {
 			w.open[rf] = m
@@ -322,14 +336,15 @@ func report(w *confirmWrite, devices ...cube.RFAddress) confirmReport {
 
 // confirmState checks the open writes to rf against its state, at each
 // state event, and returns the lines of those it now shows after their
-// deadline.
+// deadline, and of a re-send every device of which shows it in time
+// (resend.go).
 func (s *Server) confirmState(rt *runtime, rf cube.RFAddress) []event {
 	snap := rt.client.Snapshot()
 	if st, ok := snap.State(rf); !ok || !st.Valid {
 		return nil
 	}
 	c := &rt.confirms
-	var late []confirmReport
+	var late, done []confirmReport
 	c.mu.Lock()
 	c.writes = slices.DeleteFunc(c.writes, func(w *confirmWrite) bool {
 		fields, open := w.open[rf]
@@ -345,6 +360,9 @@ func (s *Server) confirmState(rt *runtime, rf cube.RFAddress) []event {
 		}
 		delete(w.open, rf)
 		w.shown++
+		if len(w.open) == 0 && w.resend && !w.late {
+			done = append(done, report(w))
+		}
 		return len(w.open) == 0
 	})
 	c.mu.Unlock()
@@ -352,17 +370,22 @@ func (s *Server) confirmState(rt *runtime, rf cube.RFAddress) []event {
 	for _, r := range late {
 		out = append(out, s.confirmedLate(rt, r))
 	}
+	for _, r := range done {
+		out = append(out, s.resendConfirmed(r))
+	}
 	return out
 }
 
 // confirmStep looks, in the follow-up loop, at the writes whose deadline
 // has come: what their devices show now, and an unconfirmed event for
-// each write that a device does not show yet.
-func (s *Server) confirmStep(rt *runtime) {
+// each write that a device does not show yet, which for a room setpoint
+// of the API's is sent once more (resend.go); a re-send's own write has
+// its outcome instead.
+func (s *Server) confirmStep(ctx context.Context, rt *runtime) {
 	now := time.Now()
 	snap := rt.client.Snapshot()
 	c := &rt.confirms
-	var due []confirmReport
+	var due, done []confirmReport
 	c.mu.Lock()
 	c.writes = slices.DeleteFunc(c.writes, func(w *confirmWrite) bool {
 		if w.late || w.byConfig || w.due.After(now) {
@@ -379,6 +402,9 @@ func (s *Server) confirmStep(rt *runtime) {
 			w.shown++
 		}
 		if len(left) == 0 {
+			if w.resend {
+				done = append(done, report(w))
+			}
 			return true
 		}
 		w.late = true
@@ -386,8 +412,18 @@ func (s *Server) confirmStep(rt *runtime) {
 		return false
 	})
 	c.mu.Unlock()
+	for _, r := range done {
+		rt.emit(s.resendConfirmed(r))
+	}
 	for _, r := range due {
-		rt.emit(s.unconfirmed(rt, r))
+		ev := s.unconfirmed(rt, r)
+		if r.w.resend {
+			ev.Summary["outcome"] = outcomeResendNot
+		}
+		rt.emit(ev)
+		if r.w.sent != nil && !r.w.resend {
+			s.resendUnconfirmed(ctx, rt, r)
+		}
 	}
 }
 
@@ -538,6 +574,8 @@ func (rt *runtime) setConfirmation(d *view.Device) {
 
 // setpointConfirm starts confirming a setpoint write the Cube took: a
 // room's to each of its visible thermostats, a device's to the device.
+// A room's of the API's keeps what it sent, to send it once more where
+// its members do not show it (resend.go).
 func (rt *runtime) setpointConfirm(ctx context.Context, t cube.Target, device cube.RFAddress, st cube.SetTemperature, source string) string {
 	w := &confirmWrite{what: writeSetpoint, source: source, command: commandOf(ctx), want: setpointWant(st)}
 	devices := []cube.RFAddress{device}
@@ -545,6 +583,9 @@ func (rt *runtime) setpointConfirm(ctx context.Context, t cube.Target, device cu
 		radiators, walls := roomThermostats(rt, t.RoomID)
 		devices = append(radiators, walls...)
 		w.target, w.room = roomTarget(t.RoomID), t.RoomID
+		if source == "api" && t.Room {
+			w.sent = &roomSetpoint{target: t, st: st}
+		}
 	} else {
 		w.target = "device:" + device.String()
 	}
@@ -567,6 +608,7 @@ func (rt *runtime) proxyConfirm(c cube.RadioCommand) {
 			return
 		}
 		w.what, w.want = writeSetpoint, setpointWant(st)
+		rt.setpointAsked(c.Target) // a newer write than an API's waiting re-send (resend.go)
 	case cube.RFLockControls:
 		locked, err := c.Locked()
 		if err != nil {

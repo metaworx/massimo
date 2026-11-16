@@ -103,6 +103,17 @@ var settleRules = map[string]settleRule{
 	// a flag set for a day (errorwatch.go): the same flag of the same
 	// device clear again
 	"error_watch": {by: []string{"error_watch"}, match: sameFlagCleared},
+	// a room setpoint its members did not show in time, its re-send not
+	// shown either or failed: a later re-send to the same room that every
+	// member shows (resend.go); any other write's only by a mark
+	"unconfirmed": {by: []string{"unconfirmed"}, match: resendSettles},
+}
+
+// resendSettles: a later re-send of a setpoint to the same room that
+// every member shows.
+func resendSettles(alert, later *event) bool {
+	return summaryText(later, "outcome") == outcomeResendOK && summaryText(later, "target") == summaryText(alert, "target") &&
+		summaryText(alert, "write") == writeSetpoint && summaryText(alert, "room") != ""
 }
 
 // deviceFlags are a device's state's flags that are alerts while set.
