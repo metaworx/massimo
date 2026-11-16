@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/base64"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -209,28 +210,36 @@ func TestVirtualWallThermostatEvents(t *testing.T) {
 	if err := fc.SetState(0x0a0205, fakecube.State{ActualTemp: &temp}); err != nil {
 		t.Fatal(err)
 	}
-	wait := func(evs <-chan sseEvent, device string) sseEvent {
+	// The pump publishes the rooms' events from the snapshot as it stands
+	// at each event it handles: one still busy with the greeting can send
+	// a room's new temperature before the member's own event. So each
+	// stream is read until every event wanted has come, in any order, a
+	// room's older events passed over.
+	is := func(ev sseEvent, device, has string) bool {
+		return ev.kind == "state" && strings.Contains(ev.data, `"device":"`+device+`"`) && strings.Contains(ev.data, has)
+	}
+	waitAll := func(evs <-chan sseEvent, want ...[2]string) map[string]sseEvent {
 		t.Helper()
-		for {
+		got := map[string]sseEvent{}
+		for len(got) < len(want) {
 			ev := next(t, evs)
-			if ev.kind == "state" && strings.Contains(ev.data, `"device":"`+device+`"`) {
-				return ev
+			for _, w := range want {
+				if _, ok := got[w[0]]; !ok && is(ev, w[0], w[1]) {
+					got[w[0]] = ev
+				}
 			}
 		}
+		return got
 	}
-	wait(all, "0a0205")
-	if ev := wait(all, "000002"); !strings.Contains(ev.data, `"actual_temp":21`) {
-		t.Fatalf("room 2's event: %s", ev.data)
-	}
+	waitAll(all, [2]string{"0a0205", ""}, [2]string{"000002", `"actual_temp":21`})
 	wall := 20.1
 	if err := fc.SetState(0x0a0201, fakecube.State{ActualTemp: &wall}); err != nil {
 		t.Fatal(err)
 	}
-	ev := wait(virtual, "000001")
-	if !strings.Contains(ev.data, `"actual_temp":20.1`) || !strings.Contains(ev.data, `"changes"`) {
+	if ev := waitAll(virtual, [2]string{"000001", `"actual_temp":20.1`})["000001"]; !strings.Contains(ev.data, `"changes"`) {
 		t.Fatalf("room 1's event: %s", ev.data)
 	}
-	wait(real, "0a0201")
+	waitAll(real, [2]string{"0a0201", ""})
 	for {
 		select {
 		case e := <-real:
@@ -251,6 +260,52 @@ func TestVirtualWallThermostatEvents(t *testing.T) {
 	defer rt.subsMu.Unlock()
 	if len(rt.replay) == 0 {
 		t.Fatal("nothing kept for replay")
+	}
+}
+
+// The view virtual leaves out every event of the real wall thermostat,
+// not only the state events the pump marks: a mismatch of its
+// configuration too, which a stream opened before the pump came to it
+// would otherwise carry; the views that show it carry the event.
+func TestVirtualViewLeavesOutTheRealWallsEvents(t *testing.T) {
+	_, ts, s, _ := startRooms(t)
+	rt := s.cubes["keq0000100"]
+	stream := func(kind string, burst int) <-chan sseEvent {
+		evs := readStreamURL(t, ts.URL+"/api/v1/cubes/KEQ0000100/events?devices="+kind)
+		for range burst {
+			next(t, evs)
+		}
+		return evs
+	}
+	all, virtual := stream("all", 10), stream("virtual", 9)
+	mismatch := func(device string) event {
+		return event{Kind: "mismatch", Source: "cube", Level: "warn", Device: device, Time: time.Now(), Summary: map[string]any{"finding": "programme"}}
+	}
+	rt.send(mismatch("0a0201")) // the real wall thermostat
+	rt.send(mismatch("0a0204")) // a radiator thermostat, in every view
+	upTo := func(evs <-chan sseEvent, device string) []string {
+		t.Helper()
+		var got []string
+		for {
+			ev := next(t, evs)
+			if ev.kind != "mismatch" {
+				continue
+			}
+			for _, d := range []string{"0a0201", "0a0204"} {
+				if strings.Contains(ev.data, `"device":"`+d+`"`) {
+					got = append(got, d)
+				}
+			}
+			if strings.Contains(ev.data, `"device":"`+device+`"`) {
+				return got
+			}
+		}
+	}
+	if got := upTo(virtual, "0a0204"); !slices.Equal(got, []string{"0a0204"}) {
+		t.Fatalf("the virtual view's mismatches: %v", got)
+	}
+	if got := upTo(all, "0a0204"); !slices.Equal(got, []string{"0a0201", "0a0204"}) {
+		t.Fatalf("the view all's mismatches: %v", got)
 	}
 }
 
