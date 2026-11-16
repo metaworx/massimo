@@ -115,7 +115,6 @@ function fmtUntil(text) {
 function renderRooms() {
   MassimoParts.rooms.render();
   $("house").classList.toggle("hidden", !state.rooms.some(roomThermostat));
-  renderHouseRooms();
   $("unlisted").classList.toggle("hidden", !state.unlisted.length);
 }
 
@@ -360,7 +359,7 @@ async function deleteRoom(room) {
 // closePanels closes every inline panel (vacation, delete confirm,
 // House), for the Escape key; dropdown (components.js) closes the menus.
 function closePanels() {
-  if (!housePanel().classList.contains("hidden")) closeHouse();
+  if (houseOpen()) closeHouse(); // house.js
   for (const room of state.rooms) {
     const ui = state.ui[room.id];
     if (!ui) continue;

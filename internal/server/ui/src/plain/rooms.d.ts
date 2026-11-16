@@ -40,6 +40,8 @@ declare global {
   const MIN_TEMP: number;
   /** The highest temperature a thermostat takes, 30.5 °C. */
   const MAX_TEMP: number;
+  /** The setpoint the House panel sends for MANU where no temperature is given. */
+  const DEFAULT_TEMP: number;
   /** How long a result that went well stays shown, in ms. */
   const RESULT_FADE_MS: number;
   /** What the room's tile keeps, made the first time it is asked for. */

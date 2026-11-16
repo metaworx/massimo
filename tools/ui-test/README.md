@@ -196,8 +196,10 @@ hence `failed_checks_forgotten`.
   typed stays; a name typed in the configuration stays, also once the
   focus has left; a click on + counts with a state event or a reload
   between its press and its release, and from the configuration; the tile
-  is the element it was; a new setpoint is shown.
-  Sixteen of them failed on the page before the move.
+  is the element it was; a new setpoint is shown;
+  in the House panel a room unticked and the focus on its checkbox stay
+  through a reload of the rooms.
+  Seventeen of them failed on the page before the move.
 - `test_stream.py`:
   the event stream opens with tickets only, never with the token,
   and after a refused stream (the test hands out a used ticket first,

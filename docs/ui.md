@@ -434,6 +434,8 @@ Every room has a tile:
 The **House** tile sets several rooms at once: ECO, AUTO,
 COMFORT or MANU with a temperature, permanently or until a date and time;
 its **Send** is off while no room is ticked.
+What its panel holds stays when the rooms load again and when it closes:
+the rooms ticked, the mode, the end typed.
 
 **Devices without a room** are listed at the end:
 a device just paired, or one the original software paired through the proxy
@@ -1516,7 +1518,7 @@ a script for each region of the page, in the order the page loads them:
   and the actions behind a tile; `tiles.js`, the tile's actions that stay plain
   and a finding of the Cube's lines in words;
   `unlisted.js`, a device removed from the Cube;
-  `house.js`, the House tile;
+  `house.js`, the House tile's plain names, which call its part;
 - `week-program.js` and `config.js`, a room's configuration;
 - `log.js`, the log and its sign for unseen problems;
   `pages.js`, the pages, the main menu, the address and the scroll;
@@ -1701,23 +1703,33 @@ around the parts' places and not in them,
 and the home notice's place is shown and hidden by the plain code (and by `pages.js`),
 the part drawing inside it.
 The rooms (`ui/src/rooms/`) are the third:
-`index.tsx` draws a tile per room of the chosen Cube in `#rooms`,
+`index.tsx` draws the House tile's modes and panel in `#house-slot`,
+a tile per room of the chosen Cube in `#rooms`,
 kept by the Cube and the room's id, and the devices without a room in `#unlisted-devices`,
-and registers `render`, `data`, `unlisted`, `room`, `result` and `ui`,
+and registers `render`, `data`, `unlisted`, `room`, `result`, `ui`,
+`houseOpen` and `closeHouse`,
 which `rooms.js` calls as `renderRooms`, `updateDevice` (`data` for a room's device,
-`unlisted` for one in no room), `rerenderRoom`, `showTileResult` and `roomUI`;
+`unlisted` for one in no room), `rerenderRoom`, `showTileResult` and `roomUI`,
+and `house.js` by their own names;
 `store.ts` holds its counter, a counter per room that a state event of one of its
 devices raises and one per room's configuration, what a tile keeps (`newUI`,
 the live object `roomUI` gives the plain actions, which set it as before)
+and what the House tile's panel keeps (`house`: the mode, the duration,
+the temperature and the end typed, the rooms unticked, the last result),
+across its close too,
 and the timer of an open window's next state by the clock;
 `facts.ts` what the rooms alone read of a room and its devices
 (a mode's badge, the problems of a tile's head and of a device's row with their label,
 a device's badges in words, the note of devices not seen for long);
 `Tile.tsx` the tile, `Devices.tsx` a device's row and a tile's device list,
+`House.tsx` the House tile, its temperature a `Stepper`, its end a `DateTime`,
+its mode and its duration a choice of radio buttons side by side of its own (`Segments`),
+its Send and Cancel a `FormFooter`;
 `Unlisted.tsx` the devices without a room, each row a device's row with
 Put into a room… and Remove from the Cube;
 the section of the devices without a room is shown and hidden by `rooms.js`,
-its message line is `unlisted.js`'s (`showUnlistedResult`).
+its message line, `#unlisted-msg` of the partial, an `actionRunner`'s, a success fading,
+and the House tile's section, with its title, is shown and hidden by `rooms.js` too.
 The tile's actions stay plain (`rooms.js`, `tiles.js`) and set `roomUI`,
 which the tile follows: a write running turns its button and keeps the others off,
 a stepper value waiting to be sent shows with Save and Cancel.

@@ -4,11 +4,13 @@
 /**
  * @file internal/server/ui/src/rooms/index.tsx
  *
- * The rooms as parts (AP UiParts, Block 7): a tile per room of the chosen
- * Cube in #rooms, with its device list, and the devices without a room in
- * #unlisted-devices, each built once per room or device and updated in
- * place. The plain code calls MassimoParts.rooms (rooms.js renderRooms,
- * rerenderRoom, updateDevice, showTileResult and roomUI);
+ * The rooms as parts (AP UiParts, Block 7): the House tile's modes and its
+ * panel in #house-slot, a tile per room of the chosen Cube in #rooms, with
+ * its device list, and the devices without a room in #unlisted-devices,
+ * each built once per room or device and updated in place. The plain code
+ * calls MassimoParts.rooms (rooms.js renderRooms, rerenderRoom,
+ * updateDevice, showTileResult and roomUI, house.js houseOpen and
+ * closeHouse);
  * the tile's actions stay plain and set the tile's live state, which the
  * tile follows. The configuration (config.js), the repairs (repair.js) and
  * the form that puts a device into a room (pairing.js) stay plain inside.
@@ -16,9 +18,10 @@
 
 import { fader, type Outcome } from "../shared/action";
 import { mounter, register } from "../shared/region";
+import { closeHouse, House } from "./House";
 import { Tile } from "./Tile";
 import { UNLISTED, Unlisted } from "./Unlisted";
-import { changed, load, newUI, planWindows, roomOf, tickOf } from "./store";
+import { changed, house, load, newUI, planWindows, roomOf, tickOf } from "./store";
 
 /** Rooms is a tile per room, kept by its Cube and its id for as long as the room is there. */
 function Rooms() {
@@ -26,7 +29,7 @@ function Rooms() {
   return <>{state.rooms.map((r) => <Tile key={(state.roomsOf || "") + ":" + r.id} room={r} />)}</>;
 }
 
-const mounts = [mounter("rooms", () => <Rooms />), mounter("unlisted-devices", () => <Unlisted />)];
+const mounts = [mounter("house-slot", () => <House />), mounter("rooms", () => <Rooms />), mounter("unlisted-devices", () => <Unlisted />)];
 
 /** Per room, how its tile's result line is set, a success fading as an action runner's does (fader). */
 const results = new Map<number, (res: Outcome | null) => void>();
@@ -79,6 +82,12 @@ const rooms = register("rooms", {
   },
   /** ui makes what a room's tile keeps, live (roomUI). */
   ui: newUI,
+  /** houseOpen says whether the House tile's panel is open (house.js houseOpen). */
+  houseOpen(): boolean {
+    return house.open;
+  },
+  /** closeHouse closes the House tile's panel (house.js closeHouse, Escape). */
+  closeHouse,
 });
 
 /** MassimoParts.rooms, as index.ts declares it. */

@@ -229,7 +229,7 @@ def test_house_send_turns_and_needs_a_room(page, case):
         assert busy_state(page, "#house-panel button[type=submit]") == [False, False, None], "Send is back once every room answered"
     finally:
         page.unroute("**/rooms/*/setpoint")
-    page.locator("#house-cancel").click()
+    page.locator("#house-panel .form-cancel").click()
 
 
 def test_boost_from_the_room_menu(page, case):

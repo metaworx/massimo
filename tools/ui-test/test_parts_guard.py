@@ -500,7 +500,6 @@ NOT_MOVED = {
     "room-config": "plain inside its tile (config.js, Block 8): a data event fills it again, but while the focus is in it; "
                    "once the focus leaves, the fill put off comes: every element is new, and what is typed and not yet "
                    "taken by a change event is gone",
-    "house": "a rooms reload builds the rooms' checkboxes again (renderHouseRooms): the ticks are carried over, the focus is not",
     "sign-in": "the dialog is filled again at each askLogin",
 }
 

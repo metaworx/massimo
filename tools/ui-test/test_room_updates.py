@@ -2,9 +2,11 @@
 # Copyright (C) 2026 The Massimo Authors
 """A room tile keeps what is open, focused, typed and selected in it
 when data comes in (AP UiParts, Block 7): the cases of the room tile in
-the fresh look's probe and the spike's four more, each a test. Before the tiles were parts, a state event built the
-tile again and a reload of the rooms every tile, and sixteen of the
-twenty cases lost what the user had.
+the fresh look's probe and the spike's four more, each a test, and the
+House panel's two. Before the tiles were parts, a state event built the
+tile again and a reload of the rooms every tile and the House panel's
+checkboxes, and sixteen of the twenty cases lost what the user had, and
+one of the House panel's.
 
 Data comes the way the page gets it: a state event is updateDevice with
 a device of the room as it is, what every state event of the stream
@@ -359,3 +361,34 @@ def test_new_setpoint_is_shown(page, case):
     }""", rid)
     assert wait_until(page, "document.querySelector(%r).textContent.includes('27')" % (tile + " .setpoint-big"), 3), \
         "the new setpoint: " + page.locator(tile + " .setpoint-big").inner_text()
+
+
+def open_house(page):
+    """The House panel opened with AUTO."""
+    page.locator("#house-auto").click()
+    page.locator("#house-panel").wait_for(state="visible")
+
+
+def test_house_room_unticked_stays(page, case):
+    """A room unticked in the House panel stays unticked through a reload
+    of the rooms."""
+    held(page)
+    open_house(page)
+    box = page.locator("#house-rooms input[data-room]").first
+    box.uncheck()
+    rooms_loaded(page)
+    checked = page.locator("#house-rooms input[data-room]").first.is_checked()
+    page.locator("#house-panel .form-cancel").click()
+    assert not checked, "the room is still unticked"
+
+
+def test_house_focus_stays(page, case):
+    """The focus on a room's checkbox in the House panel stays through a
+    reload of the rooms."""
+    held(page)
+    open_house(page)
+    page.locator("#house-rooms input[data-room]").first.focus()
+    rooms_loaded(page)
+    focus = page.evaluate("document.activeElement === document.querySelector('#house-rooms input[data-room]')")
+    page.locator("#house-panel .form-cancel").click()
+    assert focus, f"the focus on the room's checkbox: {active(page)}"

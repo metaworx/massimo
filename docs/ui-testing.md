@@ -634,7 +634,7 @@ which the guard does not apply.
 The Cubes list and Cube settings left the list with their move to parts
 (AP UiParts, Block 5), the header's problems list with the header's
 (Block 6), with a view of the list open and one of the Cube choice open
-with the Cubes found, the room tiles with theirs (Block 7).
+with the Cubes found, the room tiles and the House tile with theirs (Block 7).
 The devices without a room left it with the rooms too: their view answers
 `GET …/devices` with the server's answer and one device without a room
 (`UNLISTED_STUB`), and opens its form that puts it into a room.

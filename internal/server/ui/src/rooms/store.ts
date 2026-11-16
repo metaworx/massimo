@@ -9,7 +9,8 @@
  * UiParts, Block 15): the load counter of every tile, a counter per room,
  * which a state event of one of its devices raises, and the counter of
  * its configuration, which stays plain inside the tile (config.js); what
- * a tile keeps (roomUI) is live state, made here for rooms.js.
+ * a tile keeps (roomUI) is live state, made here for rooms.js, and so is
+ * what the House tile's panel keeps.
  */
 
 import { counter } from "../shared/counter";
@@ -36,6 +37,22 @@ export function newUI(): RoomUI {
   return live<RoomUI>({ open: false, pending: null, timer: null, vacation: false, confirm: false, config: null, deferred: false, sending: null,
     hold: false, result: null });
 }
+
+/**
+ * What the House tile's panel keeps, across its close too: open, the mode
+ * chosen, permanently or until, the temperature and the end typed, the
+ * rooms unticked (a room is ticked until it is unticked), and the result
+ * of the last Send.
+ */
+export const house = live({
+  open: false,
+  mode: "auto",
+  duration: "permanent" as "permanent" | "until",
+  temp: "20",
+  until: "",
+  ticks: {} as Record<number, boolean>,
+  result: null as { text: string; ok: boolean } | null,
+});
 
 /** roomOf is the room of the id as the page has it now, undefined once it is gone. */
 export function roomOf(id: number): PageRoom | undefined {
