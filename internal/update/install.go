@@ -15,6 +15,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"go.metaworx.ch/massimo/internal/safefile"
 )
 
 // PrevPath is where the binary before the last update is kept.
@@ -128,7 +130,7 @@ func Rollback(target, keep string) error {
 		if err := swapRenaming(prev, target, swap); err != nil {
 			return err
 		}
-		return os.Rename(swap, keep)
+		return safefile.Rename(swap, keep, 0)
 	}
 	if err := keepAs(target, swap); err != nil {
 		return err
@@ -145,16 +147,18 @@ func Rollback(target, keep string) error {
 // swapRenaming puts src in target's place and moves target to aside, for
 // Windows, which lets a running .exe be renamed but not replaced. Unlike
 // the rename over target elsewhere, there is a moment without target; a
-// failure in it puts target back.
+// failure in it puts target back. A file another process holds for a
+// moment - a virus scanner reading the binary just installed, a process
+// still exiting from the old one - is waited for (safefile.Rename).
 func swapRenaming(src, target, aside string) error {
-	if err := os.Remove(aside); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := safefile.Remove(aside, 0); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	if err := os.Rename(target, aside); err != nil {
+	if err := safefile.Rename(target, aside, 0); err != nil {
 		return err
 	}
-	if err := os.Rename(src, target); err != nil {
-		if rerr := os.Rename(aside, target); rerr != nil {
+	if err := safefile.Rename(src, target, 0); err != nil {
+		if rerr := safefile.Rename(aside, target, 0); rerr != nil {
 			return fmt.Errorf("%v; and putting %s back failed: %v", err, target, rerr)
 		}
 		return err

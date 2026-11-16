@@ -1,0 +1,137 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 The Massimo Authors
+
+package ch.metaworx.massimo
+
+import org.json.JSONObject
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
+import org.junit.Rule
+import org.junit.Test
+import org.junit.rules.TemporaryFolder
+import java.io.File
+
+class ServerStoreTest {
+    @get:Rule
+    val tmp = TemporaryFolder()
+
+    private fun file() = File(tmp.root, "servers.json")
+
+    private fun input(vararg kv: Pair<String, Any>) = JSONObject().apply { kv.forEach { (k, v) -> put(k, v) } }
+
+    private fun refused(text: Int, block: () -> Unit) {
+        try {
+            block()
+            fail("not refused")
+        } catch (e: BridgeException) {
+            assertEquals(text, e.text)
+        }
+    }
+
+    @Test
+    fun saveAddsInOrderWithAnId() {
+        val st = ServerStore(file())
+        val a = st.save(input("name" to "Home", "node" to "node-a", "lan" to "http://192.168.1.20:8099/", "biometric" to true))
+        val b = st.save(input("name" to "Cabin", "remote" to "https://massimo.example.net/"))
+        assertTrue(a.id.isNotEmpty())
+        assertNotEquals(a.id, b.id)
+        assertEquals(listOf("Home", "Cabin"), st.list().map { it.name })
+        assertEquals("node-a", a.node)
+        assertTrue(a.biometric)
+        assertFalse(b.biometric)
+        assertEquals("", a.fp)
+    }
+
+    @Test
+    fun saveReplacesInPlaceAndKeepsThePin() {
+        val st = ServerStore(file())
+        val a = st.save(input("name" to "Home", "lan" to "http://192.168.1.20:8099/"))
+        st.save(input("name" to "Cabin", "lan" to "http://192.168.1.21:8099/"))
+        val fp = Fingerprint.of(byteArrayOf(7))
+        st.trust(a.id, fp)
+        val again = st.save(input("id" to a.id, "name" to "House", "lan" to "https://192.168.1.20:8443/", "fp" to "ignored"))
+        assertEquals(a.id, again.id)
+        assertEquals(fp, again.fp)
+        assertEquals(listOf("House", "Cabin"), st.list().map { it.name })
+    }
+
+    @Test
+    fun saveOfAnUnknownIdIsRefused() {
+        refused(R.string.err_no_server) { ServerStore(file()).save(input("id" to "nope", "lan" to "http://192.168.1.20/")) }
+    }
+
+    @Test
+    fun addressesAreChecked() {
+        val st = ServerStore(file())
+        refused(R.string.err_no_address) { st.save(input("name" to "x")) }
+        for (bad in listOf(
+            "http://192.168.1.20:8099",
+            "https://user@massimo.example.net/",
+            "https://massimo.example.net/?x=1",
+            "https://massimo.example.net/#top",
+            "ftp://massimo.example.net/",
+            "https://appassets.androidplatform.net/",
+            "massimo.example.net/",
+        )) {
+            refused(R.string.err_bad_address) { st.save(input("lan" to bad)) }
+        }
+        assertEquals("https://massimo.example.net/massimo/", ServerStore.address(" https://massimo.example.net/massimo/ "))
+        assertEquals("", ServerStore.address(""))
+    }
+
+    @Test
+    fun aServerWithoutANameIsNamedByItsHost() {
+        val s = ServerStore(file()).save(input("name" to "  ", "remote" to "https://massimo.example.net/"))
+        assertEquals("massimo.example.net", s.name)
+    }
+
+    @Test
+    fun valuesOfTheWrongTypeAreNone() {
+        val s = ServerStore(file()).save(input("name" to 3, "lan" to "http://192.168.1.20/", "biometric" to "yes", "node" to JSONObject.NULL))
+        assertEquals("192.168.1.20", s.name)
+        assertEquals("", s.node)
+        assertFalse(s.biometric)
+    }
+
+    @Test
+    fun removeForgets() {
+        val st = ServerStore(file())
+        val a = st.save(input("lan" to "http://192.168.1.20/"))
+        st.remove(a.id)
+        st.remove("never-there")
+        assertTrue(st.list().isEmpty())
+        assertNull(st.get(a.id))
+    }
+
+    @Test
+    fun trustTakesFingerprintsAlone() {
+        val st = ServerStore(file())
+        val a = st.save(input("lan" to "https://192.168.1.20:8443/"))
+        refused(R.string.err_bad_fp) { st.trust(a.id, "not one") }
+        refused(R.string.err_no_server) { st.trust("nope", Fingerprint.of(byteArrayOf(1))) }
+        val fp = Fingerprint.of(byteArrayOf(1))
+        st.trust(a.id, fp.removePrefix("SHA256:").lowercase().replace(":", ""))
+        assertEquals(fp, st.get(a.id)?.fp)
+    }
+
+    @Test
+    fun theFileKeepsThemAcrossStarts() {
+        val st = ServerStore(file())
+        val a = st.save(input("name" to "Home", "lan" to "http://192.168.1.20:8099/", "push" to true))
+        st.trust(a.id, Fingerprint.of(byteArrayOf(3)))
+        assertEquals(st.list(), ServerStore(file()).list())
+        assertFalse(File(file().path + ".new").exists())
+    }
+
+    @Test
+    fun aFileItCannotReadIsKeptAside() {
+        file().writeText("{ not json")
+        val st = ServerStore(file())
+        assertTrue(st.list().isEmpty())
+        assertTrue(File(file().path + ".bad").isFile)
+    }
+}

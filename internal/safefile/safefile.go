@@ -93,6 +93,17 @@ func Write(path string, data []byte, o Options) error {
 	})
 }
 
+// Rename renames from to to, as os.Rename does. On Windows, which
+// refuses a rename while another process holds either file - a reader
+// that opened it without FILE_SHARE_DELETE, a process still exiting from
+// it, a virus scanner's look at a new .exe - the refusal is retried for
+// wait, five seconds where it is 0, as Write's own rename is.
+func Rename(from, to string, wait time.Duration) error { return renameOver(from, to, wait) }
+
+// Remove removes path, as os.Remove does, retrying on Windows for wait
+// (five seconds where 0) while another process holds it, as Rename does.
+func Remove(path string, wait time.Duration) error { return removeHeld(path, wait) }
+
 // Replace replaces the file at path with what fill writes to the empty
 // temporary file it is handed by name, as SQLite's VACUUM INTO needs a
 // path; nothing changes at path when fill fails. It has no in-place

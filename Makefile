@@ -249,13 +249,16 @@ ui-test: ui
 ui-screenshots: ui
 	tools/ui-test/run.sh screenshots
 
-# The web UI's brand files into internal/server/ui/brand/: the ui scope of
-# tools/brand/make_brand.py in the chosen flavour (tools/brand/README.md);
-# its Python environment is made the first time, which needs the network.
+# The web UI's brand files into internal/server/ui/brand/, and the Android
+# app's icon into app/android/app/src/main/res-brand/: the ui and android
+# scopes of tools/brand/make_brand.py in the chosen flavour
+# (tools/brand/README.md); its Python environment is made the first time,
+# which needs the network.
 BRAND_VENV = tools/brand/.venv
 ui-brand:
 	@test -x $(BRAND_VENV)/bin/python || { python3 -m venv $(BRAND_VENV) && $(BRAND_VENV)/bin/pip install -q -r tools/brand/requirements.txt; }
 	$(BRAND_VENV)/bin/python tools/brand/make_brand.py --flavour grayorange --i dot --scope ui --out internal/server/ui/brand --yes
+	$(BRAND_VENV)/bin/python tools/brand/make_brand.py --flavour grayorange --scope android --out app/android/app/src/main/res-brand --yes
 
 # Discovery, serve's mDNS announcement and massimo discover on a LAN in
 # Docker, against avahi (tools/lan-test/README.md); needs Docker with

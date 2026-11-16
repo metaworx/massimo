@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Plain HTTP is allowed: a server on the LAN often has no certificate,
+     and the connect page warns for an http:// address outside the private
+     ranges (docs/app.md). Only the system's certificate authorities are
+     trusted, never one a user added; a self-signed certificate is pinned
+     by its fingerprint in the app's code instead. -->
+<network-security-config xmlns:tools="http://schemas.android.com/tools">
+    <base-config
+        cleartextTrafficPermitted="true"
+        tools:ignore="InsecureBaseConfiguration">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Machine-translated from English; not yet reviewed by a native speaker. -->
+<resources>
+    <string name="unlock_title">Sblocca %1$s</string>
+    <string name="webview_outdated">Massimo ha bisogno di una versione più recente di Android System WebView. Aggiornala dal tuo store di app, poi riapri Massimo.</string>
+    <string name="cert_changed_title">Certificato cambiato</string>
+    <string name="cert_changed_text">Il certificato di %1$s non è quello che hai accettato, quindi Massimo non l\'ha aperto. Confronta la nuova impronta nell\'elenco dei server prima di accettarla.</string>
+    <string name="download_unsupported">L\'app non può ancora salvare file. Apri l\'interfaccia web in un browser per scaricarlo.</string>
+    <string name="err_not_allowed">Questa pagina non può chiedere questo all\'app.</string>
+    <string name="err_bad_call">La pagina ha chiesto all\'app qualcosa che non conosce.</string>
+    <string name="err_no_server">Questo server non esiste nell\'app.</string>
+    <string name="err_no_address">Un server ha bisogno di un indirizzo nella rete locale o di uno dall\'esterno.</string>
+    <string name="err_bad_address">Non è l\'indirizzo di un server: %1$s</string>
+    <string name="err_open_url">Questo indirizzo non è uno di quelli del server.</string>
+    <string name="err_bad_fp">Non è un\'impronta SHA-256.</string>
+    <string name="err_screen_lock">Imposta prima un blocco schermo sul telefono: l\'impronta o il PIN ne hanno bisogno.</string>
+    <string name="err_not_confirmed">Non confermato: l\'impronta o il PIN restano richiesti.</string>
+    <string name="err_storage">Il telefono non ha potuto conservare l\'accesso: %1$s</string>
+    <string name="err_internal">Qualcosa è andato storto nell\'app: %1$s</string>
+    <string name="probe_unreachable">Non raggiungibile: %1$s</string>
+    <string name="probe_timeout">Nessuna risposta entro quattro secondi.</string>
+    <string name="probe_not_massimo">Questo non è un server Massimo.</string>
+    <string name="probe_status">Il server ha risposto con lo stato %1$d.</string>
+</resources>
