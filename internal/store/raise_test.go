@@ -30,7 +30,7 @@ import (
 
 // losses0024 are the columns a store taken up by 0024 and down again may
 // hold other values in than before, by table, each with the loss of
-// 0024_raise.down.sql that names it. A loss of rows (L2, L6, L7) has no
+// 0024_raise.down.sql that names it. A loss of rows (L2, L6) has no
 // entry: TestRaiseDownLosses checks those rows itself.
 var losses0024 = map[string]map[string]string{
 	"cube_options": {"updated_at": "L7", "updated_by": "L7"},
@@ -215,6 +215,11 @@ func sameFile(t *testing.T, want, got string, ignore map[string]map[string]strin
 		}
 	}
 	wr, gr := fileRows(t, rawDB(t, want), ignore), fileRows(t, rawDB(t, got), ignore)
+	// The AUTOINCREMENT counters are rows too (D17-A): a file of backups
+	// or commands has them, and they are compared as every table is.
+	if len(wr["backups"])+len(wr["commands"]) > 0 && len(wr["sqlite_sequence"]) == 0 {
+		t.Errorf("sqlite_sequence: no counters, though backups or commands have rows")
+	}
 	for table, w := range wr {
 		if g := gr[table]; !slices.Equal(g, w) {
 			t.Errorf("rows of %s:\n%s\nwant\n%s", table, strings.Join(g, "\n"), strings.Join(w, "\n"))
@@ -384,6 +389,10 @@ func v23Store(t *testing.T, dir string, clock func() time.Time) (integ string, u
 	if _, err := s.db.Exec(`DELETE FROM backups WHERE id = (SELECT max(id) FROM backups)`); err != nil {
 		t.Fatal(err)
 	}
+	var top, seq int64
+	if err := s.db.QueryRow(`SELECT (SELECT max(id) FROM backups), (SELECT seq FROM sqlite_sequence WHERE name = 'backups')`).Scan(&top, &seq); err != nil || seq <= top {
+		t.Fatalf("the backups' counter %d, the highest id %d, %v: the purge should leave it above", seq, top, err)
+	}
 	users = map[string]int64{}
 	rows, err := s.db.Query(`SELECT uuid, id FROM users`)
 	if err != nil {
@@ -540,11 +549,11 @@ func TestRaiseOfAFilledStore(t *testing.T) {
 
 // What the raised schema holds and schema 23 cannot is lost by the down
 // part as 0024_raise.down.sql names it: a removed identity (L2), the
-// second row of a role's key (L6) and of a Cube's serial with its log and
-// backups (L7), the name of a user removed after the raise suffixed
-// again (L5), the key of an integration renamed made from its new name
-// (L4); the file is that of schema 23 to the byte, and every foreign key
-// holds.
+// second row of a role's key (L6), the name of a user removed after the
+// raise suffixed again (L5), the key of an integration renamed made from
+// its new name (L4); a second row of a Cube's serial is kept under
+// <serial>~<id> with everything of it (D15-C); the file is that of schema
+// 23 to the byte, and every foreign key holds.
 func TestRaiseDownLosses(t *testing.T) {
 	ctx := context.Background()
 	clock := fixedClock()
@@ -631,20 +640,22 @@ func TestRaiseDownLosses(t *testing.T) {
 	if n := count(`SELECT count(*) FROM roles WHERE key = 'night'`); n != 1 {
 		t.Errorf("L6: %d rows of night", n)
 	}
-	if n := count(`SELECT count(*) FROM cubes WHERE serial = 'KEQ0000001'`); n != 1 || count(`SELECT count(*) FROM cubes WHERE id = ?`, fresh.ID) != 1 {
-		t.Errorf("L7: the live Cube's row not the one kept")
+	if n := count(`SELECT count(*) FROM cubes WHERE serial = 'KEQ0000001' AND id = ?`, fresh.ID); n != 1 {
+		t.Errorf("D15-C: the live Cube's row does not keep the serial")
 	}
-	if n := count(`SELECT count(*) FROM log WHERE cube_id = ?`, old.ID); n != 0 {
-		t.Errorf("L7: %d log rows of the removed Cube's row left", n)
+	if n := count(`SELECT count(*) FROM cubes WHERE serial = ? AND id = ?`, "KEQ0000001~"+strconv.FormatInt(old.ID, 10), old.ID); n != 1 {
+		t.Errorf("D15-C: the removed row not named KEQ0000001~%d", old.ID)
 	}
-	if n := count(`SELECT count(*) FROM backups WHERE cube_id = ?`, old.ID); n != 0 {
-		t.Errorf("L7: %d backups of the removed Cube's row left", n)
+	if n := count(`SELECT count(*) FROM log WHERE cube_id = ?`, old.ID); n != 2 {
+		t.Errorf("D15-C: %d log rows of the removed Cube's row, want its 2", n)
 	}
-	if n := count(`SELECT count(*) FROM commands WHERE cube_id IS NULL AND uuid = 'c-1'`); n != 1 {
-		t.Errorf("L7: the removed row's command not kept without a Cube")
+	if n := count(`SELECT count(*) FROM commands WHERE cube_id = ? AND uuid = 'c-1'`, old.ID); n != 1 {
+		t.Errorf("D15-C: the removed row's command not kept with it")
 	}
-	if n := count(`SELECT count(*) FROM cube_options`); n != 0 {
-		t.Errorf("L7: %d cube_options rows for a Cube whose option is off", n)
+	// L7: the option of the removed row, on, is a row again; the live
+	// row's, off, is none.
+	if n := count(`SELECT count(*) FROM cube_options WHERE cube_id = ?`, old.ID); n != 1 || count(`SELECT count(*) FROM cube_options`) != 1 {
+		t.Errorf("L7: cube_options %d", count(`SELECT count(*) FROM cube_options`))
 	}
 	if n := count(`SELECT count(*) FROM users WHERE id = ? AND name = 'dora-del-20261116-0900'`, dora.ID); n != 1 {
 		t.Errorf("L5: the removed dora not suffixed")
@@ -663,6 +674,143 @@ func TestRaiseDownLosses(t *testing.T) {
 	s = open(t, dir)
 	if v, _ := s.SchemaVersion(); v != raiseVersion {
 		t.Fatalf("migrated again to %d", v)
+	}
+}
+
+// Two rows of one serial (D15-C): the down part keeps both with
+// everything that names them, the removed one under <serial>~<id> in
+// cubes.serial alone, the log byte for byte; 0024 takes the suffix off
+// again, and both rows have the plain serial and all their rows.
+func TestRaiseDownKeepsBothRowsOfASerial(t *testing.T) {
+	ctx := context.Background()
+	clock := fixedClock()
+	dir := t.TempDir()
+	s, err := Open(dir, Options{Logger: quiet(), Now: clock})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fill := func(c Cube, n int) {
+		t.Helper()
+		if err := s.InsertEvent(ctx, Event{CubeID: c.ID, Kind: "state", Source: "device", Serial: "MEQ000010" + strconv.Itoa(n),
+			Data: []byte(`{"kind":"state","cube_serial":"KEQ0000001","n":` + strconv.Itoa(n) + `}`)}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.AddBackup(ctx, Backup{CubeID: c.ID, Reason: ReasonManual, Format: "json"}, []byte(`{"version":`+strconv.Itoa(n)+`}`)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.AddCommand(ctx, Command{CubeID: c.ID, Action: "setpoint"}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.Audit(ctx, AuditEntry{CubeID: c.ID, Action: "setpoint", Target: "cube:KEQ0000001"}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.db.Exec(`INSERT INTO rooms (uuid, cube_id, room_id, created_at, updated_at) VALUES (?, ?, 1, ?, ?)`, newUUID(), c.ID, s.nowText(), s.nowText()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old, err := s.AddCube(ctx, Cube{Serial: "KEQ0000001", Name: "Old", Configured: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fill(old, 1)
+	if _, err := s.db.Exec(`UPDATE cubes SET deleted_at = ? WHERE id = ?`, s.nowText(), old.ID); err != nil {
+		t.Fatal(err)
+	}
+	fresh, err := s.AddCube(ctx, Cube{Serial: "KEQ0000001", Name: "New", Configured: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fill(fresh, 2)
+	s.Close()
+	logRows := func() []string {
+		t.Helper()
+		// Each read closes its connection, which Downgrade's lock needs.
+		db := rawDB(t, dir)
+		defer db.Close()
+		// The columns both schemas have; the user's are none of these rows'.
+		rows, err := db.Query(`SELECT quote(id) || ' ' || quote(uuid) || ' ' || quote(cube_id) || ' ' || quote(time) || ' ' || quote(kind) || ' ' || quote(source) || ' ' ||
+			quote(level) || ' ' || quote(device) || ' ' || quote(serial) || ' ' || quote(data) || ' ' || quote(command_id) || ' ' || quote(visibility) FROM log ORDER BY id`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		var out []string
+		for rows.Next() {
+			var r string
+			rows.Scan(&r)
+			out = append(out, r)
+		}
+		return out
+	}
+	children := func() string {
+		t.Helper()
+		db := rawDB(t, dir)
+		defer db.Close()
+		var b strings.Builder
+		for _, table := range []string{"log", "backups", "rooms", "commands", "audit"} {
+			for _, id := range []int64{old.ID, fresh.ID} {
+				var n int
+				// The names are the test's own.
+				if err := db.QueryRow(`SELECT count(*) FROM `+table+` WHERE cube_id = ?`, id).Scan(&n); err != nil {
+					t.Fatal(err)
+				}
+				fmt.Fprintf(&b, "%s %d: %d; ", table, id, n)
+			}
+		}
+		return b.String()
+	}
+	serials := func() map[int64]string {
+		t.Helper()
+		db := rawDB(t, dir)
+		defer db.Close()
+		rows, err := db.Query(`SELECT id, serial FROM cubes`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		out := map[int64]string{}
+		for rows.Next() {
+			var id int64
+			var sn string
+			rows.Scan(&id, &sn)
+			out[id] = sn
+		}
+		return out
+	}
+	wantLog, wantChildren := logRows(), children()
+	if len(wantLog) != 2 || strings.Contains(wantChildren, ": 0;") {
+		t.Fatalf("the rows made: %v, %s", wantLog, wantChildren)
+	}
+
+	if _, err := Downgrade(dir, 23, Options{Logger: quiet(), Now: clock}); err != nil {
+		t.Fatal(err)
+	}
+	if got := serials(); len(got) != 2 || got[fresh.ID] != "KEQ0000001" || got[old.ID] != "KEQ0000001~"+strconv.FormatInt(old.ID, 10) {
+		t.Fatalf("serials down: %v", got)
+	}
+	if got := children(); got != wantChildren {
+		t.Errorf("down: %s, want %s", got, wantChildren)
+	}
+	if got := logRows(); !slices.Equal(got, wantLog) {
+		t.Errorf("the log down:\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(wantLog, "\n"))
+	}
+
+	migrateOnly(t, dir, nil, clock)
+	if got := serials(); len(got) != 2 || got[fresh.ID] != "KEQ0000001" || got[old.ID] != "KEQ0000001" {
+		t.Fatalf("serials up again: %v", got)
+	}
+	if got := children(); got != wantChildren {
+		t.Errorf("up again: %s, want %s", got, wantChildren)
+	}
+	if got := logRows(); !slices.Equal(got, wantLog) {
+		t.Errorf("the log up again:\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(wantLog, "\n"))
+	}
+	s = open(t, dir)
+	if removed, err := s.RemovedCubes(ctx, "KEQ0000001"); err != nil || len(removed) != 1 || removed[0].ID != old.ID {
+		t.Fatalf("the removed row up again: %+v %v", removed, err)
+	}
+	if c, ok, _ := s.Cube(ctx, "KEQ0000001"); !ok || c.ID != fresh.ID {
+		t.Fatalf("the live row up again: %+v", c)
 	}
 }
 

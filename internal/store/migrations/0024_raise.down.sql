@@ -34,12 +34,17 @@
 --     after its removal), the one not removed stays, else the newest
 --     removed; the others go with their capabilities.
 -- L7. cubes.proxy_virtual goes back into cube_options: a row for each
---     Cube with the option on, its updated_at and updated_by the Cube's; a
---     row with the option off is not made again. Of several rows of one
---     serial (a Cube added again after its removal), the one not removed
---     stays, else the newest removed; the others go with their log,
---     backups and rooms, and their commands and audit rows stay, without
---     a Cube.
+--     Cube row with the option on, its updated_at and updated_by the
+--     Cube's; a row with the option off is not made again.
+--
+-- Not lost (D15-C): of several rows of one serial (a Cube added again
+-- after its removal), the one not removed keeps the serial, else the
+-- newest removed; each other, removed, is named <serial>~<its id> in
+-- cubes.serial alone, so that schema 23's UNIQUE (serial) holds, and
+-- keeps its log, backups, rooms, commands and audit rows. log.serial and
+-- the serials in JSON (log.data, audit.detail) are history and stay as
+-- written. A binary for 23 reads the Cubes not removed alone, and 0024
+-- takes the ~<id> off again.
 -- L8. tokens.revoked_at is deleted_at again, and the old deleted_at,
 --     which no release wrote, is NULL; commands.deleted_at, never
 --     written either, is NULL.
@@ -52,8 +57,8 @@
 -- last_level outside '', view, control and admin.
 
 -- What the tables made again need, kept while they are dropped: the
--- integrations' keys, the names of the users, the role and Cube rows
--- that go, and the sequences.
+-- integrations' keys, the names of the users, the role rows that go, the
+-- Cube rows renamed, and the sequences.
 CREATE TEMP TABLE down_keys (integration_id INTEGER PRIMARY KEY, key TEXT NOT NULL);
 WITH RECURSIVE
     walk(id, rest, out) AS (
@@ -115,13 +120,8 @@ WHERE c.id <> (SELECT k.id FROM cubes k WHERE k.serial = c.serial ORDER BY k.del
 
 CREATE TEMP TABLE down_sequence AS SELECT name, seq FROM sqlite_sequence WHERE name IN ('backups', 'commands');
 
--- L7: what the Cube rows that go leave.
-DELETE FROM log WHERE cube_id IN (SELECT id FROM temp.down_cubes);
-DELETE FROM backup_data WHERE id IN (SELECT b.id FROM backups b WHERE b.cube_id IN (SELECT id FROM temp.down_cubes));
-DELETE FROM backups WHERE cube_id IN (SELECT id FROM temp.down_cubes);
-DELETE FROM rooms WHERE cube_id IN (SELECT id FROM temp.down_cubes);
-UPDATE commands SET cube_id = NULL WHERE cube_id IN (SELECT id FROM temp.down_cubes);
-UPDATE audit SET cube_id = NULL WHERE cube_id IN (SELECT id FROM temp.down_cubes);
+-- D15-C: the other rows of a serial named <serial>~<id>, cubes.serial alone.
+UPDATE cubes SET serial = serial || '~' || id WHERE id IN (SELECT id FROM temp.down_cubes);
 
 -- L6: what the role rows that go leave.
 UPDATE users SET role_id = (SELECT keep FROM temp.down_roles WHERE id = users.role_id) WHERE role_id IN (SELECT id FROM temp.down_roles);
@@ -228,8 +228,8 @@ CREATE TABLE cube_options (
     updated_by    INTEGER REFERENCES users (id)
 );
 INSERT INTO cube_options (cube_id, proxy_virtual, updated_at, updated_by)
-SELECT id, 1, updated_at, updated_by FROM cubes WHERE proxy_virtual = 1 AND id NOT IN (SELECT id FROM temp.down_cubes);
-CREATE TEMP TABLE down_rows AS SELECT * FROM cubes WHERE id NOT IN (SELECT id FROM temp.down_cubes);
+SELECT id, 1, updated_at, updated_by FROM cubes WHERE proxy_virtual = 1;
+CREATE TEMP TABLE down_rows AS SELECT * FROM cubes;
 DROP TABLE cubes;
 CREATE TABLE cubes (
     id                 INTEGER PRIMARY KEY,
