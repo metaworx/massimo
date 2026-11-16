@@ -465,3 +465,44 @@ func TestDNS01ClearsAfterItsTime(t *testing.T) {
 		t.Fatalf("the failed clear is not logged:\n%s", buf.String())
 	}
 }
+
+// A set that fails, as one may after its provider made the record, is
+// followed by the clear all the same, and the order waits for no record.
+func TestDNS01ClearsAfterAFailedSet(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the hook is a shell script")
+	}
+	ca := newFakeCA(t)
+	hookDir := t.TempDir()
+	hook := filepath.Join(hookDir, "hook.sh")
+	calls := filepath.Join(hookDir, "calls.txt")
+	// The hook records its calls; its set fails.
+	os.WriteFile(hook, []byte("#!/bin/sh\necho \"$1 $2 $3\" >> \""+calls+"\"\n[ \"$1\" = clear ]\n"), 0o755)
+	var buf bytes.Buffer
+	log := slog.New(slog.NewTextHandler(&buf, nil))
+	d, err := OpenDNS01(t.TempDir(), []string{"example.net"}, "", ca.url("/directory"), hook, log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	looked := false
+	d.lookupTXT = func(context.Context, string) ([]string, error) { looked = true; return nil, nil }
+	d.dnsEvery = 10 * time.Millisecond
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	if err := d.order(ctx, time.Now()); err == nil || !strings.Contains(err.Error(), "hook set") {
+		t.Fatalf("an order whose set failed: %v, want the set's error", err)
+	}
+	_, callLines := hookCalls(calls)
+	if len(callLines) != 2 || !strings.HasPrefix(callLines[0], "set _acme-challenge.example.net ") || !strings.HasPrefix(callLines[1], "clear _acme-challenge.example.net ") {
+		t.Fatalf("hook calls %q", callLines)
+	}
+	if callLines[0][len("set "):] != callLines[1][len("clear "):] {
+		t.Fatalf("the clear names another record or value than the set: %q", callLines)
+	}
+	if looked {
+		t.Fatal("the order waited for the record of a set that failed")
+	}
+	if strings.Contains(buf.String(), "could not clear") {
+		t.Fatalf("a clear that worked is logged as failed:\n%s", buf.String())
+	}
+}
