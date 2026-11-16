@@ -674,7 +674,7 @@ func alsoText(also []string) string {
 // The translation files hold the texts of the page: each parses, the
 // other languages have no key English lacks (but their own plural forms
 // and the machine-translation note), and English has every key the
-// markup and the scripts ask for.
+// markup, the scripts and the parts ask for.
 func TestUITranslations(t *testing.T) {
 	js, err := uiFiles.ReadFile("ui/i18n.js")
 	if err != nil {
@@ -773,8 +773,38 @@ func TestUITranslations(t *testing.T) {
 			}
 		}
 	}
+	// The parts ask as the scripts do, with t("…"), tn("…") and
+	// tParts("…"). Their files are read from the disk: the bundle is made
+	// from them, and they are not embedded.
+	partCall := regexp.MustCompile(`\b(tn?|tParts)\(\s*"([^"]+)"\s*[,)]`)
+	asked := 0
+	err = fs.WalkDir(os.DirFS("ui/src"), ".", func(name string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || strings.HasSuffix(name, ".d.ts") || !(strings.HasSuffix(name, ".ts") || strings.HasSuffix(name, ".tsx")) {
+			return err
+		}
+		b, err := os.ReadFile(path.Join("ui/src", name))
+		if err != nil {
+			return err
+		}
+		for _, m := range partCall.FindAllStringSubmatch(string(b), -1) {
+			asked++
+			if m[1] == "tn" {
+				used[m[2]+".one"] = "src/" + name
+				used[m[2]+".other"] = "src/" + name
+			} else {
+				used[m[2]] = "src/" + name
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if asked < 20 {
+		t.Fatalf("only %d texts found in the parts under ui/src", asked)
+	}
 	if len(used) < 100 {
-		t.Fatalf("only %d keys found in the markup and the scripts", len(used))
+		t.Fatalf("only %d keys found in the markup, the scripts and the parts", len(used))
 	}
 	for _, k := range slices.Sorted(maps.Keys(used)) {
 		if _, ok := en[k]; !ok {
