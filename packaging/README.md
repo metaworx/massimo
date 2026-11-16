@@ -231,7 +231,9 @@ with `-tls-http :80` the listen drop-in grants the capability for port 80 too.
 `-acme-dns-hook <script>` with `-tls acme -tls-names …` takes the DNS-01
 challenge instead of a port: the server runs
 `<script> set _acme-challenge.<name> <value>` before the validation and
-`<script> clear …` after it, waits until the resolver shows the record,
+`<script> clear …` after it,
+also after a set that failed, so a clear removes only the records of that value;
+it waits until the resolver shows the record,
 and keeps the certificate and its key in `/var/lib/massimo/tls/acme/`.
 The name may point at the box's LAN address,
 and wildcards work (`-tls-names '*.example.net,example.net'`).
@@ -881,8 +883,33 @@ Changes made in the store meanwhile are not in the file,
 so the old binary serves the file's values.
 Updating again opens the database as it was left and logs the lines of the file
 that differ.
-A later binary refuses a file only when a migration changed a meaning (none so far);
-it then names the copy `massimo.db.before-<version>` it made before.
+An older binary refuses a file only when a later migration changed a meaning
+(raised its `min_reader`, docs/store.md, "Migrations");
+it then names the copy `massimo.db.before-<version>` made before it.
+So the rollback looks at the store too:
+where the binary put back refuses it (its `store info`),
+the rollback stops the service and runs the binary it set aside
+(`massimo.failed`, after `-rollback` `massimo.prev`) as
+`store downgrade -to <the old binary's schema version>`,
+which undoes the newer migrations by their down parts;
+where that binary is gone or fails after a failed health check,
+the binary put back does it by the down parts the store keeps.
+Both run as `_massimo`, the owner of `massimo.db`:
+the helper, root, opens no store itself.
+The result is in the update's status and output,
+and the file as it was stays as `massimo.db.before-downgrade-<version>`.
+A binary up to v0.16 has no such rollback:
+after the update from it to one that raised `min_reader`, a failed health check
+leaves the service down, and the newer binary takes the store back by hand,
+`N` being the version that `massimo store info` names in its refusal
+("this one is for version N"):
+
+```bash
+sudo systemctl stop massimo.service
+sudo -u _massimo massimo store info
+sudo -u _massimo /usr/local/bin/massimo.failed store downgrade -to <N>
+sudo systemctl start massimo.service
+```
 
 `install -remove` keeps the data directory, `-purge` removes it with the store.
 

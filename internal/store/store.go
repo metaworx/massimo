@@ -73,7 +73,10 @@ type Store struct {
 	now      func() time.Time
 	version  string
 	readOnly bool
-	hashes   *hashGate // the password hashes at once
+	// exclusive opens the file with locking_mode EXCLUSIVE, for a
+	// command that needs it alone (Downgrade).
+	exclusive bool
+	hashes    *hashGate // the password hashes at once
 
 	schema    int // the file's schema version after Open
 	minReader int
@@ -190,10 +193,18 @@ func newStore(dir string, o Options) *Store {
 
 // open opens the database with the engine settings of docs/store.md
 // section 3: WAL, synchronous=NORMAL, a busy timeout, foreign keys, and
-// one connection, which is the one writer.
+// one connection, which is the one writer; with s.exclusive the
+// connection keeps the file's lock from its first write on.
 func (s *Store) open(readOnly bool) error {
 	q := url.Values{}
-	for _, p := range []string{"busy_timeout(5000)", "foreign_keys(1)"} {
+	busy := "busy_timeout(5000)"
+	if s.exclusive {
+		// A serve's open holds the lock for milliseconds; one that runs
+		// holds it for good, and need not be waited for long.
+		q.Add("_pragma", "locking_mode(EXCLUSIVE)")
+		busy = "busy_timeout(2000)"
+	}
+	for _, p := range []string{busy, "foreign_keys(1)"} {
 		q.Add("_pragma", p)
 	}
 	if readOnly {

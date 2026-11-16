@@ -50,7 +50,7 @@ export SOURCE_DATE_EPOCH ?= $(shell git log -1 --format=%ct 2>/dev/null || date 
 # The container the package test runs in (make deb-test).
 DEB_IMAGE ?= debian:trixie-slim
 
-.PHONY: all ui ui-check build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots ui-brand lan-test actionlint windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages debver version deb-test deb-systemd-test apt-test site build-release release release-files clean release-alpha release-beta release-rc release-stable
+.PHONY: all ui ui-check api-types build test vet race test-armv6 fuzz store-bench ui-test ui-screenshots ui-brand lan-test actionlint windows linux linux-arm64 linux-armv7 linux-armv6 darwin darwin-amd64 darwin-arm64 cross deb-unit packages debver version deb-test deb-systemd-test apt-test site build-release release release-files clean release-alpha release-beta release-rc release-stable
 
 # Development happens on main; a release is a tag on main, whose label is
 # the release's flavour (internal/update): -alpha.N is alpha, -beta.N beta,
@@ -188,6 +188,14 @@ ui:
 ui-check:
 	npm ci --prefix tools/ui-check --ignore-scripts --no-audit --no-fund --loglevel=error --no-update-notifier
 	tools/ui-check/node_modules/.bin/tsc --noEmit -p internal/server/ui/src
+
+# The API's shapes as TypeScript for the parts' type check: tools/apitypes
+# writes internal/server/ui/src/api.d.ts, one declaration per schema of
+# docs/api-v1-openapi.yaml, run again after a change to a schema. git keeps
+# the file; go test (tools/apitypes) fails while it is not current, and
+# go run ./tools/apitypes -check says so without writing.
+api-types:
+	GOOS= GOARCH= GOARM= go run ./tools/apitypes
 
 build: ui
 	go build -ldflags "$(LDFLAGS)" -o massimo $(PKG)

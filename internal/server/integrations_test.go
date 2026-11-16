@@ -76,6 +76,16 @@ func TestIntegrationRegistrationRoutes(t *testing.T) {
 	if code, text := callAPI(t, ts, "POST", approve, "secret", `{"max_caps":["read","setpoint"]}`); code != 200 || !strings.Contains(text, `"key": "casa-leone"`) {
 		t.Fatalf("approve: %d %s", code, text)
 	}
+	// Approved, its key not collected: the integration says until when it may be.
+	var waiting struct {
+		RequestExpires string `json:"request_expires"`
+		RequestCode    string `json:"request_code"`
+	}
+	code, text = callAPI(t, ts, "GET", "/api/v1/integrations/"+req.ID, "secret", "")
+	decodeInto(t, text, &waiting)
+	if code != 200 || waiting.RequestExpires == "" || waiting.RequestCode != "" {
+		t.Fatalf("approved, not collected: %d %s", code, text)
+	}
 	code, text = callAPI(t, ts, "GET", collect, "", "")
 	var got struct{ Key string }
 	decodeInto(t, text, &got)
@@ -87,6 +97,9 @@ func TestIntegrationRegistrationRoutes(t *testing.T) {
 	}
 	if code, _ := callAPI(t, ts, "GET", collect, "", ""); code != 410 {
 		t.Fatalf("collect after the key's use: %d", code)
+	}
+	if code, text := callAPI(t, ts, "GET", "/api/v1/integrations/"+req.ID, "secret", ""); code != 200 || strings.Contains(text, "request_expires") {
+		t.Fatalf("collected, still an expiry: %d %s", code, text)
 	}
 	if code, _ := callAPI(t, ts, "DELETE", "/api/v1/integrations/"+req.ID, "secret", ""); code != 200 {
 		t.Fatalf("revoke: %d", code)

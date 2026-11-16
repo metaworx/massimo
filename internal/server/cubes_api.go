@@ -178,7 +178,7 @@ func (s *Server) postCube(w http.ResponseWriter, r *http.Request) error {
 		return nil
 	}
 	if known {
-		row, err = st.UpdateCube(r.Context(), serial, change)
+		row, err = st.UpdateCube(r.Context(), serial, change, principalOf(r).userID())
 	} else {
 		row = store.Cube{Serial: serial}
 		if err = change(&row); err == nil {
@@ -239,7 +239,7 @@ func (s *Server) putCube(w http.ResponseWriter, r *http.Request) error {
 		return fail(http.StatusBadRequest, "the serial is the path's")
 	}
 	before, _, _ := st.Cube(r.Context(), rt.cubeSerial())
-	row, err := st.UpdateCube(r.Context(), rt.cubeSerial(), req.apply)
+	row, err := st.UpdateCube(r.Context(), rt.cubeSerial(), req.apply, principalOf(r).userID())
 	if err != nil {
 		return storeFail(err)
 	}
@@ -329,7 +329,7 @@ func (s *Server) deleteCube(w http.ResponseWriter, r *http.Request) error {
 	row, err := st.UpdateCube(r.Context(), rt.cubeSerial(), func(c *store.Cube) error {
 		c.Configured, c.Source = false, store.SourceUI
 		return nil
-	})
+	}, principalOf(r).userID())
 	if err != nil {
 		return storeFail(err)
 	}

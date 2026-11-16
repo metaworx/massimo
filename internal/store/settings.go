@@ -105,10 +105,15 @@ func (s *Store) SettingDuration(ctx context.Context, key string) (time.Duration,
 	return d, true, nil
 }
 
-// SetSetting writes a setting; value is marshalled to JSON unless it is
-// a json.RawMessage. The row's version goes up and this node becomes
-// its origin.
+// SetSetting writes a setting for the server itself (SetSettingBy).
 func (s *Store) SetSetting(ctx context.Context, key string, value any) error {
+	return s.SetSettingBy(ctx, key, value, 0)
+}
+
+// SetSettingBy writes a setting for the user by (0: the server itself);
+// value is marshalled to JSON unless it is a json.RawMessage. The row's
+// version goes up, this node becomes its origin and by its updated_by.
+func (s *Store) SetSettingBy(ctx context.Context, key string, value any, by int64) error {
 	if err := s.writable(); err != nil {
 		return err
 	}
@@ -123,9 +128,9 @@ func (s *Store) SetSetting(ctx context.Context, key string, value any) error {
 	if !json.Valid(raw) {
 		return fmt.Errorf("store: setting %s: not JSON", key)
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO settings (key, value, updated_at, origin) VALUES (?, ?, ?, ?)
-		ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at, origin = excluded.origin,
-			version = settings.version + 1, deleted_at = NULL`, key, string(raw), s.nowText(), s.nodeID)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO settings (key, value, updated_at, updated_by, origin) VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at, updated_by = excluded.updated_by,
+			origin = excluded.origin, version = settings.version + 1, deleted_at = NULL`, key, string(raw), s.nowText(), nullID(by), s.nodeID)
 	if err != nil {
 		return fmt.Errorf("store: setting %s: %w", key, err)
 	}
@@ -188,14 +193,22 @@ func (s *Store) SetSecretSetting(ctx context.Context, key string, value any) err
 	return s.SetSetting(ctx, key, sealed)
 }
 
-// DeleteSetting removes a setting, leaving a tombstone (deleted_at) so
-// that the removal can be replicated.
+// DeleteSetting removes a setting for the server itself
+// (DeleteSettingBy).
 func (s *Store) DeleteSetting(ctx context.Context, key string) error {
+	return s.DeleteSettingBy(ctx, key, 0)
+}
+
+// DeleteSettingBy removes a setting for the user by (0: the server
+// itself), leaving a tombstone (deleted_at) so that the removal can be
+// replicated.
+func (s *Store) DeleteSettingBy(ctx context.Context, key string, by int64) error {
 	if err := s.writable(); err != nil {
 		return err
 	}
 	now := s.nowText()
-	_, err := s.db.ExecContext(ctx, `UPDATE settings SET deleted_at = ?, updated_at = ?, origin = ?, version = version + 1 WHERE key = ? AND deleted_at IS NULL`, now, now, s.nodeID, key)
+	_, err := s.db.ExecContext(ctx, `UPDATE settings SET deleted_at = ?, updated_at = ?, updated_by = ?, origin = ?, version = version + 1 WHERE key = ? AND deleted_at IS NULL`,
+		now, now, nullID(by), s.nodeID, key)
 	if err != nil {
 		return fmt.Errorf("store: setting %s: %w", key, err)
 	}

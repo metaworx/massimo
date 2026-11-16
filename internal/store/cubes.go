@@ -210,9 +210,10 @@ func (s *Store) AddCube(ctx context.Context, c Cube) (Cube, error) {
 // UpdateCube changes the row of a serial with change, in one
 // transaction, and writes back the configuration (Configured, Name,
 // Address, FollowDiscovery, ProxyAddress, ProxySerial, Hidden, Source);
-// the discovery columns are NoteDiscovered's. A serial without a row is
+// the discovery columns are NoteDiscovered's. by is the user who made
+// the change, 0 for the server itself. A serial without a row is
 // ErrNotFound; an error from change leaves the row as it was.
-func (s *Store) UpdateCube(ctx context.Context, serial string, change func(*Cube) error) (Cube, error) {
+func (s *Store) UpdateCube(ctx context.Context, serial string, change func(*Cube) error, by int64) (Cube, error) {
 	if err := s.writable(); err != nil {
 		return Cube{}, err
 	}
@@ -233,8 +234,8 @@ func (s *Store) UpdateCube(ctx context.Context, serial string, change func(*Cube
 	}
 	hidden, _ := json.Marshal(normalHidden(c.Hidden))
 	if _, err := tx.ExecContext(ctx, `UPDATE cubes SET configured = ?, name = ?, address = ?, follow_discovery = ?, proxy_address = ?, proxy_serial = ?, hidden = ?, source = ?,
-		updated_at = ?, origin = ?, version = version + 1 WHERE id = ?`,
-		c.Configured, c.Name, c.Address, c.FollowDiscovery, c.ProxyAddress, c.ProxySerial, string(hidden), c.Source, s.nowText(), s.nodeID, c.ID); err != nil {
+		updated_at = ?, updated_by = ?, origin = ?, version = version + 1 WHERE id = ?`,
+		c.Configured, c.Name, c.Address, c.FollowDiscovery, c.ProxyAddress, c.ProxySerial, string(hidden), c.Source, s.nowText(), nullID(by), s.nodeID, c.ID); err != nil {
 		return Cube{}, fmt.Errorf("store: cube %s: %w", c.Serial, err)
 	}
 	if err := tx.Commit(); err != nil {

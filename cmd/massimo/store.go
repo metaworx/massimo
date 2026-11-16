@@ -12,23 +12,29 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 
 	"go.metaworx.ch/massimo/internal/store"
 )
 
-// runStore handles massimo store backup|migrate|info, the commands that
-// open serve's store directly (docs/store.md section 7). They take
-// -data like serve and run as the service user, beside a running
-// server. Each checks its arguments before it opens the store, which
-// migrate creates, so that its help and a mistake leave nothing behind.
+// runStore handles massimo store backup|migrate|info|downgrade, the
+// commands that open serve's store directly (docs/store.md section 7).
+// They take -data like serve and run as the service user, beside a
+// running server, but for downgrade, which needs the store alone. Each
+// checks its arguments before it opens the store, which migrate creates,
+// so that its help and a mistake leave nothing behind.
 func runStore(args []string) error {
 	usage := func() {
-		fmt.Fprint(os.Stderr, `usage: massimo [-data <dir>] store backup <file> | migrate | info
+		fmt.Fprint(os.Stderr, `usage: massimo [-data <dir>] store backup <file> | migrate | info | downgrade -to <version>
 
   backup <file>  write a consistent copy of massimo.db, also while serve runs
   migrate        create massimo.db or apply its pending migrations, without starting serve;
                  a new one only where -data or MASSIMO_DATA names the directory
   info           the file's schema version, node and row counts
+  downgrade -to <version>
+                 take massimo.db back to what a binary for that schema version opens
+                 (its store info names it), for a rollback to an older release;
+                 with the service stopped, a copy massimo.db.before-downgrade-<version> first
 
 `+dataDirUsage("store", "info"))
 	}
@@ -123,6 +129,34 @@ func runStore(args []string) error {
 		for _, t := range tables {
 			fmt.Printf("  %-13s %d\n", t, in.Counts[t])
 		}
+	case "downgrade":
+		set := flag.NewFlagSet("store downgrade", flag.ContinueOnError)
+		set.Usage = usage
+		to := set.Int("to", 0, "the schema version of the binary to go back to")
+		if err := set.Parse(args[1:]); err != nil {
+			return err
+		}
+		if len(set.Args()) > 0 || *to < 1 {
+			usage()
+			return errors.New("store downgrade: give -to <version>, the schema version of the binary to go back to")
+		}
+		logger, err := newLogger(os.Stderr)
+		if err != nil {
+			return err
+		}
+		d, err := store.Downgrade(dir, *to, store.Options{Version: versionString(), Logger: logger})
+		if err != nil {
+			return storeError(dir, err)
+		}
+		if f, err := filepath.Abs(d.Path); err == nil {
+			warnOtherStore(os.Stderr, f, "store", "downgrade", "-to", strconv.Itoa(*to))
+		}
+		if d.Copy == "" {
+			fmt.Printf("%s: schema version %d (min_reader %d), which a binary for version %d opens; nothing to do\n", d.Path, d.From, d.MinReader, *to)
+			break
+		}
+		fmt.Printf("%s: schema version %d, now %d (min_reader %d), which a binary for version %d opens; the file as it was is %s\n",
+			d.Path, d.From, d.To, d.MinReader, *to, d.Copy)
 	case "help", "-h", "--help":
 		usage()
 	default:

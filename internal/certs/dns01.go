@@ -281,10 +281,9 @@ func (d *DNS01) authorize(ctx context.Context, client *acme.Client, url string) 
 		return err
 	}
 	record := "_acme-challenge." + z.Identifier.Value
-	if err := d.runHook(ctx, "set", record, txt); err != nil {
-		return err
+	if err = d.runHook(ctx, "set", record, txt); err == nil {
+		err = d.waitTXT(ctx, record, txt)
 	}
-	err = d.waitTXT(ctx, record, txt)
 	if err == nil {
 		if _, err = client.Accept(ctx, ch); err == nil {
 			_, err = client.WaitAuthorization(ctx, z.URI)
@@ -292,7 +291,10 @@ func (d *DNS01) authorize(ctx context.Context, client *acme.Client, url string) 
 	}
 	// The clear runs on a context of its own: the order's may be over
 	// (its 30 minutes, or the wait for the record), and a record left
-	// behind would pile up with every retry.
+	// behind would pile up with every retry. It follows a set that
+	// failed too, which may have made the record before it failed or was
+	// ended at its two minutes; a clear removes only the records of this
+	// value.
 	if cerr := d.runHook(context.WithoutCancel(ctx), "clear", record, txt); cerr != nil {
 		d.log.Warn("tls: the dns hook could not clear the record", "record", record, "error", cerr)
 	}
