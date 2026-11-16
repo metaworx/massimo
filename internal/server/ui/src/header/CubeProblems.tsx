@@ -65,7 +65,7 @@ function entries(): Entry[] {
 
 /** CubeProblems is the header's problem list, in #cube-problems. */
 export function CubeProblems() {
-  load.use();
+  load.useLoad();
   const list = entries();
   return <Problems entries={list} label={problemsLabelOf(list)} ok={state.cubes.length ? t("problem.none") : undefined} />;
 }

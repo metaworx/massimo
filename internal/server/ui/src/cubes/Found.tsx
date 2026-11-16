@@ -94,7 +94,7 @@ function Hints({ found }: { found: FoundCube[] }) {
  * many Cubes and Massimo proxies, then a row each and how to serve them.
  */
 export function Found({ found }: { found: FoundCube[] }) {
-  load.use();
+  load.useLoad();
   const proxies = found.filter((c) => c.kind === "proxy").length;
   const cubes = found.length - proxies;
   return (

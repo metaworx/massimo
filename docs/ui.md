@@ -1566,7 +1566,7 @@ the rooms' move puts them into `model/`, since `model/` may not import a region.
 
 | Part or helper | File | For | Properties or arguments |
 |---|---|---|---|
-| `counter` | `counter.ts` | a region's load counter: "draw the region again" while its data stay plain objects | gives `bump()`, after a load, and `use()`, in every part of the region, which reads the counter, the language and the icons chosen |
+| `counter` | `counter.ts` | a region's load counter: "draw the region again" while its data stay plain objects | gives `bump()`, after a load, and `useLoad()`, in every part of the region, which reads the counter, the language and the icons chosen |
 | `register`, `mounter` | `region.ts` | a region's functions as `MassimoParts.<name>`; its root drawn once into the page's container | `name`, `fns`; `id`, `root` |
 | `live`, `liveMap` | `live.ts` | objects whose properties are signals, for what a region keeps per place; the plain code reads and writes them as before | `init`; `make`, then `of(key)`, `clear()` |
 | `lang`, `useLang`, `tParts`, `joinParts` | `lang.ts` | the page's language as a signal, raised by `applyLanguage` (`MassimoParts.language`); a text with parts in it (`tNodes`); parts joined with " · ", the empty ones left out | `key`, `texts`, `parts`; `parts`, `lead` (" · " before the first too) |
@@ -1638,7 +1638,8 @@ A region that moves calls these, in this order:
 
 - `counter()` for its load counter, bumped by its plain names,
   which other scripts call and which call the part,
-  and after each of its requests; `use()` in each of its parts;
+  and after each of its requests;
+  `useLoad()` in each of its parts, at the top of its drawing;
 - `register` for `MassimoParts.<region>`, whose functions its plain names call,
   and `mounter` for each root, drawn into the container the page has for it;
 - `liveMap` for what it keeps per item and place (a panel open, by its key);
@@ -1690,13 +1691,29 @@ Preact 11.2.0 and @preact/signals 2.11.4 are vendored under
 the bundler takes them from there and refuses any other import.
 `make ui-check` type-checks `ui/src/` with `tsc --noEmit` (its `tsconfig.json`:
 strict, the vendored types by `paths`),
-with the TypeScript `tools/ui-check/` locks (its `README.md`),
+then checks its hooks with Biome's two rules (`tools/ui-check/biome.jsonc`):
+a hook at the top of a part's drawing, never after an early return or in a branch,
+and an effect that lists what it reads,
+or says why not in a `biome-ignore` comment with its reason;
+with the TypeScript and the Biome `tools/ui-check/` locks (its `README.md`),
 and CI's job UI types runs it.
 What a part reads from the API is typed by `ui/src/api.d.ts`,
 one declaration per schema of `docs/api-v1-openapi.yaml`,
 `Cube`, `Room` or `Device`, which a part imports with `import type`:
 `make api-types` writes it (`tools/apitypes`, its `README.md`),
 git keeps it, and `go test` fails while it does not follow the OpenAPI file.
+
+Two tests hold the files of both kinds of region to the contract.
+`TestUIFileHeaders`: every `ui/*.js` and `ui/*.css` opens with the SPDX line
+and the copyright line, and every file under `ui/src/` with both as `//` lines,
+then its `@file` header, which names its own path from the repository root
+and says what the file is for.
+`TestUINoHTMLInjection`: no script and no part puts markup into the page from a
+string (`innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write`,
+`dangerouslySetInnerHTML`) or sets an inline handler (`setAttribute("on…")`,
+an `on…=` attribute in `ui/*.html` or a partial),
+and no part carries a `data-i18n`, which `applyI18n` would write over;
+comments are left out, so that prose may name them.
 
 `ui/connect.html` is a second page, the apps' (docs/app.md),
 served at `/ui/connect.html` as it is, not assembled:

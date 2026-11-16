@@ -43,6 +43,7 @@ export function Dropdown({ id, cls, summaryId, summaryCls, label, title, summary
   children?: ComponentChildren;
 }) {
   const ref = useRef<HTMLDetailsElement>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the listeners are added once to the details, which is made once; arrows and focusCurrent are a menu's for its life, and listed they would add the listeners again.
   useLayoutEffect(() => {
     const details = ref.current;
     if (!details) return;

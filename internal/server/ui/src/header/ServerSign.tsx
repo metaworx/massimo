@@ -46,7 +46,7 @@ function serverAct(): void {
 
 /** ServerSign is the server's sign, a button. */
 export function ServerSign() {
-  load.use();
+  load.useLoad();
   const st = serverState();
   const label = t("server." + st, { version: updateLatest(), seconds: state.settings.poll });
   return (
