@@ -527,8 +527,8 @@ func (s *Server) getCommand(w http.ResponseWriter, r *http.Request) error {
 	}
 	if p.has("audit") {
 		if e, found, err := st.AuditOfCommand(ctx, c.ID); err == nil && found {
-			v.Audit = &auditView{ID: e.ID, Time: e.Time, User: e.User, TokenID: e.TokenID, Remote: e.Remote, Action: e.Action, Cube: e.Cube, Target: e.Target,
-				Detail: e.Detail, Result: e.Result, CommandID: e.CommandID}
+			a := viewAudit(ctx, st.Namer(), e)
+			v.Audit = &a
 		}
 	}
 	writeJSON(w, http.StatusOK, v)

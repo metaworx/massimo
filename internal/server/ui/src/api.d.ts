@@ -137,10 +137,12 @@ export interface AuditEntry {
   /** @format date-time */
   time?: string;
   /**
-   * The login name; absent for no authentication, a failed login or the command
-   * line
+   * The login name of the user whose rights it had; absent for no
+   * authentication, a failed login or the command line
    */
   user?: string;
+  effective_user?: RowUser;
+  real_user?: RowUser;
   /** The session or key used */
   token_id?: number;
   /** The client's address, or cli */
@@ -488,10 +490,44 @@ export interface Session {
   provider?: string;
 }
 
-export interface User {
-  /** The login name, lower case */
+/**
+ * A user of a row of the log or the audit, as it is named now: effective_user
+ * the user whose rights it had, real_user who made it, the same user but for a
+ * call of an integration's user linked to a Massimo user, which the effective
+ * user then is. Absent for no authentication, the Cube and the server's own
+ * jobs.
+ */
+export interface RowUser {
+  /**
+   * The login name; an integration's user's is <the integration's uuid>:<its id
+   * there>
+   */
   name?: string;
   display_name?: string;
+  /** The uuid of the integration whose user it is; absent for any other user */
+  integration?: string;
+  /**
+   * How it is shown: its display name, else its login name; an integration's
+   * user by the chain "<the integration's name> › <its display name>";
+   * real_user's with ", as <the effective user's login name>" where the two
+   * differ.
+   */
+  display?: string;
+}
+
+export interface User {
+  /**
+   * The login name, lower case; an integration's users' are <the integration's
+   * uuid>:, <uuid>:system and <uuid>:<its id there>
+   */
+  name?: string;
+  display_name?: string;
+  /**
+   * How the user is shown: its display name, else its login name; an
+   * integration's user by the chain "<the integration's name> › <its display
+   * name>", with ", as <login name>" where it is linked to a Massimo user
+   */
+  display?: string;
   /** The role's key */
   role?: string;
   disabled?: boolean;
@@ -516,11 +552,11 @@ export interface User {
   /** @format date-time */
   last_login_at?: string;
   /**
-   * In GET /api/v1/users: an integration's user. id, name and linked_to for one
-   * of its users, absent for the integration's own
+   * An integration's user, with its integration's uuid; in GET /api/v1/users
+   * id, name and linked_to for one of its users, absent for the integration's
+   * own
    */
   integration?: {
-    key?: string;
     uuid?: string;
     id?: string;
     name?: string;
@@ -528,10 +564,12 @@ export interface User {
   };
   /** In GET /api/v1/users: the integrations' users linked to this user */
   links?: {
-    /** The integration's key */
+    /** The integration's uuid */
     integration?: string;
     id?: string;
     name?: string;
+    /** Its chain, <the integration's name> › <its display name> */
+    display?: string;
   }[];
 }
 
@@ -573,8 +611,10 @@ export interface Me {
   /** The registered integration whose key it is; null for any other key */
   integration?: {
     uuid?: string;
-    key?: string;
+    /** Its name as the owner gives it, its own user's display name */
     name?: string;
+    /** The name it reports */
+    reported_name?: string;
     state?: string;
     instance_id?: string;
   } | null;
@@ -1702,9 +1742,17 @@ export interface IntegrationRequest {
 export interface Integration {
   uuid?: string;
   kind?: string;
-  /** Lower case, its users' names begin with it; absent for a request */
-  key?: string;
+  /**
+   * Its name as the owner gives it (PUT), its own user's display name; it
+   * follows reported_name while it is the name reported before. A request's is
+   * the name it reported.
+   */
   name?: string;
+  /**
+   * The name the integration reports, when it asks and when a request is
+   * attached to it
+   */
+  reported_name?: string;
   state?: "pending" | "active" | "disabled";
   instance_id?: string;
   /** An installation id a call came with, not accepted yet */
@@ -1713,8 +1761,6 @@ export interface Integration {
   version?: string;
   /** The key's maximum, within the role integration */
   max_caps?: string[];
-  /** Its own user, holding its key */
-  user?: string;
   /** A request's short code */
   request_code?: string;
   /**
@@ -1740,6 +1786,11 @@ export interface IntegrationUser {
   id?: string;
   /** Its name there, from its last call */
   name?: string;
+  /**
+   * Its chain, <the integration's name> › <its user's display name>, with ",
+   * as <login name>" where linked
+   */
+  display?: string;
   /** The user its calls act as */
   user?: string;
   /** The user made at its first call */

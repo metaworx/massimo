@@ -28,8 +28,12 @@ const maxLabel = 64
 
 // userView is a user as the API shows it.
 type userView struct {
-	Name        string     `json:"name"`
-	DisplayName string     `json:"display_name,omitempty"`
+	Name        string `json:"name"`
+	DisplayName string `json:"display_name,omitempty"`
+	// Display is how the user is shown: its chain, "<the integration's
+	// name> › <its display name>" for an integration's user, with ",
+	// as <login name>" where it acts as a Massimo user (names.go).
+	Display     string     `json:"display,omitempty"`
 	Role        string     `json:"role"`
 	Disabled    bool       `json:"disabled"`
 	HasPassword bool       `json:"has_password"`
@@ -42,8 +46,10 @@ type userView struct {
 	// May is what the caller may do with the user, in the users routes'
 	// answers (users_api.go); absent elsewhere.
 	May *userMay `json:"may,omitempty"`
-	// Integration marks an integration's user, and Links lists the
-	// integrations' users linked to this one: in GET /api/v1/users.
+	// Integration marks an integration's user, with the integration's
+	// uuid, and in GET /api/v1/users with its id and name there and the
+	// user it is linked to; Links lists there the integrations' users
+	// linked to this one.
 	Integration *userIntegration `json:"integration,omitempty"`
 	Links       []userLink       `json:"links,omitempty"`
 }
@@ -52,7 +58,7 @@ type userView struct {
 // and for one of its users the id and name there and the Massimo user it
 // is linked to. The integration's own user has no id.
 type userIntegration struct {
-	Key      string `json:"key"` // the integration's uuid since migration 0024 dropped its key
+	Key      string `json:"key"` // undocumented, for older clients: its uuid since migration 0024 dropped the key
 	UUID     string `json:"uuid"`
 	ID       string `json:"id,omitempty"`
 	Name     string `json:"name,omitempty"`
@@ -61,9 +67,10 @@ type userIntegration struct {
 
 // userLink is an integration's user linked to a Massimo user.
 type userLink struct {
-	Integration string `json:"integration"` // the integration's uuid since migration 0024 dropped its key
+	Integration string `json:"integration"` // the integration's uuid
 	ID          string `json:"id"`
 	Name        string `json:"name,omitempty"`
+	Display     string `json:"display,omitempty"` // its chain, "<the integration's name> › <its display name>"
 }
 
 // roleRef is the role of a user as GET /api/v1/me shows it.
@@ -389,10 +396,11 @@ func (s *Server) meOf(r *http.Request, p *principal) (meView, error) {
 		}
 	}
 	u := viewUser(p.user, invitedBy)
+	u.Display, u.Integration = userDisplay(ctx, st.Namer(), p.user)
 	tok := viewToken(p.token)
 	me.User, me.Role, me.Capabilities, me.Token = &u, &roleRef{Key: role.Key, Name: role.Name, Disabled: role.Disabled}, caps, &tok
 	if i := p.integration; i != nil {
-		me.Integration = &meIntegration{UUID: i.UUID, Key: i.UUID, Name: i.Name, State: i.State, InstanceID: i.InstanceID}
+		me.Integration = &meIntegration{UUID: i.UUID, Key: i.UUID, Name: store.IntegrationName(*i), ReportedName: i.Name, State: i.State, InstanceID: i.InstanceID}
 		me.Capabilities = integrationCaps(p)
 		if me.Capabilities == nil {
 			me.Capabilities = []string{}
@@ -406,11 +414,14 @@ func (s *Server) meOf(r *http.Request, p *principal) (meView, error) {
 
 // meIntegration is a key's integration in GET /api/v1/me.
 type meIntegration struct {
-	UUID       string `json:"uuid"`
-	Key        string `json:"key"` // its uuid since migration 0024 dropped its key
-	Name       string `json:"name"`
-	State      string `json:"state"`
-	InstanceID string `json:"instance_id"`
+	UUID string `json:"uuid"`
+	Key  string `json:"key"` // undocumented, for older clients: its uuid since migration 0024 dropped the key
+	// Name is the integration's name as the owner gives it, its own
+	// user's display name; ReportedName the one it reports.
+	Name         string `json:"name"`
+	ReportedName string `json:"reported_name"`
+	State        string `json:"state"`
+	InstanceID   string `json:"instance_id"`
 }
 
 // meActsFor is the integration's user a call acts for in GET /api/v1/me.

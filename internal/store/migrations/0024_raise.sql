@@ -45,7 +45,8 @@
 --    after this file (afterMigration, since SQL makes no UUIDv7), and the
 --    key unique among the roles that are not removed.
 -- 10. cubes made again (D11-A): the serial unique among the Cubes that
---    are not removed, and proxy_virtual from cube_options, which goes.
+--    are not removed, and proxy_virtual from cube_options, which goes; a
+--    removed row's serial loses the ~<id> the down part gave it (D15-C).
 -- 11. tokens (D7): deleted_at, never written, dropped, and revoked_at
 --    renamed deleted_at, every table's tombstone.
 -- 12. The rest of D9-A: commands.deleted_at and commands_cube_time,
@@ -283,7 +284,10 @@ CREATE TABLE cubes_new (
 );
 INSERT INTO cubes_new (id, uuid, serial, configured, name, address, follow_discovery, proxy_address, proxy_serial, proxy_virtual, hidden, source,
                        mac, rf_address, firmware, discovered_address, first_seen, last_seen, created_at, updated_at, updated_by, version, deleted_at, origin)
-SELECT c.id, c.uuid, c.serial, c.configured, c.name, c.address, c.follow_discovery, c.proxy_address, c.proxy_serial, coalesce(o.proxy_virtual, 0), c.hidden, c.source,
+SELECT c.id, c.uuid,
+       CASE WHEN c.deleted_at IS NOT NULL AND length(c.serial) > length('~' || c.id) AND substr(c.serial, -length('~' || c.id)) = '~' || c.id
+            THEN substr(c.serial, 1, length(c.serial) - length('~' || c.id)) ELSE c.serial END,
+       c.configured, c.name, c.address, c.follow_discovery, c.proxy_address, c.proxy_serial, coalesce(o.proxy_virtual, 0), c.hidden, c.source,
        c.mac, c.rf_address, c.firmware, c.discovered_address, c.first_seen, c.last_seen, c.created_at, c.updated_at, c.updated_by, c.version, c.deleted_at, c.origin
 FROM cubes c LEFT JOIN cube_options o ON o.cube_id = c.id;
 DROP TABLE cube_options;

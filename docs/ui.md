@@ -1224,9 +1224,13 @@ the browser keeps which cards are folded.
   in the first minute, then every 15 s, until it has: then it says so;
   once that time has passed, **approval expired** as a badge, why, and
   **Register**.
-  Every integration in a panel, its name and key, **disabled**,
+  Every integration in a panel, its name, **disabled**,
   **new installation** and **approval expired** as badges:
-  its key, installation id, address, version, when its key was issued and
+  its **Name** with **Save the name**, off while the name is as stored,
+  the name its users are shown under (the integration's own user's
+  display name);
+  its **Name in Home Assistant** where Home Assistant reports another,
+  its id, installation id, address, version, when its key was issued and
   whether the LAN saw it;
   for a call from another installation, **Accept the new installation**;
   **Enabled**, its maximum with **Save the maximum**,
@@ -1247,10 +1251,16 @@ the browser keeps which cards are folded.
   the restart, or `-announce` or `MASSIMO_ANNOUNCE`, which decides;
   with `settings`, **Open Maintenance**, but where the flag or the
   variable decides.
-  In **Users**, an integration's users carry **user of** its key (the
-  integration's own **integration** and its key), and a linked one
+  In **Users**, an integration's user is shown by its chain,
+  "<the integration's name> › <its display name>", with
+  ", as <login name>" where it is linked (AP StoreRaise v1.2), without
+  its login name, and carries **integration user** (the integration's own,
+  shown by the integration's name, **integration**); a linked one
   **acts as** the user; a user that integration users act as counts them
-  as a badge and names them at the top of its panel.
+  as a badge and names them, by their chains, at the top of its panel.
+  The log's lines, a command's detail and its audit row name who
+  started them the same way ("…, by Home › Anna, as anna"), and the
+  log's user filter lists the users so.
 - **Roles** (with `roles`):
   every role in a panel with its display name and a switch per capability,
   **Save**, off while nothing differs from the role,

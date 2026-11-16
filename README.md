@@ -1074,7 +1074,11 @@ and leaves the file as it was as `massimo.db.before-downgrade-<version>`
 `user add <name> -role operator` asks for the password twice (`-no-password` for
 a user with keys only,
 `-password-stdin` to read it from standard input for scripts,
-`-expires <RFC 3339>` for a guest's end), `user list`, `user passwd <name>`,
+`-expires <RFC 3339>` for a guest's end),
+`user list`, which shows each user as the page does (SHOWN AS: an
+integration's user by the chain "<the integration's name> › <its display
+name>", with ", as <login name>" where it is linked),
+`user passwd <name>`,
 `user rename <name> <new name>`,
 which asks for the password again since it goes with the name
 (`-no-password` to leave the user with its keys),

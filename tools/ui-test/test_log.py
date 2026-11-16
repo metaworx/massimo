@@ -408,6 +408,38 @@ def test_log_change_line(page, case):
     show_view(page, "tiles")
 
 
+THROUGH_SAYS = {
+    "en": "Cube changed KEQ0000000: name – → Upstairs, by Home › Anna, as anna",
+    "de": "Cube geändert KEQ0000000: Name – → Upstairs, durch Home › Anna, as anna",
+}
+
+
+def test_log_names_integration_users(page, case):
+    """A change made through an integration for its user linked to anna
+    names the integration's user by its chain, ", as anna" after it, and
+    is kept by the user filter of either user (AP StoreRaise v1.2, Block
+    4)."""
+    show_view(page, "log")
+    page.wait_for_timeout(1600)
+    real = "01a1e000-0000-7000-8000-000000000001:" + "a" * 32
+    page.evaluate("""(real) => state.events.dispatchEvent(new MessageEvent("change", { data: JSON.stringify({
+      kind: "change", source: "config", level: "info", time: new Date().toISOString(),
+      summary: { action: "cube.update", target: "cube:KEQ0000000", changes: { name: { from: "", to: "Upstairs" } } },
+      by: { name: "anna", display_name: "Anna" },
+      effective_user: { name: "anna", display_name: "Anna", display: "Anna" },
+      real_user: { name: real, display_name: "Anna", integration: "01a1e000-0000-7000-8000-000000000001", display: "Home › Anna, as anna" } }) }))""", real)
+    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-change').length > 0", 5), "the change line"
+    text = page.locator("#log-lines .log-line.kind-change").first.locator(".log-text").inner_text()
+    assert text == THROUGH_SAYS[case.lang], f"the change: {text}"
+    for who in ("anna", real):
+        kept = page.evaluate("""([who, real]) => { const was = logState.user; logState.user = who;
+          const line = logState.lines.find((l) => l.kind === "change" && l.realName === real);
+          const ok = logOfChoices(line); logState.user = was; return ok; }""", [who, real])
+        assert kept, f"the user filter of {who} keeps it"
+    assert scroll_width(page) <= case.width, "no horizontal scroll with the chain"
+    show_view(page, "tiles")
+
+
 SLOTS_SAYS = {
     "en": ("few of the Cube's memory slots are free, 4 since ", "the Cube's memory slots stay full, 1 free since ",
            "the Cube's memory slots are free again, 50 free (fewer than 5 since "),
