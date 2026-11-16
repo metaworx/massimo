@@ -13,7 +13,7 @@
  * meanwhile, with Take theirs; the field draws that notice itself.
  */
 
-import type { ComponentChildren } from "preact";
+import type { ComponentChildren, Ref } from "preact";
 import { useRef, useState } from "preact/hooks";
 import { Notice } from "./badge";
 import { busyProps } from "./question";
@@ -131,23 +131,81 @@ export function Field<T>({ label, id, wide, unit, hint, draft, show, children }:
 
 /**
  * TextField is a row with a text input that shows a stored text, as its
- * draft: name, placeholder and type (text by default; a password is no
- * stored text) are the input's;
- * the row is wide unless wide is false.
+ * draft: name, placeholder, maxLength and pattern (what a valid value
+ * looks like) and type (text by default; a password is no stored text)
+ * are the input's; the row is wide unless wide is false.
  */
-export function TextField({ label, id, wide = true, unit, hint, name, placeholder, type, maxLength, draft, show }: Row & {
+export function TextField({ label, id, wide = true, unit, hint, name, placeholder, type, maxLength, pattern, draft, show }: Row & {
   name: string;
   placeholder?: string;
   type?: "text" | "email" | "url" | "search";
   maxLength?: number;
+  pattern?: string;
   draft: Draft<string>;
   show?: (v: string) => string;
 }) {
   return (
     <Field label={label} id={id} wide={wide} unit={unit} hint={hint} draft={draft} show={show}>
       <input id={id} type={(type || "text") as "text"} name={name} class={unit ? undefined : "field-control"} autocomplete="off" spellcheck={false}
-        placeholder={placeholder} maxLength={maxLength} value={draft.value} onInput={(ev) => draft.set(ev.currentTarget.value)} />
+        placeholder={placeholder} maxLength={maxLength} pattern={pattern} value={draft.value} onInput={(ev) => draft.set(ev.currentTarget.value)} />
     </Field>
+  );
+}
+
+/**
+ * An option of a Select, as fillOptions of components.js takes it: its
+ * value, its label and whether it cannot be chosen; or a group of
+ * options under a heading.
+ */
+export type SelectOption = [value: string, label: string, disabled?: boolean] | { group: string; options: [string, string, boolean?][] };
+
+/**
+ * Select is a row with a select (selectInput of components.js): its
+ * options as fillOptions takes them, the value chosen from a draft of a
+ * stored value (with its "changed meanwhile" notice) or from value and
+ * onChange; name is the select's, the row narrow unless wide.
+ */
+export function Select({ label, id, wide, unit, hint, name, options, value, onChange, draft, show }: Row & {
+  name?: string;
+  options: SelectOption[];
+  value?: string;
+  onChange?: (v: string) => void;
+  draft?: Draft<string>;
+  show?: (v: string) => string;
+}) {
+  const opt = ([v, l, off]: [string, string, boolean?]) => <option key={v} value={v} disabled={off}>{l}</option>;
+  return (
+    <Field label={label} id={id} wide={wide} unit={unit} hint={hint} draft={draft} show={show}>
+      <select id={id} name={name} class={unit ? undefined : "field-control"} value={draft ? draft.value : value} onChange={(ev) => {
+        const v = ev.currentTarget.value;
+        if (draft) draft.set(v);
+        if (onChange) onChange(v);
+      }}>
+        {options.map((o) => (Array.isArray(o) ? opt(o) : <optgroup key={"group:" + o.group} label={o.group}>{o.options.map(opt)}</optgroup>))}
+      </select>
+    </Field>
+  );
+}
+
+/**
+ * DateTime is a field of a date and a time (datetime-local), its value
+ * as the input takes it ("YYYY-MM-DDTHH:MM"); the API's time is made of
+ * it where it is sent. id, cls, step, required and disabled are the
+ * input's, ref gives it the focus.
+ */
+export function DateTime({ value, set, id, cls, step, required, disabled, inputRef }: {
+  value: string;
+  set: (v: string) => void;
+  id?: string;
+  cls?: string;
+  step?: number;
+  required?: boolean;
+  disabled?: boolean;
+  inputRef?: Ref<HTMLInputElement>;
+}) {
+  return (
+    <input ref={inputRef} type="datetime-local" id={id} class={cls} step={step === undefined ? undefined : String(step)} required={required}
+      disabled={disabled} value={value} onInput={(ev) => set(ev.currentTarget.value)} />
   );
 }
 
@@ -155,25 +213,26 @@ export function TextField({ label, id, wide = true, unit, hint, name, placeholde
  * Switch is a checkbox drawn as a switch with its label beside it: on
  * from checked, or from a draft of a stored setting, whose "changed
  * meanwhile" notice follows it; onChange gets its state. It draws its own
- * .field row unless row is false (a switch inside another row); id,
- * disabled and title are the checkbox's; children follow the label (a
- * help button).
+ * .field row unless row is false (a switch inside another row, or an item
+ * of a menu); cls adds classes to the switch; id, name, disabled and
+ * title are the checkbox's; children follow the label (a help button).
  */
-export function Switch({ name, label, checked, onChange, draft, show, row = true, id, disabled, title, children }: {
-  name: string;
+export function Switch({ name, label, checked, onChange, draft, show, row = true, cls, id, disabled, title, children }: {
+  name?: string;
   label: string;
   checked?: boolean;
   onChange?: (on: boolean) => void;
   draft?: Draft<boolean>;
   show?: (v: boolean) => string;
   row?: boolean;
+  cls?: string;
   id?: string;
   disabled?: boolean;
   title?: string;
   children?: ComponentChildren;
 }) {
   const sw = (
-    <label class="switch" title={title}>
+    <label class={cls ? "switch " + cls : "switch"} title={title}>
       <input id={id} type="checkbox" name={name} disabled={disabled} checked={draft ? draft.value : !!checked} onChange={(ev) => {
         const on = ev.currentTarget.checked;
         if (draft) draft.set(on);
@@ -198,9 +257,10 @@ export function Switch({ name, label, checked, onChange, draft, show, row = true
 /**
  * FormFooter is a form's row of actions (formFooter of components.js):
  * extra at its left end (resets, Remove), then at its right Cancel, where
- * cancel is given (cancelLabel in place of "Cancel"), and the submit
- * button, submit its label, busy while its request runs (useBusy) and off
- * where off says nothing is to be sent (sendWhenChanged).
+ * cancel is given (cancelLabel in place of "Cancel"; its class
+ * form-cancel, as the plain footer's), and the submit button, submit its
+ * label, busy while its request runs (useBusy) and off where off says
+ * nothing is to be sent (sendWhenChanged).
  */
 export function FormFooter({ submit, busy, off, cancel, cancelLabel, extra }: {
   submit?: string;
@@ -214,9 +274,44 @@ export function FormFooter({ submit, busy, off, cancel, cancelLabel, extra }: {
     <div class="actions">
       {extra && <span class="actions-left">{extra}</span>}
       <span class="actions-right">
-        {cancel && <button type="button" onClick={cancel}>{cancelLabel || t("action.cancel")}</button>}
+        {cancel && <button type="button" class="form-cancel" onClick={cancel}>{cancelLabel || t("action.cancel")}</button>}
         {submit && <button type="submit" {...busyProps("primary", !!busy, off)}>{submit}</button>}
       </span>
     </div>
+  );
+}
+
+/**
+ * Stepper is a number field between a − and a + button (stepper of
+ * components.js), which change it by step within min and max, rounded to
+ * the step; an empty field steps from min. value is what the field shows,
+ * set is told of every change, typed or stepped. id and cls are the
+ * field's; hidden keeps the whole in its place unseen; children follow the
+ * + (a unit). The buttons are named half a degree less and more: the first
+ * user of another unit adds their names as a property.
+ */
+export function Stepper({ value, set, min, max, step, id, cls, hidden, children }: {
+  value: string;
+  set: (v: string) => void;
+  min: number;
+  max: number;
+  step: number;
+  id?: string;
+  cls?: string;
+  hidden?: boolean;
+  children?: ComponentChildren;
+}) {
+  const by = (d: number) => () => {
+    const v = Number(value === "" ? min : value) + d;
+    set(String(Math.min(max, Math.max(min, Math.round(v / step) * step))));
+  };
+  return (
+    <span class={hidden ? "inline hidden" : "inline"}>
+      <button type="button" class="step small" aria-label={t("temp.less")} onClick={by(-step)}>−</button>
+      <input type="number" id={id} class={cls} min={String(min)} max={String(max)} step={String(step)} value={value}
+        onInput={(ev) => set(ev.currentTarget.value)} />
+      <button type="button" class="step small" aria-label={t("temp.more")} onClick={by(step)}>+</button>
+      {children}
+    </span>
   );
 }

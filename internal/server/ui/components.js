@@ -505,7 +505,9 @@ function formEl(onSubmit, cls) {
 // formFooter is a form's row of actions: the extra buttons (resets,
 // Remove) at its left end, Cancel and the submit button at its right;
 // submit is the submit button's label, cancel the handler of Cancel,
-// whose label cancelLabel replaces (Close). Each part is optional.
+// whose label cancelLabel replaces (Close), a button of the class
+// form-cancel, as a part's footer's (ui/src/shared/field.tsx FormFooter).
+// Each part is optional.
 function formFooter({ submit, cancel, cancelLabel, extra } = {}) {
   const actions = document.createElement("div");
   actions.className = "actions";
@@ -517,7 +519,7 @@ function formFooter({ submit, cancel, cancelLabel, extra } = {}) {
   }
   const right = document.createElement("span");
   right.className = "actions-right";
-  if (cancel) right.appendChild(button(cancelLabel || t("action.cancel"), "", cancel));
+  if (cancel) right.appendChild(button(cancelLabel || t("action.cancel"), "form-cancel", cancel));
   if (submit) right.appendChild(submitButton(submit));
   actions.appendChild(right);
   return actions;
@@ -610,6 +612,10 @@ function numberInput(value, min, max, step, onChange) {
   i.addEventListener("change", () => onChange(i.value === "" ? undefined : Number(i.value)));
   return i;
 }
+
+// stepper is drawn by a part since AP UiParts Block 7
+// (ui/src/shared/field.tsx Stepper); nothing calls it now, and it goes
+// with the builders nobody calls (Block 15).
 
 // stepper puts a − and a + button around a number input, which change
 // it by step within min and max and fire its change event; labels names

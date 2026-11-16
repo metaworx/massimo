@@ -1581,27 +1581,30 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `useIcons` | `look.ts` | the icons chosen for the window and the radio as a signal, raised by `redrawSigns` (`MassimoParts.icons`); `Sign` reads it | – |
 | `Island` | `island.tsx` | a plain piece inside a part: an element the part draws empty and plain code fills, again where a key or the language changed | `tag` (div, p, span), `cls`, `keys`, `fill(el)` |
 | `Fold`, `FoldHead` | `fold.tsx` | a details that opens and closes (`detailsPanel`), the toggle of its making not passed on; a panel's head | `cls`, `open`, `onToggle(open)`, `summary`, `summaryProps`, `data`, the body as children; `before`, `name`, `mono`, `badges` |
-| `Dropdown` | `menu.tsx` | a menu that drops down (`dropdown`), with `arrows` its arrow keys (`menuArrows`) and with `focusCurrent` the focus on its current item when it opens (among `arrows`' items, else its list's buttons that are on); a click on any button of its list closes it, as `dropdown()` of `components.js` does for every menu of the page | `id`, `cls`, `summaryId`, `summaryCls`, `label`, `title` (where the tooltip is not the label), `summary`, `listCls`, `arrows` (a selector of its items), `focusCurrent`, `onClick`, the items as children |
-| `MenuItem` | `menu.tsx` | a menu's button, its icon, label, the icons after it and a grey second line (`menuItem`) | `icon`, `blank`, `label`, `icons`, `sub`, `value` (its `data-value`), `current`, `disabled`, `onClick` |
+| `Dropdown` | `menu.tsx` | a menu that drops down (`dropdown`), with `arrows` its arrow keys (`menuArrows`) and with `focusCurrent` the focus on its current item when it opens (among `arrows`' items, else its list's buttons that are on); a click on any button of its list closes it, as `dropdown()` of `components.js` does for every menu of the page | `id`, `cls`, `summaryId`, `summaryCls`, `label` (without it the summary is named by its text), `title` (where the tooltip is not the label), `summary`, `listCls`, `arrows` (a selector of its items), `focusCurrent`, `busy` (the summary turning while a request sent from its list runs), `onClick`, `onOpen` (told each time it opens), the items as children |
+| `MenuItem` | `menu.tsx` | a menu's button, its icon, label, the icons after it and a grey second line (`menuItem`) | `icon`, `blank`, `label`, `icons`, `sub` (the second line, there whenever given, empty too), `subCls` (its class), `cls`, `value` (its `data-value`), `current`, `disabled`, `busy`, `onClick` |
 | `Picker` | `menu.tsx` | a menu that chooses one item, its summary the chosen one (`pickerMenu`) | `id`, `cls`, `summaryId`, `summaryCls`, `entries` (an item `{ value, label, sub, icon, icons, disabled }`, `{ group }` or `{ separator: true }`), `value`, `onPick(value)`, `shown` (`{ icon, label, title, aria }`) |
 | `actionRunner`, `fader` | `action.ts` | a request, a reload, and its outcome (`Outcome`, `{ text, ok }`) in the region's message line (`showResult`) or in a part's state that a `ResultLine` draws, a success fading where a fade is given; `fader` is that fade alone, for a result set by other means | `where()`, `set(res)`, `fade` (ms), `reload()`; gives `run(fn, ok, fail)`, `say(text, ok)`; `set`, `ms` |
 | `Icon` | `icon.tsx` | a symbol of the page (`iconEl`) | `symbol`, `cls`, `mark` (the symbol is a mark, which blinks where the style makes it) |
 | `Sign` | `icon.tsx` | a kind of `SIGNS` in a state, its mark blinking (`signEl`) | `kind`, `state` ("", ok, warn, bad, open), `cls`, `blink` (the mark's key), `label` (named for a screen reader, else hidden) |
 | `Mark` | `icon.tsx` | a mark alone (`markEl`) | `state` (warn, bad), `blink` |
 | `CountIcon` | `icon.tsx` | an icon with a number in its corner (`foundCountEl`) | `symbol`, `n`, `cls` |
+| `IconButton` | `icon.tsx` | a button that is an icon alone, named for a screen reader (`iconButton`): a tile's info and cog, the server's sign, the copy icon | `symbol`, `label` (its name, and its tooltip without `title`), `title`, `cls`, `mark`, and the button's own attributes (`id`, `aria-expanded`, `data-…`, the handlers) |
 | `Badge` | `badge.tsx` | a `.flag` led by its mark for a warning or a failure (`badgeEl`) | `kind`, `text`, `blink`, `title`, children after the text |
 | `Notice` | `badge.tsx` | a lasting warning with since when (`noticeEl`) | `text`, `since`, `next`, `cls`, `id`, `role`, `hidden` (the class `hidden`, the line kept in its place), children after |
 | `Age` | `badge.tsx` | how old a value is, filled by `fillAge` (`ageEl`) | `at`, `stale`, `plain` |
+| `ResultLine` | `badge.tsx` | the line that says how an action went, green or red, hidden while there is none (`showResult`), as an `actionRunner`'s `set` gives it | `res` (an `Outcome` or null), `cls` |
 | `Problems` | `problems.tsx` | the problem list, entries under entries (`problemsEl`) | `entries`, `label`, `ok` (the green check's label where nothing is wrong), `onClick` |
 | `KindIcons`, `problemKinds`, `kindsLabel` | `problems.tsx` | the kinds' icons of entries without the list (`kindIcons`); the kinds themselves, to know whether there are any; the label naming the kinds among items in an order of kinds, "" for none | `entries`, `skip`; `entries`, `skip`; `items`, `kinds` |
 | `OkPill` | `problems.tsx` | the green check in a list's place (`okPill`) | `label` |
 | `Field` | `field.tsx` | a label and its control, `.field` or `.field.wide` (`fieldRow`) | `label`, `id`, `wide`, `unit`, `hint`, `draft`, `show`, the control as children |
 | `TextField` | `field.tsx` | a row with a text input that shows a stored text, from its draft | `label`, `id`, `name`, `draft`, `show`, `wide` (on by default), `unit`, `hint`, `placeholder`, `type`, `maxLength`, `pattern` |
-| `Select` | `field.tsx` | a row with a select (`selectInput`), its options as `fillOptions` takes them | `label`, `id`, `name`, `options` (`[value, label, disabled]` or `{ group, options }`), `value` and `onChange`, or `draft` and `show`; `wide`, `unit`, `hint`; `row` (false: the select alone, in a row of the caller's beside other controls) |
+| `Select` | `field.tsx` | a row with a select (`selectInput`), its options as `fillOptions` takes them | `label`, `id`, `name`, `options` (`[value, label, disabled]` or `{ group, options }`), `value` and `onChange`, or `draft` and `show`; `wide`, `unit`, `hint` |
 | `DateTime` | `field.tsx` | a date and time field (`datetime-local`), its value as the input takes it | `value`, `set`, `id`, `cls`, `step`, `required`, `disabled`, `inputRef` |
-| `Switch` | `field.tsx` | a checkbox drawn as a switch (`switchEl`) | `name`, `label`, `checked` and `onChange`, or `draft` and `show`; `row`, `id`, `disabled`, `title`, children after the label |
+| `Switch` | `field.tsx` | a checkbox drawn as a switch (`switchEl`) | `name`, `label`, `checked` and `onChange`, or `draft` and `show`; `row`, `cls` (the switch's classes), `id`, `disabled`, `title`, children after the label |
+| `Stepper` | `field.tsx` | a number field between − and + (`stepper`), the step within its range; its buttons are named for a temperature, half a degree less and more, and the first user of another unit adds their names | `value`, `set`, `min`, `max`, `step`, `id` and `cls` of the field, `hidden` (the whole kept in its place unseen), children after the + (a unit) |
 | `useDraft`, `Meanwhile` | `field.tsx` | a field that shows stored data keeps a draft: untouched it follows, changed it says "changed meanwhile" with Take theirs (D59-A) | `stored`, `norm`; gives `value`, `stored`, `set`, `changed`, `meanwhile`, `take`; `draft`, `show` |
-| `FormFooter` | `field.tsx` | a form's row of actions (`formFooter`, `sendWhenChanged`) | `submit`, `busy`, `off`, `cancel`, `cancelLabel`, `extra` |
+| `FormFooter` | `field.tsx` | a form's row of actions (`formFooter`, `sendWhenChanged`) | `submit`, `busy`, `off`, `cancel` (its button of the class `form-cancel`, as the plain footer's), `cancelLabel`, `extra` |
 | `Question` | `question.tsx` | a question in the page, No and Yes, Escape for No (`confirmBox`) | `text`, `yes`, `no`, `onYes` (its request's promise), `onNo` |
 | `useAsk` | `question.tsx` | a row that asks in its own place, the focus back on its button (`confirmInPlace`) | gives `asking`, `ask`, `done`, `ref` |
 | `useBusy`, `busyProps` | `question.tsx` | a button's request under way: busy, off, `aria-busy` (`whileBusy`, `setBusy`) | `run(fn)`; `busyProps(cls, busy, off)` |
@@ -1630,15 +1633,23 @@ What the table cannot say:
   what must outlive the component (a request a tile keeps across its being
   drawn again) is live state (`live`).
 
-Left for the regions that need them first:
-`MenuItem` has no `cls` or `id`, `Dropdown` does not tell when it opens,
-and its summary is named by `label`, not by its text;
-the rooms meet these first, and add them as properties.
-
 These builders of `components.js` and `app.js` have no part yet, since no region
 that has moved uses them: the help button (`helpParts`) and a field row without
-a label, `numberInput`, `stepper`, `selectInput`, `markRange`, `kvList`,
-`countList`, `iconButton` and `sectionBadges`.
+a label, `numberInput` (but the one of `Stepper`), `markRange`, `kvList`,
+`countList` and `sectionBadges`.
+Known gaps, for the blocks that meet them:
+a `ResultLine` with something after its text (`config.js`'s Load the current programme);
+a `Select` without a row of its own, beside another control in the caller's row
+(`config.js`'s day and hour);
+the conversion of a `DateTime`'s value to the API's time, which stays with its users
+(`apiUntil` of `rooms.js`), and which the block that moves the users' expiry fields
+(`users-panel.html`, `users.js`, `app.js`'s `localDateTimeValue`) brings to the part;
+a device row's head (icon, name, type, identifiers), which `pairing.js` draws a twin of,
+taken into `model/` by the block that moves the pairing, since no region imports another;
+choosing rooms, checkboxes with All in the House panel and switches with All and None
+in the configuration's Copy tab, one shared list once the configuration moves;
+a room's write's outcome in words, built in three places
+(`House.tsx` `houseRequests`, `rooms.js` `resultText`, `config.js`'s copy).
 The block that first needs one writes it under `ui/src/shared/`,
 knowing no region, and adds its row to the table above; no region writes its own.
 A section card's badges (`sectionBadges`) stay plain until the page's chrome moves
@@ -1674,10 +1685,8 @@ which `header.js` calls as `renderCubeSelect`, `renderUpdated`, `renderServerSig
 and `renderTLS`, and `home.js` as `renderHomeNotice`;
 `store.ts` holds its counter, the search under way and the certificate,
 `send.ts` the search and the poll the server's sign asks for.
-The choice is a `Picker`, the problems a `Problems`, the certificate's line a `Notice`;
-the server's sign is a button written by hand, since `iconButton` has no part yet
-and the next change to the header takes the button away:
-the rooms' icon buttons (a tile's info and cog) bring that part.
+The choice is a `Picker`, the problems a `Problems`, the certificate's line a `Notice`,
+the server's sign an `IconButton`.
 The facts row with its fitting, the version and the refresh button stay plain,
 around the parts' places and not in them,
 and the home notice's place is shown and hidden by the plain code (and by `pages.js`),

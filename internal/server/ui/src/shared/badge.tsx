@@ -4,14 +4,15 @@
 /**
  * @file internal/server/ui/src/shared/badge.tsx
  *
- * A badge, a notice and a value's age as parts: badgeEl, noticeEl and
- * ageEl of components.js and app.js. An age is filled by the page's own
+ * A badge, a notice, a value's age and an action's result line as parts:
+ * badgeEl, noticeEl, ageEl and showResult of components.js and app.js. An age is filled by the page's own
  * fillAge, which refreshAges runs once a minute over every .age[data-at],
  * so that a part's ages and the plain ones read alike.
  */
 
 import type { ComponentChildren } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
+import type { Outcome } from "./action";
 import { Mark } from "./icon";
 
 /**
@@ -60,6 +61,17 @@ export function Notice({ text, since, next, cls, id, role, hidden, children }: {
       {children}
     </p>
   );
+}
+
+/**
+ * ResultLine is the line that says how an action went (showResult of
+ * components.js), as an actionRunner's set gives it: the text, green where
+ * it went well, red where not; hidden, in its place, while there is none.
+ * cls is its class (tile-result, the small result line under a tile's or
+ * a form's actions).
+ */
+export function ResultLine({ res, cls }: { res: Outcome | null | undefined; cls: string }) {
+  return <p class={cls + (res ? (res.ok ? " ok" : " bad") : " hidden")}>{res?.text}</p>;
 }
 
 /**

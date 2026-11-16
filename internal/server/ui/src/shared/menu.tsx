@@ -15,38 +15,49 @@
 import type { ComponentChildren, TargetedMouseEvent } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import { Icon } from "./icon";
+import { busyProps } from "./question";
 
 /**
  * Dropdown is a details of the classes "menu" and cls (its id id): its
  * summary (summaryCls, its id summaryId, label its name for a screen
- * reader and, without title, its tooltip) shows summary, its list
- * (.menu-items and listCls) the children; onClick sees every click in it.
- * With arrows, a selector of its items, the arrow keys move between them
+ * reader and, without title, its tooltip; without label it is named by
+ * what it shows) shows summary, its list (.menu-items and listCls) the
+ * children; onClick sees every click in it, and onOpen is told each time
+ * it opens (a list that loads what it shows). busy makes the summary turn
+ * while a request sent from its list runs, as busyProps marks a button. With
+ * arrows, a selector of its items, the arrow keys move between them
  * (menuArrows of components.js); with focusCurrent opening the menu puts
  * the focus on the item marked aria-current, else on the first, among
  * arrows' items, or its list's buttons that are on without arrows. A click
  * on any button of its list closes it (dropdown), as every menu of the
  * page.
  */
-export function Dropdown({ id, cls, summaryId, summaryCls, label, title, summary, listCls, arrows, focusCurrent, onClick, children }: {
+export function Dropdown({ id, cls, summaryId, summaryCls, label, title, summary, listCls, arrows, focusCurrent, busy, onClick, onOpen, children }: {
   id?: string;
   cls?: string;
   summaryId?: string;
   summaryCls?: string;
-  label: string;
+  label?: string;
   title?: string;
   summary: ComponentChildren;
   listCls?: string;
   arrows?: string;
   focusCurrent?: boolean;
+  busy?: boolean;
   onClick?: (ev: TargetedMouseEvent<HTMLDetailsElement>) => void;
+  onOpen?: () => void;
   children?: ComponentChildren;
 }) {
   const ref = useRef<HTMLDetailsElement>(null);
+  const opened = useRef(onOpen);
+  opened.current = onOpen;
   useLayoutEffect(() => {
     const details = ref.current;
     if (!details) return;
     dropdown(details);
+    details.addEventListener("toggle", () => {
+      if (details.open && opened.current) opened.current();
+    });
     if (focusCurrent) {
       const among = arrows || ".menu-items button:not(:disabled)";
       details.addEventListener("toggle", () => {
@@ -58,9 +69,11 @@ export function Dropdown({ id, cls, summaryId, summaryCls, label, title, summary
     }
     if (arrows) menuArrows(details, arrows);
   }, []);
+  const sum = summaryCls || "";
   return (
     <details ref={ref} id={id} class={cls ? "menu " + cls : "menu"} onClick={onClick}>
-      <summary id={summaryId} class={summaryCls} title={title || label} aria-label={label}>{summary}</summary>
+      <summary id={summaryId} class={(busy ? sum + " busy" : sum) || undefined} title={title || label} aria-label={label}
+        aria-busy={busy ? "true" : undefined}>{summary}</summary>
       <div class={listCls ? "menu-items " + listCls : "menu-items"}>{children}</div>
     </details>
   );
@@ -71,17 +84,23 @@ export function Dropdown({ id, cls, summaryId, summaryCls, label, title, summary
  * icon (an element such as a sign; with blank and no icon an empty place
  * of an icon's width, so that the labels line up), its label with icons
  * after it on its line where given, and under it in grey a second line
- * (sub); value is its data-value, current marks it aria-current.
+ * wherever sub is given, empty too (one that fills once loaded), of the
+ * classes menu-item-sub and subCls; cls is the button's class, value its
+ * data-value, current marks it aria-current, busy makes it turn while the
+ * request it sent runs (busyProps).
  */
-export function MenuItem({ icon, blank, label, icons, sub, value, current, disabled, onClick }: {
+export function MenuItem({ icon, blank, label, icons, sub, subCls, cls, value, current, disabled, busy, onClick }: {
   icon?: ComponentChildren;
   blank?: boolean;
   label: string;
   icons?: ComponentChildren;
   sub?: string;
+  subCls?: string;
+  cls?: string;
   value?: string;
   current?: boolean;
   disabled?: boolean;
+  busy?: boolean;
   onClick?: () => void;
 }) {
   const name = icons ? (
@@ -90,10 +109,12 @@ export function MenuItem({ icon, blank, label, icons, sub, value, current, disab
       <span class="menu-item-icons">{icons}</span>
     </span>
   ) : <span class="menu-item-label">{label}</span>;
+  const b = busyProps(cls || "", !!busy, disabled);
   return (
-    <button type="button" data-value={value} disabled={disabled} aria-current={current ? "true" : undefined} onClick={onClick}>
+    <button type="button" class={b.class || undefined} data-value={value} disabled={b.disabled} aria-busy={b["aria-busy"]}
+      aria-current={current ? "true" : undefined} onClick={onClick}>
       {icon || (blank && <span class="menu-icon-none" />)}
-      {sub ? <span class="menu-item-text">{name}<span class="menu-item-sub">{sub}</span></span> : name}
+      {sub !== undefined ? <span class="menu-item-text">{name}<span class={subCls ? "menu-item-sub " + subCls : "menu-item-sub"}>{sub}</span></span> : name}
     </button>
   );
 }
@@ -141,7 +162,7 @@ export function Picker({ id, cls, summaryId, summaryCls, entries, value, onPick,
       {entries.map((e, i) => {
         if ("group" in e) return <p key={"group:" + e.group} class="menu-group">{e.group}</p>;
         if ("separator" in e) return <hr key={"sep:" + i} class="menu-sep" />;
-        return <MenuItem key={e.value} value={e.value} icon={e.icon} blank={blank} label={e.label} icons={e.icons} sub={e.sub}
+        return <MenuItem key={e.value} value={e.value} icon={e.icon} blank={blank} label={e.label} icons={e.icons} sub={e.sub || undefined}
           current={e.value === value} disabled={e.disabled} onClick={() => onPick(e.value)} />;
       })}
     </Dropdown>

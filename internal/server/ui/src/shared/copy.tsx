@@ -12,7 +12,7 @@
  */
 
 import type { TargetedKeyboardEvent } from "preact";
-import { Icon } from "./icon";
+import { IconButton } from "./icon";
 
 /** copyHandlers copy what get returns on a click, Enter or Space. */
 function copyHandlers(get: () => string) {
@@ -33,11 +33,7 @@ function copyHandlers(get: () => string) {
 
 /** CopyIcon is a small button with the copy icon that copies what get returns; label names what. */
 export function CopyIcon({ get, label }: { get: () => string; label: string }) {
-  return (
-    <button type="button" class="copy-icon copyable" aria-label={label} title={label} {...copyHandlers(get)}>
-      <Icon symbol="icon-copy" cls="ni" />
-    </button>
-  );
+  return <IconButton symbol="icon-copy" label={label} cls="copy-icon copyable" {...copyHandlers(get)} />;
 }
 
 /**

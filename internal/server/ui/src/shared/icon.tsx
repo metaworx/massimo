@@ -5,13 +5,15 @@
  * @file internal/server/ui/src/shared/icon.tsx
  *
  * An icon, a sign and a mark as parts: iconEl, signEl and markEl of
- * components.js, drawn once and updated in place. A mark is an element of
+ * components.js, drawn once and updated in place; and a button that is an
+ * icon alone (iconButton). A mark is an element of
  * its own (use.mark), which is what blinks; it is made again only where
  * its state changes, and then starts its blinking where the mark of its
  * key first came (keepBlink), so that a mark that stays keeps its phase
  * by itself.
  */
 
+import type { ButtonHTMLAttributes } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import { useIcons } from "./look";
 
@@ -82,5 +84,26 @@ export function CountIcon({ symbol, n, cls }: { symbol: string; n: number; cls: 
       <Icon symbol={symbol} cls="ni" />
       <b>{String(n)}</b>
     </span>
+  );
+}
+
+/**
+ * IconButton is a button that shows an icon alone (iconButton of
+ * components.js): label names it for a screen reader and, without title,
+ * is its tooltip; cls is its class, mark draws the symbol as a mark
+ * (Icon); the other properties are the button's (an id, aria-expanded,
+ * data- attributes, the handlers).
+ */
+export function IconButton({ symbol, label, title, cls, mark, ...rest }: {
+  symbol: string;
+  label: string;
+  title?: string;
+  cls?: string;
+  mark?: boolean;
+} & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "class" | "title" | "children" | "type">) {
+  return (
+    <button type="button" class={cls} aria-label={label} title={title || label} {...rest}>
+      <Icon symbol={symbol} cls="ni" mark={mark} />
+    </button>
   );
 }
