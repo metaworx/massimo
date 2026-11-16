@@ -182,7 +182,7 @@ export function DeviceRow({ d, ui, room, actions, children }: {
   actions?: ComponentChildren;
   children?: ComponentChildren;
 }) {
-  load.use();
+  load.useLoad();
   const virtual = !!d.virtual;
   // An out-of-date device shows the values of its last report.
   const values = isThermostat(d) && !!(d.reported || (d.out_of_date && d.last_known));
@@ -244,7 +244,7 @@ export function DeviceRow({ d, ui, room, actions, children }: {
  * then in expert mode the room's virtual wall thermostat.
  */
 export function DeviceList({ room, ui }: { room: PageRoom; ui: RoomUI }) {
-  load.use();
+  load.useLoad();
   return (
     <>
       {room.devices.length === 0 && <p class="muted">{t("room.noDevices")}</p>}

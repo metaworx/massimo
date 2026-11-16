@@ -25,7 +25,7 @@ import { changed, house, load, newUI, planWindows, roomOf, tickOf } from "./stor
 
 /** Rooms is a tile per room, kept by its Cube and its id for as long as the room is there. */
 function Rooms() {
-  load.use();
+  load.useLoad();
   return <>{state.rooms.map((r) => <Tile key={(state.roomsOf || "") + ":" + r.id} room={r} />)}</>;
 }
 

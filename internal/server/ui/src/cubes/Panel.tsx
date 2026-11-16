@@ -167,7 +167,7 @@ function keepOpen(ev: TargetedMouseEvent<HTMLElement>) {
  * order, and a click on its head folds nothing.
  */
 export function Panel({ c, page }: { c: Cube; page: boolean }) {
-  load.use();
+  load.useLoad();
   const ui = cubeUI.of(c.serial);
   const toggle = (open: boolean) => {
     if (page) return;

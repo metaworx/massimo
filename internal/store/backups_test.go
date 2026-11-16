@@ -189,7 +189,7 @@ func TestBackupsMigration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, _ := old.AddCube(context.Background(), Cube{Serial: "KEQ0000001", Configured: true})
+	c := Cube{ID: oldCube(t, old, "KEQ0000001")}
 	for i, reason := range []string{"connect", "daily", "manual"} {
 		if _, err := old.db.Exec(`INSERT INTO backups (uuid, cube_id, taken_at, reason, format, size, sha256, body) VALUES (?, ?, ?, ?, 'json', 1, '', x'00')`,
 			newUUID(), c.ID, formatTime(time.Now().Add(time.Duration(i)*time.Second)), reason); err != nil {
@@ -212,7 +212,7 @@ func TestBackupsMigration(t *testing.T) {
 	if strings.Join(reasons, ",") != "auto,auto,manual" {
 		t.Fatalf("copied as %v", reasons)
 	}
-	if _, err := s.db.Exec(`INSERT INTO backups (uuid, cube_id, taken_at, reason, format, size, sha256, body) VALUES (?, ?, ?, 'daily', 'json', 1, '', x'00')`,
+	if _, err := s.db.Exec(`INSERT INTO backups (uuid, cube_id, taken_at, reason, format, size, sha256) VALUES (?, ?, ?, 'daily', 'json', 1, '')`,
 		newUUID(), c.ID, s.nowText()); err == nil {
 		t.Fatal("the reason daily taken after 0005")
 	}
@@ -287,25 +287,22 @@ func TestBackupsAutoincrementMigration(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	c, _ := old.AddCube(ctx, Cube{Serial: "KEQ0000001", Configured: true})
+	c := Cube{ID: oldCube(t, old, "KEQ0000001")}
 	now := time.Now().UTC().Truncate(time.Second)
-	kept, err := old.AddBackup(ctx, Backup{CubeID: c.ID, Reason: ReasonManual, Format: "yaml", Note: "kept", TakenAt: now.Add(-time.Hour)}, []byte("version: 1\n"))
-	if err != nil {
+	kept := Backup{ID: oldBackup(t, old, c.ID, ReasonManual, "yaml", now.Add(-time.Hour), []byte("version: 1\n"))}
+	gone := Backup{ID: oldBackup(t, old, c.ID, ReasonAuto, "json", now, []byte(`{"version":1}`))}
+	if _, err := old.db.ExecContext(ctx, `UPDATE backups SET deleted_at = ?, body = x'', version = version + 1 WHERE id = ?`, formatTime(now), gone.ID); err != nil {
 		t.Fatal(err)
 	}
-	gone, err := old.AddBackup(ctx, Backup{CubeID: c.ID, Reason: ReasonAuto, Format: "json", TakenAt: now}, []byte(`{"version":1}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	old.DeleteBackup(ctx, c.ID, gone.ID)
 	type row struct {
 		ID                         int64
 		UUID, Deleted, Origin, Sum string
 		Version, Body              int64
 	}
-	rows := func(s *Store) []row {
+	// The files are in backup_data since 0024.
+	rows := func(s *Store, body string) []row {
 		t.Helper()
-		r, err := s.db.Query(`SELECT id, uuid, coalesce(deleted_at, ''), origin, sha256, version, length(body) FROM backups ORDER BY id`)
+		r, err := s.db.Query(`SELECT id, uuid, coalesce(deleted_at, ''), origin, sha256, version, ` + body + ` ORDER BY id`)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -318,11 +315,12 @@ func TestBackupsAutoincrementMigration(t *testing.T) {
 		}
 		return out
 	}
-	want := rows(old)
+	want := rows(old, `length(body) FROM backups`)
 	old.Close()
 
 	s := open(t, dir)
-	if got := rows(s); fmt.Sprint(got) != fmt.Sprint(want) || len(got) != 2 || got[1].Deleted == "" {
+	if got := rows(s, `coalesce((SELECT length(d.data) FROM backup_data d WHERE d.id = backups.id), 0) FROM backups`); fmt.Sprint(got) != fmt.Sprint(want) ||
+		len(got) != 2 || got[1].Deleted == "" {
 		t.Fatalf("copied %+v, want %+v", got, want)
 	}
 	if body, ok, err := s.BackupBody(ctx, c.ID, kept.ID); err != nil || !ok || string(body) != "version: 1\n" {

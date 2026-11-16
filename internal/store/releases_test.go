@@ -21,8 +21,10 @@ import (
 // stays sound, every table keeps its rows, the log's exactly, every event
 // has its source, the log, the users and the backups read, the
 // backups' and the commands' sequences start at their highest id
-// (migrations 0013 and 0014), and the events, the log's rows since 0014,
-// read through their view as before.
+// (migrations 0013 and 0014), and 0024 has given every row of the log
+// and the audit with a user its real user, the same, and every live
+// backup its file in backup_data. TestReleasedStoresDownAgain takes
+// each down again (raise_test.go).
 func TestMigratesReleasedStores(t *testing.T) {
 	dumps, err := filepath.Glob(filepath.Join("testdata", "releases", "v*.sql"))
 	if err != nil || len(dumps) < 6 {
@@ -67,12 +69,21 @@ func TestMigratesReleasedStores(t *testing.T) {
 					t.Errorf("%s: %d rows after the migration, %d before", table, after[table], n)
 				}
 			}
-			var unsourced, viewed int
+			var unsourced int
 			if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM log WHERE source = ''`).Scan(&unsourced); err != nil || unsourced != 0 {
 				t.Errorf("%d events without a source, %v", unsourced, err)
 			}
-			if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM events`).Scan(&viewed); err != nil || viewed != after["log"] {
-				t.Errorf("the view events: %d rows of %d, %v", viewed, after["log"], err)
+			for _, table := range []string{"log", "audit"} {
+				var users, real int
+				// The names are the test's own.
+				if err := s.db.QueryRowContext(ctx, `SELECT count(effective_user_id), count(*) FILTER (WHERE real_user_id IS effective_user_id AND real_user_id IS NOT NULL) FROM `+table).
+					Scan(&users, &real); err != nil || real != users {
+					t.Errorf("%s: %d rows with a user, %d with the same real user, %v", table, users, real, err)
+				}
+			}
+			var live, files int
+			if err := s.db.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM backups WHERE deleted_at IS NULL), (SELECT count(*) FROM backup_data)`).Scan(&live, &files); err != nil || live != files {
+				t.Errorf("%d live backups, %d files, %v", live, files, err)
 			}
 			cubes, err := s.Cubes(ctx)
 			if err != nil || len(cubes) != 1 {

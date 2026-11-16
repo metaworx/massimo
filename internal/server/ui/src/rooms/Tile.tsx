@@ -229,7 +229,7 @@ function Config({ room, ui, cfg }: { room: PageRoom; ui: RoomUI; cfg: number }) 
 
 /** Tile is a room's tile. */
 export function Tile({ room }: { room: PageRoom }) {
-  load.use();
+  load.useLoad();
   const tick = tickOf(room.id);
   void tick.n; // drawn again when a device of the room changed
   const ui = roomUI(room);

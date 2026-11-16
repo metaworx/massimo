@@ -117,7 +117,7 @@ async function houseRequests(): Promise<void> {
  * rooms.js shows and hides the tile, as there is a room with a thermostat.
  */
 export function House() {
-  load.use();
+  load.useLoad();
   const sending = useBusy();
   const panel = useRef<HTMLFormElement>(null);
   const rooms = state.rooms.filter((r) => roomThermostat(r));

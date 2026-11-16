@@ -73,9 +73,9 @@ func TestProviders(t *testing.T) {
 		t.Fatalf("its identities: %+v", ids)
 	}
 	var n int
-	s.db.QueryRowContext(ctx, `SELECT count(*) FROM user_identities`).Scan(&n)
+	s.db.QueryRowContext(ctx, `SELECT count(*) FROM user_identities WHERE deleted_at IS NULL`).Scan(&n)
 	if n != 0 {
-		t.Fatalf("%d identity rows left", n)
+		t.Fatalf("%d live identity rows left", n)
 	}
 	if err := s.DeleteProvider(ctx, "cloud", 0); !errors.Is(err, ErrNoProvider) {
 		t.Fatalf("remove twice: %v", err)

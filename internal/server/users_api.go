@@ -666,7 +666,7 @@ func (s *Server) deleteToken(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return userFail(err)
 	}
-	if !ok || tok.UserID != u.ID || !tok.RevokedAt.IsZero() {
+	if !ok || tok.UserID != u.ID || !tok.DeletedAt.IsZero() {
 		return fail(http.StatusNotFound, "user %s has no token %d", u.Name, id)
 	}
 	if err := st.RevokeToken(r.Context(), id); err != nil {

@@ -101,7 +101,7 @@ function UnlistedRow({ d }: { d: Device }) {
 
 /** Unlisted is the list of the devices without a room, in #unlisted-devices; its section is shown and hidden by rooms.js. */
 export function Unlisted() {
-  load.use();
+  load.useLoad();
   void tickOf(UNLISTED).n; // drawn again when one of them reported
   return <>{state.unlisted.map((d) => <UnlistedRow key={(state.roomsOf || "") + ":" + d.rf_address} d={d} />)}</>;
 }

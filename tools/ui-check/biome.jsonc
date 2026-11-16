@@ -1,0 +1,27 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 The Massimo Authors
+//
+// The hooks lint of the page's parts (make ui-check: biome lint over
+// internal/server/ui/src, after tsc). Two rules and no other, both about
+// Preact's hooks, which tsc cannot check: a hook is called at the top of
+// a part's drawing, never after an early return or in a branch, and an
+// effect lists what it reads. A hook is known by its name, use and a
+// capital letter: the counter's useLoad() is one. No formatter and no
+// layout rule: the parts keep the style they are written in.
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": { "enabled": false },
+  "files": { "includes": ["**/*.ts", "**/*.tsx"] },
+  "formatter": { "enabled": false },
+  "assist": { "enabled": false },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "none",
+      "correctness": {
+        "useHookAtTopLevel": "error",
+        "useExhaustiveDependencies": "error"
+      }
+    }
+  }
+}

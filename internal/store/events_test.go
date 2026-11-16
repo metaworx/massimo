@@ -368,7 +368,7 @@ func TestEventsPageQuery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.db.Exec(`UPDATE log SET user_id = ? WHERE cube_id = ? AND id % 211 = 0`, anna.ID, a.ID); err != nil {
+	if _, err := s.db.Exec(`UPDATE log SET effective_user_id = ?, real_user_id = ? WHERE cube_id = ? AND id % 211 = 0`, anna.ID, anna.ID, a.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.db.Exec(`UPDATE log SET level = 8 WHERE level = 0 AND id % 997 = 0`); err != nil {
@@ -458,7 +458,7 @@ func TestEventsPageQuery(t *testing.T) {
 		}
 		for i, e := range page {
 			if e.CubeID != q.CubeID && !(q.Server && e.CubeID == 0) || (q.Kind != "" && e.Kind != q.Kind) || (q.Serial != "" && e.Serial != q.Serial) ||
-				(q.Source != "" && e.Source != q.Source) || (q.UserID != 0 && e.UserID != q.UserID) || (q.MinLevel != nil && e.Level < *q.MinLevel) ||
+				(q.Source != "" && e.Source != q.Source) || (q.UserID != 0 && e.EffectiveUserID != q.UserID) || (q.MinLevel != nil && e.Level < *q.MinLevel) ||
 				(q.BeforeID > 0 && e.ID >= q.BeforeID) || (!q.Before.IsZero() && !e.Time.Before(q.Before)) ||
 				(!q.Since.IsZero() && e.Time.Before(q.Since)) ||
 				(i > 0 && e.ID >= page[i-1].ID) {

@@ -24,7 +24,7 @@ import (
 
 // contentColumns are the content columns per table: names, addresses,
 // hidden, settings.value, preferences.value, log.data, audit.detail,
-// backups.body and note.
+// backup_data.data (the backups' files) and note.
 var contentColumns = map[string][]string{
 	"cubes":       {"name", "address", "proxy_address", "discovered_address", "mac", "hidden"},
 	"users":       {"display_name"},
@@ -34,7 +34,8 @@ var contentColumns = map[string][]string{
 	"preferences": {"value"},
 	"log":         {"data"},
 	"audit":       {"detail", "remote"},
-	"backups":     {"body", "note"},
+	"backups":     {"note"},
+	"backup_data": {"data"}, // the backups' files (migration 0024)
 	"commands":    {"request", "result"},
 	// the OpenID Connect providers: the button's name and the client's
 	// secret; the identities' e-mail is a key a sign-in is found by

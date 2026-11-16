@@ -387,7 +387,7 @@ func (s *Server) endAudit(ctx context.Context, a *auditInfo, remote string) {
 		}
 	}
 	if a.p != nil && a.p.integration != nil {
-		detail["via"] = a.p.integration.Key
+		detail["via"] = a.p.integration.UUID
 		if f := a.p.actsFor; f != nil {
 			detail["for"] = map[string]any{"id": f.Subject, "name": f.Name, "level": f.LastLevel}
 		}
@@ -400,7 +400,7 @@ func (s *Server) endAudit(ctx context.Context, a *auditInfo, remote string) {
 	}
 	e := store.AuditEntry{Time: a.started, Remote: remote, Action: a.action, CubeID: a.cubeID, Target: a.target, Detail: raw, Result: result, CommandID: a.commandID}
 	if a.p.named() {
-		e.UserID, e.TokenID = a.p.user.ID, a.p.token.ID
+		e.EffectiveUserID, e.RealUserID, e.TokenID = a.p.user.ID, a.p.realUserID(), a.p.token.ID
 	}
 	// The request's context may be over; the row is written anyway.
 	if _, err := st.Audit(context.WithoutCancel(ctx), e); err != nil {
@@ -438,7 +438,7 @@ func (s *Server) logChange(a *auditInfo) {
 	}
 	ev := event{Kind: "change", Source: "config", Time: a.started, Summary: summary, Command: a.commandID}
 	if a.p.named() {
-		ev.userID = a.p.user.ID
+		ev.userID, ev.realUserID = a.p.user.ID, a.p.realUserID()
 	}
 	if dev, ok := strings.CutPrefix(a.target, "device:"); ok && deviceSerial.MatchString(dev) {
 		ev.Serial = strings.ToUpper(dev)

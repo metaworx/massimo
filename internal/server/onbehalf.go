@@ -159,7 +159,7 @@ func (s *Server) integrationPrincipal(ctx context.Context, r *http.Request, p *p
 		return p, nil
 	}
 	if integ.State != store.IntegrationActive {
-		return nil, &onBehalfRefusal{http.StatusForbidden, "integration_disabled", "the integration " + integ.Key + " is disabled"}
+		return nil, &onBehalfRefusal{http.StatusForbidden, "integration_disabled", "the integration " + integ.UUID + " is disabled"}
 	}
 	caps := intersect(p.caps, integ.MaxCaps)
 	if h == "" {
@@ -173,7 +173,7 @@ func (s *Server) integrationPrincipal(ctx context.Context, r *http.Request, p *p
 	}
 	if ob.instance != integ.InstanceID {
 		if err := st.NotePendingInstance(ctx, integ.ID, ob.instance); err != nil {
-			s.log.Error("api: an integration's new installation id not recorded", "integration", integ.Key, "error", err)
+			s.log.Error("api: an integration's new installation id not recorded", "integration", integ.UUID, "error", err)
 		}
 		return nil, &onBehalfRefusal{http.StatusForbidden, "instance_pending", "the call came from another installation than the one accepted; the owner accepts it in the integration's settings"}
 	}
@@ -182,7 +182,7 @@ func (s *Server) integrationPrincipal(ctx context.Context, r *http.Request, p *p
 		return nil, &onBehalfRefusal{http.StatusInternalServerError, "", err.Error()}
 	}
 	now := time.Now()
-	own, ok, err := st.UserByID(ctx, id.OwnUserID)
+	own, ok, err := st.UserByID(ctx, id.RealUserID)
 	if err != nil || !ok {
 		return nil, &onBehalfRefusal{http.StatusInternalServerError, "", "the integration's user is missing"}
 	}
@@ -200,7 +200,7 @@ func (s *Server) integrationPrincipal(ctx context.Context, r *http.Request, p *p
 	caps = intersect(caps, ownCaps)
 	acting := own
 	if id.Linked() {
-		linked, ok, err := st.UserByID(ctx, id.UserID)
+		linked, ok, err := st.UserByID(ctx, id.EffectiveUserID)
 		if err != nil || !ok {
 			return nil, &onBehalfRefusal{http.StatusInternalServerError, "", "the linked user is missing"}
 		}

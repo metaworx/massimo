@@ -46,7 +46,7 @@ function serverAct(): void {
 
 /** ServerSign is the server's sign, an icon button. */
 export function ServerSign() {
-  load.use();
+  load.useLoad();
   const st = serverState();
   const label = t("server." + st, { version: updateLatest(), seconds: state.settings.poll });
   return <IconButton id="server-sign" cls="server-sign" data-state={st} symbol={SERVER_ICON[st]} mark={st === "new"} label={label} onClick={serverAct} />;
