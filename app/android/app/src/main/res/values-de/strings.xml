@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="unlock_title">%1$s entsperren</string>
+    <string name="webview_outdated">Massimo braucht ein neueres Android System WebView. Es im App-Store aktualisieren und Massimo dann wieder öffnen.</string>
+    <string name="cert_changed_title">Zertifikat geändert</string>
+    <string name="cert_changed_text">Das Zertifikat von %1$s ist nicht das vertraute, darum hat Massimo den Server nicht geöffnet. Den neuen Fingerabdruck in der Liste der Server vergleichen, bevor man ihm vertraut.</string>
+    <string name="download_unsupported">Die App kann noch keine Dateien speichern. Zum Herunterladen die Weboberfläche im Browser öffnen.</string>
+    <string name="err_not_allowed">Diese Seite darf die App nicht darum bitten.</string>
+    <string name="err_bad_call">Die Seite hat die App um etwas gebeten, das sie nicht kennt.</string>
+    <string name="err_no_server">Diesen Server gibt es in der App nicht.</string>
+    <string name="err_no_address">Ein Server braucht eine Adresse im LAN oder eine von unterwegs.</string>
+    <string name="err_bad_address">Keine Adresse eines Servers: %1$s</string>
+    <string name="err_open_url">Diese Adresse ist keine des Servers.</string>
+    <string name="err_bad_fp">Das ist kein SHA-256-Fingerabdruck.</string>
+    <string name="err_screen_lock">Zuerst eine Displaysperre auf dem Telefon einrichten: Fingerabdruck oder PIN brauchen eine.</string>
+    <string name="err_not_confirmed">Nicht bestätigt: Fingerabdruck oder PIN werden weiter verlangt.</string>
+    <string name="err_storage">Das Telefon konnte die Anmeldung nicht speichern: %1$s</string>
+    <string name="err_internal">In der App ist etwas schiefgegangen: %1$s</string>
+    <string name="probe_unreachable">Nicht erreichbar: %1$s</string>
+    <string name="probe_timeout">Keine Antwort innerhalb von vier Sekunden.</string>
+    <string name="probe_not_massimo">Das ist kein Massimo-Server.</string>
+    <string name="probe_status">Der Server hat mit Status %1$d geantwortet.</string>
+</resources>

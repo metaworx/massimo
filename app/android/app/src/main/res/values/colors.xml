@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The web UI's background (internal/server/ui/style.css); the icon's
+         is make ui-brand's, in res-brand/. -->
+    <color name="background">#F6F6F4</color>
+</resources>

@@ -475,6 +475,7 @@ not this block:
 - `Makefile`
 - `.github/**`
 - `third_party/**`
+- `app/**`
 - `:!docs/**`
 - `:!tools/**`
 - `:!GUIDELINES/**`
