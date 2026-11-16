@@ -34,8 +34,13 @@ func TestMain(m *testing.M) {
 // massimoBinaries copies the test binary, as massimo, to a directory of
 // its own and returns it and its kept name, massimo.failed (on Windows
 // massimo.exe and massimo.exe.failed); kept is made only with withKept.
+// With -short it skips the test: the armv6 job runs the test binary
+// under QEMU, which cannot start a copy of it by itself.
 func massimoBinaries(t *testing.T, withKept bool) (target, kept string) {
 	t.Helper()
+	if testing.Short() {
+		t.Skip("runs copies of the test binary")
+	}
 	self, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)

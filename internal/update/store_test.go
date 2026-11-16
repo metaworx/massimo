@@ -53,9 +53,14 @@ func fakeMassimo(mode string, args []string) int {
 
 // keptBinary copies the test binary to dir as a binary a rollback keeps
 // aside, massimo.failed (on Windows massimo.exe.failed, which Windows
-// would not run by that name).
+// would not run by that name). With -short it skips the test: the armv6
+// job runs the test binary under QEMU, which cannot start a copy of it
+// by itself.
 func keptBinary(t *testing.T, dir string) string {
 	t.Helper()
+	if testing.Short() {
+		t.Skip("runs a copy of the test binary")
+	}
 	self, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
