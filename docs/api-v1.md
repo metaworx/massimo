@@ -1043,7 +1043,7 @@ keep the default:
 | `window_open` | a window opened and is still open after `after_min` | on, 30 min |
 | `battery_low` | a device's battery flag held for 15 minutes: change the batteries (its `battery` `low`) | on |
 | `battery_weak` | a device's battery flag seen, as under the valve motor's load, and still weak after 15 minutes (its `battery` `weak`); once until a long valve move goes by without it | on |
-| `device_error` | a device reports a communication error (its state's `error`) or a link error (`link_error`), when the first of them is set | on |
+| `device_error` | a device reports a communication error (its state's `error`) or a link error (`link_error`), when each of them is set, a second while the first stays set as well | on |
 | `frost` | a device's measured temperature fell under `below_c`; again once it rose half a degree above | on, 8 °C |
 | `device_stale` | a thermostat went past the stale threshold (`stale_after`, `stale_after_wall`) | off |
 | `paired` | a device joined by pairing | off |
@@ -1053,7 +1053,9 @@ keep the default:
 `after_min` is 1 to 1440, `below_c` −10 to 20.
 A `PUT` of a document the rules cannot read (an unknown kind,
 a value out of bounds, `after_min` on a kind without a delay) is `400`.
-One kind is told once per device per half hour;
+One kind is told once per device per half hour,
+a `device_error` once per flag,
+so that the other flag's start is told while the first's half hour runs;
 a delay ends when its condition does.
 The rules keep their state in memory:
 a restart costs at most one repeated notification.

@@ -839,7 +839,9 @@ also while no page is open.
   and a value outside is not saved:
   its box turns red, with the range in amber before it,
   until it holds one inside, whatever a save meanwhile says.
-  One kind notifies once per device per half hour.
+  One kind notifies once per device per half hour,
+  a device's error once per flag:
+  a link error set while the communication error lasts notifies too.
 - **Your devices**:
   every browser and app notified for you,
   with its name, when it was added and last notified,
