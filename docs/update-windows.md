@@ -70,7 +70,18 @@ and with `-health` the poll of `/healthz` every two seconds for
 `-health-timeout` (two minutes) until its `version` carries the tag.
 Otherwise `update.Rollback(target, FailedPath)` puts `massimo.exe.prev` back,
 keeps the failed binary as `massimo.exe.failed` and restarts the service again.
-`-rollback` swaps `massimo.exe` and `massimo.exe.prev` (a second one goes forward again),
+Where the new binary migrated `C:\ProgramData\Massimo\massimo.db` past what the
+binary put back reads (a raised `min_reader`, docs/store.md, "Migrations"),
+which that binary's `store info` says,
+the rollback first stops the service (`install.StopService`)
+and runs `massimo.exe.failed -data C:\ProgramData\Massimo store downgrade -to <N>`
+through a hard link named `.massimo.run.exe` beside it,
+since Windows runs a file by its extension;
+where that fails, the binary put back takes the store back by the down parts
+the store keeps.
+`-rollback` swaps `massimo.exe` and `massimo.exe.prev` (a second one goes forward again)
+and takes the store back the same way, by `massimo.exe.prev`,
+which is then the newer binary.
 `-version <tag>` installs a given release, `-yes` skips the question.
 The test report's step 7 saw all of it: four seconds for an update,
 one second for a rollback,

@@ -902,6 +902,11 @@ and the rename carries it to the new table;
 an id pruned before the upgrade can still be given out once more.
 It keeps `min_reader` 1: the columns and their meaning stay,
 and a binary of before chooses a new id by the table's schema as well.
+`0023_down_parts.sql` (AP StoreRaise v1.2, Block 1, D1-D) adds
+`schema_version.down_sql`, additively:
+the down part of each version, which the binary writes into its row at every
+start where the row has none (the "down parts" rule below).
+
 Rules:
 
 - A migration is additive when it only adds tables,
@@ -917,12 +922,51 @@ Rules:
   The log says so.
 - A binary that finds a file with `min_reader` above its own version
   refuses to start with a message naming the copy and the versions;
-  it never downgrades a file.
+  it never downgrades a file by itself.
+- The down parts: a migration whose `min_reader` is above 1, the one that
+  raised it and every one after it (an additive one too, since it was made on
+  the raised schema), comes with `NNNN_<name>.down.sql`, plain SQL that undoes it;
+  `TestRaisingMigrationsHaveDownParts` fails without one.
+  The binary embeds them and writes each into `schema_version.down_sql`
+  of its version,
+  so that the file carries them for a binary that knows the version by its row alone.
+- `massimo store downgrade -to <N>` takes the file back to what a binary for
+  schema version N opens:
+  it undoes, newest first, the migrations from the first whose `min_reader` is
+  above N up to the file's version,
+  in one transaction with the foreign keys off and checked before the commit,
+  and deletes their `schema_version` rows;
+  the additive migrations before that first one stay, since N's binary reads them,
+  so the file can end above N.
+  The SQL of each comes from the binary that runs it, else from the file.
+  It needs the file alone: it opens it with `locking_mode=EXCLUSIVE`,
+  so a running `serve`, which holds a shared lock, makes it fail
+  ("stop the service first"), and nobody opens the file while it runs.
+  It copies the file first to `massimo.db.before-downgrade-<version>`
+  (`-2`, `-3` where an earlier downgrade left that name), owned by the file's owner
+  where root runs it.
+  A version without a down part in either stops it before anything changes,
+  naming the `massimo.db.before-<version>` copy as the way back.
+  It loses what the newer schema added, and only that.
+- The rollback of `massimo update` (after a failed health check, and `-rollback`)
+  asks the binary it put back whether it opens the file (its `store info`,
+  which names its schema version N also in its refusal);
+  where it does not, the rollback stops the service,
+  runs the binary it set aside (`.failed`, after `-rollback` `.prev`, the newer one)
+  as `store downgrade -to <N>`,
+  else, after a failed health check, the binary put back, which is the one that
+  ran the update and downgrades by the file's own down parts,
+  and says what it did in the update's status (packaging/README.md, "The store").
+  The update runs as root and opens no store itself:
+  where root runs them, both binaries run as the owner of `massimo.db`.
+  apt, brew and the Windows installer never downgrade a binary.
 - The store refuses a file it did not create (no `schema_version`
   table) rather than migrating a stranger's database.
 - Tests: migrating an empty file to the latest version,
   migrating a file at every earlier version,
-  and opening a newer additive version with an older reader.
+  opening a newer additive version with an older reader,
+  and a test-only raise undone by its down parts, from the binary and from the
+  file, to the schema of a fresh file (`downgrade_test.go`).
 - The stores the releases wrote: `internal/store/testdata/releases/<tag>.sql`
   is the text dump of the store a release's `serve` wrote against the fake Cube,
   one for each release since the store came (v0.7.0-alpha.1),
@@ -1433,7 +1477,9 @@ for the commands they are the configuration, for `serve` the seed.
 The exceptions are `user` (section 6) and `store` (stage (a):
 `store backup <file>` for a consistent copy,
 `store migrate` to apply migrations without starting the server,
-`store info` for the version and the counts), which open the store directly.
+`store info` for the version and the counts,
+`store downgrade -to <N>` to take it back for an older binary, section 5,
+"Migrations"), which open the store directly.
 
 A later mode `massimo -server <url> status` lets the commands use the server's
 API with a key instead of the Cube protocol,

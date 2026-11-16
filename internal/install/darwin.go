@@ -538,16 +538,52 @@ func RemoveDarwin(o Options, purge bool) error {
 }
 
 // RestartLaunchd restarts a loaded LaunchDaemon (kickstart -k: the
-// running instance is stopped first); for `massimo update -restart`. The
-// label may carry its domain ("system/…").
+// running instance is stopped first); one that StopLaunchd booted out is
+// bootstrapped from its property list again, which starts it
+// (RunAtLoad). For `massimo update -restart`. The label may carry its
+// domain ("system/…").
 func RestartLaunchd(label string) error {
-	target := label
-	if !strings.Contains(target, "/") {
-		target = "system/" + target
+	target, domain, bare := launchdTarget(label)
+	if exec.Command(launchctl, "print", target).Run() != nil {
+		out, err := exec.Command(launchctl, "bootstrap", domain, PlistPath(bare)).CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("launchctl bootstrap %s %s: %v: %s", domain, PlistPath(bare), err, strings.TrimSpace(string(out)))
+		}
+		return nil
 	}
 	out, err := exec.Command(launchctl, "kickstart", "-k", target).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("launchctl kickstart -k %s: %v: %s", target, err, strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+// StopLaunchd boots a LaunchDaemon out, so that launchd does not start
+// it again, and waits until launchd has let go of it; for `massimo
+// update`, whose rollback takes the store back with the service stopped.
+// RestartLaunchd brings it back. A job that is not loaded is left alone.
+func StopLaunchd(label string) error {
+	target, _, _ := launchdTarget(label)
+	if exec.Command(launchctl, "print", target).Run() != nil {
+		return nil
+	}
+	out, err := exec.Command(launchctl, "bootout", target).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("launchctl bootout %s: %v: %s", target, err, strings.TrimSpace(string(out)))
+	}
+	for i := 0; i < 50 && exec.Command(launchctl, "print", target).Run() == nil; i++ {
+		time.Sleep(200 * time.Millisecond)
+	}
+	return nil
+}
+
+// launchdTarget is a label's service target ("system/<label>" where it
+// names no domain), its domain and the bare label.
+func launchdTarget(label string) (target, domain, bare string) {
+	target = label
+	if !strings.Contains(target, "/") {
+		target = "system/" + target
+	}
+	i := strings.LastIndex(target, "/")
+	return target, target[:i], target[i+1:]
 }

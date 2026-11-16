@@ -1060,6 +1060,14 @@ and no sign-in provider's client secret opens (packaging/README.md,
 "The store").
 Run as the service user they act on the service's store from any directory,
 for example `sudo -u _massimo massimo store info`.
+`store downgrade -to <version>` takes the store back to what a binary for that
+schema version opens (its `store info` says "this binary: N"),
+for going back to an older release after a migration it cannot read:
+run with the newer binary and the service stopped,
+it undoes the newer migrations by their down parts,
+and leaves the file as it was as `massimo.db.before-downgrade-<version>`
+(docs/store.md, "Migrations").
+`update`'s rollback does it by itself.
 
 `massimo user` manages the users of the store from the box (docs/api-v1.md,
 "Authentication"):

@@ -17,3 +17,6 @@ func RemoveWindows(Options, bool) error { return errNotWindows }
 
 // RestartService restarts a Windows service; only on Windows.
 func RestartService(string) error { return errNotWindows }
+
+// StopService stops a Windows service; only on Windows.
+func StopService(string) error { return errNotWindows }
