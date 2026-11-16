@@ -11,6 +11,7 @@ import (
 	"os"
 	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -794,18 +795,135 @@ func TestParseRadioCommand(t *testing.T) {
 		data string
 		want RadioCommand
 	}{
-		{"AAQQAAAACgEKAQRO3VTzRQoxIDEgMSAxIA==", RadioCommand{RFSetWeekProgram, Target{RFAddress: 0x0a010a, RoomID: 1, Room: true}}},
-		{"AAARAAAACgEKACwePQkDCgM=", RadioCommand{RFSetTemperatures, Target{RFAddress: 0x0a010a}}},
-		{"AARAAAAACgENBgA=", RadioCommand{RFSetTemperature, Target{RFAddress: 0x0a010d, RoomID: 6, Room: true}}},
+		{"AAQQAAAACgEKAQRO3VTzRQoxIDEgMSAxIA==", RadioCommand{RFSetWeekProgram, Target{RFAddress: 0x0a010a, RoomID: 1, Room: true},
+			[]byte{0x04, 0x4e, 0xdd, 0x54, 0xf3, 0x45, 0x0a, 0x31, 0x20, 0x31, 0x20, 0x31, 0x20, 0x31, 0x20}}},
+		{"AAARAAAACgEKACwePQkDCgM=", RadioCommand{RFSetTemperatures, Target{RFAddress: 0x0a010a}, []byte{0x2c, 0x1e, 0x3d, 0x09, 0x03, 0x0a, 0x03}}},
+		{"AARAAAAACgENBgA=", RadioCommand{RFSetTemperature, Target{RFAddress: 0x0a010d, RoomID: 6, Room: true}, []byte{0x00}}},
 	} {
 		got, err := ParseRadioCommand(tc.data)
-		if err != nil || got != tc.want {
+		if err != nil || got.Command != tc.want.Command || got.Target != tc.want.Target || !bytes.Equal(got.Payload, tc.want.Payload) {
 			t.Errorf("%s: %+v %v, want %+v", tc.data, got, err, tc.want)
 		}
 	}
 	for _, bad := range []string{"", "!!", "AARAAAAA"} {
 		if _, err := ParseRadioCommand(bad); err == nil {
 			t.Errorf("%q accepted", bad)
+		}
+	}
+}
+
+// The payloads of 0x40, 0x80 and 0x82 decode to what was built, the
+// captured lines among them.
+func TestRadioCommandPayloads(t *testing.T) {
+	parse := func(m Message) RadioCommand {
+		t.Helper()
+		c, err := ParseRadioCommand(m.Data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	for _, tc := range []struct {
+		data string
+		want SetTemperature
+	}{
+		{"AARAAAAACgEKAV4=", SetTemperature{Mode: ModeManual, Setpoint: 15}},                                        // captured
+		{"AARAAAAACgEIAwA=", SetTemperature{Mode: ModeAuto}},                                                        // captured
+		{"AARAAAAACgEKAY2kmgQ=", SetTemperature{Mode: ModeVacation, Setpoint: 6.5, Until: Until{2026, 11, 4, 120}}}, // captured
+		{"AARAAAAACgIDAe0=", SetTemperature{Mode: ModeBoost, Setpoint: 22.5}},
+	} {
+		got, err := parse(Message{Type: 's', Data: tc.data}).SetTemperature()
+		if err != nil || got != tc.want {
+			t.Errorf("%s: %+v %v, want %+v", tc.data, got, err, tc.want)
+		}
+	}
+	if m, err := CmdSetTemperature(Target{RFAddress: 0x0a0203, RoomID: 1, Room: true}, 22.5, ModeBoost, Until{}); err != nil || m.Data != "AARAAAAACgIDAe0=" {
+		t.Errorf("boost 22.5: %v %v", m, err)
+	}
+	for _, locked := range []bool{true, false} {
+		if got, err := parse(CmdLockControls(Target{RFAddress: 0x0a0103}, locked)).Locked(); err != nil || got != locked {
+			t.Errorf("lock %v: %v %v", locked, got, err)
+		}
+	}
+	for _, actual := range []bool{true, false} {
+		if got, err := parse(CmdSetDisplayActual(Target{RFAddress: 0x0a010e}, actual)).DisplayActual(); err != nil || got != actual {
+			t.Errorf("display %v: %v %v", actual, got, err)
+		}
+	}
+	lock := parse(CmdLockControls(Target{RFAddress: 0x0a0103}, true))
+	if _, err := lock.SetTemperature(); err == nil {
+		t.Error("a lock decoded as a set temperature")
+	}
+	if _, err := lock.DisplayActual(); err == nil {
+		t.Error("a lock decoded as a display command")
+	}
+	if _, err := (RadioCommand{Command: RFSetTemperature, Payload: []byte{0x80}}).SetTemperature(); err == nil {
+		t.Error("a vacation without its end decoded")
+	}
+	if _, err := (RadioCommand{Command: RFLockControls}).Locked(); err == nil {
+		t.Error("a lock without its payload decoded")
+	}
+}
+
+// The payloads of 0x11, 0x12 and 0x10 decode to what was built, the
+// captured lines among them, read as the C line reads the same values.
+func TestConfigCommandPayloads(t *testing.T) {
+	parse := func(data string) RadioCommand {
+		t.Helper()
+		c, err := ParseRadioCommand(data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	temps, err := parse("AAARAAAACgEKACwePQkDCgM=").Temperatures() // captured
+	if want := (TemperatureSettings{Comfort: 22, Eco: 15, Max: 30.5, Min: 4.5, Offset: -2, WindowOpen: 5, WindowOpenMinutes: 15}); err != nil || temps != want {
+		t.Errorf("temperatures %+v %v, want %+v", temps, err, want)
+	}
+	valve, err := parse("AAQSAAAACgEKATAM/wA=").ValveSettings() // captured: boost 5 min 80 %
+	if want := (ValveSettings{BoostMinutes: 5, BoostValvePct: 80, DecalcDay: Saturday, DecalcHour: 12, MaxValvePct: 100, ValveOffsetPct: 0}); err != nil || valve != want {
+		t.Errorf("valve %+v %v, want %+v", valve, err, want)
+	}
+	for _, v := range []ValveSettings{{BoostMinutes: 60, BoostValvePct: 100, DecalcDay: Friday, DecalcHour: 23, MaxValvePct: 37, ValveOffsetPct: 3}} {
+		m, err := CmdSetValveConfig(Target{RFAddress: 0x0a010a}, v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, err := parse(m.Data).ValveSettings(); err != nil || got != v {
+			t.Errorf("valve %+v: %+v %v", v, got, err)
+		}
+	}
+	day, err := parse("AAQQAAAACgEKAQRO3VTzRQoxIDEgMSAxIA==").DayProgram() // captured
+	want := DayProgramPart{Day: Wednesday, Points: DayProgram{{19.5, 1105}, {21, 1215}, {17, 1330}, {12, 1440}}, Last: true}
+	if err != nil || !reflect.DeepEqual(day, want) {
+		t.Errorf("day %+v %v, want %+v", day, err, want)
+	}
+	if !day.Shown(want.Points) || day.Shown(append(slices.Clone(want.Points), SwitchPoint{12, 1440})) || day.Shown(want.Points[:3]) {
+		t.Error("Shown of a whole day")
+	}
+	long := DayProgram{{17, 360}, {21, 480}, {17, 600}, {21, 720}, {17, 840}, {21, 960}, {17, 1080}, {21, 1200}, {17, 1440}}
+	ms, err := CmdSetDayProgram(Target{RFAddress: 0x0a010a, RoomID: 1, Room: true}, Monday, long)
+	if err != nil || len(ms) != 2 {
+		t.Fatalf("long day: %v %v", ms, err)
+	}
+	first, err1 := parse(ms[0].Data).DayProgram()
+	second, err2 := parse(ms[1].Data).DayProgram()
+	if err1 != nil || err2 != nil || first.Day != Monday || first.From != 0 || first.Last || len(first.Points) != 7 ||
+		second.Day != Monday || second.From != 7 || !second.Last || len(second.Points) != 2 {
+		t.Fatalf("parts %+v %v, %+v %v", first, err1, second, err2)
+	}
+	if !first.Shown(long) || !second.Shown(long) || second.Shown(long[:8]) || first.Shown(long[:6]) {
+		t.Error("Shown of a long day's parts")
+	}
+	for _, bad := range []RadioCommand{{Command: RFSetTemperatures, Payload: []byte{1, 2}}, {Command: RFSetValveConfig}, {Command: RFSetWeekProgram, Payload: []byte{0x07, 0, 0}}} {
+		if _, err := bad.Temperatures(); err == nil {
+			t.Errorf("%+v decoded as temperatures", bad)
+		}
+		if _, err := bad.ValveSettings(); err == nil {
+			t.Errorf("%+v decoded as valve settings", bad)
+		}
+		if _, err := bad.DayProgram(); err == nil {
+			t.Errorf("%+v decoded as a day", bad)
 		}
 	}
 }

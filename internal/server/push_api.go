@@ -289,7 +289,8 @@ func (s *Server) notifyEvent(rt *runtime, ev event) {
 		n.RoomName = roomName(rt, dv.RoomID)
 		if ev.Kind == "state" && dv.State != nil {
 			st := dv.State
-			n.State = &notify.State{WindowOpen: st.WindowOpen, BatteryLow: st.BatteryLow, Error: st.Error, LinkError: st.LinkError, ActualTemp: st.ActualTemp}
+			n.State = &notify.State{WindowOpen: st.WindowOpen, BatteryLow: st.BatteryLow, Error: st.Error, FailedRadiogram: st.FailedRadiogram,
+				LinkError: st.LinkError, ActualTemp: st.ActualTemp}
 		}
 	}
 	if ev.Kind == "battery" {

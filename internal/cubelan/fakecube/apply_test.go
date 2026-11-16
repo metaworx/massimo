@@ -132,6 +132,27 @@ func TestApplySetpoint(t *testing.T) {
 	}
 }
 
+// A deaf device keeps its entry while the other members of its room
+// take a room command, and takes the next one once it hears again.
+func TestApplyDeaf(t *testing.T) {
+	s := startRooms(t, &Server{})
+	s.SetDeaf(0x0a0205, true)
+	c := dial(t, s.ln.Addr().String())
+	c.send(must(cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a0204, RoomID: 2, Room: true}, 22.5, cube.ModeManual, cube.Until{})))
+	st := c.states()
+	if st[0x0a0204].Mode != cube.ModeManual || st[0x0a0206].Mode != cube.ModeManual {
+		t.Errorf("the room's others: %+v %+v", st[0x0a0204], st[0x0a0206])
+	}
+	if st[0x0a0205].Mode != cube.ModeAuto || *st[0x0a0205].Setpoint != 20 {
+		t.Errorf("the deaf device took it: %+v", st[0x0a0205])
+	}
+	s.SetDeaf(0x0a0205, false)
+	c.send(must(cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a0204, RoomID: 2, Room: true}, 21, cube.ModeManual, cube.Until{})))
+	if st := c.states(); *st[0x0a0205].Setpoint != 21 {
+		t.Errorf("heard again: %+v", st[0x0a0205])
+	}
+}
+
 // Auto without a temperature takes the programme's; vacation keeps its
 // end, and leaving it drops the bytes that carried it.
 func TestApplyAutoAndVacation(t *testing.T) {

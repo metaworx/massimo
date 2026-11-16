@@ -19,6 +19,7 @@ CHANGES = {"en": "window opened, set 18.0 → 5.0", "de": "Fenster geöffnet, So
 SEARCHING = {"en": "Searching…", "de": "Suche läuft…"}
 FOUND_N = {"en": "{n} Cube{s} found, not configured", "de": "{n} Cube{s} gefunden, nicht eingerichtet"}
 STALE = {"en": "Not seen for 30 hours", "de": "Seit 30 Stunden keine Meldung"}
+ECO_BUTTON = {"en": "eco button", "de": "Eco-Taster"}
 CONTRAST_SCHEME = {"en": "High contrast", "de": "Hoher Kontrast"}
 SAVED = {"en": "Saved as “Test scheme”.", "de": "Als „Test scheme“ gespeichert."}
 HEX_LABEL = {"en": "Lines, hex", "de": "Linien, Hex"}

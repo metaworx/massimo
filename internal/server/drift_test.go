@@ -259,26 +259,115 @@ func alertKinds(t *testing.T, ts *httptest.Server) []string {
 	return out
 }
 
-// Without a recent setpoint of Massimo's, the room's wall thermostat's
-// state is sent once more.
+// disagreeAndResend runs the checks of a disagreement from its start to
+// its re-send: the first check, the Warn eleven minutes later, the
+// second check eleven minutes after it.
+func (r *driftRig) disagreeAndResend() {
+	r.check()
+	r.clock.add(11 * time.Minute)
+	r.check()
+	r.clock.add(11 * time.Minute)
+	r.check()
+}
+
+// wantResend checks the one room command sent since the n-th line and
+// the re-send's event: its source (from) and mode.
+func (r *driftRig) wantResend(n int, master cube.RFAddress, room uint8, temp float64, mode cube.Mode, from string) {
+	r.t.Helper()
+	want := setpointLine(r.t, master, room, temp, mode)
+	if got := r.radioSince(n); !slices.Equal(got, []string{want}) {
+		r.t.Fatalf("the re-send: %v, want %s", got, want)
+	}
+	ev := r.newest("disagree")
+	if summaryText(&ev, "outcome") != "resent" || summaryText(&ev, "from") != from || summaryText(&ev, "mode") != mode.String() {
+		r.t.Fatalf("the re-send's event: %+v", ev.Summary)
+	}
+	if _, ok := ev.Summary["setpoint"]; ok != (temp != 0) {
+		r.t.Fatalf("the re-send's setpoint: %+v", ev.Summary)
+	}
+}
+
+// Without a recent setpoint of Massimo's, the state more than half of
+// the room's thermostats show is sent once more, before the wall
+// thermostat's (D188); in a room without a wall thermostat too.
+func TestDisagreeResendsTheMajoritys(t *testing.T) {
+	t.Run("over the wall thermostat's", func(t *testing.T) {
+		r := startDrift(t, nil)
+		r.set(0x0a0201, "manual", 19)
+		r.set(0x0a0202, "manual", 22)
+		r.set(0x0a0203, "manual", 22)
+		sent := len(r.fc.Received())
+		r.disagreeAndResend()
+		r.wantResend(sent, 0x0a0201, 1, 22, cube.ModeManual, "majority")
+	})
+	t.Run("without a wall thermostat", func(t *testing.T) {
+		r := startDrift(t, nil)
+		r.set(0x0a0204, "manual", 18)
+		r.set(0x0a0205, "manual", 23)
+		r.set(0x0a0206, "manual", 18)
+		sent := len(r.fc.Received())
+		r.disagreeAndResend()
+		r.wantResend(sent, 0x0a0204, 2, 18, cube.ModeManual, "majority")
+	})
+}
+
+// Without a recent setpoint of Massimo's and without a majority, the
+// room's wall thermostat's state is sent once more; without that too,
+// nothing, the report alone.
 func TestDisagreeResendsTheWallThermostats(t *testing.T) {
 	r := startDrift(t, nil)
-	for _, rf := range []cube.RFAddress{0x0a0201, 0x0a0202} {
-		r.set(rf, "manual", 19)
-	}
+	r.set(0x0a0201, "manual", 19)
+	r.set(0x0a0202, "manual", 20)
 	r.set(0x0a0203, "manual", 22)
 	sent := len(r.fc.Received())
-	r.check()
-	r.clock.add(11 * time.Minute)
-	r.check()
-	r.clock.add(11 * time.Minute)
-	r.check()
-	want := setpointLine(t, 0x0a0201, 1, 19, cube.ModeManual)
-	if got := r.radioSince(sent); !slices.Equal(got, []string{want}) {
-		t.Fatalf("the re-send: %v, want %s", got, want)
+	r.disagreeAndResend()
+	r.wantResend(sent, 0x0a0201, 1, 19, cube.ModeManual, "wall_thermostat")
+
+	r.set(0x0a0204, "manual", 18)
+	r.set(0x0a0205, "manual", 19)
+	r.set(0x0a0206, "manual", 23)
+	sent = len(r.fc.Received())
+	r.disagreeAndResend()
+	if got := r.radioSince(sent); len(got) != 0 {
+		t.Fatalf("sent without a state to take: %v", got)
 	}
-	if ev := r.newest("disagree"); summaryText(&ev, "outcome") != "resent" || summaryText(&ev, "from") != "wall_thermostat" {
-		t.Fatalf("the re-send's event: %+v", ev)
+	if ev := r.newest("disagree"); summaryText(&ev, "outcome") != "not_resent" || summaryText(&ev, "why") != "no_state" || summaryText(&ev, "room") != "2" {
+		t.Fatalf("the report alone: %+v", ev.Summary)
+	}
+}
+
+// Massimo's setpoint in auto with a temperature is sent again as it was
+// while no switch point of the programme has passed since; past one,
+// auto on the programme, which takes its value now (D188). The fixture's
+// programme: 21 °C from 18:20, 17 °C from 20:15.
+func TestDisagreeResendsMassimosAuto(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		hhmm string  // the Cube's clock at the start, "" for 19:51
+		temp float64 // the re-send's, 0 for the programme
+	}{
+		{"before a switch point", "121e", 23}, // 18:30, the re-send at 19:02
+		{"past a switch point", "", 0},        // 19:51, the re-send at 20:23
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			r := startDrift(t, func(lines []cube.Message) []cube.Message {
+				if c.hhmm == "" {
+					return lines
+				}
+				return withCubeTime(t, lines, c.hhmm)
+			})
+			if code, out := do(t, r.ts, "PUT", "/api/v1/cubes/KEQ0000100/rooms/2/setpoint", `{"mode":"auto","temp":23}`); code != 200 {
+				t.Fatalf("room setpoint: %d %v", code, out)
+			}
+			for _, rf := range []cube.RFAddress{0x0a0204, 0x0a0205, 0x0a0206} {
+				r.waitSetting(rf, "auto", 23)
+			}
+			r.clock.add(10 * time.Minute) // a person's change ten minutes later
+			r.set(0x0a0205, "manual", 18)
+			sent := len(r.fc.Received())
+			r.disagreeAndResend()
+			r.wantResend(sent, 0x0a0204, 2, c.temp, cube.ModeAuto, "massimo")
+		})
 	}
 }
 
@@ -538,6 +627,53 @@ func TestRoomCheckRules(t *testing.T) {
 	if drifting([]roomMember{a, c, c2}) != nil || drifting([]roomMember{a, m, c}) != nil || drifting([]roomMember{c}) != nil {
 		t.Error("an odd one where not every other member follows")
 	}
+	// The majority (D188): more than half, two on their own programmes
+	// as one, auto on the programme; none of two that differ.
+	m2 := member(6, cube.ModeManual, 21, false, false)
+	for _, c := range []struct {
+		ms   []roomMember
+		ok   bool
+		mode cube.Mode
+		temp float64
+	}{
+		{[]roomMember{a, b, m}, true, cube.ModeAuto, 0},
+		{[]roomMember{m, c, m2}, true, cube.ModeManual, 21},
+		{[]roomMember{a, m}, false, 0, 0},
+		{[]roomMember{a, c, m}, false, 0, 0},
+	} {
+		r, ok := majority(2, c.ms)
+		if ok != c.ok || ok && (r.mode != c.mode || r.temp != c.temp || r.from != fromMajority) {
+			t.Errorf("the majority of %d: %+v %v", len(c.ms), r, ok)
+		}
+	}
+	// Massimo's auto with a temperature is shown by a member on its
+	// programme too; a switch point passed is one of a member's
+	// programme, or a new day.
+	in := roomIntent{mode: cube.ModeAuto, temp: 23}
+	if !in.shownBy(a) || in.shownBy(c) || !in.shownBy(member(7, cube.ModeAuto, 23, true, false)) {
+		t.Error("auto 23 shown by the wrong members")
+	}
+	var w cube.WeekProgram
+	for d := range w {
+		w[d] = cube.DayProgram{{Temp: 17, Until: 6 * 60}, {Temp: 21, Until: 22 * 60}, {Temp: 17, Until: 24 * 60}}
+	}
+	p := member(8, cube.ModeAuto, 21, true, true)
+	p.program = &w
+	at := func(hh, mm int) time.Time { return time.Date(2026, 11, 17, hh, mm, 0, 0, time.UTC) }
+	for _, c := range []struct {
+		then, now time.Time
+		want      bool
+	}{
+		{at(21, 40), at(21, 59), false},
+		{at(21, 50), at(22, 5), true},
+		{at(23, 50), at(23, 59).Add(10 * time.Minute), true},
+		{at(22, 5), at(21, 50), false},
+	} {
+		if got := switchedSince([]roomMember{a, p}, c.then, c.now); got != c.want {
+			t.Errorf("switched between %s and %s: %v", c.then.Format("15:04"), c.now.Format("Jan 2 15:04"), got)
+		}
+	}
+
 	members := map[cube.RFAddress]bool{0x0a0204: true}
 	match := toRoom(2, members)
 	line, _ := cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a0301, RoomID: 2, Room: true}, 21, cube.ModeManual, cube.Until{})

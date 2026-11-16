@@ -15,10 +15,11 @@ package server
 // communication error, link error and low battery are in the log at info,
 // in its state's changes: each is an alert at warn while the device has
 // the flag, at the line that set it, a communication error with the type
-// of the radiogram that failed.
+// of the most severe radiogram that failed while it stayed set.
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"maps"
 	"net/http"
@@ -166,7 +167,8 @@ func lockoutEnds(ev *event) time.Time {
 
 // logAlert is an unsettled warning or error of the log: its line, and
 // for a device's flag, which; for its communication error, the type of
-// the radiogram that failed, as the device shows it now.
+// the most severe radiogram that failed while the flag stayed set, of
+// two as severe the oldest (flagRadiogram).
 type logAlert struct {
 	ID              int64               `json:"id"`
 	Kind            string              `json:"kind"`
@@ -288,7 +290,7 @@ func (s *Server) flagAlerts(ctx context.Context, st *store.Store, id int64, rt *
 			if line := flagLine(states, flag); line != nil {
 				a := alertOf(line, "warn", flag)
 				if flag == "error" {
-					a.FailedRadiogram = p.State.FailedRadiogram
+					a.FailedRadiogram = flagRadiogram(states, line, p.State.FailedRadiogram)
 				}
 				out = append(out, a)
 			}
@@ -313,6 +315,47 @@ func flagLine(states []event, flag string) *event {
 		}
 	}
 	return oldest
+}
+
+// flagRadiogram is the radiogram a communication error's alert names
+// (D181): of the radiograms that failed while the flag stayed set, those
+// of the state lines (oldest first) from the line that set it on, and
+// the device's now, the most severe (RadiogramType.Severity), of two as
+// severe the oldest; nil where none names one.
+func flagRadiogram(states []event, line *event, now *cube.RadiogramType) *cube.RadiogramType {
+	var best *cube.RadiogramType
+	take := func(r *cube.RadiogramType) {
+		if r != nil && (best == nil || r.Severity() > best.Severity()) {
+			best = r
+		}
+	}
+	for i := range states {
+		if states[i].ID >= line.ID {
+			take(lineRadiogram(&states[i]))
+		}
+	}
+	take(now)
+	return best
+}
+
+// lineRadiogram is the failed radiogram a state line's state gives, nil
+// for none.
+func lineRadiogram(ev *event) *cube.RadiogramType {
+	d, _ := ev.State.(map[string]any)
+	st, _ := d["state"].(map[string]any)
+	v, ok := st["failed_radiogram"]
+	if !ok || v == nil {
+		return nil
+	}
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return nil
+	}
+	var r cube.RadiogramType
+	if json.Unmarshal(raw, &r) != nil {
+		return nil
+	}
+	return &r
 }
 
 // getLogAlerts handles GET /api/v1/log/alerts: the log's unsettled

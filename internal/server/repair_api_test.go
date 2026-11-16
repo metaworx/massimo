@@ -526,6 +526,110 @@ func TestRepairList(t *testing.T) {
 	})
 }
 
+// A device the list lacks is listed under the name the request gives,
+// else "<room name> <type> <n>", n the lowest number the names of that
+// form in the room leave free, whatever their case (D185); the run
+// writes exactly the Cube's metadata with the device's entry added. The
+// fixture's room 1 is "Wohnzimmer", its devices 0a010a and the wall
+// thermostat.
+func TestRepairListNamesTheDevice(t *testing.T) {
+	const path = "/api/v1/cubes/KEQ0000100/devices/0a0b0c/repair/list"
+	for _, c := range []struct {
+		name  string
+		names map[cube.RFAddress]string // room 1's devices renamed
+		query string
+		want  string
+	}{
+		{"the default", nil, "", "Wohnzimmer radiator thermostat 1"},
+		{"a taken n", map[cube.RFAddress]string{0x0a010a: "wohnzimmer Radiator Thermostat 1", copyWall: "Wohnzimmer radiator thermostat 3"}, "",
+			"Wohnzimmer radiator thermostat 2"},
+		{"another type's name takes no n", map[cube.RFAddress]string{copyWall: "Wohnzimmer wall thermostat 1"}, "", "Wohnzimmer radiator thermostat 1"},
+		{"a given name", nil, "?name=" + url.QueryEscape(" Sofa side "), "Sofa side"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			fc, ts, s := startRepairCube(t, func(fc *fakecube.Server) {
+				withConfigRoom(t, fc.Greeting, copyNew, 1)
+				withMetadata(t, fc.Greeting, func(md *cube.Metadata) {
+					for i := range md.Devices {
+						if n, ok := c.names[md.Devices[i].RFAddress]; ok {
+							md.Devices[i].Name = n
+						}
+					}
+				})
+			})
+			before := *s.cubes["keq0000100"].client.Snapshot().Metadata()
+			sent := len(fc.Received())
+			p, code, out := runRepairOf(t, ts, path, c.query)
+			if p.Details["name"] != c.want || p.Details["room_name"] != "Wohnzimmer" || p.Details["type"] != "radiator_thermostat" || p.Details["listed"] != false {
+				t.Fatalf("the preview's details %v", p.Details)
+			}
+			if code != 200 || out["ok"] != true {
+				t.Fatalf("run: %d %v", code, out)
+			}
+			want := before
+			want.Devices = append(append([]cube.DeviceMeta(nil), before.Devices...),
+				cube.DeviceMeta{Type: cube.DeviceRadiatorThermostat, RFAddress: copyNew, Serial: "TEQ0000001", Name: c.want, RoomID: 1})
+			lines, err := cube.WriteMetadataCommands(&want)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var wantLines, got []string
+			for _, l := range lines {
+				wantLines = append(wantLines, l.String())
+			}
+			for _, m := range sentSince(fc, sent) {
+				got = append(got, m.String())
+			}
+			if strings.Join(got, "\n") != strings.Join(wantLines, "\n") {
+				t.Fatalf("sent\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(wantLines, "\n"))
+			}
+		})
+	}
+	t.Run("a name too long", func(t *testing.T) {
+		_, ts, _ := startRepairCube(t, func(fc *fakecube.Server) { withConfigRoom(t, fc.Greeting, copyNew, 1) })
+		if code, body := callAPI(t, ts, "GET", path+"?name="+strings.Repeat("x", 33), "", ""); code != http.StatusBadRequest {
+			t.Fatalf("GET: %d %s", code, body)
+		}
+	})
+	t.Run("a new room's name, cut", func(t *testing.T) {
+		_, ts, _ := startRepairCube(t, func(fc *fakecube.Server) { withConfigRoom(t, fc.Greeting, copyNew, 7) })
+		code, p, body := previewOf(t, ts, path+"?room_name="+url.QueryEscape("Attic over the garage"))
+		if code != 200 || p.Details["name"] != "Attic over radiator thermostat 1" || p.Details["room_name"] != "Attic over the garage" {
+			t.Fatalf("GET: %d %s", code, body)
+		}
+	})
+}
+
+// The default name's rules (D185): the lowest free n, a name of that
+// form whatever its case, a room's name cut at a character where the
+// whole would pass 32 bytes, a two-digit n cutting one more.
+func TestDefaultDeviceName(t *testing.T) {
+	for _, c := range []struct {
+		room  string
+		typ   cube.DeviceType
+		taken []string
+		want  string
+	}{
+		{"Bath", cube.DeviceWallThermostat, nil, "Bath wall thermostat 1"},
+		{"Bath", cube.DeviceShutterContact, []string{"Bath window contact 2", "BATH WINDOW CONTACT 1", "Bath window contact 04"}, "Bath window contact 3"},
+		{"Bath", cube.DeviceEcoSwitch, []string{"Bath eco button", "Bath eco button x", "Bath eco button -1", "Bath eco button 0"}, "Bath eco button 1"},
+		{"Bath", cube.DeviceRadiatorThermostatPlus, nil, "Bath radiator thermostat plus 1"},
+		{"Wohnzimmer", cube.DeviceRadiatorThermostat, nil, "Wohnzimmer radiator thermostat 1"},
+		{"aÄÄÄÄÄÄ", cube.DeviceRadiatorThermostat, nil, "aÄÄÄÄ radiator thermostat 1"},
+		{"Attic over the garage", cube.DeviceRadiatorThermostat, []string{"Attic over radiator thermostat 1"}, "Attic over radiator thermostat 2"},
+		{"Wohnzimmer", cube.DeviceRadiatorThermostat, []string{"Wohnzimmer radiator thermostat 1", "Wohnzimmer radiator thermostat 2",
+			"Wohnzimmer radiator thermostat 3", "Wohnzimmer radiator thermostat 4", "Wohnzimmer radiator thermostat 5",
+			"Wohnzimmer radiator thermostat 6", "Wohnzimmer radiator thermostat 7", "Wohnzimmer radiator thermostat 8",
+			"Wohnzimmer radiator thermostat 9"}, "Wohnzimme radiator thermostat 1"},
+		{"", cube.DeviceWallThermostat, []string{"wall thermostat 1"}, "wall thermostat 2"},
+	} {
+		got := defaultDeviceName(c.room, c.typ, c.taken)
+		if got != c.want || len(got) > maxNameBytes || checkName(got) != nil {
+			t.Errorf("%q %s %v: %q (%d bytes), want %q", c.room, c.typ, c.taken, got, len(got), c.want)
+		}
+	}
+}
+
 // A room whose metadata names a device of another room as its master
 // gets its wall thermostat as master, metadata only; a valid master is
 // left alone.

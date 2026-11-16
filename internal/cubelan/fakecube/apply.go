@@ -72,6 +72,9 @@ func (s *Server) applyNow(raw []byte) {
 		targets = []cube.RFAddress{cube.RFAddressFromBytes(raw[6:9])}
 	}
 	for _, rf := range targets {
+		if s.deaf[rf] {
+			continue
+		}
 		switch cmd {
 		case cube.RFSetTemperature:
 			s.setTemperatureLocked(rf, raw[10:])
@@ -99,6 +102,19 @@ func (s *Server) applyNow(raw []byte) {
 			})
 		}
 	}
+}
+
+// SetDeaf makes rf a device that does not take the radio commands the
+// fake acknowledges, as one out of range or with flat batteries: its
+// lines stay as they are, while the other devices a room command
+// addresses take it; false makes it take them again.
+func (s *Server) SetDeaf(rf cube.RFAddress, deaf bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.deaf == nil {
+		s.deaf = map[cube.RFAddress]bool{}
+	}
+	s.deaf[rf] = deaf
 }
 
 // setTemperatureLocked applies 0x40: mode and setpoint, a vacation's end,

@@ -17,6 +17,8 @@ import (
 	"fmt"
 	"sort"
 	"time"
+
+	"go.metaworx.ch/massimo/internal/protocol/cube"
 )
 
 // The kinds of notification.
@@ -26,7 +28,7 @@ const (
 	KindWindowOpen  = "window_open"  // a window open, still open after the delay
 	KindBatteryLow  = "battery_low"  // a device's battery flag held: change the batteries
 	KindBatteryWeak = "battery_weak" // a device's battery flag seen under load, still weak after BatteryWeakDelay
-	KindDeviceError = "device_error" // a device reports an error or a link error
+	KindDeviceError = "device_error" // a device reports a communication error or a link error
 	KindFrost       = "frost"        // the measured temperature fell under the threshold
 	KindDeviceStale = "device_stale" // a thermostat past the stale threshold
 	KindPaired      = "paired"       // a device joined by pairing
@@ -154,7 +156,10 @@ type Notification struct {
 	RoomName   string `json:"room_name,omitempty"`
 	// Since is when the condition began, for the delayed kinds.
 	Since *time.Time `json:"since,omitempty"`
-	// Values are the kind's: minutes, actual_c and below_c, version, …
+	// Values are the kind's: minutes, actual_c and below_c, version;
+	// for device_error the flags set, error and link_error, and
+	// failed_radiogram with the communication error, where the device
+	// gives it.
 	Values map[string]any `json:"values,omitempty"`
 	Time   time.Time      `json:"time"`
 	// URL is the page that shows it, relative to the server.
@@ -181,13 +186,17 @@ type Event struct {
 	Time   time.Time
 }
 
-// State is what the rules read of a device's state.
+// State is what the rules read of a device's state: Error is the
+// communication error, byte 5's 0x08, with FailedRadiogram, the type of
+// the radiogram that failed, where the device gives it; LinkError is the
+// link error, byte 6's 0x40 (docs/cube-protocol.md).
 type State struct {
-	WindowOpen *bool
-	BatteryLow bool
-	Error      bool
-	LinkError  bool
-	ActualTemp *float64
+	WindowOpen      *bool
+	BatteryLow      bool
+	Error           bool
+	FailedRadiogram *cube.RadiogramType
+	LinkError       bool
+	ActualTemp      *float64
 }
 
 // Device is a device as the stale scan sees it.

@@ -45,6 +45,68 @@ func TestRadiogramTypesAreTheDocumentedList(t *testing.T) {
 	}
 }
 
+// The radiogram types' categories are those docs/cube-protocol.md lists
+// after the FrameType list, code for code, and none for the rest; their
+// severity ranks Assignment and Remove first, then Configuration, then
+// Control, then the rest (D181).
+func TestRadiogramCategoriesAreTheDocumentedOnes(t *testing.T) {
+	raw, err := os.ReadFile("../../../docs/cube-protocol.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := string(raw)
+	start := strings.Index(doc, "Each type has a category")
+	end := strings.Index(doc[start:], "none for the rest.")
+	if start < 0 || end < 0 {
+		t.Fatal("the categories are not in docs/cube-protocol.md")
+	}
+	names := map[string]RadiogramCategory{}
+	for c, n := range radiogramCategoryNames {
+		names[n] = c
+	}
+	listed := map[RadiogramType]RadiogramCategory{}
+	text := strings.Join(strings.Fields(doc[start:start+end]), " ")
+	code := regexp.MustCompile(`0x([0-9A-F]{2})(?:–0x([0-9A-F]{2}))?`)
+	for _, m := range regexp.MustCompile(`([A-Z][a-z]+) for ((?:0x[0-9A-F]{2}(?:–0x[0-9A-F]{2})?(?:, | and )?)+)`).FindAllStringSubmatch(text, -1) {
+		c, ok := names[m[1]]
+		if !ok || c == RadiogramCategoryNone {
+			t.Fatalf("the docs name a category %q", m[1])
+		}
+		for _, r := range code.FindAllStringSubmatch(m[2], -1) {
+			from, _ := strconv.ParseUint(r[1], 16, 8)
+			to := from
+			if r[2] != "" {
+				to, _ = strconv.ParseUint(r[2], 16, 8)
+			}
+			for v := from; v <= to; v++ {
+				listed[RadiogramType(v)] = c
+			}
+		}
+	}
+	if len(listed) != 14 {
+		t.Fatalf("the docs give %d types a category, want 14: %v", len(listed), listed)
+	}
+	for v := range 256 {
+		r := RadiogramType(v)
+		if got, want := r.Category(), listed[r]; got != want {
+			t.Errorf("0x%02x: category %s, the docs %s", v, got, want)
+		}
+	}
+	for _, c := range []struct {
+		r    RadiogramType
+		want int
+	}{
+		{RadiogramAddLinkPartner, 3}, {RadiogramRemoveGroupAddress, 3}, {RadiogramReset, 3},
+		{RadiogramConfigWeekTemperatureProfile, 2}, {RadiogramConfigValveFunctions, 2}, {RadiogramSwitchDisplaySetPointActual, 2},
+		{RadiogramControlMode, 1}, {RadiogramSetPointTemperature, 1}, {RadiogramLockManualControls, 1},
+		{RadiogramTimeInformation, 0}, {RadiogramWakeUp, 0}, {RadiogramSetPointAndCurrentTemperature, 0}, {0xf6, 0},
+	} {
+		if got := c.r.Severity(); got != c.want {
+			t.Errorf("%s: severity %d, want %d", c.r, got, c.want)
+		}
+	}
+}
+
 // The radio command codes Massimo sends are the radiogram types of the
 // same names in the original software.
 func TestRadioCommandCodesAreRadiogramTypes(t *testing.T) {

@@ -76,6 +76,7 @@ ROOM_CHECK_SAYS = {
         "kinds": ("room disagrees", "programme drift"),
         "differ": "{room}: its thermostats differ in setpoint for 11 min: {a}: manual set 21.0, {b}: manual set 18.0",
         "resent": "{room}: manual set 21.0 sent again to its thermostats, as Massimo last set it",
+        "majority": "{room}: auto on the week programme sent again to its thermostats, as most of its thermostats have it",
         "drift": "does not follow its week programme: 12.0 instead of 21.0 since the switch point at 18:20, while the room's other"
         " thermostats follow theirs; its clock or its programme is suspect; it shows the programme an hour off;"
         " communication error: TimeInformation (0x03)",
@@ -84,6 +85,7 @@ ROOM_CHECK_SAYS = {
         "kinds": ("Raum uneinig", "Programmabweichung"),
         "differ": "{room}: die Thermostate unterscheiden sich seit 11 Min. in Solltemperatur: {a}: Manuell Soll 21,0, {b}: Manuell Soll 18,0",
         "resent": "{room}: Manuell Soll 21,0 nochmals an die Thermostate gesendet, wie Massimo es zuletzt einstellte",
+        "majority": "{room}: Auto nach Wochenprogramm nochmals an die Thermostate gesendet, wie die meisten seiner Thermostate es haben",
         "drift": "folgt seinem Wochenprogramm nicht: 12,0 statt 21,0 seit dem Schaltpunkt um 18:20, während die anderen Thermostate"
         " des Raums ihrem folgen; seine Uhr oder sein Programm ist verdächtig; es zeigt das Programm um eine Stunde verschoben;"
         " Kommunikationsstörung: TimeInformation (0x03)",
@@ -94,7 +96,8 @@ ROOM_CHECK_SAYS = {
 def test_log_room_check_lines(page, case):
     """The room checks' lines (AP RadioHealth v1.2, Block 9), sent on the
     stream: a room whose thermostats disagree names the room and each
-    thermostat with its setting, the state sent again says from where; a
+    thermostat with its setting, the state sent again says from where,
+    Massimo's setpoint or the majority's (D188); a
     thermostat off its week programme says what it shows and what the
     programme says, that it shows it an hour off and the radiogram that
     failed."""
@@ -108,6 +111,7 @@ def test_log_room_check_lines(page, case):
       send("disagree", { source: "cube", level: "warn", summary: { room: r.id, outcome: "differ", minutes: 11, differs: ["setpoint"],
         members: [{ rf: ds[0].rf_address, mode: "manual", setpoint: 21 }, { rf: ds[1].rf_address, mode: "manual", setpoint: 18 }] } });
       send("disagree", { source: "cube", level: "info", summary: { room: r.id, outcome: "resent", from: "massimo", mode: "manual", setpoint: 21 } });
+      send("disagree", { source: "cube", level: "info", summary: { room: r.id, outcome: "resent", from: "majority", mode: "auto" } });
       send("drift", { source: "device", level: "warn", device: ds[1].rf_address, serial: ds[1].serial, summary: { room: r.id,
         outcome: "not_following", setpoint: 12, expected: 21, switch_at: "18:20", hour_off: true, auto_dst: true,
         failed_radiogram: { code: 3, name: "TimeInformation" } } });
@@ -116,10 +120,11 @@ def test_log_room_check_lines(page, case):
     assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-drift').length > 0", 5), "the drift line"
     says = ROOM_CHECK_SAYS[case.lang]
     lines = page.locator("#log-lines .log-line.kind-disagree")
-    assert lines.count() == 2, "the two lines of the room"
+    assert lines.count() == 3, "the three lines of the room"
     assert lines.nth(0).locator(".log-kind").inner_text().strip() == says["kinds"][0]
-    assert lines.nth(1).locator(".log-text").inner_text() == says["differ"].format(**names), lines.nth(1).locator(".log-text").inner_text()
-    assert lines.nth(0).locator(".log-text").inner_text() == says["resent"].format(**names), lines.nth(0).locator(".log-text").inner_text()
+    assert lines.nth(2).locator(".log-text").inner_text() == says["differ"].format(**names), lines.nth(2).locator(".log-text").inner_text()
+    assert lines.nth(1).locator(".log-text").inner_text() == says["resent"].format(**names), lines.nth(1).locator(".log-text").inner_text()
+    assert lines.nth(0).locator(".log-text").inner_text() == says["majority"].format(**names), lines.nth(0).locator(".log-text").inner_text()
     drift = page.locator("#log-lines .log-line.kind-drift").first
     assert drift.locator(".log-kind").inner_text().strip() == says["kinds"][1]
     assert drift.locator(".log-text").inner_text() == says["drift"], drift.locator(".log-text").inner_text()

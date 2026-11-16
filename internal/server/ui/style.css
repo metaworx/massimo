@@ -1932,3 +1932,8 @@ massimo-week-program { display: contents; }
 .repair-warning p { margin: 0 0 8px; }
 .repair-result.ok { color: var(--ok); }
 .repair-result.bad, .repair-refused { color: var(--bad); }
+
+/* A device that has not shown a write by its deadline, in its form of the
+   configuration's devices tab (config.js renderDeviceForm). */
+.notice.device-unconfirmed { display: flex; gap: 6px; align-items: flex-start; }
+.notice.device-unconfirmed .ni { flex: none; margin-top: 2px; }
