@@ -331,7 +331,8 @@ function renderDevicesTab(room, c) {
 
 // renderDeviceForm is one device's row: name, offset and display mode
 // for thermostats, and a move to another room, with one Send; and
-// Remove from the Cube (capability structure), asked in the row.
+// Remove from the Cube (capability structure), asked in the row. A
+// device that has not shown a write by its deadline says what first.
 function renderDeviceForm(room, c, d) {
   const e = c.edit.devices[d.rf_address];
   const key = "device:" + d.rf_address;
@@ -341,6 +342,10 @@ function renderDeviceForm(room, c, d) {
     textEl("span", deviceName(d), "device-name"),
     textEl("span", typeName(d.type), "muted expert-only"),
     elem("span", "muted expert-only", deviceIds(d.serial, d.rf_address))));
+  if (confirmItem(d)) { // rooms.js
+    form.appendChild(elem("p", "notice device-unconfirmed", iconEl("icon-unconfirmed", "ni tone-warn"),
+      textEl("span", t("device.notConfirmed", { fields: confirmFieldsText(d) }))));
+  }
   const name = document.createElement("input");
   name.type = "text";
   name.value = e.name;

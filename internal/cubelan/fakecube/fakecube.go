@@ -74,6 +74,7 @@ type Server struct {
 	live     bool                    // a command or the control changed a line: the greeting carries the changes
 	boosts   map[cube.RFAddress]*boost
 	removed  map[cube.RFAddress]bool // taken out with Remove, back with Restore
+	deaf     map[cube.RFAddress]bool // take no command, see SetDeaf
 	control  *http.Server            // the control's HTTP server, see Control
 	closed   bool                    // Close was called
 

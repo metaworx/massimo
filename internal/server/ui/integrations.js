@@ -19,7 +19,123 @@ const integrationsUI = {
   announce: null, // why it does not: the found answer's announce
   users: null, // the Massimo users to link to, where they may be read
   open: new Set(), // the uuids whose panel is open
+  watch: new Map(), // per uuid: the timer re-reading an approval until its key is collected
 };
+
+// keyState is an approved integration's key: "waiting" while Home
+// Assistant may still collect it, "expired" once it may not (the
+// server's rule: active, no key collected, request_expires passed), ""
+// once collected or for any other state.
+function keyState(i) {
+  if (i.state !== "active" || i.key_issued_at) return "";
+  const until = Date.parse(i.request_expires || "");
+  if (isNaN(until)) return "";
+  return Date.now() < until ? "waiting" : "expired";
+}
+
+// REQUEST_LIFE is how long an approval waits for its key (RequestLife in
+// internal/store), from which the re-reading's pace is counted.
+const REQUEST_LIFE = 10 * 60 * 1000;
+
+// watchApproval re-reads an approved integration from this server until
+// its key is collected or the approval expires: every 3 s in its first
+// minute, then every 15 s; it stops once the section is out of view, and
+// renderIntegrations starts it again.
+function watchApproval(uuid) {
+  if (integrationsUI.watch.has(uuid)) return;
+  const tick = async () => {
+    integrationsUI.watch.delete(uuid);
+    const box = $("integrations-list");
+    if (!box || !box.offsetParent) return;
+    let i;
+    try {
+      i = await api("GET", "api/v1/integrations/" + encodeURIComponent(uuid));
+    } catch (e) {
+      return;
+    }
+    const n = integrationsUI.list.findIndex((x) => x.uuid === uuid);
+    const was = n >= 0 ? keyState(integrationsUI.list[n]) : "";
+    if (n >= 0) {
+      Object.assign(integrationsUI.list[n], i);
+      delete integrationsUI.list[n].users; // the list's entries carry none
+    }
+    if (integrationsUI.open.has(uuid)) integrationsUI.details[uuid] = i;
+    const now = keyState(i);
+    if (now !== was) {
+      renderIntegrations();
+      if (was === "waiting" && !now) integrationsMsg(t("integrations.collected", { name: i.name }), true);
+      return;
+    }
+    if (now === "waiting") schedule(i);
+  };
+  const schedule = (i) => {
+    const since = Date.now() - (Date.parse(i.request_expires) - REQUEST_LIFE);
+    const left = Date.parse(i.request_expires) - Date.now();
+    const pace = since < 60 * 1000 ? 3000 : 15000;
+    integrationsUI.watch.set(uuid, setTimeout(tick, Math.max(500, Math.min(pace, left + 500))));
+  };
+  const i = integrationsUI.list.find((x) => x.uuid === uuid);
+  if (i && keyState(i) === "waiting") schedule(i);
+}
+
+// haRegisterURL is the page of Home Assistant at base that adds the
+// Massimo integration.
+function haRegisterURL(base) {
+  return base.replace(/\/+$/, "") + "/_my_redirect/config_flow_start?domain=massimo";
+}
+
+// httpURL is s as an http(s) URL, or null.
+function httpURL(s) {
+  try {
+    const u = new URL((s || "").trim());
+    return u.protocol === "http:" || u.protocol === "https:" ? u : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// registerControl is Register for a Home Assistant at url, which opens
+// its page that adds the Massimo integration; where url is not known, it
+// first asks for Home Assistant's address, filled in from address.
+function registerControl(url, address, name) {
+  const box = elem("div", "integration-register");
+  const reg = button(t("integrations.register"), "register-integration");
+  reg.setAttribute("aria-label", t("integrations.registerLabel", { name }));
+  box.appendChild(reg);
+  if (httpURL(url)) {
+    reg.addEventListener("click", () => window.open(haRegisterURL(url), "_blank", "noopener"));
+    return box;
+  }
+  const input = document.createElement("input");
+  input.type = "url";
+  input.value = address ? "http://" + address + ":8123" : "http://";
+  const open = button(t("integrations.registerOpen"), "register-open");
+  const msg = elem("p", "small cubes-msg hidden");
+  msg.setAttribute("role", "status");
+  const row = fieldRow(t("integrations.registerAddress"), elem("span", "inline", input, open),
+    { wide: true, hint: t("integrations.registerHint") });
+  row.classList.add("hidden", "register-address");
+  row.appendChild(msg);
+  box.appendChild(row);
+  reg.addEventListener("click", () => {
+    row.classList.toggle("hidden");
+    if (!row.classList.contains("hidden")) input.focus();
+  });
+  const go = () => {
+    const u = httpURL(input.value);
+    if (!u) {
+      showResult(msg, t("integrations.registerBad"), false);
+      return;
+    }
+    showResult(msg, "", true);
+    window.open(haRegisterURL(u.origin + u.pathname), "_blank", "noopener");
+  };
+  open.addEventListener("click", go);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") go();
+  });
+  return box;
+}
 
 // INTEGRATION_CEILING is the role integration's set, what an integration
 // may have at most (integrationCeiling in internal/server/auth.go).
@@ -161,7 +277,8 @@ function requestPanel(r) {
   approve.addEventListener("click", () => {
     const req = { max_caps: caps.value() };
     if (attach.value) req.attach = attach.value;
-    integrationAction(() => api("POST", integrationPath(r, "/approve"), req), t("integrations.approved", { name: r.name }), r.name, approve);
+    integrationAction(() => api("POST", integrationPath(r, "/approve"), req), t("integrations.approved", { name: r.name }), r.name, approve)
+      .then((ok) => ok && watchApproval(attach.value || r.uuid));
   });
   const d = detailsPanel({ name: r.name || r.kind, mono: r.request_code, badges, open: true, cls: "integration-request" }, body);
   d.dataset.uuid = r.uuid;
@@ -232,7 +349,15 @@ function integrationPanel(i) {
   const badges = [];
   if (i.state === "disabled") badges.push(badgeEl(t("integrations.disabled"), "bad"));
   if (i.pending_instance) badges.push(badgeEl(t("integrations.pendingInstance"), "warn"));
+  const key = keyState(i);
+  if (key === "expired") badges.push(badgeEl(t("integrations.approvalExpired"), "warn"));
   const body = elem("div", "integration-body");
+  if (key === "waiting") {
+    body.appendChild(textEl("p", t("integrations.keyWaiting", { time: fmtShortTime(Date.parse(i.request_expires)) }), "notice small integration-key-waiting"));
+  } else if (key === "expired") {
+    body.appendChild(elem("div", "notice integration-approval-expired", textEl("p", t("integrations.approvalExpiredText")),
+      registerControl(i.url, "", i.name)));
+  }
   const issued = Date.parse(i.key_issued_at || "");
   body.appendChild(kvList([
     [t("integrations.key"), i.key, true],
@@ -305,9 +430,13 @@ function renderSeenIntegrations() {
   }
   const ul = elem("ul", "integrations-found-list");
   for (const f of integrationsUI.found) {
-    const li = elem("li", "", textEl("span", f.location || f.name, "integration-found-name"), " ",
-      textEl("span", f.url || f.address, "mono muted small"), " ",
+    const name = f.location || f.name;
+    const where = httpURL(f.url)
+      ? elem("span", "copy-pair", linkEl(f.url, f.url, "mono small"), copyIcon(() => f.url, t("copy.what", { what: f.url })))
+      : copyEl(f.url || f.address, { icon: true, cls: "mono muted small" });
+    const li = elem("li", "", textEl("span", name, "integration-found-name"), " ", where, " ",
       badgeEl(t(f.integration ? "integrations.registered" : "integrations.notRegistered"), f.integration ? "ok" : "mode"));
+    if (!f.integration) li.appendChild(registerControl(f.url, f.address, name));
     ul.appendChild(li);
   }
   box.appendChild(ul);
@@ -325,7 +454,10 @@ function renderIntegrations() {
   for (const r of waiting) reqBox.appendChild(requestPanel(r));
   clear(box);
   if (!registered.length) box.appendChild(textEl("p", t("integrations.none"), "muted small"));
-  for (const i of registered) box.appendChild(integrationPanel(i));
+  for (const i of registered) {
+    box.appendChild(integrationPanel(i));
+    if (keyState(i) === "waiting") watchApproval(i.uuid);
+  }
   renderSeenIntegrations();
   const badges = [];
   if (waiting.length) badges.push(badgeEl(tn("integrations.badge.waiting", waiting.length), "warn"));

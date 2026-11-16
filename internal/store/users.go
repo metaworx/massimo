@@ -529,7 +529,7 @@ func (s *Store) DeleteUser(ctx context.Context, name string, by int64) error {
 	if _, err := tx.ExecContext(ctx, `UPDATE users SET name = ?, deleted_at = ?, updated_at = ?, updated_by = ?, origin = ?, version = version + 1 WHERE id = ?`, gone, now, now, nullID(by), s.nodeID, u.ID); err != nil {
 		return fmt.Errorf("store: user %s: %w", u.Name, err)
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE tokens SET revoked_at = ?, version = version + 1 WHERE user_id = ? AND revoked_at IS NULL`, now, u.ID); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE tokens SET revoked_at = ?, origin = ?, version = version + 1 WHERE user_id = ? AND revoked_at IS NULL`, now, s.nodeID, u.ID); err != nil {
 		return fmt.Errorf("store: user %s: %w", u.Name, err)
 	}
 	if err := s.removePreferences(ctx, tx, u.ID, now); err != nil {

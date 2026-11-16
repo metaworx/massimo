@@ -145,9 +145,9 @@ func TestStoreSQL(t *testing.T) {
 	}
 }
 
-// Every file of migrations/ is a numbered migration, which loadMigrations
-// would otherwise skip without a word, or store.sql; the binary embeds
-// exactly the numbered ones.
+// Every file of migrations/ is a numbered migration or its down part,
+// which loadMigrations would otherwise skip without a word, or
+// store.sql; the binary embeds exactly the numbered ones.
 func TestMigrationFilesNamed(t *testing.T) {
 	entries, err := os.ReadDir("migrations")
 	if err != nil {
@@ -157,10 +157,10 @@ func TestMigrationFilesNamed(t *testing.T) {
 	for _, e := range entries {
 		switch {
 		case e.Name() == storeSQLName:
-		case migrationName.MatchString(e.Name()):
+		case migrationName.MatchString(e.Name()), downName.MatchString(e.Name()):
 			numbered = append(numbered, e.Name())
 		default:
-			t.Errorf("migrations/%s: neither a migration NNNN_<name>.sql nor %s", e.Name(), storeSQLName)
+			t.Errorf("migrations/%s: neither a migration NNNN_<name>.sql, its NNNN_<name>.down.sql, nor %s", e.Name(), storeSQLName)
 		}
 	}
 	embeddedNames, err := fs.Glob(embeddedMigrations(), "*")

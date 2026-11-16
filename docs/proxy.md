@@ -111,12 +111,20 @@ as the original software does.
 
 A client's radio write (`s:`) that the Cube took is followed up as the server's
 own writes are (README, "Server"): after a configuration write (week programme,
-preset temperatures, valve settings, display mode,
+preset temperatures, valve settings,
 room group) the server reads the device's `C` line again for about six minutes
-until it changes,
+until it shows what was written (docs/api-v1.md, "Writes confirmed by the
+devices"), or for a write that does not decode, a room group's, until it changes,
 for every thermostat of the room when the write was addressed to the room;
 after any radio write it reconnects once for the budget if radiograms were pending.
-A setpoint, a key lock or a link re-reads nothing.
+A setpoint, a key lock and a display mode are confirmed by the devices' states
+instead, as the API's own are
+(docs/api-v1.md, "Writes confirmed by the devices"):
+a room-flagged one by every visible thermostat of the room
+(the wall thermostats alone for the display), a direct one by its device;
+one whose radiogram does not decode is not.
+Its `unconfirmed` line in the log has the `source` `proxy`.
+A link re-reads nothing.
 A write the Cube discarded is not followed up.
 
 ## Hidden devices

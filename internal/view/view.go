@@ -204,6 +204,29 @@ type Device struct {
 	// members of its room (Mismatch); the server sets them, none
 	// elsewhere.
 	Mismatches []Mismatch `json:"mismatches,omitempty"`
+	// Confirmation is a write the device has not shown yet, which the
+	// server keeps (its confirm.go); a virtual wall thermostat has its
+	// room's.
+	Confirmation *Confirmation `json:"confirmation,omitempty"`
+}
+
+// Confirmation says that a write is not confirmed yet: the device, or a
+// member of the room, does not show what it set. It is pending until the
+// write's deadline, then unconfirmed, until the devices show it or a newer
+// write of the same values replaces it.
+type Confirmation struct {
+	State string `json:"state"` // pending or unconfirmed
+	// Since is when the Cube took the oldest of the writes still open.
+	Since time.Time `json:"since"`
+	// Fields are the values not shown yet: mode, setpoint, until, locked
+	// and display_actual of the device's L entry, and the configuration's
+	// values of its C line by their API names (comfort_temp …
+	// valve_offset_pct), a day's programme as program.<day>, the second
+	// part of a long day's program.<day>.2.
+	Fields []string `json:"fields"`
+	// Devices are a room's: its members that do not show it, by radio
+	// address.
+	Devices []string `json:"devices,omitempty"`
 }
 
 // StaleAfter is how long a radiator thermostat's entry may stay
@@ -355,6 +378,9 @@ type Room struct {
 	// Cube's C lines and its metadata that concern the room, and among
 	// its members (Mismatch); the server sets them, none elsewhere.
 	Mismatches []Mismatch `json:"mismatches,omitempty"`
+	// Confirmation is what its members have not shown of the writes to
+	// them (Device.Confirmation), set by the server.
+	Confirmation *Confirmation `json:"confirmation,omitempty"`
 }
 
 // Rooms lists the visible rooms in the Cube's order, each with the

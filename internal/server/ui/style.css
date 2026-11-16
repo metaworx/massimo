@@ -1812,6 +1812,10 @@ massimo-week-program { display: contents; }
 .integration-user .inline { display: flex; gap: 6px; flex-wrap: wrap; }
 .integration-user select { flex: 1 1 12em; min-width: 0; }
 .integrations-found-list li { overflow-wrap: anywhere; }
+.integration-register { margin-top: 6px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.integration-register .field { align-self: stretch; }
+.integration-register .inline { display: flex; gap: 6px; flex-wrap: wrap; }
+.integration-register input[type="url"] { flex: 1 1 14em; min-width: 0; }
 .integration-request .kv dd:first-of-type { font-size: 1.3rem; letter-spacing: 0.15em; }
 .user-integration-links { margin: 0 0 8px; }
 /* System settings → Maintenance: the announcement on the LAN and the Cube intervals (maintenance.js) */
@@ -1933,3 +1937,8 @@ massimo-week-program { display: contents; }
 .repair-warning p { margin: 0 0 8px; }
 .repair-result.ok { color: var(--ok); }
 .repair-result.bad, .repair-refused { color: var(--bad); }
+
+/* A device that has not shown a write by its deadline, in its form of the
+   configuration's devices tab (config.js renderDeviceForm). */
+.notice.device-unconfirmed { display: flex; gap: 6px; align-items: flex-start; }
+.notice.device-unconfirmed .ni { flex: none; margin-top: 2px; }

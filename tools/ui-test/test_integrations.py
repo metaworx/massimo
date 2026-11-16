@@ -34,7 +34,8 @@ def test_register_and_link(page, case):
     """The request shows its code; Approve with cubes.reboot off gives the
     integration that maximum; its user named like the operator is
     proposed for the link, Link links it, and the operator's panel then
-    names it."""
+    names it. After Approve the panel waits for the key and follows its
+    collection; an approval expired shows Register (v1.1, Block 8)."""
     instance = ("%04d%s" % (case.width, case.lang)).encode().hex().ljust(32, "0")[:32]
     subject = ("a1%04d%s" % (case.width, case.lang)).encode().hex().ljust(32, "b")[:32]
     status, req = raw_call("POST", "api/v1/integrations/requests",
@@ -53,12 +54,20 @@ def test_register_and_link(page, case):
         panel.locator(".approve-integration").click()
         approved = page.locator(f".integration-panel[data-uuid='{uuid}']")
         approved.wait_for()
+        sel = f".integration-panel[data-uuid='{uuid}']"
+        page.locator(f"{sel} .integration-key-waiting").wait_for(state="attached")
         got = next(i for i in api_call("GET", "api/v1/integrations") if i["uuid"] == uuid)
         assert got["state"] == "active" and "cubes.reboot" not in got["max_caps"] and "setpoint" in got["max_caps"], \
             f"approved with the maximum chosen: {got}"
 
         status, key = raw_call("GET", f"api/v1/integrations/requests/{uuid}?code={req['code']}")
         assert status == 200 and key["key"], "the key collected"
+        # AP IntegrationUsers v1.1, Block 8: the panel follows the collection
+        assert wait_until(page, f"!document.querySelector(\"{sel} .integration-key-waiting\")", 8), \
+            "the panel follows the collection"
+        want = page.evaluate("(n) => t('integrations.collected', {name: n})", f"Casa {case.width} {case.lang}")
+        assert page.locator("#integrations-msg").inner_text() == want, "and says so"
+        approved = page.locator(sel)
         on_behalf = f"id={subject}; level=control; name=operator; instance={instance}"
         status, me = raw_call("GET", "api/v1/me", headers={"Authorization": "Bearer " + key["key"], HEADER: on_behalf})
         assert status == 200 and me["acts_for"]["id"] == subject, "the integration acts for its user"
@@ -82,12 +91,51 @@ def test_register_and_link(page, case):
         op.wait_for()
         assert wait_until(page, "!!document.querySelector(\".user-panel[data-name='operator'] .user-integration-links\")", 5), \
             "the operator's panel names the integration user linked to it"
+        _approval_expired(page, case, uuid)
     finally:
         try:
             api_call("PUT", f"api/v1/integrations/{uuid}/users/{subject}", {"user": None})
         except Exception:  # never acted, or not approved: nothing linked
             pass
         _end(uuid)
+
+
+def _approval_expired(page, case, uuid):
+    """An approval whose time passed without its key collected (the list
+    stubbed, AP IntegrationUsers v1.1, Block 8) shows approval expired, in
+    the panel's head and in it, with Register."""
+    sel = f".integration-panel[data-uuid='{uuid}']"
+
+    def expired(route):
+        try:
+            resp = route.fetch()
+            body = resp.json()
+            for i in body:
+                if i.get("uuid") == uuid:
+                    i.pop("key_issued_at", None)
+                    i["request_expires"] = "2026-01-01T00:00:00Z"
+            route.fulfill(response=resp, body=json.dumps(body))
+        except Exception:  # Route is already handled, or the page closed
+            pass
+
+    page.route("**/api/v1/integrations", expired)
+    try:
+        show_view(page, "tiles")
+        show_view(page, "system")
+        notice = page.locator(f"{sel} .integration-approval-expired")
+        notice.wait_for(state="attached")
+        assert page.evaluate("t('integrations.approvalExpired')") in page.locator(f"{sel} summary").inner_text(), \
+            "approval expired in the panel's head"
+        if not page.locator(sel).evaluate("d => d.open"):
+            page.locator(f"{sel} summary").click()
+        _record_opens(page)
+        notice.locator(".register-integration").click()
+        assert page.evaluate("window.__opened") == ["http://192.0.2.20:8123/_my_redirect/config_flow_start?domain=massimo"], \
+            "Register again"
+        named_buttons(page, "System settings → Integrations, approval expired")
+        assert scroll_width(page) <= case.width, "no horizontal scroll with approval expired"
+    finally:
+        page.unroute("**/api/v1/integrations", expired)
 
 
 def _end(uuid):
@@ -190,3 +238,58 @@ def test_why_not_without_settings(page, case):
         page.evaluate("history.replaceState(null, '', location.pathname)")
         page.reload()
         page.wait_for_selector(".room", timeout=10000)
+
+
+def _record_opens(page):
+    """window.open recorded instead of opening a tab."""
+    page.evaluate("() => { window.__opened = []; window.open = (u) => { window.__opened.push(String(u)); return null; }; }")
+
+
+def test_seen_on_the_lan_register(page, case):
+    """Seen on the LAN (AP IntegrationUsers v1.1, Block 8, found answer
+    stubbed): an announced address is a link with a copy icon, and
+    Register opens Home Assistant's page that adds Massimo; where none is
+    announced, Register asks for it first, filled in with the IP address
+    and Home Assistant's port, and refuses what is not an http(s) address."""
+
+    def handle(route):
+        try:
+            route.fulfill(status=200, content_type="application/json", body=json.dumps({"looks": True, "found": [
+                {"name": "ha-one", "location": "Casa Uno", "url": "http://192.0.2.21:8123", "address": "192.0.2.21"},
+                {"name": "ha-two", "location": "Casa Due", "address": "192.0.2.22"},
+            ]}))
+        except Exception:  # Route is already handled, or the page closed
+            pass
+
+    page.route("**/api/v1/integrations/found*", handle)
+    try:
+        show_view(page, "tiles")
+        show_view(page, "system")
+        items = page.locator("#integrations-found .integrations-found-list li")
+        items.nth(1).wait_for()
+        one, two = items.nth(0), items.nth(1)
+        assert one.locator("a").get_attribute("href") == "http://192.0.2.21:8123", "the announced address a link"
+        assert one.locator(".copy-pair .copy-icon, .copy-pair button").count() >= 1, "with a copy icon"
+        assert two.locator(".copy-pair").count() == 1 and two.locator("a").count() == 0, "the bare address copyable, no link"
+        named_buttons(page, "System settings → Integrations, Seen on the LAN")
+        assert scroll_width(page) <= case.width, "no horizontal scroll with Register"
+        _record_opens(page)
+        one.locator(".register-integration").click()
+        assert page.evaluate("window.__opened") == ["http://192.0.2.21:8123/_my_redirect/config_flow_start?domain=massimo"], \
+            "Register opens Home Assistant's page"
+        two.locator(".register-integration").click()
+        field = two.locator(".register-address input")
+        field.wait_for()
+        assert field.input_value() == "http://192.0.2.22:8123", "the address asked for, filled in"
+        field.fill("ftp://192.0.2.22")
+        two.locator(".register-open").click()
+        assert two.locator(".register-address .bad").is_visible(), "an address not http(s) refused"
+        field.fill("https://ha.example.org/")
+        two.locator(".register-open").click()
+        assert page.evaluate("window.__opened")[-1] == "https://ha.example.org/_my_redirect/config_flow_start?domain=massimo", \
+            "the address given opens"
+        assert scroll_width(page) <= case.width, "no horizontal scroll with the address asked for"
+    finally:
+        show_view(page, "tiles")
+        page.unroute("**/api/v1/integrations/found*", handle)
+

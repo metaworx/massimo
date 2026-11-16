@@ -1,40 +1,41 @@
-# AP RadioHealth v1.2: Communication errors, checks and repair
+# AP RadioHealth v1.3: Communication errors, checks and repair
 
 ## TL;DR
 
 Massimo finds, resets and repairs what goes wrong between the Cube and its
-devices: the error flag (0x08), lost room commands, disagreeing members, and
-rooms that differ from the list. A command counts by its results; the
-original software is a baseline.
+devices; a command counts by its results, the original software is a
+baseline. Built by sub-agents on 2026-11-15 and 16: Blocks 1–7 and 9–12
+merged, the run's decisions with them; left are Block 8, Block 14 and,
+after the spare-Cube run, Block 13.
 
-- **Byte 4:** "unknown" → the failed radiogram's type, with the flag (D112-A)
-- **Room command:** no reset → one `r:01` per flagged member of the
-  numbered room first, for 0x08 only (D110, D111)
-- **Names:** "transmit error" → "communication error" (D154-A)
-- **A flagged device that reports:** reset once a day at most, a Warn
-  when the flag returns (D102-B)
-- **Watched:** full slots, returning flags, C lines and room masters
-  against the metadata (D165), unconfirmed commands, disagreeing members,
-  programme drift (D162-A)
-- **Repair:** a `repair` capability, owner and manager (D166); resets,
-  re-sent configuration, re-linked rooms, automatically where safe (D157);
-  "unlink all" a step of its own (D163)
+- **Errors:** byte 4 → the failed radiogram; 0x08 "communication error",
+  0x40 "link error"
+- **Resets:** a command's flagged devices first, its room's and those it
+  addresses; a flagged device that reports, once a day
+- **Watched:** slots (< 5 free a Warn, < 2 an Error), flags back or
+  lasting, C lines against the list, disagreeing rooms, drift
+- **Repair:** the `repair` capability; each repair previewed, then run;
+  "unlink all" apart
+- **Next:** Block 8 → an unconfirmed room command re-sent once, one
+  re-send a day per room with Block 9's (D199-A); Block 14 → the run's
+  follow-ups
 
 ### Blocks
 
-1. Byte 4: the failed radiogram, decoded and logged
-2. Room commands reset their flagged members first, for 0x08 only
-3. "Communication error": the names in the UI, the log and the docs
-4. A flagged device that reports is reset, once a day at most
-5. A Cube whose slots stay full is warned of
-6. A flag that keeps coming back is reported
-7. C lines and room masters checked against the metadata, and each room
+1. Byte 4: the failed radiogram, decoded and logged (merged, #309)
+2. Room commands reset their flagged members first, for 0x08 only (merged, #311)
+3. "Communication error": the names in the UI, the log and the docs (merged, #309)
+4. A flagged device that reports is reset, once a day at most (merged, #311)
+5. A Cube whose slots stay full is warned of (merged, #317)
+6. A flag that keeps coming back is reported (merged, #315)
+7. C lines and room masters checked against the metadata, and each room (merged, #317)
 8. An unconfirmed room command is re-sent once
-9. Disagreeing members and programme drift are reported
-10. The `repair` capability
-11. Repair actions: resets, configuration, links, rooms
-12. "Unlink all and re-link", behind its own warning
+9. Disagreeing members and programme drift are reported (merged, #313)
+10. The `repair` capability (merged, #312)
+11. Repair actions: resets, configuration, links, rooms (merged, #312; item 4's spare-Cube run to come)
+12. "Unlink all and re-link", behind its own warning (merged, #312; its spare-Cube run to come)
 13. A room whose link error lasts is re-linked, where it is safe
+14. The run's follow-ups: pairing's default name, a name too long, each flag notified, the preview's resets
 
 ## Discussion
 
@@ -44,7 +45,8 @@ analyses this plan rests on are
 `wip/2026-11-14_19-15_ANALYSIS_RadioHealth_transmit_error_d102.md`,
 `wip/2026-11-14_20-30_ANALYSIS_RadioHealth_transmit_error_d102_v2.md` and
 `wip/2026-11-15_11-44_ANALYSIS_RadioHealth_transmit_error_d102_v3.md`.
-Where they and this plan differ, this plan holds.
+Where they and this plan differ, this plan holds. The decision numbers are
+this plan's own.
 
 The owner, 2026-11-15: "D 153 A, 154 A, 156 A … PLAN+ RadioHealth +
 DeviceUnPairingFix"; then, on what the plan is for: "we cannot know for
@@ -60,7 +62,9 @@ of v1.1: "102 B - with a warning if it comes back with the next report?",
 "157 EVAL B - as long as we know all devices have reported recently …
 only once, reporting as warning, marked seen if the auto-repair clears it.
 an error if it stays for more than 24hrs? what would mark a 'clear'?",
-and "does D102 need a 'job queue'?"
+and "does D102 need a 'job queue'?" To the run of v1.2: "EXEC RadioHealth
+1-2", "the entire AP is due", "Use sub agents if you can split the work
+onto multiple sessions"; and to its last gate "D203 A, PLAN++".
 
 **Settled:**
 
@@ -85,10 +89,6 @@ and "does D102 need a 'job queue'?"
   "unlink all and re-link" is a step of its own, behind a warning and a
   second confirmation.
 - **D113:** moot (#283, #287).
-
-**Settled at the gate of v1.1** (NOTE RadioHealth v1.1: owner decisions,
-folded in here):
-
 - **D102-B, with a warning:** one `r:` when a flagged device reports, at
   most once a day; its flag back by its next report, or later that day,
   a Warn and no more automatic resets for it until it stays clear a day;
@@ -97,14 +97,71 @@ folded in here):
 - **D110-A:** one `r:01` per flagged member of the numbered room before a
   room command; T135 showed the room number deciding every member.
 - **D111-A:** 0x08 only; 0x40 is the devices' own report.
-- **D164-A:** detection, reset and repair in this plan; AP LegacyLogs keeps
-  its Block 15, which Block 8 builds on.
+- **D164-A:** detection, reset and repair in this plan; AP LegacyLogs kept
+  its Block 15, which became AP RoomConfirm, on which Block 8 builds.
 - **D165-A:** C lines and room masters against the metadata at every
   greeting, C line and metadata write, at no radio cost.
 - **D166-A:** a new `repair` capability, the owner's and `manager`'s by a
   migration, in the integration role's ceiling; "unlink all and re-link"
   needs `repair` and `structure`.
 - **No job queue** for D102 (the owner's question): see the Analysis.
+
+**Settled in the run** (2026-11-15 and 16; the questions as asked, with
+the owner's words, are in the four decision NOTEs beside the plan,
+`wip/2026-11-15_21-43_NOTE_RadioHealth_v1.2_open_decisions_of_the_run.md`,
+`wip/2026-11-15_22-04_NOTE_RadioHealth_v1.2_owner_decisions_of_the_run.md`,
+`wip/2026-11-15_23-02_NOTE_RadioHealth_v1.2_decisions_of_blocks_5_and_7.md`,
+`wip/2026-11-15_23-04_NOTE_RadioHealth_v1.2_owner_decisions_of_blocks_5_to_7.md`;
+how the run went in
+`wip/2026-11-16_00-05_NOTE_RadioHealth_v1.2_how_the_run_went.md`):
+
+- **D180-B:** the `device_error` notification names the communication
+  error or the link error, with the radiogram that failed (#318).
+- **D181:** the flag alert names, of the radiograms that failed while the
+  flag stayed set, the most severe, then the oldest; severity by the
+  original software's categories: Assignment and Remove, then
+  Configuration, then Control, then the rest (#318).
+- **D182-A:** a line sent directly to a flagged device that is not the
+  command's Target gets an `r:` first too (#318).
+- **D183-B:** a command of `r:` lines alone passes the duty and free-slot
+  holds; an `r:` takes no air time and no slot (#318).
+- **D184-A:** a repair's preview counts 1.25 % per radiogram until the
+  spare-Cube run measures it.
+- **D185-A:** a device the list lacks is listed under the name given,
+  else "<room> <type> <n>" (#318); a room the list lacks is named by the
+  user. D201 changes the long name.
+- **D186:** moot.
+- **D187-B:** a wall thermostat back from new batteries is taken as it
+  is; the owner: "if someone changes the batteries, they can also verify
+  if it's on auto or manu or whatever."
+- **D188-A, refined:** a disagreeing room's re-send takes Massimo's
+  setpoint within the 15 minutes (auto again where a switch point passed
+  since), else what most of its thermostats show, else the wall
+  thermostat's state, else only the report (#318).
+- **D189-A:** the clear's Info settles the Warn and the Error.
+- **D190-A:** the kind "error watch".
+- **D191-A:** a device without a valid state since the Cube's restart
+  starts its 24 hours again at a `serve` restart.
+- **D192-A, with thresholds:** no reconnect of its own (the refresh
+  interval is in Maintenance); fewer than 5 free slots at two readings an
+  hour apart a Warn, fewer than 2 an Error (#317).
+- **D193-B:** the original software's room-list writes through the proxy
+  get no quiet minutes; "such a user probably knows what they do."
+- **D194-A:** the UI fixture's window contact has its C line; the full
+  suite is CI's (#317).
+- **D199-A:** one lost room command, one extra write: Block 9 leaves a
+  room alone while it has an open or unconfirmed confirmation, and Block
+  8's re-send and Block 9's share one re-send a day per room (Block 8).
+- **D200-A:** pairing prefills "<room> <type> <n>" as well (Block 14).
+- **D201, the owner's own:** "leave it too long with the warning mechanism
+  of a too long value before saving (similar to the limit used in the
+  paring time) so the user needs to correct the value but they know what
+  it is. In case of no user interaction, drop the room name." (Block 14).
+- **D202-A:** each flag's start is notified, within the half-hour limit
+  (Block 14).
+- **D203-A:** Massimo's setpoint is re-sent only while a thermostat of the
+  room still shows it, so that people's later changes are not undone.
+- **D204-A:** a repair's preview counts the queue's resets too (Block 14).
 
 **Open, written here as recommended:**
 
@@ -166,22 +223,30 @@ addressing"; AP LegacyLogs' analyses of T134 and T135 on `main`):
   room byte, not the metadata's; the previous owner's unlisted devices,
   their C lines in rooms 4 and 5, blocked those rooms' commands. The Cube
   changes a C line only once the device acknowledged, 1 to 4 minutes later.
+- **Confirmations** (AP RoomConfirm, on main since #316): a setpoint, key
+  lock or display write opens a confirmation per device, a room's write
+  one per visible thermostat of the room by its C line; 5 minutes after
+  the Cube's answer, the devices that do not show it are `unconfirmed`
+  (an event at warn naming each, with what it shows and its flags), and a
+  device that shows it later is `confirmed_late`. Tested on hardware
+  2026-11-15: a room of three radiator thermostats confirmed manual and
+  auto in 20 to 25 s.
 
 The code:
 
-- `internal/protocol/cube/devicelist.go`: byte 4 "unknown".
-- `internal/engine/queue.go`: `deviceInError` is `Error || LinkError`; an
-  `r:` only for `cmd.Target`; a room setpoint has none.
-- `internal/view/view.go`: a virtual wall thermostat's `Consistent`, false
-  while the room's thermostats disagree on mode, setpoint or until:
-  the start of Block 9.
-- `internal/server/auth.go`, `capabilities`, and `docs/store.md`
-  section 6: the capabilities and the roles' seed; `manager` holds
-  `structure`, `pair`, `restore`.
-- `internal/server/ui/tiles.js`, `log.js`, the six `ui/i18n/*.json`;
-  `internal/server/logalerts.go`; `docs/api-v1.md`, `docs/ui.md`.
-- Re-linking a room and placing a device in its listed room need AP
-  DeviceUnPairingFix's link half (its Block 2): Block 11 waits for it.
+- `internal/protocol/cube`: `radiogram.go`, the radiogram types and their
+  categories; `DeviceState.FailedRadiogram`.
+- `internal/engine/queue.go`: the prelude's resets (the Target, a room's
+  flagged members, the devices a command addresses directly), the holds
+  an `r:`-only command passes; `Queue.Concerns`, `Pending`, `Holding`.
+- `internal/server`: `autoreset.go` (Block 4), `errorwatch.go` (6),
+  `slots.go` (5), `congruence.go` (7), `drift.go` (9, its re-send and
+  daily limit), `repair_api.go` (10 to 12), `logalerts.go`; and AP
+  RoomConfirm's `confirm.go`, `rt.roomConfirmation(room)` a room's open
+  confirmation, nil for none, and `setpoint()` running `rt.intend(…)`
+  before `rt.setpointConfirm(…)`.
+- `internal/cubeio/rooms.go`, `move.go`: AP DeviceUnPairingFix's link
+  half, which Block 11's re-link uses.
 
 ## Implementation Plan
 
@@ -189,6 +254,8 @@ Every block brings its `CHANGELOG.d/` fragment and its docs; the UI's
 texts in all six languages (FR, IT, NL, PL machine-translated, marked).
 
 ### Block 1: Byte 4, the failed radiogram
+
+**Done** (#309); how it went in the NOTE of the run.
 
 1. `internal/protocol/cube`: the radiogram types (codes and names of the
    original's jar) as a Go type; `DeviceState.FailedRadiogram`, set from
@@ -205,6 +272,8 @@ texts in all six languages (FR, IT, NL, PL machine-translated, marked).
 
 ### Block 2: Room commands reset their flagged members first
 
+**Done** (#311), with D182-A's direct lines (#318).
+
 1. `internal/engine/queue.go`: before a room command's radio lines, one
    `r:01,<address>` per device whose C line names the room and whose 0x08
    is set; after a discard, the same once more and one retry.
@@ -218,6 +287,8 @@ texts in all six languages (FR, IT, NL, PL machine-translated, marked).
 
 ### Block 3: "Communication error"
 
+**Done** (#309), with D180-B's notification (#318).
+
 1. The badge for 0x08 reads "communication error", its title the failed
    radiogram; "link error" for 0x40 with the original's sentence; the log
    the same.
@@ -227,6 +298,8 @@ texts in all six languages (FR, IT, NL, PL machine-translated, marked).
 - **Verification:** `make ui-test`, the Go gate, `GUIDELINES/shared/tools/check`.
 
 ### Block 4: A flagged device that reports is reset (D102-B)
+
+**Done** (#311), with D183-B (#318).
 
 1. `serve`, at each changed entry of a device whose 0x08 is set (a new
    valid entry, its values changed): one `r:01`, unless its last
@@ -240,6 +313,9 @@ texts in all six languages (FR, IT, NL, PL machine-translated, marked).
 
 ### Block 5: A Cube whose slots stay full
 
+**Done** (#317), with D192-A's thresholds: fewer than 5 free a Warn,
+fewer than 2 an Error, each at two readings an hour apart.
+
 1. Free slots at 1 or 0 at two readings an hour apart, nothing of Massimo
    in flight: a Warn and an alert, once; back above, Info.
 2. The Cube's panel says so and points to its Reboot (owner-only), which
@@ -249,6 +325,8 @@ texts in all six languages (FR, IT, NL, PL machine-translated, marked).
 - **Verification:** the Go gate, `make ui-test`, `GUIDELINES/shared/tools/check`.
 
 ### Block 6: A flag that keeps coming back (D102-B)
+
+**Done** (#315).
 
 1. A device whose 0x08 is back by its next report after a reset, or later
    that day: a Warn, once a day, with the failed radiogram; Block 4 leaves
@@ -263,6 +341,8 @@ texts in all six languages (FR, IT, NL, PL machine-translated, marked).
 - **Verification:** the Go gate, `GUIDELINES/shared/tools/check`.
 
 ### Block 7: C lines against the metadata (D165-A)
+
+**Done** (#317), with D194-A.
 
 1. At every greeting, every C line, and every metadata write, without
    radio: a device whose C line's room differs from the metadata's; a
@@ -282,18 +362,35 @@ texts in all six languages (FR, IT, NL, PL machine-translated, marked).
 
 - **Verification:** the Go gate, `make ui-test`, `GUIDELINES/shared/tools/check`.
 
-### Block 8: An unconfirmed room command is re-sent once (D162-A)
+### Block 8: An unconfirmed room command is re-sent once (D162-A, D199-A)
 
-1. On AP LegacyLogs' Block 15 (a room command "not confirmed" until each
-   member shows it): a command still unconfirmed after a few minutes is
-   re-sent once, its flagged members reset first (Block 2); still
-   unconfirmed, a Warn naming the members.
-2. Rate-limited per room, behind the duty hold.
-3. Tests against the fake Cube with a member that ignores the command.
+On AP RoomConfirm's confirmations (`internal/server/confirm.go`).
 
-- **Verification:** the Go gate, `make race`, `GUIDELINES/shared/tools/check`.
+1. A room write of Massimo's own whose confirmation is `unconfirmed` (the
+   `unconfirmed` event, 5 minutes after the Cube's answer): the same
+   write re-sent once as a room command, at low priority and behind the
+   duty hold; the queue resets the room's flagged members first (Block 2).
+   Still not shown by every member 5 minutes after the re-send: a Warn
+   naming the members and what each shows.
+2. Not re-sent: a write a newer write to the room superseded; a LAN proxy
+   client's write, only reported (as D193-B leaves a proxy client's
+   room-list writes to it); a room with a command of Massimo's waiting
+   or running.
+3. One re-send a day per room, shared with Block 9's (D199-A): a room
+   re-sent by either is not re-sent by the other that day, and Block 9
+   leaves a room alone while `rt.roomConfirmation(room)` is open or
+   unconfirmed. The day's re-sends seeded from the store's log at start.
+4. Tests against the fake Cube with a member that ignores the write: the
+   re-send's exact lines with a flagged member's `r:`, no second re-send
+   that day, Block 9 quiet while the confirmation is open and after
+   Block 8's re-send, a superseded write not re-sent, the Warn.
+
+- **Verification:** the Go gate, `make race`, the touched UI test files,
+  `GUIDELINES/shared/tools/check`.
 
 ### Block 9: Disagreeing members and programme drift (D162-A)
+
+**Done** (#313), with D188-A refined and D203-A (#318).
 
 1. Members of a room whose mode or setpoint differ for more than
    10 minutes (the view's `Consistent`): reported; at a second check, the
@@ -308,6 +405,8 @@ texts in all six languages (FR, IT, NL, PL machine-translated, marked).
 
 ### Block 10: The `repair` capability (D166-A)
 
+**Done** (#312).
+
 1. `internal/server/auth.go`: `repair` in `capabilities` and in the
    integration role's ceiling; a migration seeding it for `manager`.
 2. `docs/store.md` section 6, `docs/api-v1.md`, the UI's capability names.
@@ -316,6 +415,9 @@ texts in all six languages (FR, IT, NL, PL machine-translated, marked).
 - **Verification:** the Go gate, `GUIDELINES/shared/tools/check`.
 
 ### Block 11: Repair actions (D163-A)
+
+**Done** (#312), with D185-A (#318); item 4's spare-Cube run is still to
+come, under a gate of its own.
 
 Each a route under `repair`, each showing its cost before it runs, each
 judged afterwards by what the Cube shows (lines accepted, slots back,
@@ -338,6 +440,8 @@ no flag), in the Cube's, the room's and the device's panels:
   item 4 on the spare Cube, under a gate of its own.
 
 ### Block 12: "Unlink all and re-link" (D163-B, apart)
+
+**Done** (#312); its spare-Cube run is still to come.
 
 1. A route needing `repair` and `structure`: every link of a room
    removed, then built again with the link half; the UI's warning names
@@ -365,42 +469,52 @@ Only once Block 11's re-link has passed on the spare Cube and on hardware.
 
 - **Verification:** the Go gate, `make ui-test`, `GUIDELINES/shared/tools/check`.
 
+### Block 14: The run's follow-ups (D200-A, D201, D202-A, D204-A)
+
+One commit each.
+
+1. **Pairing's default name (D200-A):** the pairing form's name field and
+   "Put into a room…" prefilled with "<room> <type> <n>" in the page's
+   language, as the repair "list" does; the server applies the same
+   default where a placement gives no name.
+2. **A default name too long (D201):** a default name past the Cube's 32
+   bytes stays in the field as it is, with a warning on the field, and
+   cannot be saved until the user shortens it, as the pairing time's
+   limit works; where no user is there (the API without a name), the
+   room's name is dropped: "<type> <n>". This replaces the cut of the
+   room's name of D185 (#318).
+3. **Each flag notified (D202-A):** the `device_error` notification for
+   each flag's start, the communication error's and the link error's,
+   within the notification's half-hour limit.
+4. **The preview's resets (D204-A):** the engine gives the resets its
+   prelude would send for a command (the Target, a room's flagged
+   members, the flagged devices it addresses directly), and a repair's
+   preview counts its resets from them.
+5. Tests for each, the exact lines and names against the fake Cube; the
+   texts in six languages.
+
+- **Verification:** the Go gate, `make race`, the touched UI test files,
+  `GUIDELINES/shared/tools/check`.
+
 ## Proposed commit message
 
-For Block 1:
+For Block 8:
 
 ```
-feat(cube/errors): The failed radiogram of a communication error
+feat(serve/confirm): An unconfirmed room command is re-sent once, its flagged members reset first
 
-Byte 4 of an L entry is decoded as the type of the Cube's last radiogram to the device that failed, read only with the error flag, logged with it and given in the device's state (AP RadioHealth v1.2, Block 1).
+A room write of Massimo's that its members do not show 5 minutes after the Cube's answer is re-sent once, the room's flagged members reset first, and a Warn names the members that still do not show it; the re-send and the room checks' share one a day per room (AP RadioHealth v1.3, Block 8).
 
 Key changes:
-- internal/protocol/cube: the radiogram types; DeviceState.FailedRadiogram
-- the API's failed_radiogram, the OpenAPI file, docs/api-v1.md
-- the log's flag change names the failed radiogram
+- internal/server: the re-send of an unconfirmed room write, its daily limit shared with drift.go
+- docs/api-v1.md, the log's texts in six languages, the tests against the fake Cube
 
 Assisted-by: claude-code:claude-opus-5-5
 ```
 
-For Block 2:
-
-```
-fix(engine/queue): Room commands reset their flagged members first
-
-The queue sends one r: for every device of the numbered room whose error flag is set before a room command, as the original software does, and no longer resets for the link error alone (AP RadioHealth v1.2, Block 2).
-
-Key changes:
-- internal/engine/queue.go: the room's flagged members reset before a room command; deviceInError reads 0x08 only
-- the exact-line tests against the fake Cube
-
-Assisted-by: claude-code:claude-opus-5-5
-```
-
-The other blocks follow the same form: `feat(ui/errors)`,
-`feat(serve/errors)`, `feat(serve/slots)`, `feat(serve/errors)`,
-`feat(serve/congruence)`, `feat(engine/confirm)`, `feat(serve/drift)`,
-`feat(auth/repair)`, `feat(api/repair)`, `feat(api/repair)`,
-`feat(serve/relink)`.
+For Block 14, one commit each: `feat(ui/pairing): …` (item 1),
+`fix(api/names): …` (item 2), `feat(notify/errors): …` (item 3),
+`fix(api/repair): …` (item 4).
 
 ## Change History
 
@@ -415,3 +529,11 @@ The other blocks follow the same form: `feat(ui/errors)`,
   D102-B with its warning and Error, D110-A, D111-A, D164-A, D165-A,
   D166-A settled; no job queue for D102; D157-B with conditions, Block 13;
   the room master named in D167's order.
+- v1.3 (2026-11-16): Blocks 1–7 and 9–12 done (#309, #311, #312, #313,
+  #315, #317) and the run's decisions in #318; the decisions of NOTE
+  RadioHealth v1.2: open decisions of the run, owner decisions of the
+  run, decisions of blocks 5 and 7, and owner decisions of blocks 5 to 7
+  taken into the Discussion (the four stay beside the plan, since NOTE
+  RadioHealth v1.2: how the run went cites them); D199-A to D204-A
+  settled, D201 as the owner's own; Block 8 on AP RoomConfirm with D199-A;
+  Block 14 added; the Analysis and the code list as built.

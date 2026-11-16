@@ -5,7 +5,8 @@ token's user, the owner, with their defaults and the changes kept in its
 preference notify; this browser turned on and off against a fake
 pushManager, which conftest.py's page takes from an init script and a
 reload, since a headless browser has no push service; the toast of a
-notification from the stream and from the service worker, shown once;
+notification from the stream and from the service worker, shown once,
+and a device error's, which names its flag;
 a guest's page, which says why it has none, and a browser without push.
 axe-core finds no violation on the page in each of its states.
 
@@ -308,6 +309,35 @@ def test_toast(page, case):
                   notification(45, "2026-11-09T06:57:00Z"))
     toast.wait_for(state="visible")
     assert "45" in page.locator("#toast-body").inner_text(), "the service worker's notification"
+
+
+def test_device_error_names_the_flag(page, case):
+    """A device error's toast names its flag (D180-B): the communication
+    error with the radiogram that failed, a code the list lacks as its
+    number, the link error, both; the radiogram only with the
+    communication error."""
+    send = """(n) => state.events.dispatchEvent(new MessageEvent("notification", { data: JSON.stringify({ kind: "notification", notification: n }) }))"""
+    where = {"where": "Radiator (Bath)"}
+
+    def failed(radiogram):
+        return " " + t(page, "notify.device_error.radiogram", {"radiogram": radiogram})
+
+    control = {"code": 64, "name": "ControlMode"}
+    toast = page.locator("#toast")
+    for i, (values, want) in enumerate([
+        ({"error": True, "link_error": False, "failed_radiogram": control}, t(page, "notify.device_error.error", where) + failed("ControlMode (0x40)")),
+        ({"error": True, "link_error": False, "failed_radiogram": {"code": 246}}, t(page, "notify.device_error.error", where) + failed("0xf6")),
+        ({"error": False, "link_error": True}, t(page, "notify.device_error.link", where)),
+        ({"error": True, "link_error": True, "failed_radiogram": control}, t(page, "notify.device_error.both", where) + failed("ControlMode (0x40)")),
+    ]):
+        n = {"kind": "device_error", "cube": "KEQ0000100", "device": "0a0103", "serial": "MEQ0000003", "device_name": "Radiator",
+             "room": 3, "room_name": "Bath", "values": values, "time": f"2026-11-09T07:0{i}:00Z", "url": "/"}
+        page.evaluate(send, n)
+        toast.wait_for(state="visible")
+        assert page.locator("#toast-title").inner_text() == t(page, "notify.device_error.title")
+        assert page.locator("#toast-body").inner_text() == want, values
+        page.locator("#toast-close").click()
+        toast.wait_for(state="hidden")
 
 
 def test_guest_has_none(page, case):
