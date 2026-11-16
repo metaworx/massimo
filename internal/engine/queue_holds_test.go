@@ -5,7 +5,9 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -74,4 +76,32 @@ func TestQueueHoldsAResetWithARadiogram(t *testing.T) {
 		t.Fatalf("holds %+v, want one for the memory slots", h)
 	}
 	sameSent(t, received(srv), []string{m.String(), reset.String(), m.String()})
+}
+
+// A command whose Wanted says no once the hold has let it pass is
+// dropped with ErrUnwanted, nothing sent: Wanted is asked after the
+// hold, as for an automatic correction that a newer command made moot
+// while it waited (AP RadioHealth v1.3, Block 8). One it wants goes.
+func TestQueueDropsAnUnwantedCommand(t *testing.T) {
+	var wanted atomic.Bool
+	var asked atomic.Int32
+	var once sync.Once
+	srv, q, _ := setup(t, Options{SlotWait: 100 * time.Millisecond, OnHold: func(Hold) { once.Do(func() { wanted.Store(false) }) }})
+	srv.SetFreeSlots(2)
+	m := roomSetpoint(t)
+	// The first radio command learns the budget: 2 slots free.
+	q.Enqueue(Command{Lines: []cube.Message{m}}).Wait(context.Background())
+	wanted.Store(true)
+	still := func() bool { asked.Add(1); return wanted.Load() }
+	res := q.Enqueue(Command{Priority: PriorityLow, Lines: []cube.Message{m}, Wanted: still}).Wait(context.Background())
+	if !errors.Is(res.Err, ErrUnwanted) || asked.Load() != 1 {
+		t.Fatalf("result %+v, asked %d times", res, asked.Load())
+	}
+	sameSent(t, received(srv), []string{m.String()})
+
+	wanted.Store(true)
+	if res := q.Enqueue(Command{Priority: PriorityLow, Lines: []cube.Message{m}, Wanted: still}).Wait(context.Background()); res.Err != nil {
+		t.Fatalf("a wanted command: %+v", res)
+	}
+	sameSent(t, received(srv), []string{m.String(), m.String()})
 }

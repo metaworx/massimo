@@ -1566,6 +1566,9 @@ massimo-week-program { display: contents; }
    amber (.warn-text) before it, twice as far from the box as the unit */
 .field input[type="number"][aria-invalid="true"] { border-color: var(--bad); outline-color: var(--bad); }
 .field .inline > .warn-text { margin-right: 6px; }
+/* a name longer than the Cube keeps (markNameBytes): the box red, the
+   limit in amber after the label, before the box on its own line */
+.field input.name-bytes[aria-invalid="true"] { border-color: var(--bad); outline-color: var(--bad); }
 .field.wide > .field-control { flex: 1 1 100%; margin-left: 0; min-width: 0; width: 100%; }
 .field-hint { flex-basis: 100%; margin: 0; }
 /* the window's and the radio's drawing as chosen, beside its choice

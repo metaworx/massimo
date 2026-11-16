@@ -145,7 +145,8 @@ def test_listing_names_the_device(page, case):
     """A listing of a device the Cube's list lacks offers its name (D185):
     the room's, the type in the page's language and the lowest free
     number, reads the preview with it and runs with it; a name changed
-    reads the preview again, one too long is refused in place."""
+    reads the preview again, one too long is marked on its field and not
+    read (D201)."""
     unlisted = dict(LIST, details={"from": 0, "to": 1, "listed": False, "new_room": False, "name": "Bath radiator thermostat 1",
                                    "room_name": "Bath", "type": "radiator_thermostat"})
     stub = RepairStub(page, {"config": "the 2 other thermostats of room 1 share no temperatures by a majority",
@@ -159,12 +160,12 @@ def test_listing_names_the_device(page, case):
     page.on("request", seen)
     try:
         word = page.evaluate("t('type.radiator_thermostat')")
-        assert page.evaluate("listNameNumber('Bath ' + %s, ['bath ' + %s + ' 1', 'Bath ' + %s + ' 3', 'Bath ' + %s + ' x'])"
+        assert page.evaluate("freeNameNumber('Bath ' + %s, ['bath ' + %s + ' 1', 'Bath ' + %s + ' 3', 'Bath ' + %s + ' x'])"
                              % (json.dumps(word), json.dumps(word.upper()), json.dumps(word), json.dumps(word))) == 2, "the lowest free n"
-        assert page.evaluate("listDefaultName('Attic over the garage', 'radiator thermostat', [])") == "Attic over radiator thermostat 1", \
-            "a room's name cut to fit 32 bytes"
-        assert page.evaluate("listDefaultName('aÄÄÄÄÄÄ', 'radiator thermostat', [])") == "aÄÄÄÄ radiator thermostat 1", "cut at a character"
-        want = page.evaluate("listDefaultName('Bath', %s, listedNames(state.serial, 1))" % json.dumps(word))
+        assert page.evaluate("defaultDeviceName('Attic over the garage', 'radiator thermostat', [])") == \
+            "Attic over the garage radiator thermostat 1", "a name too long for the Cube offered as it is (D201)"
+        assert page.evaluate("defaultDeviceName('', 'wall thermostat', ['wall thermostat 1'])") == "wall thermostat 2", "without a room's name"
+        want = page.evaluate("defaultDeviceName('Bath', %s, roomDeviceNames(state.serial, 1))" % json.dumps(word))
         assert want.startswith("Bath " + word + " "), want
         tile = page.locator(".room").first
         tile.locator(".room-name-btn").click()
@@ -178,12 +179,17 @@ def test_listing_names_the_device(page, case):
         assert listing.locator(".repair-device-name-form label").inner_text() == page.evaluate("t('repair.deviceName')"), "the name asked for"
         assert wait_until(page, "document.querySelector('.repair-item[data-repair=list] .repair-cost') !== null", 5), "the preview shown"
         assert names and names[-1] == [want], f"the preview read with the name offered: {names}"
-        long = "x" * 33
-        field.fill(long)
+        reads = len(names)
+        field.fill("x" * 33)
+        hint = listing.locator(".repair-name-long")
+        assert hint.is_visible() and hint.inner_text() == page.evaluate("t('cfg.nameLong', {n: 32})"), "a name too long marked as it is typed"
+        assert field.get_attribute("aria-invalid") == "true" and field.get_attribute("aria-describedby") == hint.get_attribute("id"), \
+            "the field marked, the limit its description"
         listing.locator(".repair-device-name-form button[type=submit]").click()
-        assert listing.locator(".repair-name-note").inner_text() == page.evaluate("t('cfg.devNameTooLong', {name: %s, n: 32})" % json.dumps(long)), \
-            "a name too long refused in place"
+        page.wait_for_timeout(300)
+        assert field.evaluate("(el) => el === document.activeElement") and len(names) == reads, "and not read: back to the field"
         field.fill("Sofa side")
+        assert hint.is_hidden() and field.get_attribute("aria-invalid") is None, "a name that fits clears the mark"
         listing.locator(".repair-device-name-form button[type=submit]").click()
         assert wait_until(page, "document.querySelector('.repair-item[data-repair=list] input[name=name]') && "
                           "document.querySelector('.repair-item[data-repair=list] input[name=name]').value === 'Sofa side' && "
@@ -195,6 +201,69 @@ def test_listing_names_the_device(page, case):
         page.locator(".repair-item[data-repair=list] .confirm-yes").click()
         assert wait_until(page, "document.querySelector('.repair-item[data-repair=list] .repair-result.ok') !== null", 5), "the listing ran"
         assert stub.runs and stub.runs[0][1] == {"name": ["Sofa side"], "plan": ["plan-list"]}, f"with the name and the plan: {stub.runs}"
+    finally:
+        page.remove_listener("request", seen)
+        stub.close()
+
+
+# The name a listing into Wohnzimmer offers a radiator thermostat: the
+# German "Wohnzimmer Heizkörperthermostat 1" is 34 bytes, past the 32 the
+# Cube keeps; the English 32.
+WOHNZIMMER = {"en": "Wohnzimmer radiator thermostat 1", "de": "Wohnzimmer Heizkörperthermostat 1"}
+
+
+def test_listing_name_too_long(page, case):
+    """A name offered past the Cube's 32 bytes stays in its field as it
+    is, marked (D201): no preview is read with it and nothing runs until
+    it is shortened; then the preview is read with the shorter name and
+    runs with it. The English name fits and is read at once."""
+    unlisted = dict(LIST, details={"from": 0, "to": 1, "listed": False, "new_room": False, "name": "Wohnzimmer radiator thermostat 1",
+                                   "room_name": "Wohnzimmer", "type": "radiator_thermostat"})
+    stub = RepairStub(page, {"config": "the 2 other thermostats of room 1 share no temperatures by a majority",
+                             "place": "the Cube's list does not list device 0a0101: list it instead", "list": unlisted})
+    names = []
+
+    def seen(req):
+        if req.method == "GET" and "/repair/list" in req.url:
+            names.append(parse_qs(urlparse(req.url).query).get("name"))
+
+    page.on("request", seen)
+    try:
+        offered = WOHNZIMMER[case.lang]
+        tile = page.locator(".room").first
+        tile.locator(".room-name-btn").click()
+        device = tile.locator(".device").first
+        device.wait_for(state="visible")
+        device.locator(".repair-open").click()
+        listing = page.locator(".device .repair-box:not(.hidden) .repair-item[data-repair=list]").first
+        field = listing.locator("input[name=name]")
+        field.wait_for(state="visible")
+        assert field.input_value() == offered, "the name offered, as it is"
+        hint = listing.locator(".repair-name-long")
+        name = offered
+        if case.lang == "de":
+            assert hint.is_visible() and hint.inner_text() == "länger als 32 Bytes", "the limit, on the field"
+            assert field.get_attribute("aria-invalid") == "true", "the field marked"
+            box, before = field.bounding_box(), hint.bounding_box()
+            assert before["y"] + before["height"] <= box["y"] + 1, "the limit above the box"
+            assert listing.locator(".repair-run").count() == 0 and listing.locator(".repair-cost").count() == 0, "nothing to run"
+            assert names == [None], f"no preview read with it: {names}"
+            assert scroll_width(page) <= case.width, "no horizontal scroll with the limit"
+            listing.locator(".repair-device-name-form button[type=submit]").click()
+            page.wait_for_timeout(300)
+            assert field.evaluate("(el) => el === document.activeElement") and names == [None], "Show what it sends goes back to the field"
+            name = "Wohnzimmer Heizkörper 1"
+            field.fill(name)
+            assert hint.is_hidden() and field.get_attribute("aria-invalid") is None, "the shorter name clears the mark"
+            listing.locator(".repair-device-name-form button[type=submit]").click()
+        else:
+            assert hint.is_hidden() and field.get_attribute("aria-invalid") is None, "a name of 32 bytes fits"
+        assert wait_until(page, "document.querySelector('.repair-item[data-repair=list] .repair-run') !== null", 5), "Run… once it fits"
+        assert names[-1] == [name], f"the preview read with the name: {names}"
+        page.locator(".repair-item[data-repair=list] .repair-run").click()
+        page.locator(".repair-item[data-repair=list] .confirm-yes").click()
+        assert wait_until(page, "document.querySelector('.repair-item[data-repair=list] .repair-result.ok') !== null", 5), "the listing ran"
+        assert stub.runs and stub.runs[0][1] == {"name": [name], "plan": ["plan-list"]}, f"with the name and the plan: {stub.runs}"
     finally:
         page.remove_listener("request", seen)
         stub.close()

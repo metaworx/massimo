@@ -6,6 +6,7 @@ package notify
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
@@ -313,6 +314,50 @@ func TestDeviceErrorNamesTheFlags(t *testing.T) {
 	} {
 		if got := values(c.ev); got != c.want {
 			t.Errorf("%+v: values %s, want %s", c.ev.State, got, c.want)
+		}
+	}
+}
+
+// Each flag's start is told (D202-A): the link error set while the
+// communication error stays set is told inside the first's half hour,
+// naming both; a flag that clears and comes back within its own half
+// hour is not told again, and is past it; both starting at once are one
+// notification.
+func TestDeviceErrorTellsEachFlagsStart(t *testing.T) {
+	h := newHarness(t, user(1, `{}`))
+	ev := func(errFlag, link bool) Event {
+		return Event{Kind: "state", Cube: "KEQ0000100", Device: "0a0103", State: &State{Error: errFlag, LinkError: link}}
+	}
+	// told is the flags each notification since the last call names, as
+	// error/link_error.
+	told := func() string {
+		var out []string
+		for _, d := range h.take() {
+			if d.n.Kind != KindDeviceError {
+				t.Fatalf("delivered %+v", d.n)
+			}
+			out = append(out, fmt.Sprintf("%v/%v", d.n.Values["error"], d.n.Values["link_error"]))
+		}
+		return strings.Join(out, " ")
+	}
+	for _, step := range []struct {
+		what     string
+		after    time.Duration
+		push     []Event
+		wantTold string
+	}{
+		{"the communication error's start", 0, []Event{ev(false, false), ev(true, false)}, "true/false"},
+		{"the link error's, inside the first's half hour", 5 * time.Minute, []Event{ev(true, true)}, "true/true"},
+		{"the link error back inside its own half hour", 5 * time.Minute, []Event{ev(true, false), ev(true, true)}, ""},
+		{"the communication error back past its half hour", 21 * time.Minute, []Event{ev(false, true), ev(true, true)}, "true/true"},
+		{"both at once", 30 * time.Minute, []Event{ev(false, false), ev(true, true)}, "true/true"},
+	} {
+		h.advance(step.after)
+		for _, e := range step.push {
+			h.push(e)
+		}
+		if got := told(); got != step.wantTold {
+			t.Fatalf("%s: told %q, want %q", step.what, got, step.wantTold)
 		}
 	}
 }

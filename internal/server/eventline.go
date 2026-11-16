@@ -82,8 +82,19 @@ func eventMessage(ev event) string {
 			return "structure change not confirmed, memory slots still held"
 		}
 	case "unconfirmed":
-		if ev.Summary["outcome"] == "confirmed_late" {
+		switch ev.Summary["outcome"] {
+		case "confirmed_late":
 			return "write shown by the device after its deadline"
+		case outcomeResent:
+			return "room setpoint not shown by every thermostat in time, sent once more"
+		case outcomeNotResent:
+			return "room setpoint not shown by every thermostat in time, not sent once more"
+		case outcomeResendFail:
+			return "room setpoint not sent once more"
+		case outcomeResendOK:
+			return "room setpoint sent once more, shown by every thermostat"
+		case outcomeResendNot:
+			return "room setpoint sent once more, still not shown by every thermostat in time"
 		}
 		return "write not shown by its devices in time"
 	case "slots":

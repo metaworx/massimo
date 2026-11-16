@@ -624,18 +624,19 @@ export interface RepairPlan {
   plan?: string;
   steps?: {
     what?: string;
-    /**
-     * The device the command addresses, which the queue resets first where
-     * flagged
-     */
+    /** The device the command addresses */
     device?: string;
     /** The room woken up before the command */
     room?: number;
-    /** The queue resets the device's error flag before the command */
+    /**
+     * The queue resets error flags before the command: the device's, the
+     * flagged members its room lines reach, the flagged devices its direct
+     * lines address
+     */
     reset?: boolean;
     /**
      * The command's lines as they go to the Cube, the wakeup and the queue's
-     * reset not included
+     * resets not included
      */
     lines?: string[];
   }[];
@@ -653,7 +654,7 @@ export interface RepairPlan {
    * radiogram's but its addressee's
    */
   held_slots?: number;
-  /** The r: lines, the queue's own included; free */
+  /** The r: lines, those the queue sends before each command included; free */
   resets?: number;
   wakeups?: number;
   /** A metadata write, no radio */
@@ -1326,7 +1327,9 @@ export interface Room {
 export interface Confirmation {
   /**
    * pending until five minutes after the Cube's answer, then unconfirmed until
-   * the devices show it or a newer write of the same kind replaces it
+   * the devices show it or a newer write of the same kind replaces it; a room
+   * setpoint sent once more is pending again for five minutes after the
+   * re-send's answer
    */
   state: "pending" | "unconfirmed";
   /**

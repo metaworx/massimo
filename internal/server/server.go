@@ -2000,6 +2000,7 @@ func (s *Server) setpoint(w http.ResponseWriter, r *http.Request, rt *runtime, t
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
+	rt.setpointAsked(t) // a newer write than a waiting re-send to its room (resend.go)
 	res := rt.enqueue(ctx, engine.Command{Key: "setpoint:" + key, Priority: engine.PriorityHigh, Target: target, Lines: []cube.Message{m}}).Wait(ctx)
 	var roomCmd uint8
 	if t.Room {
