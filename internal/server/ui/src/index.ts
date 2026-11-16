@@ -13,6 +13,8 @@
  * plain/, a file per script.
  */
 
+import "./cubes";
+import type { CubesPart } from "./cubes";
 import { languageChanged } from "./shared/lang";
 import { iconsChanged } from "./shared/look";
 import { parts, register } from "./shared/region";
@@ -23,6 +25,8 @@ export interface MassimoParts {
   language(): void;
   /** The icons chosen for the window and the radio changed (theme.js redrawSigns): every sign draws them again. */
   icons(): void;
+  /** System settings → Cubes and Cube settings (cubes/). */
+  cubes: CubesPart;
 }
 
 declare global {

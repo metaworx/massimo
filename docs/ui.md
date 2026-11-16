@@ -866,6 +866,14 @@ serial, radio budget and pill, is its first row, and a click on it folds
 nothing.
 The page follows the Cube choice and every poll, as the card does,
 and what it saves shows in System settings.
+The panel is built once and follows every poll in place:
+its problem list stays open and follows the data, a focused button keeps the focus,
+and what is typed stays, each field with the "changed meanwhile" of System settings;
+Reboot's question names the radiograms pending as the Cube says now,
+and a line of the settings file that comes to differ while the panel is shown
+gets its notice with **Take the file's value**.
+Pair a device and Repair… keep their own drawing inside the panel
+until their own move to parts.
 A panel is drawn in one place at a time:
 while Cube settings is shown, System settings' list does not hold it.
 Under the panel the Cube's **Backup and restore** (with `backup`),
@@ -960,13 +968,14 @@ the browser keeps which cards are folded.
   and its devices with theirs, as the header's), top-right whatever wraps,
   a green check where nothing is wrong, whose click opens its list
   and not the panel, and under them where its settings come from,
-  all of it drawn again at every poll, and opens with a click:
+  all of it following every poll in place, whether the panel is open or not,
+  so that an open problem list stays open, and opens with a click:
   its own badges as its top line (its link where it is not connected,
   a proxy that does not listen, a settings file that differs,
   a Cube found elsewhere than its fixed address, the source),
   a table of its facts for everyone who sees the panel
   (serial, address, port, firmware, radio address, the Cube's clock,
-  duty cycle, free slots, pending and queued, refreshed while it is open;
+  duty cycle, free slots, pending and queued, following every poll;
   the serial, the address and the radio address copy with a click on them
   or their copy icon),
   and above the facts a notice with since when where the server knows why it
@@ -1008,7 +1017,7 @@ the browser keeps which cards are folded.
   each with its name, serial number and radio address and **Show again**;
   **Hide** takes a radio address,
   with the Cube's devices to choose from.
-  While the panel is open, a field not touched follows a value stored meanwhile
+  A field not touched follows a value stored meanwhile
   (by another browser or the settings file);
   a field being edited keeps what is typed and says under it that the stored value
   changed, with the new value and **Take theirs**.
@@ -1339,7 +1348,7 @@ before, in and after the cards that flow in two columns,
 and Maintenance's two cards one, `maint`.
 A partial is a file per feature,
 and its first line names the script that uses it.
-What a script builds again and again, a Cube's panel, a log line, a scheme row,
+What a script builds again and again, a log line, a scheme row,
 is a `<template>` there, which the script clones with `fromTemplate`,
 fills with `textContent` and wires with `addEventListener`.
 The shared pieces (buttons, the `.field` rows, forms, confirmations in the page)
@@ -1350,7 +1359,7 @@ it holds the editor's behaviour, works on a model the page keeps,
 builds its controls with a kit the page gives it (`components.js`, `t()`),
 and tells the page of every edit with a `change` event;
 the programme tab puts it in a form with Cancel, Send and the two resets.
-A panel that opens, a Cube's, a user's or a role's, is a `detailsPanel`:
+A plain panel that opens, a user's or a role's, is a `detailsPanel`:
 its head the name, the serial, login or key, and the badges,
 its body the form cloned from the feature's template.
 Backup and restore is a box per Cube (`backupBox` in `backup.js`),
@@ -1436,8 +1445,9 @@ a script for each region of the page, in the order the page loads them:
   `pages.js`, the pages, the main menu, the address and the scroll;
 - `update.js`, Software update; `maintenance.js`, the Maintenance card;
   `system-info.js`, System info;
-- `cubes.js`, System settings → Cubes, the found Cubes and the Cube page;
-  `cube-panel.js`, a Cube's panel; `repair.js`, the repairs of a room,
+- `cubes.js`, the plain names of System settings → Cubes and Cube settings,
+  which call their part (`ui/src/cubes/`), and the Cubes card's badges;
+  `repair.js`, the repairs of a room,
   a device and a Cube; `pairing.js`, the pairing;
 - `login.js`, `users.js`, `providers.js`, `integrations.js`,
   `backup.js` and `roles.js`, the sign-in and the cards of System settings;
@@ -1462,8 +1472,8 @@ A region that has moved is a part:
 Preact with its signals, written in TSX under `ui/src/<region>/`,
 built once and updated in place.
 `ui/src/index.ts` is the entry point; it registers `window.MassimoParts`,
-by region the functions the plain code calls,
-and no region is a part yet.
+by region the functions the plain code calls;
+the first region that is a part is the Cubes (`ui/src/cubes/`, below).
 What the parts share is under `ui/src/shared/`; read it before writing a part.
 A region uses these and writes no copy of their markup.
 A shared part knows no region:
@@ -1547,6 +1557,15 @@ A region that moves calls these, in this order:
 - `actionRunner` for its requests and their message line, `useBusy` for the button;
 - `useDraft` with `TextField`, `Switch` or `Field` for a field that shows stored data,
   `FormFooter` for its Save, `useAsk` and `Question` for an action that asks first.
+
+The Cubes (`ui/src/cubes/`) are the first such region:
+`index.tsx` mounts System settings' list in `#cubes-list` and Cube settings' panel
+in `#cube-page-body`, a panel in one place at a time,
+and registers `render`, `polled` and `openFound`,
+which `cubes.js` calls as `renderCubes`, `cubesPolled` and `showFoundFold`;
+`store.ts` holds its counter, each panel's `open` by serial, the folds
+and the devices loaded for the hide choice;
+`send.ts` holds its requests, run by its action runner.
 `make ui` bundles it with esbuild, through esbuild's Go API (`tools/uibundle`,
 a module of its own, its `README.md`),
 into `ui/parts.js`: one classic script, minified, for ES2022,

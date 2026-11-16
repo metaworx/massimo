@@ -362,7 +362,6 @@ function applyIcons() {
 function redrawSigns() {
   MassimoParts.icons();
   renderRooms(); // rooms.js
-  renderCubes(); // cubes.js
   renderCubeSelect(); // header.js, the header's problems
 }
 

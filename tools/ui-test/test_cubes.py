@@ -100,10 +100,10 @@ def test_found_cube_added_and_removed(page):
 
 
 def test_redraw_of_an_open_panel_loads_nothing(page, case):
-    """A redraw of System settings → Cubes, as after a save, builds the open
-    panel open again without asking for its pairing again, so that an
-    answer arriving later does not redraw the pairing under the user's
-    typing; the test holds such a request until it has typed."""
+    """A redraw of System settings → Cubes, as after a save, keeps the open
+    panel and asks for nothing again, so that no answer arriving later
+    draws the pairing again under the user's typing; the test holds such
+    a request until it has typed."""
     panel, form = open_panel(page)
     assert wait_until(page, "!!document.querySelector(%r)" % (PANEL + " .pair-open"), 5), "the pairing is drawn"
     page.wait_for_timeout(500)  # the panel's own loads are in
@@ -653,16 +653,16 @@ def test_cube_drafts_across_polls(page, case):
         page.evaluate("loadCubes()")
         assert wait_until(page, "document.querySelector(\"%s input[name=name]\").value === 'Stored meanwhile'" % PANEL, 5), \
             "an untouched field follows"
-        assert form.locator(".cube-conflict").count() == 0, "without a word"
+        assert form.locator(".field-meanwhile").count() == 0, "without a word"
         proxy_serial.fill("KEQ0000555")
         page.evaluate(put, {"proxy_serial": "KEQ0000777"})
         page.evaluate("loadCubes()")
-        conflict = form.locator(".cube-conflict")
-        assert wait_until(page, "!!document.querySelector(\"%s .cube-conflict\")" % PANEL, 5), "the change said"
+        conflict = form.locator(".field-meanwhile")
+        assert wait_until(page, "!!document.querySelector(\"%s .field-meanwhile\")" % PANEL, 5), "the change said"
         assert proxy_serial.input_value() == "KEQ0000555", "the draft kept"
         assert CHANGED[case.lang] in conflict.inner_text() and "KEQ0000777" in conflict.inner_text(), "with the stored value"
         conflict.locator(".take-theirs").click()
-        assert proxy_serial.input_value() == "KEQ0000777" and form.locator(".cube-conflict").count() == 0, "Take theirs takes it"
+        assert proxy_serial.input_value() == "KEQ0000777" and form.locator(".field-meanwhile").count() == 0, "Take theirs takes it"
         assert form.locator("button[type=submit]").is_disabled(), "nothing left to save"
         assert scroll_width(page) <= case.width, "no horizontal scroll"
     finally:
