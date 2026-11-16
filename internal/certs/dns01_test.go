@@ -16,6 +16,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -400,17 +401,23 @@ func TestHookTimeoutEndsTheChildren(t *testing.T) {
 	pidFile := filepath.Join(dir, "child.pid")
 	os.WriteFile(hook, []byte("#!/bin/sh\nsleep 20 &\necho $! > \""+pidFile+"\"\nwait\n"), 0o755)
 	d := &DNS01{hook: hook, log: slog.New(slog.NewTextHandler(io.Discard, nil))}
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- d.runHook(ctx, "set", "_acme-challenge.example.net", "value") }()
+	// The time is up once the child runs, however long the start took.
+	var pid int
+	for wait := time.Now().Add(time.Minute); pid == 0; time.Sleep(20 * time.Millisecond) {
+		b, _ := os.ReadFile(pidFile)
+		if pid, _ = strconv.Atoi(strings.TrimSpace(string(b))); pid == 0 && time.Now().After(wait) {
+			t.Fatal("the hook wrote no pid")
+		}
+	}
 	start := time.Now()
-	err := d.runHook(ctx, "set", "_acme-challenge.example.net", "value")
+	cancel()
+	err := <-done
 	if took := time.Since(start); err == nil || took > 3*time.Second {
 		t.Fatalf("runHook returned %v after %s, want an error within the time", err, took)
-	}
-	b, _ := os.ReadFile(pidFile)
-	pid, _ := strconv.Atoi(strings.TrimSpace(string(b)))
-	if pid == 0 {
-		t.Fatal("the hook wrote no pid")
 	}
 	deadline := time.Now().Add(2 * time.Second)
 	for exec.Command("kill", "-0", strconv.Itoa(pid)).Run() == nil {
@@ -424,7 +431,8 @@ func TestHookTimeoutEndsTheChildren(t *testing.T) {
 
 // An order whose time runs out while it waits for the TXT record still
 // clears the record, on a context of its own, and a clear that fails is
-// logged whatever became of the order.
+// logged whatever became of the order. The order's context ends at the
+// first look for the record, so the set has run however slow the machine.
 func TestDNS01ClearsAfterItsTime(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the hook is a shell script")
@@ -441,12 +449,13 @@ func TestDNS01ClearsAfterItsTime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d.lookupTXT = func(context.Context, string) ([]string, error) { return nil, nil } // the record never shows
-	d.dnsEvery = 10 * time.Millisecond
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	if err := d.order(ctx, time.Now()); err == nil {
-		t.Fatal("an order without its record succeeded")
+	// The record never shows, and the order's time is up while it waits.
+	d.lookupTXT = func(context.Context, string) ([]string, error) { cancel(); return nil, nil }
+	d.dnsEvery = 10 * time.Millisecond
+	if err := d.order(ctx, time.Now()); !errors.Is(err, context.Canceled) {
+		t.Fatalf("an order without its record: %v, want its time up", err)
 	}
 	_, callLines := hookCalls(calls)
 	if len(callLines) != 2 || !strings.HasPrefix(callLines[0], "set _acme-challenge.example.net ") || !strings.HasPrefix(callLines[1], "clear _acme-challenge.example.net ") {
