@@ -9,7 +9,7 @@ The window and the staleness come from state events applied in the page
 """
 import re
 
-from helpers import OPEN, STALE, named_buttons, scroll_width, wait_until
+from helpers import ECO_BUTTON, OPEN, STALE, named_buttons, scroll_width, wait_until
 
 
 def test_tiles_device_list_configuration(page, case):
@@ -313,6 +313,29 @@ def test_stale_and_expert(page, case):
         "(() => { const c = state.cubes.find((x) => x.serial === state.serial); return c.name || c.serial; })()"), \
         "the Cube's name and its radio budget in the header in expert mode"
     assert scroll_width(page) <= case.width, "no horizontal scroll in expert mode"
+    page.evaluate("() => { state.settings.expert = false; applySettings(); }")
+    tile.locator(".room-name-btn").click()
+
+
+def test_eco_button(page, case):
+    """The greeting's eco button, typed eco_switch by the API: its row in
+    the device list carries the leaf and its type's name, in expert mode
+    also as text."""
+    room = page.evaluate("""(() => {
+      const r = state.rooms.find((r) => r.devices.some((d) => d.rf_address === "0a010e"));
+      return r && { name: r.name, type: r.devices.find((d) => d.rf_address === "0a010e").type };
+    })()""")
+    assert room and room["type"] == "eco_switch", f"the eco button in a room, as the API types it ({room})"
+    tile = page.locator(".room", has=page.locator(".room-name", has_text=room["name"])).first
+    tile.locator(".room-name-btn").click()
+    dev = tile.locator(".device[data-rf='0a010e']")
+    dev.wait_for(state="visible", timeout=5000)
+    icon = dev.locator(".device-type-icon")
+    assert icon.get_attribute("aria-label") == ECO_BUTTON[case.lang], f"its type's name ({icon.get_attribute('aria-label')!r})"
+    assert icon.get_attribute("title") == ECO_BUTTON[case.lang], "and as the icon's title"
+    assert icon.locator("svg use").get_attribute("href") == "#icon-leaf", "the leaf as its icon"
+    page.evaluate("() => { state.settings.expert = true; applySettings(); }")
+    assert dev.locator(".device-type").inner_text() == ECO_BUTTON[case.lang], "its type in words in expert mode"
     page.evaluate("() => { state.settings.expert = false; applySettings(); }")
     tile.locator(".room-name-btn").click()
 

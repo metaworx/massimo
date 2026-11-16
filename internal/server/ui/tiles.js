@@ -161,7 +161,7 @@ function modeTone(mode) {
 function deviceIcon(d) {
   if (d.type === "wall_thermostat") return "icon-wall";
   if (d.type === "shutter_contact") return iconChoice("window").type; // components.js
-  if (d.type === "eco_button") return "icon-leaf";
+  if (d.type === "eco_switch") return "icon-leaf";
   return "icon-radiator";
 }
 

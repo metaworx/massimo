@@ -11,9 +11,10 @@ The script:
    a copy of the radiator thermostat 0a010d, two seconds after `n:`,
    again after it was removed), with `greeting.txt`,
    which is the protocol fixture from internal/protocol/cube/testdata plus an
-   `L:` line with device states (measured temperatures included) and a window contact,
-   "Fenster Kind 1", with its `C:` line as a Cube sends one for every device,
-   that reports an open window;
+   `L:` line with device states (measured temperatures included),
+   a window contact, "Fenster Kind 1", that reports an open window,
+   and an eco button, "Eco-Taster Kind 2" (0a010e, `test_rooms.py`),
+   each with its `C:` line as a Cube sends one for every device;
    `massimo serve` against the fake Cube,
    with the API token `ui-test-token`;
    the Cube comes from `MASSIMO_CUBE_KEQ0000100_ADDRESS` and `_NAME` ("Fake Cube"),

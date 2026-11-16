@@ -1059,7 +1059,7 @@
   "type.radiator_thermostat_plus": "thermostat de radiateur+",
   "type.wall_thermostat": "thermostat mural",
   "type.shutter_contact": "contact de fenêtre",
-  "type.eco_button": "interrupteur Eco",
+  "type.eco_switch": "interrupteur Eco",
 
   "result.ok": "{label} : ok",
   "result.budget": "{text} (duty cycle {duty} %, {slots} places libres)",

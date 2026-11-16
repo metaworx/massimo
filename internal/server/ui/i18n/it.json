@@ -1059,7 +1059,7 @@
   "type.radiator_thermostat_plus": "termostato per radiatore+",
   "type.wall_thermostat": "termostato a parete",
   "type.shutter_contact": "contatto finestra",
-  "type.eco_button": "pulsante Eco",
+  "type.eco_switch": "pulsante Eco",
 
   "result.ok": "{label}: ok",
   "result.budget": "{text} (duty cycle {duty} %, {slots} slot liberi)",

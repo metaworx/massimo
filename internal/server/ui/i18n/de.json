@@ -1057,7 +1057,7 @@
   "type.radiator_thermostat_plus": "Heizkörperthermostat+",
   "type.wall_thermostat": "Wandthermostat",
   "type.shutter_contact": "Fensterkontakt",
-  "type.eco_button": "Eco-Taster",
+  "type.eco_switch": "Eco-Taster",
 
   "result.ok": "{label}: ok",
   "result.budget": "{text} (Duty Cycle {duty} %, {slots} freie Plätze)",
