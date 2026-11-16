@@ -5,8 +5,8 @@
  * @file internal/server/ui/src/plain/components.d.ts
  *
  * The globals of the plain script ui/components.js that the parts call:
- * the signs' drawings, the blink of a mark, a menu that drops down, the
- * clipboard, and the result line of an action.
+ * the signs' drawings, the blink of a mark, a menu that drops down with
+ * its arrow keys, the clipboard, and the result line of an action.
  * The builders of elements stay out: a part draws its own.
  */
 
@@ -26,6 +26,8 @@ declare global {
   function keepBlink(use: Element, key?: string): void;
   /** Makes a details.menu a menu that drops down: one open at a time, kept in the window. */
   function dropdown(details: HTMLDetailsElement): HTMLDetailsElement;
+  /** Lets the arrow keys move the focus between the items of an open dropdown that match selector. */
+  function menuArrows(details: HTMLDetailsElement, selector: string): void;
   /** Puts text on the clipboard; whether it did. */
   function copyText(text: string): Promise<boolean>;
   /** Says on el and to a screen reader that something was copied. */

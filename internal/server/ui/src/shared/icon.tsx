@@ -15,11 +15,15 @@
 import { useLayoutEffect, useRef } from "preact/hooks";
 import { useIcons } from "./look";
 
-/** Icon is a small inline icon of a symbol of the page (iconEl). */
-export function Icon({ symbol, cls }: { symbol: string; cls: string }) {
+/**
+ * Icon is a small inline icon of a symbol of the page (iconEl); with mark,
+ * the symbol is a mark (use.mark), which blinks where the page's style
+ * makes it, as a sign's state that calls for a look.
+ */
+export function Icon({ symbol, cls, mark }: { symbol: string; cls: string; mark?: boolean }) {
   return (
     <svg class={cls} aria-hidden="true">
-      <use href={"#" + symbol} />
+      <use href={"#" + symbol} class={mark ? "mark" : undefined} />
     </svg>
   );
 }
