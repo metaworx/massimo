@@ -1082,6 +1082,7 @@
   "cfg.nameHint": "Tot {n} bytes; letters met accenten tellen dubbel.",
   "cfg.nameRequired": "Een naam is vereist.",
   "cfg.nameTooLong": "De naam is langer dan {n} bytes.",
+  "cfg.nameLong": "langer dan {n} bytes",
   "cfg.nameUnchanged": "De naam is ongewijzigd.",
   "cfg.renaming": "Hernoemen …",
   "cfg.renamed": "Ruimte hernoemd naar {name}.",

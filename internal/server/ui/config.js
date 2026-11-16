@@ -222,15 +222,21 @@ function byteLength(s) {
 // server's default (repair_api.go, defaultDeviceName) with the type's
 // word in the page's language: "<room name> <type> <n>", n the lowest
 // number from 1 that no name of the room's (taken) has in that form,
-// whatever its case; a room's name too long for the whole to fit
-// NAME_BYTES is cut at a character.
+// whatever its case. One longer than NAME_BYTES is offered as it is: its
+// field says so (markNameBytes), and the user shortens it before it is
+// sent (D201), where the server, with nobody to ask, drops the room's
+// name.
 function defaultDeviceName(room, word, taken) {
-  for (let digits = 1; ; digits++) {
-    const base = cutToBytes(String(room || "").trim(), NAME_BYTES - byteLength(word) - 2 - digits);
-    const prefix = (base + " " + word).trim();
-    const n = freeNameNumber(prefix, taken);
-    if (String(n).length <= digits || base === "") return prefix + " " + n;
-  }
+  const prefix = (String(room || "").trim() + " " + word).trim();
+  return prefix + " " + freeNameNumber(prefix, taken);
+}
+
+// markNameBytes marks a name's field, as markRange marks a number's
+// (components.js): a name longer than NAME_BYTES outlines it in red and
+// shows hint, the amber limit before the box; it returns whether the
+// name fits.
+function markNameBytes(input, hint) {
+  return markRange(input, hint, byteLength(input.value.trim()) <= NAME_BYTES);
 }
 
 // freeNameNumber is the lowest number from 1 that no name of taken has
@@ -247,18 +253,6 @@ function freeNameNumber(prefix, taken) {
   let n = 1;
   while (used.has(n)) n++;
   return n;
-}
-
-// cutToBytes is s cut to at most max bytes of UTF-8 at a character,
-// trailing spaces left out.
-function cutToBytes(s, max) {
-  if (byteLength(s) <= max) return s;
-  let out = "";
-  for (const ch of s) {
-    if (byteLength(out + ch) > max) break;
-    out += ch;
-  }
-  return out.replace(/ +$/, "");
 }
 
 // roomDeviceNames are the names of the devices a Cube's list has in a

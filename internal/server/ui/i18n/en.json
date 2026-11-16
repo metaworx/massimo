@@ -1081,6 +1081,7 @@
   "cfg.nameHint": "Up to {n} bytes; umlauts take two.",
   "cfg.nameRequired": "A name is required.",
   "cfg.nameTooLong": "The name is longer than {n} bytes.",
+  "cfg.nameLong": "longer than {n} bytes",
   "cfg.nameUnchanged": "The name is unchanged.",
   "cfg.renaming": "Renaming …",
   "cfg.renamed": "Room renamed to {name}.",

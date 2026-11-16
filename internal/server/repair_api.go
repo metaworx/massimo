@@ -29,7 +29,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"go.metaworx.ch/massimo/internal/cubeio"
 	"go.metaworx.ch/massimo/internal/cubelan"
@@ -796,22 +795,22 @@ func roomDeviceNames(md *cube.Metadata, room uint8) []string {
 // put into one (D200-A), gets where the request names none: "<room
 // name> <type> <n>", the type in English (deviceTypeWords), n the
 // lowest number from 1 that no name of the room's (taken) has in that
-// form, which a name matches whatever its case. A room's name too long
-// for the whole to fit maxNameBytes is cut, at a character, the form
-// then that of the cut name.
+// form, which a name matches whatever its case. Where the whole would
+// pass maxNameBytes, the room's name is dropped, "<type> <n>", n the
+// lowest free in that form: nobody is there to shorten it, as the web
+// UI asks its user to (D201).
 func defaultDeviceName(room string, typ cube.DeviceType, taken []string) string {
 	word, ok := deviceTypeWords[typ]
 	if !ok {
 		word = strings.ReplaceAll(typ.String(), "_", " ")
 	}
-	for digits := 1; ; digits++ {
-		base := cutName(strings.TrimSpace(room), maxNameBytes-len(word)-2-digits)
-		prefix := strings.TrimSpace(base + " " + word)
-		n := freeNumber(prefix, taken)
-		if len(strconv.Itoa(n)) <= digits || base == "" {
-			return prefix + " " + strconv.Itoa(n)
+	if room = strings.TrimSpace(room); room != "" {
+		prefix := room + " " + word
+		if name := prefix + " " + strconv.Itoa(freeNumber(prefix, taken)); len(name) <= maxNameBytes {
+			return name
 		}
 	}
+	return word + " " + strconv.Itoa(freeNumber(word, taken))
 }
 
 // freeNumber is the lowest number from 1 that no name of taken has in
@@ -836,20 +835,4 @@ func freeNumber(prefix string, taken []string) int {
 		n++
 	}
 	return n
-}
-
-// cutName is s cut to at most max bytes at a character, trailing spaces
-// left out; "" for max below 1.
-func cutName(s string, max int) string {
-	if len(s) <= max {
-		return s
-	}
-	if max < 1 {
-		return ""
-	}
-	end := max
-	for end > 0 && !utf8.RuneStart(s[end]) {
-		end--
-	}
-	return strings.TrimRight(s[:end], " ")
 }

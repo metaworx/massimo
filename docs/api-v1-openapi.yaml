@@ -2772,8 +2772,9 @@ paths:
         the name the preview asks for it (details code room_name_needed and room).
         A device the list does not have gets the name name gives, else
         "<room name> <type> <n>", the type in English and n the lowest
-        number no device of the room takes in a name of that form; details
-        name, room_name and type say which.
+        number no device of the room takes in a name of that form, and
+        "<type> <n>" where that would pass 32 bytes; details name,
+        room_name and type say which.
         The preview sends nothing: the lines a run would send and what they
         cost, and the plan's hash for the run.
       parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}, {$ref: "#/components/parameters/repairRoomName"}, {$ref: "#/components/parameters/repairDeviceName"}]

@@ -287,21 +287,29 @@ function pairDefaultName(serial, dev, room) {
 // pairDeviceForm is the form that puts a device that is in no room into
 // one (tpl-pair-device, capability structure): its name (with rename),
 // offered by default (pairDefaultName) for the room chosen until one is
-// typed, the room, and for a thermostat the switch that copies the
-// room's settings (with configure, which the copy needs as well), on by
-// default; PUT …/devices/{rf}. e keeps what is typed (typed, once the
-// name was) across redraws, the result, and done once the device is in
-// the room; onDone runs then, onFail after a refusal, and onCancel, when
-// given, is the form's Cancel.
+// typed, one too long for the Cube marked on its field and not sent
+// (markNameBytes), the room, and for a thermostat the switch that
+// copies the room's settings (with configure, which the copy needs as
+// well), on by default; PUT …/devices/{rf}. e keeps what is typed
+// (typed, once the name was) across redraws, the result, and done once
+// the device is in the room; onDone runs then, onFail after a refusal,
+// and onCancel, when given, is the form's Cancel.
 function pairDeviceForm(serial, dev, e, { onDone, onFail, onCancel } = {}) {
   const form = fromTemplate("tpl-pair-device");
   const id = "pair-" + serial + "-" + dev.rf_address;
   const name = form.querySelector("input[name=name]");
   name.id = id + "-name";
-  name.previousElementSibling.htmlFor = name.id;
+  name.closest(".field").querySelector("label").htmlFor = name.id;
+  // A name longer than the Cube keeps, the one offered included, stays as
+  // it is, marked as it is typed, and is not sent until it is shortened
+  // (D201).
+  const long = form.querySelector(".pair-name-long");
+  long.id = name.id + "-long";
+  long.textContent = t("cfg.nameLong", { n: NAME_BYTES });
   name.addEventListener("input", () => {
     e.name = name.value;
     e.typed = true;
+    markNameBytes(name, long); // config.js
   });
   const rooms = cubeRooms(serial);
   const select = form.querySelector("select[name=room]");
@@ -314,6 +322,7 @@ function pairDeviceForm(serial, dev, e, { onDone, onFail, onCancel } = {}) {
   const offer = () => {
     if (!e.typed) e.name = pairDefaultName(serial, dev, e.room);
     name.value = e.name || "";
+    markNameBytes(name, long);
   };
   offer();
   select.addEventListener("change", () => {
@@ -353,9 +362,8 @@ function pairDeviceForm(serial, dev, e, { onDone, onFail, onCancel } = {}) {
     const body = { room_id: e.room };
     if (isThermostat(dev)) body.copy = hasCap("configure") && e.copy !== false;
     if (nm) {
-      if (byteLength(nm) > NAME_BYTES) {
-        e.result = { text: t("cfg.devNameTooLong", { name: nm, n: NAME_BYTES }), ok: false };
-        showResult(result, e.result.text, false);
+      if (!markNameBytes(name, long)) {
+        name.focus(); // its field says why, as the pairing time's does
         return;
       }
       body.name = nm;

@@ -1083,6 +1083,7 @@
   "cfg.nameHint": "Fino a {n} byte; le lettere accentate ne occupano due.",
   "cfg.nameRequired": "Il nome è obbligatorio.",
   "cfg.nameTooLong": "Il nome supera i {n} byte.",
+  "cfg.nameLong": "più di {n} byte",
   "cfg.nameUnchanged": "Il nome è invariato.",
   "cfg.renaming": "Rinomina in corso …",
   "cfg.renamed": "Locale rinominato in {name}.",

@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
 """Pairing and removal: in System settings → Cubes a device is paired, named
-(the form offers "<room> <type> <n>" for the room chosen, D200-A),
+(the form offers "<room> <type> <n>" for the room chosen, D200-A, one
+too long for the Cube marked and not sent until shortened, D201),
 put into a room with the room's settings and removed from the Cube again
 in the room's Devices tab; a device paired while the page was not
 looking is put into a room from Devices without a room, and another
@@ -31,12 +32,16 @@ ENDED = {"en": "Pairing ended; 1 device joined.", "de": "Anlernen beendet; 1 Ger
 LEFT = {"en": "s left", "de": "noch"}
 RANGE = {"en": "only 1 to 255", "de": "nur 1 bis 255"}
 # The name offered for the fake's radiator thermostat (D200-A): the
-# room's name, the type in the page's language, the lowest free n; the
-# German "Wohnzimmer Heizkörperthermostat 1" is 34 bytes, so the room's
-# name is cut to fit 32.
+# room's name, the type in the page's language, the lowest free n. The
+# German "Wohnzimmer Heizkörperthermostat 1" is 34 bytes, past the 32 the
+# Cube keeps: it is offered as it is, marked, and not sent until it is
+# shortened (D201), to SHORT; the English is 32.
 OFFERED = {"en": {1: "Wohnzimmer radiator thermostat 1", 3: "Küche radiator thermostat 1"},
-           "de": {1: "Wohnzimm Heizkörperthermostat 1", 3: "Küche Heizkörperthermostat 1"}}
-IN_ROOM ="state.rooms.some((r) => r.id === %d && r.devices.some((d) => d.rf_address === '" + DEV + "'))"
+           "de": {1: "Wohnzimmer Heizkörperthermostat 1", 3: "Küche Heizkörperthermostat 1"}}
+TOO_LONG = {"en": False, "de": True}
+LONG = {"en": "longer than 32 bytes", "de": "länger als 32 Bytes"}
+SHORT = "Wohnzimmer Heizkörper 1"
+IN_ROOM = "state.rooms.some((r) => r.id === %d && r.devices.some((d) => d.rf_address === '" + DEV + "'))"
 GONE = "!state.rooms.some((r) => r.devices.some((d) => d.rf_address === '" + DEV + "')) && !state.unlisted.some((d) => d.rf_address === '" + DEV + "')"
 
 
@@ -97,6 +102,32 @@ def name_in(page, room):
                          % (room, DEV))
 
 
+def check_name_mark(page, case, form, long, submit=False):
+    """The form's name field marked as too long for the Cube (D201), as
+    the pairing time's field is out of range: the box red, the limit in
+    amber before it, above the box on its own line, the field's
+    description; or neither. With submit, a too long name puts nothing
+    into a room: the submit goes back to the field."""
+    name, hint = form.locator("input[name=name]"), form.locator(".pair-name-long")
+    if not long:
+        assert hint.is_hidden() and name.get_attribute("aria-invalid") is None, "a name that fits is not marked"
+        return
+    assert hint.is_visible() and hint.inner_text() == LONG[case.lang], "the limit, before the box"
+    assert name.get_attribute("aria-invalid") == "true", "the field marked"
+    assert name.get_attribute("aria-describedby") == hint.get_attribute("id"), "the limit is the field's description"
+    assert hint.evaluate("(el) => getComputedStyle(el).color") == colour_of(page, "--warn"), "the limit in amber"
+    assert name.evaluate("(el) => getComputedStyle(el).borderTopColor") == colour_of(page, "--bad"), "the box in red"
+    box, before = name.bounding_box(), hint.bounding_box()
+    assert before["y"] + before["height"] <= box["y"] + 1, "the limit above the box"
+    assert scroll_width(page) <= case.width, "no horizontal scroll with the limit"
+    if not submit:
+        return
+    form.locator("button[type=submit]").click()
+    page.wait_for_timeout(500)
+    assert name.evaluate("(el) => el === document.activeElement"), "the submit goes back to the field"
+    assert (api("GET", CUBE + "/devices/" + DEV)[1] or {}).get("room_id") == 0, "the device put into no room"
+
+
 def test_pair_put_into_a_room_and_remove(page, case, clean):
     room = first_room(page)
     before = serve_log()
@@ -117,9 +148,11 @@ def test_pair_put_into_a_room_and_remove(page, case, clean):
     form = row.locator("form")
     name = form.locator("input[name=name]")
     assert room["id"] == 1 and form.locator("select[name=room]").input_value() == "1", "the first room chosen, Wohnzimmer"
-    assert name.input_value() == OFFERED[case.lang][1], "the name offered for the room"
+    assert name.input_value() == OFFERED[case.lang][1], "the name offered for the room, as it is"
+    check_name_mark(page, case, form, TOO_LONG[case.lang])
     form.locator("select[name=room]").select_option("3")
     assert name.input_value() == OFFERED[case.lang][3], "the name offered follows the room"
+    check_name_mark(page, case, form, False)
     name.fill("Pair test")
     form.locator("select[name=room]").select_option(str(room["id"]))
     assert name.input_value() == "Pair test", "a name typed stays when the room changes"
@@ -168,13 +201,20 @@ def test_put_into_a_room_from_devices_without_a_room(page, case, clean):
     row.locator(".put-open").click()
     form = row.locator("form.pair-device-form")
     form.locator("select[name=room]").select_option(str(room["id"]))
-    assert form.locator("input[name=name]").input_value() == OFFERED[case.lang][room["id"]], "the name offered for the room"
+    name = form.locator("input[name=name]")
+    assert name.input_value() == OFFERED[case.lang][room["id"]], "the name offered for the room, as it is"
     form.locator(".pair-copy .switch").click()
     assert not form.locator("input[name=copy]").is_checked(), "the copy switched off"
     assert scroll_width(page) <= case.width, "no horizontal scroll with the form"
+    check_name_mark(page, case, form, TOO_LONG[case.lang], submit=True)
+    want = OFFERED[case.lang][room["id"]]
+    if TOO_LONG[case.lang]:
+        name.fill(SHORT)
+        check_name_mark(page, case, form, False)
+        want = SHORT
     form.locator("button[type=submit]").click()
     assert wait_until(page, IN_ROOM % room["id"], 20), "the device is in the room"
-    assert name_in(page, room["id"]) == OFFERED[case.lang][room["id"]], "under the name offered"
+    assert name_in(page, room["id"]) == want, "under the name offered, or the one shortened"
     assert page.locator("#unlisted .device[data-rf='%s']" % DEV).count() == 0, "no longer without a room"
     if SERVE_LOG:
         new = serve_log()[len(before):]

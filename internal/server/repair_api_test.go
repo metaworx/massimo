@@ -627,18 +627,19 @@ func TestRepairListNamesTheDevice(t *testing.T) {
 			t.Fatalf("GET: %d %s", code, body)
 		}
 	})
-	t.Run("a new room's name, cut", func(t *testing.T) {
+	t.Run("a new room's name too long, dropped", func(t *testing.T) {
 		_, ts, _ := startRepairCube(t, func(fc *fakecube.Server) { withConfigRoom(t, fc.Greeting, copyNew, 7) })
-		code, p, body := previewOf(t, ts, path+"?room_name="+url.QueryEscape("Attic over the garage"))
-		if code != 200 || p.Details["name"] != "Attic over radiator thermostat 1" || p.Details["room_name"] != "Attic over the garage" {
+		code, p, body := previewOf(t, ts, path+"?room_name="+url.QueryEscape("Wohnzimmer im Erdgeschoss"))
+		if code != 200 || p.Details["name"] != "radiator thermostat 1" || p.Details["room_name"] != "Wohnzimmer im Erdgeschoss" {
 			t.Fatalf("GET: %d %s", code, body)
 		}
 	})
 }
 
-// The default name's rules (D185): the lowest free n, a name of that
-// form whatever its case, a room's name cut at a character where the
-// whole would pass 32 bytes, a two-digit n cutting one more.
+// The default name's rules (D185, D201): the lowest free n, a name of
+// that form whatever its case; where the whole would pass 32 bytes,
+// with a room's name of umlauts or a two-digit n, the room's name
+// dropped, "<type> <n>", n the lowest free in that form.
 func TestDefaultDeviceName(t *testing.T) {
 	for _, c := range []struct {
 		room  string
@@ -651,13 +652,17 @@ func TestDefaultDeviceName(t *testing.T) {
 		{"Bath", cube.DeviceEcoSwitch, []string{"Bath eco button", "Bath eco button x", "Bath eco button -1", "Bath eco button 0"}, "Bath eco button 1"},
 		{"Bath", cube.DeviceRadiatorThermostatPlus, nil, "Bath radiator thermostat plus 1"},
 		{"Wohnzimmer", cube.DeviceRadiatorThermostat, nil, "Wohnzimmer radiator thermostat 1"},
-		{"aÄÄÄÄÄÄ", cube.DeviceRadiatorThermostat, nil, "aÄÄÄÄ radiator thermostat 1"},
-		{"Attic over the garage", cube.DeviceRadiatorThermostat, []string{"Attic over radiator thermostat 1"}, "Attic over radiator thermostat 2"},
+		{"Wohnzimmer Süd", cube.DeviceShutterContact, nil, "Wohnzimmer Süd window contact 1"}, // 32 bytes
+		{"Wohnzimmer Süd", cube.DeviceRadiatorThermostat, nil, "radiator thermostat 1"},
+		{"aÄÄÄÄÄÄ", cube.DeviceRadiatorThermostat, nil, "radiator thermostat 1"},
+		{"Attic over the garage", cube.DeviceRadiatorThermostat, []string{"Attic over radiator thermostat 1", "radiator thermostat 1"},
+			"radiator thermostat 2"},
 		{"Wohnzimmer", cube.DeviceRadiatorThermostat, []string{"Wohnzimmer radiator thermostat 1", "Wohnzimmer radiator thermostat 2",
 			"Wohnzimmer radiator thermostat 3", "Wohnzimmer radiator thermostat 4", "Wohnzimmer radiator thermostat 5",
 			"Wohnzimmer radiator thermostat 6", "Wohnzimmer radiator thermostat 7", "Wohnzimmer radiator thermostat 8",
-			"Wohnzimmer radiator thermostat 9"}, "Wohnzimme radiator thermostat 1"},
+			"Wohnzimmer radiator thermostat 9"}, "radiator thermostat 1"},
 		{"", cube.DeviceWallThermostat, []string{"wall thermostat 1"}, "wall thermostat 2"},
+		{" ", cube.DeviceEcoSwitch, nil, "eco button 1"},
 	} {
 		got := defaultDeviceName(c.room, c.typ, c.taken)
 		if got != c.want || len(got) > maxNameBytes || checkName(got) != nil {

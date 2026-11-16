@@ -2378,10 +2378,11 @@ and one to the new device for each partner
 (two shutter contacts are not linked with each other), then 0x22 set group,
 then the metadata with the device listed under its name in the room,
 then a re-read of its C line.
-Without `name` it is listed under the default a repair's listing gives
-(D200-A; "A listed device's name", under Repairs):
+Without `name` it is listed under the default a repair's listing gives (D200-A):
 `<room name> <type> <n>`, such as `Bath radiator thermostat 2`
-beside `Bath radiator thermostat 1`.
+beside `Bath radiator thermostat 1`,
+and `<type> <n>` where that would pass 32 bytes ("A listed device's name",
+under Repairs).
 A device whose C line names another room (paired long ago and never listed) is
 first unlinked from that room with 0x23 remove group and 0x21 remove link partner,
 as in a move.
@@ -3056,9 +3057,13 @@ the device type in English (`radiator thermostat`, `radiator thermostat plus`,
 `n` the lowest number from 1 that no device the list has in that room
 takes in a name of that form, whatever its case,
 such as `Bath radiator thermostat 2` beside `Bath radiator thermostat 1`.
-A room's name too long for the whole to fit 32 bytes is cut, at a character.
+Where the whole would pass 32 bytes, nobody being there to shorten it,
+the room's name is dropped (D201):
+`<type> <n>`, `n` the lowest free in that form,
+such as `radiator thermostat 1` for a room `Wohnzimmer Süd`.
 A device the list has keeps its name, `name` or not.
-The web UI offers the same default with the type in the page's language.
+The web UI offers the same default with the type in the page's language,
+one past 32 bytes whole, which its user shortens before it is sent.
 The log's **device change** names a re-link `relink`, "unlink all and re-link"
 `unlink_relink`, a re-sent configuration `config` and a placement `move`;
 one of a room has no device and names its `rooms`.

@@ -387,19 +387,23 @@ func TestAddWithoutCopy(t *testing.T) {
 // A placement without a name lists the device under the default a
 // repair's listing gives (D200-A), "<room name> <type> <n>", n the
 // lowest the room's names of that form leave free; the metadata written
-// is exactly the Cube's with the device's entry added. A name given is
-// taken as it is. The copy cube's room 1 is "Wohnzimmer".
+// is exactly the Cube's with the device's entry added. Where the whole
+// would pass 32 bytes, the room's name is dropped (D201): nobody is
+// there to shorten it. A name given is taken as it is. The copy cube's
+// room 1 is "Wohnzimmer".
 func TestAddWithoutANameTakesTheDefault(t *testing.T) {
 	for _, c := range []struct {
 		name  string
 		body  string
+		room  string                    // room 1 renamed
 		names map[cube.RFAddress]string // room 1's devices renamed
 		want  string
 	}{
-		{"the default", `{"room_id":1,"copy":false}`, nil, "Wohnzimmer radiator thermostat 1"},
-		{"a taken n", `{"room_id":1,"copy":false}`, map[cube.RFAddress]string{0x0a010a: "Wohnzimmer radiator thermostat 1"},
+		{"the default", `{"room_id":1,"copy":false}`, "", nil, "Wohnzimmer radiator thermostat 1"},
+		{"a taken n", `{"room_id":1,"copy":false}`, "", map[cube.RFAddress]string{0x0a010a: "Wohnzimmer radiator thermostat 1"},
 			"Wohnzimmer radiator thermostat 2"},
-		{"a name given", `{"name":" Neu ","room_id":1,"copy":false}`, nil, "Neu"},
+		{"a room's name too long", `{"room_id":1,"copy":false}`, "Wohnzimmer Süd", nil, "radiator thermostat 1"},
+		{"a name given", `{"name":" Neu ","room_id":1,"copy":false}`, "", nil, "Neu"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			fc, ts, s := startCopyCube(t, func(fc *fakecube.Server) {
@@ -407,6 +411,11 @@ func TestAddWithoutANameTakesTheDefault(t *testing.T) {
 					for i := range md.Devices {
 						if n, ok := c.names[md.Devices[i].RFAddress]; ok {
 							md.Devices[i].Name = n
+						}
+					}
+					for i := range md.Rooms {
+						if md.Rooms[i].ID == 1 && c.room != "" {
+							md.Rooms[i].Name = c.room
 						}
 					}
 				})

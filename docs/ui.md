@@ -495,8 +495,11 @@ or for resets whether the Cube's device list still shows the error.
   offers, which can be changed before Run…:
   the room's name, the device's type in the page's language,
   and the lowest number from 1 that no device of the room takes
-  in a name of that form ("Bath radiator thermostat 2"),
-  the room's name cut where the whole would pass 32 bytes (D185).
+  in a name of that form ("Bath radiator thermostat 2") (D185).
+  One longer than the 32 bytes the Cube keeps
+  ("Wohnzimmer Heizkörperthermostat 1" is 34) stays in its field as it is,
+  outlined in red with the limit in amber above it, as it is typed too,
+  and the listing shows no cost and no **Run…** until it is shortened (D201).
   **Show what it sends** reads the preview again with a name changed.
 - In a Cube's panel: **Reset the communication errors** of every device.
 
@@ -1107,7 +1110,10 @@ the browser keeps which cards are folded.
   the name offered as a repair's listing offers one (Rooms, Repairs; D200-A),
   the room's name, the device's type in the page's language and the lowest
   free number ("Bath radiator thermostat 2"), following the room chosen until
-  a name is typed,
+  a name is typed;
+  a name longer than the 32 bytes the Cube keeps, the one offered included,
+  stays as it is, outlined in red with the limit in amber above it,
+  and **Put into a room** goes back to the field until it is shortened (D201);
   and for a thermostat **Copy the room's settings**, on by default,
   shown where the role has `configure`, which the copy needs.
   **Put into a room** links the device with the room's other devices and lists it there;
