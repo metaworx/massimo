@@ -1012,7 +1012,7 @@ export interface FoundCube {
    * What answered: a Cube, a massimo proxy (also one at an announced server's
    * address), or neither
    */
-  kind?: "cube" | "proxy" | "unknown";
+  kind: "cube" | "proxy" | "unknown";
   /**
    * A proxy's: the serial of the Cube with its radio address, served here or
    * found; absent where none is known
@@ -1074,6 +1074,35 @@ export interface FoundCube {
    * @format date-time
    */
   last_seen: string;
+}
+
+/** A run of discovery, as POST /api/v1/cubes/discover answers it */
+export interface Discovery {
+  /** @format date-time */
+  ran_at: string;
+  /**
+   * Every Cube and massimo proxy that answered, configured or not; empty where
+   * none did
+   */
+  found: FoundCube[];
+}
+
+/**
+ * The certificate the server serves, as /healthz and GET /api/v1/system give it
+ * as tls; absent without TLS
+ */
+export interface CertStatus {
+  /** Where the certificate comes from: files, self-signed, or acme. */
+  source?: string;
+  /** The certificate's names and addresses. */
+  names?: string[];
+  /** @format date-time */
+  not_after: string;
+  /** The SHA-256 of the certificate, as browsers show it. */
+  fingerprint?: string;
+  self_signed: boolean;
+  /** Set while something needs the owner. */
+  warning?: string;
 }
 
 export interface Cube {
@@ -1200,7 +1229,7 @@ export interface Cube {
    */
   pending_radiograms: number;
   /** @format date-time */
-  updated?: string;
+  updated: string;
   /**
    * When the server first heard from the Cube; a device value received at that
    * time was already there and may be older
