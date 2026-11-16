@@ -109,11 +109,11 @@ func stoppedUnits(t *testing.T) *[]string {
 }
 
 // checkTakenBack fails unless the store in dir is at this binary's
-// version again, with min_reader 1, and opens.
+// version again, with a min_reader it reads, and opens.
 func checkTakenBack(t *testing.T, dir string) {
 	t.Helper()
 	v, mr, err := store.FileVersion(dir)
-	if err != nil || v != store.SchemaVersion() || mr != 1 {
+	if err != nil || v != store.SchemaVersion() || mr > store.SchemaVersion() {
 		t.Fatalf("store at %d (min_reader %d) %v", v, mr, err)
 	}
 	st, err := store.Open(dir, store.Options{Logger: quietLog()})

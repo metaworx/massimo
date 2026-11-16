@@ -539,10 +539,10 @@ func TestRemovedUserKeepsItsHistory(t *testing.T) {
 	if subs, err := st.PushSubscriptions(ctx, row.ID); err != nil || len(subs) != 0 {
 		t.Fatalf("its push subscriptions: %v %v", subs, err)
 	}
-	// Its row kept under a name of its own, by which the log and the
-	// audit name it.
+	// Its row kept with its name (migration 0024), by which the log and
+	// the audit name it while no other user has the name.
 	u, ok, err := st.UserByID(ctx, row.ID)
-	if err != nil || !ok || !strings.HasPrefix(u.Name, "anna-del-") || u.DisplayName != "Anna" {
+	if err != nil || !ok || u.Name != "anna" || u.DisplayName != "Anna" {
 		t.Fatalf("its row: %+v %v %v", u, ok, err)
 	}
 	gone := u.Name

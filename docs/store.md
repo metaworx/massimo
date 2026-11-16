@@ -342,6 +342,7 @@ CREATE TABLE schema_version (
 
 CREATE TABLE roles (
     id         INTEGER PRIMARY KEY,
+    uuid       TEXT    NOT NULL UNIQUE,       -- migration 0024: it replicates
     key        TEXT    NOT NULL,              -- 'owner', 'manager', 'operator', 'guest', 'viewer', 'integration', or the key of a created role
     name       TEXT    NOT NULL DEFAULT '',   -- display name; '' shows the key's translated default
     builtin    INTEGER NOT NULL DEFAULT 0,    -- 1: seeded; owner is builtin and immutable
@@ -349,9 +350,10 @@ CREATE TABLE roles (
     created_at TEXT    NOT NULL,
     updated_at TEXT    NOT NULL,
     updated_by INTEGER REFERENCES users (id),
-    created_by INTEGER REFERENCES users (id),
-    UNIQUE (key)
+    created_by INTEGER REFERENCES users (id)
 );
+-- migration 0024: the key unique among the roles not removed (UNIQUE (key) before)
+CREATE UNIQUE INDEX roles_key ON roles (key) WHERE deleted_at IS NULL;
 
 CREATE TABLE role_capabilities (
     role_id    INTEGER NOT NULL REFERENCES roles (id) ON DELETE CASCADE,
@@ -372,15 +374,17 @@ CREATE TABLE users (
     display_name  TEXT    NOT NULL DEFAULT '',
     password_hash TEXT    NOT NULL DEFAULT '',   -- argon2id in PHC string form; '' = no password login (keys only)
     role_id       INTEGER NOT NULL REFERENCES roles (id),
+    integration_id INTEGER REFERENCES integrations (id),  -- migration 0024: the integration whose user it is
     disabled      INTEGER NOT NULL DEFAULT 0,
     expires_at    TEXT,                          -- guests: disabled from this time on
     invited_by    INTEGER REFERENCES users (id),
     created_at    TEXT    NOT NULL,
     updated_at    TEXT    NOT NULL,
     updated_by    INTEGER REFERENCES users (id),
-    last_login_at TEXT,
-    UNIQUE (name)
+    last_login_at TEXT
 );
+-- migration 0024: the name unique among the users not removed (UNIQUE (name) before)
+CREATE UNIQUE INDEX users_name ON users (name) WHERE deleted_at IS NULL;
 
 CREATE TABLE tokens (
     id             INTEGER PRIMARY KEY,
@@ -392,7 +396,7 @@ CREATE TABLE tokens (
     expires_at     TEXT,                         -- NULL: never (API keys); sessions: moved on every use
     last_used_at   TEXT,
     last_used_from TEXT    NOT NULL DEFAULT '',  -- the client's address
-    revoked_at     TEXT
+    deleted_at     TEXT                          -- revoked; revoked_at until migration 0024 (D7)
 );
 CREATE INDEX tokens_user ON tokens (user_id);
 
@@ -413,6 +417,7 @@ CREATE TABLE cubes (
     follow_discovery   INTEGER NOT NULL DEFAULT 0,    -- the address follows the Cube's discovery answers
     proxy_address      TEXT    NOT NULL DEFAULT '',   -- the server's listener for this Cube, host[:port]; '' = none
     proxy_serial       TEXT    NOT NULL DEFAULT '',   -- the serial used in discovery replies; '' = the Cube's
+    proxy_virtual      INTEGER NOT NULL DEFAULT 0,    -- migration 0024, cube_options before: the proxy shows the virtual wall thermostats
     hidden             TEXT    NOT NULL DEFAULT '[]', -- JSON list of radio addresses, as _IGNORE
     source             TEXT    NOT NULL DEFAULT 'env' CHECK (source IN ('env', 'ui', 'discovery', 'flag')),
     -- what discovery reported last, for GET /api/v1/cubes
@@ -424,9 +429,10 @@ CREATE TABLE cubes (
     last_seen          TEXT,
     created_at         TEXT    NOT NULL,
     updated_at         TEXT    NOT NULL,
-    updated_by         INTEGER REFERENCES users (id),
-    UNIQUE (serial)
+    updated_by         INTEGER REFERENCES users (id)
 );
+-- migration 0024: the serial unique among the Cubes not removed (D11-A; UNIQUE (serial) before)
+CREATE UNIQUE INDEX cubes_serial ON cubes (serial) WHERE deleted_at IS NULL;
 
 CREATE TABLE preferences (
     user_id    INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
@@ -459,12 +465,7 @@ CREATE TABLE rooms (                         -- migration 0017
 );
 CREATE UNIQUE INDEX rooms_room ON rooms (cube_id, room_id) WHERE deleted_at IS NULL;
 
-CREATE TABLE cube_options (                  -- migration 0018
-    cube_id       INTEGER PRIMARY KEY REFERENCES cubes (id) ON DELETE CASCADE,
-    proxy_virtual INTEGER NOT NULL DEFAULT 0,  -- the proxy shows the virtual wall thermostats
-    updated_at    TEXT    NOT NULL,
-    updated_by    INTEGER REFERENCES users (id)
-);
+-- cube_options (migration 0018) went into cubes.proxy_virtual in 0024
 
 CREATE TABLE log (                           -- events until migration 0014, made again by 0009 and 0014
     id         INTEGER PRIMARY KEY,
@@ -475,10 +476,11 @@ CREATE TABLE log (                           -- events until migration 0014, mad
     level      INTEGER NOT NULL DEFAULT 0,        -- slog's: -4 debug, 0 info, 4 warn, 8 error
     device     TEXT    NOT NULL DEFAULT '',       -- radio address, '' when none
     serial     TEXT    NOT NULL DEFAULT '',       -- the device's serial number, or the Cube's for its own lines
-    user_id    INTEGER REFERENCES users (id),     -- who started it; NULL: the Cube, the server's own jobs, a server without users
+    effective_user_id INTEGER REFERENCES users (id),  -- 0024, user_id before: whose rights it was started with; NULL: the Cube, the server's own jobs, a server without users
     data       TEXT    NOT NULL,                  -- JSON: the event object as GET …/log returns it today
     command_id INTEGER REFERENCES commands (id) ON DELETE SET NULL,  -- migration 0014: the command the row belongs to
-    visibility TEXT    NOT NULL DEFAULT 'read' CHECK (visibility IN ('read', 'audit'))  -- 0014: audit for an auditor's eyes alone
+    visibility TEXT    NOT NULL DEFAULT 'read' CHECK (visibility IN ('read', 'audit')),  -- 0014: audit for an auditor's eyes alone
+    real_user_id INTEGER REFERENCES users (id)    -- 0024: who started it, the effective user but for an integration's user acting for a linked one
 );
 CREATE INDEX log_cube_time ON log (cube_id, time);
 -- migrations 0004 and 0009: each in id order within its terms,
@@ -487,19 +489,20 @@ CREATE INDEX log_cube ON log (cube_id);
 CREATE INDEX log_cube_kind ON log (cube_id, kind);
 CREATE INDEX log_cube_source ON log (cube_id, source);
 CREATE INDEX log_cube_serial ON log (cube_id, serial);
-CREATE INDEX log_user ON log (user_id) WHERE user_id IS NOT NULL;
+CREATE INDEX log_user ON log (effective_user_id) WHERE effective_user_id IS NOT NULL;
+CREATE INDEX log_real_user ON log (real_user_id) WHERE real_user_id IS NOT NULL;  -- 0024
 -- migration 0011: the warnings and errors alone, each Cube's in id order
 CREATE INDEX log_cube_warn ON log (cube_id) WHERE level >= 4;
 -- migration 0014: a command's rows
 CREATE INDEX log_command ON log (command_id) WHERE command_id IS NOT NULL;
--- migration 0014: the log as the binaries before it knew it, with
--- INSTEAD OF triggers for their insert, update and delete
-CREATE VIEW events AS SELECT id, uuid, cube_id, time, kind, source, level, device, serial, user_id, data FROM log;
+-- migration 0014 kept the log as the binaries before it knew it, a view
+-- events with INSTEAD OF triggers; 0024 dropped it
 
 CREATE TABLE audit (
     id        INTEGER PRIMARY KEY,
     time      TEXT    NOT NULL,
-    user_id   INTEGER REFERENCES users (id),     -- NULL: no authentication configured, or the server itself
+    effective_user_id INTEGER REFERENCES users (id),  -- 0024, user_id before: whose rights; NULL: no authentication configured, or the server itself
+    real_user_id      INTEGER REFERENCES users (id),  -- 0024: who made the request, as in the log
     token_id  INTEGER REFERENCES tokens (id),
     remote    TEXT    NOT NULL DEFAULT '',       -- the client's address
     action    TEXT    NOT NULL,                  -- 'setpoint', 'room.config', 'device.name', 'pairing.start', 'cube.update', 'user.add', 'login', 'login.failed', 'update.start', …
@@ -509,7 +512,9 @@ CREATE TABLE audit (
     result    TEXT    NOT NULL DEFAULT 'ok' CHECK (result IN ('ok', 'refused', 'failed'))
 );
 CREATE INDEX audit_time ON audit (time);
-CREATE INDEX audit_user ON audit (user_id, time);
+-- migration 0024: the filter by user (user_id, time before), and who made it
+CREATE INDEX audit_user ON audit (effective_user_id, time) WHERE effective_user_id IS NOT NULL;
+CREATE INDEX audit_real_user ON audit (real_user_id, time) WHERE real_user_id IS NOT NULL;
 -- migration 0014: a command's audit row, and the SET NULL of a pruned command
 CREATE INDEX audit_command ON audit (command_id) WHERE command_id IS NOT NULL;
 
@@ -522,11 +527,15 @@ CREATE TABLE backups (
     tool       TEXT    NOT NULL DEFAULT '',      -- backup.File.Tool, the version that took it
     size       INTEGER NOT NULL,                 -- bytes before compression
     sha256     TEXT    NOT NULL,                 -- of the file before compression
-    body       BLOB    NOT NULL,                 -- the backup file, gzip; empty in a tombstone
     user_id    INTEGER REFERENCES users (id),    -- who asked, for manual, before_restore and upload
     note       TEXT    NOT NULL DEFAULT ''
 );
 CREATE INDEX backups_cube_time ON backups (cube_id, taken_at);
+
+CREATE TABLE backup_data (                      -- migration 0024 (D5-B), backups.body before
+    id   INTEGER PRIMARY KEY REFERENCES backups (id) ON DELETE CASCADE,  -- the backup's
+    data BLOB    NOT NULL                       -- the backup file, gzip; a tombstone has no row
+);
 
 CREATE TABLE auth_failures (
     key          TEXT    PRIMARY KEY,            -- 'addr:<ip>' or 'user:<name>'
@@ -546,7 +555,7 @@ CREATE TABLE auth_providers (                   -- migration 0016
     scopes        TEXT    NOT NULL DEFAULT 'openid email profile',
     auto_create   INTEGER NOT NULL DEFAULT 0,
     auto_role_id  INTEGER REFERENCES roles (id), -- NULL: viewer
-    auto_domains  TEXT    NOT NULL DEFAULT '',  -- comma-separated; '': any
+    auto_domains  TEXT    NOT NULL DEFAULT '[]', -- 0024: a JSON array, comma-separated before; []: any
     groups_claim  TEXT    NOT NULL DEFAULT 'groups', -- migration 0020: the claim of the groups
     allowed_groups TEXT   NOT NULL DEFAULT '[]', -- migration 0020: a JSON array; []: any
     enabled       INTEGER NOT NULL DEFAULT 1,
@@ -562,28 +571,28 @@ CREATE TABLE integrations (                     -- migration 0021
     id               INTEGER PRIMARY KEY,
     uuid             TEXT    NOT NULL UNIQUE,
     kind             TEXT    NOT NULL,                -- homeassistant
-    key              TEXT    NOT NULL,                -- lower case, in its users' names
-    name             TEXT    NOT NULL DEFAULT '',     -- the installation's name
+    name             TEXT    NOT NULL DEFAULT '',     -- the installation's name as reported
     instance_id      TEXT    NOT NULL DEFAULT '',     -- the installation id the owner accepted
     pending_instance TEXT    NOT NULL DEFAULT '',     -- one seen and not accepted
     url              TEXT    NOT NULL DEFAULT '',
     app_version      TEXT    NOT NULL DEFAULT '',
     max_caps         TEXT    NOT NULL DEFAULT '[]',   -- JSON: the key's maximum, within the role integration
-    user_id          INTEGER REFERENCES users (id),   -- its own user, holding its key
-    system_user_id   INTEGER REFERENCES users (id),   -- its user "system"
     state            TEXT    NOT NULL DEFAULT 'pending',  -- pending, active, disabled, refused
     request_code     TEXT    NOT NULL DEFAULT '',
-    request_expires  TEXT,
+    request_expires_at TEXT,                          -- 0024, request_expires before
     request_remote   TEXT    NOT NULL DEFAULT '',
     key_issued_at    TEXT,
     merged_into      INTEGER REFERENCES integrations (id)  -- a request approved as an earlier integration
-    -- and created_at, updated_at, updated_by, version, deleted_at, origin
+    -- and created_at, updated_at, updated_by, version, deleted_at, origin;
+    -- 0024 dropped key, user_id and system_user_id (D8-C): its users are
+    -- those whose users.integration_id it is, named <uuid>:, <uuid>:system
+    -- and <uuid>:<subject>
 );
 
-CREATE TABLE user_identities (                  -- migration 0016, made again by 0021
+CREATE TABLE user_identities (                  -- migration 0016, made again by 0021 and 0024
     id           INTEGER PRIMARY KEY,
     uuid         TEXT    NOT NULL UNIQUE,
-    user_id      INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    effective_user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,  -- 0024, user_id before: the user it acts as
     provider_id  INTEGER REFERENCES auth_providers (id) ON DELETE CASCADE,  -- an OIDC provider's, or
     integration_id INTEGER REFERENCES integrations (id) ON DELETE CASCADE,  -- an integration's: exactly one set
     subject      TEXT,                          -- the provider's sub, the integration's user id or system; NULL until bound
@@ -595,12 +604,13 @@ CREATE TABLE user_identities (                  -- migration 0016, made again by
     name         TEXT    NOT NULL DEFAULT '',   -- migration 0019: at the provider, at the last sign-in or link
     username     TEXT    NOT NULL DEFAULT '',   -- preferred_username, likewise
     groups       TEXT    NOT NULL DEFAULT '[]', -- a JSON array of strings, likewise
-    own_user_id  INTEGER REFERENCES users (id), -- 0021, an integration's: the user made at its first call, kept when linked
+    real_user_id INTEGER REFERENCES users (id), -- 0021 (own_user_id until 0024), an integration's: the user made at its first call, kept when linked
     system_generated INTEGER NOT NULL DEFAULT 0,-- 0021: the integration's own system user (Home Assistant's Supervisor, …)
-    last_level   TEXT    NOT NULL DEFAULT ''    -- 0021: the level of its last call, for display
+    last_level   TEXT    NOT NULL DEFAULT ''    -- 0021: the level of its last call, for display; 0024: '', view, control or admin
+    -- 0024 (D6-B): and updated_at, version, deleted_at, origin; a removed identity is a tombstone
 );
 -- unique (provider_id, subject) where bound, (provider_id, email) where not,
--- (integration_id, subject) for an integration's
+-- (integration_id, subject) for an integration's, each among the identities not removed
 ```
 
 Notes on the tables:
@@ -708,7 +718,9 @@ Notes on the tables:
   `audit_time` (365 by default, 0 keeping everything; AP OneLog v1.1, Block 8),
   and says so in an `audit_pruned` line.
   Until then nothing pruned the audit, though this section said so.
-- `backups.body` holds the file itself, gzip-compressed,
+- `backup_data.data` holds the file itself, gzip-compressed,
+  a row of its own beside its backup's since migration 0024 (`backups.body` before),
+  so that a list of backups does not walk the files' overflow pages;
   because a backup of a Cube with thirty devices is tens of kilobytes,
   about 11 KB compressed (the six-device fixture: 24 KB of JSON, 2.2 KB gzip),
   and the server takes one only after a change;
@@ -731,12 +743,13 @@ Notes on the tables:
   which keeps it bounded as `maxTracked` does today.
 - Identifiers: the rowid stays the internal key,
   and every row that will be replicated or exported (`users`, `tokens`, `cubes`,
-  `preferences`, `log`, `audit`, `backups`,
-  later `commands`) also carries `uuid TEXT NOT NULL UNIQUE`,
+  `preferences`, `log`, `audit`, `backups`, `commands`, and since migration 0024
+  `roles` and `user_identities`) also carries `uuid TEXT NOT NULL UNIQUE`,
   a UUIDv7 (decision 7, taken 2026-11-06; docs/server.md says why).
   The owned tables (`users`, `tokens`, `cubes`, `settings`, `preferences`,
-  `backups`) also carry `version INTEGER`,
+  `backups`, and since 0024 `user_identities`) also carry `version INTEGER`,
   `deleted_at TEXT` and `origin TEXT` (decision 14, taken),
+  `deleted_at` every table's tombstone (D7: `tokens.revoked_at` until 0024),
   and the first migration seeds `settings` with `node.id` and `tenant.id`.
   The listing above leaves those columns out so that it stays readable;
   the migration file has them, and so does `internal/store/migrations/store.sql`.
@@ -748,10 +761,16 @@ Notes on the tables:
   room's life; the other columns are the settings of the room's virtual wall
   thermostat (docs/api-v1.md, "The virtual wall thermostat").
   A row has `version`, `deleted_at` and `origin`, as the owned tables do.
-- `cube_options` (migration 0018) are a Cube's options beyond its row,
-  defaults where it has none: `proxy_virtual` (docs/proxy.md).
-  A table of its own, so that a binary built for an earlier version reads
-  `cubes` as before.
+- `cubes.proxy_virtual` (docs/proxy.md) was a table of its own,
+  `cube_options` (migration 0018), so that a binary built for an earlier version
+  read `cubes` as before; migration 0024 made it a column of the Cube's row,
+  which a change of it now versions.
+- A removed row keeps its unique name, which is unique among the rows not
+  removed only (migration 0024, D10-A and D11-A): `users.name`, `roles.key`,
+  `auth_providers.key`, `rooms (cube_id, room_id)` and `cubes.serial`.
+  A Cube whose serial has removed rows is added as a row of its own, or one of
+  them is restored by its uuid, with its log, backups, rooms, commands and audit
+  (`AddCube`, `RemovedCubes`).
 - `push_subscriptions` (migration 0010) are the browsers and apps a user's
   notifications go to by Web Push (docs/api-v1.md, "Notifications"):
   each tied to the session or API key that subscribed,
@@ -871,8 +890,8 @@ the level `warn` for `disconnected`, `debug` for `hello`, `info` for the rest.
 It keeps `min_reader` 1: a binary of version 8 reads its Cube's rows by
 `cube_id = ?`, never meeting a NULL one, and writes rows without the new
 columns, which take their defaults;
-the writer of a binary of version 9 fills those (`source` empty) at its start
-(`TestOlderReaderOnNine`).
+the writer of a binary of version 9 to 23 filled those (`source` empty) at its
+start, and 0024 fills them once, the binaries since knowing no such rows.
 `0011_events_warnings.sql` (AP Logging v1.2, Block 8) adds `events_cube_warn`,
 an index of the log's warnings and errors alone (section 5, `events`),
 additively: a binary of before writes and reads as it did,
@@ -891,8 +910,8 @@ and its `INSTEAD OF` triggers turn their insert, update and delete into the
 log's.
 SQLite counts no rows changed through a view,
 so the prune of such a binary removes one chunk per Cube a pass;
-the next pass goes on (`TestEventsViewForOlderBinaries`).
-The view goes in a migration that raises `min_reader` anyway.
+the next pass goes on.
+0024, which raises `min_reader`, dropped the view.
 `0013_backups_autoincrement.sql` (AP BackupIds v1.0) makes `backups` again
 with `AUTOINCREMENT`, as 0005 made it:
 without it SQLite gives a new row the highest id plus one,
@@ -906,6 +925,42 @@ and a binary of before chooses a new id by the table's schema as well.
 `schema_version.down_sql`, additively:
 the down part of each version, which the binary writes into its row at every
 start where the row has none (the "down parts" rule below).
+`0024_raise.sql` (AP StoreRaise v1.2, Block 3) is the first migration that
+raises `min_reader`, to 24: no binary built for 23 or earlier opens a file it
+migrated, and each refuses it naming `massimo store downgrade -to <its version>`,
+which the newer binary runs.
+It drops what was kept for older binaries alone (the view `events`,
+the fill of rows without a source, `cube_options`, now `cubes.proxy_virtual`)
+and tidies the schema: the backups' files in `backup_data`;
+`effective_user_id` and `real_user_id` in `log`, `audit` and `user_identities`
+(D2-A; `real_user_id` filled for every row with a user, the audit rows of a call
+through an integration with its user's own);
+an integration's users named `<uuid>:`, `<uuid>:system` and `<uuid>:<subject>`
+under `users.integration_id`, and `integrations` without `key`, `user_id` and
+`system_user_id` (D3-A, D8-C);
+the columns of a replicated row on `user_identities`, whose deletes are
+tombstones now, and a uuid on `roles` (D6-B);
+`tokens.revoked_at` as `deleted_at` (D7);
+a removed row's name unique among the live ones only, the users' `-del-…`
+suffixes taken off (D10-A, D11-A);
+and the rest of D9-A (`commands.deleted_at` and `commands_cube_time` gone,
+`auto_domains` a JSON array, `request_expires_at`, a CHECK on `last_level`).
+It runs with the foreign keys off and makes a table again as `<name>_new`,
+copied, dropped and renamed; `log` is altered, never made again.
+Its down part, `0024_raise.down.sql`, makes the file of version 23 again to the
+byte of `sqlite_master`, every row a binary for 23 wrote as it was;
+its header names what it loses, L1 to L8:
+who made a row where an integration acted for a linked user (L1),
+the removed identities (L2), the integration users' and the removed users'
+names, made again by the rules of 23 (L3, L5), an integration's key, made again
+from its name (L4), the role's uuid and a second row of one key (L6),
+the time of a Cube's option and a second row of one serial with its log,
+backups and rooms (L7), and the never written `deleted_at` of tokens and
+commands (L8).
+On a store of 500 000 log rows (149 MB, a tenth with a user) a desktop took
+2.0 s for the raise, its copy `massimo.db.before-24` included, and 2.2 s for the
+down part, its copy included (`TestRaiseTimes` with
+`MASSIMO_STORE_RAISE_ROWS`; not measured on a Raspberry Pi yet).
 
 Rules:
 
@@ -967,6 +1022,13 @@ Rules:
   opening a newer additive version with an older reader,
   and a test-only raise undone by its down parts, from the binary and from the
   file, to the schema of a fresh file (`downgrade_test.go`).
+  For 0024 (`raise_test.go`, D14-A): each release's dump, migrated to the
+  newest version and downgraded for its own release, equals the dump migrated
+  only as far as that downgrade stops, in `sqlite_master` and in every row but
+  for the columns of the losses (`losses0024`, which names them by L1 to L8);
+  a store of version 23 with a row of every kind 0024 changes goes up and down
+  again so, and the losses themselves are checked where the raised schema
+  holds what 23 cannot.
 - The stores the releases wrote: `internal/store/testdata/releases/<tag>.sql`
   is the text dump of the store a release's `serve` wrote against the fake Cube,
   one for each release since the store came (v0.7.0-alpha.1),
@@ -987,7 +1049,8 @@ Rules:
   `TestMigratesReleasedStores` loads each as its release left it and opens it,
   which migrates it:
   the file stays sound, no table loses a row, `events` keeps exactly its own,
-  every event has its source, and the log, the users and the backups read.
+  every event has its source, and the log, the users and the backups read;
+  `TestReleasedStoresDownAgain` takes each down again (above).
   Each release's file is so migrated by every later binary;
   a tag's own dump, at its binary's schema, is opened as it is.
 - `store.sql`, beside the migrations, is the schema they make of an empty file,
@@ -1325,11 +1388,13 @@ The record holds the name it was registered under,
 the credential identifier from which the server derives the user's OPRF key,
 so `user rename` registers the password again under the new name
 and ends the user's sessions; its keys, preferences and audit stay with the row.
-A removed user's row is renamed `<name>-del-YYYYMMDD-HHNN`,
-the removal's time in UTC, `-<id>` added where that is taken,
-so that the name is free and a user added under it is a row of its own
-(migration 0015 renamed the rows removed before it;
-until then a new user took the removed one's row over, with its history).
+A removed user's row keeps its name, which is unique among the users not
+removed only (migration 0024, D10-A),
+so that the name is free and a user added under it is a row of its own.
+From migration 0015 to 0024 a removed row was renamed
+`<name>-del-YYYYMMDD-HHNN`, the removal's time in UTC, `-<id>` added where
+that was taken; 0024 took the suffixes off.
+(Until 0015 a new user took the removed one's row over, with its history.)
 The audit records them with `user_id` NULL and `remote` `cli`.
 
 ### The lockout
@@ -1422,10 +1487,18 @@ a row of `integrations` per installation the owner approved,
 and per request waiting or refused.
 A request comes without a key and waits ten minutes with a short code
 the owner compares; at most five wait at once.
-Approved, the integration gets its `key` (from its name, `casa-leone`),
-its own user `<key>` holding its API key, a user `<key>.system` for the
-calls no user started, both with the role `integration`, and its maximum,
-`max_caps`.
+Approved, the integration gets its own user `<uuid>:`, the integration's
+uuid and a colon, holding its API key, a user `<uuid>:system` for the
+calls no user started, both with the role `integration` and
+`users.integration_id` naming it, and its maximum, `max_caps`
+(migration 0024, D3-A and D8-C; until then a `key` made from its name,
+`casa-leone`, and users `<key>` and `<key>.system`).
+The own user's `display_name` is the reported name at first,
+and follows a name reported anew only while it still is the name reported
+before: a name the owner gave stays.
+The names of an integration's users follow
+`^<uuid>:([a-z0-9]{1,64}|system)?$`; only the store makes them, and the
+rule of every other name has no colon.
 A request approved as an earlier integration (`merged_into`) reuses that
 one's row, users and links, as after a key lost or revoked;
 a revoke ends the key and keeps the rest.
@@ -1435,11 +1508,14 @@ until the owner accepts it.
 
 Each of the integration's users is a row of `user_identities` with
 `integration_id` set, its id at the integration as `subject`:
-made at its first call, with a user of its own (`own_user_id`, named
-`<key>.<the id's first 8 characters>`) of the role `integration`.
-`user_id` is the user its calls act as: its own,
+made at its first call, with a user of its own (`real_user_id`, named
+`<uuid>:<the id, lower case>`; `own_user_id` and `<key>.<the id's first 8
+characters>` before 0024) of the role `integration`.
+`effective_user_id` is the user its calls act as: its own,
 or the Massimo user the owner linked it to,
 several of an integration's users to one where wanted.
+The log and the audit write both: whose rights a row was made with
+(`effective_user_id`), and who made it (`real_user_id`).
 A call's capabilities are what the user's role, the role `integration`,
 the linked user's role, the maximum and the call's level all allow
 (docs/api-v1.md, "Acting for an integration's users").

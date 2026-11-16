@@ -10,7 +10,8 @@ package store
 // first sign-in with that e-mail verified, and by its subject alone from
 // then on, since an address can change hands at a provider. An owner may
 // assign the subject itself, the user id at the provider, which is bound
-// from the start (AP Oidc v1.1, D26-A).
+// from the start (AP Oidc v1.1, D26-A). A removed identity is a
+// tombstone (deleted_at, migration 0024), which no read finds.
 
 import (
 	"context"
@@ -64,7 +65,7 @@ type Identity struct {
 // Bound reports whether the identity has its subject.
 func (i Identity) Bound() bool { return i.Subject != "" }
 
-const identityColumns = `i.id, i.uuid, i.user_id, i.provider_id, p.key, coalesce(i.subject, ''), i.email, i.name, i.username, i.groups,
+const identityColumns = `i.id, i.uuid, i.effective_user_id, i.provider_id, p.key, coalesce(i.subject, ''), i.email, i.name, i.username, i.groups,
 	i.created_at, i.bound_at, i.last_used_at`
 
 const identityFrom = ` FROM user_identities i JOIN auth_providers p ON p.id = i.provider_id `
@@ -97,7 +98,7 @@ func normalEmail(v string) (string, error) {
 
 // Identities returns a user's identities, by provider.
 func (s *Store) Identities(ctx context.Context, userID int64) ([]Identity, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+identityColumns+identityFrom+`WHERE i.user_id = ? AND p.deleted_at IS NULL ORDER BY p.key, i.id`, userID)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+identityColumns+identityFrom+`WHERE i.effective_user_id = ? AND i.deleted_at IS NULL AND p.deleted_at IS NULL ORDER BY p.key, i.id`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("store: identities: %w", err)
 	}
@@ -132,14 +133,15 @@ func (s *Store) AddIdentity(ctx context.Context, userID int64, provider, email s
 		return Identity{}, fmt.Errorf("%w: %s", ErrNoProvider, provider)
 	}
 	var n int
-	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM user_identities WHERE provider_id = ? AND subject IS NULL AND email = ?`, p.ID, email).Scan(&n); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM user_identities WHERE provider_id = ? AND subject IS NULL AND email = ? AND deleted_at IS NULL`, p.ID, email).Scan(&n); err != nil {
 		return Identity{}, fmt.Errorf("store: identity: %w", err)
 	}
 	if n > 0 {
 		return Identity{}, fmt.Errorf("%w: %s at %s", ErrIdentityExists, email, p.Key)
 	}
-	res, err := s.db.ExecContext(ctx, `INSERT INTO user_identities (uuid, user_id, provider_id, email, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?)`,
-		newUUID(), userID, p.ID, email, s.nowText(), nullID(by))
+	now := s.nowText()
+	res, err := s.db.ExecContext(ctx, `INSERT INTO user_identities (uuid, effective_user_id, provider_id, email, created_at, created_by, updated_at, origin)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, newUUID(), userID, p.ID, email, now, nullID(by), now, s.nodeID)
 	if err != nil {
 		return Identity{}, fmt.Errorf("store: identity: %w", err)
 	}
@@ -166,15 +168,15 @@ func (s *Store) AddSubjectIdentity(ctx context.Context, userID int64, provider, 
 		return Identity{}, fmt.Errorf("%w: %s", ErrNoProvider, provider)
 	}
 	var n int
-	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM user_identities WHERE provider_id = ? AND subject = ?`, p.ID, subject).Scan(&n); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM user_identities WHERE provider_id = ? AND subject = ? AND deleted_at IS NULL`, p.ID, subject).Scan(&n); err != nil {
 		return Identity{}, fmt.Errorf("store: identity: %w", err)
 	}
 	if n > 0 {
 		return Identity{}, fmt.Errorf("%w: user id %s at %s", ErrIdentityExists, subject, p.Key)
 	}
 	now := s.nowText()
-	res, err := s.db.ExecContext(ctx, `INSERT INTO user_identities (uuid, user_id, provider_id, subject, created_at, created_by, bound_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		newUUID(), userID, p.ID, subject, now, nullID(by), now)
+	res, err := s.db.ExecContext(ctx, `INSERT INTO user_identities (uuid, effective_user_id, provider_id, subject, created_at, created_by, bound_at, updated_at, origin)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, newUUID(), userID, p.ID, subject, now, nullID(by), now, now, s.nodeID)
 	if err != nil {
 		return Identity{}, fmt.Errorf("store: identity: %w", err)
 	}
@@ -190,15 +192,15 @@ func (s *Store) EmailWaits(ctx context.Context, providerID int64, email string) 
 		return false, nil
 	}
 	var n int
-	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM user_identities i JOIN users u ON u.id = i.user_id
-		WHERE i.provider_id = ? AND i.subject IS NULL AND i.email = ? AND u.deleted_at IS NULL`, providerID, email).Scan(&n); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM user_identities i JOIN users u ON u.id = i.effective_user_id
+		WHERE i.provider_id = ? AND i.subject IS NULL AND i.email = ? AND i.deleted_at IS NULL AND u.deleted_at IS NULL`, providerID, email).Scan(&n); err != nil {
 		return false, fmt.Errorf("store: identity: %w", err)
 	}
 	return n > 0, nil
 }
 
 func (s *Store) identity(ctx context.Context, q queryer, id int64) (Identity, error) {
-	i, err := scanIdentity(q.QueryRowContext(ctx, `SELECT `+identityColumns+identityFrom+`WHERE i.id = ?`, id))
+	i, err := scanIdentity(q.QueryRowContext(ctx, `SELECT `+identityColumns+identityFrom+`WHERE i.id = ? AND i.deleted_at IS NULL`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Identity{}, fmt.Errorf("%w: %d", ErrNoIdentity, id)
 	}
@@ -208,12 +210,15 @@ func (s *Store) identity(ctx context.Context, q queryer, id int64) (Identity, er
 	return i, nil
 }
 
-// DeleteIdentity removes one of a user's identities.
+// DeleteIdentity removes one of a user's identities: a tombstone
+// (migration 0024), which no sign-in finds.
 func (s *Store) DeleteIdentity(ctx context.Context, userID, id int64) error {
 	if err := s.writable(); err != nil {
 		return err
 	}
-	res, err := s.db.ExecContext(ctx, `DELETE FROM user_identities WHERE id = ? AND user_id = ?`, id, userID)
+	now := s.nowText()
+	res, err := s.db.ExecContext(ctx, `UPDATE user_identities SET deleted_at = ?, updated_at = ?, origin = ?, version = version + 1
+		WHERE id = ? AND effective_user_id = ? AND deleted_at IS NULL`, now, now, s.nodeID, id, userID)
 	if err != nil {
 		return fmt.Errorf("store: identity %d: %w", id, err)
 	}
@@ -226,8 +231,8 @@ func (s *Store) DeleteIdentity(ctx context.Context, userID, id int64) error {
 // UserBySubject finds the user of a provider's subject; false where no
 // user that is not removed has it.
 func (s *Store) UserBySubject(ctx context.Context, providerID int64, subject string) (User, Identity, bool, error) {
-	i, err := scanIdentity(s.db.QueryRowContext(ctx, `SELECT `+identityColumns+identityFrom+`JOIN users u ON u.id = i.user_id
-		WHERE i.provider_id = ? AND i.subject = ? AND u.deleted_at IS NULL`, providerID, subject))
+	i, err := scanIdentity(s.db.QueryRowContext(ctx, `SELECT `+identityColumns+identityFrom+`JOIN users u ON u.id = i.effective_user_id
+		WHERE i.provider_id = ? AND i.subject = ? AND i.deleted_at IS NULL AND u.deleted_at IS NULL`, providerID, subject))
 	if errors.Is(err, sql.ErrNoRows) {
 		return User{}, Identity{}, false, nil
 	}
@@ -258,8 +263,8 @@ func (s *Store) BindIdentity(ctx context.Context, providerID int64, email, subje
 	}
 	defer tx.Rollback()
 	var id int64
-	err = tx.QueryRowContext(ctx, `SELECT i.id FROM user_identities i JOIN users u ON u.id = i.user_id
-		WHERE i.provider_id = ? AND i.subject IS NULL AND i.email = ? AND u.deleted_at IS NULL`, providerID, email).Scan(&id)
+	err = tx.QueryRowContext(ctx, `SELECT i.id FROM user_identities i JOIN users u ON u.id = i.effective_user_id
+		WHERE i.provider_id = ? AND i.subject IS NULL AND i.email = ? AND i.deleted_at IS NULL AND u.deleted_at IS NULL`, providerID, email).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return User{}, Identity{}, false, nil
 	}
@@ -267,7 +272,8 @@ func (s *Store) BindIdentity(ctx context.Context, providerID int64, email, subje
 		return User{}, Identity{}, false, fmt.Errorf("store: identity: %w", err)
 	}
 	now := s.nowText()
-	if _, err := tx.ExecContext(ctx, `UPDATE user_identities SET subject = ?, bound_at = ?, last_used_at = ? WHERE id = ?`, subject, now, now, id); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE user_identities SET subject = ?, bound_at = ?, last_used_at = ?, updated_at = ?, origin = ?, version = version + 1
+		WHERE id = ?`, subject, now, now, now, s.nodeID, id); err != nil {
 		return User{}, Identity{}, false, fmt.Errorf("store: identity: %w", err)
 	}
 	i, err := s.identity(ctx, tx, id)
@@ -321,8 +327,8 @@ func (s *Store) AddIdentityUser(ctx context.Context, u User, providerID int64, s
 			email = ""
 		}
 	}
-	res, err = tx.ExecContext(ctx, `INSERT INTO user_identities (uuid, user_id, provider_id, subject, email, created_at, bound_at, last_used_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		newUUID(), userID, providerID, subject, email, now, now, now)
+	res, err = tx.ExecContext(ctx, `INSERT INTO user_identities (uuid, effective_user_id, provider_id, subject, email, created_at, bound_at, last_used_at, updated_at, origin)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, newUUID(), userID, providerID, subject, email, now, now, now, now, s.nodeID)
 	if err != nil {
 		return User{}, Identity{}, fmt.Errorf("store: identity: %w", err)
 	}
@@ -345,8 +351,10 @@ func (s *Store) TouchIdentity(ctx context.Context, id int64, d IdentityDetails) 
 		return err
 	}
 	d = CleanDetails(d)
+	now := s.nowText()
 	if _, err := s.db.ExecContext(ctx, `UPDATE user_identities SET last_used_at = ?, email = CASE WHEN ? = '' THEN email ELSE ? END,
-		name = ?, username = ?, groups = ? WHERE id = ?`, s.nowText(), d.Email, d.Email, d.Name, d.Username, groupsText(d.Groups), id); err != nil {
+		name = ?, username = ?, groups = ?, updated_at = ?, origin = ?, version = version + 1 WHERE id = ?`,
+		now, d.Email, d.Email, d.Name, d.Username, groupsText(d.Groups), now, s.nodeID, id); err != nil {
 		return fmt.Errorf("store: identity %d: %w", id, err)
 	}
 	return nil
@@ -405,7 +413,7 @@ func (s *Store) LinkIdentity(ctx context.Context, userID, providerID int64, subj
 	}
 	defer tx.Rollback()
 	var id, owner int64
-	err = tx.QueryRowContext(ctx, `SELECT id, user_id FROM user_identities WHERE provider_id = ? AND subject = ?`, providerID, subject).Scan(&id, &owner)
+	err = tx.QueryRowContext(ctx, `SELECT id, effective_user_id FROM user_identities WHERE provider_id = ? AND subject = ? AND deleted_at IS NULL`, providerID, subject).Scan(&id, &owner)
 	switch {
 	case err == nil && owner != userID:
 		return Identity{}, ErrIdentityTaken
@@ -413,19 +421,21 @@ func (s *Store) LinkIdentity(ctx context.Context, userID, providerID int64, subj
 		return Identity{}, fmt.Errorf("store: link: %w", err)
 	}
 	now := s.nowText()
-	if _, err := tx.ExecContext(ctx, `DELETE FROM user_identities WHERE user_id = ? AND provider_id = ? AND id != ?`, userID, providerID, id); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE user_identities SET deleted_at = ?, updated_at = ?, origin = ?, version = version + 1
+		WHERE effective_user_id = ? AND provider_id = ? AND id != ? AND deleted_at IS NULL`, now, now, s.nodeID, userID, providerID, id); err != nil {
 		return Identity{}, fmt.Errorf("store: link: %w", err)
 	}
 	if id == 0 {
-		res, err := tx.ExecContext(ctx, `INSERT INTO user_identities (uuid, user_id, provider_id, subject, email, name, username, groups, created_at, created_by, bound_at, last_used_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			newUUID(), userID, providerID, subject, d.Email, d.Name, d.Username, groupsText(d.Groups), now, userID, now, now)
+		res, err := tx.ExecContext(ctx, `INSERT INTO user_identities (uuid, effective_user_id, provider_id, subject, email, name, username, groups, created_at, created_by,
+			bound_at, last_used_at, updated_at, origin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			newUUID(), userID, providerID, subject, d.Email, d.Name, d.Username, groupsText(d.Groups), now, userID, now, now, now, s.nodeID)
 		if err != nil {
 			return Identity{}, fmt.Errorf("store: link: %w", err)
 		}
 		id, _ = res.LastInsertId()
 	} else if _, err := tx.ExecContext(ctx, `UPDATE user_identities SET email = CASE WHEN ? = '' THEN email ELSE ? END, name = ?, username = ?, groups = ?,
-		bound_at = coalesce(bound_at, ?), last_used_at = ? WHERE id = ?`, d.Email, d.Email, d.Name, d.Username, groupsText(d.Groups), now, now, id); err != nil {
+		bound_at = coalesce(bound_at, ?), last_used_at = ?, updated_at = ?, origin = ?, version = version + 1 WHERE id = ?`,
+		d.Email, d.Email, d.Name, d.Username, groupsText(d.Groups), now, now, now, s.nodeID, id); err != nil {
 		return Identity{}, fmt.Errorf("store: link: %w", err)
 	}
 	i, err := s.identity(ctx, tx, id)
@@ -473,9 +483,11 @@ func (s *Store) UpdateIdentity(ctx context.Context, userID, id int64, email, sub
 	}
 	var n int
 	if email != "" {
-		err = tx.QueryRowContext(ctx, `SELECT count(*) FROM user_identities WHERE provider_id = ? AND subject IS NULL AND email = ? AND id != ?`, i.ProviderID, email, id).Scan(&n)
+		err = tx.QueryRowContext(ctx, `SELECT count(*) FROM user_identities WHERE provider_id = ? AND subject IS NULL AND email = ? AND id != ? AND deleted_at IS NULL`,
+			i.ProviderID, email, id).Scan(&n)
 	} else {
-		err = tx.QueryRowContext(ctx, `SELECT count(*) FROM user_identities WHERE provider_id = ? AND subject = ? AND id != ?`, i.ProviderID, subject, id).Scan(&n)
+		err = tx.QueryRowContext(ctx, `SELECT count(*) FROM user_identities WHERE provider_id = ? AND subject = ? AND id != ? AND deleted_at IS NULL`,
+			i.ProviderID, subject, id).Scan(&n)
 	}
 	if err != nil {
 		return Identity{}, fmt.Errorf("store: identity %d: %w", id, err)
@@ -484,9 +496,12 @@ func (s *Store) UpdateIdentity(ctx context.Context, userID, id int64, email, sub
 		return Identity{}, fmt.Errorf("%w: at %s", ErrIdentityExists, i.Provider)
 	}
 	if email != "" {
-		_, err = tx.ExecContext(ctx, `UPDATE user_identities SET email = ?, subject = NULL, bound_at = NULL WHERE id = ?`, email, id)
+		_, err = tx.ExecContext(ctx, `UPDATE user_identities SET email = ?, subject = NULL, bound_at = NULL, updated_at = ?, origin = ?, version = version + 1
+			WHERE id = ?`, email, s.nowText(), s.nodeID, id)
 	} else {
-		_, err = tx.ExecContext(ctx, `UPDATE user_identities SET subject = ?, email = '', bound_at = ? WHERE id = ?`, subject, s.nowText(), id)
+		now := s.nowText()
+		_, err = tx.ExecContext(ctx, `UPDATE user_identities SET subject = ?, email = '', bound_at = ?, updated_at = ?, origin = ?, version = version + 1
+			WHERE id = ?`, subject, now, now, s.nodeID, id)
 	}
 	if err != nil {
 		return Identity{}, fmt.Errorf("store: identity %d: %w", id, err)

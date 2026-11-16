@@ -100,7 +100,7 @@ func (s *Store) PushSubscription(ctx context.Context, id int64) (PushSubscriptio
 // userID 0, every subscription that may be sent to: its token neither
 // revoked nor expired, its user neither removed, disabled nor expired.
 func (s *Store) PushSubscriptions(ctx context.Context, userID int64) ([]PushSubscription, error) {
-	q := `SELECT ` + pushColumns + `, t.revoked_at, t.expires_at, u.deleted_at, u.disabled, u.expires_at
+	q := `SELECT ` + pushColumns + `, t.deleted_at, t.expires_at, u.deleted_at, u.disabled, u.expires_at
 		FROM push_subscriptions p JOIN tokens t ON t.id = p.token_id JOIN users u ON u.id = p.user_id`
 	args := []any{}
 	if userID != 0 {

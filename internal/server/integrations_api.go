@@ -76,7 +76,7 @@ func newRequestCode() (string, error) {
 type integrationView struct {
 	UUID            string    `json:"uuid"`
 	Kind            string    `json:"kind"`
-	Key             string    `json:"key,omitempty"`
+	Key             string    `json:"key,omitempty"` // its uuid: migration 0024 dropped the key, AP StoreRaise v1.2, Block 4 drops this
 	Name            string    `json:"name"`
 	State           string    `json:"state"`
 	InstanceID      string    `json:"instance_id"`
@@ -105,7 +105,7 @@ func (s *Server) viewIntegration(r *http.Request, i store.Integration) integrati
 	if i.State == store.IntegrationPending {
 		v.RequestCode, v.RequestExpires, v.RequestRemote = i.RequestCode, i.RequestExpires, i.RequestRemote
 	} else {
-		v.Key = i.Key
+		v.Key = i.UUID
 		if i.State == store.IntegrationActive && i.KeyIssuedAt.IsZero() {
 			// approved, its key not collected yet: until when it may be
 			v.RequestExpires = i.RequestExpires
@@ -407,7 +407,7 @@ func (s *Server) getIntegration(w http.ResponseWriter, r *http.Request) error {
 	}
 	out := []integrationUserView{}
 	for _, id := range ids {
-		v := integrationUserView{ID: id.Subject, Name: id.Name, User: byID[id.UserID].Name, OwnUser: byID[id.OwnUserID].Name, Linked: id.Linked(),
+		v := integrationUserView{ID: id.Subject, Name: id.Name, User: byID[id.EffectiveUserID].Name, OwnUser: byID[id.RealUserID].Name, Linked: id.Linked(),
 			SystemGenerated: id.SystemGenerated, LastLevel: id.LastLevel, LastUsedAt: id.LastUsedAt}
 		if !id.Linked() && id.Subject != "system" && id.Name != "" {
 			for _, u := range users {
@@ -489,18 +489,18 @@ func integrationMarks(ctx context.Context, st *store.Store, users []store.User) 
 	for _, i := range integs {
 		byID[i.ID] = i
 		if i.UserID != 0 {
-			marks[i.UserID] = &userIntegration{Key: i.Key, UUID: i.UUID}
+			marks[i.UserID] = &userIntegration{Key: i.UUID, UUID: i.UUID}
 		}
 	}
 	links := map[int64][]userLink{}
 	for _, id := range ids {
 		i := byID[id.IntegrationID]
-		m := &userIntegration{Key: i.Key, UUID: i.UUID, ID: id.Subject, Name: id.Name}
+		m := &userIntegration{Key: i.UUID, UUID: i.UUID, ID: id.Subject, Name: id.Name}
 		if id.Linked() {
-			m.LinkedTo = names[id.UserID]
-			links[id.UserID] = append(links[id.UserID], userLink{Integration: i.Key, ID: id.Subject, Name: id.Name})
+			m.LinkedTo = names[id.EffectiveUserID]
+			links[id.EffectiveUserID] = append(links[id.EffectiveUserID], userLink{Integration: i.UUID, ID: id.Subject, Name: id.Name})
 		}
-		marks[id.OwnUserID] = m
+		marks[id.RealUserID] = m
 	}
 	return marks, links, nil
 }

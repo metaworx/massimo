@@ -78,7 +78,7 @@ func TestOnBehalfChain(t *testing.T) {
 		return resp.StatusCode, text
 	}
 	// The key alone: the integration, its maximum within the ceiling.
-	if code, text := me(nil); code != 200 || !strings.Contains(text, `"key": "casa-leone"`) || !strings.Contains(text, `"structure"`) || strings.Contains(text, `"configure"`) {
+	if code, text := me(nil); code != 200 || !strings.Contains(text, `"key": "`+i.UUID+`"`) || !strings.Contains(text, `"structure"`) || strings.Contains(text, `"configure"`) {
 		t.Fatalf("the key alone: %d %s", code, text)
 	}
 	// view: reading alone.
@@ -98,7 +98,7 @@ func TestOnBehalfChain(t *testing.T) {
 		t.Fatalf("sent %+v", rc)
 	}
 	rows := auditRows(t, ts, owner, "?limit=1")
-	if len(rows) == 0 || rows[0].User != "casa-leone."+haAnna[:8] || !strings.Contains(string(rows[0].Detail), `"via": "casa-leone"`) || !strings.Contains(string(rows[0].Detail), haAnna) {
+	if len(rows) == 0 || rows[0].User != i.UUID+":"+haAnna || !strings.Contains(string(rows[0].Detail), `"via": "`+i.UUID+`"`) || !strings.Contains(string(rows[0].Detail), haAnna) {
 		t.Fatalf("the audit %+v %s", rows, rows[0].Detail)
 	}
 	// admin adds nothing beyond the maximum and the user's role.
@@ -106,7 +106,7 @@ func TestOnBehalfChain(t *testing.T) {
 		t.Fatalf("configure beyond the maximum: %d", resp.StatusCode)
 	}
 	// The owner narrows Anna's user: the same call is refused.
-	if _, err := st.UpdateUser(t.Context(), "casa-leone."+haAnna[:8], func(u *store.User) error { u.Role = store.RoleViewer; return nil }, 0); err != nil {
+	if _, err := st.UpdateUser(t.Context(), i.UUID+":"+haAnna, func(u *store.User) error { u.Role = store.RoleViewer; return nil }, 0); err != nil {
 		t.Fatal(err)
 	}
 	if resp, _ := callWith(t, ts, "PUT", setpoint, key, `{"mode":"auto"}`, as(haAnna, LevelControl)); resp.StatusCode != 403 {
@@ -116,7 +116,7 @@ func TestOnBehalfChain(t *testing.T) {
 	if code, text := me(as(haBruno, LevelControl)); code != 200 || !strings.Contains(text, `"setpoint"`) {
 		t.Fatalf("Bruno: %d %s", code, text)
 	}
-	if code, text := me(as("system", LevelAdmin)); code != 200 || !strings.Contains(text, `"name": "casa-leone.system"`) {
+	if code, text := me(as("system", LevelAdmin)); code != 200 || !strings.Contains(text, `"name": "`+i.UUID+`:system"`) {
 		t.Fatalf("system: %d %s", code, text)
 	}
 
@@ -135,7 +135,7 @@ func TestOnBehalfChain(t *testing.T) {
 	if got, _, _ := st.IntegrationByUUID(t.Context(), i.UUID); got.PendingInstance != "fedcba9876543210fedcba9876543210" {
 		t.Fatalf("the new installation id not noted: %+v", got)
 	}
-	if _, err := st.UpdateUser(t.Context(), "casa-leone."+haBruno[:8], func(u *store.User) error { u.Disabled = true; return nil }, 0); err != nil {
+	if _, err := st.UpdateUser(t.Context(), i.UUID+":"+haBruno, func(u *store.User) error { u.Disabled = true; return nil }, 0); err != nil {
 		t.Fatal(err)
 	}
 	refused("a disabled user", key, as(haBruno, LevelView), 403, "user_disabled")

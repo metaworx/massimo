@@ -248,7 +248,7 @@ func TestRefusedRequestsAuditedPerMinute(t *testing.T) {
 	var d map[string]any
 	json.Unmarshal(row.Detail, &d)
 	statuses, _ := d["statuses"].(map[string]any)
-	if row.Result != store.ResultRefused || row.Remote != "192.0.2.10" || row.Action != "setpoint" || row.Cube != "KEQ0000100" || row.UserID != 0 ||
+	if row.Result != store.ResultRefused || row.Remote != "192.0.2.10" || row.Action != "setpoint" || row.Cube != "KEQ0000100" || row.EffectiveUserID != 0 ||
 		d["count"] != float64(30) || statuses["401"] != float64(20) || statuses["429"] != float64(10) || d["body"] != nil || d["bytes"] != nil {
 		t.Fatalf("row %+v, detail %v", row, d)
 	}

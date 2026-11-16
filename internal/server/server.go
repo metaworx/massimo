@@ -608,8 +608,11 @@ type event struct {
 	// every Cube's log (GET /api/v1/log); absent elsewhere, and for the
 	// server's own events.
 	CubeSerial string `json:"cube_serial,omitempty"`
-	// userID is By's row in the store, kept in log.user_id.
-	userID int64
+	// userID is By's row in the store, kept in log.effective_user_id;
+	// realUserID who started it where that is another user, the
+	// integration's user of a call through it (log.real_user_id).
+	userID     int64
+	realUserID int64
 	// audit marks an event only a user with audit sees (the log's
 	// visibility audit).
 	audit bool

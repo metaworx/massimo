@@ -61,7 +61,7 @@ func (s *Store) Bootstrap(ctx context.Context, token string) (BootstrapResult, e
 		res.Users, res.OwnerCreated, res.TokenAdded = 1, true, true
 		return res, nil
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id, hash, label FROM tokens WHERE kind = ? AND revoked_at IS NULL`, TokenAPI)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, hash, label FROM tokens WHERE kind = ? AND deleted_at IS NULL`, TokenAPI)
 	if err != nil {
 		return res, fmt.Errorf("store: bootstrap: %w", err)
 	}

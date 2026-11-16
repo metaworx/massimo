@@ -13,7 +13,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 )
@@ -97,20 +96,25 @@ func (s *Store) pruneAudit(ctx context.Context, now time.Time, between func() bo
 // AuditEntry is one row of audit, with the user's name and the Cube's
 // serial joined in.
 type AuditEntry struct {
-	ID        int64
-	UUID      string
-	Time      time.Time
-	UserID    int64  // 0: no authentication, or the command line
-	User      string // the login name, "" for none
-	TokenID   int64
-	Remote    string
-	Action    string
-	CubeID    int64
-	Cube      string // the serial, "" for none
-	Target    string
-	Detail    json.RawMessage
-	Result    string
-	CommandID int64
+	ID   int64
+	UUID string
+	Time time.Time
+	// EffectiveUserID is the user whose rights the request had, 0 for no
+	// authentication or the command line; RealUserID who made it, the
+	// same user but where an integration acted for a user linked to its
+	// own (migration 0024), EffectiveUserID where 0.
+	EffectiveUserID int64
+	RealUserID      int64
+	User            string // the effective user's login name, "" for none
+	TokenID         int64
+	Remote          string
+	Action          string
+	CubeID          int64
+	Cube            string // the serial, "" for none
+	Target          string
+	Detail          json.RawMessage
+	Result          string
+	CommandID       int64
 }
 
 // Audit writes a row; the time is e.Time, or now.
@@ -136,8 +140,13 @@ func (s *Store) Audit(ctx context.Context, e AuditEntry) (int64, error) {
 		}
 		detail = string(e.Detail)
 	}
-	res, err := s.db.ExecContext(ctx, `INSERT INTO audit (uuid, time, user_id, token_id, remote, action, cube_id, target, detail, result, command_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		newUUID(), formatTime(at), nullID(e.UserID), nullID(e.TokenID), e.Remote, e.Action, nullID(e.CubeID), e.Target, detail, e.Result, nullID(e.CommandID))
+	realID := e.RealUserID
+	if realID == 0 {
+		realID = e.EffectiveUserID
+	}
+	res, err := s.db.ExecContext(ctx, `INSERT INTO audit (uuid, time, effective_user_id, real_user_id, token_id, remote, action, cube_id, target, detail, result, command_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		newUUID(), formatTime(at), nullID(e.EffectiveUserID), nullID(realID), nullID(e.TokenID), e.Remote, e.Action, nullID(e.CubeID), e.Target, detail, e.Result, nullID(e.CommandID))
 	if err != nil {
 		return 0, fmt.Errorf("store: audit: %w", err)
 	}
@@ -161,14 +170,14 @@ func (s *Store) AuditList(ctx context.Context, before time.Time, limit int, user
 		return s.auditRows(ctx, `(? = '' OR a.time < ?)`, bound, bound, limit)
 	}
 	// By the user's id, which the index audit_user serves; a join on
-	// the name would read the whole audit.
-	var id int64
-	err := s.db.QueryRowContext(ctx, `SELECT id FROM users WHERE name = ?`, user).Scan(&id)
-	if errors.Is(err, sql.ErrNoRows) {
-		return []AuditEntry{}, nil
-	}
+	// the name would read the whole audit. A name is the user's that is
+	// not removed, else the one removed last.
+	id, ok, err := s.UserIDByName(ctx, user)
 	if err != nil {
 		return nil, fmt.Errorf("store: audit: %w", err)
+	}
+	if !ok {
+		return []AuditEntry{}, nil
 	}
 	return s.auditRows(ctx, auditByUser, id, bound, bound, limit)
 }
@@ -176,7 +185,7 @@ func (s *Store) AuditList(ctx context.Context, before time.Time, limit int, user
 // auditByUser is the WHERE of one user's rows before a time (the empty
 // text: from the newest), its arguments the user's id and the time
 // twice.
-const auditByUser = `a.user_id = ? AND (? = '' OR a.time < ?)`
+const auditByUser = `a.effective_user_id = ? AND (? = '' OR a.time < ?)`
 
 // AuditOfCommand returns the audit's row of a command, the request that
 // is the command; false for none (a proxy client's, or one pruned).
@@ -190,8 +199,9 @@ func (s *Store) AuditOfCommand(ctx context.Context, commandID int64) (AuditEntry
 
 // auditSelect reads an audit row with its user's name and its Cube's
 // serial, as auditRows scans it.
-const auditSelect = `SELECT a.id, a.uuid, a.time, a.user_id, coalesce(u.name, ''), a.token_id, a.remote, a.action, a.cube_id, coalesce(c.serial, ''), a.target, a.detail, a.result, a.command_id
-		FROM audit a LEFT JOIN users u ON u.id = a.user_id LEFT JOIN cubes c ON c.id = a.cube_id`
+const auditSelect = `SELECT a.id, a.uuid, a.time, a.effective_user_id, a.real_user_id, coalesce(u.name, ''), a.token_id, a.remote, a.action, a.cube_id,
+		coalesce(c.serial, ''), a.target, a.detail, a.result, a.command_id
+		FROM audit a LEFT JOIN users u ON u.id = a.effective_user_id LEFT JOIN cubes c ON c.id = a.cube_id`
 
 // auditRows reads the audit's rows of a WHERE, with the user's name and
 // the Cube's serial joined in, newest first; args end with the limit.
@@ -206,12 +216,12 @@ func (s *Store) auditRows(ctx context.Context, where string, args ...any) ([]Aud
 	for rows.Next() {
 		var e AuditEntry
 		var at sql.NullString
-		var userID, tokenID, cubeID, commandID sql.NullInt64
+		var userID, realID, tokenID, cubeID, commandID sql.NullInt64
 		var detail string
-		if err := rows.Scan(&e.ID, &e.UUID, &at, &userID, &e.User, &tokenID, &e.Remote, &e.Action, &cubeID, &e.Cube, &e.Target, &detail, &e.Result, &commandID); err != nil {
+		if err := rows.Scan(&e.ID, &e.UUID, &at, &userID, &realID, &e.User, &tokenID, &e.Remote, &e.Action, &cubeID, &e.Cube, &e.Target, &detail, &e.Result, &commandID); err != nil {
 			return nil, fmt.Errorf("store: audit: %w", err)
 		}
-		e.Time, e.UserID, e.TokenID, e.CubeID, e.CommandID = parseTime(at), userID.Int64, tokenID.Int64, cubeID.Int64, commandID.Int64
+		e.Time, e.EffectiveUserID, e.RealUserID, e.TokenID, e.CubeID, e.CommandID = parseTime(at), userID.Int64, realID.Int64, tokenID.Int64, cubeID.Int64, commandID.Int64
 		e.Detail = json.RawMessage(detail)
 		out = append(out, e)
 	}

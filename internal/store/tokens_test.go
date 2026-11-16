@@ -78,7 +78,7 @@ func TestTokens(t *testing.T) {
 	if list, _ := s.Tokens(ctx, anna.ID); len(list) != 0 {
 		t.Fatalf("live tokens %+v", list)
 	}
-	if got, ok, _ := s.Token(ctx, key.ID); !ok || got.RevokedAt.IsZero() {
+	if got, ok, _ := s.Token(ctx, key.ID); !ok || got.DeletedAt.IsZero() {
 		t.Fatalf("revoked key %+v %v", got, ok)
 	}
 }

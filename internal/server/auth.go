@@ -121,6 +121,16 @@ type principal struct {
 	actsFor     *store.IntegrationIdentity
 }
 
+// realUserID is who makes the principal's calls: the integration's user
+// a call through an integration acts for, which p.user is linked to
+// where that is another; else p.user.
+func (p *principal) realUserID() int64 {
+	if p.actsFor != nil {
+		return p.actsFor.RealUserID
+	}
+	return p.user.ID
+}
+
 // has reports whether the principal holds a capability; outside users
 // mode everyone holds every one.
 func (p *principal) has(c string) bool {
@@ -748,7 +758,7 @@ func (s *Server) stillAdmitted(ctx context.Context, p *principal) bool {
 	}
 	now := time.Now()
 	tok, ok, err := s.opts.Store.Token(ctx, p.token.ID)
-	if err != nil || !ok || !tok.RevokedAt.IsZero() || tok.Expired(now) {
+	if err != nil || !ok || !tok.DeletedAt.IsZero() || tok.Expired(now) {
 		return false
 	}
 	np, err := s.principalFor(ctx, tok, now)

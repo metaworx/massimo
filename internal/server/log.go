@@ -63,8 +63,8 @@ func storedEvent(cubeID int64, ev event) store.Event {
 	if ev.audit {
 		vis = store.VisibilityAudit
 	}
-	return store.Event{CubeID: cubeID, Time: ev.Time, Kind: ev.Kind, Source: ev.Source, Level: level, Device: ev.Device, Serial: ev.Serial, UserID: userID, Data: data,
-		CommandID: ev.Command, Visibility: vis}
+	return store.Event{CubeID: cubeID, Time: ev.Time, Kind: ev.Kind, Source: ev.Source, Level: level, Device: ev.Device, Serial: ev.Serial,
+		EffectiveUserID: userID, RealUserID: ev.realUserID, Data: data, CommandID: ev.Command, Visibility: vis}
 }
 
 // learnStoreID finds the row of a runtime that has none yet, at its
@@ -337,7 +337,7 @@ func (s *Server) storedLog(ctx context.Context, st *store.Store, cubes map[int64
 		if id := rows[i].CubeID; id != 0 {
 			ev.CubeSerial = cubes[id]
 		}
-		if id := rows[i].UserID; id != 0 {
+		if id := rows[i].EffectiveUserID; id != 0 {
 			by, seen := users[id]
 			if !seen {
 				named := event{userID: id}

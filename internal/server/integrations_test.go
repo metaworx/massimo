@@ -73,7 +73,7 @@ func TestIntegrationRegistrationRoutes(t *testing.T) {
 	if code, _ := callAPI(t, ts, "POST", approve, "secret", `{"max_caps":["read","users"]}`); code != 400 {
 		t.Fatalf("a maximum beyond the role integration: %d", code)
 	}
-	if code, text := callAPI(t, ts, "POST", approve, "secret", `{"max_caps":["read","setpoint"]}`); code != 200 || !strings.Contains(text, `"key": "casa-leone"`) {
+	if code, text := callAPI(t, ts, "POST", approve, "secret", `{"max_caps":["read","setpoint"]}`); code != 200 || !strings.Contains(text, `"key": "`+req.ID+`"`) {
 		t.Fatalf("approve: %d %s", code, text)
 	}
 	// Approved, its key not collected: the integration says until when it may be.
@@ -92,7 +92,7 @@ func TestIntegrationRegistrationRoutes(t *testing.T) {
 	if code != 200 || len(got.Key) != 64 {
 		t.Fatalf("collect: %d %s", code, text)
 	}
-	if code, text := callAPI(t, ts, "GET", "/api/v1/me", got.Key, ""); code != 200 || !strings.Contains(text, `"casa-leone"`) {
+	if code, text := callAPI(t, ts, "GET", "/api/v1/me", got.Key, ""); code != 200 || !strings.Contains(text, `"`+req.ID+`"`) {
 		t.Fatalf("the key: %d %s", code, text)
 	}
 	if code, _ := callAPI(t, ts, "GET", collect, "", ""); code != 410 {
@@ -161,7 +161,7 @@ func TestIntegrationLinking(t *testing.T) {
 	code, text := callAPI(t, ts, "GET", "/api/v1/integrations/"+i.UUID, owner, "")
 	decodeInto(t, text, &got)
 	users := got.Users
-	if code != 200 || got.Key != "casa-leone" || len(users) != 3 || users[0].ID != "system" || users[1].Name != "Anna" || users[1].Proposal != "anna" || users[2].Proposal != "" {
+	if code != 200 || got.Key != i.UUID || len(users) != 3 || users[0].ID != "system" || users[1].Name != "Anna" || users[1].Proposal != "anna" || users[2].Proposal != "" {
 		t.Fatalf("the users %d %s", code, text)
 	}
 
@@ -189,9 +189,9 @@ func TestIntegrationLinking(t *testing.T) {
 		switch {
 		case u.Name == "anna" && len(u.Links) != 2:
 			t.Fatalf("anna's links %+v", u.Links)
-		case u.Name == "casa-leone" && (u.Integration == nil || u.Integration.ID != ""):
+		case u.Name == i.UUID+":" && (u.Integration == nil || u.Integration.ID != ""):
 			t.Fatalf("the integration's user %+v", u.Integration)
-		case u.Name == "casa-leone."+haAnna[:8] && (u.Integration == nil || u.Integration.LinkedTo != "anna" || u.Integration.ID != haAnna):
+		case u.Name == i.UUID+":"+haAnna && (u.Integration == nil || u.Integration.LinkedTo != "anna" || u.Integration.ID != haAnna):
 			t.Fatalf("Anna's integration user %+v", u.Integration)
 		}
 	}
@@ -203,7 +203,7 @@ func TestIntegrationLinking(t *testing.T) {
 		status                 int
 	}{
 		{"system", owner, "system", `{"user":"anna"}`, 400},
-		{"an integration's user", owner, haAnna, `{"user":"casa-leone.` + haBruno[:8] + `"}`, 400},
+		{"an integration's user", owner, haAnna, `{"user":"` + i.UUID + `:` + haBruno + `"}`, 400},
 		{"the owner by a manager", manager, haAnna, `{"user":"boss"}`, 403},
 		{"nobody", owner, haAnna, `{"user":"nobody"}`, 404},
 		{"an unknown id", owner, "cccccccc11112222333344445555cccc", `{"user":"anna"}`, 404},

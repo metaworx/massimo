@@ -74,9 +74,14 @@ func TestRoles(t *testing.T) {
 	if _, err := s.AddUser(ctx, User{Name: "n2", Role: "night"}, "", 0); !errors.Is(err, ErrNoRole) {
 		t.Fatalf("user with a removed role: %v", err)
 	}
+	// The key again: a row of its own, the removed one left as it was
+	// (migration 0024).
 	back, err := s.AddRole(ctx, Role{Key: "night", Capabilities: []string{"read"}}, 0)
-	if err != nil || back.ID != night.ID || back.Disabled || strings.Join(back.Capabilities, ",") != "read" {
-		t.Fatalf("take over %+v %v", back, err)
+	if err != nil || back.ID == night.ID || back.UUID == night.UUID || back.UUID == "" || back.Disabled || strings.Join(back.Capabilities, ",") != "read" {
+		t.Fatalf("added again %+v %v", back, err)
+	}
+	if _, err := s.AddRole(ctx, Role{Key: "night"}, 0); !errors.Is(err, ErrRoleExists) {
+		t.Fatalf("a live role's key: %v", err)
 	}
 }
 

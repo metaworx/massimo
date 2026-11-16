@@ -36,12 +36,13 @@ func TestIntegrationRegistration(t *testing.T) {
 		t.Fatalf("a wrong code: %v", err)
 	}
 	i, err := s.ApproveIntegration(ctx, req.UUID, []string{"setpoint", "read"}, "", 0)
-	if err != nil || i.State != IntegrationActive || i.Key != "casa-leone" || i.UserID == 0 || i.SystemUserID == 0 || strings.Join(i.MaxCaps, ",") != "read,setpoint" {
+	if err != nil || i.State != IntegrationActive || i.UserID == 0 || i.SystemUserID == 0 || strings.Join(i.MaxCaps, ",") != "read,setpoint" {
 		t.Fatalf("approved %+v %v", i, err)
 	}
 	own, _, _ := s.UserByID(ctx, i.UserID)
 	sys, _, _ := s.UserByID(ctx, i.SystemUserID)
-	if own.Name != "casa-leone" || own.Role != RoleIntegration || own.HasPassword || sys.Name != "casa-leone.system" {
+	if own.Name != i.UUID+":" || own.DisplayName != "Casa Leone" || own.Role != RoleIntegration || own.HasPassword || own.IntegrationID != i.ID ||
+		sys.Name != i.UUID+":system" || sys.IntegrationID != i.ID {
 		t.Fatalf("its users %+v %+v", own, sys)
 	}
 	k1, got, err := s.CollectIntegrationKey(ctx, req.UUID, "K7Q2PX")
@@ -53,7 +54,7 @@ func TestIntegrationRegistration(t *testing.T) {
 	if err != nil || k2 == k1 {
 		t.Fatalf("collect again %v", err)
 	}
-	if tok, ok, _ := s.TokenByHash(ctx, HashToken(k1)); ok && tok.RevokedAt.IsZero() {
+	if tok, ok, _ := s.TokenByHash(ctx, HashToken(k1)); ok && tok.DeletedAt.IsZero() {
 		t.Fatal("the first key still valid")
 	}
 	tok, _, _ := s.TokenByHash(ctx, HashToken(k2))
@@ -72,7 +73,7 @@ func TestIntegrationRegistration(t *testing.T) {
 	if err := s.RevokeIntegration(ctx, i.UUID, 0); err != nil {
 		t.Fatal(err)
 	}
-	if tok, ok, _ := s.TokenByHash(ctx, HashToken(k2)); ok && tok.RevokedAt.IsZero() {
+	if tok, ok, _ := s.TokenByHash(ctx, HashToken(k2)); ok && tok.DeletedAt.IsZero() {
 		t.Fatal("the key outlived the revoke")
 	}
 	again, _ := s.AddIntegrationRequest(ctx, haRequest(instanceA), "Z9Z9Z9")
@@ -98,7 +99,7 @@ func TestIntegrationRegistration(t *testing.T) {
 }
 
 // Refused and too many requests; a second integration of the same name
-// gets a key of its own.
+// gets users of its own, named by its uuid.
 func TestIntegrationRequestsBounded(t *testing.T) {
 	s := open(t, t.TempDir())
 	ctx := context.Background()
@@ -123,8 +124,10 @@ func TestIntegrationRequestsBounded(t *testing.T) {
 	list, _ := s.Integrations(ctx)
 	a, _ := s.ApproveIntegration(ctx, list[0].UUID, nil, "", 0)
 	b, _ := s.ApproveIntegration(ctx, list[1].UUID, nil, "", 0)
-	if a.Key != "casa-leone" || b.Key != "casa-leone-2" {
-		t.Fatalf("keys %q %q", a.Key, b.Key)
+	ua, _, _ := s.UserByID(ctx, a.UserID)
+	ub, _, _ := s.UserByID(ctx, b.UserID)
+	if a.Name != b.Name || ua.Name != a.UUID+":" || ub.Name != b.UUID+":" {
+		t.Fatalf("users %q %q", ua.Name, ub.Name)
 	}
 	if _, err := s.AddIntegrationRequest(ctx, IntegrationRequest{Kind: KindHomeAssistant, InstanceID: "short"}, "C"); !errors.Is(err, ErrBadInstance) {
 		t.Fatalf("a bad installation id: %v", err)
@@ -132,8 +135,9 @@ func TestIntegrationRequestsBounded(t *testing.T) {
 }
 
 // An integration's users are made at their first call, named by the
-// integration's key and their id, longer where two ids begin alike; a
-// later call updates the name and the level.
+// integration's uuid and their id, which must make such a name; a later
+// call updates the name and the level, and the display name of its user
+// while that is the name reported before (the copy rule).
 func TestIntegrationUsers(t *testing.T) {
 	s := open(t, t.TempDir())
 	ctx := context.Background()
@@ -147,18 +151,68 @@ func TestIntegrationUsers(t *testing.T) {
 	if err != nil || !b.SystemGenerated {
 		t.Fatalf("Bruno %+v %v", b, err)
 	}
-	ua, _, _ := s.UserByID(ctx, a.OwnUserID)
-	ub, _, _ := s.UserByID(ctx, b.OwnUserID)
-	if ua.Name != "casa-leone.12345678" || ub.Name != "casa-leone.12345678bbbb" || ua.Role != RoleIntegration || ua.DisplayName != "Anna" {
+	ua, _, _ := s.UserByID(ctx, a.RealUserID)
+	ub, _, _ := s.UserByID(ctx, b.RealUserID)
+	if ua.Name != i.UUID+":12345678aaaaaaaaaaaaaaaaaaaaaaaa" || ub.Name != i.UUID+":12345678bbbbbbbbbbbbbbbbbbbbbbbb" || ua.Role != RoleIntegration ||
+		ua.DisplayName != "Anna" || ua.IntegrationID != i.ID {
 		t.Fatalf("names %q %q %+v", ua.Name, ub.Name, ua)
 	}
 	again, _ := s.IntegrationUser(ctx, i, IntegrationSeen{Subject: "12345678aaaaaaaaaaaaaaaaaaaaaaaa", Name: "Anna R.", Level: "admin"})
-	ua, _, _ = s.UserByID(ctx, a.OwnUserID)
+	ua, _, _ = s.UserByID(ctx, a.RealUserID)
 	if again.ID != a.ID || again.Name != "Anna R." || again.LastLevel != "admin" || ua.DisplayName != "Anna R." {
 		t.Fatalf("again %+v, user %+v", again, ua)
 	}
-	if sys, err := s.IntegrationUser(ctx, i, IntegrationSeen{Subject: "system", Level: "admin"}); err != nil || sys.UserID != i.SystemUserID {
+	// A display name given by hand stays when the name reported changes.
+	if _, err := s.UpdateUser(ctx, ua.Name, func(u *User) error { u.DisplayName = "Anna (kitchen)"; return nil }, 0); err != nil {
+		t.Fatal(err)
+	}
+	again, _ = s.IntegrationUser(ctx, i, IntegrationSeen{Subject: "12345678aaaaaaaaaaaaaaaaaaaaaaaa", Name: "Anna Rossi", Level: "admin"})
+	ua, _, _ = s.UserByID(ctx, a.RealUserID)
+	if again.Name != "Anna Rossi" || ua.DisplayName != "Anna (kitchen)" {
+		t.Fatalf("a name given by hand: %+v, user %+v", again, ua)
+	}
+	if sys, err := s.IntegrationUser(ctx, i, IntegrationSeen{Subject: "system", Level: "admin"}); err != nil || sys.EffectiveUserID != i.SystemUserID {
 		t.Fatalf("system %+v %v", sys, err)
+	}
+	if _, err := s.IntegrationUser(ctx, i, IntegrationSeen{Subject: "not-a-plain-id", Level: "view"}); !errors.Is(err, ErrBadName) {
+		t.Fatalf("a subject that makes no name: %v", err)
+	}
+	if _, err := s.AddUser(ctx, User{Name: i.UUID + ":x"}, "", 0); !errors.Is(err, ErrBadName) {
+		t.Fatalf("a regular user under an integration's name: %v", err)
+	}
+}
+
+// A request attached to an integration brings the installation's name:
+// the integration takes it, and its own user's display name follows while
+// it is the name reported before.
+func TestIntegrationReportedName(t *testing.T) {
+	s := open(t, t.TempDir())
+	ctx := context.Background()
+	req, _ := s.AddIntegrationRequest(ctx, haRequest(instanceA), "AAAAAA")
+	i, _ := s.ApproveIntegration(ctx, req.UUID, nil, "", 0)
+	attach := func(name, code string) (Integration, User) {
+		t.Helper()
+		r := haRequest(instanceA)
+		r.Name = name
+		again, err := s.AddIntegrationRequest(ctx, r, code)
+		if err != nil {
+			t.Fatal(err)
+		}
+		back, err := s.ApproveIntegration(ctx, again.UUID, nil, i.UUID, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		own, _, _ := s.UserByID(ctx, back.UserID)
+		return back, own
+	}
+	if back, own := attach("Casa Rossa", "BBBBBB"); back.Name != "Casa Rossa" || own.DisplayName != "Casa Rossa" {
+		t.Fatalf("a new name reported: %+v, %+v", back, own)
+	}
+	if _, err := s.UpdateUser(ctx, i.UUID+":", func(u *User) error { u.DisplayName = "Home"; return nil }, 0); err != nil {
+		t.Fatal(err)
+	}
+	if back, own := attach("Casa Verde", "CCCCCC"); back.Name != "Casa Verde" || own.DisplayName != "Home" {
+		t.Fatalf("a name given by hand: %+v, %+v", back, own)
 	}
 }
 
@@ -180,18 +234,18 @@ func TestLinkIntegrationUser(t *testing.T) {
 	}
 	for _, id := range []IntegrationIdentity{a, b} {
 		got, err := s.LinkIntegrationUser(ctx, i.ID, id.Subject, anna.ID, 0)
-		if err != nil || !got.Linked() || got.UserID != anna.ID {
+		if err != nil || !got.Linked() || got.EffectiveUserID != anna.ID {
 			t.Fatalf("link %s: %+v %v", id.Subject, got, err)
 		}
 	}
 	list, err := s.IntegrationIdentities(ctx, i.ID)
-	if err != nil || len(list) != 3 || list[0].Subject != "system" || list[1].UserID != anna.ID || list[2].UserID != anna.ID {
+	if err != nil || len(list) != 3 || list[0].Subject != "system" || list[1].EffectiveUserID != anna.ID || list[2].EffectiveUserID != anna.ID {
 		t.Fatalf("listed %+v %v", list, err)
 	}
 	if _, err := s.LinkIntegrationUser(ctx, i.ID, "system", anna.ID, 0); !errors.Is(err, ErrBadLink) {
 		t.Fatalf("linking the system user: %v", err)
 	}
-	if _, err := s.LinkIntegrationUser(ctx, i.ID, b.Subject, a.OwnUserID, 0); !errors.Is(err, ErrBadLink) {
+	if _, err := s.LinkIntegrationUser(ctx, i.ID, b.Subject, a.RealUserID, 0); !errors.Is(err, ErrBadLink) {
 		t.Fatalf("linking to an integration's user: %v", err)
 	}
 	if _, err := s.LinkIntegrationUser(ctx, i.ID, b.Subject, i.UserID, 0); !errors.Is(err, ErrBadLink) {
@@ -201,12 +255,12 @@ func TestLinkIntegrationUser(t *testing.T) {
 		t.Fatalf("an unknown user: %v", err)
 	}
 	got, err := s.LinkIntegrationUser(ctx, i.ID, a.Subject, 0, 0)
-	if err != nil || got.Linked() || got.UserID != a.OwnUserID {
+	if err != nil || got.Linked() || got.EffectiveUserID != a.RealUserID {
 		t.Fatalf("unlinked %+v %v", got, err)
 	}
 	// A later call keeps the link.
 	again, _ := s.IntegrationUser(ctx, i, IntegrationSeen{Subject: b.Subject, Name: "Anna's phone", Level: "control"})
-	if again.UserID != anna.ID {
+	if again.EffectiveUserID != anna.ID {
 		t.Fatalf("the link lost at a call: %+v", again)
 	}
 	all, _ := s.AllIntegrationIdentities(ctx)
