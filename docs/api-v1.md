@@ -6,6 +6,8 @@ with TLS every response carries `Strict-Transport-Security`,
 a year by default (`-hsts <days>`, `0` clears it).
 Every response is JSON unless stated otherwise.
 The machine-readable description is in [api-v1-openapi.yaml](api-v1-openapi.yaml).
+The web UI's types are generated from its schemas (`make api-types`,
+`tools/apitypes`), so a change to a schema writes them again in the same change.
 
 The server keeps one persistent connection and one command queue per Cube.
 Reads answer from the server's copy of the Cube's state,
@@ -797,6 +799,9 @@ An integration is registered by the owner, without a key typed anywhere:
    the same call answers a new key, the one before revoked,
    as long as that key was never used and ten minutes since the approval
    have not passed.
+   Until then the approved integration carries `request_expires`,
+   the end of those ten minutes; once they are over, Home Assistant
+   registers again and the owner approves the new request.
 
 The key belongs to the integration's own user, named by the integration's
 `key` (lower case, from its name: `casa-leone`), with the role
@@ -2138,8 +2143,11 @@ a thermostat in boost and one whose entry is out of date;
 a room while one of its windows is open
 (its thermostats then hold their own window-open temperature),
 while a structure change of Massimo's concerns it
-(see "Structure changes read back")
-and while a command to it waits or runs in the queue;
+(see "Structure changes read back"),
+while a command to it waits or runs in the queue
+and while a write to it is open or not confirmed, its `confirmation` set
+(see "Writes confirmed by the devices": a room setpoint not confirmed is
+sent once more there);
 a difference not yet reported then starts again.
 
 - **Thermostats that disagree:** they differ in mode, setpoint or `until`,
@@ -2168,8 +2176,11 @@ a difference not yet reported then starts again.
   3. `wall_thermostat`: else the room's wall thermostat's state,
      its week programme where it follows it;
   4. else nothing, the warning alone (`not_resent`, `no_state`).
-  It is sent at most once a day per room, the day's re-sends read back from the
-  log after a restart, and never while the queue holds the radio for the duty
+  It is sent at most once a day per room, a day shared with the re-send of a
+  room setpoint not confirmed (one lost room command, one extra write):
+  a room sent its state once more by either is not by the other that day;
+  the day's re-sends of both are read back from the log after a restart.
+  It is never sent while the queue holds the radio for the duty
   cycle or the memory slots: it waits for a later check then.
   Once they agree, an `agree` line settles the warning.
 - **A thermostat off its week programme:** in a room in auto,
@@ -2333,6 +2344,38 @@ The writes of the LAN proxy's clients are confirmed the same way where their
 radiogram decodes (docs/proxy.md).
 It costs no radio time: the states come with the server's poll of the Cube.
 The confirmations are kept in memory: a restart forgets them.
+
+**A room setpoint sent once more.**
+A room's setpoint of the API's (`PUT …/rooms/{id}/setpoint`)
+that a thermostat of the room does not show at the deadline is sent once more,
+the same room command (`0x40`), through the queue at low priority,
+behind its holds for the duty cycle and the memory slots,
+the room's thermostats with a communication error reset first,
+as before every room command.
+Auto with a temperature is sent as auto on the week programme
+where a switch point of a thermostat's programme has passed since,
+at the Cube's time.
+While the re-send is open, the room's `confirmation` is `pending` again,
+and the re-send is confirmed as the write was:
+shown by every thermostat by its deadline,
+a line at `info` says so and settles the write's warning;
+else a warning names each thermostat that still does not show it,
+and what it shows.
+Nothing more is sent for it.
+It is not sent where a newer setpoint to the room or to one of its devices
+has been asked for since (`superseded`);
+where a thermostat that showed it shows something else now,
+a person's change passed on in the room or its window open (`changed`);
+while a command of Massimo's to the room waits or runs in the queue (`busy`);
+for a boost, which ends by itself (`boost`);
+and where the room was sent a state once more within the day,
+by this or by the room checks (`today`, see "The room checks").
+`superseded` and `changed` are asked again when the queue's turn comes:
+dropped then, nothing is sent and the room's day stays free.
+A device's setpoint and a LAN proxy client's write are only reported,
+as the proxy's clients' writes are left to them.
+It costs one room command, about 3 % of the duty cycle and a memory slot
+(docs/cube-protocol.md), once a day per room at most.
 
 ### DELETE /api/v1/cubes/{sn}/rooms/{id}
 
@@ -3200,6 +3243,7 @@ of the same Cube, or of the server for the server's own:
 | `locked_out` | its end |
 | `restart`, `reboot`, `update` not started | `server_started`; for `update`, also an `update` started |
 | `error_watch` `back` or `lasting` | the same device's `error_watch` `clear` of the same `flag` |
+| `unconfirmed`, a room's setpoint or its re-send not confirmed, its re-send failed | an `unconfirmed` of the same `target` whose `outcome` is `resend_confirmed` |
 
 Any other, such as `proxy_discarded` and `proxy_delete_refused`,
 is settled only by a person's mark.
@@ -3389,9 +3433,17 @@ devices showed it (`confirmed`), and the `devices` that do not, each with its
 `rf_address`, `serial`, the `fields` it does not show, what it `shows`, and its
 `error`, `link_error` and `out_of_date`;
 or `confirmed_late` at `info`, one device's, with the `seconds` it took.
+A room setpoint's re-send (see "A room setpoint sent once more") has these:
+`resent` at `info` (the budget's `duty_pct` and `free_slots`, and `program`
+where auto with a temperature went as auto on the week programme),
+`not_resent` at `info` (`why`: `superseded`, `changed`, `busy`, `boost` or
+`today`), `resend_failed` at `warn` with its `error`,
+then `resend_confirmed` at `info` (`confirmed`, the `seconds` it took) or
+`resend_not_confirmed` at `warn`, with what `not_confirmed` has.
 A device's write has the device in `device`, and so has each device's of a
 configuration; a room's setpoint none.
-Its warning is settled only by a person's mark.
+A room setpoint's warning, its re-send's included, is settled by a later
+`resend_confirmed` of the same room; any other only by a person's mark.
 The server's sign-ins, source `server`, only on the pages and streams of a
 user with `audit`: `login` (`user`, `remote`), `login_failed` at `warn`,
 and `locked_out` at `warn` (`remote`, `for`, `after`: `logins` or `tokens`).

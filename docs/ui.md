@@ -549,7 +549,14 @@ A write its devices do not show by its deadline is a **not confirmed** line,
 a warning that names the write, the room and each device with what it shows
 ("setpoint to Bedroom: not confirmed after 5 min: Window (mode auto, setpoint
 20.0)"); a device that shows it later has a line of its own ("setpoint:
-confirmed after 70 s"). The warning is settled by a mark alone.
+confirmed after 70 s").
+A room's setpoint is sent once more then (`docs/api-v1.md`, "A room setpoint
+sent once more"), with lines of the same kind: "setpoint to Bedroom: sent once
+more to its thermostats", or why not ("not sent once more: once a day at most,
+and it was today"), then "sent once more, confirmed by every thermostat after
+25 s", which settles the warning, or a warning "sent once more, still not
+confirmed after 5 min: Window (mode auto, setpoint 20.0)".
+Any other write's warning is settled by a mark alone.
 The LAN proxy's clients have lines of their own: a client connected or gone,
 turned away, its deletes, a pairing for it and the proxy's warnings;
 a line a client passes on to the Cube is a command like the web UI's.
@@ -603,7 +610,8 @@ a lost connection until the next one,
 a failed command until the same one is acknowledged,
 a failed backup until the next, a hold until it ends,
 a room whose thermostats disagree until they agree again,
-a thermostat off its week programme until it follows it again;
+a thermostat off its week programme until it follows it again,
+a room's setpoint not confirmed until every thermostat shows its re-send;
 a device's communication error, link error and low battery
 while the device has them, at the line that set them;
 a communication error's line names the radiogram that failed,
@@ -1188,8 +1196,13 @@ the browser keeps which cards are folded.
   **Registered before as**, where an integration of its kind is
   registered, the same installation chosen,
   **Refuse**, which asks first, and **Approve**.
-  Every integration in a panel, its name and key, **disabled** and
-  **new installation** as badges:
+  Approved, the integration's panel says until when Home Assistant may
+  collect its key, and the page reads that integration again, every 3 s
+  in the first minute, then every 15 s, until it has: then it says so;
+  once that time has passed, **approval expired** as a badge, why, and
+  **Register**.
+  Every integration in a panel, its name and key, **disabled**,
+  **new installation** and **approval expired** as badges:
   its key, installation id, address, version, when its key was issued and
   whether the LAN saw it;
   for a call from another installation, **Accept the new installation**;
@@ -1199,7 +1212,13 @@ the browser keeps which cards are folded.
   last, and **Acts as**: its own user or a Massimo user, the one of the
   same name proposed, with **Link**; and **Revoke**, which asks first.
   Under them the Home Assistant installations the server saw on the LAN,
-  each **registered** or **not registered**, with **Look again**;
+  each with its address as a link, or as text where it announced none,
+  either with a copy icon, and **registered** or **not registered**;
+  one not registered has **Register**, which opens Home Assistant's page
+  that adds the Massimo integration
+  (`<address>/_my_redirect/config_flow_start?domain=massimo`), and where
+  Home Assistant announced no address first asks for it, filled in with
+  `http://<its IP address>:8123`; with **Look again**;
   where the server does not look, why, naming Announce on the LAN and
   what to change: Off, Automatic on the loopback, a change waiting for
   the restart, or `-announce` or `MASSIMO_ANNOUNCE`, which decides;
@@ -1522,6 +1541,11 @@ the bundler takes them from there and refuses any other import.
 strict, the vendored types by `paths`),
 with the TypeScript `tools/ui-check/` locks (its `README.md`),
 and CI's job UI types runs it.
+What a part reads from the API is typed by `ui/src/api.d.ts`,
+one declaration per schema of `docs/api-v1-openapi.yaml`,
+`Cube`, `Room` or `Device`, which a part imports with `import type`:
+`make api-types` writes it (`tools/apitypes`, its `README.md`),
+git keeps it, and `go test` fails while it does not follow the OpenAPI file.
 
 `ui/connect.html` is a second page, the apps' (docs/app.md),
 served at `/ui/connect.html` as it is, not assembled:

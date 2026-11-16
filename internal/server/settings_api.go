@@ -387,17 +387,18 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 		if prev, ok, err := st.Setting(r.Context(), wr.key); err == nil && ok {
 			json.Unmarshal(prev, &from)
 		}
+		by := principalOf(r).userID()
 		switch {
 		case wr.clear:
-			err = st.DeleteSetting(r.Context(), wr.key)
+			err = st.DeleteSettingBy(r.Context(), wr.key, by)
 		case wr.duration != nil:
-			err = st.SetSetting(r.Context(), wr.key, fmtDuration(*wr.duration))
+			err = st.SetSettingBy(r.Context(), wr.key, fmtDuration(*wr.duration), by)
 		case wr.on != nil:
-			err = st.SetSetting(r.Context(), wr.key, *wr.on)
+			err = st.SetSettingBy(r.Context(), wr.key, *wr.on, by)
 		case wr.name != nil:
-			err = st.SetSetting(r.Context(), wr.key, *wr.name)
+			err = st.SetSettingBy(r.Context(), wr.key, *wr.name, by)
 		default:
-			err = st.SetSetting(r.Context(), wr.key, *wr.number)
+			err = st.SetSettingBy(r.Context(), wr.key, *wr.number, by)
 		}
 		if err != nil {
 			return fail(http.StatusInternalServerError, "%v", err)

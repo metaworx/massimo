@@ -77,7 +77,7 @@ func (s *Store) Seed(ctx context.Context, file string, cubes []FileCube) (SeedRe
 		}
 		if !ok || !row.Configured && row.Source == SourceDiscovery {
 			if ok {
-				_, err = s.UpdateCube(ctx, serial, func(c *Cube) error { fromFile(c, fc); return nil })
+				_, err = s.UpdateCube(ctx, serial, func(c *Cube) error { fromFile(c, fc); return nil }, 0)
 			} else {
 				row = Cube{Serial: serial}
 				fromFile(&row, fc)

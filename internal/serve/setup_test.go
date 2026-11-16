@@ -258,7 +258,7 @@ func TestServeStoreWins(t *testing.T) {
 	if _, err := st.UpdateCube(ctx, "KEQ0000001", func(c *store.Cube) error {
 		c.Name, c.Address, c.Source = "Basement", "10.0.0.2", store.SourceUI
 		return nil
-	}); err != nil {
+	}, 0); err != nil {
 		t.Fatal(err)
 	}
 	su, err = setupCubes(ctx, st, Config{}, quietLog())

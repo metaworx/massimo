@@ -13,6 +13,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -156,8 +157,26 @@ func (s *Store) AuditList(ctx context.Context, before time.Time, limit int, user
 		bound = formatTime(before)
 	}
 	user = NormalName(user)
-	return s.auditRows(ctx, `(? = '' OR a.time < ?) AND (? = '' OR u.name = ?)`, bound, bound, user, user, limit)
+	if user == "" {
+		return s.auditRows(ctx, `(? = '' OR a.time < ?)`, bound, bound, limit)
+	}
+	// By the user's id, which the index audit_user serves; a join on
+	// the name would read the whole audit.
+	var id int64
+	err := s.db.QueryRowContext(ctx, `SELECT id FROM users WHERE name = ?`, user).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return []AuditEntry{}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("store: audit: %w", err)
+	}
+	return s.auditRows(ctx, auditByUser, id, bound, bound, limit)
 }
+
+// auditByUser is the WHERE of one user's rows before a time (the empty
+// text: from the newest), its arguments the user's id and the time
+// twice.
+const auditByUser = `a.user_id = ? AND (? = '' OR a.time < ?)`
 
 // AuditOfCommand returns the audit's row of a command, the request that
 // is the command; false for none (a proxy client's, or one pruned).
@@ -169,13 +188,16 @@ func (s *Store) AuditOfCommand(ctx context.Context, commandID int64) (AuditEntry
 	return rows[0], true, nil
 }
 
+// auditSelect reads an audit row with its user's name and its Cube's
+// serial, as auditRows scans it.
+const auditSelect = `SELECT a.id, a.uuid, a.time, a.user_id, coalesce(u.name, ''), a.token_id, a.remote, a.action, a.cube_id, coalesce(c.serial, ''), a.target, a.detail, a.result, a.command_id
+		FROM audit a LEFT JOIN users u ON u.id = a.user_id LEFT JOIN cubes c ON c.id = a.cube_id`
+
 // auditRows reads the audit's rows of a WHERE, with the user's name and
 // the Cube's serial joined in, newest first; args end with the limit.
 func (s *Store) auditRows(ctx context.Context, where string, args ...any) ([]AuditEntry, error) {
 	// where is the callers' own text, never input.
-	rows, err := s.db.QueryContext(ctx, `SELECT a.id, a.uuid, a.time, a.user_id, coalesce(u.name, ''), a.token_id, a.remote, a.action, a.cube_id, coalesce(c.serial, ''), a.target, a.detail, a.result, a.command_id
-		FROM audit a LEFT JOIN users u ON u.id = a.user_id LEFT JOIN cubes c ON c.id = a.cube_id
-		WHERE `+where+` ORDER BY a.id DESC LIMIT ?`, args...)
+	rows, err := s.db.QueryContext(ctx, auditSelect+` WHERE `+where+` ORDER BY a.id DESC LIMIT ?`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("store: audit: %w", err)
 	}

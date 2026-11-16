@@ -116,8 +116,9 @@ func TestRoomCommandConfirmed(t *testing.T) {
 
 // A member that does not take a room command keeps the room pending,
 // then not confirmed at the deadline: one warning names it, what it
-// shows and its flags; the room and the device say so until it shows
-// it, which a line at info says.
+// shows and its flags; once the command's re-send is not confirmed
+// either (resend.go), the room and the device say so until it shows it,
+// which a line at info says.
 func TestRoomCommandNotConfirmed(t *testing.T) {
 	fc, ts, _ := startConfirmCube(t, 600*time.Millisecond, 0)
 	fc.SetDeaf(0x0a0205, true)
@@ -150,6 +151,7 @@ func TestRoomCommandNotConfirmed(t *testing.T) {
 	if !reflect.DeepEqual(ev.Summary["devices"], want) {
 		t.Fatalf("devices %v", ev.Summary["devices"])
 	}
+	waitUnconfirmed(t, ts, "resend_not_confirmed")
 	c := confirmRoom(t, ts, 2).Confirmation
 	if c == nil || c.State != "unconfirmed" || !reflect.DeepEqual(c.Devices, []string{"0a0205"}) || !reflect.DeepEqual(c.Fields, []string{"mode", "setpoint"}) {
 		t.Fatalf("room: %+v", c)
