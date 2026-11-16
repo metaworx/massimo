@@ -107,6 +107,16 @@ func (r *driftRig) waitSetting(rf cube.RFAddress, mode string, setpoint float64)
 	})
 }
 
+// confirmed waits until the pump has seen room's thermostats show the
+// writes to them. The snapshot shows a new state before the pump handles
+// its state event and confirms the write; a check before that would find
+// the room confirming and pass over it, dropping a disagreement just
+// begun.
+func (r *driftRig) confirmed(room uint8) {
+	r.t.Helper()
+	waitFor(r.t, "the room's writes confirmed", func() bool { return r.rt.roomConfirmation(room) == nil })
+}
+
 // events are the log's events of a kind, oldest first, once the store
 // has written what came before.
 func (r *driftRig) events(kind string) []event {
@@ -174,6 +184,7 @@ func TestDisagreeResendsMassimosSetpoint(t *testing.T) {
 	for _, rf := range []cube.RFAddress{0x0a0204, 0x0a0205, 0x0a0206} {
 		r.waitSetting(rf, "manual", 21)
 	}
+	r.confirmed(2)
 	sent := len(r.fc.Received())
 	r.set(0x0a0205, "manual", 18)
 	r.check()
@@ -205,6 +216,7 @@ func TestDisagreeResendsMassimosSetpoint(t *testing.T) {
 		t.Fatalf("the re-send's event: %+v", ev)
 	}
 	r.waitSetting(0x0a0205, "manual", 21)
+	r.confirmed(2)
 	r.clock.add(time.Minute)
 	r.check()
 	if got := r.outcomes("disagree"); !slices.Equal(got, []string{"differ", "resent", "agree"}) {
@@ -366,6 +378,7 @@ func TestDisagreeResendsMassimosAuto(t *testing.T) {
 			for _, rf := range []cube.RFAddress{0x0a0204, 0x0a0205, 0x0a0206} {
 				r.waitSetting(rf, "auto", 23)
 			}
+			r.confirmed(2)
 			r.clock.add(10 * time.Minute) // a person's change ten minutes later
 			r.set(0x0a0205, "manual", 18)
 			sent := len(r.fc.Received())

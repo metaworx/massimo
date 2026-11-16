@@ -15,13 +15,17 @@ import (
 	"time"
 )
 
-// openAt opens a store whose file stops at a schema version.
+// openAt opens a store whose file stops at a schema version, and closes
+// it at the test's cleanup, so that Windows can remove dir; a store the
+// test closes itself, to open dir again, is closed once more there, which
+// sql.DB allows.
 func openAt(t *testing.T, dir string, version int) *Store {
 	t.Helper()
 	s, err := Open(dir, Options{Version: "test", Logger: quiet(), readerVersion: version})
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { s.Close() })
 	if v, _ := s.SchemaVersion(); v != version {
 		t.Fatalf("version %d, want %d", v, version)
 	}

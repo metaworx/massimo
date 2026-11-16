@@ -710,6 +710,7 @@ logged as `arrangeNewDevice`, `removeDevices`,
 `removeRoom`) did not remove them either; the next backup still listed them,
 unnamed, and a power cycle of the Cube did not drop them.
 The FHEM project notes that `t:` makes the Cube send a factory reset to the device,
+which a removal of 2026-11-15 confirmed ("Lessons from the hardware days"),
 so a device that never answers is apparently never dropped.
 Massimo deletes a device as the original software removed one that answers
 on 2026-11-15 ("Lessons from the hardware days";
@@ -1112,6 +1113,9 @@ kept here because they cost time to learn.
   then `t:01,1,<address>` and `m:` without the device.
   So a removal sends no 0x21 to the leaving device and no 0x23;
   which of Massimo's lines the Cube discarded is not known.
+  The removed thermostat came out factory-reset (the owner, at the device,
+  when it was paired with another Cube the next day, as a new device):
+  `t:` does make the Cube send the device a factory reset, as FHEM notes.
 - A wall thermostat with new batteries reports a measured temperature of 0
   in its L entry until it has measured (2026-11-13, Cube firmware 1.1.3,
   seen as 0.0 °C in a room on the owner's Cube):
@@ -1136,6 +1140,57 @@ kept here because they cost time to learn.
   which to 000000 could reach more than intended.
   A room's radio command, which may carry 000000 with the room flag, is not refused.
   Clearing the entry is left to the owner, outside Massimo.
+- Repairs, moves and a pairing through Massimo, read from its log
+  (2026-11-16, Cube firmware 1.1.3, two of the owner's Cubes):
+  - A room's re-link, adding only (a room of a wall thermostat and two
+    radiator thermostats): one command per member after the room's wakeup,
+    12 radiograms in all, every one accepted; the free slots went 49 → 38
+    and were all back within 6 minutes.
+    One radiator thermostat had failed the Cube's wakeups before it
+    (byte 4 0xF1) and kept failing them after it,
+    taking a room setpoint only after 680 s:
+    a re-link mends links, not a weak radio path.
+    Its link error, set for 101 hours, had cleared at a report of its own
+    shortly before.
+  - A move of a radiator thermostat into an empty room: the wakeup and the
+    four radiograms of the unlink half, then the 0x22 for the new room,
+    were accepted, but the device failed the 0x23 (flagged 10 s later,
+    byte 4 0x23) and its C line kept the old room;
+    Massimo's check of the C lines against the room list warned of it at
+    the next C lines, 6 minutes later.
+    One slot was still held 12 minutes after the move and was free 3½
+    minutes after that.
+    The move back sent one radiogram out of the empty room and the link
+    half into the old one; the Cube discarded one of its lines,
+    took it after an `r:` and one more send,
+    and the next device list had both radiator thermostats' error flags
+    cleared.
+  - The copy of a move or a pairing sends 0x40 auto with temperature 0,
+    as the original software does: the moved thermostat went to auto,
+    16 °C, while its room's other two were manual at 5.5 °C.
+    Massimo's room checks, which leave a room alone until a structure
+    change's read-back has ended, reported the disagreement once it had
+    lasted 10 minutes after that, and re-sent the state most of the room's
+    thermostats showed (manual, 5.5 °C) as one room command 11 minutes
+    later; the moved thermostat took it within 11 s.
+  - Placing a radiator thermostat whose C line named no room into the room
+    its list names (a wakeup and three radiograms):
+    its C line named the room 18 s later.
+    The room's wall thermostat, which had reported a link error before,
+    still reported it half an hour later.
+  - A factory-fresh radiator thermostat paired and put into a room with a
+    wall thermostat: three link radiograms and the copy were accepted,
+    one slot held for over 12 minutes.
+    It measured 15.9 °C before it was mounted and 11 °C on its cold
+    radiator, and then showed "window open" on its display while the wall
+    thermostat did not; both kept the same setpoint, as linked partners
+    pass it on.
+    Massimo reads no window-open state of a thermostat from its L entry.
+  - A radiator thermostat whose batteries were taken out and put back
+    (for its calibration on the new radiator) first reported manual,
+    20 °C, with the link error set; 30 s later its link error was clear
+    and its setpoint its room's, 4.5 °C, from its wall thermostat partner,
+    with nothing sent by the Cube.
 
 ## Open questions
 
