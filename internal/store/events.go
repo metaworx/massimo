@@ -146,11 +146,14 @@ type EventQuery struct {
 	Source    string    // "": every source
 	Device    string    // "": every device; a radio address, which no index serves
 	Serial    string    // "": every device; a serial number
-	UserID    int64     // 0: anyone's and no one's; else the rows of its effective user
+	UserID    int64     // 0: anyone's and no one's; else the rows of its effective or real user
 	CommandID int64     // 0: any command's and none's
 	MinLevel  *int      // nil: every level
 	Audit     bool      // the rows of the audit visibility too
 	Limit     int
+	// byReal makes a walk of UserID's rows by their real user alone
+	// (Events).
+	byReal bool
 }
 
 // eventWriter is the state of the writer goroutine.
@@ -566,13 +569,24 @@ func (s *Store) Events(ctx context.Context, q EventQuery) ([]Event, error) {
 	if q.Server && !slices.Contains(cubes, 0) {
 		cubes = append(cubes, 0)
 	}
-	walks := make([][]Event, 0, len(cubes))
+	// A user's rows are two walks of each Cube's, each by its index
+	// (log_user, log_real_user): those made with its rights, and those it
+	// made acting as another user (an integration's user linked to one).
+	queries := []EventQuery{q}
+	if q.UserID != 0 {
+		byReal := q
+		byReal.byReal = true
+		queries = append(queries, byReal)
+	}
+	walks := make([][]Event, 0, len(cubes)*len(queries))
 	for _, cube := range cubes {
-		out, err := s.eventsWalk(ctx, q, cube, limit)
-		if err != nil {
-			return nil, err
+		for _, wq := range queries {
+			out, err := s.eventsWalk(ctx, wq, cube, limit)
+			if err != nil {
+				return nil, err
+			}
+			walks = append(walks, out)
 		}
-		walks = append(walks, out)
 	}
 	if len(walks) == 1 {
 		return walks[0], nil
@@ -669,7 +683,13 @@ func eventsQuery(q EventQuery, cube int64, limit int) (string, []any) {
 		where, args = append(where, "serial = ?"), append(args, q.Serial)
 	}
 	if q.UserID != 0 {
-		where, args = append(where, "effective_user_id = ?"), append(args, q.UserID)
+		if q.byReal {
+			// The rows the user made acting as another: the first walk
+			// has those made with its rights, its own included.
+			where, args = append(where, "real_user_id = ?", "+effective_user_id <> ?"), append(args, q.UserID, q.UserID)
+		} else {
+			where, args = append(where, "effective_user_id = ?"), append(args, q.UserID)
+		}
 	}
 	if q.CommandID != 0 {
 		where, args = append(where, "command_id = ?"), append(args, q.CommandID)

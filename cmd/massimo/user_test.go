@@ -452,3 +452,47 @@ func TestUserRename(t *testing.T) {
 		t.Fatalf("no audit row of the rename: %+v", rows)
 	}
 }
+
+// user list shows an integration's users as the page does, by the chain
+// "<the integration's name> › <its display name>", with ", as <login
+// name>" where one is linked to a Massimo user (AP StoreRaise v1.2,
+// Block 4).
+func TestUserListChain(t *testing.T) {
+	clearCubeEnv(t)
+	dir := t.TempDir()
+	t.Setenv(env.DataVar, dir)
+	ctx := context.Background()
+	if _, err := runUserWith(t, "", "add", "anna", "-display-name", "Anna", "-no-password"); err != nil {
+		t.Fatal(err)
+	}
+	st, err := store.Open(dir, store.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err := st.AddIntegrationRequest(ctx, store.IntegrationRequest{Kind: store.KindHomeAssistant, Name: "Casa", InstanceID: strings.Repeat("ab", 16)}, "ABCDEF")
+	if err != nil {
+		t.Fatal(err)
+	}
+	i, err := st.ApproveIntegration(ctx, req.UUID, []string{"read"}, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	subject := strings.Repeat("c1", 16)
+	if _, err := st.IntegrationUser(ctx, i, store.IntegrationSeen{Subject: subject, Name: "Anna's phone", Level: "view"}); err != nil {
+		t.Fatal(err)
+	}
+	anna, _, _ := st.User(ctx, "anna")
+	if _, err := st.LinkIntegrationUser(ctx, i.ID, subject, anna.ID, 0); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+	out, err := runUserWith(t, "", "list")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"SHOWN AS", "Casa › Anna's phone, as anna", "Casa › system", i.UUID + ":  ", "Casa  "} {
+		if !strings.Contains(out, want) {
+			t.Errorf("no %q in %s", want, out)
+		}
+	}
+}

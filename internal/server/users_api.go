@@ -265,14 +265,21 @@ type userMay struct {
 	Password bool `json:"password"`
 }
 
-func (s *Server) viewUserOf(r *http.Request, st *store.Store, u store.User) userView {
+// viewUserOf is u as the users routes show it, its chain and its
+// integration named by n, a Namer of st (nil for a new one).
+func (s *Server) viewUserOf(r *http.Request, st *store.Store, n *store.Namer, u store.User) userView {
+	if n == nil {
+		n = st.Namer()
+	}
 	invitedBy := ""
 	if u.InvitedBy != 0 {
-		if by, ok, _ := st.UserByID(r.Context(), u.InvitedBy); ok {
+		if by, ok := n.User(r.Context(), u.InvitedBy); ok {
 			invitedBy = by.Name
 		}
 	}
-	return viewUser(u, invitedBy)
+	v := viewUser(u, invitedBy)
+	v.Display, v.Integration = userDisplay(r.Context(), n, u)
+	return v
 }
 
 // listUsers handles GET /api/v1/users: every user with users, the
@@ -293,12 +300,17 @@ func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) error {
 		return userFail(err)
 	}
 	out := []userView{}
+	n := st.Namer()
+	n.Seed(users...)
 	for _, u := range users {
 		self := p.named() && u.ID == p.user.ID
 		if a.mayView(u) || self {
-			v := s.viewUserOf(r, st, u)
+			v := s.viewUserOf(r, st, n, u)
 			v.May = &userMay{Manage: a.mayManage(u), Password: a.maySetPassword(u) || self}
-			v.Integration, v.Links = marks[u.ID], links[u.ID]
+			if m := marks[u.ID]; m != nil {
+				v.Integration = m
+			}
+			v.Links = links[u.ID]
 			out = append(out, v)
 		}
 	}
@@ -389,7 +401,7 @@ func (s *Server) postUser(w http.ResponseWriter, r *http.Request) error {
 	} else {
 		s.log.Info("user added", "user", created.Name, "role", created.Role, "remote", s.clientIP(r))
 	}
-	writeJSON(w, http.StatusCreated, s.viewUserOf(r, st, created))
+	writeJSON(w, http.StatusCreated, s.viewUserOf(r, st, nil, created))
 	return nil
 }
 
@@ -436,7 +448,7 @@ func (s *Server) getUser(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	writeJSON(w, http.StatusOK, s.viewUserOf(r, st, u))
+	writeJSON(w, http.StatusOK, s.viewUserOf(r, st, nil, u))
 	return nil
 }
 
@@ -547,9 +559,9 @@ func (s *Server) putUser(w http.ResponseWriter, r *http.Request) error {
 			return userFail(err)
 		}
 	}
-	s.log.Info("user changed", "user", u.Name, "remote", s.clientIP(r))
+	s.log.Info("user changed", "user", s.logUserName(r.Context(), u), "remote", s.clientIP(r))
 	auditSubject(r, userSubject(u))
-	v := s.viewUserOf(r, st, u)
+	v := s.viewUserOf(r, st, nil, u)
 	v.May = &userMay{Manage: a.mayManage(u), Password: a.maySetPassword(u) || a.self}
 	writeJSON(w, http.StatusOK, v)
 	return nil
@@ -585,7 +597,7 @@ func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) error {
 	if err := st.DeleteUser(r.Context(), u.Name, by); err != nil {
 		return userFail(err)
 	}
-	s.log.Info("user removed", "user", u.Name, "remote", s.clientIP(r))
+	s.log.Info("user removed", "user", s.logUserName(r.Context(), u), "remote", s.clientIP(r))
 	auditSubject(r, userSubject(u)) // as the user was
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "name": u.Name})
 	return nil
@@ -641,7 +653,7 @@ func (s *Server) postToken(w http.ResponseWriter, r *http.Request) error {
 	}
 	auditTarget(r, "token:"+strconv.FormatInt(tok.ID, 10))
 	auditSubject(r, tokenSubject(tok, u))
-	s.log.Info("api key created", "user", u.Name, "label", req.Label, "remote", s.clientIP(r))
+	s.log.Info("api key created", "user", s.logUserName(r.Context(), u), "label", req.Label, "remote", s.clientIP(r))
 	v := viewToken(tok)
 	writeJSON(w, http.StatusCreated, map[string]any{"token": secret, "id": v.ID, "kind": v.Kind, "label": v.Label, "created_at": v.CreatedAt})
 	return nil
@@ -672,7 +684,7 @@ func (s *Server) deleteToken(w http.ResponseWriter, r *http.Request) error {
 	if err := st.RevokeToken(r.Context(), id); err != nil {
 		return userFail(err)
 	}
-	s.log.Info("token revoked", "user", u.Name, "token", id, "kind", tok.Kind, "remote", s.clientIP(r))
+	s.log.Info("token revoked", "user", s.logUserName(r.Context(), u), "token", id, "kind", tok.Kind, "remote", s.clientIP(r))
 	auditSubject(r, tokenSubject(tok, u))
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id})
 	return nil

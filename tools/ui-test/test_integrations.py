@@ -91,6 +91,7 @@ def test_register_and_link(page, case):
         op.wait_for()
         assert wait_until(page, "!!document.querySelector(\".user-panel[data-name='operator'] .user-integration-links\")", 5), \
             "the operator's panel names the integration user linked to it"
+        _rename(page, case, uuid, subject)
         _approval_expired(page, case, uuid)
     finally:
         try:
@@ -98,6 +99,43 @@ def test_register_and_link(page, case):
         except Exception:  # never acted, or not approved: nothing linked
             pass
         _end(uuid)
+
+
+def _rename(page, case, uuid, subject):
+    """The integration's name, set in its panel, is the name its users
+    are shown under, by the chain "<name> › <user>, as <login name>";
+    the name Home Assistant reports stays beside it (AP StoreRaise v1.2,
+    Block 4)."""
+    reported = f"Casa {case.width} {case.lang}"
+    named = f"Home {case.width} {case.lang}"
+    sel = f".integration-panel[data-uuid='{uuid}']"
+    user_sel = f".user-panel[data-name='{uuid}:{subject}']"
+    head = page.locator(f"{user_sel} > summary .panel-name")
+    head.wait_for()
+    assert head.inner_text() == f"{reported} › operator, as operator", f"the chain under the reported name: {head.inner_text()}"
+    assert page.locator(f"{user_sel} > summary .mono").count() == 0, "no login name: the uuid and the id"
+    if not page.locator(sel).evaluate("d => d.open"):
+        page.locator(f"{sel} > summary").click()
+    field = page.locator(f"#integration-name-{uuid}")
+    save = page.locator(f"{sel} .save-name")
+    assert field.input_value() == reported and save.is_disabled(), "the name as stored, Save off"
+    field.fill(named)
+    assert save.is_enabled(), "Save on once the name differs"
+    save.click()
+    want = page.evaluate("(n) => t('integrations.nameSaved', {name: n})", named)
+    assert wait_until(page, f"document.querySelector('#integrations-msg').textContent === {json.dumps(want)}", 5), "and says so"
+    got = api_call("GET", f"api/v1/integrations/{uuid}")
+    assert got["name"] == named and got["reported_name"] == reported, f"the name given, the one reported kept: {got}"
+    panel = page.locator(sel)
+    assert panel.locator("summary .panel-name").inner_text() == named, "the panel under its new name"
+    assert reported in panel.locator("dl.kv").inner_text(), "the name Home Assistant reports, where it differs"
+    show_view(page, "tiles")
+    show_view(page, "system")
+    assert wait_until(page, f"(() => {{ const h = document.querySelector(\"{user_sel} > summary .panel-name\"); "
+                            f"return !!h && h.textContent === {json.dumps(named + ' › operator, as operator')}; }})()", 5), \
+        "the user shown under the new name"
+    named_buttons(page, "System settings → Integrations, renamed")
+    assert scroll_width(page) <= case.width, "no horizontal scroll with an integration's users"
 
 
 def _approval_expired(page, case, uuid):

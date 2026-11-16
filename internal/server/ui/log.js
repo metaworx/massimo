@@ -96,7 +96,7 @@ function logAtLevel(line) {
 // logOfChoices reports whether a line is of the source and the user
 // chosen.
 function logOfChoices(line) {
-  return (!logState.source || line.source === logState.source) && (!logState.user || (line.by && line.by.name === logState.user));
+  return (!logState.source || line.source === logState.source) && (!logState.user || (line.by && line.by.name === logState.user) || line.realName === logState.user);
 }
 
 // logLoadUsers fills the who choice once, for a caller who may list the
@@ -709,6 +709,10 @@ function logLine(ev) {
     changes: ev.kind === "state" && ev.changes && Object.keys(ev.changes).length ? ev.changes : null,
     cube: ev.kind === "cube_found" || ev.kind === "cube_gone" ? ev.cube : null,
     by: ev.by || null,
+    // who started it as the page shows a user: an integration's user by
+    // its chain, ", as <login name>" where it acted as a Massimo user
+    who: (ev.real_user && ev.real_user.display) || "",
+    realName: (ev.real_user && ev.real_user.name) || "",
     cubeSerial: ev.cube_serial || "", // the line's Cube under All Cubes (GET /api/v1/log)
     command: ev.command || 0,
     error: ev.error || "",
@@ -720,7 +724,7 @@ function logText(line) {
   let text = logOwnText(line);
   if (line.error && text !== line.error) text = text ? text + ": " + line.error : line.error;
   if (line.missed && text) text = t("log.whileDisconnected", { text });
-  if (line.by) text = t("log.by", { text, name: line.by.display_name || line.by.name });
+  if (line.by || line.who) text = t("log.by", { text, name: line.who || line.by.display_name || line.by.name });
   return text;
 }
 
@@ -892,7 +896,8 @@ function renderLogCommand(id) {
   }
   const state = logWord("log.cmdState.", c.state);
   let head = t("log.cmd.head", { action: c.action, target: c.target || "–", state });
-  if (c.user) head = t("log.by", { text: head, name: c.user });
+  const who = (c.audit && c.audit.real_user && c.audit.real_user.display) || c.user;
+  if (who) head = t("log.by", { text: head, name: who });
   box.appendChild(textEl("p", head, "log-cmd-head"));
   const steps = elem("ol", "log-cmd-steps");
   for (const st of c.steps || []) {
@@ -905,7 +910,7 @@ function renderLogCommand(id) {
   if (steps.childElementCount) box.appendChild(steps);
   if (c.audit) {
     const a = c.audit;
-    box.appendChild(textEl("p", t("log.cmd.audit", { action: a.action, user: a.user || "–", remote: a.remote || "–", result: logWord("log.auditResult.", a.result) }), "log-cmd-audit"));
+    box.appendChild(textEl("p", t("log.cmd.audit", { action: a.action, user: (a.real_user && a.real_user.display) || a.user || "–", remote: a.remote || "–", result: logWord("log.auditResult.", a.result) }), "log-cmd-audit"));
   }
   return box;
 }
@@ -1246,7 +1251,7 @@ function fillLogSelects() {
   kinds.value = logState.kind;
   fillOptions($("log-level"), LOG_LEVELS.filter((l) => l !== "error").map((l) => [l, t("log.level." + l)])).value = logState.level;
   const users = logState.users || [];
-  const who = fillOptions($("log-user"), [["", t("log.allUsers")]].concat(users.map((u) => [u.name, u.display_name || u.name])));
+  const who = fillOptions($("log-user"), [["", t("log.allUsers")]].concat(users.map((u) => [u.name, u.display || u.display_name || u.name])));
   if (logState.user && !users.some((u) => u.name === logState.user)) who.appendChild(new Option(logState.user, logState.user));
   who.value = logState.user;
   who.classList.toggle("hidden", users.length === 0 && !logState.user);

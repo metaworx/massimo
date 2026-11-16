@@ -593,6 +593,14 @@ type event struct {
 	// them now; absent for the Cube, the server's own jobs and a server
 	// without users (the bootstrap token is a key of the first owner).
 	By *eventUser `json:"by,omitempty"`
+	// EffectiveUser is the user whose rights it was started with, and
+	// RealUser who started it: the same user but for a call through an
+	// integration for its user linked to a Massimo user, which the
+	// effective user then is. Each carries its integration and its
+	// chain (display); RealUser's says ", as <the effective user>" where
+	// the two differ (names.go).
+	EffectiveUser *eventUser `json:"effective_user,omitempty"`
+	RealUser      *eventUser `json:"real_user,omitempty"`
 	// Changed says, for a "config" event of a thermostat or a virtual
 	// wall thermostat, what of its configuration changed: program, temps
 	// (the presets, boost and valve settings) or settings (a virtual
@@ -629,10 +637,14 @@ type event struct {
 	seq uint64
 }
 
-// eventUser names the user an event says started it.
+// eventUser names the user an event says started it: By with its names
+// alone, EffectiveUser and RealUser with its integration and its chain
+// as well (names.go).
 type eventUser struct {
 	Name        string `json:"name"`
 	DisplayName string `json:"display_name,omitempty"`
+	Integration string `json:"integration,omitempty"`
+	Display     string `json:"display,omitempty"`
 }
 
 // settle gives an event the source and the level its kind has where it
@@ -721,14 +733,21 @@ func (s *Server) logServer(ev event) {
 	}
 }
 
-// nameUser sets an event's By from its user, as the store names them
-// now; a removed user keeps the names it had.
+// nameUser sets an event's By, EffectiveUser and RealUser from its
+// users, as the store names them now; a removed user keeps the names it
+// had.
 func (s *Server) nameUser(ctx context.Context, ev *event) {
 	if ev.userID == 0 || s.opts.Store == nil {
 		return
 	}
-	if u, ok, err := s.opts.Store.UserByID(ctx, ev.userID); err == nil && ok {
-		ev.By = &eventUser{Name: u.Name, DisplayName: u.DisplayName}
+	nameUsers(ctx, s.opts.Store.Namer(), ev)
+}
+
+// nameUsers names an event's users with n.
+func nameUsers(ctx context.Context, n *store.Namer, ev *event) {
+	ev.EffectiveUser, ev.RealUser = rowUsers(ctx, n, ev.userID, ev.realUserID)
+	if e := ev.EffectiveUser; e != nil {
+		ev.By = &eventUser{Name: e.Name, DisplayName: e.DisplayName}
 	}
 }
 

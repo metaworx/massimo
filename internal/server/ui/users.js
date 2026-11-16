@@ -201,7 +201,7 @@ function userBadges(u) {
   // an integration's user, and the integrations' users that act as this
   // one (integrations.js)
   const ig = u.integration;
-  if (ig) out.push(badgeEl(t(ig.id ? "users.integrationUser" : "users.integrationOwn", { key: ig.key }), "mode"));
+  if (ig) out.push(badgeEl(t(ig.id ? "users.integrationUser" : "users.integrationOwn"), "mode"));
   if (ig && ig.linked_to) out.push(badgeEl(t("users.linkedTo", { name: ig.linked_to }), "ok"));
   if (u.links && u.links.length) out.push(badgeEl(tn("users.links", u.links.length), "mode"));
   return out;
@@ -287,11 +287,14 @@ function wireNewKey(u, box, where) {
 // that the tokens load once and the new key, shown once, is not hidden
 // again by a second load.
 function userPanel(u) {
-  const d = detailsPanel({ name: u.display_name || u.name, mono: u.name, badges: userBadges(u), open: usersUI.open.has(u.name), cls: "user-panel" },
+  // shown by its chain (AP StoreRaise v1.2, "The display"); an
+  // integration's user, which never signs in, without its login name,
+  // its integration's uuid and its id there
+  const d = detailsPanel({ name: u.display || u.display_name || u.name, mono: u.integration ? "" : u.name, badges: userBadges(u), open: usersUI.open.has(u.name), cls: "user-panel" },
     fromTemplate("tpl-user-panel"));
   d.dataset.name = u.name;
   if (u.links && u.links.length) {
-    const who = u.links.map((l) => (l.name || l.id.slice(0, 8)) + " (" + l.integration + ")").join(", ");
+    const who = u.links.map((l) => l.display || l.name || l.id.slice(0, 8)).join(", ");
     d.querySelector("summary").after(textEl("p", t("users.linksList", { users: who }), "muted small user-integration-links"));
   }
   const tokensBox = fromTemplate("tpl-user-tokens");
