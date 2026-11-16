@@ -228,9 +228,12 @@ function foundEntry(found) {
 
 // cubeEntry is a Cube's problems as an entry of problemsEl: the Cube as
 // the heading with its network sign, its link's badge where it is not
-// connected, own its settings' warnings too (a Cube's panel, ui/src/cubes/Panel.tsx),
+// connected, own its settings' warnings too (a Cube's panel),
 // and its devices with a problem under it, "Room › Device", with their
 // badges (tiles.js deviceProblems); a window open briefly is a state.
+// Its TypeScript twin, with those of cubeSettingItems and problemsLabelOf,
+// is in ui/src/model/cube.tsx, which the Cubes' panel calls: the header's
+// move to a part (AP UiParts, Block 6) takes those and deletes these.
 function cubeEntry(c, own) {
   const st = linkSign(c);
   const items = st === "ok" ? [] : [{ kind: "net", icon: "icon-net", sign: "net", tone: st === "bad" ? "bad" : "warn", text: linkWord(c) }];

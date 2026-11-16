@@ -10,40 +10,17 @@
  * the lines for the settings file in a fold of their own.
  */
 
-import type { ComponentChildren } from "preact";
 import type { FoundCube } from "../api";
+import { foundWhat } from "../model/found";
 import { Age, Badge } from "../shared/badge";
 import { CopyIcon } from "../shared/copy";
 import { Fold, FoldHead } from "../shared/fold";
 import { CountIcon, Icon } from "../shared/icon";
-import { tParts } from "../shared/lang";
-import { Link } from "../shared/link";
+import { joinParts } from "../shared/lang";
 import { busyProps, useBusy } from "../shared/question";
 import { addCube } from "./send";
 import { OtherNetwork } from "./Panel";
 import { folds, load } from "./store";
-
-/**
- * what is what a found entry is and who serves it: a Massimo proxy and the
- * Cube it serves, and the Massimo server serving it, its name a link to
- * the address its announcement gives. Its plain twin is cubes.js
- * foundWhat, which header.js foundEntry calls: the header's move to a part
- * (AP UiParts, Block 6) takes this one and deletes the plain one.
- */
-function what(c: FoundCube): ComponentChildren[] {
-  const out: ComponentChildren[] = [];
-  if (c.kind === "proxy") out.push(c.serves ? t("found.proxyServes", { serial: c.serves }) : t("found.proxy"));
-  if (c.host) out.push(tParts("found.servedBy", {}, { host: <Link url={c.host.url} text={c.host.name || c.host.url} cls="found-host" /> }));
-  return out;
-}
-
-/**
- * joined are parts with " · " before each, the empty ones left out; the
- * twin of cubes.js joinParts, which goes with foundWhat (Block 6).
- */
-function joined(parts: ComponentChildren[]): ComponentChildren[] {
-  return parts.filter((p) => p !== "" && !(Array.isArray(p) && !p.length)).flatMap((p) => [" · ", p]);
-}
 
 /**
  * Row is a Cube or a Massimo proxy found: its sign, its serial, for a Cube
@@ -59,8 +36,8 @@ function Row({ c }: { c: FoundCube }) {
   const dhcp = c.dhcp === true ? t("cubes.dhcp") : c.dhcp === false ? t("cubes.static") : "";
   const proxies = (c.proxies || []).join(", ");
   const own = proxy ? [] : [dhcp, c.firmware ? t("budget.firmware") + " " + c.firmware : "", proxies ? t("cubes.viaProxy", { address: proxies }) : ""];
-  const facts = joined([c.address, ...own, ...what(c)]);
-  const extra = joined([c.rf_address, c.mac || "", c.gateway ? t("cubes.gateway") + " " + c.gateway : ""]);
+  const facts = joinParts([c.address, ...own, ...foundWhat(c)], true);
+  const extra = joinParts([c.rf_address, c.mac || "", c.gateway ? t("cubes.gateway") + " " + c.gateway : ""], true);
   return (
     <li class="cube-found-row" data-serial={c.serial} data-kind={c.kind || "unknown"}>
       <Icon symbol={proxy ? "icon-proxy" : "icon-cube3d"} cls="ni found-icon" />

@@ -66,7 +66,7 @@ function renderCubesBadges() {
 
 // joinParts joins parts, each a text or an array of texts and elements,
 // with " · ", leaving out the empty ones (header.js foundEntry). Its
-// TypeScript twin is joined in ui/src/cubes/Found.tsx: the header's move
+// TypeScript twin is joinParts in ui/src/shared/lang.ts: the header's move
 // to a part (AP UiParts, Block 6) takes that one and deletes this one.
 function joinParts(parts) {
   const out = [];
@@ -83,7 +83,7 @@ function joinParts(parts) {
 // server serving it, the proxy's own or the one a Cube's proxy runs on
 // (host), its name a link to the address its announcement on the
 // network gives; for the header's problem list (header.js foundEntry).
-// Its TypeScript twin is what in ui/src/cubes/Found.tsx: the header's
+// Its TypeScript twin is foundWhat in ui/src/model/found.tsx: the header's
 // move to a part (AP UiParts, Block 6) takes that one and deletes this one.
 function foundWhat(c) {
   const parts = [];
@@ -94,7 +94,7 @@ function foundWhat(c) {
 
 // hostPort splits a Cube's address, host:port or [v6]:port, into the
 // host and the port; an address without a port is its host (home.js
-// renderHomeNotice). Its TypeScript twin is in ui/src/cubes/util.ts: the
+// renderHomeNotice). Its TypeScript twin is in ui/src/model/cube.tsx: the
 // header's move to a part (AP UiParts, Block 6) takes that one and deletes
 // this one.
 function hostPort(addr) {

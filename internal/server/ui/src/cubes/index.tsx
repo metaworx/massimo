@@ -14,6 +14,7 @@
 
 import { useEffect } from "preact/hooks";
 import type { Cube } from "../api";
+import { chosenCube } from "../model/cube";
 import { mounter, register } from "../shared/region";
 import { msg } from "./send";
 import { Found } from "./Found";
@@ -50,7 +51,7 @@ function PagePanel({ c }: { c: Cube }) {
 function Page() {
   load.use();
   if (place.value !== "page") return null;
-  const c = state.cubes.find((x) => x.serial === state.serial);
+  const c = chosenCube();
   if (!c) return <p class="muted small">{t("cubes.none")}</p>;
   return <PagePanel key={c.serial} c={c} />;
 }

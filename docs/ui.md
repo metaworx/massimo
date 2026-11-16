@@ -1541,13 +1541,30 @@ its data come as properties or signals, its texts as text or as its own keys.
 A part calls the plain scripts' globals,
 each declared to TypeScript in `ui/src/plain/<script>.d.ts`,
 with what the parts call alone.
+Two regions never import from each other (`TestRegionsKnowNoOtherRegion`:
+every directory of `ui/src/` but `shared`, `model` and `plain` is a region,
+and imports from itself, `shared`, `model`, Preact and the API's types alone).
+What several regions read of the API's data beside its fields is under `ui/src/model/`:
+it knows the API's data and no region, holds no state and no part with hooks of its own,
+and may put shared parts together into a small piece of that data;
+it imports from itself, the shared parts, Preact and the API's types alone
+(`TestModelKnowsNoRegion`).
+What one region alone reads stays in the region, anything with state too,
+and what is not about the API's data is a shared part.
+`cube.tsx` holds the Cube chosen in the header (`chosenCube`),
+a Cube's address split into host and port (`hostPort`), its network sign (`CubeSign`)
+and its problems as an entry of `Problems` (`cubeEntry`, `cubeSettingItems`)
+with the label naming their kinds and the Cubes found (`problemsLabelOf`);
+`found.tsx` what a Cube or a Massimo proxy found is and who serves it (`foundWhat`).
+`cubeEntry` calls `deviceProblems` and `deviceIcon` of `tiles.js` today;
+the rooms' move puts them into `model/`, since `model/` may not import a region.
 
 | Part or helper | File | For | Properties or arguments |
 |---|---|---|---|
 | `counter` | `counter.ts` | a region's load counter: "draw the region again" while its data stay plain objects | gives `bump()`, after a load, and `use()`, in every part of the region, which reads the counter, the language and the icons chosen |
 | `register`, `mounter` | `region.ts` | a region's functions as `MassimoParts.<name>`; its root drawn once into the page's container | `name`, `fns`; `id`, `root` |
 | `live`, `liveMap` | `live.ts` | objects whose properties are signals, for what a region keeps per place; the plain code reads and writes them as before | `init`; `make`, then `of(key)`, `clear()` |
-| `lang`, `useLang`, `tParts` | `lang.ts` | the page's language as a signal, raised by `applyLanguage` (`MassimoParts.language`); a text with parts in it (`tNodes`) | `key`, `texts`, `parts` |
+| `lang`, `useLang`, `tParts`, `joinParts` | `lang.ts` | the page's language as a signal, raised by `applyLanguage` (`MassimoParts.language`); a text with parts in it (`tNodes`); parts joined with " · ", the empty ones left out | `key`, `texts`, `parts`; `parts`, `lead` (" · " before the first too) |
 | `useIcons` | `look.ts` | the icons chosen for the window and the radio as a signal, raised by `redrawSigns` (`MassimoParts.icons`); `Sign` reads it | – |
 | `Island` | `island.tsx` | a plain piece inside a part: an element the part draws empty and plain code fills, again where a key or the language changed | `tag` (div, p, span), `cls`, `keys`, `fill(el)` |
 | `Fold`, `FoldHead` | `fold.tsx` | a details that opens and closes (`detailsPanel`), the toggle of its making not passed on; a panel's head | `cls`, `open`, `onToggle(open)`, `summary`, `summaryProps`, `data`, the body as children; `before`, `name`, `mono`, `badges` |
@@ -1561,7 +1578,7 @@ with what the parts call alone.
 | `Notice` | `badge.tsx` | a lasting warning with since when (`noticeEl`) | `text`, `since`, `next`, `cls`, children after |
 | `Age` | `badge.tsx` | how old a value is, filled by `fillAge` (`ageEl`) | `at`, `stale`, `plain` |
 | `Problems` | `problems.tsx` | the problem list, entries under entries (`problemsEl`) | `entries`, `label`, `ok` (the green check's label where nothing is wrong), `onClick` |
-| `KindIcons` | `problems.tsx` | the kinds' icons of entries without the list (`kindIcons`) | `entries`, `skip` |
+| `KindIcons`, `problemKinds`, `kindsLabel` | `problems.tsx` | the kinds' icons of entries without the list (`kindIcons`); the kinds themselves, to know whether there are any; the label naming the kinds among items in an order of kinds, "" for none | `entries`, `skip`; `entries`, `skip`; `items`, `kinds` |
 | `OkPill` | `problems.tsx` | the green check in a list's place (`okPill`) | `label` |
 | `Field` | `field.tsx` | a label and its control, `.field` or `.field.wide` (`fieldRow`) | `label`, `id`, `wide`, `unit`, `hint`, `draft`, `show`, the control as children |
 | `TextField` | `field.tsx` | a row with a text input that shows a stored text, from its draft | `label`, `id`, `name`, `draft`, `show`, `wide` (on by default), `unit`, `hint`, `placeholder`, `type`, `maxLength` |
