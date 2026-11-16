@@ -1698,6 +1698,18 @@ one declaration per schema of `docs/api-v1-openapi.yaml`,
 `make api-types` writes it (`tools/apitypes`, its `README.md`),
 git keeps it, and `go test` fails while it does not follow the OpenAPI file.
 
+Two tests hold the files of both kinds of region to the contract.
+`TestUIFileHeaders`: every `ui/*.js` and `ui/*.css` opens with the SPDX line
+and the copyright line, and every file under `ui/src/` with both as `//` lines,
+then its `@file` header, which names its own path from the repository root
+and says what the file is for.
+`TestUINoHTMLInjection`: no script and no part puts markup into the page from a
+string (`innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write`,
+`dangerouslySetInnerHTML`) or sets an inline handler (`setAttribute("on…")`,
+an `on…=` attribute in `ui/*.html` or a partial),
+and no part carries a `data-i18n`, which `applyI18n` would write over;
+comments are left out, so that prose may name them.
+
 `ui/connect.html` is a second page, the apps' (docs/app.md),
 served at `/ui/connect.html` as it is, not assembled:
 its markup, its templates and `<base href="../">`,
