@@ -578,6 +578,48 @@ func TestUIScriptGlobals(t *testing.T) {
 	}
 }
 
+// The parts' shared files know no region (docs/ui.md, "How the page is
+// built"): each imports from the shared directory itself, from Preact
+// and its signals, and from the API's types alone, so that every region
+// can use it. They are read from the disk: the bundle is made from them,
+// and they are not embedded.
+func TestSharedPartsKnowNoRegion(t *testing.T) {
+	const dir = "ui/src/shared"
+	spec := regexp.MustCompile(`(?:\bfrom\s*|\bimport\s*\(?\s*)["']([^"']+)["']`)
+	files := 0
+	err := fs.WalkDir(os.DirFS(dir), ".", func(name string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !(strings.HasSuffix(name, ".ts") || strings.HasSuffix(name, ".tsx")) {
+			return err
+		}
+		files++
+		b, err := os.ReadFile(path.Join(dir, name))
+		if err != nil {
+			return err
+		}
+		for n, line := range strings.Split(string(b), "\n") {
+			for _, m := range spec.FindAllStringSubmatch(line, -1) {
+				from := m[1]
+				allowed := from == "preact" || strings.HasPrefix(from, "preact/") || from == "@preact/signals"
+				if strings.HasPrefix(from, ".") {
+					// A relative import stays inside the shared directory, but for the API's types.
+					target := path.Join(path.Dir(name), from)
+					allowed = target == "../api" || !strings.HasPrefix(target, "..")
+				}
+				if !allowed {
+					t.Errorf("%s/%s:%d imports %q: a shared part imports from %s, from Preact and from ../api alone", dir, name, n+1, from, dir)
+				}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if files == 0 {
+		t.Fatalf("%s holds no part", dir)
+	}
+}
+
 // The translation files hold the texts of the page: each parses, the
 // other languages have no key English lacks (but their own plural forms
 // and the machine-translation note), and English has every key the
