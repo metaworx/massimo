@@ -1,6 +1,6 @@
 > **Fragment** — inlined by `tools/sync-docs.sh`; not a standalone document.
 
-# {{project_name}} — Project Contract (v1.12.0)
+# {{project_name}} — Project Contract (v1.13.0)
 
 <!-- TEMPLATE: installed as {{guidelines_root}}/project/_CONTRACT.md. Replace
      every {{TODO: …}}, delete rows that do not apply. Shared documents
@@ -165,6 +165,11 @@ the ones an agent trips over most come first:
     A field that shows stored data keeps a draft.
     A part that reads a signal reads everything it depends on as signals.
     A part calls `t()` and carries no `data-i18n`.
+    Its shared elements come from `internal/server/ui/src/shared/`,
+    which knows no region (`TestSharedPartsKnowNoRegion`):
+    a region writes no copy of one,
+    and the block that first needs one that is missing writes it there,
+    with its row in `docs/ui.md` ("How the page is built").
     `make ui-check` type-checks the parts.
     A file under `ui/src/` opens with the SPDX and copyright lines,
     then the `@file` header of `{{shared_root}}/lang/ts/LINTING.md`;
