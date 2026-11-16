@@ -4856,6 +4856,7 @@ components:
         offset_seconds: {type: integer}
     Room:
       type: object
+      required: [id, name, ready, devices]
       properties:
         id: {type: integer}
         name: {type: string}
@@ -4928,7 +4929,7 @@ components:
         consistent: {type: boolean, description: "A virtual wall thermostat's alone: false while the room's thermostats disagree on mode, setpoint or until"}
     Device:
       type: object
-      required: [rf_address, name]
+      required: [rf_address, type, name, room_id, reported]
       properties:
         rf_address: {type: string}
         type: {$ref: "#/components/schemas/DeviceType"}
@@ -4957,6 +4958,7 @@ components:
             when the server saw it open, and when it counts as open too
             long, as a warning and as an alert (the settings
             window_warn_after and window_alert_after).
+          required: [open_since, warn_at, alert_at]
           properties:
             open_since: {type: string, format: date-time}
             warn_at: {type: string, format: date-time}
