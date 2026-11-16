@@ -216,6 +216,10 @@ body.signed-out .top-line > .nav,
 body.signed-out header.top > :not(.top-line),
 body.signed-out main,
 body.signed-out #toast { display: none !important; }
+/* A part's place inside plain markup (AP UiParts): the element a part is
+   drawn into where it stands among plain siblings, out of the layout, so
+   that the part's own element is laid out as if it stood there itself. */
+.part-slot { display: contents; }
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -319,7 +323,7 @@ button.copy-icon .ni { width: 16px; height: 16px; }
   }
 }
 .cube { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 100%; }
-/* The Cube choice, a menu of the page (components.js pickerMenu): closed
+/* The Cube choice, a menu of the page (ui/src/header/Choice.tsx): closed
    the chosen Cube's plug and name, open as wide as its entries need, each
    a plug, the name and under it the serial and the address. */
 .cube-menu { position: relative; min-width: 0; }

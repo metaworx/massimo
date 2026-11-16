@@ -35,16 +35,7 @@ paths:
                     type: object
                     description: "What this server can do, by name, each its version MAJOR.MINOR: event_ids, idempotency, commands, vwt, program_etag, boost, proxy_virtual; without a store idempotency, commands and proxy_virtual are left out. A name never changes meaning."
                     additionalProperties: {type: string, pattern: "^[0-9]+\\.[0-9]+$", example: "1.0"}
-                  tls:
-                    type: object
-                    description: With TLS, the certificate served; absent without.
-                    properties:
-                      source: {type: string, description: "Where the certificate comes from: files, self-signed, or acme."}
-                      names: {type: array, items: {type: string}, description: The certificate's names and addresses.}
-                      not_after: {type: string, format: date-time}
-                      fingerprint: {type: string, description: "The SHA-256 of the certificate, as browsers show it."}
-                      self_signed: {type: boolean}
-                      warning: {type: string, description: Set while something needs the owner.}
+                  tls: {$ref: "#/components/schemas/CertStatus"}
   /api/v1/login:
     post:
       summary: Log in with a name and a password
@@ -1718,13 +1709,7 @@ paths:
           description: Every Cube that answered, configured or not
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  ran_at: {type: string, format: date-time}
-                  found:
-                    type: array
-                    items: {$ref: "#/components/schemas/FoundCube"}
+              schema: {$ref: "#/components/schemas/Discovery"}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
@@ -3367,9 +3352,7 @@ paths:
                 properties:
                   version: {type: string, description: "The build version with the Go details, as /healthz has it"}
                   started_at: {type: string, format: date-time, description: When the server process started.}
-                  tls:
-                    type: object
-                    description: With TLS, the certificate served, as /healthz has it; absent without.
+                  tls: {$ref: "#/components/schemas/CertStatus"}
                   install:
                     type: string
                     description: |
@@ -4684,7 +4667,7 @@ components:
     FoundCube:
       type: object
       description: A Cube that answered discovery
-      required: [serial, address, rf_address, firmware, last_seen]
+      required: [serial, kind, address, rf_address, firmware, last_seen]
       properties:
         serial: {type: string}
         kind: {type: string, enum: [cube, proxy, unknown], description: "What answered: a Cube, a massimo proxy (also one at an announced server's address), or neither"}
@@ -4715,9 +4698,30 @@ components:
           description: "The other addresses that answered for the Cube's serial in the latest run: massimo proxies (docs/proxy.md); absent when none did"
         found_at: {type: string, format: date-time, description: When the server first saw it}
         last_seen: {type: string, format: date-time, description: Its latest answer}
+    Discovery:
+      type: object
+      description: A run of discovery, as POST /api/v1/cubes/discover answers it
+      required: [ran_at, found]
+      properties:
+        ran_at: {type: string, format: date-time}
+        found:
+          type: array
+          description: Every Cube and massimo proxy that answered, configured or not; empty where none did
+          items: {$ref: "#/components/schemas/FoundCube"}
+    CertStatus:
+      type: object
+      description: "The certificate the server serves, as /healthz and GET /api/v1/system give it as tls; absent without TLS"
+      required: [not_after, self_signed]
+      properties:
+        source: {type: string, description: "Where the certificate comes from: files, self-signed, or acme."}
+        names: {type: array, items: {type: string}, description: The certificate's names and addresses.}
+        not_after: {type: string, format: date-time}
+        fingerprint: {type: string, description: "The SHA-256 of the certificate, as browsers show it."}
+        self_signed: {type: boolean}
+        warning: {type: string, description: Set while something needs the owner.}
     Cube:
       type: object
-      required: [serial, address, configured_address, follow_discovery, proxy_virtual, hidden, connected, link, budget, pending_radiograms]
+      required: [serial, address, configured_address, follow_discovery, proxy_virtual, hidden, connected, link, budget, pending_radiograms, updated]
       properties:
         serial: {type: string}
         name: {type: string, description: "User-friendly name from the store (seeded from MASSIMO_CUBE_<SN>_NAME), when set"}

@@ -107,6 +107,8 @@ The compacted header has **↑** left of ☰, back to the top.
   device's link and, for one who may change the settings, the cog), each in
   its worst colour, and under it its serial and address,
   the list as wide as they need; the arrow keys move between them.
+  Open, it stays open when data comes in, the focus where it was,
+  and shows what came: a Cube's new name, a problem, a Cube found.
   The last entry, **Search for new Cubes…**,
   asks the server to look for Cubes on the LAN (about two seconds;
   the server also looks every 30 minutes by itself),
@@ -147,6 +149,9 @@ The compacted header has **↑** left of ☰, back to the top.
   A window open briefly is not listed: it is a state, not a problem.
   Its list, as every menu of the page, opens inside the window,
   no higher than the room below it, and scrolls in itself, not the page.
+  An open list stays open when data comes in, and follows it:
+  a problem that comes is listed, one that goes leaves the list,
+  until nothing is left to list and the green check takes its place.
 - **How long ago the chosen Cube was heard from** and **↻**, one button without a frame,
   which asks the server for the current state now:
   "8 sec" since the server last took a message from the Cube,
@@ -1436,8 +1441,7 @@ as ☰'s pages are `MENU_VIEWS`; `markSettingsPages` shows the title for one pag
 `fitPageTabs` gives the page shown's button the longest name's width,
 and `backToTop` wires the two ↑, the floating one and the compacted header's;
 `showToast` shows the page's one toast at its foot (a notification, the search's outcome),
-`pickerMenu` makes a dropdown the choice of one item (the Cube choice),
-its items `menuItem`s, a Cube's link its network sign (`cubeSignEl`, `LINK_SIGN`);
+a Cube's link is its network sign (`cubeSignEl`, `LINK_SIGN`), for the plain regions;
 a device's serial and radio address are a `deviceIds`;
 a list of facts is a `kvList`, of counts a `countList`;
 an action with what it does and its button is an `.action-row`;
@@ -1491,10 +1495,11 @@ a script for each region of the page, in the order the page loads them:
 - `app.js`, the core: the state, the settings and their scopes, the API,
   the helpers, the ages of values, help, the Cube clock, loading, polling,
   the event stream, the language and `init`;
-- `header.js`, the header: the radio budget,
-  the last update and the server's clock, the Cube choice and the problems list,
-  the version, the TLS notice and the server's sign;
-  `home.js`, the home notice and the search for Cubes;
+- `header.js`, the plain names of the header, which call its parts (`ui/src/header/`),
+  and what stays plain there: the radio budget, the refresh button and the server's clock,
+  the version and the facts' fitting, the server's state;
+  `home.js`, the home notice's place shown or hidden, the Cubes a `cube_found` event adds
+  and the way to them;
   `prefs.js`, the wiring of My settings' rows and the language choice;
 - `rooms.js`, a room's facts, the drawing of Rooms, a device's state event
   and the actions behind a tile; `tiles.js`, a room's tile;
@@ -1541,27 +1546,46 @@ its data come as properties or signals, its texts as text or as its own keys.
 A part calls the plain scripts' globals,
 each declared to TypeScript in `ui/src/plain/<script>.d.ts`,
 with what the parts call alone.
+Two regions never import from each other (`TestRegionsKnowNoOtherRegion`:
+every directory of `ui/src/` but `shared`, `model` and `plain` is a region,
+and imports from itself, `shared`, `model`, Preact and the API's types alone).
+What several regions read of the API's data beside its fields is under `ui/src/model/`:
+it knows the API's data and no region, holds no state and no part with hooks of its own,
+and may put shared parts together into a small piece of that data;
+it imports from itself, the shared parts, Preact and the API's types alone
+(`TestModelKnowsNoRegion`).
+What one region alone reads stays in the region, anything with state too,
+and what is not about the API's data is a shared part.
+`cube.tsx` holds the Cube chosen in the header (`chosenCube`),
+a Cube's address split into host and port (`hostPort`), its network sign (`CubeSign`)
+and its problems as an entry of `Problems` (`cubeEntry`, `cubeSettingItems`)
+with the label naming their kinds and the Cubes found (`problemsLabelOf`);
+`found.tsx` what a Cube or a Massimo proxy found is and who serves it (`foundWhat`).
+`cubeEntry` calls `deviceProblems` and `deviceIcon` of `tiles.js` today;
+the rooms' move puts them into `model/`, since `model/` may not import a region.
 
 | Part or helper | File | For | Properties or arguments |
 |---|---|---|---|
 | `counter` | `counter.ts` | a region's load counter: "draw the region again" while its data stay plain objects | gives `bump()`, after a load, and `use()`, in every part of the region, which reads the counter, the language and the icons chosen |
 | `register`, `mounter` | `region.ts` | a region's functions as `MassimoParts.<name>`; its root drawn once into the page's container | `name`, `fns`; `id`, `root` |
 | `live`, `liveMap` | `live.ts` | objects whose properties are signals, for what a region keeps per place; the plain code reads and writes them as before | `init`; `make`, then `of(key)`, `clear()` |
-| `lang`, `useLang`, `tParts` | `lang.ts` | the page's language as a signal, raised by `applyLanguage` (`MassimoParts.language`); a text with parts in it (`tNodes`) | `key`, `texts`, `parts` |
+| `lang`, `useLang`, `tParts`, `joinParts` | `lang.ts` | the page's language as a signal, raised by `applyLanguage` (`MassimoParts.language`); a text with parts in it (`tNodes`); parts joined with " · ", the empty ones left out | `key`, `texts`, `parts`; `parts`, `lead` (" · " before the first too) |
 | `useIcons` | `look.ts` | the icons chosen for the window and the radio as a signal, raised by `redrawSigns` (`MassimoParts.icons`); `Sign` reads it | – |
 | `Island` | `island.tsx` | a plain piece inside a part: an element the part draws empty and plain code fills, again where a key or the language changed | `tag` (div, p, span), `cls`, `keys`, `fill(el)` |
 | `Fold`, `FoldHead` | `fold.tsx` | a details that opens and closes (`detailsPanel`), the toggle of its making not passed on; a panel's head | `cls`, `open`, `onToggle(open)`, `summary`, `summaryProps`, `data`, the body as children; `before`, `name`, `mono`, `badges` |
-| `Dropdown` | `menu.tsx` | a menu that drops down (`dropdown`) | `cls`, `summaryCls`, `label`, `summary`, `listCls`, `onClick`, the items as children |
+| `Dropdown` | `menu.tsx` | a menu that drops down (`dropdown`), with `arrows` its arrow keys (`menuArrows`) and with `focusCurrent` the focus on its current item when it opens (among `arrows`' items, else its list's buttons that are on); a click on any button of its list closes it, as `dropdown()` of `components.js` does for every menu of the page | `id`, `cls`, `summaryId`, `summaryCls`, `label`, `title` (where the tooltip is not the label), `summary`, `listCls`, `arrows` (a selector of its items), `focusCurrent`, `onClick`, the items as children |
+| `MenuItem` | `menu.tsx` | a menu's button, its icon, label, the icons after it and a grey second line (`menuItem`) | `icon`, `blank`, `label`, `icons`, `sub`, `value` (its `data-value`), `current`, `disabled`, `onClick` |
+| `Picker` | `menu.tsx` | a menu that chooses one item, its summary the chosen one (`pickerMenu`) | `id`, `cls`, `summaryId`, `summaryCls`, `entries` (an item `{ value, label, sub, icon, icons, disabled }`, `{ group }` or `{ separator: true }`), `value`, `onPick(value)`, `shown` (`{ icon, label, title, aria }`) |
 | `actionRunner` | `action.ts` | a request, a reload, and its outcome in the region's message line (`showResult`) | `where()`, `reload()`; gives `run(fn, ok, fail)`, `say(text, ok)` |
-| `Icon` | `icon.tsx` | a symbol of the page (`iconEl`) | `symbol`, `cls` |
+| `Icon` | `icon.tsx` | a symbol of the page (`iconEl`) | `symbol`, `cls`, `mark` (the symbol is a mark, which blinks where the style makes it) |
 | `Sign` | `icon.tsx` | a kind of `SIGNS` in a state, its mark blinking (`signEl`) | `kind`, `state` ("", ok, warn, bad, open), `cls`, `blink` (the mark's key), `label` (named for a screen reader, else hidden) |
 | `Mark` | `icon.tsx` | a mark alone (`markEl`) | `state` (warn, bad), `blink` |
 | `CountIcon` | `icon.tsx` | an icon with a number in its corner (`foundCountEl`) | `symbol`, `n`, `cls` |
 | `Badge` | `badge.tsx` | a `.flag` led by its mark for a warning or a failure (`badgeEl`) | `kind`, `text`, `blink`, `title`, children after the text |
-| `Notice` | `badge.tsx` | a lasting warning with since when (`noticeEl`) | `text`, `since`, `next`, `cls`, children after |
+| `Notice` | `badge.tsx` | a lasting warning with since when (`noticeEl`) | `text`, `since`, `next`, `cls`, `id`, `role`, `hidden` (the class `hidden`, the line kept in its place), children after |
 | `Age` | `badge.tsx` | how old a value is, filled by `fillAge` (`ageEl`) | `at`, `stale`, `plain` |
 | `Problems` | `problems.tsx` | the problem list, entries under entries (`problemsEl`) | `entries`, `label`, `ok` (the green check's label where nothing is wrong), `onClick` |
-| `KindIcons` | `problems.tsx` | the kinds' icons of entries without the list (`kindIcons`) | `entries`, `skip` |
+| `KindIcons`, `problemKinds`, `kindsLabel` | `problems.tsx` | the kinds' icons of entries without the list (`kindIcons`); the kinds themselves, to know whether there are any; the label naming the kinds among items in an order of kinds, "" for none | `entries`, `skip`; `entries`, `skip`; `items`, `kinds` |
 | `OkPill` | `problems.tsx` | the green check in a list's place (`okPill`) | `label` |
 | `Field` | `field.tsx` | a label and its control, `.field` or `.field.wide` (`fieldRow`) | `label`, `id`, `wide`, `unit`, `hint`, `draft`, `show`, the control as children |
 | `TextField` | `field.tsx` | a row with a text input that shows a stored text, from its draft | `label`, `id`, `name`, `draft`, `show`, `wide` (on by default), `unit`, `hint`, `placeholder`, `type`, `maxLength` |
@@ -1596,10 +1620,15 @@ What the table cannot say:
   what must outlive the component (a request a tile keeps across its being
   drawn again) is live state (`live`).
 
+Left for the regions that need them first:
+`MenuItem` has no `cls` or `id`, `Dropdown` does not tell when it opens,
+and its summary is named by `label`, not by its text;
+the rooms meet these first, and add them as properties.
+
 These builders of `components.js` and `app.js` have no part yet, since no region
 that has moved uses them: the help button (`helpParts`) and a field row without
 a label, `numberInput`, `stepper`, `selectInput`, `markRange`, `kvList`,
-`countList`, `iconButton`, `pickerMenu` and `sectionBadges`.
+`countList`, `iconButton` and `sectionBadges`.
 The block that first needs one writes it under `ui/src/shared/`,
 knowing no region, and adds its row to the table above; no region writes its own.
 A section card's badges (`sectionBadges`) stay plain until the page's chrome moves
@@ -1626,6 +1655,26 @@ which `cubes.js` calls as `renderCubes`, `cubesPolled` and `showFoundFold`;
 `store.ts` holds its counter, each panel's `open` by serial, the folds
 and the devices loaded for the hide choice;
 `send.ts` holds its requests, run by its action runner.
+The header (`ui/src/header/`) is the second:
+`index.tsx` draws the Cube choice with every Cube's problems in `#header-cube`,
+the chosen Cube's age in the refresh button's `#updated`,
+the server's sign in `#server-sign-slot`, the certificate's line in `#tls-slot`
+and the home notice inside `#home-notice`, and registers `render` and `tls`,
+which `header.js` calls as `renderCubeSelect`, `renderUpdated`, `renderServerSign`
+and `renderTLS`, and `home.js` as `renderHomeNotice`;
+`store.ts` holds its counter, the search under way and the certificate,
+`send.ts` the search and the poll the server's sign asks for.
+The choice is a `Picker`, the problems a `Problems`, the certificate's line a `Notice`;
+the server's sign is a button written by hand, since `iconButton` has no part yet
+and the next change to the header takes the button away:
+the rooms' icon buttons (a tile's info and cog) bring that part.
+The facts row with its fitting, the version and the refresh button stay plain,
+around the parts' places and not in them,
+and the home notice's place is shown and hidden by the plain code (and by `pages.js`),
+the part drawing inside it.
+A part's place among plain siblings is an element of the class `part-slot`,
+which takes no box of its own (`display: contents`),
+so that the part's element is laid out as if it stood there itself.
 `make ui` bundles it with esbuild, through esbuild's Go API (`tools/uibundle`,
 a module of its own, its `README.md`),
 into `ui/parts.js`: one classic script, minified, for ES2022,

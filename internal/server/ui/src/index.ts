@@ -15,6 +15,8 @@
 
 import "./cubes";
 import type { CubesPart } from "./cubes";
+import "./header";
+import type { HeaderPart } from "./header";
 import { languageChanged } from "./shared/lang";
 import { iconsChanged } from "./shared/look";
 import { parts, register } from "./shared/region";
@@ -27,6 +29,8 @@ export interface MassimoParts {
   icons(): void;
   /** System settings → Cubes and Cube settings (cubes/). */
   cubes: CubesPart;
+  /** The header: the Cube choice, the problems, the age, the server's sign, the certificate's line, the home notice (header/). */
+  header: HeaderPart;
 }
 
 declare global {

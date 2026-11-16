@@ -1,11 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 The Massimo Authors
 
-// The Massimo web UI, the header: the chosen Cube's radio budget, the
-// time of the last update with the server's clock, the Cube choice with
-// each Cube's network sign and the problems list, the version with the
-// TLS notice, the facts that fit the header's width, and the server's
-// sign, which follows the server's version and its updates.
+// The Massimo web UI, the header: the plain names of the region, which
+// call its parts (ui/src/header/, MassimoParts.header, AP UiParts Block
+// 6), and what stays plain: the chosen Cube's radio budget, the refresh
+// button with its tooltip and the server's clock, a Cube's link's sign
+// and word for the plain regions, the version and the certificate's text,
+// the facts that fit the header's width, and the server's state, which
+// follows its version and its updates. The parts draw the Cube choice,
+// every Cube's problems, the chosen Cube's age, the server's sign and the
+// certificate's line, built once and updated in place, so that what is
+// open in the header stays open and follows the data (docs/ui.md,
+// "Header").
 "use strict";
 
 // --- header -----------------------------------------------------------
@@ -62,45 +68,26 @@ function noteServerClock(resp) {
   if (Math.abs(skew - serverSkew) > 1500) serverSkew = skew;
 }
 
-// fmtSince is a time span (ms), briefly: seconds under a minute, then
-// minutes, hours, from two days on days ("8 sec", "12 min", "5 hr").
-function fmtSince(ms) {
-  const sec = Math.max(0, Math.floor(ms / 1000));
-  if (sec < 60) return fmtUnit(sec, "second");
-  if (sec < 3600) return fmtUnit(Math.floor(sec / 60), "minute");
-  if (sec < 48 * 3600) return fmtUnit(Math.floor(sec / 3600), "hour");
-  return fmtUnit(Math.floor(sec / 86400), "day");
-}
-
-let updatedTimer = null;
-
-// renderUpdated shows in the refresh button how long ago the chosen Cube
-// was last heard from: its updated, the last message the server took
-// from it, on the server's clock (serverSkew), the age counting on by
-// itself (each second under a minute, then each minute, each hour); its
+// renderUpdated draws the chosen Cube's age in the refresh button
+// (ui/src/header/Updated.tsx), which counts on by itself; the button's
 // tooltip and its name for a screen reader say the time itself, "updated
-// 20:51:00, click to reload". Nothing where the Cube has no such time.
+// 20:51:00, click to reload", the button's own words where the Cube has
+// no such time.
 function renderUpdated() {
-  const el = $("updated");
+  MassimoParts.header.render();
   const btn = $("refresh-btn");
-  clearTimeout(updatedTimer);
   const cube = state.cubes.find((c) => c.serial === state.serial);
   const at = cube ? Date.parse(cube.updated || "") : NaN;
   if (isNaN(at)) {
-    el.textContent = "";
     btn.title = t("header.refreshTitle");
     btn.setAttribute("aria-label", t("header.refreshTitle"));
     return;
   }
-  const age = Math.max(0, Date.now() + serverSkew - at);
-  el.textContent = fmtSince(age);
   const pad = (n) => String(n).padStart(2, "0");
   const d = new Date(at);
   const time = pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds());
   btn.title = t("header.refreshUpdated", { time });
   btn.setAttribute("aria-label", t("header.refreshUpdated", { time }));
-  const step = age < 60000 ? 1000 : age < 3600000 ? 60000 : 3600000;
-  updatedTimer = setTimeout(renderUpdated, step - (age % step) + 20);
 }
 
 // LINK_SIGN is the state of a Cube's network sign by its link (linkState):
@@ -108,7 +95,8 @@ function renderUpdated() {
 // connection, another client or none a failure.
 const LINK_SIGN = { connected: "ok", held: "warn", rebooting: "warn", stale: "bad", busy: "bad", offline: "bad" };
 
-// linkSign is the state of a Cube's network sign.
+// linkSign is the state of a Cube's network sign, for the parts and the
+// plain regions alike.
 function linkSign(c) {
   return LINK_SIGN[linkState(c)] || "bad";
 }
@@ -120,7 +108,8 @@ function linkWord(c) {
 }
 
 // cubeSignEl is a Cube's network sign, named for a screen reader by its
-// link (components.js signEl).
+// link (components.js signEl), for the plain regions (backup.js); the
+// parts draw it with the shared Sign.
 function cubeSignEl(c) {
   const svg = signEl("net", linkSign(c), "conn-sign", "cube:" + c.serial);
   svg.removeAttribute("aria-hidden");
@@ -129,155 +118,12 @@ function cubeSignEl(c) {
   return svg;
 }
 
-// renderCubeSelect fills the Cube choice (components.js pickerMenu): the
-// configured Cubes, each with its network sign (cubeSignEl), its name
-// (its serial without one) with the icons of its problems after it, the
-// settings' cog for a role with settings, and under it its serial and
-// address; then
-// those found on the LAN but not configured, shown, not selectable; then
-// the entry that searches the LAN for new ones. Closed it shows the
-// chosen Cube's sign and name, its tooltip the serial, the address and
-// the link. An open choice is left as it is, so that a poll does not
-// take the focus from it; a pick closes it first. Beside it, every
-// Cube's problems (renderCubeProblems).
+// renderCubeSelect draws the Cube choice and every Cube's problems
+// beside it (ui/src/header/Choice.tsx, CubeProblems.tsx) from the Cubes
+// as the page has them: in place, an open choice or list staying open
+// and following the data.
 function renderCubeSelect() {
-  renderCubeProblems();
-  const menu = $("cube-menu");
-  if (menu.open) return;
-  const items = state.cubes.map((c) => ({
-    value: c.serial,
-    label: c.name || c.serial,
-    sub: [c.name ? c.serial : "", c.address || ""].filter(Boolean).join(" · "),
-    icon: cubeSignEl(c),
-    // its problems after its name, its link apart: its sign is that
-    icons: kindIcons([cubeEntry(c, hasCap("settings"))], ["net"]), // components.js
-  }));
-  // a found Cube opens System settings → Cubes, where it can be added,
-  // for a role with cubes; for others it is information
-  if (state.found.length) {
-    items.push({ group: t("discover.group") });
-    for (const c of state.found) items.push({ value: "found:" + c.serial, label: c.serial, sub: c.address || "", disabled: !hasCap("cubes") });
-  }
-  if (hasCap("discover")) {
-    items.push({ separator: true });
-    items.push({ value: DISCOVER, label: t(discovery.running ? "discover.searching" : "discover.search"), disabled: discovery.running });
-  }
-  const cube = state.cubes.find((c) => c.serial === state.serial);
-  const name = cube ? cube.name || cube.serial : t("header.cube");
-  const conn = cube ? linkWord(cube) : "";
-  pickerMenu(menu, {
-    items,
-    value: state.serial || "",
-    onPick: (v) => {
-      menu.open = false;
-      if (v === DISCOVER) discoverCubes();
-      else if (v.startsWith("found:")) showFound();
-      else selectCube(v);
-    },
-    shown: {
-      icon: cube ? cubeSignEl(cube) : null,
-      label: name,
-      title: cube ? [name, cube.name ? cube.serial : "", cube.address || "", conn].filter(Boolean).join(" · ") : name,
-      aria: cube ? t("header.cubeChoice", { name, state: conn }) : name,
-    },
-  });
-}
-
-// cubeProblemEntries are every Cube's problems as problemsEl's entries:
-// a Cube with a problem as the heading, its network sign its own state
-// (green where only its devices fail), its link's badge where it is not
-// connected, and its devices with a problem under it, "Room › Device",
-// with their badges (tiles.js deviceProblems); a window open briefly is a
-// state, not a problem. Then, for one who may change the settings, the
-// settings: a Cube proxy that does not listen, a settings file that
-// differs from the store, a Cube found elsewhere than its fixed address.
-// Last, for everyone, what was found on the network and is not served
-// (foundEntry), as information.
-function cubeProblemEntries() {
-  const entries = state.cubes.map((c) => cubeEntry(c));
-  if (hasCap("settings")) {
-    const items = [];
-    for (const c of state.cubes) items.push(...cubeSettingItems(c, c.name || c.serial));
-    entries.push({ sign: { kind: "cog", state: items.length ? "warn" : "" }, title: t("problem.settings"), items });
-  }
-  if (state.found.length) entries.push(foundEntry(state.found));
-  return entries;
-}
-
-// foundEntry is what was found on the network and is not served, as the
-// problem list's last group: the found Cubes' sign with their number,
-// shown in the summary too, "not set up" and, for a role with cubes, a
-// link to System settings → Cubes (showFound); under it each Cube and
-// Massimo proxy, its address, what it is and the server serving it
-// (cubes.js foundWhat).
-function foundEntry(found) {
-  const sub = [t("found.notSetUp")];
-  if (hasCap("cubes")) {
-    const go = textEl("button", t("found.toCubes"), "link-button found-to-cubes");
-    go.type = "button";
-    go.addEventListener("click", showFound);
-    sub.push(" · ", go);
-  }
-  const subs = found.map((c) => ({
-    icon: c.kind === "proxy" ? "icon-proxy" : "icon-cube3d",
-    title: c.serial,
-    sub: joinParts([c.address, ...foundWhat(c)]), // cubes.js
-  }));
-  return { node: foundCountEl(found.length), title: t("found.group"), sub, subs, info: true, summary: foundCountEl(found.length) };
-}
-
-// cubeEntry is a Cube's problems as an entry of problemsEl: the Cube as
-// the heading with its network sign, its link's badge where it is not
-// connected, own its settings' warnings too (a Cube's panel, ui/src/cubes/Panel.tsx),
-// and its devices with a problem under it, "Room › Device", with their
-// badges (tiles.js deviceProblems); a window open briefly is a state.
-function cubeEntry(c, own) {
-  const st = linkSign(c);
-  const items = st === "ok" ? [] : [{ kind: "net", icon: "icon-net", sign: "net", tone: st === "bad" ? "bad" : "warn", text: linkWord(c) }];
-  if (own) items.push(...cubeSettingItems(c, ""));
-  const subs = (c.problems || []).map((d) => ({
-    icon: deviceIcon(d), // tiles.js
-    title: [d.room, deviceName(d)].filter(Boolean).join(" › "),
-    sub: d.serial || d.rf_address,
-    items: deviceProblems(d, true).filter((it) => it.tone !== "fill-open"), // tiles.js
-  }));
-  return { sign: { kind: "net", state: st }, title: c.name || c.serial, sub: c.name ? c.serial : "", items, subs };
-}
-
-// cubeSettingItems are a Cube's settings that need a look, as items: a
-// proxy listener that does not listen, a settings file that differs, a
-// fixed address the Cube is found elsewhere than (found_elsewhere); who
-// names the Cube in the text, "" for its own panel.
-function cubeSettingItems(c, who) {
-  const items = [];
-  const text = (key, args) => (who ? t("problem." + key, { cube: who, ...args }) : t("problem." + key + "Own", args));
-  for (const f of c.proxy_failing || []) items.push({ kind: "cog", icon: "icon-cog", sign: "cog", tone: "warn", text: text("proxy", { addr: f.addr }) });
-  if ((c.file_differs || []).length) items.push({ kind: "cog", icon: "icon-cog", sign: "cog", tone: "warn", text: text("file", {}) });
-  if (c.found_elsewhere) items.push({ kind: "cog", icon: "icon-cog", sign: "cog", tone: "warn", text: text("address", { addr: c.found_elsewhere.address }) });
-  return items;
-}
-
-// problemsLabelOf names the kinds of problems among entries, for a
-// screen reader and the tooltip.
-function problemsLabelOf(entries) {
-  const kinds = ["net", "radio", "battery", "window", "cog"].filter((k) => entries.flatMap(entryItems).some((it) => it.kind === k)); // components.js
-  const found = entries.some((e) => e.info) && state.found.length ? tn("found.pill", state.found.length) : "";
-  if (!kinds.length) return [t("problem.none"), found].filter(Boolean).join(" · ");
-  return [t("problem.label", { list: kinds.map((k) => t("problem." + k)).join(", ") }), found].filter(Boolean).join(" · ");
-}
-
-// renderCubeProblems draws every Cube's problems beside the Cube choice
-// (problemsEl), a green check where none has one (okPill), nothing before
-// there is a Cube; its list kept open across a poll where it was open.
-function renderCubeProblems() {
-  const box = $("cube-problems");
-  if (!box) return;
-  const was = box.querySelector("details.problems");
-  if (was && was.open) return;
-  const entries = cubeProblemEntries();
-  const p = problemsEl(entries, problemsLabelOf(entries));
-  if (p) box.replaceChildren(p);
-  else box.replaceChildren(...(state.cubes.length ? [okPill(t("problem.none"))] : [])); // components.js
+  MassimoParts.header.render();
 }
 
 // --- version ----------------------------------------------------------
@@ -302,36 +148,13 @@ function splitVersion(v) {
   return { short: m[1], rest: m[2].replace(/^\((.*)\)$/, "$1") };
 }
 
-// checkVersion compares the server's version with the one the page was
-// loaded with; a newer server reloads the page when nothing is open,
-// otherwise it offers a button.
-// renderTLS shows, from /healthz's tls, while the certificate the server
-// serves is self-signed, a notice under the header and in the sign-in dialog
-// asking to compare the fingerprint the browser shows for it with
-// massimo tls show on the box before signing in; and a warning while
-// the certificate ends within two weeks (or has none yet), computed
-// here from not_after so that it speaks the page's language. The page
-// shows no fingerprint: it comes over the very connection in question,
-// and a man in the middle would pass the server's along, or rewrite it.
+// renderTLS takes /healthz's tls: the line under the header
+// (ui/src/header/Tls.tsx), and while the certificate is self-signed the
+// sign-in dialog's line asking to compare its fingerprint before signing
+// in.
 function renderTLS(tls) {
-  const notice = $("tls-notice");
   $("login-tls").classList.toggle("hidden", !(tls && tls.self_signed));
-  if (!tls) {
-    notice.classList.add("hidden");
-    return;
-  }
-  const until = Date.parse(tls.not_after || "");
-  const texts = [];
-  if (tls.self_signed) texts.push(t("header.selfSigned"));
-  if (isNaN(until)) {
-    if (tls.warning) texts.push(t("header.certMissing"));
-  } else {
-    const days = Math.floor((until - Date.now()) / 86400000);
-    if (days < 0) texts.push(t("header.certExpired"));
-    else if (days < 14) texts.push(tn("header.certExpires", days));
-  }
-  $("tls-notice-text").textContent = texts.join(" ");
-  notice.classList.toggle("hidden", texts.length === 0);
+  MassimoParts.header.tls(tls || null);
 }
 
 // certText is the certificate the server serves, as GET /api/v1/system
@@ -416,6 +239,9 @@ function watchFacts() {
   }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
 }
 
+// checkVersion compares the server's version with the one the page was
+// loaded with; a newer server reloads the page when nothing is open,
+// otherwise its sign offers the reload.
 async function checkVersion() {
   let h;
   try {
@@ -442,47 +268,13 @@ async function checkVersion() {
   if (!somethingOpen()) location.reload();
 }
 
-// SERVER_SIGN is the icon of each state of the server's sign.
-const SERVER_SIGN = { up: "icon-plug-on", info: "icon-info", new: "mark-warn", down: "icon-plug-off" };
-
-// serverState is the state the server's sign shows: "down" while the
-// last poll failed, "new" once the server runs another version than the
-// page, "info" while an update is out for one who may install it
-// (update.js updateOut), "up" otherwise.
-function serverState() {
-  if (state.serverDown) return "down";
-  if (state.newVersion) return "new";
-  return updateOut() ? "info" : "up"; // update.js
-}
-
-// renderServerSign draws the server's sign before the time of the last
-// update: its icon in a frame, green, blue, amber (its triangle blinks)
-// or filled red (it blinks), its label saying what a click does; while
-// the server is gone, the page's other signs are greyed, their state
-// unknown, and the time stays that of the last update.
+// renderServerSign draws the server's sign (ui/src/header/ServerSign.tsx)
+// from the server's state; while the server is gone, the page's other
+// signs are greyed, their state unknown, and the time stays that of the
+// last update.
 function renderServerSign() {
-  const st = serverState();
-  const b = $("server-sign");
-  if (!b) return;
-  b.dataset.state = st;
-  const icon = iconEl(SERVER_SIGN[st], "ni"); // components.js
-  if (st === "new") icon.firstChild.setAttribute("class", "mark");
-  b.replaceChildren(icon);
-  const label = t("server." + st, { version: updateLatest(), seconds: state.settings.poll }); // update.js
-  b.title = label;
-  b.setAttribute("aria-label", label);
-  document.body.classList.toggle("server-down", st === "down");
-}
-
-// serverSignClick acts by the sign's state: a new version reloads the
-// page, an update out opens Software update, otherwise it polls now.
-function serverSignClick(ev) {
-  const st = serverState();
-  if (st === "new") location.reload();
-  else if (st === "info") {
-    showView("maint"); // pages.js
-    showCard($("sys-software")); // components.js
-  } else whileBusy($("refresh-btn"), () => poll(true));
+  MassimoParts.header.render();
+  document.body.classList.toggle("server-down", !!state.serverDown);
 }
 
 // serverReached notes whether the last request to the server got an

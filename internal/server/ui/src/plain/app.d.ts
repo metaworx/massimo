@@ -5,8 +5,8 @@
  * @file internal/server/ui/src/plain/app.d.ts
  *
  * The globals of the plain script ui/app.js that the parts call: the
- * page's state, the API, the reload, the ages of values, a Cube's link
- * and clock.
+ * page's state, the API, the reload, the loads and the poll, the Cube
+ * chosen, the ages of values and the times, a Cube's link and clock.
  */
 
 import type { Cube, Device, FoundCube } from "../api";
@@ -20,6 +20,12 @@ declare global {
     found: FoundCube[];
     /** The Cube chosen in the header. */
     serial: string | null;
+    /** The last poll got no answer from the server. */
+    serverDown: boolean;
+    /** The server runs another version than the page was loaded with. */
+    newVersion: boolean;
+    /** The person's settings, as far as a part reads them. */
+    settings: { poll: number };
   };
   /** The element of the page with the id. */
   function $(id: string): HTMLElement | null;
@@ -27,6 +33,22 @@ declare global {
   function api<T = unknown>(method: string, path: string, body?: unknown): Promise<T>;
   /** Loads the Cubes, the rooms and the log's alerts again. */
   function refresh(): Promise<void>;
+  /** Loads the Cubes' list into state.cubes and state.found and draws what shows them. */
+  function loadCubes(): Promise<void>;
+  /** Asks the server for the current state now, the rooms too with rooms. */
+  function poll(rooms?: boolean): Promise<void>;
+  /** Chooses the Cube the page shows, by its serial, and loads it. */
+  function selectCube(serial: string): void;
+  /** Whether an entry of GET /api/v1/cubes is a Cube the server serves. */
+  function isConfigured(c: Cube | FoundCube): boolean;
+  /** The server's clock less the browser's, in ms (header.js noteServerClock). */
+  let serverSkew: number;
+  /** A number with its unit, short, in the page's language ("8 sec"). */
+  function fmtUnit(n: number, unit: string): string;
+  /** An instant as date and time. */
+  function fmtInstant(date: Date, timeZone?: string): string;
+  /** An API time as a Date, null for none (a zero time). */
+  function timeOf(iso?: string): Date | null;
   /** A time of day, short, from milliseconds. */
   function fmtShortTime(ms: number): string;
   /** Fills an age (.age[data-at]) with how old it is; refreshAges does so once a minute. */

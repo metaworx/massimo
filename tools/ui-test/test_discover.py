@@ -60,7 +60,7 @@ def test_search_held_then_answered(page, case):
     if held:
         held[0].continue_()  # on to the server, which asks the fake Cube
     page.unroute("**/api/v1/cubes/discover")
-    assert wait_until(page, "!discovery.running", 10), "search done"
+    assert wait_until(page, "!document.querySelector(\"#cube-menu button[data-value='__discover']\").disabled", 10), "search done"
     toast = page.locator("#toast")
     assert toast.is_visible() and page.locator("#toast-body").inner_text() == found_text(case.lang, 1), "the outcome in the toast"
     assert page.locator("#toast-action").inner_text() == page.evaluate("t('discover.show')"), "with Show"

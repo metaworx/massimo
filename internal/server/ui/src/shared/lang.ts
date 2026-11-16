@@ -8,6 +8,7 @@
  * reads, so that a change of language draws it again; applyLanguage
  * (app.js) raises it through MassimoParts.language. A part calls t() for
  * its texts and carries no data-i18n, which applyI18n would write over.
+ * Beside it, a text with parts in it, and parts joined into a line.
  */
 
 import { signal } from "@preact/signals";
@@ -46,4 +47,14 @@ export function tParts(key: string, texts: Record<string, string | number>, part
   }
   out.push(s.slice(last));
   return out.filter((x) => x !== "");
+}
+
+/**
+ * joinParts are parts with " · " between them, the empty ones left out;
+ * with lead, also before the first, for a line that goes on after
+ * something else.
+ */
+export function joinParts(parts: ComponentChildren[], lead?: boolean): ComponentChildren[] {
+  const out = parts.filter((p) => p !== "" && p !== undefined && p !== null && !(Array.isArray(p) && !p.length)).flatMap((p) => [" · ", p]);
+  return lead ? out : out.slice(1);
 }

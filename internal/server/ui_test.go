@@ -584,7 +584,45 @@ func TestUIScriptGlobals(t *testing.T) {
 // can use it. They are read from the disk: the bundle is made from them,
 // and they are not embedded.
 func TestSharedPartsKnowNoRegion(t *testing.T) {
-	const dir = "ui/src/shared"
+	partsImportOnly(t, "ui/src/shared")
+}
+
+// What the parts read of the API's data beside its fields (ui/src/model/)
+// knows no region either: it imports from itself, from the shared parts,
+// from Preact and from the API's types alone, so that two regions that
+// both need it never import from each other.
+func TestModelKnowsNoRegion(t *testing.T) {
+	partsImportOnly(t, "ui/src/model", "shared")
+}
+
+// No region of the parts imports from another (docs/ui.md, "How the
+// page is built"): every directory of ui/src/ but shared, model and plain
+// is a region, and imports from itself, from the shared parts, from the
+// model, from Preact and from the API's types alone.
+func TestRegionsKnowNoOtherRegion(t *testing.T) {
+	dirs, err := os.ReadDir("ui/src")
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, d := range dirs {
+		if !d.IsDir() || d.Name() == "shared" || d.Name() == "model" || d.Name() == "plain" {
+			continue
+		}
+		n++
+		partsImportOnly(t, "ui/src/"+d.Name(), "shared", "model")
+	}
+	if n == 0 {
+		t.Fatal("ui/src holds no region")
+	}
+}
+
+// partsImportOnly holds the TypeScript files under dir, a directory of
+// ui/src/, to their imports: from dir itself, from the directories of
+// ui/src/ named in also, from Preact and its signals, and from the API's
+// types.
+func partsImportOnly(t *testing.T, dir string, also ...string) {
+	t.Helper()
 	spec := regexp.MustCompile(`(?:\bfrom\s*|\bimport\s*\(?\s*)["']([^"']+)["']`)
 	files := 0
 	err := fs.WalkDir(os.DirFS(dir), ".", func(name string, d fs.DirEntry, err error) error {
@@ -601,12 +639,16 @@ func TestSharedPartsKnowNoRegion(t *testing.T) {
 				from := m[1]
 				allowed := from == "preact" || strings.HasPrefix(from, "preact/") || from == "@preact/signals"
 				if strings.HasPrefix(from, ".") {
-					// A relative import stays inside the shared directory, but for the API's types.
+					// A relative import stays inside the directory, but for
+					// the API's types and the directories also names.
 					target := path.Join(path.Dir(name), from)
 					allowed = target == "../api" || !strings.HasPrefix(target, "..")
+					for _, a := range also {
+						allowed = allowed || strings.HasPrefix(target, "../"+a+"/")
+					}
 				}
 				if !allowed {
-					t.Errorf("%s/%s:%d imports %q: a shared part imports from %s, from Preact and from ../api alone", dir, name, n+1, from, dir)
+					t.Errorf("%s/%s:%d imports %q: a file of %s imports from it, %sfrom Preact and from ../api alone", dir, name, n+1, from, dir, alsoText(also))
 				}
 			}
 		}
@@ -620,10 +662,19 @@ func TestSharedPartsKnowNoRegion(t *testing.T) {
 	}
 }
 
+// alsoText names the directories partsImportOnly allows beside its own.
+func alsoText(also []string) string {
+	s := ""
+	for _, a := range also {
+		s += "from ui/src/" + a + ", "
+	}
+	return s
+}
+
 // The translation files hold the texts of the page: each parses, the
 // other languages have no key English lacks (but their own plural forms
 // and the machine-translation note), and English has every key the
-// markup and the scripts ask for.
+// markup, the scripts and the parts ask for.
 func TestUITranslations(t *testing.T) {
 	js, err := uiFiles.ReadFile("ui/i18n.js")
 	if err != nil {
@@ -722,8 +773,38 @@ func TestUITranslations(t *testing.T) {
 			}
 		}
 	}
+	// The parts ask as the scripts do, with t("…"), tn("…") and
+	// tParts("…"). Their files are read from the disk: the bundle is made
+	// from them, and they are not embedded.
+	partCall := regexp.MustCompile(`\b(tn?|tParts)\(\s*"([^"]+)"\s*[,)]`)
+	asked := 0
+	err = fs.WalkDir(os.DirFS("ui/src"), ".", func(name string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || strings.HasSuffix(name, ".d.ts") || !(strings.HasSuffix(name, ".ts") || strings.HasSuffix(name, ".tsx")) {
+			return err
+		}
+		b, err := os.ReadFile(path.Join("ui/src", name))
+		if err != nil {
+			return err
+		}
+		for _, m := range partCall.FindAllStringSubmatch(string(b), -1) {
+			asked++
+			if m[1] == "tn" {
+				used[m[2]+".one"] = "src/" + name
+				used[m[2]+".other"] = "src/" + name
+			} else {
+				used[m[2]] = "src/" + name
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if asked < 20 {
+		t.Fatalf("only %d texts found in the parts under ui/src", asked)
+	}
 	if len(used) < 100 {
-		t.Fatalf("only %d keys found in the markup and the scripts", len(used))
+		t.Fatalf("only %d keys found in the markup, the scripts and the parts", len(used))
 	}
 	for _, k := range slices.Sorted(maps.Keys(used)) {
 		if _, ok := en[k]; !ok {

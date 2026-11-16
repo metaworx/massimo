@@ -91,6 +91,17 @@ export function problemKinds(entries: Entry[], skip: string[] = []): Kind[] {
   return [...kinds.values()];
 }
 
+/**
+ * kindsLabel names the kinds of problems among items, in the order kinds
+ * gives, "Problems: radio, battery" (problem.label, each kind's text
+ * problem.<kind>), for a screen reader and a list's tooltip; "" where
+ * there is none of them.
+ */
+export function kindsLabel(items: Item[], kinds: string[]): string {
+  const found = kinds.filter((k) => items.some((it) => it.kind === k));
+  return found.length ? t("problem.label", { list: found.map((k) => t("problem." + k)).join(", ") }) : "";
+}
+
 /** whoOf names the entries with an item, for the blink of the summary's marks. */
 function whoOf(entries: Entry[]): string {
   return entries.filter((e) => entryItems(e).length).map((e) => e.title + " " + (typeof e.sub === "string" ? e.sub : "")).join("|");

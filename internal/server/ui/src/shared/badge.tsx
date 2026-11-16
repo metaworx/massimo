@@ -34,13 +34,26 @@ export function Badge({ kind, text, blink, title, children }: { kind: string; te
 /**
  * Notice is a lasting warning (.notice) of a state the server keeps
  * trying to leave: since, an API time, adds from when it holds; next,
- * when the server tries again, is its tooltip.
+ * when the server tries again, is its tooltip. id and role are its
+ * element's (a line of the page that a screen reader is told of, role
+ * status), and hidden keeps it in its place without showing it, for a
+ * notice that comes and goes where a test or the page's style finds it.
  */
-export function Notice({ text, since, next, cls, children }: { text: string; since?: string; next?: string; cls?: string; children?: ComponentChildren }) {
+export function Notice({ text, since, next, cls, id, role, hidden, children }: {
+  text?: string;
+  since?: string;
+  next?: string;
+  cls?: string;
+  id?: string;
+  role?: "status" | "alert" | "note";
+  hidden?: boolean;
+  children?: ComponentChildren;
+}) {
   const from = Date.parse(since || "");
   const at = Date.parse(next || "");
   return (
-    <p class={"notice" + (cls ? " " + cls : "")} title={isNaN(at) ? undefined : t("notice.next", { time: new Date(at).toLocaleTimeString(i18n.lang) })}>
+    <p id={id} class={"notice" + (cls ? " " + cls : "") + (hidden ? " hidden" : "")} role={role}
+      title={isNaN(at) ? undefined : t("notice.next", { time: new Date(at).toLocaleTimeString(i18n.lang) })}>
       {text}
       {!isNaN(from) && " "}
       {!isNaN(from) && <span class="notice-since">{t("notice.since", { time: fmtShortTime(from) })}</span>}
