@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
@@ -83,9 +84,22 @@ func (rt *runtime) streamID(seq uint64) string {
 // Cube's stream subscribers: to every one for user 0, else to that
 // user's alone.
 func (rt *runtime) publish(ev event, user int64) {
+	rt.markRealWall(&ev)
 	rt.subsMu.Lock()
 	defer rt.subsMu.Unlock()
 	rt.publishLocked(ev, user)
+}
+
+// markRealWall marks an event of a real wall thermostat that the pump's
+// device events did not mark, such as a mismatch of its configuration,
+// so that the view virtual leaves it out as it does the device's state.
+func (rt *runtime) markRealWall(ev *event) {
+	if ev.virtual || ev.realWall || ev.Device == "" {
+		return
+	}
+	if rf, err := cube.ParseRFAddress(ev.Device); err == nil {
+		ev.realWall = realWall(rt.client.Snapshot(), rf)
+	}
 }
 
 // publishLocked is publish with subsMu held. A subscriber whose channel
