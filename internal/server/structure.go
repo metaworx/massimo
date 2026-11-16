@@ -202,7 +202,13 @@ func (s *Server) structureRead(rt *runtime, w *structureWatch, b cubelan.Budget,
 	if w.device != 0 {
 		dev = w.device.String()
 	} else {
-		summary["rooms"] = w.rooms // a room's repair (repair_api.go)
+		// A room's repair (repair_api.go): the rooms as numbers, since
+		// JSON writes a []uint8 as a base64 string.
+		rooms := make([]int, len(w.rooms))
+		for i, r := range w.rooms {
+			rooms[i] = int(r)
+		}
+		summary["rooms"] = rooms
 	}
 	rt.emit(event{Kind: "structure", Source: "cube", Level: level, Device: dev, Time: time.Now(), Summary: summary})
 }
