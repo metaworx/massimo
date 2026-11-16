@@ -231,7 +231,9 @@ with `-tls-http :80` the listen drop-in grants the capability for port 80 too.
 `-acme-dns-hook <script>` with `-tls acme -tls-names …` takes the DNS-01
 challenge instead of a port: the server runs
 `<script> set _acme-challenge.<name> <value>` before the validation and
-`<script> clear …` after it, waits until the resolver shows the record,
+`<script> clear …` after it,
+also after a set that failed, so a clear removes only the records of that value;
+it waits until the resolver shows the record,
 and keeps the certificate and its key in `/var/lib/massimo/tls/acme/`.
 The name may point at the box's LAN address,
 and wildcards work (`-tls-names '*.example.net,example.net'`).
