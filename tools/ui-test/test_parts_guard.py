@@ -41,6 +41,7 @@ language once, since a width changes what is shown and a language
 changes no element. In CI that is once in each UI job, on a worker of
 its own beside the other files.
 """
+import json
 import os
 from dataclasses import dataclass
 from typing import Callable
@@ -194,13 +195,62 @@ def system(page):
     settle(page)
 
 
+# The fake Cube's fixture lists nothing in a Cube's problem list until
+# its open window is five minutes old, and finds no Cube until a search,
+# which is a POST. The Cubes' views therefore answer GET /api/v1/cubes
+# with the server's answer and, from the start, a device with a low
+# battery, a line of the settings file that differs, an address found
+# elsewhere and a proxy that does not listen on the fake Cube, and a
+# Cube and a Massimo proxy found on the network, the Cube outside this
+# machine's networks: the same answer at every load, so that the data
+# stay as they were.
+CUBES_STUB = {
+    "problems": [{"rf_address": "0a0101", "type": "radiator_thermostat", "name": "Radiator", "room": "Kitchen", "serial": "MEQ0000101",
+                  "reported": True, "state": {"error": False, "battery_low": True, "link_error": False}}],
+    "file_differs": [{"field": "name", "variable": "MASSIMO_CUBE_KEQ0000100_NAME", "file": "File name", "store": "Fake Cube"}],
+    "found_elsewhere": {"address": "192.0.2.24:62910", "configured": "192.0.2.23:62910", "since": "2026-11-14T08:00:00+01:00"},
+    "proxy_failing": [{"addr": "192.0.2.10:62910", "error": "bind: cannot assign requested address", "since": "2026-11-13T08:00:00+01:00",
+                       "next_try": "2026-11-13T08:02:30+01:00", "tries": 9}],
+}
+FOUND_STUB = [
+    {"serial": "KEQ0000300", "kind": "cube", "configured": False, "address": "192.168.0.222", "rf_address": "0a0301", "firmware": "1.1.3",
+     "dhcp": False, "other_network": True, "found_at": "2026-11-14T08:00:00+01:00", "last_seen": "2026-11-14T08:00:00+01:00"},
+    {"serial": "KEQ0000400", "kind": "proxy", "configured": False, "address": "192.0.2.40", "rf_address": "0a0401", "firmware": "",
+     "serves": "KEQ0000300", "host": {"name": "other", "url": "http://192.0.2.40:8080"},
+     "found_at": "2026-11-14T08:00:00+01:00", "last_seen": "2026-11-14T08:00:00+01:00"},
+]
+
+
+def stub_cubes(page):
+    """Answers GET /api/v1/cubes with CUBES_STUB and FOUND_STUB, once per
+    page, and loads the list."""
+    if getattr(page, "_guard_cubes", False):
+        return
+
+    def handle(route):
+        try:
+            cubes = route.fetch().json()
+            for c in cubes:
+                if c.get("serial") == "KEQ0000100":
+                    c.update(CUBES_STUB)
+            route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes + FOUND_STUB))
+        except Exception:  # the route is already handled, or the page closed
+            pass
+    page.route("**/api/v1/cubes", handle)
+    page._guard_cubes = True
+    page.evaluate("loadCubes()")
+    settle(page)
+
+
 def cubes_closed(page):
+    stub_cubes(page)
     system(page)
     page.locator("#cubes-list .cube-panel").first.wait_for()
 
 
 def cubes_open(page):
     cubes_closed(page)
+    page.keyboard.press("Escape")  # an open problem list lies over the head at 390 px
     panel = page.locator("#cubes-list .cube-panel").first
     if panel.get_attribute("open") is None:
         panel.locator(":scope > summary .cube-head-who").click()
@@ -208,11 +258,40 @@ def cubes_open(page):
     settle(page)
 
 
+def cubes_problems(page):
+    """A closed Cube's problem list open: the fault the owner reported."""
+    cubes_closed(page)
+    panel = page.locator("#cubes-list .cube-panel").first
+    if panel.get_attribute("open") is not None:
+        panel.locator(":scope > summary .cube-head-who").click()
+    panel.locator(":scope > summary .cube-pill .problems-sum").click()
+    panel.locator(":scope > summary .cube-pill .problems-list").wait_for(state="visible")
+
+
+def cubes_found(page):
+    cubes_closed(page)
+    page.keyboard.press("Escape")
+    fold = page.locator("#cubes-list .found-panel")
+    if fold.get_attribute("open") is None:
+        fold.locator(":scope > summary").click()
+    lines = fold.locator(".found-lines")
+    if lines.get_attribute("open") is None:
+        lines.locator(":scope > summary").click()
+    fold.locator(".cube-found-row").first.wait_for(state="visible")
+
+
 def cube_page(page):
+    stub_cubes(page)
     if not page.locator("#cube-page").is_visible():
         show_view(page, "cube")
     page.locator("#cube-page-body .cube-panel .cube-form").wait_for(state="visible")
     settle(page)
+
+
+def cube_page_problems(page):
+    cube_page(page)
+    page.locator("#cube-page-body .cube-pill .problems-sum").click()
+    page.locator("#cube-page-body .cube-pill .problems-list").wait_for(state="visible")
 
 
 def pairing_form(page):
@@ -325,10 +404,14 @@ REGIONS = (
            gap="the fixture has no device without a room; one joins only through pairing, which is a write to the fake Cube"),
     Region("cubes-list", ("#cubes-list", "#cubes-msg"), (
         View("every panel closed", cubes_closed, focus=".cube-panel > summary"),
+        View("a closed Cube's problem list open", cubes_problems),
         View("a Cube's panel open", cubes_open),
+        View("the found Cubes' fold and its lines open", cubes_found),
     ), exclude=".cube-pairing"),
-    Region("cube-settings", ("#cube-page-body", "#cube-page-msg"), (View("the chosen Cube's panel", cube_page),),
-           exclude=".cube-pairing"),
+    Region("cube-settings", ("#cube-page-body", "#cube-page-msg"), (
+        View("the chosen Cube's panel", cube_page),
+        View("its problem list open", cube_page_problems),
+    ), exclude=".cube-pairing"),
     Region("pairing", ("#cube-page-body .cube-pairing",), (View("the pairing form on Cube settings", pairing_form),)),
     Region("users", ("#sys-users-body",), (View("the operator's panel and the new user's form", users),)),
     Region("roles", ("#sys-roles-body",), (View("the operator role's panel and the new role's form", roles),)),
@@ -370,9 +453,6 @@ NOT_MOVED = {
     "room-config": "kept while the focus is in it; the redraw put off meanwhile replaces the tile once the focus leaves",
     "house": "a rooms reload builds the rooms' checkboxes again (renderHouseRooms): the ticks are carried over, the focus is not",
     "unlisted": "a rooms reload builds every row again, a state event its row unless its form is open",
-    "cubes-list": "with every panel closed a poll builds the list again (cubesPolled): an open pill closes, the focus goes",
-    "cube-settings": "a poll builds the head's problem pill again while it is closed (fillCubeHead); seen once the fixture's "
-                     "window is five minutes old",
     "sign-in": "the dialog is filled again at each askLogin",
 }
 

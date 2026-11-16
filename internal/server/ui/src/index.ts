@@ -7,13 +7,27 @@
  * The entry point of the page's parts (AP UiParts), which make ui bundles
  * into ui/parts.js, loaded after the plain scripts. The plain code reaches
  * a part through window.MassimoParts.<region>: each region that becomes a
- * part adds its member to MassimoParts here, with the functions the plain
- * code calls (docs/ui.md, "How the page is built"). No region is a part
- * yet.
+ * part registers its functions there (shared/region.ts register) and is
+ * imported here (docs/ui.md, "How the page is built"). What every part
+ * shares is in shared/; the plain globals a part calls are declared in
+ * plain/, a file per script.
  */
 
+import "./cubes";
+import type { CubesPart } from "./cubes";
+import { languageChanged } from "./shared/lang";
+import { iconsChanged } from "./shared/look";
+import { parts, register } from "./shared/region";
+
 /** The parts the plain code calls, by region. */
-export interface MassimoParts {}
+export interface MassimoParts {
+  /** The page's language changed (app.js applyLanguage): every part draws its texts again. */
+  language(): void;
+  /** The icons chosen for the window and the radio changed (theme.js redrawSigns): every sign draws them again. */
+  icons(): void;
+  /** System settings → Cubes and Cube settings (cubes/). */
+  cubes: CubesPart;
+}
 
 declare global {
   interface Window {
@@ -22,4 +36,6 @@ declare global {
   }
 }
 
-window.MassimoParts = {};
+register("language", languageChanged);
+register("icons", iconsChanged);
+window.MassimoParts = parts as unknown as MassimoParts;

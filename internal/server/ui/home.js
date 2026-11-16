@@ -56,7 +56,7 @@ function renderHomeNotice() {
     // it changed, so that a poll leaves a focused copy icon where it is.
     const key = cube.other_network ? [i18n.lang, cube.serial, cube.address].join(" ") : "";
     if (!key) check.textContent = t("home.check");
-    else if (check.dataset.key !== key) check.replaceChildren(...otherNetworkEls(cube, hostPort(cube.address).host)); // cube-panel.js
+    else if (check.dataset.key !== key) check.replaceChildren(...otherNetworkEls(cube, hostPort(cube.address).host)); // cubes.js
     check.dataset.key = key;
   }
   check.classList.toggle("hidden", !check.textContent);
@@ -103,9 +103,9 @@ function addFound(c) {
 }
 
 // showFound opens System settings with the Cubes card in view and the
-// fold of what was found open (cubes.js foundFold).
+// fold of what was found open (ui/src/cubes/Found.tsx).
 function showFound() {
-  cubesUI.foundOpen = true; // cubes.js
+  showFoundFold(); // cubes.js
   showView("system");
   renderCubes(); // cubes.js
   showCard($("sys-cubes"), true); // components.js

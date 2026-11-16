@@ -14,28 +14,32 @@ function cubePath(serial) {
   return "api/v1/cubes/" + encodeURIComponent(serial);
 }
 
+// pairingUI is what the pairing keeps per Cube: its flow (pairingOf)
+// and, for a Cube that is not the one shown, its rooms (loadCubeRooms).
+const pairingUI = { flows: {}, rooms: {} };
+
 // pairingOf is the pairing flow of a Cube's panel, which outlives a
 // redraw: form (the time and Start shown), seconds, active and until
 // (the server's state), paired (the devices that joined while this page
 // watched), msg (the last outcome), edits (per device, what its form
 // holds), tick (the countdown's timer).
 function pairingOf(serial) {
-  return cubesUI.pairing[serial] || (cubesUI.pairing[serial] = { form: false, seconds: 60, active: false, until: 0, paired: [], msg: null, edits: {}, tick: null });
+  return pairingUI.flows[serial] || (pairingUI.flows[serial] = { form: false, seconds: 60, active: false, until: 0, paired: [], msg: null, edits: {}, tick: null });
 }
 
 // cubeRooms are the rooms a device of the Cube can be put into: the
 // page's for the Cube shown, else those loadCubeRooms read.
 function cubeRooms(serial) {
-  return serial === state.serial ? state.rooms : cubesUI.rooms[serial] || [];
+  return serial === state.serial ? state.rooms : pairingUI.rooms[serial] || [];
 }
 
 async function loadCubeRooms(serial) {
   if (serial === state.serial) return;
   try {
-    cubesUI.rooms[serial] = (await api("GET", cubePath(serial) + "/rooms?devices=real")) || [];
+    pairingUI.rooms[serial] = (await api("GET", cubePath(serial) + "/rooms?devices=real")) || [];
     redrawPairing(serial);
   } catch (e) {
-    cubesUI.rooms[serial] = [];
+    pairingUI.rooms[serial] = [];
   }
 }
 
@@ -192,15 +196,17 @@ function pairingJoined(serial, dev) {
   redrawPairing(serial);
 }
 
-// redrawPairing draws a panel's pairing again, in place, so that the
-// Cube's form keeps what is typed in it.
+// redrawPairing draws a panel's pairing again inside its .cube-pairing,
+// the element the Cube's panel (ui/src/cubes/Actions.tsx) leaves to it,
+// so that the Cube's form keeps what is typed in it.
 function redrawPairing(serial) {
   const panel = document.querySelector('.cube-panel[data-serial="' + serial + '"]');
-  const old = panel && panel.querySelector(".cube-pairing");
-  if (old) old.replaceWith(pairingSection(serial));
+  const box = panel && panel.querySelector(".cube-pairing");
+  if (box) box.replaceChildren(...pairingSection(serial).childNodes);
 }
 
-// pairingSection is a panel's pairing (tpl-pairing): Pair a device; the
+// pairingSection is a panel's pairing (tpl-pairing), whose children
+// redrawPairing puts into the panel's .cube-pairing: Pair a device; the
 // time and Start; while pairing runs, the countdown and Stop; the last
 // outcome; the devices that joined.
 function pairingSection(serial) {

@@ -917,6 +917,7 @@ function showLanguageError() {
 // applyLanguage redraws every text after a change of language.
 function applyLanguage() {
   if (I18N.en) applyI18n(document);
+  MassimoParts.language(); // the parts draw their texts again (ui/src/shared/lang.ts)
   initHelpSlots();
   pageBar($("system"));
   pageBar($("maint-page"));

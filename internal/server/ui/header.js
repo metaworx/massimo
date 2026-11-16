@@ -11,7 +11,7 @@
 // --- header -----------------------------------------------------------
 
 // budgetFacts is a Cube's radio budget as the page shows it, in the
-// header and in its panel (cube-panel.js): the duty cycle, the free memory
+// header and in its panel (ui/src/cubes/): the duty cycle, the free memory
 // slots, the radiograms pending and the commands queued, "–" while unknown.
 function budgetFacts(cube) {
   const b = cube.budget || {};
@@ -25,7 +25,7 @@ function budgetFacts(cube) {
 
 // renderHeader shows the chosen Cube in the header: its connection in
 // the Cube choice, and in expert mode its name with its radio budget,
-// queued only while commands wait. Its clock is in its facts (cube-panel.js).
+// queued only while commands wait. Its clock is in its facts (ui/src/cubes/Facts.tsx).
 function renderHeader(cube) {
   renderCubeSelect(); // the chosen Cube's connection, its plug
   const f = budgetFacts(cube);
@@ -228,7 +228,7 @@ function foundEntry(found) {
 
 // cubeEntry is a Cube's problems as an entry of problemsEl: the Cube as
 // the heading with its network sign, its link's badge where it is not
-// connected, own its settings' warnings too (cube-panel.js, a Cube's panel),
+// connected, own its settings' warnings too (a Cube's panel, ui/src/cubes/Panel.tsx),
 // and its devices with a problem under it, "Room › Device", with their
 // badges (tiles.js deviceProblems); a window open briefly is a state.
 function cubeEntry(c, own) {
