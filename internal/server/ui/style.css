@@ -809,8 +809,8 @@ body.scrolled .top-btn { display: inline-flex; }
 .cube-top-line { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 8px; }
 /* a field's value changed on the server while a draft of it is open
    (cube-panel.js syncForm): the notice and Take theirs under the field */
-.cube-conflict { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: -4px 0 8px; }
-.cube-conflict .notice { margin: 0; flex: 1 1 220px; }
+.cube-conflict, .field-meanwhile { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: -4px 0 8px; }
+.cube-conflict .notice, .field-meanwhile .notice { margin: 0; flex: 1 1 220px; }
 .cube-top-line:empty { display: none; }
 .cube-panel:not([open]) > .cube-top-line { display: none; }
 .cube-panel[open] > summary > .panel-badges { display: none; } /* the source is on the top line then */

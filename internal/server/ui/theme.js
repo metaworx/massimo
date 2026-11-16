@@ -356,8 +356,11 @@ function applyIcons() {
   iconsDrawn = now;
 }
 
-// redrawSigns draws again what shows the window and the radio.
+// redrawSigns draws again what shows the window and the radio: the
+// plain regions by name, the parts through the icons' signal, which their
+// signs read (ui/src/shared/look.ts).
 function redrawSigns() {
+  MassimoParts.icons();
   renderRooms(); // rooms.js
   renderCubes(); // cubes.js
   renderCubeSelect(); // header.js, the header's problems

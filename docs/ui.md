@@ -1464,6 +1464,89 @@ built once and updated in place.
 `ui/src/index.ts` is the entry point; it registers `window.MassimoParts`,
 by region the functions the plain code calls,
 and no region is a part yet.
+What the parts share is under `ui/src/shared/`; read it before writing a part.
+A region uses these and writes no copy of their markup.
+A shared part knows no region:
+its data come as properties or signals, its texts as text or as its own keys.
+A part calls the plain scripts' globals,
+each declared to TypeScript in `ui/src/plain/<script>.d.ts`,
+with what the parts call alone.
+
+| Part or helper | File | For | Properties or arguments |
+|---|---|---|---|
+| `counter` | `counter.ts` | a region's load counter: "draw the region again" while its data stay plain objects | gives `bump()`, after a load, and `use()`, in every part of the region, which reads the counter, the language and the icons chosen |
+| `register`, `mounter` | `region.ts` | a region's functions as `MassimoParts.<name>`; its root drawn once into the page's container | `name`, `fns`; `id`, `root` |
+| `live`, `liveMap` | `live.ts` | objects whose properties are signals, for what a region keeps per place; the plain code reads and writes them as before | `init`; `make`, then `of(key)`, `clear()` |
+| `lang`, `useLang`, `tParts` | `lang.ts` | the page's language as a signal, raised by `applyLanguage` (`MassimoParts.language`); a text with parts in it (`tNodes`) | `key`, `texts`, `parts` |
+| `useIcons` | `look.ts` | the icons chosen for the window and the radio as a signal, raised by `redrawSigns` (`MassimoParts.icons`); `Sign` reads it | – |
+| `Island` | `island.tsx` | a plain piece inside a part: an element the part draws empty and plain code fills, again where a key or the language changed | `tag` (div, p, span), `cls`, `keys`, `fill(el)` |
+| `Fold`, `FoldHead` | `fold.tsx` | a details that opens and closes (`detailsPanel`), the toggle of its making not passed on; a panel's head | `cls`, `open`, `onToggle(open)`, `summary`, `summaryProps`, `data`, the body as children; `before`, `name`, `mono`, `badges` |
+| `Dropdown` | `menu.tsx` | a menu that drops down (`dropdown`) | `cls`, `summaryCls`, `label`, `summary`, `listCls`, `onClick`, the items as children |
+| `actionRunner` | `action.ts` | a request, a reload, and its outcome in the region's message line (`showResult`) | `where()`, `reload()`; gives `run(fn, ok, fail)`, `say(text, ok)` |
+| `Icon` | `icon.tsx` | a symbol of the page (`iconEl`) | `symbol`, `cls` |
+| `Sign` | `icon.tsx` | a kind of `SIGNS` in a state, its mark blinking (`signEl`) | `kind`, `state` ("", ok, warn, bad, open), `cls`, `blink` (the mark's key), `label` (named for a screen reader, else hidden) |
+| `Mark` | `icon.tsx` | a mark alone (`markEl`) | `state` (warn, bad), `blink` |
+| `CountIcon` | `icon.tsx` | an icon with a number in its corner (`foundCountEl`) | `symbol`, `n`, `cls` |
+| `Badge` | `badge.tsx` | a `.flag` led by its mark for a warning or a failure (`badgeEl`) | `kind`, `text`, `blink`, `title`, children after the text |
+| `Notice` | `badge.tsx` | a lasting warning with since when (`noticeEl`) | `text`, `since`, `next`, `cls`, children after |
+| `Age` | `badge.tsx` | how old a value is, filled by `fillAge` (`ageEl`) | `at`, `stale`, `plain` |
+| `Problems` | `problems.tsx` | the problem list, entries under entries (`problemsEl`) | `entries`, `label`, `ok` (the green check's label where nothing is wrong), `onClick` |
+| `KindIcons` | `problems.tsx` | the kinds' icons of entries without the list (`kindIcons`) | `entries`, `skip` |
+| `OkPill` | `problems.tsx` | the green check in a list's place (`okPill`) | `label` |
+| `Field` | `field.tsx` | a label and its control, `.field` or `.field.wide` (`fieldRow`) | `label`, `id`, `wide`, `unit`, `hint`, `draft`, `show`, the control as children |
+| `TextField` | `field.tsx` | a row with a text input that shows a stored text, from its draft | `label`, `id`, `name`, `draft`, `show`, `wide` (on by default), `unit`, `hint`, `placeholder`, `type`, `maxLength` |
+| `Switch` | `field.tsx` | a checkbox drawn as a switch (`switchEl`) | `name`, `label`, `checked` and `onChange`, or `draft` and `show`; `row`, `id`, `disabled`, `title`, children after the label |
+| `useDraft`, `Meanwhile` | `field.tsx` | a field that shows stored data keeps a draft: untouched it follows, changed it says "changed meanwhile" with Take theirs (D59-A) | `stored`, `norm`; gives `value`, `stored`, `set`, `changed`, `meanwhile`, `take`; `draft`, `show` |
+| `FormFooter` | `field.tsx` | a form's row of actions (`formFooter`, `sendWhenChanged`) | `submit`, `busy`, `off`, `cancel`, `cancelLabel`, `extra` |
+| `Question` | `question.tsx` | a question in the page, No and Yes, Escape for No (`confirmBox`) | `text`, `yes`, `no`, `onYes` (its request's promise), `onNo` |
+| `useAsk` | `question.tsx` | a row that asks in its own place, the focus back on its button (`confirmInPlace`) | gives `asking`, `ask`, `done`, `ref` |
+| `useBusy`, `busyProps` | `question.tsx` | a button's request under way: busy, off, `aria-busy` (`whileBusy`, `setBusy`) | `run(fn)`; `busyProps(cls, busy, off)` |
+| `Copy`, `CopyIcon` | `copy.tsx` | a text that copies itself, a copy icon (`copyEl`, `copyIcon`) | `text`, `value` (what it copies, where it is not the text), `label`, `icon`, `cls`; `get`, `label` |
+| `Link` | `link.tsx` | a link in a tab of its own, the text alone for a url that is not http(s) (`linkEl`) | `url`, `text`, `cls` |
+| `DeviceIds` | `device.tsx` | a device's serial and radio address (`deviceIds`) | `serial`, `rf`, `always` |
+
+What the table cannot say:
+
+- An entry of `Problems` is `{ icon, sign, node, title, sub, items, subs, info, summary }`:
+  its icon, or `sign` (`{ kind, state }`) where its own state shows,
+  or `node`, a part of its own with the class `problem-icon`;
+  its name, a grey detail (a text, monospaced, or parts that are not),
+  its items, the entries under it, `info` to list it and those under it
+  without an item, and `summary`, shown in the list's summary after the icons.
+  An item is `{ kind, icon, sign, tone, mark, text, title, at, stale }`, one badge:
+  `kind` groups the summary's icons (`sign` draws it as a sign), an item
+  without one adds no icon; `tone` is the badge's kind, `mark` how its icon is
+  coloured where that differs; `title` its tooltip, `at` and `stale` its age.
+- `Field` draws the row and the label for `id`; its control comes as children
+  and carries that id and, without a unit, the class `field-control`.
+  `TextField` makes the input itself.
+- `Switch` draws its own `.field` row; with `row={false}` it is the switch alone,
+  inside a row of the caller's.
+- `useDraft` and `useBusy` are the component's state and go with it;
+  what must outlive the component (a request a tile keeps across its being
+  drawn again) is live state (`live`).
+
+These builders of `components.js` and `app.js` have no part yet, since no region
+that has moved uses them: the help button (`helpParts`) and a field row without
+a label, `numberInput`, `stepper`, `selectInput`, `markRange`, `kvList`,
+`countList`, `iconButton`, `pickerMenu` and `sectionBadges`.
+The block that first needs one writes it under `ui/src/shared/`,
+knowing no region, and adds its row to the table above; no region writes its own.
+A section card's badges (`sectionBadges`) stay plain until the page's chrome moves
+(Block 14): the Cubes' card badges are drawn by `cubes.js`.
+
+A region that moves calls these, in this order:
+
+- `counter()` for its load counter, bumped by its plain names,
+  which other scripts call and which call the part,
+  and after each of its requests; `use()` in each of its parts;
+- `register` for `MassimoParts.<region>`, whose functions its plain names call,
+  and `mounter` for each root, drawn into the container the page has for it;
+- `liveMap` for what it keeps per item and place (a panel open, by its key);
+- `Fold` for a panel or a fold, `Island` for a plain piece it keeps inside;
+- `actionRunner` for its requests and their message line, `useBusy` for the button;
+- `useDraft` with `TextField`, `Switch` or `Field` for a field that shows stored data,
+  `FormFooter` for its Save, `useAsk` and `Question` for an action that asks first.
 `make ui` bundles it with esbuild, through esbuild's Go API (`tools/uibundle`,
 a module of its own, its `README.md`),
 into `ui/parts.js`: one classic script, minified, for ES2022,
