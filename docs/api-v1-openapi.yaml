@@ -3884,7 +3884,6 @@ components:
               ok: {type: boolean}
               discarded: {type: boolean, description: Always false on 200; a discarded command answers 502}
               budget: {$ref: "#/components/schemas/Budget"}
-        pending_radiograms: {type: integer, description: "Radiograms sent by the Cube and not yet acknowledged by a device (memory slots in use): all of them when no slot is free, 0 until the Cube has reported its budget"}
     BadRequest:
       description: Bad input
       content:
@@ -4558,6 +4557,7 @@ components:
     ProxyFailure:
       type: object
       description: A proxy listener that does not listen, and is tried again
+      required: [addr, error, since, next_try]
       properties:
         addr: {type: string}
         error: {type: string, description: The last try's error}
@@ -4567,6 +4567,7 @@ components:
     FoundElsewhere:
       type: object
       description: "A Cube with a fixed address that answered the latest discovery at another one, neither it nor a proxy answering at its own; absent otherwise"
+      required: [address, configured, since]
       properties:
         address: {type: string, description: "Where it answers, with the configured address's port: the address a PUT takes"}
         configured: {type: string, description: The configured address}
@@ -4650,6 +4651,7 @@ components:
     Budget:
       type: object
       description: What the Cube last reported about its radio limits
+      required: [updated_at]
       properties:
         duty_cycle_pct: {type: integer, description: Share of the hourly radio budget already used}
         free_memory_slots: {type: integer, description: Free slots for unacknowledged radiograms (about 50)}
@@ -4657,6 +4659,7 @@ components:
     FoundCube:
       type: object
       description: A Cube that answered discovery
+      required: [serial, address, rf_address, firmware, last_seen]
       properties:
         serial: {type: string}
         kind: {type: string, enum: [cube, proxy, unknown], description: "What answered: a Cube, a massimo proxy (also one at an announced server's address), or neither"}
@@ -4664,6 +4667,7 @@ components:
         host:
           type: object
           description: "The massimo server that serves it, announced on the LAN: the one at a proxy's address, or the one a proxy of a Cube runs on; absent where none matched"
+          required: [name, url]
           properties:
             name: {type: string, description: Its instance name}
             url: {type: string, description: "The url its announcement gives, else http(s)://<address>:<port>"}
@@ -4688,6 +4692,7 @@ components:
         last_seen: {type: string, format: date-time, description: Its latest answer}
     Cube:
       type: object
+      required: [serial, address, configured_address, follow_discovery, proxy_virtual, hidden, connected, link, budget, pending_radiograms]
       properties:
         serial: {type: string}
         name: {type: string, description: "User-friendly name from the store (seeded from MASSIMO_CUBE_<SN>_NAME), when set"}
@@ -4754,6 +4759,7 @@ components:
         firmware: {type: string, example: "1.1.3"}
         rf_address: {type: string}
         budget: {$ref: "#/components/schemas/Budget"}
+        pending_radiograms: {type: integer, description: "Radiograms sent by the Cube and not yet acknowledged by a device (memory slots in use): all of them when no slot is free, 0 until the Cube has reported its budget"}
         updated: {type: string, format: date-time}
         observed_since: {type: string, format: date-time, description: When the server first heard from the Cube; a device value received at that time was already there and may be older}
         rooms: {type: integer}
@@ -4787,6 +4793,7 @@ components:
         fixed_by: {type: string, description: "What decides this run's value instead of the setting: -announce or MASSIMO_ANNOUNCE (announce), -poll, -refresh, -discover-interval or -stale-after (the intervals)"}
     FileDifference:
       type: object
+      required: [field, variable, file, store]
       properties:
         field: {type: string, enum: [name, address, proxy_address, proxy_serial, hidden]}
         variable: {type: string, example: MASSIMO_CUBE_KEQ0000000_NAME}
@@ -4882,6 +4889,7 @@ components:
         consistent: {type: boolean, description: "A virtual wall thermostat's alone: false while the room's thermostats disagree on mode, setpoint or until"}
     Device:
       type: object
+      required: [rf_address, name]
       properties:
         rf_address: {type: string}
         type: {$ref: "#/components/schemas/DeviceType"}
