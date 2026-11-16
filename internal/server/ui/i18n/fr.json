@@ -1093,6 +1093,7 @@
   "cfg.nameHint": "Jusqu’à {n} octets ; les lettres accentuées en comptent deux.",
   "cfg.nameRequired": "Un nom est requis.",
   "cfg.nameTooLong": "Le nom dépasse {n} octets.",
+  "cfg.nameLong": "plus de {n} octets",
   "cfg.nameUnchanged": "Le nom n’a pas changé.",
   "cfg.renaming": "Renommage…",
   "cfg.renamed": "Pièce renommée en {name}.",

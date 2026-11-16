@@ -1048,7 +1048,7 @@ keep the default:
 | `window_open` | a window opened and is still open after `after_min` | on, 30 min |
 | `battery_low` | a device's battery flag held for 15 minutes: change the batteries (its `battery` `low`) | on |
 | `battery_weak` | a device's battery flag seen, as under the valve motor's load, and still weak after 15 minutes (its `battery` `weak`); once until a long valve move goes by without it | on |
-| `device_error` | a device reports a communication error (its state's `error`) or a link error (`link_error`), when the first of them is set | on |
+| `device_error` | a device reports a communication error (its state's `error`) or a link error (`link_error`), when each of them is set, a second while the first stays set as well | on |
 | `frost` | a device's measured temperature fell under `below_c`; again once it rose half a degree above | on, 8 °C |
 | `device_stale` | a thermostat went past the stale threshold (`stale_after`, `stale_after_wall`) | off |
 | `paired` | a device joined by pairing | off |
@@ -1058,7 +1058,9 @@ keep the default:
 `after_min` is 1 to 1440, `below_c` −10 to 20.
 A `PUT` of a document the rules cannot read (an unknown kind,
 a value out of bounds, `after_min` on a kind without a delay) is `400`.
-One kind is told once per device per half hour;
+One kind is told once per device per half hour,
+a `device_error` once per flag,
+so that the other flag's start is told while the first's half hour runs;
 a delay ends when its condition does.
 The rules keep their state in memory:
 a restart costs at most one repeated notification.
@@ -2419,6 +2421,11 @@ and one to the new device for each partner
 (two shutter contacts are not linked with each other), then 0x22 set group,
 then the metadata with the device listed under its name in the room,
 then a re-read of its C line.
+Without `name` it is listed under the default a repair's listing gives (D200-A):
+`<room name> <type> <n>`, such as `Bath radiator thermostat 2`
+beside `Bath radiator thermostat 1`,
+and `<type> <n>` where that would pass 32 bytes ("A listed device's name",
+under Repairs).
 A device whose C line names another room (paired long ago and never listed) is
 first unlinked from that room with 0x23 remove group and 0x21 remove link partner,
 as in a move.
@@ -2998,8 +3005,11 @@ and what they cost:
 ```
 
 `steps` are the commands in the order they would be sent:
-each with the device it addresses, which the queue resets first where its
-error flag is set (`reset`),
+each with the device it addresses,
+whether the queue resets error flags first (`reset`, the `r:` not among
+`lines`): the device's, the flagged members its room-flagged lines reach,
+the flagged devices its direct lines address, as the queue's prelude does
+for every command (D204-A),
 the room woken up before it (`z:1e,G,<room>`, not among `lines`),
 and its `lines` as they go to the Cube;
 a metadata write is a step of its own.
@@ -3009,8 +3019,9 @@ a metadata write is a step of its own.
 a radiogram with the room flag one per member of the room (T134),
 and `held_slots` those that stay taken until the members' next wakeup,
 about ten minutes: a room radiogram's but its addressee's.
-`resets` counts the `r:` lines, the queue's own included, which cost no radio
-time; `wakeups` the room wakeups; `metadata` a metadata write, no radio.
+`resets` counts the `r:` lines, those the queue sends before each step included,
+by the device list as it is now, which cost no radio time;
+`wakeups` the room wakeups; `metadata` a metadata write, no radio.
 `budget` is what the Cube last reported.
 `untested` marks a repair not yet run on hardware.
 `refused` says why a run would be refused now:
@@ -3089,9 +3100,13 @@ the device type in English (`radiator thermostat`, `radiator thermostat plus`,
 `n` the lowest number from 1 that no device the list has in that room
 takes in a name of that form, whatever its case,
 such as `Bath radiator thermostat 2` beside `Bath radiator thermostat 1`.
-A room's name too long for the whole to fit 32 bytes is cut, at a character.
+Where the whole would pass 32 bytes, nobody being there to shorten it,
+the room's name is dropped (D201):
+`<type> <n>`, `n` the lowest free in that form,
+such as `radiator thermostat 1` for a room `Wohnzimmer Süd`.
 A device the list has keeps its name, `name` or not.
-The web UI offers the same default with the type in the page's language.
+The web UI offers the same default with the type in the page's language,
+one past 32 bytes whole, which its user shortens before it is sent.
 The log's **device change** names a re-link `relink`, "unlink all and re-link"
 `unlink_relink`, a re-sent configuration `config` and a placement `move`;
 one of a room has no device and names its `rooms`.

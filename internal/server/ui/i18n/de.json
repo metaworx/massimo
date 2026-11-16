@@ -1091,6 +1091,7 @@
   "cfg.nameHint": "Bis {n} Bytes; Umlaute zählen doppelt.",
   "cfg.nameRequired": "Ein Name ist nötig.",
   "cfg.nameTooLong": "Der Name ist länger als {n} Bytes.",
+  "cfg.nameLong": "länger als {n} Bytes",
   "cfg.nameUnchanged": "Der Name ist unverändert.",
   "cfg.renaming": "Benenne um …",
   "cfg.renamed": "Raum umbenannt in {name}.",

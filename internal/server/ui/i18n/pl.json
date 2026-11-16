@@ -1130,6 +1130,7 @@
   "cfg.nameHint": "Limit bajtów: {n}; polskie litery (ą, ę …) zajmują po dwa.",
   "cfg.nameRequired": "Nazwa jest wymagana.",
   "cfg.nameTooLong": "Nazwa przekracza limit bajtów ({n}).",
+  "cfg.nameLong": "ponad {n} bajtów",
   "cfg.nameUnchanged": "Nazwa się nie zmieniła.",
   "cfg.renaming": "Zmiana nazwy …",
   "cfg.renamed": "Zmieniono nazwę pomieszczenia na {name}.",

@@ -29,7 +29,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"go.metaworx.ch/massimo/internal/cubeio"
 	"go.metaworx.ch/massimo/internal/cubelan"
@@ -107,8 +106,9 @@ type repairPlan struct {
 	// ten minutes: a room radiogram's but the addressee's.
 	Slots int `json:"slots"`
 	Held  int `json:"held_slots"`
-	// Resets counts the r: lines, the queue's own included, which cost
-	// no radio time; Wakeups the room wakeups before the commands.
+	// Resets counts the r: lines, those the queue's prelude sends before
+	// each command included (engine.PreludeOf), which cost no radio
+	// time; Wakeups the room wakeups before the commands.
 	Resets   int  `json:"resets"`
 	Wakeups  int  `json:"wakeups"`
 	Metadata bool `json:"metadata"`
@@ -126,8 +126,10 @@ type repairPlan struct {
 }
 
 // repairStep is one command of a preview: the device it addresses, the
-// room woken up before it, whether the queue resets the device's flag
-// first, and its lines as they go to the Cube.
+// room woken up before it, whether the queue's prelude resets flags
+// first (the device's, the flagged members its room lines reach, the
+// flagged devices its direct lines address), and its lines as they go
+// to the Cube.
 type repairStep struct {
 	What   string   `json:"what"`
 	Device string   `json:"device,omitempty"`
@@ -217,11 +219,9 @@ func (s *Server) repairView(rt *runtime, a *repairAction) repairPlan {
 	fmt.Fprintf(h, "%s\n", a.name)
 	for _, st := range a.steps {
 		step := repairStep{What: st.what, Lines: wireLines(st.cmd.Lines)}
-		radio := false
 		for _, l := range st.cmd.Lines {
 			switch l.Type {
 			case 's':
-				radio = true
 				v.Radiograms++
 				v.Slots++
 				if rc, err := cube.ParseRadioCommand(l.Data); err == nil && rc.Target.Room {
@@ -231,16 +231,19 @@ func (s *Server) repairView(rt *runtime, a *repairAction) repairPlan {
 					}
 				}
 			case 'r':
-				radio = true
 				v.Resets++
 			}
 		}
 		if st.cmd.Target != 0 {
 			step.Device = st.cmd.Target.String()
-			if stt, ok := snap.State(st.cmd.Target); radio && ok && stt.Error {
-				step.Reset = true // the queue's prelude (engine.Queue)
-				v.Resets++
-			}
+		}
+		// The resets the queue's prelude sends before the step, by the
+		// engine's own list (AP RadioHealth v1.3, D204-A): the Target's,
+		// the flagged members its room lines reach, the flagged devices
+		// its direct lines address.
+		if n := len(engine.PreludeOf(snap, st.cmd).Resets()); n > 0 {
+			step.Reset = true
+			v.Resets += n
 		}
 		if st.cmd.Wakeup {
 			step.Room = st.cmd.RoomID
@@ -788,25 +791,26 @@ func roomDeviceNames(md *cube.Metadata, room uint8) []string {
 	return out
 }
 
-// defaultDeviceName is the name a device listed into a room gets where
-// the request names none (D185): "<room name> <type> <n>", the type in
-// English (deviceTypeWords), n the lowest number from 1 that no name of
-// the room's (taken) has in that form, which a name matches whatever
-// its case. A room's name too long for the whole to fit maxNameBytes is
-// cut, at a character, the form then that of the cut name.
+// defaultDeviceName is the name a device listed into a room (D185), or
+// put into one (D200-A), gets where the request names none: "<room
+// name> <type> <n>", the type in English (deviceTypeWords), n the
+// lowest number from 1 that no name of the room's (taken) has in that
+// form, which a name matches whatever its case. Where the whole would
+// pass maxNameBytes, the room's name is dropped, "<type> <n>", n the
+// lowest free in that form: nobody is there to shorten it, as the web
+// UI asks its user to (D201).
 func defaultDeviceName(room string, typ cube.DeviceType, taken []string) string {
 	word, ok := deviceTypeWords[typ]
 	if !ok {
 		word = strings.ReplaceAll(typ.String(), "_", " ")
 	}
-	for digits := 1; ; digits++ {
-		base := cutName(strings.TrimSpace(room), maxNameBytes-len(word)-2-digits)
-		prefix := strings.TrimSpace(base + " " + word)
-		n := freeNumber(prefix, taken)
-		if len(strconv.Itoa(n)) <= digits || base == "" {
-			return prefix + " " + strconv.Itoa(n)
+	if room = strings.TrimSpace(room); room != "" {
+		prefix := room + " " + word
+		if name := prefix + " " + strconv.Itoa(freeNumber(prefix, taken)); len(name) <= maxNameBytes {
+			return name
 		}
 	}
+	return word + " " + strconv.Itoa(freeNumber(word, taken))
 }
 
 // freeNumber is the lowest number from 1 that no name of taken has in
@@ -831,20 +835,4 @@ func freeNumber(prefix string, taken []string) int {
 		n++
 	}
 	return n
-}
-
-// cutName is s cut to at most max bytes at a character, trailing spaces
-// left out; "" for max below 1.
-func cutName(s string, max int) string {
-	if len(s) <= max {
-		return s
-	}
-	if max < 1 {
-		return ""
-	}
-	end := max
-	for end > 0 && !utf8.RuneStart(s[end]) {
-		end--
-	}
-	return strings.TrimRight(s[:end], " ")
 }
