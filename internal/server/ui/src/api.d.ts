@@ -1320,7 +1320,9 @@ export interface Room {
 export interface Confirmation {
   /**
    * pending until five minutes after the Cube's answer, then unconfirmed until
-   * the devices show it or a newer write of the same kind replaces it
+   * the devices show it or a newer write of the same kind replaces it; a room
+   * setpoint sent once more is pending again for five minutes after the
+   * re-send's answer
    */
   state: "pending" | "unconfirmed";
   /**

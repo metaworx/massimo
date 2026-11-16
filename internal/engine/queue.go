@@ -75,6 +75,13 @@ type Command struct {
 	// Seq is the queue's number of the command, set by Enqueue, which
 	// tells the Observer's calls for one command from another's.
 	Seq uint64
+	// Wanted, where set, is asked once the command's turn has come and
+	// the duty and slot holds have let it pass: false drops it with
+	// ErrUnwanted, nothing sent. An automatic correction asks it, so
+	// that a newer command or a person's change that came while it
+	// waited makes it moot (AP RadioHealth v1.3, Block 8). It is called
+	// without the queue's lock held and may ask the queue.
+	Wanted func() bool
 }
 
 // Observer is told what becomes of every command with an ID: that it
@@ -120,6 +127,8 @@ type Result struct {
 var (
 	ErrSuperseded = errors.New("engine: command superseded by a newer one with the same key")
 	ErrDiscarded  = errors.New("engine: command discarded by the cube")
+	// ErrUnwanted is the result of a command its Wanted dropped.
+	ErrUnwanted = errors.New("engine: command no longer wanted when its turn came")
 )
 
 // Ticket lets the caller wait for a command's result.
@@ -433,6 +442,9 @@ func (q *Queue) execute(ctx context.Context, cmd Command) Result {
 		if err := q.waitForBudget(ctx); err != nil {
 			return Result{Err: err, Budget: q.gw.Budget()}
 		}
+	}
+	if cmd.Wanted != nil && !cmd.Wanted() {
+		return Result{Err: ErrUnwanted, Budget: q.gw.Budget()}
 	}
 	if cmd.Wakeup && !cmd.Passthrough {
 		wake := cube.CmdWakeup(q.opts.WakeupSeconds, cube.WakeupRoom, fmt.Sprintf("%02x", cmd.RoomID))

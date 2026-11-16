@@ -3163,7 +3163,11 @@ paths:
         devices do not show in time: write (setpoint, lock, display, config,
         program), target, room, source, expected,
         outcome not_confirmed at warn with minutes, confirmed and devices,
-        or confirmed_late at info with seconds, in "summary"); slots, source cube (the Cube's memory
+        or confirmed_late at info with seconds, and a room setpoint's
+        re-send: resent with duty_pct, free_slots and program, not_resent
+        with why (superseded, changed, busy, boost, today), resend_failed
+        at warn, resend_confirmed with confirmed and seconds, or
+        resend_not_confirmed at warn as not_confirmed, in "summary"); slots, source cube (the Cube's memory
         slots held for an hour with nothing of the server's in flight,
         fewer than 5 free at warn, fewer than 2 at error, and free again,
         at info: state low, full or free, from for a step, free_slots,
@@ -4857,7 +4861,7 @@ components:
       description: "A write not confirmed yet: the device, or members of the room, do not show what it set. Present while one is open"
       required: [state, since, fields]
       properties:
-        state: {type: string, enum: [pending, unconfirmed], description: "pending until five minutes after the Cube's answer, then unconfirmed until the devices show it or a newer write of the same kind replaces it"}
+        state: {type: string, enum: [pending, unconfirmed], description: "pending until five minutes after the Cube's answer, then unconfirmed until the devices show it or a newer write of the same kind replaces it; a room setpoint sent once more is pending again for five minutes after the re-send's answer"}
         since: {type: string, format: date-time, description: "When the Cube took the oldest write still open"}
         fields: {type: array, items: {type: string}, description: "The values not shown yet: mode, setpoint, until, locked and display_actual of the state; the configuration's by their names (comfort_temp … valve_offset_pct); program.<day> for a day of the week programme, program.<day>.2 for a long day's second radiogram"}
         devices: {type: array, items: {type: string}, description: "A room's: the radio addresses of its members that do not show them"}

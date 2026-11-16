@@ -546,7 +546,14 @@ A write its devices do not show by its deadline is a **not confirmed** line,
 a warning that names the write, the room and each device with what it shows
 ("setpoint to Bedroom: not confirmed after 5 min: Window (mode auto, setpoint
 20.0)"); a device that shows it later has a line of its own ("setpoint:
-confirmed after 70 s"). The warning is settled by a mark alone.
+confirmed after 70 s").
+A room's setpoint is sent once more then (`docs/api-v1.md`, "A room setpoint
+sent once more"), with lines of the same kind: "setpoint to Bedroom: sent once
+more to its thermostats", or why not ("not sent once more: once a day at most,
+and it was today"), then "sent once more, confirmed by every thermostat after
+25 s", which settles the warning, or a warning "sent once more, still not
+confirmed after 5 min: Window (mode auto, setpoint 20.0)".
+Any other write's warning is settled by a mark alone.
 The LAN proxy's clients have lines of their own: a client connected or gone,
 turned away, its deletes, a pairing for it and the proxy's warnings;
 a line a client passes on to the Cube is a command like the web UI's.
@@ -600,7 +607,8 @@ a lost connection until the next one,
 a failed command until the same one is acknowledged,
 a failed backup until the next, a hold until it ends,
 a room whose thermostats disagree until they agree again,
-a thermostat off its week programme until it follows it again;
+a thermostat off its week programme until it follows it again,
+a room's setpoint not confirmed until every thermostat shows its re-send;
 a device's communication error, link error and low battery
 while the device has them, at the line that set them;
 a communication error's line names the radiogram that failed,
