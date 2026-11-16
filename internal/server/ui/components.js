@@ -1208,6 +1208,11 @@ function pickerMenu(details, { items, value, onPick, shown }) {
   menuArrows(details, ".menu-items button:not(:disabled)");
 }
 
+// problemsEl, kindIcons, entryItems and problemEntry made the problem
+// lists of the plain regions, which are parts since AP UiParts Blocks 5
+// to 7 (ui/src/shared/problems.tsx Problems); nothing calls them now, and
+// they go with the builders nobody calls (Block 15).
+
 // problemsEl shows what is wrong in a place, wherever it is put (a
 // tile's head, a device's, a section card's, the header's): one icon per
 // kind of problem among its entries, in the order they come, each in the

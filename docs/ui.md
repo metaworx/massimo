@@ -1515,8 +1515,7 @@ a script for each region of the page, in the order the page loads them:
   which call their parts (`ui/src/rooms/`), a device's state event
   and the actions behind a tile; `tiles.js`, the tile's actions that stay plain
   and a finding of the Cube's lines in words;
-  `devices.js`, the rows of the devices without a room;
-  `unlisted.js`, the devices without a room;
+  `unlisted.js`, a device removed from the Cube;
   `house.js`, the House tile;
 - `week-program.js` and `config.js`, a room's configuration;
 - `log.js`, the log and its sign for unseen problems;
@@ -1703,10 +1702,10 @@ and the home notice's place is shown and hidden by the plain code (and by `pages
 the part drawing inside it.
 The rooms (`ui/src/rooms/`) are the third:
 `index.tsx` draws a tile per room of the chosen Cube in `#rooms`,
-kept by the Cube and the room's id,
-and registers `render`, `data`, `room`, `result` and `ui`,
-which `rooms.js` calls as `renderRooms`, `updateDevice`, `rerenderRoom`,
-`showTileResult` and `roomUI`;
+kept by the Cube and the room's id, and the devices without a room in `#unlisted-devices`,
+and registers `render`, `data`, `unlisted`, `room`, `result` and `ui`,
+which `rooms.js` calls as `renderRooms`, `updateDevice` (`data` for a room's device,
+`unlisted` for one in no room), `rerenderRoom`, `showTileResult` and `roomUI`;
 `store.ts` holds its counter, a counter per room that a state event of one of its
 devices raises and one per room's configuration, what a tile keeps (`newUI`,
 the live object `roomUI` gives the plain actions, which set it as before)
@@ -1714,7 +1713,11 @@ and the timer of an open window's next state by the clock;
 `facts.ts` what the rooms alone read of a room and its devices
 (a mode's badge, the problems of a tile's head and of a device's row with their label,
 a device's badges in words, the note of devices not seen for long);
-`Tile.tsx` the tile, `Devices.tsx` a device's row and a tile's device list.
+`Tile.tsx` the tile, `Devices.tsx` a device's row and a tile's device list,
+`Unlisted.tsx` the devices without a room, each row a device's row with
+Put into a room… and Remove from the Cube;
+the section of the devices without a room is shown and hidden by `rooms.js`,
+its message line is `unlisted.js`'s (`showUnlistedResult`).
 The tile's actions stay plain (`rooms.js`, `tiles.js`) and set `roomUI`,
 which the tile follows: a write running turns its button and keeps the others off,
 a stepper value waiting to be sent shows with Save and Cancel.
@@ -1723,7 +1726,10 @@ an `Island` that `renderConfig` fills: again where the configuration asks for it
 (`rerenderRoom`), where it opens or closes, and at a data event,
 but while the focus is in it,
 where the fill waits until the focus has left it (`configFocused`).
-A room's repairs and a device's Repair… stay plain too (`repair.js`), each an `Island`.
+A room's repairs and a device's Repair… stay plain too (`repair.js`), each an `Island`,
+and so does the form that puts a device without a room into one
+(`pairDeviceForm`, Block 9),
+its typing kept across a fill by the object it is given.
 The menus are `Dropdown`s, their items `MenuItem`s, the problems a `Problems`,
 the info and the cog `IconButton`s, the holiday form's temperature a `Stepper`
 and its end a `DateTime`,

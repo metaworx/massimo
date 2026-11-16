@@ -106,26 +106,17 @@ function fmtUntil(text) {
   return new Intl.DateTimeFormat(i18n.lang, opts).format(new Date(y, mo - 1, d, hh, mm));
 }
 
-// renderRooms draws the rooms as the page has them now: every tile
-// follows in place (MassimoParts.rooms.render), its configuration filled
-// again unless the focus is in it, where that waits for the focus to
-// leave; then the House tile and the devices without a room.
+// renderRooms draws the rooms as the page has them now: every tile and
+// every row of the devices without a room follows in place
+// (MassimoParts.rooms.render), a tile's configuration filled again unless
+// the focus is in it, where that waits for the focus to leave; the House
+// tile and the devices without a room are shown where they have
+// something.
 function renderRooms() {
   MassimoParts.rooms.render();
   $("house").classList.toggle("hidden", !state.rooms.some(roomThermostat));
   renderHouseRooms();
-  const unl = $("unlisted");
-  const list = $("unlisted-devices");
-  clear(list);
-  for (const rf of Object.keys(unlistedUI)) {
-    if (!state.unlisted.some((d) => d.rf_address === rf)) delete unlistedUI[rf];
-  }
-  if (state.unlisted.length) {
-    for (const d of state.unlisted) list.appendChild(renderUnlisted(d));
-    unl.classList.remove("hidden");
-  } else {
-    unl.classList.add("hidden");
-  }
+  $("unlisted").classList.toggle("hidden", !state.unlisted.length);
 }
 
 // rerenderRoom draws a room's tile again after a change of the room or of
@@ -168,9 +159,7 @@ function updateDevice(d) {
   const j = state.unlisted.findIndex((x) => x.rf_address === d.rf_address);
   if (j >= 0) {
     state.unlisted[j] = d;
-    const old = document.querySelector('#unlisted-devices .device[data-rf="' + d.rf_address + '"]');
-    // A form being typed in keeps its row; the next render brings the state.
-    if (old && !(unlistedUI[d.rf_address] || {}).form) old.replaceWith(renderUnlisted(d));
+    MassimoParts.rooms.unlisted(); // its row follows, the form under it as it is
   }
 }
 

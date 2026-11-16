@@ -635,6 +635,9 @@ The Cubes list and Cube settings left the list with their move to parts
 (AP UiParts, Block 5), the header's problems list with the header's
 (Block 6), with a view of the list open and one of the Cube choice open
 with the Cubes found, the room tiles with theirs (Block 7).
+The devices without a room left it with the rooms too: their view answers
+`GET …/devices` with the server's answer and one device without a room
+(`UNLISTED_STUB`), and opens its form that puts it into a room.
 A tile's configuration stays on it while it is plain inside its tile
 (config.js, Block 8): a data event fills it again, but while the focus is
 in it; once the focus leaves, the fill put off comes,
