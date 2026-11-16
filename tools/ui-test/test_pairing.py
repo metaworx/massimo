@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
-"""Pairing and removal: in System settings → Cubes a device is paired, named,
+"""Pairing and removal: in System settings → Cubes a device is paired, named
+(the form offers "<room> <type> <n>" for the room chosen, D200-A),
 put into a room with the room's settings and removed from the Cube again
 in the room's Devices tab; a device paired while the page was not
 looking is put into a room from Devices without a room, and another
@@ -29,7 +30,13 @@ PANEL = ".cube-panel[data-serial='KEQ0000100']"
 ENDED = {"en": "Pairing ended; 1 device joined.", "de": "Anlernen beendet; 1 Gerät hat sich gemeldet."}
 LEFT = {"en": "s left", "de": "noch"}
 RANGE = {"en": "only 1 to 255", "de": "nur 1 bis 255"}
-IN_ROOM = "state.rooms.some((r) => r.id === %d && r.devices.some((d) => d.rf_address === '" + DEV + "'))"
+# The name offered for the fake's radiator thermostat (D200-A): the
+# room's name, the type in the page's language, the lowest free n; the
+# German "Wohnzimmer Heizkörperthermostat 1" is 34 bytes, so the room's
+# name is cut to fit 32.
+OFFERED = {"en": {1: "Wohnzimmer radiator thermostat 1", 3: "Küche radiator thermostat 1"},
+           "de": {1: "Wohnzimm Heizkörperthermostat 1", 3: "Küche Heizkörperthermostat 1"}}
+IN_ROOM ="state.rooms.some((r) => r.id === %d && r.devices.some((d) => d.rf_address === '" + DEV + "'))"
 GONE = "!state.rooms.some((r) => r.devices.some((d) => d.rf_address === '" + DEV + "')) && !state.unlisted.some((d) => d.rf_address === '" + DEV + "')"
 
 
@@ -84,6 +91,12 @@ def first_room(page):
     return page.evaluate("(() => { const r = state.rooms[0]; return { id: r.id, name: r.name, n: r.devices.length }; })()")
 
 
+def name_in(page, room):
+    """The name the device has in a room of the page."""
+    return page.evaluate("((state.rooms.find((r) => r.id === %d) || {devices: []}).devices.find((d) => d.rf_address === '%s') || {}).name"
+                         % (room, DEV))
+
+
 def test_pair_put_into_a_room_and_remove(page, case, clean):
     room = first_room(page)
     before = serve_log()
@@ -102,8 +115,14 @@ def test_pair_put_into_a_room_and_remove(page, case, clean):
     named_buttons(page, "the pairing")
     assert scroll_width(page) <= case.width, "no horizontal scroll with the joined device"
     form = row.locator("form")
-    form.locator("input[name=name]").fill("Pair test")
+    name = form.locator("input[name=name]")
+    assert room["id"] == 1 and form.locator("select[name=room]").input_value() == "1", "the first room chosen, Wohnzimmer"
+    assert name.input_value() == OFFERED[case.lang][1], "the name offered for the room"
+    form.locator("select[name=room]").select_option("3")
+    assert name.input_value() == OFFERED[case.lang][3], "the name offered follows the room"
+    name.fill("Pair test")
     form.locator("select[name=room]").select_option(str(room["id"]))
+    assert name.input_value() == "Pair test", "a name typed stays when the room changes"
     assert form.locator("input[name=copy]").is_checked(), "the copy is on by default"
     form.locator("button[type=submit]").click()
     assert wait_until(page, IN_ROOM % room["id"], 30), "the device is in the room"
@@ -149,11 +168,13 @@ def test_put_into_a_room_from_devices_without_a_room(page, case, clean):
     row.locator(".put-open").click()
     form = row.locator("form.pair-device-form")
     form.locator("select[name=room]").select_option(str(room["id"]))
+    assert form.locator("input[name=name]").input_value() == OFFERED[case.lang][room["id"]], "the name offered for the room"
     form.locator(".pair-copy .switch").click()
     assert not form.locator("input[name=copy]").is_checked(), "the copy switched off"
     assert scroll_width(page) <= case.width, "no horizontal scroll with the form"
     form.locator("button[type=submit]").click()
     assert wait_until(page, IN_ROOM % room["id"], 20), "the device is in the room"
+    assert name_in(page, room["id"]) == OFFERED[case.lang][room["id"]], "under the name offered"
     assert page.locator("#unlisted .device[data-rf='%s']" % DEV).count() == 0, "no longer without a room"
     if SERVE_LOG:
         new = serve_log()[len(before):]

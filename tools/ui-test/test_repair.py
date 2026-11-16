@@ -159,12 +159,12 @@ def test_listing_names_the_device(page, case):
     page.on("request", seen)
     try:
         word = page.evaluate("t('type.radiator_thermostat')")
-        assert page.evaluate("listNameNumber('Bath ' + %s, ['bath ' + %s + ' 1', 'Bath ' + %s + ' 3', 'Bath ' + %s + ' x'])"
+        assert page.evaluate("freeNameNumber('Bath ' + %s, ['bath ' + %s + ' 1', 'Bath ' + %s + ' 3', 'Bath ' + %s + ' x'])"
                              % (json.dumps(word), json.dumps(word.upper()), json.dumps(word), json.dumps(word))) == 2, "the lowest free n"
-        assert page.evaluate("listDefaultName('Attic over the garage', 'radiator thermostat', [])") == "Attic over radiator thermostat 1", \
+        assert page.evaluate("defaultDeviceName('Attic over the garage', 'radiator thermostat', [])") == "Attic over radiator thermostat 1", \
             "a room's name cut to fit 32 bytes"
-        assert page.evaluate("listDefaultName('aÄÄÄÄÄÄ', 'radiator thermostat', [])") == "aÄÄÄÄ radiator thermostat 1", "cut at a character"
-        want = page.evaluate("listDefaultName('Bath', %s, listedNames(state.serial, 1))" % json.dumps(word))
+        assert page.evaluate("defaultDeviceName('aÄÄÄÄÄÄ', 'radiator thermostat', [])") == "aÄÄÄÄ radiator thermostat 1", "cut at a character"
+        want = page.evaluate("defaultDeviceName('Bath', %s, roomDeviceNames(state.serial, 1))" % json.dumps(word))
         assert want.startswith("Bath " + word + " "), want
         tile = page.locator(".room").first
         tile.locator(".room-name-btn").click()

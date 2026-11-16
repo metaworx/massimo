@@ -1886,10 +1886,12 @@ paths:
         the metadata. room_id 0 is refused. A device in no room yet
         (unlisted, for example just paired) needs room_id and is linked
         with the room's members (0x20 both ways, after a wakeup), given
-        the room's group (0x22) and listed under name; without room_id it
-        answers 409. A thermostat put into a room, by an add or a move,
-        then gets the room's settings from its first other thermostat:
-        0x40 auto, 0x11 to every thermostat of the room, 0x12, and 0x10
+        the room's group (0x22) and listed under name, without name under
+        the default "<room name> <type> <n>" a repair's listing gives;
+        without room_id it answers 409. A thermostat put into a room, by
+        an add or a move, then gets the room's settings from its first
+        other thermostat: 0x40 auto, 0x11 to every thermostat of the
+        room, 0x12, and 0x10
         for each day of the programme that differs, then 0x11 again;
         hidden devices are left out. The copy needs the capability
         configure as well (403 without it); copy false skips it. A

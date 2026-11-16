@@ -434,7 +434,7 @@ its **Send** is off while no room is ticked.
 a device just paired, or one the original software paired through the proxy
 and never put into a room.
 **Put into a room…** opens the form of System settings → Cubes' pairing under the row,
-with name, room and **Copy the room's settings**,
+with name (offered as there), room and **Copy the room's settings**,
 and **Remove from the Cube** asks in the row, then deletes it from the Cube.
 
 Every change goes to the Cube as a radio command.
@@ -1102,6 +1102,10 @@ the browser keeps which cards are folded.
   and each device that joins is listed with its type and serial
   (in expert mode also its radio address) and a form:
   **Name**, **Room** (one of the Cube's rooms),
+  the name offered as a repair's listing offers one (Rooms, Repairs; D200-A),
+  the room's name, the device's type in the page's language and the lowest
+  free number ("Bath radiator thermostat 2"), following the room chosen until
+  a name is typed,
   and for a thermostat **Copy the room's settings**, on by default,
   shown where the role has `configure`, which the copy needs.
   **Put into a room** links the device with the room's other devices and lists it there;

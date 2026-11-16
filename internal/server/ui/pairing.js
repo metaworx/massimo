@@ -275,23 +275,33 @@ function pairedRow(serial, d) {
   return row;
 }
 
+// pairDefaultName is the name the form offers a device put into a room
+// (D200-A), as a repair's listing offers one: defaultDeviceName's
+// (config.js) with the room's name and the device type's word in the
+// page's language; "" for a room the page does not hold.
+function pairDefaultName(serial, dev, room) {
+  const r = cubeRooms(serial).find((x) => x.id === room);
+  return r ? defaultDeviceName(r.name, typeName(dev.type), roomDeviceNames(serial, room)) : ""; // rooms.js
+}
+
 // pairDeviceForm is the form that puts a device that is in no room into
 // one (tpl-pair-device, capability structure): its name (with rename),
-// the room, and for a thermostat the switch that copies the room's
-// settings (with configure, which the copy needs as well), on by
-// default; PUT …/devices/{rf}. e keeps what is typed
-// across redraws, the result, and done once the device is in the room;
-// onDone runs then, onFail after a refusal, and onCancel, when given,
-// is the form's Cancel.
+// offered by default (pairDefaultName) for the room chosen until one is
+// typed, the room, and for a thermostat the switch that copies the
+// room's settings (with configure, which the copy needs as well), on by
+// default; PUT …/devices/{rf}. e keeps what is typed (typed, once the
+// name was) across redraws, the result, and done once the device is in
+// the room; onDone runs then, onFail after a refusal, and onCancel, when
+// given, is the form's Cancel.
 function pairDeviceForm(serial, dev, e, { onDone, onFail, onCancel } = {}) {
   const form = fromTemplate("tpl-pair-device");
   const id = "pair-" + serial + "-" + dev.rf_address;
   const name = form.querySelector("input[name=name]");
   name.id = id + "-name";
   name.previousElementSibling.htmlFor = name.id;
-  name.value = e.name || "";
   name.addEventListener("input", () => {
     e.name = name.value;
+    e.typed = true;
   });
   const rooms = cubeRooms(serial);
   const select = form.querySelector("select[name=room]");
@@ -300,8 +310,15 @@ function pairDeviceForm(serial, dev, e, { onDone, onFail, onCancel } = {}) {
   fillOptions(select, rooms.map((r) => [String(r.id), r.name]));
   if (!rooms.some((r) => r.id === e.room) && rooms.length) e.room = rooms[0].id;
   if (e.room !== undefined) select.value = String(e.room);
+  // The name offered follows the room until the user types one.
+  const offer = () => {
+    if (!e.typed) e.name = pairDefaultName(serial, dev, e.room);
+    name.value = e.name || "";
+  };
+  offer();
   select.addEventListener("change", () => {
     e.room = Number(select.value);
+    offer();
   });
   const copyRow = form.querySelector(".pair-copy");
   const copy = copyRow.querySelector("input[name=copy]");
@@ -329,11 +346,13 @@ function pairDeviceForm(serial, dev, e, { onDone, onFail, onCancel } = {}) {
   form.addEventListener("submit", async (ev) => {
     ev.preventDefault();
     if (e.busy || !rooms.length) return;
-    const nm = (e.name || "").trim();
+    // Without rename the field is hidden: the server names the device by
+    // its default.
+    const nm = hasCap("rename") ? (e.name || "").trim() : "";
     const label = nm || deviceName(dev);
     const body = { room_id: e.room };
     if (isThermostat(dev)) body.copy = hasCap("configure") && e.copy !== false;
-    if (nm && hasCap("rename")) {
+    if (nm) {
       if (byteLength(nm) > NAME_BYTES) {
         e.result = { text: t("cfg.devNameTooLong", { name: nm, n: NAME_BYTES }), ok: false };
         showResult(result, e.result.text, false);

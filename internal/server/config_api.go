@@ -215,7 +215,8 @@ func (s *Server) renameRoom(w http.ResponseWriter, r *http.Request) error {
 // it: unlink from the old room's partners, relink with the new room's,
 // set the group, then the metadata. A device that is in no room yet,
 // such as one just paired, needs a room_id and is added to the room the
-// way the original software adds a new device (cubeio.Writer.AddDevice).
+// way the original software adds a new device (cubeio.Writer.AddDevice),
+// without a name under the default "<room name> <type> <n>" (D200-A).
 // Either way a thermostat then gets the room's settings
 // (cubeio.Writer.CopySettings), which needs the capability configure as
 // well, unless the body says "copy": false. The links and the metadata
@@ -396,8 +397,9 @@ func (s *Server) copySettings(ctx context.Context, rt *runtime, rf cube.RFAddres
 }
 
 // addDevice puts a device that is not in the metadata, one just paired
-// or paired long ago and never listed, into a room; withCopy says that
-// the copy follows, which needs configure. It returns the room.
+// or paired long ago and never listed, into a room, under name, else
+// under defaultDeviceName's default; withCopy says that the copy
+// follows, which needs configure. It returns the room.
 func (s *Server) addDevice(ctx context.Context, r *http.Request, rt *runtime, md *cube.Metadata, c *cube.DeviceConfig, name *string, roomID *int, withCopy bool) (uint8, bool, error) {
 	if roomID == nil {
 		return 0, false, fail(http.StatusConflict, "device %s is in no room yet; give room_id to add it to one", c.RFAddress)
@@ -406,7 +408,8 @@ func (s *Server) addDevice(ctx context.Context, r *http.Request, rt *runtime, md
 		return 0, false, fail(http.StatusBadRequest, "room_id must be 1..255")
 	}
 	room := uint8(*roomID)
-	if _, ok := rt.hidden().Room(md, room); !ok {
+	target, ok := rt.hidden().Room(md, room)
+	if !ok {
 		return 0, false, fail(http.StatusNotFound, "no room %d", room)
 	}
 	if c.Type == cube.DeviceCube {
@@ -420,7 +423,9 @@ func (s *Server) addDevice(ctx context.Context, r *http.Request, rt *runtime, md
 			return 0, false, err
 		}
 	}
-	n := ""
+	// Without a name the device is listed under the default a repair's
+	// listing gives (D200-A): "<room name> <type> <n>".
+	n := defaultDeviceName(target.Name, c.Type, roomDeviceNames(md, room))
 	if name != nil {
 		n = strings.TrimSpace(*name)
 	}

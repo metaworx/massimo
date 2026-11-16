@@ -788,12 +788,13 @@ func roomDeviceNames(md *cube.Metadata, room uint8) []string {
 	return out
 }
 
-// defaultDeviceName is the name a device listed into a room gets where
-// the request names none (D185): "<room name> <type> <n>", the type in
-// English (deviceTypeWords), n the lowest number from 1 that no name of
-// the room's (taken) has in that form, which a name matches whatever
-// its case. A room's name too long for the whole to fit maxNameBytes is
-// cut, at a character, the form then that of the cut name.
+// defaultDeviceName is the name a device listed into a room (D185), or
+// put into one (D200-A), gets where the request names none: "<room
+// name> <type> <n>", the type in English (deviceTypeWords), n the
+// lowest number from 1 that no name of the room's (taken) has in that
+// form, which a name matches whatever its case. A room's name too long
+// for the whole to fit maxNameBytes is cut, at a character, the form
+// then that of the cut name.
 func defaultDeviceName(room string, typ cube.DeviceType, taken []string) string {
 	word, ok := deviceTypeWords[typ]
 	if !ok {

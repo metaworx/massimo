@@ -2376,6 +2376,10 @@ and one to the new device for each partner
 (two shutter contacts are not linked with each other), then 0x22 set group,
 then the metadata with the device listed under its name in the room,
 then a re-read of its C line.
+Without `name` it is listed under the default a repair's listing gives
+(D200-A; "A listed device's name", under Repairs):
+`<room name> <type> <n>`, such as `Bath radiator thermostat 2`
+beside `Bath radiator thermostat 1`.
 A device whose C line names another room (paired long ago and never listed) is
 first unlinked from that room with 0x23 remove group and 0x21 remove link partner,
 as in a move.

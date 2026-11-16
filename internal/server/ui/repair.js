@@ -82,62 +82,11 @@ function repairQuery(item) {
   return q.length ? "?" + q.join("&") : "";
 }
 
-// listedNames are the names of the devices a Cube's list has in a room,
-// as the page holds them.
-function listedNames(serial, room) {
-  const r = cubeRooms(serial).find((x) => x.id === room); // pairing.js
-  return r ? (r.devices || []).map((d) => d.name || "") : [];
-}
-
-// listDefaultName is the name a device the Cube's list lacks is offered
-// when it is listed into a room (D185), as the server's default
-// (repair_api.go, defaultDeviceName) with the type in the page's
-// language: "<room name> <type> <n>", n the lowest number from 1 that no
-// name of the room's (taken) has in that form, whatever its case; a
-// room's name too long for the whole to fit NAME_BYTES is cut at a
-// character.
-function listDefaultName(room, word, taken) {
-  for (let digits = 1; ; digits++) {
-    const base = cutToBytes(String(room || "").trim(), NAME_BYTES - byteLength(word) - 2 - digits); // config.js
-    const prefix = (base + " " + word).trim();
-    const n = listNameNumber(prefix, taken);
-    if (String(n).length <= digits || base === "") return prefix + " " + n;
-  }
-}
-
-// listNameNumber is the lowest number from 1 that no name of taken has
-// in the form "<prefix> <n>", whatever its case.
-function listNameNumber(prefix, taken) {
-  const p = prefix.toLowerCase() + " ";
-  const used = new Set();
-  for (const name of taken) {
-    const s = String(name || "").trim();
-    if (!s.toLowerCase().startsWith(p)) continue;
-    const rest = s.slice(p.length);
-    if (/^[0-9]+$/.test(rest) && Number(rest) > 0) used.add(Number(rest));
-  }
-  let n = 1;
-  while (used.has(n)) n++;
-  return n;
-}
-
-// cutToBytes is s cut to at most max bytes of UTF-8 at a character,
-// trailing spaces left out.
-function cutToBytes(s, max) {
-  if (byteLength(s) <= max) return s;
-  let out = "";
-  for (const ch of s) {
-    if (byteLength(out + ch) > max) break;
-    out += ch;
-  }
-  return out.replace(/ +$/, "");
-}
-
 // loadRepair reads one repair's preview into item and draws the box: a
 // preview with nothing to send says why, one that needs a room's name
 // asks for it. A listing of a device the list lacks takes the name it
-// offers (listDefaultName) the first time, and reads the preview again
-// with it.
+// offers (defaultDeviceName, config.js) the first time, and reads the
+// preview again with it.
 async function loadRepair(scope, r, item) {
   const box = repairBoxes.get(scope);
   try {
@@ -152,7 +101,7 @@ async function loadRepair(scope, r, item) {
       item.state = "none";
       item.error = p.nothing;
     } else if (r.key === "list" && d.listed === false && item.devName === undefined) {
-      item.devName = listDefaultName(d.room_name, typeName(d.type), listedNames(box.serial, d.to)); // rooms.js
+      item.devName = defaultDeviceName(d.room_name, typeName(d.type), roomDeviceNames(box.serial, d.to)); // config.js, rooms.js
       item.state = "loading"; // its plan is the server's default's
       return loadRepair(scope, r, item);
     }
@@ -246,7 +195,7 @@ function repairItem(scope, r, item) {
 }
 
 // repairDeviceNameForm asks for the name a device the Cube's list lacks
-// is listed under, offering the default (listDefaultName), and reads the
+// is listed under, offering the default (defaultDeviceName), and reads the
 // preview again with the name changed; an empty name or one longer than
 // NAME_BYTES is refused in place.
 function repairDeviceNameForm(scope, r, item) {

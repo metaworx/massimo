@@ -384,6 +384,56 @@ func TestAddWithoutCopy(t *testing.T) {
 		cube.CmdSetGroup(copyNew, 1, false).String(), "m:", "c:0a0b0c"})
 }
 
+// A placement without a name lists the device under the default a
+// repair's listing gives (D200-A), "<room name> <type> <n>", n the
+// lowest the room's names of that form leave free; the metadata written
+// is exactly the Cube's with the device's entry added. A name given is
+// taken as it is. The copy cube's room 1 is "Wohnzimmer".
+func TestAddWithoutANameTakesTheDefault(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		body  string
+		names map[cube.RFAddress]string // room 1's devices renamed
+		want  string
+	}{
+		{"the default", `{"room_id":1,"copy":false}`, nil, "Wohnzimmer radiator thermostat 1"},
+		{"a taken n", `{"room_id":1,"copy":false}`, map[cube.RFAddress]string{0x0a010a: "Wohnzimmer radiator thermostat 1"},
+			"Wohnzimmer radiator thermostat 2"},
+		{"a name given", `{"name":" Neu ","room_id":1,"copy":false}`, nil, "Neu"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			fc, ts, s := startCopyCube(t, func(fc *fakecube.Server) {
+				withMetadata(t, fc.Greeting, func(md *cube.Metadata) {
+					for i := range md.Devices {
+						if n, ok := c.names[md.Devices[i].RFAddress]; ok {
+							md.Devices[i].Name = n
+						}
+					}
+				})
+			})
+			md := *s.cubes["keq0000100"].client.Snapshot().Metadata()
+			before := len(fc.Received())
+			if code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/0a0b0c", c.body); code != 200 {
+				t.Fatalf("add to room 1: %d %v", code, out)
+			}
+			md.Devices = append(append([]cube.DeviceMeta(nil), md.Devices...),
+				cube.DeviceMeta{Type: cube.DeviceRadiatorThermostat, RFAddress: copyNew, Serial: "TEQ0000001", Name: c.want, RoomID: 1})
+			lines, err := cube.WriteMetadataCommands(&md)
+			if err != nil || len(lines) != 1 {
+				t.Fatalf("metadata %v %v", lines, err)
+			}
+			sameLines(t, fc.Received()[before:], []string{"z:1e,G,01",
+				cube.CmdLinkPartner(cube.Target{RFAddress: 0x0a010a, RoomID: 1, Room: true}, true, copyNew, cube.DeviceRadiatorThermostat).String(),
+				cube.CmdLinkPartner(cube.Target{RFAddress: copyNew}, true, 0x0a010a, cube.DeviceRadiatorThermostat).String(),
+				cube.CmdLinkPartner(cube.Target{RFAddress: copyNew}, true, copyWall, cube.DeviceWallThermostat).String(),
+				cube.CmdSetGroup(copyNew, 1, false).String(), lines[0].String(), "c:0a0b0c"})
+			if code, d := do(t, ts, "GET", "/api/v1/cubes/KEQ0000100/devices/0a0b0c", ""); code != 200 || d["name"] != c.want {
+				t.Fatalf("device after the add: %d %v", code, d)
+			}
+		})
+	}
+}
+
 // A shutter contact has no settings: it is linked and listed, nothing
 // is copied.
 func TestAddContactCopiesNothing(t *testing.T) {
