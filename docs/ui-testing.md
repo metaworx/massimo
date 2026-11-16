@@ -634,7 +634,12 @@ which the guard does not apply.
 The Cubes list and Cube settings left the list with their move to parts
 (AP UiParts, Block 5), the header's problems list with the header's
 (Block 6), with a view of the list open and one of the Cube choice open
-with the Cubes found.
+with the Cubes found, the room tiles with theirs (Block 7).
+A tile's configuration stays on it while it is plain inside its tile
+(config.js, Block 8): a data event fills it again, but while the focus is
+in it; once the focus leaves, the fill put off comes,
+every element is new, and what is typed and not yet taken by a `change`
+event is gone.
 Since the fixture has nothing in a Cube's problem list from the start and
 finds no Cube without a search, which is a POST, their views answer
 `GET /api/v1/cubes` with the server's answer and, the same at every load,

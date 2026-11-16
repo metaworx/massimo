@@ -96,7 +96,7 @@ def test_eco_and_comfort_keep_the_mode(page, case):
     try:
         tile.locator(".more-sum").click()
         assert tile.locator(".more-hold").is_visible(), "Hold is shown while the room is in Auto"
-        assert not tile.locator(".hold-input").is_checked(), "and off"
+        assert not tile.locator(".more-hold input").is_checked(), "and off"
         assert wait_until(page, "document.querySelector(%r).textContent !== ''" % (sel + " .menu-eco .more-temp"), 5), \
             "Eco shows its temperature"
         eco_text = page.evaluate("fmtTemp(%r)" % temps["eco"])
@@ -112,14 +112,14 @@ def test_eco_and_comfort_keep_the_mode(page, case):
 
         tile.locator(".more-sum").click()
         tile.locator(".more-hold").click()
-        assert tile.locator(".hold-input").is_checked(), "Hold switched on"
+        assert tile.locator(".more-hold input").is_checked(), "Hold switched on"
         assert tile.locator(".more-menu").get_attribute("open") == "", "the menu stays open for the switch"
         tile.locator(".more-menu .menu-comfort").click()
         assert wait_held(page, held), "Comfort sends"
         assert sent[-1] == {"mode": "manual", "temp": temps["comfort"]}, f"with Hold, Comfort holds it in Manual: {sent}"
         answer(page, held, sel)
         tile.locator(".more-sum").click()
-        assert tile.locator(".hold-input").is_checked(), "Hold stays on"
+        assert tile.locator(".more-hold input").is_checked(), "Hold stays on"
         page.keyboard.press("Escape")
 
         page.evaluate(SET_MODE, ["manual", None, False])
@@ -144,7 +144,8 @@ def test_the_menu_by_keyboard(page, case):
     back on More, and Holiday… opens the holiday form."""
     rid = page.evaluate(SET_MODE, ["auto", None, False])
     tile, sel = tile_of(page, rid)
-    focused = "(() => { const a = document.activeElement; return a ? a.className : ''; })()"
+    # the focused element by its class, the Hold switch's checkbox by its switch's
+    focused = "(() => { const a = document.activeElement; return !a ? '' : a.matches('.more-hold input') ? 'more-hold' : a.className; })()"
     tile.locator(".more-sum").focus()
     page.keyboard.press("Enter")
     assert tile.locator(".more-menu").get_attribute("open") == "", "Enter opens the menu"
@@ -152,7 +153,7 @@ def test_the_menu_by_keyboard(page, case):
     for _ in range(5):
         page.keyboard.press("ArrowDown")
         order.append(page.evaluate(focused))
-    assert order == ["menu-eco", "menu-comfort", "hold-input", "menu-holiday", "menu-eco"], f"down through the items: {order}"
+    assert order == ["menu-eco", "menu-comfort", "more-hold", "menu-holiday", "menu-eco"], f"down through the items: {order}"
     page.keyboard.press("ArrowUp")
     assert page.evaluate(focused) == "menu-holiday", "up from the first to the last"
     page.keyboard.press("Escape")
@@ -163,7 +164,7 @@ def test_the_menu_by_keyboard(page, case):
     page.keyboard.press("Enter")
     assert tile.locator(".vacation-panel").is_visible(), "Holiday… opens the holiday form"
     assert page.evaluate(focused).startswith("vacation-until"), "its end date has the focus"
-    tile.locator(".vacation-cancel").click()
+    tile.locator(".vacation-panel .form-cancel").click()
     assert not tile.locator(".vacation-panel").is_visible(), "Cancel closes it"
 
 

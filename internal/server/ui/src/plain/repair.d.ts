@@ -4,9 +4,10 @@
 /**
  * @file internal/server/ui/src/plain/repair.d.ts
  *
- * The globals of the plain script ui/repair.js that the parts call: a
- * Cube's Repair… and the box of its repairs, which stay plain inside its
- * panel, filled into the panel's .cube-repair-area.
+ * The globals of the plain script ui/repair.js that the parts call: the
+ * Repair… of a Cube, a room or a device and the box of its repairs, which
+ * stay plain inside their parts, filled into an element the part leaves
+ * to them.
  */
 
 declare global {
@@ -16,6 +17,8 @@ declare global {
   function repairButton(scope: string, kind: string, path: string, opts?: { label?: string; skip?: string[] }): HTMLButtonElement;
   /** Where a scope's box goes: the box while it is open, an empty place otherwise. */
   function repairSlot(scope: string): HTMLElement;
+  /** Opens or closes the box of a scope's repairs, for a thing of kind at path; skip leaves repairs out. */
+  function toggleRepair(scope: string, kind: string, path?: string, skip?: string[]): void;
 }
 
 export {};

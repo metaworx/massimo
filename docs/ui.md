@@ -450,6 +450,13 @@ The tile shows the result when it is done: "ok", or what failed.
 While radio commands wait for the devices' acknowledgement,
 the header says how many are pending.
 
+A tile is drawn once and follows the data in place:
+a menu open, the focus, a click under way, a text selected, the result line,
+the holiday form and what is typed in it stay
+when a device reports or the rooms are loaded again.
+The configuration is drawn again at such a time, but not while the focus is in it:
+then once the focus has left it.
+
 ### Repairs
 
 For a role with `repair` (the owner's and the manager's),
@@ -1504,9 +1511,12 @@ a script for each region of the page, in the order the page loads them:
   `home.js`, the home notice's place shown or hidden, the Cubes a `cube_found` event adds
   and the way to them;
   `prefs.js`, the wiring of My settings' rows and the language choice;
-- `rooms.js`, a room's facts, the drawing of Rooms, a device's state event
-  and the actions behind a tile; `tiles.js`, a room's tile;
-  `devices.js`, its device rows; `unlisted.js`, the devices without a room;
+- `rooms.js`, a room's facts, the plain names of the rooms' drawing,
+  which call their parts (`ui/src/rooms/`), a device's state event
+  and the actions behind a tile; `tiles.js`, the tile's actions that stay plain
+  and a finding of the Cube's lines in words;
+  `devices.js`, the rows of the devices without a room;
+  `unlisted.js`, the devices without a room;
   `house.js`, the House tile;
 - `week-program.js` and `config.js`, a room's configuration;
 - `log.js`, the log and its sign for unseen problems;
@@ -1691,6 +1701,38 @@ The facts row with its fitting, the version and the refresh button stay plain,
 around the parts' places and not in them,
 and the home notice's place is shown and hidden by the plain code (and by `pages.js`),
 the part drawing inside it.
+The rooms (`ui/src/rooms/`) are the third:
+`index.tsx` draws a tile per room of the chosen Cube in `#rooms`,
+kept by the Cube and the room's id,
+and registers `render`, `data`, `room`, `result` and `ui`,
+which `rooms.js` calls as `renderRooms`, `updateDevice`, `rerenderRoom`,
+`showTileResult` and `roomUI`;
+`store.ts` holds its counter, a counter per room that a state event of one of its
+devices raises and one per room's configuration, what a tile keeps (`newUI`,
+the live object `roomUI` gives the plain actions, which set it as before)
+and the timer of an open window's next state by the clock;
+`facts.ts` what the rooms alone read of a room and its devices
+(a mode's badge, the problems of a tile's head and of a device's row with their label,
+a device's badges in words, the note of devices not seen for long);
+`Tile.tsx` the tile, `Devices.tsx` a device's row and a tile's device list.
+The tile's actions stay plain (`rooms.js`, `tiles.js`) and set `roomUI`,
+which the tile follows: a write running turns its button and keeps the others off,
+a stepper value waiting to be sent shows with Save and Cancel.
+The configuration stays plain inside the tile (`config.js`, AP UiParts Block 8),
+an `Island` that `renderConfig` fills: again where the configuration asks for it
+(`rerenderRoom`), where it opens or closes, and at a data event,
+but while the focus is in it,
+where the fill waits until the focus has left it (`configFocused`).
+A room's repairs and a device's Repair… stay plain too (`repair.js`), each an `Island`.
+The menus are `Dropdown`s, their items `MenuItem`s, the problems a `Problems`,
+the info and the cog `IconButton`s, the holiday form's temperature a `Stepper`
+and its end a `DateTime`,
+the deletion's question a `Question`, the notices `Notice`s,
+the result lines `ResultLine`s,
+a device's badges `Badge`s with their `Age`, its identifiers a `DeviceIds`,
+the virtual thermostat's two settings a `Select` and a `TextField` with their drafts (`useDraft`),
+a `FormFooter` and a `ResultLine` that its `actionRunner` sets;
+the tile's result line is a `ResultLine` too, its success fading by `fader`.
 A part's place among plain siblings is an element of the class `part-slot`,
 which takes no box of its own (`display: contents`),
 so that the part's element is laid out as if it stood there itself.

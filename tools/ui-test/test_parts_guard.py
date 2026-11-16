@@ -469,8 +469,9 @@ REGIONS = (
 # moves one of them keeps it passing. The two regions the fixture
 # cannot show stay here until it can.
 NOT_MOVED = {
-    "rooms": "a state event builds the tile again, a rooms reload every tile: the menus close, the focus goes, typing is set back",
-    "room-config": "kept while the focus is in it; the redraw put off meanwhile replaces the tile once the focus leaves",
+    "room-config": "plain inside its tile (config.js, Block 8): a data event fills it again, but while the focus is in it; "
+                   "once the focus leaves, the fill put off comes: every element is new, and what is typed and not yet "
+                   "taken by a change event is gone",
     "house": "a rooms reload builds the rooms' checkboxes again (renderHouseRooms): the ticks are carried over, the focus is not",
     "unlisted": "a rooms reload builds every row again, a state event its row unless its form is open",
     "sign-in": "the dialog is filled again at each askLogin",

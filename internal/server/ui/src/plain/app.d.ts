@@ -6,12 +6,15 @@
  *
  * The globals of the plain script ui/app.js that the parts call: the
  * page's state, the API, the reload, the loads and the poll, the Cube
- * chosen, the ages of values and the times, a Cube's link and clock.
+ * chosen, the ages of values and the times, a Cube's link and clock, a
+ * device's path, detail and name, a temperature.
  */
 
-import type { Cube, Device, FoundCube } from "../api";
+import type { Cube, Device, DeviceDetail, FoundCube, Room } from "../api";
 
 declare global {
+  /** A room as the page keeps it: its virtual wall thermostat taken out of its devices (app.js splitVirtual). */
+  type PageRoom = Room & { vwt: Device | null };
   /** What the page loaded, as far as a part reads it (app.js state). */
   const state: {
     /** The Cubes the server serves, as the last load of GET /api/v1/cubes gave them. */
@@ -20,12 +23,22 @@ declare global {
     found: FoundCube[];
     /** The Cube chosen in the header. */
     serial: string | null;
+    /** The chosen Cube's rooms, as the last load gave them and the state events since changed them. */
+    rooms: PageRoom[];
+    /** The chosen Cube's devices in no room. */
+    unlisted: Device[];
+    /** The Cube whose rooms and devices rooms and unlisted hold, once loaded. */
+    roomsOf: string | null;
+    /** A device's detail by its radio address, fetched on demand (deviceDetail); emptied after a write that changes one. */
+    details: Record<string, DeviceDetail | undefined>;
+    /** What each room's tile keeps, by the room's id (rooms.js roomUI). */
+    ui: Record<number, RoomUI>;
     /** The last poll got no answer from the server. */
     serverDown: boolean;
     /** The server runs another version than the page was loaded with. */
     newVersion: boolean;
     /** The person's settings, as far as a part reads them. */
-    settings: { poll: number };
+    settings: { poll: number; expert: boolean };
   };
   /** The element of the page with the id. */
   function $(id: string): HTMLElement | null;
@@ -65,6 +78,18 @@ declare global {
   function clockText(c: Cube): { text: string; title: string };
   /** A device's name, else its serial, else its radio address. */
   function deviceName(d: Device): string;
+  /** Whether a device is a radiator or a wall thermostat. */
+  function isThermostat(d: Device): boolean;
+  /** The API path of the chosen Cube. */
+  function base(): string;
+  /** The API path of a device of the chosen Cube. */
+  function devicePath(d: Device): string;
+  /** A device's detail (GET …/devices/{rf}), from state.details where it is there. */
+  function deviceDetail(d: Device): Promise<DeviceDetail>;
+  /** A temperature with one decimal and its unit, " °C" unless given; "–" when unknown. */
+  function fmtTemp(v: number | undefined | null, unit?: string): string;
+  /** The default end of a temporary setting, tomorrow at six, as a datetime-local value. */
+  function tomorrowMorning(): string;
 }
 
 export {};

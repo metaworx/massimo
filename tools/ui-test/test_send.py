@@ -166,8 +166,8 @@ def test_week_programme_send_is_off_until_a_point_changes(page, case):
 def test_a_redraw_of_the_rooms_keeps_a_click_in_the_configuration(page, case):
     """A redraw of every tile, as a metadata event's reload makes, between
     the press and the release of a click on Reset all leaves the tile with
-    the focus as it is, so that the click counts; the tile is drawn again
-    once the focus has left its configuration."""
+    the focus as it is, so that the click counts; the tile is the one it
+    was, also once the configuration is closed."""
     tile, sel = first_tile(page)
     open_tab(tile, "program")
     send = tile.locator(".config-body form button[type=submit]")
@@ -184,7 +184,7 @@ def test_a_redraw_of_the_rooms_keeps_a_click_in_the_configuration(page, case):
     page.mouse.up()
     assert send.is_disabled(), "Reset all counts with a redraw in the click"
     tile.locator(".config-tabs .close").click()
-    assert wait_until(page, "!document.querySelector(%r).dataset.before" % sel, 5), "it is drawn again once the focus left"
+    assert page.evaluate("document.querySelector(%r).dataset.before" % sel) == "1", "the tile is the one it was"
 
 
 def test_copy_send_is_off_until_a_room_is_ticked(page, case):

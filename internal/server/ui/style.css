@@ -1328,7 +1328,7 @@ html.blink-first .server-sign[data-state="new"] use.mark, html.blink-first .serv
    both rather than on a line of their own. */
 .mode-group { display: inline-flex; flex-wrap: wrap; gap: 8px; flex: 1 1 0; }
 .mode-row .mode-group > button.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
-/* More (tiles.js renderMore): a mode button whose menu drops down, Eco,
+/* More (ui/src/rooms/Tile.tsx More): a mode button whose menu drops down, Eco,
    Comfort, the Hold switch and Holiday…, its items those of a menu */
 .mode-group .more-sum {
   display: inline-flex;
