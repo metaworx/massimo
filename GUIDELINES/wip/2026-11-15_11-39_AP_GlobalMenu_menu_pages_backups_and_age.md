@@ -1,4 +1,4 @@
-# AP GlobalMenu v1.2: one menu, four settings pages
+# AP GlobalMenu v1.3: one menu, four settings pages
 
 ## TL;DR
 
@@ -27,8 +27,17 @@ problems.
 - "updated 20:51:00" → "8 s": the chosen Cube's last message, on the
   server's clock; its tooltip "updated 20:51:00, click to reload" (D134-A)
 - Cube choice's list → each Cube's problem icons after its name (spec v10)
+- the server's sign and the age → in the header's pile, the age above it;
+  the pile always a list, "Refresh now" first with three times; the
+  version → ☰'s first row (D177-A, D178-A)
+- the header's row → logo, pile, Cube choice, ↑ beside it; on a phone
+  the Cube choice alone on the second row; the M kept from 331 px
+  (D176-A)
+- a tile's notices → entries of its pill, one line left in the tile
+  (D179-A)
 
-Blocks 1–9 are merged (#289, #293); Block 10 follows on a branch of its own.
+Blocks 1–10 are merged (#289, #293, #301). Blocks 11–13 are built on the
+Preact parts of AP UiParts, stacked on #347.
 
 ### Blocks
 
@@ -47,6 +56,14 @@ Blocks 1–9 are merged (#289, #293); Block 10 follows on a branch of its own.
    order, the current one filled
 10. SearchToast: the search's outcome in a toast; ☰'s Sign out in the
     accent and its mark on a disc
+11. PileParts: `Problems` with a leading icon and a list where nothing
+    is wrong, an item that leaves its menu open, `Dropdown` told of its
+    closing
+12. HeaderPile: the server's sign and the age in the pile, Refresh now,
+    the version in ☰, the row's order, ↑ beside the Cube choice, the
+    header's shots
+13. TileNotices: a tile's notices as entries of its pill, one line in
+    the tile
 
 ## Discussion
 
@@ -125,6 +142,42 @@ accent; and whether this needs a plan.
 
 `PLAN++` on 2026-11-15 for this revision: Block 10 on a new branch from
 main, to a pull request and the completion gate. No merge and no
+retirement.
+
+The owner's look at the header on a phone, 2026-11-16: the server's sign
+into the header's pile (the problem list beside the Cube choice), the
+pile on the row's baseline, the age centred above it; in the pile's list
+"Refresh now" first, with the time the chosen Cube was read, the time the
+server last replied and the time now, in the browser's time zone; the
+version as a small first row in ☰; the logo kept above 330 px; the pile
+before the Cube choice, so that only the Cube choice wraps; ↑ right of
+the Cube choice on a wide page; the age to the pile's right where the
+pile has a line of its own (under about 260 px); shots of the header at
+each width. Then, looking at two tiles: should a tile's notices be rows
+of its pill, the tile keeping one line that opens it?
+
+- D175-A: this plan's Blocks 11–13, not a plan of its own.
+- D176-A: the M stays in the compacted phone header; under 331 px the
+  logo goes, compacted or not.
+- D177-A: the server's sign is the pile's first icon, in its state's
+  colour, without a frame; its click's other action (Software update,
+  the reload) the list's second item while it has one; unreachable
+  fills the pile red.
+- D178-A: the age above the pile, to its right where the pile has a
+  line of its own.
+- D179-A: a tile's notices (the room not ready, the stale values, the
+  mismatches) as entries of its pill with their "since"; the tile keeps
+  one line that opens the pill, which says so while room commands are
+  discarded.
+
+The header and the rooms became Preact parts meanwhile (AP UiParts,
+Blocks 6 and 7). Asked on the owner's word, the session of AP UiParts
+moved them unchanged and sent a briefing on 2026-11-17 for building the
+change on the parts; what the change removes (the facts row, the version,
+the refresh button) it left plain. The owner sent `PLAN++` with all as
+recommended, stacking onto #347 (AP UnsavedMarks, Block 3) rather than
+starting from main: one branch and pull request per block, Block 11 on
+#347's branch, Blocks 12 and 13 on Block 11's. No merge and no
 retirement.
 
 Out of scope: the redraws that close an open pill (the evaluation of
@@ -215,6 +268,39 @@ Out of scope: the redraws that close an open pill (the evaluation of
   every page through ☰ after Block 3. The tests of the cards that move
   open `maint` after Block 4, and `test_backup.py` follows the component
   in Block 5.
+
+For Blocks 11–13, on #347's branch:
+
+- **The header's parts** (`ui/src/header/`): `index.tsx` mounts the Cube
+  choice with every Cube's problem list into `#header-cube`, the age into
+  `#updated` inside the plain `#refresh-btn`, the server's sign
+  (`ServerSign.tsx`, an `IconButton`) into `#server-sign-slot`; `store.ts`
+  holds the region's counter `load`, `send.ts` `pollNow`, which turns
+  `#refresh-btn` while it polls. Plain: the facts row (`.top-left`,
+  `.top-facts`, `fitFacts`, `watchFacts`), `#version-short` and
+  `#refresh-btn` in `header.js` and `partials/header.html`; ☰ and
+  `#top-btn` until UiParts' Block 14.
+- **The shared list** (`ui/src/shared/problems.tsx`): `Problems` draws
+  `OkPill`, a pill without a list, where nothing is wrong, and takes no
+  element before the kinds' icons. An `Item` has `action` (its badge a
+  button) and `at` (an age), no "since". `Dropdown` (`menu.tsx`) tells
+  its opening (`onOpen`), not its closing; every menu goes through the
+  plain `dropdown()` of `components.js`, which closes it on a click on
+  any button of its list. `docs/ui.md` names "an item whose action
+  leaves the list open" as a gap for "Refresh now".
+- **The server's answers:** `api()` (`app.js`) passes each to
+  `noteServerClock`; nothing keeps when the last one came.
+- **The tile** (`ui/src/rooms/Tile.tsx`): `NotReady`, the stale
+  `Notice` and `Mismatches` under the head, each a notice with its
+  "since" (`Notice`'s `since`); the pill's entries are `roomEntries`
+  (`rooms/facts.ts`), per device, where a silent device already has its
+  "not reported" badge.
+- **The rules:** a shared part knows no region and gets a property, with
+  its row in `docs/ui.md`, from the block that first needs it; a part
+  looks up no id it draws with `$()`; no `data-i18n` in a part; `make ui`
+  before Go builds, `make ui-check` for the parts. The parts' guard
+  (`test_parts_guard.py`) has the view `header_problems`; its `main-menu`
+  view names `.top-facts`, which Block 12 removes.
 
 ## Implementation Plan
 
@@ -414,6 +500,98 @@ shot looked at; `make ui-test` whole, `go test ./...`, `make cross`,
 **Verification:** `make ui-test` whole; `go test ./...`, `make cross`,
 `gofmt`, the three `go vet`, `GUIDELINES/shared/tools/check`.
 
+Blocks 11–13 are verified as D174 has it: locally the UI test files a
+block touches, in all four cases, `make ui`, `make ui-check`, the Go
+tests of `internal/server`, `gofmt`, the three `go vet` and
+`GUIDELINES/shared/tools/check`; the whole UI suite, `make race` and
+`make cross` are CI's. Before each pull request a second reader, who has
+not seen this plan's reasoning, checks the block for reuse against the
+shared parts and the code still plain.
+
+### Block 11: PileParts
+
+The shared properties Block 12 needs, each in `ui/src/shared/` and its
+row in `docs/ui.md`:
+
+- `Problems`: `lead`, an element before the kinds' icons in the
+  summary, shown also where nothing is wrong; `always`, the list there
+  where nothing is wrong too, its summary `lead` and the green check, its
+  list `ok` as a line; `head`, what the list shows before its entries;
+  `onOpen` and `onClose`, passed to its `Dropdown`.
+- `Dropdown`: `onClose`, told each time it closes.
+- `MenuItem`: `keepOpen`, a click on it leaves its menu open:
+  `dropdown()` of `components.js` closes a menu on a click on any button
+  of its list but one marked `data-keep-open`; `docs/ui.md`'s gap goes.
+
+**Verification:** `make ui-check`; the Go tests of `internal/server`
+(the parts' rules); `test_problem_list.py`, `test_header.py` and
+`test_parts_guard.py` unchanged and passing (the properties change
+nothing where they are not given); their behaviour is tested by Block 12.
+
+### Block 12: HeaderPile
+
+- `partials/header.html`: the row is the logo, `#header-pile`, the Cube
+  choice in `#header-cube`, ↑ beside it (shown from 600 px while
+  compacted), and the pages; the facts row, `#refresh-btn` and
+  `#server-sign-slot` go; the version a first row of ☰'s list, and a
+  copy beside the logo shown only while signed out.
+- `ui/src/header/Pile.tsx`, in `#header-pile`: the age above the pile;
+  the pile a `Problems` with `lead` the server's sign (its icon in its
+  state's colour; unreachable fills the pill red and blinks), `always`,
+  `head` "Refresh now" (`keepOpen`, turning while it polls) with its
+  three times, and while the sign offers one, the list's second item:
+  Software update, or the reload for the new version. While the list is
+  open the times move on each second, and stop when it closes. The pile's
+  label names the server's state and the problems. Where the logo, the
+  pile and the pages do not fit one line, measured in the part's effect
+  with a `ResizeObserver`, the pile takes a line of its own and the age
+  moves to its right. `ServerSign.tsx` and `CubeProblems.tsx` go into it;
+  `Updated.tsx` stays the age.
+- `app.js` `api()`: the time of the server's last answer, kept in
+  `state`; `send.ts` `pollNow` turns the Refresh now item.
+- `header.js`: `fitFacts`, `watchFacts`, the refresh button's tooltip
+  and `renderVersionTitle`'s fitting go; `checkVersion` fills both
+  version elements; `prefs.js`'s wiring of `#refresh-btn` goes.
+- `style.css`: the row a grid, its items on its lower edge (the logo's
+  baseline, the buttons' lower edge); below 600 px the Cube choice alone
+  on the second row, compacted too; under 331 px no logo; the age over
+  the pile, beside it on a line of its own; ↑ after the Cube choice from
+  600 px, between ⌂ and ☰ below; the facts row's rules go.
+- i18n: the three times' words, the list's items, in the six languages.
+- `docs/ui.md` "Header"; a fragment; `claude-gear-menu.md` or the
+  header's fragment corrected where not released.
+- Tests: `test_header.py`, `test_header_updates.py`,
+  `test_server_sign.py`, `test_problem_list.py`, `test_menu_fit.py`,
+  `test_main_menu.py`, `test_to_top.py`, `test_login.py` and the guard's
+  views (`main-menu` without `.top-facts`; the pile's list open while it
+  polls): the order, the lower edge, the age's place, the list open with
+  Refresh now and its times moving, the sign's states and their item, the
+  version in ☰ and signed out, ↑'s two places, the logo by width.
+- `screenshots.py`: the header alone at 1100, 1100 compacted, 700, 390
+  and 320 px compacted.
+
+**Verification:** as above; each new shot looked at.
+
+### Block 13: TileNotices
+
+- `ui/src/shared/problems.tsx`: an `Item`'s `since`, an API time, drawn
+  after its text as `Notice` draws it; its row in `docs/ui.md`.
+- `rooms/facts.ts` `roomEntries`: a mismatch an item of its device's
+  entry (the room's own entry where it names no device of the room); the
+  stale values an item of their device; the room not ready an item of the
+  room, its silent devices keeping their own badges; each with its
+  "since" and a kind of its own for the summary's icons.
+- `rooms/Tile.tsx`: `NotReady`, the stale `Notice` and `Mismatches` go;
+  one line under the head while there is any of them, which opens the
+  pill, and says that room commands are discarded while the room is not
+  ready.
+- i18n: the line and the new kinds' names, in the six languages.
+- `docs/ui.md` "Rooms"; a fragment.
+- Tests: the tiles' tests of the notices (`test_room_confirm.py`,
+  `test_mismatch*.py` or where they are) read the pill and the line.
+
+**Verification:** as above.
+
 ## Proposed commit messages
 
 - Block 1: `feat(ui): Cube settings has its title row`
@@ -426,6 +604,9 @@ shot looked at; `make ui-test` whole, `go test ./...`, `make cross`,
 - Block 8: `docs(ui): The menu and the pages in docs/ui.md and the screenshot set`
 - Block 9: `feat(ui): The page buttons take the title's place, the current one filled`
 - Block 10: `feat(ui): The search's outcome in a toast, ☰'s Sign out and mark clearer`
+- Block 11: `feat(ui/shared): A problem list leads with an icon, lists when all is well`
+- Block 12: `feat(ui/header): The server's sign and the age in the pile, the version in ☰`
+- Block 13: `feat(ui/rooms): A tile's notices are entries of its pill`
 
 ## Change History
 
@@ -438,3 +619,7 @@ shot looked at; `make ui-test` whole, `go test ./...`, `make cross`,
 - v1.2 (2026-11-15): Block 10, SearchToast, by `PLAN++`, with D170-A,
   D171-A, D172-A and D173-A as recommended; the TL;DR names the merge of
   Block 9 (#293).
+- v1.3 (2026-11-17): Blocks 11–13, the header's pile and a tile's
+  notices on the Preact parts, by `PLAN++` with D175-A to D179-A as
+  recommended, stacked on #347; the TL;DR names the merge of Block 10
+  (#301).
