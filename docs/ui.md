@@ -84,6 +84,24 @@ and a sign-out it asked about then goes on, since nothing is lost any more.
 A session that expires, or ends in another tab, asks for a sign-in and nothing more:
 the same user signed in again finds the changes,
 another user does not.
+What the page was reading when the session ended it reads again after the sign-in;
+what the user did, a setpoint, a save, a deletion, any request but a read,
+is never sent again, whoever signs in and however much later:
+it fails at once, red where its result shows, as not sent since the user was signed out.
+A setpoint stepped and still waiting for its two seconds is dropped as the sign-in opens,
+and its tile says so; a settings change waiting for its second waits for the sign-in.
+For the same user a form's draft stays, so that it is one click on **Save** again,
+and where the page's message line said that a write was not sent,
+the line says it again after the page's reload, unless the reload put something there.
+Another user's sign-in forgets on the page what a sign-out forgets:
+the first user's settings in this browser, which the page would otherwise hand
+to the second user's account, the drafts, the settings changes still waiting,
+every line that said a write was not sent, and the Cubes' data, which loads again.
+The stream's ticket alone, which the page asks for by itself and which changes nothing,
+waits for the sign-in as a read does.
+A request sent with the old key whose 401 comes after a sign-in is done
+opens the sign-in once more, though the page is signed in;
+a write so answered fails as any other and is not sent again.
 The page that reloads by itself when the server has a newer version
 waits while there are any.
 
@@ -1951,9 +1969,11 @@ the dialog with Stay and the label of the page's own button,
 resolving true at once where no form has changes,
 and `changes()`, which `somethingOpen` of `header.js` asks,
 so that a newer server's reload waits.
-After a 401, the sign-in of `askLogin` forgets every form (`forgetOthers` of `login.js`,
-`MassimoParts.signedOut`) where the user who signs in is not the one who was,
-by `/me`'s user or mode, before the requests that waited for it are sent again.
+After a 401, the sign-in of `askLogin` forgets every form (`settleSignIn` of `login.js`,
+which calls `forgetSession`, the page's part of `logout`,
+and with it `MassimoParts.signedOut`)
+where the user who signs in is not the one who was,
+by `/me`'s user or mode, before the reads that waited for it are sent again.
 Moving inside the page (`pages.js`, the Cube choice) unloads nothing,
 so nothing asks there.
 A part's place among plain siblings is an element of the class `part-slot`,

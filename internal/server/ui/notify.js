@@ -278,6 +278,15 @@ function saveNotifyRules() {
   }, NOTIFY_SAVE_DELAY);
 }
 
+// takeNotifySave ends the wait of saveNotifyRules and reports whether a
+// save waited, for the sign-in to hold it (holdPushes, login.js).
+function takeNotifySave() {
+  if (!notifyState.timer) return false;
+  clearTimeout(notifyState.timer);
+  notifyState.timer = null;
+  return true;
+}
+
 // turnOnNotify subscribes this browser: the service worker, the
 // browser's permission, the subscription with the server's VAPID key,
 // and the server told of it with the label given.

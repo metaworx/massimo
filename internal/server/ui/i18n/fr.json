@@ -101,6 +101,7 @@
   "budget.certificate": "Certificat",
   "msg.cannotLoad": "Chargement impossible : {error}",
   "api.badToken": "jeton manquant ou erroné",
+  "api.notSent": "non envoyé, car vous étiez déconnecté : recommencez une fois connecté",
 
   "settings.poll": "Interroger toutes les",
   "settings.seconds": "s",

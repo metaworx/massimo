@@ -102,6 +102,7 @@
   "budget.certificate": "Certyfikat",
   "msg.cannotLoad": "Nie można wczytać: {error}",
   "api.badToken": "brak tokenu lub błędny token",
+  "api.notSent": "nie wysłano, ponieważ nastąpiło wylogowanie: zrób to ponownie po zalogowaniu",
 
   "settings.poll": "Odpytuj co",
   "settings.seconds": "s",
