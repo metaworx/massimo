@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // builtServe is massimo serve run from a binary the test built, with a
@@ -112,7 +113,7 @@ func (s *builtServe) log() []string {
 // waitFor waits for a log line with msg and returns its attributes.
 func (s *builtServe) waitFor(t *testing.T, msg string) map[string]string {
 	t.Helper()
-	deadline := time.After(10 * time.Second)
+	deadline := time.After(testkit.Scale(10 * time.Second))
 	for seen := 0; ; {
 		s.mu.Lock()
 		lines, added := s.lines[seen:], s.added
@@ -157,7 +158,7 @@ func (s *builtServe) wait(t *testing.T, since time.Time) time.Duration {
 	t.Helper()
 	select {
 	case <-s.exited:
-	case <-time.After(20 * time.Second):
+	case <-time.After(testkit.Scale(20 * time.Second)):
 		t.Fatal("serve did not end on SIGTERM")
 	}
 	if s.err != nil {
@@ -205,7 +206,7 @@ func TestServeAnswersRequestInFlightAtStop(t *testing.T) {
 	s.signal(t)
 	time.Sleep(500 * time.Millisecond)
 	io.WriteString(conn, body[8:])
-	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	conn.SetReadDeadline(time.Now().Add(testkit.Scale(10 * time.Second)))
 	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
 	if err != nil {
 		t.Fatalf("no answer to the request in flight at the stop: %v", err)
@@ -286,7 +287,7 @@ func TestServeStopEndsEventStreams(t *testing.T) {
 		if err != nil {
 			t.Errorf("the stream was cut rather than ended: %v", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(testkit.Scale(5 * time.Second)):
 		t.Error("the stream did not end")
 	}
 }

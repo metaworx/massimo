@@ -13,6 +13,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/sharedport"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // ipNet parses a CIDR keeping the host's address in it, as
@@ -125,17 +126,15 @@ func TestResponderAnswersItsOwnHostByBroadcast(t *testing.T) {
 			t.Fatal(err)
 		}
 		buf := make([]byte, 256)
-		client.SetReadDeadline(time.Now().Add(5 * time.Second))
+		client.SetReadDeadline(time.Now().Add(testkit.Scale(5 * time.Second)))
 		if _, _, err := client.ReadFrom(buf); err != nil {
 			t.Fatal(err)
 		}
-		for deadline := time.Now().Add(5 * time.Second); broadcasts() < want; time.Sleep(5 * time.Millisecond) {
-			if time.Now().After(deadline) {
-				n := broadcasts()
-				mu.Lock()
-				defer mu.Unlock()
-				t.Fatalf("%d broadcast(s) to %s, want %d; sent %v", n, bcast, want, sent)
-			}
+		if !testkit.Within(5*time.Second, func() bool { return broadcasts() >= want }) {
+			n := broadcasts()
+			mu.Lock()
+			defer mu.Unlock()
+			t.Fatalf("%d broadcast(s) to %s, want %d; sent %v", n, bcast, want, sent)
 		}
 	}
 	ask(1)
@@ -147,7 +146,7 @@ func TestResponderAnswersItsOwnHostByBroadcast(t *testing.T) {
 	resp.mu.Unlock()
 	client.WriteTo(append([]byte("eQ3Max*\x00**********"), 'I'), pc.LocalAddr())
 	buf := make([]byte, 256)
-	client.SetReadDeadline(time.Now().Add(5 * time.Second))
+	client.SetReadDeadline(time.Now().Add(testkit.Scale(5 * time.Second)))
 	if _, _, err := client.ReadFrom(buf); err != nil {
 		t.Fatal(err)
 	}
@@ -200,7 +199,7 @@ func TestResponderUnmapsIPv4Sources(t *testing.T) {
 		if len(p.From.IP) != net.IPv4len || !p.From.IP.Equal(net.IPv4(127, 0, 0, 1)) {
 			t.Fatalf("source %v, %d bytes", p.From, len(p.From.IP))
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(testkit.Scale(5 * time.Second)):
 		t.Fatal("nothing reached the search")
 	}
 }

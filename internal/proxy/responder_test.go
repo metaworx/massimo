@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/cubelan"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // fakePacket is a datagram a fakeConn hands to its reader.
@@ -113,16 +114,6 @@ func (r *Responder) othersSeen() int {
 	return r.others
 }
 
-// waitFor fails the test unless cond holds within 5 s.
-func waitFor(t *testing.T, what string, cond func() bool) {
-	t.Helper()
-	for deadline := time.Now().Add(5 * time.Second); !cond(); time.Sleep(2 * time.Millisecond) {
-		if time.Now().After(deadline) {
-			t.Fatalf("no %s within 5 s", what)
-		}
-	}
-}
-
 // A search from this host and the responder's port is another
 // program's, unless it is the responder's own come back; one from
 // another port or another host is not.
@@ -134,13 +125,13 @@ func TestResponderTellsAnotherProgramsSearch(t *testing.T) {
 	fc.in <- fakePacket{identify, &net.UDPAddr{IP: hostAddr, Port: cubelan.DiscoveryPort}}
 	// The responder reads in turn: once the next one is noted, the ones
 	// before it were looked at.
-	waitFor(t, "own echo's end", func() bool {
+	testkit.Eventually(t, "own echo's end", func() bool {
 		r.mu.Lock()
 		defer r.mu.Unlock()
 		return time.Since(r.ownSend) > defaultOwnEcho
 	})
 	fc.in <- fakePacket{identify, &net.UDPAddr{IP: hostAddr, Port: cubelan.DiscoveryPort}}
-	waitFor(t, "other program's search", func() bool { return r.othersSeen() > 0 })
+	testkit.Eventually(t, "other program's search", func() bool { return r.othersSeen() > 0 })
 	if n := r.othersSeen(); n != 1 {
 		t.Fatalf("%d other programs' searches, want 1", n)
 	}
@@ -163,7 +154,7 @@ func TestDiscoverWaitsForAnotherProgramsSearch(t *testing.T) {
 			r.searchWindow, r.searchWaitMax = tc.window, tc.limit
 			r.mu.Unlock()
 			fc.in <- fakePacket{identify, &net.UDPAddr{IP: hostAddr, Port: cubelan.DiscoveryPort}}
-			waitFor(t, "other program's search", func() bool { return r.othersSeen() > 0 })
+			testkit.Eventually(t, "other program's search", func() bool { return r.othersSeen() > 0 })
 			r.mu.Lock()
 			seen := r.otherSearch
 			r.mu.Unlock()
@@ -205,7 +196,7 @@ func TestDiscoverCutShortByAnotherProgramsSearch(t *testing.T) {
 	}()
 	// Search sends twice, 50 ms apart; another program's search comes
 	// well after the second.
-	waitFor(t, "the search's two requests", func() bool { return len(fc.written()) >= 2 })
+	testkit.Eventually(t, "the search's two requests", func() bool { return len(fc.written()) >= 2 })
 	time.Sleep(100 * time.Millisecond)
 	fc.in <- fakePacket{identify, &net.UDPAddr{IP: hostAddr, Port: cubelan.DiscoveryPort}}
 	select {
@@ -213,7 +204,7 @@ func TestDiscoverCutShortByAnotherProgramsSearch(t *testing.T) {
 		if !errors.Is(err, ErrSearchShared) {
 			t.Fatalf("Discover: %v, want ErrSearchShared", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(testkit.Scale(5 * time.Second)):
 		t.Fatal("Discover did not end")
 	}
 	// Without another program's search, the next run is complete.
@@ -264,16 +255,16 @@ func TestResponderWarnsOfAnswersItDidNotAskFor(t *testing.T) {
 	warned := func() int { return len(buf.lines("WARN", msg)) }
 
 	fc.in <- fakePacket{answer('c'), cube}
-	waitFor(t, "the first warning", func() bool { return warned() == 1 })
+	testkit.Eventually(t, "the first warning", func() bool { return warned() == 1 })
 	fc.in <- fakePacket{answer('c'), cube}                                    // again within the minute
 	fc.in <- fakePacket{answer('c'), &net.UDPAddr{IP: hostAddr, Port: 23272}} // this host
 	fc.in <- fakePacket{answer('I'), cube}                                    // identify
 	fc.in <- fakePacket{answer('C'), cube}                                    // another opcode
-	waitFor(t, "the second warning", func() bool { return warned() == 2 })
+	testkit.Eventually(t, "the second warning", func() bool { return warned() == 2 })
 	if l := buf.lines("WARN", msg); !strings.Contains(l[0], "serial=KEQ0000000") || !strings.Contains(l[0], "op=c") || !strings.Contains(l[1], "op=C") {
 		t.Errorf("warnings %q", l)
 	}
-	waitFor(t, "the identify answer at Debug", func() bool { return len(buf.lines("DEBUG", "identify answer")) == 1 })
+	testkit.Eventually(t, "the identify answer at Debug", func() bool { return len(buf.lines("DEBUG", "identify answer")) == 1 })
 
 	// During an operation of the responder's own, and within the grace
 	// after it, an answer is that operation's.
@@ -285,13 +276,13 @@ func TestResponderWarnsOfAnswersItDidNotAskFor(t *testing.T) {
 	// The responder reads in turn: once the search after it is counted,
 	// the answer within the grace was looked at.
 	fc.in <- fakePacket{identify, &net.UDPAddr{IP: hostAddr, Port: cubelan.DiscoveryPort}}
-	waitFor(t, "the search after it", func() bool { return r.othersSeen() == 1 })
+	testkit.Eventually(t, "the search after it", func() bool { return r.othersSeen() == 1 })
 	r.mu.Lock()
 	r.opGrace = time.Millisecond
 	r.mu.Unlock()
 	time.Sleep(10 * time.Millisecond)
 	fc.in <- fakePacket{answer('R'), cube}
-	waitFor(t, "the warning after the grace", func() bool { return warned() == 3 })
+	testkit.Eventually(t, "the warning after the grace", func() bool { return warned() == 3 })
 	if l := buf.lines("WARN", msg); !strings.Contains(l[2], "op=R") {
 		t.Errorf("third warning %q, want the one after the grace", l[2])
 	}

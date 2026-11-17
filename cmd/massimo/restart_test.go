@@ -24,6 +24,7 @@ import (
 	"go.metaworx.ch/massimo/internal/install"
 	"go.metaworx.ch/massimo/internal/server"
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/packaging"
 )
 
@@ -194,7 +195,7 @@ func TestServeRestartsThroughTheAPI(t *testing.T) {
 	select {
 	case a := <-addr:
 		base = "http://" + a
-	case <-time.After(10 * time.Second):
+	case <-time.After(testkit.Scale(10 * time.Second)):
 		t.Fatal("serve did not start, or not with -restart exit")
 	}
 	resp, err := http.Post(base+"/api/v1/restart", "application/json", strings.NewReader("{}"))
@@ -214,7 +215,7 @@ func TestServeRestartsThroughTheAPI(t *testing.T) {
 		if !errors.As(err, &ee) || ee.ExitCode() != exitRestart {
 			t.Fatalf("serve ended with %v, want exit status %d", err, exitRestart)
 		}
-	case <-time.After(20 * time.Second):
+	case <-time.After(testkit.Scale(20 * time.Second)):
 		t.Fatal("serve did not end for the restart")
 	}
 	<-scanned
