@@ -22,7 +22,8 @@ name: Build
 # (massimo-build.txt, its log among it), which the signed manifest lists,
 # attests the provenance of every file it built (GitHub's build
 # provenance, through Sigstore), and hands the files to release.yml as
-# the run's artifact `release`.
+# the run's artifact `release`; `app` builds the Android app of a tag or
+# of the nightly build, unsigned, as the artifact `release-app`.
 on:
   workflow_call:
     outputs:
@@ -239,4 +240,68 @@ jobs:
         with:
           name: release
           path: dist/
+          if-no-files-found: error
+
+  # The Android app (AP MobileApp, Block 4): a version tag's foss APK and
+  # play AAB, and the nightly build's nightly APK (D13-B, D18-A), built
+  # unsigned; release.yml signs them, a tag's in the signing environment,
+  # the nightly one in rolling. A tag's app/version.json must be the tag's,
+  # with the tag's versionCode (packaging/app-version.sh, D12-A, which make
+  # release wrote); a nightly build's version is git describe's, given to
+  # Gradle. The image's JDK 17 and Android SDK, Gradle through the
+  # committed wrapper, no cache, no secret. The files are attested
+  # unsigned and handed over as the artifact release-app, apart from
+  # release, whose files sign publishes as they are. Its failure fails no
+  # release (continue-on-error): the boxes' files go out, and the signing
+  # jobs say that the release carries no app. A devel build has none.
+  app:
+    name: Android app
+    needs: meta
+    if: needs.meta.outputs.kind == 'release' || needs.meta.outputs.kind == 'nightly'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.meta.outputs.sha }}
+          fetch-depth: 0 # the versionCode counts the commits since a tag
+
+      - name: Build the app, unsigned
+        env:
+          KIND: ${{ needs.meta.outputs.kind }}
+          TAG: ${{ needs.meta.outputs.tag }}
+          SHA: ${{ needs.meta.outputs.sha }}
+        run: |
+          export JAVA_HOME="${JAVA_HOME_17_X64:?the runner image has no JDK 17}"
+          out=app/android/app/build/outputs
+          mkdir -p app-dist
+          gradle() { (cd app/android && ./gradlew --no-daemon --no-build-cache --console=plain "$@"); }
+          if [ "$KIND" = release ]; then
+            packaging/app-version.sh check "$TAG"
+            gradle :app:assembleFossRelease :app:bundlePlayRelease
+            cp "${out}/apk/foss/release/app-foss-release-unsigned.apk" app-dist/massimo-android-unsigned.apk
+            cp "${out}/bundle/playRelease/app-play-release.aab" app-dist/massimo-android-play-unsigned.aab
+          else
+            v="$(packaging/app-version.sh describe "$SHA")"
+            read -r name code <<<"$v"
+            echo "the nightly app: ${name}, versionCode ${code}"
+            gradle :app:assembleNightlyRelease -Pmassimo.version="$name" -Pmassimo.versionCode="$code"
+            cp "${out}/apk/nightly/release/app-nightly-release-unsigned.apk" app-dist/massimo-android-nightly-unsigned.apk
+          fi
+          sha256sum app-dist/*
+
+      - name: Attest the unsigned app's provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: app-dist/*
+
+      - name: Hand the app to the signing jobs
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-app
+          path: app-dist/
           if-no-files-found: error

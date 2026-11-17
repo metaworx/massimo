@@ -62,6 +62,31 @@ A room's tile whose configuration has the focus is not drawn again under a click
 or the user's typing, for a state event or a reload of the rooms alike;
 it is drawn once the focus has left the configuration.
 
+Settings typed and not saved (Cube settings, a room's virtual thermostat)
+stay while the page is loaded, across its pages and the Cube chosen;
+moving to another page or choosing another Cube asks nothing,
+since the disks of the problem lists say where they are.
+Closing the tab, reloading it or going to another site
+while such settings have changes, also those still being typed or being saved,
+the browser asks with its own prompt, which says nothing of the page:
+leaving drops the changes; staying, every changed form is unsaved now,
+with its sign and its disk, and a second later the page shows **Settings not saved**,
+a dialog that lists them, red where a save failed,
+each a button that closes it and opens its settings
+with the focus in them, from any page, and **Close**;
+the second keeps the dialog off a page that is leaving while the next one comes.
+A browser asks only once the page has had a click or a key.
+**Sign out** (or **Forget key**), which drops them too,
+asks first with the same dialog, with **Stay** and the button that signs out;
+without such changes it signs out at once.
+The dialog closes by itself once the last of its settings is saved or reset,
+and a sign-out it asked about then goes on, since nothing is lost any more.
+A session that expires, or ends in another tab, asks for a sign-in and nothing more:
+the same user signed in again finds the changes,
+another user does not.
+The page that reloads by itself when the server has a newer version
+waits while there are any.
+
 ## Header
 
 The header's line reads, from the left:
@@ -105,7 +130,8 @@ The compacted header has **↑** left of ☰, back to the top.
   Open, each Cube has its sign, its name with an icon after it for each
   kind of problem it has (the radio, a battery, a window open too long, a
   device's link and, for one who may change the settings, the cog, and the
-  disk while the Cube's settings are unsaved or a save of them failed), each in
+  disk while the Cube's settings or the settings of one of its rooms' virtual
+  wall thermostats are unsaved or a save of them failed), each in
   its worst colour, and under it its serial and address,
   the list as wide as they need; the arrow keys move between them.
   Open, it stays open when data comes in, the focus where it was,
@@ -379,6 +405,34 @@ Every room has a tile:
   (**Median** or **Mean** of its radiator thermostats)
   and its radio address, which matters only to clients of the LAN proxy
   whose device numbers collide; **Save** writes them.
+  What is typed there stays until it is saved or reset:
+  when the device list closes and opens, when the rooms load again,
+  when a device reports and when another Cube is chosen, each with its Cube.
+  It is forgotten at a sign-out, when its Cube is no longer served,
+  and when a load of the rooms from the Cube, connected, no longer gives the room
+  or its virtual wall thermostat: deleted, or hidden in Cube settings;
+  a Cube not connected forgets nothing.
+  Opened again, the settings show what was typed at once;
+  opened for the first time, they are off until they have come from the server,
+  or say in their result line that they could not be read.
+  After a save the settings show what the server has,
+  or what was sent where they cannot be read again.
+  **Save** and **Reset** say how they stand, as in Cube settings:
+  off and plain while nothing is changed, in the accent colour once something is,
+  with the warning mark once the focus has left them,
+  the list was closed or a minute has passed,
+  with the cross after a save that failed, and the check after one that went through.
+  While they are unsaved, or a save failed,
+  the virtual wall thermostat's problem list in its row,
+  the tile's problem list in its head
+  and the Cube's problem lists,
+  in the header's list of every Cube and in its panel's head,
+  show the disk with the corner mark,
+  "Living room, virtual thermostat: not saved", amber, red after a failed save,
+  outside expert mode too, where the virtual wall thermostat's row then shows
+  as long as its settings have changes, and goes again once they are saved or reset.
+  A click on it, from any page, chooses the Cube where another is chosen,
+  shows the rooms, opens the room's device list and puts the focus into the settings.
   A device that has not been heard from for more than 24 hours has a "Not seen
   for …" badge.
 - The cog button opens the room's configuration:
@@ -947,7 +1001,8 @@ and with the check for five seconds after a save.
 While the settings are unsaved, or a save failed,
 the Cube's problem list, in its panel's head and in the header's list of every Cube,
 shows the disk with the corner mark, amber, red after a failed save,
-"Cube settings: not saved"; a click on it opens the settings,
+"Cube settings: not saved", as it shows a disk for each of its rooms' unsaved settings
+(Rooms, the device list); a click on it opens the settings,
 the Cube's panel in System settings, else Cube settings with the Cube chosen,
 and puts the focus into them.
 A panel is drawn in one place at a time:
@@ -1644,15 +1699,18 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `KindIcons`, `problemKinds`, `kindsLabel` | `problems.tsx` | the kinds' icons of entries without the list (`kindIcons`); the kinds themselves, to know whether there are any; the label naming the kinds among items in an order of kinds, "" for none | `entries`, `skip`; `entries`, `skip`; `items`, `kinds` |
 | `OkPill` | `problems.tsx` | the green check in a list's place (`okPill`) | `label` |
 | `Field` | `field.tsx` | a label and its control, `.field` or `.field.wide` (`fieldRow`) | `label`, `id`, `wide`, `unit`, `hint`, `draft`, `show`, the control as children |
-| `TextField` | `field.tsx` | a row with a text input that shows a stored text, from its draft | `label`, `id`, `name`, `draft`, `show`, `wide` (on by default), `unit`, `hint`, `placeholder`, `type`, `maxLength`, `pattern` |
-| `Select` | `field.tsx` | a row with a select (`selectInput`), its options as `fillOptions` takes them | `label`, `id`, `name`, `options` (`[value, label, disabled]` or `{ group, options }`), `value` and `onChange`, or `draft` and `show`; `wide`, `unit`, `hint` |
+| `TextField` | `field.tsx` | a row with a text input that shows a stored text, from its draft | `label`, `id`, `name`, `draft`, `show`, `wide` (on by default), `unit`, `hint`, `placeholder`, `type`, `maxLength`, `pattern`, `disabled` |
+| `Select` | `field.tsx` | a row with a select (`selectInput`), its options as `fillOptions` takes them | `label`, `id`, `name`, `options` (`[value, label, disabled]` or `{ group, options }`), `value` and `onChange`, or `draft` and `show`; `wide`, `unit`, `hint`, `disabled` |
 | `DateTime` | `field.tsx` | a date and time field (`datetime-local`), its value as the input takes it | `value`, `set`, `id`, `cls`, `step`, `required`, `disabled`, `inputRef` |
 | `Switch` | `field.tsx` | a checkbox drawn as a switch (`switchEl`) | `name`, `label`, `checked` and `onChange`, or `draft` and `show`; `row`, `cls` (the switch's classes), `id`, `disabled`, `title`, children after the label |
 | `Stepper` | `field.tsx` | a number field between − and + (`stepper`), the step within its range; its buttons are named for a temperature, half a degree less and more, and the first user of another unit adds their names | `value`, `set`, `min`, `max`, `step`, `id` and `cls` of the field, `hidden` (the whole kept in its place unseen), children after the + (a unit) |
 | `useDraft`, `Meanwhile` | `field.tsx` | a field that shows stored data keeps a draft: untouched it follows, changed it says "changed meanwhile" with Take theirs (D59-A); with a place, a form's (`useForm`), the draft is kept there | `stored`, `norm`, `place`; gives `value`, `stored`, `set`, `changed`, `meanwhile`, `take`; `draft`, `show` |
 | `FormFooter` | `field.tsx` | a form's row of actions (`formFooter`, `sendWhenChanged`); with `look`, Save shows the form's state | `submit`, `busy`, `off`, `cancel` (its button of the class `form-cancel`, as the plain footer's), `cancelLabel`, `reset` (Reset, of the class `form-reset`, one fixed class per footer button as Cancel's `form-cancel`, off while clean), `look` (a `FormLook` of `useForm`), `extra` |
-| `useForm` | `forms.ts` | a settings form that keeps its changes until they are saved or reset, kept by a key the region chooses beyond the part, and its state: clean, changed, unsaved (the focus left it, it was taken away, or a minute passed since the last change), saving, failed, saved | `key`, `name` (a text key and its arguments, naming it in the problem list), `open` (shows it and calls `focusForm`); gives `look`, `props` (the form element's), `place(field)` (for `useDraft`), `track(changed, drafts)` (after the fields, at each drawing), `save(fn)`, `reset()` |
+| `useForm` | `forms.ts` | a settings form that keeps its changes until they are saved or reset, kept by a key the region chooses beyond the part, and its state: clean, changed, unsaved (the focus left it, it was taken away, or a minute passed since the last change), saving, failed, saved | `key`, `name` (a text key and its arguments, naming it in the problem list), `open` (shows it and calls `focusForm`); gives `look`, `props` (the form element's), `place(field)` (for `useDraft`; its `known()` the stored value its draft holds, undefined before it has one), `track(changed, drafts)` (after the fields, at each drawing), `save(fn)`, `reset()` |
+| `hasChanges` | `forms.ts` | whether a form, or one under it, has changes not saved: changed, saving, unsaved or failed (a row shown while it holds such a form, otherwise for expert mode alone) | `key` |
 | `unsavedItems`, `focusForm`, `forgetForms` | `forms.ts` | the unsaved and the failed forms as items of `Problems`, the disk naming the form, a click opening it (the registry they come from, a signal inside `forms.ts`, holds the forms merely changed too, for the question on leaving the page); the focus put into a form once it is shown; a form's drafts forgotten, what it belongs to gone, or all at a sign-out (`MassimoParts.signedOut`, `logout` of `login.js`) | `key` (that form's and those under it, `key:…`); `key`; `key` ("" for all) |
+| `changedItems`, `leaveForms` | `forms.ts` | every form with changes not saved, the merely changed and the saving ones too, as `unsavedItems` draws them: what leaving the page drops; every changed form counted as left, unsaved, at an attempt to leave the page | – |
+| `FormsDialog` | `dialog.tsx` | a modal `<dialog>` that lists forms with changes, each a button that closes it and opens its form, with a button that stays (Escape too, and any close without a button of its own) and one that goes on, of the classes `dialog-stay` and `dialog-go` in every use; the focus on the one that stays, given back where it was when it closes | `shown`, `title`, `text`, `forms` (items, as `changedItems` gives them), `stay` (its label), `onStay`, `go` (`{ label, onGo }`, none without) |
 | `Question` | `question.tsx` | a question in the page, No and Yes, Escape for No (`confirmBox`) | `text`, `yes`, `no`, `onYes` (its request's promise), `onNo` |
 | `useAsk` | `question.tsx` | a row that asks in its own place, the focus back on its button (`confirmInPlace`) | gives `asking`, `ask`, `done`, `ref` |
 | `useBusy`, `busyProps` | `question.tsx` | a button's request under way: busy, off, `aria-busy` (`whileBusy`, `setBusy`) | `run(fn)`; `busyProps(cls, busy, off)` |
@@ -1703,7 +1761,10 @@ What the table cannot say:
   under its owner's key (`<owner>:<tab>`),
   which also gives a section its prefix.
   A form whose stored values load later (the virtual thermostat's settings)
-  takes no place before they have loaded, so that its drafts start from them.
+  draws its fields from their places at once where `known()` gives their
+  stored values (a form drawn again), and otherwise takes no place,
+  calls no `track` and keeps its fields off (`disabled`) until they have come,
+  so that its drafts start from them and nothing typed meanwhile is lost.
 
 These builders of `components.js` and `app.js` have no part yet, since no region
 that has moved uses them: the help button (`helpParts`) and a field row without
@@ -1728,6 +1789,19 @@ it says only whether the request was taken,
 and the error is in the message line;
 a Cancel of `useForm` (Reset and the form's close) and the "unsaved" form of a
 section without a pill (AP UnsavedMarks, Blocks 4 and 5);
+a room's own entry in the tile's problem list, where a configuration tab lists its
+form, which today goes through the virtual wall thermostat's entry, and one list of
+the room's forms that does not name the virtual thermostat twice, and a tab's open
+by `openConfig(room, el, tab)` (`config.js`), where the virtual thermostat's open
+closes the configuration (AP UnsavedMarks, Block 4);
+the page's modal dialog: `FormsDialog` is the list of forms with a title,
+and a later modal takes its shell out of it
+(its opening by a property, the focus, its closing);
+a sign-in through a provider after a 401 leaves the page while drafts are kept,
+so the browser's prompt asks there too, and staying shows the dialog above the sign-in,
+whose forms cannot be shown while signed out;
+the worse state of several forms, failed over unsaved, for a section's pill and
+the menu's sign (AP UnsavedMarks, Block 5);
 an item of `Problems` whose action leaves the list open
 (every button in a menu closes it, as an item's action does;
 the header's coming "Refresh now").
@@ -1782,10 +1856,11 @@ The rooms (`ui/src/rooms/`) are the third:
 `index.tsx` draws the House tile's modes and panel in `#house-slot`,
 a tile per room of the chosen Cube in `#rooms`,
 kept by the Cube and the room's id, and the devices without a room in `#unlisted-devices`,
-and registers `render`, `data`, `unlisted`, `room`, `result`, `ui`,
+and registers `render`, `data`, `unlisted`, `room`, `result`, `ui`, `loaded`,
 `houseOpen` and `closeHouse`,
 which `rooms.js` calls as `renderRooms`, `updateDevice` (`data` for a room's device,
-`unlisted` for one in no room), `rerenderRoom`, `showTileResult` and `roomUI`,
+`unlisted` for one in no room), `rerenderRoom`, `showTileResult`, `roomUI`
+and `roomsLoaded`,
 and `house.js` by their own names;
 `store.ts` holds its counter, a counter per room that a state event of one of its
 devices raises and one per room's configuration, what a tile keeps (`newUI`,
@@ -1825,8 +1900,49 @@ the deletion's question a `Question`, the notices `Notice`s,
 the result lines `ResultLine`s,
 a device's badges `Badge`s with their `Age`, its identifiers a `DeviceIds`,
 the virtual thermostat's two settings a `Select` and a `TextField` with their drafts (`useDraft`),
-a `FormFooter` and a `ResultLine` that its `actionRunner` sets;
+a `FormFooter` and a `ResultLine` that its `actionRunner` sets,
+a `useForm` of the key `vwtFormKey(id)` (`store.ts`), under the room's
+`roomFormKey(serial, id)` of `model/cube.tsx`, which the room's configuration's
+tabs take keys under too: `facts.ts` lists its `unsavedItems` in the row's
+and the tile's problem list (`vwtItems`), `cubeEntry` those of every room of the Cube
+(`unsavedItems(roomFormKey(serial))`), the row shows outside expert mode while
+`hasChanges` says so, and `openSettings` (`store.ts`) chooses the Cube, shows the rooms
+and keeps the request until that Cube's rooms have loaded;
+`index.tsx` registers `loaded`, which `loadRooms` calls as `roomsLoaded`
+after a load that went through and before the rooms are drawn:
+it forgets a room's forms when the load, from a Cube connected with its greeting,
+no longer gives the room or its virtual thermostat
+(a Cube the server has not greeted answers no rooms at all),
+and opens the settings asked for;
+the Cubes' `index.tsx` forgets `roomFormKey(serial)` with the Cube;
 the tile's result line is a `ResultLine` too, its success fading by `fader`.
+Leaving the page (`ui/src/leaving/`) is a region of its own,
+a dialog without a place in any page's region:
+the page's chrome stays plain until AP UiParts' Block 14, and no region imports another,
+so it knows the forms only through `forms.ts`.
+`index.tsx` draws a `FormsDialog` into `#leaving` at the end of the page
+as soon as `parts.js` loads, and adds its `beforeunload` and `pagehide` listeners
+only while `changedItems` has any, removed once none has,
+since a page with a `beforeunload` listener can lose the browser's back and forward cache:
+at the prompt it counts the forms left (`leaveForms`), and the dialog with Close
+comes `STAY_AFTER_MS` (a second) later where the page is still there:
+a browser does not tell the page the user's answer,
+and a page that is left runs on until the next one comes (a Pi 1 is slow to send it),
+so the dialog shown at once would come on a page that is leaving;
+`pagehide` takes back the dialog of a stay, and one that waits to come,
+so that a page kept for the back button comes back without it;
+once the last form is saved, reset or forgotten, the dialog closes
+and a sign-out's question is answered as a sign-out;
+it registers `signOut(label)`, which `logout` of `login.js` awaits first,
+the dialog with Stay and the label of the page's own button,
+resolving true at once where no form has changes,
+and `changes()`, which `somethingOpen` of `header.js` asks,
+so that a newer server's reload waits.
+After a 401, the sign-in of `askLogin` forgets every form (`forgetOthers` of `login.js`,
+`MassimoParts.signedOut`) where the user who signs in is not the one who was,
+by `/me`'s user or mode, before the requests that waited for it are sent again.
+Moving inside the page (`pages.js`, the Cube choice) unloads nothing,
+so nothing asks there.
 A part's place among plain siblings is an element of the class `part-slot`,
 which takes no box of its own (`display: contents`),
 so that the part's element is laid out as if it stood there itself.

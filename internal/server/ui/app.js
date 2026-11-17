@@ -657,6 +657,7 @@ async function loadRooms() {
   state.rooms = rooms;
   state.unlisted = unlisted;
   state.roomsOf = serial;
+  roomsLoaded(); // rooms.js
   renderRooms();
   // log.js: the device chosen is gone, or else the lines drawn before the
   // rooms came (a reload on the log, a Cube switch there) get their names

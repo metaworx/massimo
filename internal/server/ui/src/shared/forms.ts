@@ -17,7 +17,9 @@
  * Reset, or nothing left to send; saved for as long as a result line
  * shows a success (RESULT_FADE_MS). A region chooses the keys, such as
  * "<kind>:<id>", and forgets the forms of what is gone; the page forgets
- * them all at a sign-out.
+ * them all at a sign-out. Every form with changes, the merely changed
+ * among them, is what leaving the page would drop: the page asks for
+ * them, and an attempt to leave counts each changed form as left.
  */
 
 import { signal, type Signal } from "@preact/signals";
@@ -64,6 +66,12 @@ interface Slot<T> {
 export interface Place<T> {
   /** slot is the field's draft, made from stored the first time. */
   slot(stored: T): Slot<T>;
+  /**
+   * known is the stored value the field's draft holds now, undefined
+   * before it has one: a form whose stored values load later draws its
+   * drafts from it at once, before they have come again.
+   */
+  known(): T | undefined;
   /** changed tells the form of the user's change. */
   changed(): void;
   /** redraw draws the form again, after a draft was taken. */
@@ -191,23 +199,55 @@ export function focusForm(key: string): void {
 }
 
 /**
+ * hasChanges says whether the form of key, or one under it, has changes
+ * not saved: changed, saving, unsaved or failed; not once it is saved or
+ * reset. A part shows what holds such a form while it has them (a row
+ * otherwise for expert mode alone).
+ */
+export function hasChanges(key: string): boolean {
+  return pending.value.some((u) => under(u.key, key));
+}
+
+/**
  * unsavedItems are the items of a problem list for the unsaved and the
  * failed forms whose key is key or begins with key + ":", not those
  * merely changed: the disk, amber while unsaved, red after a failed save,
  * its text naming the form, its click opening it.
  */
 export function unsavedItems(key: string): Item[] {
-  return pending.value.filter((u) => u.state !== "changed" && under(u.key, key)).map((u) => {
-    const name = t(u.name.key, u.name.args || {});
-    return {
-      kind: "unsaved",
-      icon: "icon-disk",
-      sign: "disk",
-      tone: u.state === "failed" ? "bad" : "warn",
-      text: t(u.state === "failed" ? "form.failedItem" : "form.unsavedItem", { form: name }),
-      action: u.open,
-    };
-  });
+  return pending.value.filter((u) => u.state !== "changed" && under(u.key, key)).map(itemOf);
+}
+
+/**
+ * changedItems are the items of every form with changes not saved, the
+ * merely changed ones and those saving too, as unsavedItems draws them:
+ * what leaving the page would drop. A part that reads them is drawn
+ * again when they change.
+ */
+export function changedItems(): Item[] {
+  return pending.value.map(itemOf);
+}
+
+/** itemOf is a form's item in a list: the disk, red after a failed save, else amber, its text naming the form, its click opening it. */
+function itemOf(u: Pending): Item {
+  const name = t(u.name.key, u.name.args || {});
+  return {
+    kind: "unsaved",
+    icon: "icon-disk",
+    sign: "disk",
+    tone: u.state === "failed" ? "bad" : "warn",
+    text: t(u.state === "failed" ? "form.failedItem" : "form.unsavedItem", { form: name }),
+    action: u.open,
+  };
+}
+
+/**
+ * leaveForms counts every changed form as left, as the focus leaving it
+ * does: an attempt to leave the page, so that a form still being typed
+ * in is unsaved, with its sign and its disk, where the user stays.
+ */
+export function leaveForms(): void {
+  for (const r of records.values()) left(r);
 }
 
 /** What a form part gets from useForm. */
@@ -304,6 +344,7 @@ export function useForm({ key, name, open }: { key: string; name: FormName; open
           }
           return s;
         },
+        known: () => (r.slots.get(field) as Slot<T> | undefined)?.stored,
         changed: () => touched(r),
         redraw: () => {
           r.ver.value++;

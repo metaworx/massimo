@@ -10,10 +10,14 @@
  * which a state event of one of its devices raises, and the counter of
  * its configuration, which stays plain inside the tile (config.js); what
  * a tile keeps (roomUI) is live state, made here for rooms.js, and so is
- * what the House tile's panel keeps.
+ * what the House tile's panel keeps; the keys a room's forms are kept by
+ * (shared/forms.ts), and the opening of a virtual thermostat's settings
+ * asked for from anywhere.
  */
 
+import { roomFormKey } from "../model/cube";
 import { counter } from "../shared/counter";
+import { focusForm } from "../shared/forms";
 import { live, liveMap } from "../shared/live";
 import { windowState } from "../model/device";
 
@@ -53,6 +57,57 @@ export const house = live({
   ticks: {} as Record<number, boolean>,
   result: null as { text: string; ok: boolean } | null,
 });
+
+/**
+ * vwtFormKey is the key the settings of a room's virtual wall thermostat
+ * are kept by (useForm), under the room's of its Cube (roomFormKey): one
+ * virtual thermostat per room, whatever its radio address.
+ */
+export function vwtFormKey(serial: string, id: number): string {
+  return roomFormKey(serial, id) + ":vwt";
+}
+
+/**
+ * The settings of a virtual thermostat asked to be opened (openSettings),
+ * by its Cube and its room, until that Cube's rooms have loaded: choosing
+ * a Cube empties the tiles' state (selectCube), so the request waits for
+ * the load (takeOpening).
+ */
+let opening: { serial: string; id: number } | null = null;
+
+/**
+ * openSettings shows the settings of a room's virtual wall thermostat and
+ * puts the focus into them, from any page: its Cube chosen where another
+ * is, the rooms shown, then, once that Cube's rooms are there, the room's
+ * device list opened as its info button opens it (toggleDevices) and the
+ * focus put into the form (focusForm), which brings the row into view.
+ */
+export function openSettings(serial: string, id: number): void {
+  opening = { serial, id };
+  if (state.serial !== serial) selectCube(serial);
+  if (!isShown("tiles")) showView("tiles");
+  takeOpening();
+}
+
+/**
+ * takeOpening carries out the opening asked for where the rooms loaded are
+ * its Cube's (openSettings), at once or after the load (loaded); a request
+ * for a Cube no longer chosen is dropped, and so is one for a room gone.
+ */
+export function takeOpening(): void {
+  const o = opening;
+  if (!o) return;
+  if (state.serial !== o.serial) {
+    opening = null;
+    return;
+  }
+  if (state.roomsOf !== o.serial) return; // its rooms not loaded yet
+  opening = null;
+  const room = roomOf(o.id);
+  if (!room) return;
+  if (!roomUI(room).open) toggleDevices(room, null);
+  focusForm(vwtFormKey(o.serial, o.id));
+}
 
 /** roomOf is the room of the id as the page has it now, undefined once it is gone. */
 export function roomOf(id: number): PageRoom | undefined {

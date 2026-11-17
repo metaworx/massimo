@@ -9,19 +9,25 @@
  * its device list, and the devices without a room in #unlisted-devices,
  * each built once per room or device and updated in place. The plain code
  * calls MassimoParts.rooms (rooms.js renderRooms, rerenderRoom,
- * updateDevice, showTileResult and roomUI, house.js houseOpen and
+ * updateDevice, showTileResult, roomUI and roomsLoaded, house.js houseOpen and
  * closeHouse);
  * the tile's actions stay plain and set the tile's live state, which the
- * tile follows. The configuration (config.js), the repairs (repair.js) and
+ * tile follows. A room's forms are forgotten once a load no longer gives
+ * the room, or the virtual thermostat whose settings they hold, and the
+ * settings asked to be opened from elsewhere are opened once their
+ * Cube's rooms have loaded. The
+ * configuration (config.js), the repairs (repair.js) and
  * the form that puts a device into a room (pairing.js) stay plain inside.
  */
 
+import { roomFormKey } from "../model/cube";
 import { fader, type Outcome } from "../shared/action";
+import { forgetForms } from "../shared/forms";
 import { mounter, register } from "../shared/region";
 import { closeHouse, House } from "./House";
 import { Tile } from "./Tile";
 import { UNLISTED, Unlisted } from "./Unlisted";
-import { changed, house, load, newUI, planWindows, roomOf, tickOf } from "./store";
+import { changed, house, load, newUI, planWindows, roomOf, takeOpening, tickOf, vwtFormKey } from "./store";
 
 /** Rooms is a tile per room, kept by its Cube and its id for as long as the room is there. */
 function Rooms() {
@@ -47,6 +53,32 @@ function resultOf(id: number): (res: Outcome | null) => void {
   return set;
 }
 
+/** Per Cube, the rooms its last load gave, by id, each with whether it had its virtual wall thermostat. */
+const loaded = new Map<string, Map<number, boolean>>();
+
+/**
+ * forgetGone forgets the forms of the rooms the last load of the Cube's
+ * rooms no longer gives, and the settings of a virtual thermostat it no
+ * longer gives: deleted or hidden, by this page or another client. It
+ * runs at loaded alone, which loadRooms calls after a load that went
+ * through, with the rooms of the Cube state.roomsOf names; a load that
+ * fails throws before it. It forgets only where that Cube is connected
+ * with its greeting (connected of the Cubes' list): a Cube the server has
+ * not greeted since it started answers no rooms at all, and a draft is not
+ * forgotten at a disconnect. A Cube no longer served takes its rooms'
+ * forms with it (the Cubes' forgetGone); a sign-out takes every form.
+ */
+function forgetGone(): void {
+  const serial = state.roomsOf;
+  if (!serial || !state.cubes.find((c) => c.serial === serial)?.connected) return;
+  const now = new Map(state.rooms.map((r) => [r.id, !!r.vwt]));
+  for (const [id, vwt] of loaded.get(serial) || []) {
+    if (!now.has(id)) forgetForms(roomFormKey(serial, id));
+    else if (vwt && !now.get(id)) forgetForms(vwtFormKey(serial, id));
+  }
+  loaded.set(serial, now);
+}
+
 /** The functions the plain code calls, MassimoParts.rooms. */
 const rooms = register("rooms", {
   /** render draws the rooms as the page has them now (renderRooms): every tile follows in place, its configuration filled again unless the focus is in it. */
@@ -64,6 +96,16 @@ const rooms = register("rooms", {
   /** unlisted takes a state event of a device without a room (updateDevice): its row follows. */
   unlisted(): void {
     tickOf(UNLISTED).n++;
+  },
+  /**
+   * loaded takes a load of the rooms that went through, before they are
+   * drawn (roomsLoaded): the forms of what it no longer gives are
+   * forgotten, and a virtual thermostat's settings asked to be opened
+   * before its Cube's rooms were there are opened.
+   */
+  loaded(): void {
+    forgetGone();
+    takeOpening();
   },
   /** room draws the room's tile again and fills its configuration again at once, as the configuration asks for (rerenderRoom). */
   room(id: number): void {
