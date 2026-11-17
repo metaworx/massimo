@@ -503,6 +503,7 @@ async function logout() {
   setToken(null);
   state.me = null;
   if (synced) await forgetUserSettings(); // app.js
+  MassimoParts.signedOut(); // what was typed in the settings and not saved goes too
   closeEvents();
   clearCubeData(); // app.js: nothing of this session behind the sign-in
   showView("tiles", "replace");

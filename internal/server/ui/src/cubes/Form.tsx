@@ -6,19 +6,22 @@
  *
  * A Cube's settings in its panel, for a role with cubes: a notice per line
  * of the settings file that differs, with Take the file's value; the
- * fields, each a draft against the value stored (D59-A), the proxy's
- * state under its address, the hidden devices with Hide and Show again,
- * and Save, off while nothing differs.
+ * fields, each a draft against the value stored (D59-A), kept by the
+ * Cube's serial beyond the panel (shared/forms.ts), the proxy's state
+ * under its address, the hidden devices with Hide and Show again, and
+ * Reset and Save, which says whether the changes are saved.
  */
 
 import { useRef, useState } from "preact/hooks";
 import type { Cube, FileDifference } from "../api";
+import { cubeFormKey } from "../model/cube";
 import { Notice } from "../shared/badge";
 import { DeviceIds } from "../shared/device";
 import { FormFooter, Switch, TextField, useDraft } from "../shared/field";
+import { focusForm, useForm } from "../shared/forms";
 import { busyProps, useBusy } from "../shared/question";
 import { msg, saveCube } from "./send";
-import { deviceOf, devices, load } from "./store";
+import { cubeUI, deviceOf, devices, load } from "./store";
 import { valueText } from "./util";
 
 /** Differs is a line of the settings file that says something else than the store, with Take the file's value. */
@@ -115,25 +118,44 @@ const upper = (v: string) => v.trim().toUpperCase();
 const asSet = (l: string[]) => [...l].sort().join(",");
 
 /**
+ * openForm shows a Cube's settings and puts the focus into them: its
+ * panel opened in System settings while that page is shown, else Cube
+ * settings with the Cube chosen.
+ */
+function openForm(serial: string): void {
+  if (isShown("system")) {
+    cubeUI.of(serial).open = true;
+  } else {
+    if (state.serial !== serial) selectCube(serial);
+    if (!isShown("cube")) showView("cube");
+  }
+  focusForm(cubeFormKey(serial));
+}
+
+/**
  * Form is the Cube's settings: the file's differing lines before it, then
  * its fields, each a draft (useDraft) that the shared TextField and Switch
  * draw with its "changed meanwhile" notice: a field the user has not
  * touched follows a value stored meanwhile, by another client or the
  * settings file; one the user changed keeps the draft and says that the
  * stored value changed, with Take theirs. The hidden list is a draft too,
- * for its state alone: it says nothing of a change meanwhile. Save sends
- * the fields that differ from the Cube as the list last gave it.
+ * for its state alone: it says nothing of a change meanwhile. The drafts
+ * are kept by the Cube's serial (useForm), so that what is typed stays
+ * when the panel closes and from System settings to Cube settings and
+ * back, until it is saved, reset or the Cube is gone; the Cube's problem
+ * lists show the disk while it is unsaved. Save sends the fields that
+ * differ from the Cube as the list last gave it.
  */
 export function Form({ c }: { c: Cube }) {
   load.useLoad();
-  const name = useDraft(c.name || "", trim);
-  const address = useDraft(c.configured_address || "", trim);
-  const follow = useDraft(!!c.follow_discovery);
-  const proxy = useDraft(c.proxy_address || "", trim);
-  const proxySerial = useDraft((c.proxy_serial || "").toUpperCase(), upper);
-  const virtual = useDraft(!!c.proxy_virtual);
-  const hidden = useDraft(c.hidden || [], asSet);
-  const saving = useBusy();
+  const form = useForm({ key: cubeFormKey(c.serial), name: { key: "nav.cubeTitle" }, open: () => openForm(c.serial) });
+  const name = useDraft(c.name || "", trim, form.place("name"));
+  const address = useDraft(c.configured_address || "", trim, form.place("address"));
+  const follow = useDraft(!!c.follow_discovery, undefined, form.place("follow"));
+  const proxy = useDraft(c.proxy_address || "", trim, form.place("proxy"));
+  const proxySerial = useDraft((c.proxy_serial || "").toUpperCase(), upper, form.place("proxy_serial"));
+  const virtual = useDraft(!!c.proxy_virtual, undefined, form.place("virtual"));
+  const hidden = useDraft(c.hidden || [], asSet, form.place("hidden"));
   const body: Record<string, unknown> = {};
   if (name.changed) body.name = name.value.trim();
   if (address.changed) body.address = address.value.trim();
@@ -142,24 +164,22 @@ export function Form({ c }: { c: Cube }) {
   if (proxySerial.changed) body.proxy_serial = proxySerial.value.trim();
   if (virtual.changed) body.proxy_virtual = virtual.value;
   if (hidden.changed) body.hidden = hidden.value;
+  const changed = Object.keys(body).length > 0;
+  form.track(changed, [name, address, follow, proxy, proxySerial, virtual, hidden]);
   const submit = (ev: Event) => {
     ev.preventDefault();
-    if (!Object.keys(body).length) {
+    if (!changed) {
       msg(t("cubes.unchanged"), true);
       return;
     }
-    saving.run(async () => {
-      if (!(await saveCube(c.serial, body))) return;
-      // taken: the form shows the Cube as the server has it now
-      for (const d of [name, address, follow, proxy, proxySerial, virtual, hidden]) d.take();
-    });
+    form.save(() => saveCube(c.serial, body));
   };
   const id = (field: string) => "cube-" + c.serial + "-" + field;
   const placeholder = !c.configured_address && c.address ? t("cubes.addressFound", { address: c.address }) : t("cubes.addressHint");
   return (
     <>
       {(c.file_differs || []).map((d) => <Differs key={d.field} c={c} d={d} />)}
-      <form class="cube-form needs-cubes" onSubmit={submit}>
+      <form {...form.props} class="cube-form needs-cubes" onSubmit={submit}>
         <div class="cube-fields">
           <TextField label={t("cubes.name")} id={id("name")} name="name" draft={name} show={valueText} />
           <TextField label={t("cubes.address")} id={id("address")} name="address" draft={address} show={valueText} placeholder={placeholder} />
@@ -171,7 +191,7 @@ export function Form({ c }: { c: Cube }) {
           <Switch name="proxy_virtual" label={t("cubes.proxyVirtual")} draft={virtual} show={valueText} />
         </div>
         <Hidden c={c} list={hidden.value} set={hidden.set} />
-        <FormFooter submit={t("cubes.save")} busy={saving.busy} off={!Object.keys(body).length} />
+        <FormFooter submit={t("cubes.save")} look={form.look} reset={form.reset} off={!changed} />
       </form>
     </>
   );

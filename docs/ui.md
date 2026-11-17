@@ -104,7 +104,8 @@ The compacted header has **↑** left of ☰, back to the top.
   its tooltip adds the serial, the address and the link in words.
   Open, each Cube has its sign, its name with an icon after it for each
   kind of problem it has (the radio, a battery, a window open too long, a
-  device's link and, for one who may change the settings, the cog), each in
+  device's link and, for one who may change the settings, the cog, and the
+  disk while the Cube's settings are unsaved or a save of them failed), each in
   its worst colour, and under it its serial and address,
   the list as wide as they need; the arrow keys move between them.
   Open, it stays open when data comes in, the focus where it was,
@@ -930,6 +931,25 @@ and a line of the settings file that comes to differ while the panel is shown
 gets its notice with **Take the file's value**.
 Pair a device and Repair… keep their own drawing inside the panel
 until their own move to parts.
+What is typed in a Cube's settings stays until it is saved or reset:
+when the panel closes, from System settings to Cube settings and back,
+and when another Cube is chosen, each Cube's with its Cube;
+it is forgotten at a sign-out and when the Cube is no longer served.
+**Save** says how it stands: off and plain while nothing is changed,
+in the accent colour once something is,
+with the warning mark before its text once the focus has left the form,
+the form was closed or left, or a minute has passed since the last change,
+turning while it saves,
+with the cross after a save that failed, the server not reached or the value refused
+(the message line says why, no field is outlined), until a save goes through or Reset,
+and with the check for five seconds after a save.
+**Reset**, beside it and off while nothing is changed, takes the values stored back.
+While the settings are unsaved, or a save failed,
+the Cube's problem list, in its panel's head and in the header's list of every Cube,
+shows the disk with the corner mark, amber, red after a failed save,
+"Cube settings: not saved"; a click on it opens the settings,
+the Cube's panel in System settings, else Cube settings with the Cube chosen,
+and puts the focus into them.
 A panel is drawn in one place at a time:
 while Cube settings is shown, System settings' list does not hold it.
 Under the panel the Cube's **Backup and restore** (with `backup`),
@@ -1476,7 +1496,8 @@ a cross for a failure (red).
 as the person chooses, `ICON_CHOICES`, the Wi-Fi fan or the tower,
 the opening sash with the mark inside its frame or the paned window with it
 at the bottom right, as the original MAX! software has it;
-`SIGNS`: the network of a Cube's link with it on top, the cog for the settings),
+`SIGNS`: the network of a Cube's link with it on top, the cog for the settings,
+the disk for a form's unsaved changes),
 the drawing and the mark two parts, so that the mark alone blinks;
 `badgeEl` leads a warning's or a failure's badge with its mark (`markEl`)
 and sets it in bold, while a badge that names a state, such as a mode, stays regular;
@@ -1619,7 +1640,7 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `Notice` | `badge.tsx` | a lasting warning with since when (`noticeEl`) | `text`, `since`, `next`, `cls`, `id`, `role`, `hidden` (the class `hidden`, the line kept in its place), children after |
 | `Age` | `badge.tsx` | how old a value is, filled by `fillAge` (`ageEl`) | `at`, `stale`, `plain` |
 | `ResultLine` | `badge.tsx` | the line that says how an action went, green or red, hidden while there is none (`showResult`), as an `actionRunner`'s `set` gives it | `res` (an `Outcome` or null), `cls` |
-| `Problems` | `problems.tsx` | the problem list, entries under entries (`problemsEl`) | `entries`, `label`, `ok` (the green check's label where nothing is wrong), `onClick` |
+| `Problems` | `problems.tsx` | the problem list, entries under entries (`problemsEl`), an item with an action a button | `entries`, `label`, `ok` (the green check's label where nothing is wrong), `onClick` |
 | `KindIcons`, `problemKinds`, `kindsLabel` | `problems.tsx` | the kinds' icons of entries without the list (`kindIcons`); the kinds themselves, to know whether there are any; the label naming the kinds among items in an order of kinds, "" for none | `entries`, `skip`; `entries`, `skip`; `items`, `kinds` |
 | `OkPill` | `problems.tsx` | the green check in a list's place (`okPill`) | `label` |
 | `Field` | `field.tsx` | a label and its control, `.field` or `.field.wide` (`fieldRow`) | `label`, `id`, `wide`, `unit`, `hint`, `draft`, `show`, the control as children |
@@ -1628,8 +1649,10 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `DateTime` | `field.tsx` | a date and time field (`datetime-local`), its value as the input takes it | `value`, `set`, `id`, `cls`, `step`, `required`, `disabled`, `inputRef` |
 | `Switch` | `field.tsx` | a checkbox drawn as a switch (`switchEl`) | `name`, `label`, `checked` and `onChange`, or `draft` and `show`; `row`, `cls` (the switch's classes), `id`, `disabled`, `title`, children after the label |
 | `Stepper` | `field.tsx` | a number field between − and + (`stepper`), the step within its range; its buttons are named for a temperature, half a degree less and more, and the first user of another unit adds their names | `value`, `set`, `min`, `max`, `step`, `id` and `cls` of the field, `hidden` (the whole kept in its place unseen), children after the + (a unit) |
-| `useDraft`, `Meanwhile` | `field.tsx` | a field that shows stored data keeps a draft: untouched it follows, changed it says "changed meanwhile" with Take theirs (D59-A) | `stored`, `norm`; gives `value`, `stored`, `set`, `changed`, `meanwhile`, `take`; `draft`, `show` |
-| `FormFooter` | `field.tsx` | a form's row of actions (`formFooter`, `sendWhenChanged`) | `submit`, `busy`, `off`, `cancel` (its button of the class `form-cancel`, as the plain footer's), `cancelLabel`, `extra` |
+| `useDraft`, `Meanwhile` | `field.tsx` | a field that shows stored data keeps a draft: untouched it follows, changed it says "changed meanwhile" with Take theirs (D59-A); with a place, a form's (`useForm`), the draft is kept there | `stored`, `norm`, `place`; gives `value`, `stored`, `set`, `changed`, `meanwhile`, `take`; `draft`, `show` |
+| `FormFooter` | `field.tsx` | a form's row of actions (`formFooter`, `sendWhenChanged`); with `look`, Save shows the form's state | `submit`, `busy`, `off`, `cancel` (its button of the class `form-cancel`, as the plain footer's), `cancelLabel`, `reset` (Reset, of the class `form-reset`, one fixed class per footer button as Cancel's `form-cancel`, off while clean), `look` (a `FormLook` of `useForm`), `extra` |
+| `useForm` | `forms.ts` | a settings form that keeps its changes until they are saved or reset, kept by a key the region chooses beyond the part, and its state: clean, changed, unsaved (the focus left it, it was taken away, or a minute passed since the last change), saving, failed, saved | `key`, `name` (a text key and its arguments, naming it in the problem list), `open` (shows it and calls `focusForm`); gives `look`, `props` (the form element's), `place(field)` (for `useDraft`), `track(changed, drafts)` (after the fields, at each drawing), `save(fn)`, `reset()` |
+| `unsavedItems`, `focusForm`, `forgetForms` | `forms.ts` | the unsaved and the failed forms as items of `Problems`, the disk naming the form, a click opening it (the registry they come from, a signal inside `forms.ts`, holds the forms merely changed too, for the question on leaving the page); the focus put into a form once it is shown; a form's drafts forgotten, what it belongs to gone, or all at a sign-out (`MassimoParts.signedOut`, `logout` of `login.js`) | `key` (that form's and those under it, `key:…`); `key`; `key` ("" for all) |
 | `Question` | `question.tsx` | a question in the page, No and Yes, Escape for No (`confirmBox`) | `text`, `yes`, `no`, `onYes` (its request's promise), `onNo` |
 | `useAsk` | `question.tsx` | a row that asks in its own place, the focus back on its button (`confirmInPlace`) | gives `asking`, `ask`, `done`, `ref` |
 | `useBusy`, `busyProps` | `question.tsx` | a button's request under way: busy, off, `aria-busy` (`whileBusy`, `setBusy`) | `run(fn)`; `busyProps(cls, busy, off)` |
@@ -1645,10 +1668,13 @@ What the table cannot say:
   its name, a grey detail (a text, monospaced, or parts that are not),
   its items, the entries under it, `info` to list it and those under it
   without an item, and `summary`, shown in the list's summary after the icons.
-  An item is `{ kind, icon, sign, tone, mark, text, title, at, stale }`, one badge:
+  An item is `{ kind, icon, sign, tone, mark, text, title, at, stale, action }`,
+  one badge:
   `kind` groups the summary's icons (`sign` draws it as a sign), an item
   without one adds no icon; `tone` is the badge's kind, `mark` how its icon is
-  coloured where that differs; `title` its tooltip, `at` and `stale` its age.
+  coloured where that differs; `title` its tooltip, `at` and `stale` its age;
+  `action`, where given, makes the badge a button that runs it
+  (an unsaved form's item, which opens the form).
 - `Field` draws the row and the label for `id`; its control comes as children
   and carries that id and, without a unit, the class `field-control`.
   `TextField` makes the input itself.
@@ -1656,7 +1682,28 @@ What the table cannot say:
   inside a row of the caller's.
 - `useDraft` and `useBusy` are the component's state and go with it;
   what must outlive the component (a request a tile keeps across its being
-  drawn again) is live state (`live`).
+  drawn again) is live state (`live`), and a settings form's drafts are kept
+  by its `useForm`, at the place each field is given.
+- A settings form with `useForm`: its fields' `useDraft` at `form.place(field)`,
+  then `form.track(changed, drafts)`, `form.props` on the form element,
+  `form.save(fn)` in its submit, and `look={form.look}` and `reset={form.reset}`
+  on its `FormFooter`; its region lists `unsavedItems(key)` among the items of
+  the problem list nearest the form, and forgets the form's key (`forgetForms`)
+  when what it belongs to is gone.
+  Save's states: clean, plain and off; changed, primary; unsaved, primary
+  with the warning mark before its text; saving, turning as every busy button,
+  its ring after the text; failed, the cross, until a save goes through, Reset,
+  or nothing is left to send; saved, the check, plain and off, for as long as
+  a result line's success stays (`RESULT_FADE_MS`, by `fader`), then clean.
+  A key in an unsaved form makes it changed
+  again; a failed one stays red. The minute is one constant of `forms.ts`,
+  which the UI suite moves on with Playwright's clock (the marker `clock`).
+  A form without `look` keeps Save's one look, primary.
+  One `useForm` per form element; a form of tabs takes a key per tab
+  under its owner's key (`<owner>:<tab>`),
+  which also gives a section its prefix.
+  A form whose stored values load later (the virtual thermostat's settings)
+  takes no place before they have loaded, so that its drafts start from them.
 
 These builders of `components.js` and `app.js` have no part yet, since no region
 that has moved uses them: the help button (`helpParts`) and a field row without
@@ -1674,7 +1721,16 @@ taken into `model/` by the block that moves the pairing, since no region imports
 choosing rooms, checkboxes with All in the House panel and switches with All and None
 in the configuration's Copy tab, one shared list once the configuration moves;
 a room's write's outcome in words, built in three places
-(`House.tsx` `houseRequests`, `rooms.js` `resultText`, `config.js`'s copy).
+(`House.tsx` `houseRequests`, `rooms.js` `resultText`, `config.js`'s copy);
+a failed save's error with its unsaved form's item (its tooltip),
+which `actionRunner`'s `run` does not hand back:
+it says only whether the request was taken,
+and the error is in the message line;
+a Cancel of `useForm` (Reset and the form's close) and the "unsaved" form of a
+section without a pill (AP UnsavedMarks, Blocks 4 and 5);
+an item of `Problems` whose action leaves the list open
+(every button in a menu closes it, as an item's action does;
+the header's coming "Refresh now").
 The block that first needs one writes it under `ui/src/shared/`,
 knowing no region, and adds its row to the table above; no region writes its own.
 A section card's badges (`sectionBadges`) stay plain until the page's chrome moves
@@ -1692,7 +1748,8 @@ A region that moves calls these, in this order:
 - `Fold` for a panel or a fold, `Island` for a plain piece it keeps inside;
 - `actionRunner` for its requests and their message line, `useBusy` for the button;
 - `useDraft` with `TextField`, `Switch` or `Field` for a field that shows stored data,
-  `FormFooter` for its Save, `useAsk` and `Question` for an action that asks first.
+  `FormFooter` for its Save, `useForm` for a settings form that keeps its changes
+  and marks them unsaved, `useAsk` and `Question` for an action that asks first.
 
 The Cubes (`ui/src/cubes/`) are the first such region:
 `index.tsx` mounts System settings' list in `#cubes-list` and Cube settings' panel
@@ -1701,7 +1758,11 @@ and registers `render`, `polled` and `openFound`,
 which `cubes.js` calls as `renderCubes`, `cubesPolled` and `showFoundFold`;
 `store.ts` holds its counter, each panel's `open` by serial, the folds
 and the devices loaded for the hide choice;
-`send.ts` holds its requests, run by its action runner.
+`send.ts` holds its requests, run by its action runner;
+`Form.tsx` a Cube's settings as a `useForm` of the key `cubeFormKey(serial)`
+(`model/cube.tsx`, which lists its `unsavedItems` in `cubeEntry`,
+so in the panel head's pill and in the header's entry of the Cube),
+and `index.tsx` forgets a Cube's form when the list no longer gives the Cube.
 The header (`ui/src/header/`) is the second:
 `index.tsx` draws the Cube choice with every Cube's problems in `#header-cube`,
 the chosen Cube's age in the refresh button's `#updated`,

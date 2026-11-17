@@ -42,8 +42,6 @@ declare global {
   const MAX_TEMP: number;
   /** The setpoint the House panel sends for MANU where no temperature is given. */
   const DEFAULT_TEMP: number;
-  /** How long a result that went well stays shown, in ms. */
-  const RESULT_FADE_MS: number;
   /** What the room's tile keeps, made the first time it is asked for. */
   function roomUI(room: PageRoom): RoomUI;
   /** The thermostat whose state stands for the room: its wall thermostat, else its first radiator thermostat. */

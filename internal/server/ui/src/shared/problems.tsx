@@ -24,7 +24,8 @@ import { Dropdown } from "./menu";
  * without a kind is listed and adds no icon; tone is a badge's kind,
  * which colours the badge and, without "fill-", the icon, or mark where
  * the item says how its icon is coloured; title is the badge's tooltip,
- * at when the value came.
+ * at when the value came; action, where given, makes the badge a button
+ * that runs it (an unsaved form's item opens the form).
  */
 export interface Item {
   kind?: string;
@@ -36,6 +37,7 @@ export interface Item {
   title?: string;
   at?: string;
   stale?: boolean;
+  action?: () => void;
 }
 
 /**
@@ -133,8 +135,9 @@ function entryKey(e: Entry): string {
  * ProblemEntry is one entry of the list, the same at every level: its
  * icon in a column of its own, its name and grey detail, under the name
  * its badges, each led by its icon (a warning's or a failure's by its
- * mark), with its age; then the entries under it. Nothing for an entry
- * without an item, its own or under it, but for information.
+ * mark), with its age, a badge with an action a button that runs it;
+ * then the entries under it. Nothing for an entry without an item, its
+ * own or under it, but for information.
  */
 function ProblemEntry({ e, info }: { e: Entry; info?: boolean }) {
   const shown = info || e.info;
@@ -155,13 +158,18 @@ function ProblemEntry({ e, info }: { e: Entry; info?: boolean }) {
       </div>
       {(e.items || []).length > 0 && (
         <div class="problem-flags">
-          {(e.items || []).map((it) => (
-            <Badge key={(it.kind || "") + ":" + it.text} kind={it.tone || "mode"} title={it.title} blink={[e.title, sub, it.kind, it.text].join(":")}>
-              {it.icon && !badgeState(it.tone || "") && <Icon symbol={it.icon} cls="ni" />}
-              {it.text}
-              <Age at={it.at} stale={it.stale} />
-            </Badge>
-          ))}
+          {(e.items || []).map((it) => {
+            const key = (it.kind || "") + ":" + it.text;
+            const badge = (
+              <Badge key={key} kind={it.tone || "mode"} title={it.title} blink={[e.title, sub, it.kind, it.text].join(":")}>
+                {it.icon && !badgeState(it.tone || "") && <Icon symbol={it.icon} cls="ni" />}
+                {it.text}
+                <Age at={it.at} stale={it.stale} />
+              </Badge>
+            );
+            if (!it.action) return badge;
+            return <button key={key} type="button" class="problem-action" onClick={it.action}>{badge}</button>;
+          })}
         </div>
       )}
       {subs.length > 0 && (

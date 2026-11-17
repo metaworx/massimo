@@ -9,6 +9,10 @@
 // helpParts, fmtTemp) are in app.js.
 "use strict";
 
+// How long a result that went well stays shown, in ms: a result line's
+// success, and the check on a form's Save.
+const RESULT_FADE_MS = 5000;
+
 // clear removes every child of an element.
 function clear(el) {
   while (el.firstChild) el.removeChild(el.firstChild);
@@ -183,12 +187,14 @@ function iconEl(symbol, cls) {
 // mark, a triangle (warn) or a cross (bad). The radio and the window are
 // drawn as the person chooses (ICON_CHOICES); the network (a Cube's
 // link) carries the mark on top, in place of its upper node; the cog
-// (the settings) and the log (its unseen problems, log.js renderLogSign)
-// at the bottom right. A battery has no mark: it is amber or nothing.
+// (the settings), the log (its unseen problems, log.js renderLogSign) and
+// the disk (a form's unsaved changes, ui/src/shared/forms.ts) at the
+// bottom right. A battery has no mark: it is amber or nothing.
 const SIGNS = {
   net: { icon: "icon-net", base: "icon-net-base", warn: "mark-net-warn", bad: "mark-net-x" },
   cog: { icon: "icon-cog", base: "icon-cog-small", warn: "mark-corner-warn", bad: "mark-corner-x" },
   log: { icon: "icon-log", base: "icon-log-small", warn: "mark-corner-warn", bad: "mark-corner-x" },
+  disk: { icon: "icon-disk", base: "icon-disk-small", warn: "mark-corner-warn", bad: "mark-corner-x" },
   battery: { icon: "icon-battery" },
 };
 

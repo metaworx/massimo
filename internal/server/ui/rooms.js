@@ -13,7 +13,6 @@ const MIN_TEMP = 4.5;
 const MAX_TEMP = 30.5;
 const DEFAULT_TEMP = 20; // stepper start when the room has no setpoint yet
 const SEND_DELAY_MS = 2000;
-const RESULT_FADE_MS = 5000;
 
 // --- room facts -------------------------------------------------------
 

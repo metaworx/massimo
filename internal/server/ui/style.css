@@ -1253,6 +1253,9 @@ html.blink-first .server-sign[data-state="new"] use.mark, html.blink-first .serv
 .problem-flags .flag { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0 4px; max-width: 100%; border-radius: 10px; }
 .problem-flags .flag .age { margin-left: 0; }
 .problem-flags .flag .ni { width: 14px; height: 14px; }
+/* A badge that opens what it names, an unsaved form's (problems.tsx, an item's action): the badge as it is, a button around it. */
+.problem-flags .problem-action { display: inline-flex; max-width: 100%; padding: 0; border: 0; border-radius: 10px; background: none; text-align: start; }
+.problem-flags .problem-action:hover .flag { text-decoration: underline; }
 .device-type-icon { display: inline-flex; flex: none; color: var(--muted); }
 .device-type-icon .ni { width: 18px; height: 18px; }
 
@@ -1625,6 +1628,12 @@ massimo-week-program { display: contents; }
 .actions { flex-wrap: wrap; }
 .actions-left { display: inline-flex; flex-wrap: wrap; gap: 8px; margin-right: auto; }
 .actions-right { display: inline-flex; gap: 8px; margin-left: auto; }
+/* A form's Save shows its state by a sign before its text (FormFooter): the
+   warning mark while unsaved, the cross after a failed save, the check
+   after a save, which stays readable on the button that is off. */
+.actions-right button > .mark-sign, .actions-right button > .ok-check { width: 1em; height: 1em; margin-right: 0.35em; vertical-align: -0.12em; stroke-width: 2.3; }
+.actions-right button > .mark-sign use.mark.x { stroke-width: 2.6; }
+.actions-right button:disabled:has(> .ok-check) { opacity: 1; }
 .prog-bar {
   display: flex;
   height: 28px;
