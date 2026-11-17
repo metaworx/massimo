@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.58.0)
+# Massimo — CI Conventions (v1.59.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -34,11 +34,11 @@ There is no other platform.
 
 | Trigger | Jobs |
 |---------|------|
-| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test, the store's benchmarks once each with `-short`, `make cross`); actionlint (`make actionlint`: the workflows by actionlint, their `run:` scripts by the runner's shellcheck); UI types (`make ui-check`: `tsc --noEmit` over the web UI's parts, `internal/server/ui/src/`, then Biome's two hooks rules over them); Race (`make race`, the race detector on `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve`, `internal/announce` and `internal/notify`); Test (armv6, QEMU) (`make test-armv6`, every package's tests with `-short` on 32-bit ARM, run by Ubuntu's `qemu-user` as the Raspberry Pi 1's core); Fuzz on a push to `main` only (`make fuzz`, every fuzz target for 10 s, a crash's input kept as the artifact `fuzz-crash`, Go 1.26's own deadline passed with a warning); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, then under systemd, each case in a container of its own (`make deb-systemd-test`: the first start, the restart, the upgrade from v0.12.0-alpha.1 with the service running), and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Windows service (the unit tests of the update, the installer, the command line, discovery and `internal/safefile`; install, run, update from the API and by hand, roll back, remove, on a Windows runner; then a second `serve` announcing itself beside Windows' own mDNS, found by `massimo discover`); macOS LaunchDaemon (the unit tests of the update, the installer, the command line and `internal/safefile`; first `install` on the template's settings, `packaging/launchd/template-test.sh`: the message and its owner line run as printed, a loaded job restarted, a booted-out one left stopped, the web UI's way, the purge; then the same as Windows on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`; then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker; then a second `serve` beside Apple's mDNSResponder, found and resolved by `dns-sd`); UI test (the web UI's pytest suite, a job per width with both languages, "UI test (1100 px, screenshots)" and "UI test (390 px)", each its two cases in four workers; in the 1100 px job then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only; on failure the failed tests' screenshots and videos and the traces of their run once more as `ui-test-results-<width>`; on a pull request only when it changes the UI, its bundler (`tools/uibundle`), the vendored Preact, its suite or `ci.yml`, as the job What to test answers); LAN against avahi (`make lan-test`: a second `serve`'s searches finding a fake Cube, losing it with its cable pulled and finding it again, then from a box's proxy too; `serve` beside avahi-daemon, `avahi-browse` and `massimo discover` on a client; a third `serve` following the Cube by its serial to another address after the loss; in Docker; on a pull request only when it changes the announcement, discovery, the shared port, the server's own files, the proxy, the Go module, the LAN test or `ci.yml`, as the job What to test answers, and not on the merge of a pull request that found it not needed); Guidelines (section 4); Site (`packaging/site/build.sh --no-apt`: the site's pages and the docs of the commit, every link checked, a document under `docs/` missing from `docs/fragments/_documents.md` failing it; never deployed; also for a change to the site's documents alone); Code result, for a change to documents alone only (`packaging/code-result.sh`: the verdict of the last run that tested the code, below) |
-| beside the jobs above, on a push | Build (build.yml): What to release decides what the run releases, then every target built without cgo with the Debian packages, the build record, `SHA256SUMS` and the manifest, the provenance attested; nothing signed (section 6) |
+| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test, the store's benchmarks once each with `-short`, `make cross`); actionlint (`make actionlint`: the workflows by actionlint, their `run:` scripts by the runner's shellcheck); UI types (`make ui-check`: `tsc --noEmit` over the web UI's parts, `internal/server/ui/src/`, then Biome's two hooks rules over them); Race (`make race`, the race detector on `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve`, `internal/announce` and `internal/notify`); Test (armv6, QEMU) (`make test-armv6`, every package's tests with `-short` on 32-bit ARM, run by Ubuntu's `qemu-user` as the Raspberry Pi 1's core); Fuzz on a push to `main` only (`make fuzz`, every fuzz target for 10 s, a crash's input kept as the artifact `fuzz-crash`, Go 1.26's own deadline passed with a warning); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, then under systemd, each case in a container of its own (`make deb-systemd-test`: the first start, the restart, the upgrade from v0.12.0-alpha.1 with the service running), and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Windows service (the unit tests of the update, the installer, the command line, discovery and `internal/safefile`; install, run, update from the API and by hand, roll back, remove, on a Windows runner; then a second `serve` announcing itself beside Windows' own mDNS, found by `massimo discover`); macOS LaunchDaemon (the unit tests of the update, the installer, the command line and `internal/safefile`; first `install` on the template's settings, `packaging/launchd/template-test.sh`: the message and its owner line run as printed, a loaded job restarted, a booted-out one left stopped, the web UI's way, the purge; then the same as Windows on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`; then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker; then a second `serve` beside Apple's mDNSResponder, found and resolved by `dns-sd`); UI test (the web UI's pytest suite, a job per width with both languages, "UI test (1100 px, screenshots)" and "UI test (390 px)", each its two cases in four workers; in the 1100 px job then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only; on failure the failed tests' screenshots and videos and the traces of their run once more as `ui-test-results-<width>`; on a pull request only when it changes the UI, its bundler (`tools/uibundle`), the vendored Preact, its suite or `ci.yml`, as the job What to test answers); LAN against avahi (`make lan-test`: a second `serve`'s searches finding a fake Cube, losing it with its cable pulled and finding it again, then from a box's proxy too; `serve` beside avahi-daemon, `avahi-browse` and `massimo discover` on a client; a third `serve` following the Cube by its serial to another address after the loss; in Docker; on a pull request only when it changes the announcement, discovery, the shared port, the server's own files, the proxy, the Go module, the LAN test or `ci.yml`, as the job What to test answers, and not on the merge of a pull request that found it not needed); Android app (`app/version.json` against its tag, the debug build with its unit tests and lint, the release APK built at two paths and compared byte for byte, then the AAB and the nightly APK signed with a key made for the run; on a pull request only when it changes `app/`, the web UI's files the app bundles, `packaging/app-*.sh`, `ci.yml`, `build.yml` or `release.yml`, as the job What to test answers, and not on the merge of a pull request that found it not needed); Guidelines (section 4); Site (`packaging/site/build.sh --no-apt`: the site's pages and the docs of the commit, every link checked, a document under `docs/` missing from `docs/fragments/_documents.md` failing it; never deployed; also for a change to the site's documents alone); Code result, for a change to documents alone only (`packaging/code-result.sh`: the verdict of the last run that tested the code, below) |
+| beside the jobs above, on a push | Build (build.yml): What to release decides what the run releases, then every target built without cgo with the Debian packages, the build record, `SHA256SUMS` and the manifest, the provenance attested; for a version tag the Android app's APK and AAB, for the nightly build its nightly APK, unsigned, attested too; nothing signed (section 6) |
 | after every job above | All tests passed: fails unless none of them failed or was cancelled, and names each with its result in its summary, an annotation for each that did not pass, and on a pull request in one comment; then, on a push, once Build is done, Release (release.yml): a push to `main` becomes the `devel` build, the GitHub release `release/devel` replaced in place, signed with the rolling key (section 6); then, at every run of release.yml, Site (site.yml): the site built with the newest release's signed apt index and the docs of every channel, and deployed to GitHub Pages; nothing where no release carries the index yet; for a push to `main` of the site's documents alone, which has no Build and so no Release, Deploy site (site.yml) instead |
 | push to a release branch (`release/alpha`, later `release/beta` and `release/stable`) | nothing: ci.yml listens to `main` and the tags; the release moved the branch to a commit ci.yml had tested |
-| a version tag | every job above, as for a push to `main`, Build included; then release.yml: sign the manifest with the release key, verify the signature against the public key compiled into `massimo`, publish the GitHub release; then, with the deploy key set, the Homebrew formula of the release's channel rendered and pushed to the tap (publish.yml, section 6), and, with the apt key set, the apt repository rebuilt from the releases and deployed to GitHub Pages |
+| a version tag | every job above, as for a push to `main`, Build included; then release.yml: sign the manifest and `SHA256SUMS` with the release key, verify the signatures against the public key compiled into `massimo`, publish the GitHub release; with the app's keys set, sign the Android app, add it to the release and its lines to `SHA256SUMS`, sign that again and attest the signed files (section 6); then, with the deploy key set, the Homebrew formula of the release's channel rendered and pushed to the tap (publish.yml, section 6), and, with the apt key set, the apt repository rebuilt from the releases and deployed to GitHub Pages |
 | daily at 02:30 UTC, or by hand (`gh workflow run nightly.yml --ref main`) | nightly.yml: build.yml, then release.yml, no tests: the nightly build, `release/nightly`, of the newest commit of `main` whose suite passed and that is newer than the one it carries; nothing where there is none (section 6) |
 | by hand (`gh workflow run publish.yml -f tag=<tag>`) | publish.yml: the formula of a release already out, such as the one published before the tap existed |
 
@@ -111,10 +111,11 @@ on the commit the run tested:
 a pull request's head, or the commit pushed to `main`.
 It holds `fingerprint.sh fingerprint` of the tree that ran,
 a pull request's merge commit in its run,
-and whether the UI tests, LAN and Fuzz passed for that code
-(`fp1:<hex> ui=… lan=… fuzz=…`);
+and whether the UI tests, LAN, Fuzz and the Android app passed for that code
+(`fp1:<hex> ui=… lan=… fuzz=… app=…`);
 LAN is `unneeded` where What to test answered `lan=false`, a pull request's
-filter finding it not needed, and it did not pass.
+filter finding it not needed, and it did not pass,
+and so is the Android app where it answered `app=false` (AP MobileApp, D17-A).
 What to test reads the status on the commit the run before tested:
 for a pull request its head's first parent,
 for a merge into `main` its second parent, the pull request's head.
@@ -122,8 +123,8 @@ Where it is green, written by `github-actions[bot]` and its fingerprint the comm
 it answers `tested=true`:
 the jobs that passed for that code are skipped,
 Fuzz, which a pull request never runs,
-and the UI tests and LAN run where they had not passed,
-but for LAN on a push where the record says `unneeded` (owner,
+and the UI tests, LAN and the Android app run where they had not passed,
+but for LAN and the Android app on a push where the record says `unneeded` (owner,
 2026-11-15, AP SiteOnly, D78-C),
 and Guidelines, All tests passed, Build and Release run as always;
 the run's own Tested status then carries the record on.
@@ -380,6 +381,34 @@ which the follower's step checks;
 `internal/server/ui/` is not,
 since the LAN test never reaches the web UI (owner, 2026-11-15, D1-A).
 
+The Android app job (AP MobileApp, Block 4) builds `app/android` with the
+image's JDK 17 and Android SDK (platform and build-tools 36),
+Gradle through the committed wrapper, nothing cached.
+It checks `app/version.json` against its tag (`packaging/app-version.sh check`),
+runs `:app:assembleFossDebug :app:testFossDebugUnitTest :app:lintFossDebug`
+and `:app:lintNightlyDebug`,
+then builds the release APK in the checkout and in a copy at another path
+and compares the two byte for byte,
+as F-Droid compares its build of a tag with ours;
+on a difference both APKs are the artifact `app-repro`.
+Last it builds the AAB and the nightly APK
+and signs the three with a key made for the run (`packaging/app-sign.sh`),
+which must match its certificate and must be refused against another one,
+so that the release's signing path is proven before a tag needs it.
+A pull request runs it only when it changes `app/`,
+a file of `internal/server/ui/` the app bundles
+(all but `index.html`, `partials/`, `src/`, `parts.js` and `vendor/`,
+which `BundleUi` in `app/android/app/build.gradle.kts` leaves out),
+`packaging/app-*.sh`, `ci.yml`, `build.yml` or `release.yml`;
+a push to `main` always,
+but for the merge of a pull request that found it not needed (`app=unneeded`),
+as LAN (owner, 2026-11-17, D17-A).
+Block 1 adds `make ui` and `make app-core-android` (Go, the NDK, gomobile)
+before Gradle, here and in build.yml's job,
+and `app/core/`, `internal/serve/` with what it imports,
+`go.mod` and `go.sum` to the filter;
+the comparison then covers the `.aar` too.
+
 The actionlint job runs `make actionlint`,
 the tool pinned by the `tool` line of `tools/actionlint/go.mod`,
 a module of its own (section 8, `tools/actionlint/README.md`),
@@ -535,14 +564,17 @@ and on 2026-11-08 it read a Dependabot pull request's that way.
 
 | Name | Set where | Used by |
 |------|-----------|---------|
-| `MASSIMO_RELEASE_KEY` | the `signing` environment on GitHub, usable by version tags only, each run approved by the owner | release.yml, to sign the release manifest; its public half is `internal/update/release-key.pem` |
-| `MASSIMO_ROLLING_KEY` | the `signing-rolling` environment, usable by `main` only | release.yml's `rolling`, to sign the manifest of a `devel` or `nightly` build; its public half is `internal/update/rolling-key.pem`, which boxes accept for those two flavours alone |
+| `MASSIMO_RELEASE_KEY` | the `signing` environment on GitHub, usable by version tags only, each run approved by the owner | release.yml's `sign`, to sign the release manifest and `SHA256SUMS`, and `app-publish`, to sign `SHA256SUMS` again with the app's lines; its public half is `internal/update/release-key.pem` |
+| `MASSIMO_ROLLING_KEY` | the `signing-rolling` environment, usable by `main` only | release.yml's `rolling`, to sign the manifest and `SHA256SUMS` of a `devel` or `nightly` build; its public half is `internal/update/rolling-key.pem`, which boxes accept for those two flavours alone |
 | `ROLLING_TAG_DEPLOY_KEY` | the `signing-rolling` environment; its public half a deploy key with write access, "rolling tags (release.yml)" | release.yml's `rolling`, to move `release/devel` and `release/nightly` to the new build (section 6); without it the token tries |
 | `RELEASE_BRANCH_DEPLOY_KEY` | the `signing` environment; its public half a deploy key with write access, "release branches (release.yml)" | release.yml's `sign`, to fast-forward `release/<flavour>` to the published release (section 6); without it the branch stays |
 | `HOMEBREW_TAP_DEPLOY_KEY` | the `signing` environment (packaging/README.md, "Homebrew"); a repository secret until 2026-11-11, which any run on any branch could read (D56-A) | publish.yml, called by release.yml's `homebrew` job, to push the formula to `metaworx/homebrew-massimo`; without it the job is skipped |
 | `HOMEBREW_ROLLING_TAP_DEPLOY_KEY` | the `signing-rolling` environment; its public half a deploy key with write access on `metaworx/homebrew-massimo-rolling`, "rolling formulae (release.yml)" | release.yml's `rolling`, to push `massimo-devel` or `massimo-nightly` to the rolling tap (packaging/README.md, "Homebrew"); without it the step is skipped with a warning |
 | `MASSIMO_APT_KEY`, `MASSIMO_APT_KEY_PASSPHRASE` | the `signing` environment, once the owner has made the key (packaging/README.md, "The apt repository") | release.yml's `apt-build` job, to sign the apt suites; the site's `massimo.asc` is its public half; without them the apt jobs are skipped |
 | `MASSIMO_ROLLING_APT_KEY`, `MASSIMO_ROLLING_APT_KEY_PASSPHRASE` | the `signing-rolling` environment (packaging/README.md, "The apt repository") | release.yml's `rolling` job, to sign the apt suite `devel` or `nightly`; its public half is `packaging/apt/rolling-archive-key.asc`, the site's `massimo-rolling.asc`; without them the rolling suite is left off the site |
+| `MASSIMO_APP_KEYSTORE`, `MASSIMO_APP_KEYSTORE_PASSWORD` | the `signing` environment, once the owner has made the key (`app/README.md`, "The signing keys") | release.yml's `app-sign`, to sign the Android app's APK: the app signing key, alias `massimo`, a PKCS#12 keystore in base64; its certificate is `app/android/signing/app-cert.pem`, which the signer must match; without them a release carries no app |
+| `MASSIMO_APP_UPLOAD_KEYSTORE`, `MASSIMO_APP_UPLOAD_KEYSTORE_PASSWORD` | the `signing` environment, as above | release.yml's `app-sign`, to sign the AAB with Google Play's upload key, alias `upload`; its certificate is `app/android/signing/upload-cert.pem`; without them a release carries the APK and no AAB |
+| `MASSIMO_APP_ROLLING_KEYSTORE`, `MASSIMO_APP_ROLLING_KEYSTORE_PASSWORD` | the `signing-rolling` environment, as above | release.yml's `rolling`, to sign the nightly build's APK, `ch.metaworx.massimo.nightly`, alias `rolling`; its certificate is `app/android/signing/rolling-cert.pem`; without them the nightly build carries no app |
 | `GITHUB_TOKEN` | provided by GitHub | the release jobs to publish, the Windows and macOS jobs as `MASSIMO_GITHUB_TOKEN`, for the release checks against the API's rate limit and the release files through the API |
 
 Never echo any slice of a secret to the log.
@@ -621,9 +653,55 @@ a statement signed through Sigstore with the job's OIDC token,
 not with the project's keys,
 naming the repository, the workflow, the commit and the runner;
 `gh attestation verify <file> -R metaworx/massimo` checks one.
-Only the manifest's signature is not attested,
-since `sign` and `rolling` make it.
+Only the signatures are not attested,
+since `sign` and `rolling` make them.
 It runs in `build`, not beside the keys, which run nothing but openssl and gh.
+`sign` and `rolling` sign `SHA256SUMS` as they sign the manifest,
+as `SHA256SUMS.sig`, with the release key or the rolling key
+(AP MobileApp, D15-D):
+the manifest is what boxes install from, `SHA256SUMS` what people check a download with.
+
+The Android app (AP MobileApp, Block 4) is built by build.yml's job of its own,
+"Android app", for a version tag and for the nightly build, unsigned,
+attested and handed over as the artifact `release-app`,
+apart from `release`, whose files `sign` publishes as they are;
+a devel build has none.
+A tag's `app/version.json` must name the tag with the tag's versionCode
+(`packaging/app-version.sh check <tag>`), which `make release` wrote:
+`app-version.sh release` asks for the code first,
+`write` puts the file in the working tree just before the cut,
+`changelog.sh cut` commits it in the release commit as the changelog's manifest
+(`GUIDELINES/config.ini`), and `check` holds it to the tag before the push.
+The versionCode is `MMmmPPbbbb`: the major (at most 20, Play's limit),
+the minor and the patch (at most 99),
+and the commits since the version's first tag (at most 9999),
+the labels without digits of their own (owner, 2026-11-17, D21-A):
+`v0.16.0-alpha.1` is 16000000, a build 227 commits on 16000227.
+The job's failure fails no release (`continue-on-error`);
+the signing jobs then say that the release carries no app.
+For a version tag, `app-sign` ("Sign the Android app") signs the APK with
+`MASSIMO_APP_KEYSTORE` and the AAB with `MASSIMO_APP_UPLOAD_KEYSTORE`
+(section 5) through `packaging/app-sign.sh`,
+which checks each signer against its certificate in `app/android/signing/`,
+and hands them on as the artifact `app-signed`;
+`app-publish` ("Publish the Android app") waits for `sign` and `app-sign`
+(`packaging/wait-for-job.sh`),
+checks the published `SHA256SUMS.sig` against the release key,
+adds the app's lines, signs the file again,
+and uploads `massimo-android.apk` and `massimo-android-play.aab`,
+then `SHA256SUMS` and its signature (D14-A, D20-A).
+Both are in `signing` and start beside `sign`, so the one approval lets them run;
+`app-publish` runs only sha256sum, openssl and gh.
+The nightly build's `massimo-android-nightly.apk` is signed inside `rolling`,
+with `MASSIMO_APP_ROLLING_KEYSTORE`, before its one publish,
+and joins the build's files with its line in `SHA256SUMS` (D18-A, D19-A);
+a fault there warns, and the build goes out without it.
+`attest`, without a key, then attests the files signed in the run
+with the `SHA256SUMS` that names them,
+for which ci.yml's and nightly.yml's Release grant `attestations`.
+The signed manifest names no app file: boxes do not install the app.
+Without a key's secrets or its certificate a step warns and the release
+carries no app; the owner makes the keys (`app/README.md`).
 
 A push to `main` whose suite passed becomes the `devel` build:
 the same `make build-release`, as the version `git describe` calls the commit

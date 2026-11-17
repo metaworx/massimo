@@ -9,15 +9,23 @@ tested and put on a phone.
 | Directory | What |
 |---|---|
 | `android/` | the Gradle project of the Android app, the module `app` |
-| `version.json` | the version the release writes (AP MobileApp Block 4); a build without it is `0.0.0-dev` |
+| `version.json` | the newest release's version and versionCode, which `make release` writes (below, "Versions") |
+| `android/signing/` | the public certificates of the app's signing keys (below, "The signing keys") |
 
 ## The Android app
 
 Kotlin, the Android Gradle Plugin, `compileSdk` and `targetSdk` 36,
 `minSdk` 26 (Android 8.0).
-Two flavours: `foss`, the F-Droid build, and `play`, the Google Play build,
-the same app until Block 8 gives `play` Google's push distributor.
-The application id is `ch.metaworx.massimo` in both.
+Three flavours: `foss`, the F-Droid build, and `play`, the Google Play build,
+the same app until Block 8 gives `play` Google's push distributor,
+both with the application id `ch.metaworx.massimo`;
+and `nightly`, `foss` as the nightly build publishes it on GitHub,
+`ch.metaworx.massimo.nightly`, "Massimo nightly",
+an app of its own that installs beside the release
+(AP MobileApp, D18-A).
+Its icon is the mark's one-colour layer, white on a dark blue
+(`src/nightly/res/`);
+a themed icon looks the same for both, and the label tells them apart.
 Dependencies are AndroidX (Apache-2.0) alone, from Google's Maven
 repository and Maven Central; the JVM tests add JUnit and org.json.
 
@@ -59,6 +67,86 @@ so that the session the server labels with it names the phone.
 A server's page cannot save a file yet: its downloads are `blob:` URLs,
 which a WebView hands to no one; the app says so and points to the browser.
 Restoring a backup from a file works, through the system's file picker.
+
+### Versions
+
+`version.json` holds the newest release's `version` and `versionCode`;
+`make release` writes the next one's just before the cut,
+which commits it in the release commit as the changelog's manifest
+(`GUIDELINES/config.ini`), so a tag's source builds as the tag,
+and F-Droid's update check reads both at the tag.
+`packaging/app-version.sh` is the formula's one place (D21-A):
+the versionCode is `MMmmPPbbbb`,
+the major (at most 20, as Play's largest code allows),
+the minor and the patch (at most 99 each),
+and the commits since the version's first tag (at most 9999).
+The labels alpha, beta and rc have no digits of their own,
+so every build of a version counts on from its first tag:
+
+| Build | versionName | versionCode |
+|---|---|---|
+| `v0.16.0-alpha.1` | `0.16.0-alpha.1` | 16000000 |
+| the nightly build 227 commits on | `0.16.0-alpha.1-227-g<commit>` | 16000227 |
+| `v0.16.0` cut two commits later | `0.16.0` | 16000229 |
+| `v0.17.0-alpha.1` | `0.17.0-alpha.1` | 17000000 |
+
+The nightly build gives its version to Gradle as `-Pmassimo.version` and
+`-Pmassimo.versionCode`; a debug build's versionName ends in `-dev`.
+`packaging/app-version.sh check` says whether the file is its tag's,
+and the CI job Android app runs it.
+
+### The signing keys
+
+The app is signed in the release workflow alone
+(`GUIDELINES/project/CI.md`, "Releases"), with three keys the owner makes and keeps:
+
+| Key | Signs | Secrets, environment | Certificate |
+|---|---|---|---|
+| the app signing key, alias `massimo` | the released APK, which every phone and F-Droid's `AllowedAPKSigningKeys` know it by; it cannot be replaced | `MASSIMO_APP_KEYSTORE`, `MASSIMO_APP_KEYSTORE_PASSWORD`, `signing` | `android/signing/app-cert.pem` |
+| Google Play's upload key, alias `upload` | the AAB for Play; Play can reset it | `MASSIMO_APP_UPLOAD_KEYSTORE`, `MASSIMO_APP_UPLOAD_KEYSTORE_PASSWORD`, `signing` | `android/signing/upload-cert.pem` |
+| the rolling key, alias `rolling` | the nightly APK | `MASSIMO_APP_ROLLING_KEYSTORE`, `MASSIMO_APP_ROLLING_KEYSTORE_PASSWORD`, `signing-rolling` | `android/signing/rolling-cert.pem` |
+
+Each is a PKCS#12 keystore with an RSA key of 4096 bits,
+in base64 as its secret, with its password beside it.
+`packaging/app-sign.sh` signs with one and checks the signer against its
+certificate before a file is handed on;
+without a key's secrets or its certificate the release warns and carries no app.
+The keys never enter the repository, a log or a chat;
+the certificates are public and committed.
+A lost app signing key cannot be registered again for Android's
+developer verification, nor for Play App Signing with our own key,
+so the keystore and its password are kept in two places of the owner's.
+Made with `keytool` (here the app signing key; the others alike,
+with their alias and name):
+
+```bash
+keytool -genkeypair -alias massimo -keyalg RSA -keysize 4096 -sigalg SHA256withRSA -validity 20000 -dname "CN=Massimo, O=The Massimo Authors" -storetype PKCS12 -keystore massimo-app.p12
+```
+
+```bash
+keytool -exportcert -rfc -alias massimo -keystore massimo-app.p12 -file app-cert.pem
+```
+
+```bash
+base64 -w0 massimo-app.p12 | gh secret set MASSIMO_APP_KEYSTORE --env signing
+```
+
+```bash
+gh secret set MASSIMO_APP_KEYSTORE_PASSWORD --env signing
+```
+
+The last asks for the password without showing it.
+
+A downloaded APK is checked against the committed certificate with the
+build-tools' `apksigner`; the digest it prints must be the certificate's:
+
+```bash
+apksigner verify --print-certs massimo-android.apk
+```
+
+```bash
+openssl x509 -in app/android/signing/app-cert.pem -outform DER | sha256sum
+```
 
 ### The toolchain in WSL
 

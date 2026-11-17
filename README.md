@@ -134,6 +134,8 @@ so take the newest release from the page and put its tag in place of `<tag>` bel
 | `massimo-darwin-arm64` | Mac with Apple silicon |
 | `massimo-darwin-amd64` | Mac with an Intel processor |
 | `massimo_<version>_<arch>.deb` | the Linux binary as a Debian package: `amd64`, `arm64`, `armhf` (every 32-bit Raspberry Pi OS), see [Linux](#linux) |
+| `massimo-android.apk` | the Android app, Android 8.0 or later, a client of a server on your network ([app/README.md](app/README.md)); the nightly build's is `massimo-android-nightly.apk`, an app of its own beside it |
+| `massimo-android-play.aab` | the same app as Google Play takes it, signed with the upload key; not for a phone |
 
 <!-- BEGIN GENERATED PARTIAL docs/fragments/_trust.md - do not edit; run "GUIDELINES/shared/tools/sync-docs.sh" -->
 **A binary is only as trustworthy as the place it came from.**
@@ -167,6 +169,17 @@ signed through Sigstore rather than with the project's keys:
 
 ```bash
 gh attestation verify massimo-linux-amd64 -R metaworx/massimo
+```
+
+`SHA256SUMS.sig` is `SHA256SUMS` signed with the release key,
+whose public half is `internal/update/release-key.pem` in the source,
+the key `massimo update` checks against
+(a `devel` or `nightly` build's with the rolling key, `rolling-key.pem`);
+take the key from a checkout of the signed source, not from the release page:
+
+```bash
+base64 -d SHA256SUMS.sig > SHA256SUMS.sig.bin
+openssl pkeyutl -verify -pubin -inkey internal/update/release-key.pem -rawin -in SHA256SUMS -sigfile SHA256SUMS.sig.bin
 ```
 
 `serve` reads its settings from the environment or from a `.env` in the
@@ -1254,6 +1267,10 @@ so that the branch names what that flavour's boxes are offered.
 It refuses when `main`'s head is released already,
 when `changelog.sh check` finds something,
 and when `[Unreleased]` holds no bullet.
+The release commit also carries `app/version.json`, the Android app's version
+and its versionCode, which `packaging/app-version.sh` counts
+and `changelog.sh check` holds to the changelog's newest release
+([app/README.md](app/README.md), "Versions").
 `make release <flavour> DRY=1` shows what it would cut, tag and push,
 and does none of it;
 `ASSISTED_BY=agent:model` gives an agent's release commit its `Assisted-by` trailer.
