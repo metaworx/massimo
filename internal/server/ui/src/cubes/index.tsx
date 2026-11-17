@@ -9,12 +9,15 @@
  * settings, the chosen Cube's panel alone, open. A panel is drawn in one
  * place at a time, as its ids are its serial's. The plain code calls
  * MassimoParts.cubes (cubes.js renderCubes and cubesPolled, home.js
- * showFound); the panels follow every load of the Cubes' list in place.
+ * showFound); the panels follow every load of the Cubes' list in place,
+ * and the settings typed for a Cube that is no longer served are
+ * forgotten.
  */
 
 import { useEffect } from "preact/hooks";
 import type { Cube } from "../api";
-import { chosenCube } from "../model/cube";
+import { chosenCube, cubeFormKey } from "../model/cube";
+import { forgetForms } from "../shared/forms";
 import { mounter, register } from "../shared/region";
 import { msg } from "./send";
 import { Found } from "./Found";
@@ -56,6 +59,21 @@ function Page() {
   return <PagePanel key={c.serial} c={c} />;
 }
 
+/** served are the serials of the Cubes the list gave last. */
+let served = new Set<string>();
+
+/**
+ * forgetGone forgets the settings typed for the Cubes the list no longer
+ * gives: removed, by this page or another client. It runs at polled
+ * alone, which loadCubes calls after a load that went through; a load
+ * that fails throws before it, and leaves state.cubes as it was.
+ */
+function forgetGone(): void {
+  const now = new Set(state.cubes.map((c) => c.serial));
+  for (const serial of served) if (!now.has(serial)) forgetForms(cubeFormKey(serial));
+  served = now;
+}
+
 const mountList = mounter("cubes-list", () => <List />);
 const mountPage = mounter("cube-page-body", () => <Page />);
 
@@ -68,10 +86,11 @@ const cubes = register("cubes", {
     place.value = isShown("cube") ? "page" : "list";
     load.bump();
   },
-  /** polled takes a load of the Cubes' list (cubesPolled): every panel follows it in place. */
+  /** polled takes a load of the Cubes' list (cubesPolled): every panel follows it in place, and a Cube no longer given forgets its form. */
   polled(): void {
     mountList();
     mountPage();
+    forgetGone();
     load.bump();
   },
   /** openFound opens the fold of the Cubes found (showFound). */

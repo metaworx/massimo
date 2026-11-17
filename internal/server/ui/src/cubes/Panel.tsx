@@ -130,6 +130,7 @@ function keepPanel(ev: TargetedMouseEvent<HTMLDetailsElement>) {
  * its settings come from on a line of its own.
  */
 function Head({ c }: { c: Cube }) {
+  load.useLoad(); // it reads the unsaved forms' signal too, and a part that reads signals is drawn again only for them or new properties
   const { host } = hostPort(c.address);
   const f = budgetFacts(c);
   const entries = [cubeEntry(c, true)];

@@ -104,7 +104,8 @@ The compacted header has **↑** left of ☰, back to the top.
   its tooltip adds the serial, the address and the link in words.
   Open, each Cube has its sign, its name with an icon after it for each
   kind of problem it has (the radio, a battery, a window open too long, a
-  device's link and, for one who may change the settings, the cog), each in
+  device's link and, for one who may change the settings, the cog, and the
+  disk while the Cube's settings are unsaved or a save of them failed), each in
   its worst colour, and under it its serial and address,
   the list as wide as they need; the arrow keys move between them.
   Open, it stays open when data comes in, the focus where it was,
@@ -930,6 +931,25 @@ and a line of the settings file that comes to differ while the panel is shown
 gets its notice with **Take the file's value**.
 Pair a device and Repair… keep their own drawing inside the panel
 until their own move to parts.
+What is typed in a Cube's settings stays until it is saved or reset:
+when the panel closes, from System settings to Cube settings and back,
+and when another Cube is chosen, each Cube's with its Cube;
+it is forgotten at a sign-out and when the Cube is no longer served.
+**Save** says how it stands: off and plain while nothing is changed,
+in the accent colour once something is,
+with the warning mark before its text once the focus has left the form,
+the form was closed or left, or a minute has passed since the last change,
+turning while it saves,
+with the cross after a save that failed, the server not reached or the value refused
+(the message line says why, no field is outlined), until a save goes through or Reset,
+and with the check for five seconds after a save.
+**Reset**, beside it and off while nothing is changed, takes the values stored back.
+While the settings are unsaved, or a save failed,
+the Cube's problem list, in its panel's head and in the header's list of every Cube,
+shows the disk with the corner mark, amber, red after a failed save,
+"Cube settings: not saved"; a click on it opens the settings,
+the Cube's panel in System settings, else Cube settings with the Cube chosen,
+and puts the focus into them.
 A panel is drawn in one place at a time:
 while Cube settings is shown, System settings' list does not hold it.
 Under the panel the Cube's **Backup and restore** (with `backup`),
@@ -1734,7 +1754,11 @@ and registers `render`, `polled` and `openFound`,
 which `cubes.js` calls as `renderCubes`, `cubesPolled` and `showFoundFold`;
 `store.ts` holds its counter, each panel's `open` by serial, the folds
 and the devices loaded for the hide choice;
-`send.ts` holds its requests, run by its action runner.
+`send.ts` holds its requests, run by its action runner;
+`Form.tsx` a Cube's settings as a `useForm` of the key `cubeFormKey(serial)`
+(`model/cube.tsx`, which lists its `unsavedItems` in `cubeEntry`,
+so in the panel head's pill and in the header's entry of the Cube),
+and `index.tsx` forgets a Cube's form when the list no longer gives the Cube.
 The header (`ui/src/header/`) is the second:
 `index.tsx` draws the Cube choice with every Cube's problems in `#header-cube`,
 the chosen Cube's age in the refresh button's `#updated`,

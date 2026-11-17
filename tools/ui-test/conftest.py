@@ -22,6 +22,10 @@ A test marked used_ticket gets a used ticket for its first stream
 (`watch.refused`), which the server refuses with a 401; its page is
 handed over before the stream opens again.
 
+A test marked clock gets Playwright's clock installed before the page's
+scripts run, its time flowing as the real one: the test moves it on with
+page.clock.fast_forward, for what the page does after a minute.
+
 test_login.py opens a context of its own, without the token, from
 pytest-playwright's new_context with the case's viewport and locale.
 
@@ -181,10 +185,13 @@ def clear_preferences():
 def page(context, case, watch, request):
     """The page loaded, with the token, the room tiles shown and, unless
     the test is marked used_ticket, the event stream open; the token's
-    user without preferences on the server (clear_preferences)."""
+    user without preferences on the server (clear_preferences); marked
+    clock, under Playwright's clock."""
     clear_preferences()
     if TOKEN:
         context.add_init_script(f"localStorage.setItem('massimo.token', {TOKEN!r})")
+    if request.node.get_closest_marker("clock") is not None:
+        context.clock.install()
     page = context.new_page()
     page.set_default_timeout(5000)
     used = request.node.get_closest_marker("used_ticket") is not None
