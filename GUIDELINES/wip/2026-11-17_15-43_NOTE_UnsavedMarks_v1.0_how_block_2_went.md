@@ -98,8 +98,9 @@ Made in the run, and small enough to change afterwards:
   `make ui`, gofmt, `go vet` for linux, windows and darwin,
   `MASSIMO_ENV_FILE=/dev/null go test ./...`, `make ui-check`,
   the types' `-check` and the guidelines' twelve checks pass;
-  UI tests in all four cases, in the builder's run and here: thirteen test files there, 532 passed and 60 skipped;
-  fourteen here, 540 passed and 60 skipped.
+  UI tests in all four cases, in the builder's run and here:
+  thirteen test files there, 532 passed and 60 skipped; fourteen here,
+  540 passed and 60 skipped.
 - **After the merge of main:**
   the same, and `make cross`.
 - **UI tests after the merge of main:**
