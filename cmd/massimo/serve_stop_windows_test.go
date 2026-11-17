@@ -22,6 +22,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/env"
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // The service manager's stop ends serve as SIGTERM does on Unix
@@ -74,7 +75,7 @@ func TestServiceStopClosesTheStore(t *testing.T) {
 	// Up once the Cube has its row and its first event is in the store,
 	// which its id shows.
 	var sn string
-	for deadline := time.Now().Add(15 * time.Second); ; time.Sleep(50 * time.Millisecond) {
+	for deadline := time.Now().Add(testkit.Scale(15 * time.Second)); ; time.Sleep(50 * time.Millisecond) {
 		select {
 		case err := <-served:
 			t.Fatalf("serve ended before the stop: %v", err)
@@ -114,7 +115,7 @@ func TestServiceStopClosesTheStore(t *testing.T) {
 	close(theService.stop) // what the manager's stop does
 	time.Sleep(500 * time.Millisecond)
 	io.WriteString(conn, body[8:])
-	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	conn.SetReadDeadline(time.Now().Add(testkit.Scale(10 * time.Second)))
 	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
 	if err != nil {
 		t.Fatalf("no answer to the request in flight at the stop: %v", err)

@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // serialsOf maps the Cube's devices' radio addresses to their serials,
@@ -47,7 +48,7 @@ func TestLogEventsCarrySerial(t *testing.T) {
 		cubeRF, _ = v["rf_address"].(string)
 	}
 	var evs []event
-	eventually(t, "a config event per device and the Cube's own", func() bool {
+	testkit.Eventually(t, "a config event per device and the Cube's own", func() bool {
 		_, evs = logOf(t, ts, "?kind=config&limit=1000&level=debug") // the greeting's own lines
 		return len(evs) >= len(serials)+1
 	})
@@ -94,7 +95,7 @@ func TestLogForgottenDeviceHasSerial(t *testing.T) {
 		t.Fatalf("the removal sent %v, want its t:", got)
 	}
 	var gone *event
-	eventually(t, "device_forgotten in the log", func() bool {
+	testkit.Eventually(t, "device_forgotten in the log", func() bool {
 		_, evs := logOf(t, ts, "?kind=device_forgotten")
 		for i := range evs {
 			if evs[i].Device == "0a010a" {
@@ -187,7 +188,7 @@ func TestLogDeviceFilterBySerial(t *testing.T) {
 	_, ts, _, _ := startStored(t, Options{})
 	serials := serialsOf(t, ts, "")
 	var byRF []event
-	eventually(t, "the device's events", func() bool {
+	testkit.Eventually(t, "the device's events", func() bool {
 		_, byRF = logOf(t, ts, "?device=0a010d")
 		return len(byRF) > 0
 	})

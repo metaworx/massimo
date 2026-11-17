@@ -9,6 +9,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // A Cube whose connection is held is listed with link held, since the
@@ -35,14 +36,14 @@ func TestAHeldCubeIsListedAsHeld(t *testing.T) {
 		l, _ := cubes[0]["link"].(map[string]any)
 		return l
 	}
-	eventually(t, "connected", func() bool { l := link(); return l != nil && l["state"] == "connected" })
+	testkit.Eventually(t, "connected", func() bool { l := link(); return l != nil && l["state"] == "connected" })
 	fc.SetSilent(true)
-	eventually(t, "held", func() bool { l := link(); return l != nil && l["state"] == "held" })
+	testkit.Eventually(t, "held", func() bool { l := link(); return l != nil && l["state"] == "held" })
 	if l := link(); l["since"] == nil || l["until"] == nil {
 		t.Errorf("held link %v: want since and until", l)
 	}
 	fc.SetSilent(false)
-	eventually(t, "connected again", func() bool { l := link(); return l != nil && l["state"] == "connected" })
+	testkit.Eventually(t, "connected again", func() bool { l := link(); return l != nil && l["state"] == "connected" })
 	if fc.Connections() != 1 {
 		t.Errorf("%d connections, want the held one only", fc.Connections())
 	}

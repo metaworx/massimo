@@ -14,6 +14,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
@@ -34,13 +35,9 @@ func TestHiddenDevicesInvisible(t *testing.T) {
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
 	var c cubeView
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		if getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+	testkit.Within(5*time.Second, func() bool {
+		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
+	})
 	if !c.Connected || c.Rooms != 5 || c.Devices != 5 || len(c.RoomList) != 5 {
 		t.Fatalf("cube %+v", c)
 	}
@@ -107,12 +104,9 @@ func TestShowHiddenShowsListedDevices(t *testing.T) {
 	go s.Run(ctx)
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		if getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices/0a010d", nil) == 200 {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
+	if !testkit.Within(5*time.Second, func() bool {
+		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices/0a010d", nil) == 200
+	}) {
+		t.Fatal("listed device hidden despite ShowHidden")
 	}
-	t.Fatal("listed device hidden despite ShowHidden")
 }

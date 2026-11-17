@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/cubelan"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 func TestUIServed(t *testing.T) {
@@ -173,7 +174,7 @@ func TestUIServed(t *testing.T) {
 		t.Fatalf("GET /api/v1/cubes?token=secret: %d, want 401", code)
 	}
 	req, _ := http.NewRequest("GET", ts.URL+"/api/v1/cubes/KEQ0000100/events?token=secret", nil)
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), testkit.Scale(2*time.Second))
 	defer cancel()
 	resp, err = http.DefaultClient.Do(req.WithContext(ctx))
 	if err != nil {

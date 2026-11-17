@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/update"
 )
 
@@ -30,12 +31,13 @@ func (f *rebootFake) reboot() error {
 	return f.err
 }
 
-// called waits for one call, or fails the test after five seconds.
+// called waits for one call, or fails the test after five seconds,
+// scaled.
 func (f *rebootFake) called(t *testing.T) {
 	t.Helper()
 	select {
 	case <-f.calls:
-	case <-time.After(5 * time.Second):
+	case <-time.After(testkit.Scale(5 * time.Second)):
 		t.Fatal("the reboot was not asked for")
 	}
 }
@@ -234,17 +236,13 @@ func TestRebootBlocked(t *testing.T) {
 		t.Fatalf("POST: %d %s", code, text)
 	}
 	failing.called(t)
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		_, text := callAPI(t, ts, "GET", path, "secret", "")
-		v := decodeReboot(t, text)
-		if v.Error == failing.err.Error() && v.Available && v.At == nil {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("GET after the failure: %s", text)
-		}
-		time.Sleep(20 * time.Millisecond)
+	var answer string
+	if !testkit.Within(5*time.Second, func() bool {
+		_, answer = callAPI(t, ts, "GET", path, "secret", "")
+		v := decodeReboot(t, answer)
+		return v.Error == failing.err.Error() && v.Available && v.At == nil
+	}) {
+		t.Fatalf("GET after the failure: %s", answer)
 	}
 
 	// A reboot the helper took but the computer did not carry out.
@@ -256,15 +254,12 @@ func TestRebootBlocked(t *testing.T) {
 		t.Fatalf("POST: %d %s", code, text)
 	}
 	failing.called(t)
-	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(20 * time.Millisecond) {
-		_, text := callAPI(t, ts, "GET", path, "secret", "")
-		v := decodeReboot(t, text)
-		if v.Error == "the computer has not rebooted within 50ms; the reboot helper's log says why" && v.Available && !v.Begun {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("GET after a reboot that did not happen: %s", text)
-		}
+	if !testkit.Within(5*time.Second, func() bool {
+		_, answer = callAPI(t, ts, "GET", path, "secret", "")
+		v := decodeReboot(t, answer)
+		return v.Error == "the computer has not rebooted within 50ms; the reboot helper's log says why" && v.Available && !v.Begun
+	}) {
+		t.Fatalf("GET after a reboot that did not happen: %s", answer)
 	}
 
 	if code, text := callAPI(t, ts, "POST", path, "secret", `{"delay": 3600}`); code != 202 {

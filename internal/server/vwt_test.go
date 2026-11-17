@@ -16,6 +16,7 @@ import (
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
@@ -79,7 +80,7 @@ func startRoomsOpts(t *testing.T, o roomsOpts) (*fakecube.Server, *httptest.Serv
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
 	waitConnected(t, ts, "KEQ0000100")
-	eventually(t, "the rooms' uids", func() bool {
+	testkit.Eventually(t, "the rooms' uids", func() bool {
 		var rooms []view.Room
 		getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/rooms", &rooms)
 		return len(rooms) == 3 && rooms[2].UID != ""

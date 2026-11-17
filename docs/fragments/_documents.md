@@ -48,6 +48,8 @@ on a document under `docs/` that is not).
 - [GUIDELINES/README.md](GUIDELINES/README.md): how the project is worked on:
   the guidelines, the project's contract and its coding standard
 - [docs/roadmap.md](docs/roadmap.md): what comes next, in order
+- [docs/testing.md](docs/testing.md): how a Go test waits:
+  the test kit and the scale of every wait
 - [docs/testing-writes.md](docs/testing-writes.md):
   the test plan for the configuration writes on real hardware,
   [docs/reports/write-test-2026-11-05.md](docs/reports/write-test-2026-11-05.md) its results

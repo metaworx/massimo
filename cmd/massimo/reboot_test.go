@@ -19,6 +19,7 @@ import (
 	"go.metaworx.ch/massimo/internal/install"
 	"go.metaworx.ch/massimo/internal/server"
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // Who reboots: the Windows service itself; systemd's and launchd's
@@ -77,7 +78,7 @@ func TestRebootRequester(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "reboot-request")
 	taken := make(chan string, 1)
 	go func() {
-		for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(5 * time.Millisecond) {
+		for deadline := time.Now().Add(testkit.Scale(5 * time.Second)); time.Now().Before(deadline); time.Sleep(5 * time.Millisecond) {
 			if b, err := os.ReadFile(path); err == nil {
 				os.Remove(path)
 				taken <- string(b)

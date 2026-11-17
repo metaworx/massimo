@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 const fixture = "../../protocol/cube/testdata/cube-fw0113-greeting.txt"
@@ -29,7 +30,7 @@ func dial(t *testing.T, addr string) *client {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { conn.Close() })
-	conn.SetDeadline(time.Now().Add(5 * time.Second))
+	conn.SetDeadline(time.Now().Add(testkit.Scale(5 * time.Second)))
 	c := &client{t: t, conn: conn, r: cube.NewReader(conn)}
 	for {
 		m := c.read()
@@ -179,7 +180,7 @@ func TestPairDeviceJoinsOnlyWhileIncluding(t *testing.T) {
 	if m, err := c.r.Read(); err == nil {
 		t.Fatalf("after x: the fake sent %s", m)
 	}
-	c.conn.SetDeadline(time.Now().Add(5 * time.Second))
+	c.conn.SetDeadline(time.Now().Add(testkit.Scale(5 * time.Second)))
 	c.r = cube.NewReader(c.conn)
 	// Two n: in a row: the device joins once.
 	c.conn.Write([]byte(cube.CmdInclusion(time.Minute).Wire()))

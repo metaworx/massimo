@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // startSingle starts a SingleClient fake with the recorded greeting.
@@ -40,17 +41,6 @@ func refused(addr string) bool {
 	return err != nil
 }
 
-// within waits up to five seconds for cond.
-func within(t *testing.T, what string, cond func() bool) {
-	t.Helper()
-	for end := time.Now().Add(5 * time.Second); time.Now().Before(end); time.Sleep(10 * time.Millisecond) {
-		if cond() {
-			return
-		}
-	}
-	t.Fatalf("timed out waiting for %s", what)
-}
-
 // A SingleClient fake refuses a second client while one is connected,
 // and takes the next once that one has left.
 func TestSingleClientRefusesASecond(t *testing.T) {
@@ -60,7 +50,7 @@ func TestSingleClientRefusesASecond(t *testing.T) {
 		t.Fatal("a second client was served while the first is connected")
 	}
 	first.conn.Close()
-	within(t, "the slot freed", func() bool { return !refused(addr) })
+	testkit.Eventually(t, "the slot freed", func() bool { return !refused(addr) })
 	if srv.HeldDead() {
 		t.Error("a client that left while the fake spoke left a dead session")
 	}
@@ -73,12 +63,12 @@ func TestADeadSessionIsHeldUntilHoldDead(t *testing.T) {
 	first := dial(t, addr)
 	srv.SetSilent(true)
 	first.conn.Close()
-	within(t, "the dead session", srv.HeldDead)
+	testkit.Eventually(t, "the dead session", srv.HeldDead)
 	srv.SetSilent(false)
 	if !refused(addr) {
 		t.Fatal("a client was served while the dead session is held")
 	}
-	within(t, "the end of the dead session", func() bool { return !srv.HeldDead() })
+	testkit.Eventually(t, "the end of the dead session", func() bool { return !srv.HeldDead() })
 	dial(t, addr)
 }
 
@@ -90,13 +80,13 @@ func TestReleaseAndRestartFreeTheCube(t *testing.T) {
 		c := dial(t, addr)
 		srv.SetSilent(true)
 		c.conn.Close()
-		within(t, "the dead session", srv.HeldDead)
+		testkit.Eventually(t, "the dead session", srv.HeldDead)
 		srv.SetSilent(false)
 		free()
 		if srv.HeldDead() {
 			t.Fatal("the dead session is still held")
 		}
-		within(t, "a client served again", func() bool { return !refused(addr) })
+		testkit.Eventually(t, "a client served again", func() bool { return !refused(addr) })
 	}
 	c := dial(t, addr)
 	srv.Restart()
@@ -121,7 +111,7 @@ func TestAnRRestartsTheJoinedFake(t *testing.T) {
 	c := dial(t, addr)
 	srv.SetSilent(true)
 	c.conn.Close()
-	within(t, "the dead session", srv.HeldDead)
+	testkit.Eventually(t, "the dead session", srv.HeldDead)
 	srv.SetSilent(false)
 
 	pc, err := net.ListenPacket("udp4", "127.0.0.1:0")
@@ -134,7 +124,7 @@ func TestAnRRestartsTheJoinedFake(t *testing.T) {
 	if _, err := pc.WriteTo(frame, to); err != nil {
 		t.Fatal(err)
 	}
-	within(t, "the restart", func() bool { return srv.Restarts() == 1 && !srv.HeldDead() })
+	testkit.Eventually(t, "the restart", func() bool { return srv.Restarts() == 1 && !srv.HeldDead() })
 	if d.Reboots() != 1 {
 		t.Errorf("%d reboots counted", d.Reboots())
 	}

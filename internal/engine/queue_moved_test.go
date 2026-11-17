@@ -10,6 +10,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // A Cube found at a new address: the reconnect queued for it drops a
@@ -39,14 +40,14 @@ func TestMovedReconnectKeepsTheNewConnection(t *testing.T) {
 	go c.Run(ctx)
 	select {
 	case <-c.Ready():
-	case <-time.After(5 * time.Second):
+	case <-time.After(testkit.Scale(5 * time.Second)):
 		t.Fatal("client not ready")
 	}
 	q := NewQueue(c, Options{Gap: time.Millisecond})
 	go q.Run(ctx)
 	reconnect := func() {
 		t.Helper()
-		wctx, wcancel := context.WithTimeout(ctx, 5*time.Second)
+		wctx, wcancel := context.WithTimeout(ctx, testkit.Scale(5*time.Second))
 		defer wcancel()
 		if res := q.Enqueue(Command{Key: "refresh", Priority: PriorityNormal, Reconnect: true, Moved: true}).Wait(wctx); res.Err != nil {
 			t.Fatal(res.Err)
@@ -56,10 +57,8 @@ func TestMovedReconnectKeepsTheNewConnection(t *testing.T) {
 	// Still connected to the old address: dropped, the new one dialled.
 	c.SetAddress(newAddr)
 	reconnect()
-	for deadline := time.Now().Add(5 * time.Second); !(c.Connected() && moved.Connections() == 1); time.Sleep(10 * time.Millisecond) {
-		if time.Now().After(deadline) {
-			t.Fatalf("not connected to the new address: %d connections", moved.Connections())
-		}
+	if !testkit.Within(5*time.Second, func() bool { return c.Connected() && moved.Connections() == 1 }) {
+		t.Fatalf("not connected to the new address: %d connections", moved.Connections())
 	}
 	// Connected to the new address already: nothing to drop.
 	reconnect()

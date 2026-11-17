@@ -12,6 +12,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 const newDevice cube.RFAddress = 0x0a0b0c
@@ -38,25 +39,11 @@ func startPairingCube(t *testing.T, delay time.Duration) (*fakecube.Server, *htt
 	go s.Run(ctx)
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
-	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+	testkit.Eventually(t, "the cube's connect", func() bool {
 		var c cubeView
-		if getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected {
-			return fc, ts, s
-		}
-	}
-	t.Fatal("cube never connected")
-	return nil, nil, nil
-}
-
-// waitFor polls cond until it holds or five seconds passed.
-func waitFor(t *testing.T, what string, cond func() bool) {
-	t.Helper()
-	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
-		if cond() {
-			return
-		}
-	}
-	t.Fatalf("timed out waiting for %s", what)
+		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
+	})
+	return fc, ts, s
 }
 
 func TestPairingAndAddingToARoom(t *testing.T) {
@@ -77,7 +64,7 @@ func TestPairingAndAddingToARoom(t *testing.T) {
 	}
 	// The device joins: it is in the state, the log has the event, and
 	// the server fetched its C line, so the device list has it.
-	waitFor(t, "the paired device", func() bool {
+	testkit.Eventually(t, "the paired device", func() bool {
 		_, st = do(t, ts, "GET", base+"/pairing", "")
 		p, _ := st["paired"].([]any)
 		return len(p) == 1
@@ -85,7 +72,7 @@ func TestPairingAndAddingToARoom(t *testing.T) {
 	if p := st["paired"].([]any)[0].(map[string]any); p["rf_address"] != "0a0b0c" || p["serial"] != "TEQ0000001" || p["type"] != "radiator_thermostat" {
 		t.Fatalf("paired %v", p)
 	}
-	waitFor(t, "the C line", func() bool {
+	testkit.Eventually(t, "the C line", func() bool {
 		code, d := do(t, ts, "GET", base+"/devices/0a0b0c", "")
 		return code == 200 && d["unlisted"] == true && d["thermostat"] != nil
 	})
@@ -163,7 +150,7 @@ func TestPairingEndsWithTheCube(t *testing.T) {
 	if code, _ := do(t, ts, "POST", base+"/pairing", `{"seconds":1}`); code != 200 {
 		t.Fatal(code)
 	}
-	waitFor(t, "the end", func() bool {
+	testkit.Eventually(t, "the end", func() bool {
 		_, st := do(t, ts, "GET", base+"/pairing", "")
 		return st["active"] == false && st["ended"] != nil
 	})
@@ -196,7 +183,7 @@ func TestPairingTimeLimit(t *testing.T) {
 	}
 	// The fake records a line once it read it, which can be after the
 	// answer.
-	waitFor(t, "the n: at the Cube", func() bool { return len(fc.Received()) > 0 })
+	testkit.Eventually(t, "the n: at the Cube", func() bool { return len(fc.Received()) > 0 })
 	if got := fc.Received(); len(got) != 1 || got[0].String() != "n:00ff" {
 		t.Fatalf("cube received %v", got)
 	}

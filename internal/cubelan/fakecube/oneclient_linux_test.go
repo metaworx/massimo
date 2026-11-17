@@ -8,6 +8,8 @@ import (
 	"net"
 	"testing"
 	"time"
+
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // On Linux a refused client's dial times out, as against a Cube that
@@ -29,7 +31,7 @@ func TestSingleClientDialTimesOutOnLinux(t *testing.T) {
 	}()
 	// The kernel sends the SYN again after a second; the slot is free by
 	// then.
-	conn, err := net.DialTimeout("tcp", addr, 3*time.Second)
+	conn, err := net.DialTimeout("tcp", addr, testkit.Scale(3*time.Second))
 	if err != nil {
 		t.Fatalf("dial while the slot frees: %v", err)
 	}

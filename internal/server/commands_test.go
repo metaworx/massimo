@@ -19,6 +19,7 @@ import (
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // callWith sends a request with extra headers and returns the response.
@@ -189,11 +190,10 @@ func TestRestoreCommand(t *testing.T) {
 	}
 	rows := auditRows(t, ts, "secret", "?limit=1")
 	var c commandView
-	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
-		if c = commandOfRow(t, ts, "secret", rows[0]); store.Final(c.State) {
-			break
-		}
-	}
+	testkit.Within(5*time.Second, func() bool {
+		c = commandOfRow(t, ts, "secret", rows[0])
+		return store.Final(c.State)
+	})
 	if c.Action != "restore.start" || c.State != store.StateAcknowledged || c.Status != 202 || !strings.Contains(string(c.Result), `"state"`) {
 		t.Fatalf("restore command %+v", c)
 	}
@@ -318,12 +318,12 @@ func TestStepObserverDoesNotWaitOnTheStore(t *testing.T) {
 		t.Fatalf("the observer waited %s on the store's lock", took)
 	}
 	var c store.Command
-	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
-		if c, _, _ = st.Command(t.Context(), parent.ID); len(c.Steps) == 1 && c.Steps[0].State == store.StateAcknowledged {
-			return
-		}
+	if !testkit.Within(5*time.Second, func() bool {
+		c, _, _ = st.Command(t.Context(), parent.ID)
+		return len(c.Steps) == 1 && c.Steps[0].State == store.StateAcknowledged
+	}) {
+		t.Fatalf("steps after the lock: %+v", c.Steps)
 	}
-	t.Fatalf("steps after the lock: %+v", c.Steps)
 }
 
 // A retry whose first request was in flight when the server stopped,
@@ -377,11 +377,10 @@ func TestReplayOfARestoreKeepsItsAnswer(t *testing.T) {
 	}
 	rows := auditRows(t, ts, "secret", "?limit=1")
 	var c commandView
-	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
-		if c = commandOfRow(t, ts, "secret", rows[0]); store.Final(c.State) {
-			break
-		}
-	}
+	testkit.Within(5*time.Second, func() bool {
+		c = commandOfRow(t, ts, "secret", rows[0])
+		return store.Final(c.State)
+	})
 	if !store.Final(c.State) || !strings.Contains(string(c.Result), `"state"`) {
 		t.Fatalf("the run did not finish the command: %+v", c)
 	}

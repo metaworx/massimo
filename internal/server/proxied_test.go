@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // Where a proxy serves a request, in each of the common headers' forms.
@@ -132,11 +133,12 @@ func TestSystemBehindAProxy(t *testing.T) {
 	if v.Proxy == nil || v.Proxy.Proto != "https" || v.Proxy.Host != "example.com" || strconv.Itoa(v.Proxy.Port) != port || v.ClientIP != "192.0.2.20" {
 		t.Fatalf("proxy %+v, client %q", v.Proxy, v.ClientIP)
 	}
-	deadline := time.Now().Add(5 * time.Second)
-	for v.Proxy.Certificate == nil && time.Now().Before(deadline) {
-		time.Sleep(50 * time.Millisecond)
-		v = get(ts)
-	}
+	testkit.Within(5*time.Second, func() bool {
+		if v.Proxy.Certificate == nil {
+			v = get(ts)
+		}
+		return v.Proxy.Certificate != nil
+	})
 	c := v.Proxy.Certificate
 	if c == nil || c.Error != "" || c.Trusted || c.CheckedAt.IsZero() || len(c.Names) == 0 {
 		t.Fatalf("the proxy's certificate %+v", c)

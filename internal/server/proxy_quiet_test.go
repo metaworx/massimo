@@ -16,6 +16,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // A proxy client gets only what it asks for: a change of the Cube's state
@@ -44,7 +45,7 @@ func TestProxySendsNothingUnasked(t *testing.T) {
 	go s.Run(ctx)
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
-	eventually(t, "the cube", func() bool {
+	testkit.Eventually(t, "the cube", func() bool {
 		var c cubeView
 		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
 	})
@@ -54,7 +55,7 @@ func TestProxySendsNothingUnasked(t *testing.T) {
 	if err := fc.SetState(0x0a0202, fakecube.State{Setpoint: &setpoint}); err != nil {
 		t.Fatal(err)
 	}
-	eventually(t, "the new setpoint", func() bool {
+	testkit.Eventually(t, "the new setpoint", func() bool {
 		_, d := do(t, ts, "GET", "/api/v1/cubes/KEQ0000100/devices/0a0202", "")
 		st, _ := d["state"].(map[string]any)
 		return st["setpoint"] == setpoint
@@ -65,7 +66,7 @@ func TestProxySendsNothingUnasked(t *testing.T) {
 		t.Fatalf("the proxy sent %v unasked (%v)", m, err)
 	}
 
-	conn.SetDeadline(time.Now().Add(5 * time.Second))
+	conn.SetDeadline(time.Now().Add(testkit.Scale(5 * time.Second)))
 	if _, err := conn.Write([]byte("l:\r\n")); err != nil {
 		t.Fatal(err)
 	}

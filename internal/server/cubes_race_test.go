@@ -16,6 +16,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // Two POSTs for one serial at the same time: one 201, one 409, and one
@@ -75,9 +76,7 @@ func TestNothingStartsAfterRun(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { s.Run(ctx); close(done) }()
-	for s.track() == nil {
-		time.Sleep(time.Millisecond)
-	}
+	testkit.Eventually(t, "Run's start", func() bool { return s.track() != nil })
 	s.wg.Done() // the probe above was counted
 	cancel()
 	<-done
@@ -138,16 +137,16 @@ func TestSerialLearnedWhileRead(t *testing.T) {
 	defer func() { close(stop); wg.Wait() }()
 	time.Sleep(200 * time.Millisecond)
 	fc.Serve(held)
-	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+	testkit.Eventually(t, "the serial learned", func() bool {
 		var cubes []cubeView
 		getJSON(t, ts, "secret", "/api/v1/cubes", &cubes)
 		for _, c := range cubes {
 			if c.Serial == "KEQ0000100" && c.Connected {
-				return
+				return true
 			}
 		}
-	}
-	t.Fatal("the serial was not learned")
+		return false
+	})
 }
 
 // A Cube served by its address that reports a serial another runtime
@@ -192,11 +191,9 @@ func TestLearnedSerialServedAlready(t *testing.T) {
 		t.Fatalf("runtimes %p %p", byAddr, bySerial)
 	}
 	fc.Serve(held)
-	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
-		if byAddr.cubeSerial() != "" && lookup(strings.ToLower(addr)) == nil {
-			break
-		}
-	}
+	testkit.Within(5*time.Second, func() bool {
+		return byAddr.cubeSerial() != "" && lookup(strings.ToLower(addr)) == nil
+	})
 	if got := lookup("keq0000100"); got != bySerial {
 		t.Fatalf("the serial's runtime is the one by address (%p), not the one added (%p)", got, bySerial)
 	}

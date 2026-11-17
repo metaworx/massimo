@@ -15,6 +15,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // virtualsOfRooms is the virtual wall thermostats of the fake Cube's
@@ -54,7 +55,7 @@ func setupVirtual(t *testing.T) (*fakecube.Server, *cube.Reader, net.Conn, []cub
 	go c.Run(ctx)
 	select {
 	case <-c.Ready():
-	case <-time.After(5 * time.Second):
+	case <-time.After(testkit.Scale(5 * time.Second)):
 		t.Fatal("client not ready")
 	}
 	q := engine.NewQueue(c, engine.Options{Gap: time.Millisecond})
@@ -71,7 +72,7 @@ func setupVirtual(t *testing.T) (*fakecube.Server, *cube.Reader, net.Conn, []cub
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { conn.Close() })
-	conn.SetDeadline(time.Now().Add(10 * time.Second))
+	conn.SetDeadline(time.Now().Add(testkit.Scale(10 * time.Second)))
 	r := cube.NewReader(conn)
 	var lines []cube.Message
 	for {

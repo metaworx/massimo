@@ -18,6 +18,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 const fixture = "../protocol/cube/testdata/cube-fw0113-greeting.txt"
@@ -47,7 +48,7 @@ func setupWith(t *testing.T, mod func(*fakecube.Server)) (*fakecube.Server, *Pro
 	go c.Run(ctx)
 	select {
 	case <-c.Ready():
-	case <-time.After(5 * time.Second):
+	case <-time.After(testkit.Scale(5 * time.Second)):
 		t.Fatal("client not ready")
 	}
 	q := engine.NewQueue(c, engine.Options{Gap: time.Millisecond})
@@ -89,7 +90,7 @@ func TestProxyGreetingReadsAndPassthrough(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.Close()
-	conn.SetDeadline(time.Now().Add(10 * time.Second))
+	conn.SetDeadline(time.Now().Add(testkit.Scale(10 * time.Second)))
 	r := cube.NewReader(conn)
 
 	// Greeting: H with our fields, M, the C lines, then L.
@@ -191,7 +192,7 @@ func TestProxyDiscardsWhenBudgetExhausted(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.Close()
-	conn.SetDeadline(time.Now().Add(10 * time.Second))
+	conn.SetDeadline(time.Now().Add(testkit.Scale(10 * time.Second)))
 	r := cube.NewReader(conn)
 	for m := readLine(t, r); m.Type != 'L'; m = readLine(t, r) {
 	}
@@ -227,7 +228,7 @@ func TestProxyDiscovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	buf := make([]byte, 256)
-	client.SetReadDeadline(time.Now().Add(5 * time.Second))
+	client.SetReadDeadline(time.Now().Add(testkit.Scale(5 * time.Second)))
 	n, _, err := client.ReadFrom(buf)
 	if err != nil {
 		t.Fatal(err)
@@ -268,7 +269,7 @@ func TestProxyDiscoverySilentWhileCubeLost(t *testing.T) {
 	go c.Run(ctx)
 	select {
 	case <-c.Ready():
-	case <-time.After(5 * time.Second):
+	case <-time.After(testkit.Scale(5 * time.Second)):
 		t.Fatal("client not ready")
 	}
 	p := New(Options{Client: c})
@@ -296,20 +297,11 @@ func TestProxyDiscoverySilentWhileCubeLost(t *testing.T) {
 		n, _, err := client.ReadFrom(buf)
 		return err == nil && n > 0
 	}
-	waitFor := func(what string, cond func() bool) {
-		t.Helper()
-		for deadline := time.Now().Add(5 * time.Second); !cond(); time.Sleep(5 * time.Millisecond) {
-			if time.Now().After(deadline) {
-				t.Fatalf("timed out waiting for %s", what)
-			}
-		}
-	}
-
-	if !answered(5 * time.Second) {
+	if !answered(testkit.Scale(5 * time.Second)) {
 		t.Fatal("not answered while the cube is connected")
 	}
 	fc.Close()
-	waitFor("the loss", c.Lost)
+	testkit.Eventually(t, "the loss", c.Lost)
 	if answered(300 * time.Millisecond) {
 		t.Fatal("answered while the cube is lost")
 	}
@@ -318,8 +310,8 @@ func TestProxyDiscoverySilentWhileCubeLost(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { fc2.Close() })
-	waitFor("the greeting after the loss", c.Connected)
-	if !answered(5 * time.Second) {
+	testkit.Eventually(t, "the greeting after the loss", c.Connected)
+	if !answered(testkit.Scale(5 * time.Second)) {
 		t.Fatal("not answered once the cube is back")
 	}
 }
@@ -566,7 +558,7 @@ func TestProxyPairing(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.Close()
-	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	conn.SetReadDeadline(time.Now().Add(testkit.Scale(10 * time.Second)))
 	r := cube.NewReader(conn)
 	for readLine(t, r).Type != 'L' {
 	}
@@ -637,14 +629,14 @@ func TestProxyPairingCapped(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.Close()
-	conn.SetDeadline(time.Now().Add(10 * time.Second))
+	conn.SetDeadline(time.Now().Add(testkit.Scale(10 * time.Second)))
 	r := cube.NewReader(conn)
 	for readLine(t, r).Type != 'L' {
 	}
 
 	conn.Write([]byte("n:012c\r\n"))
-	waitFor(t, "the pairing's event", func() bool { return len(noted()) == 1 })
-	waitFor(t, "the n: at the Cube", func() bool { return countType(fc, 'n') > 0 })
+	testkit.Eventually(t, "the pairing's event", func() bool { return len(noted()) == 1 })
+	testkit.Eventually(t, "the n: at the Cube", func() bool { return countType(fc, 'n') > 0 })
 	if got := fc.Received(); len(got) != 1 || got[0].String() != "n:00ff" {
 		t.Fatalf("cube received %v", got)
 	}
@@ -655,7 +647,7 @@ func TestProxyPairingCapped(t *testing.T) {
 		t.Fatalf("event %v", s)
 	}
 	conn.Write([]byte("n:003c\r\n"))
-	waitFor(t, "the join's event", func() bool { return len(noted()) >= 2 })
+	testkit.Eventually(t, "the join's event", func() bool { return len(noted()) >= 2 })
 	time.Sleep(50 * time.Millisecond)
 	if ev := noted(); len(ev) != 2 || len(ev[1].Summary) != 1 || ev[1].Summary["joined"] != true {
 		t.Fatalf("events %+v", ev)
@@ -696,7 +688,7 @@ func TestProxyReportsWrites(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer conn.Close()
-		conn.SetDeadline(time.Now().Add(10 * time.Second))
+		conn.SetDeadline(time.Now().Add(testkit.Scale(10 * time.Second)))
 		r := cube.NewReader(conn)
 		for readLine(t, r).Type != 'L' {
 		}
@@ -753,7 +745,7 @@ func TestProxyDeleteOfSeveralDevices(t *testing.T) {
 	r := cube.NewReader(conn)
 	for readLine(t, r).Type != 'L' {
 	}
-	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	conn.SetReadDeadline(time.Now().Add(testkit.Scale(3 * time.Second)))
 	conn.Write([]byte(cube.CmdDeleteDevices(true, 0x0a0108, 0x0a0109, 0x0a010b).Wire()))
 	for i := 0; i < 3; i++ {
 		if a := readLine(t, r); a.Type != 'A' {
