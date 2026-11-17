@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // A device whose entry the Cube marks out of date, the valid bit cleared
@@ -17,7 +18,7 @@ func TestOutOfDateDevice(t *testing.T) {
 	fc, ts, _, _ := startRooms(t)
 	const wall = 0x0a0201
 	var d deviceDetail
-	waitFor(t, "the wall thermostat's state", func() bool {
+	testkit.Eventually(t, "the wall thermostat's state", func() bool {
 		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices/0a0201", &d) == 200 && d.Reported && d.State != nil
 	})
 	setpoint := *d.State.Setpoint
@@ -25,7 +26,7 @@ func TestOutOfDateDevice(t *testing.T) {
 	if err := fc.SetState(wall, fakecube.State{Reported: &no}); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, "out of date", func() bool {
+	testkit.Eventually(t, "out of date", func() bool {
 		d = deviceDetail{} // a field the answer leaves out is not kept from the last one
 		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices/0a0201", &d) == 200 && !d.Reported
 	})

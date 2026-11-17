@@ -17,6 +17,7 @@ import (
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
@@ -63,17 +64,19 @@ func startStored(t *testing.T, opts Options) (*fakecube.Server, *httptest.Server
 // waitConnected waits until the Cube of serial is listed as connected.
 func waitConnected(t *testing.T, ts *httptest.Server, serial string) map[string]any {
 	t.Helper()
-	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+	var found map[string]any
+	testkit.Eventually(t, "cube "+serial+" to connect", func() bool {
 		var cubes []map[string]any
 		getJSON(t, ts, "", "/api/v1/cubes", &cubes)
 		for _, c := range cubes {
 			if c["serial"] == serial && c["connected"] == true {
-				return c
+				found = c
+				return true
 			}
 		}
-	}
-	t.Fatalf("cube %s never connected", serial)
-	return nil
+		return false
+	})
+	return found
 }
 
 // greetingAt reads the H line of a proxy listening on addr.
@@ -81,16 +84,14 @@ func greetingAt(t *testing.T, addr string) cube.Message {
 	t.Helper()
 	var conn net.Conn
 	var err error
-	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
-		if conn, err = net.Dial("tcp", addr); err == nil {
-			break
-		}
-	}
-	if conn == nil {
+	if !testkit.Within(5*time.Second, func() bool {
+		conn, err = net.Dial("tcp", addr)
+		return err == nil
+	}) {
 		t.Fatalf("no proxy on %s: %v", addr, err)
 	}
 	defer conn.Close()
-	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	conn.SetReadDeadline(time.Now().Add(testkit.Scale(10 * time.Second)))
 	m, err := cube.NewReader(conn).Read()
 	if err != nil {
 		t.Fatalf("greeting at %s: %v", addr, err)
@@ -377,7 +378,7 @@ func serveRows(t *testing.T, st *store.Store, opts Options) (ts *httptest.Server
 		cancel()
 		select {
 		case <-done:
-		case <-time.After(5 * time.Second):
+		case <-time.After(testkit.Scale(5 * time.Second)):
 			t.Fatal("the server did not stop")
 		}
 	}
@@ -487,14 +488,10 @@ func TestRemovedCubeIsListedAsFound(t *testing.T) {
 		plain := store.FileCube{Values: map[string]store.FileValue{store.FieldAddress: {Variable: "MASSIMO_CUBE_ADDRESS", Value: addr}}}
 		ts, s, _ := serveRows(t, st, Options{Cubes: []CubeConfig{{Addr: addr, Source: store.SourceEnv, SeedFromFile: true}}, FileCubes: map[string]store.FileCube{"": plain},
 			DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{freeUDP(t, "127.0.0.1")}})
-		for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(20 * time.Millisecond) {
-			if row, ok, _ := st.Cube(ctx, "KEQ0000100"); ok && row.Configured {
-				break
-			}
-			if time.Now().After(deadline) {
-				t.Fatal("the plain address's cube was not seeded")
-			}
-		}
+		testkit.Eventually(t, "the plain address's cube seeded", func() bool {
+			row, ok, _ := st.Cube(ctx, "KEQ0000100")
+			return ok && row.Configured
+		})
 		s.note(ctx, lan, time.Now())
 		if n := removedListed(t, ts, "KEQ0000100"); n != 1 {
 			t.Fatalf("the removed cube is listed %d times", n)

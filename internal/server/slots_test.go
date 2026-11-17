@@ -22,6 +22,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // testClock is a clock the test moves on.
@@ -99,7 +100,7 @@ func (c *slotsCube) readings() int {
 // waitReadings waits until the server took n readings.
 func (c *slotsCube) waitReadings(t *testing.T, n int) {
 	t.Helper()
-	waitFor(t, "the reading of the free slots", func() bool { return c.readings() == n })
+	testkit.Eventually(t, "the reading of the free slots", func() bool { return c.readings() == n })
 }
 
 // reconnect makes the server read a new greeting and waits until it
@@ -149,7 +150,7 @@ func (c *slotsCube) slotsAlerts(t *testing.T) []string {
 func (c *slotsCube) waitSlotsEvents(t *testing.T, n int) []event {
 	t.Helper()
 	var evs []event
-	waitFor(t, fmt.Sprintf("%d slots events", n), func() bool {
+	testkit.Eventually(t, fmt.Sprintf("%d slots events", n), func() bool {
 		evs = c.events(t, "slots")
 		return len(evs) == n
 	})
@@ -182,7 +183,7 @@ func TestSlotsStayFull(t *testing.T) {
 	c.fc.SetFreeSlots(0)
 	c.clock.add(time.Hour)
 	c.reconnect(t)
-	waitFor(t, "the count of the last reading", func() bool { f := c.slotsLowOf(t); return f != nil && f.FreeSlots == 0 })
+	testkit.Eventually(t, "the count of the last reading", func() bool { f := c.slotsLowOf(t); return f != nil && f.FreeSlots == 0 })
 
 	c.fc.SetFreeSlots(50)
 	c.reconnect(t)

@@ -17,6 +17,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // Every kind of settleRules, and every kind that settles one, is a kind
@@ -136,7 +137,7 @@ func TestLogAlertsRoute(t *testing.T) {
 	add(event{Kind: "connected", Time: time.Now(), Summary: map[string]any{"cause": "loss"}}, row.ID)
 	add(event{Kind: "restart", Source: "system", Level: "error", Error: "no helper", Time: time.Now()}, 0)
 	var out logAlertsView
-	eventually(t, "the restart's error", func() bool {
+	testkit.Eventually(t, "the restart's error", func() bool {
 		return getJSON(t, ts, "", "/api/v1/log/alerts", &out) == 200 && len(out.Alerts) == 1
 	})
 	if a := out.Alerts[0]; a.Kind != "restart" || a.Level != "error" || out.Level != "error" || a.CubeSerial != "" {
@@ -150,7 +151,7 @@ func TestLogAlertsRoute(t *testing.T) {
 	flagged := append([]byte(nil), raw...)
 	copy(flagged, []byte{0x0b, 0x0a, 0x01, 0x0d, 0x09, 0x12 | 0x08, 0x01, 30, 42, 0, 0, 0}) // 0a010d: a transmit error
 	fc.SetDeviceList(cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(flagged)})
-	eventually(t, "the transmit error", func() bool {
+	testkit.Eventually(t, "the transmit error", func() bool {
 		return getJSON(t, ts, "", "/api/v1/log/alerts", &out) == 200 && len(out.Alerts) == 2
 	})
 	a := out.Alerts[0]
@@ -163,7 +164,7 @@ func TestLogAlertsRoute(t *testing.T) {
 	}
 
 	fc.SetDeviceList(last)
-	eventually(t, "the error cleared", func() bool {
+	testkit.Eventually(t, "the error cleared", func() bool {
 		return getJSON(t, ts, "", "/api/v1/log/alerts", &out) == 200 && len(out.Alerts) == 1
 	})
 	if code, _ := callAPI(t, ts, "GET", "/api/v1/log/alerts?after=x", "", ""); code != 400 {

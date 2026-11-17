@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
@@ -91,7 +92,7 @@ func next(t *testing.T, evs <-chan sseEvent) sseEvent {
 			t.Fatal("the stream ended")
 		}
 		return ev
-	case <-time.After(5 * time.Second):
+	case <-time.After(testkit.Scale(5 * time.Second)):
 		t.Fatal("no event")
 	}
 	return sseEvent{}
@@ -271,7 +272,7 @@ func TestStreamOfASlowClientEnds(t *testing.T) {
 		close(sub.gone)
 	}
 	rt.subsMu.Unlock()
-	deadline := time.After(5 * time.Second)
+	deadline := time.After(testkit.Scale(5 * time.Second))
 	for {
 		select {
 		case _, ok := <-evs:

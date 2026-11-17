@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // programWith reads a programme route, with its tag from the body and the
@@ -90,7 +92,7 @@ func TestProgramTag(t *testing.T) {
 		t.Fatalf("a tag from before the write on its way: %d", code)
 	}
 	// Confirmed: the same tag, no longer pending.
-	eventually(t, "the written programme confirmed", func() bool {
+	testkit.Eventually(t, "the written programme confirmed", func() bool {
 		room, now = programWith(t, base+"rooms/2/program")
 		return room["pending"] == false
 	})
@@ -107,7 +109,7 @@ func TestProgramTag(t *testing.T) {
 	}
 	// Each write is confirmed before the next, so that no re-read is in
 	// flight when it is sent (cubelan.ErrBusy).
-	eventually(t, "the member's programme confirmed", func() bool {
+	testkit.Eventually(t, "the member's programme confirmed", func() bool {
 		room, _ = programWith(t, base+"rooms/2/program")
 		return room["pending"] == false
 	})
@@ -130,7 +132,7 @@ func TestProgramConfigEvents(t *testing.T) {
 		t.Fatalf("write: %d %v", code, body)
 	}
 	seen := map[string]bool{}
-	deadline := time.After(5 * time.Second)
+	deadline := time.After(testkit.Scale(5 * time.Second))
 	for !(seen["0a0204"] && seen["000002"]) {
 		select {
 		case ev := <-evs:

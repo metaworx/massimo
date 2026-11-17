@@ -10,6 +10,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/battery"
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // A device's battery flag makes it weak (AP LegacyLogs v1.0, Block 11):
@@ -27,10 +28,10 @@ func TestBatteryLevel(t *testing.T) {
 	if err := fc.SetState(0x0a010d, fakecube.State{Reported: &on, BatteryLow: &on}); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, "the weak level", func() bool {
+	testkit.Eventually(t, "the weak level", func() bool {
 		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices/0a010d", &d) == 200 && d.Battery == "weak"
 	})
-	waitFor(t, "the battery event", func() bool { return hasKind(logKinds(t, ts, 0), "battery:0a010d") })
+	testkit.Eventually(t, "the battery event", func() bool { return hasKind(logKinds(t, ts, 0), "battery:0a010d") })
 	var devs []deviceDetail
 	if getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices", &devs) != 200 {
 		t.Fatal("device list")

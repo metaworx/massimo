@@ -25,6 +25,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/update"
 )
 
@@ -132,10 +133,11 @@ func TestLogRotatedLine(t *testing.T) {
 	s.LogRotated("size", "serve.log.1", 8, []string{"serve.log.9.gz"}, nil)
 	s.LogRotated("sighup", "serve.log.1", 3, nil, errors.New("log not rotated: permission denied"))
 	var evs []event
-	for end := time.Now().Add(5 * time.Second); len(evs) < 2 && time.Now().Before(end); time.Sleep(20 * time.Millisecond) {
+	testkit.Within(5*time.Second, func() bool {
 		evs = nil
 		getJSON(t, ts, token, "/api/v1/cubes/KEQ0000100/log?kind=log_rotated", &evs)
-	}
+		return len(evs) >= 2
+	})
 	if len(evs) != 2 {
 		t.Fatalf("%d lines: %+v", len(evs), evs)
 	}
@@ -221,7 +223,7 @@ func TestAddressChangedLogged(t *testing.T) {
 	// 127.0.0.2 is the loopback, where nothing answers: no packet leaves.
 	s.note(context.Background(), cubelan.Discovered{Serial: "KEQ0000100", IP: net.ParseIP("127.0.0.2"), Kind: cubelan.KindCube}, time.Now())
 	var evs []event
-	eventually(t, "address_changed", func() bool {
+	testkit.Eventually(t, "address_changed", func() bool {
 		_, evs = logOf(t, ts, "?kind=address_changed")
 		return len(evs) == 1
 	})

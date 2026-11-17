@@ -11,6 +11,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // quickRetry is the tests' wait between a proxy listener's tries.
@@ -60,13 +62,13 @@ func TestProxyRetriedUntilThePortIsFree(t *testing.T) {
 		t.Fatalf("put %d %v", code, out)
 	}
 	// Several tries go by while the port is held.
-	eventually(t, "a few tries", func() bool {
+	testkit.Eventually(t, "a few tries", func() bool {
 		s.proxyMu.Lock()
 		defer s.proxyMu.Unlock()
 		return len(s.proxies) == 1 && s.proxies[0].tries >= 3
 	})
 	taken.Close()
-	eventually(t, "the proxy to listen", func() bool { return len(cubeListening(t, s)) == 1 })
+	testkit.Eventually(t, "the proxy to listen", func() bool { return len(cubeListening(t, s)) == 1 })
 	if m := greetingAt(t, addr); m.Type != 'H' {
 		t.Fatalf("greeting %q", m.Wire())
 	}
@@ -105,11 +107,11 @@ func TestProxyRetriedUntilTheAddressIsThere(t *testing.T) {
 			return len(s.proxies) == 1 && s.proxies[0].tries >= n
 		}
 	}
-	eventually(t, "three tries", tries(3))
+	testkit.Eventually(t, "three tries", tries(3))
 	mu.Lock()
 	failWith = errors.New("listen tcp " + addr + ": bind: address already in use")
 	mu.Unlock()
-	eventually(t, "six tries", tries(6))
+	testkit.Eventually(t, "six tries", tries(6))
 	s.proxyMu.Lock()
 	pr := *s.proxies[0]
 	s.proxyMu.Unlock()
@@ -119,7 +121,7 @@ func TestProxyRetriedUntilTheAddressIsThere(t *testing.T) {
 	mu.Lock()
 	failWith = nil
 	mu.Unlock()
-	eventually(t, "the proxy to listen", func() bool { return len(cubeListening(t, s)) == 1 })
+	testkit.Eventually(t, "the proxy to listen", func() bool { return len(cubeListening(t, s)) == 1 })
 	greetingAt(t, addr)
 	if n := countLines(logs.String(), "level=ERROR", `msg="proxy listener not started"`); n != 2 {
 		t.Errorf("%d Error lines for two errors, want 2:\n%s", n, logs.String())
@@ -222,7 +224,7 @@ func TestProxyFailingInTheAPI(t *testing.T) {
 		t.Fatalf("cube_proxies[0] %+v", p)
 	}
 	taken.Close()
-	eventually(t, "the proxy to listen", func() bool { return len(cubeListening(t, s)) == 1 })
+	testkit.Eventually(t, "the proxy to listen", func() bool { return len(cubeListening(t, s)) == 1 })
 	_, out = do(t, ts, "GET", "/api/v1/cubes/KEQ0000100", "")
 	if out["proxy_failing"] != nil {
 		t.Errorf("proxy_failing once listening: %v", out["proxy_failing"])

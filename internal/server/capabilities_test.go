@@ -17,6 +17,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // roleSets are the default roles' capabilities as docs/store.md section
@@ -383,15 +384,13 @@ func startQuiet(t *testing.T, opts Options) (*fakecube.Server, *httptest.Server,
 	go s.Run(ctx)
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
+	testkit.Eventually(t, "the cube's connect", func() bool {
 		for _, rt := range s.runtimes() {
 			if rt.client.Connected() && rt.client.Snapshot().Hello() != nil {
-				return fc, ts, s
+				return true
 			}
 		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatal("cube never connected")
-	return nil, nil, nil
+		return false
+	})
+	return fc, ts, s
 }

@@ -11,6 +11,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // A Cube that answers discovery from its address while another client
@@ -36,7 +37,7 @@ func TestABusyCubeIsListedAsBusy(t *testing.T) {
 	// The dial returns once the kernel has queued the connection; the
 	// fake refuses others only once it has taken this one, and a dial of
 	// the server's before that would get in and wait for a greeting.
-	eventually(t, "the other client taken", func() bool { return fc.Connections() == 1 })
+	testkit.Eventually(t, "the other client taken", func() bool { return fc.Connections() == 1 })
 	at, err := fakecube.StartDiscovery("127.0.0.2:0", "KEQ0000100", 0x0a0107)
 	if err != nil {
 		t.Skip(err)
@@ -59,10 +60,10 @@ func TestABusyCubeIsListedAsBusy(t *testing.T) {
 		l, _ := cubes[0]["link"].(map[string]any)
 		return l
 	}
-	eventually(t, "busy", func() bool { l := link(); return l != nil && l["state"] == "busy" })
+	testkit.Eventually(t, "busy", func() bool { l := link(); return l != nil && l["state"] == "busy" })
 	if l := link(); l["since"] == nil {
 		t.Errorf("busy link %v: want since", l)
 	}
 	other.Close()
-	eventually(t, "connected once the other client left", func() bool { l := link(); return l != nil && l["state"] == "connected" })
+	testkit.Eventually(t, "connected once the other client left", func() bool { l := link(); return l != nil && l["state"] == "connected" })
 }

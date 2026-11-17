@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // openStream opens a Cube's event stream with the token, "" for none,
@@ -52,7 +53,7 @@ func openStream(t *testing.T, ts *httptest.Server, token string) <-chan string {
 // ended waits for the stream to end, failing after a while.
 func ended(t *testing.T, lines <-chan string, what string) {
 	t.Helper()
-	deadline := time.After(5 * time.Second)
+	deadline := time.After(testkit.Scale(5 * time.Second))
 	for {
 		select {
 		case _, ok := <-lines:
@@ -76,7 +77,7 @@ func TestStreamEndsWhenItsCallerIsNotLetIn(t *testing.T) {
 	open := openStream(t, ts, "")
 	select {
 	case <-open:
-	case <-time.After(5 * time.Second):
+	case <-time.After(testkit.Scale(5 * time.Second)):
 		t.Fatal("no keep-alive on the open server")
 	}
 	if _, err := st.AddUser(t.Context(), store.User{Name: "owner1", Role: store.RoleOwner}, "placeholder-pass", 0); err != nil {
@@ -102,7 +103,7 @@ func TestStreamEndsWhenItsCallerIsNotLetIn(t *testing.T) {
 			if !ok {
 				t.Fatal("the stream of a caller still allowed ended")
 			}
-		case <-time.After(5 * time.Second):
+		case <-time.After(testkit.Scale(5 * time.Second)):
 			t.Fatal("no keep-alive for a caller still allowed")
 		}
 	}
@@ -125,7 +126,7 @@ func TestLegacyStreamEndsWithItsToken(t *testing.T) {
 	lines := openStream(t, ts, "secret")
 	select {
 	case <-lines:
-	case <-time.After(5 * time.Second):
+	case <-time.After(testkit.Scale(5 * time.Second)):
 		t.Fatal("no keep-alive")
 	}
 	if err := s.SetToken(t.Context(), "placeholder-token-2"); err != nil {

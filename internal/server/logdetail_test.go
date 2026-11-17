@@ -18,6 +18,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
@@ -164,14 +165,14 @@ func newLines(t *testing.T, s string, all []event, n int) []event {
 // own lines are at debug, each with its summary.
 func TestReconnectAtInfoIsOneLine(t *testing.T) {
 	fc, ts, _, _ := startStored(t, Options{})
-	eventually(t, "the first connected", func() bool {
+	testkit.Eventually(t, "the first connected", func() bool {
 		_, evs := logOf(t, ts, "?kind=connected")
 		return len(evs) == 1
 	})
 	_, before := logOf(t, ts, "?limit=1000")
 	_, beforeDebug := logOf(t, ts, "?limit=1000&level=debug")
 	fc.Drop()
-	eventually(t, "the second connected", func() bool {
+	testkit.Eventually(t, "the second connected", func() bool {
 		_, evs := logOf(t, ts, "?kind=connected")
 		return len(evs) == 2
 	})
@@ -210,7 +211,7 @@ func TestReconnectAtInfoIsOneLine(t *testing.T) {
 // line at info, as a metadata line that says so.
 func TestChangedWhileDisconnected(t *testing.T) {
 	fc, ts, _, _ := startStored(t, Options{})
-	eventually(t, "the first connected", func() bool {
+	testkit.Eventually(t, "the first connected", func() bool {
 		_, evs := logOf(t, ts, "?kind=connected")
 		return len(evs) == 1
 	})
@@ -218,7 +219,7 @@ func TestChangedWhileDisconnected(t *testing.T) {
 	fc.SetGreeting(greetingWithRoomName(t, greeting, 6, "Renamed elsewhere"))
 	fc.Drop()
 	var meta []event
-	eventually(t, "the change after the reconnect", func() bool {
+	testkit.Eventually(t, "the change after the reconnect", func() bool {
 		_, meta = logOf(t, ts, "?kind=metadata")
 		return len(meta) == 1
 	})
@@ -237,7 +238,7 @@ func TestChangedWhileDisconnected(t *testing.T) {
 func TestChangedWhileServerDown(t *testing.T) {
 	fc, ts, s, st := startStored(t, Options{})
 	rt := s.cubes["keq0000100"]
-	eventually(t, "the first connected", func() bool {
+	testkit.Eventually(t, "the first connected", func() bool {
 		_, evs := logOf(t, ts, "?kind=connected")
 		return len(evs) == 1
 	})
@@ -254,19 +255,19 @@ func TestChangedWhileServerDown(t *testing.T) {
 	defer cancel()
 	go s2.Run(ctx)
 	rt2 := s2.cubes["keq0000100"]
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		if evs, err := s2.storedLog(ctx, st, map[int64]string{row.ID: ""}, logQuery{kind: "metadata", limit: 10, minLevel: 0}); err == nil && len(evs) == 1 {
-			m := evs[0]
-			if !m.Missed || len(m.ListChanges) != 1 || m.ListChanges[0].Name != "Renamed while down" {
-				t.Fatalf("the line after the restart: %+v", m)
-			}
-			break
+	var m event
+	if !testkit.Within(5*time.Second, func() bool {
+		evs, err := s2.storedLog(ctx, st, map[int64]string{row.ID: ""}, logQuery{kind: "metadata", limit: 10, minLevel: 0})
+		if err != nil || len(evs) != 1 {
+			return false
 		}
-		if time.Now().After(deadline) {
-			t.Fatalf("no metadata line after the restart; connected %v", rt2.client.Connected())
-		}
-		time.Sleep(20 * time.Millisecond)
+		m = evs[0]
+		return true
+	}) {
+		t.Fatalf("no metadata line after the restart; connected %v", rt2.client.Connected())
+	}
+	if !m.Missed || len(m.ListChanges) != 1 || m.ListChanges[0].Name != "Renamed while down" {
+		t.Fatalf("the line after the restart: %+v", m)
 	}
 }
 
@@ -275,13 +276,13 @@ func TestChangedWhileServerDown(t *testing.T) {
 func TestSameConfigAtDebug(t *testing.T) {
 	fc, ts, s, _ := startStored(t, Options{})
 	rt := s.cubes["keq0000100"]
-	eventually(t, "the first connected", func() bool {
+	testkit.Eventually(t, "the first connected", func() bool {
 		_, evs := logOf(t, ts, "?kind=connected")
 		return len(evs) == 1
 	})
 	ctx := context.Background()
 	rt.writer().Reread(ctx, 0x0a010d)
-	eventually(t, "the re-read at debug", func() bool {
+	testkit.Eventually(t, "the re-read at debug", func() bool {
 		_, evs := logOf(t, ts, "?kind=config&device=0a010d&level=debug")
 		return len(evs) >= 2 && evs[len(evs)-1].Level == "debug" && !evs[len(evs)-1].Missed
 	})
@@ -301,7 +302,7 @@ func TestSameConfigAtDebug(t *testing.T) {
 	raw[0x12] = 44 // comfort 22.0
 	fc.SetConfig(cube.Message{Type: 'C', Data: rf + "," + base64.StdEncoding.EncodeToString(raw)})
 	rt.writer().Reread(ctx, 0x0a010d)
-	eventually(t, "the change at info", func() bool {
+	testkit.Eventually(t, "the change at info", func() bool {
 		_, evs := logOf(t, ts, "?kind=config&device=0a010d")
 		return len(evs) == 1 && evs[0].Changes["comfort_temp"].To == 22.0
 	})

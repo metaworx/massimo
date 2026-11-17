@@ -30,6 +30,7 @@ import (
 	"go.metaworx.ch/massimo/internal/push"
 	"go.metaworx.ch/massimo/internal/push/pushtest"
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // loopbackOnly is the tests' Web Push client: it reaches the loopback
@@ -240,7 +241,7 @@ func TestNotificationFromTheCube(t *testing.T) {
 	if code, text := callAPI(t, ts, "POST", "/api/v1/me/push", "secret", subscription(t, "https://push.example.net/send/a", "phone")); code != 201 {
 		t.Fatalf("subscribe: %d %s", code, text)
 	}
-	eventually(t, "the cube", func() bool {
+	testkit.Eventually(t, "the cube", func() bool {
 		var c cubeView
 		return getJSON(t, ts, "secret", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
 	})
@@ -250,10 +251,10 @@ func TestNotificationFromTheCube(t *testing.T) {
 	raw, _ := base64.StdEncoding.DecodeString(l.Data)
 	copy(raw, []byte{0x0b, 0x0a, 0x01, 0x0d, 0x09, 0x12, 0x01, 30, 42, 0, 0, 0})
 	fc.SetDeviceList(cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(raw)})
-	eventually(t, "the first state", func() bool { return strings.Contains(log.String(), "device=0a010d") })
+	testkit.Eventually(t, "the first state", func() bool { return strings.Contains(log.String(), "device=0a010d") })
 	raw[5] |= 0x08
 	fc.SetDeviceList(cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(raw)})
-	eventually(t, "the notification", func() bool {
+	testkit.Eventually(t, "the notification", func() bool {
 		return strings.Contains(log.String(), "msg=notification") && strings.Contains(log.String(), "kind=device_error cube=KEQ0000100 device=0a010d")
 	})
 	if n := strings.Count(log.String(), "msg=notification"); n != 1 {
@@ -328,7 +329,7 @@ func TestNotificationDelivered(t *testing.T) {
 	if code, text := callAPI(t, ts, "POST", "/api/v1/me/push", "secret", svc.Subscription("/send/owner", "phone")); code != 201 {
 		t.Fatalf("subscribe: %d %s", code, text)
 	}
-	eventually(t, "the cube", func() bool {
+	testkit.Eventually(t, "the cube", func() bool {
 		var c cubeView
 		return getJSON(t, ts, "secret", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
 	})
@@ -340,7 +341,7 @@ func TestNotificationDelivered(t *testing.T) {
 	raw, _ := base64.StdEncoding.DecodeString(l.Data)
 	copy(raw, []byte{0x0b, 0x0a, 0x01, 0x0d, 0x09, 0x12, 0x01, 30, 42, 0, 0, 0})
 	fc.SetDeviceList(cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(raw)})
-	eventually(t, "the first state", func() bool { return strings.Contains(log.String(), "device=0a010d") })
+	testkit.Eventually(t, "the first state", func() bool { return strings.Contains(log.String(), "device=0a010d") })
 	raw[4], raw[5] = byte(cube.RadiogramControlMode), raw[5]|0x08
 	fc.SetDeviceList(cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(raw)})
 
@@ -349,10 +350,10 @@ func TestNotificationDelivered(t *testing.T) {
 		if n.Kind != notify.KindDeviceError || n.Cube != "KEQ0000100" || n.Device != "0a010d" {
 			t.Fatalf("the stream's notification: %+v", n)
 		}
-	case <-time.After(10 * time.Second):
+	case <-time.After(testkit.Scale(10 * time.Second)):
 		t.Fatal("no notification on the user's stream")
 	}
-	eventually(t, "the push", func() bool { return len(svc.Received()) == 1 })
+	testkit.Eventually(t, "the push", func() bool { return len(svc.Received()) == 1 })
 	got := svc.Received()[0]
 	var n notify.Notification
 	if got.Err != nil || json.Unmarshal(got.Message, &n) != nil || n.Kind != notify.KindDeviceError || n.Device != "0a010d" || got.Path != "/send/owner" {
@@ -365,7 +366,7 @@ func TestNotificationDelivered(t *testing.T) {
 	if h := got.Header; h.Get("TTL") != "86400" || h.Get("Urgency") != "normal" || h.Get("Topic") != "device_error-0a010d" {
 		t.Fatalf("the push's headers: %v", h)
 	}
-	eventually(t, "the local deliverer", func() bool {
+	testkit.Eventually(t, "the local deliverer", func() bool {
 		mu.Lock()
 		defer mu.Unlock()
 		return len(local) == 1
@@ -373,7 +374,7 @@ func TestNotificationDelivered(t *testing.T) {
 	if !strings.HasSuffix(local[0], " device_error 0a010d") || strings.HasPrefix(local[0], "0 ") {
 		t.Fatalf("the local deliverer: %v", local)
 	}
-	eventually(t, "the delivery noted", func() bool {
+	testkit.Eventually(t, "the delivery noted", func() bool {
 		_, text := callAPI(t, ts, "GET", "/api/v1/me/push", "secret", "")
 		var list []pushView
 		json.Unmarshal([]byte(text), &list)

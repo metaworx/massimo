@@ -18,6 +18,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 const restoreBase = "/api/v1/cubes/KEQ0000100/restore"
@@ -47,7 +48,7 @@ func startRestoreCube(t *testing.T, fc *fakecube.Server, gap time.Duration) (*ht
 	go s.Run(ctx)
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
-	waitFor(t, "the cube", func() bool {
+	testkit.Eventually(t, "the cube", func() bool {
 		var c cubeView
 		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
 	})
@@ -258,7 +259,7 @@ func TestRestoreRunSendsThePlan(t *testing.T) {
 	}
 	id := out["id"].(string)
 	var st map[string]any
-	waitFor(t, "the restore", func() bool {
+	testkit.Eventually(t, "the restore", func() bool {
 		_, st = do(t, ts, "GET", restoreBase, "")
 		return st["state"] == "done"
 	})
@@ -297,7 +298,7 @@ func TestRestoreRunSendsThePlan(t *testing.T) {
 					t.Fatalf("done event %+v", ev.Restore)
 				}
 			}
-		case <-time.After(5 * time.Second):
+		case <-time.After(testkit.Scale(5 * time.Second)):
 			t.Fatalf("events on the stream: %v", kinds)
 		}
 	}
@@ -328,7 +329,7 @@ func TestRestoreFailsWhenTheCubeDiscards(t *testing.T) {
 		t.Fatalf("restore: %d %v", code, out)
 	}
 	var st map[string]any
-	waitFor(t, "the restore", func() bool {
+	testkit.Eventually(t, "the restore", func() bool {
 		_, st = do(t, ts, "GET", restoreBase, "")
 		return st["state"] != "running"
 	})
@@ -391,7 +392,7 @@ func TestRestoreRefusals(t *testing.T) {
 	if code, st := do(t, ts, "GET", restoreBase, ""); code != 200 || st["state"] != "running" || st["id"] != out["id"] {
 		t.Fatalf("state while running: %d %v", code, st)
 	}
-	waitFor(t, "the restore", func() bool {
+	testkit.Eventually(t, "the restore", func() bool {
 		_, st := do(t, ts, "GET", restoreBase, "")
 		return st["state"] == "done"
 	})
@@ -408,7 +409,7 @@ func TestRestoreRefusals(t *testing.T) {
 
 	// A Cube that is gone.
 	fc.Close()
-	waitFor(t, "the disconnect", func() bool { return !rt.client.Connected() })
+	testkit.Eventually(t, "the disconnect", func() bool { return !rt.client.Connected() })
 	if code, _ := postBackup(t, ts, restoreBase+"/plan", "application/json", marshal(t, f)); code != 503 {
 		t.Fatalf("plan without the cube: %d, want 503", code)
 	}
@@ -439,7 +440,7 @@ func TestRestoreRefusesHighDutyCycle(t *testing.T) {
 	if code, out := postBackup(t, ts, restoreBase+"?plan="+hash, "application/json", marshal(t, g)); code != 202 {
 		t.Fatalf("names-only restore at 85 %%: %d %v", code, out)
 	}
-	waitFor(t, "the restore", func() bool {
+	testkit.Eventually(t, "the restore", func() bool {
 		_, st := do(t, ts, "GET", restoreBase, "")
 		return st["state"] == "done"
 	})
