@@ -17,6 +17,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 func do(t *testing.T, ts *httptest.Server, method, path, body string) (int, map[string]any) {
@@ -276,7 +277,7 @@ func startCopyCube(t *testing.T, mod func(*fakecube.Server)) (*fakecube.Server, 
 	go s.Run(ctx)
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
-	waitFor(t, "the cube", func() bool {
+	testkit.Eventually(t, "the cube", func() bool {
 		var c cubeView
 		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
 	})
@@ -617,7 +618,7 @@ func TestRemoveListedDevice(t *testing.T) {
 	if after.Devices != before.Devices-1 || after.Rooms != before.Rooms {
 		t.Fatalf("counts %d devices %d rooms, before %d and %d", after.Devices, after.Rooms, before.Devices, before.Rooms)
 	}
-	waitFor(t, "the events", func() bool {
+	testkit.Eventually(t, "the events", func() bool {
 		kinds := logKinds(t, ts, events)
 		// The list written without the device is a metadata line of that
 		// one device (AP Logging v1.1, Block 4).
@@ -637,7 +638,7 @@ func TestRemoveUnlistedDevice(t *testing.T) {
 	if device, _ := listedRF(t, ts, "0a0b0c"); device {
 		t.Fatal("still among the devices")
 	}
-	waitFor(t, "device_forgotten", func() bool { return hasKind(logKinds(t, ts, events), "device_forgotten:0a0b0c") })
+	testkit.Eventually(t, "device_forgotten", func() bool { return hasKind(logKinds(t, ts, events), "device_forgotten:0a0b0c") })
 }
 
 // A device in no room by the metadata whose C line names room 1, as one
@@ -738,7 +739,7 @@ func TestStepNamesTheDiscardedLine(t *testing.T) {
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
 	stores[ts] = s.opts.Store
-	waitFor(t, "the cube", func() bool {
+	testkit.Eventually(t, "the cube", func() bool {
 		code, text := callAPI(t, ts, "GET", "/api/v1/cubes/KEQ0000100", "secret", "")
 		var c cubeView
 		return code == 200 && json.Unmarshal([]byte(text), &c) == nil && c.Connected
@@ -919,7 +920,7 @@ func TestRemovedDeviceTheCubeKeeps(t *testing.T) {
 	if res := rt.queue.Enqueue(engine.Command{Reconnect: true}).Wait(t.Context()); res.Err != nil {
 		t.Fatal(res.Err)
 	}
-	waitFor(t, "the device after the greeting", func() bool { return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices/0a010a", nil) == 200 })
+	testkit.Eventually(t, "the device after the greeting", func() bool { return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices/0a010a", nil) == 200 })
 }
 
 // A removal and an add at once: each reads the metadata the other wrote,

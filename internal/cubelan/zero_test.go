@@ -13,6 +13,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // zeroEntry is the L entry one of the owner's Cubes listed at radio
@@ -129,10 +130,9 @@ func TestClientWarnsOfZeroEntry(t *testing.T) {
 	go c.Run(ctx)
 	const kept, entry = "cube: a line it sent cannot be read; kept as received for the proxy and backups",
 		"cube: its device list has an entry at radio address 000000; it is no device, not shown and sent nothing"
-	deadline := time.Now().Add(5 * time.Second)
-	for len(logs.lines("WARN", entry)) == 0 && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
-	}
+	// Within, not Eventually: where the entry's warning does not come, the
+	// check below shows both warnings as they are.
+	testkit.Within(testkit.Wait, func() bool { return len(logs.lines("WARN", entry)) > 0 })
 	if k, e := logs.lines("WARN", kept), logs.lines("WARN", entry); len(k) != 1 || len(e) != 1 {
 		t.Fatalf("warnings: kept %q, entry %q", k, e)
 	}
@@ -152,10 +152,7 @@ func TestClientRefusesZero(t *testing.T) {
 	defer cancel()
 	c := New(Options{Addr: addr})
 	go c.Run(ctx)
-	deadline := time.Now().Add(5 * time.Second)
-	for !c.isConnected() && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
-	}
+	testkit.Eventually(t, "first greeting", c.isConnected)
 	if _, err := c.Send(ctx, cube.CmdDeleteDevices(true, cube.ZeroAddress)); !errors.Is(err, cube.ErrZeroAddress) {
 		t.Fatalf("t: to 000000: %v, want ErrZeroAddress", err)
 	}

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/env"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // resetLogLevel clears MASSIMO_LOG_LEVEL for the test, and puts the
@@ -279,7 +280,7 @@ func TestParseLogSize(t *testing.T) {
 // set to value.
 func (s *builtServe) waitForAttr(t *testing.T, msg, key, value string) {
 	t.Helper()
-	for end := time.Now().Add(10 * time.Second); time.Now().Before(end); time.Sleep(20 * time.Millisecond) {
+	for end := time.Now().Add(testkit.Scale(10 * time.Second)); time.Now().Before(end); time.Sleep(20 * time.Millisecond) {
 		for _, l := range s.log() {
 			if !strings.Contains(l, `msg="`+msg+`"`) {
 				continue

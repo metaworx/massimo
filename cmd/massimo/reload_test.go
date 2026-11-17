@@ -25,6 +25,7 @@ import (
 	"go.metaworx.ch/massimo/internal/env"
 	"go.metaworx.ch/massimo/internal/server"
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // What SIGHUP does: a reload under a service manager and after nohup, a
@@ -100,7 +101,7 @@ func TestWatchSettings(t *testing.T) {
 	put("MASSIMO_LOG=bb\n")
 	select {
 	case <-calls:
-	case <-time.After(2 * time.Second):
+	case <-time.After(testkit.Scale(2 * time.Second)):
 		t.Fatal("no reload after a change")
 	}
 	quiet("after the reload")
@@ -109,7 +110,7 @@ func TestWatchSettings(t *testing.T) {
 	put("MASSIMO_LOG=ccc\n")
 	select {
 	case <-calls:
-	case <-time.After(2 * time.Second):
+	case <-time.After(testkit.Scale(2 * time.Second)):
 		t.Fatal("no reload after the file came back changed")
 	}
 }
@@ -220,7 +221,7 @@ func startServe(t *testing.T, settingsFile, data string, args ...string) (*exec.
 	select {
 	case a := <-addr:
 		return cmd, "http://" + a, func() string { mu.Lock(); defer mu.Unlock(); return log.String() }, scanned
-	case <-time.After(10 * time.Second):
+	case <-time.After(testkit.Scale(10 * time.Second)):
 		t.Fatal("serve did not start")
 	}
 	return nil, "", nil, nil
@@ -260,15 +261,11 @@ func TestServeAppliesTheTokenOnSIGHUP(t *testing.T) {
 	}
 	os.WriteFile(settingsFile, []byte(tokenVar+"=placeholder-token-1\n"+env.TrustedProxies+"=127.0.0.1\n"), 0o600)
 	cmd.Process.Signal(syscall.SIGHUP)
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		if code, _ := get(t, base+"/api/v1/cubes", ""); code == 401 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("the server does not ask for the token after the SIGHUP; log:\n%s", log())
-		}
-		time.Sleep(50 * time.Millisecond)
+	if !testkit.Within(5*time.Second, func() bool {
+		code, _ := get(t, base+"/api/v1/cubes", "")
+		return code == 401
+	}) {
+		t.Fatalf("the server does not ask for the token after the SIGHUP; log:\n%s", log())
 	}
 	if code, text := get(t, base+"/api/v1/cubes", "placeholder-token-1"); code != 200 {
 		t.Fatalf("with the token: %d %s", code, text)
@@ -310,7 +307,7 @@ func TestServeStopsOnSIGHUP(t *testing.T) {
 		if err != nil {
 			t.Fatalf("serve ended on SIGHUP with %v", err)
 		}
-	case <-time.After(20 * time.Second):
+	case <-time.After(testkit.Scale(20 * time.Second)):
 		t.Fatal("serve did not stop on SIGHUP")
 	}
 	if _, err := os.Stat(filepath.Join(data, "massimo.db-wal")); err == nil {

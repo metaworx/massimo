@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // The budget's holds and the commands of r: lines alone (AP RadioHealth
@@ -43,7 +44,7 @@ func TestQueueResetsPassTheHolds(t *testing.T) {
 	// The first radio command learns the budget: 100 %, 2 slots free.
 	q.Enqueue(Command{Lines: []cube.Message{m}}).Wait(context.Background())
 	reset := cube.CmdResetError(0x0a010d)
-	ctx, stop := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, stop := context.WithTimeout(context.Background(), testkit.Scale(5*time.Second))
 	defer stop()
 	res := q.Enqueue(Command{Key: "error-reset:0a010d", Priority: PriorityLow, Lines: []cube.Message{reset}}).Wait(ctx)
 	if res.Err != nil || res.Discarded {

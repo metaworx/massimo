@@ -13,6 +13,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // A state change the Cube reports in the answer to a later l: poll is a
@@ -32,7 +33,7 @@ func TestPolledStateChangesReachTheLog(t *testing.T) {
 	go s.Run(ctx)
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
-	eventually(t, "the cube", func() bool {
+	testkit.Eventually(t, "the cube", func() bool {
 		var c cubeView
 		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
 	})
@@ -42,7 +43,7 @@ func TestPolledStateChangesReachTheLog(t *testing.T) {
 	copy(raw, []byte{0x0b, 0x0a, 0x01, 0x0d, 0x09, 0x12, 0x01, 30, 42, 0, 0, 0})
 	fc.SetDeviceList(cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(raw)})
 	var changed event
-	eventually(t, "a state event after connected", func() bool {
+	testkit.Eventually(t, "a state event after connected", func() bool {
 		var evs []event
 		getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log", &evs)
 		connected := false
@@ -77,7 +78,7 @@ func TestPolledStateChangesReachTheLog(t *testing.T) {
 	// A later change of one value is an event with that value only.
 	raw[7] = 50
 	fc.SetDeviceList(cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(raw)})
-	eventually(t, "the valve change", func() bool {
+	testkit.Eventually(t, "the valve change", func() bool {
 		var evs []event
 		getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log", &evs)
 		last := evs[len(evs)-1]

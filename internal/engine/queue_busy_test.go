@@ -11,6 +11,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // A queue command sent while the connection's poll waits for a slow
@@ -33,7 +34,7 @@ func TestQueueCommandWaitsForAPollInFlight(t *testing.T) {
 	go c.Run(ctx)
 	select {
 	case <-c.Ready():
-	case <-time.After(5 * time.Second):
+	case <-time.After(testkit.Scale(5 * time.Second)):
 		t.Fatal("client not ready")
 	}
 	q := NewQueue(c, Options{Gap: time.Millisecond})
@@ -50,11 +51,7 @@ func TestQueueCommandWaitsForAPollInFlight(t *testing.T) {
 	}
 	polls := count('l')
 	srv.SetSilent(true)
-	for deadline := time.Now().Add(5 * time.Second); count('l') == polls; time.Sleep(5 * time.Millisecond) {
-		if time.Now().After(deadline) {
-			t.Fatal("no poll while the Cube is silent")
-		}
-	}
+	testkit.Eventually(t, "a poll while the Cube is silent", func() bool { return count('l') != polls })
 
 	// A setpoint, as a user's write: the poll's l: holds the line.
 	m, err := cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a010d, RoomID: 6, Room: true}, 19, cube.ModeManual, cube.Until{})
@@ -72,7 +69,7 @@ func TestQueueCommandWaitsForAPollInFlight(t *testing.T) {
 	}
 
 	srv.SetSilent(false)
-	wctx, wcancel := context.WithTimeout(ctx, 5*time.Second)
+	wctx, wcancel := context.WithTimeout(ctx, testkit.Scale(5*time.Second))
 	defer wcancel()
 	res := ticket.Wait(wctx)
 	if res.Err != nil || len(res.Replies) != 1 || res.Replies[0].Type != 'S' {

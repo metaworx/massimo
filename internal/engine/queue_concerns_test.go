@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // A command concerns a device by its Target, the device's room by its
@@ -59,11 +60,7 @@ func TestQueueConcerns(t *testing.T) {
 	ctx := context.Background()
 	first.Wait(ctx)
 	second.Wait(ctx)
-	deadline := time.Now().Add(5 * time.Second)
-	for q.Concerns(0x0a010d) && time.Now().Before(deadline) {
-		time.Sleep(5 * time.Millisecond)
-	}
-	if q.Concerns(0x0a010d) {
+	if !testkit.Within(5*time.Second, func() bool { return !q.Concerns(0x0a010d) }) {
 		t.Fatal("a command done still concerns the device")
 	}
 }

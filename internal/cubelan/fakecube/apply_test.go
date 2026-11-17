@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // startRooms serves the rooms fixture with writes applied.
@@ -186,16 +187,11 @@ func TestApplyBoost(t *testing.T) {
 	}
 	// Each device's boost ends on its own timer, as on a real Cube, so the
 	// test waits until neither is boosting any more.
-	deadline := time.Now().Add(3 * time.Second)
-	for {
+	if !testkit.Within(3*time.Second, func() bool {
 		st = c.states()
-		if st[0x0a0203].Mode != cube.ModeBoost && st[0x0a0201].Mode != cube.ModeBoost {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("the boost did not end: %+v %+v", st[0x0a0203], st[0x0a0201])
-		}
-		time.Sleep(50 * time.Millisecond)
+		return st[0x0a0203].Mode != cube.ModeBoost && st[0x0a0201].Mode != cube.ModeBoost
+	}) {
+		t.Fatalf("the boost did not end: %+v %+v", st[0x0a0203], st[0x0a0201])
 	}
 	if *st[0x0a0203].ValvePct != 15 || st[0x0a0201].Mode != cube.ModeAuto {
 		t.Fatalf("after the boost: %+v %+v", st[0x0a0203], st[0x0a0201])

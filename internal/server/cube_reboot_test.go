@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // A Cube's reboot: refused while a radiogram is pending and the request
@@ -42,7 +43,7 @@ func TestRebootACube(t *testing.T) {
 		s, _ := l["state"].(string)
 		return s
 	}
-	eventually(t, "connected", func() bool { return link() == "connected" })
+	testkit.Eventually(t, "connected", func() bool { return link() == "connected" })
 
 	// The fake's S reply leaves one radiogram pending (49 free slots).
 	if code, body := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/0a010d/setpoint", `{"mode":"manual","temp":21.5}`); code != 200 {
@@ -61,8 +62,8 @@ func TestRebootACube(t *testing.T) {
 	if at.Reboots() != 1 {
 		t.Errorf("%d R received", at.Reboots())
 	}
-	eventually(t, "the restart", func() bool { return fc.Restarts() == 1 })
-	eventually(t, "connected after the reboot", func() bool { return link() == "connected" && fc.Connections() >= 2 })
+	testkit.Eventually(t, "the restart", func() bool { return fc.Restarts() == 1 })
+	testkit.Eventually(t, "connected after the reboot", func() bool { return link() == "connected" && fc.Connections() >= 2 })
 	if code, _ := do(t, ts, "POST", "/api/v1/cubes/KEQ0000999/reboot", `{}`); code != 404 {
 		t.Errorf("another Cube: %d", code)
 	}
@@ -87,7 +88,7 @@ func TestARebootingCubeIsListedAsRebooting(t *testing.T) {
 	defer at.Close()
 	ts, s := startDiscovering(t, Options{Cubes: []CubeConfig{{Serial: "KEQ0000100", Addr: addr}},
 		DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{at.Addr()}})
-	eventually(t, "connected", func() bool { return s.runtimes()[0].client.Connected() })
+	testkit.Eventually(t, "connected", func() bool { return s.runtimes()[0].client.Connected() })
 	fc.SetSilent(true) // the Cube restarts: no greeting for a while
 	defer fc.SetSilent(false)
 	if code, body := do(t, ts, "POST", "/api/v1/cubes/KEQ0000100/reboot", `{}`); code != 202 {

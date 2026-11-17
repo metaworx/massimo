@@ -13,6 +13,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
@@ -59,7 +60,7 @@ func settleState(t *testing.T, fc *fakecube.Server, ts *httptest.Server, s *Serv
 	if err := fc.SetState(rf, st); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, "the state line of "+rf.String(), func() bool { return stateLines(t, ts, rf, key, to) > before })
+	testkit.Eventually(t, "the state line of "+rf.String(), func() bool { return stateLines(t, ts, rf, key, to) > before })
 	rt := s.runtimes()[0]
 	if res := rt.queue.Enqueue(engine.Command{Priority: engine.PriorityLow, Lines: []cube.Message{cube.CmdGetNTP}}).Wait(context.Background()); res.Err != nil {
 		t.Fatal(res.Err)
@@ -85,7 +86,7 @@ func watchLines(t *testing.T, ts *httptest.Server, rf cube.RFAddress) []event {
 func waitWatch(t *testing.T, ts *httptest.Server, rf cube.RFAddress, n int) []event {
 	t.Helper()
 	var lines []event
-	waitFor(t, "the error_watch lines of "+rf.String(), func() bool {
+	testkit.Eventually(t, "the error_watch lines of "+rf.String(), func() bool {
 		lines = watchLines(t, ts, rf)
 		return len(lines) >= n
 	})
@@ -141,7 +142,7 @@ func TestErrorWatchBack(t *testing.T) {
 	valve := func(n int) *int { return &n }
 
 	settleState(t, fc, ts, s, rf, fakecube.State{Reported: &on, Error: &on, ValvePct: valve(10)}, "valve_pct", float64(10))
-	waitFor(t, "the error_reset", func() bool { return hasKind(logKinds(t, ts, 0), "error_reset:0a010d") })
+	testkit.Eventually(t, "the error_reset", func() bool { return hasKind(logKinds(t, ts, 0), "error_reset:0a010d") })
 	if n := resets(fc, rf); n != 1 {
 		t.Fatalf("the first report: %d resets, want 1", n)
 	}
@@ -291,7 +292,7 @@ func TestErrorWatchLastingAcrossRestart(t *testing.T) {
 	settleState(t, fc, ts, s, flagged, fakecube.State{Reported: &on, Error: &on, ValvePct: valve(10)}, "error", true)
 	settleState(t, fc, ts, s, linked, fakecube.State{Reported: &on, LinkError: &on}, "link_error", true)
 	settleState(t, fc, ts, s, silent, fakecube.State{Error: &on}, "", nil)
-	waitFor(t, "the error_reset", func() bool { return hasKind(logKinds(t, ts, 0), "error_reset:0a010a") })
+	testkit.Eventually(t, "the error_reset", func() bool { return hasKind(logKinds(t, ts, 0), "error_reset:0a010a") })
 	if err := st.FlushEvents(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -362,7 +363,7 @@ func TestErrorWatchWaitsForTheCube(t *testing.T) {
 	settleState(t, fc, ts, s, rf, fakecube.State{Error: &on}, "", nil)
 	fc.Close()
 	rt := s.runtimes()[0]
-	waitFor(t, "the Cube away", func() bool { return !rt.client.Connected() })
+	testkit.Eventually(t, "the Cube away", func() bool { return !rt.client.Connected() })
 	clock.add(25 * time.Hour)
 	if lines := watchLines(t, ts, rf); len(lines) != 0 {
 		t.Fatalf("with the Cube away: %+v", lines)

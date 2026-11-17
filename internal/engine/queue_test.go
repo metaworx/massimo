@@ -15,6 +15,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 const fixture = "../protocol/cube/testdata/cube-fw0113-greeting.txt"
@@ -28,7 +29,7 @@ func withError(t *testing.T, greeting []cube.Message, rf cube.RFAddress) []cube.
 // waitFor polls until the fake cube received a command of type typ.
 func waitFor(t *testing.T, srv *fakecube.Server, typ byte) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(testkit.Scale(5 * time.Second))
 	for time.Now().Before(deadline) {
 		for _, m := range srv.Received() {
 			if m.Type == typ {
@@ -59,7 +60,7 @@ func setup(t *testing.T, opts Options, patch ...func([]cube.Message) []cube.Mess
 	go c.Run(ctx)
 	select {
 	case <-c.Ready():
-	case <-time.After(5 * time.Second):
+	case <-time.After(testkit.Scale(5 * time.Second)):
 		t.Fatal("client not ready")
 	}
 	if opts.Gap == 0 {
@@ -295,7 +296,7 @@ func TestQueueObserver(t *testing.T) {
 	third := q.Enqueue(Command{ID: "c", Key: "k", Lines: []cube.Message{line}})
 	q.Enqueue(Command{Lines: []cube.Message{line}}) // no ID: not observed
 	close(rec.release)
-	ctx, stop := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, stop := context.WithTimeout(context.Background(), testkit.Scale(5*time.Second))
 	defer stop()
 	if res := first.Wait(ctx); res.Err != nil {
 		t.Fatal(res.Err)
@@ -306,10 +307,7 @@ func TestQueueObserver(t *testing.T) {
 	// A command still waiting when the queue stops is drained.
 	q.Enqueue(Command{ID: "d", Lines: []cube.Message{line}})
 	cancel()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) && len(rec.list()) < 10 {
-		time.Sleep(10 * time.Millisecond)
-	}
+	testkit.Within(2*time.Second, func() bool { return len(rec.list()) >= 10 })
 	got := rec.list()
 	want := []string{"enqueued:a", "enqueued:b", "finished:b:" + ErrSuperseded.Error(), "enqueued:c", "started:a", "finished:a", "started:c", "finished:c", "enqueued:d"}
 	for i, w := range want {
@@ -349,7 +347,7 @@ func TestQueueObserverHearsEnqueuedFirst(t *testing.T) {
 	rec := &gatedRecorder{gate: "b", release: make(chan struct{})}
 	_, q, _ := setup(t, Options{Gap: 20 * time.Millisecond, Observer: rec})
 	line := cube.Message{Type: 's', Data: "AARAAAAACgENBms="}
-	ctx, stop := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, stop := context.WithTimeout(context.Background(), testkit.Scale(5*time.Second))
 	defer stop()
 	first := q.Enqueue(Command{ID: "a", Lines: []cube.Message{line}})
 	second := make(chan *Ticket, 1)

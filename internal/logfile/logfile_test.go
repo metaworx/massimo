@@ -16,6 +16,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 var fixed = time.Date(2026, 11, 11, 10, 0, 0, 0, time.UTC)
@@ -90,9 +92,7 @@ func TestRotateAtSize(t *testing.T) {
 		}
 	}
 	// The size's Rotations are handed on in goroutines of their own.
-	for end := time.Now().Add(5 * time.Second); len(got()) < 4 && time.Now().Before(end); {
-		time.Sleep(10 * time.Millisecond)
-	}
+	testkit.Within(5*time.Second, func() bool { return len(got()) >= 4 })
 	if w := []string{"serve.log", "serve.log.1", "serve.log.2.gz", "serve.log.3.gz", "serve.log.4.gz"}; !slices.Equal(names(t, dir), w) {
 		t.Fatalf("files %v, want %v", names(t, dir), w)
 	}

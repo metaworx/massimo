@@ -22,6 +22,7 @@ import (
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/sharedport"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // freeUDP returns a local UDP address that was free a moment ago.
@@ -99,7 +100,7 @@ func TestACallDuringARunGetsTheNext(t *testing.T) {
 	ctx := context.Background()
 	go s.discover(ctx)
 	var going *discoveryRun
-	eventually(t, "a run going", func() bool {
+	testkit.Eventually(t, "a run going", func() bool {
 		s.discMu.Lock()
 		defer s.discMu.Unlock()
 		going = s.discRun
@@ -274,7 +275,7 @@ func TestDiscoveryLeavesOutTheProxysOwnAnswers(t *testing.T) {
 	ts, _ := startDiscovering(t, Options{DiscoveryAddr: own, DiscoveryTargets: []string{own, other.Addr()},
 		Proxy: []ProxyListener{{Addr: proxyAddr, Discovery: true}}})
 	// Wait for the proxy's greeting data, without which it answers nothing.
-	eventually(t, "the cube", func() bool {
+	testkit.Eventually(t, "the cube", func() bool {
 		var c cubeView
 		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
 	})
@@ -336,7 +337,7 @@ func TestDiscoveryLeavesOutALaterProxysAnswers(t *testing.T) {
 	proxyAddr := tcp.Addr().String()
 	tcp.Close()
 	ts, s := startDiscovering(t, Options{DiscoveryAddr: own, DiscoveryTargets: []string{own, other.Addr()}})
-	eventually(t, "the cube", func() bool {
+	testkit.Eventually(t, "the cube", func() bool {
 		var c cubeView
 		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
 	})
@@ -478,7 +479,7 @@ func TestDiscoveryPortShared(t *testing.T) {
 	proxyAddr := tcp.Addr().String()
 	tcp.Close()
 	_, s := startDiscovering(t, Options{DiscoveryAddr: own, Proxy: []ProxyListener{{Addr: proxyAddr, Discovery: true}}})
-	eventually(t, "the proxies' discovery socket", func() bool {
+	testkit.Eventually(t, "the proxies' discovery socket", func() bool {
 		s.mu.RLock()
 		defer s.mu.RUnlock()
 		return s.responder != nil
@@ -638,7 +639,7 @@ func TestCubeConfiguredBySerialFollowsItsAddress(t *testing.T) {
 		}
 		return cubes[0]
 	}
-	eventually(t, "the cube at 127.0.0.2", func() bool {
+	testkit.Eventually(t, "the cube at 127.0.0.2", func() bool {
 		c := cube()
 		return c != nil && c["connected"] == true && c["address"] == addr
 	})
@@ -647,7 +648,7 @@ func TestCubeConfiguredBySerialFollowsItsAddress(t *testing.T) {
 	at3.SetSilent(false)
 	first.Close()
 	postDiscovery(t, ts)
-	eventually(t, "the cube at 127.0.0.3", func() bool {
+	testkit.Eventually(t, "the cube at 127.0.0.3", func() bool {
 		c := cube()
 		return c != nil && c["connected"] == true && c["address"] == "127.0.0.3:"+portStr && second.Connections() == 1
 	})
@@ -735,8 +736,8 @@ func startMovingCube(t *testing.T, retry time.Duration) *movingCube {
 	m.requests = requests
 	m.ts, m.s = startDiscovering(t, Options{Cubes: []CubeConfig{{Serial: "KEQ0000100"}}, CubePort: port, AddressRetry: retry,
 		DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{m.at2.Addr(), m.at3.Addr(), counter}})
-	eventually(t, "the cube at 127.0.0.2", func() bool { return m.at(addr) })
-	eventually(t, "the run at the start to end", func() bool { return noRunGoing(m.s) })
+	testkit.Eventually(t, "the cube at 127.0.0.2", func() bool { return m.at(addr) })
+	testkit.Eventually(t, "the run at the start to end", func() bool { return noRunGoing(m.s) })
 	return m
 }
 
@@ -755,7 +756,7 @@ func TestALostCubeIsSearchedForAtOnce(t *testing.T) {
 	m.at2.SetSilent(true)
 	m.at3.SetSilent(false)
 	m.first.Close()
-	eventually(t, "the cube at 127.0.0.3", func() bool {
+	testkit.Eventually(t, "the cube at 127.0.0.3", func() bool {
 		return m.at("127.0.0.3:"+m.port) && m.second.Connections() == 1
 	})
 }
@@ -768,16 +769,16 @@ func TestALostCubeIsSearchedForWhileLost(t *testing.T) {
 	before := m.requests()
 	m.first.Close()
 	// The search at the loss hears nobody: both homes are silent.
-	eventually(t, "a search after the loss", func() bool { return m.requests() > before && noRunGoing(m.s) })
+	testkit.Eventually(t, "a search after the loss", func() bool { return m.requests() > before && noRunGoing(m.s) })
 	if m.at("127.0.0.3:" + m.port) {
 		t.Fatal("followed to a silent address")
 	}
 	m.at3.SetSilent(false)
-	eventually(t, "the cube at 127.0.0.3", func() bool {
+	testkit.Eventually(t, "the cube at 127.0.0.3", func() bool {
 		return m.at("127.0.0.3:"+m.port) && m.second.Connections() == 1
 	})
 	// Back, it is no longer searched for.
-	eventually(t, "the last run to end", func() bool { return noRunGoing(m.s) })
+	testkit.Eventually(t, "the last run to end", func() bool { return noRunGoing(m.s) })
 	time.Sleep(600 * time.Millisecond) // a run asked for before it was back
 	settled := m.requests()
 	time.Sleep(500 * time.Millisecond)
@@ -817,8 +818,8 @@ func fixedCube(t *testing.T, interval time.Duration) (s *Server, fc *fakecube.Se
 		getJSON(t, ts, "", "/api/v1/cubes", &cubes)
 		return len(cubes) == 1 && cubes[0]["connected"] == true
 	}
-	eventually(t, "the cube connected", connected)
-	eventually(t, "no run going", func() bool { return noRunGoing(srv) })
+	testkit.Eventually(t, "the cube connected", connected)
+	testkit.Eventually(t, "no run going", func() bool { return noRunGoing(srv) })
 	warnings = func() int {
 		return strings.Count(log.String(), `msg="cube answers discovery from another address than configured"`)
 	}
@@ -830,7 +831,7 @@ func fixedCube(t *testing.T, interval time.Duration) (s *Server, fc *fakecube.Se
 func TestALostFixedCubeWithoutAnIntervalIsNotSearchedFor(t *testing.T) {
 	_, fc, connected, warnings, requests := fixedCube(t, 0)
 	fc.Close()
-	eventually(t, "the cube lost", func() bool { return !connected() })
+	testkit.Eventually(t, "the cube lost", func() bool { return !connected() })
 	time.Sleep(500 * time.Millisecond) // five AddressRetry
 	if n, w := requests(), warnings(); n != 0 || w != 0 {
 		t.Fatalf("%d searches, %d warnings, want none", n, w)
@@ -844,12 +845,12 @@ func TestALostFixedCubeWithAnIntervalIsSearchedFor(t *testing.T) {
 	s, fc, connected, warnings, requests := fixedCube(t, time.Hour)
 	// The run at the start may have warned already, where its wait heard
 	// the answer; the searches after the loss repeat until one does.
-	eventually(t, "the run at the start", func() bool { return requests() >= 1 && noRunGoing(s) })
+	testkit.Eventually(t, "the run at the start", func() bool { return requests() >= 1 && noRunGoing(s) })
 	before := requests()
 	fc.Close()
-	eventually(t, "the cube lost", func() bool { return !connected() })
-	eventually(t, "a warning after the loss", func() bool { return warnings() == 1 })
-	eventually(t, "searches after the warning", func() bool { return requests() >= before+3 })
+	testkit.Eventually(t, "the cube lost", func() bool { return !connected() })
+	testkit.Eventually(t, "a warning after the loss", func() bool { return warnings() == 1 })
+	testkit.Eventually(t, "searches after the warning", func() bool { return requests() >= before+3 })
 	if n := warnings(); n != 1 {
 		t.Errorf("%d warnings over the searches, want 1", n)
 	}
@@ -909,7 +910,7 @@ func TestOneSerialFromACubeAndAProxy(t *testing.T) {
 		Logger:        slog.New(slog.NewTextHandler(&log, nil)),
 		DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{atCube.Addr(), atProxy.Addr()}})
 	proxyAddr := "127.0.0.3:" + strconv.Itoa(port)
-	eventually(t, "the cube through the proxy", func() bool {
+	testkit.Eventually(t, "the cube through the proxy", func() bool {
 		var cubes []map[string]any
 		getJSON(t, ts, "", "/api/v1/cubes", &cubes)
 		return len(cubes) == 1 && cubes[0]["connected"] == true && cubes[0]["address"] == proxyAddr
@@ -966,7 +967,7 @@ func TestAnUnknownAnswerIsNotFollowed(t *testing.T) {
 		}
 		return cubes[0]["address"]
 	}
-	eventually(t, "the cube at its own address", func() bool { return address() == cubeAddr })
+	testkit.Eventually(t, "the cube at its own address", func() bool { return address() == cubeAddr })
 	atCube.SetSilent(true)
 	atProxy.SetSilent(false)
 	postDiscovery(t, ts)

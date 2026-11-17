@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"golang.org/x/net/dns/dnsmessage"
+
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // testNode is a node_id of the form the store makes, a UUIDv7.
@@ -126,7 +128,7 @@ func byType(m *dnsmessage.Message, typ dnsmessage.Type) []dnsmessage.Resource {
 // another service nothing.
 func TestAnnounceAnswersQuery(t *testing.T) {
 	_, port, _ := startTest(t, testService(), quietLog())
-	m := ask(t, port, query(t, 4711, "_massimo._tcp.local.", dnsmessage.TypePTR), 5*time.Second)
+	m := ask(t, port, query(t, 4711, "_massimo._tcp.local.", dnsmessage.TypePTR), testkit.Scale(5*time.Second))
 	if m == nil {
 		t.Fatal("no answer")
 	}
@@ -156,7 +158,7 @@ func TestAnnounceAnswersQuery(t *testing.T) {
 		}
 	}
 
-	host := ask(t, port, query(t, 1, "MASSIMO-00000001.local.", dnsmessage.TypeA), 5*time.Second)
+	host := ask(t, port, query(t, 1, "MASSIMO-00000001.local.", dnsmessage.TypeA), testkit.Scale(5*time.Second))
 	if host == nil || len(host.Answers) != 1 || host.Answers[0].Header.Type != dnsmessage.TypeA {
 		t.Fatalf("host name: %+v", host)
 	}
@@ -177,7 +179,7 @@ func TestAnnounceTLSFingerprint(t *testing.T) {
 		mu.Lock()
 		fp = want
 		mu.Unlock()
-		m := ask(t, port, query(t, 3, "box._massimo._tcp.local.", dnsmessage.TypeTXT), 5*time.Second)
+		m := ask(t, port, query(t, 3, "box._massimo._tcp.local.", dnsmessage.TypeTXT), testkit.Scale(5*time.Second))
 		if m == nil || len(m.Answers) != 1 {
 			t.Fatalf("txt: %+v", m)
 		}
@@ -192,7 +194,7 @@ func TestAnnounceTLSFingerprint(t *testing.T) {
 func TestAnnounceGoodbye(t *testing.T) {
 	r, _, s := startTest(t, testService(), quietLog())
 	read := func() *dnsmessage.Message {
-		s.SetReadDeadline(time.Now().Add(5 * time.Second))
+		s.SetReadDeadline(time.Now().Add(testkit.Scale(5 * time.Second)))
 		buf := make([]byte, 9000)
 		n, _, err := s.ReadFrom(buf)
 		if err != nil {

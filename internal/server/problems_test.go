@@ -10,6 +10,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // A Cube's devices with a problem are in its entry of the Cubes' list,
@@ -28,7 +29,7 @@ func TestCubeProblems(t *testing.T) {
 	copy(raw[12:], []byte{0x0b, 0x0a, 0x01, 0x08, 0x09, 0x12, 0x40, 30, 42, 0, 0, 0})
 	fc.SetDeviceList(cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(raw)})
 	var c cubeView
-	eventually(t, "the problems", func() bool {
+	testkit.Eventually(t, "the problems", func() bool {
 		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && len(c.Problems) > 0
 	})
 	if len(c.Problems) != 1 {

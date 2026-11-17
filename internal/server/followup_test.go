@@ -18,6 +18,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // withEco returns rf's C line from the greeting with another eco
@@ -55,7 +56,7 @@ func TestFollowUpAfterAWrite(t *testing.T) {
 	go s.Run(ctx)
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
-	eventually(t, "the cube", func() bool {
+	testkit.Eventually(t, "the cube", func() bool {
 		var c cubeView
 		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
 	})
@@ -77,10 +78,10 @@ func TestFollowUpAfterAWrite(t *testing.T) {
 		t.Fatalf("eco right after the write %v", e)
 	}
 	fc.SetConfig(withEco(t, greeting, 0x0a010a, 17))
-	eventually(t, "the new eco temperature", func() bool { return eco() == float64(17) })
+	testkit.Eventually(t, "the new eco temperature", func() bool { return eco() == float64(17) })
 	// The fake's S reply left one radiogram pending (49 of 50 slots
 	// free), so the follow-up reconnects for a fresh H line.
-	eventually(t, "the budget reconnect", func() bool { return fc.Connections() == 2 })
+	testkit.Eventually(t, "the budget reconnect", func() bool { return fc.Connections() == 2 })
 	var evs []event
 	getJSON(t, ts, "", base+"/log", &evs)
 	config := false
@@ -120,7 +121,7 @@ func TestFollowUpGivesUpAndRespectsTheRefreshSwitch(t *testing.T) {
 	go s.Run(ctx)
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
-	eventually(t, "the cube", func() bool {
+	testkit.Eventually(t, "the cube", func() bool {
 		var c cubeView
 		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
 	})
@@ -138,17 +139,6 @@ func TestFollowUpGivesUpAndRespectsTheRefreshSwitch(t *testing.T) {
 	if cs != 3 || fc.Connections() != 1 {
 		t.Fatalf("%d re-reads, %d connections", cs, fc.Connections())
 	}
-}
-
-// eventually polls cond until it holds or five seconds passed.
-func eventually(t *testing.T, what string, cond func() bool) {
-	t.Helper()
-	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
-		if cond() {
-			return
-		}
-	}
-	t.Fatalf("timed out waiting for %s", what)
 }
 
 // syncBuffer collects log output from several goroutines.
@@ -173,13 +163,13 @@ func (b *syncBuffer) String() string {
 func proxyClient(t *testing.T, addr string) (net.Conn, *cube.Reader) {
 	t.Helper()
 	var conn net.Conn
-	eventually(t, "the proxy", func() bool {
+	testkit.Eventually(t, "the proxy", func() bool {
 		var err error
 		conn, err = net.DialTimeout("tcp", addr, time.Second)
 		return err == nil
 	})
 	t.Cleanup(func() { conn.Close() })
-	conn.SetDeadline(time.Now().Add(10 * time.Second))
+	conn.SetDeadline(time.Now().Add(testkit.Scale(10 * time.Second)))
 	r := cube.NewReader(conn)
 	for {
 		m, err := r.Read()
@@ -233,7 +223,7 @@ func TestFollowUpAfterAProxyClientsWrite(t *testing.T) {
 	go s.Run(ctx)
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
-	eventually(t, "the cube", func() bool {
+	testkit.Eventually(t, "the cube", func() bool {
 		var c cubeView
 		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
 	})
@@ -264,9 +254,9 @@ func TestFollowUpAfterAProxyClientsWrite(t *testing.T) {
 	}
 	conn, r := proxyClient(t, proxyAddr)
 	proxyWrite(t, conn, r, m.Data)
-	eventually(t, "a re-read", func() bool { n, _ := sent(); return n >= 1 })
+	testkit.Eventually(t, "a re-read", func() bool { n, _ := sent(); return n >= 1 })
 	fc.SetConfig(changed)
-	eventually(t, "the device's new configuration", func() bool {
+	testkit.Eventually(t, "the device's new configuration", func() bool {
 		return strings.Contains(logs.String(), "device configuration taken over by the device")
 	})
 	_, d := do(t, ts, "GET", "/api/v1/cubes/KEQ0000100/devices/0a010a", "")
@@ -274,8 +264,8 @@ func TestFollowUpAfterAProxyClientsWrite(t *testing.T) {
 		t.Fatalf("eco after the follow-up %v", th["eco_temp"])
 	}
 	// The fake's S reply left one radiogram pending.
-	eventually(t, "the budget reconnect", func() bool { return fc.Connections() == 2 })
-	eventually(t, "the budget refresh logged", func() bool { return strings.Contains(logs.String(), "budget refreshed after writes") })
+	testkit.Eventually(t, "the budget reconnect", func() bool { return fc.Connections() == 2 })
+	testkit.Eventually(t, "the budget refresh logged", func() bool { return strings.Contains(logs.String(), "budget refreshed after writes") })
 	time.Sleep(200 * time.Millisecond)
 	before, others := sent()
 	if before > 5 || others != 0 {
@@ -285,7 +275,7 @@ func TestFollowUpAfterAProxyClientsWrite(t *testing.T) {
 	// A room setpoint re-reads nothing, but wants the budget again.
 	conn, r = proxyClient(t, proxyAddr)
 	proxyWrite(t, conn, r, "AARAAAAACgENBgA=")
-	eventually(t, "the second budget reconnect", func() bool { return fc.Connections() == 3 })
+	testkit.Eventually(t, "the second budget reconnect", func() bool { return fc.Connections() == 3 })
 	if after, others := sent(); after != before || others != 0 {
 		t.Fatalf("a setpoint re-read: %d re-reads of the device (%d before), %d of others", after, before, others)
 	}
