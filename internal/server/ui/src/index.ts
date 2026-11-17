@@ -32,7 +32,7 @@ export interface MassimoParts {
   language(): void;
   /** The icons chosen for the window and the radio changed (theme.js redrawSigns): every sign draws them again. */
   icons(): void;
-  /** A sign-out (login.js logout): every form's drafts and marks forgotten (shared/forms.ts). */
+  /** A sign-out, or another user's sign-in after a 401 (login.js forgetSession): every form's drafts and marks forgotten (shared/forms.ts). */
   signedOut(): void;
   /** System settings → Cubes and Cube settings (cubes/). */
   cubes: CubesPart;

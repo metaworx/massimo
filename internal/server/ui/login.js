@@ -7,7 +7,7 @@
 // browser, or an API key pasted), Log out, hiding what the role may not
 // do, the own password, and the form that creates the first owner on a
 // server without users. Loaded after app.js; api() calls askLogin on a
-// 401.
+// 401, and sends only a read again once it is in.
 "use strict";
 
 // CAPABILITIES are the server's, in its order (docs/api-v1.md,
@@ -297,21 +297,55 @@ function whoIs(me) {
   return me.user ? "user:" + me.user.name : "mode:" + me.mode;
 }
 
-// forgetOthers forgets every settings form's drafts (MassimoParts.signedOut)
-// where the sign-in of askLogin, after a 401, is not of was, who was
-// signed in: a session that expired keeps the drafts for its own user,
-// and the next user neither sees nor saves them. Where /me cannot be read
-// they are forgotten. It runs before the requests that waited for the
-// sign-in are sent again.
-async function forgetOthers(was) {
-  if (!was) return;
+// holdPushes takes the settings pushes that wait for their second
+// (schedulePreferences, saveNotifyRules of notify.js) as the sign-in of
+// askLogin opens, so that none goes out under whoever signs in;
+// resumePushes schedules them again, for the same user.
+function holdPushes() {
+  return { prefs: takeScheduled(), notify: takeNotifySave() };
+}
+
+function resumePushes(held) {
+  for (const key of held.prefs) schedulePreferences(key);
+  if (held.notify) saveNotifyRules(); // notify.js
+}
+
+// settleSignIn follows a sign-in of askLogin after a 401, before the
+// reads that waited for it are sent again. Where it is of was, who was
+// signed in, the session merely expired: the drafts stay and the pushes
+// held go on. Where it is another's, or /me cannot be read, the page
+// forgets the one who was, as a sign-out does (forgetSession), and drops
+// the pushes held: the next user neither sees nor saves nor receives
+// anything of the last. A sign-in that nobody was signed in before has
+// nothing to forget.
+async function settleSignIn(was, held) {
+  if (!was) return resumePushes(held);
   let me = null;
   try {
     me = await apiRequest("GET", "api/v1/me");
   } catch (e) {
     // not known: forgotten, to be safe
   }
-  if (whoIs(me) !== was) MassimoParts.signedOut();
+  if (whoIs(me) === was) return resumePushes(held);
+  await forgetSession(canSync());
+}
+
+// forgetSession forgets on the page all that was of whoever was signed
+// in, for a sign-out (logout) and for another user's sign-in after a 401
+// (settleSignIn) alike: the settings that followed the user, where they
+// did (forgetUserSettings, app.js), the forms' drafts, the lines saying a
+// write was not sent (forgetNotSent, app.js), the House's panel, the
+// stream and the Cubes' data; the page shows the tiles. Who is in is
+// read again after it.
+async function forgetSession(synced) {
+  state.me = null;
+  if (synced) await forgetUserSettings();
+  MassimoParts.signedOut();
+  forgetNotSent();
+  MassimoParts.rooms.closeHouse();
+  closeEvents();
+  clearCubeData(); // app.js: nothing of this session behind the sign-in
+  showView("tiles", "replace");
 }
 
 // askLogin opens the sign-in dialog and resolves true once a session or
@@ -320,7 +354,10 @@ async function forgetOthers(was) {
 // the name, the version and the dialog.
 function askLogin() {
   if (loginPromise) return loginPromise;
-  const was = whoIs(state.me); // a 401 while signed in: the drafts stay for this user alone (forgetOthers)
+  notSentNow = false; // app.js: only the writes this sign-in answers
+  const was = whoIs(state.me); // a 401 while signed in: the drafts stay for this user alone (settleSignIn)
+  const held = holdPushes();
+  dropPendingSetpoints(); // rooms.js
   loginPromise = new Promise((resolve) => {
     const dlg = $("login-dialog");
     const form = $("login-form");
@@ -354,7 +391,7 @@ function askLogin() {
       const key = $("login-token").value.trim();
       if (!key) return;
       setToken(key);
-      await forgetOthers(was);
+      await settleSignIn(was, held);
       done(true);
       if (!startWaits) afterLogin();
     };
@@ -377,11 +414,14 @@ function askLogin() {
         return;
       }
       setToken(session.token);
-      await forgetOthers(was);
+      await settleSignIn(was, held);
       done(true);
       if (!startWaits) afterLogin();
     };
-    dlg.onclose = () => done(false);
+    dlg.onclose = () => {
+      resumePushes(held); // dismissed: they go as they would have
+      done(false);
+    };
     document.body.classList.add("signed-out");
     // Not modal: the page behind is empty, and a modal dialog makes the
     // rest of the document inert, where a password manager draws its
@@ -497,15 +537,33 @@ async function currentPassword(user, password) {
   return { current_password: password };
 }
 
-// afterLogin reads who is in, and starts the stream and the data again,
-// for a sign-in that no start waited for: a session that ended while the
-// page ran, a key pasted, the first owner.
+// afterLogin reads who is in, and starts the poll, the stream and the
+// data again, for a sign-in that no start waited for: a session that
+// ended while the page ran, a key pasted, the first owner. A write that
+// was not sent while the sign-in was open (notSent, app.js) and said so
+// on the page's message line, which the reload of the data clears, is
+// said there again, where the reload left the line empty.
 function afterLogin() {
+  const said = notSentSaid();
   loadMe()
     .then(loadPreferences)
     .then(() => {
-      refresh().then(connectEvents);
+      startPolling(); // app.js: stopped where another user's sign-in forgot the session
+      refresh().then(() => {
+        if (said && $("message").classList.contains("hidden")) showMessage(said, false);
+        return connectEvents();
+      });
     });
+}
+
+// notSentSaid is the page's message line's text where it says that a
+// write was not sent during this sign-in (notSentNow, app.js), else "".
+function notSentSaid() {
+  const msg = $("message");
+  const text = msg.classList.contains("hidden") ? "" : msg.textContent;
+  const said = notSentNow && saysNotSent(text) ? text : "";
+  notSentNow = false;
+  return said;
 }
 
 // logout ends the session (an API key is only forgotten), clears what
@@ -516,7 +574,8 @@ function afterLogin() {
 // browser forgets the user's values and schemes and keeps what is kept
 // for this device only, so that the next to sign in neither sees them
 // nor hands them to its own account, as loadPreferences would hand over
-// what a server lacks. Neither request asks for a sign-in.
+// what a server lacks (forgetSession). Neither request asks for a
+// sign-in.
 async function logout() {
   // a settings form with changes not saved: the page's dialog lists them and asks first (ui/src/leaving/)
   if (!(await MassimoParts.leaving.signOut($("logout-label").textContent))) return;
@@ -533,12 +592,7 @@ async function logout() {
     }
   }
   setToken(null);
-  state.me = null;
-  if (synced) await forgetUserSettings(); // app.js
-  MassimoParts.signedOut(); // what was typed in the settings and not saved goes too
-  closeEvents();
-  clearCubeData(); // app.js: nothing of this session behind the sign-in
-  showView("tiles", "replace");
+  await forgetSession(synced);
   await loadMeAndPreferences();
   startPolling();
   refresh().then(connectEvents);

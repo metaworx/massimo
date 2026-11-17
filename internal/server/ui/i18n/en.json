@@ -95,6 +95,7 @@
   "budget.certificate": "Certificate",
   "msg.cannotLoad": "Cannot load: {error}",
   "api.badToken": "missing or wrong token",
+  "api.notSent": "not sent, since you were signed out: do it again once signed in",
 
   "settings.poll": "Poll every",
   "settings.seconds": "s",

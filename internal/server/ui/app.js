@@ -282,14 +282,67 @@ async function apiRequest(method, path, body, { auth = true, keepalive = false, 
   return data;
 }
 
-// api is apiRequest with the token, asking for a sign-in on a 401 and
-// sending the request again once one is in; headers are added to the
-// request's own.
+// sentAgain reports whether a request that met a 401 is sent again once
+// a sign-in is in: a read, and the page's own requests that change
+// nothing. A write, every other request, is never sent again: it went out
+// under a session that has ended, and sent later it would go under
+// whoever signs in, however much later (AP SignInResend).
+function sentAgain(method, path) {
+  if (method === "GET") return true;
+  // the event stream's ticket: the page asks for it by itself to open the
+  // stream, which the sign-in starts again, and it changes nothing
+  return method === "POST" && /\/events\/ticket$/.test(path);
+}
+
+// notSentTexts are the texts that said a write was not sent, in each
+// language they were said in, so that the page knows them again on its
+// lines (saysNotSent); notSentNow is set once a write was not sent since
+// the sign-in last opened (askLogin, login.js).
+const notSentTexts = new Set();
+let notSentNow = false;
+
+// notSentText is the text of a write not sent since the user was signed
+// out, noted in notSentTexts and notSentNow.
+function notSentText() {
+  const text = t("api.notSent");
+  notSentTexts.add(text);
+  notSentNow = true;
+  return text;
+}
+
+// saysNotSent reports whether a line's text says a write was not sent.
+function saysNotSent(text) {
+  return [...notSentTexts].some((s) => text.includes(s));
+}
+
+// forgetNotSent takes back every line of the plain regions that says a
+// write was not sent (failedLines, components.js), for a user who is
+// gone (forgetSession, login.js); the parts' lines go with the Cube data
+// and the House's panel.
+function forgetNotSent() {
+  for (const el of failedLines) if (saysNotSent(el.textContent)) showResult(el, "");
+  notSentNow = false;
+}
+
+// notSent opens the sign-in and returns the error a write that met a 401
+// fails with at once: not sent, to be done again after the sign-in; its
+// status stays 401.
+function notSent() {
+  askLogin(); // login.js: the write does not wait for it
+  const err = new Error(notSentText());
+  err.status = 401;
+  return err;
+}
+
+// api is apiRequest with the token, asking for a sign-in on a 401: a read
+// is sent again once one is in, a write fails at once (sentAgain); headers
+// are added to the request's own.
 async function api(method, path, body, headers) {
   try {
     return await apiRequest(method, path, body, { headers });
   } catch (e) {
     if (e.status !== 401) throw e;
+    if (!sentAgain(method, path)) throw notSent();
     if (await askLogin()) return api(method, path, body, headers); // login.js
     throw new Error(t("api.badToken"));
   }
@@ -297,13 +350,14 @@ async function api(method, path, body, headers) {
 
 // apiRaw is api for what is not JSON, a backup file: body goes as it is,
 // with contentType, and the answer is the Response; an error is thrown
-// as api throws it.
+// as api throws it, a write that met a 401 not sent again.
 async function apiRaw(method, path, body, contentType) {
   const headers = {};
   if (state.token) headers.Authorization = "Bearer " + state.token;
   if (body !== undefined) headers["Content-Type"] = contentType || "application/octet-stream";
   const resp = await fetch(path, { method, headers, body });
   if (resp.status === 401) {
+    if (!sentAgain(method, path)) throw notSent();
     if (await askLogin()) return apiRaw(method, path, body, contentType); // login.js
     throw new Error(t("api.badToken"));
   }

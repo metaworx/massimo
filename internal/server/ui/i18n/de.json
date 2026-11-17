@@ -95,6 +95,7 @@
   "budget.certificate": "Zertifikat",
   "msg.cannotLoad": "Laden fehlgeschlagen: {error}",
   "api.badToken": "Token fehlt oder ist falsch",
+  "api.notSent": "nicht gesendet, da Sie abgemeldet waren: tun Sie es angemeldet noch einmal",
 
   "settings.poll": "Abfrage alle",
   "settings.seconds": "s",

@@ -97,6 +97,7 @@
   "budget.certificate": "Certificato",
   "msg.cannotLoad": "Impossibile caricare: {error}",
   "api.badToken": "token mancante o errato",
+  "api.notSent": "non inviato, perché eri disconnesso: riprova una volta connesso",
 
   "settings.poll": "Interroga ogni",
   "settings.seconds": "s",
