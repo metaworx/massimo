@@ -16,6 +16,8 @@
 import type { ComponentChildren, Ref } from "preact";
 import { useRef, useState } from "preact/hooks";
 import { Notice } from "./badge";
+import type { FormLook, Place } from "./forms";
+import { Icon, Mark } from "./icon";
 import { busyProps } from "./question";
 
 /** A field's draft against its stored value (useDraft). */
@@ -40,12 +42,14 @@ export interface Draft<T> {
  * text, a serial in capitals, a list as a set). An untouched draft follows
  * stored; one the user changed keeps its value, and meanwhile says that
  * stored moved under it, until take() or a stored value equal to the
- * draft. It is the component's state: it goes with the component.
+ * draft. Without a place it is the component's state and goes with the
+ * component; with one (a form's place, useForm of forms.ts) it is kept
+ * there, its base with it, and outlives the component.
  */
-export function useDraft<T>(stored: T, norm: (v: T) => unknown = (v) => v): Draft<T> {
-  const r = useRef({ base: stored, value: stored, stored });
+export function useDraft<T>(stored: T, norm: (v: T) => unknown = (v) => v, place?: Place<T>): Draft<T> {
+  const own = useRef({ base: stored, value: stored, stored });
   const [, redraw] = useState(0);
-  const d = r.current;
+  const d = place ? place.slot(stored) : own.current;
   d.stored = stored; // the latest, for take() called after a later draw
   const same = (a: T, b: T) => Object.is(norm(a), norm(b));
   if (!same(stored, d.base) && (same(d.value, d.base) || same(d.value, stored))) {
@@ -59,12 +63,14 @@ export function useDraft<T>(stored: T, norm: (v: T) => unknown = (v) => v): Draf
     meanwhile: !same(stored, d.base),
     set(v) {
       d.value = v;
-      redraw((n) => n + 1);
+      if (place) place.changed();
+      else redraw((n) => n + 1);
     },
     take() {
       d.base = d.stored;
       d.value = d.stored;
-      redraw((n) => n + 1);
+      if (place) place.redraw();
+      else redraw((n) => n + 1);
     },
   };
 }
@@ -254,28 +260,59 @@ export function Switch({ name, label, checked, onChange, draft, show, row = true
   );
 }
 
+/** The tooltip of Save's sign, by the form's state. */
+const LOOK_TITLE: Partial<Record<FormLook, string>> = { unsaved: "form.unsavedTitle", failed: "form.failedTitle", saved: "form.savedTitle" };
+
+/**
+ * LookSign is the sign before Save's text: the warning mark while the
+ * form's changes are unsaved, the cross after a failed save, the check
+ * after a save; nothing else.
+ */
+function LookSign({ look }: { look?: FormLook }) {
+  if (look === "unsaved") return <Mark state="warn" />;
+  if (look === "failed") return <Mark state="bad" />;
+  if (look === "saved") return <Icon symbol="icon-check" cls="ni ok-check" />;
+  return null;
+}
+
 /**
  * FormFooter is a form's row of actions (formFooter of components.js):
- * extra at its left end (resets, Remove), then at its right Cancel, where
- * cancel is given (cancelLabel in place of "Cancel"; its class
- * form-cancel, as the plain footer's), and the submit button, submit its
- * label, busy while its request runs (useBusy) and off where off says
- * nothing is to be sent (sendWhenChanged).
+ * extra at its left end (resets, Remove), then at its right Reset, where
+ * reset is given (off while the form is clean), Cancel, where cancel is
+ * given (cancelLabel in place of "Cancel"; its class form-cancel, as the
+ * plain footer's), and the submit button, submit its label, busy while
+ * its request runs (useBusy) and off where off says nothing is to be
+ * sent (sendWhenChanged). Where look gives the form's state (useForm of
+ * forms.ts), Save shows it: clean, plain and off; changed, primary;
+ * unsaved, primary with the warning mark before its text; saving, busy;
+ * failed, with the cross; saved, plain and off with the check. Without
+ * look it is primary, as it always was.
  */
-export function FormFooter({ submit, busy, off, cancel, cancelLabel, extra }: {
+export function FormFooter({ submit, busy, off, cancel, cancelLabel, reset, look, extra }: {
   submit?: string;
   busy?: boolean;
   off?: boolean;
   cancel?: () => void;
   cancelLabel?: string;
+  reset?: () => void;
+  look?: FormLook;
   extra?: ComponentChildren;
 }) {
+  const clean = look === "clean" || look === "saved";
+  const turning = !!busy || look === "saving";
+  const title = look && LOOK_TITLE[look];
   return (
     <div class="actions">
       {extra && <span class="actions-left">{extra}</span>}
       <span class="actions-right">
+        {reset && <button type="button" class="form-reset" disabled={clean || turning} onClick={reset}>{t("action.reset")}</button>}
         {cancel && <button type="button" class="form-cancel" onClick={cancel}>{cancelLabel || t("action.cancel")}</button>}
-        {submit && <button type="submit" {...busyProps("primary", !!busy, off)}>{submit}</button>}
+        {submit && (
+          <button type="submit" {...busyProps(clean ? "" : "primary", turning, off || clean)} title={title ? t(title) : undefined}>
+            <LookSign look={look} />
+            {submit}
+          </button>
+        )}
       </span>
     </div>
   );

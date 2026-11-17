@@ -13,6 +13,8 @@
  */
 
 declare global {
+  /** How long a result that went well stays shown, in ms. */
+  const RESULT_FADE_MS: number;
   /** A kind's sign: its icon where all is well, else its base and the mark of a state. */
   interface SignDrawing {
     icon: string;

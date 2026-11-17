@@ -19,6 +19,7 @@ import "./header";
 import type { HeaderPart } from "./header";
 import "./rooms";
 import type { RoomsPart } from "./rooms";
+import { forgetForms } from "./shared/forms";
 import { languageChanged } from "./shared/lang";
 import { iconsChanged } from "./shared/look";
 import { parts, register } from "./shared/region";
@@ -29,6 +30,8 @@ export interface MassimoParts {
   language(): void;
   /** The icons chosen for the window and the radio changed (theme.js redrawSigns): every sign draws them again. */
   icons(): void;
+  /** A sign-out (login.js logout): every form's drafts and marks forgotten (shared/forms.ts). */
+  signedOut(): void;
   /** System settings → Cubes and Cube settings (cubes/). */
   cubes: CubesPart;
   /** The header: the Cube choice, the problems, the age, the server's sign, the certificate's line, the home notice (header/). */
@@ -46,4 +49,5 @@ declare global {
 
 register("language", languageChanged);
 register("icons", iconsChanged);
+register("signedOut", () => forgetForms(""));
 window.MassimoParts = parts as unknown as MassimoParts;
