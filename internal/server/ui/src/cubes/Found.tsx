@@ -6,7 +6,8 @@
  *
  * What was found on the network and is not served, one fold under the
  * served Cubes, for a role with cubes: its sign with how many, a row per
- * Cube and Massimo proxy, a Cube with Add, and how to serve them, Add or
+ * Cube and Massimo proxy, a Cube with Add, or with Add as new and a
+ * Restore per removed row of its serial, and how to serve them, Add or
  * the lines for the settings file in a fold of their own.
  */
 
@@ -27,8 +28,8 @@ import { folds, load } from "./store";
  * its address, DHCP flag, firmware and the proxies that answer for it, for
  * a proxy what it serves, for both the server serving it, in expert mode
  * the radio and MAC address and the gateway, how long ago it answered,
- * and for a Cube Add, which serves it at once; under a Cube outside this
- * machine's networks, why and the way to an address here.
+ * and for a Cube its adds (Adds); under a Cube outside this machine's
+ * networks, why and the way to an address here.
  */
 function Row({ c }: { c: FoundCube }) {
   const add = useBusy();
@@ -45,14 +46,49 @@ function Row({ c }: { c: FoundCube }) {
       {facts.length > 0 && <span class="found-facts">{facts}</span>}
       {extra.length > 0 && <span class="mono expert-only found-extra">{extra}</span>}
       <Age at={c.last_seen} plain />
-      {!proxy && (
+      {!proxy && <Adds c={c} add={add} />}
+      {!proxy && c.other_network && <OtherNetwork c={c} address={c.address} />}
+    </li>
+  );
+}
+
+/**
+ * Adds serve a found Cube at once: Add, or, where its serial has removed
+ * rows, Add as new, a row of its own, and Restore <date> for each removed
+ * row, newest first, which serves that row again with its history. One
+ * request at a time: the row's busy turns them all off.
+ */
+function Adds({ c, add }: { c: FoundCube; add: ReturnType<typeof useBusy> }) {
+  const removed = c.removed || [];
+  if (removed.length === 0) {
+    return (
+      <span class="found-adds">
         <button type="button" {...busyProps("add-cube needs-cubes", add.busy)} aria-label={t("cubes.addLabel", { serial: c.serial })}
           onClick={() => add.run(() => addCube(c.serial))}>
           {t("cubes.add")}
         </button>
-      )}
-      {!proxy && c.other_network && <OtherNetwork c={c} address={c.address} />}
-    </li>
+      </span>
+    );
+  }
+  return (
+    <span class="found-adds">
+      <button type="button" {...busyProps("add-cube needs-cubes", add.busy)} aria-label={t("cubes.addNewLabel", { serial: c.serial })}
+        onClick={() => add.run(() => addCube(c.serial))}>
+        {t("cubes.addNew")}
+      </button>
+      {removed.map((r) => {
+        const at = timeOf(r.removed_at);
+        const date = at ? fmtInstant(at) : r.removed_at;
+        return (
+          <button key={r.uuid} type="button" {...busyProps("restore-cube needs-cubes", add.busy)} data-uuid={r.uuid}
+            title={r.name || undefined}
+            aria-label={t(r.name ? "cubes.restoreNamedLabel" : "cubes.restoreLabel", { serial: c.serial, name: r.name, date })}
+            onClick={() => add.run(() => addCube(c.serial, r.uuid))}>
+            {t("cubes.restore", { date })}
+          </button>
+        );
+      })}
+    </span>
   );
 }
 

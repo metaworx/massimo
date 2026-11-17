@@ -1539,6 +1539,11 @@ Its row stays in the server's store with its first and latest sighting
 (the latest is written once per server run, or when an answer changes the row),
 so that a restart does not announce it again;
 after a restart it is listed once a run has heard it.
+A Cube that was removed (`DELETE`, below) gets no such row:
+it is found in memory only, and after a restart once a run has heard it.
+Its entry lists the removed rows of its serial, newest first,
+as `removed`, each `{"uuid", "name", "removed_at"}`;
+`POST /api/v1/cubes` adds it as new, or with `restore` one of them.
 
 `link` says how the server stands with a configured Cube,
 beyond `connected`,
@@ -1647,6 +1652,14 @@ Any field of `PUT` can come with it.
 Without an address the Cube follows discovery,
 starting at the address discovery saw last, else after the next search.
 The answer is `201` with the Cube object; a Cube served already is `409`.
+A Cube that was removed is added as new,
+a row of its own without the removed rows' history,
+unless `"restore": "<uuid>"` names one of the removed rows its found entry lists:
+that row is served again with its settings, log, backups, rooms, commands and audit,
+the body's other fields changing its settings (D11-A).
+A `restore` that names no removed row of the serial is `404`,
+one for a serial with a row that is not removed `409`,
+and in a `PUT` it is `400`.
 
 `PUT /api/v1/cubes/{sn}` with any of
 
@@ -1676,9 +1689,10 @@ The answer is the Cube object.
 
 `DELETE /api/v1/cubes/{sn}` stops serving the Cube:
 its connection and its proxy stop,
-and its row stays in the store with `configured` off, with its history.
-Discovery lists it as found while it answers, `POST` adds it back,
-and a line in the settings file does not bring it back by itself.
+and its row is removed, kept in the store with its history.
+Discovery lists the Cube as found while it answers, with that row in `removed`;
+`POST` adds it again, as new or, with `restore`, as the removed row;
+a line in the settings file does not bring it back by itself.
 
 A Cube served by serial for this run only (`-sn` without a row)
 is not in the store and answers `409` to `PUT` and `DELETE`; `serve -addr`

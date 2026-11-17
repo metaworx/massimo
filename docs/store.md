@@ -619,8 +619,10 @@ Notes on the tables:
   so "Add" in the UI is an update of the row and `GET /api/v1/cubes` is one query;
   the discovery columns are what `foundCube` carries today.
   A Cube row is never deleted by the server;
-  "Remove" sets `configured = 0` and keeps the events,
-  the audit and the backups of the Cube.
+  "Remove" sets `configured = 0` and `deleted_at` (`RemoveCube`) and keeps the
+  events, the audit and the backups of the Cube with the row.
+  Discovery makes no row for a serial with removed rows (D20-B):
+  it is found in memory only until it is added, as new or restored.
 - `log.data` (`events.data` before migration 0014) is the event JSON as the
   stream and `GET …/log` send it,
   so the UI's log view keeps its format,

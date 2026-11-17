@@ -33,7 +33,11 @@ var serialPattern = regexp.MustCompile(`^[A-Z0-9]{1,16}$`)
 // cubeRequest is the body of PUT /api/v1/cubes/{sn} and POST
 // /api/v1/cubes; absent fields stay as they are.
 type cubeRequest struct {
-	Serial          string    `json:"serial,omitempty"` // POST only
+	Serial string `json:"serial,omitempty"` // POST only
+	// Restore is, in POST only, the uuid of a removed row of the serial
+	// (a found Cube's removed) to revive, with its history; without it
+	// the Cube gets a row of its own (D11-A).
+	Restore         string    `json:"restore,omitempty"`
 	Name            *string   `json:"name"`
 	Address         *string   `json:"address"`
 	FollowDiscovery *bool     `json:"follow_discovery"`
@@ -147,6 +151,10 @@ func storeFail(err error) error {
 // postCube handles POST /api/v1/cubes: serve a Cube discovery found, or
 // one given by serial, from now on. The body is {"serial": …} with any
 // of the fields of PUT; without an address the Cube follows discovery.
+// It is added as new: the serial's row discovery made, else a row of its
+// own; or, with "restore": <uuid>, the removed row of the serial that
+// uuid names is revived, its settings and history with it, the body's
+// fields over its settings (D11-A, D20-B).
 func (s *Server) postCube(w http.ResponseWriter, r *http.Request) error {
 	s.cubeMu.Lock() // one add, change or remove at a time: check, write and start together
 	defer s.cubeMu.Unlock()
@@ -177,10 +185,24 @@ func (s *Server) postCube(w http.ResponseWriter, r *http.Request) error {
 		c.Configured = true
 		return nil
 	}
-	if known {
+	switch {
+	case req.Restore != "":
+		if known {
+			return fail(http.StatusConflict, "cube %s has a row that is not removed: add it without restore", serial)
+		}
+		row, err = s.restoreRow(r, st, serial, req.Restore)
+		if err == nil {
+			if err = change(&row); err == nil {
+				row, err = st.AddCube(r.Context(), row)
+			}
+		}
+		if err == nil {
+			auditChange(r, "restored", nil, req.Restore)
+		}
+	case known:
 		row, err = st.UpdateCube(r.Context(), serial, change, principalOf(r).userID())
-	} else {
-		row = store.Cube{Serial: serial}
+	default:
+		row = s.foundRow(serial)
 		if err = change(&row); err == nil {
 			row, err = st.AddCube(r.Context(), row)
 		}
@@ -193,9 +215,52 @@ func (s *Server) postCube(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return fail(http.StatusConflict, "%v", err)
 	}
-	s.log.Info("cube added", "serial", serial, "address", row.Address, "follow_discovery", row.FollowDiscovery, "remote", s.clientIP(r))
+	s.log.Info("cube added", "serial", serial, "address", row.Address, "follow_discovery", row.FollowDiscovery, "restored", req.Restore, "remote", s.clientIP(r))
 	writeJSON(w, http.StatusCreated, s.summary(rt))
 	return nil
+}
+
+// restoreRow is the removed row of serial that uuid names, to restore,
+// with what discovery knows of the Cube now; a uuid that names none is
+// 404.
+func (s *Server) restoreRow(r *http.Request, st *store.Store, serial, uuid string) (store.Cube, error) {
+	removed, err := st.RemovedCubes(r.Context(), serial)
+	if err != nil {
+		return store.Cube{}, err
+	}
+	for _, rc := range removed {
+		if rc.UUID == uuid {
+			c := rc.Cube
+			s.withFound(&c)
+			return c, nil
+		}
+	}
+	return store.Cube{}, fail(http.StatusNotFound, "restore %q: no removed row of cube %s", uuid, serial)
+}
+
+// foundRow is a new row of serial with what discovery knows of the
+// Cube: a serial with removed rows has no row of its own until it is
+// added (store.NoteDiscovered).
+func (s *Server) foundRow(serial string) store.Cube {
+	c := store.Cube{Serial: serial}
+	s.withFound(&c)
+	return c
+}
+
+// withFound writes what discovery knows of a Cube into its row's
+// discovery columns, where it has heard it.
+func (s *Server) withFound(c *store.Cube) {
+	f, ok := s.foundInfo(c.Serial)
+	if !ok {
+		return
+	}
+	c.DiscoveredAddress, c.RFAddress, c.Firmware, c.LastSeen = f.Address, f.RFAddress, f.Firmware, f.LastSeen
+	if f.MAC != "" {
+		c.MAC = f.MAC
+	}
+	if c.FirstSeen.IsZero() {
+		c.FirstSeen = f.FoundAt
+	}
 }
 
 // storedCube returns the runtime of the path's Cube and its row, or the
@@ -237,6 +302,9 @@ func (s *Server) putCube(w http.ResponseWriter, r *http.Request) error {
 	}
 	if req.Serial != "" {
 		return fail(http.StatusBadRequest, "the serial is the path's")
+	}
+	if req.Restore != "" {
+		return fail(http.StatusBadRequest, "restore: POST /api/v1/cubes only")
 	}
 	before, _, _ := st.Cube(r.Context(), rt.cubeSerial())
 	row, err := st.UpdateCube(r.Context(), rt.cubeSerial(), req.apply, principalOf(r).userID())
@@ -317,8 +385,9 @@ func (s *Server) applyCube(rt *runtime, row store.Cube) error {
 }
 
 // deleteCube handles DELETE /api/v1/cubes/{sn}: the server stops serving
-// the Cube; its row stays with configured = 0 (and its history with it),
-// and it is listed as found once discovery sees it.
+// the Cube and its row is removed, kept with its history (D20-B); once
+// discovery sees the Cube it is listed as found, with the removed row to
+// restore.
 func (s *Server) deleteCube(w http.ResponseWriter, r *http.Request) error {
 	s.cubeMu.Lock() // one add, change or remove at a time: check, write and start together
 	defer s.cubeMu.Unlock()
@@ -326,14 +395,11 @@ func (s *Server) deleteCube(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	row, err := st.UpdateCube(r.Context(), rt.cubeSerial(), func(c *store.Cube) error {
-		c.Configured, c.Source = false, store.SourceUI
-		return nil
-	}, principalOf(r).userID())
+	row, err := st.RemoveCube(r.Context(), rt.cubeSerial(), principalOf(r).userID())
 	if err != nil {
 		return storeFail(err)
 	}
-	s.noteRow(row)
+	s.noteRow(row.Cube)
 	s.removeCube(rt)
 	s.log.Info("cube removed", "serial", rt.cubeSerial(), "remote", s.clientIP(r))
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "serial": rt.cubeSerial()})
