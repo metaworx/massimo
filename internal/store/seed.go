@@ -10,7 +10,9 @@ package store
 // store knows is served from its row, and a file line that differs is
 // reported, the store winning. A Cube discovery found earlier counts as
 // unknown: its row takes the file's values and becomes configured. A
-// Cube removed through the API stays removed.
+// Cube removed through the API stays removed: its live row unconfigured
+// (as a store of an earlier release has it), or its serial with removed rows
+// and no live one (RemoveCube, D20-B).
 
 import (
 	"context"
@@ -74,6 +76,16 @@ func (s *Store) Seed(ctx context.Context, file string, cubes []FileCube) (SeedRe
 		row, ok, err := s.Cube(ctx, serial)
 		if err != nil {
 			return res, err
+		}
+		if !ok {
+			removed, err := s.hasRemoved(ctx, serial)
+			if err != nil {
+				return res, err
+			}
+			if removed {
+				s.log.Info("cube removed through the API, not added from the settings file", "serial", serial, "file", file)
+				continue
+			}
 		}
 		if !ok || !row.Configured && row.Source == SourceDiscovery {
 			if ok {

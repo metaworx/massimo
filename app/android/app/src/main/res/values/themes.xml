@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- AppCompat, since androidx.biometric's dialogs before Android 9
+         want it; DayNight, so that the WebView's prefers-color-scheme
+         follows the phone. -->
+    <style name="Theme.Massimo" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:windowBackground">@color/background</item>
+    </style>
+</resources>

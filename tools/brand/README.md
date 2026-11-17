@@ -89,6 +89,7 @@ letters' baseline, and its sides the M's left and the last letter's right.
 | `tick` | `anim/`: 60 frames of a second, 6° each, a turn a minute, as GIF |
 | `frames` | `frames/`: every frame drawn for the animations, as SVG |
 | `ui` | the web UI's files, flat, by fixed names; `make ui-brand` writes them (below) |
+| `android` | the Android app's adaptive icon, by fixed names; `make ui-brand` writes it (below) |
 
 Every turn is a seamless loop, without a pause. A GIF knows transparency only
 on or off: its frames are drawn at four times their size, scaled down, and
@@ -126,3 +127,20 @@ word under the drawing shows until the sprite has come
 (`docs/ui.md`, "Header").
 The minute hand with the hub's square is a part of its own, for a turn the
 page might draw one day.
+
+## The Android app's icon
+
+`make ui-brand` also builds the `android` scope of the same flavour
+into `app/android/app/src/main/res-brand/`,
+a resource folder of the app's (`app/README.md`):
+the folder is the tool's, as `ui/brand/` is,
+and its marker is committed with the files.
+An adaptive icon is three layers in a 108 dp box,
+of which a launcher shows the middle 72 dp and keeps a circle of 66 whatever its mask:
+the mark sits in the 72 as the maskable square has it in its 512.
+
+| File | What |
+|------|------|
+| `drawable/ic_launcher_foreground.xml` | the mark as the maskable square draws it, the M in white over its gray, the hands orange, as a vector drawable |
+| `drawable/ic_launcher_monochrome.xml` | the M alone in one colour, the hands carved, which Android tints for a themed icon: a hand drawn on top would vanish there |
+| `values/ic_launcher_background.xml` | the tile's blue, `ic_launcher_background` |

@@ -4,7 +4,7 @@
 settings file's differing name is offered and taken back; hiding the
 devices of a room makes its tile go, showing them again brings it back;
 a Cube found on the LAN is added and removed again, and is then listed
-as found. Each test puts the server's store back as it was, since every
+as found, with its removed row to restore. Each test puts the server's store back as it was, since every
 case uses the same server; nothing is sent to the fake Cube."""
 import json
 
@@ -72,8 +72,11 @@ def test_hidden_devices(page, case):
 def test_found_cube_added_and_removed(page):
     """The Cube the fake Cube announces, its DHCP flag shown, is added and
     served, and Remove,
-    asking in the panel, lists it as found again. The server keeps what a
-    search found; where nothing was searched yet, this test searches."""
+    asking in the panel, lists it as found again, with a Restore for its
+    removed row. It is restored where an earlier case removed it, else
+    added as new, so that the server's store keeps one removed row of it.
+    The server keeps what a search found; where nothing was searched yet,
+    this test searches."""
     if not page.evaluate("state.found.some((c) => c.serial === 'KEQ0000000')"):
         choose_cube(page, "__discover")
         wait_until(page, "!document.querySelector(\"#cube-menu button[data-value='__discover']\").disabled", 10)
@@ -82,8 +85,9 @@ def test_found_cube_added_and_removed(page):
     found = page.locator(".cube-found-row[data-serial='KEQ0000000']")
     assert found.count() == 1, "the found Cube in System settings → Cubes"
     assert " · DHCP · " in found.locator(".found-facts").inner_text(), "the found Cube's DHCP flag in System settings → Cubes"
-    found.locator("button").click()
-    assert wait_until(page, "state.cubes.some((c) => c.serial === 'KEQ0000000')", 5), "Add serves the found Cube"
+    restore = found.locator(".restore-cube")
+    (restore.first if restore.count() else found.locator(".add-cube")).click()
+    assert wait_until(page, "state.cubes.some((c) => c.serial === 'KEQ0000000')", 5), "Add or Restore serves the found Cube"
     assert page.evaluate("state.serial") == "KEQ0000100", "the selected Cube stays"
     other = page.locator(".cube-panel[data-serial='KEQ0000000']")
     other.locator(":scope > summary").click()
@@ -96,6 +100,9 @@ def test_found_cube_added_and_removed(page):
     other.locator(".confirm-box .confirm-yes").click()
     assert wait_until(page, "!state.cubes.some((c) => c.serial === 'KEQ0000000') && state.found.some((c) => c.serial === 'KEQ0000000')", 5), \
         "Remove lists it as found again"
+    assert wait_until(page, "state.found.some((c) => c.serial === 'KEQ0000000' && (c.removed || []).length === 1)", 5), "with its removed row"
+    open_found(page)
+    assert found.locator(".restore-cube").count() == 1 and found.locator(".add-cube").is_visible(), "Restore beside Add as new"
     show_view(page, "tiles")
 
 

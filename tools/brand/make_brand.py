@@ -365,6 +365,82 @@ def square_svg(pose: Pose, scale: float = SQUARE_SCALE) -> str:
     )
 
 
+# The Android app's adaptive icon (the android scope): its layers as vector
+# drawables in the 108 dp box, of which a launcher shows the middle 72 and
+# keeps a circle of 66 whatever its mask; the mark sits in those 72 as the
+# web UI's maskable square has it in its 512, so well inside that circle.
+ANDROID_BOX = 108
+ANDROID_SHOWN = 72
+
+
+def _exact(v: float) -> str:
+    return f"{v:.6f}".rstrip("0").rstrip(".")
+
+
+def android_vector(paths: list[tuple[str, str, bool]], what: str) -> str:
+    """A vector drawable of filled paths drawn in the 512 box - each its
+    path data, its colour and whether it fills even-odd - placed in the
+    adaptive icon's box as square_svg places the mark."""
+    k = ANDROID_SHOWN / 512
+    scale = k * SQUARE_SCALE
+    move = (ANDROID_BOX - ANDROID_SHOWN) / 2 + k * 256 * (1 - SQUARE_SCALE)
+    body = ""
+    for d, colour, evenodd in paths:
+        body += f'        <path\n            android:fillColor="{colour}"\n'
+        if evenodd:
+            body += '            android:fillType="evenOdd"\n'
+        body += f'            android:pathData="{d}" />\n'
+    return (
+        '<?xml version="1.0" encoding="utf-8"?>\n'
+        f"<!-- {what}. Written by tools/brand/make_brand.py, make ui-brand. -->\n"
+        '<vector xmlns:android="http://schemas.android.com/apk/res/android"\n'
+        '    xmlns:tools="http://schemas.android.com/tools"\n'
+        f'    android:width="{ANDROID_BOX}dp"\n'
+        f'    android:height="{ANDROID_BOX}dp"\n'
+        f'    android:viewportWidth="{ANDROID_BOX}"\n'
+        f'    android:viewportHeight="{ANDROID_BOX}"\n'
+        '    tools:ignore="VectorPath">\n'
+        "    <group\n"
+        f'        android:scaleX="{_exact(scale)}"\n'
+        f'        android:scaleY="{_exact(scale)}"\n'
+        f'        android:translateX="{_exact(move)}"\n'
+        f'        android:translateY="{_exact(move)}">\n'
+        f"{body}"
+        "    </group>\n"
+        "</vector>\n"
+    )
+
+
+def android_foreground(pose: Pose) -> str:
+    """The icon's foreground: the mark as the maskable square draws it, the
+    M in white over its gray, the hands in the finger's colour; the
+    square's blue is the background."""
+    white = replace(pose, colour="#FFFFFF")
+    parts = mark_parts(white, SHIFT)
+    fills = {"back": white.backing, "m": white.colour, "hour": white.finger_colour, "minute": white.finger_colour}
+    paths = [(parts[n], fills[n], n == "m") for n, _ in UI_PARTS if n in parts]
+    return android_vector(paths, "The adaptive icon's foreground: Massimo's mark")
+
+
+def android_monochrome(pose: Pose) -> str:
+    """The icon's one-colour layer, which Android tints for a themed icon:
+    the M alone, the hands carved as the first flavour carved them, since a
+    hand in another colour on top would vanish in one colour."""
+    carved = replace(pose, finger="hand", hour="round", backing="")
+    return android_vector([(_d(outline(carved), 0, SHIFT), "#FFFFFF", True)], "The adaptive icon's monochrome layer")
+
+
+def android_background(pose: Pose) -> str:
+    """The icon's background: the tile's blue."""
+    return (
+        '<?xml version="1.0" encoding="utf-8"?>\n'
+        "<!-- The adaptive icon's background. Written by tools/brand/make_brand.py, make ui-brand. -->\n"
+        "<resources>\n"
+        f'    <color name="ic_launcher_background">{pose.colour}</color>\n'
+        "</resources>\n"
+    )
+
+
 # The web UI's sprite (the ui scope): the parts of the logo and of the small
 # mark as symbols without a fill, each drawn by a <use> whose class gives it
 # its colour (brand.css); the cover first, in the background of the place,
@@ -778,7 +854,7 @@ def cycle(deg: float) -> Pose:
     return Pose(left_top=left, right_top=right, minute_deg=deg % 360)
 
 
-VERSION = "1.3.0"
+VERSION = "1.4.0"
 
 
 @dataclass(frozen=True)
@@ -827,6 +903,8 @@ SCOPES = {
     "favicon": "favicon.ico, 16 to 256 px",
     "ui": "the web UI's files, flat and by fixed names: brand.svg (a sprite), brand.css, favicon.svg, "
     "favicon.ico, tile-192/512.png, maskable-192/512.png, apple-touch-180.png (make ui-brand)",
+    "android": "the Android app's adaptive icon, by fixed names: drawable/ic_launcher_foreground.xml and "
+    "drawable/ic_launcher_monochrome.xml as vector drawables, values/ic_launcher_background.xml (make ui-brand)",
     "homeassistant": "homeassistant-brand/: icon.png, icon@2x.png, logo.png, logo@2x.png, and dark_ ones, "
     "trimmed to the mark",
     "turn-fast": "the turn at 40, 80 and 160 ms a frame, 80 frames, as GIF and WebP",
@@ -975,6 +1053,18 @@ def plan(flavour: str, base: str, scopes: set[str], themes: tuple[str, ...], i_s
             png(square, 180, 180).save(out / "apple-touch-180.png")
 
         jobs.append(Job("the web UI's files", names, run))
+    if "android" in scopes:
+        names = ["drawable/ic_launcher_foreground.xml", "drawable/ic_launcher_monochrome.xml"]
+        names += ["values/ic_launcher_background.xml"]
+
+        def run(out: Path) -> None:
+            for sub in ("drawable", "values"):
+                (out / sub).mkdir(exist_ok=True)
+            (out / "drawable/ic_launcher_foreground.xml").write_text(android_foreground(v.pose))
+            (out / "drawable/ic_launcher_monochrome.xml").write_text(android_monochrome(v.pose))
+            (out / "values/ic_launcher_background.xml").write_text(android_background(v.pose))
+
+        jobs.append(Job("the Android app's icon", names, run))
     if "homeassistant" in scopes:
         prefixes = {"light": "", "dark": "dark_"}
         names = [

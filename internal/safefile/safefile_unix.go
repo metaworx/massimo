@@ -126,6 +126,10 @@ func xattrValue(path, name string) ([]byte, error) {
 // another process holds path.
 func renameOver(tmp, path string, _ time.Duration) error { return os.Rename(tmp, path) }
 
+// removeHeld removes path; only Windows refuses that while another
+// process holds it.
+func removeHeld(path string, _ time.Duration) error { return os.Remove(path) }
+
 // syncDir syncs the directory, so that the rename survives a power cut;
 // a file system that cannot is left as it is.
 func syncDir(dir string) {

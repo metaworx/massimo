@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Machine-translated from English; not yet reviewed by a native speaker. -->
+<resources>
+    <string name="unlock_title">Déverrouiller %1$s</string>
+    <string name="webview_outdated">Massimo a besoin d\'une version plus récente d\'Android System WebView. Mettez-la à jour dans votre magasin d\'applications, puis rouvrez Massimo.</string>
+    <string name="cert_changed_title">Certificat modifié</string>
+    <string name="cert_changed_text">Le certificat de %1$s n\'est pas celui que vous avez approuvé, Massimo ne l\'a donc pas ouvert. Comparez la nouvelle empreinte dans la liste des serveurs avant de l\'approuver.</string>
+    <string name="download_unsupported">L\'application ne peut pas encore enregistrer de fichiers. Ouvrez l\'interface web dans un navigateur pour télécharger ceci.</string>
+    <string name="err_not_allowed">Cette page ne peut pas demander cela à l\'application.</string>
+    <string name="err_bad_call">La page a demandé à l\'application quelque chose qu\'elle ne connaît pas.</string>
+    <string name="err_no_server">Ce serveur n\'existe pas dans l\'application.</string>
+    <string name="err_no_address">Un serveur a besoin d\'une adresse sur le réseau local ou d\'une adresse depuis l\'extérieur.</string>
+    <string name="err_bad_address">Ce n\'est pas l\'adresse d\'un serveur : %1$s</string>
+    <string name="err_open_url">Cette adresse n\'est pas l\'une de celles du serveur.</string>
+    <string name="err_bad_fp">Ce n\'est pas une empreinte SHA-256.</string>
+    <string name="err_screen_lock">Configurez d\'abord un verrouillage de l\'écran sur le téléphone : l\'empreinte ou le code en a besoin.</string>
+    <string name="err_not_confirmed">Non confirmé : l\'empreinte ou le code reste demandé.</string>
+    <string name="err_storage">Le téléphone n\'a pas pu conserver la connexion : %1$s</string>
+    <string name="err_internal">Une erreur s\'est produite dans l\'application : %1$s</string>
+    <string name="probe_unreachable">Injoignable : %1$s</string>
+    <string name="probe_timeout">Aucune réponse en quatre secondes.</string>
+    <string name="probe_not_massimo">Ce n\'est pas un serveur Massimo.</string>
+    <string name="probe_status">Le serveur a répondu avec le statut %1$d.</string>
+</resources>

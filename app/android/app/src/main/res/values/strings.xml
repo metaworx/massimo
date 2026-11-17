@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The adapter's own texts; the pages' are the web UI's (ui/i18n). A text
+     marked err_ or probe_ is the message of a call the page shows as it is
+     (docs/app.md). -->
+<resources>
+    <string name="app_name" translatable="false">Massimo</string>
+    <string name="unlock_title">Unlock %1$s</string>
+    <string name="webview_outdated">Massimo needs a newer Android System WebView. Update it in your app store, then open Massimo again.</string>
+    <string name="cert_changed_title">Certificate changed</string>
+    <string name="cert_changed_text">The certificate of %1$s is not the one you trusted, so Massimo did not open it. Compare the new fingerprint in the list of servers before you trust it.</string>
+    <string name="download_unsupported">The app cannot save files yet. Open the web UI in a browser to download this.</string>
+    <string name="err_not_allowed">This page may not ask the app for that.</string>
+    <string name="err_bad_call">The page asked the app for something it does not know.</string>
+    <string name="err_no_server">There is no such server in the app.</string>
+    <string name="err_no_address">A server needs an address on the LAN or one from elsewhere.</string>
+    <string name="err_bad_address">Not the address of a server: %1$s</string>
+    <string name="err_open_url">That address is not one of the server\'s.</string>
+    <string name="err_bad_fp">That is not a SHA-256 fingerprint.</string>
+    <string name="err_screen_lock">Set a screen lock on the phone first: the fingerprint or PIN needs one.</string>
+    <string name="err_not_confirmed">Not confirmed: the fingerprint or PIN is still asked for.</string>
+    <string name="err_storage">The phone could not keep the sign-in: %1$s</string>
+    <string name="err_internal">Something went wrong in the app: %1$s</string>
+    <string name="probe_unreachable">Not reachable: %1$s</string>
+    <string name="probe_timeout">No answer within four seconds.</string>
+    <string name="probe_not_massimo">This is not a Massimo server.</string>
+    <string name="probe_status">The server answered with status %1$d.</string>
+</resources>

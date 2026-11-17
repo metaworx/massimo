@@ -5,6 +5,7 @@ discovery on a loopback port as a Cube that is not configured,
 KEQ0000000; the server's own discovery socket is on a loopback port of
 its own (serve -discover-listen, run.sh), so the search needs no UDP
 23272."""
+import json
 import time
 
 from helpers import FOUND2, SEARCHING, choose_cube, cube_item, found_text, open_found, scroll_width, show_view, wait_until
@@ -16,6 +17,8 @@ SERVES = {"en": "Massimo proxy, serves {serial}", "de": "Massimo-Proxy, bedient 
 SERVED_BY = {"en": "served by Massimo on {host}", "de": "von Massimo auf {host} bedient"}
 OTHER_NETWORK = {"en": "192.168.0.222 lies outside the networks of this machine",
                  "de": "192.168.0.222 liegt außerhalb der Netze dieses Rechners"}
+ADD_NEW = {"en": "Add as new", "de": "Neu hinzufügen"}
+RESTORE = {"en": "Restore ", "de": "Wiederherstellen "}
 NETCONFIG = "massimo netconfig -sn LEQ0000507 -broadcast -static <ip> -gateway <gateway> -netmask <netmask>"
 
 # The pill's found group: the last entry of its list.
@@ -189,6 +192,46 @@ def test_found_proxy(page, case):
         "a url that is not http(s) is the name alone"
     assert "LEQ0000601" not in " ".join(page.locator("#cubes-list .env-lines").all_text_contents()), "no lines for a proxy"
     assert scroll_width(page) <= case.width, "no horizontal scroll with the proxies"
+    show_view(page, "tiles")
+
+
+def test_found_cube_with_removed_rows(page, case, watch):
+    """A found Cube whose serial has removed rows offers Add as new and a
+    Restore with the date per removed row, newest first, the name in its
+    label and its tooltip; Restore sends the row's uuid with the serial.
+    The POST is answered here, refused, so the store stays as it was."""
+    removed = [{"uuid": "00000000-0000-4000-8000-000000000002", "name": "Upstairs", "removed_at": "2026-11-16T09:00:00Z"},
+               {"uuid": "00000000-0000-4000-8000-000000000001", "name": "", "removed_at": "2026-11-01T09:00:00Z"}]
+    found_event(page, dict(FOUND2, serial="LEQ0000508", address="192.168.1.79", removed=removed))
+    show_view(page, "system")
+    open_found(page)
+    row = page.locator(".cube-found-row[data-serial='LEQ0000508']")
+    assert row.locator(".add-cube").inner_text() == ADD_NEW[case.lang], "Add as new beside removed rows"
+    restores = row.locator(".restore-cube")
+    assert restores.count() == 2, "a Restore per removed row"
+    first = restores.nth(0)
+    assert first.get_attribute("data-uuid") == removed[0]["uuid"], "newest first"
+    assert first.inner_text().startswith(RESTORE[case.lang]) and "2026" in first.inner_text(), "Restore with the date"
+    assert "Upstairs" in first.get_attribute("aria-label") and first.get_attribute("title") == "Upstairs", "the name in its label and tooltip"
+    assert "Upstairs" not in (restores.nth(1).get_attribute("aria-label") or ""), "a row without a name"
+    sent = []
+
+    def refuse(route):
+        if route.request.method != "POST":
+            route.fallback()
+            return
+        sent.append(json.loads(route.request.post_data))
+        route.fulfill(status=409, content_type="application/json", body='{"error":"test"}')
+    watch.expected.append(("/api/v1/cubes", 409))
+    page.route("**/api/v1/cubes", refuse)
+    try:
+        first.click()
+        assert wait_until(page, "!document.querySelector(\".cube-found-row[data-serial='LEQ0000508'] .restore-cube\").disabled", 5), \
+            "the Restores come back after the answer"
+    finally:
+        page.unroute("**/api/v1/cubes", refuse)
+    assert sent == [{"serial": "LEQ0000508", "restore": removed[0]["uuid"]}], "Restore sends the row's uuid"
+    assert scroll_width(page) <= case.width, "no horizontal scroll with the Restores"
     show_view(page, "tiles")
 
 

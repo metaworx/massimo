@@ -115,9 +115,13 @@ type foundCube struct {
 	// address lies in none of this host's networks (hostnets.go
 	// otherNetwork): a Cube without a DHCP lease, on 192.168.0.222, or
 	// with a static address of another network. Never on a proxy.
-	OtherNetwork bool      `json:"other_network,omitempty"`
-	FoundAt      time.Time `json:"found_at"`
-	LastSeen     time.Time `json:"last_seen"`
+	OtherNetwork bool `json:"other_network,omitempty"`
+	// Removed are, on the copies of a Cube that is not configured, the
+	// removed rows of its serial in the store, newest first: what adding
+	// it can restore (D11-A); absent where there are none.
+	Removed  []removedCube `json:"removed,omitempty"`
+	FoundAt  time.Time     `json:"found_at"`
+	LastSeen time.Time     `json:"last_seen"`
 	// state is the entry's: kept on the map's entry, and in a copy only
 	// as it was when copied.
 	state foundState
@@ -129,6 +133,32 @@ type foundCube struct {
 	// (noteElsewhere). In memory only, as state.
 	elsewhere, elsewhereFound string
 	elsewhereSince            time.Time
+}
+
+// removedCube is a removed row of a found Cube's serial, as the found
+// entry lists it: POST /api/v1/cubes restores it by its uuid.
+type removedCube struct {
+	UUID      string    `json:"uuid"`
+	Name      string    `json:"name"`
+	RemovedAt time.Time `json:"removed_at"`
+}
+
+// removedOf lists the removed rows of a serial, newest first; none
+// without a store, or where it cannot be read.
+func (s *Server) removedOf(serial string) []removedCube {
+	if s.opts.Store == nil {
+		return nil
+	}
+	rows, err := s.opts.Store.RemovedCubes(context.Background(), serial)
+	if err != nil {
+		s.log.Warn("store: removed cubes not read", "serial", serial, "error", err)
+		return nil
+	}
+	var out []removedCube
+	for _, r := range rows {
+		out = append(out, removedCube{UUID: r.UUID, Name: r.Name, RemovedAt: r.RemovedAt})
+	}
+	return out
 }
 
 // discoveryRun is one run of discovery; callers that come while it
@@ -436,8 +466,9 @@ func (s *Server) browseServers(ctx context.Context, wait time.Duration) <-chan s
 // discover marks it; a proxy names the Cube with its radio address
 // (Serves); a proxy names the server at its address, and a Cube the
 // server one of its proxies runs on (Host); a Cube says whether its
-// address lies outside this host's networks (OtherNetwork). It runs
-// without foundMu held.
+// address lies outside this host's networks (OtherNetwork), and one that
+// is not configured lists the removed rows of its serial (Removed). It
+// runs without foundMu held.
 func (s *Server) describeFound(list []foundCube) {
 	if len(list) == 0 {
 		return
@@ -494,7 +525,7 @@ func (s *Server) describeFound(list []foundCube) {
 	for i := range list {
 		f := &list[i]
 		f.Kind = kindOf(*f)
-		f.Serves, f.Host = "", nil
+		f.Serves, f.Host, f.Removed = "", nil, nil
 		f.OtherNetwork = f.Kind != cubelan.KindProxy && otherNetwork(nets, f.Address)
 		if f.Kind == cubelan.KindProxy {
 			f.Serves = cubeAt[f.RFAddress]
@@ -502,6 +533,9 @@ func (s *Server) describeFound(list []foundCube) {
 			continue
 		}
 		f.Host = proxyHost[f.RFAddress]
+		if !f.Configured {
+			f.Removed = s.removedOf(f.Serial)
+		}
 	}
 }
 
@@ -764,6 +798,9 @@ func (s *Server) cubeFound(f foundCube) {
 		return
 	}
 	f.OtherNetwork = f.Kind != cubelan.KindProxy && otherNetwork(s.hostNetworks(), f.Address)
+	if f.Kind != cubelan.KindProxy {
+		f.Removed = s.removedOf(f.Serial)
+	}
 	s.logServer(event{Kind: "cube_found", Source: "cube", Serial: f.Serial, Cube: &f, Time: f.LastSeen})
 	s.pushNotify(notify.Event{Kind: "cube_found", Cube: f.Serial, Values: map[string]any{"address": f.Address}, Time: f.LastSeen})
 }

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Machine-translated from English; not yet reviewed by a native speaker. -->
+<resources>
+    <string name="unlock_title">%1$s ontgrendelen</string>
+    <string name="webview_outdated">Massimo heeft een nieuwere Android System WebView nodig. Werk die bij in uw app-winkel en open Massimo daarna opnieuw.</string>
+    <string name="cert_changed_title">Certificaat gewijzigd</string>
+    <string name="cert_changed_text">Het certificaat van %1$s is niet het certificaat dat u vertrouwde, dus heeft Massimo de server niet geopend. Vergelijk de nieuwe vingerafdruk in de lijst met servers voordat u die vertrouwt.</string>
+    <string name="download_unsupported">De app kan nog geen bestanden opslaan. Open de webinterface in een browser om dit te downloaden.</string>
+    <string name="err_not_allowed">Deze pagina mag de app dat niet vragen.</string>
+    <string name="err_bad_call">De pagina vroeg de app iets wat die niet kent.</string>
+    <string name="err_no_server">Deze server bestaat niet in de app.</string>
+    <string name="err_no_address">Een server heeft een adres op het LAN of een adres van buitenaf nodig.</string>
+    <string name="err_bad_address">Geen adres van een server: %1$s</string>
+    <string name="err_open_url">Dat adres is niet een van de adressen van de server.</string>
+    <string name="err_bad_fp">Dat is geen SHA-256-vingerafdruk.</string>
+    <string name="err_screen_lock">Stel eerst een schermvergrendeling in op de telefoon: de vingerafdruk of pincode heeft er een nodig.</string>
+    <string name="err_not_confirmed">Niet bevestigd: de vingerafdruk of pincode wordt nog steeds gevraagd.</string>
+    <string name="err_storage">De telefoon kon de aanmelding niet bewaren: %1$s</string>
+    <string name="err_internal">Er ging iets mis in de app: %1$s</string>
+    <string name="probe_unreachable">Niet bereikbaar: %1$s</string>
+    <string name="probe_timeout">Geen antwoord binnen vier seconden.</string>
+    <string name="probe_not_massimo">Dit is geen Massimo-server.</string>
+    <string name="probe_status">De server antwoordde met status %1$d.</string>
+</resources>

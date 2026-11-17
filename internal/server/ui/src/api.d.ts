@@ -1105,6 +1105,25 @@ export interface FoundCube {
    */
   proxies?: string[];
   /**
+   * A Cube that is not configured: the removed rows of its serial in the store,
+   * newest first, one of which POST /api/v1/cubes can restore; absent where
+   * there are none, and on a proxy
+   */
+  removed?: {
+    /**
+     * The row's, for POST /api/v1/cubes's restore
+     * @format uuid
+     */
+    uuid: string;
+    /** The name it had; empty where it had none */
+    name: string;
+    /**
+     * When it was removed
+     * @format date-time
+     */
+    removed_at: string;
+  }[];
+  /**
    * When the server first saw it
    * @format date-time
    */

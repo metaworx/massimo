@@ -74,3 +74,38 @@ func TestRenameRetriesAHeldFile(t *testing.T) {
 		t.Fatalf("content %q", got)
 	}
 }
+
+// A rename of a file another process holds - a virus scanner reading the
+// .exe an update just installed - waits until it lets go, and so does a
+// removal; os.Rename itself is refused meanwhile.
+func TestRenameAndRemoveWaitForAHeldFile(t *testing.T) {
+	dir := t.TempDir()
+	from, to := filepath.Join(dir, "massimo.exe"), filepath.Join(dir, "massimo.exe.prev")
+	if err := os.WriteFile(from, []byte("new"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	hold := func(p string) {
+		f, err := os.Open(p) // without FILE_SHARE_DELETE, as Go opens files
+		if err != nil {
+			t.Fatal(err)
+		}
+		time.AfterFunc(300*time.Millisecond, func() { f.Close() })
+	}
+	hold(from)
+	if err := os.Rename(from, to); err == nil {
+		t.Fatal("os.Rename renamed a held file: the test holds nothing")
+	}
+	if err := Rename(from, to, 0); err != nil {
+		t.Fatalf("Rename of a held file: %v", err)
+	}
+	if got := readString(t, to); got != "new" {
+		t.Fatalf("content %q", got)
+	}
+	hold(to)
+	if err := Remove(to, 0); err != nil {
+		t.Fatalf("Remove of a held file: %v", err)
+	}
+	if _, err := os.Stat(to); !os.IsNotExist(err) {
+		t.Fatalf("the file is still there: %v", err)
+	}
+}

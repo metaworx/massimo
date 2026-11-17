@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Machine-translated from English; not yet reviewed by a native speaker. -->
+<resources>
+    <string name="unlock_title">Odblokuj %1$s</string>
+    <string name="webview_outdated">Massimo potrzebuje nowszej wersji Android System WebView. Zaktualizuj ją w sklepie z aplikacjami, a potem ponownie otwórz Massimo.</string>
+    <string name="cert_changed_title">Certyfikat się zmienił</string>
+    <string name="cert_changed_text">Certyfikat serwera %1$s nie jest tym, któremu zaufałeś, więc Massimo go nie otworzyło. Porównaj nowy odcisk na liście serwerów, zanim mu zaufasz.</string>
+    <string name="download_unsupported">Aplikacja nie potrafi jeszcze zapisywać plików. Aby to pobrać, otwórz interfejs WWW w przeglądarce.</string>
+    <string name="err_not_allowed">Ta strona nie może prosić aplikacji o to.</string>
+    <string name="err_bad_call">Strona poprosiła aplikację o coś, czego ona nie zna.</string>
+    <string name="err_no_server">Tego serwera nie ma w aplikacji.</string>
+    <string name="err_no_address">Serwer potrzebuje adresu w sieci lokalnej albo adresu z zewnątrz.</string>
+    <string name="err_bad_address">To nie jest adres serwera: %1$s</string>
+    <string name="err_open_url">Ten adres nie należy do serwera.</string>
+    <string name="err_bad_fp">To nie jest odcisk SHA-256.</string>
+    <string name="err_screen_lock">Najpierw ustaw blokadę ekranu w telefonie: odcisk palca lub PIN jej wymagają.</string>
+    <string name="err_not_confirmed">Nie potwierdzono: odcisk palca lub PIN są nadal wymagane.</string>
+    <string name="err_storage">Telefon nie mógł zachować logowania: %1$s</string>
+    <string name="err_internal">Coś poszło nie tak w aplikacji: %1$s</string>
+    <string name="probe_unreachable">Nieosiągalny: %1$s</string>
+    <string name="probe_timeout">Brak odpowiedzi w ciągu czterech sekund.</string>
+    <string name="probe_not_massimo">To nie jest serwer Massimo.</string>
+    <string name="probe_status">Serwer odpowiedział statusem %1$d.</string>
+</resources>
