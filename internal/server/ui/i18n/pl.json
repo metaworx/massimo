@@ -1210,6 +1210,7 @@
   "vwt.address": "Adres radiowy",
   "vwt.addressHint": "Sześć cyfr szesnastkowych; puste dla numeru pomieszczenia. Tylko dla klientów proxy LAN, których numery urządzeń się pokrywają.",
   "vwt.saved": "Zapisano.",
+  "vwt.formName": "{room}, wirtualny termostat",
   "prog.resetAllTitle": "Powrót do wczytanego programu tygodniowego",
   "prog.copyTo": "{day}: kopiuj do …",
   "prog.hasProgramme": "{day}, ma ten program",

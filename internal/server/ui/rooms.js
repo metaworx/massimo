@@ -117,6 +117,15 @@ function renderRooms() {
   $("unlisted").classList.toggle("hidden", !state.unlisted.length);
 }
 
+// roomsLoaded takes a load of the rooms that went through, before
+// renderRooms draws them (loadRooms of app.js): the forms of a room or a
+// virtual wall thermostat it no longer gives are forgotten, and settings
+// asked to be opened before the rooms were there are opened
+// (MassimoParts.rooms.loaded).
+function roomsLoaded() {
+  MassimoParts.rooms.loaded();
+}
+
 // rerenderRoom draws a room's tile again after a change of the room or of
 // its configuration, and fills its configuration (config.js) again at
 // once (MassimoParts.rooms.room).

@@ -1171,6 +1171,7 @@
   "vwt.address": "Radio address",
   "vwt.addressHint": "Six hex digits; empty for the room number. Only for clients of the LAN proxy whose device numbers collide.",
   "vwt.saved": "Saved.",
+  "vwt.formName": "{room}, virtual thermostat",
   "prog.resetAllTitle": "Back to the week programme as loaded",
   "prog.copyTo": "Copy {day} to …",
   "prog.hasProgramme": "{day}, has this programme",

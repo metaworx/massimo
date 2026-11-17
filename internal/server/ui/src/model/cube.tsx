@@ -8,8 +8,8 @@
  * shows Cubes (the Cubes and the header): the Cube chosen in the header,
  * its address split into host and port, its network sign, its problems
  * as an entry of the shared problem list, with the label that names their
- * kinds, and the key its settings form is kept by (shared/forms.ts),
- * whose unsaved changes the entry lists. Like all of ui/src/model/
+ * kinds, and the keys its settings form and its rooms' forms are kept
+ * by (shared/forms.ts), whose unsaved changes the entry lists. Like all of ui/src/model/
  * (docs/ui.md, "How the page is built"), it knows the API's data and no
  * region, holds no state and no part with
  * hooks of its own, and may put shared parts together into a small piece
@@ -52,6 +52,17 @@ export function cubeFormKey(serial: string): string {
 }
 
 /**
+ * roomFormKey is the key a room's forms are kept under (useForm), by its
+ * Cube's serial and the room's id, each form of the room a key under it
+ * ("<key>:vwt"); without an id, the beginning of the keys of every room of
+ * the Cube, whose unsaved forms the Cube's entry lists and which are
+ * forgotten with the Cube.
+ */
+export function roomFormKey(serial: string, id?: number): string {
+  return "rooms:" + serial + (id === undefined ? "" : ":" + id);
+}
+
+/**
  * cubeSettingItems are a Cube's settings that need a look, as items: a
  * proxy listener that does not listen, a settings file that differs, a
  * fixed address the Cube is found elsewhere than (found_elsewhere); who
@@ -70,8 +81,9 @@ export function cubeSettingItems(c: Cube, who: string): Item[] {
  * cubeEntry is a Cube's problems as an entry of the problem list: the
  * Cube as the heading with its network sign (green where only its devices
  * fail), its link's badge where it is not connected, with own its
- * settings' warnings too (its panel), its settings form's unsaved
- * changes, the disk that opens the form, and its devices with a problem
+ * settings' warnings too (its panel), the unsaved changes of its
+ * settings form and of its rooms' forms, each the disk that opens the
+ * form, its text naming it, and its devices with a problem
  * under it, "Room › Device", with their badges; a window open briefly is
  * a state, not a problem.
  */
@@ -79,7 +91,7 @@ export function cubeEntry(c: Cube, own?: boolean): Entry {
   const st = linkSign(c);
   const items: Item[] = st === "ok" ? [] : [{ kind: "net", icon: "icon-net", sign: "net", tone: st === "bad" ? "bad" : "warn", text: linkWord(c) }];
   if (own) items.push(...cubeSettingItems(c, ""));
-  items.push(...unsavedItems(cubeFormKey(c.serial)));
+  items.push(...unsavedItems(cubeFormKey(c.serial)), ...unsavedItems(roomFormKey(c.serial)));
   const subs = (c.problems || []).map((d) =>
     deviceEntry(d, deviceProblems(d, true).filter((it) => it.tone !== "fill-open"), [d.room, deviceName(d)].filter(Boolean).join(" › ")));
   return { sign: { kind: "net", state: st }, title: c.name || c.serial, sub: c.name ? c.serial : "", items, subs };

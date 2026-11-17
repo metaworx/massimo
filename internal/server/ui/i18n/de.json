@@ -1171,6 +1171,7 @@
   "vwt.address": "Funkadresse",
   "vwt.addressHint": "Sechs Hex-Ziffern; leer für die Raumnummer. Nur für Clients des LAN-Proxys, deren Gerätenummern kollidieren.",
   "vwt.saved": "Gespeichert.",
+  "vwt.formName": "{room}, virtueller Thermostat",
   "prog.resetAllTitle": "Zurück zum geladenen Wochenprogramm",
   "prog.copyTo": "{day} kopieren nach …",
   "prog.hasProgramme": "{day}, hat dieses Programm",

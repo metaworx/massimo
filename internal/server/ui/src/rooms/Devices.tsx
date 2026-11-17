@@ -9,9 +9,11 @@
  * them, its badges in words, in expert mode its type, serial and radio
  * address; a thermostat's values, Lock and the device's Repair…, whose box
  * stays plain (repair.js) in an element the part leaves to it. The room's
- * virtual wall thermostat, in expert mode, has its two settings under it.
- * Built once per device and updated in place, so that a focused Lock and
- * an address typed stay when data comes in.
+ * virtual wall thermostat, in expert mode, has its two settings under it,
+ * a settings form kept by the room (shared/forms.ts), whose unsaved
+ * changes its row's pill and the tile's show. Built once per device and
+ * updated in place, so that a focused Lock and an address typed stay when
+ * data comes in.
  */
 
 import type { ComponentChildren } from "preact";
@@ -22,35 +24,49 @@ import { actionRunner, type Outcome } from "../shared/action";
 import { Age, Badge, ResultLine } from "../shared/badge";
 import { DeviceIds } from "../shared/device";
 import { FormFooter, Select, TextField, useDraft } from "../shared/field";
+import { hasChanges, useForm } from "../shared/forms";
 import { Icon } from "../shared/icon";
 import { Island } from "../shared/island";
 import { Problems } from "../shared/problems";
 import { busyProps, useBusy } from "../shared/question";
-import { deviceBadges, deviceItems, problemsLabel } from "./facts";
-import { load } from "./store";
+import { deviceBadges, deviceItems, problemsLabel, vwtItems } from "./facts";
+import { load, openSettings, vwtFormKey } from "./store";
 
 /**
  * useDetail is a device's detail (deviceDetail of app.js, which keeps it in
  * state.details), where want says that its row shows some of it (a
  * thermostat's offset, the virtual thermostat's settings): asked for again
  * at every drawing of the row, so that the row follows once a write
- * emptied state.details; undefined before it came or where it failed.
- * again draws the row again, which asks for it.
+ * emptied state.details; undefined before it came or where it failed,
+ * error then what failed ("" once it came). again asks for it again and
+ * resolves once it is there; where it cannot be had, the detail known
+ * takes the settings sent (sent), which the server took.
  */
-function useDetail(d: Device, want: boolean): { detail: DeviceDetail | undefined; again: () => void } {
+function useDetail(d: Device, want: boolean): {
+  detail: DeviceDetail | undefined;
+  error: string;
+  again: (sent: DeviceDetail["settings"]) => Promise<void>;
+} {
   const [detail, setDetail] = useState<DeviceDetail | undefined>(state.details[d.rf_address]);
-  const [, redraw] = useState(0);
+  const [error, setError] = useState("");
   useEffect(() => {
     if (!want) return;
     let gone = false;
     deviceDetail(d).then((x) => {
-      if (!gone) setDetail(x);
-    }).catch(() => {});
+      if (gone) return;
+      setDetail(x);
+      setError("");
+    }, (e: Error) => {
+      if (!gone) setError(e.message);
+    });
     return () => {
       gone = true;
     };
   });
-  return { detail, again: () => redraw((n) => n + 1) };
+  const again = (sent: DeviceDetail["settings"]) => deviceDetail(d).then(setDetail, () => {
+    setDetail((x) => (x ? { ...x, settings: { ...x.settings, ...sent } } : x));
+  });
+  return { detail, error, again };
 }
 
 /**
@@ -130,40 +146,64 @@ function Lock({ d, ui }: { d: Device; ui?: RoomUI }) {
   );
 }
 
+const rfNorm = (x: string) => x.trim().toLowerCase();
+
 /**
  * VirtualSettings are the two settings of the room's virtual wall
  * thermostat: how a room without a wall thermostat takes its temperature
  * from its radiator thermostats, and its radio address. Each is a draft
  * against the value stored (useDraft), which comes with the device's
- * detail; Save writes both, and saved asks for the detail again.
+ * detail, kept by the room (useForm, vwtFormKey), so that what is typed
+ * stays when the device list closes, the rooms load again or a device
+ * reports, until it is saved, reset or the room or its virtual
+ * thermostat is gone. A form that has its drafts draws them at once, from
+ * the stored values they hold, before the detail comes again; one that
+ * has none yet keeps its fields and Save off until it has come, or says
+ * in its result line that it could not be had. Save writes both, then
+ * asks for the detail again before the drafts take it; where that cannot
+ * be had, they take what was sent.
  */
-function VirtualSettings({ v, detail, saved }: { v: Device; detail?: DeviceDetail; saved: () => void }) {
+function VirtualSettings({ v, room, serial, detail, error, saved }: {
+  v: Device;
+  room: PageRoom;
+  serial: string;
+  detail?: DeviceDetail;
+  error: string;
+  saved: (sent: DeviceDetail["settings"]) => Promise<void>;
+}) {
+  const form = useForm({ key: vwtFormKey(serial, room.id), name: { key: "vwt.formName", args: { room: room.name } }, open: () => openSettings(serial, room.id) });
   const s = detail?.settings || {};
-  const method = useDraft<string>(s.temp_method || "median");
-  const addr = useDraft<string>(s.rf_address || "", (x) => x.trim().toLowerCase());
-  const saving = useBusy();
+  const methodAt = form.place<string>("temp_method");
+  const addrAt = form.place<string>("rf_address");
+  const kept = { method: methodAt.known(), addr: addrAt.known() };
+  // the stored values: the detail's, else those the drafts hold (a form drawn again); none before either
+  const ready = !!detail || (kept.method !== undefined && kept.addr !== undefined);
+  const method = useDraft<string>(detail ? s.temp_method || "median" : kept.method ?? "median", undefined, ready ? methodAt : undefined);
+  const addr = useDraft<string>(detail ? s.rf_address || "" : kept.addr ?? "", rfNorm, ready ? addrAt : undefined);
   const [result, setResult] = useState<Outcome | null>(null);
+  const changed = method.changed || addr.changed;
+  if (ready) form.track(changed, [method, addr]); // before, the form keeps what it said last
   const id = (f: string) => "vwt-" + v.rf_address + "-" + f;
-  const runner = actionRunner({
-    set: setResult,
-    reload: async () => {
-      state.details = {};
-      saved(); // its detail asked for again: the settings stored are the ones sent
-    },
-  });
+  const runner = actionRunner({ set: setResult });
   const submit = (ev: Event) => {
     ev.preventDefault();
-    saving.run(() => runner.run(() => api("PUT", devicePath(v) + "/config", { temp_method: method.value, rf_address: addr.value.trim().toLowerCase() }),
-      t("vwt.saved"), (error) => error));
+    if (!ready || !changed) return;
+    const sent = { temp_method: method.value as "median" | "mean", rf_address: rfNorm(addr.value) };
+    form.save(() => runner.run(async () => {
+      await api("PUT", devicePath(v) + "/config", sent);
+      state.details = {};
+      await saved(sent); // its detail asked for again, before the drafts take it
+    }, t("vwt.saved"), (e) => e));
   };
+  const failed: Outcome | null = !ready && error ? { text: t("msg.cannotLoad", { error }), ok: false } : null;
   return (
-    <form class="vwt-settings needs-configure" onSubmit={submit}>
-      <Select label={t("vwt.method")} id={id("method")} hint={t("vwt.methodHint")} name="temp_method" draft={method}
+    <form {...form.props} class="vwt-settings needs-configure" onSubmit={submit}>
+      <Select label={t("vwt.method")} id={id("method")} hint={t("vwt.methodHint")} name="temp_method" draft={method} disabled={!ready}
         options={["median", "mean"].map((m) => [m, t("vwt." + m)])} />
       <TextField label={t("vwt.address")} id={id("address")} hint={t("vwt.addressHint")} name="rf_address" wide={false} maxLength={6}
-        pattern="[0-9a-fA-F]{6}" placeholder={v.rf_address} draft={addr} />
-      <FormFooter submit={t("action.save")} busy={saving.busy} />
-      <ResultLine res={result} cls="tile-result" />
+        pattern="[0-9a-fA-F]{6}" placeholder={v.rf_address} draft={addr} disabled={!ready} />
+      <FormFooter submit={t("action.save")} look={form.look} reset={form.reset} off={!ready || !changed} />
+      <ResultLine res={result || failed} cls="tile-result" />
     </form>
   );
 }
@@ -186,9 +226,13 @@ export function DeviceRow({ d, ui, room, actions, children }: {
   const virtual = !!d.virtual;
   // An out-of-date device shows the values of its last report.
   const values = isThermostat(d) && !!(d.reported || (d.out_of_date && d.last_known));
-  const { detail, again } = useDetail(d, values || virtual);
+  const { detail, error, again } = useDetail(d, values || virtual);
+  const serial = state.roomsOf || "";
+  // the virtual thermostat's row is an expert's, but while its settings have changes not saved
+  const expert = virtual && !(room && hasChanges(vwtFormKey(serial, room.id)));
   const type = virtual ? t("vwt.type") : typeName(d.type);
-  const items = deviceItems(d);
+  // the virtual thermostat's row lists its settings while unsaved (vwtItems), as the tile's head does
+  const items = virtual && room ? [...deviceItems(d), ...vwtItems(room)] : deviceItems(d);
   const seen = Date.parse(d.last_seen || "");
   const seenLine = isNaN(seen) ? "" : t("age.lastSeen", { time: fmtShortTime(seen) });
   // the virtual thermostat's sources by their serial, the radio address of one not in the room
@@ -197,7 +241,7 @@ export function DeviceRow({ d, ui, room, actions, children }: {
   const cfg = detail?.thermostat || detail?.wall_thermostat;
   const scope = repairScope(state.serial || "", "device", d.rf_address);
   return (
-    <div class={virtual ? "device virtual expert-only" : "device"} data-rf={d.rf_address}>
+    <div class={virtual ? "device virtual" + (expert ? " expert-only" : "") : "device"} data-rf={d.rf_address}>
       <div class="device-head">
         <span class="device-type-icon" role="img" title={type} aria-label={type}>
           <Icon symbol={virtual ? "icon-room" : deviceIcon(d)} cls="ni" />
@@ -233,7 +277,7 @@ export function DeviceRow({ d, ui, room, actions, children }: {
         {actions}
       </div>
       {!virtual && <Island cls="part-slot" keys={[scope]} fill={(el) => el.replaceChildren(repairSlot(scope))} />}
-      {virtual && <VirtualSettings v={d} detail={detail} saved={again} />}
+      {virtual && room && <VirtualSettings v={d} room={room} serial={serial} detail={detail} error={error} saved={again} />}
       {children}
     </div>
   );
@@ -249,7 +293,7 @@ export function DeviceList({ room, ui }: { room: PageRoom; ui: RoomUI }) {
     <>
       {room.devices.length === 0 && <p class="muted">{t("room.noDevices")}</p>}
       {room.devices.map((d) => <DeviceRow key={d.rf_address} d={d} ui={ui} room={room} />)}
-      {room.vwt && <DeviceRow key={"vwt:" + room.vwt.rf_address} d={room.vwt} ui={ui} room={room} />}
+      {room.vwt && <DeviceRow key={"vwt:" + room.id} d={room.vwt} ui={ui} room={room} />}
     </>
   );
 }
