@@ -17,6 +17,8 @@ import "./cubes";
 import type { CubesPart } from "./cubes";
 import "./header";
 import type { HeaderPart } from "./header";
+import "./leaving";
+import type { LeavingPart } from "./leaving";
 import "./rooms";
 import type { RoomsPart } from "./rooms";
 import { forgetForms } from "./shared/forms";
@@ -36,6 +38,8 @@ export interface MassimoParts {
   cubes: CubesPart;
   /** The header: the Cube choice, the problems, the age, the server's sign, the certificate's line, the home notice (header/). */
   header: HeaderPart;
+  /** Leaving the page, and signing out, while a settings form has changes not saved: the dialog that lists them (leaving/). */
+  leaving: LeavingPart;
   /** The rooms: a tile per room with its device list (rooms/). */
   rooms: RoomsPart;
 }

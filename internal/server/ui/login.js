@@ -289,12 +289,38 @@ async function loadMeAndPreferences() {
   await loadPreferences();
 }
 
+// whoIs names who the page is signed in as, from /me: a user by name,
+// else the mode (the server's token, an open server); "" before the
+// server has said.
+function whoIs(me) {
+  if (!me) return "";
+  return me.user ? "user:" + me.user.name : "mode:" + me.mode;
+}
+
+// forgetOthers forgets every settings form's drafts (MassimoParts.signedOut)
+// where the sign-in of askLogin, after a 401, is not of was, who was
+// signed in: a session that expired keeps the drafts for its own user,
+// and the next user neither sees nor saves them. Where /me cannot be read
+// they are forgotten. It runs before the requests that waited for the
+// sign-in are sent again.
+async function forgetOthers(was) {
+  if (!was) return;
+  let me = null;
+  try {
+    me = await apiRequest("GET", "api/v1/me");
+  } catch (e) {
+    // not known: forgotten, to be safe
+  }
+  if (whoIs(me) !== was) MassimoParts.signedOut();
+}
+
 // askLogin opens the sign-in dialog and resolves true once a session or
 // a key is in, false when the dialog was dismissed. While it is open the
 // page is signed out: the body's class signed-out hides all of it but
 // the name, the version and the dialog.
 function askLogin() {
   if (loginPromise) return loginPromise;
+  const was = whoIs(state.me); // a 401 while signed in: the drafts stay for this user alone (forgetOthers)
   loginPromise = new Promise((resolve) => {
     const dlg = $("login-dialog");
     const form = $("login-form");
@@ -323,11 +349,12 @@ function askLogin() {
       loginPromise = null;
       resolve(ok);
     };
-    keyForm.onsubmit = (ev) => {
+    keyForm.onsubmit = async (ev) => {
       ev.preventDefault();
       const key = $("login-token").value.trim();
       if (!key) return;
       setToken(key);
+      await forgetOthers(was);
       done(true);
       if (!startWaits) afterLogin();
     };
@@ -350,6 +377,7 @@ function askLogin() {
         return;
       }
       setToken(session.token);
+      await forgetOthers(was);
       done(true);
       if (!startWaits) afterLogin();
     };
@@ -481,13 +509,17 @@ function afterLogin() {
 }
 
 // logout ends the session (an API key is only forgotten), clears what
-// the page loaded of the Cubes and asks who is there again. The settings that followed the user go with it: a
+// the page loaded of the Cubes and asks who is there again; where a
+// settings form has changes not saved, which it drops, it asks first.
+// The settings that followed the user go with it: a
 // change still waiting is sent under the user's token first, then the
 // browser forgets the user's values and schemes and keeps what is kept
 // for this device only, so that the next to sign in neither sees them
 // nor hands them to its own account, as loadPreferences would hand over
 // what a server lacks. Neither request asks for a sign-in.
 async function logout() {
+  // a settings form with changes not saved: the page's dialog lists them and asks first (ui/src/leaving/)
+  if (!(await MassimoParts.leaving.signOut($("logout-label").textContent))) return;
   const me = state.me;
   const synced = canSync();
   for (const key of takeScheduled()) {

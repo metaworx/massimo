@@ -17,7 +17,9 @@
  * Reset, or nothing left to send; saved for as long as a result line
  * shows a success (RESULT_FADE_MS). A region chooses the keys, such as
  * "<kind>:<id>", and forgets the forms of what is gone; the page forgets
- * them all at a sign-out.
+ * them all at a sign-out. Every form with changes, the merely changed
+ * among them, is what leaving the page would drop: the page asks for
+ * them, and an attempt to leave counts each changed form as left.
  */
 
 import { signal, type Signal } from "@preact/signals";
@@ -213,17 +215,39 @@ export function hasChanges(key: string): boolean {
  * its text naming the form, its click opening it.
  */
 export function unsavedItems(key: string): Item[] {
-  return pending.value.filter((u) => u.state !== "changed" && under(u.key, key)).map((u) => {
-    const name = t(u.name.key, u.name.args || {});
-    return {
-      kind: "unsaved",
-      icon: "icon-disk",
-      sign: "disk",
-      tone: u.state === "failed" ? "bad" : "warn",
-      text: t(u.state === "failed" ? "form.failedItem" : "form.unsavedItem", { form: name }),
-      action: u.open,
-    };
-  });
+  return pending.value.filter((u) => u.state !== "changed" && under(u.key, key)).map(itemOf);
+}
+
+/**
+ * changedItems are the items of every form with changes not saved, the
+ * merely changed ones and those saving too, as unsavedItems draws them:
+ * what leaving the page would drop. A part that reads them is drawn
+ * again when they change.
+ */
+export function changedItems(): Item[] {
+  return pending.value.map(itemOf);
+}
+
+/** itemOf is a form's item in a list: the disk, red after a failed save, else amber, its text naming the form, its click opening it. */
+function itemOf(u: Pending): Item {
+  const name = t(u.name.key, u.name.args || {});
+  return {
+    kind: "unsaved",
+    icon: "icon-disk",
+    sign: "disk",
+    tone: u.state === "failed" ? "bad" : "warn",
+    text: t(u.state === "failed" ? "form.failedItem" : "form.unsavedItem", { form: name }),
+    action: u.open,
+  };
+}
+
+/**
+ * leaveForms counts every changed form as left, as the focus leaving it
+ * does: an attempt to leave the page, so that a form still being typed
+ * in is unsaved, with its sign and its disk, where the user stays.
+ */
+export function leaveForms(): void {
+  for (const r of records.values()) left(r);
 }
 
 /** What a form part gets from useForm. */

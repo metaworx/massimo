@@ -62,6 +62,31 @@ A room's tile whose configuration has the focus is not drawn again under a click
 or the user's typing, for a state event or a reload of the rooms alike;
 it is drawn once the focus has left the configuration.
 
+Settings typed and not saved (Cube settings, a room's virtual thermostat)
+stay while the page is loaded, across its pages and the Cube chosen;
+moving to another page or choosing another Cube asks nothing,
+since the disks of the problem lists say where they are.
+Closing the tab, reloading it or going to another site
+while such settings have changes, also those still being typed or being saved,
+the browser asks with its own prompt, which says nothing of the page:
+leaving drops the changes; staying, every changed form is unsaved now,
+with its sign and its disk, and a second later the page shows **Settings not saved**,
+a dialog that lists them, red where a save failed,
+each a button that closes it and opens its settings
+with the focus in them, from any page, and **Close**;
+the second keeps the dialog off a page that is leaving while the next one comes.
+A browser asks only once the page has had a click or a key.
+**Sign out** (or **Forget key**), which drops them too,
+asks first with the same dialog, with **Stay** and the button that signs out;
+without such changes it signs out at once.
+The dialog closes by itself once the last of its settings is saved or reset,
+and a sign-out it asked about then goes on, since nothing is lost any more.
+A session that expires, or ends in another tab, asks for a sign-in and nothing more:
+the same user signed in again finds the changes,
+another user does not.
+The page that reloads by itself when the server has a newer version
+waits while there are any.
+
 ## Header
 
 The header's line reads, from the left:
@@ -1684,6 +1709,8 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `useForm` | `forms.ts` | a settings form that keeps its changes until they are saved or reset, kept by a key the region chooses beyond the part, and its state: clean, changed, unsaved (the focus left it, it was taken away, or a minute passed since the last change), saving, failed, saved | `key`, `name` (a text key and its arguments, naming it in the problem list), `open` (shows it and calls `focusForm`); gives `look`, `props` (the form element's), `place(field)` (for `useDraft`; its `known()` the stored value its draft holds, undefined before it has one), `track(changed, drafts)` (after the fields, at each drawing), `save(fn)`, `reset()` |
 | `hasChanges` | `forms.ts` | whether a form, or one under it, has changes not saved: changed, saving, unsaved or failed (a row shown while it holds such a form, otherwise for expert mode alone) | `key` |
 | `unsavedItems`, `focusForm`, `forgetForms` | `forms.ts` | the unsaved and the failed forms as items of `Problems`, the disk naming the form, a click opening it (the registry they come from, a signal inside `forms.ts`, holds the forms merely changed too, for the question on leaving the page); the focus put into a form once it is shown; a form's drafts forgotten, what it belongs to gone, or all at a sign-out (`MassimoParts.signedOut`, `logout` of `login.js`) | `key` (that form's and those under it, `key:…`); `key`; `key` ("" for all) |
+| `changedItems`, `leaveForms` | `forms.ts` | every form with changes not saved, the merely changed and the saving ones too, as `unsavedItems` draws them: what leaving the page drops; every changed form counted as left, unsaved, at an attempt to leave the page | – |
+| `FormsDialog` | `dialog.tsx` | a modal `<dialog>` that lists forms with changes, each a button that closes it and opens its form, with a button that stays (Escape too, and any close without a button of its own) and one that goes on, of the classes `dialog-stay` and `dialog-go` in every use; the focus on the one that stays, given back where it was when it closes | `shown`, `title`, `text`, `forms` (items, as `changedItems` gives them), `stay` (its label), `onStay`, `go` (`{ label, onGo }`, none without) |
 | `Question` | `question.tsx` | a question in the page, No and Yes, Escape for No (`confirmBox`) | `text`, `yes`, `no`, `onYes` (its request's promise), `onNo` |
 | `useAsk` | `question.tsx` | a row that asks in its own place, the focus back on its button (`confirmInPlace`) | gives `asking`, `ask`, `done`, `ref` |
 | `useBusy`, `busyProps` | `question.tsx` | a button's request under way: busy, off, `aria-busy` (`whileBusy`, `setBusy`) | `run(fn)`; `busyProps(cls, busy, off)` |
@@ -1767,6 +1794,14 @@ form, which today goes through the virtual wall thermostat's entry, and one list
 the room's forms that does not name the virtual thermostat twice, and a tab's open
 by `openConfig(room, el, tab)` (`config.js`), where the virtual thermostat's open
 closes the configuration (AP UnsavedMarks, Block 4);
+the page's modal dialog: `FormsDialog` is the list of forms with a title,
+and a later modal takes its shell out of it
+(its opening by a property, the focus, its closing);
+a sign-in through a provider after a 401 leaves the page while drafts are kept,
+so the browser's prompt asks there too, and staying shows the dialog above the sign-in,
+whose forms cannot be shown while signed out;
+the worse state of several forms, failed over unsaved, for a section's pill and
+the menu's sign (AP UnsavedMarks, Block 5);
 an item of `Problems` whose action leaves the list open
 (every button in a menu closes it, as an item's action does;
 the header's coming "Refresh now").
@@ -1881,6 +1916,33 @@ no longer gives the room or its virtual thermostat
 and opens the settings asked for;
 the Cubes' `index.tsx` forgets `roomFormKey(serial)` with the Cube;
 the tile's result line is a `ResultLine` too, its success fading by `fader`.
+Leaving the page (`ui/src/leaving/`) is a region of its own,
+a dialog without a place in any page's region:
+the page's chrome stays plain until AP UiParts' Block 14, and no region imports another,
+so it knows the forms only through `forms.ts`.
+`index.tsx` draws a `FormsDialog` into `#leaving` at the end of the page
+as soon as `parts.js` loads, and adds its `beforeunload` and `pagehide` listeners
+only while `changedItems` has any, removed once none has,
+since a page with a `beforeunload` listener can lose the browser's back and forward cache:
+at the prompt it counts the forms left (`leaveForms`), and the dialog with Close
+comes `STAY_AFTER_MS` (a second) later where the page is still there:
+a browser does not tell the page the user's answer,
+and a page that is left runs on until the next one comes (a Pi 1 is slow to send it),
+so the dialog shown at once would come on a page that is leaving;
+`pagehide` takes back the dialog of a stay, and one that waits to come,
+so that a page kept for the back button comes back without it;
+once the last form is saved, reset or forgotten, the dialog closes
+and a sign-out's question is answered as a sign-out;
+it registers `signOut(label)`, which `logout` of `login.js` awaits first,
+the dialog with Stay and the label of the page's own button,
+resolving true at once where no form has changes,
+and `changes()`, which `somethingOpen` of `header.js` asks,
+so that a newer server's reload waits.
+After a 401, the sign-in of `askLogin` forgets every form (`forgetOthers` of `login.js`,
+`MassimoParts.signedOut`) where the user who signs in is not the one who was,
+by `/me`'s user or mode, before the requests that waited for it are sent again.
+Moving inside the page (`pages.js`, the Cube choice) unloads nothing,
+so nothing asks there.
 A part's place among plain siblings is an element of the class `part-slot`,
 which takes no box of its own (`display: contents`),
 so that the part's element is laid out as if it stood there itself.
