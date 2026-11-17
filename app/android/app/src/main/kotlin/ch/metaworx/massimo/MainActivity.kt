@@ -72,9 +72,13 @@ class MainActivity : FragmentActivity() {
         files = null
     }
 
+    // A path handler is handed the path after the prefix it is registered
+    // at: /ui/connect.html reaches it as connect.html, the asset
+    // ui/connect.html.
     private val assets by lazy {
+        val files = WebViewAssetLoader.AssetsPathHandler(this)
         WebViewAssetLoader.Builder()
-            .addPathHandler("/ui/", WebViewAssetLoader.AssetsPathHandler(this))
+            .addPathHandler("/ui/") { path -> files.handle("ui/$path") }
             .build()
     }
 
@@ -212,7 +216,9 @@ class MainActivity : FragmentActivity() {
         override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
             if (request.url.host != Origins.APP_HOST) return null
             // Nothing of the app's own origin goes to the network.
-            return assets.shouldInterceptRequest(request.url)
+            // A file the app does not have is answered as not found, where
+            // the handler's empty answer is one the WebView calls invalid.
+            return assets.shouldInterceptRequest(request.url)?.takeIf { it.data != null }
                 ?: WebResourceResponse("text/plain", "utf-8", 404, "Not Found", null, ByteArrayInputStream(ByteArray(0)))
         }
 
