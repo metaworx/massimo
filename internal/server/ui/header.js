@@ -129,8 +129,10 @@ function renderCubeSelect() {
 // --- version ----------------------------------------------------------
 
 // somethingOpen reports whether a reload would interrupt the user: a
-// panel, a dialog, a device list, or a stepper value not yet sent.
+// panel, a dialog, a device list, a stepper value not yet sent, or a
+// settings form with changes not saved, for which the browser would ask.
 function somethingOpen() {
+  if (MassimoParts.leaving.changes()) return true; // ui/src/leaving/
   if (isShown("me") || isShown("system") || isShown("maint") || isShown("cube")) return true;
   if (houseOpen()) return true; // house.js
   if ($("login-dialog").open) return true;

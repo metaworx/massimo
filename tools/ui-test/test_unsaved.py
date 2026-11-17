@@ -13,17 +13,28 @@ with the focus in it. What is typed goes with the page from System
 settings to Cube settings and back, and is forgotten when the Cube is no
 longer served.
 
+Leaving the page (Block 3): while a form has changes, also one still
+being typed in, an attempt to close or reload the page asks with the
+browser's prompt; staying, the page's dialog lists the forms, each
+opening its form, and the form is unsaved; leaving drops the draft. Sign
+out asks with the same dialog; moving inside the page asks nothing.
+Playwright answers the browser's prompt (page.on("dialog")): dismissed,
+the page stays, as a user's Stay; page.close(run_before_unload=True)
+asks it without waiting for a navigation.
+
 The page runs under Playwright's clock (the marker clock), which the
 tests move on for the minute and for the check's five seconds. No PUT
 reaches the server: each is held, answered or refused by a route, so the
 store and the fake Cube keep their settings."""
 import json
 import re
+import time
 
 import pytest
 
-from conftest import api_call
-from helpers import hold, show_view, wait_held, wait_until
+from conftest import URL, api_call
+from helpers import choose_cube, hold, show_view, sign_out, wait_held, wait_until
+from test_login import sign_in
 
 pytestmark = pytest.mark.clock
 
@@ -671,3 +682,370 @@ def test_vwt_settings_forgotten(page, case, gone):
         assert row_disk(page, room).count() == 0 and tile_disk(page, room).count() == 0, "no disk"
     finally:
         expert(page, False)
+
+
+# --- leaving the page (AP UnsavedMarks, Block 3) ---
+
+DIALOG = "#leaving dialog.forms-dialog"
+SIGN_OUT = {"en": "Sign out", "de": "Abmelden"}
+FORGET_KEY = {"en": "Forget key", "de": "Schlüssel vergessen"}
+
+
+class Prompts(list):
+    """The types of the browser's prompts on leaving the page, in order;
+    accept says how the next is answered."""
+    accept = False
+
+
+def prompts(page, accept=False):
+    """Records the browser's prompts on leaving the page, each answered:
+    accepted, the page left, or dismissed, the user staying, as the list's
+    accept says. Playwright dismisses a prompt nobody listens for."""
+    seen = Prompts()
+    seen.accept = accept
+
+    def answer(d):
+        seen.append(d.type)
+        if seen.accept:
+            d.accept()
+        else:
+            d.dismiss()
+
+    page.on("dialog", answer)
+    return seen
+
+
+def dialog_open(page):
+    return page.evaluate("(sel) => !!document.querySelector(sel)?.open", DIALOG)
+
+
+def dialog_forms(page):
+    """The texts of the forms the page's dialog lists."""
+    return [s.strip() for s in page.locator(DIALOG + " .dialog-form").all_text_contents()]
+
+
+def stay_after_prompt(page, seen):
+    """An attempt to close the page, its prompt dismissed: the user stays,
+    and the page's dialog shows."""
+    n = len(seen)
+    page.close(run_before_unload=True)
+    for _ in range(25):
+        if len(seen) > n:
+            break
+        page.wait_for_timeout(200)
+    assert seen[n:] == ["beforeunload"], f"the browser's prompt asks: {seen}"
+    assert not dialog_open(page), "not at once: a moment after the prompt"
+    assert wait_until(page, "!!document.querySelector(%s)?.open" % json.dumps(DIALOG), 5), "the page's dialog shows where the user stays"
+
+
+def listed(page):
+    """Waits until the page lists a form with changes: a form drawn again
+    after the key that changed it, a frame or two."""
+    assert wait_until(page, "MassimoParts.leaving.changes()", 5), "the form listed as changed"
+
+
+def reloaded(page):
+    """Waits until the page loaded again has its Cubes and its stream."""
+    assert wait_until(page, "typeof state === 'object' && state.cubes.length > 0 && state.eventsOpen", 10), "the page loads again"
+
+
+def focused(page, sel):
+    return wait_until(page, "document.activeElement === document.querySelector(%s)" % json.dumps(sel), 5)
+
+
+def activated(page):
+    """A click on the page's name in the header, which does nothing: the
+    page has had a click, without which a browser shows no prompt on
+    leaving, whatever the page asks."""
+    page.locator(".brand h1").click()
+    assert page.evaluate("navigator.userActivation.hasBeenActive"), "the page has had a click"
+
+
+@pytest.mark.parametrize("how", ["untouched", "reset"])
+def test_leaving_without_changes_asks_nothing(page, case, how):
+    """With no form changed, or one changed and reset, a reload of a page
+    that has had a click asks nothing: no prompt, no dialog."""
+    seen = prompts(page)
+    activated(page)
+    if how == "reset":
+        _, form = open_panel(page)
+        form.locator("input[name=name]").fill("Typed, then reset")
+        form.locator(".form-reset").click()
+        wait_save(page, form, [True, False, False, ""], "reset")
+    page.reload()
+    reloaded(page)
+    assert seen == [], f"no prompt without changes: {seen}"
+    assert not dialog_open(page), "and no dialog"
+
+
+def test_leaving_with_a_changed_form_asks(page, case):
+    """A form changed and still focused: an attempt to close the page asks
+    through the browser's prompt; staying, the page's dialog lists it,
+    the focus on its Close, and the form is unsaved now, with its sign and
+    its disk. Close gives the focus back. From Rooms, the dialog's button
+    of the form closes it and opens Cube settings with the focus in the
+    form and what was typed."""
+    seen = prompts(page)
+    _, form = open_panel(page)
+    name = form.locator("input[name=name]")
+    name.click()
+    name.press("End")
+    page.keyboard.type(" typed")
+    wait_save(page, form, [False, True, False, ""], "changed, the focus in the form")
+    stay_after_prompt(page, seen)
+    assert dialog_forms(page) == [UNSAVED[case.lang]], f"the form in the dialog: {dialog_forms(page)}"
+    assert focused(page, DIALOG + " .dialog-stay"), "the focus on Close"
+    assert page.evaluate("(sel) => document.querySelector(sel).matches(':modal')", DIALOG), "a modal dialog"
+    assert page.locator(DIALOG + " .dialog-go").count() == 0, "nothing to go on to"
+    wait_save(page, form, [False, True, False, "warn"], "unsaved after the attempt")
+    assert item(page, PANEL + " > summary .cube-pill").count() == 1, "with its disk"
+    page.locator(DIALOG + " .dialog-stay").click()
+    assert not dialog_open(page), "Close closes it"
+    assert focused(page, PANEL + " form.cube-form input[name=name]"), "and gives the focus back"
+
+    show_view(page, "tiles")
+    stay_after_prompt(page, seen)
+    page.keyboard.press("Escape")
+    assert not dialog_open(page), "Escape closes it"
+    stay_after_prompt(page, seen)
+    page.locator(DIALOG + " .dialog-form").click()
+    assert not dialog_open(page), "the form's button closes it"
+    page.locator("#cube-page").wait_for(state="visible")
+    assert focused(page, PAGE_PANEL + " form.cube-form input[name=name]"), "Cube settings, the focus in the form"
+    assert page.locator(PAGE_PANEL + " form.cube-form input[name=name]").input_value() == "Fake Cube typed", "with what was typed"
+    page.locator(PAGE_PANEL + " form.cube-form .form-reset").click()
+    assert not page.evaluate("MassimoParts.leaving.changes()"), "reset: nothing to ask about"
+
+
+def test_leaving_accepted_drops_the_draft(page, case):
+    """The prompt accepted, the page reloads, and what was typed is gone."""
+    seen = prompts(page, accept=True)
+    _, form = open_panel(page)
+    form.locator("input[name=name]").click()
+    page.keyboard.type("Dropped")
+    listed(page)
+    page.reload()
+    reloaded(page)
+    assert seen == ["beforeunload"], f"the browser's prompt asked: {seen}"
+    assert not dialog_open(page), "no dialog on the page that comes back"
+    _, form = open_panel(page)
+    assert form.locator("input[name=name]").input_value() == "Fake Cube", "the stored name"
+    assert save_state(form) == [True, False, False, ""], "clean"
+
+
+def test_moving_inside_asks_nothing(page, case):
+    """With a form changed, another page of the app and another Cube
+    (a second Cube added to the server, which never connects) ask
+    nothing: no prompt, no dialog, and the draft stays."""
+    seen = prompts(page)
+    added = False
+    try:
+        _, form = open_panel(page)
+        form.locator("input[name=name]").click()
+        page.keyboard.type("Kept")
+        for view in ("tiles", "cube", "log", "me", "system"):
+            show_view(page, view)
+        api_call("POST", "api/v1/cubes", {"serial": SECOND, "address": "127.0.0.1:9", "name": "Second"})
+        added = True
+        page.evaluate("loadCubes()")
+        assert wait_until(page, "state.cubes.some((c) => c.serial === %s)" % json.dumps(SECOND), 5), "the second Cube listed"
+        show_view(page, "tiles")
+        choose_cube(page, SECOND)
+        assert wait_until(page, "state.serial === %s" % json.dumps(SECOND), 5), "the second Cube chosen"
+        page.wait_for_timeout(300)
+        assert seen == [] and not dialog_open(page), f"nothing asked: {seen}"
+        assert page.evaluate("MassimoParts.leaving.changes()"), "the draft kept"
+    finally:
+        page.evaluate("() => { if (state.serial !== 'KEQ0000100') selectCube('KEQ0000100'); }")
+        if added:
+            api_call("DELETE", "api/v1/cubes/" + SECOND)
+        page.evaluate("loadCubes()")
+
+
+def changed_cube_form(page, text):
+    """Cube settings in System settings with the name typed into; the form."""
+    _, form = open_panel(page)
+    name = form.locator("input[name=name]")
+    name.click()
+    name.press("End")
+    page.keyboard.type(text)
+    listed(page)
+    return form
+
+
+def test_leaving_dialog_waits_for_a_page_that_goes(page, case):
+    """The dialog of a stay comes a moment after the prompt, not at once:
+    accepted, with the next page held for half a second, the page that
+    goes never shows it. Where the page stays, the dialog that comes is
+    taken back as the page is hidden for the browser's back button."""
+    seen = prompts(page, accept=True)
+    changed_cube_form(page, " slow")
+    page.evaluate("""(sel) => setInterval(() => {
+      if (document.querySelector(sel)?.open) localStorage.setItem('ui-test.leavingShown', '1');
+    }, 20)""", DIALOG)
+
+    def slow(route):
+        time.sleep(0.5)
+        route.continue_()
+
+    page.route(re.compile(r"/(#.*)?$"), slow)
+    try:
+        page.reload()
+        reloaded(page)
+    finally:
+        page.unroute(re.compile(r"/(#.*)?$"))
+    assert seen == ["beforeunload"], f"the prompt asked: {seen}"
+    assert page.evaluate("localStorage.getItem('ui-test.leavingShown')") is None, "no dialog on the page that went"
+    page.evaluate("localStorage.removeItem('ui-test.leavingShown')")
+
+    seen.accept = False
+    changed_cube_form(page, " kept")
+    stay_after_prompt(page, seen)
+    page.evaluate("dispatchEvent(new PageTransitionEvent('pagehide', {persisted: true}))")
+    assert wait_until(page, "!document.querySelector(%s).open" % json.dumps(DIALOG), 5), "taken back as the page is hidden"
+    assert page.evaluate("MassimoParts.leaving.changes()"), "the draft kept"
+
+
+def test_leaving_dialog_shows_a_failed_form_and_closes_itself(page, case, watch):
+    """A form whose save failed is listed in red; a save that goes through
+    while the dialog is open closes it, and so does a Reset."""
+    seen = prompts(page)
+    watch.expected.append(("/cubes/KEQ0000100", "ERR_FAILED"))
+    page.route(CUBE_PATH, lambda route: route.abort() if route.request.method == "PUT" else route.continue_())
+    try:
+        form = changed_cube_form(page, " failed")
+        form.locator("button[type=submit]").click()
+        wait_save(page, form, [False, True, False, "bad"], "failed")
+    finally:
+        page.unroute(CUBE_PATH)
+    stay_after_prompt(page, seen)
+    assert dialog_forms(page) == [FAILED[case.lang]], f"the failed form: {dialog_forms(page)}"
+    assert page.locator(DIALOG + " .dialog-form .sign.tone-bad").count() == 1, "in red"
+    page.evaluate("(sel) => document.querySelector(sel).click()", PANEL + " form.cube-form .form-reset")
+    assert wait_until(page, "!document.querySelector(%s).open" % json.dumps(DIALOG), 5), "a Reset closes it"
+
+    held, sent = [], []
+    hold(page, CUBE_PATH, "PUT", held, sent)
+    try:
+        form = changed_cube_form(page, " saving")
+        form.locator("button[type=submit]").click()
+        assert wait_held(page, held), "the PUT is sent"
+        stay_after_prompt(page, seen)
+        assert dialog_forms(page) == [UNSAVED[case.lang]], f"the form saving is listed: {dialog_forms(page)}"
+        for route in held:
+            route.fulfill(status=200, content_type="application/json", body="{}")
+        assert wait_until(page, "!document.querySelector(%s).open" % json.dumps(DIALOG), 5), "a save that went through closes it"
+    finally:
+        page.unroute(CUBE_PATH)
+
+
+def test_sign_out_with_a_key_says_forget_key(page, case):
+    """With the owner's key, the dialog's button says Forget key, as the
+    page's own; Stay keeps the key."""
+    changed_cube_form(page, " key")
+    sign_out(page)
+    assert wait_until(page, "!!document.querySelector(%s)?.open" % json.dumps(DIALOG), 5), "the dialog asks"
+    assert page.locator(DIALOG + " .dialog-go").inner_text().strip() == FORGET_KEY[case.lang], "Forget key"
+    page.locator(DIALOG + " .dialog-stay").click()
+    assert not dialog_open(page), "Stay closes it"
+    assert page.evaluate("!!state.token && !!state.me"), "the key kept"
+    show_view(page, "system")
+    _, form = open_panel(page)
+    form.locator(".form-reset").click()
+
+
+def expire(page):
+    """The session taken as expired: a token the server does not know, and
+    a request that meets its 401, which asks for a sign-in."""
+    page.evaluate("() => { setToken('expired-session'); loadMe(); }")
+    assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the sign-in asked for"
+
+
+def test_sign_in_after_a_401_keeps_drafts_for_the_same_user(new_context, case, watch, guard):
+    """A 401 asks for a sign-in and asks nothing about the drafts: the same
+    user signed in again finds them, another user does not."""
+    ctx = new_context()
+    page = ctx.new_page()
+    guard.page = page
+    page.set_default_timeout(5000)
+    page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+    page.goto(URL)
+    sign_in(page, "operator", "op-pass")
+    room = vwt_room(page)
+    unsaved(page, room)
+    expire(page)
+    sign_in(page, "operator", "op-pass")
+    assert page.evaluate("MassimoParts.leaving.changes()"), "the same user: the drafts kept"
+    expire(page)
+    sign_in(page, "guest1", "guest-pass")
+    assert page.evaluate("state.me.user.name") == "guest1", "another user"
+    assert not page.evaluate("MassimoParts.leaving.changes()"), "the first user's drafts forgotten"
+
+
+def test_sign_out_asks_first(new_context, case, watch, guard):
+    """The operator, signed in, with the virtual thermostat's settings
+    changed: Sign out asks with the page's dialog, which lists them;
+    Stay keeps the session and the draft; Sign out there signs out and
+    the draft is gone. Signed in again, without changes, Sign out asks
+    nothing; with a save under way, it asks, and once the save has gone
+    through the sign-out goes on. A page of its own, without the test's token, as
+    test_login.py's."""
+    ctx = new_context()  # the case's viewport and locale
+    page = ctx.new_page()
+    guard.page = page
+    page.set_default_timeout(5000)
+    page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+    seen = prompts(page)
+    page.goto(URL)
+    sign_in(page, "operator", "op-pass")
+    room = vwt_room(page)
+    form, stored = unsaved(page, room)
+    want = VWT_UNSAVED[case.lang].format(room=room["name"])
+    sign_out(page)
+    assert wait_until(page, "!!document.querySelector(%s)?.open" % json.dumps(DIALOG), 5), "the dialog asks"
+    assert dialog_forms(page) == [want], f"listing the form: {dialog_forms(page)}"
+    assert page.locator(DIALOG + " .dialog-go").inner_text().strip() == SIGN_OUT[case.lang], "its Sign out"
+    assert focused(page, DIALOG + " .dialog-stay"), "the focus on Stay"
+    page.locator(DIALOG + " .dialog-stay").click()
+    assert not dialog_open(page), "Stay closes it"
+    page.wait_for_timeout(300)
+    assert page.evaluate("state.me && state.me.user && state.me.user.name") == "operator", "still signed in"
+    assert not page.evaluate("document.getElementById('login-dialog').open"), "no sign-in asked"
+    show_view(page, "tiles")
+    form = open_vwt(page, room)
+    assert value(page, room, "rf_address") == OTHER_ADDRESS, "the draft kept"
+
+    sign_out(page)
+    assert wait_until(page, "!!document.querySelector(%s)?.open" % json.dumps(DIALOG), 5), "the dialog asks again"
+    page.locator(DIALOG + " .dialog-go").click()
+    assert wait_until(page, "document.getElementById('login-dialog').open", 5), "signed out"
+    assert not dialog_open(page), "the dialog gone"
+    assert not page.evaluate("MassimoParts.leaving.changes()"), "the draft dropped"
+
+    sign_in(page, "operator", "op-pass")
+    expert(page)
+    open_vwt(page, room)
+    loaded(page)
+    assert value(page, room, "rf_address") == stored[1], "the stored address, signed in again"
+    sign_out(page)
+    assert wait_until(page, "document.getElementById('login-dialog').open", 5), "without changes, Sign out at once"
+    assert not dialog_open(page), "no dialog"
+
+    # a save that goes through while the question is open: nothing is lost
+    # any more, and the sign-out goes on
+    sign_in(page, "operator", "op-pass")
+    form, _ = unsaved(page, room)
+    held, sent = [], []
+    hold(page, room["path"] + "/config", "PUT", held, sent)
+    try:
+        form.locator("button[type=submit]").click()
+        assert wait_held(page, held), "the PUT is sent"
+        sign_out(page)
+        assert wait_until(page, "!!document.querySelector(%s)?.open" % json.dumps(DIALOG), 5), "the dialog asks while it saves"
+        for route in held:
+            route.fulfill(status=200, content_type="application/json", body="{}")
+        assert wait_until(page, "document.getElementById('login-dialog').open", 5), "saved: the sign-out goes on"
+        assert not dialog_open(page), "the dialog gone"
+    finally:
+        page.unroute(room["path"] + "/config")
+    assert seen == [], f"no browser prompt: {seen}"
