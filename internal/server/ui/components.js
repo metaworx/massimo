@@ -646,7 +646,14 @@ function showResult(el, text, ok) {
   el.classList.toggle("hidden", !text);
   el.classList.toggle("ok", !!text && !!ok);
   el.classList.toggle("bad", !!text && !ok);
+  if (text && !ok) failedLines.add(el);
+  else failedLines.delete(el);
 }
+
+// failedLines are the lines that showResult shows a failure in, so that
+// the page can take back what it told a user who is gone (forgetNotSent,
+// app.js).
+const failedLines = new Set();
 
 // markRange marks a number field by what its required, min, max and step
 // allow, or by ok where the caller judges the value itself (the

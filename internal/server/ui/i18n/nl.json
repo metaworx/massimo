@@ -96,6 +96,7 @@
   "budget.certificate": "Certificaat",
   "msg.cannotLoad": "Laden mislukt: {error}",
   "api.badToken": "token ontbreekt of is onjuist",
+  "api.notSent": "niet verzonden, omdat u afgemeld was: doe het opnieuw zodra u aangemeld bent",
 
   "settings.poll": "Opvragen elke",
   "settings.seconds": "s",
