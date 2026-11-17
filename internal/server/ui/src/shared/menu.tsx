@@ -22,17 +22,18 @@ import { busyProps } from "./question";
  * summary (summaryCls, its id summaryId, label its name for a screen
  * reader and, without title, its tooltip; without label it is named by
  * what it shows) shows summary, its list (.menu-items and listCls) the
- * children; onClick sees every click in it, and onOpen is told each time
- * it opens (a list that loads what it shows). busy makes the summary turn
+ * children; onClick sees every click in it, onOpen is told each time
+ * it opens (a list that loads what it shows) and onClose each time it
+ * closes (a list that keeps a timer while open). busy makes the summary turn
  * while a request sent from its list runs, as busyProps marks a button. With
  * arrows, a selector of its items, the arrow keys move between them
  * (menuArrows of components.js); with focusCurrent opening the menu puts
  * the focus on the item marked aria-current, else on the first, among
  * arrows' items, or its list's buttons that are on without arrows. A click
  * on any button of its list closes it (dropdown), as every menu of the
- * page.
+ * page, but on one marked keepOpen (MenuItem).
  */
-export function Dropdown({ id, cls, summaryId, summaryCls, label, title, summary, listCls, arrows, focusCurrent, busy, onClick, onOpen, children }: {
+export function Dropdown({ id, cls, summaryId, summaryCls, label, title, summary, listCls, arrows, focusCurrent, busy, onClick, onOpen, onClose, children }: {
   id?: string;
   cls?: string;
   summaryId?: string;
@@ -46,18 +47,22 @@ export function Dropdown({ id, cls, summaryId, summaryCls, label, title, summary
   busy?: boolean;
   onClick?: (ev: TargetedMouseEvent<HTMLDetailsElement>) => void;
   onOpen?: () => void;
+  onClose?: () => void;
   children?: ComponentChildren;
 }) {
   const ref = useRef<HTMLDetailsElement>(null);
   const opened = useRef(onOpen);
   opened.current = onOpen;
+  const closed = useRef(onClose);
+  closed.current = onClose;
   // biome-ignore lint/correctness/useExhaustiveDependencies: the listeners are added once to the details, which is made once; arrows and focusCurrent are a menu's for its life, and listed they would add the listeners again.
   useLayoutEffect(() => {
     const details = ref.current;
     if (!details) return;
     dropdown(details);
     details.addEventListener("toggle", () => {
-      if (details.open && opened.current) opened.current();
+      const told = details.open ? opened.current : closed.current;
+      if (told) told();
     });
     if (focusCurrent) {
       const among = arrows || ".menu-items button:not(:disabled)";
@@ -88,9 +93,11 @@ export function Dropdown({ id, cls, summaryId, summaryCls, label, title, summary
  * wherever sub is given, empty too (one that fills once loaded), of the
  * classes menu-item-sub and subCls; cls is the button's class, value its
  * data-value, current marks it aria-current, busy makes it turn while the
- * request it sent runs (busyProps).
+ * request it sent runs (busyProps); keepOpen leaves its menu open after
+ * a click on it (data-keep-open, which dropdown of components.js reads),
+ * for an item whose result shows in the list itself.
  */
-export function MenuItem({ icon, blank, label, icons, sub, subCls, cls, value, current, disabled, busy, onClick }: {
+export function MenuItem({ icon, blank, label, icons, sub, subCls, cls, value, current, disabled, busy, keepOpen, onClick }: {
   icon?: ComponentChildren;
   blank?: boolean;
   label: string;
@@ -102,6 +109,7 @@ export function MenuItem({ icon, blank, label, icons, sub, subCls, cls, value, c
   current?: boolean;
   disabled?: boolean;
   busy?: boolean;
+  keepOpen?: boolean;
   onClick?: () => void;
 }) {
   const name = icons ? (
@@ -113,7 +121,7 @@ export function MenuItem({ icon, blank, label, icons, sub, subCls, cls, value, c
   const b = busyProps(cls || "", !!busy, disabled);
   return (
     <button type="button" class={b.class || undefined} data-value={value} disabled={b.disabled} aria-busy={b["aria-busy"]}
-      aria-current={current ? "true" : undefined} onClick={onClick}>
+      aria-current={current ? "true" : undefined} data-keep-open={keepOpen ? "" : undefined} onClick={onClick}>
       {icon || (blank && <span class="menu-icon-none" />)}
       {sub !== undefined ? <span class="menu-item-text">{name}<span class={subCls ? "menu-item-sub " + subCls : "menu-item-sub"}>{sub}</span></span> : name}
     </button>

@@ -1328,7 +1328,8 @@ function problemEntry(e) {
 
 // dropdown makes a <details class="menu"> a menu that drops down: one
 // open at a time, kept in the window (placeMenu), closed by a choice of
-// one of its items, by Escape (the focus back on its summary) and by a
+// one of its items (but one marked data-keep-open, whose result shows in
+// the list), by Escape (the focus back on its summary) and by a
 // click outside it. The room tiles' ⋯ and More and the header's 👤 and ☰
 // are such menus.
 function dropdown(details) {
@@ -1341,7 +1342,8 @@ function dropdown(details) {
     requestAnimationFrame(() => placeMenu(details));
   });
   details.addEventListener("click", (ev) => {
-    if (ev.target.closest(".menu-items button")) details.open = false;
+    const b = ev.target.closest(".menu-items button");
+    if (b && !b.hasAttribute("data-keep-open")) details.open = false;
   });
   return details;
 }
