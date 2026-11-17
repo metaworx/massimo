@@ -8,6 +8,9 @@ its own (serve -discover-listen, run.sh), so the search needs no UDP
 import json
 import time
 
+import pytest
+from playwright.sync_api import Error
+
 from helpers import FOUND2, SEARCHING, choose_cube, cube_item, found_text, open_found, scroll_width, show_view, wait_until
 
 GATEWAY = {"en": "gateway", "de": "Gateway"}
@@ -129,19 +132,47 @@ def test_search_held_then_answered(page, case):
     show_view(page, "tiles")
 
 
-def found_event(page, cube):
-    """Tells the page of a found Cube, as the server's cube_found does."""
-    page.evaluate("(c) => state.events.dispatchEvent(new MessageEvent('cube_found', { data: JSON.stringify("
-                  "{ kind: 'cube_found', cube: c, time: c.found_at }) }))", cube)
+@pytest.fixture
+def found_event(page):
+    """found_event(cube) tells the page of a found Cube, as the server's
+    cube_found does. The page takes its found Cubes anew from every read
+    of the Cubes (its poll, every 10 s by default, and the reads that
+    events and actions start), so a Cube that only an event brought
+    would be gone at the next one. A server that found a Cube lists it
+    from then on, once per serial: the page's reads are answered here
+    with the server's Cubes and those told, a Cube in the list before
+    its event goes out."""
+    told = {}
+
+    def with_told(route):
+        if route.request.method != "GET":
+            route.fallback()
+            return
+        try:
+            answer = route.fetch()
+            if not answer.ok:
+                route.fulfill(response=answer)
+                return
+            cubes = [c for c in answer.json() if c.get("serial") not in told] + list(told.values())
+            route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes))
+        except Error:  # the page closed with a read on its way, or the server did not answer it: that read stays open
+            pass
+    page.route("**/api/v1/cubes", with_told)
+
+    def tell(cube):
+        told[cube["serial"]] = cube
+        page.evaluate("(c) => state.events.dispatchEvent(new MessageEvent('cube_found', { data: JSON.stringify("
+                      "{ kind: 'cube_found', cube: c, time: c.found_at }) }))", cube)
+    return tell
 
 
-def test_cube_found_live(page, case):
+def test_cube_found_live(page, case, found_event):
     """A cube_found event adds another found Cube live, counted on the
     pill's sign, and System settings → Cubes lists it with the massimo
     proxy that answers for it; without cubes the pill's group has no link,
     and the choice's entry cannot be chosen."""
     before = page.evaluate("state.found.length")
-    found_event(page, dict(FOUND2, proxies=["192.0.2.7"]))
+    found_event(dict(FOUND2, proxies=["192.0.2.7"]))
     assert cube_item(page, "found:LEQ0000506").count() == 1, "cube_found adds a Cube live"
     assert found_sign(page)[1] == str(before + 1), "found Cubes counted on the pill's sign"
     show_view(page, "system")
@@ -158,7 +189,7 @@ def test_cube_found_live(page, case):
     assert cube_item(page, "found:LEQ0000506").is_disabled(), "the choice's found entry cannot be chosen without cubes"
 
 
-def test_found_proxy(page, case):
+def test_found_proxy(page, case, found_event):
     """A Massimo proxy found on the network, with the Cube it serves and
     the server it runs on, as the server describes it: in the pill's group
     and in System settings → Cubes, the proxy's sign, what it serves and
@@ -169,8 +200,8 @@ def test_found_proxy(page, case):
                  host={"name": "box-a", "url": "https://box-a.example:8443"})
     odd = dict(FOUND2, serial="LEQ0000602", address="192.0.2.32", kind="proxy",
                host={"name": "box-b", "url": "javascript:alert(1)"})
-    found_event(page, proxy)
-    found_event(page, odd)
+    found_event(proxy)
+    found_event(odd)
     open_pill(page)
     entry = page.locator(FOUND_GROUP + " .problem-subs .problem-entry", has_text="LEQ0000601")
     assert SERVES[case.lang].format(serial="KEQ0000201") in entry.inner_text(), "what the proxy serves, in the pill"
@@ -195,14 +226,14 @@ def test_found_proxy(page, case):
     show_view(page, "tiles")
 
 
-def test_found_cube_with_removed_rows(page, case, watch):
+def test_found_cube_with_removed_rows(page, case, watch, found_event):
     """A found Cube whose serial has removed rows offers Add as new and a
     Restore with the date per removed row, newest first, the name in its
     label and its tooltip; Restore sends the row's uuid with the serial.
     The POST is answered here, refused, so the store stays as it was."""
     removed = [{"uuid": "00000000-0000-4000-8000-000000000002", "name": "Upstairs", "removed_at": "2026-11-16T09:00:00Z"},
                {"uuid": "00000000-0000-4000-8000-000000000001", "name": "", "removed_at": "2026-11-01T09:00:00Z"}]
-    found_event(page, dict(FOUND2, serial="LEQ0000508", address="192.168.1.79", removed=removed))
+    found_event(dict(FOUND2, serial="LEQ0000508", address="192.168.1.79", removed=removed))
     show_view(page, "system")
     open_found(page)
     row = page.locator(".cube-found-row[data-serial='LEQ0000508']")
@@ -235,13 +266,13 @@ def test_found_cube_with_removed_rows(page, case, watch):
     show_view(page, "tiles")
 
 
-def test_found_cube_in_another_network(page, case):
+def test_found_cube_in_another_network(page, case, found_event):
     """A found Cube outside this machine's networks (other_network), as a
     Cube without a DHCP lease answers from 192.168.0.222: its row in
     System settings → Cubes says so, under its facts, with the fallback
     address and the netconfig line with its serial, which copies; a Cube
     in the network has no such line."""
-    found_event(page, dict(FOUND2, serial="LEQ0000507", address="192.168.0.222", other_network=True))
+    found_event(dict(FOUND2, serial="LEQ0000507", address="192.168.0.222", other_network=True))
     show_view(page, "system")
     open_found(page)
     row = page.locator(".cube-found-row[data-serial='LEQ0000507']")
