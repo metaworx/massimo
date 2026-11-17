@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The nightly app's icon (AP MobileApp, D18-A): the mark's one-colour
+     layer, the M with its hands carved, in white on the night's dark blue,
+     so that it stands apart from the release's tile beside it. The layers
+     are make ui-brand's (res-brand/); a themed icon tints the same layer as
+     the release's, and the label tells the two apart there. -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_background_nightly" />
+    <foreground android:drawable="@drawable/ic_launcher_monochrome" />
+    <monochrome android:drawable="@drawable/ic_launcher_monochrome" />
+</adaptive-icon>
