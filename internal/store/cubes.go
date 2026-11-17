@@ -229,6 +229,15 @@ func (s *Store) RemovedCubes(ctx context.Context, serial string) ([]RemovedCube,
 	return out, rows.Err()
 }
 
+// hasRemoved reports whether a serial has removed rows.
+func (s *Store) hasRemoved(ctx context.Context, serial string) (bool, error) {
+	var removed bool
+	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM cubes WHERE serial = ? AND deleted_at IS NOT NULL)`, NormalSerial(serial)).Scan(&removed); err != nil {
+		return false, fmt.Errorf("store: removed cubes %s: %w", serial, err)
+	}
+	return removed, nil
+}
+
 // RemovedCube is a removed row of cubes, with the time of its removal.
 type RemovedCube struct {
 	Cube
@@ -296,6 +305,46 @@ func (s *Store) UpdateCube(ctx context.Context, serial string, change func(*Cube
 	return out, err
 }
 
+// RemoveCube removes the live row of a serial: configured = 0 and
+// deleted_at set, by the user by (0 for the server itself), its version
+// bumped. The row keeps its identifier, and with it its log, backups,
+// rooms, commands and audit rows, until AddCube restores it; the serial
+// is free for a row of its own (D11-A, D20-B). A serial without a live
+// row is ErrNotFound. It returns the removed row.
+func (s *Store) RemoveCube(ctx context.Context, serial string, by int64) (RemovedCube, error) {
+	if err := s.writable(); err != nil {
+		return RemovedCube{}, err
+	}
+	sn := NormalSerial(serial)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return RemovedCube{}, fmt.Errorf("store: remove cube %s: %w", sn, err)
+	}
+	defer tx.Rollback()
+	c, ok, err := s.cube(ctx, tx, sn)
+	if err != nil {
+		return RemovedCube{}, err
+	}
+	if !ok {
+		return RemovedCube{}, fmt.Errorf("%w: %s", ErrNotFound, sn)
+	}
+	now := s.nowText()
+	if _, err := tx.ExecContext(ctx, `UPDATE cubes SET configured = 0, source = ?, deleted_at = ?, updated_at = ?, updated_by = ?, origin = ?, version = version + 1 WHERE id = ?`,
+		SourceUI, now, now, nullID(by), s.nodeID, c.ID); err != nil {
+		return RemovedCube{}, fmt.Errorf("store: remove cube %s: %w", sn, err)
+	}
+	var r RemovedCube
+	var at sql.NullString
+	if r.Cube, err = scanCube(scannerPlus{tx.QueryRowContext(ctx, `SELECT `+cubeColumns+`, deleted_at FROM cubes WHERE id = ?`, c.ID), &at}); err != nil {
+		return RemovedCube{}, fmt.Errorf("store: remove cube %s: %w", sn, err)
+	}
+	r.RemovedAt = parseTime(at)
+	if err := tx.Commit(); err != nil {
+		return RemovedCube{}, fmt.Errorf("store: remove cube %s: %w", sn, err)
+	}
+	return r, nil
+}
+
 // Discovered is what one discovery answer says about a Cube.
 type Discovered struct {
 	Serial    string
@@ -308,8 +357,10 @@ type Discovered struct {
 
 // NoteDiscovered records a discovery answer. A Cube without a live row
 // gets one with configured = 0 and source 'discovery', which survives a
-// restart as the found Cube, and is reported as new; a removed row of the
-// serial stays removed (RemovedCubes).
+// restart as the found Cube, and is reported as new; but for a serial
+// with removed rows (RemoveCube), which gets no row and is returned as
+// the answer says it, not new: adding it makes a row, or restores one
+// (AddCube). A removed row stays removed (RemovedCubes).
 //
 // A known row is not a configuration change: its version, updated_at
 // and origin stay, which keep meaning "last changed by a user or a
@@ -335,6 +386,19 @@ func (s *Store) NoteDiscovered(ctx context.Context, d Discovered) (Cube, bool, e
 	row, ok, err := s.Cube(ctx, serial)
 	if err != nil {
 		return Cube{}, false, err
+	}
+	if !ok {
+		// A serial with removed rows gets no row of its own until it is
+		// added, as new or restored (D20-B): its found entry is the
+		// server's, in memory, and the next start's first run finds it
+		// again.
+		removed, err := s.hasRemoved(ctx, serial)
+		if err != nil {
+			return Cube{}, false, err
+		}
+		if removed {
+			return Cube{Serial: serial, MAC: d.MAC, RFAddress: d.RFAddress, Firmware: d.Firmware, DiscoveredAddress: d.Address, FirstSeen: at, LastSeen: at}, false, nil
+		}
 	}
 	switch {
 	case !ok:

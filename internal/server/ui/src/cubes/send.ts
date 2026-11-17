@@ -41,9 +41,13 @@ export function saveCube(serial: string, body: Record<string, unknown>): Promise
   return run(serial, () => api("PUT", cubePath(serial), body), t("cubes.saved", { serial }));
 }
 
-/** addCube serves a found Cube (POST). */
-export function addCube(serial: string): Promise<boolean> {
-  return run(serial, () => api("POST", "api/v1/cubes", { serial }), t("cubes.added", { serial }));
+/**
+ * addCube serves a found Cube (POST): as new, or with restore the
+ * removed row of its serial that uuid names, with its history.
+ */
+export function addCube(serial: string, restore?: string): Promise<boolean> {
+  const body = restore ? { serial, restore } : { serial };
+  return run(serial, () => api("POST", "api/v1/cubes", body), t(restore ? "cubes.restored" : "cubes.added", { serial }));
 }
 
 /** rebootCube restarts a Cube, with the radiograms pending its question named (POST …/reboot). */

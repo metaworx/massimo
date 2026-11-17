@@ -1652,6 +1652,12 @@ paths:
         or on :62910 when it is the only Cube and nothing else listens;
         with -proxy on serve's command line the listeners stay as they
         are. Needs the store.
+
+        A Cube that was removed is added as new, a row of its own without
+        the removed rows' history, unless restore names one of the removed
+        rows its found entry lists (removed): that row is served again,
+        with its settings, log, backups, rooms, commands and audit, and
+        the body's other fields change its settings.
       parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
@@ -1664,6 +1670,7 @@ paths:
                   required: [serial]
                   properties:
                     serial: {type: string, example: KEQ0000000}
+                    restore: {type: string, format: uuid, description: "The uuid of a removed row of the serial, from the found Cube's removed, to serve again with its history; absent: the Cube is added as new"}
       responses:
         "201":
           description: The Cube, now served
@@ -1673,8 +1680,13 @@ paths:
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
+        "404":
+          description: restore names no removed row of the serial
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
         "409":
-          description: The Cube is served already
+          description: The Cube is served already, or restore is given for a serial that has a row that is not removed
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
@@ -1774,11 +1786,12 @@ paths:
       summary: Stop serving a Cube
       x-capability: cubes
       description: |
-        The server stops the Cube's connection and proxy. Its row stays
-        in the store with configured = 0, with its history; discovery
-        lists it as found while it answers, and POST /api/v1/cubes adds
-        it back. A line for it in the settings file does not bring it
-        back.
+        The server stops the Cube's connection and proxy. Its row is
+        removed and kept in the store with its history; discovery lists
+        the Cube as found while it answers, with the removed row under
+        removed, and POST /api/v1/cubes adds it again: as new, or with
+        restore, the removed row with its history. A line for it in the
+        settings file does not bring it back.
       parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/idempotencyKey"}]
       responses:
         "200":
@@ -4723,6 +4736,16 @@ components:
           type: array
           items: {type: string}
           description: "The other addresses that answered for the Cube's serial in the latest run: massimo proxies (docs/proxy.md); absent when none did"
+        removed:
+          type: array
+          description: "A Cube that is not configured: the removed rows of its serial in the store, newest first, one of which POST /api/v1/cubes can restore; absent where there are none, and on a proxy"
+          items:
+            type: object
+            required: [uuid, name, removed_at]
+            properties:
+              uuid: {type: string, format: uuid, description: "The row's, for POST /api/v1/cubes's restore"}
+              name: {type: string, description: "The name it had; empty where it had none"}
+              removed_at: {type: string, format: date-time, description: When it was removed}
         found_at: {type: string, format: date-time, description: When the server first saw it}
         last_seen: {type: string, format: date-time, description: Its latest answer}
     Discovery:

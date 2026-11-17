@@ -1095,8 +1095,8 @@ the browser keeps which cards are folded.
   When a line of the server's settings file says something else than the panel,
   a notice names the line and **Take the file's value** takes it.
   **Remove** stops serving the Cube;
-  it keeps its settings and history in the store and is listed as found
-  while discovery hears it.
+  its settings and history stay in the store with its removed row,
+  and it is listed as found while discovery hears it.
   Under the panels, what discovery found and the server does not serve
   is one fold, **Found on the network, not set up**, closed at first:
   its head the found Cubes' sign and how many Cubes and Massimo proxies;
@@ -1104,6 +1104,10 @@ the browser keeps which cards are folded.
   "via proxy at …" where a massimo proxy answers for it,
   in expert mode its radio and MAC address and the gateway it uses, and **Add**,
   which serves a found Cube at once;
+  a Cube that was removed has **Add as new**, a row of its own without the
+  old history, and a **Restore** with the date for each removed row of its serial,
+  newest first, its name in the label and the tooltip,
+  which serves that row again with its settings and history (`removed`, `restore`);
   under a Cube whose address lies outside this machine's networks
   (`other_network`), a notice as on Rooms, with the `netconfig` line;
   each Massimo proxy with its address, the Cube it serves

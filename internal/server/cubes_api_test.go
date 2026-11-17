@@ -165,7 +165,8 @@ func TestPutCube(t *testing.T) {
 	}
 }
 
-// DELETE stops serving the Cube and keeps its row; POST serves it again.
+// DELETE stops serving the Cube and removes its row, which is kept with
+// its history (D20-B); POST serves it again, as new.
 func TestDeleteAndAddCube(t *testing.T) {
 	_, ts, _, st := startStored(t, Options{})
 	ctx := context.Background()
@@ -174,9 +175,12 @@ func TestDeleteAndAddCube(t *testing.T) {
 	if code, out := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0000100", ""); code != 200 || out["serial"] != "KEQ0000100" {
 		t.Fatalf("delete %d %v", code, out)
 	}
-	row, ok, _ := st.Cube(ctx, "KEQ0000100")
-	if !ok || row.Configured || row.Source != store.SourceUI {
-		t.Fatalf("row after delete %+v %v", row, ok)
+	if row, ok, _ := st.Cube(ctx, "KEQ0000100"); ok {
+		t.Fatalf("a live row after delete %+v", row)
+	}
+	removed, _ := st.RemovedCubes(ctx, "KEQ0000100")
+	if len(removed) != 1 || removed[0].ID != before.ID || removed[0].Configured || removed[0].Source != store.SourceUI {
+		t.Fatalf("row after delete %+v", removed)
 	}
 	var cubes []map[string]any
 	getJSON(t, ts, "", "/api/v1/cubes", &cubes)
@@ -195,8 +199,8 @@ func TestDeleteAndAddCube(t *testing.T) {
 	if c["address"] != cubeAddr {
 		t.Fatalf("address %v", c)
 	}
-	row, _, _ = st.Cube(ctx, "KEQ0000100")
-	if !row.Configured || row.Name != "Again" {
+	row, _, _ := st.Cube(ctx, "KEQ0000100")
+	if !row.Configured || row.Name != "Again" || row.ID == before.ID {
 		t.Fatalf("row after post %+v", row)
 	}
 	if code, _ := do(t, ts, "POST", "/api/v1/cubes", `{"serial":"KEQ0000100"}`); code != 409 {
@@ -204,6 +208,98 @@ func TestDeleteAndAddCube(t *testing.T) {
 	}
 	if code, _ := do(t, ts, "POST", "/api/v1/cubes", `{"serial":"no/serial"}`); code != 400 {
 		t.Fatalf("bad serial %d", code)
+	}
+}
+
+// A removed Cube found again lists the removed rows of its serial, and
+// discovery makes no row for it (D20-B); POST adds it as new, beside a
+// removed row, or with "restore" revives the removed row it names, one
+// of two, with its id and settings.
+func TestRestoreRemovedCube(t *testing.T) {
+	other, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000000", 0x0a0b0c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Close()
+	greeting, _ := fakecube.LoadGreeting(fixture)
+	second := &fakecube.Server{Greeting: greeting}
+	addr2, err := second.Start("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second.Close()
+	_, port, _ := net.SplitHostPort(addr2)
+	p, _ := strconv.Atoi(port)
+	_, ts, _, st := startStored(t, Options{DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{other.Addr()}, DiscoveryWait: 200 * time.Millisecond, CubePort: p})
+	ctx := context.Background()
+	if code, _ := postDiscovery(t, ts); code != 200 {
+		t.Fatal(code)
+	}
+	if code, out := do(t, ts, "POST", "/api/v1/cubes", `{"serial":"KEQ0000000","name":"First"}`); code != 201 {
+		t.Fatalf("add %d %v", code, out)
+	}
+	first, _, _ := st.Cube(ctx, "KEQ0000000")
+	found := func() map[string]any {
+		t.Helper()
+		var cubes []map[string]any
+		getJSON(t, ts, "", "/api/v1/cubes", &cubes)
+		for _, c := range cubes {
+			if c["serial"] == "KEQ0000000" && c["configured"] == false {
+				return c
+			}
+		}
+		t.Fatalf("KEQ0000000 not found: %v", cubes)
+		return nil
+	}
+	if code, out := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0000000", ""); code != 200 {
+		t.Fatalf("delete %d %v", code, out)
+	}
+	removed, _ := found()["removed"].([]any)
+	if len(removed) != 1 {
+		t.Fatalf("removed rows of the found cube: %v", found())
+	}
+	if r := removed[0].(map[string]any); r["uuid"] != first.UUID || r["name"] != "First" || r["removed_at"] == "" {
+		t.Fatalf("the removed row: %v", r)
+	}
+	postDiscovery(t, ts)
+	if row, ok, _ := st.Cube(ctx, "KEQ0000000"); ok {
+		t.Fatalf("discovery made a row beside a removed one: %+v", row)
+	}
+
+	if code, out := do(t, ts, "POST", "/api/v1/cubes", `{"serial":"KEQ0000000","name":"Second"}`); code != 201 || out["name"] != "Second" {
+		t.Fatalf("add as new %d %v", code, out)
+	}
+	fresh, _, _ := st.Cube(ctx, "KEQ0000000")
+	if fresh.ID == first.ID || !fresh.Configured || fresh.DiscoveredAddress != "127.0.0.1" || fresh.RFAddress != "0a0b0c" {
+		t.Fatalf("added as new: %+v", fresh)
+	}
+	waitConnected(t, ts, "KEQ0000000")
+	if code, _ := do(t, ts, "POST", "/api/v1/cubes", `{"serial":"KEQ0000000","restore":"`+first.UUID+`"}`); code != 409 {
+		t.Fatalf("restore of a served cube %d", code)
+	}
+	if code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000000", `{"restore":"`+first.UUID+`"}`); code != 400 {
+		t.Fatalf("restore in a PUT %d", code)
+	}
+	if code, out := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0000000", ""); code != 200 {
+		t.Fatalf("delete %d %v", code, out)
+	}
+	if removed, _ := found()["removed"].([]any); len(removed) != 2 || removed[0].(map[string]any)["uuid"] != fresh.UUID {
+		t.Fatalf("two removed rows, newest first: %v", removed)
+	}
+	if code, _ := do(t, ts, "POST", "/api/v1/cubes", `{"serial":"KEQ0000000","restore":"`+fresh.UUID+`x"}`); code != 404 {
+		t.Fatalf("restore of no removed row %d", code)
+	}
+	code, out := do(t, ts, "POST", "/api/v1/cubes", `{"serial":"KEQ0000000","restore":"`+first.UUID+`"}`)
+	if code != 201 || out["name"] != "First" {
+		t.Fatalf("restore %d %v", code, out)
+	}
+	back, _, _ := st.Cube(ctx, "KEQ0000000")
+	if back.ID != first.ID || back.Name != "First" || !back.Configured {
+		t.Fatalf("restored: %+v", back)
+	}
+	waitConnected(t, ts, "KEQ0000000")
+	if left, _ := st.RemovedCubes(ctx, "KEQ0000000"); len(left) != 1 || left[0].ID != fresh.ID {
+		t.Fatalf("removed rows after the restore: %+v", left)
 	}
 }
 

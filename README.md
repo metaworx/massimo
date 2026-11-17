@@ -1036,6 +1036,9 @@ and under System settings → Cubes in the web UI, which offers the file's value
 That page, and `POST /api/v1/cubes`, `PUT` and `DELETE /api/v1/cubes/{serial}`,
 add a Cube, change its name, address, proxy and hidden devices,
 and remove it while `serve` runs.
+A removed Cube keeps its settings and history in the store:
+found again, it is added as new, or restored with them
+(**Restore** in the web UI, `"restore": "<uuid>"` in the API).
 `massimo config` prints, per Cube,
 which value is the store's and which line of the file differs.
 `MASSIMO_API_TOKEN`, `MASSIMO_LISTEN`,

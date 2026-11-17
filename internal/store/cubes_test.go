@@ -6,6 +6,7 @@ package store
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"strings"
@@ -94,7 +95,8 @@ func TestSeedAndPrecedence(t *testing.T) {
 }
 
 // A Cube discovery found before is seeded from the file when the file
-// names it; one removed through the API stays removed.
+// names it; one removed through the API stays removed, an unconfigured
+// row of before RemoveCube as a removed row (D20-B).
 func TestSeedFoundAndRemoved(t *testing.T) {
 	s := open(t, t.TempDir())
 	ctx := context.Background()
@@ -107,7 +109,14 @@ func TestSeedFoundAndRemoved(t *testing.T) {
 	if _, err := s.UpdateCube(ctx, "KEQ0000002", func(c *Cube) error { c.Configured = false; return nil }, 0); err != nil {
 		t.Fatal(err)
 	}
-	res, err := s.Seed(ctx, "x.env", []FileCube{fileCube("KEQ0000001", FieldName, "Cellar"), fileCube("KEQ0000002", FieldAddress, "10.0.0.2")})
+	if _, err := s.AddCube(ctx, Cube{Serial: "KEQ0000003", Configured: true, Address: "10.0.0.3"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.RemoveCube(ctx, "KEQ0000003", 0); err != nil {
+		t.Fatal(err)
+	}
+	res, err := s.Seed(ctx, "x.env", []FileCube{fileCube("KEQ0000001", FieldName, "Cellar"), fileCube("KEQ0000002", FieldAddress, "10.0.0.2"),
+		fileCube("KEQ0000003", FieldAddress, "10.0.0.3")})
 	if err != nil || len(res.Added) != 1 || res.Added[0] != "KEQ0000001" {
 		t.Fatalf("%+v %v", res, err)
 	}
@@ -118,6 +127,9 @@ func TestSeedFoundAndRemoved(t *testing.T) {
 	c2, _, _ := s.Cube(ctx, "KEQ0000002")
 	if c2.Configured {
 		t.Fatal("removed cube configured again by the file")
+	}
+	if c3, ok, _ := s.Cube(ctx, "KEQ0000003"); ok {
+		t.Fatalf("removed row brought back by the file %+v", c3)
 	}
 }
 
@@ -180,10 +192,12 @@ func TestCubeProxyVirtual(t *testing.T) {
 	}
 }
 
-// A removed row of a serial stays removed (D11-A): adding the serial
-// makes a row of its own, and discovery finds the Cube as a new row too;
-// adding it with the removed row's uuid restores that row, with its id
-// and so its history, and RemovedCubes lists what can be restored.
+// A removed row of a serial stays removed (D11-A): RemoveCube frees the
+// serial, discovery makes no row for it while it has removed rows
+// (D20-B), adding it makes a row of its own, and adding it with a
+// removed row's uuid restores that row, one of two, with its id and so
+// its log, backups, rooms, commands and audit; RemovedCubes lists what
+// can be restored.
 func TestRemovedCubeAddedOrRestored(t *testing.T) {
 	clock := time.Date(2026, 11, 16, 8, 0, 0, 0, time.UTC)
 	s, err := Open(t.TempDir(), Options{Logger: quiet(), Now: func() time.Time { return clock }})
@@ -196,39 +210,94 @@ func TestRemovedCubeAddedOrRestored(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	remove := func(id int64) {
+	history := func(id int64) (cmd Command, audit int64) {
 		t.Helper()
-		clock = clock.Add(time.Hour)
-		if _, err := s.db.ExecContext(ctx, `UPDATE cubes SET deleted_at = ? WHERE id = ?`, formatTime(clock), id); err != nil {
+		if err := s.InsertEvent(ctx, Event{CubeID: id, Kind: "state", Data: json.RawMessage(`{}`)}); err != nil {
 			t.Fatal(err)
 		}
+		if _, err := s.AddBackup(ctx, Backup{CubeID: id, Reason: ReasonManual, Format: "json"}, []byte(`{"version":1}`)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.SyncRooms(ctx, id, []uint8{1}); err != nil {
+			t.Fatal(err)
+		}
+		if cmd, err = s.AddCommand(ctx, Command{CubeID: id, Action: "setpoint"}); err != nil {
+			t.Fatal(err)
+		}
+		if audit, err = s.Audit(ctx, AuditEntry{Time: clock, Action: "cube.change", CubeID: id, Result: ResultOK}); err != nil {
+			t.Fatal(err)
+		}
+		return cmd, audit
 	}
-	remove(old.ID)
+	kept := func(what string, id int64, cmd Command, audit int64) {
+		t.Helper()
+		if ev, err := s.Events(ctx, EventQuery{CubeID: id}); err != nil || len(ev) != 1 {
+			t.Errorf("%s: log %+v %v", what, ev, err)
+		}
+		if bk, err := s.Backups(ctx, id); err != nil || len(bk) != 1 {
+			t.Errorf("%s: backups %+v %v", what, bk, err)
+		}
+		if rooms, err := s.Rooms(ctx, id); err != nil || len(rooms) != 1 {
+			t.Errorf("%s: rooms %+v %v", what, rooms, err)
+		}
+		if c, ok, err := s.Command(ctx, cmd.ID); err != nil || !ok || c.CubeID != id {
+			t.Errorf("%s: command %+v %v %v", what, c, ok, err)
+		}
+		var cubeID int64
+		if err := s.db.QueryRowContext(ctx, `SELECT cube_id FROM audit WHERE id = ?`, audit).Scan(&cubeID); err != nil || cubeID != id {
+			t.Errorf("%s: audit row of cube %d %v", what, cubeID, err)
+		}
+	}
+	oldCmd, oldAudit := history(old.ID)
+
+	clock = clock.Add(time.Hour)
+	gone, err := s.RemoveCube(ctx, "keq0000001", 0)
+	if err != nil || gone.ID != old.ID || gone.Configured || !gone.RemovedAt.Equal(clock) || gone.Version != old.Version+1 {
+		t.Fatalf("removed: %+v %v", gone, err)
+	}
+	if _, err := s.RemoveCube(ctx, "KEQ0000001", 0); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("a removed serial removed again: %v", err)
+	}
+	if all, _ := s.Cubes(ctx); len(all) != 0 {
+		t.Fatalf("a removed row listed: %+v", all)
+	}
 	found, created, err := s.NoteDiscovered(ctx, Discovered{Serial: "KEQ0000001", Address: "192.0.2.10"})
-	if err != nil || !created || found.ID == old.ID || found.Configured {
+	if err != nil || created || found.ID != 0 || found.DiscoveredAddress != "192.0.2.10" {
 		t.Fatalf("found again: %+v %v %v", found, created, err)
 	}
-	if _, err := s.AddCube(ctx, Cube{Serial: "KEQ0000001"}); !errors.Is(err, ErrExists) {
-		t.Fatalf("a serial with a live row added: %v", err)
+	if all, _ := s.Cubes(ctx); len(all) != 0 {
+		t.Fatalf("discovery made a row beside a removed one: %+v", all)
 	}
-	remove(found.ID)
+
 	fresh, err := s.AddCube(ctx, Cube{Serial: "KEQ0000001", Name: "New", Configured: true})
-	if err != nil || fresh.ID == old.ID || fresh.ID == found.ID || fresh.Name != "New" {
+	if err != nil || fresh.ID == old.ID || fresh.Name != "New" {
 		t.Fatalf("added as new: %+v %v", fresh, err)
 	}
+	if ev, _ := s.Events(ctx, EventQuery{CubeID: fresh.ID}); len(ev) != 0 {
+		t.Fatalf("the new row has the removed one's log: %+v", ev)
+	}
+	freshCmd, freshAudit := history(fresh.ID)
+	clock = clock.Add(time.Hour)
+	if _, err := s.RemoveCube(ctx, "KEQ0000001", 0); err != nil {
+		t.Fatal(err)
+	}
 	removed, err := s.RemovedCubes(ctx, "keq0000001")
-	if err != nil || len(removed) != 2 || removed[0].ID != found.ID || removed[1].ID != old.ID || removed[1].Name != "Old" || !removed[0].RemovedAt.After(removed[1].RemovedAt) {
+	if err != nil || len(removed) != 2 || removed[0].ID != fresh.ID || removed[1].ID != old.ID || removed[1].Name != "Old" || !removed[0].RemovedAt.After(removed[1].RemovedAt) {
 		t.Fatalf("removed rows: %+v %v", removed, err)
 	}
-	remove(fresh.ID)
 	if _, err := s.AddCube(ctx, Cube{UUID: fresh.UUID + "x", Serial: "KEQ0000001"}); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("restore of no removed row: %v", err)
 	}
 	back, err := s.AddCube(ctx, Cube{UUID: old.UUID, Serial: "KEQ0000001", Name: "Back", Configured: true})
-	if err != nil || back.ID != old.ID || back.Name != "Back" || back.Version != old.Version+1 {
+	if err != nil || back.ID != old.ID || back.Name != "Back" || back.Version != gone.Version+1 {
 		t.Fatalf("restored: %+v %v", back, err)
 	}
-	if removed, _ := s.RemovedCubes(ctx, "KEQ0000001"); len(removed) != 2 {
+	kept("the restored row", back.ID, oldCmd, oldAudit)
+	kept("the other removed row", fresh.ID, freshCmd, freshAudit)
+	if removed, _ := s.RemovedCubes(ctx, "KEQ0000001"); len(removed) != 1 || removed[0].ID != fresh.ID {
 		t.Fatalf("removed rows after the restore: %+v", removed)
+	}
+	if _, err := s.AddCube(ctx, Cube{UUID: fresh.UUID, Serial: "KEQ0000001"}); !errors.Is(err, ErrExists) {
+		t.Fatalf("a restore beside a live row: %v", err)
 	}
 }
