@@ -15,6 +15,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/backup"
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 const backupsBase = "/api/v1/cubes/KEQ0000100/backups"
@@ -41,16 +42,6 @@ func reasons(l backupList) string {
 	return strings.Join(out, ",")
 }
 
-// within reports whether cond holds before d has passed.
-func within(d time.Duration, cond func() bool) bool {
-	for deadline := time.Now().Add(d); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
-		if cond() {
-			return true
-		}
-	}
-	return cond()
-}
-
 // The server takes a Cube's first backup at once, none while nothing
 // changes, one after a change once it has been quiet for
 // backups.auto_min, and one backups.auto_max after the first change
@@ -61,7 +52,7 @@ func TestBackupAutomatic(t *testing.T) {
 	st.SetSetting(ctx, store.BackupsAutoMinKey, 3)
 	st.SetSetting(ctx, store.BackupsAutoMaxKey, 10)
 	var l backupList
-	eventually(t, "the first backup", func() bool {
+	testkit.Eventually(t, "the first backup", func() bool {
 		_, l = historyOf(t, ts.URL)
 		return reasons(l) == "auto"
 	})
@@ -73,7 +64,7 @@ func TestBackupAutomatic(t *testing.T) {
 	if code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/rooms/6", `{"name":"Renamed"}`); code != 200 {
 		t.Fatalf("rename: %d", code)
 	}
-	eventually(t, "the backup after the change", func() bool {
+	testkit.Eventually(t, "the backup after the change", func() bool {
 		_, l = historyOf(t, ts.URL)
 		return reasons(l) == "auto,auto"
 	})
@@ -86,11 +77,11 @@ func TestBackupAutomatic(t *testing.T) {
 	if code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/rooms/6", `{"name":"Again"}`); code != 200 {
 		t.Fatalf("rename: %d", code)
 	}
-	eventually(t, "the change seen", func() bool {
+	testkit.Eventually(t, "the change seen", func() bool {
 		_, l = historyOf(t, ts.URL)
 		return l.Changed != nil && l.Due != nil || len(l.Backups) == 3
 	})
-	eventually(t, "the backup at backups.auto_max", func() bool {
+	testkit.Eventually(t, "the backup at backups.auto_max", func() bool {
 		_, l = historyOf(t, ts.URL)
 		return len(l.Backups) == 3
 	})
@@ -107,14 +98,14 @@ func TestBackupDeleteNewest(t *testing.T) {
 	st.SetSetting(ctx, store.BackupsAutoMinKey, 3)
 	st.SetSetting(ctx, store.BackupsAutoMaxKey, 10)
 	var l backupList
-	eventually(t, "the first backup", func() bool {
+	testkit.Eventually(t, "the first backup", func() bool {
 		_, l = historyOf(t, ts.URL)
 		return reasons(l) == "auto"
 	})
 	if code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/rooms/6", `{"name":"Renamed"}`); code != 200 {
 		t.Fatalf("rename: %d", code)
 	}
-	eventually(t, "the backup after the change", func() bool {
+	testkit.Eventually(t, "the backup after the change", func() bool {
 		_, l = historyOf(t, ts.URL)
 		return reasons(l) == "auto,auto" && l.Changed == nil
 	})
@@ -134,7 +125,7 @@ func TestBackupDeleteNewest(t *testing.T) {
 	if err != nil || backup.ConfigHash(f) == backup.ConfigHash(backupOf(t, ts)) {
 		t.Fatalf("the configuration is the one of the backup now newest (%v)", err)
 	}
-	if !within(time.Second, func() bool {
+	if !testkit.Within(time.Second, func() bool {
 		_, l = historyOf(t, ts.URL)
 		return l.Changed != nil && l.Due != nil
 	}) {
@@ -151,7 +142,7 @@ func TestBackupDeleteAll(t *testing.T) {
 	_, ts, _, st := startStored(t, Options{BackupMinute: 20 * time.Millisecond})
 	ctx := context.Background()
 	var l backupList
-	eventually(t, "the first backup", func() bool {
+	testkit.Eventually(t, "the first backup", func() bool {
 		_, l = historyOf(t, ts.URL)
 		return reasons(l) == "auto"
 	})
@@ -161,7 +152,7 @@ func TestBackupDeleteAll(t *testing.T) {
 	if code, _ := do(t, ts, "DELETE", backupsBase+"/"+strconv.FormatInt(first, 10), ""); code != 204 {
 		t.Fatalf("delete: %d", code)
 	}
-	if !within(time.Second, func() bool {
+	if !testkit.Within(time.Second, func() bool {
 		_, l = historyOf(t, ts.URL)
 		return reasons(l) == "auto" && l.Backups[0].ID != first
 	}) {
@@ -175,7 +166,7 @@ func TestBackupPruneNewest(t *testing.T) {
 	_, ts, s, st := startStored(t, Options{BackupMinute: 20 * time.Millisecond})
 	ctx := context.Background()
 	var l backupList
-	eventually(t, "the first backup", func() bool {
+	testkit.Eventually(t, "the first backup", func() bool {
 		_, l = historyOf(t, ts.URL)
 		return reasons(l) == "auto"
 	})
@@ -190,7 +181,7 @@ func TestBackupPruneNewest(t *testing.T) {
 	}
 	// The prune removes the row, and the next takes a new id all the same
 	// (migration 0013), so that an id read before names no other backup.
-	if !within(time.Second, func() bool {
+	if !testkit.Within(time.Second, func() bool {
 		_, l = historyOf(t, ts.URL)
 		return reasons(l) == "auto" && l.Backups[0].ID > first.ID
 	}) {
@@ -268,7 +259,7 @@ func TestRestoreKeepsBackups(t *testing.T) {
 	st.SetSetting(ctx, store.BackupsAutoMinKey, 2)
 	st.SetSetting(ctx, store.BackupsAutoMaxKey, 4)
 	var l backupList
-	eventually(t, "the first backup", func() bool {
+	testkit.Eventually(t, "the first backup", func() bool {
 		_, l = historyOf(t, ts.URL)
 		return reasons(l) == "auto"
 	})
@@ -277,7 +268,7 @@ func TestRestoreKeepsBackups(t *testing.T) {
 	if code, out := postBackup(t, ts, restoreBase+"?plan="+hash, "application/json", marshal(t, f)); code != 202 {
 		t.Fatalf("restore: %d %v", code, out)
 	}
-	waitFor(t, "the restore", func() bool {
+	testkit.Eventually(t, "the restore", func() bool {
 		_, run := do(t, ts, "GET", restoreBase, "")
 		return run["state"] == "done"
 	})
@@ -300,7 +291,7 @@ func TestRestoreKeepsBackups(t *testing.T) {
 	if code, out := postBackup(t, ts, restoreBase+q+"&plan="+p["plan"].(string), "", nil); code != 202 {
 		t.Fatalf("restore by id: %d %v", code, out)
 	}
-	waitFor(t, "the restore by id", func() bool {
+	testkit.Eventually(t, "the restore by id", func() bool {
 		_, run := do(t, ts, "GET", restoreBase, "")
 		return run["state"] == "done" && run["plan"] == p["plan"]
 	})
@@ -329,7 +320,7 @@ func TestRestoreDoneAfterItsReference(t *testing.T) {
 		t.Fatalf("restore: %d %v", code, out)
 	}
 	// Without HTTP in between, so that a window after done is not missed.
-	for deadline := time.Now().Add(5 * time.Second); ; {
+	for deadline := time.Now().Add(testkit.Scale(5 * time.Second)); ; {
 		if run, _ := rt.restoreStatus(); run.State == "done" {
 			break
 		} else if run.State == "failed" || time.Now().After(deadline) {

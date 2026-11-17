@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // A Cube's log holds the server's events, kept once with no Cube; source=
@@ -21,7 +22,7 @@ func TestLogSourceFilter(t *testing.T) {
 	_, ts, s, st := startStored(t, Options{})
 	// The Cube's own events too: its connect is logged as the greeting's
 	// last, after the devices' states.
-	eventually(t, "the Cube's states and its connect", func() bool {
+	testkit.Eventually(t, "the Cube's states and its connect", func() bool {
 		_, states := logOf(t, ts, "?kind=state")
 		_, cube := logOf(t, ts, "?source=cube")
 		return len(states) > 0 && len(cube) > 0
@@ -62,7 +63,7 @@ func TestLogSourceFilter(t *testing.T) {
 // debug, a lost connection at warn.
 func TestLogLevelFilter(t *testing.T) {
 	_, ts, s, _ := startStored(t, Options{})
-	eventually(t, "the greeting's hello", func() bool {
+	testkit.Eventually(t, "the greeting's hello", func() bool {
 		_, evs := logOf(t, ts, "?kind=hello&level=debug")
 		return len(evs) > 0
 	})

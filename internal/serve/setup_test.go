@@ -26,6 +26,7 @@ import (
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/server"
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // clearCubeEnv unsets every MASSIMO_CUBE_* variable for the test, and
@@ -160,7 +161,7 @@ func TestServeSingleCubeWithoutSerial(t *testing.T) {
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	go srv.Run(runCtx)
-	conn, m, err := proxyGreeting(proxyAddr, time.Now().Add(20*time.Second))
+	conn, m, err := proxyGreeting(proxyAddr, time.Now().Add(testkit.Scale(20*time.Second)))
 	if conn != nil {
 		defer conn.Close()
 	}
@@ -168,12 +169,11 @@ func TestServeSingleCubeWithoutSerial(t *testing.T) {
 		t.Fatalf("greeting %v %v", m, err)
 	}
 	var row store.Cube
-	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+	testkit.Within(5*time.Second, func() bool {
 		var ok bool
-		if row, ok, _ = st.Cube(ctx, "KEQ0000100"); ok {
-			break
-		}
-	}
+		row, ok, _ = st.Cube(ctx, "KEQ0000100")
+		return ok
+	})
 	if !row.Configured || row.Source != store.SourceEnv || row.Address != cubeAddr || row.ProxyAddress != proxyAddr {
 		t.Fatalf("row after the serial was learned: %+v", row)
 	}
@@ -460,12 +460,10 @@ func TestServePlainSeedCutShort(t *testing.T) {
 				srv.Run(runCtx)
 				close(done)
 			}()
-			for deadline := time.Now().Add(10 * time.Second); !strings.Contains(log.String(), "cut short"); time.Sleep(20 * time.Millisecond) {
-				if time.Now().After(deadline) {
-					cancel()
-					<-done
-					t.Fatalf("no write refused:\n%s", log.String())
-				}
+			if !testkit.Within(10*time.Second, func() bool { return strings.Contains(log.String(), "cut short") }) {
+				cancel()
+				<-done
+				t.Fatalf("no write refused:\n%s", log.String())
 			}
 			cancel()
 			<-done

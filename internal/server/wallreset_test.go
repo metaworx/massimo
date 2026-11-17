@@ -9,6 +9,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
@@ -41,7 +42,7 @@ func TestWallReset(t *testing.T) {
 	var resets []event // the wall thermostat's wall_resets, as the stream had them
 	next := func(what string, ok func(event) bool) {
 		t.Helper()
-		timeout := time.After(5 * time.Second)
+		timeout := time.After(testkit.Scale(5 * time.Second))
 		for {
 			select {
 			case ev := <-stream:
@@ -89,5 +90,5 @@ func TestWallReset(t *testing.T) {
 	if sum := resets[0].Summary; sum["mode"] != "auto" || sum["was_mode"] != "manual" || sum["setpoint"] != 5.5 || sum["was_setpoint"] != 6.0 {
 		t.Fatalf("wall_reset summary %v", sum)
 	}
-	waitFor(t, "the wall_reset in the log", func() bool { return hasKind(logKinds(t, ts, 0), "wall_reset:0a0201") })
+	testkit.Eventually(t, "the wall_reset in the log", func() bool { return hasKind(logKinds(t, ts, 0), "wall_reset:0a0201") })
 }

@@ -16,6 +16,7 @@ import (
 	"go.metaworx.ch/massimo/internal/notify"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // stepClock is a clock the test moves on (a notify.Clock): add runs the
@@ -138,7 +139,7 @@ func startResets(t *testing.T, st *store.Store, addr string, clock *stepClock, p
 	// The pump has taken the greeting's states once its connected event
 	// is in the log: a report before that would be the devices' first
 	// state there, without changes.
-	waitFor(t, "the pump's connected event", func() bool { return connected() > len(before) })
+	testkit.Eventually(t, "the pump's connected event", func() bool { return connected() > len(before) })
 	return ts, s, stop
 }
 
@@ -164,7 +165,7 @@ func reportAndSettle(t *testing.T, fc *fakecube.Server, ts *httptest.Server, s *
 	if err := fc.SetState(rf, st); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, "the report of "+rf.String(), func() bool {
+	testkit.Eventually(t, "the report of "+rf.String(), func() bool {
 		var evs []event
 		getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log?limit=500", &evs)
 		for _, e := range evs {
@@ -211,7 +212,7 @@ func TestAutoReset(t *testing.T) {
 		t.Fatalf("the first report: %d resets, want 1", n)
 	}
 	var ev event
-	waitFor(t, "the error_reset event", func() bool {
+	testkit.Eventually(t, "the error_reset event", func() bool {
 		var evs []event
 		getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log?limit=500", &evs)
 		for _, e := range evs {
@@ -238,7 +239,7 @@ func TestAutoReset(t *testing.T) {
 	}
 
 	// The second reset's event is in the store; a new server reads it.
-	waitFor(t, "the second error_reset", func() bool {
+	testkit.Eventually(t, "the second error_reset", func() bool {
 		n := 0
 		for _, k := range logKinds(t, ts, 0) {
 			if k == "error_reset:0a010d" {
@@ -327,7 +328,7 @@ func TestAutoResetWaitsForTheStoresRow(t *testing.T) {
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(func() { ts.Close(); cancel(); <-done; fc.Close() })
 	waitConnected(t, ts, "KEQ0000100")
-	waitFor(t, "the pump's connected event", func() bool {
+	testkit.Eventually(t, "the pump's connected event", func() bool {
 		var evs []event
 		getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log?kind=connected&limit=50", &evs)
 		return len(evs) > 0

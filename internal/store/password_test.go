@@ -14,6 +14,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // The parameters of the first releases, 64 MiB and one pass on four
@@ -106,9 +108,7 @@ func TestHashGate(t *testing.T) {
 		}
 		got <- err
 	}()
-	for g.waiting.Load() != 1 {
-		time.Sleep(time.Millisecond)
-	}
+	testkit.Eventually(t, "the second caller in the queue", func() bool { return g.waiting.Load() == 1 })
 	if _, err := g.enter(ctx); !errors.Is(err, ErrBusy) {
 		t.Fatalf("a full queue: %v, want ErrBusy", err)
 	}

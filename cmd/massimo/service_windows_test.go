@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"golang.org/x/sys/windows/svc"
+
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // The service manager's stop ends serve's context, and the handler
@@ -40,7 +42,7 @@ func TestServiceStopWaitsForServe(t *testing.T) {
 		case r <- c:
 		case <-returned:
 			t.Fatalf("the handler returned before %v reached it", c.Cmd)
-		case <-time.After(2 * time.Second):
+		case <-time.After(testkit.Scale(2 * time.Second)):
 			t.Fatalf("the handler did not take %v", c.Cmd)
 		}
 	}
@@ -49,7 +51,7 @@ func TestServiceStopWaitsForServe(t *testing.T) {
 	case <-ctx.Done():
 	case <-returned:
 		t.Fatal("the handler returned on the stop without ending serve's context")
-	case <-time.After(2 * time.Second):
+	case <-time.After(testkit.Scale(2 * time.Second)):
 		t.Fatal("the stop did not end serve's context")
 	}
 	select {
@@ -61,7 +63,7 @@ func TestServiceStopWaitsForServe(t *testing.T) {
 	go serviceEnd()
 	select {
 	case <-returned:
-	case <-time.After(2 * time.Second):
+	case <-time.After(testkit.Scale(2 * time.Second)):
 		t.Fatal("the handler did not return once serve did")
 	}
 	close(s)
@@ -114,7 +116,7 @@ func TestServiceEndWithoutStop(t *testing.T) {
 	}()
 	select {
 	case <-ended:
-	case <-time.After(2 * time.Second):
+	case <-time.After(testkit.Scale(2 * time.Second)):
 		t.Fatal("serviceEnd waited without a stop")
 	}
 	select {

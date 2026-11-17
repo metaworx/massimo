@@ -13,6 +13,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
@@ -86,7 +87,7 @@ func unconfirmedEvents(t *testing.T, ts *httptest.Server, outcome string) []even
 func waitUnconfirmed(t *testing.T, ts *httptest.Server, outcome string) event {
 	t.Helper()
 	var found []event
-	waitFor(t, "an unconfirmed event, "+outcome, func() bool {
+	testkit.Eventually(t, "an unconfirmed event, "+outcome, func() bool {
 		found = unconfirmedEvents(t, ts, outcome)
 		return len(found) > 0
 	})
@@ -108,7 +109,7 @@ func TestRoomCommandConfirmed(t *testing.T) {
 	if code != 200 || out["confirmation"] != "pending" {
 		t.Fatalf("setpoint: %d %v", code, out)
 	}
-	eventually(t, "room 2 confirmed", func() bool { return confirmRoom(t, ts, 2).Confirmation == nil && openWrites(rt) == 0 })
+	testkit.Eventually(t, "room 2 confirmed", func() bool { return confirmRoom(t, ts, 2).Confirmation == nil && openWrites(rt) == 0 })
 	if evs := unconfirmedEvents(t, ts, "not_confirmed"); len(evs) != 0 {
 		t.Fatalf("lines %+v", evs)
 	}
@@ -126,7 +127,7 @@ func TestRoomCommandNotConfirmed(t *testing.T) {
 	if err := fc.SetState(0x0a0205, fakecube.State{Error: &on}); err != nil {
 		t.Fatal(err)
 	}
-	eventually(t, "the error flag", func() bool {
+	testkit.Eventually(t, "the error flag", func() bool {
 		d := confirmDevice(t, ts, "0a0205")
 		return d.State != nil && d.State.Error
 	})
@@ -171,7 +172,7 @@ func TestRoomCommandNotConfirmed(t *testing.T) {
 	if late.Level != "info" || late.Device != "0a0205" || late.Serial != "MEQ0000205" || late.Summary["target"] != "room:2" {
 		t.Fatalf("late %+v", late)
 	}
-	eventually(t, "room 2 confirmed", func() bool { return confirmRoom(t, ts, 2).Confirmation == nil })
+	testkit.Eventually(t, "room 2 confirmed", func() bool { return confirmRoom(t, ts, 2).Confirmation == nil })
 	if evs := unconfirmedEvents(t, ts, "not_confirmed"); len(evs) != 1 {
 		t.Fatalf("%d warnings", len(evs))
 	}
@@ -242,7 +243,7 @@ func TestLockAndDisplayConfirmed(t *testing.T) {
 	if c := confirmDevice(t, ts, "0a0201").Confirmation; c == nil || !reflect.DeepEqual(c.Fields, []string{"display_actual"}) {
 		t.Fatalf("display pending: %+v", c)
 	}
-	eventually(t, "both confirmed", func() bool { return openWrites(rt) == 0 })
+	testkit.Eventually(t, "both confirmed", func() bool { return openWrites(rt) == 0 })
 	if d := confirmDevice(t, ts, "0a0204"); d.Confirmation != nil || !d.State.PanelLocked {
 		t.Fatalf("locked: %+v", d)
 	}
@@ -300,7 +301,7 @@ func TestConfigWriteConfirmed(t *testing.T) {
 	if code != 200 || out["confirmation"] != "pending" {
 		t.Fatalf("config: %d %v", code, out)
 	}
-	eventually(t, "the C line shows it", func() bool { return openWrites(rt) == 0 })
+	testkit.Eventually(t, "the C line shows it", func() bool { return openWrites(rt) == 0 })
 	if evs := unconfirmedEvents(t, ts, "not_confirmed"); len(evs) != 0 {
 		t.Fatalf("lines %+v", evs)
 	}
@@ -345,7 +346,7 @@ func TestProgramDayNotConfirmed(t *testing.T) {
 		!reflect.DeepEqual(devices[0].(map[string]any)["fields"], []any{"program.monday"}) {
 		t.Fatalf("event %+v", ev)
 	}
-	eventually(t, "the others confirmed", func() bool { return openWrites(rt) == 1 })
+	testkit.Eventually(t, "the others confirmed", func() bool { return openWrites(rt) == 1 })
 	if c := confirmRoom(t, ts, 2).Confirmation; c == nil || !reflect.DeepEqual(c.Devices, []string{"0a0205"}) || !reflect.DeepEqual(c.Fields, []string{"program.monday"}) {
 		t.Fatalf("room: %+v", c)
 	}
@@ -366,7 +367,7 @@ func TestProxyConfigWriteConfirmed(t *testing.T) {
 	}
 	rt.proxyWrote(c) // as if the Cube had taken it
 	var evs []event
-	eventually(t, "three warnings", func() bool { evs = unconfirmedEvents(t, ts, "not_confirmed"); return len(evs) == 3 })
+	testkit.Eventually(t, "three warnings", func() bool { evs = unconfirmedEvents(t, ts, "not_confirmed"); return len(evs) == 3 })
 	for _, ev := range evs {
 		if ev.Summary["source"] != "proxy" || ev.Summary["write"] != "config" || ev.Summary["target"] != "room:2" || ev.Device == "" {
 			t.Fatalf("event %+v", ev)

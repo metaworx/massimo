@@ -12,6 +12,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // A device that joins is in the pairing state once a watcher has its N
@@ -120,7 +121,7 @@ func TestInclusionDeliversNewDevices(t *testing.T) {
 		if err != nil || nd.RFAddress != 0x0a0b0c || nd.Serial != "TEQ0000001" || nd.Type != cube.DeviceRadiatorThermostat {
 			t.Fatalf("N line %v: %+v %v", m, nd, err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(testkit.Scale(5 * time.Second)):
 		t.Fatal("no N line")
 	}
 	if e := waitEvent(t, c, EventPaired); e.Device != 0x0a0b0c || e.New == nil {

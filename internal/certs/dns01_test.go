@@ -34,6 +34,8 @@ import (
 	"time"
 
 	"golang.org/x/crypto/acme"
+
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // fakeCA is an ACME directory for the tests: RFC 8555's shape, no
@@ -407,19 +409,18 @@ func TestHookTimeoutEndsTheChildren(t *testing.T) {
 	go func() { done <- d.runHook(ctx, "set", "_acme-challenge.example.net", "value") }()
 	// The time is up once the child runs, however long the start took.
 	var pid int
-	for wait := time.Now().Add(time.Minute); pid == 0; time.Sleep(20 * time.Millisecond) {
+	testkit.Eventually(t, "the hook's pid", func() bool {
 		b, _ := os.ReadFile(pidFile)
-		if pid, _ = strconv.Atoi(strings.TrimSpace(string(b))); pid == 0 && time.Now().After(wait) {
-			t.Fatal("the hook wrote no pid")
-		}
-	}
+		pid, _ = strconv.Atoi(strings.TrimSpace(string(b)))
+		return pid != 0
+	}, testkit.For(time.Minute), testkit.Every(20*time.Millisecond))
 	start := time.Now()
 	cancel()
 	err := <-done
 	if took := time.Since(start); err == nil || took > 3*time.Second {
 		t.Fatalf("runHook returned %v after %s, want an error within the time", err, took)
 	}
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(testkit.Scale(2 * time.Second))
 	for exec.Command("kill", "-0", strconv.Itoa(pid)).Run() == nil {
 		if time.Now().After(deadline) {
 			exec.Command("kill", strconv.Itoa(pid)).Run()

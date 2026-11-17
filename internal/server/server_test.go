@@ -19,6 +19,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
@@ -61,17 +62,12 @@ func startWith(t *testing.T, opts Options) (*fakecube.Server, *httptest.Server, 
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
 	// Wait for the greeting, and for its events on the stream.
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
+	testkit.Eventually(t, "the cube's connect and its greeting's events", func() bool {
 		var cubes []cubeView
 		getJSON(t, ts, token, "/api/v1/cubes", &cubes)
-		if len(cubes) == 1 && cubes[0].Connected && greetingPublished(s) {
-			return fc, ts, s
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatal("cube never connected")
-	return nil, nil, nil
+		return len(cubes) == 1 && cubes[0].Connected && greetingPublished(s)
+	})
+	return fc, ts, s
 }
 
 // greetingPublished reports whether every Cube's runtime has published
@@ -288,10 +284,7 @@ func TestPeriodicRefreshReconnects(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	go s.Run(ctx)
 	t.Cleanup(func() { cancel(); fc.Close() })
-	deadline := time.Now().Add(5 * time.Second)
-	for fc.Connections() < 3 && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
-	}
+	testkit.Within(5*time.Second, func() bool { return fc.Connections() >= 3 })
 	if fc.Connections() < 3 {
 		t.Fatalf("connections %d", fc.Connections())
 	}
@@ -319,9 +312,10 @@ func TestDeviceValueTimes(t *testing.T) {
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
 	var c cubeView
-	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline) && !c.Connected; time.Sleep(20 * time.Millisecond) {
+	testkit.Within(5*time.Second, func() bool {
 		getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c)
-	}
+		return c.Connected
+	})
 	if !c.Connected || c.ObservedSince.Before(before) {
 		t.Fatalf("cube %+v", c)
 	}

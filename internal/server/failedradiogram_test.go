@@ -13,6 +13,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
@@ -81,7 +82,7 @@ func TestFailedRadiogram(t *testing.T) {
 	// the test waits for the line of the last.
 	caughtUp := func(what string, flagged bool, want string) {
 		t.Helper()
-		waitFor(t, what, func() bool {
+		testkit.Eventually(t, what, func() bool {
 			evs := stateLines()
 			if len(evs) == 0 {
 				return false
@@ -93,10 +94,10 @@ func TestFailedRadiogram(t *testing.T) {
 	}
 
 	list(0x09, false)
-	waitFor(t, "the report", func() bool { st := state("0a010d"); return st != nil && st["failed_radiogram"] == nil })
+	testkit.Eventually(t, "the report", func() bool { st := state("0a010d"); return st != nil && st["failed_radiogram"] == nil })
 	caughtUp("the report's line", false, "null")
 	list(0x03, true)
-	waitFor(t, "the communication error", func() bool { return state("0a010d")["error"] == true })
+	testkit.Eventually(t, "the communication error", func() bool { return state("0a010d")["error"] == true })
 	if got := failed(state("0a010d")); got != `{"code":3,"name":"TimeInformation"}` {
 		t.Fatalf("failed_radiogram %s", got)
 	}
@@ -104,12 +105,12 @@ func TestFailedRadiogram(t *testing.T) {
 		t.Fatalf("0a0108 without the flag: %v", st)
 	}
 	var line *event
-	waitFor(t, "the line that set the flag", func() bool { line = stateLine("error", `{"from":false,"to":true}`); return line != nil })
+	testkit.Eventually(t, "the line that set the flag", func() bool { line = stateLine("error", `{"from":false,"to":true}`); return line != nil })
 	if change(line, "failed_radiogram") != `{"from":null,"to":{"code":3,"name":"TimeInformation"}}` {
 		t.Fatalf("the line's changes %v", line.Changes)
 	}
 	var logLine map[string]any
-	waitFor(t, "the process log's line", func() bool {
+	testkit.Eventually(t, "the process log's line", func() bool {
 		for _, l := range jsonLines(t, buf.String()) {
 			if l["kind"] == "state" && l["device"] == "0a010d" && l["error"] == true {
 				logLine = l
@@ -122,7 +123,7 @@ func TestFailedRadiogram(t *testing.T) {
 		t.Fatalf("the process log's line %v", logLine)
 	}
 	var alerts logAlertsView
-	waitFor(t, "the flag's alert", func() bool {
+	testkit.Eventually(t, "the flag's alert", func() bool {
 		return getJSON(t, ts, "", "/api/v1/log/alerts", &alerts) == 200 && len(alerts.Alerts) == 1
 	})
 	if a := alerts.Alerts[0]; a.Flag != "error" || a.FailedRadiogram == nil || *a.FailedRadiogram != cube.RadiogramTimeInformation {
@@ -132,8 +133,8 @@ func TestFailedRadiogram(t *testing.T) {
 	// Another radiogram fails while the flag stays; its code is not in
 	// the list.
 	list(0xf6, true)
-	waitFor(t, "the unknown code", func() bool { return failed(state("0a010d")) == `{"code":246}` })
-	waitFor(t, "its line", func() bool {
+	testkit.Eventually(t, "the unknown code", func() bool { return failed(state("0a010d")) == `{"code":246}` })
+	testkit.Eventually(t, "its line", func() bool {
 		line = stateLine("failed_radiogram", `{"from":{"code":3,"name":"TimeInformation"},"to":{"code":246}}`)
 		return line != nil
 	})
@@ -145,7 +146,7 @@ func TestFailedRadiogram(t *testing.T) {
 	alertNames := func(what string, want cube.RadiogramType) {
 		t.Helper()
 		var got *cube.RadiogramType
-		waitFor(t, what, func() bool {
+		testkit.Eventually(t, what, func() bool {
 			if getJSON(t, ts, "", "/api/v1/log/alerts", &alerts) != 200 || len(alerts.Alerts) != 1 {
 				return false
 			}
@@ -158,17 +159,17 @@ func TestFailedRadiogram(t *testing.T) {
 	caughtUp("the setpoint's line", true, `{"code":64,"name":"ControlMode"}`)
 	alertNames("the setpoint's, more severe", cube.RadiogramControlMode)
 	list(0xf6, true)
-	waitFor(t, "the unknown code again", func() bool { return failed(state("0a010d")) == `{"code":246}` })
+	testkit.Eventually(t, "the unknown code again", func() bool { return failed(state("0a010d")) == `{"code":246}` })
 	caughtUp("its line again", true, `{"code":246}`)
 	alertNames("the setpoint's still", cube.RadiogramControlMode)
 
 	// The flag cleared, byte 4 kept: no failed radiogram.
 	list(0xf6, false)
-	waitFor(t, "the flag cleared", func() bool { return state("0a010d")["error"] == false })
+	testkit.Eventually(t, "the flag cleared", func() bool { return state("0a010d")["error"] == false })
 	if st := state("0a010d"); st["failed_radiogram"] != nil {
 		t.Fatalf("cleared, yet %v", st)
 	}
-	waitFor(t, "the line that cleared it", func() bool {
+	testkit.Eventually(t, "the line that cleared it", func() bool {
 		line = stateLine("error", `{"from":true,"to":false}`)
 		return line != nil
 	})

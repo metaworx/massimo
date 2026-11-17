@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 type fakeClock struct{ t time.Time }
@@ -86,7 +87,7 @@ func TestTicketStore(t *testing.T) {
 // the event stream, the context is cancelled once the headers are in.
 func send(t *testing.T, method, url, token string) *http.Response {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), testkit.Scale(5*time.Second))
 	defer cancel()
 	req, _ := http.NewRequestWithContext(ctx, method, url, nil)
 	if token != "" {

@@ -11,6 +11,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // received counts the lines of type typ a fake Cube has read.
@@ -39,13 +40,14 @@ func sendAsync(ctx context.Context, c *Client, m cube.Message) <-chan sent {
 	return ch
 }
 
-// outcome waits up to five seconds for a Send started with sendAsync.
+// outcome waits up to five seconds, scaled, for a Send started with
+// sendAsync.
 func outcome(t *testing.T, what string, ch <-chan sent) sent {
 	t.Helper()
 	select {
 	case s := <-ch:
 		return s
-	case <-time.After(5 * time.Second):
+	case <-time.After(testkit.Scale(5 * time.Second)):
 		t.Fatalf("%s: Send never returned", what)
 		return sent{}
 	}
@@ -61,7 +63,7 @@ func startTurnClient(t *testing.T, opts Options) (*fakecube.Server, *Client, con
 	opts.Addr = addr
 	c := New(opts)
 	go c.Run(ctx)
-	eventually(t, "first greeting", c.Connected)
+	testkit.Eventually(t, "first greeting", c.Connected)
 	return srv, c, ctx
 }
 
@@ -73,7 +75,7 @@ func TestSendWaitsForTheCommandInFlight(t *testing.T) {
 
 	srv.SetSilent(true)
 	first := sendAsync(ctx, c, cube.CmdGetNTP)
-	eventually(t, "the first f: read", func() bool { return received(srv, 'f') == 1 })
+	testkit.Eventually(t, "the first f: read", func() bool { return received(srv, 'f') == 1 })
 	second := sendAsync(ctx, c, cube.CmdGetNTP)
 	time.Sleep(100 * time.Millisecond)
 	select {
@@ -106,7 +108,7 @@ func TestWaitingSendEndsWithItsContext(t *testing.T) {
 
 	srv.SetSilent(true)
 	first := sendAsync(ctx, c, cube.CmdGetNTP)
-	eventually(t, "the first f: read", func() bool { return received(srv, 'f') == 1 })
+	testkit.Eventually(t, "the first f: read", func() bool { return received(srv, 'f') == 1 })
 	wctx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
 	defer cancel()
 	start := time.Now()
@@ -133,7 +135,7 @@ func TestWaitingSendEndsWhenTheConnectionDrops(t *testing.T) {
 
 	srv.SetSilent(true)
 	first := sendAsync(ctx, c, cube.CmdGetNTP)
-	eventually(t, "the first f: read", func() bool { return received(srv, 'f') == 1 })
+	testkit.Eventually(t, "the first f: read", func() bool { return received(srv, 'f') == 1 })
 	second := sendAsync(ctx, c, cube.Message{Type: 'c', Data: "0a010d"})
 	time.Sleep(50 * time.Millisecond)
 	srv.Drop()
@@ -159,7 +161,7 @@ func TestPollSkipsABusyLine(t *testing.T) {
 
 	srv.SetSilent(true)
 	held := sendAsync(ctx, c, cube.CmdGetNTP)
-	eventually(t, "the f: read", func() bool { return received(srv, 'f') == 1 })
+	testkit.Eventually(t, "the f: read", func() bool { return received(srv, 'f') == 1 })
 	// A poll that took the turn first is held as well, and ends with the
 	// reply timeout; the polls after the f: are the ones that matter.
 	polls, warned := pollsReceived(srv), logs.count("WARN", "poll failed")
@@ -171,7 +173,7 @@ func TestPollSkipsABusyLine(t *testing.T) {
 	if s := outcome(t, "held f:", held); s.err != nil {
 		t.Fatalf("held f: %v", s.err)
 	}
-	eventually(t, "polls after the reply", func() bool { return pollsReceived(srv) >= polls+2 })
+	testkit.Eventually(t, "polls after the reply", func() bool { return pollsReceived(srv) >= polls+2 })
 	if c.Lost() || srv.Connections() != 1 {
 		t.Errorf("lost %v, %d connections", c.Lost(), srv.Connections())
 	}

@@ -13,6 +13,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // The re-send of an unconfirmed room command (AP RadioHealth v1.3,
@@ -48,7 +49,7 @@ func (r *driftRig) unconfirmedOutcomes(outcome string) []event {
 func (r *driftRig) waitOutcome(outcome string, n int) event {
 	r.t.Helper()
 	var evs []event
-	waitFor(r.t, "an unconfirmed event, "+outcome, func() bool {
+	testkit.Eventually(r.t, "an unconfirmed event, "+outcome, func() bool {
 		evs = r.unconfirmedOutcomes(outcome)
 		return len(evs) >= n
 	})
@@ -66,7 +67,7 @@ func (r *driftRig) flag(rf cube.RFAddress) {
 	if err := r.fc.SetState(rf, fakecube.State{Error: &on}); err != nil {
 		r.t.Fatal(err)
 	}
-	waitFor(r.t, rf.String()+" flagged", func() bool {
+	testkit.Eventually(r.t, rf.String()+" flagged", func() bool {
 		st, ok := r.rt.client.Snapshot().State(rf)
 		return ok && st.Error
 	})
@@ -179,7 +180,7 @@ func TestUnconfirmedRoomCommandResentBehindTheHold(t *testing.T) {
 	sent := len(r.fc.Received())
 	r.setRoom2("22")
 	r.waitOutcome("not_confirmed", 1)
-	waitFor(t, "the queue's hold", func() bool { return len(r.events("hold")) > 0 })
+	testkit.Eventually(t, "the queue's hold", func() bool { return len(r.events("hold")) > 0 })
 	if got := r.radioSince(sent); len(got) != 1 {
 		t.Fatalf("sent before the hold ended: %v", got)
 	}
@@ -291,7 +292,7 @@ func TestUnconfirmedRoomCommandNotResent(t *testing.T) {
 		sent := len(r.fc.Received())
 		r.setRoom2("22")
 		r.waitOutcome("not_confirmed", 1)
-		waitFor(t, "the re-send in the queue", func() bool {
+		testkit.Eventually(t, "the re-send in the queue", func() bool {
 			return r.rt.queue.Pending(func(c engine.Command) bool { return c.Key == resendKey(2) })
 		})
 		r.fc.SetDeaf(0x0a0205, false) // the newer write is shown, and not sent again

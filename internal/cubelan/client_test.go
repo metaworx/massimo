@@ -18,6 +18,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 const fixture = "../protocol/cube/testdata/cube-fw0113-greeting.txt"
@@ -39,7 +40,7 @@ func startFake(t *testing.T) (*fakecube.Server, string) {
 
 func waitEvent(t *testing.T, c *Client, kind EventKind) Event {
 	t.Helper()
-	deadline := time.After(5 * time.Second)
+	deadline := time.After(testkit.Scale(5 * time.Second))
 	for {
 		select {
 		case e := <-c.Events():
@@ -61,7 +62,7 @@ func TestClientGreetingAndSnapshot(t *testing.T) {
 
 	select {
 	case <-c.Ready():
-	case <-time.After(5 * time.Second):
+	case <-time.After(testkit.Scale(5 * time.Second)):
 		t.Fatal("client never became ready")
 	}
 	s := c.Snapshot()
@@ -171,7 +172,7 @@ func TestReconnectRefreshesTheSnapshot(t *testing.T) {
 	go c.Run(ctx)
 	select {
 	case <-c.Ready():
-	case <-time.After(5 * time.Second):
+	case <-time.After(testkit.Scale(5 * time.Second)):
 		t.Fatal("client never became ready")
 	}
 	// A device the Cube no longer has (deleted by another client, say)
@@ -189,7 +190,7 @@ func TestReconnectRefreshesTheSnapshot(t *testing.T) {
 	if c.Snapshot().Config(0x0a0b0c) == nil {
 		t.Fatal("extra device not applied")
 	}
-	rctx, rcancel := context.WithTimeout(ctx, 5*time.Second)
+	rctx, rcancel := context.WithTimeout(ctx, testkit.Scale(5*time.Second))
 	defer rcancel()
 	if err := c.Reconnect(rctx); err != nil {
 		t.Fatal(err)
@@ -499,7 +500,7 @@ func TestSetAddressCutsTheBackoffShort(t *testing.T) {
 	c.SetAddress(addr)
 	select {
 	case <-c.Ready():
-	case <-time.After(5 * time.Second):
+	case <-time.After(testkit.Scale(5 * time.Second)):
 		t.Fatal("never connected")
 	}
 	if took := time.Since(start); took > 700*time.Millisecond {
@@ -605,7 +606,7 @@ func TestGreetingCLineAnsweringASend(t *testing.T) {
 	}
 	select {
 	case <-c.Ready():
-	case <-time.After(5 * time.Second):
+	case <-time.After(testkit.Scale(5 * time.Second)):
 		t.Fatal("no greeting")
 	}
 	if c.Snapshot().Config(first) == nil {
@@ -675,16 +676,6 @@ func (ec *eventCount) get(k EventKind) int {
 	return ec.n[k]
 }
 
-// eventually waits up to five seconds for cond.
-func eventually(t *testing.T, what string, cond func() bool) {
-	t.Helper()
-	for deadline := time.Now().Add(5 * time.Second); !cond(); time.Sleep(5 * time.Millisecond) {
-		if time.Now().After(deadline) {
-			t.Fatalf("no %s within 5 s", what)
-		}
-	}
-}
-
 // A Cube that goes away is reported once, however often the client
 // retries, and its return once, with how long it was down; the next
 // loss is reported again.
@@ -696,16 +687,16 @@ func TestALostCubeIsReportedOnce(t *testing.T) {
 	c := New(Options{Addr: addr, Backoff: 10 * time.Millisecond, Logger: logs.logger()})
 	evs := countEvents(ctx, c)
 	go c.Run(ctx)
-	eventually(t, "first greeting", func() bool { return evs.get(EventConnected) == 1 })
+	testkit.Eventually(t, "first greeting", func() bool { return evs.get(EventConnected) == 1 })
 
 	srv.Close()
-	eventually(t, "three failed retries", func() bool { return logs.count("DEBUG", "cube connection attempt failed") >= 3 })
+	testkit.Eventually(t, "three failed retries", func() bool { return logs.count("DEBUG", "cube connection attempt failed") >= 3 })
 	srv2 := &fakecube.Server{Greeting: srv.Greeting}
 	if _, err := srv2.Start(addr); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { srv2.Close() })
-	eventually(t, "greeting after the loss", func() bool { return evs.get(EventConnected) == 2 })
+	testkit.Eventually(t, "greeting after the loss", func() bool { return evs.get(EventConnected) == 2 })
 	// The client logs the return before the event (AP LostOrder).
 	if n := logs.count("WARN", "cube connection lost"); n != 1 {
 		t.Errorf("%d cube connection lost lines, want 1", n)
@@ -724,7 +715,7 @@ func TestALostCubeIsReportedOnce(t *testing.T) {
 	}
 
 	srv2.Close()
-	eventually(t, "second disconnected event", func() bool { return evs.get(EventDisconnected) == 2 })
+	testkit.Eventually(t, "second disconnected event", func() bool { return evs.get(EventDisconnected) == 2 })
 	if n := logs.count("WARN", "cube connection lost"); n != 2 {
 		t.Errorf("%d cube connection lost lines after the second loss, want 2", n)
 	}
@@ -742,7 +733,7 @@ func TestLostFromALossToTheNextGreeting(t *testing.T) {
 	}
 	evs := countEvents(ctx, c)
 	go c.Run(ctx)
-	eventually(t, "first greeting", func() bool { return evs.get(EventConnected) == 1 })
+	testkit.Eventually(t, "first greeting", func() bool { return evs.get(EventConnected) == 1 })
 	if c.Lost() {
 		t.Fatal("lost after the greeting")
 	}
@@ -774,9 +765,9 @@ func TestLostFromALossToTheNextGreeting(t *testing.T) {
 	}
 
 	srv.Close()
-	eventually(t, "the loss", c.Lost)
+	testkit.Eventually(t, "the loss", c.Lost)
 	// The event follows Lost, and countEvents reads it on its own.
-	eventually(t, "the disconnected event", func() bool { return evs.get(EventDisconnected) >= 1 })
+	testkit.Eventually(t, "the disconnected event", func() bool { return evs.get(EventDisconnected) >= 1 })
 	if n := evs.get(EventDisconnected); n != 1 {
 		t.Errorf("%d disconnected events, want 1", n)
 	}
@@ -785,7 +776,7 @@ func TestLostFromALossToTheNextGreeting(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { srv2.Close() })
-	eventually(t, "the greeting after the loss", func() bool { return evs.get(EventConnected) == 3 })
+	testkit.Eventually(t, "the greeting after the loss", func() bool { return evs.get(EventConnected) == 3 })
 	if c.Lost() || !c.Connected() {
 		t.Errorf("after the greeting: lost %v, connected %v", c.Lost(), c.Connected())
 	}
@@ -813,15 +804,15 @@ func TestSilentCubeIsLostAfterTwoPolls(t *testing.T) {
 	c := New(Options{Addr: addr, PollInterval: 200 * time.Millisecond, ReplyTimeout: 100 * time.Millisecond, Backoff: 10 * time.Millisecond, Logger: logs.logger()})
 	evs := countEvents(ctx, c)
 	go c.Run(ctx)
-	eventually(t, "first greeting", func() bool { return evs.get(EventConnected) == 1 })
+	testkit.Eventually(t, "first greeting", func() bool { return evs.get(EventConnected) == 1 })
 
 	srv.SetSilent(true)
-	eventually(t, "the loss", c.Lost)
+	testkit.Eventually(t, "the loss", c.Lost)
 	if lost := logs.lines("WARN", "cube connection lost"); len(lost) != 1 || !strings.Contains(lost[0], "2 polls in a row") {
 		t.Errorf("cube connection lost lines: %q", lost)
 	}
 	srv.SetSilent(false)
-	eventually(t, "the greeting after the loss", func() bool { return evs.get(EventConnected) == 2 })
+	testkit.Eventually(t, "the greeting after the loss", func() bool { return evs.get(EventConnected) == 2 })
 	if n := evs.get(EventDisconnected); n != 1 {
 		t.Errorf("%d disconnected events, want 1", n)
 	}
@@ -855,12 +846,12 @@ func TestLostAfterItsWarning(t *testing.T) {
 	defer cancel()
 	c := New(Options{Addr: addr, Backoff: 10 * time.Millisecond, Logger: slog.New(h)})
 	go c.Run(ctx)
-	eventually(t, "first greeting", c.Connected)
+	testkit.Eventually(t, "first greeting", c.Connected)
 
 	srv.Close()
 	select {
 	case <-h.held:
-	case <-time.After(10 * time.Second):
+	case <-time.After(testkit.Scale(10 * time.Second)):
 		close(h.release)
 		t.Fatal("no cube connection lost warning")
 	}
@@ -880,7 +871,7 @@ func TestLostAfterItsWarning(t *testing.T) {
 	if lost || disconnected != 0 {
 		t.Errorf("while the warning is written: lost %v, %d disconnected events", lost, disconnected)
 	}
-	eventually(t, "the loss after the warning", c.Lost)
+	testkit.Eventually(t, "the loss after the warning", c.Lost)
 }
 
 // One poll the Cube answers late, or not at all, followed by one it
@@ -893,15 +884,15 @@ func TestOneMissedPollKeepsTheConnection(t *testing.T) {
 	c := New(Options{Addr: addr, PollInterval: 200 * time.Millisecond, ReplyTimeout: 50 * time.Millisecond, Backoff: 10 * time.Millisecond, Logger: logs.logger()})
 	evs := countEvents(ctx, c)
 	go c.Run(ctx)
-	eventually(t, "first greeting", func() bool { return evs.get(EventConnected) == 1 })
+	testkit.Eventually(t, "first greeting", func() bool { return evs.get(EventConnected) == 1 })
 
 	n := pollsReceived(srv)
 	srv.SetSilent(true)
-	eventually(t, "a poll held", func() bool { return pollsReceived(srv) > n })
-	eventually(t, "the poll missed", func() bool { return logs.count("WARN", "poll failed") >= 1 })
+	testkit.Eventually(t, "a poll held", func() bool { return pollsReceived(srv) > n })
+	testkit.Eventually(t, "the poll missed", func() bool { return logs.count("WARN", "poll failed") >= 1 })
 	srv.SetSilent(false)
 	m := pollsReceived(srv)
-	eventually(t, "two polls more", func() bool { return pollsReceived(srv) >= m+2 })
+	testkit.Eventually(t, "two polls more", func() bool { return pollsReceived(srv) >= m+2 })
 	if c.Lost() || evs.get(EventDisconnected) != 0 || srv.Connections() != 1 {
 		t.Errorf("lost %v, %d disconnected events, %d connections", c.Lost(), evs.get(EventDisconnected), srv.Connections())
 	}
@@ -918,18 +909,18 @@ func TestSilentCubeWhilePairingIsKept(t *testing.T) {
 	c := New(Options{Addr: addr, PollInterval: 100 * time.Millisecond, ReplyTimeout: 30 * time.Millisecond, Backoff: 10 * time.Millisecond, Logger: logs.logger()})
 	evs := countEvents(ctx, c)
 	go c.Run(ctx)
-	eventually(t, "first greeting", func() bool { return evs.get(EventConnected) == 1 })
+	testkit.Eventually(t, "first greeting", func() bool { return evs.get(EventConnected) == 1 })
 
 	if err := c.StartInclusion(time.Minute); err != nil {
 		t.Fatal(err)
 	}
 	srv.SetSilent(true)
-	eventually(t, "three missed polls", func() bool { return logs.count("WARN", "poll failed") >= 3 })
+	testkit.Eventually(t, "three missed polls", func() bool { return logs.count("WARN", "poll failed") >= 3 })
 	if c.Lost() || evs.get(EventDisconnected) != 0 {
 		t.Fatal("lost while pairing runs")
 	}
 	c.EndInclusion()
-	eventually(t, "the loss once pairing ended", c.Lost)
+	testkit.Eventually(t, "the loss once pairing ended", c.Lost)
 }
 
 // A Cube never reached since the start is reported once, at the first
@@ -942,7 +933,7 @@ func TestAnUnreachableCubeIsReportedOnce(t *testing.T) {
 	c := New(Options{Addr: addr, Backoff: 10 * time.Millisecond, Logger: logs.logger()})
 	evs := countEvents(ctx, c)
 	go c.Run(ctx)
-	eventually(t, "four failed retries", func() bool { return logs.count("DEBUG", "cube connection attempt failed") >= 4 })
+	testkit.Eventually(t, "four failed retries", func() bool { return logs.count("DEBUG", "cube connection attempt failed") >= 4 })
 	if lost := logs.lines("WARN", "cube connection lost"); len(lost) != 1 || !strings.Contains(lost[0], " retry_in=") {
 		t.Errorf("cube connection lost lines: %q", lost)
 	}
@@ -956,7 +947,7 @@ func TestAnUnreachableCubeIsReportedOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { srv.Close() })
-	eventually(t, "greeting", func() bool { return evs.get(EventConnected) == 1 })
+	testkit.Eventually(t, "greeting", func() bool { return evs.get(EventConnected) == 1 })
 	// The client logs the return before the event (AP LostOrder).
 	if n := evs.get(EventDisconnected); n != 1 {
 		t.Errorf("%d disconnected events, want 1", n)
@@ -982,7 +973,7 @@ func TestAReminderWhileTheCubeStaysDown(t *testing.T) {
 	c := New(Options{Addr: addr, Backoff: 10 * time.Millisecond, RemindEvery: 100 * time.Millisecond, Logger: logs.logger()})
 	evs := countEvents(ctx, c)
 	go c.Run(ctx)
-	eventually(t, "two reminders", func() bool { return logs.count("WARN", "cube still unreachable") >= 2 })
+	testkit.Eventually(t, "two reminders", func() bool { return logs.count("WARN", "cube still unreachable") >= 2 })
 	for _, line := range logs.lines("WARN", "cube still unreachable") {
 		if !strings.Contains(line, " down_for=") {
 			t.Errorf("reminder without down_for: %s", line)
@@ -991,7 +982,7 @@ func TestAReminderWhileTheCubeStaysDown(t *testing.T) {
 	if n := logs.count("WARN", "cube connection lost"); n != 1 {
 		t.Errorf("%d cube connection lost lines, want 1", n)
 	}
-	eventually(t, "disconnected event", func() bool { return evs.get(EventDisconnected) > 0 })
+	testkit.Eventually(t, "disconnected event", func() bool { return evs.get(EventDisconnected) > 0 })
 	if n := evs.get(EventDisconnected); n != 1 {
 		t.Errorf("%d disconnected events, want 1", n)
 	}
@@ -1014,7 +1005,7 @@ func TestAFailedReconnectIsALoss(t *testing.T) {
 	c := New(Options{Addr: addr, Dialer: dial, Backoff: 10 * time.Millisecond, Logger: logs.logger()})
 	evs := countEvents(ctx, c)
 	go c.Run(ctx)
-	eventually(t, "first greeting", func() bool { return evs.get(EventConnected) == 1 })
+	testkit.Eventually(t, "first greeting", func() bool { return evs.get(EventConnected) == 1 })
 
 	refuse.Store(true)
 	rctx, stop := context.WithTimeout(ctx, 200*time.Millisecond)
@@ -1022,9 +1013,9 @@ func TestAFailedReconnectIsALoss(t *testing.T) {
 	if err := c.Reconnect(rctx); err == nil {
 		t.Fatal("Reconnect succeeded with every dial refused")
 	}
-	eventually(t, "two failed retries", func() bool { return logs.count("DEBUG", "cube connection attempt failed") >= 2 })
+	testkit.Eventually(t, "two failed retries", func() bool { return logs.count("DEBUG", "cube connection attempt failed") >= 2 })
 	refuse.Store(false)
-	eventually(t, "greeting after the reconnect", func() bool { return evs.get(EventConnected) == 2 })
+	testkit.Eventually(t, "greeting after the reconnect", func() bool { return evs.get(EventConnected) == 2 })
 	if n := logs.count("INFO", "cube reconnecting"); n != 1 {
 		t.Errorf("%d cube reconnecting lines, want 1", n)
 	}

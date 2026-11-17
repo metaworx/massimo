@@ -18,6 +18,7 @@ import (
 	"golang.org/x/sys/windows"
 
 	"go.metaworx.ch/massimo/internal/install"
+	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/update"
 )
 
@@ -66,18 +67,11 @@ func TestHelperStarterGuard(t *testing.T) {
 		t.Fatalf("second start: %v", err)
 	}
 	// Once it has exited (and let go of update.log), the guard is released.
-	for i := 0; ; i++ {
+	testkit.Eventually(t, "the helper's exit", func() bool {
 		h.mu.Lock()
-		running := h.running
-		h.mu.Unlock()
-		if !running {
-			break
-		}
-		if i > 100 {
-			t.Fatal("the helper did not exit")
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+		defer h.mu.Unlock()
+		return !h.running
+	}, testkit.For(10*time.Second), testkit.Every(100*time.Millisecond))
 }
 
 // The restart helper is this binary's massimo restart for the service,

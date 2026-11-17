@@ -14,6 +14,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // jsonLines reads a JSON log's lines.
@@ -76,7 +77,7 @@ func TestEventLinesMatchTheRows(t *testing.T) {
 	s.logServer(systemEvent("backups_pruned", 0, map[string]any{"removed": 2}))
 	ctx := context.Background()
 	var rows []store.Event
-	eventually(t, "the connect burst in the store", func() bool {
+	testkit.Eventually(t, "the connect burst in the store", func() bool {
 		st.FlushEvents(ctx)
 		var err error
 		rows, err = st.Events(ctx, store.EventQuery{CubeID: 1, Server: true})

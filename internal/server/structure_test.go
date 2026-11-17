@@ -12,6 +12,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // startStructureCube is startCopyCube with the structure changes read
@@ -34,7 +35,7 @@ func startStructureCube(t *testing.T, mod func(*fakecube.Server)) (*fakecube.Ser
 	go s.Run(ctx)
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
-	waitFor(t, "the cube", func() bool {
+	testkit.Eventually(t, "the cube", func() bool {
 		var c cubeView
 		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
 	})
@@ -46,7 +47,7 @@ func startStructureCube(t *testing.T, mod func(*fakecube.Server)) (*fakecube.Ser
 func structureEvent(t *testing.T, ts *httptest.Server, device string) event {
 	t.Helper()
 	var found event
-	waitFor(t, "the structure event of "+device, func() bool {
+	testkit.Eventually(t, "the structure event of "+device, func() bool {
 		var evs []event
 		getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log?limit=500", &evs)
 		for _, e := range evs {

@@ -222,21 +222,25 @@ vet: ui
 
 # The race detector on the packages whose goroutines meet: the server, the
 # store, the Cube client, the proxy, the server's wiring, its announcement
-# and its notification rules (the contract's test gate).
+# and its notification rules (the contract's test gate). The detector
+# slows the tests down, so their waits are twice as long
+# (MASSIMO_TEST_SCALE, docs/testing.md).
 RACEPKGS = ./internal/server ./internal/store ./internal/cubelan ./internal/proxy ./internal/serve ./internal/announce ./internal/notify
 
 race: ui
-	MASSIMO_ENV_FILE=/dev/null go test -race $(RACEPKGS)
+	MASSIMO_ENV_FILE=/dev/null MASSIMO_TEST_SCALE=2 go test -race $(RACEPKGS)
 
 # Every package's tests on 32-bit ARM, the armv6 binary that the armhf
 # package ships, run by QEMU as the Raspberry Pi 1's core (ARM1176) with
 # -short: qemu-arm from the system (Debian and Ubuntu: qemu-user), no
 # binfmt needed. CI's job armv6 runs it (GUIDELINES/project/CI.md,
-# section 2).
+# section 2). QEMU runs the tests several times slower than the host, so
+# their waits are four times as long (MASSIMO_TEST_SCALE,
+# docs/testing.md).
 QEMU_ARM ?= qemu-arm -cpu arm1176
 
 test-armv6: ui
-	GOOS=linux GOARCH=arm GOARM=6 CGO_ENABLED=0 MASSIMO_ENV_FILE=/dev/null go test -short -exec '$(QEMU_ARM)' ./...
+	GOOS=linux GOARCH=arm GOARM=6 CGO_ENABLED=0 MASSIMO_ENV_FILE=/dev/null MASSIMO_TEST_SCALE=4 go test -short -exec '$(QEMU_ARM)' ./...
 
 # The fuzz targets (Fuzz* in the packages that parse untrusted bytes:
 # the Cube's and LAN clients' lines, uploaded backups, stored hashes),

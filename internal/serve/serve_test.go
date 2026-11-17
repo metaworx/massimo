@@ -21,6 +21,7 @@ import (
 	"go.metaworx.ch/massimo/internal/announce"
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // TestMain keeps the look for servers beside each discovery run off the
@@ -59,7 +60,7 @@ func runInstance(t *testing.T, inst *Instance) (stop func() error) {
 		select {
 		case err := <-done:
 			return err
-		case <-time.After(20 * time.Second):
+		case <-time.After(testkit.Scale(20 * time.Second)):
 			t.Fatal("Run did not return")
 			return nil
 		}
@@ -70,18 +71,16 @@ func runInstance(t *testing.T, inst *Instance) (stop func() error) {
 // as connected.
 func waitForCube(t *testing.T, base string) {
 	t.Helper()
-	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(20 * time.Millisecond) {
-		var list []struct {
-			Serial    string `json:"serial"`
-			Connected bool   `json:"connected"`
-		}
+	var list []struct {
+		Serial    string `json:"serial"`
+		Connected bool   `json:"connected"`
+	}
+	if !testkit.Within(10*time.Second, func() bool {
+		list = nil
 		getJSON(t, base+"/api/v1/cubes", &list)
-		if len(list) == 1 && list[0].Serial == "KEQ0000100" && list[0].Connected {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("the fake Cube never connected: %+v", list)
-		}
+		return len(list) == 1 && list[0].Serial == "KEQ0000100" && list[0].Connected
+	}) {
+		t.Fatalf("the fake Cube never connected: %+v", list)
 	}
 }
 
@@ -454,7 +453,7 @@ func TestRunAnnouncesBySetting(t *testing.T) {
 	stop := runInstance(t, inst)
 	select {
 	case <-got:
-	case <-time.After(5 * time.Second):
+	case <-time.After(testkit.Scale(5 * time.Second)):
 		t.Fatal("not announced with the setting on")
 	}
 	if err := stop(); err != nil {

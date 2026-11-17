@@ -25,6 +25,7 @@ import (
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
@@ -201,7 +202,7 @@ func (c *mismatchCube) checks() int {
 
 func (c *mismatchCube) waitChecks(t *testing.T, n int) {
 	t.Helper()
-	waitFor(t, fmt.Sprintf("check %d", n), func() bool { return c.checks() >= n })
+	testkit.Eventually(t, fmt.Sprintf("check %d", n), func() bool { return c.checks() >= n })
 }
 
 // greet makes the server read greeting and waits for its check.
@@ -565,7 +566,7 @@ func TestMismatchSeededFromTheLog(t *testing.T) {
 			st.AddEvent(storedEvent(cubeID, mismatchEvent(nil, m, "found")))
 		}
 	})
-	waitFor(t, "the cleared finding", func() bool { return c.event(t, view.MismatchType, "0a0109", "cleared") != nil })
+	testkit.Eventually(t, "the cleared finding", func() bool { return c.event(t, view.MismatchType, "0a0109", "cleared") != nil })
 	n := 0
 	for _, e := range c.events(t) {
 		if e.Summary["finding"] == view.MismatchRoom {

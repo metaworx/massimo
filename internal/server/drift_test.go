@@ -17,6 +17,7 @@ import (
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
@@ -101,7 +102,7 @@ func (r *driftRig) set(rf cube.RFAddress, mode string, setpoint float64) {
 // waitSetting waits until the snapshot shows rf at mode and setpoint.
 func (r *driftRig) waitSetting(rf cube.RFAddress, mode string, setpoint float64) {
 	r.t.Helper()
-	waitFor(r.t, rf.String()+" at "+mode, func() bool {
+	testkit.Eventually(r.t, rf.String()+" at "+mode, func() bool {
 		st, ok := r.rt.client.Snapshot().State(rf)
 		return ok && st.Mode.String() == mode && st.Setpoint != nil && *st.Setpoint == setpoint
 	})
@@ -114,7 +115,7 @@ func (r *driftRig) waitSetting(rf cube.RFAddress, mode string, setpoint float64)
 // begun.
 func (r *driftRig) confirmed(room uint8) {
 	r.t.Helper()
-	waitFor(r.t, "the room's writes confirmed", func() bool { return r.rt.roomConfirmation(room) == nil })
+	testkit.Eventually(r.t, "the room's writes confirmed", func() bool { return r.rt.roomConfirmation(room) == nil })
 }
 
 // events are the log's events of a kind, oldest first, once the store
@@ -442,7 +443,7 @@ func TestDisagreeLeavesOut(t *testing.T) {
 			if err := r.fc.SetState(0x0a0207, fakecube.State{WindowOpen: &open}); err != nil {
 				r.t.Fatal(err)
 			}
-			waitFor(r.t, "the open window", func() bool {
+			testkit.Eventually(r.t, "the open window", func() bool {
 				st, _ := r.rt.client.Snapshot().State(0x0a0207)
 				return st.WindowOpen != nil && *st.WindowOpen
 			})
@@ -480,7 +481,7 @@ func TestDisagreeLeavesOut(t *testing.T) {
 			if err := r.fc.SetState(0x0a0207, fakecube.State{WindowOpen: &closed}); err != nil {
 				t.Fatal(err)
 			}
-			waitFor(t, "the closed window", func() bool {
+			testkit.Eventually(t, "the closed window", func() bool {
 				st, _ := r.rt.client.Snapshot().State(0x0a0207)
 				return st.WindowOpen != nil && !*st.WindowOpen
 			})

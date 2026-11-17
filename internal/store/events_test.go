@@ -16,6 +16,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // eventsStore opens a store with two Cubes and starts its writer, which
@@ -41,15 +43,11 @@ func startWriter(t *testing.T, s *Store) {
 	go func() { s.RunEvents(ctx); close(done) }()
 	var once sync.Once
 	t.Cleanup(func() { once.Do(func() { cancel(); <-done }) })
-	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(time.Millisecond) {
+	testkit.Eventually(t, "the writer's start", func() bool {
 		s.ev.mu.Lock()
-		running := s.ev.done != nil
-		s.ev.mu.Unlock()
-		if running {
-			return
-		}
-	}
-	t.Fatal("the writer did not start")
+		defer s.ev.mu.Unlock()
+		return s.ev.done != nil
+	})
 }
 
 func ev(cube int64, at time.Time, kind, device string, n int) Event {
@@ -298,15 +296,13 @@ func TestEventsPruned(t *testing.T) {
 	s.PruneEventsSoon()
 	s.PruneEventsSoon()
 	cutoff := now.Add(-time.Duration(DefaultLogKeepDays) * 24 * time.Hour)
-	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(10 * time.Millisecond) {
-		pa, _ := s.Events(ctx, EventQuery{CubeID: a.ID, Before: cutoff})
-		pb, _ := s.Events(ctx, EventQuery{CubeID: b.ID, Before: cutoff})
-		if len(pa)+len(pb) == 0 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("PruneEventsSoon left %d and %d", len(pa), len(pb))
-		}
+	var pa, pb []Event
+	if !testkit.Within(5*time.Second, func() bool {
+		pa, _ = s.Events(ctx, EventQuery{CubeID: a.ID, Before: cutoff})
+		pb, _ = s.Events(ctx, EventQuery{CubeID: b.ID, Before: cutoff})
+		return len(pa)+len(pb) == 0
+	}) {
+		t.Fatalf("PruneEventsSoon left %d and %d", len(pa), len(pb))
 	}
 	// Without a writer, a request while one is pending adds nothing.
 	idle := open(t, t.TempDir())
@@ -537,7 +533,7 @@ func TestEventsPruneYields(t *testing.T) {
 	startWriter(t, s)
 	select {
 	case <-inPrune:
-	case <-time.After(5 * time.Second):
+	case <-time.After(testkit.Scale(5 * time.Second)):
 		t.Fatal("no prune at the writer's start")
 	}
 	s.AddEvent(ev(a.ID, time.Now(), "hello", "", 1))
@@ -546,14 +542,10 @@ func TestEventsPruneYields(t *testing.T) {
 	if page, _ := s.Events(ctx, EventQuery{CubeID: a.ID, Kind: "hello"}); len(page) != 1 {
 		t.Fatalf("the flush during the prune: %d events", len(page))
 	}
-	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
-		if page, _ := s.Events(ctx, EventQuery{CubeID: a.ID, Kind: "state", Limit: 1}); len(page) == 0 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("the prune did not end")
-		}
-	}
+	testkit.Eventually(t, "the prune's end", func() bool {
+		page, _ := s.Events(ctx, EventQuery{CubeID: a.ID, Kind: "state", Limit: 1})
+		return len(page) == 0
+	}, testkit.For(10*time.Second))
 	if after.Load() == 0 {
 		t.Fatalf("the flush waited for the whole prune (%d chunks)", steps.Load())
 	}
@@ -584,7 +576,7 @@ func TestEventsPruneStops(t *testing.T) {
 	go func() { s.RunEvents(ctx); close(done) }()
 	select {
 	case <-done:
-	case <-time.After(10 * time.Second):
+	case <-time.After(testkit.Scale(10 * time.Second)):
 		t.Fatal("the writer did not stop")
 	}
 	var left int

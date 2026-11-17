@@ -14,6 +14,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // lockedWriter collects what a logger writes from another goroutine.
@@ -43,10 +45,8 @@ func TestCatchSighup(t *testing.T) {
 	if err := syscall.Kill(os.Getpid(), syscall.SIGHUP); err != nil {
 		t.Fatal(err)
 	}
-	for end := time.Now().Add(5 * time.Second); !strings.Contains(out.String(), "SIGHUP during the start, ignored"); time.Sleep(10 * time.Millisecond) {
-		if time.Now().After(end) {
-			t.Fatalf("no warning for the SIGHUP before ready: %q", out.String())
-		}
+	if !testkit.Within(5*time.Second, func() bool { return strings.Contains(out.String(), "SIGHUP during the start, ignored") }) {
+		t.Fatalf("no warning for the SIGHUP before ready: %q", out.String())
 	}
 	ran := make(chan struct{}, 1)
 	h.ready(func() { ran <- struct{}{} })
@@ -55,7 +55,7 @@ func TestCatchSighup(t *testing.T) {
 	}
 	select {
 	case <-ran:
-	case <-time.After(5 * time.Second):
+	case <-time.After(testkit.Scale(5 * time.Second)):
 		t.Fatal("the SIGHUP after ready ran no reload")
 	}
 }
