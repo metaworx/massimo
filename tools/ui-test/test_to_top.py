@@ -52,18 +52,28 @@ def test_to_top_on_every_page(page, case):
 
 
 def test_to_top_in_the_compacted_header(page, case):
-    """The header's ↑ shows while the header is compacted, left of ☰, and
+    """The header's ↑ shows while the header is compacted, right of the
+    Cube choice from 600 px and left of ☰ below, level with them, and
     takes the page to its top."""
-    btn = page.locator("#top-btn")
+    wide = case.width >= 600
+    btn = page.locator("#top-btn-wide" if wide else "#top-btn")
+    other = page.locator("#top-btn" if wide else "#top-btn-wide")
     long_page(page, "rooms")
     try:
-        assert btn.is_hidden(), "no ↑ in the whole header"
+        assert btn.is_hidden() and other.is_hidden(), "no ↑ in the whole header"
         scrolled_to(page, 400)
         assert wait_until(page, "document.body.classList.contains('scrolled')", 3), "the header compacted"
-        assert btn.is_visible(), "↑ in the compacted header"
-        last = "#nav-menu > summary"
-        b, n = btn.bounding_box(), page.locator(last).bounding_box()
-        assert b["x"] + b["width"] <= n["x"] and abs(b["y"] - n["y"]) <= 1, f"left of {last}, level with it: {b} vs {n}"
+        assert btn.is_visible() and other.is_hidden(), "one ↑ in the compacted header"
+        b = btn.bounding_box()
+        if wide:
+            c = page.locator("#cube-choice").bounding_box()
+            assert c["x"] + c["width"] < b["x"] and abs((b["y"] + b["height"]) - (c["y"] + c["height"])) <= 1, \
+                f"right of the Cube choice, level with it: {b} vs {c}"
+        else:
+            n = page.locator("#nav-menu > summary").bounding_box()
+            h = page.locator("#view-tiles").bounding_box()
+            assert h["x"] + h["width"] <= b["x"] and b["x"] + b["width"] <= n["x"] and abs(b["y"] - n["y"]) <= 1, \
+                f"between 🏠 and ☰, level with them: {b} vs {h}, {n}"
         btn.click()
         assert wait_until(page, "window.scrollY === 0", 3), "↑ takes the page to its top"
         assert wait_until(page, "!document.body.classList.contains('scrolled')", 3), "the header whole again"

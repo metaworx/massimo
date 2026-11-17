@@ -39,7 +39,8 @@ byte for byte on one machine, on every run:
 A shot is framed by what it is about (PAGES): the viewport where the
 page is the subject, else the one element that is, with PADDING around
 it and the whole of it, however tall; at phone width (390) every shot
-is the viewport, as a phone shows the page.
+is the viewport, as a phone shows the page, but the header's own shots,
+which are the window's top, where the header stays, at every width.
 
 Nothing is sent to the fake Cube and nothing is changed in the server's
 store. A shot that cannot be taken fails the run (exit 1); the pixels
@@ -62,7 +63,7 @@ LOG_TIME = "2026-11-03T20:45:00+01:00"       # the log's state event with change
 HTTP_NOW = "Tue, 03 Nov 2026 19:51:00 GMT"   # NOW in an answer's Date header
 STALE_TIME = "2026-11-02T14:51:00+01:00"     # the stale thermostat: 30 hours ago
 TZ = "Europe/Zurich"
-HEIGHT = {1100: 800, 390: 844}
+HEIGHT = {1100: 800, 700: 800, 390: 844, 320: 640}
 PHONE = 390                                  # the width whose shots are all the viewport
 PADDING = 12                                 # CSS px around an element shot
 LOCALE = {"en": "en-US", "de": "de-DE"}
@@ -106,6 +107,10 @@ SYSTEM = {"version": VERSION, "os_name": "Debian GNU/Linux 13 (trixie)", "arch":
 # server of the run is in a terminal, which reboots nothing.
 REBOOT = {"available": True, "by": "systemd"}
 
+# The frame of the header's own shots: the header where the window shows
+# it, at the top, as it stays there compacted (snap).
+HEADER = "@header"
+
 # The pages, in the order of the set and of the slideshow, each with its
 # frame: None for the viewport, else the element the shot is about.
 PAGES = {
@@ -130,10 +135,13 @@ PAGES = {
     "cube-found": "header.top",                     # the Cube choice, the found Cubes' sign in its pill
     "cubes": "#system .cubes-settings",
     "nav-menu": None,                               # ☰ open over the rooms: every page
+    "header": HEADER,                               # the header alone, at the page's top
+    "header-scrolled": HEADER,                      # the header alone, compacted
 }
 
-# The pages of the full width: all of them.
-WIDE = list(PAGES)
+# The pages of the full width: all of them but the header's own shots,
+# which a set of their own takes at each width.
+WIDE = [p for p in PAGES if not p.startswith("header")]
 
 # The set: each run is one browser context, (width, theme, language,
 # pages). The first is the main set and the slideshow's frames.
@@ -142,6 +150,12 @@ SETS = [
     (1100, "dark", "en", WIDE),
     (390, "light", "en", ["rooms", "nav-menu", "cube-choice", "prefs", "cube-settings", "system", "maintenance", "system-info"]),
     (1100, "light", "de", ["rooms"]),
+    # the header at each width: wide, wide compacted, medium, phone and
+    # very narrow compacted (AP GlobalMenu, Block 12)
+    (1100, "light", "en", ["header", "header-scrolled"]),
+    (700, "light", "en", ["header-scrolled"]),
+    (390, "light", "en", ["header-scrolled"]),
+    (320, "light", "en", ["header-scrolled"]),
 ]
 
 
@@ -283,6 +297,10 @@ def snap(page, path, frame):
     opts = dict(path=path, animations="disabled", caret="hide", scale="css")
     if frame is None:
         return page.screenshot(**opts)
+    if frame == HEADER:
+        # the header where it stays, compacted or not: the window's top
+        h = page.evaluate("document.querySelector('header.top').getBoundingClientRect().bottom")
+        return page.screenshot(clip={"x": 0, "y": 0, "width": page.viewport_size["width"], "height": math.ceil(h + PADDING)}, **opts)
     # The header and the page's row stay at the top of the window as it
     # scrolls, and ↑ floats over it (components.js stickyHeader, pageBar,
     # backToTop): an element's shot is of the element alone. Through the
@@ -315,7 +333,15 @@ def open_config(page, tab):
 def step(page, which):
     """Brings the loaded page to what the shot shows."""
     tile = page.locator(".room").first
-    if which == "rooms":
+    if which in ("rooms", "header"):
+        return
+    if which == "header-scrolled":
+        # the page long enough to compact the header at every width: room
+        # under the rooms, out of the shot, through the element's style
+        # (the page's CSP takes no style element)
+        page.evaluate("document.querySelector('main').style.paddingBottom = '1200px'")
+        page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)")
+        wait_until(page, "document.body.classList.contains('scrolled')", 3)
         return
     if which == "rooms-devices":
         tile.locator(".room-name-btn").click()
@@ -412,7 +438,7 @@ def shoot(browser, url, token, width, theme, lang, pages, problems):
                 raise RuntimeError("data-theme is not " + theme)
             step(page, which)
             settle(page)
-            snap(page, str(OUT / file), None if width == PHONE else PAGES[which])
+            snap(page, str(OUT / file), None if width == PHONE and PAGES[which] != HEADER else PAGES[which])
             print("shot  " + file)
         except Exception as e:  # a timeout or a missing element
             problems.append(f"{file}: {e}")

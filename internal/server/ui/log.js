@@ -430,7 +430,7 @@ function logSummaryText(kind, s, serial) {
     case "unconfirmed":
       return logUnconfirmedText(s, serial);
     case "slots": {
-      const at = (iso) => (iso ? fmtLogTime(new Date(iso)) : "–");
+      const at = (iso) => (iso ? fmtTimeOfDay(new Date(iso)) : "–");
       if (s.state === "full") return t("log.sum.slotsFull", { slots: num(s.free_slots), since: at(s.full_since || s.since) });
       if (s.state === "low") return t("log.sum.slotsLow", { slots: num(s.free_slots), since: at(s.since) });
       return t("log.sum.slotsFree", { slots: num(s.free_slots), since: at(s.since) });
@@ -444,7 +444,7 @@ function logSummaryText(kind, s, serial) {
     case "drift":
       return logDriftText(s);
     case "hold":
-      if (s.reason === "duty_cycle") return t("log.sum.holdDuty", { duty: num(s.duty_pct), until: s.until ? fmtLogTime(new Date(s.until)) : "–" });
+      if (s.reason === "duty_cycle") return t("log.sum.holdDuty", { duty: num(s.duty_pct), until: s.until ? fmtTimeOfDay(new Date(s.until)) : "–" });
       return t("log.sum.holdSlots", { slots: num(s.free_slots), wait: num(s.wait_s) });
     case "login":
       return t("log.sum.login", { user: s.user || "–", remote: s.remote || "–" });
@@ -488,7 +488,7 @@ function logErrorWatchText(s) {
       break;
     case "lasting":
       parts.push(t(link ? "log.sum.watchLastingLink" : "log.sum.watchLasting", {
-        hours: num(s.hours), since: s.since ? fmtLogTime(new Date(s.since)) : "–" }));
+        hours: num(s.hours), since: s.since ? fmtTimeOfDay(new Date(s.since)) : "–" }));
       if (s.silent) parts.push(t("log.sum.watchSilent"));
       break;
     case "clear":
@@ -754,14 +754,6 @@ function logKind(kind) {
   return s === key ? kind : s;
 }
 
-// fmtLogTime is a line's time, with its date when it is not today's.
-function fmtLogTime(d) {
-  const pad = (n) => String(n).padStart(2, "0");
-  const time = pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds());
-  if (d.toDateString() === new Date().toDateString()) return time;
-  return new Intl.DateTimeFormat(undefined, { day: "2-digit", month: "2-digit" }).format(d) + " " + time;
-}
-
 // logRangeStart is where a time range starts, seen from now; null for the
 // count and for all.
 function logRangeStart(range, now = new Date()) {
@@ -795,7 +787,7 @@ function logLineMatches(line) {
   if (!logOfDevice(line, logState.device) || !logAtLevel(line) || !logOfChoices(line)) return false;
   const f = logState.filter.trim().toLowerCase();
   if (!f) return true;
-  const hay = [fmtLogTime(line.time), line.kind, logKind(line.kind), logLineCube(line), line.device, logDeviceSerial(line), logDeviceName(line), logText(line)]
+  const hay = [fmtTimeOfDay(line.time), line.kind, logKind(line.kind), logLineCube(line), line.device, logDeviceSerial(line), logDeviceName(line), logText(line)]
     .join(" ")
     .toLowerCase();
   return hay.includes(f);
@@ -814,7 +806,7 @@ function renderLogLine(line) {
   const row = fromTemplate("tpl-log-line");
   row.className += " kind-" + line.kind;
   if (line.id) row.dataset.id = String(line.id);
-  row.querySelector(".log-time").textContent = fmtLogTime(line.time);
+  row.querySelector(".log-time").textContent = fmtTimeOfDay(line.time);
   row.querySelector(".log-kind").textContent = logKind(line.kind);
   const dev = row.querySelector(".log-device");
   const sn = row.querySelector(".log-sn");

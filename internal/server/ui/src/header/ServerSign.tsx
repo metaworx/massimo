@@ -4,17 +4,17 @@
 /**
  * @file internal/server/ui/src/header/ServerSign.tsx
  *
- * The server's sign before the time of the last update: an icon in a
- * frame, green while the server answers, blue while an update is out for
+ * The server's sign, first in the header's pile: its icon in its state's
+ * colour, green while the server answers, blue while an update is out for
  * one who may install it, amber once the server runs a new version (its
- * triangle blinks), filled red after a poll without an answer (it blinks);
- * its label says what a click does, and a click does it. Built once and
- * updated in place.
+ * triangle blinks), red after a poll without an answer (it blinks, and the
+ * pile is filled red); and, while its state offers something to do, that
+ * as an item of the pile's list: Software update, or the reload for the
+ * new version.
  */
 
-import { IconButton } from "../shared/icon";
-import { pollNow } from "./send";
-import { load } from "./store";
+import { Icon } from "../shared/icon";
+import { MenuItem } from "../shared/menu";
 
 /** The icon of each state of the server's sign. */
 const SERVER_ICON: Record<string, string> = { up: "icon-plug-on", info: "icon-info", new: "mark-warn", down: "icon-plug-off" };
@@ -31,23 +31,34 @@ export function serverState(): string {
   return updateOut() ? "info" : "up";
 }
 
-/**
- * serverAct does what the sign's state offers: a new version reloads the
- * page, an update out opens Software update, otherwise it polls now.
- */
-function serverAct(): void {
-  const st = serverState();
-  if (st === "new") location.reload();
-  else if (st === "info") {
-    showView("maint");
-    showCard($("sys-software"));
-  } else pollNow();
+/** serverWords say the server's state, for the pile's label and tooltip. */
+export function serverWords(st: string): string {
+  return t("server." + st, { version: updateLatest(), seconds: state.settings.poll });
 }
 
-/** ServerSign is the server's sign, an icon button. */
-export function ServerSign() {
-  load.useLoad();
-  const st = serverState();
-  const label = t("server." + st, { version: updateLatest(), seconds: state.settings.poll });
-  return <IconButton id="server-sign" cls="server-sign" data-state={st} symbol={SERVER_ICON[st]} mark={st === "new"} label={label} onClick={serverAct} />;
+/** ServerIcon is the server's sign in the pile's summary, its state its class. */
+export function ServerIcon({ st }: { st: string }) {
+  return <Icon symbol={SERVER_ICON[st]} cls={"ni server-icon state-" + st} mark={st === "new"} />;
+}
+
+/** openSoftware opens Software update on Maintenance. */
+function openSoftware(): void {
+  showView("maint");
+  showCard($("sys-software"));
+}
+
+/**
+ * ServerItem is what the server's state offers, an item of the pile's
+ * list: while an update is out, Software update; once the server runs a
+ * new version, the page's reload; nothing otherwise, where Refresh now is
+ * what there is to do.
+ */
+export function ServerItem({ st }: { st: string }) {
+  if (st === "info") {
+    return <MenuItem cls="server-item" icon={<Icon symbol="icon-info" cls="ni" />} label={t("server.toUpdate", { version: updateLatest() })} onClick={openSoftware} />;
+  }
+  if (st === "new") {
+    return <MenuItem cls="server-item" icon={<Icon symbol="icon-refresh" cls="ni" />} label={t("server.reload")} onClick={() => location.reload()} />;
+  }
+  return null;
 }

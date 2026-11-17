@@ -1082,10 +1082,10 @@ function stickyHeader() {
   onScroll();
 }
 
-// backToTop wires the two back-to-top buttons: ↑ at the bottom right
-// of every page once it is a screen down (#to-top), and the header's,
-// left of ☰, while the header is compacted (#top-btn,
-// style.css). Each takes the page back to its top, the focus on the
+// backToTop wires the back-to-top buttons: ↑ at the bottom right of
+// every page once it is a screen down (#to-top), and the header's while
+// it is compacted, beside the Cube choice from 600 px (#top-btn-wide),
+// left of ☰ below (#top-btn, style.css). Each takes the page back to its top, the focus on the
 // page's sections menu where it has one, else on its button in the
 // header.
 function backToTop() {
@@ -1104,6 +1104,7 @@ function backToTop() {
   };
   btn.addEventListener("click", go);
   document.getElementById("top-btn").addEventListener("click", go);
+  document.getElementById("top-btn-wide").addEventListener("click", go);
 }
 
 // settleAtTop keeps a scroll to the top from ending a few pixels short:

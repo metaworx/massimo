@@ -31,6 +31,7 @@ const state = {
   version: null, // the server version the page was loaded with
   newVersion: false,
   serverDown: false, // the last poll got no answer (renderServerSign)
+  repliedAt: 0, // when the server last answered a request (Date.now()), for the pile's Refresh now
   updateAt: 0, // when the page last asked whether an update is out (updateDue)
   lastPoll: null, // time of the last successful poll (browser time)
 };
@@ -264,6 +265,7 @@ async function apiRequest(method, path, body, { auth = true, keepalive = false, 
   if (body !== undefined) headers["Content-Type"] = "application/json";
   const resp = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), keepalive });
   noteServerClock(resp);
+  state.repliedAt = Date.now();
   let data = null;
   const text = await resp.text();
   if (text) {
@@ -440,6 +442,16 @@ function fmtAge(ms, since) {
   else if (sec < 48 * 3600) text = fmtUnit(Math.floor(sec / 3600), "hour");
   else text = fmtUnit(Math.floor(sec / 86400), "day");
   return since ? "≥ " + text : text;
+}
+
+// fmtTimeOfDay is an instant as the browser's time of day, "20:51:03",
+// with its date before it when it is not today's (a log line's time, the
+// header's Refresh now).
+function fmtTimeOfDay(d) {
+  const pad = (n) => String(n).padStart(2, "0");
+  const time = pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds());
+  if (d.toDateString() === new Date().toDateString()) return time;
+  return new Intl.DateTimeFormat(undefined, { day: "2-digit", month: "2-digit" }).format(d) + " " + time;
 }
 
 // fmtShortTime is an instant (ms) as day, month and time.
@@ -763,7 +775,7 @@ function selectCube(serial) {
 
 // poll refreshes the header, the log button's sign, and runs the version
 // check; the rooms are refreshed as well while the event stream is not
-// connected, or always when the user asked (the refresh button).
+// connected, or always when the user asked (the pile's Refresh now).
 function poll(rooms) {
   checkVersion();
   loadLogAlerts(); // log.js: the log button's sign
@@ -1017,7 +1029,6 @@ async function init() {
   // the header kept at the top; System settings' row there with its
   // sections menu, its cards that fold; back to top on every page
   stickyHeader();
-  watchFacts();
   for (const page of [$("system"), $("maint-page"), $("cube-page"), $("me")]) {
     sectionCards(page);
     pageBar(page);

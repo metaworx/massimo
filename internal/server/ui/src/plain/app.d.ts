@@ -37,9 +37,15 @@ declare global {
     serverDown: boolean;
     /** The server runs another version than the page was loaded with. */
     newVersion: boolean;
+    /** When the server last answered a request of the page (Date.now()), 0 before. */
+    repliedAt: number;
     /** The person's settings, as far as a part reads them. */
     settings: { poll: number; expert: boolean };
   };
+  /** An instant as the browser's time of day, "20:51:03", its date before it when it is not today's. */
+  function fmtTimeOfDay(d: Date): string;
+  /** An API time as a Date, null for none (a zero time). */
+  function timeOf(iso: string | undefined): Date | null;
   /** The element of the page with the id. */
   function $(id: string): HTMLElement | null;
   /** A request to the API with the page's token; the answer's JSON, or an error with the server's message. */

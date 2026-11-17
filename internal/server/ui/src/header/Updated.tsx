@@ -4,12 +4,11 @@
 /**
  * @file internal/server/ui/src/header/Updated.tsx
  *
- * How long ago the chosen Cube was heard from, in the header's refresh
- * button: its updated, the last message the server took from it, on the
- * server's clock (serverSkew of header.js), counting on by itself, each
- * second under a minute, then each minute, each hour. The button around
- * it, with its tooltip that says the time itself, stays plain
- * (header.js renderUpdated).
+ * How long ago the chosen Cube was heard from, above the header's pile
+ * (Pile.tsx): its updated, the last message the server took from it, on
+ * the server's clock (serverSkew of header.js), counting on by itself,
+ * each second under a minute, then each minute, each hour. The time itself
+ * is in the pile's list, under Refresh now.
  */
 
 import { useEffect, useState } from "preact/hooks";

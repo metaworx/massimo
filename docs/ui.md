@@ -107,35 +107,34 @@ waits while there are any.
 
 ## Header
 
-The header's line reads, from the left:
-Massimo's logo with the server's version and the time of the last update with **↻**,
-all on one baseline where they fit beside it, the M as tall as the page buttons;
-then the Cube choice with the server's connection to the Cube as a plug;
-then the house, **Rooms**, and **☰**, the menu of every other page.
-Where the version, the server's sign and the time do not fit beside the logo
-on one line, they take a row of their own across the header,
-under the logo and the Cube choice, on a phone under the logo and the page buttons,
-the version on a line of its own where the row is too narrow for all three,
-so that it is cut only where it is wider than the header.
-On a screen narrower than 600 px the Cube choice takes a line of its own,
+The header's row reads, from the left:
+Massimo's logo, the M as tall as the page buttons;
+the pile, how long ago the chosen Cube was heard from above a pill
+that starts with the server's sign and shows every Cube's problems;
+the Cube choice with the server's connection to the Cube as a plug;
+then, at the right, the house, **Rooms**, and **☰**, the menu of every other page.
+They all end on one line, the logo's baseline and the buttons' lower edge.
+On a screen narrower than 600 px the Cube choice takes the second row to itself,
 and the logo is the mark alone, the M with the clock in its V.
+Where the logo, the pile and the page buttons do not fit the first row,
+the pile takes a line of its own under them, the age at its right.
+Under 331 px the logo goes.
 
 The logo lies over the word "Massimo", which a screen reader reads:
 the word shows until the drawing has come (`ui/brand/brand.svg`,
 made by `make ui-brand`, `tools/brand/README.md`), and stays where it never does.
 The drawing has no margin: its bottom edge is the letters' baseline,
-which the version and the time of the last update stand on.
+which the pile and the buttons end on.
 Its colours follow the light or dark mode chosen, its letters the page's text.
 The sign-in, the form that creates the first owner and the apps' connect page
 show the logo too, the first two larger, above their titles.
 
 The header stays at the top while the page scrolls.
-Scrolled, it keeps its first line, the server's sign and the time of the last update,
-without the version, and the lines under it go until the page is back
-at its top, expert mode's line of the Cube's radio budget apart;
-narrower than 600 px the Cube choice then takes the line of **Massimo**,
-the sign and the time a short line under it.
-The compacted header has **↑** left of ☰, back to the top.
+Scrolled, it keeps its rows as they are, the logo too,
+and the lines under them go until the page is back
+at its top, expert mode's line of the Cube's radio budget apart.
+The compacted header has **↑**, back to the top:
+right of the Cube choice from 600 px, left of ☰ below.
 
 - **Cube**:
   a menu that chooses the Cube when the server has several.
@@ -174,10 +173,24 @@ The compacted header has **↑** left of ☰, back to the top.
   for others the choice's entries cannot be chosen.
   A Cube the server finds by itself appears without reloading the page,
   and in the log.
-- **Problems**, beside the Cube choice, a green check in a pill's frame
-  where nothing is wrong on any Cube; where something is,
-  a pill with an icon per kind (a Cube's link, the radio, a battery, a window
-  open too long, the settings), which lists every Cube with a problem as a heading,
+- **The pile**, between the logo and the Cube choice:
+  how long ago the chosen Cube was heard from, centred above a pill
+  that starts with the server's sign (below), then
+  a green check where nothing is wrong on any Cube; where something is,
+  an icon per kind (a Cube's link, the radio, a battery, a window
+  open too long, the settings).
+  The pill opens a list, whatever is wrong or not.
+  Its first item is **Refresh now**, which asks the server for the current state now,
+  turns while it asks and leaves the list open;
+  under it, a line each, the times in the browser's time zone:
+  when the chosen Cube was read (the last message the server took from it),
+  when the server last answered the page, and the time now,
+  which moves on each second while the list is open.
+  While the server's sign offers something to do,
+  that is the list's second item: **Software update** with the version,
+  or the reload for the server's new version.
+  Then the list says that nothing is wrong,
+  or it lists every Cube with a problem as a heading,
   its own sign and its link's badge, and under it its devices with a problem
   as "Room › Device" with their badges;
   for one who may change the settings, **Settings**:
@@ -196,15 +209,15 @@ The compacted header has **↑** left of ☰, back to the top.
   no higher than the room below it, and scrolls in itself, not the page.
   An open list stays open when data comes in, and follows it:
   a problem that comes is listed, one that goes leaves the list,
-  until nothing is left to list and the green check takes its place.
-- **How long ago the chosen Cube was heard from** and **↻**, one button without a frame,
-  which asks the server for the current state now:
+  until nothing is left to list and the list says so, the green check in the pill.
+- **How long ago the chosen Cube was heard from**, above the pill:
   "8 sec" since the server last took a message from the Cube,
   measured on the server's clock,
   counting on by itself, each second under a minute, then each minute, each hour;
-  its tooltip says the time itself, "updated 20:51:00, click to reload";
-  a finger hits it a little beyond what it shows, and ↻ turns while it asks.
-- **The version** is short; its tooltip is the whole version, "(server version)".
+  the time itself is under Refresh now.
+- **The version** is ☰'s first row, short and small; its tooltip is the whole version,
+  "(server version)", and a click copies it.
+  Signed out, when there is no ☰, it stands beside the logo.
   The Cube's clock is in the Cube's facts, under System settings → **Cubes**:
   the Cube tells it when the server connects, to the minute,
   and the page moves it on from then;
@@ -251,19 +264,20 @@ The compacted header has **↑** left of ☰, back to the top.
   a page opened for the first time starts at its top.
 - **↑**, round and filled in the accent's blue at the bottom right,
   shows on every page once it is a screen down,
-  and another ↑ left of ☰ while the header is compacted;
+  and another ↑ in the compacted header, right of the Cube choice from 600 px,
+  left of ☰ below;
   each takes the page back to its top,
   the focus on the page's sections menu where it has one.
-- **The server's sign**, before the time of the last update,
-  an icon in a frame whose label says what a click does:
-  the plug in green while the server answers (a click updates now);
+- **The server's sign**, first in the pile's pill,
+  its state named first in the pill's label:
+  the plug in green while the server answers;
   a blue "i" while an update is out,
-  for one who may install it (a click opens Software update);
+  for one who may install it (the list's second item opens Software update);
   an amber triangle, blinking, once the server runs a new version
-  (a click reloads the page);
-  the open plug on a filled red square, blinking, after a poll without an answer:
+  (the list's second item reloads the page);
+  the open plug, blinking, the pill filled red, after a poll without an answer:
   the page's other signs are greyed, their state not known,
-  the time is that of the last update, and the page tries again at every poll.
+  the age is that of the last update, and the page tries again at every poll.
   After an update the page reloads by itself only when nothing is open:
   no setting being edited, no panel and none of the settings pages.
 - In expert mode a line under the first shows the chosen Cube's name,
@@ -1616,8 +1630,8 @@ a script for each region of the page, in the order the page loads them:
   the helpers, the ages of values, help, the Cube clock, loading, polling,
   the event stream, the language and `init`;
 - `header.js`, the plain names of the header, which call its parts (`ui/src/header/`),
-  and what stays plain there: the radio budget, the refresh button and the server's clock,
-  the version and the facts' fitting, the server's state;
+  and what stays plain there: the radio budget, the server's clock and its last answer,
+  the version in ☰ and beside the logo while signed out, the server's state;
   `home.js`, the home notice's place shown or hidden, the Cubes a `cube_found` event adds
   and the way to them;
   `prefs.js`, the wiring of My settings' rows and the language choice;
@@ -1708,12 +1722,12 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `Sign` | `icon.tsx` | a kind of `SIGNS` in a state, its mark blinking (`signEl`) | `kind`, `state` ("", ok, warn, bad, open), `cls`, `blink` (the mark's key), `label` (named for a screen reader, else hidden) |
 | `Mark` | `icon.tsx` | a mark alone (`markEl`) | `state` (warn, bad), `blink` |
 | `CountIcon` | `icon.tsx` | an icon with a number in its corner (`foundCountEl`) | `symbol`, `n`, `cls` |
-| `IconButton` | `icon.tsx` | a button that is an icon alone, named for a screen reader (`iconButton`): a tile's info and cog, the server's sign, the copy icon | `symbol`, `label` (its name, and its tooltip without `title`), `title`, `cls`, `mark`, and the button's own attributes (`id`, `aria-expanded`, `data-…`, the handlers) |
+| `IconButton` | `icon.tsx` | a button that is an icon alone, named for a screen reader (`iconButton`): a tile's info and cog, the copy icon | `symbol`, `label` (its name, and its tooltip without `title`), `title`, `cls`, `mark`, and the button's own attributes (`id`, `aria-expanded`, `data-…`, the handlers) |
 | `Badge` | `badge.tsx` | a `.flag` led by its mark for a warning or a failure (`badgeEl`) | `kind`, `text`, `blink`, `title`, children after the text |
 | `Notice` | `badge.tsx` | a lasting warning with since when (`noticeEl`) | `text`, `since`, `next`, `cls`, `id`, `role`, `hidden` (the class `hidden`, the line kept in its place), children after |
 | `Age` | `badge.tsx` | how old a value is, filled by `fillAge` (`ageEl`) | `at`, `stale`, `plain` |
 | `ResultLine` | `badge.tsx` | the line that says how an action went, green or red, hidden while there is none (`showResult`), as an `actionRunner`'s `set` gives it | `res` (an `Outcome` or null), `cls` |
-| `Problems` | `problems.tsx` | the problem list, entries under entries (`problemsEl`), an item with an action a button | `entries`, `label`, `ok` (the green check's label where nothing is wrong), `always` (the list there where nothing is wrong too, its summary the green check, `ok` a line of its list), `lead` (drawn first in the summary, a sign of the place's own state), `head` (drawn first in the list, items that act on the place), `onClick`, `onOpen`, `onClose` (as `Dropdown`'s) |
+| `Problems` | `problems.tsx` | the problem list, entries under entries (`problemsEl`), an item with an action a button | `entries`, `label`, `ok` (the green check's label where nothing is wrong), `always` (the list there where nothing is wrong too; where `ok` is given, its summary the green check and `ok` a line of its list), `lead` (drawn first in the summary, a sign of the place's own state), `head` (drawn first in the list, items that act on the place), `onClick`, `onOpen`, `onClose` (as `Dropdown`'s) |
 | `KindIcons`, `problemKinds`, `kindsLabel` | `problems.tsx` | the kinds' icons of entries without the list (`kindIcons`); the kinds themselves, to know whether there are any; the label naming the kinds among items in an order of kinds, "" for none | `entries`, `skip`; `entries`, `skip`; `items`, `kinds` |
 | `OkPill` | `problems.tsx` | the green check in a list's place (`okPill`) | `label` |
 | `Field` | `field.tsx` | a label and its control, `.field` or `.field.wide` (`fieldRow`) | `label`, `id`, `wide`, `unit`, `hint`, `draft`, `show`, the control as children |
@@ -1853,17 +1867,19 @@ and the devices loaded for the hide choice;
 so in the panel head's pill and in the header's entry of the Cube),
 and `index.tsx` forgets a Cube's form when the list no longer gives the Cube.
 The header (`ui/src/header/`) is the second:
-`index.tsx` draws the Cube choice with every Cube's problems in `#header-cube`,
-the chosen Cube's age in the refresh button's `#updated`,
-the server's sign in `#server-sign-slot`, the certificate's line in `#tls-slot`
+`index.tsx` draws the pile in `#header-pile` (`Pile.tsx`: the chosen Cube's age,
+`Updated.tsx`, above every Cube's problems, `CubeProblems.tsx`,
+led by the server's sign, `ServerSign.tsx`, with Refresh now and the times),
+the Cube choice in `#header-cube`, the certificate's line in `#tls-slot`
 and the home notice inside `#home-notice`, and registers `render` and `tls`,
 which `header.js` calls as `renderCubeSelect`, `renderUpdated`, `renderServerSign`
 and `renderTLS`, and `home.js` as `renderHomeNotice`;
 `store.ts` holds its counter, the search under way and the certificate,
-`send.ts` the search and the poll the server's sign asks for.
-The choice is a `Picker`, the problems a `Problems`, the certificate's line a `Notice`,
-the server's sign an `IconButton`.
-The facts row with its fitting, the version and the refresh button stay plain,
+`send.ts` the search.
+The choice is a `Picker`, the problems a `Problems` with `lead`, `always` and `head`,
+Refresh now a `MenuItem` with `keepOpen`, the certificate's line a `Notice`.
+The pile measures in an effect whether it needs a line of its own (`data-line`).
+The logo, the version (in ☰, and beside the logo while signed out) and ↑ stay plain,
 around the parts' places and not in them,
 and the home notice's place is shown and hidden by the plain code (and by `pages.js`),
 the part drawing inside it.

@@ -27,12 +27,14 @@ FAULTY = {"rf_address": "0a0101", "type": "radiator_thermostat", "name": "Radiat
 
 
 def summary_icons(page):
+    """The pill's icons, the server's sign first."""
     return [svg.evaluate("(s) => [...s.querySelectorAll('use')].map((u) => u.getAttribute('href')).join('+')")
             for svg in page.locator("#cube-problems .problems-sum svg").all()]
 
 
 def test_header_problems(page, case):
-    """No problem: the green check in the pill's place. A device's failure: the radio's cross in the
+    """No problem: the green check after the server's sign, the list there
+    all the same, saying nothing is wrong. A device's failure: the radio's cross in the
     pill; its list has the Cube as the heading in green, the device under
     it as "Room › Device" with its badge. A held link: the Cube's sign
     with a triangle and its badge. A proxy that does not listen: the
@@ -40,10 +42,12 @@ def test_header_problems(page, case):
     keeps each Cube's sign."""
     try:
         page.evaluate(SET, [None, [], []])
-        assert page.locator("#cube-problems .problems").count() == 0, "nothing wrong: no problem pill"
-        assert page.locator("#cube-problems .ok-pill .ok-check").count() == 1, "the green check in its place"
+        assert summary_icons(page)[1:] == ["#icon-check"], f"nothing wrong: the green check after the sign ({summary_icons(page)})"
+        page.locator("#cube-problems .problems-sum").click()
+        assert page.locator("#cube-problems .problems-ok").inner_text() == page.evaluate("t('problem.none')"), "the list says so"
+        page.keyboard.press("Escape")
         page.evaluate(SET, [None, [FAULTY], []])
-        assert summary_icons(page) == ["#icon-radio-small+#mark-corner-x"], "the radio's cross"
+        assert summary_icons(page)[1:] == ["#icon-radio-small+#mark-corner-x"], "the radio's cross"
         page.locator("#cube-problems .problems-sum").click()
         heads = page.locator("#cube-problems .problems-list > .problem-entry")
         assert heads.count() == 1, "one Cube"
@@ -54,7 +58,7 @@ def test_header_problems(page, case):
         assert sub.locator(".flag.bad").count() == 1, "with its badge"
         page.keyboard.press("Escape")
         page.evaluate(SET, ["held", [FAULTY], [{"addr": "0.0.0.0:62910", "error": "in use"}]])
-        icons = summary_icons(page)
+        icons = summary_icons(page)[1:]
         assert icons[0] == "#icon-net-base+#mark-net-warn" and icons[-1] == "#icon-cog-small+#mark-corner-warn", \
             f"the held link first, the settings last ({icons})"
         page.locator("#cube-problems .problems-sum").click()

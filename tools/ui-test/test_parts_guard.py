@@ -211,12 +211,21 @@ def cube_choice_found(page):
 
 
 def header_problems(page):
-    """Every Cube's problem list open beside the Cube choice, with a
+    """Every Cube's problem list open in the header's pile, with a
     device, the settings and the Cubes found in it (stub_cubes): the fault
     of AP UiParts Block 6."""
     stub_cubes(page)
     on_rooms(page)
     page.locator("#cube-problems .problems-sum").click()
+    page.locator("#cube-problems .problems-list").wait_for(state="visible")
+
+
+def pile_refreshed(page):
+    """The pile's list open after its Refresh now, which polls and leaves
+    it open (AP GlobalMenu, Block 12), the poll come back."""
+    header_problems(page)
+    page.locator("#cube-problems .refresh-now").click()
+    assert wait_until(page, "!document.querySelector('#cube-problems .refresh-now').disabled", 5), "the poll came back"
     page.locator("#cube-problems .problems-list").wait_for(state="visible")
 
 
@@ -436,8 +445,11 @@ REGIONS = (
         View("the Cube choice open", cube_choice),
         View("the Cube choice open with the Cubes found", cube_choice_found),
     )),
-    Region("cube-problems", ("#cube-problems",), (View("every Cube's problem list open", header_problems),)),
-    Region("main-menu", ("header.top .top-facts", "header.top nav.nav"), (View("☰ open", main_menu),)),
+    Region("pile", (".pile",), (
+        View("every Cube's problem list open", header_problems),
+        View("the pile's list open after Refresh now", pile_refreshed),
+    )),
+    Region("main-menu", ("header.top nav.nav",), (View("☰ open", main_menu),)),
     Region("home-notice", ("#home-notice",), (View("on the second server, its Cube not connected", home_notice),)),
     Region("rooms", ("#rooms",), (
         View("a tile's ⋯ menu open", rooms_menu),
