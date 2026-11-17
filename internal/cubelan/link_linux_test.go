@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // The fake's refusal is the kernel's (Linux): a refused client's dial
@@ -49,19 +50,19 @@ func TestAStaleCubeAfterTheHold(t *testing.T) {
 	c := New(Options{Addr: addr, PollInterval: 100 * time.Millisecond, ReplyTimeout: 50 * time.Millisecond, Backoff: 10 * time.Millisecond,
 		Hold: 200 * time.Millisecond, Logger: logs.logger(), Dialer: quickDial})
 	go c.Run(ctx)
-	eventually(t, "first greeting", c.Connected)
+	testkit.Eventually(t, "first greeting", c.Connected)
 	if l := c.Link(); l.State != LinkConnected {
 		t.Fatalf("link %+v, want connected", l)
 	}
 
 	srv.SetSilent(true)
-	eventually(t, "the hold", func() bool { return c.Link().State == LinkHeld })
+	testkit.Eventually(t, "the hold", func() bool { return c.Link().State == LinkHeld })
 	if l := c.Link(); l.Since.IsZero() || !l.Until.After(l.Since) {
 		t.Errorf("held link %+v: want since and until", l)
 	}
-	eventually(t, "the dead session", srv.HeldDead)
+	testkit.Eventually(t, "the dead session", srv.HeldDead)
 	srv.SetSilent(false) // the network is back, the Cube still holds the session
-	eventually(t, "two dials timed out", func() bool { return logs.count("DEBUG", "cube connection attempt failed") >= 2 })
+	testkit.Eventually(t, "two dials timed out", func() bool { return logs.count("DEBUG", "cube connection attempt failed") >= 2 })
 	if l := c.Link(); l.State != LinkOffline {
 		t.Errorf("link %+v before discovery heard the Cube, want offline", l)
 	}
@@ -75,9 +76,9 @@ func TestAStaleCubeAfterTheHold(t *testing.T) {
 	}
 
 	srv.Release()
-	eventually(t, "the connection after the release", func() bool { return c.Link().State == LinkConnected })
+	testkit.Eventually(t, "the connection after the release", func() bool { return c.Link().State == LinkConnected })
 	// The line follows the state, written right after the greeting.
-	eventually(t, "the line of the refusal's end", func() bool { return logs.count("INFO", "cube no longer refuses") == 1 })
+	testkit.Eventually(t, "the line of the refusal's end", func() bool { return logs.count("INFO", "cube no longer refuses") == 1 })
 }
 
 // A Cube that another client holds, with no connection of serve's left
@@ -89,19 +90,19 @@ func TestABusyCube(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer other.Close()
-	eventually(t, "the other client served", func() bool { return srv.Connections() == 1 })
+	testkit.Eventually(t, "the other client served", func() bool { return srv.Connections() == 1 })
 
 	var logs logLines
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	c := New(Options{Addr: addr, PollInterval: time.Minute, Backoff: 10 * time.Millisecond, Logger: logs.logger(), Dialer: quickDial})
 	go c.Run(ctx)
-	eventually(t, "two dials timed out", func() bool { return logs.count("DEBUG", "cube connection attempt failed") >= 1 })
-	eventually(t, "the busy link", func() bool { c.Heard(); return c.Link().State == LinkBusy })
+	testkit.Eventually(t, "two dials timed out", func() bool { return logs.count("DEBUG", "cube connection attempt failed") >= 1 })
+	testkit.Eventually(t, "the busy link", func() bool { c.Heard(); return c.Link().State == LinkBusy })
 	if n := logs.count("WARN", "cube busy with another client"); n != 1 {
 		t.Errorf("%d busy lines, want 1", n)
 	}
 
 	other.Close()
-	eventually(t, "the connection once the other left", func() bool { return c.Link().State == LinkConnected })
+	testkit.Eventually(t, "the connection once the other left", func() bool { return c.Link().State == LinkConnected })
 }

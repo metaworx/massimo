@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // Reboot sends R to the Cube and returns its answer, status 2.
@@ -48,19 +49,19 @@ func TestRebootingIsNoLoss(t *testing.T) {
 	c := New(Options{Addr: addr, Backoff: 10 * time.Millisecond, Logger: logs.logger()})
 	evs := countEvents(ctx, c)
 	go c.Run(ctx)
-	eventually(t, "first greeting", func() bool { return evs.get(EventConnected) == 1 })
+	testkit.Eventually(t, "first greeting", func() bool { return evs.get(EventConnected) == 1 })
 
 	srv.SetSilent(true) // the Cube restarts: no greeting for a while
 	c.Rebooting(time.Minute)
 	if l := c.Link(); l.State != LinkRebooting || l.Since.IsZero() || l.Until.IsZero() {
 		t.Errorf("link %+v, want rebooting", l)
 	}
-	eventually(t, "the next connection", func() bool { return srv.Connections() == 2 })
+	testkit.Eventually(t, "the next connection", func() bool { return srv.Connections() == 2 })
 	if l := c.Link(); l.State != LinkRebooting {
 		t.Errorf("link %+v before the greeting, want rebooting", l)
 	}
 	srv.SetSilent(false)
-	eventually(t, "the greeting after the reboot", func() bool { return evs.get(EventConnected) == 2 })
+	testkit.Eventually(t, "the greeting after the reboot", func() bool { return evs.get(EventConnected) == 2 })
 	if l := c.Link(); l.State != LinkConnected {
 		t.Errorf("link %+v after the greeting", l)
 	}
