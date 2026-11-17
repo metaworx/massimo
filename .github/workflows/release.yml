@@ -27,7 +27,15 @@ name: Release
 # environment too, and rebuilds the repository from the releases
 # (packaging/apt/publish.sh). Both start beside `sign` and wait for it
 # inside (packaging/wait-for-job.sh), so that one approval lets the
-# three of them run (D57-A, 2026-11-11); `site`
+# three of them run (D57-A, 2026-11-11). `sign` and `rolling` sign
+# SHA256SUMS too, as SHA256SUMS.sig. The Android app (AP MobileApp,
+# Block 4): `app-sign` signs a release's APK and AAB, which build.yml
+# built unsigned, with the app's keys through the signing environment,
+# and `app-publish` waits for both signing jobs, adds the app to the
+# release and its lines to SHA256SUMS, which it signs again with the
+# release key; both start beside `sign` under its approval. `rolling`
+# signs the nightly build's APK itself, before it publishes; `attest`,
+# without a key, attests what these signed. `site`
 # (site.yml) builds the site around it, with the docs of every channel,
 # and puts it on GitHub Pages, also for a run that releases nothing, from
 # the newest release's signed index, with each rolling release's index
@@ -129,7 +137,10 @@ jobs:
             exit 1
           fi
 
-      - name: Sign the manifest
+      # The manifest, which boxes install from, and SHA256SUMS, which people
+      # check a download with (AP MobileApp, D15-D): Publish the Android
+      # app signs SHA256SUMS again once it holds the app's lines.
+      - name: Sign the manifest and SHA256SUMS
         env:
           MASSIMO_RELEASE_KEY: ${{ secrets.MASSIMO_RELEASE_KEY }}
         run: |
@@ -137,16 +148,20 @@ jobs:
           key="$(mktemp)"
           trap 'rm -f "$key"' EXIT
           printf '%s\n' "$MASSIMO_RELEASE_KEY" > "$key"
-          openssl pkeyutl -sign -inkey "$key" -rawin -in dist/massimo-release.json | base64 -w0 > dist/massimo-release.json.sig
-          echo >> dist/massimo-release.json.sig
+          for f in dist/massimo-release.json dist/SHA256SUMS; do
+            openssl pkeyutl -sign -inkey "$key" -rawin -in "$f" | base64 -w0 > "${f}.sig"
+            echo >> "${f}.sig"
+          done
 
-      # The signature must verify against the key massimo has compiled in,
+      # The signatures must verify against the key massimo has compiled in,
       # or no installed binary would accept the release.
       - name: Verify against the compiled-in key
         run: |
-          base64 -d dist/massimo-release.json.sig > "$RUNNER_TEMP/sig.bin"
-          openssl pkeyutl -verify -pubin -inkey internal/update/release-key.pem -rawin \
-            -in dist/massimo-release.json -sigfile "$RUNNER_TEMP/sig.bin"
+          for f in dist/massimo-release.json dist/SHA256SUMS; do
+            base64 -d "${f}.sig" > "$RUNNER_TEMP/sig.bin"
+            openssl pkeyutl -verify -pubin -inkey internal/update/release-key.pem -rawin \
+              -in "$f" -sigfile "$RUNNER_TEMP/sig.bin"
+          done
           (cd dist && sha256sum -c SHA256SUMS)
 
       - name: Publish the GitHub release
@@ -155,7 +170,7 @@ jobs:
         run: |
           flags=()
           if [ "$PRERELEASE" = true ]; then flags+=(--prerelease); fi
-          sentence="Flavour: \`${FLAVOUR}\`, which boxes on the channel \`${FLAVOUR}\` and on every less stable one take. Install or update with \`massimo update\`, or install the Debian package with \`apt install ./massimo_<version>_<arch>.deb\` (see packaging/README.md); verify a download by hand with \`sha256sum -c SHA256SUMS\`."
+          sentence="Flavour: \`${FLAVOUR}\`, which boxes on the channel \`${FLAVOUR}\` and on every less stable one take. Install or update with \`massimo update\`, or install the Debian package with \`apt install ./massimo_<version>_<arch>.deb\` (see packaging/README.md); verify a download by hand with \`sha256sum -c SHA256SUMS\`, and SHA256SUMS with its signature, SHA256SUMS.sig (README.md, \"Installing\")."
           # The notes are the tag message's body, the release's CHANGELOG.md
           # section as changelog.sh wrote it, then the sentence; an old tag's
           # channel: line is not part of them, and a tag with no body gets
@@ -169,10 +184,10 @@ jobs:
           fi
           # The target is the tag's commit; a box reads the flavour from
           # the tag's label (internal/update, hintedFlavour).
-          gh release create "$TAG" --verify-tag --target "$SHA" --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md" "${flags[@]}" dist/massimo-* dist/*.deb dist/SHA256SUMS
+          gh release create "$TAG" --verify-tag --target "$SHA" --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md" "${flags[@]}" dist/massimo-* dist/*.deb dist/SHA256SUMS dist/SHA256SUMS.sig
           # Every file under its own name, or SHA256SUMS and the manifest
           # name files the release lacks (packaging/release-assets.sh).
-          packaging/release-assets.sh "$TAG" dist/massimo-* dist/*.deb dist/SHA256SUMS
+          packaging/release-assets.sh "$TAG" dist/massimo-* dist/*.deb dist/SHA256SUMS dist/SHA256SUMS.sig
 
       # The release branch follows the published release: release/<flavour>
       # names what the flavour's boxes are offered. It is pushed with a
@@ -204,6 +219,192 @@ jobs:
           git push "git@github.com:${GITHUB_REPOSITORY}.git" "${SHA}:refs/heads/${branch}"
           echo "${branch} is ${SHA} (${TAG})"
 
+  # The Android app of a release (AP MobileApp, Block 4, D14-A, D16-A):
+  # build.yml's unsigned APK signed with the app signing key, its AAB with
+  # Google Play's upload key, each checked against its certificate in
+  # app/android/signing/ (packaging/app-sign.sh), and handed to Publish
+  # the Android app as the artifact app-signed; nothing is published here.
+  # It starts beside sign, in the signing environment, so that the one
+  # approval lets it run. Without a key's two secrets or its certificate,
+  # or without the build's files, it warns and signs nothing, and the
+  # release carries no app (no AAB without the upload key alone).
+  app-sign:
+    name: Sign the Android app
+    if: inputs.kind == 'release'
+    runs-on: ubuntu-latest
+    environment: signing
+    permissions:
+      contents: read
+    env:
+      HAS_APP_KEY: ${{ secrets.MASSIMO_APP_KEYSTORE != '' && secrets.MASSIMO_APP_KEYSTORE_PASSWORD != '' }}
+      HAS_UPLOAD_KEY: ${{ secrets.MASSIMO_APP_UPLOAD_KEYSTORE != '' && secrets.MASSIMO_APP_UPLOAD_KEYSTORE_PASSWORD != '' }}
+    steps:
+      # The script and the certificates; nothing from here is built.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        id: app
+        continue-on-error: true
+        with:
+          name: release-app
+          path: app-dist
+
+      - name: Sign the APK and the AAB
+        id: sign
+        if: steps.app.outcome == 'success' && env.HAS_APP_KEY == 'true'
+        env:
+          APP_KEYSTORE: ${{ secrets.MASSIMO_APP_KEYSTORE }}
+          APP_KEYSTORE_PASSWORD: ${{ secrets.MASSIMO_APP_KEYSTORE_PASSWORD }}
+          UPLOAD_KEYSTORE: ${{ secrets.MASSIMO_APP_UPLOAD_KEYSTORE }}
+          UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.MASSIMO_APP_UPLOAD_KEYSTORE_PASSWORD }}
+        run: |
+          certs=app/android/signing
+          if [ ! -f "${certs}/app-cert.pem" ]; then
+            echo "::warning::${certs}/app-cert.pem is not committed: the app signing key's signer cannot be checked, and the release carries no app."
+            exit 0
+          fi
+          export JAVA_HOME="${JAVA_HOME_17_X64:-${JAVA_HOME:-}}"
+          umask 077
+          keys="$(mktemp -d)"
+          trap 'rm -rf "${keys:?}"' EXIT
+          mkdir -p app-signed
+          printf '%s' "$APP_KEYSTORE" | base64 -d > "${keys}/app.p12"
+          APP_KS_PASS="$APP_KEYSTORE_PASSWORD" packaging/app-sign.sh apk app-dist/massimo-android-unsigned.apk \
+            app-signed/massimo-android.apk "${keys}/app.p12" massimo "${certs}/app-cert.pem"
+          if [ "$HAS_UPLOAD_KEY" != true ]; then
+            echo "::warning::MASSIMO_APP_UPLOAD_KEYSTORE or its password is not set in signing: the release carries the APK and no AAB."
+          elif [ ! -f "${certs}/upload-cert.pem" ]; then
+            echo "::warning::${certs}/upload-cert.pem is not committed: the release carries the APK and no AAB."
+          else
+            printf '%s' "$UPLOAD_KEYSTORE" | base64 -d > "${keys}/upload.p12"
+            APP_KS_PASS="$UPLOAD_KEYSTORE_PASSWORD" packaging/app-sign.sh aab app-dist/massimo-android-play-unsigned.aab \
+              app-signed/massimo-android-play.aab "${keys}/upload.p12" upload "${certs}/upload-cert.pem"
+          fi
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+
+      - name: No app
+        if: steps.sign.outputs.signed != 'true'
+        run: echo "::warning::the release carries no Android app; the steps above say why (build.yml's Android app, MASSIMO_APP_KEYSTORE and its password in signing, app/android/signing/app-cert.pem)."
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: steps.sign.outputs.signed == 'true'
+        with:
+          name: app-signed
+          path: app-signed/
+          if-no-files-found: error
+          retention-days: 1
+
+  # D15-D and D20-A: the signed app onto the release, its lines added to
+  # SHA256SUMS, which is signed again with the release key. It runs only
+  # sha256sum, openssl and gh, starts beside sign under the one approval,
+  # and waits for sign and for Sign the Android app; the SHA256SUMS sign
+  # published must verify against the compiled-in key before it is
+  # extended, and a re-run replaces the app's lines. The app files first,
+  # then the sums and their signature; a check by hand in the second
+  # between them fails and passes on the next try. The new SHA256SUMS and
+  # the app go to Attest the signed files as the artifact signed.
+  # actions: the wait reads this run's jobs.
+  app-publish:
+    name: Publish the Android app
+    if: inputs.kind == 'release'
+    runs-on: ubuntu-latest
+    environment: signing
+    permissions:
+      contents: write
+      actions: read
+    env:
+      TAG: ${{ inputs.tag }}
+    steps:
+      # The waiting script and the public key; nothing from here is built.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Wait for Sign and publish and Sign the Android app
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          packaging/wait-for-job.sh "Sign and publish"
+          packaging/wait-for-job.sh "Sign the Android app"
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        id: app
+        continue-on-error: true
+        with:
+          name: app-signed
+          path: signed
+
+      - name: Nothing signed
+        if: steps.app.outcome != 'success'
+        run: echo "::notice::Sign the Android app signed nothing; ${TAG} keeps its SHA256SUMS."
+
+      - name: Add the app to SHA256SUMS, sign it, and publish
+        if: steps.app.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MASSIMO_RELEASE_KEY: ${{ secrets.MASSIMO_RELEASE_KEY }}
+        run: |
+          umask 077
+          work="$(mktemp -d)"
+          trap 'rm -rf "${work:?}"' EXIT
+          pub="${PWD}/internal/update/release-key.pem"
+          gh release download "$TAG" -p SHA256SUMS -p SHA256SUMS.sig -D "$work"
+          base64 -d "${work}/SHA256SUMS.sig" > "${work}/sig.bin"
+          openssl pkeyutl -verify -pubin -inkey "$pub" -rawin -in "${work}/SHA256SUMS" -sigfile "${work}/sig.bin"
+          cd signed
+          app=(massimo-android*)
+          grep -vE '^[0-9a-f]{64} [ *]massimo-android[a-z-]*\.(apk|aab)$' "${work}/SHA256SUMS" > SHA256SUMS
+          sha256sum "${app[@]}" >> SHA256SUMS
+          printf '%s\n' "$MASSIMO_RELEASE_KEY" > "${work}/key"
+          openssl pkeyutl -sign -inkey "${work}/key" -rawin -in SHA256SUMS | base64 -w0 > SHA256SUMS.sig
+          echo >> SHA256SUMS.sig
+          base64 -d SHA256SUMS.sig > "${work}/new.bin"
+          openssl pkeyutl -verify -pubin -inkey "$pub" -rawin -in SHA256SUMS -sigfile "${work}/new.bin"
+          sha256sum -c --ignore-missing SHA256SUMS
+          gh release upload "$TAG" --clobber "${app[@]}"
+          gh release upload "$TAG" --clobber SHA256SUMS SHA256SUMS.sig
+          ../packaging/release-assets.sh "$TAG" "${app[@]}" SHA256SUMS SHA256SUMS.sig
+          cat SHA256SUMS
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: steps.app.outcome == 'success'
+        with:
+          name: signed
+          path: |
+            signed/massimo-android*
+            signed/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 1
+
+  # GitHub's build provenance of the files signed in this run (D15-D): a
+  # release's APK and AAB with the SHA256SUMS that names them, or the
+  # nightly APK with its build's; build.yml attested everything else. No
+  # key here, and nothing but the attestation action runs.
+  attest:
+    name: Attest the signed files
+    needs: [ app-publish, rolling ]
+    if: ${{ !cancelled() && (needs.app-publish.result == 'success' || needs.rolling.result == 'success') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        id: signed
+        continue-on-error: true
+        with:
+          name: signed
+          path: signed
+
+      - name: Nothing signed
+        if: steps.signed.outcome != 'success'
+        run: echo "::notice::no app was signed in this run; build.yml's attestations cover every file."
+
+      - name: Attest the signed files' provenance
+        if: steps.signed.outcome == 'success'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: signed/*
+
   # A rolling build: signed with the rolling key and published as the one
   # release release/<flavour>, which is replaced in place. Editing a
   # release notifies no watcher, as creating one at every merge would.
@@ -227,6 +428,7 @@ jobs:
       SHA: ${{ inputs.sha }}
       HAS_APT_KEY: ${{ secrets.MASSIMO_ROLLING_APT_KEY != '' }}
       HAS_TAP_KEY: ${{ secrets.HOMEBREW_ROLLING_TAP_DEPLOY_KEY != '' }}
+      HAS_APP_KEY: ${{ secrets.MASSIMO_APP_ROLLING_KEYSTORE != '' && secrets.MASSIMO_APP_ROLLING_KEYSTORE_PASSWORD != '' }}
     steps:
       # The public key, CHANGELOG.md and changelog.sh for the notes, and
       # the history for the ancestry; nothing from here is built.
@@ -259,7 +461,53 @@ jobs:
             grep -qF "$want" dist/massimo-release.json || { echo "::error::the manifest lacks ${want}"; exit 1; }
           done
 
-      - name: Sign the manifest
+      # The nightly build's Android app (AP MobileApp, D18-A, D19-A):
+      # build.yml's unsigned nightly APK, signed here with the rolling app
+      # key and checked against app/android/signing/rolling-cert.pem
+      # (packaging/app-sign.sh), joins the build's files with its line in
+      # SHA256SUMS before they are signed and published. A devel build
+      # carries none. Without the key's two secrets, its certificate or the
+      # build's file, or where the signing fails, the build goes out
+      # without it, and the step after says so.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        id: app
+        if: inputs.kind == 'nightly'
+        continue-on-error: true
+        with:
+          name: release-app
+          path: app-dist
+
+      - name: Sign the nightly app
+        id: app-sign
+        if: inputs.kind == 'nightly' && steps.app.outcome == 'success' && env.HAS_APP_KEY == 'true'
+        continue-on-error: true
+        env:
+          APP_KEYSTORE: ${{ secrets.MASSIMO_APP_ROLLING_KEYSTORE }}
+          APP_KEYSTORE_PASSWORD: ${{ secrets.MASSIMO_APP_ROLLING_KEYSTORE_PASSWORD }}
+        run: |
+          cert=app/android/signing/rolling-cert.pem
+          if [ ! -f "$cert" ]; then
+            echo "::warning::${cert} is not committed: the rolling app key's signer cannot be checked."
+            exit 0
+          fi
+          export JAVA_HOME="${JAVA_HOME_17_X64:-${JAVA_HOME:-}}"
+          umask 077
+          keys="$(mktemp -d)"
+          trap 'rm -rf "${keys:?}"' EXIT
+          printf '%s' "$APP_KEYSTORE" | base64 -d > "${keys}/rolling.p12"
+          APP_KS_PASS="$APP_KEYSTORE_PASSWORD" packaging/app-sign.sh apk app-dist/massimo-android-nightly-unsigned.apk \
+            "${keys}/massimo-android-nightly.apk" "${keys}/rolling.p12" rolling "$cert"
+          mv "${keys}/massimo-android-nightly.apk" dist/
+          (cd dist && sha256sum massimo-android-nightly.apk >> SHA256SUMS)
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+
+      - name: No nightly app
+        if: inputs.kind == 'nightly' && steps.app-sign.outputs.signed != 'true'
+        run: echo "::warning::the ${FLAVOUR} build carries no Android app; the steps above say why (build.yml's Android app, MASSIMO_APP_ROLLING_KEYSTORE and its password in signing-rolling, app/android/signing/rolling-cert.pem)."
+
+      # The manifest, which boxes install from, and SHA256SUMS, which
+      # people check a download with (AP MobileApp, D15-D).
+      - name: Sign the manifest and SHA256SUMS
         env:
           MASSIMO_ROLLING_KEY: ${{ secrets.MASSIMO_ROLLING_KEY }}
         run: |
@@ -267,14 +515,18 @@ jobs:
           key="$(mktemp)"
           trap 'rm -f "$key"' EXIT
           printf '%s\n' "$MASSIMO_ROLLING_KEY" > "$key"
-          openssl pkeyutl -sign -inkey "$key" -rawin -in dist/massimo-release.json | base64 -w0 > dist/massimo-release.json.sig
-          echo >> dist/massimo-release.json.sig
+          for f in dist/massimo-release.json dist/SHA256SUMS; do
+            openssl pkeyutl -sign -inkey "$key" -rawin -in "$f" | base64 -w0 > "${f}.sig"
+            echo >> "${f}.sig"
+          done
 
       - name: Verify against the compiled-in rolling key
         run: |
-          base64 -d dist/massimo-release.json.sig > "$RUNNER_TEMP/sig.bin"
-          openssl pkeyutl -verify -pubin -inkey internal/update/rolling-key.pem -rawin \
-            -in dist/massimo-release.json -sigfile "$RUNNER_TEMP/sig.bin"
+          for f in dist/massimo-release.json dist/SHA256SUMS; do
+            base64 -d "${f}.sig" > "$RUNNER_TEMP/sig.bin"
+            openssl pkeyutl -verify -pubin -inkey internal/update/rolling-key.pem -rawin \
+              -in "$f" -sigfile "$RUNNER_TEMP/sig.bin"
+          done
           (cd dist && sha256sum -c SHA256SUMS)
 
       # The notes: what the build is, the commits since the build before
@@ -322,7 +574,7 @@ jobs:
           TAG_KEY: ${{ secrets.ROLLING_TAG_DEPLOY_KEY }}
         run: |
           git fetch --quiet --force origin "+refs/tags/${RELEASE}:refs/tags/${RELEASE}" 2>/dev/null || true
-          files=(dist/massimo-* dist/*.deb dist/SHA256SUMS)
+          files=(dist/massimo-* dist/*.deb dist/SHA256SUMS dist/SHA256SUMS.sig)
           title="${FLAVOUR} ${VERSION}"
           if ! cur="$(git rev-parse --verify --quiet "refs/tags/${RELEASE}^{commit}")"; then
             gh release create "$RELEASE" --target "$SHA" --prerelease --latest=false --title "$title" --notes-file "$RUNNER_TEMP/notes.md" "${files[@]}"
@@ -364,6 +616,18 @@ jobs:
           done
           echo "${RELEASE} moved from ${cur} to ${SHA}"
           echo "published=true" >> "$GITHUB_OUTPUT"
+
+      # The nightly APK and the SHA256SUMS that names it, for Attest the
+      # signed files; only where this run published them.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: steps.app-sign.outputs.signed == 'true' && steps.publish.outputs.published == 'true'
+        with:
+          name: signed
+          path: |
+            dist/massimo-android-nightly.apk
+            dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 1
 
       # The rolling suite of the apt repository (packaging/README.md, "The
       # apt repository"): the build's packages as the release now has them,

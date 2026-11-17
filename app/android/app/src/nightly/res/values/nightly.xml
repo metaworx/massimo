@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The nightly app's name and its icon's background (AP MobileApp, D18-A),
+     over main's. -->
+<resources>
+    <string name="app_name" translatable="false">Massimo nightly</string>
+    <color name="ic_launcher_background_nightly">#172033</color>
+</resources>
