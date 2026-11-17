@@ -8,17 +8,22 @@ plugins {
     alias(libs.plugins.android.application)
 }
 
-// The version is the server's: app/version.json, which the release writes
-// with the tag's version and its versionCode; a development build without
-// the file is 0.0.0-dev.
+// The version is the server's: app/version.json, which make release writes
+// with the tag's version and its versionCode (packaging/app-version.sh);
+// a checkout without the file is 0.0.0-dev. A nightly build gives its own,
+// git describe's, as -Pmassimo.version and -Pmassimo.versionCode
+// (.github/workflows/build.yml).
 val versionFile = rootProject.file("../version.json")
-val appVersion: Pair<String, Int> =
+val fileVersion: Pair<String, Int> =
     if (versionFile.isFile) {
         val v = JsonSlurper().parse(versionFile) as Map<*, *>
         (v["version"] as String) to (v["versionCode"] as Number).toInt()
     } else {
         "0.0.0-dev" to 1
     }
+val appVersion: Pair<String, Int> =
+    (providers.gradleProperty("massimo.version").orNull ?: fileVersion.first) to
+        (providers.gradleProperty("massimo.versionCode").orNull?.toInt() ?: fileVersion.second)
 
 android {
     namespace = "ch.metaworx.massimo"
@@ -35,14 +40,25 @@ android {
     }
 
     // foss is the F-Droid build, play the Google Play build; they differ
-    // from Block 8 on, where play carries the FCM distributor.
+    // from Block 8 on, where play carries the FCM distributor. nightly is
+    // foss as the nightly build publishes it on GitHub alone: an app of
+    // its own beside the release, "Massimo nightly", with its own icon
+    // (src/nightly/res) and key (AP MobileApp, D18-A).
     flavorDimensions += "store"
     productFlavors {
         create("foss") { dimension = "store" }
         create("play") { dimension = "store" }
+        create("nightly") {
+            dimension = "store"
+            applicationIdSuffix = ".nightly"
+        }
     }
 
     buildTypes {
+        // A developer's build never passes for the release it follows.
+        debug {
+            versionNameSuffix = "-dev"
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true

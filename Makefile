@@ -78,8 +78,13 @@ DEB_IMAGE ?= debian:trixie-slim
 # "test(store): The store <tag> writes", so that the tag holds its own dump
 # and every later binary's TestMigratesReleasedStores migrates it; the
 # release CI refuses a tag without it (docs/store.md, "Migrations"). Then
-# changelog.sh cuts CHANGELOG.md's [Unreleased] into the
-# release's section, makes the chore(release) commit on main and the signed
+# packaging/app-version.sh writes app/version.json, the Android app's
+# version and versionCode, which counts the release commit to come (AP
+# MobileApp, D21-A); it is asked first, so that a version the code cannot
+# hold stops the release before anything is written, and checked against
+# the tag before the push. Then changelog.sh cuts CHANGELOG.md's
+# [Unreleased] into the release's section, with the file as its manifest
+# (GUIDELINES/config.ini), makes the chore(release) commit on main and the signed
 # tag at it with that section as its message; main and the tag are then
 # pushed atomically, all or nothing, and CI tests the tag and releases it
 # (ci.yml calling release.yml), which then fast-forwards the branch
@@ -132,12 +137,15 @@ release:
 	if done=$$(git describe --tags --exact-match --match 'v[0-9]*.[0-9]*.[0-9]*' $$sha 2>/dev/null); then \
 		echo "release: main ($$sha) is already released as $$done" >&2; exit 1; fi; \
 	next=$$(git tag -l | packaging/next-version.sh $$flavour $(BUMP)) || exit 1; \
+	appcode=$$(packaging/app-version.sh release $$next 2) || { \
+		echo "release: the Android app's versionCode cannot hold $$next; nothing written" >&2; exit 1; }; \
 	cut="cut $${next#v} --commit --tag create$(if $(ASSISTED_BY), --assisted-by $(ASSISTED_BY))"; \
 	$(CHANGELOG_SH) -q check || { \
 		echo "release: changelog.sh check finds something; fix it on main first" >&2; exit 1; }; \
 	dump=internal/store/testdata/releases/$$next.sql; \
 	if [ -n "$(DRY)" ]; then \
 		echo "release: would run: tools/store-fixture/make.sh --ref HEAD --flavour $$flavour $$next, and commit $$dump"; \
+		echo "release: would write app/version.json: version $${next#v}, versionCode $$appcode"; \
 		$(CHANGELOG_SH) $$cut || exit 1; \
 		echo "release: would run: git push --atomic origin main refs/tags/$$next"; \
 		exit 0; fi; \
@@ -149,11 +157,15 @@ release:
 		-m "Made by make release before the release commit: the store massimo $$next writes against the fake Cube, which TestMigratesReleasedStores migrates in every later binary (docs/store.md, Migrations)."$(if $(ASSISTED_BY), -m "Assisted-by: $(ASSISTED_BY)") || { \
 		echo "release: the dump's commit failed; nothing pushed; to start over: git reset --keep $$sha" >&2; exit 1; }; \
 	dumped=$$(git rev-parse HEAD); \
+	packaging/app-version.sh write $$next 1 >/dev/null || { \
+		echo "release: app/version.json not written; nothing pushed; to start over: git reset --keep $$sha" >&2; exit 1; }; \
 	$(CHANGELOG_SH) $$cut --force || { \
-		echo "release: the cut stopped half-way; nothing pushed, see git status and git log -2; to start over: git tag -d $$next; git reset --keep $$sha" >&2; exit 1; }; \
+		echo "release: the cut stopped half-way; nothing pushed, see git status and git log -2; to start over: git tag -d $$next; git reset --keep $$sha; git checkout -- app/version.json" >&2; exit 1; }; \
 	rel=$$(git rev-parse HEAD) && \
 	if [ "$$(git rev-parse $$dumped^)" != "$$sha" ] || [ "$$(git rev-parse $$rel^)" != "$$dumped" ] || [ "$$(git rev-parse "refs/tags/$$next^{commit}" 2>/dev/null)" != "$$rel" ]; then \
 		echo "release: the dump's commit, the release commit or $$next is not where it should be; nothing pushed" >&2; exit 1; fi; \
+	packaging/app-version.sh check $$next || { \
+		echo "release: app/version.json is not $$next's; nothing pushed; to start over: git tag -d $$next; git reset --keep $$sha" >&2; exit 1; }; \
 	git push --atomic origin main refs/tags/$$next || { \
 		echo "release: the push failed and published nothing; to start over: git tag -d $$next && git reset --keep $$sha" >&2; exit 1; }; \
 	echo "tagged $$next ($$rel); CI tests and releases it, then moves release/$$flavour: https://github.com/metaworx/massimo/actions"

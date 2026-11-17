@@ -33,8 +33,9 @@ jobs:
     uses: ./.github/workflows/build.yml
 
   # contents to publish, pages and id-token to deploy the site, actions
-  # for the release's jobs that wait for Sign and publish: a called job
-  # may ask for no more than this, whether it runs or not.
+  # for the release's jobs that wait for Sign and publish, attestations
+  # for the signed nightly app's provenance: a called job may ask for no
+  # more than this, whether it runs or not.
   release:
     name: Release
     needs: build
@@ -43,6 +44,7 @@ jobs:
       pages: write
       id-token: write
       actions: read
+      attestations: write
     uses: ./.github/workflows/release.yml
     secrets: inherit
     with:
