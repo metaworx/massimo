@@ -22,12 +22,14 @@ PAGES = {"log": ("#logview", "#log", "#menu-log"), "cube": ("#cube-page", "#cube
 
 
 def test_main_menu_entries(page, case):
-    """☰ at every width, its entries with their icons in this order, the
-    groups apart; Sign out with the personal page's label and icon, in
+    """☰ at every width, the server's version its first row, then its
+    entries with their icons in this order, the groups apart; Sign out with the personal page's label and icon, in
     its accent and weight."""
     assert page.locator("#nav-menu").is_visible(), "☰ shown"
     m = open_main_menu(page)
     got = m.locator(".menu-items > *").evaluate_all("(es) => es.map((e) => e.id ? '#' + e.id : e.tagName.toLowerCase())")
+    assert got[0] == "p" and m.locator(".menu-items > .menu-version #version-short").count() == 1, f"the version first: {got}"
+    got = got[1:]
     assert got == ORDER, f"☰'s entries in this order: {got}"
     for sel in ORDER:
         if sel == "hr":

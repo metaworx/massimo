@@ -675,7 +675,7 @@ def test_log_older(page, case):
         assert wait_until(page, "document.querySelectorAll('#log-lines .kind-hello').length === 202", 5), "two older events"
         assert page.evaluate("logState.lines[0].id === 1 && logState.lines[1].id === 2 && logState.lines[2].id === 201"), "kept oldest first"
         assert page.evaluate("[...document.querySelectorAll('#log-lines .kind-hello')].slice(-2).map((l) => l.querySelector('.log-time').textContent)") \
-            == page.evaluate("[logState.lines[1], logState.lines[0]].map((l) => fmtLogTime(l.time))"), "drawn at the bottom"
+            == page.evaluate("[logState.lines[1], logState.lines[0]].map((l) => fmtTimeOfDay(l.time))"), "drawn at the bottom"
         assert page.evaluate(box + ".scrollTop") == top, "the view stays where it was"
         assert wait_until(page, "document.getElementById('log-older').disabled", 5), "a short page ends the paging"
         assert older.inner_text() == NO_OLDER[case.lang], "nothing older"

@@ -3,15 +3,15 @@
 
 // The Massimo web UI, the header: the plain names of the region, which
 // call its parts (ui/src/header/, MassimoParts.header, AP UiParts Block
-// 6), and what stays plain: the chosen Cube's radio budget, the refresh
-// button with its tooltip and the server's clock, a Cube's link's sign
-// and word for the plain regions, the version and the certificate's text,
-// the facts that fit the header's width, and the server's state, which
-// follows its version and its updates. The parts draw the Cube choice,
-// every Cube's problems, the chosen Cube's age, the server's sign and the
-// certificate's line, built once and updated in place, so that what is
-// open in the header stays open and follows the data (docs/ui.md,
-// "Header").
+// 6), and what stays plain: the chosen Cube's radio budget, the server's
+// clock and the time of its last answer, a Cube's link's sign and word for
+// the plain regions, the version in ☰ (and beside the logo while signed
+// out) and the certificate's text, and the server's state, which follows
+// its version and its updates. The parts draw the pile (the chosen Cube's
+// age, the server's sign, every Cube's problems, Refresh now), the Cube
+// choice and the certificate's line, built once and updated in place,
+// so that what is open in the header stays open and follows the data
+// (docs/ui.md, "Header").
 "use strict";
 
 // --- header -----------------------------------------------------------
@@ -68,26 +68,11 @@ function noteServerClock(resp) {
   if (Math.abs(skew - serverSkew) > 1500) serverSkew = skew;
 }
 
-// renderUpdated draws the chosen Cube's age in the refresh button
-// (ui/src/header/Updated.tsx), which counts on by itself; the button's
-// tooltip and its name for a screen reader say the time itself, "updated
-// 20:51:00, click to reload", the button's own words where the Cube has
-// no such time.
+// renderUpdated draws the chosen Cube's age above the header's pile
+// (ui/src/header/Pile.tsx), which counts on by itself; the time itself is
+// in the pile's list, under Refresh now.
 function renderUpdated() {
   MassimoParts.header.render();
-  const btn = $("refresh-btn");
-  const cube = state.cubes.find((c) => c.serial === state.serial);
-  const at = cube ? Date.parse(cube.updated || "") : NaN;
-  if (isNaN(at)) {
-    btn.title = t("header.refreshTitle");
-    btn.setAttribute("aria-label", t("header.refreshTitle"));
-    return;
-  }
-  const pad = (n) => String(n).padStart(2, "0");
-  const d = new Date(at);
-  const time = pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds());
-  btn.title = t("header.refreshUpdated", { time });
-  btn.setAttribute("aria-label", t("header.refreshUpdated", { time }));
 }
 
 // LINK_SIGN is the state of a Cube's network sign by its link (linkState):
@@ -118,10 +103,10 @@ function cubeSignEl(c) {
   return svg;
 }
 
-// renderCubeSelect draws the Cube choice and every Cube's problems
-// beside it (ui/src/header/Choice.tsx, CubeProblems.tsx) from the Cubes
-// as the page has them: in place, an open choice or list staying open
-// and following the data.
+// renderCubeSelect draws the Cube choice and the pile with every Cube's
+// problems (ui/src/header/Choice.tsx, Pile.tsx) from the Cubes as the
+// page has them: in place, an open choice or list staying open and
+// following the data.
 function renderCubeSelect() {
   MassimoParts.header.render();
 }
@@ -170,80 +155,14 @@ function certText(tls) {
 }
 
 // renderVersionTitle names the server's whole version in the tooltip of
-// the short one in the header.
+// the short one, ☰'s first row.
 function renderVersionTitle() {
   copyLabel($("version-short"), state.version ? t("header.versionTitle", { version: state.version }) + " · " + t("copy.hint") : ""); // components.js
-  fitFacts();
-}
-
-// fitFacts puts the version, the server's sign and the time beside the
-// logo where all three fit there on one line, on the logo's baseline, and
-// on a row of their own across the header otherwise (.top-line.facts-row):
-// under the logo and the Cube choice, on a phone under the logo and the
-// pages, the version on a line of its own where that row is narrow too.
-// It measures them beside the logo each time, so that it never swings;
-// the compacted header is left as it is.
-function fitFacts() {
-  const line = document.querySelector(".top-line");
-  if (!line || document.body.classList.contains("scrolled")) return;
-  const brand = line.querySelector(".brand");
-  const facts = line.querySelector(".top-facts");
-  const version = $("version-short");
-  line.classList.remove("facts-row");
-  const b = brand.getBoundingClientRect();
-  const f = facts.getBoundingClientRect();
-  const beside = f.top < b.bottom - 1 && version.scrollWidth <= version.clientWidth + 1;
-  line.classList.toggle("facts-row", !beside);
-}
-
-// watchFacts fits the facts again when the header's width or the logo's
-// size changes, when what the facts show changes (the time of the last
-// update, which comes after the version, and the server's sign), when the
-// page's fonts have come, or when the header is whole again after
-// compacting (fitFacts), after the frame, so that the layout it changes
-// does not call it back within the same one.
-function watchFacts() {
-  const line = document.querySelector(".top-line");
-  let width = -1;
-  let brand = "";
-  const ro = new ResizeObserver(() => {
-    const w = line.getBoundingClientRect().width;
-    // the logo's height too: on a phone the drawing that replaces the
-    // word keeps its width and changes its height
-    const r = line.querySelector(".brand").getBoundingClientRect();
-    const b = r.width + "x" + r.height;
-    if (w === width && b === brand) return;
-    width = w;
-    brand = b;
-    requestAnimationFrame(fitFacts);
-  });
-  ro.observe(line);
-  ro.observe(line.querySelector(".brand"));
-  // the facts beside the logo wrapped under it once the time came, the
-  // version cut; fitFacts changes no text, so it does not call itself
-  let queued = false;
-  new MutationObserver(() => {
-    if (queued) return;
-    queued = true;
-    requestAnimationFrame(() => {
-      queued = false;
-      fitFacts();
-    });
-  }).observe(line.querySelector(".top-facts"), { childList: true, characterData: true, subtree: true });
-  // the page's fonts change the version's width when they come
-  if (document.fonts) document.fonts.ready.then(() => requestAnimationFrame(fitFacts));
-  // a resize while compacted is fitted once the header is whole again
-  let was = document.body.classList.contains("scrolled");
-  new MutationObserver(() => {
-    const now = document.body.classList.contains("scrolled");
-    if (was && !now) requestAnimationFrame(fitFacts);
-    was = now;
-  }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
 }
 
 // checkVersion compares the server's version with the one the page was
 // loaded with; a newer server reloads the page when nothing is open,
-// otherwise its sign offers the reload.
+// otherwise the pile's list offers the reload.
 async function checkVersion() {
   let h;
   try {
@@ -260,6 +179,7 @@ async function checkVersion() {
     state.version = v;
     const parts = splitVersion(v);
     $("version-short").textContent = parts.short;
+    $("version-out").textContent = parts.short; // beside the logo while signed out
     renderVersionTitle();
     renderServerSign();
     return;

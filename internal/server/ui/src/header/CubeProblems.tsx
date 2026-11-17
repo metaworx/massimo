@@ -4,21 +4,18 @@
 /**
  * @file internal/server/ui/src/header/CubeProblems.tsx
  *
- * Every Cube's problems beside the Cube choice, as the shared problem
- * list: a Cube with a problem as the heading, its devices with a problem
- * under it; for one who may change the settings, the settings; last, what
- * was found on the network and is not served. A green check where nothing
- * is wrong, nothing before there is a Cube. Built once and updated in
- * place, so that an open list stays open and follows the data.
+ * Every Cube's problems as the entries of the header's pile (Pile.tsx):
+ * a Cube with a problem as the heading, its devices with a problem under
+ * it; for one who may change the settings, the settings; last, what was
+ * found on the network and is not served.
  */
 
 import type { FoundCube } from "../api";
-import { cubeEntry, cubeSettingItems, problemsLabelOf } from "../model/cube";
+import { cubeEntry, cubeSettingItems } from "../model/cube";
 import { foundWhat } from "../model/found";
 import { CountIcon } from "../shared/icon";
 import { joinParts } from "../shared/lang";
-import { Problems, type Entry, type Item } from "../shared/problems";
-import { load } from "./store";
+import type { Entry, Item } from "../shared/problems";
 
 /**
  * foundEntry is what was found on the network and is not served, as the
@@ -47,12 +44,12 @@ function foundEntry(found: FoundCube[]): Entry {
 }
 
 /**
- * entries are every Cube's problems as the list's entries (cubeEntry,
+ * cubeProblems are every Cube's problems as the list's entries (cubeEntry,
  * its link's badge where it is not connected, its devices under it);
  * then, for one who may change the settings, the settings of every Cube
  * that need a look; last what was found and is not served.
  */
-function entries(): Entry[] {
+export function cubeProblems(): Entry[] {
   const out = state.cubes.map((c) => cubeEntry(c));
   if (hasCap("settings")) {
     const items: Item[] = [];
@@ -61,11 +58,4 @@ function entries(): Entry[] {
   }
   if (state.found.length) out.push(foundEntry(state.found));
   return out;
-}
-
-/** CubeProblems is the header's problem list, in #cube-problems. */
-export function CubeProblems() {
-  load.useLoad();
-  const list = entries();
-  return <Problems entries={list} label={problemsLabelOf(list)} ok={state.cubes.length ? t("problem.none") : undefined} />;
 }
