@@ -353,25 +353,39 @@ Every room has a tile:
   nothing while the write is pending, and it goes once the device shows it
   or a newer write replaces it;
   crossed arrows, the room's thermostats in different modes;
+  a pause sign, amber, a room whose commands are discarded until every device
+  has reported since the Cube started, its devices that have not with the badge
+  **not reported**, or **out of date** with its age as the device's row says it;
+  the clock, amber, values not seen for long (below);
+  the sliders, amber, where the Cube and its room list differ (below);
   a suitcase, a room on holiday, which is no problem but is listed there.
   A tap on them lists the devices concerned, each once with its serial,
   its badges under its name, led by the same icons, a warning's and a failure's
   by its mark, and how long ago each came,
   for different modes each thermostat's mode,
   and for a holiday its end, "holiday until 24.12., 18:00";
+  what concerns the room itself, its commands discarded and a finding that names
+  no device of the room in its whole sentence, under the room's own name first;
   Escape or a click outside closes the list.
   An icon goes as soon as its problem does.
   The room's virtual wall thermostat is not listed:
   its flags are the wall thermostat's.
-- **"Values may be old"**:
+- **One line under the tile's head** while the room has notices,
+  which its icons list:
+  "Room commands are discarded until every device has reported" while that holds,
+  as that is why a change does nothing; otherwise how many of them its list holds,
+  "2 notices", a device not seen for long, not reported or with a finding each.
+  **Show** opens the list of the tile's icons.
+- **Values may be old**:
   a thermostat of the room has not been heard from for more than 24 hours,
-  and the note says how long.
+  and its entry says how long, "Not seen for 30 hours".
   It may be out of range or its batteries flat,
   but a thermostat whose valve stays shut outside the heating season can be quiet as well.
   Its values are greyed.
 - **Where the Cube and its room list differ** (`mismatches` of `docs/api-v1.md`,
-  "The Cube's lines against its room list"), a notice each, with since when,
-  naming the device and both rooms:
+  "The Cube's lines against its room list"), a badge each in the device's entry,
+  with since when, "in Office for the Cube since 16.11., 00:41",
+  its tooltip the whole sentence naming the device and both rooms:
   "Radiator: in Office by its configuration on the Cube, in Living room in the
   room list"; a device the room list does not have whose configuration puts it
   in the room, which can block the room's commands;
@@ -1726,6 +1740,7 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `Badge` | `badge.tsx` | a `.flag` led by its mark for a warning or a failure (`badgeEl`) | `kind`, `text`, `blink`, `title`, children after the text |
 | `Notice` | `badge.tsx` | a lasting warning with since when (`noticeEl`) | `text`, `since`, `next`, `cls`, `id`, `role`, `hidden` (the class `hidden`, the line kept in its place), children after |
 | `Age` | `badge.tsx` | how old a value is, filled by `fillAge` (`ageEl`) | `at`, `stale`, `plain` |
+| `Since` | `badge.tsx` | from when a badge's state holds, after its text (a problem list's item) | `at` |
 | `ResultLine` | `badge.tsx` | the line that says how an action went, green or red, hidden while there is none (`showResult`), as an `actionRunner`'s `set` gives it | `res` (an `Outcome` or null), `cls` |
 | `Problems` | `problems.tsx` | the problem list, entries under entries (`problemsEl`), an item with an action a button | `entries`, `label`, `ok` (the green check's label where nothing is wrong), `always` (the list there where nothing is wrong too; where `ok` is given, its summary the green check and `ok` a line of its list), `lead` (drawn first in the summary, a sign of the place's own state), `head` (drawn first in the list, items that act on the place), `onClick`, `onOpen`, `onClose` (as `Dropdown`'s) |
 | `KindIcons`, `problemKinds`, `kindsLabel` | `problems.tsx` | the kinds' icons of entries without the list (`kindIcons`); the kinds themselves, to know whether there are any; the label naming the kinds among items in an order of kinds, "" for none | `entries`, `skip`; `entries`, `skip`; `items`, `kinds` |
@@ -1758,11 +1773,12 @@ What the table cannot say:
   its name, a grey detail (a text, monospaced, or parts that are not),
   its items, the entries under it, `info` to list it and those under it
   without an item, and `summary`, shown in the list's summary after the icons.
-  An item is `{ kind, icon, sign, tone, mark, text, title, at, stale, action }`,
+  An item is `{ kind, icon, sign, tone, mark, text, title, at, stale, since, action }`,
   one badge:
   `kind` groups the summary's icons (`sign` draws it as a sign), an item
   without one adds no icon; `tone` is the badge's kind, `mark` how its icon is
-  coloured where that differs; `title` its tooltip, `at` and `stale` its age;
+  coloured where that differs; `title` its tooltip, `at` and `stale` its age,
+  `since` from when its state holds, said after its text;
   `action`, where given, makes the badge a button that runs it
   (an unsaved form's item, which opens the form).
 - `Field` draws the row and the label for `id`; its control comes as children
@@ -1902,7 +1918,8 @@ across its close too,
 and the timer of an open window's next state by the clock;
 `facts.ts` what the rooms alone read of a room and its devices
 (a mode's badge, the problems of a tile's head and of a device's row with their label,
-a device's badges in words, the note of devices not seen for long);
+the room's notices among them and their count for the tile's line,
+a device's badges in words);
 `Tile.tsx` the tile, `Devices.tsx` a device's row and a tile's device list,
 `House.tsx` the House tile, its temperature a `Stepper`, its end a `DateTime`,
 its mode and its duration a choice of radio buttons side by side of its own (`Segments`),
@@ -1927,7 +1944,7 @@ its typing kept across a fill by the object it is given.
 The menus are `Dropdown`s, their items `MenuItem`s, the problems a `Problems`,
 the info and the cog `IconButton`s, the holiday form's temperature a `Stepper`
 and its end a `DateTime`,
-the deletion's question a `Question`, the notices `Notice`s,
+the deletion's question a `Question`, the line of its notices a `Notice`,
 the result lines `ResultLine`s,
 a device's badges `Badge`s with their `Age`, its identifiers a `DeviceIds`,
 the virtual thermostat's two settings a `Select` and a `TextField` with their drafts (`useDraft`),
