@@ -1173,6 +1173,7 @@
   "vwt.address": "Adresse radio",
   "vwt.addressHint": "Six chiffres hexadécimaux ; vide pour le numéro de la pièce. Seulement pour les clients du proxy LAN dont les numéros d'appareil se chevauchent.",
   "vwt.saved": "Enregistré.",
+  "vwt.formName": "{room}, thermostat virtuel",
   "prog.resetAllTitle": "Revenir au programme hebdomadaire tel que chargé",
   "prog.copyTo": "Copier {day} vers…",
   "prog.hasProgramme": "{day}, a ce programme",

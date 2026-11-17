@@ -1172,6 +1172,7 @@
   "vwt.address": "Radioadres",
   "vwt.addressHint": "Zes hexadecimale cijfers; leeg voor het kamernummer. Alleen voor clients van de LAN-proxy waarvan de apparaatnummers botsen.",
   "vwt.saved": "Opgeslagen.",
+  "vwt.formName": "{room}, virtuele thermostaat",
   "prog.resetAllTitle": "Terug naar het geladen weekprogramma",
   "prog.copyTo": "{day} kopiëren naar …",
   "prog.hasProgramme": "{day}, heeft dit programma",

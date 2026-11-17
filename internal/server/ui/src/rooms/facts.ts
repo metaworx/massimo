@@ -6,7 +6,8 @@
  *
  * What the rooms' parts show of a room and its devices beside their
  * fields, which no other region reads: a mode's badge, the problems of a
- * tile's head and of a device's row with the label that names them, a
+ * tile's head and of a device's row with the label that names them, the
+ * unsaved settings of a room's virtual wall thermostat among them, a
  * device's badges in words, and the tile's note of the devices that have
  * not been seen for long. A room's facts (roomThermostat, roomModes,
  * staleText, …) and the texts of a write not confirmed (confirmItem and
@@ -17,10 +18,12 @@
 
 import type { Device } from "../api";
 import { deviceEntry, deviceProblems, WINDOW_TONE, windowState } from "../model/device";
+import { unsavedItems } from "../shared/forms";
 import { kindsLabel, type Entry, type Item } from "../shared/problems";
+import { vwtFormKey } from "./store";
 
 /** The kinds of problems a tile's head and a device's row name, in their order there; a holiday is listed with its end. */
-const KINDS = ["radio", "battery", "window", "unconfirmed", "mixed"];
+const KINDS = ["radio", "battery", "window", "unconfirmed", "mixed", "unsaved"];
 
 /** MODE_TONE colours a mode's badge: auto green, manual (and boost) amber, holiday violet. */
 const MODE_TONE: Record<string, string> = { auto: "fill-ok", manual: "fill-warn", holiday: "fill-info" };
@@ -60,11 +63,14 @@ export function deviceItems(d: Device, withWindow?: boolean): Item[] {
  * problems with an open window, a write it has not shown by its deadline,
  * and the thermostats' modes where they differ; a thermostat on holiday
  * with the holiday's end, in its mode's colour, in place of its mode. The
- * room's virtual wall thermostat is not listed: its flags are the wall
- * thermostat's.
+ * room's virtual wall thermostat is listed for its settings alone, while
+ * they are unsaved or their save failed (vwtItems), in every mode: its
+ * flags are the wall thermostat's.
  */
 export function roomEntries(room: PageRoom): Entry[] {
   const mixed = roomModes(room).length > 1;
+  const vwt = room.vwt ? vwtItems(room) : [];
+  const own = vwt.length && room.vwt ? [deviceEntry(room.vwt, vwt)] : [];
   return room.devices.map((d) => {
     const items = deviceItems(d, true);
     const s = d.state || {};
@@ -74,7 +80,16 @@ export function roomEntries(room: PageRoom): Entry[] {
       items.push({ kind: "mixed", icon: "icon-shuffle", tone: modeTone(s.mode), mark: "warn", text: modeName(s.mode) });
     }
     return deviceEntry(d, items);
-  });
+  }).concat(own);
+}
+
+/**
+ * vwtItems are the items of the settings of the room's virtual wall
+ * thermostat while they are unsaved or their save failed (unsavedItems):
+ * the disk, whose click opens them.
+ */
+export function vwtItems(room: PageRoom): Item[] {
+  return unsavedItems(vwtFormKey(state.roomsOf || "", room.id));
 }
 
 /** A badge of a device's row in words: its text, its kind, and the time of the value for its age. */
