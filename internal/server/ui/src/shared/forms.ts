@@ -64,6 +64,12 @@ interface Slot<T> {
 export interface Place<T> {
   /** slot is the field's draft, made from stored the first time. */
   slot(stored: T): Slot<T>;
+  /**
+   * known is the stored value the field's draft holds now, undefined
+   * before it has one: a form whose stored values load later draws its
+   * drafts from it at once, before they have come again.
+   */
+  known(): T | undefined;
   /** changed tells the form of the user's change. */
   changed(): void;
   /** redraw draws the form again, after a draft was taken. */
@@ -191,6 +197,16 @@ export function focusForm(key: string): void {
 }
 
 /**
+ * hasChanges says whether the form of key, or one under it, has changes
+ * not saved: changed, saving, unsaved or failed; not once it is saved or
+ * reset. A part shows what holds such a form while it has them (a row
+ * otherwise for expert mode alone).
+ */
+export function hasChanges(key: string): boolean {
+  return pending.value.some((u) => under(u.key, key));
+}
+
+/**
  * unsavedItems are the items of a problem list for the unsaved and the
  * failed forms whose key is key or begins with key + ":", not those
  * merely changed: the disk, amber while unsaved, red after a failed save,
@@ -304,6 +320,7 @@ export function useForm({ key, name, open }: { key: string; name: FormName; open
           }
           return s;
         },
+        known: () => (r.slots.get(field) as Slot<T> | undefined)?.stored,
         changed: () => touched(r),
         redraw: () => {
           r.ver.value++;

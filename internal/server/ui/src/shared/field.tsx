@@ -138,11 +138,12 @@ export function Field<T>({ label, id, wide, unit, hint, draft, show, children }:
 /**
  * TextField is a row with a text input that shows a stored text, as its
  * draft: name, placeholder, maxLength and pattern (what a valid value
- * looks like) and type (text by default; a password is no stored text)
- * are the input's; the row is wide unless wide is false.
+ * looks like), type (text by default; a password is no stored text) and
+ * disabled (off) are the input's; the row is wide unless wide is false.
  */
-export function TextField({ label, id, wide = true, unit, hint, name, placeholder, type, maxLength, pattern, draft, show }: Row & {
+export function TextField({ label, id, wide = true, unit, hint, name, placeholder, type, maxLength, pattern, disabled, draft, show }: Row & {
   name: string;
+  disabled?: boolean;
   placeholder?: string;
   type?: "text" | "email" | "url" | "search";
   maxLength?: number;
@@ -153,7 +154,7 @@ export function TextField({ label, id, wide = true, unit, hint, name, placeholde
   return (
     <Field label={label} id={id} wide={wide} unit={unit} hint={hint} draft={draft} show={show}>
       <input id={id} type={(type || "text") as "text"} name={name} class={unit ? undefined : "field-control"} autocomplete="off" spellcheck={false}
-        placeholder={placeholder} maxLength={maxLength} pattern={pattern} value={draft.value} onInput={(ev) => draft.set(ev.currentTarget.value)} />
+        placeholder={placeholder} maxLength={maxLength} pattern={pattern} disabled={disabled} value={draft.value} onInput={(ev) => draft.set(ev.currentTarget.value)} />
     </Field>
   );
 }
@@ -169,10 +170,12 @@ export type SelectOption = [value: string, label: string, disabled?: boolean] | 
  * Select is a row with a select (selectInput of components.js): its
  * options as fillOptions takes them, the value chosen from a draft of a
  * stored value (with its "changed meanwhile" notice) or from value and
- * onChange; name is the select's, the row narrow unless wide.
+ * onChange; name and disabled (off) are the select's, the row narrow
+ * unless wide.
  */
-export function Select({ label, id, wide, unit, hint, name, options, value, onChange, draft, show }: Row & {
+export function Select({ label, id, wide, unit, hint, name, options, value, onChange, disabled, draft, show }: Row & {
   name?: string;
+  disabled?: boolean;
   options: SelectOption[];
   value?: string;
   onChange?: (v: string) => void;
@@ -182,7 +185,7 @@ export function Select({ label, id, wide, unit, hint, name, options, value, onCh
   const opt = ([v, l, off]: [string, string, boolean?]) => <option key={v} value={v} disabled={off}>{l}</option>;
   return (
     <Field label={label} id={id} wide={wide} unit={unit} hint={hint} draft={draft} show={show}>
-      <select id={id} name={name} class={unit ? undefined : "field-control"} value={draft ? draft.value : value} onChange={(ev) => {
+      <select id={id} name={name} class={unit ? undefined : "field-control"} disabled={disabled} value={draft ? draft.value : value} onChange={(ev) => {
         const v = ev.currentTarget.value;
         if (draft) draft.set(v);
         if (onChange) onChange(v);
