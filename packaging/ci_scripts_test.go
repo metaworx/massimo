@@ -5,6 +5,8 @@ package packaging
 
 import (
 	"encoding/json"
+	"go/build"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -117,13 +119,19 @@ type ciReportRun struct {
 	allJSON    any     // where set, what filter=all answers in place of all
 	comments   string  // the pull request's comments, JSON
 	failWrites bool
+	unrunJobs  string // UNRUN_JOBS, where not ci.yml's
 }
 
 // ciReportResult is what a run of ci-report.sh left: its output, the
-// summary it wrote and the calls of gh it made, with their bodies.
+// summary it wrote, the step's outputs and the calls of gh it made, with
+// their bodies.
 type ciReportResult struct {
-	out, summary, calls string
+	out, summary, outputs, calls string
 }
+
+// ciUnrunJobs is UNRUN_JOBS as ci.yml gives it: the jobs that a pull
+// request leaves unrun where no runner took them (AP TestSpeed, D5-A).
+const ciUnrunJobs = `{"macOS LaunchDaemon": "macos", "Windows service": "windows"}`
 
 // runCIReport runs packaging/ci-report.sh against fakeGH and fails the
 // test where it exits with anything but 0.
@@ -168,6 +176,10 @@ func runCIReport(t *testing.T, r ciReportRun) ciReportResult {
 		}
 	}
 	summary := filepath.Join(dir, "summary.md")
+	unrunJobs := r.unrunJobs
+	if unrunJobs == "" {
+		unrunJobs = ciUnrunJobs
+	}
 	cmd := exec.Command(bash, "ci-report.sh")
 	cmd.Env = append(os.Environ(),
 		"PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"),
@@ -177,11 +189,13 @@ func runCIReport(t *testing.T, r ciReportRun) ciReportResult {
 		"GITHUB_RUN_ATTEMPT="+strconv.Itoa(r.attempt),
 		"GITHUB_SERVER_URL=https://github.example.invalid",
 		"GITHUB_STEP_SUMMARY="+summary,
+		"GITHUB_OUTPUT="+filepath.Join(dir, "outputs"),
 		"NEEDS="+r.needs,
 		"PR="+r.pr,
 		"SHA=abcdef0123456789",
 		"SELF=All tests passed",
 		"CALLED=^(Build|Release|Deploy site)( / |$)",
+		"UNRUN_JOBS="+unrunJobs,
 	)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -194,7 +208,7 @@ func runCIReport(t *testing.T, r ciReportRun) ciReportResult {
 		}
 		return string(b)
 	}
-	return ciReportResult{out: string(out), summary: read("summary.md"), calls: read("calls")}
+	return ciReportResult{out: string(out), summary: read("summary.md"), outputs: read("outputs"), calls: read("calls")}
 }
 
 // wants fails the test for each of the strings that s does not hold.
@@ -428,6 +442,294 @@ func TestCIReportEarlierAttemptsUnreadable(t *testing.T) {
 	lacks(t, "summary", res.summary, "re-run, and counted", "only on a re-run\n")
 	lacks(t, "output", res.out, "integer expression", "::warning::Android app")
 	lacks(t, "calls", res.calls, "ci-rerun")
+}
+
+// macosNeeds is a run's needs with macOS LaunchDaemon's result as given.
+func macosNeeds(result string) string {
+	return `{"changes":{"result":"success"},"test":{"result":"success"},"windows":{"result":"success"},"macos":{"result":"` +
+		result + `"},"fuzz":{"result":"skipped"}}`
+}
+
+// unrunNeeds is a run's needs where no runner took macOS LaunchDaemon:
+// abandoned, as GitHub gives it (runs 44151208458 and 44335801523).
+var unrunNeeds = macosNeeds("abandoned")
+
+// unrunJobs is a first attempt whose macOS LaunchDaemon no runner took,
+// or, with started, one that a runner took before it was cancelled.
+func unrunJobs(started bool) []ciJob {
+	macos := notRun(4, 1, "macOS LaunchDaemon", "cancelled")
+	if started {
+		macos = ran(4, 1, "macOS LaunchDaemon", "cancelled", 2)
+	}
+	return []ciJob{
+		ran(1, 1, "What to test", "success", 0),
+		ran(2, 1, "Vet and test", "success", 1),
+		ran(3, 1, "Windows service", "success", 1),
+		macos,
+		notRun(5, 1, "Fuzz", "skipped"),
+		running(6, 1),
+	}
+}
+
+// TestCIReportUnrunOnAPullRequest: on a pull request, a macOS job no
+// runner took counts as not run (AP TestSpeed, D5-A), abandoned among the
+// needs as GitHub gives it, or cancelled: its id is the output unrun, the
+// summary names it with a warning and passes, and no report is written
+// for it alone.
+func TestCIReportUnrunOnAPullRequest(t *testing.T) {
+	for _, result := range []string{"abandoned", "cancelled"} {
+		t.Run(result, func(t *testing.T) {
+			testUnrunOnAPullRequest(t, macosNeeds(result))
+		})
+	}
+}
+
+// testUnrunOnAPullRequest is TestCIReportUnrunOnAPullRequest for the
+// needs given.
+func testUnrunOnAPullRequest(t *testing.T, needs string) {
+	t.Helper()
+	res := runCIReport(t, ciReportRun{attempt: 1, pr: "7", needs: needs, latest: unrunJobs(false)})
+	if res.outputs != "unrun=macos\n" {
+		t.Errorf("outputs = %q, want unrun=macos", res.outputs)
+	}
+	wants(t, "summary", res.summary,
+		"### Every test job passed or was skipped, 1 not run for want of a runner\n",
+		"| macOS LaunchDaemon | not run, as no runner took it |",
+		"Not run, as no runner took them; the Tested record leaves them out, and the push of the merged tree runs them:\n\n"+
+			"- macOS LaunchDaemon\n")
+	wants(t, "output", res.out,
+		"::warning::macOS LaunchDaemon: no runner took it, so it did not run on this pull request; the push of the merged tree runs it\n")
+	lacks(t, "output", res.out, "::error::")
+	lacks(t, "calls", res.calls, "POST", "PATCH")
+}
+
+// TestCIReportUnrunInTheReport: a pull request's report, where there is
+// one, names the job not run, and the run passes.
+func TestCIReportUnrunInTheReport(t *testing.T) {
+	res := runCIReport(t, ciReportRun{attempt: 1, pr: "7", needs: unrunNeeds, latest: unrunJobs(false),
+		comments: `[{"id":11,"user":{"login":"github-actions[bot]"},"body":"<!-- ci-report -->\nan earlier one"}]`})
+	wants(t, "calls", res.calls,
+		"PATCH repos/owner/repo/issues/comments/11\n<!-- ci-report -->\n"+
+			"**Every test job passed or was skipped, 1 not run for want of a runner** on abcdef0",
+		"Not run, as no runner took them; the Tested record leaves them out, and the push of the merged tree runs them:\n\n"+
+			"- macOS LaunchDaemon\n")
+	lacks(t, "calls", res.calls, "| macOS LaunchDaemon |", "POST")
+}
+
+// TestCIReportUnrunOnAPush: on a push, the merge's included, a job no
+// runner took fails as before.
+func TestCIReportUnrunOnAPush(t *testing.T) {
+	res := runCIReport(t, ciReportRun{attempt: 1, needs: unrunNeeds, latest: unrunJobs(false)})
+	if res.outputs != "unrun=\n" {
+		t.Errorf("outputs = %q, want unrun empty", res.outputs)
+	}
+	wants(t, "summary", res.summary, "### 1 test job(s) did not pass\n",
+		"| macOS LaunchDaemon | cancelled before a runner took it |")
+	wants(t, "output", res.out, "::error::macOS LaunchDaemon: cancelled before a runner took it\n")
+	lacks(t, "summary", res.summary, "not run")
+}
+
+// TestCIReportCancelledAfterItStarted: a macOS job cancelled once a
+// runner had taken it fails on a pull request too.
+func TestCIReportCancelledAfterItStarted(t *testing.T) {
+	res := runCIReport(t, ciReportRun{attempt: 1, pr: "7", needs: macosNeeds("cancelled"), latest: unrunJobs(true)})
+	if res.outputs != "unrun=\n" {
+		t.Errorf("outputs = %q, want unrun empty", res.outputs)
+	}
+	wants(t, "summary", res.summary, "### 1 test job(s) did not pass\n", "| macOS LaunchDaemon | cancelled |")
+	wants(t, "output", res.out, "::error::macOS LaunchDaemon: cancelled\n")
+	wants(t, "calls", res.calls, "POST repos/owner/repo/issues/7/comments\n<!-- ci-report -->\n**1 test job(s) did not pass**")
+}
+
+// TestCIReportUnrunOnlyForItsJobs: a job that UNRUN_JOBS does not name,
+// or whose needs say neither abandoned nor cancelled, or UNRUN_JOBS that
+// is no object, leaves a job no runner took failed.
+func TestCIReportUnrunOnlyForItsJobs(t *testing.T) {
+	for name, r := range map[string]ciReportRun{
+		"another job": {unrunJobs: `{"Windows service": "windows"}`},
+		"another id":  {unrunJobs: `{"macOS LaunchDaemon": "windows"}`},
+		"failed":      {needs: macosNeeds("failure")},
+		"no object":   {unrunJobs: `["macOS LaunchDaemon"]`},
+		"no JSON":     {unrunJobs: `macos`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r.attempt, r.pr, r.latest = 1, "7", unrunJobs(false)
+			if r.needs == "" {
+				r.needs = unrunNeeds
+			}
+			res := runCIReport(t, r)
+			if res.outputs != "unrun=\n" {
+				t.Errorf("outputs = %q, want unrun empty", res.outputs)
+			}
+			wants(t, "output", res.out, "::error::macOS LaunchDaemon: cancelled before a runner took it\n")
+		})
+	}
+}
+
+// TestCIReportUnrunJobsAreCIJobs: the names and ids ci.yml gives as
+// UNRUN_JOBS are those of its jobs, so that a renamed job does not
+// silently fail a pull request again.
+func TestCIReportUnrunJobsAreCIJobs(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", ".github", "workflows", "ci.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ci := string(b)
+	if !strings.Contains(ci, "UNRUN_JOBS: '"+ciUnrunJobs+"'\n") {
+		t.Fatalf("ci.yml does not give UNRUN_JOBS as %s", ciUnrunJobs)
+	}
+	var jobs map[string]string
+	if err := json.Unmarshal([]byte(ciUnrunJobs), &jobs); err != nil {
+		t.Fatal(err)
+	}
+	for name, id := range jobs {
+		if !strings.Contains(ci, "\n  "+id+":\n    name: "+name+"\n") {
+			t.Errorf("ci.yml has no job %s named %q", id, name)
+		}
+	}
+}
+
+// ciGateLines open the lines of ci.yml's What to test that make the macOS
+// and Windows gates (AP TestSpeed, D1-A to D3-A): the announcement's
+// paths, the Go files each platform leaves out by name, and the two lists.
+var ciGateLines = []string{"announce=", "notmac=", "macfiles=", "winfiles="}
+
+// ciPlatformGates runs ci.yml's macOS and Windows gates over the paths
+// given, as What to test does on a pull request, and returns the paths
+// each lets through and those each leaves out by name.
+func ciPlatformGates(t *testing.T, paths []string) (mac, win, notMac, notWin map[string]bool) {
+	t.Helper()
+	bash := scriptShell(t)
+	b, err := os.ReadFile(filepath.Join("..", ".github", "workflows", "ci.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var script strings.Builder
+	script.WriteString("set -euo pipefail\nchanged=\"$(cat)\"\n")
+	found := map[string]bool{}
+	for _, line := range strings.Split(string(b), "\n") {
+		line = strings.TrimSpace(line)
+		for _, p := range ciGateLines {
+			if strings.HasPrefix(line, p) {
+				if found[p] {
+					t.Fatalf("ci.yml has two lines opening with %s", p)
+				}
+				found[p] = true
+				script.WriteString(line + "\n")
+			}
+		}
+	}
+	for _, p := range ciGateLines {
+		if !found[p] {
+			t.Fatalf("ci.yml has no line opening with %s", p)
+		}
+	}
+	script.WriteString(`out() { while IFS= read -r f; do [ -z "$f" ] || echo "$1 $f"; done; }
+out mac <<<"$macfiles"
+out win <<<"$winfiles"
+grep -E "$notmac" <<<"$changed" | out notmac || true
+grep -E "$notwin" <<<"$changed" | out notwin || true
+`)
+	cmd := exec.Command(bash, "-c", script.String())
+	cmd.Stdin = strings.NewReader(strings.Join(paths, "\n") + "\n")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("the gates: %v\n%s", err, out)
+	}
+	sets := map[string]map[string]bool{"mac": {}, "win": {}, "notmac": {}, "notwin": {}}
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		set, path, ok := strings.Cut(line, " ")
+		if !ok || sets[set] == nil {
+			t.Fatalf("the gates printed %q", line)
+		}
+		sets[set][path] = true
+	}
+	return sets["mac"], sets["win"], sets["notmac"], sets["notwin"]
+}
+
+// goFiles lists the Go files under cmd/ and internal/, as paths from the
+// repository's root, leaving out the directories go/build leaves out.
+func goFiles(t *testing.T) []string {
+	t.Helper()
+	var files []string
+	for _, top := range []string{"cmd", "internal"} {
+		root := filepath.Join("..", top)
+		err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			name := d.Name()
+			if d.IsDir() {
+				if path != root && (name == "testdata" || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_")) {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if strings.HasSuffix(name, ".go") {
+				rel, err := filepath.Rel("..", path)
+				if err != nil {
+					return err
+				}
+				files = append(files, filepath.ToSlash(rel))
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	return files
+}
+
+// builtFor reports whether go/build takes the file, a path from the
+// repository's root, into its package for the system given.
+func builtFor(t *testing.T, goos, goarch, file string) bool {
+	t.Helper()
+	ctx := build.Default
+	ctx.GOOS, ctx.GOARCH, ctx.CgoEnabled = goos, goarch, false
+	ok, err := ctx.MatchFile(filepath.Join("..", filepath.FromSlash(filepath.Dir(file))), filepath.Base(file))
+	if err != nil {
+		t.Fatalf("%s: %v", file, err)
+	}
+	return ok
+}
+
+// TestCIGatesHoldPlatformFiles: every Go file under cmd/ and internal/
+// that is built for darwin and not for linux runs the macOS job, and for
+// windows the Windows job, since Linux's tests never build it; and a file
+// a gate leaves out by its name (notmac, notwin) is not built for that
+// platform, _unix by its build tag, which Go's file names do not give.
+func TestCIGatesHoldPlatformFiles(t *testing.T) {
+	files := goFiles(t)
+	mac, win, notMac, notWin := ciPlatformGates(t, files)
+	var darwinOnly, windowsOnly int
+	for _, f := range files {
+		linux := builtFor(t, "linux", "amd64", f)
+		darwin := builtFor(t, "darwin", "arm64", f)
+		windows := builtFor(t, "windows", "amd64", f)
+		if darwin && !linux {
+			darwinOnly++
+			if !mac[f] {
+				t.Errorf("%s is built for darwin and not for linux, and the macOS gate does not hold it", f)
+			}
+		}
+		if windows && !linux {
+			windowsOnly++
+			if !win[f] {
+				t.Errorf("%s is built for windows and not for linux, and the Windows gate does not hold it", f)
+			}
+		}
+		if notMac[f] && darwin {
+			t.Errorf("%s is built for darwin, and the macOS gate leaves it out by its name", f)
+		}
+		if notWin[f] && windows {
+			t.Errorf("%s is built for windows, and the Windows gate leaves it out by its name", f)
+		}
+	}
+	if darwinOnly == 0 || windowsOnly == 0 || len(notWin) == 0 {
+		t.Fatalf("%d files for darwin alone, %d for windows alone, %d left out of Windows by name: the walk found too little",
+			darwinOnly, windowsOnly, len(notWin))
+	}
 }
 
 // testEvent is a line of `go test -json`.
