@@ -308,9 +308,11 @@ class Bridge(
             }
             val undo = { revokeQuietly(now.url, s.fp, session, user, key.id) }
             main.post {
+                // Not only a GeneralSecurityException: the Keystore throws an
+                // IllegalStateException where no fingerprint is enrolled.
                 val cipher: Cipher = try {
                     keys.encrypter(alias)
-                } catch (e: GeneralSecurityException) {
+                } catch (e: Exception) {
                     io.execute(undo)
                     answer.fail(BridgeException(R.string.err_storage, reason(e)))
                     return@post
@@ -358,9 +360,10 @@ class Bridge(
             done(false)
             return
         }
+        // Any refusal of the Keystore forgets the login all the same.
         val cipher = try {
             keys.decrypter(LoginKey.alias(id), kept.iv)
-        } catch (e: KeyInvalidated) {
+        } catch (e: Exception) {
             done(false)
             return
         }
