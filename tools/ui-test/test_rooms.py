@@ -255,8 +255,10 @@ def test_problems_in_the_heads(page, case):
 
 
 def test_stale_and_expert(page, case):
-    """The first room's devices made 30 hours old and stale: the tile
-    warns, the values are greyed and the device list says so; expert mode
+    """The first room's devices made 30 hours old and stale: the tile's
+    line says there is a notice and opens its pill, which lists each
+    device not seen for 30 hours; the values are greyed and the device list
+    says so; expert mode
     adds the type, the radio address, the exact times and the Cube's
     radio budget in the header."""
     page.evaluate("""() => {
@@ -276,8 +278,15 @@ def test_stale_and_expert(page, case):
       updateDevice(v);
     }""")
     tile = page.locator(".room").first
-    note = tile.locator(".stale-note")
-    assert note.is_visible() and STALE[case.lang] in note.inner_text(), "stale warning on the tile"
+    line = tile.locator(".tile-notices")
+    assert line.is_visible() and line.inner_text().startswith(page.evaluate("tn('room.notices', 1)")), \
+        f"one notice on the tile: {line.inner_text()!r}"
+    line.locator(".tile-notices-show").click()
+    listed = tile.locator(".room-problems .problems-list")
+    listed.wait_for(state="visible")
+    assert STALE[case.lang] in listed.inner_text(), "the pill lists the devices not seen for long"
+    assert tile.locator(".room-problems .problems-sum use[href='#icon-set-dial']").count() == 1, "the clock among the pill's icons"
+    page.keyboard.press("Escape")
     assert tile.locator(".temp-val.stale").count() == 1, "stale measured temperature greyed"
     assert "30" in tile.locator(".temp-age").inner_text(), "the measured temperature is 30 hours old"
     tile.locator(".room-name-btn").click()
@@ -497,6 +506,50 @@ def test_out_of_date_device(page, case):
     page.evaluate("() => updateDevice(window.__dev)")
 
 
+def test_not_ready_line(page, case):
+    """A room whose devices have not all reported since the Cube started:
+    the tile's line says that its commands are discarded, Show opens its
+    pill, which lists the room's own notice and the device not reported,
+    the pause sign among its icons; a device the Cube no longer hears is
+    out of date there, as its row says; the line goes once it reports."""
+    page.evaluate("""() => {
+      const r = state.rooms.find((r) => r.devices.some((d) => isThermostat(d) && !d.virtual && d.reported));
+      const d = r.devices.find((d) => isThermostat(d) && !d.virtual && d.reported);
+      window.__room = r.name;
+      window.__dev = JSON.parse(JSON.stringify(d));
+      const x = JSON.parse(JSON.stringify(d));
+      x.reported = false;
+      updateDevice(x);
+    }""")
+    tile = page.locator(".room", has=page.locator(".room-name", has_text=page.evaluate("window.__room"))).first
+    line = tile.locator(".tile-notices")
+    not_ready = page.evaluate("t('room.notReady')")
+    line.wait_for(state="visible", timeout=5000)
+    assert line.inner_text().startswith(not_ready), f"the line says the commands are discarded: {line.inner_text()!r}"
+    line.locator(".tile-notices-show").click()
+    listed = tile.locator(".room-problems .problems-list")
+    listed.wait_for(state="visible")
+    text = listed.inner_text()
+    assert not_ready in text, "the room's own notice in the pill"
+    assert page.evaluate("t('badge.notReported')") in text, f"the device not reported: {text!r}"
+    assert tile.locator(".room-problems .problems-sum use[href='#icon-paused']").count() == 1, "the pause sign among the pill's icons"
+    page.keyboard.press("Escape")
+    page.evaluate("""() => {
+      const x = JSON.parse(JSON.stringify(window.__dev));
+      x.reported = false;
+      x.out_of_date = true;
+      updateDevice(x);
+    }""")
+    line.locator(".tile-notices-show").click()
+    listed.wait_for(state="visible")
+    assert wait_until(page, "[...document.querySelectorAll('.room-problems .problems-list')]"
+                      ".some((l) => l.innerText.includes(t('badge.outOfDate')))", 5), "out of date, as the device's row says"
+    assert listed.locator(".flag .age").count() > 0, "with its age"
+    page.keyboard.press("Escape")
+    page.evaluate("() => updateDevice(window.__dev)")
+    line.wait_for(state="hidden", timeout=5000)
+
+
 MISMATCH_NOTE = {
     "en": "{device}: in {cube} by its configuration on the Cube, in {list} in the room list.",
     "de": "{device}: laut seiner Konfiguration im Cube in {cube}, in der Raumliste in {list}.",
@@ -508,10 +561,11 @@ MISMATCH_PROGRAMME = {"en": "own week programme", "de": "eigenes Wochenprogramm"
 def test_mismatch_marks(page, case):
     """A device whose C line names another room than the room list, and a
     member whose week programme differs (mismatches, as the server sends
-    them; AP RadioHealth, Block 7): the room's tile says each in a notice
-    that names the device and both rooms, the device's row has a badge
-    naming the room the Cube has it in, the whole sentence its title; the
-    marks go with the findings."""
+    them; AP RadioHealth, Block 7): the tile's line counts them and opens
+    its pill, where the device's entry has a badge for each, with since
+    when, the whole sentence naming the device and both rooms its tooltip;
+    the device's row has the same badges; the marks go with the
+    findings."""
     names = page.evaluate("""() => {
       const r = state.rooms.find((r) => r.devices.some((d) => isThermostat(d) && !d.virtual));
       const other = state.rooms.find((x) => x.id !== r.id);
@@ -528,18 +582,24 @@ def test_mismatch_marks(page, case):
       return { room: r.name, other: other.name, device: deviceName(d) };
     }""")
     tile = page.locator(".room", has=page.locator(".room-name", has_text=names["room"])).first
-    notes = tile.locator(".mismatch-notes .notice")
-    assert notes.count() == 2, "a notice per finding"
-    text = notes.first.inner_text()
+    line = tile.locator(".tile-notices")
+    assert line.inner_text().startswith(page.evaluate("tn('room.notices', 2)")), f"two notices: {line.inner_text()!r}"
+    line.locator(".tile-notices-show").click()
+    tile.locator(".room-problems .problems-list").wait_for(state="visible")
+    entry = tile.locator(".room-problems .problems-list .problem-entry", has=page.locator(".problem-name", has_text=names["device"])).first
+    flags = entry.locator(".flag", has=page.locator(".badge-since"))
+    assert flags.count() == 2, "a badge per finding, each with since when"
     want = MISMATCH_NOTE[case.lang].format(device=names["device"], cube=names["other"], list=names["room"])
-    assert text.startswith(want), f"the notice names the device and both rooms: {text!r}, want {want!r}"
-    assert notes.first.locator(".notice-since").count() == 1, "since when"
+    first = flags.first
+    assert first.inner_text().startswith(MISMATCH_BADGE[case.lang].format(cube=names["other"])), f"the row's words: {first.inner_text()!r}"
+    assert first.get_attribute("title") == want, f"the whole sentence its tooltip: {first.get_attribute('title')!r}"
+    page.keyboard.press("Escape")
     badge = tile.locator(".device .mismatch-badge").first
     assert badge.inner_text().strip().endswith(MISMATCH_BADGE[case.lang].format(cube=names["other"])), \
         f"the device's badge: {badge.inner_text()!r}"
     assert badge.get_attribute("title") == want, "the badge's title the whole sentence"
     assert MISMATCH_PROGRAMME[case.lang] in tile.locator(".device .device-badges").first.inner_text(), "the programme's badge"
-    assert scroll_width(page) <= case.width, "no horizontal scroll with the notices"
+    assert scroll_width(page) <= case.width, "no horizontal scroll with the badges"
     page.evaluate("""() => {
       const r = state.rooms.find((x) => x.id === window.__room.id);
       Object.assign(r, window.__room);
@@ -548,4 +608,4 @@ def test_mismatch_marks(page, case):
       roomUI(r).open = false;
       rerenderRoom(r);
     }""")
-    assert tile.locator(".mismatch-notes .notice").count() == 0 and tile.locator(".mismatch-notes").is_hidden(), "the notices gone"
+    assert tile.locator(".tile-notices").is_hidden(), "the line gone with the findings"

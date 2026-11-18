@@ -368,8 +368,9 @@ button.copy-icon .ni { width: 16px; height: 16px; }
 .ok-pill .ni, .problems-sum .ok-check { width: 18px; height: 18px; }
 .ni.ok-check { color: var(--ok); stroke-width: 2.4; }
 .problem-entry > .found-count.problem-icon, .problem-entry > .found-count.problem-icon .ni { width: var(--ic); height: var(--ic); color: var(--accent); }
-/* in the pill's list, the way to System settings → Cubes: a link's look */
-.found-to-cubes {
+/* a button with a link's look: in the pill's list, the way to System
+   settings → Cubes; on a tile, Show of its line of notices */
+.found-to-cubes, .tile-notices-show {
   padding: 0;
   border: none;
   background: none;
@@ -382,6 +383,7 @@ button.copy-icon .ni { width: 16px; height: 16px; }
   cursor: pointer;
 }
 .menu-items .found-to-cubes { display: inline; width: auto; padding: 0; }
+.tile-notices .tile-notices-show { color: inherit; }
 /* System settings → Cubes: the found Cubes and proxies, one fold */
 .found-panel > summary .found-count { margin-right: 6px; }
 .cube-found-list .found-icon { width: 16px; height: 16px; flex: none; color: var(--muted); }
@@ -1207,6 +1209,7 @@ html.blink-first .server-icon.state-new use.mark, html.blink-first .server-icon.
    by side, inside the list */
 .problem-flags .flag { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0 4px; max-width: 100%; border-radius: 10px; }
 .problem-flags .flag .age { margin-left: 0; }
+.problem-flags .flag .badge-since { margin-left: 6px; } /* an item's since, after its text */
 .problem-flags .flag .ni { width: 14px; height: 14px; }
 /* A badge that opens what it names, an unsaved form's (problems.tsx, an item's action): the badge as it is, a button around it. */
 .problem-flags .problem-action { display: inline-flex; max-width: 100%; padding: 0; border: 0; border-radius: 10px; background: none; text-align: start; }

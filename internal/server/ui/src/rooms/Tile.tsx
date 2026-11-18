@@ -5,8 +5,9 @@
  * @file internal/server/ui/src/rooms/Tile.tsx
  *
  * A room's tile: its head with the room's name, its problems and its ⋯
- * menu; the notices of a room not ready, of devices not seen for long and
- * of the Cube's lines that differ from its room list; the measured and
+ * menu; one line of its notices (a room not ready, devices not seen for
+ * long, the Cube's lines that differ from its room list), which its
+ * problems list (rooms/facts.ts roomEntries); the measured and
  * the set temperature with the stepper; the modes with More; the info and
  * the cog; the holiday form, the deletion's question, the room's repairs,
  * the result line, the device list and the configuration. Built once per
@@ -17,17 +18,16 @@
  * in an element the part leaves to it.
  */
 
-import { Fragment } from "preact";
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import { Age, Notice, ResultLine } from "../shared/badge";
 import { DateTime, FormFooter, Stepper, Switch } from "../shared/field";
 import { Icon, IconButton } from "../shared/icon";
 import { Island } from "../shared/island";
 import { Dropdown, MenuItem } from "../shared/menu";
-import { Problems } from "../shared/problems";
+import { Problems, type Entry } from "../shared/problems";
 import { busyProps, Question } from "../shared/question";
 import { DeviceList } from "./Devices";
-import { problemsLabel, roomEntries, staleNote } from "./facts";
+import { problemsLabel, roomEntries, roomNotices } from "./facts";
 import { load, tickOf } from "./store";
 
 /** hid is the class hidden, with its space, where off. */
@@ -38,36 +38,29 @@ function hid(off: boolean): string {
 /** The arrow keys of More move between these: its buttons that are on, and the Hold switch where shown. */
 const MORE_ITEMS = ".menu-items button:not(:disabled), .menu-items .switch:not(.hidden) input";
 
-/** NotReady says that the room's devices have not all reported since the Cube restarted, naming those that have not. */
-function NotReady({ room }: { room: PageRoom }) {
-  const silent = room.ready ? [] : room.devices.filter((d) => !d.reported);
-  return (
-    <Notice cls="not-ready" hidden={room.ready} text={room.ready ? undefined : t("room.notReady")}>
-      {silent.length > 0 && ": "}
-      {silent.map((d, i) => (
-        <Fragment key={d.rf_address}>
-          {i > 0 && ", "}
-          <span>{deviceName(d)}</span>
-          {d.name && <span class="mono expert-only">{" " + d.rf_address}</span>}
-        </Fragment>
-      ))}
-      {!room.ready && "."}
-    </Notice>
-  );
-}
-
 /**
- * Mismatches say, one notice each with since when, where the Cube's
- * configuration of a device and its room list differ for the room, or a
- * member's week programme or temperatures differ from the rest of the room
- * (room.mismatches, docs/api-v1.md).
+ * NoticeLine is the tile's one line of its notices, which its pill lists
+ * (entries, roomEntries): while the room is not ready that its commands
+ * are discarded until every device has reported, as that is why a change
+ * does nothing; otherwise how many there are. Show opens the pill's list.
  */
-function Mismatches({ room }: { room: PageRoom }) {
-  const list = room.mismatches || [];
+function NoticeLine({ room, entries, tile }: { room: PageRoom; entries: Entry[]; tile: () => HTMLElement | null }) {
+  const n = roomNotices(entries);
+  const open = () => {
+    // After the click, which the page's close of an open menu on a click
+    // outside it (components.js) sees first, as every other listener does.
+    setTimeout(() => {
+      const list = tile()?.querySelector<HTMLDetailsElement>(".room-problems details.problems");
+      if (!list) return;
+      list.open = true;
+      list.querySelector("summary")?.focus();
+    });
+  };
   return (
-    <div class={"mismatch-notes" + hid(!list.length)}>
-      {list.map((m, i) => <Notice key={i + ":" + m.finding + ":" + (m.device || "")} text={mismatchText(m)} since={m.since} />)}
-    </div>
+    <Notice cls="tile-notices" hidden={!n} text={!n ? undefined : room.ready ? tn("room.notices", n) : t("room.notReady")}>
+      {n > 0 && " "}
+      {n > 0 && <button type="button" class="tile-notices-show" onClick={open}>{t("action.show")}</button>}
+    </Notice>
   );
 }
 
@@ -243,7 +236,6 @@ export function Tile({ room }: { room: PageRoom }) {
   const actual = roomActual(room);
   const src = roomActualDevice(room);
   const entries = roomEntries(room);
-  const stale = staleNote(room);
   const res = ui.result;
   const cfgOpen = !!ui.config?.open;
   const off = !!ui.sending;
@@ -270,9 +262,7 @@ export function Tile({ room }: { room: PageRoom }) {
         <span class="room-problems"><Problems entries={entries} label={problemsLabel(entries.flatMap((e) => e.items || []))} /></span>
         <RoomMenu room={room} ui={ui} tile={tile} />
       </header>
-      <NotReady room={room} />
-      <Notice cls="stale-note" hidden={!stale} text={stale || undefined} />
-      <Mismatches room={room} />
+      <NoticeLine room={room} entries={entries} tile={tile} />
       <div class={"setpoint-row" + hid(!th)}>
         <div class="temp-block">
           <span class="temp-tag"><Icon symbol="icon-is" cls="ti" /><span class="temp-label">{t("room.is")}</span></span>

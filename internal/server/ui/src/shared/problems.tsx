@@ -14,7 +14,7 @@
  */
 
 import { Fragment, type ComponentChildren, type TargetedMouseEvent } from "preact";
-import { Age, Badge } from "./badge";
+import { Age, Badge, Since } from "./badge";
 import { Icon, Sign } from "./icon";
 import { Dropdown } from "./menu";
 
@@ -24,8 +24,9 @@ import { Dropdown } from "./menu";
  * without a kind is listed and adds no icon; tone is a badge's kind,
  * which colours the badge and, without "fill-", the icon, or mark where
  * the item says how its icon is coloured; title is the badge's tooltip,
- * at when the value came; action, where given, makes the badge a button
- * that runs it (an unsaved form's item opens the form).
+ * at when the value came; since, an API time, from when a state holds,
+ * said after the text ("since 16.11., 00:41"); action, where given, makes
+ * the badge a button that runs it (an unsaved form's item opens the form).
  */
 export interface Item {
   kind?: string;
@@ -37,6 +38,7 @@ export interface Item {
   title?: string;
   at?: string;
   stale?: boolean;
+  since?: string;
   action?: () => void;
 }
 
@@ -165,6 +167,7 @@ function ProblemEntry({ e, info }: { e: Entry; info?: boolean }) {
                 {it.icon && !badgeState(it.tone || "") && <Icon symbol={it.icon} cls="ni" />}
                 {it.text}
                 <Age at={it.at} stale={it.stale} />
+                <Since at={it.since} />
               </Badge>
             );
             if (!it.action) return badge;
