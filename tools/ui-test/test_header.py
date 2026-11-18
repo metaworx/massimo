@@ -635,7 +635,13 @@ def test_cube_choice_list_shows_problems(page, case, reads):
         assert any("cog" in h for h in hrefs), f"the settings' cog after the name: {hrefs}"
         assert "#icon-net" in hrefs[0], f"its link's sign first after the name: {hrefs}"
         assert sum("#icon-net" in h for h in hrefs) == 1, f"its link once, its sign: {hrefs}"
-        name, line = item.locator(".menu-item-label").bounding_box(), icons.first.bounding_box()
+        # Both boxes at once, once the list is placed: placeMenu
+        # (components.js) moves it into the window on the frame after it
+        # opens, and two reads apart could straddle the move.
+        name, line = item.evaluate("""(e) => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => {
+            const box = (el) => { const b = el.getBoundingClientRect(); return {x: b.x, y: b.y, width: b.width, height: b.height}; };
+            done([box(e.querySelector('.menu-item-label')), box(e.querySelector('.menu-item-icons > svg'))]);
+        })))""")
         assert line["x"] >= name["x"] + name["width"] and abs((line["y"] + line["height"] / 2) - (name["y"] + name["height"] / 2)) <= 6, \
             f"after the name, on its line: {name} {line}"
         page.keyboard.press("Escape")
