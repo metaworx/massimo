@@ -6,7 +6,8 @@ shown in the address, each page's own scroll position, and expert mode's
 line of the chosen Cube's radio budget."""
 import json
 
-from helpers import CUBES, VIEWER, css_hidden, hold, open_personal_page, scroll_settled, scroll_width, show_view, wait_held, wait_until
+from helpers import (CUBES, VIEWER, assert_busy, css_hidden, held_poll, hold, open_personal_page, scroll_settled, scroll_width, show_view,
+                     wait_held, wait_until)
 
 # The symbol a page button shows, drawn in an svg of its own outside the
 # header, so that its size does not depend on whether the button is shown;
@@ -489,51 +490,90 @@ def test_updated_is_the_cubes_age(page, case):
     time itself. The server's clock is taken from its answers. The poll is
     held meanwhile, so that it does not bring the Cube's own time back."""
     assert wait_until(page, "Math.abs(serverSkew) < 3000", 5), "the server's clock from its answers: this machine's"
-    page.evaluate("clearInterval(state.pollTimer)")
     try:
-        for ago, n, unit in AGES:
-            text, line = page.evaluate(SET_AGE, [ago, 0])
-            assert text == page.evaluate(f"fmtUnit({n}, '{unit}')"), f"{ago} s ago: {text!r}"
-            times = page.locator("#cube-problems .refresh-times").evaluate("(e) => e.textContent")
-            assert times.split("\n")[0] == line, f"Refresh now says the time, with its date where not today's: {times!r} vs {line!r}"
-        text, _ = page.evaluate(SET_AGE, [0, 60000])
-        assert text == page.evaluate("fmtUnit(1, 'minute')"), f"on the server's clock, a minute ahead: {text!r}"
-        page.evaluate(SET_AGE, [3, 0])
-        assert wait_until(page, "document.querySelector('.pile-age').textContent === fmtUnit(5, 'second')", 4), "it counts on"
+        with held_poll(page):
+            for ago, n, unit in AGES:
+                text, line = page.evaluate(SET_AGE, [ago, 0])
+                assert text == page.evaluate(f"fmtUnit({n}, '{unit}')"), f"{ago} s ago: {text!r}"
+                times = page.locator("#cube-problems .refresh-times").evaluate("(e) => e.textContent")
+                assert times.split("\n")[0] == line, f"Refresh now says the time, with its date where not today's: {times!r} vs {line!r}"
+            text, _ = page.evaluate(SET_AGE, [0, 60000])
+            assert text == page.evaluate("fmtUnit(1, 'minute')"), f"on the server's clock, a minute ahead: {text!r}"
+            page.evaluate(SET_AGE, [3, 0])
+            assert wait_until(page, "document.querySelector('.pile-age').textContent === fmtUnit(5, 'second')", 4), "it counts on"
     finally:
-        page.evaluate("startPolling(); poll(true)")
+        page.evaluate("poll(true)")  # the Cube's own time back
+
+
+# The list's times as they are drawn closed, and again after a timer of
+# the page's own that is due after any tick the list's clock would make
+# (an interval of a second, set before): a tick still running shows.
+TIMES_STILL = """async () => {
+  const text = () => document.querySelector('#cube-problems .refresh-times').textContent;
+  await new Promise((done) => setTimeout(done)); // the list's close handled: its clock stopped, or not
+  await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+  const still = text();
+  await new Promise((done) => setTimeout(done, 1100));
+  return [still, text()];
+}"""
+
+# A read of the chosen Cube's rooms, which Refresh now's poll makes
+# (poll(true)) and the page's own poll does not while the stream is open.
+ROOMS_READ = "/rooms?devices=all"
 
 
 def test_refresh_now_keeps_the_list_open(page, case):
     """The pile's list starts with Refresh now, under it when the chosen
     Cube was read, when the server last answered and the time now, a line
-    each, the time now moving on while the list is open. A click polls
-    and leaves the list open, the server's answer then newer; closed, the
-    times stand still."""
-    page.locator("#cube-problems .problems-sum").click()
-    first = page.locator("#cube-problems .problems-list > *").first
-    first.wait_for(state="visible")
-    assert "refresh-now" in (first.get_attribute("class") or ""), "Refresh now first"
-    assert first.locator(".menu-item-label").inner_text() == page.evaluate("t('header.refreshTitle')"), "named so"
-    times = page.locator("#cube-problems .refresh-times")
-    lines = times.evaluate("(e) => e.textContent").split("\n")
-    words = page.evaluate("['header.cubeRead', 'header.serverReplied', 'header.timeNow'].map((k) => t(k, {time: ''}).trim())")
-    assert len(lines) == 3 and all(line.startswith(w) for line, w in zip(lines, words)), f"three times: {lines}"
-    tall = times.evaluate("(e) => e.getBoundingClientRect().height / parseFloat(getComputedStyle(e).lineHeight || '16')")
-    assert tall >= 2.5, f"a line each: {tall} lines tall"
-    now = lines[2]
-    assert wait_until(page, f"document.querySelector('#cube-problems .refresh-times').textContent.split('\\n')[2] !== {now!r}", 3), \
-        "the time now moves on"
-    page.evaluate("window.__replied = state.repliedAt")
-    page.wait_for_timeout(1100)  # a second on, so that the answer's time shows newer
-    first.click()
-    assert wait_until(page, "state.repliedAt > window.__replied", 5), "a click polls"
-    assert page.evaluate("document.querySelector('#cube-problems details').open"), "and leaves the list open"
-    page.keyboard.press("Escape")
-    assert wait_until(page, "!document.querySelector('#cube-problems details').open", 3), "Escape closes it"
-    still = times.evaluate("(e) => e.textContent")
-    page.wait_for_timeout(1500)
-    assert times.evaluate("(e) => e.textContent") == still, "closed, the times stand still"
+    each, the time now moving on while the list is open. A click polls,
+    the rooms too, and leaves the list open, which then shows the server's
+    answer, and turns while it waits for the server; closed, the times
+    stand still. The page's poll is held meanwhile (held_poll): the
+    click's poll is then the only one, and the times move by the list's
+    own clock alone, whatever the poll's period (docs/ui-testing.md,
+    section 9)."""
+    with held_poll(page):
+        page.locator("#cube-problems .problems-sum").click()
+        first = page.locator("#cube-problems .problems-list > *").first
+        first.wait_for(state="visible")
+        assert "refresh-now" in (first.get_attribute("class") or ""), "Refresh now first"
+        assert first.locator(".menu-item-label").inner_text() == page.evaluate("t('header.refreshTitle')"), "named so"
+        times = page.locator("#cube-problems .refresh-times")
+        lines = times.evaluate("(e) => e.textContent").split("\n")
+        words = page.evaluate("['header.cubeRead', 'header.serverReplied', 'header.timeNow'].map((k) => t(k, {time: ''}).trim())")
+        assert len(lines) == 3 and all(line.startswith(w) for line, w in zip(lines, words)), f"three times: {lines}"
+        tall = times.evaluate("(e) => e.getBoundingClientRect().height / parseFloat(getComputedStyle(e).lineHeight || '16')")
+        assert tall >= 2.5, f"a line each: {tall} lines tall"
+        now = lines[2]
+        assert wait_until(page, f"document.querySelector('#cube-problems .refresh-times').textContent.split('\\n')[2] !== {now!r}", 3), \
+            "the time now moves on"
+        replied = page.evaluate("state.repliedAt")
+        rooms_read = []
+        page.on("request", lambda r: rooms_read.append(r.url) if r.method == "GET" and ROOMS_READ in r.url else None)
+        held, sent = [], []
+        hold(page, CUBES, "GET", held, sent)  # the click's read of the Cubes held, as a slow server would
+        try:
+            first.click()
+            assert wait_held(page, held), "a click polls: the Cubes are read"
+            assert_busy(page, "#cube-problems .refresh-now", "Refresh now")
+            for route in held:
+                route.continue_()
+            held.clear()
+            assert wait_until(page, "!document.querySelector('#cube-problems .refresh-now').classList.contains('busy') "
+                                    f"&& state.repliedAt > {replied}", 5), "the server answered: Refresh now turns no more"
+        finally:
+            for route in held:
+                route.continue_()
+            page.unroute(CUBES)
+        assert rooms_read, "the click's poll reads the rooms too, as the page's own poll does not while the stream is open"
+        assert wait_until(page, "document.querySelector('#cube-problems .refresh-times').textContent.split('\\n')[1] "
+                                "=== t('header.serverReplied', {time: fmtTimeOfDay(new Date(state.repliedAt))})", 3), \
+            f"the list shows the server's answer: {times.evaluate('(e) => e.textContent')!r}"
+        assert page.evaluate("document.querySelector('#cube-problems details').open"), "and leaves the list open"
+        page.keyboard.press("Escape")
+        assert wait_until(page, "!document.querySelector('#cube-problems details').open", 3), "Escape closes it"
+        still, later = page.evaluate(TIMES_STILL)
+        assert later == still, f"closed, the times stand still: {still!r}, then {later!r}"
 
 
 def test_cube_choice_list_shows_problems(page, case, reads):

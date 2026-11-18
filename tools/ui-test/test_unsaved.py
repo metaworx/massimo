@@ -33,7 +33,7 @@ import time
 import pytest
 
 from conftest import URL, api_call
-from helpers import CUBES, choose_cube, found_only, hold, show_view, sign_out, wait_held, wait_until
+from helpers import CUBES, choose_cube, describe_event, found_only, held_poll, hold, show_view, sign_out, wait_held, wait_until
 from test_login import sign_in
 
 pytestmark = pytest.mark.clock
@@ -280,6 +280,7 @@ TILE = "#rooms .room"
 VWT_UNSAVED = {"en": "{room}, virtual thermostat: not saved", "de": "{room}, virtueller Thermostat: nicht gespeichert"}
 VWT_FAILED = {"en": "{room}, virtual thermostat: saving failed", "de": "{room}, virtueller Thermostat: Speichern fehlgeschlagen"}
 OTHER_ADDRESS = "0a0101"
+STORED_ELSEWHERE = "0a0102"  # the virtual thermostat's address as another client saved it meanwhile
 SECOND = "KEQ0000700"
 
 
@@ -351,18 +352,73 @@ def unsaved(page, room):
     return form, stored
 
 
-def drawings(page, ms):
-    """How often, in ms, the virtual thermostat's form and the pills that
-    name it were drawn: the calls of t() with their texts' keys."""
-    return page.evaluate("""(ms) => new Promise((done) => {
+def drawings(page, ms, poll=False):
+    """How often the virtual thermostat's form (its key vwt.method) and
+    the pills that name it (vwt.formName) were drawn, by the calls of t()
+    with those keys, as {key: count}: with poll, while a poll of the
+    page's own (poll(false)) runs, awaited; then in ms."""
+    return page.evaluate("""async ([ms, polled]) => {
       const orig = window.t;
-      let n = 0;
+      const n = {};
       window.t = function (key, params) {
-        if (key === "vwt.method" || key === "vwt.formName") n++;
+        if (key === "vwt.method" || key === "vwt.formName") n[key] = (n[key] || 0) + 1;
         return orig.call(this, key, params);
       };
-      setTimeout(() => { window.t = orig; done(n); }, ms);
-    })""", ms)
+      try {
+        if (polled) await poll(false);
+        await new Promise((done) => setTimeout(done, ms));
+      } finally {
+        window.t = orig;
+      }
+      return n;
+    }""", [ms, poll])
+
+
+def answered(page, action):
+    """Runs action(), then waits until every request it started has been
+    answered, the stream's left out: what the page draws from their
+    answers is drawn then, those the action did not await among them (a
+    poll's check of the version, its log alerts). Returns action's
+    result."""
+    started, ended = [], []
+
+    def start(r):
+        if "/events?" not in r.url:
+            started.append(r)
+
+    def end(r):
+        ended.append(r)
+
+    page.on("request", start)
+    page.on("requestfinished", end)
+    page.on("requestfailed", end)
+    try:
+        result = action()
+        until = time.time() + 5
+        while any(r not in ended for r in started) and time.time() < until:
+            page.wait_for_timeout(50)
+        assert all(r in ended for r in started), f"the requests answered: {[r.url for r in started if r not in ended]}"
+    finally:
+        page.remove_listener("request", start)
+        page.remove_listener("requestfinished", end)
+        page.remove_listener("requestfailed", end)
+    page.evaluate("new Promise((done) => requestAnimationFrame(() => setTimeout(done)))")  # their answers handled
+    return result
+
+
+def came(stream, mark):
+    """The events the page's stream brought since mark, in a few words
+    each, for a failure's message: a stray event of the server's can then
+    be told from a fault."""
+    seen = stream.since(mark)
+    return f"{len(seen)} events on the stream meanwhile" + (": " + ", ".join(describe_event(e) for e in seen[-20:]) if seen else "")
+
+
+def stored_elsewhere(detail):
+    """The virtual thermostat's detail with the address another client
+    saved meanwhile."""
+    detail.setdefault("settings", {})["rf_address"] = STORED_ELSEWHERE
+    return detail
 
 
 def hold_detail(page, room, method=None):
@@ -390,13 +446,16 @@ def hold_detail(page, room, method=None):
     return release
 
 
-def test_vwt_settings_kept_and_the_disk_opens_them(page, case):
+def test_vwt_settings_kept_and_the_disk_opens_them(page, case, reads, stream):
     """The virtual thermostat's settings: Save off while clean, Reset
     beside it; changed, then unsaved once the focus left, with the disk in
-    the row's pill and the tile's; the page settles while it shows; what
-    is typed stays when the device list closes and opens, a device
-    reports and the rooms load again; a click on the tile's disk opens the
-    list with the focus in the form; Reset takes the stored values back."""
+    the row's pill and the tile's; the page settles while it shows, the
+    page's poll held: nothing draws them with nothing changed, a poll a
+    few times and then nothing; what is typed stays when a device reports
+    and the rooms load again with the address stored elsewhere meanwhile,
+    which the form then says under the field, and when the device list
+    closes and opens; a click on the tile's disk opens the list with the
+    focus in the form; Reset takes the stored values back."""
     room = vwt_room(page)
     expert(page)
     try:
@@ -416,13 +475,35 @@ def test_vwt_settings_kept_and_the_disk_opens_them(page, case):
         want = VWT_UNSAVED[case.lang].format(room=room["name"])
         for where, disk in (("row", row_disk(page, room)), ("tile", tile_disk(page, room))):
             assert disk.count() == 1 and disk.text_content().strip() == want, f"the disk in the {where}'s pill: {disk.all_text_contents()}"
-        n = drawings(page, 2000)
-        assert n < 10, f"the page settles while the form is unsaved: {n} drawings in 2 s"
-        page.evaluate("(id) => MassimoParts.rooms.data(id)", room["id"])  # a device of the room reports
-        page.evaluate("loadRooms()")
-        page.wait_for_timeout(300)
-        assert value(page, room, "rf_address") == OTHER_ADDRESS, "kept at a device's report and a load of the rooms"
-        assert save_state(form)[3] == "warn", "still unsaved"
+        # the page's poll held while the drawings are counted, so that the
+        # count does not depend on its period: a poll draws the pills again
+        with held_poll(page):
+            mark = stream.mark()
+            n = drawings(page, 2000)
+            assert not n, f"the page settles while the form is unsaved: drawn {n} in 2 s with nothing changed; {came(stream, mark)}"
+            n = answered(page, lambda: drawings(page, 0, poll=True))
+            assert sum(n.values()) < 10, f"a poll draws the pills a few times: {n}"
+            mark = stream.mark()
+            n = drawings(page, 1000)
+            assert not n, f"and then nothing: drawn {n} in the second after the poll; {came(stream, mark)}"
+        # the address stored elsewhere meanwhile, as another client's save
+        # does: the load reads the detail anew, the details forgotten as a
+        # save of another form forgets them (config.js)
+        meanwhile = page.evaluate("(v) => t('field.changedMeanwhile', {value: v})", STORED_ELSEWHERE)
+        field_meanwhile = at(room, ".device.virtual form.vwt-settings .field-meanwhile")
+        reads.change(room["path"], stored_elsewhere)
+        try:
+            page.evaluate("state.details = {}")
+            page.evaluate("(id) => { MassimoParts.rooms.data(id); return loadRooms(); }", room["id"])  # a device reports, the rooms load
+            assert wait_until(page, "[...document.querySelectorAll(%s)].some((e) => e.textContent.includes(%s))"
+                              % (json.dumps(field_meanwhile), json.dumps(meanwhile)), 5), "the form says the address stored meanwhile"
+            assert value(page, room, "rf_address") == OTHER_ADDRESS, "the draft kept at a device's report and a load of the rooms"
+            assert save_state(form)[3] == "warn", "still unsaved"
+        finally:
+            reads.clear(room["path"])
+            page.evaluate("state.details = {}")
+            page.evaluate("loadRooms()")
+        assert wait_until(page, "!document.querySelector(%s)" % json.dumps(field_meanwhile), 5), "the address stored back, nothing said"
         page.locator(at(room, ".tile-info")).click()
         assert page.locator(at(room, ".device.virtual")).count() == 0, "the device list closed"
         assert tile_disk(page, room).count() == 1, "the tile's disk stays while the list is closed"

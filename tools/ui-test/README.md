@@ -279,7 +279,7 @@ hence `failed_checks_forgotten`.
   password `op-pass`) are listed with the operator's tokens,
   and the six default roles with the operator's seven capabilities;
   in the operator's open panel, Create key shows the new key,
-  lists every token once and sends one POST per click,
+  loads the tokens once and lists each once, and sends one POST per click,
   and the test revokes its keys again;
   a guest made with an end date that has seconds is saved without the end date
   when its display name alone changes, and Save without a change sends nothing;
@@ -297,7 +297,8 @@ hence `failed_checks_forgotten`.
   browser with the same token,
   the mode kept "only on this device" stays in its browser and the user's
   applies again when the switch is off; the guest the runner creates (`guest1`,
-  password `guest-pass`) has no switches, and its poll stays in the browser;
+  password `guest-pass`) has no switches,
+  and its poll stays in the browser, none sent;
   the operator's poll and scheme, changed just before Sign out,
   reach the operator's account and leave the browser,
   and the owner signing in next with its key gets neither;
@@ -569,5 +570,16 @@ Node is not needed.
 - A test of the log that sends events opens the log, calls
   `isolate_log(page, reads)` and `wait_log_live(page)`, then sends them;
   a test that waits for an event the server sends marks the stream before
-  its action and waits with `stream.wait`.
+  its action and waits with `stream.wait`,
+  and finds the event's line by what the event names, not by `.first`.
 - A wait that returns whether it was met is asserted where it is called.
+- "Nothing came" is checked against an end, not after a fixed wait:
+  a read sent after the action through the same route,
+  the page's state that says nothing waits,
+  a count of what the action started,
+  or a timer of the page's own due after the one it rules out (`docs/ui-testing.md`,
+  section 9).
+- A test that measures what the page does by itself,
+  its drawings or times that stand still,
+  holds the page's poll meanwhile (`with held_poll(page):`),
+  which fails where something started it again.

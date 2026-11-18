@@ -115,24 +115,30 @@ def test_backup_folds_in_system_settings(page, case):
 def test_back_up_now_turns_until_answered(page, case):
     """Back up now turns until the server answers, and a second click
     sends nothing; the POST is answered with a stub, so no backup is
-    stored."""
+    stored. What the second click sent is known once a read the page
+    sends after it has come through the same route: a POST of the
+    click's would have come before it."""
     show_view(page, "cube")
     take = BOX + " .backup-take"
     assert wait_until(page, f"backupOf('{SERIAL}').loaded && !document.querySelector('{take}').classList.contains('hidden')", 10), \
         "the server keeps backups"
-    held, sent = [], []
+    held, sent, came = [], [], []
     hold(page, "**/backups", "POST", held, sent)
+    page.on("request", lambda r: came.append(r.method) if r.url.endswith("/backups") else None)
     try:
         page.locator(take).click()
         assert wait_held(page, held), "the POST is sent"
         assert_busy(page, take, "Back up now")
+        mark = len(came)
         page.locator(take).click(force=True)
-        page.wait_for_timeout(300)
-        assert len(sent) == 1, f"one POST for two clicks: {sent}"
+        page.evaluate(f"api('GET', cubeRoute('{SERIAL}') + '/backups')")  # the read after the click, through the route
+        assert "GET" in came[mark:], f"the read after the click came: {came}"
+        assert came.count("POST") == 1, f"one POST for two clicks: {came}"
         for route in held:
             route.fulfill(status=201, content_type="application/json", body="{}")
         assert wait_until(page, f"!document.querySelector('{take}').classList.contains('busy')", 5), "Back up now is back"
         assert busy_state(page, take) == [False, False, None], "and on"
+        assert came.count("POST") == 1 and len(sent) == 1, f"and none sent while the first waited or once it was answered: {came}"
     finally:
         page.unroute("**/backups")
     show_view(page, "tiles")

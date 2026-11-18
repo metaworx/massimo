@@ -15,8 +15,10 @@ and what a test put in; Stream watches the page's event stream from a
 mark; isolate_log keeps a log of the test's own lines; wait_log_live
 waits until the log takes the stream's state events; safe_route is the
 one route handler that lets go a request the page no longer waits for;
-undo is a cleanup that says what it could not undo.
+undo is a cleanup that says what it could not undo; held_poll holds the
+page's poll while a test measures what the page does by itself.
 """
+import contextlib
 import json
 import re
 import sys
@@ -159,6 +161,26 @@ def wait_held(page, held, seconds=5):
     while not held and time.time() < end:
         page.wait_for_timeout(100)
     return bool(held)
+
+
+@contextlib.contextmanager
+def held_poll(page):
+    """The page's poll held for the with block: its timer cleared, and
+    started again at the end (startPolling()), for a test that measures
+    what the page does by itself, which a poll would change (docs/ui-
+    testing.md, section 9). Whatever calls startPolling() meanwhile ends
+    the hold unseen: applySettings() (a setting changed, expert mode, a
+    sign-in), the poll's field, a sign-out. So a block that ends without
+    an error of its own fails where the timer is no longer the one the
+    hold cleared."""
+    timer = page.evaluate("(() => { const t = state.pollTimer; clearInterval(t); return t; })()")
+    try:
+        yield
+        now = page.evaluate("state.pollTimer")
+        assert now == timer, f"the page's poll stayed held: something started it again meanwhile (timer {timer}, now {now})"
+    finally:
+        if not page.is_closed():
+            page.evaluate("startPolling()")
 
 
 # --- what the page reads and what its stream brings -------------------
