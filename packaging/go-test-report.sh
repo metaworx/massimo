@@ -9,12 +9,15 @@
 # Once stdin ends, it adds to the summary (GITHUB_STEP_SUMMARY; stderr
 # where it is not set) how many named tests skipped, each with its
 # package and its reason, the test's own lines, so that a skip where the
-# platform has what the test needs shows.
+# platform has what the test needs shows; then the run's 20 slowest tests
+# and its 10 slowest packages, from go test's times (AP TestSpeed, Block
+# 3), so that a run shows where its time went.
 # It fails nothing and always exits 0: the job's outcome is go test's,
 # which the step keeps with `set -o pipefail`. A line it cannot read goes
 # to the log as it came; should the reading itself die, the whole stream
 # does at its end, as `go test -v` writes it, since the lines it had taken
-# are lost to it. Either way the summary says the skips were not read.
+# are lost to it. Either way the summary says the skips were not read, and
+# names no times.
 # usage: go test -json ./... | packaging/go-test-report.sh [<title>]
 set -uo pipefail
 
@@ -114,11 +117,50 @@ if [ "$died" = false ] && [ ! -s "$errs" ]; then
 				| join(" / "))}]' "$raw" 2>/dev/null)" || skips=""
 fi
 
+# The run's times, from the Elapsed of go test's pass and fail events: the
+# 20 slowest tests, top-level ones alone, since a test's time holds its
+# subtests' and a subtest would only follow its parent in the list; and
+# the 10 slowest packages, each its test binary's own run, with how many
+# top-level tests ended in it. A parent whose subtests run in parallel
+# reports only its own function's time, so they would drop out of the
+# list; no test here runs its subtests in parallel. A package whose
+# result came from go test's cache, its `ok` line saying (cached), is
+# left out of both and counted: its tests' times are those of the run
+# that was cached. Each event is cut to its fields before the reduce, so
+# that the reduce holds no `//`, whose fork point made it copy the list
+# at every test's end: 100,000 tests took two minutes.
+times=""
+if [ -n "$skips" ]; then
+	times="$(jq -R -n "${jq_event}"'
+		reduce (inputs | event | select(.Action == "pass" or .Action == "fail" or .Action == "skip"
+			or (.Action == "output" and (.Test // "") == ""))
+			| {a: .Action, p: "\(.Package // "")", t: (.Test // ""), o: (.Output // ""),
+				s: (if (.Elapsed | type) == "number" and .Action != "skip" then .Elapsed else null end)}) as $e
+			({tests: [], packages: {}, cached: {}};
+			if $e.t == "" then
+				if $e.a == "output" then
+					if ($e.o | test("^ok  \t.*\t\\(cached\\)")) then .cached[$e.p] = true else . end
+				elif $e.s != null then .packages[$e.p].s = $e.s
+				else . end
+			elif $e.t | contains("/") then .
+			else .packages[$e.p].n += 1
+				| if $e.s != null then .tests[.tests | length] = {package: $e.p, test: $e.t, s: $e.s} else . end
+			end)
+		| .cached as $c
+		| {tests: ([.tests[] | select($c[.package] | not)] | sort_by(-.s) | .[:20]),
+			packages: ([.packages | to_entries[] | select(($c[.key] | not) and .value.s != null)
+				| {package: .key, n: (.value.n // 0), s: .value.s}] | sort_by(-.s) | .[:10]),
+			cached: ($c | length)}' "$raw" 2>/dev/null)" || times=""
+fi
+# Seconds as go test writes a test's, to two places.
+jq_secs='def secs: . * 100 | round
+	| "\(. / 100 | floor).\(. % 100 | tostring | if length < 2 then "0" + . else . end)";'
+
 {
 	if [ -z "$skips" ]; then
 		echo "### Skipped tests, ${title}: not read"
 		echo
-		echo "The output of go test -json could not be read whole; the job's log has what came."
+		echo "The output of go test -json could not be read whole; the job's log has what came, and the summary names no test's time."
 	else
 		count="$(jq length <<<"$skips")"
 		echo "### Skipped tests, ${title}: ${count}"
@@ -131,5 +173,34 @@ fi
 		fi
 	fi
 	echo
+	if [ -n "$skips" ] && [ -z "$times" ]; then
+		echo "### Slowest tests, ${title}: not read"
+		echo
+	elif [ -n "$times" ]; then
+		tests="$(jq '.tests | length' <<<"$times")"
+		cached="$(jq '.cached' <<<"$times")"
+		if [ "$tests" -gt 0 ] || [ "$cached" -gt 0 ]; then
+			echo "### Slowest tests, ${title}"
+			echo
+		fi
+		if [ "$cached" -gt 0 ]; then
+			echo "${cached} package(s) came from go test's cache and are left out: their times are an earlier run's."
+			echo
+		fi
+		if [ "$tests" -gt 0 ]; then
+			echo "| Package | Test | Seconds |"
+			echo "|---------|------|--------:|"
+			jq -r "${jq_secs}"'.tests[] | "| \(.package) | \(.test) | \(.s | secs) |"' <<<"$times"
+			echo
+		fi
+		if [ "$(jq '.packages | length' <<<"$times")" -gt 0 ]; then
+			echo "### Slowest packages, ${title}"
+			echo
+			echo "| Package | Tests | Seconds |"
+			echo "|---------|------:|--------:|"
+			jq -r "${jq_secs}"'.packages[] | "| \(.package) | \(.n) | \(.s | secs) |"' <<<"$times"
+			echo
+		fi
+	fi
 } >>"$summary"
 exit 0

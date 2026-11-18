@@ -13,7 +13,11 @@
 # tools/ui-test/results/. The first pass records no trace, whose DOM
 # snapshots make every step slower; when tests fail, they run once more
 # with it, the trace of one that fails again under results/retry/, and
-# the run fails either way.
+# the run fails either way. The first pass ends with its 20 slowest
+# phases, each a test's set-up, call or tear-down (--durations=20,
+# before PYTEST_ADDOPTS, which can ask for more), so that a run shows
+# where its time went (AP TestSpeed, Block 3); the retry, whose few
+# tests carry the trace, lists none of its own.
 # `run.sh screenshots` (make ui-screenshots) starts one set and runs
 # screenshots.py instead, which takes the screenshot set into
 # docs/screenshots/.
@@ -248,7 +252,7 @@ fi
 export UI_TEST_URL="http://127.0.0.1:$api_port/" UI_TEST_DOWN_URL="http://127.0.0.1:$down_port/" UI_TEST_TOKEN="$token" \
 	UI_TEST_SERVE_LOG="$work/set0/serve.log"
 rc=0
-"$py" -m pytest --output "$here/results" "$@" || rc=$?
+PYTEST_ADDOPTS="--durations=20 ${PYTEST_ADDOPTS:-}" "$py" -m pytest --output "$here/results" "$@" || rc=$?
 # Only failed tests (exit 1) run again: not an interrupted or empty run.
 [ $rc -eq 1 ] || exit $rc
 echo "ui-test: tests failed; they run once more, with the trace (tools/ui-test/results/retry/)" >&2

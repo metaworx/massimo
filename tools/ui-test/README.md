@@ -87,6 +87,11 @@ When tests fail, `run.sh` runs them once more with the trace
 and keeps the trace of each that fails again in `tools/ui-test/results/retry/`;
 it says whether they failed again, and the run fails either way:
 a test that passes only the second time is flaky, not fixed.
+The first pass ends with its 20 slowest phases,
+each a test's set-up, call or tear-down (`--durations=20`),
+in CI's UI jobs' logs too, so that a run shows where its time went;
+`PYTEST_ADDOPTS='--durations=0'` lists them all;
+the retry lists none of its own.
 `python -m playwright show-trace <trace.zip>` replays a trace step by step,
 with the page's DOM, console and network at every step.
 

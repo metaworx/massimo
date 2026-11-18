@@ -5,12 +5,14 @@ package packaging
 
 import (
 	"encoding/json"
+	"fmt"
 	"go/build"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -948,9 +950,22 @@ type testEvent struct {
 // where test is empty.
 func out(pkg, test, s string) testEvent { return testEvent{"output", pkg, test, s} }
 
+// timedEvent is a line of `go test -json` that ends a test or a package,
+// with the seconds it took.
+type timedEvent struct {
+	testEvent
+	Elapsed float64 `json:"Elapsed"`
+}
+
+// ended is the end of a package's test, or of the package itself where
+// test is empty, as the action (pass, fail, skip), after s seconds.
+func ended(action, pkg, test string, s float64) timedEvent {
+	return timedEvent{testEvent{action, pkg, test, ""}, s}
+}
+
 // stream is the lines of `go test -json` for the events, each line given
 // by extra after the event at its index put in after it as it is.
-func stream(t *testing.T, events []testEvent, extra map[int]string) string {
+func stream[E any](t *testing.T, events []E, extra map[int]string) string {
 	t.Helper()
 	var in strings.Builder
 	for i, e := range events {
@@ -1110,5 +1125,108 @@ func TestGoTestReportReadingDies(t *testing.T) {
 		"--- SKIP: TestSkip (0.00s)\nok  \texample.invalid/m/a\t0.01s\n")
 	if want := "### Skipped tests, go test: not read\n"; !strings.HasPrefix(summary, want) {
 		t.Errorf("summary:\n%s\nwant it to open with %q", summary, want)
+	}
+	wants(t, "summary", summary, "the summary names no test's time")
+	lacks(t, "summary", summary, "### Slowest")
+}
+
+// TestGoTestReportTimes: the summary names the run's 20 slowest
+// top-level tests, a failed one among them, and its 10 slowest packages,
+// with how many top-level tests ended in each; a subtest and a skipped
+// test are no row of their own, and a package whose result came from go
+// test's cache is left out of both, though it would head each, and
+// counted.
+func TestGoTestReportTimes(t *testing.T) {
+	const m = "example.invalid/m/"
+	var events []any
+	for i := 1; i <= 10; i++ {
+		p := fmt.Sprintf("%sp%02d", m, i)
+		events = append(events, ended("pass", p, "TestQuick", 0.01), ended("pass", p, "", float64(i)))
+	}
+	for i := 1; i <= 22; i++ {
+		events = append(events, ended("pass", m+"slow", fmt.Sprintf("Test%02d", i), float64(i)+0.5))
+	}
+	events = append(events,
+		ended("pass", m+"slow", "Test22/sub", 22.4),
+		ended("fail", m+"slow", "TestFailed", 30),
+		ended("skip", m+"slow", "TestSkipped", 40),
+		out(m+"slow", "", "FAIL\t"+m+"slow\t300.12s\n"),
+		ended("fail", m+"slow", "", 300.123),
+		ended("pass", m+"cached", "TestCached", 99),
+		out(m+"cached", "", "ok  \t"+m+"cached\t(cached)\n"),
+		ended("pass", m+"cached", "", 500),
+	)
+	_, summary := runGoTestReport(t, stream(t, events, nil), "")
+	var want strings.Builder
+	want.WriteString("### Skipped tests, go test: 1\n\n" +
+		"| Package | Test | Why |\n|---------|------|-----|\n" +
+		"| " + m + "slow | TestSkipped |  |\n\n" +
+		"### Slowest tests, go test\n\n" +
+		"1 package(s) came from go test's cache and are left out: their times are an earlier run's.\n\n" +
+		"| Package | Test | Seconds |\n|---------|------|--------:|\n" +
+		"| " + m + "slow | TestFailed | 30.00 |\n")
+	for i := 22; i >= 4; i-- {
+		fmt.Fprintf(&want, "| %sslow | Test%02d | %d.50 |\n", m, i, i)
+	}
+	want.WriteString("\n### Slowest packages, go test\n\n" +
+		"| Package | Tests | Seconds |\n|---------|------:|--------:|\n" +
+		"| " + m + "slow | 24 | 300.12 |\n")
+	for i := 10; i >= 2; i-- {
+		fmt.Fprintf(&want, "| %sp%02d | 1 | %d.00 |\n", m, i, i)
+	}
+	want.WriteString("\n")
+	if summary != want.String() {
+		t.Errorf("summary:\n%s\nwant:\n%s", summary, want.String())
+	}
+
+	// The times' reading failing alone: the skips are named, the times
+	// not read. A jq that fails on the times' program stands in for it.
+	real, err := exec.LookPath("jq")
+	if err != nil {
+		t.Skip("no jq")
+	}
+	bin := t.TempDir()
+	failing := "#!/usr/bin/env bash\n" +
+		"case \" $* \" in *'packages: {}, cached: {}'*) exit 5 ;; esac\n" +
+		"exec " + real + " \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(bin, "jq"), []byte(failing), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, summary = runGoTestReport(t, stream(t, events, nil), "", "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	wants(t, "summary", summary, "### Skipped tests, go test: 1\n", "### Slowest tests, go test: not read\n")
+	lacks(t, "summary", summary, "| Seconds |")
+}
+
+// TestGoTestReportTimesOfManyTests: among 3000 tests of one package, in
+// no order of their times, the 20 slowest are named, slowest first.
+func TestGoTestReportTimesOfManyTests(t *testing.T) {
+	const p, n = "example.invalid/m/many", 3000
+	type timed struct {
+		name  string
+		cents int
+	}
+	var events []timedEvent
+	var all []timed
+	for i := range n {
+		// 7919 is prime to n, so every hundredth of 0 to 29.99 s comes once.
+		c := timed{fmt.Sprintf("Test%04d", i), i * 7919 % n}
+		all = append(all, c)
+		events = append(events, ended("pass", p, c.name, float64(c.cents)/100))
+	}
+	events = append(events, ended("pass", p, "", 4500.5))
+	_, summary := runGoTestReport(t, stream(t, events, nil), "")
+	slices.SortFunc(all, func(a, b timed) int { return b.cents - a.cents })
+	var want strings.Builder
+	want.WriteString("### Skipped tests, go test: 0\n\n" +
+		"### Slowest tests, go test\n\n" +
+		"| Package | Test | Seconds |\n|---------|------|--------:|\n")
+	for _, c := range all[:20] {
+		fmt.Fprintf(&want, "| %s | %s | %d.%02d |\n", p, c.name, c.cents/100, c.cents%100)
+	}
+	want.WriteString("\n### Slowest packages, go test\n\n" +
+		"| Package | Tests | Seconds |\n|---------|------:|--------:|\n" +
+		"| " + p + " | 3000 | 4500.50 |\n\n")
+	if summary != want.String() {
+		t.Errorf("summary:\n%s\nwant:\n%s", summary, want.String())
 	}
 }
