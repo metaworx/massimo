@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 The Massimo Authors
 
-// The fake bridge of the web UI suite (test_connect.py): window.massimo
-// as docs/app.md describes it, put into the page before the page's own
-// scripts by Playwright's add_init_script, as an app's adapter puts the
-// real one there. It answers from window.__fakeBridgeConfig, an init
+// The fake bridge of the web UI suite (test_connect.py, test_tls.py):
+// window.massimo as docs/app.md describes it, put into the page before
+// the page's own scripts by Playwright's add_init_script, as an app's
+// adapter puts the real one there. It answers from window.__fakeBridgeConfig, an init
 // script of the test's before this one, which the test may change while
 // the page runs:
 //

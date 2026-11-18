@@ -1869,6 +1869,8 @@ massimo-week-program { display: contents; }
 .found-server { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
 .found-name { font-weight: 600; overflow-wrap: anywhere; }
 .found-where { flex: 1 1 8em; min-width: 0; overflow-wrap: anywhere; }
+/* Add at the row's end, also where the row shows no address (connect.js showWhere) */
+.found-add { margin-left: auto; }
 .found-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 8px 0 14px; }
 .found-line > :empty { display: none; }
 .add-form .field { margin-bottom: 8px; }

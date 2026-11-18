@@ -41,7 +41,6 @@
     <div class="section-body">
       <ul id="server-list" class="server-list"></ul>
       <p id="servers-empty" class="muted hidden" data-i18n="connect.none">No server yet: add one below.</p>
-      <p id="servers-msg" class="small cubes-msg hidden" role="status"></p>
       <div id="forget-all-row" class="actions hidden"><span class="actions-right"><button type="button" id="forget-all" data-i18n="connect.forgetAll">Forget all stored credentials</button></span></div>
     </div>
   </section>
@@ -101,6 +100,15 @@
 <template id="tpl-found">
   <li class="found-server"><span class="found-name"></span><span class="found-where mono muted small"></span><button type="button" class="found-add" data-i18n="connect.addButton">Add</button></li>
 </template>
+
+<!-- The page's toast (components.js showToast), the markup of
+     partials/toast.html, which only the page at / is assembled from:
+     what an action on the list or the add form came to (connect.js
+     say). -->
+<div id="toast" class="toast hidden" role="status" aria-live="polite">
+  <p class="toast-text"><strong id="toast-title" class="toast-title"></strong> <span id="toast-body"></span></p>
+  <button type="button" id="toast-close" class="icon-btn toast-close" aria-label="close" title="Close" data-i18n-attr="aria-label:action.close title:action.close">×</button>
+</div>
 
 <script src="ui/i18n.js"></script>
 <script src="ui/components.js"></script>

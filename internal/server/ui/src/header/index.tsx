@@ -26,7 +26,7 @@ import { HomeNotice } from "./HomeNotice";
 import { Pile } from "./Pile";
 import { ExpertTimes } from "./Times";
 import { TlsNotice } from "./Tls";
-import { cert, load } from "./store";
+import { cert, load, pinned } from "./store";
 
 /** The header's places, each the element of the page with the id, and what is drawn there. */
 const mounts = [
@@ -50,10 +50,13 @@ const header = register("header", {
     // the row folded anew where the pile's icons or the Cube's name change its widths
     watchFold();
   },
-  /** tls takes GET /healthz's tls, null without TLS (renderTLS). */
-  tls(tls: CertStatus | null): void {
+  /** tls takes GET /healthz's tls, null without TLS, and whether the app pinned its fingerprint (renderTLS). */
+  tls(tls: CertStatus | null, inApp = false): void {
     for (const m of mounts) m();
-    cert.value = tls;
+    batch(() => {
+      cert.value = tls;
+      pinned.value = inApp;
+    });
   },
 });
 

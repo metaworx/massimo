@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.60.0)
+# Massimo — CI Conventions (v1.62.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -107,9 +107,9 @@ flowchart TD
 
 | Trigger | Jobs |
 |---------|------|
-| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test, the store's benchmarks once each with `-short`, `make cross`); actionlint (`make actionlint`: the workflows by actionlint, their `run:` scripts by the runner's shellcheck); UI types (`make ui-check`: `tsc --noEmit` over the web UI's parts, `internal/server/ui/src/`, then Biome's two hooks rules over them); Race (`make race`, the race detector on `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve`, `internal/announce` and `internal/notify`); Test (armv6, QEMU) (`make test-armv6`, every package's tests with `-short` on 32-bit ARM, run by Ubuntu's `qemu-user` as the Raspberry Pi 1's core); Fuzz on a push to `main` only (`make fuzz`, every fuzz target for 10 s, a crash's input kept as the artifact `fuzz-crash`, Go 1.26's own deadline passed with a warning); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, then under systemd, each case in a container of its own (`make deb-systemd-test`: the first start, the restart, the upgrade from v0.12.0-alpha.1 with the service running), and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Windows service (the unit tests of the update, the installer, the command line, discovery and `internal/safefile`; install, run, update from the API and by hand, roll back, remove, on a Windows runner; then a second `serve` announcing itself beside Windows' own mDNS, found by `massimo discover`); macOS LaunchDaemon (the unit tests of the update, the installer, the command line and `internal/safefile`; first `install` on the template's settings, `packaging/launchd/template-test.sh`: the message and its owner line run as printed, a loaded job restarted, a booted-out one left stopped, the web UI's way, the purge; then the same as Windows on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`; then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker; then a second `serve` beside Apple's mDNSResponder, found and resolved by `dns-sd`); UI test (the web UI's pytest suite, a job per width with both languages, "UI test (1100 px, screenshots)" and "UI test (390 px)", each its two cases in four workers; in the 1100 px job then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only; on failure the failed tests' screenshots and videos and the traces of their run once more as `ui-test-results-<width>`; on a pull request only when it changes the UI, its bundler (`tools/uibundle`), the vendored Preact, its suite or `ci.yml`, as the job What to test answers); LAN against avahi (`make lan-test`: a second `serve`'s searches finding a fake Cube, losing it with its cable pulled and finding it again, then from a box's proxy too; `serve` beside avahi-daemon, `avahi-browse` and `massimo discover` on a client; a third `serve` following the Cube by its serial to another address after the loss; in Docker; on a pull request only when it changes the announcement, discovery, the shared port, the server's own files, the proxy, the Go module, the LAN test or `ci.yml`, as the job What to test answers, and not on the merge of a pull request that found it not needed); Android app (`app/version.json` against its tag, the debug build with its unit tests and lint, the release APK built at two paths and compared byte for byte, then the AAB and the nightly APK signed with a key made for the run; on a pull request only when it changes `app/`, the web UI's files the app bundles, `packaging/app-*.sh`, `ci.yml`, `build.yml` or `release.yml`, as the job What to test answers, and not on the merge of a pull request that found it not needed); Guidelines (section 4); Site (`packaging/site/build.sh --no-apt`: the site's pages and the docs of the commit, every link checked, a document under `docs/` missing from `docs/fragments/_documents.md` failing it; never deployed; also for a change to the site's documents alone); Code result, for a change to documents alone only (`packaging/code-result.sh`: the verdict of the last run that tested the code, below) |
+| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test with its skipped tests named in the summary, the store's benchmarks once each with `-short`, `make cross`); actionlint (`make actionlint`: the workflows by actionlint, their `run:` scripts by the runner's shellcheck); UI types (`make ui-check`: `tsc --noEmit` over the web UI's parts, `internal/server/ui/src/`, then Biome's two hooks rules over them); Race (`make race`, the race detector on `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve`, `internal/announce`, `internal/notify`, `internal/engine`, `internal/cubeio` and `internal/certs`, `-count=1` and `-timeout 30m`, its skipped tests named in the summary); Test (armv6, QEMU) (`make test-armv6`, every package's tests with `-short` and `-timeout 30m` on 32-bit ARM, run by Ubuntu's `qemu-user` as the Raspberry Pi 1's core, its skipped tests named in the summary); Fuzz on a push to `main` only (`make fuzz`, every fuzz target for 10 s, a crash's input kept as the artifact `fuzz-crash`, Go 1.26's own deadline passed with a warning); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, then under systemd, each case in a container of its own (`make deb-systemd-test`: the first start, the restart, the upgrade from v0.12.0-alpha.1 with the service running), and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Windows service (the unit tests of the update, the installer, the command line, discovery and `internal/safefile`; install, run, update from the API and by hand, roll back, remove, on a Windows runner; then a second `serve` announcing itself beside Windows' own mDNS, found by `massimo discover`); macOS LaunchDaemon (the unit tests of the update, the installer, the command line and `internal/safefile`; first `install` on the template's settings, `packaging/launchd/template-test.sh`: the message and its owner line run as printed, a loaded job restarted, a booted-out one left stopped, the web UI's way, the purge; then the same as Windows on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`; then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker; then a second `serve` beside Apple's mDNSResponder, found and resolved by `dns-sd`); UI test (the web UI's pytest suite, a job per width with both languages, "UI test (1100 px, screenshots)" and "UI test (390 px)", each its two cases in four workers; in the 1100 px job then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only; on failure the failed tests' screenshots and videos and the traces of their run once more as `ui-test-results-<width>`; on a pull request only when it changes the UI, its bundler (`tools/uibundle`), the vendored Preact, the server's own Go files, the OpenAPI file, its suite or `ci.yml`, as the job What to test answers); LAN against avahi (`make lan-test`: a second `serve`'s searches finding a fake Cube, losing it with its cable pulled and finding it again, then from a box's proxy too; `serve` beside avahi-daemon, `avahi-browse` and `massimo discover` on a client; a third `serve` following the Cube by its serial to another address after the loss; in Docker; on a pull request only when it changes the announcement, discovery, the shared port, the server's own files, the proxy, the Go module, the LAN test or `ci.yml`, as the job What to test answers, and not on the merge of a pull request that found it not needed); Android app (`app/version.json` against its tag, the debug build with its unit tests and lint, the release APK built at two paths and compared byte for byte, then the AAB and the nightly APK signed with a key made for the run; on a pull request only when it changes `app/`, the web UI's files the app bundles, `packaging/app-*.sh`, `ci.yml`, `build.yml` or `release.yml`, as the job What to test answers, and not on the merge of a pull request that found it not needed); Guidelines (section 4); Site (`packaging/site/build.sh --no-apt`: the site's pages and the docs of the commit, every link checked, a document under `docs/` missing from `docs/fragments/_documents.md` failing it; never deployed; also for a change to the site's documents alone); Code result, for a change to documents alone only (`packaging/code-result.sh`: the verdict of the last run that tested the code, below) |
 | beside the jobs above, on a push | Build (build.yml): What to release decides what the run releases, then every target built without cgo with the Debian packages, the build record, `SHA256SUMS` and the manifest, the provenance attested; for a version tag the Android app's APK and AAB, for the nightly build its nightly APK, unsigned, attested too; nothing signed (section 6) |
-| after every job above | All tests passed: fails unless none of them failed or was cancelled, and names each with its result in its summary, an annotation for each that did not pass, and on a pull request in one comment; then, on a push, once Build is done, Release (release.yml): a push to `main` becomes the `devel` build, the GitHub release `release/devel` replaced in place, signed with the rolling key (section 6); then, at every run of release.yml, Site (site.yml): the site built with the newest release's signed apt index and the docs of every channel, and deployed to GitHub Pages; nothing where no release carries the index yet; for a push to `main` of the site's documents alone, which has no Build and so no Release, Deploy site (site.yml) instead |
+| after every job above | All tests passed: fails unless none of them failed or was cancelled, and names each with its result in its summary, an annotation for each that did not pass, and on a pull request in one comment; a job that passed only on a re-run counts, and is named in a line of the summary, a warning, that comment and, on a pull request, a comment of its own; then, on a push, once Build is done, Release (release.yml): a push to `main` becomes the `devel` build, the GitHub release `release/devel` replaced in place, signed with the rolling key (section 6); then, at every run of release.yml, Site (site.yml): the site built with the newest release's signed apt index and the docs of every channel, and deployed to GitHub Pages; nothing where no release carries the index yet; for a push to `main` of the site's documents alone, which has no Build and so no Release, Deploy site (site.yml) instead |
 | push to a release branch (`release/alpha`, later `release/beta` and `release/stable`) | nothing: ci.yml listens to `main` and the tags; the release moved the branch to a commit ci.yml had tested |
 | a version tag | every job above, as for a push to `main`, Build included; then release.yml: sign the manifest and `SHA256SUMS` with the release key, verify the signatures against the public key compiled into `massimo`, publish the GitHub release; with the app's keys set, sign the Android app, add it to the release and its lines to `SHA256SUMS`, sign that again and attest the signed files (section 6); then, with the deploy key set, the Homebrew formula of the release's channel rendered and pushed to the tap (publish.yml, section 6), and, with the apt key set, the apt repository rebuilt from the releases and deployed to GitHub Pages |
 | daily at 02:30 UTC, or by hand (`gh workflow run nightly.yml --ref main`) | nightly.yml: build.yml, then release.yml, no tests: the nightly build, `release/nightly`, of the newest commit of `main` whose suite passed and that is newer than the one it carries; nothing where there is none (section 6) |
@@ -209,6 +209,9 @@ and the step's failure fails nothing.
 The same code is not the same environment: a Go patch or a runner image
 can change in between, as between two runs of one commit,
 and a flaky test that passed is not retried.
+A job that failed and passed on a re-run counts as passed here too,
+as in Code result's verdict, and leaves a record instead (owner,
+2026-11-18, AP TestInfrastructure, D10-A; All tests passed, below).
 Other paths stay out of the list because something tests them:
 `docs/**`, `README.md` and `CONTRIBUTING.md` (below),
 `GUIDELINES/shared` (Site renders with its `md_html.py`,
@@ -341,10 +344,31 @@ then edited by every run, a passing one included,
 so a pull request that never fails gets none.
 A push to `main` and a tag get the summary and annotations alone;
 GitHub's failure email reaches whoever pushed.
+A job that failed and passed on a re-run counts as passed, and is named (owner,
+2026-11-18, AP TestInfrastructure, D10-A).
+A re-run is an attempt of the same run (`github.run_attempt`);
+from the second on,
+the step reads the jobs of every attempt (`jobs?filter=all`),
+and a job whose latest run passed and an earlier one did not
+gets a line of the summary with the attempts it did not pass in and the one it passed in,
+a warning annotation, and a table in the pull request's report.
+An edit of that comment notifies no one, and the owner wants the author told,
+so a job whose last run before this attempt did not pass,
+which this attempt's re-run then made pass,
+gets a comment of its own, starting with `<!-- ci-rerun -->`:
+one at each re-run that made a job pass,
+and none at a later attempt of a run that had passed already.
+A job a re-run leaves alone is carried into the next attempt with its start,
+by which a failure carried so counts once.
+A push to `main` gets the summary and the warnings alone.
+The step is `packaging/ci-report.sh`, its test `packaging/ci_scripts_test.go`
+with the API's answers made up and a stand-in for `gh`;
+the job checks out that one file for it, which takes `contents: read`,
+and a checkout that fails leaves the report undone and fails nothing.
 The step fails nothing (`continue-on-error`):
 the verdict is the next step's, from `needs`,
 and a read-only token, Dependabot's or a fork's,
-leaves a warning instead of the comment.
+leaves a warning instead of the comment, in the summary too.
 A pipe into `grep` in a step reads to the end (`grep … >/dev/null`,
 not `grep -q`):
 under `pipefail` a `grep -q` that exits at its match kills a writer still writing,
@@ -355,12 +379,34 @@ a new push to a pull request cancels the run it supersedes,
 while a run of `main` is never cancelled,
 so every commit of `main` keeps its result.
 
+Every job that runs on a runner has a time limit (`timeout-minutes`;
+AP TestInfrastructure, Block 9), since GitHub's own is six hours:
+about three times its longest run among the 57 runs before 2026-11-18,
+ten minutes at least, and above the Go tests' own `-timeout`,
+so that Go's timeout fails a hung test with its goroutines in the log
+before the job is cut off.
+In minutes, the limit and the longest run:
+What to test, actionlint, UI types, Guidelines, Site and All tests passed:
+10, under 1;
+LAN against avahi 15, 4.8; govulncheck 15, 3.5;
+Fuzz 20, 4.5; the Debian packages 20, 5.6; Windows service 20, 3.4;
+Vet and test 30, 7.6, its `go test` with Go's ten minutes a package;
+macOS LaunchDaemon 30, 8.1;
+Race 40, 9.6, and Test (armv6, QEMU) 40, 10.3, both above their `-timeout 30m`;
+the UI test jobs 45, 15.4;
+the Android app keeps its 45, 7.0, and Code result its 70,
+which waits up to an hour for a run still going.
+
 The armhf package ships the armv6 binary, which `make cross` only builds:
 Test (armv6, QEMU) runs every package's tests on it,
 as `qemu-arm -cpu arm1176` (the Raspberry Pi 1's core) runs each test binary,
 without binfmt and without a new action, Ubuntu's `qemu-user` from apt.
 `-short` keeps the emulation to a few minutes:
 `internal/server` takes the longest, about two minutes on a PC.
+In CI it took 245 to 367 s in six runs, up to 61 % of Go's default ten minutes,
+and in QEMU with four CPUs under load its tests added up to about 21,
+so `make test-armv6` gives a package 30 (owner, 2026-11-17,
+AP TestInfrastructure, D14-A).
 The emulation's slowness brings out tests that rely on timing,
 as it did the store's prune racing a test's fill;
 such a test is fixed, not skipped under QEMU.
@@ -395,9 +441,16 @@ The first pass records no Playwright trace,
 whose DOM snapshots made every step slower;
 the failed tests run once more with it.
 A pull request runs the jobs only when it changes `internal/server/ui/`,
-`tools/ui-test/` or `.github/workflows/ci.yml`,
-the paths the contract asks `make ui-test` for and the jobs' own definition,
-and then on all four cases,
+`tools/ui-test/`, `tools/uibundle/`, `third_party/preact/`,
+the server's own Go files (`internal/server/*.go`), `docs/api-v1-openapi.yaml`
+or `.github/workflows/ci.yml`:
+the paths the contract asks `make ui-test` for, the page's bundler and Preact,
+the server the page talks to and the API it reads,
+whose change showed on `main` alone before (AP TestInfrastructure, Block 9),
+and the jobs' own definition;
+the OpenAPI file counts beside code only,
+since alone it is a site document (section 2, `site=true`).
+The jobs then run all four cases,
 so that a case it would have left out does not fail first on `main`.
 The job What to test answers that from the pull request's merge commit,
 whose first parent is the base branch.
@@ -529,8 +582,41 @@ Where CI differs, and why:
   with the runner's Node.js and npm; no action installs them.
 - `make race` is the contract's recommended `-race`, in a Race job of its own
   beside Vet and test, so that neither waits for the other:
-  about 80 s on four cores,
+  about 7 minutes in CI, up to 9.6 in November 2026,
   the server's and the store's packages taking the longest.
+  It runs with `-count=1`, so that a pass in the cache is not taken for one,
+  and `-timeout 30m`: under load `internal/server` took up to 988 s,
+  past Go's default ten minutes (owner, 2026-11-17,
+  AP TestInfrastructure, D14-A).
+  Since 2026-11-18 it covers `internal/engine` (the command queue),
+  `internal/cubeio` and `internal/certs` too, whose goroutines meet as well;
+  five runs of their tests under `-race` found no race, in 13 s.
+- Vet and test, Race and Test (armv6, QEMU) run their tests with `-json`,
+  `go test -json ./...` and `make race` or `make test-armv6` with `TESTFLAGS=-json`,
+  into `packaging/go-test-report.sh` (AP TestInfrastructure, Block 9):
+  it writes the log while the tests run,
+  each package's line and a failed test's output as `go test -v` writes it,
+  and then names in the summary each test that skipped,
+  with its package and its reason, the test's own lines.
+  A skip where the platform has what the test needs (D9-A),
+  as the discovery tests' on a port another test held were until Block 8,
+  shows there instead of passing unseen.
+  It fails nothing: the job's outcome stays go test's,
+  which the step's `set -o pipefail` keeps, and the script always exits 0;
+  what a passing test prints itself is left out of the log,
+  as its `t.Log` lines are.
+  A test's output is held until it ends,
+  its first 1000 lines and its last 200 at most,
+  with the number left out written between them:
+  held whole, one test's 80,000 lines took two minutes to read
+  and could have held up go test behind the pipe.
+  A test that never ends, as one that runs into the `-timeout`,
+  comes out at its package's end, its goroutines with it,
+  before the package's `FAIL` line.
+  A line it cannot read goes to the log as it came;
+  should its reading die, the whole stream goes to the log at the end;
+  either way the summary says the skips were not read.
+  The Windows and macOS jobs' unit tests run as before, without the summary.
 - `make fuzz` runs on a push to `main` only.
   A pull request runs the fuzz targets' seeds in `go test`, the crashes found
   before among them;
@@ -970,7 +1056,8 @@ since a site without `apt/` would take the repository offline.
 `.github/dependabot.yml` has Dependabot propose,
 once a month and in one pull request each,
 the updates of the Go modules the code imports directly,
-of the actions the workflows use, of actionlint,
+of the actions the workflows use,
+of the Android app's Gradle dependencies and plugins, of actionlint,
 of esbuild, which bundles the web UI's parts,
 and of the TypeScript that type-checks them.
 Its pull requests differ from the project's in two ways, both on purpose:
@@ -979,7 +1066,7 @@ Its pull requests differ from the project's in two ways, both on purpose:
   and no `Assisted-by` trailer,
   so the Guidelines job does not read them (section 4).
 - They carry no `CHANGELOG.md` bullet,
-  though `go.mod` and `.github/**` are shipped paths.
+  though `go.mod`, `app/**` and `.github/**` are shipped paths.
   Whoever merges one adds its updates to a bullet
   `- Dependencies updated: …` under `[Unreleased]`, Changed,
   in a commit of the project's form before the next release is cut,
@@ -994,6 +1081,13 @@ its tag's commit from `gh api repos/<owner>/<repo>/git/ref/tags/<tag>`
 (an annotated tag points at a tag object; its `object.sha` is the commit).
 `github.com/bytemare/ksf` is indirect and replaced by `third_party/bytemare-ksf`,
 so Dependabot leaves it alone until a release has the fix.
+
+The Android app's dependencies and its Gradle plugins are pinned in its
+version catalogue, `app/android/gradle/libs.versions.toml`;
+the Gradle entry, for `/app/android`, groups them into one pull request,
+since a plugin's update can need a library's.
+The job Android app builds it, tests it and checks that the release APK
+is built the same twice (section 2), as F-Droid will.
 
 actionlint is pinned by the `tool` line of `tools/actionlint/go.mod`,
 a module of its own rather than a `tool` line in massimo's `go.mod`,

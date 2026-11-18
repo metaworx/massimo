@@ -4,7 +4,8 @@
 bridge of fake_bridge.js in place of an app's adapter, put into the page
 by add_init_script as conftest.py puts the token: the server list and
 what each probe found, a tap that opens a server, adding by address and
-from discovery, the fingerprint sheet of a self-signed certificate and
+from discovery, the names a server is shown by, the toast saying what an
+action came to, the fingerprint sheet of a self-signed certificate and
 of a changed one, a server's settings with when the fingerprint is
 asked, the login by fingerprint from the row, Turn off and Forget all,
 the card of the server on the phone; a browser without the bridge; and
@@ -92,6 +93,20 @@ def wait_state(page, name, text):
     assert badge.inner_text() == text, f"{name} shows {text!r}, not {badge.inner_text()!r}"
 
 
+def wait_toast(page, text="", bad=False):
+    """Waits until the page's toast says text, with the red edge of a
+    failure or without it."""
+    js = ("(() => { const el = document.getElementById('toast');"
+          f" return !el.classList.contains('hidden') && el.classList.contains('bad') === {json.dumps(bad)}"
+          f" && el.textContent.includes({json.dumps(text)}); }})()")
+    assert wait_until(page, js, 5), f"the toast says {text!r}, bad {bad}: {page.locator('#toast').inner_text()!r}"
+
+
+def toast_gone(page):
+    """Waits until the page's toast is hidden."""
+    return wait_until(page, "document.getElementById('toast').classList.contains('hidden')", 5)
+
+
 def assert_axe(page, where):
     """axe-core finds no violation on the page as it stands."""
     results = Axe().run(page)
@@ -117,8 +132,9 @@ def test_connect_list_and_open(new_context, case, watch, guard):
     """The servers show what their probe found: at the LAN address when
     its node answers there, else at the remote one, else not reachable;
     a tap opens a server at the address found, and one that does not
-    answer is probed again and said to be unreachable. Without core in
-    the bridge there is no card for the server on the phone."""
+    answer is probed again and said to be unreachable in the toast,
+    which a later probe that finds it takes back. Without core in the
+    bridge there is no card for the server on the phone."""
     config = {
         "servers": [server("s1", "Home", NODE1, lan=HOME_LAN, remote=HOME_REMOTE),
                     server("s2", "Cabin", NODE2, lan=CABIN_LAN),
@@ -144,18 +160,24 @@ def test_connect_list_and_open(new_context, case, watch, guard):
 
     before = len(calls(page, "probe"))
     row(page, "Cabin").locator(".server-open").click()
-    msg = page.locator("#servers-msg")
-    msg.wait_for(state="visible")
-    assert "Cabin" in msg.inner_text(), "a server that does not answer is said to be unreachable"
+    wait_toast(page, "Cabin", bad=True)  # a server that does not answer is said to be unreachable
     assert len(calls(page, "probe")) > before, "and probed again first"
     assert len(calls(page, "open")) == 1, "it is not opened"
+    named_buttons(page, "the toast")
+    assert_axe(page, "the toast")
+
+    page.evaluate(f"window.__fakeBridgeConfig.answers[{CABIN_LAN!r}] = {{node: {NODE2!r}}}")
+    page.locator("#probe-btn").click()
+    wait_state(page, "Cabin", st["lan"])
+    assert toast_gone(page), "a probe that finds the server takes the toast back"
 
 
 def test_connect_add_by_address(new_context, case, watch, guard):
     """An address typed is probed at the URLs it may mean, HTTPS first,
     and added at the first that answers, as a LAN server for a private
-    address; what is not an address says so, and a plain-HTTP URL
-    outside the home network is warned of."""
+    address, which the toast says; what is not an address says so under
+    the field, and a plain-HTTP URL outside the home network is warned
+    of."""
     lan = "http://192.168.1.20:8099/"
     page = open_connect(new_context, guard, watch, {"servers": [], "answers": {lan: {"node": NODE2}}})
     assert page.locator("#servers-empty").is_visible(), "an empty list says how to add one"
@@ -169,7 +191,8 @@ def test_connect_add_by_address(new_context, case, watch, guard):
     address.fill("192.168.1.20:8099")
     assert not page.locator("#add-warn").is_visible(), "a private address is not"
     page.locator("#add-form button[type=submit]").click()
-    page.locator("#add-msg.ok").wait_for()
+    wait_toast(page, "192.168.1.20:8099")
+    assert page.locator("#add-msg").is_hidden(), "the line under the field is taken back"
     assert ["probe", ["https://192.168.1.20:8099/", lan], ""] in calls(page, "probe"), "HTTPS is tried first"
     saved = calls(page, "save")[-1][1]
     assert saved["lan"] == lan and saved["remote"] == "" and saved["node"] == NODE2, f"added as a LAN server: {saved}"
@@ -196,13 +219,13 @@ def test_connect_fingerprint_sheet(new_context, case, watch, guard):
     named_buttons(page, "the fingerprint sheet")
     assert_axe(page, "the fingerprint sheet")
     page.locator("#fp-cancel").click()
-    page.locator("#add-msg.bad").wait_for()
+    wait_toast(page, bad=True)
     assert calls(page, "save") == [], "Cancel adds nothing"
 
     page.locator("#add-form button[type=submit]").click()
     dlg.wait_for(state="visible")
     page.locator("#fp-trust").click()
-    page.locator("#add-msg.ok").wait_for()
+    wait_toast(page, "home.example.net")
     assert ["probe", [HOME_REMOTE], FP1] in calls(page, "probe"), "probed again with the fingerprint trusted"
     sid = page.evaluate("window.__fakeBridge.servers[0].id")
     assert calls(page, "trust") == [["trust", sid, FP1]], "the fingerprint is pinned"
@@ -254,7 +277,7 @@ def test_connect_settings(new_context, case, watch, guard):
     panel.wait_for(state="detached")
     saved = calls(page, "save")[-1][1]
     assert saved["ask"] == "return" and saved["id"] == "s1" and saved["lan"] == HOME_LAN and "biometric" not in saved, f"the choice is saved: {saved}"
-    page.locator("#servers-msg.ok").wait_for()
+    wait_toast(page, "Home")
 
     home.locator(".server-cog").click()
     assert panel.locator("select[name=ask]").input_value() == "return", "and shown as saved"
@@ -263,6 +286,7 @@ def test_connect_settings(new_context, case, watch, guard):
     home.wait_for(state="detached")
     assert calls(page, "remove") == [["remove", "s1"]]
     assert page.locator("#servers-empty").is_visible()
+    wait_toast(page, "Home")
 
 
 def test_connect_discovery(new_context, case, watch, guard):
@@ -296,6 +320,66 @@ def test_connect_discovery(new_context, case, watch, guard):
     assert wait_until(page, "!document.getElementById('search-btn').disabled", 3), "the search ends"
     page.locator("#search-btn").click()
     assert wait_until(page, "window.__fakeBridge.calls.filter((c) => c[0] === 'discover').length === 2", 3), "Search again"
+
+
+def service(name, host, node):
+    """A service discovery finds, as the adapter sends it."""
+    return {"name": name, "host": host, "port": 8099, "node": node, "version": "v0.0.0-test", "tls": False, "fp": ""}
+
+
+def test_connect_names(new_context, case, watch, guard):
+    """A server added by its address is named by it, and its row shows
+    the address once; the name discovery hears for its node replaces
+    that name, heard before the server is added or after, while a name
+    the user gave stays; a server found without a name shows its address
+    once."""
+    cellar = "http://192.168.1.20:8099/"
+    attic = "http://192.168.1.30:8099/"
+    config = {"servers": [], "answers": {cellar: {"node": NODE2}, attic: {"node": NODE3}},
+              "found": [service("Attic", "192.168.1.30", NODE3), service("", "192.168.1.50", NODE1)]}
+    page = open_connect(new_context, guard, watch, config)
+    page.locator(".found-server", has_text="Attic").wait_for()
+    nameless = page.locator(".found-server", has_text="192.168.1.50:8099")
+    nameless.wait_for()
+    assert nameless.locator(".found-where").is_hidden(), "a server found without a name shows its address once"
+    assert wait_until(page, "!document.getElementById('search-btn').disabled", 3), "the first search ends"
+    address = page.locator("#add-address")
+    submit = page.locator("#add-form button[type=submit]")
+
+    address.fill("192.168.1.20:8099")
+    submit.click()
+    wait_toast(page, "192.168.1.20:8099")
+    by_address = row(page, "192.168.1.20:8099")
+    by_address.wait_for()
+    assert by_address.locator(".server-where").is_hidden(), "a server named by its address shows it once"
+
+    address.fill("192.168.1.30:8099")
+    submit.click()
+    wait_toast(page, "Attic")
+    attic_row = row(page, "Attic")
+    attic_row.wait_for()
+    assert attic_row.locator(".server-where").inner_text() == "192.168.1.30:8099", "the address beside the name heard"
+    assert page.locator(".found-server", has_text="Attic").count() == 0, "and it is no longer offered"
+
+    page.evaluate(f"window.__fakeBridgeConfig.found = [{json.dumps(service('Cellar', '192.168.1.20', NODE2))}]")
+    page.locator("#search-btn").click()
+    cellar_row = row(page, "Cellar")
+    cellar_row.wait_for()
+    assert cellar_row.locator(".server-where").inner_text() == "192.168.1.20:8099"
+    assert page.evaluate(f"window.__fakeBridge.servers.find((s) => s.node === {NODE2!r}).name") == "Cellar", "the name is saved"
+    assert wait_until(page, "!document.getElementById('search-btn').disabled", 3), "the second search ends"
+
+    cellar_row.locator(".server-cog").click()
+    panel = cellar_row.locator(".server-panel")
+    panel.locator("input").first.fill("Basement")
+    panel.locator("button[type=submit]").click()
+    panel.wait_for(state="detached")
+    page.locator("#search-btn").click()
+    assert wait_until(page, "window.__fakeBridge.calls.filter((c) => c[0] === 'discover').length === 3", 3), "Search again"
+    assert wait_until(page, "!document.getElementById('search-btn').disabled", 3), "the third search ends"
+    assert row(page, "Basement").count() == 1 and row(page, "Cellar").count() == 0, "a name the user gave stays"
+    assert page.evaluate(f"window.__fakeBridge.servers.find((s) => s.node === {NODE2!r}).name") == "Basement"
+    assert_axe(page, "the names")
 
 
 def test_connect_core_card(new_context, case, watch, guard):
@@ -395,7 +479,7 @@ def test_connect_login_by_fingerprint(new_context, case, watch, guard):
     panel.locator(".server-login-off").click()
     assert wait_until(page, "window.__fakeBridge.calls.some((c) => c[0] === 'forget')", 3)
     assert calls(page, "forget") == [["forget", "s1", HOME_LAN]]
-    page.locator("#servers-msg.ok").wait_for()
+    wait_toast(page, "Home")
     assert wait_until(page, "!document.querySelector(\".server-row[data-id='s1'] .server-login-kept\")", 3), "the settings drawn again without it"
     assert home.locator(".server-login").is_hidden(), "and the row without its fingerprint"
 
@@ -418,8 +502,7 @@ def test_connect_login_refused(new_context, case, watch, guard):
     page = open_connect(new_context, guard, watch, config)
     wait_state(page, "Home", STATE[case.lang]["lan"])
     row(page, "Home").locator(".server-login").click()
-    page.locator("#servers-msg:not(.hidden)").wait_for()
-    assert "no longer takes" in page.locator("#servers-msg").inner_text()
+    wait_toast(page, "no longer takes", bad=True)
     assert wait_until(page, "document.querySelector(\".server-row[data-id='s1'] .server-login\").classList.contains('hidden')", 3)
 
 

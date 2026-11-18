@@ -222,5 +222,38 @@ reached through `adb reverse` as `http://127.0.0.1:8099/` on the phone:
 adb reverse tcp:8099 tcp:8099
 ```
 
+The phone test of 2026-11-17 ran such a `serve` with `-tls self-signed`
+and `-listen 127.0.0.1:9443`, in an empty directory of its own,
+so that adding it shows the fingerprint sheet;
+on the phone it is then `https://127.0.0.1:9443/`:
+
+```bash
+adb reverse tcp:9443 tcp:9443
+```
+
+`adb reverse` can stall on one port:
+on that test the phone's connections to port 8443 never reached WSL,
+while 9443 to the same server worked.
+A port that stalls is left for another, on both sides.
+Type the whole URL, with `https://`, which the page probes over one connection;
+`host:port` probes two, by HTTPS and by HTTP (`docs/app.md`).
+
+A debug build lets Chrome's DevTools inspect the WebView.
+Its socket is `webview_devtools_remote_<pid>`, forwarded to a port in WSL:
+
+```bash
+adb forward tcp:9222 localabstract:webview_devtools_remote_$(adb shell pidof ch.metaworx.massimo)
+```
+
+Chrome then finds the page at `localhost:9222`
+(`chrome://inspect`, "Configure…"), and `http://localhost:9222/json` lists it.
+
+A VPN on the phone that does not let LAN connections through
+(its setting is often called "Allow LAN connections")
+routes the LAN into its tunnel:
+the phone reaches no server on the LAN, and adding one times out,
+while the LAN still reaches the phone, `adb` among it.
+Allow LAN connections in the VPN, or turn it off, for a server on the LAN.
+
 Discovery needs a `serve` on the phone's LAN that announces itself
 (AP ServerAnnouncements); a `serve` in WSL is not on it.

@@ -301,6 +301,10 @@ such as another package's tests under `make race`.
   as macOS has 127.0.0.1 alone of the loopback's 127.0.0.0/8,
   and fails on any other error, such as a port another program holds,
   which a skip would turn into a green run with the test not run.
+  CI's jobs Vet and test, Race and Test (armv6, QEMU)
+  name every test that skipped, with its reason, in the run's summary
+  (`GUIDELINES/project/CI.md`, section 3);
+  the Windows and macOS jobs do not report their skips.
 - **The server's proxies** listen through `heldPorts` (`ports_test.go`)
   and the start's `listenOn(ports)`, over the hook `Options.proxyListen`.
   `ports.hold(t)` is an address whose listener goes to the first listen at it.
