@@ -92,6 +92,26 @@ the jobs Vet and test, Race and Test (armv6, QEMU)
 name their 20 slowest tests and their 10 slowest packages in the run's summary
 (`GUIDELINES/project/CI.md`, section 3).
 
+## The race detector
+
+`-race` turns on `checkptr` too, which checks, as the code runs,
+each conversion of an `unsafe.Pointer` to a typed pointer and its arithmetic.
+`modernc.org/sqlite` is SQLite's C translated to Go and made of such steps:
+under `-race`, checking them was half the time of opening a fresh store,
+as many of the server's tests and most of the store's do.
+So `make race` turns `checkptr` off for the packages under `modernc.org` alone
+(`RACEGCFLAGS` in the `Makefile`),
+and the store-heavy tests take about half as long.
+The race detector stays on in every package, SQLite's included,
+and `checkptr` in Massimo's own packages and in every other dependency.
+SQLite's pointer steps are its own project's to test.
+Go gives a package the last `-gcflags` whose pattern matches it, not their sum,
+so a `-gcflags=all=…` in `TESTFLAGS` checks SQLite's steps again,
+as `make race RACEGCFLAGS=` does alone.
+A `-gcflags` in `GOFLAGS` comes before the `Makefile`'s,
+so under `make race` a `-gcflags=all=…` there no longer reaches SQLite's packages:
+put it in `TESTFLAGS`.
+
 ## The watcher
 
 `Eventually` waits for a state: a count, a flag, an answer of the API.

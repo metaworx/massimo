@@ -233,8 +233,20 @@ vet: ui
 TESTFLAGS ?=
 RACEPKGS = ./internal/server ./internal/store ./internal/cubelan ./internal/proxy ./internal/serve ./internal/announce ./internal/notify ./internal/engine ./internal/cubeio ./internal/certs
 
+# -race turns on checkptr too, which checks each conversion of an
+# unsafe.Pointer to a typed pointer, and its arithmetic, as the code runs; in modernc.org/sqlite, SQLite's C translated to Go,
+# that was half the time of opening a fresh store. RACEGCFLAGS turns it
+# off for the packages under modernc.org alone: the race detector stays
+# on in every package, and checkptr in the module's own and every other
+# dependency (AP TestSpeed, D6-A; docs/testing.md, "The race detector").
+# Go gives a package the last -gcflags whose pattern matches it, not
+# their sum: a -gcflags=all=... in TESTFLAGS replaces this one there,
+# and SQLite is checked again, as with RACEGCFLAGS= alone, which passes
+# no -gcflags at all. A -gcflags in GOFLAGS comes before this one.
+RACEGCFLAGS ?= modernc.org/...=-d=checkptr=0
+
 race: ui
-	MASSIMO_ENV_FILE=/dev/null MASSIMO_TEST_SCALE=2 go test -race -count=1 -timeout 30m $(TESTFLAGS) $(RACEPKGS)
+	MASSIMO_ENV_FILE=/dev/null MASSIMO_TEST_SCALE=2 go test -race -count=1 -timeout 30m $(if $(RACEGCFLAGS),'-gcflags=$(RACEGCFLAGS)') $(TESTFLAGS) $(RACEPKGS)
 
 # Every package's tests on 32-bit ARM, the armv6 binary that the armhf
 # package ships, run by QEMU as the Raspberry Pi 1's core (ARM1176) with
