@@ -35,14 +35,14 @@ class ServerStoreTest {
     @Test
     fun saveAddsInOrderWithAnId() {
         val st = ServerStore(file())
-        val a = st.save(input("name" to "Home", "node" to "node-a", "lan" to "http://192.168.1.20:8099/", "biometric" to true))
+        val a = st.save(input("name" to "Home", "node" to "node-a", "lan" to "http://192.168.1.20:8099/", "ask" to "return"))
         val b = st.save(input("name" to "Cabin", "remote" to "https://massimo.example.net/"))
         assertTrue(a.id.isNotEmpty())
         assertNotEquals(a.id, b.id)
         assertEquals(listOf("Home", "Cabin"), st.list().map { it.name })
         assertEquals("node-a", a.node)
-        assertTrue(a.biometric)
-        assertFalse(b.biometric)
+        assertEquals(Server.ASK_RETURN, a.ask)
+        assertEquals(Server.ASK_START, b.ask) // the choice until the user makes one
         assertEquals("", a.fp)
     }
 
@@ -91,10 +91,14 @@ class ServerStoreTest {
 
     @Test
     fun valuesOfTheWrongTypeAreNone() {
-        val s = ServerStore(file()).save(input("name" to 3, "lan" to "http://192.168.1.20/", "biometric" to "yes", "node" to JSONObject.NULL))
+        val st = ServerStore(file())
+        val s = st.save(input("name" to 3, "lan" to "http://192.168.1.20/", "ask" to "sometimes", "node" to JSONObject.NULL))
         assertEquals("192.168.1.20", s.name)
         assertEquals("", s.node)
-        assertFalse(s.biometric)
+        assertEquals(Server.ASK_START, s.ask)
+        // A choice the page sends that is none keeps the one saved.
+        val r = st.save(input("id" to s.id, "lan" to "http://192.168.1.20/", "ask" to "logout"))
+        assertEquals(Server.ASK_LOGOUT, st.save(input("id" to r.id, "lan" to "http://192.168.1.20/", "ask" to 7)).ask)
     }
 
     @Test
@@ -133,5 +137,24 @@ class ServerStoreTest {
         val st = ServerStore(file())
         assertTrue(st.list().isEmpty())
         assertTrue(File(file().path + ".bad").isFile)
+    }
+
+    @Test
+    fun versionOnesSwitchIsTakenOnce() {
+        // A file of version 1, one server with "Ask for my fingerprint or PIN" on.
+        file().writeText(
+            "[{\"id\":\"a\",\"name\":\"Home\",\"lan\":\"http://192.168.1.20/\",\"biometric\":true}," +
+                "{\"id\":\"b\",\"name\":\"Cabin\",\"lan\":\"http://192.168.1.21/\",\"biometric\":false}]",
+        )
+        val st = ServerStore(file())
+        assertEquals(setOf("a"), st.takeLegacy())
+        assertEquals(emptySet<String>(), st.takeLegacy())
+        assertEquals(Server.ASK_START, st.get("a")!!.ask)
+        assertFalse(file().readText().contains("biometric"))
+        assertEquals(emptySet<String>(), ServerStore(file()).takeLegacy())
+        val json = st.get("a")!!.toJson("anna")
+        assertEquals("anna", json.getString("login"))
+        assertEquals("start", json.getString("ask"))
+        assertFalse(json.has("biometric"))
     }
 }

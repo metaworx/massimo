@@ -8,7 +8,8 @@
  * closed, the cube in the chosen Cube's link's colour and its name;
  * open, each Cube with the cube, its name, its sign and the icons of its
  * problems after it, its serial and address, then those found on the LAN and not served, then
- * the entry that searches the LAN for new ones. Built once and updated in
+ * the entry that searches the LAN for new ones, and in the app "Select
+ * server", which shows the app's servers. Built once and updated in
  * place, so that an open choice stays open, with the focus where it was,
  * and shows what a poll brings.
  */
@@ -22,6 +23,16 @@ import { discovery, load } from "./store";
 
 /** DISCOVER is the value of the entry that searches the LAN. */
 const DISCOVER = "__discover";
+
+/** SERVERS is the value of the app's entry "Select server" (docs/app.md, contract version 2). */
+const SERVERS = "__servers";
+
+/** connectOf is the app's way back to its servers, null in a browser or an app without it. */
+function connectOf(): (() => Promise<null>) | null {
+  const b = appBridge();
+  const go = b?.connect;
+  return b && typeof go === "function" ? () => go.call(b) : null;
+}
 
 /**
  * entryOf is a served Cube's entry: the cube, its name (its serial without
@@ -46,9 +57,10 @@ function entryOf(c: Cube): PickEntry {
   };
 }
 
-/** pick acts on a choice: the search, a found Cube's way to System settings, or the Cube chosen. */
+/** pick acts on a choice: the search, the app's servers, a found Cube's way to System settings, or the Cube chosen. */
 function pick(v: string): void {
   if (v === DISCOVER) discoverCubes();
+  else if (v === SERVERS) connectOf()?.().catch(() => {});
   else if (v.startsWith("found:")) showFound();
   else selectCube(v);
 }
@@ -56,7 +68,8 @@ function pick(v: string): void {
 /**
  * Choice is the Cube choice: the served Cubes; those found on the LAN and
  * not served, which open System settings → Cubes for a role with cubes
- * and are information for others; for a role with discover, the search.
+ * and are information for others; for a role with discover, the search;
+ * in the app, "Select server".
  * Closed it shows the cube in the chosen Cube's link's colour, green,
  * amber or red, and its name; folded to a button (fold.ts) the cube
  * alone. Its tooltip names the chosen Cube, its serial, address and
@@ -73,6 +86,10 @@ export function Choice() {
   if (hasCap("discover")) {
     entries.push({ separator: true });
     entries.push({ value: DISCOVER, label: t(discovery.running ? "discover.searching" : "discover.search"), disabled: discovery.running });
+  }
+  if (connectOf()) {
+    entries.push({ separator: true });
+    entries.push({ value: SERVERS, label: t("app.selectServer") });
   }
   const cube = chosenCube();
   const name = cube ? cube.name || cube.serial : t("header.cube");
