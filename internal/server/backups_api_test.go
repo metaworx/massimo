@@ -42,6 +42,24 @@ func reasons(l backupList) string {
 	return strings.Join(out, ",")
 }
 
+// backupLooked returns once the backup loop has looked at rt's Cube, a
+// backup it took then included, in a look that began after the windows
+// of a change seen by now have ended: backups.auto_max minutes of
+// minute, and one more for the loop's tick. A backup due by then is
+// taken by then. The loop looks one look after the other, each look
+// clearing the touch the test sets: the third touch cleared shows that
+// the look which cleared the second is over, and that one began after
+// the look which cleared the first, which may have begun before.
+func backupLooked(t *testing.T, rt *runtime, autoMax int, minute time.Duration) {
+	t.Helper()
+	at := time.Now().Add(time.Duration(autoMax+1) * minute)
+	testkit.Eventually(t, "the end of the backup windows", func() bool { return !time.Now().Before(at) })
+	for i := 0; i < 3; i++ {
+		rt.bk.touch()
+		testkit.Eventually(t, "a look of the backup loop", func() bool { return !rt.bk.touched.Load() })
+	}
+}
+
 // The server takes a Cube's first backup at once, none while nothing
 // changes, one after a change once it has been quiet for
 // backups.auto_min, and one backups.auto_max after the first change
@@ -58,7 +76,7 @@ func TestBackupAutomatic(t *testing.T) {
 		return reasons(l) == "auto"
 	})
 	first := l.Backups[0]
-	time.Sleep(300 * time.Millisecond)
+	backupLooked(t, r.rt, 10, 20*time.Millisecond)
 	if _, l = historyOf(t, ts.URL); len(l.Backups) != 1 || l.Changed != nil {
 		t.Fatalf("a backup without a change: %s, changed %v", reasons(l), l.Changed)
 	}
@@ -282,7 +300,7 @@ func TestRestoreKeepsBackups(t *testing.T) {
 		t.Fatalf("after a restore from a file: %s", reasons(l))
 	}
 	before := l.Backups[1].ID
-	time.Sleep(300 * time.Millisecond)
+	backupLooked(t, r.rt, 4, 20*time.Millisecond)
 	if _, l = historyOf(t, ts.URL); len(l.Backups) != 3 {
 		t.Fatalf("a backup after a full restore: %s", reasons(l))
 	}
@@ -300,7 +318,7 @@ func TestRestoreKeepsBackups(t *testing.T) {
 		_, run := do(t, ts, "GET", restoreBase, "")
 		return run["state"] == "done" && run["plan"] == p["plan"]
 	})
-	time.Sleep(300 * time.Millisecond)
+	backupLooked(t, r.rt, 4, 20*time.Millisecond)
 	if _, l = historyOf(t, ts.URL); reasons(l) != "before_restore,upload,before_restore,auto" {
 		t.Fatalf("after a restore by id: %s", reasons(l))
 	}

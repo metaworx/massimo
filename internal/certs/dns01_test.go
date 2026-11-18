@@ -397,7 +397,13 @@ func TestHookTimeoutEndsTheChildren(t *testing.T) {
 	dir := t.TempDir()
 	hook := filepath.Join(dir, "hook.sh")
 	pidFile := filepath.Join(dir, "child.pid")
-	os.WriteFile(hook, []byte("#!/bin/sh\nsleep 20 &\necho $! > \""+pidFile+"\"\nwait\n"), 0o755)
+	// The child outlives every wait of the test by itself, the wait for
+	// its pid included (a minute, as the kit scales it), so that only the
+	// hook's end can end it before the check; the cleanup ends one the
+	// check did not see end.
+	pidWait, gone := testkit.Scale(time.Minute), testkit.Scale(2*time.Second)
+	sleep := int((pidWait + hookWaitDelay + gone + time.Minute).Seconds())
+	os.WriteFile(hook, []byte("#!/bin/sh\nsleep "+strconv.Itoa(sleep)+" &\necho $! > \""+pidFile+"\"\nwait\n"), 0o755)
 	d := &DNS01{hook: hook, log: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -410,20 +416,33 @@ func TestHookTimeoutEndsTheChildren(t *testing.T) {
 		pid, _ = strconv.Atoi(strings.TrimSpace(string(b)))
 		return pid != 0
 	}, testkit.For(time.Minute), testkit.Every(20*time.Millisecond))
+	ended := false
+	t.Cleanup(func() {
+		if !ended {
+			exec.Command("kill", strconv.Itoa(pid)).Run()
+		}
+	})
 	start := time.Now()
 	cancel()
-	err := <-done
+	// The hook's wait delay is the longest runHook may take, with its
+	// child holding the output; the child's own sleep is far longer.
+	var err error
+	select {
+	case err = <-done:
+	case <-time.After(testkit.Scale(hookWaitDelay + 3*time.Second)):
+		t.Fatalf("runHook still running %s after its time was up", time.Since(start).Round(time.Millisecond))
+	}
 	if took := time.Since(start); err == nil || took > 3*time.Second {
 		t.Fatalf("runHook returned %v after %s, want an error within the time", err, took)
 	}
-	deadline := time.Now().Add(testkit.Scale(2 * time.Second))
+	deadline := time.Now().Add(gone)
 	for exec.Command("kill", "-0", strconv.Itoa(pid)).Run() == nil {
 		if time.Now().After(deadline) {
-			exec.Command("kill", strconv.Itoa(pid)).Run()
 			t.Fatal("the hook's child outlived the hook's time")
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
+	ended = true
 }
 
 // An order whose time runs out while it waits for the TXT record still

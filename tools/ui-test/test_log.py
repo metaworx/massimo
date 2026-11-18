@@ -900,8 +900,9 @@ def iso(t):
 def test_log_range_is_the_last_20_by_default(page, case):
     """The range is the last 20 events at first: the page asks for 20 and
     no time, has no Older, and keeps the newest 20 as live events come:
-    the three sent push out the oldest, the server's own lines kept out
-    of the log (isolate_log)."""
+    the three sent push out the three oldest. The server's own lines are
+    kept out of the log from before the stubbed load on (isolate_log), so
+    that the log holds the stub's lines and the test's alone."""
     now = time.time()
     asked = []
 
@@ -910,6 +911,7 @@ def test_log_range_is_the_last_20_by_default(page, case):
         evs = [{"id": i, "kind": "hello", "time": iso(now - 100 + i)} for i in range(1, 21)]
         route.fulfill(status=200, content_type="application/json", body=json.dumps(evs))
 
+    isolate_log(page)
     page.route(LOG_ROUTE, answer)
     try:
         show_view(page, "log")
@@ -919,7 +921,6 @@ def test_log_range_is_the_last_20_by_default(page, case):
     assert page.locator("#log-range").input_value() == "20", "the last 20 events"
     assert asked[-1].get("limit") == ["20"] and "since" not in asked[-1], f"20 asked for, no time: {asked[-1]}"
     assert page.locator("#log-older").is_hidden(), "no Older"
-    isolate_log(page)
     wait_log_live(page)
     rf = page.evaluate("state.rooms[0].devices[0].rf_address")
     for _ in range(3):
@@ -928,11 +929,11 @@ def test_log_range_is_the_last_20_by_default(page, case):
     assert wait_until(page, "document.querySelectorAll('#log-lines .kind-config').length === 3", 5), "the live events"
     assert page.locator("#log-lines .log-line").count() == 20, "the newest 20 kept"
     assert page.evaluate("logState.lines.length") == 20, "and no more held"
-    # the stubbed lines left are the newest of them, the oldest gone: three
-    # for the events sent
+    # the stubbed lines left are the newest 17, the three oldest gone for the
+    # three events sent
     kept = sorted(int(i) for i in page.evaluate(
         "[...document.querySelectorAll('#log-lines .kind-hello')].map((l) => l.dataset.id)"))
-    assert kept == list(range(21 - len(kept), 21)) and len(kept) <= 17, f"the oldest gone, the newest kept: {kept}"
+    assert kept == list(range(4, 21)), f"the three oldest gone, the newest 17 kept: {kept}"
     show_view(page, "tiles")
 
 
@@ -1084,26 +1085,36 @@ CMD_SAYS = {"en": {"open": "command ", "head": "setpoint"}, "de": {"open": "Befe
 def test_log_command_detail(page, case, stream):
     """A line of a command opens the command under it: what was asked,
     its state, its steps and, for the owner, its audit row; the button
-    says whether it is open, and closes it again. The command's line
-    comes on the stream, watched from before the write."""
+    says whether it is open, and closes it again. The command's lines
+    come on the stream, watched from before the write, and the line taken
+    is one of the write's own command, by its number: the log holds the
+    server's earlier commands too, the four cases' among them."""
     show_view(page, "log")
     wait_log_live(page)
     serial = page.evaluate("state.serial")
     room = page.evaluate("state.rooms[0].id")
     mark = stream.mark()
     api_call("PUT", f"api/v1/cubes/{serial}/rooms/{room}/setpoint", {"mode": "auto"})
-    stream.wait("the write's command", "command", mark=mark, server=True, seconds=10)
-    btn = page.locator("#log-lines .log-line.kind-command .log-cmd").first
-    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-command .log-cmd').length > 0", 10), "a line of the command"
-    assert btn.inner_text().startswith(CMD_SAYS[case.lang]["open"]), f"the button: {btn.inner_text()}"
+    ev = stream.wait("the write's command", "command", match=lambda d: bool(d and d.get("command")), mark=mark, server=True, seconds=10)
+    cmd = ev["data"]["command"]
+    label = page.evaluate("(id) => t('log.cmd.open', {id})", cmd)
+    assert label.startswith(CMD_SAYS[case.lang]["open"]), f"the button's text: {label}"
+    # the write's command's lines, each with its button; the detail opens under each
+    line = page.locator("#log-lines .log-line.kind-command").filter(
+        has=page.locator(".log-cmd", has_text=re.compile("^" + re.escape(label) + "$"))).first
+    btn = line.locator(".log-cmd")
+    assert wait_until(page, "[...document.querySelectorAll('#log-lines .log-line.kind-command .log-cmd')].some((b) => b.textContent === %s)"
+                      % json.dumps(label), 10), f"a line of the write's command {cmd}"
     assert btn.get_attribute("aria-expanded") == "false", "closed at first"
     btn.click()
+    detail = line.locator(".log-cmd-detail")
     assert wait_until(page, "!!document.querySelector('#log-lines .log-cmd-detail .log-cmd-head')", 10), "the command's detail"
-    detail = page.locator("#log-lines .log-cmd-detail").first
-    assert CMD_SAYS[case.lang]["head"] in detail.locator(".log-cmd-head").inner_text(), "what was asked"
+    asked = api_call("GET", f"api/v1/commands/{cmd}")
+    what = f"{asked.get('action')} {asked.get('target') or '–'}"
+    head = detail.locator(".log-cmd-head").inner_text()
+    assert head.startswith(what + ": ") and CMD_SAYS[case.lang]["head"] in head, f"what was asked, of command {cmd} ({what}): {head!r}"
     assert detail.locator(".log-cmd-steps li").count() >= 1, "its steps"
     assert detail.locator(".log-cmd-audit").count() == 1, "the owner sees its audit row"
-    btn = page.locator("#log-lines .log-line.kind-command .log-cmd").first
     assert btn.get_attribute("aria-expanded") == "true", "the button says it is open"
     assert page.evaluate("document.documentElement.scrollWidth") <= case.width, "no horizontal scroll with the detail open"
     btn.click()

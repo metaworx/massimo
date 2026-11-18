@@ -4,6 +4,7 @@
 package fakecube
 
 import (
+	"errors"
 	"net"
 	"testing"
 	"time"
@@ -90,9 +91,12 @@ func TestReleaseAndRestartFreeTheCube(t *testing.T) {
 	}
 	c := dial(t, addr)
 	srv.Restart()
-	c.conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	if _, err := c.r.Read(); err == nil {
-		t.Error("the connection outlived the restart")
+	// The read ends with the close; one that times out found the
+	// connection open.
+	c.conn.SetReadDeadline(time.Now().Add(testkit.Scale(testkit.Wait)))
+	var ne net.Error
+	if _, err := c.r.Read(); err == nil || errors.As(err, &ne) && ne.Timeout() {
+		t.Errorf("the connection outlived the restart: %v", err)
 	}
 	if srv.HeldDead() || srv.Restarts() != 2 {
 		t.Errorf("after the restart: dead %v, %d restarts", srv.HeldDead(), srv.Restarts())

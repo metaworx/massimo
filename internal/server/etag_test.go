@@ -129,7 +129,7 @@ func TestProgramConfigEvents(t *testing.T) {
 	// are what the write's config events are measured against.
 	ts := startServer(t, storedRooms(), fastFollowUps(), quiet()).ts
 	evs := readStreamURL(t, ts.URL+"/api/v1/cubes/KEQ0000100/events?devices=all")
-	_, after := evs.AwaitN(t, 0, "the first burst", 10, isEvent)
+	_, after := burstOf(t, evs, 0, 10)
 	if code, body := putProgram(t, ts.URL+"/api/v1/cubes/KEQ0000100/rooms/2/program", "", `{"tuesday":[{"temp":18,"until":"24:00"}]}`); code != 200 {
 		t.Fatalf("write: %d %v", code, body)
 	}

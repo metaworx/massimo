@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // searchOn runs Search on a loopback socket of its own against targets.
@@ -52,7 +53,7 @@ func TestSearchMarksTheAnswers(t *testing.T) {
 	_, port, _ := net.SplitHostPort(cubeAt.Addr())
 	proxyAt, err := fakecube.StartDiscovery("127.0.0.2:"+port, "KEQ0000000", 0x0a0107)
 	if err != nil {
-		t.Skipf("no second loopback address here: %v", err)
+		testkit.BindOrSkip(t, err)
 	}
 	defer proxyAt.Close()
 	proxyAt.SetIdentifyOnly(true)

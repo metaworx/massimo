@@ -60,21 +60,38 @@ func isEvent(e testkit.Event) bool { return e.Kind != "" }
 // returns the id the last of them carries, with the cursor after it.
 func burst(t *testing.T, evs *testkit.Watch[testkit.Event], from testkit.Cursor, devices int) (string, testkit.Cursor) {
 	t.Helper()
-	got, after := evs.AwaitN(t, from, "the state burst", devices, isEvent)
-	id := ""
+	got, after := burstOf(t, evs, from, devices)
+	return got[len(got)-1].ID, after
+}
+
+// burstOf reads a connection's state burst from the cursor on, up to
+// its end: the first event that carries an id, which only the burst's
+// last does, with the newest id, as every live event does. The burst is
+// state events alone, devices of them; one of another size fails here,
+// rather than leave the cursor before the burst's end or after a live
+// event, where the waits after it would read on.
+func burstOf(t *testing.T, evs *testkit.Watch[testkit.Event], from testkit.Cursor, devices int) ([]testkit.Event, testkit.Cursor) {
+	t.Helper()
+	_, after := evs.Await(t, from, "the state burst's last event, with an id", func(e testkit.Event) bool { return isEvent(e) && e.ID != "" })
+	var got []testkit.Event
+	for _, ev := range evs.Since(from, nil)[:after-from] {
+		if isEvent(ev) {
+			got = append(got, ev)
+		}
+	}
 	for i, ev := range got {
 		if ev.Kind != "state" {
-			t.Fatalf("event %d: %q, want state", i, ev.Kind)
+			t.Fatalf("burst event %d: %q, want state", i, ev.Kind)
 		}
-		if i < devices-1 && ev.ID != "" {
-			t.Fatalf("state %d carries id %q; only the last does", i, ev.ID)
+	}
+	if len(got) != devices {
+		var shown []string
+		for _, ev := range got {
+			shown = append(shown, ev.Data)
 		}
-		id = ev.ID
+		t.Fatalf("a state burst of %d events, want %d:\n%s", len(got), devices, strings.Join(shown, "\n"))
 	}
-	if id == "" {
-		t.Fatal("the last state event carries no id")
-	}
-	return id, after
+	return got, after
 }
 
 // mark sends a test event on the Cube's stream.

@@ -124,10 +124,14 @@ func TestFilesWarnBeforeExpiry(t *testing.T) {
 	if f.Status().Warning != "the certificate has expired" {
 		t.Fatalf("expired: %q", f.Status().Warning)
 	}
-	// Watch checks at once.
+	// Watch checks at once, at the time it runs: the warning of the
+	// check after the end goes, long before Watch's first tick.
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	Watch(ctx, f, time.Hour)
+	if w := f.Status().Warning; w != "" {
+		t.Fatalf("Watch did not check at once: %q", w)
+	}
 }
 
 // cachedACME is an ACME source whose cache holds an ECDSA certificate for

@@ -294,8 +294,13 @@ func TestApplyDelayDiscardAndOff(t *testing.T) {
 	if st := c.states()[0x0a0204]; st.Mode != cube.ModeAuto {
 		t.Fatalf("applied at once: %+v", st)
 	}
-	time.Sleep(600 * time.Millisecond)
-	if st := c.states()[0x0a0204]; st.Mode != cube.ModeManual || *st.Setpoint != 25 {
+	// Within the connection's deadline (dial), so that the wait's end
+	// is the failure.
+	var st cube.DeviceState
+	if !testkit.Within(3*time.Second, func() bool {
+		st = c.states()[0x0a0204]
+		return st.Mode == cube.ModeManual && st.Setpoint != nil && *st.Setpoint == 25
+	}, testkit.Every(50*time.Millisecond)) {
 		t.Fatalf("not applied after the delay: %+v", st)
 	}
 

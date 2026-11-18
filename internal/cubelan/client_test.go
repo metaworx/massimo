@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"strings"
@@ -65,6 +66,27 @@ func kind(k EventKind) func(Event) bool {
 	return func(e Event) bool { return e.Kind == k }
 }
 
+// ready waits for the client's first complete greeting (Ready).
+func ready(t *testing.T, c *Client) {
+	t.Helper()
+	select {
+	case <-c.Ready():
+	case <-time.After(testkit.Scale(testkit.Wait)):
+		t.Fatalf("client never became ready within %v", testkit.Scale(testkit.Wait))
+	}
+}
+
+// caughtUp waits until evs holds every event c had sent out at the call
+// (Client.EventCounts): a ChanWatch takes the events in a goroutine of
+// its own, so a count of it right after an action can miss an event
+// still in the channel; after caughtUp it holds them all.
+func caughtUp(t *testing.T, c *Client, evs *testkit.Watch[Event]) {
+	t.Helper()
+	if _, sent := c.EventCounts(); sent > 0 {
+		evs.Await(t, 0, fmt.Sprintf("the client's event %d", sent), func(e Event) bool { return e.Seq() >= sent })
+	}
+}
+
 func TestClientGreetingAndSnapshot(t *testing.T) {
 	_, addr := startFake(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -72,11 +94,7 @@ func TestClientGreetingAndSnapshot(t *testing.T) {
 	c := New(Options{Addr: addr})
 	go c.Run(ctx)
 
-	select {
-	case <-c.Ready():
-	case <-time.After(testkit.Scale(5 * time.Second)):
-		t.Fatal("client never became ready")
-	}
+	ready(t, c)
 	s := c.Snapshot()
 	if s.Hello() == nil || s.Hello().Serial != "KEQ0000100" {
 		t.Fatalf("hello: %+v", s.Hello())
@@ -110,7 +128,7 @@ func TestClientSendAndPoll(t *testing.T) {
 	defer cancel()
 	c := New(Options{Addr: addr, PollInterval: 50 * time.Millisecond})
 	go c.Run(ctx)
-	<-c.Ready()
+	ready(t, c)
 
 	// A radio command gets an S reply.
 	m, _ := cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a010d, RoomID: 6, Room: true}, 19, cube.ModeManual, cube.Until{})
@@ -147,7 +165,7 @@ func TestClientReconnects(t *testing.T) {
 	c := New(Options{Addr: addr, Dialer: dial})
 	evs := events(t, c)
 	go c.Run(ctx)
-	<-c.Ready()
+	ready(t, c)
 	_, at := evs.Await(t, 0, "the connection", kind(EventConnected))
 
 	// Kill the server side; the client must notice and reconnect to the
@@ -177,11 +195,7 @@ func TestReconnectRefreshesTheSnapshot(t *testing.T) {
 	c := New(Options{Addr: addr})
 	evs := events(t, c)
 	go c.Run(ctx)
-	select {
-	case <-c.Ready():
-	case <-time.After(testkit.Scale(5 * time.Second)):
-		t.Fatal("client never became ready")
-	}
+	ready(t, c)
 	// A device the Cube no longer has (deleted by another client, say)
 	// lingers in the snapshot until the next greeting.
 	gone, ok := c.Snapshot().ConfigLine(0x0a010d)
@@ -247,18 +261,36 @@ func TestClientWaitsForItsAddress(t *testing.T) {
 	srv, addr := startFake(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	c := New(Options{})
+	// Every dial is recorded: one without an address would go to
+	// another port than the fake's, which counts no connection for it.
+	var mu sync.Mutex
+	var dialled []string
+	dial := func(ctx context.Context, a string) (net.Conn, error) {
+		mu.Lock()
+		dialled = append(dialled, a)
+		mu.Unlock()
+		return (&net.Dialer{}).DialContext(ctx, "tcp", a)
+	}
+	c := New(Options{Dialer: dial})
 	evs := events(t, c)
 	go c.Run(ctx)
 	// No end to wait for: a client without an address waits silently.
+	// A dial it made meanwhile comes before the one to the address, so
+	// that the dials checked once connected hold it.
 	time.Sleep(100 * time.Millisecond)
-	if srv.Connections() != 0 || c.Address() != "" {
-		t.Fatalf("connected without an address: %d %q", srv.Connections(), c.Address())
+	if c.Address() != "" {
+		t.Fatalf("an address without SetAddress: %q", c.Address())
 	}
 	if !c.SetAddress(addr) || c.SetAddress(addr) {
 		t.Fatal("SetAddress did not report the change once")
 	}
 	evs.Await(t, 0, "the connection", kind(EventConnected))
+	mu.Lock()
+	got := append([]string(nil), dialled...)
+	mu.Unlock()
+	if len(got) != 1 || got[0] != addr || srv.Connections() != 1 {
+		t.Fatalf("dials %q and %d connections, want one dial, to %s", got, srv.Connections(), addr)
+	}
 	if got := New(Options{Addr: "10.0.0.1"}).Address(); got != "10.0.0.1:62910" {
 		t.Fatalf("default port: %q", got)
 	}
@@ -466,7 +498,7 @@ func TestSendWaitsForEveryAOfADelete(t *testing.T) {
 	defer cancel()
 	c := New(Options{Addr: addr})
 	go c.Run(ctx)
-	<-c.Ready()
+	ready(t, c)
 	del := cube.CmdDeleteDevices(true, 0x0a0108, 0x0a0109, 0x0a010b)
 	start := time.Now()
 	if _, err := c.Send(ctx, del); err != nil {
@@ -489,39 +521,38 @@ func goneFake(t *testing.T) (*fakecube.Server, string) {
 
 // A new address, as discovery finds it after a DHCP lease, is dialled at
 // once, not after the backoff the failed dials to the old one built up.
+// The backoff is a minute from the first failed dial, far longer than
+// the test waits for the connection.
 func TestSetAddressCutsTheBackoffShort(t *testing.T) {
 	_, addr := startFake(t)
 	_, gone := goneFake(t)
+	logger, logs := testkit.LogWatch(slog.LevelDebug)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	c := New(Options{Addr: gone})
+	c := New(Options{Addr: gone, Backoff: time.Minute, Logger: logger})
+	evs := events(t, c)
 	go c.Run(ctx)
-	time.Sleep(1300 * time.Millisecond) // two failed dials: the client waits 2 s now
-	start := time.Now()
+	logs.Await(t, 0, "the failed dial to the old address", connLost) // the client waits a minute now
 	c.SetAddress(addr)
-	select {
-	case <-c.Ready():
-	case <-time.After(testkit.Scale(5 * time.Second)):
-		t.Fatal("never connected")
-	}
-	if took := time.Since(start); took > 700*time.Millisecond {
-		t.Fatalf("connected %s after the new address", took)
-	}
+	evs.Await(t, 0, "the connection to the new address", kind(EventConnected))
 }
 
 // Reconnect while the client is between connections dials at once and
-// waits for the greeting, rather than failing with ErrNotConnected.
+// waits for the greeting, rather than failing with ErrNotConnected. The
+// backoff is a minute from the first failed dial, far longer than the
+// test waits for the reconnect.
 func TestReconnectWhileDisconnected(t *testing.T) {
 	srv, addr := goneFake(t)
+	logger, logs := testkit.LogWatch(slog.LevelDebug)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	c := New(Options{Addr: addr})
+	c := New(Options{Addr: addr, Backoff: time.Minute, Logger: logger})
 	go c.Run(ctx)
-	time.Sleep(1300 * time.Millisecond)
+	logs.Await(t, 0, "the failed dial", connLost) // the client waits a minute now
 	if err := srv.Resume(); err != nil {
 		t.Fatal(err)
 	}
-	rctx, stop := context.WithTimeout(ctx, 700*time.Millisecond)
+	rctx, stop := context.WithTimeout(ctx, testkit.Scale(testkit.Wait))
 	defer stop()
 	if err := c.Reconnect(rctx); err != nil {
 		t.Fatalf("Reconnect while disconnected: %v", err)
@@ -575,15 +606,17 @@ func TestGreetingCLineAnsweringASend(t *testing.T) {
 		}
 	}()
 	r := cube.NewReader(server)
+	server.SetReadDeadline(time.Now().Add(testkit.Scale(testkit.Wait)))
 	for {
 		m, err := r.Read()
 		if err != nil {
-			t.Fatal(err)
+			t.Fatalf("waiting for the re-read: %v", err)
 		}
 		if m.Type == 'c' {
 			break
 		}
 	}
+	server.SetReadDeadline(time.Time{})
 	go func() {
 		for _, m := range greeting {
 			if m.Type == 'C' || m.Type == 'L' {
@@ -596,14 +629,15 @@ func TestGreetingCLineAnsweringASend(t *testing.T) {
 			}
 		}
 	}()
-	if err := <-replied; err != nil {
-		t.Fatal(err)
-	}
 	select {
-	case <-c.Ready():
-	case <-time.After(testkit.Scale(5 * time.Second)):
-		t.Fatal("no greeting")
+	case err := <-replied:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(testkit.Scale(testkit.Wait)):
+		t.Fatal("the re-read sent mid-greeting got no reply")
 	}
+	ready(t, c)
 	if c.Snapshot().Config(first) == nil {
 		t.Fatalf("device %s dropped at the end of the greeting", first)
 	}
@@ -825,6 +859,7 @@ func TestOneMissedPollKeepsTheConnection(t *testing.T) {
 	srv.SetSilent(false)
 	more := lines.Mark()
 	lines.AwaitN(t, more, "two polls more", 2, cubewatch.Type('l'))
+	caughtUp(t, c, evs)
 	if n := evs.Count(0, kind(EventDisconnected)); c.Lost() || n != 0 || srv.Connections() != 1 {
 		t.Errorf("lost %v, %d disconnected events, %d connections", c.Lost(), n, srv.Connections())
 	}
@@ -848,8 +883,9 @@ func TestSilentCubeWhilePairingIsKept(t *testing.T) {
 	}
 	srv.SetSilent(true)
 	logs.AwaitN(t, 0, "three missed polls", 3, pollFailed)
-	if c.Lost() || evs.Count(0, kind(EventDisconnected)) != 0 {
-		t.Fatal("lost while pairing runs")
+	caughtUp(t, c, evs)
+	if n := evs.Count(0, kind(EventDisconnected)); c.Lost() || n != 0 {
+		t.Fatalf("while pairing runs: lost %v, %d disconnected events", c.Lost(), n)
 	}
 	c.EndInclusion()
 	testkit.Eventually(t, "the loss once pairing ended", c.Lost)

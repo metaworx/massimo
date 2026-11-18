@@ -102,8 +102,9 @@ func TestOpenSelfSigned(t *testing.T) {
 		t.Fatal(err)
 	}
 	second := s.Status()
-	if second.Fingerprint == first.Fingerprint || logged.Count(m, testkit.Contains("expires")) == 0 {
-		t.Fatalf("not renewed at the start: %v", logged.Since(m, nil))
+	expires := testkit.Msg("tls: self-signed certificate made", "reason", "expires "+first.NotAfter.Format("2006-01-02"))
+	if second.Fingerprint == first.Fingerprint || logged.Count(m, expires) == 0 {
+		t.Fatalf("not renewed at the start for its end: %v", logged.Since(m, nil))
 	}
 	m = logged.Mark()
 	s.Check(now)

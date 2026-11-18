@@ -39,13 +39,19 @@ func connect(t *testing.T) (*fakecube.Server, *cubelan.Client, context.Context) 
 	ctx, cancel := context.WithCancel(context.Background())
 	c := cubelan.New(cubelan.Options{Addr: addr})
 	go c.Run(ctx)
-	select {
-	case <-c.Ready():
-	case <-time.After(testkit.Scale(5 * time.Second)):
-		t.Fatal("client not ready")
-	}
+	ready(t, c)
 	t.Cleanup(func() { cancel(); srv.Close() })
 	return srv, c, ctx
+}
+
+// ready waits for the client's first complete greeting (Ready).
+func ready(t *testing.T, c *cubelan.Client) {
+	t.Helper()
+	select {
+	case <-c.Ready():
+	case <-time.After(testkit.Scale(testkit.Wait)):
+		t.Fatalf("client not ready within %v", testkit.Scale(testkit.Wait))
+	}
 }
 
 func take(t *testing.T) (*fakecube.Server, *cubelan.Client, context.Context, *File) {
@@ -253,7 +259,7 @@ func TestPlanKeepsEmptyRooms(t *testing.T) {
 	t.Cleanup(func() { cancel(); srv.Close() })
 	c := cubelan.New(cubelan.Options{Addr: addr})
 	go c.Run(ctx)
-	<-c.Ready()
+	ready(t, c)
 	f, err := Take(c.Snapshot(), nil, "test", time.Now(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -306,7 +312,7 @@ func TestPlanLeavesUnlistedDevicesAlone(t *testing.T) {
 	t.Cleanup(func() { cancel(); srv.Close() })
 	c2 := cubelan.New(cubelan.Options{Addr: addr})
 	go c2.Run(ctx)
-	<-c2.Ready()
+	ready(t, c2)
 	f, err = Take(c2.Snapshot(), nil, "test", time.Now(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -369,7 +375,7 @@ func TestBackupStateAndRestoreState(t *testing.T) {
 	t.Cleanup(func() { cancel(); srv.Close() })
 	c := cubelan.New(cubelan.Options{Addr: addr})
 	go c.Run(ctx)
-	<-c.Ready()
+	ready(t, c)
 	f, err := Take(c.Snapshot(), nil, "test", time.Date(2026, 11, 4, 14, 0, 0, 0, time.UTC), nil)
 	if err != nil {
 		t.Fatal(err)

@@ -185,9 +185,11 @@ func TestVirtualCommands(t *testing.T) {
 		t.Fatalf("lock sent %+v", rc)
 	}
 	before := lines.Mark()
-	if s := sendLine(t, conn, r, cube.CmdLockControls(cube.Target{RFAddress: 0x000002}, true)); s.Type != 'S' || lines.Count(before, radio) != 0 {
-		t.Fatalf("a lock without a real wall thermostat: %s, sent %d", s, lines.Count(before, radio))
+	if s := sendLine(t, conn, r, cube.CmdLockControls(cube.Target{RFAddress: 0x000002}, true)); s.Type != 'S' {
+		t.Fatalf("a lock without a real wall thermostat: %s", s)
 	}
+	passedOn(t, conn, r)
+	lines.HasNot(t, before, "a radio line of a lock without a real wall thermostat", radio)
 	link := cube.CmdLinkPartner(cube.Target{RFAddress: 0x0a0202}, true, 0x000001, cube.DeviceWallThermostat)
 	before = lines.Mark()
 	sendLine(t, conn, r, link)
@@ -201,9 +203,11 @@ func TestVirtualCommands(t *testing.T) {
 	}
 	before = lines.Mark()
 	link = cube.CmdLinkPartner(cube.Target{RFAddress: 0x0a0204}, true, 0x000002, cube.DeviceWallThermostat)
-	if s := sendLine(t, conn, r, link); s.Type != 'S' || lines.Count(before, radio) != 0 {
+	if s := sendLine(t, conn, r, link); s.Type != 'S' {
 		t.Fatalf("a link with a virtual one without a real wall thermostat: %s", s)
 	}
+	passedOn(t, conn, r)
+	lines.HasNot(t, before, "a radio line of a link with a virtual one without a real wall thermostat", radio)
 }
 
 // A metadata write leaves the virtual wall thermostats out and puts the
@@ -246,11 +250,13 @@ func TestVirtualMetadataAndDelete(t *testing.T) {
 	}
 
 	ms := lines.Mark()
-	if a := sendLine(t, conn, r, cube.Message{Type: 'm', Data: "01," + base64.StdEncoding.EncodeToString([]byte("rest"))}); a.Type != 'A' || lines.Count(ms, cubewatch.Type('m')) != 0 {
-		t.Fatalf("a second part: %s, sent %d", a, lines.Count(ms, cubewatch.Type('m')))
+	if a := sendLine(t, conn, r, cube.Message{Type: 'm', Data: "01," + base64.StdEncoding.EncodeToString([]byte("rest"))}); a.Type != 'A' {
+		t.Fatalf("a second part: %s", a)
 	}
-	ts := lines.Mark()
-	if a := sendLine(t, conn, r, cube.CmdDeleteDevices(true, 0x000001)); a.Type != 'A' || lines.Count(ts, cubewatch.Type('t')) != 0 {
-		t.Fatalf("delete of a virtual one: %s, sent %d", a, lines.Count(ts, cubewatch.Type('t')))
+	if a := sendLine(t, conn, r, cube.CmdDeleteDevices(true, 0x000001)); a.Type != 'A' {
+		t.Fatalf("delete of a virtual one: %s", a)
 	}
+	passedOn(t, conn, r)
+	lines.HasNot(t, ms, "the second part at the cube", cubewatch.Type('m'))
+	lines.HasNot(t, ms, "the delete of a virtual one at the cube", cubewatch.Type('t'))
 }

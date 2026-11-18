@@ -77,13 +77,17 @@ def test_settings_follow_the_user(page, new_context, case):
 
 def test_guest_keeps_settings_in_the_browser(new_context, case, watch, guard):
     """A guest signs in, has no switches and no note, and a change of its
-    poll stays in the browser."""
+    poll stays in the browser: no write of the settings waits for the
+    server (the page sends one a second after a change, from a timer it
+    has not set) and none was sent."""
     clear_preferences()
     ctx = new_context()
     page = ctx.new_page()
     guard.page = page
     page.set_default_timeout(5000)
     page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+    writes = []
+    page.on("request", lambda r: writes.append(f"{r.method} {r.url}") if r.method != "GET" and "/me/preferences" in r.url else None)
     page.goto(URL)
     assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the sign-in dialog"
     page.locator("#login-user").fill("guest1")
@@ -95,9 +99,9 @@ def test_guest_keeps_settings_in_the_browser(new_context, case, watch, guard):
     assert not page.locator("input[data-device-only=poll]").is_visible(), "no switches for a guest"
     page.locator("#poll-input").fill("45")
     page.locator("#poll-input").dispatch_event("change")
-    page.wait_for_timeout(1500)
-    assert page.evaluate("localStorage.getItem('massimo.poll')") == "45", "the guest's poll in the browser"
-    assert server_ui() is None, "nothing reached the server"
+    assert wait_until(page, "localStorage.getItem('massimo.poll') === '45'", 5), "the guest's poll in the browser"
+    assert page.evaluate("prefsSync.timer === null && prefsSync.keys.size === 0"), "no write of the settings waits for the server"
+    assert not writes, f"none was sent: {writes}"
 
 
 def operator_key():

@@ -24,7 +24,7 @@ func TestABusyCubeIsListedAsBusy(t *testing.T) {
 	fc := &fakecube.Server{Greeting: recorded(t), SingleClient: true}
 	addr, err := fc.Start("127.0.0.2:0")
 	if err != nil {
-		t.Skipf("cannot listen on 127.0.0.2: %v", err)
+		testkit.BindOrSkip(t, err)
 	}
 	defer fc.Close()
 	other, err := net.Dial("tcp", addr)
@@ -38,7 +38,7 @@ func TestABusyCubeIsListedAsBusy(t *testing.T) {
 	testkit.Eventually(t, "the other client taken", func() bool { return fc.Connections() == 1 })
 	at, err := fakecube.StartDiscovery("127.0.0.2:0", "KEQ0000100", 0x0a0107)
 	if err != nil {
-		t.Skip(err)
+		testkit.BindOrSkip(t, err)
 	}
 	defer at.Close()
 

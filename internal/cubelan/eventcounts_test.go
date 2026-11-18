@@ -5,8 +5,10 @@ package cubelan
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 	"testing"
+	"time"
 
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/testkit"
@@ -74,25 +76,65 @@ func TestEventSeqUnderConcurrentSends(t *testing.T) {
 	}
 }
 
+// onLine is a log handler that calls f at each record of message msg,
+// in the goroutine that writes it, and drops every record.
+type onLine struct {
+	msg string
+	f   func()
+}
+
+func (h onLine) Enabled(context.Context, slog.Level) bool { return true }
+func (h onLine) WithAttrs([]slog.Attr) slog.Handler       { return h }
+func (h onLine) WithGroup(string) slog.Handler            { return h }
+func (h onLine) Handle(_ context.Context, r slog.Record) error {
+	if r.Message == h.msg {
+		h.f()
+	}
+	return nil
+}
+
 // Once a client is connected and handles no line, its connected event,
 // sent after the greeting's last line made it connected, is counted: a
-// test that saw the connection may count on it.
+// test that saw the connection may count on it. The client writes the
+// line "cube connected" once it is connected and before it sends the
+// event: there, the one moment the event is not counted yet, the line
+// it handles still is.
 func TestEventCountsCoverTheGreeting(t *testing.T) {
 	_, addr := startFake(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	c := New(Options{Addr: addr})
+	type counts struct {
+		connected bool
+		handling  int64
+		sent      uint64
+	}
+	atLine := make(chan counts, 1)
+	var c *Client
+	c = New(Options{Addr: addr, Logger: slog.New(onLine{msg: "cube connected", f: func() {
+		handling, sent := c.EventCounts()
+		select {
+		case atLine <- counts{c.Connected(), handling, sent}:
+		default:
+		}
+	}})})
 	evs := events(t, c)
 	go c.Run(ctx)
-	testkit.Eventually(t, "the connection", c.Connected)
-	var sent uint64
+	got, _ := evs.Await(t, 0, "the connected event", kind(EventConnected))
+	var line counts
+	select {
+	case line = <-atLine:
+	case <-time.After(testkit.Scale(testkit.Wait)):
+		t.Fatal("no cube connected line")
+	}
+	if !line.connected || line.handling == 0 {
+		t.Fatalf("at the cube connected line: connected %v, %d lines handled, %d events sent; the connected event is number %d",
+			line.connected, line.handling, line.sent, got.Seq())
+	}
 	testkit.Eventually(t, "the greeting's lines handled", func() bool {
-		var handling int64
-		handling, sent = c.EventCounts()
+		handling, _ := c.EventCounts()
 		return handling == 0
 	})
-	got, _ := evs.Await(t, 0, "the connected event", kind(EventConnected))
-	if got.Seq() == 0 || got.Seq() > sent {
+	if _, sent := c.EventCounts(); got.Seq() == 0 || got.Seq() > sent {
 		t.Fatalf("the connected event is number %d, %d sent before", got.Seq(), sent)
 	}
 	for i, e := range evs.Since(0, nil) {

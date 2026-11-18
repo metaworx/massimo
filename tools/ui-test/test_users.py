@@ -116,8 +116,9 @@ def test_new_key_shown_once(page, case):
     the toggle of a panel built open and a direct call both."""
     prefix = f"ui-test-key-{case.width}-{case.lang}-"
     revoke_keys(prefix)
-    posts = []
+    posts, loads = [], []
     page.on("request", lambda r: posts.append(r.url) if r.method == "POST" and r.url.endswith("/users/operator/tokens") else None)
+    page.on("request", lambda r: loads.append(r.url) if r.method == "GET" and r.url.endswith("/users/operator/tokens") else None)
     show_view(page, "system")
     panel = page.locator(".user-panel[data-name='operator']")
     panel.wait_for()
@@ -126,12 +127,16 @@ def test_new_key_shown_once(page, case):
     assert wait_until(page, "document.querySelectorAll(%r).length >= 1" % tokens, 5), "the operator's tokens are listed"
     try:
         for n in (1, 2):
+            before = len(loads)
             panel.locator("input[name=label]").fill(prefix + str(n))
             panel.locator(".create-key").click()
             assert wait_until(page, "document.querySelectorAll('.user-panel[data-name=\"operator\"] li[data-id]').length > 0 && "
                                     "[...document.querySelectorAll(%r)].some((li) => li.textContent.includes(%r))" % (tokens, prefix + str(n)), 5), \
                 f"key {n} is listed"
-            page.wait_for_timeout(500)  # a second load of the tokens would have come back by now
+            # listed, the panel built open has drawn its load's answer; a second
+            # load, the toggle's of the panel built open, would have been asked
+            # for before it: counted, not waited for
+            assert len(loads) - before == 1, f"one load of the tokens for key {n}, not {len(loads) - before}"
             key = panel.locator(".user-key-box")
             assert key.is_visible() and panel.locator(".user-key").inner_text().strip(), f"key {n} is shown, once"
             ids = page.evaluate("[...document.querySelectorAll(%r)].map((li) => li.dataset.id).filter((id) => id)" % tokens)

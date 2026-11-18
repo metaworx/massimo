@@ -5,7 +5,10 @@ package testkit
 
 import (
 	"errors"
+	"fmt"
 	"net"
+	"os"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -62,5 +65,56 @@ func TestListenPacket(t *testing.T) {
 	})
 	if _, _, err := pc.ReadFrom(make([]byte, 8)); !errors.Is(err, net.ErrClosed) {
 		t.Fatalf("ReadFrom after the test's end: %v, want the socket closed", err)
+	}
+}
+
+// bindRecorder is a recorder that records a skip too: its Skipf ends the
+// goroutine it runs in, as the real one does.
+type bindRecorder struct {
+	recorder
+	skipped string
+}
+
+func (r *bindRecorder) Skipf(format string, args ...any) {
+	r.skipped = fmt.Sprintf(format, args...)
+	runtime.Goexit()
+}
+
+// BindOrSkip skips a test whose listen met an address the platform
+// lacks, fails one whose listen failed otherwise, as at a port taken,
+// and ends nothing without an error.
+func TestBindOrSkip(t *testing.T) {
+	held := Listen(t)
+	_, inUse := net.Listen("tcp", held.Addr().String())
+	if inUse == nil {
+		t.Fatalf("a second listener took %s", held.Addr())
+	}
+	// 192.0.2.1 (TEST-NET-1) is no interface's address.
+	lacked, lacking := net.ListenPacket("udp4", "192.0.2.1:0")
+	if lacking == nil {
+		lacked.Close()
+		t.Skip("this host has 192.0.2.1")
+	}
+	windows := &net.OpError{Op: "listen", Net: "udp4", Err: os.NewSyscallError("bind", wsaeAddrNotAvail)}
+	for _, c := range []struct {
+		name            string
+		err             error
+		skipped, failed bool
+	}{
+		{"an address no interface has", lacking, true, false},
+		{"Windows' address not available", windows, true, false},
+		{"a port taken", inUse, false, true},
+		{"no error", nil, false, false},
+	} {
+		r := &bindRecorder{recorder: recorder{TB: t}}
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			BindOrSkip(r, c.err)
+		}()
+		<-done
+		if (r.skipped != "") != c.skipped || (r.failed != "") != c.failed {
+			t.Errorf("%s (%v): skipped %q, failed %q", c.name, c.err, r.skipped, r.failed)
+		}
 	}
 }

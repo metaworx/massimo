@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 func TestUDPIdentifyReply(t *testing.T) {
@@ -82,7 +83,7 @@ func TestDiscoverKeepsEveryAnswerOfASerial(t *testing.T) {
 	_, port, _ := net.SplitHostPort(first.Addr())
 	second, err := fakecube.StartDiscovery("127.0.0.2:"+port, "KEQ0000000", 0x0a0107)
 	if err != nil {
-		t.Skipf("no second loopback address here: %v", err)
+		testkit.BindOrSkip(t, err)
 	}
 	defer second.Close()
 	p, _ := strconv.Atoi(port)

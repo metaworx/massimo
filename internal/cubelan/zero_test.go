@@ -158,7 +158,10 @@ func TestClientRefusesZero(t *testing.T) {
 	if _, err := c.Send(ctx, cube.CmdDeleteDevices(true, cube.ZeroAddress)); !errors.Is(err, cube.ErrZeroAddress) {
 		t.Fatalf("t: to 000000: %v, want ErrZeroAddress", err)
 	}
-	if got := cubewatch.Lines(srv).Since(0, cubewatch.Type('t')); len(got) != 0 {
-		t.Fatalf("the Cube got %s", got[0])
+	// The f: sent after it is the end: a line written before it on the
+	// connection reached the Cube before the f: was answered.
+	if _, err := c.Send(ctx, cube.CmdGetNTP); err != nil {
+		t.Fatal(err)
 	}
+	cubewatch.Lines(srv).HasNot(t, 0, "a t: line", cubewatch.Type('t'))
 }

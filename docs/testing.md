@@ -296,6 +296,11 @@ such as another package's tests under `make race`.
   or to a product's listen hook.
   A UDP socket held and never read is an address where nothing answers,
   such as a discovery target without a Cube.
+- **`testkit.BindOrSkip(t, err)`** ends a test whose own listen failed:
+  it skips where the platform lacks the address,
+  as macOS has 127.0.0.1 alone of the loopback's 127.0.0.0/8,
+  and fails on any other error, such as a port another program holds,
+  which a skip would turn into a green run with the test not run.
 - **The server's proxies** listen through `heldPorts` (`ports_test.go`)
   and the start's `listenOn(ports)`, over the hook `Options.proxyListen`.
   `ports.hold(t)` is an address whose listener goes to the first listen at it.

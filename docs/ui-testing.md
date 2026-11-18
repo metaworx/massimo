@@ -1,4 +1,4 @@
-# Testing the web UI (v1.2.0)
+# Testing the web UI (v1.3.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -694,10 +694,21 @@ The suite's helpers for it are in `tools/ui-test/helpers.py`
   A test does not set `state.cubes`, `state.found` or `state.version` in the page:
   the next poll takes them back,
   and a version other than the server's makes the page reload.
-  Two tests measure what a poll itself changes, not data a test put in,
-  and so depend on the poll's period:
-  the drawings counted in 2 s (`test_unsaved.py`)
-  and the pile's times that stand still for 1.5 s (`test_header.py`).
+- **The poll held** (`with held_poll(page):`):
+  a test that measures what the page does by itself,
+  a count of its drawings or times that stand still,
+  holds the page's poll while it measures,
+  since a poll draws again and brings new times,
+  so that what it measures does not depend on the poll's period:
+  the drawings of an unsaved form (`test_unsaved.py`)
+  and the pile's times (`test_header.py`).
+  The hold clears the poll's timer and starts the poll again at its end.
+  Whatever calls `startPolling()` meanwhile ends the hold unseen:
+  `applySettings()` (a setting changed, expert mode, a sign-in),
+  the poll's field, a sign-out;
+  so the hold fails at its end where the timer is no longer the one it cleared.
+  What a poll itself draws the test counts for one poll of its own (`poll(false)`),
+  once every request it started has been answered.
 - **What the reads do not keep yet:**
   a device's state applied in the page (`updateDevice`, a dispatched `state` event)
   lasts until the rooms are loaded again.
@@ -743,6 +754,24 @@ the server's and the test's, in order,
   and fails the test on anything else, naming what it could not undo;
   `cleanup(*steps)` runs every step of a cleanup, one that fails among them,
   and raises the first error once all have run.
+- **Nothing came, against an end:**
+  a check that an action brought nothing has an end of its own,
+  not a fixed wait that a slow runner outlasts:
+  a read the page sends after the action through the same route,
+  which a request the action sends before it waits for anything comes before
+  (`test_backup.py`: its POST goes out in the click,
+  before the first `await` of `whileBusy`);
+  the page's own state that says nothing waits to be sent,
+  a timer it has not set (`test_preferences.py`);
+  a count of the requests the action started, taken once its answer is drawn
+  (`test_users.py`);
+  or a timer of the page's own that is due after the one it rules out (`test_header.py`).
+- **The test's own line:**
+  a line of the server's that the test's action made is found by what the
+  stream's event names, its command's number,
+  not by `.first` of its kind:
+  the log holds the server's earlier lines of that kind,
+  the four cases' among them (`test_log.py`).
 - **The server sets** keep the server's 10 s poll of the fake Cube,
   which brings no line of its own (the fake Cube's states do not change).
   They take no automatic backup during the run:
