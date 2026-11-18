@@ -33,14 +33,30 @@ func (s *Server) occupiedLocked() bool {
 // listener takes connections again, and whoever waits in waitFree is
 // woken. s.mu is held.
 func (s *Server) changedLocked() {
-	if s.refusing && !s.occupiedLocked() {
-		s.refusing = false
-		setBacklog(s.ln, fullBacklog)
-		if s.park != nil {
-			s.park.Close()
-			s.park = nil
-		}
+	if !s.occupiedLocked() {
+		s.endRefusalLocked()
 	}
+	s.wakeLocked()
+}
+
+// endRefusalLocked ends refuseLocked's refusal: the listener's backlog is
+// full again, and the connection parked in its queue is closed. s.mu is
+// held.
+func (s *Server) endRefusalLocked() {
+	if !s.refusing {
+		return
+	}
+	s.refusing = false
+	setBacklog(s.ln, fullBacklog)
+	if s.park != nil {
+		s.park.Close()
+		s.park = nil
+	}
+}
+
+// wakeLocked wakes whoever waits in waitFree, to look again. s.mu is
+// held.
+func (s *Server) wakeLocked() {
 	if s.freed != nil {
 		close(s.freed)
 	}
@@ -68,7 +84,11 @@ func (s *Server) refuseLocked() {
 	}
 }
 
-// waitFree waits until the slot is free; false once the server closed.
+// waitFree waits while the slot is taken and the listener's backlog
+// refuses for it (refuseLocked); false once the server closed. Where the
+// backlog could not be cut, accept refuses by a close instead, and does
+// not wait. A pause ends the wait: the paused fake takes and resets what
+// comes, or its listener is closed (Pause).
 func (s *Server) waitFree() bool {
 	for {
 		s.mu.Lock()
@@ -76,7 +96,7 @@ func (s *Server) waitFree() bool {
 			s.mu.Unlock()
 			return false
 		}
-		if !s.occupiedLocked() {
+		if !s.occupiedLocked() || !s.refusing || s.paused {
 			s.mu.Unlock()
 			return true
 		}
