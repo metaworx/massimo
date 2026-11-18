@@ -4,15 +4,11 @@
 package server
 
 import (
-	"context"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
-	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
-	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
@@ -21,20 +17,8 @@ import (
 
 // In the fixture 0a010d is the only device of room 6.
 func TestHiddenDevicesInvisible(t *testing.T) {
-	greeting, err := fakecube.LoadGreeting(fixture)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fc := &fakecube.Server{Greeting: greeting}
-	addr, err := fc.Start("127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0000100", Addr: addr, Hidden: []cube.RFAddress{0x0a010d}}}, Queue: engine.Options{Gap: time.Millisecond}})
-	ctx, cancel := context.WithCancel(context.Background())
-	go s.Run(ctx)
-	ts := httptest.NewServer(s.Handler())
-	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
+	r := startServer(t, withCube(func(c *CubeConfig) { c.Hidden = []cube.RFAddress{0x0a010d} }))
+	fc, ts := r.fc, r.ts
 	var c cubeView
 	testkit.Within(5*time.Second, func() bool {
 		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
@@ -91,20 +75,7 @@ func TestHiddenDevicesInvisible(t *testing.T) {
 
 // With ShowHidden the listed devices are shown too.
 func TestShowHiddenShowsListedDevices(t *testing.T) {
-	greeting, err := fakecube.LoadGreeting(fixture)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fc := &fakecube.Server{Greeting: greeting}
-	addr, err := fc.Start("127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0000100", Addr: addr, Hidden: []cube.RFAddress{0x0a010d}}}, ShowHidden: true, Queue: engine.Options{Gap: time.Millisecond}})
-	ctx, cancel := context.WithCancel(context.Background())
-	go s.Run(ctx)
-	ts := httptest.NewServer(s.Handler())
-	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
+	ts := startServer(t, withOptions(Options{ShowHidden: true}), withCube(func(c *CubeConfig) { c.Hidden = []cube.RFAddress{0x0a010d} })).ts
 	if !testkit.Within(5*time.Second, func() bool {
 		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices/0a010d", nil) == 200
 	}) {

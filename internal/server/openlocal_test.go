@@ -27,7 +27,7 @@ func serveFrom(s *Server, method, path, addr string, headers map[string]string) 
 // names a client in a forwarding header without a trusted proxy. With
 // users, or a token, the address does not matter.
 func TestOpenServerAnswersItsNetwork(t *testing.T) {
-	_, _, s := startWith(t, storeOptions(t, t.TempDir(), ""))
+	s := startServer(t, withOptions(storeOptions(t, t.TempDir(), ""))).s
 	cubes := "/api/v1/cubes"
 	for addr, want := range map[string]int{
 		"127.0.0.1:5000": 200, "[::1]:5000": 200, "192.168.1.20:5000": 200, "10.0.0.5:5000": 200, "172.16.0.5:5000": 200,
@@ -69,7 +69,7 @@ func TestOpenServerAnswersItsNetwork(t *testing.T) {
 		t.Fatal(err)
 	}
 	opts.TrustedProxies = trusted
-	_, _, p := startWith(t, opts)
+	p := startServer(t, withOptions(opts)).s
 	if rec := serveFrom(p, "GET", cubes, "127.0.0.1:5000", map[string]string{"X-Forwarded-For": "192.168.1.20"}); rec.Code != 200 {
 		t.Errorf("a LAN client through the trusted proxy: %d %s", rec.Code, rec.Body.String())
 	}
@@ -78,7 +78,7 @@ func TestOpenServerAnswersItsNetwork(t *testing.T) {
 	}
 
 	// With users the address does not matter.
-	_, _, u := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	u := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret"))).s
 	if rec := serveFrom(u, "GET", cubes, "203.0.113.9:5000", map[string]string{"Authorization": "Bearer secret"}); rec.Code != 200 {
 		t.Errorf("users mode from the internet: %d %s", rec.Code, rec.Body.String())
 	}

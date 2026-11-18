@@ -7,7 +7,6 @@ import (
 	"context"
 	"net"
 	"net/http"
-	"net/http/httptest"
 	"sort"
 	"strings"
 	"sync"
@@ -15,14 +14,14 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
-	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // Two POSTs for one serial at the same time: one 201, one 409, and one
 // runtime for the Cube.
 func TestConcurrentAddCube(t *testing.T) {
-	_, ts, s, st := startStored(t, Options{})
+	r := startServer(t, stored())
+	ts, s, st := r.ts, r.s, r.st
 	before, _, _ := st.Cube(context.Background(), "KEQ0000100")
 	if code, _ := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0000100", ""); code != 200 {
 		t.Fatal(code)
@@ -53,7 +52,7 @@ func TestConcurrentAddCube(t *testing.T) {
 // A proxy address whose port is taken starts nothing: it is not listed
 // as listening, and the server goes on.
 func TestProxyPortInUse(t *testing.T) {
-	_, ts, _, _ := startStored(t, Options{})
+	ts := startServer(t, stored()).ts
 	taken, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -91,10 +90,6 @@ func TestNothingStartsAfterRun(t *testing.T) {
 // A Cube served by its address alone learns its serial when it connects,
 // while a handler reads the serial (go test -race).
 func TestSerialLearnedWhileRead(t *testing.T) {
-	greeting, err := fakecube.LoadGreeting(fixture)
-	if err != nil {
-		t.Fatal(err)
-	}
 	// The Cube comes up only once the handlers read: its port is held,
 	// and the client's first dial waits for the greeting.
 	held, err := net.Listen("tcp", "127.0.0.1:0")
@@ -103,17 +98,9 @@ func TestSerialLearnedWhileRead(t *testing.T) {
 	}
 	defer held.Close()
 	addr := held.Addr().String()
-	fc := &fakecube.Server{Greeting: greeting}
+	fc := &fakecube.Server{Greeting: recorded(t)}
 	defer fc.Close()
-	opts := storeOptions(t, t.TempDir(), "secret")
-	opts.Cubes = []CubeConfig{{Addr: addr}}
-	opts.Queue = engine.Options{Gap: time.Millisecond}
-	s := New(opts)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go s.Run(ctx)
-	ts := httptest.NewServer(s.Handler())
-	defer ts.Close()
+	ts := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")), withCubes(CubeConfig{Addr: addr})).ts
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
 	for i := 0; i < 4; i++ {
@@ -154,10 +141,6 @@ func TestSerialLearnedWhileRead(t *testing.T) {
 // not take that runtime's place: it stops, as register refuses a second
 // runtime for a serial, and the one added keeps the serial.
 func TestLearnedSerialServedAlready(t *testing.T) {
-	greeting, err := fakecube.LoadGreeting(fixture)
-	if err != nil {
-		t.Fatal(err)
-	}
 	// The Cube comes up only once the serial was added: its port is
 	// held, and the client's first dial waits for the greeting.
 	held, err := net.Listen("tcp", "127.0.0.1:0")
@@ -166,17 +149,10 @@ func TestLearnedSerialServedAlready(t *testing.T) {
 	}
 	defer held.Close()
 	addr := held.Addr().String()
-	fc := &fakecube.Server{Greeting: greeting}
+	fc := &fakecube.Server{Greeting: recorded(t)}
 	defer fc.Close()
-	opts := storeOptions(t, t.TempDir(), "secret")
-	opts.Cubes = []CubeConfig{{Addr: addr}}
-	opts.Queue = engine.Options{Gap: time.Millisecond}
-	s := New(opts)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go s.Run(ctx)
-	ts := httptest.NewServer(s.Handler())
-	defer ts.Close()
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")), withCubes(CubeConfig{Addr: addr}))
+	ts, s := r.ts, r.s
 	lookup := func(key string) *runtime {
 		s.mu.RLock()
 		defer s.mu.RUnlock()

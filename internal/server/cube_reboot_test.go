@@ -15,24 +15,14 @@ import (
 // does not accept it, then R to the Cube's discovery port, its answer,
 // the restart and the connection after it.
 func TestRebootACube(t *testing.T) {
-	greeting, err := fakecube.LoadGreeting(fixture)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fc := &fakecube.Server{Greeting: greeting}
-	addr, err := fc.Start("127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer fc.Close()
 	at, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000100", 0x0a0107)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer at.Close()
+	r := startServer(t, discovering(Options{DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{at.Addr()}}))
+	fc, ts := r.fc, r.ts
 	at.SetOnRestart(fc.Restart)
-	ts, _ := startDiscovering(t, Options{Cubes: []CubeConfig{{Serial: "KEQ0000100", Addr: addr}},
-		DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{at.Addr()}})
 	link := func() string {
 		var cubes []map[string]any
 		getJSON(t, ts, "", "/api/v1/cubes", &cubes)
@@ -71,24 +61,13 @@ func TestRebootACube(t *testing.T) {
 
 // While the reboot is waited for, the link says rebooting.
 func TestARebootingCubeIsListedAsRebooting(t *testing.T) {
-	greeting, err := fakecube.LoadGreeting(fixture)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fc := &fakecube.Server{Greeting: greeting}
-	addr, err := fc.Start("127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer fc.Close()
 	at, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000100", 0x0a0107)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer at.Close()
-	ts, s := startDiscovering(t, Options{Cubes: []CubeConfig{{Serial: "KEQ0000100", Addr: addr}},
-		DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{at.Addr()}})
-	testkit.Eventually(t, "connected", func() bool { return s.runtimes()[0].client.Connected() })
+	r := startServer(t, discovering(Options{DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{at.Addr()}}))
+	fc, ts := r.fc, r.ts
 	fc.SetSilent(true) // the Cube restarts: no greeting for a while
 	defer fc.SetSilent(false)
 	if code, body := do(t, ts, "POST", "/api/v1/cubes/KEQ0000100/reboot", `{}`); code != 202 {

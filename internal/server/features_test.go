@@ -30,7 +30,7 @@ func featuresAt(t *testing.T, ts *httptest.Server) map[string]string {
 // GET /healthz names what this server can do: with a store all of it,
 // without one the features that need it left out, as their routes are.
 func TestHealthzFeatures(t *testing.T) {
-	_, ts, _, _ := startRooms(t) // with a store
+	ts := startServer(t, storedRooms()).ts // with a store
 	with := featuresAt(t, ts)
 	for _, name := range []string{"event_ids", "idempotency", "commands", "vwt", "program_etag", "boost", "proxy_virtual", "integration"} {
 		if with[name] != "1.0" {
@@ -41,7 +41,7 @@ func TestHealthzFeatures(t *testing.T) {
 		t.Errorf("with a store: %v", with)
 	}
 
-	_, bare, _ := start(t, "") // without one
+	bare := startServer(t).ts // without one
 	without := featuresAt(t, bare)
 	for _, name := range []string{"idempotency", "commands", "proxy_virtual", "integration"} {
 		if _, ok := without[name]; ok {

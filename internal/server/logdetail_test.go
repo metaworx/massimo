@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/view"
@@ -164,7 +163,8 @@ func newLines(t *testing.T, s string, all []event, n int) []event {
 // saying the devices, rooms, firmware, budget and cause; the greeting's
 // own lines are at debug, each with its summary.
 func TestReconnectAtInfoIsOneLine(t *testing.T) {
-	fc, ts, _, _ := startStored(t, Options{})
+	r := startServer(t, stored())
+	fc, ts := r.fc, r.ts
 	testkit.Eventually(t, "the first connected", func() bool {
 		_, evs := logOf(t, ts, "?kind=connected")
 		return len(evs) == 1
@@ -210,12 +210,13 @@ func TestReconnectAtInfoIsOneLine(t *testing.T) {
 // A room renamed while the Cube was disconnected follows the connected
 // line at info, as a metadata line that says so.
 func TestChangedWhileDisconnected(t *testing.T) {
-	fc, ts, _, _ := startStored(t, Options{})
+	r := startServer(t, stored())
+	fc, ts := r.fc, r.ts
 	testkit.Eventually(t, "the first connected", func() bool {
 		_, evs := logOf(t, ts, "?kind=connected")
 		return len(evs) == 1
 	})
-	greeting, _ := fakecube.LoadGreeting(fixture)
+	greeting := recorded(t)
 	fc.SetGreeting(greetingWithRoomName(t, greeting, 6, "Renamed elsewhere"))
 	fc.Drop()
 	var meta []event
@@ -236,7 +237,8 @@ func TestChangedWhileDisconnected(t *testing.T) {
 // After a restart the reference is the newest backup: a room renamed
 // while the server was down shows after the first connected line.
 func TestChangedWhileServerDown(t *testing.T) {
-	fc, ts, s, st := startStored(t, Options{})
+	r := startServer(t, stored())
+	fc, ts, s, st := r.fc, r.ts, r.s, r.st
 	rt := s.cubes["keq0000100"]
 	testkit.Eventually(t, "the first connected", func() bool {
 		_, evs := logOf(t, ts, "?kind=connected")
@@ -246,15 +248,13 @@ func TestChangedWhileServerDown(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A server started again over the store, with a Cube renamed meanwhile.
-	greeting, _ := fakecube.LoadGreeting(fixture)
+	greeting := recorded(t)
 	fc.SetGreeting(greetingWithRoomName(t, greeting, 6, "Renamed while down"))
 	row, _, _ := st.Cube(context.Background(), "KEQ0000100")
-	cfg, _ := CubeFromRow(row)
-	s2 := New(Options{Cubes: []CubeConfig{cfg}, Store: st, Queue: s.opts.Queue})
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go s2.Run(ctx)
-	rt2 := s2.cubes["keq0000100"]
+	r.stop() // down while the Cube changes
+	r2 := startServer(t, again(r))
+	s2, rt2 := r2.s, r2.rt
+	ctx := context.Background()
 	var m event
 	if !testkit.Within(5*time.Second, func() bool {
 		evs, err := s2.storedLog(ctx, st, map[int64]string{row.ID: ""}, logQuery{kind: "metadata", limit: 10, minLevel: 0})
@@ -274,7 +274,8 @@ func TestChangedWhileServerDown(t *testing.T) {
 // A C line read again that changed nothing is at debug; one that changed
 // says what at info.
 func TestSameConfigAtDebug(t *testing.T) {
-	fc, ts, s, _ := startStored(t, Options{})
+	r := startServer(t, stored())
+	fc, ts, s := r.fc, r.ts, r.s
 	rt := s.cubes["keq0000100"]
 	testkit.Eventually(t, "the first connected", func() bool {
 		_, evs := logOf(t, ts, "?kind=connected")

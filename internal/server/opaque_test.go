@@ -109,7 +109,7 @@ func opaqueSignIn(t *testing.T, ts *httptest.Server, name, password, purpose str
 // wrong password and an unknown name are answered alike at the start and
 // refused at the finish; the audit keeps none of the messages.
 func TestOpaqueSignIn(t *testing.T) {
-	_, ts, _ := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	ts := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret"))).ts
 	rec := opaqueRecord(t, ts, "secret", "anna", "correct horse")
 	code, body := callAPI(t, ts, "POST", "/api/v1/users", "secret", `{"name":"anna","role":"operator","record":"`+rec+`","ksf":"`+store.OpaqueKSF+`"}`)
 	if code != 201 {
@@ -161,7 +161,8 @@ func TestOpaqueSignIn(t *testing.T) {
 func TestOpaqueStartCounts(t *testing.T) {
 	opts := storeOptions(t, t.TempDir(), "secret")
 	opts.AuthFailures = 3
-	_, ts, s := startWith(t, opts)
+	r := startServer(t, withOptions(opts))
+	ts, s := r.ts, r.s
 	rec := opaqueRecord(t, ts, "secret", "anna", "pw")
 	if code, body := callAPI(t, ts, "POST", "/api/v1/users", "secret", `{"name":"anna","record":"`+rec+`","ksf":"`+store.OpaqueKSF+`"}`); code != 201 {
 		t.Fatalf("add: %d %s", code, body)
@@ -201,7 +202,8 @@ func TestOpaqueStartCounts(t *testing.T) {
 // password sign-in from it are 429 meanwhile, a finished or an ended
 // start lets the next one in, and a login is finished once.
 func TestOpaqueOneAtATime(t *testing.T) {
-	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, s := r.ts, r.s
 	rec := opaqueRecord(t, ts, "secret", "anna", "pw")
 	callAPI(t, ts, "POST", "/api/v1/users", "secret", `{"name":"anna","record":"`+rec+`","ksf":"`+store.OpaqueKSF+`"}`)
 	c := opaqueClient(t)
@@ -252,7 +254,7 @@ func TestOpaqueOneAtATime(t *testing.T) {
 // one, good once; someone with users needs none, and ends the user's
 // sessions.
 func TestOpaqueOwnPassword(t *testing.T) {
-	_, ts, _ := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	ts := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret"))).ts
 	callAPI(t, ts, "POST", "/api/v1/users", "secret", `{"name":"anna","role":"operator","password":"old"}`)
 	_, body := callAPI(t, ts, "POST", "/api/v1/login", "", `{"user":"anna","password":"old"}`)
 	var sess struct{ Token string }
@@ -304,7 +306,7 @@ func TestOpaqueOwnPassword(t *testing.T) {
 // add its user, the first owner from the local network among them; bad
 // messages are 400.
 func TestOpaqueRegister(t *testing.T) {
-	_, open, _ := startWith(t, storeOptions(t, t.TempDir(), ""))
+	open := startServer(t, withOptions(storeOptions(t, t.TempDir(), ""))).ts
 	rec := opaqueRecord(t, open, "", "root", "pw")
 	if code, body := callAPI(t, open, "POST", "/api/v1/users", "", `{"name":"root","record":"`+rec+`","ksf":"`+store.OpaqueKSF+`"}`); code != 201 {
 		t.Fatalf("the first owner with a record: %d %s", code, body)
@@ -313,7 +315,8 @@ func TestOpaqueRegister(t *testing.T) {
 		t.Fatalf("the first owner signs in: %d %s", code, body)
 	}
 
-	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, s := r.ts, r.s
 	viewer := userToken(t, s.opts.Store, "vera", store.RoleViewer)
 	userToken(t, s.opts.Store, "otto", store.RoleOperator)
 	req := `{"request":"` + opaqueB64.EncodeToString(must(must(opaque.DefaultConfiguration().Client()).RegistrationInit([]byte("pw"))).Serialize()) + `"}`
@@ -368,7 +371,7 @@ func must[T any](v T, err error) T {
 func TestOpaqueUpgrade(t *testing.T) {
 	opts := storeOptions(t, t.TempDir(), "secret")
 	opts.AuthFailures = 2
-	_, ts, _ := startWith(t, opts)
+	ts := startServer(t, withOptions(opts)).ts
 	if code, body := callAPI(t, ts, "POST", "/api/v1/users", "secret", `{"name":"anna","role":"operator","password":"pw"}`); code != 201 {
 		t.Fatalf("add: %d %s", code, body)
 	}
@@ -433,7 +436,8 @@ func TestOpaqueUpgrade(t *testing.T) {
 // without, and the start says so; the sign-in by OPAQUE and the API keys
 // go on, and null brings the default back.
 func TestPasswordLoginOff(t *testing.T) {
-	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, s := r.ts, r.s
 	key := userToken(t, s.opts.Store, "vera", store.RoleViewer)
 	callAPI(t, ts, "POST", "/api/v1/users", "secret", `{"name":"bert","password":"pw"}`)
 	rec := opaqueRecord(t, ts, "secret", "anna", "pw")

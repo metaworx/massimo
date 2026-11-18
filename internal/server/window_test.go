@@ -17,7 +17,8 @@ import (
 // once and is stored, the alert never under the warning, null goes back
 // to the default.
 func TestWindowSettings(t *testing.T) {
-	_, ts, srv, st := startStored(t, Options{})
+	r := startServer(t, stored())
+	ts, srv, st := r.ts, r.s, r.st
 	lim := func(out map[string]any, key string) map[string]any { m, _ := out[key].(map[string]any); return m }
 	code, out := do(t, ts, "GET", "/api/v1/settings", "")
 	if w, a := lim(out, "window_warn_after"), lim(out, "window_alert_after"); code != 200 || w["value"] != "5m" || a["value"] != "10m" || w["applies"] != "now" || w["set"] != false {

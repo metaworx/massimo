@@ -52,7 +52,8 @@ func TestFoundCubeSurvivesRestart(t *testing.T) {
 	defer other.Close()
 	dir := t.TempDir()
 	st := testStore(t, dir)
-	ts, _ := startDiscovering(t, Options{Store: st, DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{other.Addr()}})
+	first := startServer(t, discovering(Options{Store: st, DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{other.Addr()}}))
+	ts := first.ts
 	if code, out := postDiscovery(t, ts); code != 200 || len(out["found"].([]any)) != 1 {
 		t.Fatalf("discover %d %v", code, out)
 	}
@@ -60,13 +61,13 @@ func TestFoundCubeSurvivesRestart(t *testing.T) {
 	if err != nil || !ok || row.Configured || row.Source != store.SourceDiscovery || row.DiscoveredAddress != "127.0.0.1" || row.RFAddress != "0a0b0c" {
 		t.Fatalf("row %+v %v %v", row, ok, err)
 	}
-	ts.Close()
+	first.stop() // the API, then Run, before its store closes
 	st.Close()
 
 	// The restarted server lists it once a run has heard it, and that
 	// run sends no cube_found.
 	st = testStore(t, dir)
-	ts, _ = startDiscovering(t, Options{Store: st, DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{other.Addr()}})
+	ts = startServer(t, discovering(Options{Store: st, DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{other.Addr()}})).ts
 	var cubes []map[string]any
 	if getJSON(t, ts, "", "/api/v1/cubes", &cubes) != 200 || len(cubes) != 1 {
 		t.Fatalf("cubes after the restart, before a run %v", cubes)

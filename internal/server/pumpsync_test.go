@@ -49,7 +49,8 @@ func pumpSync(t testing.TB, s *Server) {
 // Once the API shows a state the Cube reported, the pump's line of it is
 // in the log after pumpSync, without a wait of its own.
 func TestPumpSync(t *testing.T) {
-	fc, ts, s, _ := startStored(t, Options{PollInterval: 100 * time.Millisecond})
+	r := startServer(t, stored(), withOptions(Options{PollInterval: 100 * time.Millisecond}))
+	fc, ts, s := r.fc, r.ts, r.s
 	pumpSync(t, s)
 	greeting := fc.Greeting
 	raw, _ := base64.StdEncoding.DecodeString(greeting[len(greeting)-1].Data)

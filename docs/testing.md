@@ -49,6 +49,16 @@ A helper that names what it waits for keeps its name and waits through the kit,
 as `waitConnected` in `internal/server` does:
 the name says what the test needs, the kit how long it waits.
 
+A test of a day, a window or a timer moves a clock on instead of waiting:
+`testkit.NewClock(at)` stands at `at` until the test's `Add`,
+which runs the timers of `AfterFunc` it passes, in their order.
+A product that takes a clock with a timer type of its own takes the kit's
+through a small adapter of the test's package,
+as `kitClock` is the server's `notify.Clock`.
+The room checks' clock of the drift tests (`checkClock`) is another:
+the real time plus an offset the test moves on,
+so that the Cube's time, read at the greeting, moves on by itself too.
+
 ## The scale
 
 `MASSIMO_TEST_SCALE` multiplies every wait: a positive number, 1 where it is
@@ -196,7 +206,7 @@ When a test needs it:
 - **after the start, before the first action**, where what the test checks is
   measured against the greeting:
   a configuration's or a list's changes, a state line's.
-  `startWith` calls it; the other starts do not, yet;
+  The start calls it ("The start");
 - **after it saw a change through the API**,
   before it reads the log, the stream's events or the alerts,
   or changes the Cube again;
@@ -222,6 +232,53 @@ and the number of the last event it sent out
 and the pump's number of the last event it handled (`runtime.pumped`).
 An event dropped because no one read it leaves no gap:
 a newer one follows it, and the pump that handled that one is past both.
+
+## The start
+
+Every test of `internal/server` starts its server with
+`startServer(t, opts...)` (`start_test.go`),
+over a fake Cube KEQ0000100 with the recorded greeting.
+It returns once the Cube is connected, through its runtime
+whatever the API's token asks,
+the pump has handled the greeting (`pumpSync`),
+and the store's writer has written what came before,
+the server's start included:
+the same for every test, which waits for none of it again.
+With `withCubes` it waits for nothing:
+no Cube, and not the store's writer, which `Run` may not have started yet.
+The rig it returns:
+
+| Field | What it is |
+|-------|------------|
+| `r.fc`, `r.addr`, `r.lines` | the fake Cube, its address, and the watch of every line it received (`cubewatch.Lines`); `nil` with `withCubes` |
+| `r.s`, `r.ts`, `r.rt` | the server, its API (`httptest`), and KEQ0000100's runtime; `r.rt` is `nil` with `withCubes` |
+| `r.st` | the store, `nil` without one |
+| `r.log` | the watch of the server's log, with `withLog` |
+| `r.stop()` | stops the API, then `Run`, and waits for its end; the cleanup calls it, and a test that stops the server itself, as a restart does |
+
+The options:
+
+| Option | What it does |
+|--------|--------------|
+| `withOptions(o)` | the server's options; the start sets their Cubes, and a gap of 1 ms where `o.Queue` sets none |
+| `editOptions(f)` | changes them, after `withOptions` whatever the order |
+| `stored()`, `onStore(st)` | a store, new or one given, whose row of KEQ0000100 is the Cube, added where it has none; `seedStore(f)` writes to it before the server starts |
+| `withGreeting(g)`, `changeGreeting(f)`, `rooms()` | another greeting, a change to it, the rooms fixture (`fakecube.RoomsFixture`) with the commands applied |
+| `withFake(f)`, `withCube(f)` | a change to the fake before it starts, to the Cube's configuration |
+| `withCubes(cfg…)`, `alsoCube(cfg)` | other Cubes in place of the fake's, for a Cube that is late, held or found; one beside it; the start waits for neither |
+| `again(r)`, `overFake(fc, addr)` | the store and the fake of an earlier start: the server started again; a fake started already |
+| `beforeRun(f)` | a change to the server before it runs |
+| `quiet()` | a poll once an hour, so none while the test runs, and no refresh |
+| `withLog(level)` | the server's log into `r.log` |
+
+A test file bundles what all its tests need into an option of its own,
+as `storedRooms`, `resetsOn`, `confirming` and `discovering` do;
+a rig with waits of its own builds on the start and keeps its name
+(`startDrift`, `startSlotsCube`, `startMismatchCube`, `startMovingCube`).
+The recorded greeting is read once for every test:
+`recorded(t)` returns a copy of it, the test's to change.
+One test runs the server by hand, since it tests `Run`'s start and end:
+`TestNothingStartsAfterRun`.
 
 ## Still written by hand
 

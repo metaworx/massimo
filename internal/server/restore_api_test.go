@@ -5,7 +5,6 @@ package server
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -27,34 +26,6 @@ const restoreBase = "/api/v1/cubes/KEQ0000100/restore"
 // ecoLine is the 0x11 radiogram that sets 0a010d (room 6 of the fixture)
 // to its fixture temperatures with eco 17.0 instead of 16.5.
 const ecoLine = "s:AAARAAAACgENBisiPQkHGAM="
-
-// startRestoreCube starts a server over fc, a fake Cube not started yet
-// (with the fixture's greeting unless it has one), with the given queue
-// gap.
-func startRestoreCube(t *testing.T, fc *fakecube.Server, gap time.Duration) (*httptest.Server, *Server) {
-	t.Helper()
-	if fc.Greeting == nil {
-		greeting, err := fakecube.LoadGreeting(fixture)
-		if err != nil {
-			t.Fatal(err)
-		}
-		fc.Greeting = greeting
-	}
-	addr, err := fc.Start("127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0000100", Addr: addr}}, Queue: engine.Options{Gap: gap}})
-	ctx, cancel := context.WithCancel(context.Background())
-	go s.Run(ctx)
-	ts := httptest.NewServer(s.Handler())
-	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
-	testkit.Eventually(t, "the cube", func() bool {
-		var c cubeView
-		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
-	})
-	return ts, s
-}
 
 // backupOf downloads the Cube's backup through the API.
 func backupOf(t *testing.T, ts *httptest.Server) *backup.File {
@@ -138,7 +109,8 @@ func plan(t *testing.T, ts *httptest.Server, query string, f *backup.File) map[s
 var noReads = cubewatch.Except('l', 'f')
 
 func TestRestorePlan(t *testing.T) {
-	fc, ts, _ := start(t, "")
+	r := startServer(t)
+	fc, ts := r.fc, r.ts
 	received := cubewatch.Lines(fc)
 	f := backupOf(t, ts)
 
@@ -237,7 +209,8 @@ func TestRestorePlan(t *testing.T) {
 }
 
 func TestRestoreRunSendsThePlan(t *testing.T) {
-	fc, ts, s := start(t, "")
+	r := startServer(t)
+	fc, ts, s := r.fc, r.ts, r.s
 	rt := s.cubes["keq0000100"]
 	f := backupWithEco(backupOf(t, ts), 17)
 	hash := plan(t, ts, "", f)["plan"].(string)
@@ -313,8 +286,7 @@ func TestRestoreRunSendsThePlan(t *testing.T) {
 }
 
 func TestRestoreFailsWhenTheCubeDiscards(t *testing.T) {
-	fc := &fakecube.Server{Discard: true}
-	ts, _ := startRestoreCube(t, fc, time.Millisecond)
+	ts := startServer(t, withFake(func(fc *fakecube.Server) { fc.Discard = true })).ts
 	f := backupWithEco(backupOf(t, ts), 17)
 	hash := plan(t, ts, "", f)["plan"].(string)
 	if code, out := postBackup(t, ts, restoreBase+"?plan="+hash, "application/json", marshal(t, f)); code != 202 {
@@ -345,8 +317,8 @@ func TestRestoreFailsWhenTheCubeDiscards(t *testing.T) {
 func TestRestoreRefusals(t *testing.T) {
 	// The queue pauses half a second between commands, so a restore of
 	// two steps runs long enough for a second one to be refused.
-	fc := &fakecube.Server{}
-	ts, s := startRestoreCube(t, fc, 500*time.Millisecond)
+	r := startServer(t, withOptions(Options{Queue: engine.Options{Gap: 500 * time.Millisecond}}))
+	fc, ts, s := r.fc, r.ts, r.s
 	received := cubewatch.Lines(fc)
 	rt := s.cubes["keq0000100"]
 	f := backupWithEco(backupOf(t, ts), 17)
@@ -410,14 +382,10 @@ func TestRestoreRefusals(t *testing.T) {
 
 func TestRestoreRefusesHighDutyCycle(t *testing.T) {
 	// The greeting's H line reports a duty cycle of 85 %.
-	greeting, err := fakecube.LoadGreeting(fixture)
-	if err != nil {
-		t.Fatal(err)
-	}
+	greeting := recorded(t)
 	greeting[0].Data = strings.Replace(greeting[0].Data, ",00,32,", ",55,32,", 1)
-	fc := &fakecube.Server{Greeting: greeting}
-	ts, _ := startRestoreCube(t, fc, time.Millisecond)
-	received := cubewatch.Lines(fc)
+	r := startServer(t, withGreeting(greeting))
+	ts, received := r.ts, r.lines
 	f := backupWithEco(backupOf(t, ts), 17)
 	p := plan(t, ts, "", f)
 	if b := p["budget"].(map[string]any); b["duty_cycle_pct"] != 85.0 {

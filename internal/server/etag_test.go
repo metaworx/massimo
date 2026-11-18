@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 )
@@ -56,7 +57,8 @@ func putProgram(t *testing.T, url, ifMatch, body string) (int, map[string]any) {
 // one with the current tag goes, a write still on its way counts, and a
 // member's own write changes the room's tag.
 func TestProgramTag(t *testing.T) {
-	fc, ts, _, _ := startRoomsOpts(t, roomsOpts{applyAfter: 600 * time.Millisecond, fast: true, slow: true})
+	r := startServer(t, storedRooms(), withFake(func(fc *fakecube.Server) { fc.ApplyAfter = 600 * time.Millisecond }), fastFollowUps(), quiet())
+	fc, ts := r.fc, r.ts
 	base := ts.URL + "/api/v1/cubes/KEQ0000100/"
 	room, tag := programWith(t, base+"rooms/2/program")
 	if room["pending"] != false || room["program_consistent"] != true || room["source"] != "0a0204" {
@@ -123,10 +125,9 @@ func TestProgramTag(t *testing.T) {
 // what changed and the new tag, and of its room's virtual wall
 // thermostat.
 func TestProgramConfigEvents(t *testing.T) {
-	_, ts, s, _ := startRoomsOpts(t, roomsOpts{fast: true, slow: true})
-	// The greeting through the pump first: its configurations are what
-	// the write's config events are measured against.
-	pumpSync(t, s)
+	// The start has the greeting through the pump: its configurations
+	// are what the write's config events are measured against.
+	ts := startServer(t, storedRooms(), fastFollowUps(), quiet()).ts
 	evs := readStreamURL(t, ts.URL+"/api/v1/cubes/KEQ0000100/events?devices=all")
 	_, after := evs.AwaitN(t, 0, "the first burst", 10, isEvent)
 	if code, body := putProgram(t, ts.URL+"/api/v1/cubes/KEQ0000100/rooms/2/program", "", `{"tuesday":[{"temp":18,"until":"24:00"}]}`); code != 200 {

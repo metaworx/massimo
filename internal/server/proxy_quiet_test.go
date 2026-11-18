@@ -4,17 +4,14 @@
 package server
 
 import (
-	"context"
 	"encoding/base64"
 	"errors"
 	"net"
-	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
-	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/testkit"
 )
@@ -28,27 +25,15 @@ func TestProxySendsNothingUnasked(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fc := &fakecube.Server{Greeting: greeting}
-	addr, err := fc.Start("127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	proxyAddr := ln.Addr().String()
 	ln.Close()
-	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0000100", Addr: addr}}, Queue: engine.Options{Gap: time.Millisecond},
-		PollInterval: 50 * time.Millisecond, RefreshInterval: time.Hour, Proxy: []ProxyListener{{Addr: proxyAddr}}})
-	ctx, cancel := context.WithCancel(context.Background())
-	go s.Run(ctx)
-	ts := httptest.NewServer(s.Handler())
-	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
-	testkit.Eventually(t, "the cube", func() bool {
-		var c cubeView
-		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
-	})
+	rg := startServer(t, withGreeting(greeting), withOptions(Options{PollInterval: 50 * time.Millisecond, RefreshInterval: time.Hour,
+		Proxy: []ProxyListener{{Addr: proxyAddr}}}))
+	fc, ts := rg.fc, rg.ts
 
 	conn, r := proxyClient(t, proxyAddr)
 	setpoint := 23.5

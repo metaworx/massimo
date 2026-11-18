@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/view"
@@ -25,8 +24,9 @@ import (
 // takes it away.
 func TestFailedRadiogram(t *testing.T) {
 	log, logs := testkit.LogWatch(nil)
-	fc, ts, s, _ := startStored(t, Options{PollInterval: 100 * time.Millisecond, Logger: log})
-	greeting, _ := fakecube.LoadGreeting(fixture)
+	rg := startServer(t, stored(), withOptions(Options{PollInterval: 100 * time.Millisecond, Logger: log}))
+	fc, ts, s := rg.fc, rg.ts, rg.s
+	greeting := recorded(t)
 	clean := greeting[len(greeting)-1]
 	list := func(b4 byte, flagged bool) {
 		raw, _ := base64.StdEncoding.DecodeString(clean.Data)

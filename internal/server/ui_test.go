@@ -29,7 +29,7 @@ import (
 )
 
 func TestUIServed(t *testing.T) {
-	_, ts, _ := start(t, "secret")
+	ts := startServer(t, withOptions(Options{Token: "secret"})).ts
 	get := func(path string) (int, string, string) {
 		resp, err := http.Get(ts.URL + path)
 		if err != nil {
@@ -239,7 +239,7 @@ func pageIDs(t *testing.T, name, page string) map[string]bool {
 // type; /favicon.ico at the root, where browsers look; an SVG with a
 // policy that lets its own style be, the dark rule of the favicon.
 func TestUIBrand(t *testing.T) {
-	_, ts, _ := startWith(t, Options{})
+	ts := startServer(t).ts
 	get := func(p string) (*http.Response, string) {
 		t.Helper()
 		resp, err := http.Get(ts.URL + p)
@@ -357,7 +357,7 @@ func TestUIPage(t *testing.T) {
 		t.Fatalf("only %d lookups found in the scripts", n)
 	}
 
-	_, ts, _ := start(t, "")
+	ts := startServer(t).ts
 	resp, err := http.Get(ts.URL + "/")
 	if err != nil {
 		t.Fatal(err)

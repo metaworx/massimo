@@ -30,8 +30,8 @@ func storedElsewhere(t *testing.T) (*httptest.Server, string, *testkit.Watch[tes
 	}
 	t.Cleanup(func() { elsewhere.Close() })
 	log, logs := testkit.LogWatch(slog.LevelDebug)
-	_, ts, _, _ := startStored(t, Options{DiscoveryWait: 200 * time.Millisecond, DiscoveryAddr: "127.0.0.1:0",
-		DiscoveryTargets: []string{elsewhere.Addr()}, Logger: log})
+	ts := startServer(t, stored(), withOptions(Options{DiscoveryWait: 200 * time.Millisecond, DiscoveryAddr: "127.0.0.1:0",
+		DiscoveryTargets: []string{elsewhere.Addr()}, Logger: log})).ts
 	_, out := do(t, ts, "GET", "/api/v1/cubes/KEQ0000100", "")
 	addr, _ := out["configured_address"].(string)
 	if addr == "" {

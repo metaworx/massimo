@@ -16,7 +16,8 @@ import (
 // The role integration in the store is the ceiling the server knows; no
 // regular user is given it, through the API or by a change of role.
 func TestIntegrationRoleIsTheCeiling(t *testing.T) {
-	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	rg := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, s := rg.ts, rg.s
 	r, ok, err := s.opts.Store.Role(t.Context(), store.RoleIntegration)
 	if err != nil || !ok {
 		t.Fatal(err)
@@ -47,7 +48,8 @@ func TestIntegrationRoleIsTheCeiling(t *testing.T) {
 // maximum, and the integration collects its key with its code; revoked,
 // the key is refused.
 func TestIntegrationRegistrationRoutes(t *testing.T) {
-	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, s := r.ts, r.s
 	body := `{"kind":"homeassistant","name":"Casa Leone","instance_id":"0123456789ABCDEF0123456789abcdef","url":"http://ha:8123","version":"2026.11.1"}`
 	code, text := callAPI(t, ts, "POST", "/api/v1/integrations/requests", "", body)
 	if code != 201 {
@@ -140,7 +142,8 @@ func decodeInto(t *testing.T, text string, v any) {
 // (the chain's third link), and the users list shows the links; unlinked,
 // the integration's user acts as itself again.
 func TestIntegrationLinking(t *testing.T) {
-	_, ts, _, st := startRoomsOpts(t, roomsOpts{slow: true})
+	r := startServer(t, storedRooms(), quiet())
+	ts, st := r.ts, r.st
 	ctx := t.Context()
 	i, key := registerHA(t, st, []string{"read", "setpoint", "lock"})
 	owner := userToken(t, st, "boss", store.RoleOwner)
@@ -226,7 +229,8 @@ func TestIntegrationLinking(t *testing.T) {
 // their id, and an integration whose id was seen is marked; the switch
 // for the requests is a setting.
 func TestFoundIntegrations(t *testing.T) {
-	_, ts, s, st := startRoomsOpts(t, roomsOpts{slow: true})
+	r := startServer(t, storedRooms(), quiet())
+	ts, s, st := r.ts, r.s, r.st
 	owner := userToken(t, st, "boss", store.RoleOwner)
 	var got struct {
 		Found []FoundIntegration `json:"found"`
@@ -268,7 +272,8 @@ func TestFoundIntegrations(t *testing.T) {
 // announces at the next start waits for the restart, then the setting
 // off, then auto on the loopback.
 func TestFoundIntegrationsWhyNot(t *testing.T) {
-	_, ts, s, st := startRoomsOpts(t, roomsOpts{slow: true})
+	r := startServer(t, storedRooms(), quiet())
+	ts, s, st := r.ts, r.s, r.st
 	owner := userToken(t, st, "boss", store.RoleOwner)
 	for _, c := range []struct {
 		name, stored, fixedBy string

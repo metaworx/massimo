@@ -97,7 +97,8 @@ func seqOf(t *testing.T, id string) uint64 {
 // reconnects with the last id it read, by the header or the parameter,
 // gets what came since and no state burst.
 func TestStreamResumes(t *testing.T) {
-	_, ts, s := start(t, "")
+	r := startServer(t)
+	ts, s := r.ts, r.s
 	rt := s.cubes["keq0000100"]
 	devices := len(s.devicesOf(rt, view.KindDefault))
 	first := readStream(t, ts, "", "")
@@ -145,7 +146,8 @@ func TestStreamResumes(t *testing.T) {
 // An id the ring no longer holds, one of another epoch or one not issued
 // yet gets a resync event and the state, as a first connection does.
 func TestStreamResyncs(t *testing.T) {
-	_, ts, s := start(t, "")
+	r := startServer(t)
+	ts, s := r.ts, r.s
 	rt := s.cubes["keq0000100"]
 	devices := len(s.devicesOf(rt, view.KindDefault))
 	head, _ := burst(t, readStream(t, ts, "", ""), 0, devices)
@@ -172,7 +174,7 @@ func TestStreamResyncs(t *testing.T) {
 
 // A user's notification is replayed to that user alone.
 func TestStreamReplayKeepsUsersApart(t *testing.T) {
-	_, _, s := start(t, "")
+	s := startServer(t).s
 	rt := s.cubes["keq0000100"]
 	rt.subsMu.Lock()
 	from := rt.streamID(rt.seq)
@@ -192,7 +194,8 @@ func TestStreamReplayKeepsUsersApart(t *testing.T) {
 // A subscriber that cannot keep up is dropped and told to end, and its
 // stream ends after writing what it still holds.
 func TestStreamOfASlowClientEnds(t *testing.T) {
-	_, ts, s := start(t, "")
+	r := startServer(t)
+	ts, s := r.ts, r.s
 	rt := s.cubes["keq0000100"]
 	slow := make(chan event, 1)
 	sub := &subscriber{gone: make(chan struct{})}

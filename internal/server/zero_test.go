@@ -40,7 +40,8 @@ func withZeroEntry(t *testing.T, g []cube.Message) []cube.Message {
 // A Cube's entry at 000000 is no device: no list of the API names it,
 // every device route answers 400 for it, and nothing reaches the Cube.
 func TestZeroEntryIsNoDevice(t *testing.T) {
-	fc, ts, _ := startCopyCube(t, func(fc *fakecube.Server) { fc.Greeting = withZeroEntry(t, fc.Greeting) })
+	r := startServer(t, withGreeting(copyGreeting(t)), withFake(func(fc *fakecube.Server) { fc.Greeting = withZeroEntry(t, fc.Greeting) }))
+	fc, ts := r.fc, r.ts
 	const base = "/api/v1/cubes/KEQ0000100"
 	for _, path := range []string{base + "/devices", base + "/rooms"} {
 		code, body := callAPI(t, ts, "GET", path, "", "")

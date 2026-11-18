@@ -35,7 +35,8 @@ func cubeListening(t *testing.T, s *Server) []string {
 // the port is free; the failure is logged once at Error, not per try.
 func TestProxyRetriedUntilThePortIsFree(t *testing.T) {
 	log, logs := testkit.LogWatch(nil)
-	_, ts, s, _ := startStored(t, Options{proxyRetry: quickRetry, Logger: log})
+	r := startServer(t, stored(), withOptions(Options{proxyRetry: quickRetry, Logger: log}))
+	ts, s := r.ts, r.s
 	taken, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -86,7 +87,8 @@ func TestProxyRetriedUntilTheAddressIsThere(t *testing.T) {
 		return net.Listen("tcp", addr)
 	}
 	log, logs := testkit.LogWatch(nil)
-	_, ts, s, _ := startStored(t, Options{proxyRetry: quickRetry, proxyListen: listen, Logger: log})
+	r := startServer(t, stored(), withOptions(Options{proxyRetry: quickRetry, proxyListen: listen, Logger: log}))
+	ts, s := r.ts, r.s
 	addr := freeTCP(t)
 	if code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100", `{"proxy_address":"`+addr+`"}`); code != 200 || out["proxy_listening"] != nil {
 		t.Fatalf("put %d %v", code, out)
@@ -127,7 +129,8 @@ func TestProxyRetriedUntilTheAddressIsThere(t *testing.T) {
 // A slot that is trying stops with a new proxy address and with the
 // Cube's removal: nothing listens on its address afterwards.
 func TestProxyRetryStops(t *testing.T) {
-	_, ts, s, _ := startStored(t, Options{proxyRetry: quickRetry})
+	r := startServer(t, stored(), withOptions(Options{proxyRetry: quickRetry}))
+	ts, s := r.ts, r.s
 	for _, step := range []struct{ method, body string }{
 		{"PUT", `{"proxy_address":"%s"}`},
 		{"DELETE", ""},
@@ -170,7 +173,7 @@ func TestProxyFlagListenerRetried(t *testing.T) {
 		t.Fatal(err)
 	}
 	addr := taken.Addr().String()
-	_, _, s := startWith(t, Options{proxyRetry: quickRetry, ProxyFixed: true, Proxy: []ProxyListener{{Serial: "KEQ0000100", Addr: addr}}})
+	s := startServer(t, withOptions(Options{proxyRetry: quickRetry, ProxyFixed: true, Proxy: []ProxyListener{{Serial: "KEQ0000100", Addr: addr}}})).s
 	if l := cubeListening(t, s); len(l) != 0 {
 		taken.Close()
 		t.Fatalf("listening on a taken port: %v", l)
@@ -183,7 +186,8 @@ func TestProxyFlagListenerRetried(t *testing.T) {
 // proxy_failing, from the PUT's answer on, and System Info's
 // cube_proxies; both clear once it listens.
 func TestProxyFailingInTheAPI(t *testing.T) {
-	_, ts, s, _ := startStored(t, Options{proxyRetry: quickRetry})
+	r := startServer(t, stored(), withOptions(Options{proxyRetry: quickRetry}))
+	ts, s := r.ts, r.s
 	taken, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -246,9 +250,9 @@ func TestProxyDiscoverySerialInSystem(t *testing.T) {
 	for _, l := range ls {
 		l.Close()
 	}
-	_, ts, _ := startWith(t, Options{ProxyFixed: true, DiscoveryAddr: "127.0.0.1:0", Proxy: []ProxyListener{
+	ts := startServer(t, withOptions(Options{ProxyFixed: true, DiscoveryAddr: "127.0.0.1:0", Proxy: []ProxyListener{
 		{Serial: "KEQ0000100", Addr: answering, Discovery: true, DiscoverySerial: "KEQ0000999"},
-		{Serial: "KEQ0000100", Addr: silent}}})
+		{Serial: "KEQ0000100", Addr: silent}}})).ts
 	var sys systemView
 	getJSON(t, ts, "", "/api/v1/system", &sys)
 	got := map[string]string{}

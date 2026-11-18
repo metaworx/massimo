@@ -17,7 +17,8 @@ import (
 // an administrative capability; the key fixed; the removal.
 func TestProvidersAPI(t *testing.T) {
 	fakeDiscovery(t, nil)
-	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	rg := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, s := rg.ts, rg.s
 	st := s.opts.Store
 	manager := userToken(t, st, "manny", store.RoleManager)
 	if code, _ := callAPI(t, ts, "GET", "/api/v1/providers", manager, ""); code != 403 {
@@ -87,7 +88,8 @@ func TestProvidersAPI(t *testing.T) {
 // without the subject, removed; a guests holder reaches a guest's only,
 // and a user lists its own without users but assigns none (AP Oidc v1.1).
 func TestIdentitiesAPI(t *testing.T) {
-	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, s := r.ts, r.s
 	st := s.opts.Store
 	ctx := t.Context()
 	if _, err := st.AddProvider(ctx, store.AuthProvider{Key: "cloud", Issuer: "https://cloud.example.com", ClientID: "m", Enabled: true}, 0); err != nil {
@@ -167,7 +169,7 @@ func itoa(n int64) string {
 // saved unchecked, and checked once enabled.
 func TestProviderIssuerAtSaving(t *testing.T) {
 	fakeDiscovery(t, map[string]string{"https://slash.example.com": "https://slash.example.com/", "https://odd.example.com": "https://other.example.com", "https://down.example.com": ""})
-	_, ts, _ := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	ts := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret"))).ts
 	add := func(key, issuer string, more string) (int, providerView) {
 		code, text := callAPI(t, ts, "POST", "/api/v1/providers", "secret", `{"key": "`+key+`", "issuer": "`+issuer+`", "client_id": "m"`+more+`}`)
 		var p providerView

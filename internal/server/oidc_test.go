@@ -211,7 +211,8 @@ func TestOIDCSignIn(t *testing.T) {
 	f := newFakeIdP(t)
 	opts := storeOptions(t, t.TempDir(), "secret")
 	opts.TrustedProxies = []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")}
-	_, ts, s := startWith(t, opts)
+	r := startServer(t, withOptions(opts))
+	ts, s := r.ts, r.s
 	st := s.opts.Store
 	ctx := t.Context()
 	p, err := st.AddProvider(ctx, store.AuthProvider{Key: "cloud", Name: "Nextcloud", Issuer: f.srv.URL, ClientID: fakeClientID, ClientSecret: f.secret, Enabled: true}, 0)
@@ -322,7 +323,8 @@ func TestOIDCSignIn(t *testing.T) {
 func TestOIDCAutoCreate(t *testing.T) {
 	f := newFakeIdP(t)
 	f.methods = []string{"client_secret_post"}
-	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, s := r.ts, r.s
 	st := s.opts.Store
 	ctx := t.Context()
 	if _, err := st.AddProvider(ctx, store.AuthProvider{Key: "cloud", Issuer: f.srv.URL, ClientID: fakeClientID, ClientSecret: f.secret, Enabled: true}, 0); err != nil {
@@ -389,7 +391,8 @@ func TestNewUserName(t *testing.T) {
 // at once.
 func TestOIDCUserinfo(t *testing.T) {
 	f := newFakeIdP(t)
-	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, s := r.ts, r.s
 	st := s.opts.Store
 	ctx := t.Context()
 	if _, err := st.AddProvider(ctx, store.AuthProvider{Key: "cloud", Issuer: f.srv.URL, ClientID: fakeClientID, ClientSecret: f.secret, Enabled: true}, 0); err != nil {
@@ -470,7 +473,8 @@ func (f roundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f
 // manager changes a link no sign-in used.
 func TestOIDCLink(t *testing.T) {
 	f := newFakeIdP(t)
-	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, s := r.ts, r.s
 	st := s.opts.Store
 	ctx := t.Context()
 	if _, err := st.AddProvider(ctx, store.AuthProvider{Key: "cloud", Issuer: f.srv.URL, ClientID: fakeClientID, ClientSecret: f.secret, Enabled: true}, 0); err != nil {
@@ -611,7 +615,8 @@ func TestOIDCLink(t *testing.T) {
 // any.
 func TestOIDCGroups(t *testing.T) {
 	f := newFakeIdP(t)
-	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, s := r.ts, r.s
 	st := s.opts.Store
 	ctx := t.Context()
 	if _, err := st.AddProvider(ctx, store.AuthProvider{Key: "cloud", Issuer: f.srv.URL, ClientID: fakeClientID, ClientSecret: f.secret, Enabled: true,

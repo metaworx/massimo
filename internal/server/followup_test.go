@@ -4,16 +4,12 @@
 package server
 
 import (
-	"context"
 	"encoding/base64"
 	"net"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
-	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
-	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
@@ -38,29 +34,12 @@ func withEco(t *testing.T, greeting []cube.Message, rf cube.RFAddress, eco float
 }
 
 func TestFollowUpAfterAWrite(t *testing.T) {
-	greeting, err := fakecube.LoadGreeting(fixture)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fc := &fakecube.Server{Greeting: greeting}
-	addr, err := fc.Start("127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0000100", Addr: addr}}, Queue: engine.Options{Gap: time.Millisecond},
-		RefreshInterval: time.Hour, FollowUpDelays: []time.Duration{40 * time.Millisecond, 40 * time.Millisecond, 40 * time.Millisecond, 40 * time.Millisecond, 40 * time.Millisecond},
-		FollowUpReconnectGap: time.Millisecond})
-	ctx, cancel := context.WithCancel(context.Background())
-	go s.Run(ctx)
-	ts := httptest.NewServer(s.Handler())
-	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
-	testkit.Eventually(t, "the cube", func() bool {
-		var c cubeView
-		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
-	})
-	// The greeting through the pump first: its configuration is what the
-	// new one's config line is measured against.
-	pumpSync(t, s)
+	// The start has the greeting through the pump: its configuration is
+	// what the new one's config line is measured against.
+	r := startServer(t, withOptions(Options{RefreshInterval: time.Hour,
+		FollowUpDelays:       []time.Duration{40 * time.Millisecond, 40 * time.Millisecond, 40 * time.Millisecond, 40 * time.Millisecond, 40 * time.Millisecond},
+		FollowUpReconnectGap: time.Millisecond}))
+	fc, ts, s := r.fc, r.ts, r.s
 	const base = "/api/v1/cubes/KEQ0000100"
 	eco := func() any {
 		_, d := do(t, ts, "GET", base+"/devices/0a010a", "")
@@ -78,7 +57,7 @@ func TestFollowUpAfterAWrite(t *testing.T) {
 	if e := eco(); e != float64(15) {
 		t.Fatalf("eco right after the write %v", e)
 	}
-	fc.SetConfig(withEco(t, greeting, 0x0a010a, 17))
+	fc.SetConfig(withEco(t, recorded(t), 0x0a010a, 17))
 	testkit.Eventually(t, "the new eco temperature", func() bool { return eco() == float64(17) })
 	// The fake's S reply left one radiogram pending (49 of 50 slots
 	// free), so the follow-up reconnects for a fresh H line.
@@ -101,26 +80,9 @@ func TestFollowUpAfterAWrite(t *testing.T) {
 }
 
 func TestFollowUpGivesUpAndRespectsTheRefreshSwitch(t *testing.T) {
-	greeting, err := fakecube.LoadGreeting(fixture)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fc := &fakecube.Server{Greeting: greeting}
-	addr, err := fc.Start("127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
 	// No RefreshInterval: no reconnects for the budget.
-	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0000100", Addr: addr}}, Queue: engine.Options{Gap: time.Millisecond},
-		FollowUpDelays: []time.Duration{20 * time.Millisecond, 20 * time.Millisecond}, FollowUpReconnectGap: time.Millisecond})
-	ctx, cancel := context.WithCancel(context.Background())
-	go s.Run(ctx)
-	ts := httptest.NewServer(s.Handler())
-	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
-	testkit.Eventually(t, "the cube", func() bool {
-		var c cubeView
-		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
-	})
+	r := startServer(t, withOptions(Options{FollowUpDelays: []time.Duration{20 * time.Millisecond, 20 * time.Millisecond}, FollowUpReconnectGap: time.Millisecond}))
+	fc, ts := r.fc, r.ts
 	if code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/0a010a/config", `{"eco_temp":17}`); code != 200 {
 		t.Fatal(code)
 	}
@@ -171,34 +133,16 @@ func proxyWrite(t *testing.T, conn net.Conn, r *cube.Reader, data string) {
 // it shows what was written, then the budget reconnect; a setpoint gets
 // the budget reconnect only.
 func TestFollowUpAfterAProxyClientsWrite(t *testing.T) {
-	greeting, err := fakecube.LoadGreeting(fixture)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fc := &fakecube.Server{Greeting: greeting}
-	addr, err := fc.Start("127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	proxyAddr := ln.Addr().String()
 	ln.Close()
-	log, logs := testkit.LogWatch(nil)
-	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0000100", Addr: addr}}, Queue: engine.Options{Gap: time.Millisecond},
-		RefreshInterval: time.Hour, FollowUpDelays: []time.Duration{40 * time.Millisecond, 40 * time.Millisecond, 40 * time.Millisecond, 40 * time.Millisecond, 40 * time.Millisecond},
-		FollowUpReconnectGap: time.Millisecond, Proxy: []ProxyListener{{Addr: proxyAddr}},
-		Logger: log})
-	ctx, cancel := context.WithCancel(context.Background())
-	go s.Run(ctx)
-	ts := httptest.NewServer(s.Handler())
-	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
-	testkit.Eventually(t, "the cube", func() bool {
-		var c cubeView
-		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
-	})
+	rg := startServer(t, withLog(nil), withOptions(Options{RefreshInterval: time.Hour,
+		FollowUpDelays:       []time.Duration{40 * time.Millisecond, 40 * time.Millisecond, 40 * time.Millisecond, 40 * time.Millisecond, 40 * time.Millisecond},
+		FollowUpReconnectGap: time.Millisecond, Proxy: []ProxyListener{{Addr: proxyAddr}}}))
+	fc, ts, logs := rg.fc, rg.ts, rg.log
 	received := cubewatch.Lines(fc)
 	sent := func() (rereads, others int) {
 		return received.Count(0, lineIs("c:0a010a")), received.Count(0, func(m cube.Message) bool { return m.Type == 'c' && m.String() != "c:0a010a" })
@@ -206,7 +150,7 @@ func TestFollowUpAfterAProxyClientsWrite(t *testing.T) {
 
 	// A 0x11 (preset temperatures) to 0a010a, as the original software
 	// sends it, with eco 17 and the device's other presets.
-	changed := withEco(t, greeting, 0x0a010a, 17)
+	changed := withEco(t, recorded(t), 0x0a010a, 17)
 	cfg, err := cube.ParseConfig(changed.Data)
 	if err != nil {
 		t.Fatal(err)

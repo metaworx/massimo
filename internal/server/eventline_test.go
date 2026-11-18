@@ -72,7 +72,8 @@ func TestEventLine(t *testing.T) {
 // client's saying it again.
 func TestEventLinesMatchTheRows(t *testing.T) {
 	log, logs := testkit.LogWatch(nil)
-	_, _, s, st := startStored(t, Options{Logger: log})
+	rg := startServer(t, stored(), withOptions(Options{Logger: log}))
+	s, st := rg.s, rg.st
 	s.logServer(systemEvent("backups_pruned", 0, map[string]any{"removed": 2}))
 	ctx := context.Background()
 	var rows []store.Event

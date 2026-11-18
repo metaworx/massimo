@@ -40,7 +40,8 @@ func isKeepAlive(e testkit.Event) bool { return e.Kind == "" && e.Comment == "ke
 // opened with a key ends once the key is revoked, and one whose caller
 // is still allowed goes on.
 func TestStreamEndsWhenItsCallerIsNotLetIn(t *testing.T) {
-	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), ""))
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "")))
+	ts, s := r.ts, r.s
 	s.streamKeepAlive.Store(int64(30 * time.Millisecond))
 	st := s.opts.Store
 	open := openStream(t, ts, "")
@@ -79,7 +80,8 @@ func mustUser(t *testing.T, st *store.Store, name string) store.User {
 // Without a store, a stream opened with the one token ends once the
 // settings file gives the server another (SetToken).
 func TestLegacyStreamEndsWithItsToken(t *testing.T) {
-	_, ts, s := startWith(t, Options{Token: "secret"})
+	r := startServer(t, withOptions(Options{Token: "secret"}))
+	ts, s := r.ts, r.s
 	s.streamKeepAlive.Store(int64(30 * time.Millisecond))
 	evs := openStream(t, ts, "secret")
 	evs.Await(t, 0, "a keep-alive", isKeepAlive)

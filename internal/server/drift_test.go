@@ -16,7 +16,6 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
-	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 	"go.metaworx.ch/massimo/internal/view"
@@ -33,14 +32,8 @@ func (c *checkClock) add(d time.Duration) { c.off.Add(int64(d)) }
 // driftRig is a server over the fake Cube's rooms fixture whose room
 // checks run only when the test calls check, on the clock of clock.
 type driftRig struct {
-	t        *testing.T
-	fc       *fakecube.Server
-	received *testkit.Watch[cube.Message] // the lines fc received
-	ts       *httptest.Server
-	s        *Server
-	rt       *runtime
-	st       *store.Store
-	clock    *checkClock
+	*rig
+	clock *checkClock
 }
 
 // startDrift starts a driftRig: the rooms fixture (room 1 a wall
@@ -48,44 +41,19 @@ type driftRig struct {
 // thermostats, room 3 a window contact; every thermostat in auto at
 // 20 °C; the Cube's clock Tuesday 19:51, when the radiator thermostats'
 // programme says 21 °C since 18:20 and 17 °C from 20:15), change
-// applied to its lines first, and edit to the server's options. The
-// fake Cube applies the commands it takes.
+// applied to its lines first, and edit to the server's options, with a
+// store, polled often. The fake Cube applies the commands it takes.
 func startDrift(t *testing.T, change func([]cube.Message) []cube.Message, edit ...func(*Options)) *driftRig {
 	t.Helper()
-	greeting, err := fakecube.RoomsFixture()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if change != nil {
-		greeting = change(greeting)
-	}
-	fc := &fakecube.Server{Greeting: greeting, Apply: true}
-	addr, err := fc.Start("127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	st := testStore(t, "")
-	row, err := st.AddCube(context.Background(), store.Cube{Serial: "KEQ0000100", Configured: true, Address: addr, Source: store.SourceEnv})
-	if err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := CubeFromRow(row)
-	if err != nil {
-		t.Fatal(err)
-	}
 	clock := &checkClock{}
-	opts := Options{Cubes: []CubeConfig{cfg}, Store: st, Queue: engine.Options{Gap: time.Millisecond}, PollInterval: 50 * time.Millisecond,
-		driftClock: clock.now, driftEvery: -1}
-	for _, e := range edit {
-		e(&opts)
+	opts := []startOpt{rooms(), stored(), withOptions(Options{PollInterval: 50 * time.Millisecond, driftClock: clock.now, driftEvery: -1})}
+	if change != nil {
+		opts = append(opts, changeGreeting(change))
 	}
-	s := New(opts)
-	ctx, cancel := context.WithCancel(context.Background())
-	go s.Run(ctx)
-	ts := httptest.NewServer(s.Handler())
-	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
-	waitConnected(t, ts, "KEQ0000100")
-	return &driftRig{t: t, fc: fc, received: cubewatch.Lines(fc), ts: ts, s: s, rt: s.cubes["keq0000100"], st: st, clock: clock}
+	for _, e := range edit {
+		opts = append(opts, editOptions(e))
+	}
+	return &driftRig{rig: startServer(t, opts...), clock: clock}
 }
 
 // check runs the room checks once.
@@ -159,7 +127,7 @@ func (r *driftRig) outcomes(kind string) []string {
 // radioSince are the s: and r: lines the fake Cube received from the
 // cursor on.
 func (r *driftRig) radioSince(from testkit.Cursor) []string {
-	return lineStrings(r.received.Since(from, cubewatch.Type('s', 'r')))
+	return lineStrings(r.lines.Since(from, cubewatch.Type('s', 'r')))
 }
 
 // setpointLine is the room command that sets a room to mode and temp,
@@ -186,7 +154,7 @@ func TestDisagreeResendsMassimosSetpoint(t *testing.T) {
 		r.waitSetting(rf, "manual", 21)
 	}
 	r.confirmed(2)
-	sent := r.received.Mark()
+	sent := r.lines.Mark()
 	r.set(0x0a0205, "manual", 18)
 	r.check()
 	r.clock.add(9 * time.Minute)
@@ -313,7 +281,7 @@ func TestDisagreeResendsTheMajoritys(t *testing.T) {
 		r.set(0x0a0201, "manual", 19)
 		r.set(0x0a0202, "manual", 22)
 		r.set(0x0a0203, "manual", 22)
-		sent := r.received.Mark()
+		sent := r.lines.Mark()
 		r.disagreeAndResend()
 		r.wantResend(sent, 0x0a0201, 1, 22, cube.ModeManual, "majority")
 	})
@@ -322,7 +290,7 @@ func TestDisagreeResendsTheMajoritys(t *testing.T) {
 		r.set(0x0a0204, "manual", 18)
 		r.set(0x0a0205, "manual", 23)
 		r.set(0x0a0206, "manual", 18)
-		sent := r.received.Mark()
+		sent := r.lines.Mark()
 		r.disagreeAndResend()
 		r.wantResend(sent, 0x0a0204, 2, 18, cube.ModeManual, "majority")
 	})
@@ -336,14 +304,14 @@ func TestDisagreeResendsTheWallThermostats(t *testing.T) {
 	r.set(0x0a0201, "manual", 19)
 	r.set(0x0a0202, "manual", 20)
 	r.set(0x0a0203, "manual", 22)
-	sent := r.received.Mark()
+	sent := r.lines.Mark()
 	r.disagreeAndResend()
 	r.wantResend(sent, 0x0a0201, 1, 19, cube.ModeManual, "wall_thermostat")
 
 	r.set(0x0a0204, "manual", 18)
 	r.set(0x0a0205, "manual", 19)
 	r.set(0x0a0206, "manual", 23)
-	sent = r.received.Mark()
+	sent = r.lines.Mark()
 	r.disagreeAndResend()
 	if got := r.radioSince(sent); len(got) != 0 {
 		t.Fatalf("sent without a state to take: %v", got)
@@ -382,7 +350,7 @@ func TestDisagreeResendsMassimosAuto(t *testing.T) {
 			r.confirmed(2)
 			r.clock.add(10 * time.Minute) // a person's change ten minutes later
 			r.set(0x0a0205, "manual", 18)
-			sent := r.received.Mark()
+			sent := r.lines.Mark()
 			r.disagreeAndResend()
 			r.wantResend(sent, 0x0a0204, 2, c.temp, cube.ModeAuto, "massimo")
 		})
@@ -463,7 +431,7 @@ func TestDisagreeLeavesOut(t *testing.T) {
 				r.set(rf, "manual", 21)
 			}
 			c.apart(r)
-			sent := r.received.Mark()
+			sent := r.lines.Mark()
 			for range 3 {
 				r.check()
 				r.clock.add(11 * time.Minute)
@@ -532,7 +500,7 @@ func TestDriftReported(t *testing.T) {
 	r.set(0x0a0204, "auto", 21)
 	r.set(0x0a0205, "auto", 21)
 	r.set(0x0a0206, "auto", 12)
-	sent := r.received.Mark()
+	sent := r.lines.Mark()
 	r.check()
 	r.clock.add(4 * time.Minute)
 	r.check()

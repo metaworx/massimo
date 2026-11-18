@@ -21,7 +21,7 @@ import (
 // trusted proxy names.
 func TestGetSystem(t *testing.T) {
 	proxies, _ := ParseTrustedProxies("127.0.0.1,::1")
-	_, ts, _ := startWith(t, Options{Token: "secret", Version: "v0.0.0-test (go1.26.0)", Install: "apt", TrustedProxies: proxies})
+	ts := startServer(t, withOptions(Options{Token: "secret", Version: "v0.0.0-test (go1.26.0)", Install: "apt", TrustedProxies: proxies})).ts
 	get := func(forwarded string) systemView {
 		t.Helper()
 		req, _ := http.NewRequest("GET", ts.URL+"/api/v1/system", nil)
@@ -64,7 +64,7 @@ func TestGetSystem(t *testing.T) {
 
 // A server that does not say how it was installed is "other".
 func TestGetSystemInstallOther(t *testing.T) {
-	_, ts, _ := startWith(t, Options{Token: "secret"})
+	ts := startServer(t, withOptions(Options{Token: "secret"})).ts
 	var v systemView
 	if code := getJSON(t, ts, "secret", "/api/v1/system", &v); code != 200 || v.Install != InstallOther {
 		t.Fatalf("%d %+v", code, v)
@@ -154,7 +154,8 @@ func TestGetSystemInterfaces(t *testing.T) {
 	hostInterfaces = func() ([]hostInterface, error) {
 		return []hostInterface{{Name: "eth0", MAC: "02:00:00:00:00:01", Up: true, IPs: []net.IP{net.ParseIP("192.168.1.8")}}}, nil
 	}
-	_, ts, s := startWith(t, Options{Token: "secret"})
+	r := startServer(t, withOptions(Options{Token: "secret"}))
+	ts, s := r.ts, r.s
 	var v systemView
 	if code := getJSON(t, ts, "secret", "/api/v1/system", &v); code != 200 || len(v.Interfaces) != 0 || v.APIPort != 0 {
 		t.Fatalf("before the API's address is known: %d %+v", code, v.Interfaces)

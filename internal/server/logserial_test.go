@@ -42,7 +42,7 @@ func serialsOf(t *testing.T, ts *httptest.Server, token string) map[string]strin
 // the source "device", a configuration also before the device has a
 // state; the Cube's own C line is the Cube's, under its serial.
 func TestLogEventsCarrySerial(t *testing.T) {
-	_, ts, _, _ := startStored(t, Options{})
+	ts := startServer(t, stored()).ts
 	serials := serialsOf(t, ts, "")
 	var cubeRF string
 	if v := waitConnected(t, ts, "KEQ0000100"); v != nil {
@@ -77,7 +77,8 @@ func TestLogEventsCarrySerial(t *testing.T) {
 // its event names it as it was: its serial, type, name and room, though
 // the snapshot no longer has it.
 func TestLogForgottenDeviceHasSerial(t *testing.T) {
-	fc, ts, _ := startCopyCube(t, nil)
+	r := startServer(t, withGreeting(copyGreeting(t)))
+	fc, ts := r.fc, r.ts
 	const base = "/api/v1/cubes/KEQ0000100"
 	var dev map[string]any
 	if code := getJSON(t, ts, "", base+"/devices/0a010a", &dev); code != 200 {
@@ -132,7 +133,8 @@ func containsLine(lines []string, want string) bool {
 // address: the same lines reach the Cube, the same device is read; a
 // serial the Cube does not have is a 404, neither form a 400.
 func TestDeviceRoutesTakeSerial(t *testing.T) {
-	fc, ts, _ := startCopyCube(t, nil)
+	r := startServer(t, withGreeting(copyGreeting(t)))
+	fc, ts := r.fc, r.ts
 	received := cubewatch.Lines(fc)
 	const base = "/api/v1/cubes/KEQ0000100/devices/"
 	serial := serialsOf(t, ts, "")["0a010a"]
@@ -188,7 +190,7 @@ func TestDeviceRoutesTakeSerial(t *testing.T) {
 // The log's device= takes the serial, in any case, as the radio address;
 // a serial the Cube does not have answers an empty page.
 func TestLogDeviceFilterBySerial(t *testing.T) {
-	_, ts, _, _ := startStored(t, Options{})
+	ts := startServer(t, stored()).ts
 	serials := serialsOf(t, ts, "")
 	var byRF []event
 	testkit.Eventually(t, "the device's events", func() bool {
@@ -213,7 +215,7 @@ func TestLogDeviceFilterBySerial(t *testing.T) {
 
 // The audit names a device by its serial, whichever form the path held.
 func TestAuditTargetBySerial(t *testing.T) {
-	_, ts, _ := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	ts := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret"))).ts
 	serial := serialsOf(t, ts, "secret")["0a010d"]
 	callAPI(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/0a010d/lock", "secret", `{"locked":false}`)
 	callAPI(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/"+strings.ToLower(serial)+"/lock", "secret", `{"locked":true}`)

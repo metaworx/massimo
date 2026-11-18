@@ -14,7 +14,8 @@ import (
 // The preferences of the signed-in user: a round trip, each user's own,
 // the capability for a write, the limits, the audit rows and no command.
 func TestPreferencesRoutes(t *testing.T) {
-	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	rg := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, s := rg.ts, rg.s
 	st := s.opts.Store
 	owner := "secret"
 	prefs := "/api/v1/me/preferences"
@@ -109,13 +110,13 @@ func TestPreferencesRoutes(t *testing.T) {
 
 // Without a signed-in user there is no one to keep preferences for.
 func TestPreferencesWithoutUser(t *testing.T) {
-	_, open, _ := startWith(t, storeOptions(t, t.TempDir(), ""))
+	open := startServer(t, withOptions(storeOptions(t, t.TempDir(), ""))).ts
 	for _, m := range []string{"GET", "PUT"} {
 		if code, text := callAPI(t, open, m, "/api/v1/me/preferences/ui", "", `{}`); code != 409 || !strings.Contains(text, "no user signed in") {
 			t.Errorf("open server %s: %d %s", m, code, text)
 		}
 	}
-	_, legacy, _ := start(t, "secret")
+	legacy := startServer(t, withOptions(Options{Token: "secret"})).ts
 	if code, _ := callAPI(t, legacy, "GET", "/api/v1/me/preferences", "secret", ""); code != 503 {
 		t.Fatalf("no store: %d", code)
 	}

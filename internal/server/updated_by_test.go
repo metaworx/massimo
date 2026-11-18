@@ -15,7 +15,7 @@ import (
 // made it in updated_by (AP StoreRaise v1.2, Block 2).
 func TestAPIChangesSayWhoMadeThem(t *testing.T) {
 	opts := storeOptions(t, t.TempDir(), "secret")
-	_, ts, _ := startWith(t, opts)
+	ts := startServer(t, withOptions(opts)).ts
 	token := userToken(t, opts.Store, "anna", store.RoleOwner)
 	anna, ok, err := opts.Store.User(t.Context(), "anna")
 	if err != nil || !ok {

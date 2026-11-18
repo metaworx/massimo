@@ -15,13 +15,11 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"net/http/httptest"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
-	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/store"
@@ -41,10 +39,7 @@ type fixtureLines struct {
 
 func loadFixtureLines(t *testing.T) *fixtureLines {
 	t.Helper()
-	lines, err := fakecube.LoadGreeting(fixture)
-	if err != nil {
-		t.Fatal(err)
-	}
+	lines := recorded(t)
 	f := &fixtureLines{t: t, lines: lines, raws: map[cube.RFAddress][]byte{}}
 	for _, g := range lines {
 		switch g.Type {
@@ -148,53 +143,30 @@ func (f *fixtureLines) greeting() []cube.Message {
 // mismatchCube is a server with a store and the owner's token over a
 // fake Cube, its checks on a clock the test moves.
 type mismatchCube struct {
-	fc    *fakecube.Server
-	ts    *httptest.Server
-	s     *Server
-	st    *store.Store
-	clock *testClock
+	*rig
+	clock *testkit.Clock
 }
 
 const mismatchToken = "secret"
 
 func startMismatchCube(t *testing.T, greeting []cube.Message, cfg func(*CubeConfig), seed func(st *store.Store, cubeID int64)) *mismatchCube {
 	t.Helper()
-	fc := &fakecube.Server{Greeting: greeting}
-	addr, err := fc.Start("127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	st := testStore(t, "")
-	row, err := st.AddCube(context.Background(), store.Cube{Serial: "KEQ0000100", Configured: true, Address: addr, Source: store.SourceEnv})
-	if err != nil {
-		t.Fatal(err)
+	clock := testkit.NewClock(time.Date(2026, 11, 15, 8, 0, 0, 0, time.UTC))
+	opts := []startOpt{withGreeting(greeting), stored(), withOptions(Options{Token: mismatchToken, checkClock: clock.Now})}
+	if cfg != nil {
+		opts = append(opts, withCube(cfg))
 	}
 	if seed != nil {
-		seed(st, row.ID)
+		opts = append(opts, seedStore(seed))
 	}
-	cc, err := CubeFromRow(row)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg != nil {
-		cfg(&cc)
-	}
-	clock := &testClock{t: time.Date(2026, 11, 15, 8, 0, 0, 0, time.UTC)}
-	s := New(Options{Cubes: []CubeConfig{cc}, Store: st, Token: mismatchToken, Queue: engine.Options{Gap: time.Millisecond}, checkClock: clock.now})
-	ctx, cancel := context.WithCancel(context.Background())
-	go s.Run(ctx)
-	ts := httptest.NewServer(s.Handler())
-	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
-	c := &mismatchCube{fc: fc, ts: ts, s: s, st: st, clock: clock}
+	c := &mismatchCube{rig: startServer(t, opts...), clock: clock}
 	c.waitChecks(t, 1) // the first greeting's
 	return c
 }
 
-func (c *mismatchCube) rt() *runtime { return c.s.runtimes()[0] }
-
 // checks is how many checks the server ran.
 func (c *mismatchCube) checks() int {
-	cg := &c.rt().cong
+	cg := &c.rt.cong
 	cg.mu.Lock()
 	defer cg.mu.Unlock()
 	return cg.checks
@@ -210,7 +182,7 @@ func (c *mismatchCube) greet(t *testing.T, greeting []cube.Message) {
 	t.Helper()
 	n := c.checks()
 	c.fc.SetGreeting(greeting)
-	if res := c.rt().queue.Enqueue(engine.Command{Key: "refresh", Reconnect: true}).Wait(context.Background()); res.Err != nil {
+	if res := c.rt.queue.Enqueue(engine.Command{Key: "refresh", Reconnect: true}).Wait(context.Background()); res.Err != nil {
 		t.Fatal(res.Err)
 	}
 	c.waitChecks(t, n+1)
@@ -443,7 +415,7 @@ func TestMismatchMasterWarnedAgainOnceRead(t *testing.T) {
 		}
 		return n
 	}
-	c.clock.add(2 * time.Minute)
+	c.clock.Add(2 * time.Minute)
 	c.greet(t, f.greeting())
 	if n := warnings(); n != 1 {
 		t.Fatalf("%d warnings while the first is unread", n)
@@ -456,12 +428,12 @@ func TestMismatchMasterWarnedAgainOnceRead(t *testing.T) {
 	if _, err := c.st.SetPreference(ctx, anna.ID, seenPrefKey, json.RawMessage(fmt.Sprintf(`{"all": 0, "lines": [%d]}`, first.ID))); err != nil {
 		t.Fatal(err)
 	}
-	c.clock.add(2 * time.Minute)
+	c.clock.Add(2 * time.Minute)
 	c.greet(t, f.greeting())
 	if n := warnings(); n != 2 {
 		t.Fatalf("%d warnings once the first was read", n)
 	}
-	c.clock.add(2 * time.Minute)
+	c.clock.Add(2 * time.Minute)
 	c.greet(t, f.greeting())
 	if n := warnings(); n != 2 {
 		t.Fatalf("%d warnings while the second is unread", n)
@@ -514,15 +486,15 @@ func TestMismatchLeftOut(t *testing.T) {
 	}
 
 	// a move of 0a010d from room 6 to room 1: the metadata first
-	rt := c.rt()
+	rt := c.rt
 	rt.beginStructure("move", 0x0a010d, 6, 1)
-	rt.settledMismatches(0x0a010d, c.clock.now())
+	rt.settledMismatches(0x0a010d, c.clock.Now())
 	f.listed(0x0a010d).RoomID = 1
 	c.greet(t, f.greeting())
 	if evs := c.events(t); len(evs) != 0 {
 		t.Fatalf("events %+v while the moved device's C line has not followed", evs)
 	}
-	c.clock.add(mismatchSettle + time.Second)
+	c.clock.Add(mismatchSettle + time.Second)
 	c.greet(t, f.greeting())
 	if ev := c.event(t, view.MismatchRoom, "0a010d", "found"); ev == nil {
 		t.Fatalf("no warning after the time is up: %+v", c.events(t))
@@ -535,7 +507,7 @@ func TestMismatchLeftOut(t *testing.T) {
 		t.Fatalf("not cleared: %+v", c.events(t))
 	}
 	rt.beginStructure("move", 0x0a010d, 6, 1)
-	rt.settledMismatches(0x0a010d, c.clock.now())
+	rt.settledMismatches(0x0a010d, c.clock.Now())
 	f.listed(0x0a010d).RoomID = 1
 	f.setRoom(0x0a010d, 1)
 	c.greet(t, f.greeting())

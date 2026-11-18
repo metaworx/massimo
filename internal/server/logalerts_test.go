@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit"
@@ -123,7 +122,8 @@ func TestFlagRadiogram(t *testing.T) {
 // error of the server's left, a device's transmit error while it is set,
 // at the line that set it; after leaves out the older ones.
 func TestLogAlertsRoute(t *testing.T) {
-	fc, ts, _, st := startStored(t, Options{PollInterval: 100 * time.Millisecond})
+	r := startServer(t, stored(), withOptions(Options{PollInterval: 100 * time.Millisecond}))
+	fc, ts, st := r.fc, r.ts, r.st
 	ctx := t.Context()
 	row, _, _ := st.Cube(ctx, "KEQ0000100")
 	add := func(ev event, cubeID int64) {
@@ -145,7 +145,7 @@ func TestLogAlertsRoute(t *testing.T) {
 	}
 	restart := out.Alerts[0].ID
 
-	greeting, _ := fakecube.LoadGreeting(fixture)
+	greeting := recorded(t)
 	last := greeting[len(greeting)-1]
 	raw, _ := base64.StdEncoding.DecodeString(last.Data)
 	flagged := append([]byte(nil), raw...)
@@ -176,7 +176,8 @@ func TestLogAlertsRoute(t *testing.T) {
 // line's mark that line alone; another person's alerts stay; a document
 // that is not marks is refused.
 func TestLogAlertsSeenMarks(t *testing.T) {
-	_, ts, _, st := startStored(t, Options{})
+	r := startServer(t, stored())
+	ts, st := r.ts, r.st
 	ctx := t.Context()
 	anna := userToken(t, st, "anna", store.RoleOwner)
 	ben := userToken(t, st, "ben", store.RoleOwner)

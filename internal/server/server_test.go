@@ -16,53 +16,11 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/certs"
-	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
-	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 	"go.metaworx.ch/massimo/internal/view"
 )
-
-const fixture = "../protocol/cube/testdata/cube-fw0113-greeting.txt"
-
-func start(t *testing.T, token string) (*fakecube.Server, *httptest.Server, *Server) {
-	t.Helper()
-	return startWith(t, Options{Token: token})
-}
-
-// startWith starts a server over the fake Cube with opts; the Cube and
-// the queue's gap are set here.
-func startWith(t *testing.T, opts Options) (*fakecube.Server, *httptest.Server, *Server) {
-	t.Helper()
-	token := opts.Token
-	greeting, err := fakecube.LoadGreeting(fixture)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fc := &fakecube.Server{Greeting: greeting}
-	addr, err := fc.Start("127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	opts.Cubes = []CubeConfig{{Serial: "KEQ0000100", Addr: addr}}
-	opts.Queue = engine.Options{Gap: time.Millisecond}
-	s := New(opts)
-	ctx, cancel := context.WithCancel(context.Background())
-	go s.Run(ctx)
-	ts := httptest.NewServer(s.Handler())
-	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
-	// Wait for the greeting, then for the pump to publish its events: a
-	// test that counts the stream's events, or resumes it, would
-	// otherwise meet them.
-	testkit.Eventually(t, "the cube's connect", func() bool {
-		var cubes []cubeView
-		getJSON(t, ts, token, "/api/v1/cubes", &cubes)
-		return len(cubes) == 1 && cubes[0].Connected
-	})
-	pumpSync(t, s)
-	return fc, ts, s
-}
 
 func getJSON(t *testing.T, ts *httptest.Server, token, path string, v any) int {
 	t.Helper()
@@ -87,7 +45,7 @@ func getJSON(t *testing.T, ts *httptest.Server, token, path string, v any) int {
 // a client can move the clock on.
 func TestCubeTimeAt(t *testing.T) {
 	before := time.Now()
-	_, ts, _ := start(t, "")
+	ts := startServer(t).ts
 	var c cubeView
 	if getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) != 200 || c.CubeTime == "" {
 		t.Fatalf("cube %+v", c)
@@ -98,7 +56,8 @@ func TestCubeTimeAt(t *testing.T) {
 }
 
 func TestServerReadsAndSetpoints(t *testing.T) {
-	fc, ts, s := start(t, "")
+	rg := startServer(t)
+	fc, ts, s := rg.fc, rg.ts, rg.s
 	received := cubewatch.Lines(fc)
 	var c cubeView
 	if getJSON(t, ts, "", "/api/v1/cubes/keq0000100", &c) != 200 || c.Rooms != 6 || c.Devices != 6 || c.Firmware != "1.1.3" || len(c.RoomList) != 6 {
@@ -207,7 +166,7 @@ func TestServerReadsAndSetpoints(t *testing.T) {
 }
 
 func TestServerToken(t *testing.T) {
-	_, ts, _ := start(t, "secret")
+	ts := startServer(t, withOptions(Options{Token: "secret"})).ts
 	if getJSON(t, ts, "", "/api/v1/cubes", nil) != 401 {
 		t.Fatal("no token accepted")
 	}
@@ -221,7 +180,7 @@ func TestServerToken(t *testing.T) {
 
 func TestHealthzStarted(t *testing.T) {
 	before := time.Now()
-	_, ts, _ := start(t, "secret")
+	ts := startServer(t, withOptions(Options{Token: "secret"})).ts
 	var h struct {
 		OK        bool      `json:"ok"`
 		StartedAt time.Time `json:"started_at"`
@@ -235,19 +194,7 @@ func TestHealthzStarted(t *testing.T) {
 }
 
 func TestPeriodicRefreshReconnects(t *testing.T) {
-	greeting, err := fakecube.LoadGreeting(fixture)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fc := &fakecube.Server{Greeting: greeting}
-	addr, err := fc.Start("127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0000100", Addr: addr}}, RefreshInterval: 50 * time.Millisecond, Queue: engine.Options{Gap: time.Millisecond}})
-	ctx, cancel := context.WithCancel(context.Background())
-	go s.Run(ctx)
-	t.Cleanup(func() { cancel(); fc.Close() })
+	fc := startServer(t, withOptions(Options{RefreshInterval: 50 * time.Millisecond})).fc
 	testkit.Within(5*time.Second, func() bool { return fc.Connections() >= 3 })
 	if fc.Connections() < 3 {
 		t.Fatalf("connections %d", fc.Connections())
@@ -255,26 +202,14 @@ func TestPeriodicRefreshReconnects(t *testing.T) {
 }
 
 func TestDeviceValueTimes(t *testing.T) {
-	greeting, err := fakecube.LoadGreeting(fixture)
-	if err != nil {
-		t.Fatal(err)
-	}
+	greeting := recorded(t)
 	// 0a010d reports in the greeting: manual, 21 °C, valve 30 %.
 	l := &greeting[len(greeting)-1]
 	raw, _ := base64.StdEncoding.DecodeString(l.Data)
 	copy(raw, []byte{0x0b, 0x0a, 0x01, 0x0d, 0x09, 0x12, 0x01, 30, 42, 0, 0, 0})
 	l.Data = base64.StdEncoding.EncodeToString(raw)
-	fc := &fakecube.Server{Greeting: greeting}
-	addr, err := fc.Start("127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
 	before := time.Now().Add(-time.Second)
-	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0000100", Addr: addr}}, Queue: engine.Options{Gap: time.Millisecond}})
-	ctx, cancel := context.WithCancel(context.Background())
-	go s.Run(ctx)
-	ts := httptest.NewServer(s.Handler())
-	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
+	ts := startServer(t, withGreeting(greeting)).ts
 	var c cubeView
 	testkit.Within(5*time.Second, func() bool {
 		getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c)
@@ -325,7 +260,7 @@ func TestHSTSAndHealthzTLS(t *testing.T) {
 		return resp.Header.Get("Strict-Transport-Security"), body
 	}
 	t.Run("a year", func(t *testing.T) {
-		_, ts, _ := startWith(t, Options{Token: "secret", TLS: fakeSource{st}, HSTSDays: 365})
+		ts := startServer(t, withOptions(Options{Token: "secret", TLS: fakeSource{st}, HSTSDays: 365})).ts
 		h, body := header(ts, "", "/healthz")
 		if h != "max-age=31536000" {
 			t.Fatalf("HSTS %q", h)
@@ -339,13 +274,13 @@ func TestHSTSAndHealthzTLS(t *testing.T) {
 		}
 	})
 	t.Run("cleared", func(t *testing.T) {
-		_, ts, _ := startWith(t, Options{TLS: fakeSource{st}, HSTSDays: 0})
+		ts := startServer(t, withOptions(Options{TLS: fakeSource{st}, HSTSDays: 0})).ts
 		if h, _ := header(ts, "", "/healthz"); h != "max-age=0" {
 			t.Fatalf("HSTS %q", h)
 		}
 	})
 	t.Run("plain", func(t *testing.T) {
-		_, ts, _ := start(t, "")
+		ts := startServer(t).ts
 		h, body := header(ts, "", "/healthz")
 		if h != "" {
 			t.Fatalf("HSTS without TLS %q", h)
@@ -360,7 +295,7 @@ func TestHSTSAndHealthzTLS(t *testing.T) {
 // names, not per proxy, and the stream asks nginx not to buffer.
 func TestLockoutBehindProxy(t *testing.T) {
 	proxies, _ := ParseTrustedProxies("127.0.0.1,::1")
-	_, ts, _ := startWith(t, Options{Token: "secret", TrustedProxies: proxies, AuthFailures: 3})
+	ts := startServer(t, withOptions(Options{Token: "secret", TrustedProxies: proxies, AuthFailures: 3})).ts
 	try := func(client, token string) int {
 		req, _ := http.NewRequest("GET", ts.URL+"/api/v1/cubes", nil)
 		req.Header.Set("X-Forwarded-For", client)

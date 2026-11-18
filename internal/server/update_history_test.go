@@ -8,7 +8,6 @@ package server
 // helper's outcome where it did not reach its version; ten kept.
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,7 +17,6 @@ import (
 	"testing"
 	"time"
 
-	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/update"
 )
@@ -141,19 +139,11 @@ func TestUpdateHistoryHelperOutcome(t *testing.T) {
 // The start writes the history: a second start with a new version and
 // no update started is one from outside, by the box's manager.
 func TestUpdateHistoryAtStart(t *testing.T) {
-	greeting, _ := fakecube.LoadGreeting(fixture)
-	fc := &fakecube.Server{Greeting: greeting}
-	addr, err := fc.Start("127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer fc.Close()
-	st := testStore(t, "")
-	row, _ := st.AddCube(context.Background(), store.Cube{Serial: "KEQ0000100", Configured: true, Address: addr, Source: store.SourceEnv})
-	_, stop := runOver(t, st, row, Options{Version: "v1.0.0"})
-	stop()
-	_, stop = runOver(t, st, row, Options{Version: "v1.1.0", Update: UpdateOptions{Manager: "brew"}})
-	stop()
+	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
+	first := startServer(t, stored(), withOptions(Options{Version: "v1.0.0", Logger: discard}))
+	first.stop()
+	startServer(t, again(first), withOptions(Options{Version: "v1.1.0", Update: UpdateOptions{Manager: "brew"}, Logger: discard})).stop()
+	st := first.st
 	s := New(Options{Store: st})
 	list := s.updateHistory(t.Context())
 	if len(list) != 1 || !list[0].Outside || list[0].Manager != "brew" || list[0].From != "v1.0.0" || list[0].Reached != "v1.1.0" {

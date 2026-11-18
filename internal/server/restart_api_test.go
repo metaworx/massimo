@@ -48,7 +48,8 @@ func TestRestartRoutes(t *testing.T) {
 	c := &restartCounter{}
 	opts := storeOptions(t, t.TempDir(), "secret")
 	opts.Restart = RestartOptions{By: "systemd", Restart: c.restart}
-	fc, ts, s := startWith(t, opts)
+	r := startServer(t, withOptions(opts))
+	fc, ts, s := r.fc, r.ts, r.s
 	stores[ts] = s.opts.Store
 	st := s.opts.Store
 	manager := userToken(t, st, "manager1", store.RoleManager)
@@ -109,7 +110,7 @@ func TestRestartRoutes(t *testing.T) {
 // and restarts nothing.
 func TestRestartBlocked(t *testing.T) {
 	opts := storeOptions(t, t.TempDir(), "secret")
-	_, ts, _ := startWith(t, opts)
+	ts := startServer(t, withOptions(opts)).ts
 	path := "/api/v1/restart"
 	code, text := callAPI(t, ts, "GET", path, "secret", "")
 	if v := decodeRestart(t, text); code != 200 || v.Available || v.By != "" || v.Blocked != "no service manager would start this server again" {
@@ -121,7 +122,7 @@ func TestRestartBlocked(t *testing.T) {
 
 	opts = storeOptions(t, t.TempDir(), "secret")
 	opts.Restart = RestartOptions{Blocked: "the restart is switched off (-restart off)", Restart: func() error { t.Error("restarted"); return nil }}
-	_, ts, _ = startWith(t, opts)
+	ts = startServer(t, withOptions(opts)).ts
 	if code, text := callAPI(t, ts, "POST", path, "secret", "{}"); code != 409 || errorOf(text) != "the restart is switched off (-restart off)" {
 		t.Fatalf("switched off: %d %s", code, text)
 	}
@@ -134,7 +135,7 @@ func TestRestartBlocked(t *testing.T) {
 	opts = storeOptions(t, t.TempDir(), "secret")
 	opts.Restart = RestartOptions{By: "launchd", Restart: c.restart}
 	opts.Update = UpdateOptions{Status: status}
-	_, ts, _ = startWith(t, opts)
+	ts = startServer(t, withOptions(opts)).ts
 	if code, text := callAPI(t, ts, "POST", path, "secret", "{}"); code != 409 || errorOf(text) != "an update is running, and it restarts the server itself" || c.calls.Load() != 0 {
 		t.Fatalf("during an update: %d %s", code, text)
 	}
@@ -142,7 +143,7 @@ func TestRestartBlocked(t *testing.T) {
 	c = &restartCounter{err: errors.New("start C:\\Program Files\\Massimo\\massimo.exe: access denied")}
 	opts = storeOptions(t, t.TempDir(), "secret")
 	opts.Restart = RestartOptions{By: "windows", Restart: c.restart}
-	_, ts, _ = startWith(t, opts)
+	ts = startServer(t, withOptions(opts)).ts
 	for i := 1; i <= 2; i++ {
 		if code, text := callAPI(t, ts, "POST", path, "secret", "{}"); code != 500 || !strings.Contains(errorOf(text), "access denied") || c.calls.Load() != int32(i) {
 			t.Fatalf("a restart that fails, %d: %d %s", i, code, text)
@@ -159,7 +160,8 @@ func TestRestartOpenServer(t *testing.T) {
 	c := &restartCounter{}
 	opts := storeOptions(t, t.TempDir(), "")
 	opts.Restart = RestartOptions{By: "exit", Restart: c.restart}
-	_, ts, s := startWith(t, opts)
+	r := startServer(t, withOptions(opts))
+	ts, s := r.ts, r.s
 	trusted, err := ParseTrustedProxies("127.0.0.1")
 	if err != nil {
 		t.Fatal(err)
@@ -167,7 +169,7 @@ func TestRestartOpenServer(t *testing.T) {
 	opts = storeOptions(t, t.TempDir(), "")
 	opts.Restart = RestartOptions{By: "exit", Restart: c.restart}
 	opts.TrustedProxies = trusted
-	_, proxied, _ := startWith(t, opts)
+	proxied := startServer(t, withOptions(opts)).ts
 	path := "/api/v1/restart"
 	for _, h := range []map[string]string{{"X-Forwarded-For": "192.168.1.20"}, {"X-Real-IP": "192.168.1.20"}, {"Forwarded": "for=192.168.1.20"}} {
 		for _, m := range []string{"GET", "POST"} {
@@ -227,7 +229,8 @@ func TestFromTheBox(t *testing.T) {
 // refused, and a server without a reloader says it reads no file.
 func TestReloadRoute(t *testing.T) {
 	opts := storeOptions(t, t.TempDir(), "secret")
-	fc, ts, s := startWith(t, opts)
+	r := startServer(t, withOptions(opts))
+	fc, ts, s := r.fc, r.ts, r.s
 	stores[ts] = s.opts.Store
 	st := s.opts.Store
 	manager := userToken(t, st, "manager1", store.RoleManager)
