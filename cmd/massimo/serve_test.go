@@ -48,6 +48,12 @@ func startFakeCube(t *testing.T) string {
 	return cubeAddr
 }
 
+// freeAddr returns a loopback address whose port was free a moment ago;
+// another process can take it before serve listens on it. It stays for
+// what serve takes as an address alone, in the test's process or in a
+// child: -proxy, whose listener the log names by the address it was
+// given, and the Windows service test's -listen (docs/testing.md,
+// "Ports").
 func freeAddr(t *testing.T) string {
 	t.Helper()
 	free, err := net.Listen("tcp", "127.0.0.1:0")

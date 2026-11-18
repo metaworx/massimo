@@ -133,15 +133,11 @@ func proxyWrite(t *testing.T, conn net.Conn, r *cube.Reader, data string) {
 // it shows what was written, then the budget reconnect; a setpoint gets
 // the budget reconnect only.
 func TestFollowUpAfterAProxyClientsWrite(t *testing.T) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	proxyAddr := ln.Addr().String()
-	ln.Close()
+	ports := &heldPorts{}
+	proxyAddr := ports.hold(t)
 	rg := startServer(t, withLog(nil), withOptions(Options{RefreshInterval: time.Hour,
 		FollowUpDelays:       []time.Duration{40 * time.Millisecond, 40 * time.Millisecond, 40 * time.Millisecond, 40 * time.Millisecond, 40 * time.Millisecond},
-		FollowUpReconnectGap: time.Millisecond, Proxy: []ProxyListener{{Addr: proxyAddr}}}))
+		FollowUpReconnectGap: time.Millisecond, Proxy: []ProxyListener{{Addr: proxyAddr}}}), listenOn(ports))
 	fc, ts, logs := rg.fc, rg.ts, rg.log
 	received := cubewatch.Lines(fc)
 	sent := func() (rereads, others int) {

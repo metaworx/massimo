@@ -52,7 +52,8 @@ func TestConcurrentAddCube(t *testing.T) {
 // A proxy address whose port is taken starts nothing: it is not listed
 // as listening, and the server goes on.
 func TestProxyPortInUse(t *testing.T) {
-	ts := startServer(t, stored()).ts
+	ports := &heldPorts{}
+	ts := startServer(t, stored(), listenOn(ports)).ts
 	taken, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -62,7 +63,7 @@ func TestProxyPortInUse(t *testing.T) {
 	if code != 200 || out["proxy_listening"] != nil {
 		t.Fatalf("put %d %v", code, out)
 	}
-	free := freeTCP(t)
+	free := ports.hold(t)
 	if code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100", `{"proxy_address":"`+free+`"}`); code != 200 || len(out["proxy_listening"].([]any)) != 1 {
 		t.Fatalf("put %d %v", code, out)
 	}

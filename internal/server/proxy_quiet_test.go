@@ -6,7 +6,6 @@ package server
 import (
 	"encoding/base64"
 	"errors"
-	"net"
 	"os"
 	"testing"
 	"time"
@@ -25,14 +24,10 @@ func TestProxySendsNothingUnasked(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	proxyAddr := ln.Addr().String()
-	ln.Close()
+	ports := &heldPorts{}
+	proxyAddr := ports.hold(t)
 	rg := startServer(t, withGreeting(greeting), withOptions(Options{PollInterval: 50 * time.Millisecond, RefreshInterval: time.Hour,
-		Proxy: []ProxyListener{{Addr: proxyAddr}}}))
+		Proxy: []ProxyListener{{Addr: proxyAddr}}}), listenOn(ports))
 	fc, ts := rg.fc, rg.ts
 
 	conn, r := proxyClient(t, proxyAddr)

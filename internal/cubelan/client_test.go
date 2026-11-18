@@ -477,24 +477,24 @@ func TestSendWaitsForEveryAOfADelete(t *testing.T) {
 	}
 }
 
-// freeAddr is an address nothing listens on.
-func freeAddr(t *testing.T) string {
+// goneFake is a fake Cube that is gone from the start: paused, so that a
+// dial to its address is refused until its Resume, while its port stays
+// held for it (fakecube's Pause).
+func goneFake(t *testing.T) (*fakecube.Server, string) {
 	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer ln.Close()
-	return ln.Addr().String()
+	srv, addr := startFake(t)
+	srv.Pause()
+	return srv, addr
 }
 
 // A new address, as discovery finds it after a DHCP lease, is dialled at
 // once, not after the backoff the failed dials to the old one built up.
 func TestSetAddressCutsTheBackoffShort(t *testing.T) {
 	_, addr := startFake(t)
+	_, gone := goneFake(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	c := New(Options{Addr: freeAddr(t)})
+	c := New(Options{Addr: gone})
 	go c.Run(ctx)
 	time.Sleep(1300 * time.Millisecond) // two failed dials: the client waits 2 s now
 	start := time.Now()
@@ -512,21 +512,15 @@ func TestSetAddressCutsTheBackoffShort(t *testing.T) {
 // Reconnect while the client is between connections dials at once and
 // waits for the greeting, rather than failing with ErrNotConnected.
 func TestReconnectWhileDisconnected(t *testing.T) {
-	greeting, err := fakecube.LoadGreeting(fixture)
-	if err != nil {
-		t.Fatal(err)
-	}
-	addr := freeAddr(t)
+	srv, addr := goneFake(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	c := New(Options{Addr: addr})
 	go c.Run(ctx)
 	time.Sleep(1300 * time.Millisecond)
-	srv := &fakecube.Server{Greeting: greeting}
-	if _, err := srv.Start(addr); err != nil {
+	if err := srv.Resume(); err != nil {
 		t.Fatal(err)
 	}
-	defer srv.Close()
 	rctx, stop := context.WithTimeout(ctx, 700*time.Millisecond)
 	defer stop()
 	if err := c.Reconnect(rctx); err != nil {
@@ -640,13 +634,11 @@ func TestALostCubeIsReportedOnce(t *testing.T) {
 	go c.Run(ctx)
 	_, at := evs.Await(t, 0, "first greeting", kind(EventConnected))
 
-	srv.Close()
+	srv.Pause()
 	logs.AwaitN(t, 0, "three failed retries", 3, attemptFailed)
-	srv2 := &fakecube.Server{Greeting: srv.Greeting}
-	if _, err := srv2.Start(addr); err != nil {
+	if err := srv.Resume(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { srv2.Close() })
 	_, at = evs.Await(t, at, "greeting after the loss", kind(EventConnected))
 	// The client logs the return before the event (AP LostOrder).
 	if n := logs.Count(0, connLost); n != 1 {
@@ -665,7 +657,7 @@ func TestALostCubeIsReportedOnce(t *testing.T) {
 		t.Errorf("%d reminders within a day", n)
 	}
 
-	srv2.Close()
+	srv.Close()
 	evs.Await(t, at, "second disconnected event", kind(EventDisconnected))
 	if n := logs.Count(0, connLost); n != 2 {
 		t.Errorf("%d cube connection lost lines after the second loss, want 2", n)
@@ -717,17 +709,15 @@ func TestLostFromALossToTheNextGreeting(t *testing.T) {
 
 	// The reconnect's greeting, then the loss: the event follows Lost.
 	_, at = evs.Await(t, at, "the reconnect's greeting", kind(EventConnected))
-	srv.Close()
+	srv.Pause()
 	testkit.Eventually(t, "the loss", c.Lost)
 	_, at = evs.Await(t, at, "the disconnected event", kind(EventDisconnected))
 	if n := evs.Count(0, kind(EventDisconnected)); n != 1 {
 		t.Errorf("%d disconnected events, want 1", n)
 	}
-	srv2 := &fakecube.Server{Greeting: srv.Greeting}
-	if _, err := srv2.Start(addr); err != nil {
+	if err := srv.Resume(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { srv2.Close() })
 	evs.Await(t, at, "the greeting after the loss", kind(EventConnected))
 	if c.Lost() || !c.Connected() {
 		t.Errorf("after the greeting: lost %v, connected %v", c.Lost(), c.Connected())
@@ -868,7 +858,7 @@ func TestSilentCubeWhilePairingIsKept(t *testing.T) {
 // A Cube never reached since the start is reported once, at the first
 // failed attempt, and the first greeting says it is back.
 func TestAnUnreachableCubeIsReportedOnce(t *testing.T) {
-	addr := freeAddr(t)
+	srv, addr := goneFake(t)
 	logger, logs := testkit.LogWatch(slog.LevelDebug)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -880,15 +870,9 @@ func TestAnUnreachableCubeIsReportedOnce(t *testing.T) {
 		t.Errorf("cube connection lost lines: %q", lost)
 	}
 
-	greeting, err := fakecube.LoadGreeting(fixture)
-	if err != nil {
+	if err := srv.Resume(); err != nil {
 		t.Fatal(err)
 	}
-	srv := &fakecube.Server{Greeting: greeting}
-	if _, err := srv.Start(addr); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { srv.Close() })
 	evs.Await(t, 0, "greeting", kind(EventConnected))
 	// The client logs the return before the event (AP LostOrder).
 	if n := evs.Count(0, kind(EventDisconnected)); n != 1 {
@@ -908,7 +892,7 @@ func TestAnUnreachableCubeIsReportedOnce(t *testing.T) {
 // A Cube that stays unreachable is warned of again every RemindEvery,
 // with how long it has been down, and without another event.
 func TestAReminderWhileTheCubeStaysDown(t *testing.T) {
-	addr := freeAddr(t)
+	_, addr := goneFake(t)
 	logger, logs := testkit.LogWatch(slog.LevelDebug)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

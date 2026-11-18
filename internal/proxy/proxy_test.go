@@ -302,16 +302,14 @@ func TestProxyDiscoverySilentWhileCubeLost(t *testing.T) {
 	if !answered(testkit.Scale(5 * time.Second)) {
 		t.Fatal("not answered while the cube is connected")
 	}
-	fc.Close()
+	fc.Pause()
 	testkit.Eventually(t, "the loss", c.Lost)
 	if answered(300 * time.Millisecond) {
 		t.Fatal("answered while the cube is lost")
 	}
-	fc2 := &fakecube.Server{Greeting: greeting}
-	if _, err := fc2.Start(addr); err != nil {
+	if err := fc.Resume(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { fc2.Close() })
 	testkit.Eventually(t, "the greeting after the loss", c.Connected)
 	if !answered(testkit.Scale(5 * time.Second)) {
 		t.Fatal("not answered once the cube is back")

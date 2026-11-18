@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -420,13 +419,9 @@ func TestSignInLinesForAuditorsAlone(t *testing.T) {
 // the client's address, whose step and the device's next state are found
 // by ?command=; the client's connection is a line of source proxy.
 func TestProxyClientsCommandInTheLog(t *testing.T) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	proxyAddr := ln.Addr().String()
-	ln.Close()
-	rg := startServer(t, stored(), withOptions(Options{PollInterval: 50 * time.Millisecond, Proxy: []ProxyListener{{Addr: proxyAddr}}}))
+	ports := &heldPorts{}
+	proxyAddr := ports.hold(t)
+	rg := startServer(t, stored(), withOptions(Options{PollInterval: 50 * time.Millisecond, Proxy: []ProxyListener{{Addr: proxyAddr}}}), listenOn(ports))
 	fc, ts, st := rg.fc, rg.ts, rg.st
 	conn, r := proxyClient(t, proxyAddr)
 	m, err := cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a010d}, 21, cube.ModeManual, cube.Until{})

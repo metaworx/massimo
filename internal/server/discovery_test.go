@@ -23,7 +23,12 @@ import (
 	"go.metaworx.ch/massimo/internal/testkit"
 )
 
-// freeUDP returns a local UDP address that was free a moment ago.
+// freeUDP returns a local UDP address that was free a moment ago, for
+// the server's own discovery socket (Options.DiscoveryAddr), which the
+// test also sends to: the server opens that socket by its address alone,
+// its proxies' one or a run's own, so no socket the test holds can be
+// handed on, and another program can take the port between
+// (docs/testing.md, "Ports").
 func freeUDP(t *testing.T, ip string) string {
 	t.Helper()
 	pc, err := net.ListenPacket("udp4", ip+":0")
@@ -246,16 +251,12 @@ func TestDiscoveryLeavesOutTheProxysOwnAnswers(t *testing.T) {
 	// The server's proxy answers discovery on own; the request goes to
 	// itself as well, as a broadcast would.
 	own := freeUDP(t, "127.0.0.1")
-	tcp, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	proxyAddr := tcp.Addr().String()
-	tcp.Close()
+	ports := &heldPorts{}
+	proxyAddr := ports.hold(t)
 	// The start waits for the Cube, whose greeting data the proxy needs
 	// to answer at all.
 	ts := startServer(t, discovering(Options{DiscoveryAddr: own, DiscoveryTargets: []string{own, other.Addr()},
-		Proxy: []ProxyListener{{Addr: proxyAddr, Discovery: true}}})).ts
+		Proxy: []ProxyListener{{Addr: proxyAddr, Discovery: true}}}), listenOn(ports)).ts
 	_, out := postDiscovery(t, ts)
 	found, _ := out["found"].([]any)
 	if len(found) != 1 || found[0].(map[string]any)["serial"] != "KEQ0000000" {
@@ -307,13 +308,9 @@ func TestDiscoveryLeavesOutALaterProxysAnswers(t *testing.T) {
 	}
 	defer other.Close()
 	own := freeUDP(t, "127.0.0.1")
-	tcp, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	proxyAddr := tcp.Addr().String()
-	tcp.Close()
-	r := startServer(t, discovering(Options{DiscoveryAddr: own, DiscoveryTargets: []string{own, other.Addr()}}))
+	ports := &heldPorts{}
+	proxyAddr := ports.hold(t)
+	r := startServer(t, discovering(Options{DiscoveryAddr: own, DiscoveryTargets: []string{own, other.Addr()}}), listenOn(ports))
 	ts, s := r.ts, r.s
 	if !s.startProxy(ProxyListener{Serial: "KEQ0000100", Addr: proxyAddr, Discovery: true, DiscoverySerial: "KEQ0000999"}) {
 		t.Fatal("the proxy did not start")
@@ -446,13 +443,9 @@ func TestDiscoveryWithoutThePort(t *testing.T) {
 // line's, is refused and falls back to another port.
 func TestDiscoveryPortShared(t *testing.T) {
 	own := freeUDP(t, "127.0.0.1")
-	tcp, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	proxyAddr := tcp.Addr().String()
-	tcp.Close()
-	s := startServer(t, discovering(Options{DiscoveryAddr: own, Proxy: []ProxyListener{{Addr: proxyAddr, Discovery: true}}})).s
+	ports := &heldPorts{}
+	proxyAddr := ports.hold(t)
+	s := startServer(t, discovering(Options{DiscoveryAddr: own, Proxy: []ProxyListener{{Addr: proxyAddr, Discovery: true}}}), listenOn(ports)).s
 	testkit.Eventually(t, "the proxies' discovery socket", func() bool {
 		s.mu.RLock()
 		defer s.mu.RUnlock()

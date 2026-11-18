@@ -270,6 +270,7 @@ The options:
 | `beforeRun(f)` | a change to the server before it runs |
 | `quiet()` | a poll once an hour, so none while the test runs, and no refresh |
 | `withLog(level)` | the server's log into `r.log` |
+| `listenOn(ports)` | the proxies' listeners from the ports the test holds ("Ports") |
 
 A test file bundles what all its tests need into an option of its own,
 as `storedRooms`, `resetsOn`, `confirming` and `discovering` do;
@@ -280,8 +281,68 @@ The recorded greeting is read once for every test:
 One test runs the server by hand, since it tests `Run`'s start and end:
 `TestNothingStartsAfterRun`.
 
+## Ports
+
+A test holds a port for as long as it needs it, and hands the listener on.
+It never closes a listener to learn a free port,
+nor closes one and opens another on its port:
+between the two, another program can take it,
+such as another package's tests under `make race`.
+
+- **`testkit.Listen(t)`, `testkit.ListenPacket(t)`**:
+  a TCP listener, a UDP socket, on the loopback at a port the system chose,
+  closed at the test's end.
+  The test hands them on: `fc.Serve(testkit.Listen(t))`,
+  or to a product's listen hook.
+  A UDP socket held and never read is an address where nothing answers,
+  such as a discovery target without a Cube.
+- **The server's proxies** listen through `heldPorts` (`ports_test.go`)
+  and the start's `listenOn(ports)`, over the hook `Options.proxyListen`.
+  `ports.hold(t)` is an address whose listener goes to the first listen at it.
+  `ports.taken(t)` is one the proxy gets only once the test frees it:
+  until then its listens fail as at a port another program holds,
+  since the test holds it.
+- **The announcer** takes its two sockets through `options.listen`
+  (`heldSockets` in `internal/announce`).
+- **The Cube goes and comes back** with `fc.Pause()` and `fc.Resume()`,
+  in place of a fake closed and a second one started on its address.
+  `Pause` drops the clients and refuses new ones;
+  the address stays the fake's.
+  On Linux a client's dial is refused, as at an address where nothing listens:
+  the listener closes, and a socket bound without listening holds the port.
+  Elsewhere the listener stays open, and the fake resets each connection it
+  accepts before any line: the dial succeeds, and the connection ends at once.
+  The Cube client takes both as a failed attempt.
+  `Resume` greets as before, with what changed in the fake meanwhile,
+  and the port is its listener's alone again.
+  A `SingleClient` fake keeps a dead session it holds across the pause,
+  and refuses as before once resumed.
+  A fake that is never paused is unchanged,
+  but for a `SingleClient` fake on a listener that is not TCP's,
+  which refuses a second client by a close;
+  `massimo fakecube` has no pause, and listens on TCP.
+  For the moment of a `Resume`, another listener can take the port,
+  as in the race of a port freed and taken again; `Resume` then fails.
+- **An address where no Cube is** is a paused fake
+  (`goneFake` in `internal/cubelan`'s tests).
+
+Where a product takes an address alone, no listener can be handed on,
+and the free-port helper stays there, its comment saying why:
+
+- `freeUDP` in `internal/server`, for the server's own discovery socket
+  (`Options.DiscoveryAddr`), which the test also sends to;
+- `freeAddr` in `internal/serve`, for the proxy of `MASSIMO_CUBE_PROXY`;
+- `freeAddr` in `cmd/massimo`, for serve's `-proxy`
+  and the Windows service test's `-listen`.
+
 ## Still written by hand
 
 - **A sleep before "nothing came"** stays where the test has no end to wait for
   yet, and takes no scale:
   the server's timers, which `pumpSync` does not end, are such waits.
+- **An address nothing listens on**, for a dial that is to fail
+  where no fake Cube stands for it,
+  is a listener opened and closed: `deadAddr` in `internal/env`,
+  `dead` in `cmd/massimo`'s `options_test.go`,
+  `closed` in `internal/server`'s `proxied_test.go`.
+  So is the address `TestProxyRetryStops` frees to see that no proxy takes it.

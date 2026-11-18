@@ -182,7 +182,7 @@ func TestBackupsLogged(t *testing.T) {
 func TestAddressChangedLogged(t *testing.T) {
 	// The Cube is lost at the new address and searched for: on the
 	// loopback, not the LAN.
-	r := startServer(t, stored(), withOptions(Options{DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{freeUDP(t, "127.0.0.1")}}))
+	r := startServer(t, stored(), withOptions(Options{DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{testkit.ListenPacket(t).LocalAddr().String()}}))
 	ts, s := r.ts, r.s
 	rt := s.cubes["keq0000100"]
 	rt.cfgMu.Lock()
