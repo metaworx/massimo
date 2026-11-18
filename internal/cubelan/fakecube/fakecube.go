@@ -78,6 +78,11 @@ type Server struct {
 	control  *http.Server            // the control's HTTP server, see Control
 	closed   bool                    // Close was called
 
+	// A pause (Pause): paused until Resume; hold holds the port while the
+	// listener is closed, nil where the listener stays open.
+	paused bool
+	hold   portHold
+
 	// The one-client rule (SingleClient, oneclient.go).
 	deadUntil time.Time     // a dead session is held until then; zero: none
 	deadTimer *time.Timer   // ends the dead session at deadUntil
@@ -332,20 +337,127 @@ func (s *Server) Start(addr string) (string, error) {
 // server. A test that brings the Cube up late holds its port this way:
 // a client's dial waits for the greeting meanwhile, and nothing else
 // takes the port, as it may between a listener closed and one opened.
+// A fake paused before Serve starts paused.
 func (s *Server) Serve(ln net.Listener) string {
-	s.ln = ln
 	if s.NTP == nil {
 		s.NTP = []string{"ntp.homematic.com", "ntp.homematic.com"}
 	}
-	go s.accept()
+	s.mu.Lock()
+	s.ln = ln
+	if s.paused {
+		s.holdLocked()
+	}
+	s.mu.Unlock()
+	go s.accept(ln)
 	return ln.Addr().String()
+}
+
+// Pause makes the fake a Cube that is gone, at an address that stays
+// the fake's: every client is dropped, as by Close, and every new one is
+// refused until Resume. On Linux a client's dial is refused, as at an
+// address where nothing listens: the listener closes, and a socket bound
+// without listening holds its port meanwhile (holdPort). Elsewhere the
+// listener stays open, and the fake resets each connection it accepts
+// before any line: the dial succeeds and the connection ends at once.
+// It is for tests, in place of a fake closed and another started on its
+// address, whose port another program can take between the two; a fake
+// that is never paused is unchanged by it, but for a SingleClient fake
+// whose listener's backlog cannot be cut (not a TCP listener): that one
+// refuses a second client by a close. A second Pause does nothing.
+// A SingleClient fake keeps the dead session it holds, and refuses again
+// after Resume while it does.
+func (s *Server) Pause() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.paused || s.closed {
+		return
+	}
+	s.paused = true
+	for c := range s.open {
+		c.Close()
+	}
+	// The one-client rule's refusal ends with the pause, which refuses
+	// every client, and accept stops waiting for the slot (waitFree).
+	s.endRefusalLocked()
+	s.wakeLocked()
+	if s.ln != nil {
+		s.holdLocked()
+	}
+}
+
+// A portHold holds the port of a paused fake whose listener is closed
+// (holdPort).
+type portHold interface {
+	reopen() (net.Listener, error) // listens on the port again, beside the hold
+	release()                      // lets the port go
+}
+
+// holdLocked closes the listener of a paused fake where a socket that
+// does not listen can hold its port meanwhile (holdPort), and leaves it
+// open where none can: accept then resets what it takes. s.mu is held.
+func (s *Server) holdLocked() {
+	hold, err := holdPort(s.ln)
+	if err != nil {
+		return
+	}
+	s.hold = hold
+	s.ln.Close()
+}
+
+// Resume ends a pause: the fake takes clients again on the same
+// address, and greets them as before the pause, with what changed in
+// it meanwhile. A Resume without a pause does nothing.
+func (s *Server) Resume() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.paused || s.closed {
+		return nil
+	}
+	s.paused = false
+	if s.hold == nil {
+		// The listener stayed open (holdLocked): accept goes on with it,
+		// and refuses a client by a close while the slot is taken.
+		return nil
+	}
+	ln, err := s.hold.reopen()
+	if err != nil {
+		s.paused = true
+		return fmt.Errorf("fakecube: resume on %s: %w", s.ln.Addr(), err)
+	}
+	s.hold.release()
+	s.hold = nil
+	s.ln = ln
+	if s.SingleClient && s.occupiedLocked() {
+		// A dead session held across the pause: the new listener
+		// refuses as the old one did, before accept waits on it.
+		s.refuseLocked()
+	}
+	go s.accept(ln)
+	return nil
+}
+
+// reset ends a connection with a reset rather than a close, as near as
+// a listener can come to refusing it.
+func reset(conn net.Conn) {
+	if tc, ok := conn.(*net.TCPConn); ok {
+		tc.SetLinger(0)
+	}
+	conn.Close()
 }
 
 // Close stops the server and drops every client connection.
 func (s *Server) Close() error {
-	err := s.ln.Close()
 	s.mu.Lock()
-	s.closed = true
+	s.closed = true // from here on, Pause and Resume do nothing
+	ln, hold := s.ln, s.hold
+	s.hold = nil
+	s.mu.Unlock()
+	err := ln.Close()
+	if hold != nil {
+		hold.release()
+		err = nil // the pause closed the listener
+	}
+	s.mu.Lock()
 	for c := range s.open {
 		c.Close()
 	}
@@ -414,14 +526,17 @@ func (s *Server) Connections() int {
 	return s.conns
 }
 
-func (s *Server) accept() {
+// accept serves the connections of ln, until it closes: at Close, or at
+// a Pause that holds its port (holdLocked), after which Resume serves a
+// listener of its own.
+func (s *Server) accept(ln net.Listener) {
 	for {
 		// A fake that drops SYNs takes no connection while the slot is
 		// taken, so that the kernel's queue fills (oneclient.go).
 		if s.SingleClient && dropsSYN && !s.waitFree() {
 			return
 		}
-		conn, err := s.ln.Accept()
+		conn, err := ln.Accept()
 		if err != nil {
 			return
 		}
@@ -429,6 +544,13 @@ func (s *Server) accept() {
 		if s.isParkLocked(conn) {
 			s.mu.Unlock()
 			conn.Close()
+			continue
+		}
+		if s.paused {
+			// A pause that keeps its listener (holdLocked): the
+			// connection ends before any line.
+			s.mu.Unlock()
+			reset(conn)
 			continue
 		}
 		if s.SingleClient && s.occupiedLocked() {

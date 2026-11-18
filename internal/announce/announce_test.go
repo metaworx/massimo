@@ -28,15 +28,45 @@ var testAddrs = []net.IP{net.ParseIP("192.0.2.10").To4(), net.ParseIP("2001:db8:
 
 func quietLog() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
 
-// freeUDPPort is a UDP port nobody holds on the loopback just now.
-func freeUDPPort(t *testing.T) int {
+// heldSockets opens the responder's two sockets, on the wildcard address
+// as it opens them, at a port the system chose, and returns the port and
+// the responder's listen (options.listen), which hands them on: no other
+// program can take the port between the test's choice of it and the
+// responder's start, as one can where the test closes a socket for its
+// port and the responder opens another. They are plain, not shared as
+// the responder's own are (listenShared): the system then chooses a port
+// no socket holds, a shared one included, and the tests ask on the
+// loopback, which needs no sharing. A family whose socket could not be
+// opened, IPv6 on a host without it, fails the listen with its error.
+func heldSockets(t *testing.T) (port int, listen func(network string, port int) (net.PacketConn, error)) {
 	t.Helper()
-	pc, err := net.ListenPacket("udp4", "127.0.0.1:0")
+	v4, err := net.ListenUDP("udp4", &net.UDPAddr{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer pc.Close()
-	return pc.LocalAddr().(*net.UDPAddr).Port
+	t.Cleanup(func() { v4.Close() })
+	port = v4.LocalAddr().(*net.UDPAddr).Port
+	held, failed := map[string]net.PacketConn{"udp4": v4}, map[string]error{}
+	if v6, err := net.ListenUDP("udp6", &net.UDPAddr{Port: port}); err != nil {
+		failed["udp6"] = err
+	} else {
+		t.Cleanup(func() { v6.Close() })
+		held["udp6"] = v6
+	}
+	var mu sync.Mutex
+	return port, func(network string, p int) (net.PacketConn, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if err := failed[network]; err != nil && p == port {
+			return nil, err
+		}
+		pc := held[network]
+		if pc == nil || p != port {
+			return listenShared(network, p)
+		}
+		delete(held, network)
+		return pc, nil
+	}
 }
 
 // sink is a socket on the loopback the responder announces to instead
@@ -55,8 +85,9 @@ func sink(t *testing.T) net.PacketConn {
 // to the sink.
 func startTest(t *testing.T, svc Service, log *slog.Logger) (*Responder, int, net.PacketConn) {
 	t.Helper()
-	port, s := freeUDPPort(t), sink(t)
-	r, err := start(context.Background(), svc, log, options{port: port, sendTo: []net.Addr{s.LocalAddr()}, hostAddrs: func() []net.IP { return testAddrs }})
+	port, listen := heldSockets(t)
+	s := sink(t)
+	r, err := start(context.Background(), svc, log, options{port: port, listen: listen, sendTo: []net.Addr{s.LocalAddr()}, hostAddrs: func() []net.IP { return testAddrs }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -255,13 +286,14 @@ func TestBrowseFindsResponder(t *testing.T) {
 func TestAnnounceWithoutMulticastWarns(t *testing.T) {
 	refuse := errors.New("refused for the test")
 	log, logged := testkit.LogWatch(nil)
-	port, s := freeUDPPort(t), sink(t)
+	port, held := heldSockets(t)
+	s := sink(t)
 	o := options{port: port, sendTo: []net.Addr{s.LocalAddr()}, hostAddrs: func() []net.IP { return testAddrs },
 		listen: func(network string, port int) (net.PacketConn, error) {
 			if network == "udp6" {
 				return nil, refuse
 			}
-			return listenShared(network, port)
+			return held(network, port)
 		}}
 	r, err := start(context.Background(), testService(), log, o)
 	if err != nil {

@@ -77,7 +77,11 @@ func startFakeCube(t *testing.T) string {
 }
 
 // freeAddr returns a loopback address whose port was free a moment ago;
-// another process can take it before the caller listens on it.
+// another process can take it before the caller listens on it. It stays
+// for the proxy address of MASSIMO_CUBE_PROXY: the server's proxy listens
+// at an address alone (server.Options.Proxy), and the hook that takes a
+// listener in its place is the server package's own (docs/testing.md,
+// "Ports").
 func freeAddr(t *testing.T) string {
 	t.Helper()
 	free, err := net.Listen("tcp", "127.0.0.1:0")

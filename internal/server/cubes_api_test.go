@@ -58,20 +58,11 @@ func greetingAt(t *testing.T, addr string) cube.Message {
 	return m
 }
 
-func freeTCP(t *testing.T) string {
-	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer ln.Close()
-	return ln.Addr().String()
-}
-
 // PUT changes the row and applies it at once: the name, the hidden list
 // (the device leaves the views), the proxy address (the listener moves).
 func TestPutCube(t *testing.T) {
-	r := startServer(t, stored())
+	ports := &heldPorts{}
+	r := startServer(t, stored(), listenOn(ports))
 	ts, st := r.ts, r.st
 	ctx := context.Background()
 
@@ -100,7 +91,7 @@ func TestPutCube(t *testing.T) {
 	}
 
 	// The proxy listener starts on its address, and moves with it.
-	p1, p2 := freeTCP(t), freeTCP(t)
+	p1, p2 := ports.hold(t), ports.hold(t)
 	if code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100", `{"proxy_address":"`+p1+`","proxy_serial":"leq0000100"}`); code != 200 || out["proxy_address"] != p1 || out["proxy_serial"] != "LEQ0000100" {
 		t.Fatalf("proxy %d %v", code, out)
 	}
@@ -411,7 +402,7 @@ func TestRemovedCubeIsListedAsFound(t *testing.T) {
 	})
 
 	t.Run("settings file", func(t *testing.T) {
-		r := startServer(t, stored(), withOptions(Options{DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{freeUDP(t, "127.0.0.1")}}))
+		r := startServer(t, stored(), withOptions(Options{DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{testkit.ListenPacket(t).LocalAddr().String()}}))
 		ts, s := r.ts, r.s
 		s.note(ctx, lan, time.Now())
 		if n := removedListed(t, ts, "KEQ0000100"); n != 1 {
@@ -430,7 +421,7 @@ func TestRemovedCubeIsListedAsFound(t *testing.T) {
 		st := testStore(t, "")
 		plain := store.FileCube{Values: map[string]store.FileValue{store.FieldAddress: {Variable: "MASSIMO_CUBE_ADDRESS", Value: addr}}}
 		r := startServer(t, onStore(st), withOptions(Options{FileCubes: map[string]store.FileCube{"": plain},
-			DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{freeUDP(t, "127.0.0.1")}}),
+			DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{testkit.ListenPacket(t).LocalAddr().String()}}),
 			withCubes(append([]CubeConfig{{Addr: addr, Source: store.SourceEnv, SeedFromFile: true}}, configuredCubes(t, st)...)...))
 		ts, s := r.ts, r.s
 		testkit.Eventually(t, "the plain address's cube seeded", func() bool {
