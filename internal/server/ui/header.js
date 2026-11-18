@@ -139,10 +139,14 @@ function splitVersion(v) {
 // renderTLS takes /healthz's tls: the line under the header
 // (ui/src/header/Tls.tsx), and while the certificate is self-signed the
 // sign-in dialog's line asking to compare its fingerprint before signing
-// in.
+// in. In the app (appBridge, app.js) neither asks for the comparison:
+// the app pinned the fingerprint the user compared when the server was
+// added, and refuses a certificate with another; the warnings of a
+// certificate near its end stay (docs/app.md).
 function renderTLS(tls) {
-  $("login-tls").classList.toggle("hidden", !(tls && tls.self_signed));
-  MassimoParts.header.tls(tls || null);
+  const pinned = !!appBridge();
+  $("login-tls").classList.toggle("hidden", pinned || !(tls && tls.self_signed));
+  MassimoParts.header.tls(tls || null, pinned);
 }
 
 // certText is the certificate the server serves, as GET /api/v1/system
