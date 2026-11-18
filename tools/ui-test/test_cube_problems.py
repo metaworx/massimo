@@ -4,7 +4,7 @@
 renderCubeProblems): a Cube with a problem as the heading, its devices
 under it, the settings last for one who may change them; nothing where
 nothing is wrong."""
-from helpers import CUBES, configured_only, reads_of
+from helpers import CUBES, configured_only, reads_of, wait_until
 
 
 def told(page, link, problems, failing):
@@ -72,8 +72,11 @@ def test_header_problems(page, case):
         assert heads.count() == 2, "the Cube, then the settings"
         assert heads.first.locator(":scope > .problem-flags .flag.warn").count() == 1, "the link's badge"
         assert "0.0.0.0:62910" in heads.last.inner_text(), "the proxy that does not listen"
-        box = page.locator("#cube-problems .problems-list").bounding_box()
-        assert box["x"] >= 0 and box["x"] + box["width"] <= case.width, f"the list within the page ({box})"
+        # placed as it opens (components.js dropdown, placeMenu), and again as its pill moves when the
+        # problems told change the row (ui/src/header/fold.ts): waited for, not read at once
+        within = ("(() => { const r = document.querySelector('#cube-problems .problems-list').getBoundingClientRect();"
+                  " return r.left >= 0 && r.right <= document.documentElement.clientWidth; })()")
+        assert wait_until(page, within, 3), f"the list within the page ({page.locator('#cube-problems .problems-list').bounding_box()})"
         page.keyboard.press("Escape")
         page.locator("#cube-choice").click()
         assert page.locator("#cube-menu .menu-items .conn-sign").count() >= 1, "the choice's list keeps each Cube's sign"

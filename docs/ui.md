@@ -229,7 +229,9 @@ The compacted header has **â†‘**, back to the top, first of the page buttons: â†
   A window open briefly is not listed: it is a state, not a problem.
   Its list is as wide as its entries need, up to the page's width,
   and, as every menu of the page, opens inside the window,
-  no higher than the room below it, and scrolls in itself, not the page.
+  no higher than the room below it, and scrolls in itself, not the page;
+  open, it stays inside the window as its pill moves,
+  when the pill grows with the problems that come or the row folds.
   An open list stays open when data comes in, and follows it:
   a problem that comes is listed, one that goes leaves the list,
   until nothing is left to list and the list says so, the green check in the pill.
@@ -1926,7 +1928,8 @@ and `renderTLS`, and `home.js` as `renderHomeNotice`;
 and `clock.ts` the header's one clock, a signal that moves on each second,
 which every time the header shows reads,
 and `fmtAgo`, how long ago in the page's language;
-`fold.ts` measures the row and folds it where it is short (`data-fold` on `.top-line`).
+`fold.ts` measures the row and folds it where it is short (`data-fold` on `.top-line`),
+and after each measure places an open list of the row in the window again (`placeMenus` of `components.js`).
 The choice is a `Picker`, the problems a `Problems` with `lead`, `always` and `head`,
 Refresh now a `MenuItem` with `keepOpen` and its times as `sub`,
 the certificate's line a `Notice`.

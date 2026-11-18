@@ -32,6 +32,8 @@ declare global {
   function keepBlink(use: Element, key?: string): void;
   /** Makes a details.menu a menu that drops down: one open at a time, kept in the window. */
   function dropdown(details: HTMLDetailsElement): HTMLDetailsElement;
+  /** Places the list of every open menu under root (the whole page by default) in the window again, where its summary has moved. */
+  function placeMenus(root?: ParentNode): void;
   /** Lets the arrow keys move the focus between the items of an open dropdown that match selector. */
   function menuArrows(details: HTMLDetailsElement, selector: string): void;
   /** Puts text on the clipboard; whether it did. */

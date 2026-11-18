@@ -606,10 +606,15 @@ def test_refresh_now_keeps_the_list_open(page, case):
 def test_pile_list_as_wide_as_its_content(page, case):
     """The pile's list is as wide as its entries need, up to the page's
     width (the body's, less its gutters), under the pill, inside the
-    window."""
+    window, once placed: components.js placeMenu sets its height's cap
+    as it places it, as test_menu_fit.py waits for it. Before, the list
+    is where the style sheet puts it, right-aligned to the pill, which
+    at 390 px is out of the window."""
     page.locator("#cube-problems .problems-sum").click()
-    lst = page.locator("#cube-problems .problems-list")
+    sel = "#cube-problems .problems-list"
+    lst = page.locator(sel)
     lst.wait_for(state="visible")
+    assert wait_until(page, "document.querySelector(%r).style.maxHeight !== ''" % sel, 3), "the list placed"
     widest = page.evaluate("Math.min(document.body.clientWidth, 1100) - 32")
     b = lst.bounding_box()
     assert b["width"] <= widest + 1, f"up to the page's width: {b['width']} vs {widest}"
