@@ -77,10 +77,95 @@ What does not take the scale:
   such as a poll interval or a backup window:
   the product's own clock is not the test's wait.
 
+## The watcher
+
+`Eventually` waits for a state: a count, a flag, an answer of the API.
+A test that waits for **the next line or event after an action** -
+the fake Cube's next `s:`, the log's next warning, the stream's next state -
+waits through a watch instead:
+a state can already hold from before the action,
+or be met by a line that is not the one the test caused.
+
+A `testkit.Watch[T]` keeps every item it is fed, in the order fed.
+The test marks it **before** the action, and waits from the mark:
+
+```go
+lines := cubewatch.Lines(fc)
+m := lines.Mark()
+// the action
+got, next := lines.Await(t, m, "the s: line", cubewatch.Type('s'))
+```
+
+| Call | What it does |
+|------|--------------|
+| `w.Mark()` | the cursor after the last item fed: "from now on" |
+| `w.Await(t, from, what, match)` | the first item from the cursor that matches, the rest skipped, and the cursor after it, from which a next wait goes on; fails after 5 s, scaled |
+| `w.AwaitN(t, from, what, n, match)` | the first `n` items from the cursor that match, and the cursor after the last: "three failed retries"; the failure says how many came |
+| `w.AwaitAll(t, from, what, matches...)` | an item for each match, in any order, each item for one match at most |
+| `w.Count(from, match)`, `w.Since(from, match)` | how many items from the cursor match, and those items: for a test that compares them as a whole once they have come |
+| `w.Seen(from, match)` | a condition that holds once a match came: the `cond` of an `Eventually`, or the `end` of a `Never` |
+| `w.Never(t, from, what, match, end)` | as `testkit.Never`: fails where a match comes before `end` holds |
+| `w.Has(t, from, what, match)`, `w.HasNot(t, from, what, match)` | the check, once the action is over, that a match has come, and returns it with the cursor after it; or that none has: fails at once, with what came |
+| `w.Ended()`, `w.Err()` | whether the feed is over, such as a stream that ended; and why, as `End` said: `nil` while it goes on or where it ended plainly, a stream's read error where it was cut |
+
+A `nil` match takes every item.
+`Await`, `AwaitN` and `Never` take the kit's options (`testkit.For`, `testkit.Every`).
+A wait is woken by each item, so it goes on the moment its item came.
+Where it times out, the failure says what it waited for, how long,
+and what came since the mark, the last 20 items:
+
+```
+timed out after 5s waiting for the s: line; 3 since the mark:
+	1 l:
+	2 f:ntp.homematic.com,ntp.homematic.com
+	3 l:
+```
+
+A feed that ended (`w.End`) fails a wait at once, with its reason.
+
+- **Mark before the action**, never after:
+  an item that comes before the mark is not waited for,
+  and one that comes between the action and a late mark is lost.
+- **A filter in place of an exact count:**
+  `w.Since(m, cubewatch.Except('l'))` is what the Cube received since the mark
+  without the polls, which come whenever the poll's clock says.
+- **A wait after a wait** goes on from the cursor the first returned,
+  not from a new `Mark`, which would skip what came meanwhile.
+- **"Nothing came"** is `w.Never` with an end that shows it would have come:
+  often an item of the same watch, `w.Seen(m, isPoll)`.
+- **"At least n"** is `w.AwaitN`, not an `Eventually` on a `Count`,
+  whose failure would not say what came.
+- **Once the action is over** - the process ended, the call returned
+  with its log written - nothing of it is on its way any more:
+  `w.Has` checks that an item came, `w.HasNot` that none did, at once.
+  Where an item could still be on its way, they are `Await` and `Never`.
+
+The feeders:
+
+| Feed | Call | Item |
+|------|------|------|
+| a logger the test hands the product | `log, w := testkit.LogWatch(level, tee...)` | `testkit.Record`: `Level`, `Msg`, `Attrs` (groups joined by dots, values as text), `Line`; matched by its whole message with `testkit.Msg(msg, key, value, …)` or `testkit.MsgAt(level, msg, …)`, by a part of its line (without the time) with `testkit.Contains(text…)` or `testkit.ContainsAt(level, text…)` |
+| a child process's log (`cmd/massimo`) | `testkit.ReadLog(w, stderr)` | the same `Record`, read from slog's text or JSON lines |
+| an event stream the test opened | `testkit.StreamWatch(t, resp.Body)` | `testkit.Event`: `ID`, `Kind`, `Data`, or a `Comment` such as the keep-alive; matched with `testkit.Kind(kind, contains…)`; `w.Err()` tells a stream the server ended (`nil`) from one that was cut |
+| a channel the test would read, such as a Cube client's `Events()` | `testkit.ChanWatch(t, ch, show)` | the channel's |
+| the lines a fake Cube receives | `cubewatch.Lines(fc)` | `cube.Message`; filtered with `cubewatch.Type('s')` and `cubewatch.Except('l', 'f')` |
+
+`testkit` imports no package of the module:
+their tests import the kit, and an import back would be a cycle.
+The fake Cube's lines are watched in `internal/testkit/cubewatch`,
+a test-only package too,
+through the fake Cube's hook `OnReceive`, which changes nothing the fake does.
+`cubewatch` does not import the Cube client,
+so that the client's tests can use it;
+the client's events are a `testkit.ChanWatch`.
+The fake Cube's own tests cannot import `cubewatch`;
+one that waits for its lines feeds a `testkit.Watch` from `OnReceive` itself.
+A `ChanWatch` takes its items from the channel in a goroutine of its own,
+so "once the action is over" holds for it only once the item that shows it
+came through the watch: a `Has` or `HasNot` right after the action can miss
+an item still in the channel.
+
 ## Still written by hand
 
-- **A wait on a channel or on lines** -
-  the Cube client's events, the fake Cube's lines, a child process's output -
-  is a `select` or a loop of its own, its deadline `testkit.Scale`d.
 - **A sleep before "nothing came"** stays where the test has no end to wait for
   yet, and takes no scale.

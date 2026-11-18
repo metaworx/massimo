@@ -5,7 +5,9 @@ package fakecube
 
 import (
 	"net"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -215,5 +217,63 @@ func TestInclusionTimeIsTheLowByte(t *testing.T) {
 	}
 	if took := time.Since(start); took < 900*time.Millisecond || took > 3*time.Second {
 		t.Fatalf("the inclusion ended after %s", took)
+	}
+}
+
+// OnReceive hands each hook the lines received before it, then each as
+// it comes, in the order Received has them, before the fake answers the
+// line; the lines of two clients at once come one at a time.
+func TestOnReceive(t *testing.T) {
+	greeting, err := LoadGreeting(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{Greeting: greeting}
+	addr, err := s.Start("127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	first, second := dial(t, addr), dial(t, addr)
+	first.send(cube.CmdList)
+	var mu sync.Mutex
+	var a, b []string
+	s.OnReceive(func(m cube.Message) { mu.Lock(); a = append(a, m.String()); mu.Unlock() })
+	s.OnReceive(func(m cube.Message) { mu.Lock(); b = append(b, m.String()); mu.Unlock() })
+	hooked := func() ([]string, []string) {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Clone(a), slices.Clone(b)
+	}
+	if a, b := hooked(); !slices.Equal(a, []string{"l:"}) || !slices.Equal(b, a) {
+		t.Fatalf("the line before the hooks: %q, %q", a, b)
+	}
+	// The answer comes after the hooks: no wait.
+	first.send(cube.Message{Type: 'c', Data: "0a0101"})
+	if a, _ := hooked(); !slices.Equal(a, []string{"l:", "c:0a0101"}) {
+		t.Fatalf("at the answer: %q", a)
+	}
+	var wg sync.WaitGroup
+	for _, c := range []*client{first, second} {
+		wg.Go(func() {
+			for range 20 {
+				if _, err := c.conn.Write([]byte(cube.CmdList.Wire())); err != nil {
+					t.Error(err)
+					return
+				}
+				if _, err := c.r.Read(); err != nil {
+					t.Error(err)
+					return
+				}
+			}
+		})
+	}
+	wg.Wait()
+	var received []string
+	for _, m := range s.Received() {
+		received = append(received, m.String())
+	}
+	if a, b := hooked(); len(a) != 42 || !slices.Equal(a, received) || !slices.Equal(b, received) {
+		t.Fatalf("hooked %d and %d lines, received %d, in another order", len(a), len(b), len(received))
 	}
 }
