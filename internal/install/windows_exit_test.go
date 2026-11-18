@@ -6,8 +6,8 @@
 package install
 
 import (
-	"bufio"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"golang.org/x/sys/windows"
+
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // A re-install stops the service and replaces massimo.exe. The service
@@ -66,12 +68,19 @@ func startChild(t *testing.T, life time.Duration) (*exec.Cmd, string) {
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
+	said := testkit.NewWatch[testkit.Record](nil)
+	read := make(chan struct{})
+	go func() {
+		defer close(read)
+		said.End(fmt.Errorf("the child's output ended: %v", testkit.ReadLog(said, out)))
+	}()
 	t.Cleanup(func() { // before t.TempDir removes the image
 		cmd.Process.Kill()
+		<-read // every line read before Wait, which closes the pipe
 		cmd.Wait()
 	})
-	if line, err := bufio.NewReader(out).ReadString('\n'); err != nil || line != "up\n" {
-		t.Fatalf("the child said %q, %v", line, err)
+	if r, _ := said.Await(t, 0, "the child's first line", nil); r.Line != "up" {
+		t.Fatalf("the child said %q", r.Line)
 	}
 	return cmd, exe
 }

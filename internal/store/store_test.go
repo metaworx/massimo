@@ -21,6 +21,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 func quiet() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
@@ -39,8 +41,8 @@ func open(t *testing.T, dir string) *Store {
 // in WAL mode with foreign keys on.
 func TestOpenMigratesAnEmptyFile(t *testing.T) {
 	dir := t.TempDir()
-	var logged bytes.Buffer
-	s, err := Open(dir, Options{Version: "v9.9.9", Logger: slog.New(slog.NewTextHandler(&logged, nil))})
+	log, logged := testkit.LogWatch(nil)
+	s, err := Open(dir, Options{Version: "v9.9.9", Logger: log})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,8 +73,8 @@ func TestOpenMigratesAnEmptyFile(t *testing.T) {
 		t.Fatalf("applied_by %q", by)
 	}
 	for _, want := range []string{"store created", "schema migrated", "node key created"} {
-		if !strings.Contains(logged.String(), want) {
-			t.Errorf("log lacks %q:\n%s", want, logged.String())
+		if logged.Count(0, testkit.Msg(want)) == 0 {
+			t.Errorf("log lacks %q: %v", want, logged.Since(0, nil))
 		}
 	}
 	// Every table of docs/store.md section 5 exists.
@@ -85,14 +87,14 @@ func TestOpenMigratesAnEmptyFile(t *testing.T) {
 	s.Close()
 
 	// The second open migrates nothing and creates nothing.
-	logged.Reset()
-	s2, err := Open(dir, Options{Version: "v9.9.9", Logger: slog.New(slog.NewTextHandler(&logged, nil))})
+	m := logged.Mark()
+	s2, err := Open(dir, Options{Version: "v9.9.9", Logger: log})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer s2.Close()
-	if s2.Created() || logged.Len() != 0 {
-		t.Fatalf("second open: created %v, log %s", s2.Created(), logged.String())
+	if s2.Created() || logged.Count(m, nil) != 0 {
+		t.Fatalf("second open: created %v, log %v", s2.Created(), logged.Since(m, nil))
 	}
 	var rows int
 	s2.db.QueryRow(`SELECT count(*) FROM schema_version`).Scan(&rows)

@@ -4,11 +4,9 @@
 package store
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"os"
 	"slices"
 	"strings"
@@ -144,15 +142,15 @@ func TestEventsDropped(t *testing.T) {
 		t.Fatalf("written %d, want 8", written)
 	}
 
-	var logged bytes.Buffer
-	ro, err := OpenReadOnly(dir, Options{Logger: slog.New(slog.NewTextHandler(&logged, nil))})
+	log, logged := testkit.LogWatch(nil)
+	ro, err := OpenReadOnly(dir, Options{Logger: log})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer ro.Close()
 	ro.AddEvent(ev(a.ID, time.Now(), "state", "", 0))
-	if _, dropped, _ := ro.EventStats(); dropped != 1 || !bytes.Contains(logged.Bytes(), []byte("event dropped")) {
-		t.Fatalf("read-only: dropped %d, log %q", dropped, logged.String())
+	if _, dropped, _ := ro.EventStats(); dropped != 1 || logged.Count(0, testkit.Msg("store: event dropped")) == 0 {
+		t.Fatalf("read-only: dropped %d, log %v", dropped, logged.Since(0, nil))
 	}
 	if err := ro.FlushEvents(context.Background()); err != nil {
 		t.Fatalf("flush without a writer: %v", err)

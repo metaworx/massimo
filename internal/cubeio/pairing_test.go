@@ -12,6 +12,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 )
 
 // A pairing whose n: is still queued when its caller gives up is taken
@@ -28,6 +29,7 @@ func TestTimedOutPairingIsWithdrawn(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer srv.Close()
+	lines := cubewatch.Lines(srv)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	// The duty cycle "resets" 600 ms after a command waits for it.
@@ -57,12 +59,11 @@ func TestTimedOutPairingIsWithdrawn(t *testing.T) {
 	if res := held.Wait(ctx); res.Err != nil {
 		t.Fatal(res.Err)
 	}
-	time.Sleep(200 * time.Millisecond)
-	for _, m := range srv.Received() {
-		if m.Type == 'n' {
-			t.Fatalf("the n: of the pairing given up reached the Cube: %v", m)
-		}
-	}
+	// The n: was queued high: a command queued low after it goes after
+	// it, and its line is the end.
+	next := lines.Mark()
+	q.Enqueue(engine.Command{Priority: engine.PriorityLow, Lines: []cube.Message{cube.CmdGetNTP}})
+	lines.Never(t, 0, "the n: of the pairing given up at the Cube", cubewatch.Type('n'), lines.Seen(next, cubewatch.Type('f')))
 }
 
 // StartPairing refuses a time under a second, or longer than a Cube

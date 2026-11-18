@@ -14,6 +14,7 @@ import (
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/testkit"
+	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
@@ -46,6 +47,7 @@ func connect(t *testing.T) (*fakecube.Server, Writer, context.Context) {
 
 func TestWriteMetadataIsMirrored(t *testing.T) {
 	srv, w, ctx := connect(t)
+	lines := cubewatch.Lines(srv)
 	md := *w.Client.Snapshot().Metadata()
 	md.Rooms = append([]cube.RoomMeta(nil), md.Rooms...)
 	md.Rooms[0].Name = "Renamed"
@@ -56,25 +58,20 @@ func TestWriteMetadataIsMirrored(t *testing.T) {
 	if got := w.Client.Snapshot().Metadata().Rooms[0].Name; got != "Renamed" {
 		t.Fatalf("snapshot room name %q", got)
 	}
-	n := 0
-	for _, m := range srv.Received() {
-		if m.Type == 'm' {
-			n++
-		}
-	}
-	if n == 0 {
+	if lines.Count(0, cubewatch.Type('m')) == 0 {
 		t.Fatal("no m: sent")
 	}
 }
 
 func TestDoRereadsConfig(t *testing.T) {
 	srv, w, ctx := connect(t)
+	lines := cubewatch.Lines(srv)
 	const rf cube.RFAddress = 0x0a010a
 	res := w.Do(ctx, engine.Command{Lines: []cube.Message{{Type: 'w', Data: "x"}}}, rf)
 	if res.Err != nil {
 		t.Fatal(res.Err)
 	}
-	got := srv.Received()
+	got := lines.Since(0, cubewatch.Except('l'))
 	if len(got) != 2 || got[1].Type != 'c' || got[1].Data != rf.String() {
 		t.Fatalf("sent %v", got)
 	}

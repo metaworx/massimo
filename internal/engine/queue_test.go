@@ -4,9 +4,7 @@
 package engine
 
 import (
-	"bytes"
 	"context"
-	"log/slog"
 	"strings"
 	"sync"
 	"testing"
@@ -16,6 +14,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/testkit"
+	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 )
 
 const fixture = "../protocol/cube/testdata/cube-fw0113-greeting.txt"
@@ -24,21 +23,6 @@ const fixture = "../protocol/cube/testdata/cube-fw0113-greeting.txt"
 func withError(t *testing.T, greeting []cube.Message, rf cube.RFAddress) []cube.Message {
 	t.Helper()
 	return withFlags(t, greeting, rf, 0x08, 0)
-}
-
-// waitFor polls until the fake cube received a command of type typ.
-func waitFor(t *testing.T, srv *fakecube.Server, typ byte) {
-	t.Helper()
-	deadline := time.Now().Add(testkit.Scale(5 * time.Second))
-	for time.Now().Before(deadline) {
-		for _, m := range srv.Received() {
-			if m.Type == typ {
-				return
-			}
-		}
-		time.Sleep(time.Millisecond)
-	}
-	t.Fatalf("fake cube did not receive a %c command", typ)
 }
 
 func setup(t *testing.T, opts Options, patch ...func([]cube.Message) []cube.Message) (*fakecube.Server, *Queue, context.CancelFunc) {
@@ -72,25 +56,16 @@ func setup(t *testing.T, opts Options, patch ...func([]cube.Message) []cube.Mess
 	return srv, q, cancel
 }
 
-func received(srv *fakecube.Server) []string {
-	var out []string
-	for _, m := range srv.Received() {
-		if m.Type != 'l' {
-			out = append(out, m.String())
-		}
-	}
-	return out
-}
-
 func TestQueueResetsErrorStateAndSendsCommand(t *testing.T) {
 	srv, q, _ := setup(t, Options{}, func(g []cube.Message) []cube.Message { return withError(t, g, 0x0a010d) })
+	lines := cubewatch.Lines(srv)
 	// The thermostat is in error state, so an r: must precede the s:.
 	m, _ := cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a010d, RoomID: 6, Room: true}, 19, cube.ModeManual, cube.Until{})
 	res := q.Enqueue(Command{Target: 0x0a010d, Lines: []cube.Message{m}}).Wait(context.Background())
 	if res.Err != nil || res.Discarded {
 		t.Fatalf("result %+v", res)
 	}
-	got := received(srv)
+	got := strs(lines.Since(0, cubewatch.Except('l'))...)
 	if len(got) != 2 || got[0] != "r:01,CgEN" || got[1] != m.String() {
 		t.Fatalf("sent %v", got)
 	}
@@ -101,9 +76,11 @@ func TestQueueResetsErrorStateAndSendsCommand(t *testing.T) {
 
 func TestQueueWakeupAndOrdering(t *testing.T) {
 	srv, q, _ := setup(t, Options{Gap: 20 * time.Millisecond}, func(g []cube.Message) []cube.Message { return withError(t, g, 0x0a0108) })
+	lines := cubewatch.Lines(srv)
 	prog, _ := cube.CmdSetDayProgram(cube.Target{RFAddress: 0x0a0108, RoomID: 3, Room: true}, cube.Monday, cube.DayProgram{{Temp: 17, Until: 360}, {Temp: 21, Until: 1440}})
+	from := lines.Mark()
 	low := q.Enqueue(Command{Priority: PriorityLow, Target: 0x0a0108, RoomID: 3, Wakeup: true, Lines: prog})
-	waitFor(t, srv, 'z') // low is in flight before high arrives
+	lines.Await(t, from, "the low command's wakeup", cubewatch.Type('z')) // low is in flight before high arrives
 	high := q.Enqueue(Command{Priority: PriorityHigh, Lines: []cube.Message{cube.CmdGetNTP}})
 	ctx := context.Background()
 	if r := high.Wait(ctx); r.Err != nil {
@@ -112,7 +89,7 @@ func TestQueueWakeupAndOrdering(t *testing.T) {
 	if r := low.Wait(ctx); r.Err != nil {
 		t.Fatal(r.Err)
 	}
-	got := received(srv)
+	got := strs(lines.Since(0, cubewatch.Except('l'))...)
 	// The low-priority command is in flight when the high-priority one
 	// arrives, so order is: wakeup, r:, s:, then f:.
 	want := []string{"z:1e,G,03", "r:01,CgEI", prog[0].String(), "f:"}
@@ -175,6 +152,7 @@ func TestQueueHoldsAtFullDutyCycle(t *testing.T) {
 
 func TestQueueRetriesAfterDiscard(t *testing.T) {
 	srv, q, _ := setup(t, Options{})
+	lines := cubewatch.Lines(srv)
 	srv.Discard = true
 	m, _ := cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a0108, RoomID: 3, Room: true}, 18, cube.ModeManual, cube.Until{})
 	res := q.Enqueue(Command{Target: 0x0a0108, Lines: []cube.Message{m}}).Wait(context.Background())
@@ -183,7 +161,7 @@ func TestQueueRetriesAfterDiscard(t *testing.T) {
 	}
 	// s: discarded, then r: and a second s:, discarded again.
 	want := []string{m.String(), "r:01,CgEI", m.String()}
-	got := received(srv)
+	got := strs(lines.Since(0, cubewatch.Except('l'))...)
 	if len(got) != len(want) {
 		t.Fatalf("sent %v", got)
 	}
@@ -205,40 +183,15 @@ func TestQueueDrainsOnCancel(t *testing.T) {
 	}
 }
 
-// syncBuffer is a bytes.Buffer safe for the queue's goroutine.
-type syncBuffer struct {
-	mu sync.Mutex
-	b  bytes.Buffer
-}
-
-func (s *syncBuffer) Write(p []byte) (int, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.b.Write(p)
-}
-
-func (s *syncBuffer) String() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.b.String()
-}
-
 func TestQueueLogsAcceptedCommands(t *testing.T) {
-	var log syncBuffer
-	_, q, _ := setup(t, Options{Logger: slog.New(slog.NewTextHandler(&log, nil))})
+	logger, logs := testkit.LogWatch(nil)
+	_, q, _ := setup(t, Options{Logger: logger})
 	m, _ := cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a0108, RoomID: 3, Room: true}, 21, cube.ModeManual, cube.Until{})
 	if r := q.Enqueue(Command{Target: 0x0a0108, RoomID: 3, Wakeup: true, Lines: []cube.Message{m}}).Wait(context.Background()); r.Err != nil {
 		t.Fatal(r.Err)
 	}
-	out := log.String()
-	for _, want := range []string{
-		`msg="room woken up" room=3 command=z:1e,G,03 reply=A:`,
-		`msg="command accepted by the cube" target=0a0108 command="` + m.String() + `" duty_pct=0 free_slots=49`,
-	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("log lacks %q:\n%s", want, out)
-		}
-	}
+	logs.Has(t, 0, "the room woken up", testkit.Msg("room woken up", "room", "3", "command", "z:1e,G,03", "reply", "A:"))
+	logs.Has(t, 0, "the command accepted", testkit.Msg("command accepted by the cube", "target", "0a0108", "command", m.String(), "duty_pct", "0", "free_slots", "49"))
 }
 
 // recorder is an Observer that keeps every call.
@@ -354,6 +307,7 @@ func TestQueueObserverHearsEnqueuedFirst(t *testing.T) {
 	go func() { second <- q.Enqueue(Command{ID: "b", Lines: []cube.Message{line}}) }()
 	// Long enough for a and its gap: a queue that can see b takes it now.
 	// (The observer must not block; this one does, to show the order.)
+	// No end to wait for: a queue that cannot see b idles, silent.
 	time.Sleep(300 * time.Millisecond)
 	close(rec.release)
 	if res := first.Wait(ctx); res.Err != nil {

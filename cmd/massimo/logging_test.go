@@ -127,17 +127,18 @@ func TestServeRefusesAnUnknownLogLevel(t *testing.T) {
 func TestServeLogLevelFlagWins(t *testing.T) {
 	proxyAddr := freeAddr(t)
 	s := startBuiltServe(t, []string{"MASSIMO_CUBE_ADDRESS=" + startFakeCube(t), env.LogLevel + "=error"}, "-log-level", "debug", "-proxy", proxyAddr)
-	s.waitFor(t, "cube proxy listening")
+	s.log.Await(t, 0, "cube proxy listening", testkit.Msg("cube proxy listening"), serveWait)
 	conn, err := net.DialTimeout("tcp", proxyAddr, 5*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer conn.Close()
+	m := s.log.Mark()
 	if _, err := conn.Write([]byte("zz\r\n")); err != nil {
 		t.Fatal(err)
 	}
-	if a := s.waitFor(t, "proxy: ignoring malformed line"); a["level"] != "DEBUG" {
-		t.Errorf("logged at %q, want DEBUG", a["level"])
+	if r, _ := s.log.Await(t, m, "proxy: ignoring malformed line", testkit.Msg("proxy: ignoring malformed line"), serveWait); r.Level != slog.LevelDebug {
+		t.Errorf("logged at %v, want DEBUG", r.Level)
 	}
 	s.stop(t)
 }
@@ -276,25 +277,6 @@ func TestParseLogSize(t *testing.T) {
 	}
 }
 
-// waitForAttr waits until serve has logged msg with the attribute key
-// set to value.
-func (s *builtServe) waitForAttr(t *testing.T, msg, key, value string) {
-	t.Helper()
-	for end := time.Now().Add(testkit.Scale(10 * time.Second)); time.Now().Before(end); time.Sleep(20 * time.Millisecond) {
-		for _, l := range s.log() {
-			if !strings.Contains(l, `msg="`+msg+`"`) {
-				continue
-			}
-			for _, m := range logAttr.FindAllStringSubmatch(l, -1) {
-				if m[1] == key && strings.Trim(m[2], `"`) == value {
-					return
-				}
-			}
-		}
-	}
-	t.Fatalf("serve did not log %q with %s=%s", msg, key, value)
-}
-
 // serve writes plain lines on stderr and JSON ones into its -log file,
 // made 0640, each with its source. A plain file it finds is rotated at the start, and the log
 // on SIGHUP: each old file ends with the rotation in its own format, and
@@ -303,18 +285,19 @@ func TestServeLogFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "serve.log")
 	os.WriteFile(path, []byte("time=2026-11-10T10:00:00Z level=INFO msg=\"api listening\"\n"), 0o644)
 	s := startBuiltServe(t, []string{"MASSIMO_CUBE_ADDRESS=" + startFakeCube(t)}, "-log", path, "-proxy", "off", "-sighup", "reload")
-	if a := s.waitFor(t, "log rotated"); a["reason"] != "format" || a["previous"] != "serve.log.1" {
-		t.Errorf("the start's rotation: %v", a)
+	if r, _ := s.log.Await(t, 0, "the start's rotation", testkit.Msg("log rotated"), serveWait); r.Attrs["reason"] != "format" || r.Attrs["previous"] != "serve.log.1" {
+		t.Errorf("the start's rotation: %v", r)
 	}
 	// The SIGHUP once serve handles it: before, it would end serve, or be
 	// lost where SIGHUP was ignored at the start.
-	s.waitFor(t, "server started")
+	s.log.Await(t, 0, "server started", testkit.Msg("server started"), serveWait)
+	m := s.log.Mark()
 	if err := s.cmd.Process.Signal(syscall.SIGHUP); err != nil {
 		t.Fatal(err)
 	}
 	// Its own rotation: the start's is logged twice, once as the
 	// log_rotated event (why=format), so two lines did not mean the SIGHUP's.
-	s.waitForAttr(t, "log rotated", "reason", "sighup")
+	s.log.Await(t, m, "the SIGHUP's rotation", testkit.Msg("log rotated", "reason", "sighup"), serveWait)
 	s.stop(t)
 
 	lines := func(p string) []string {

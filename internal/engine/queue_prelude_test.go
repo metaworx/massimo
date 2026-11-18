@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 )
 
 // The queue sends exactly the resets PreludeOf names, in its order,
@@ -36,6 +37,7 @@ func TestQueueSendsThePreludesResets(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			srv, q, _ := setup(t, Options{}, room3(t, flagged))
+			lines := cubewatch.Lines(srv)
 			if got := PreludeOf(q.gw.Snapshot(), c.cmd).Resets(); !slices.Equal(got, c.want) {
 				t.Fatalf("PreludeOf names %v, want %v", got, c.want)
 			}
@@ -49,7 +51,7 @@ func TestQueueSendsThePreludesResets(t *testing.T) {
 			for _, rf := range c.want {
 				want = append(want, cube.CmdResetError(rf).String())
 			}
-			sameSent(t, received(srv), append(want, strs(c.cmd.Lines...)...))
+			sameSent(t, lines, append(want, strs(c.cmd.Lines...)...))
 		})
 	}
 }

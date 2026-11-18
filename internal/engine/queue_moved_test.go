@@ -10,7 +10,9 @@ import (
 
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
+	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/testkit"
+	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 )
 
 // A Cube found at a new address: the reconnect queued for it drops a
@@ -60,10 +62,13 @@ func TestMovedReconnectKeepsTheNewConnection(t *testing.T) {
 	if !testkit.Within(5*time.Second, func() bool { return c.Connected() && moved.Connections() == 1 }) {
 		t.Fatalf("not connected to the new address: %d connections", moved.Connections())
 	}
-	// Connected to the new address already: nothing to drop.
+	// Connected to the new address already: nothing to drop. The queue
+	// runs one command at a time: by the next command's line at the Cube,
+	// a drop for the move would have come.
+	lines := cubewatch.Lines(moved)
 	reconnect()
-	time.Sleep(300 * time.Millisecond)
-	if n := moved.Connections(); n != 1 {
-		t.Fatalf("the reconnect for the move dropped the connection to the new address: %d connections", n)
-	}
+	next := lines.Mark()
+	q.Enqueue(Command{Lines: []cube.Message{cube.CmdGetNTP}})
+	testkit.Never(t, "the reconnect for the move dropping the connection to the new address",
+		func() bool { return moved.Connections() != 1 }, lines.Seen(next, cubewatch.Type('f')))
 }

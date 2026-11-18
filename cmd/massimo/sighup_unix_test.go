@@ -9,8 +9,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
-	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -18,36 +16,17 @@ import (
 	"go.metaworx.ch/massimo/internal/testkit"
 )
 
-// lockedWriter collects what a logger writes from another goroutine.
-type lockedWriter struct {
-	mu sync.Mutex
-	b  strings.Builder
-}
-
-func (w *lockedWriter) Write(p []byte) (int, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.b.Write(p)
-}
-
-func (w *lockedWriter) String() string {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.b.String()
-}
-
 // catchSighup catches a real SIGHUP to the process: logged before
 // ready, the reload after it.
 func TestCatchSighup(t *testing.T) {
-	var out lockedWriter
-	h, stop := catchSighup(slog.New(slog.NewTextHandler(&out, nil)))
+	log, w := testkit.LogWatch(nil)
+	h, stop := catchSighup(log)
 	defer stop()
+	m := w.Mark()
 	if err := syscall.Kill(os.Getpid(), syscall.SIGHUP); err != nil {
 		t.Fatal(err)
 	}
-	if !testkit.Within(5*time.Second, func() bool { return strings.Contains(out.String(), "SIGHUP during the start, ignored") }) {
-		t.Fatalf("no warning for the SIGHUP before ready: %q", out.String())
-	}
+	w.Await(t, m, "the warning for the SIGHUP before ready", testkit.Msg("SIGHUP during the start, ignored"))
 	ran := make(chan struct{}, 1)
 	h.ready(func() { ran <- struct{}{} })
 	if err := syscall.Kill(os.Getpid(), syscall.SIGHUP); err != nil {
@@ -66,17 +45,19 @@ func TestCatchSighup(t *testing.T) {
 func TestServeSighupDuringTheStart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "serve.log")
 	s := launchBuiltServe(t, []string{"MASSIMO_CUBE_ADDRESS=" + startFakeCube(t)}, "-log", path, "-proxy", "off", "-sighup", "reload")
-	s.waitFor(t, "store created")
+	s.log.Await(t, 0, "store created", testkit.Msg("store created"), serveWait)
+	m := s.log.Mark()
 	if err := s.cmd.Process.Signal(syscall.SIGHUP); err != nil {
 		t.Fatal(err)
 	}
-	if a := s.waitFor(t, "SIGHUP during the start, ignored"); a["level"] != "WARN" {
-		t.Errorf("the warning: %v", a)
+	if r, _ := s.log.Await(t, m, "the warning for the SIGHUP", testkit.Msg("SIGHUP during the start, ignored"), serveWait); r.Level != slog.LevelWarn {
+		t.Errorf("the warning: %v", r)
 	}
-	s.waitFor(t, "server started")
+	s.log.Await(t, 0, "server started", testkit.Msg("server started"), serveWait)
+	m = s.log.Mark()
 	if err := s.cmd.Process.Signal(syscall.SIGHUP); err != nil {
 		t.Fatal(err)
 	}
-	s.waitForAttr(t, "log rotated", "reason", "sighup")
+	s.log.Await(t, m, "the SIGHUP's rotation", testkit.Msg("log rotated", "reason", "sighup"), serveWait)
 	s.stop(t)
 }

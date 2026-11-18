@@ -13,10 +13,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strings"
-	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -25,23 +23,28 @@ import (
 	"go.metaworx.ch/massimo/internal/testkit"
 )
 
-// builtServe is massimo serve run from a binary the test built, with a
-// data directory of its own and no settings file, stopped by a signal as
-// systemd, launchd and kill stop it.
+// builtServe is massimo serve run from a binary the test built (runBuilt),
+// stopped by a signal as systemd, launchd and kill stop it;
+// launchBuiltServe's has a data directory of its own and no settings
+// file.
 type builtServe struct {
 	cmd  *exec.Cmd
 	data string
 	addr string // the API's, from the "api listening" line
 
-	mu    sync.Mutex
-	lines []string
-	added chan struct{} // closed when a line arrives
+	// log is the watch of serve's log on stderr, a record a line, ended
+	// with the exit status once the process ended. A wait for a line the
+	// test causes marks it before the action; one of the start's lines
+	// waits from 0, the start being the action.
+	log *testkit.Watch[testkit.Record]
 
 	exited chan struct{} // closed once the process ended
 	err    error         // its Wait's, once exited
 }
 
-var logAttr = regexp.MustCompile(`\b(\w+)=("[^"]*"|\S+)`)
+// serveWait is how long a test waits for a line of serve's, before the
+// scale: a binary that starts beside the other tests' builds.
+var serveWait = testkit.For(10 * time.Second)
 
 // startBuiltServe builds massimo and starts serve with args after its
 // own, env added to this process's environment without its MASSIMO_
@@ -49,7 +52,8 @@ var logAttr = regexp.MustCompile(`\b(\w+)=("[^"]*"|\S+)`)
 func startBuiltServe(t *testing.T, env []string, args ...string) *builtServe {
 	t.Helper()
 	s := launchBuiltServe(t, env, args...)
-	s.addr = s.waitFor(t, "api listening")["addr"]
+	r, _ := s.log.Await(t, 0, "api listening", testkit.Msg("api listening"), serveWait)
+	s.addr = r.Attrs["addr"]
 	return s
 }
 
@@ -67,75 +71,62 @@ func launchBuiltServe(t *testing.T, env []string, args ...string) *builtServe {
 	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
 		t.Fatalf("go build: %v\n%s", err, out)
 	}
-	s := &builtServe{data: t.TempDir(), added: make(chan struct{}), exited: make(chan struct{})}
-	s.cmd = exec.Command(bin, append([]string{"-data", s.data, "serve", "-listen", "127.0.0.1:0", "-discover-interval", "0"}, args...)...)
+	data := t.TempDir()
+	cmd := exec.Command(bin, append([]string{"-data", data, "serve", "-listen", "127.0.0.1:0", "-discover-interval", "0"}, args...)...)
 	for _, kv := range os.Environ() {
 		if !strings.HasPrefix(kv, "MASSIMO_") {
-			s.cmd.Env = append(s.cmd.Env, kv)
+			cmd.Env = append(cmd.Env, kv)
 		}
 	}
-	s.cmd.Env = append(append(s.cmd.Env, "MASSIMO_ENV_FILE="+os.DevNull), env...)
-	stderr, err := s.cmd.StderrPipe()
+	cmd.Env = append(append(cmd.Env, "MASSIMO_ENV_FILE="+os.DevNull), env...)
+	s := runBuilt(t, cmd)
+	s.data = data
+	return s
+}
+
+// runBuilt starts cmd, a massimo the test built, with its stderr read
+// into the watch of its log, which ends with the exit status once the
+// process ended. The test's end kills the process, and shows its log
+// where the test failed.
+func runBuilt(t *testing.T, cmd *exec.Cmd) *builtServe {
+	t.Helper()
+	s := &builtServe{cmd: cmd, log: testkit.NewWatch[testkit.Record](nil), exited: make(chan struct{})}
+	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.cmd.Start(); err != nil {
+	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
 	go func() {
-		sc := bufio.NewScanner(stderr)
-		for sc.Scan() {
-			s.mu.Lock()
-			s.lines = append(s.lines, sc.Text())
-			close(s.added)
-			s.added = make(chan struct{})
-			s.mu.Unlock()
+		// Every line is read before Wait, which closes the pipe.
+		testkit.ReadLog(s.log, stderr)
+		s.err = cmd.Wait()
+		if s.err != nil {
+			s.log.End(fmt.Errorf("serve ended: %w", s.err))
+		} else {
+			s.log.End(nil)
 		}
-		s.err = s.cmd.Wait()
 		close(s.exited)
 	}()
 	t.Cleanup(func() {
-		s.cmd.Process.Kill()
+		cmd.Process.Kill()
 		<-s.exited
 		if t.Failed() {
-			t.Logf("serve's log:\n%s", strings.Join(s.log(), "\n"))
+			t.Logf("serve's log:\n%s", s.logText())
 		}
 	})
 	return s
 }
 
-func (s *builtServe) log() []string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return append([]string(nil), s.lines...)
-}
-
-// waitFor waits for a log line with msg and returns its attributes.
-func (s *builtServe) waitFor(t *testing.T, msg string) map[string]string {
-	t.Helper()
-	deadline := time.After(testkit.Scale(10 * time.Second))
-	for seen := 0; ; {
-		s.mu.Lock()
-		lines, added := s.lines[seen:], s.added
-		seen = len(s.lines)
-		s.mu.Unlock()
-		for _, l := range lines {
-			if strings.Contains(l, `msg="`+msg+`"`) || strings.Contains(l, "msg="+msg+" ") {
-				attrs := map[string]string{}
-				for _, m := range logAttr.FindAllStringSubmatch(l, -1) {
-					attrs[m[1]] = strings.Trim(m[2], `"`)
-				}
-				return attrs
-			}
-		}
-		select {
-		case <-added:
-		case <-s.exited:
-			t.Fatalf("serve ended before logging %q: %v", msg, s.err)
-		case <-deadline:
-			t.Fatalf("serve did not log %q", msg)
-		}
+// logText is serve's log so far, its lines as serve wrote them, for a
+// failure.
+func (s *builtServe) logText() string {
+	var b strings.Builder
+	for _, r := range s.log.Since(0, nil) {
+		b.WriteString(r.Line + "\n")
 	}
+	return b.String()
 }
 
 // stop sends SIGTERM and waits for the process, which must end without
@@ -176,12 +167,13 @@ func TestServeStopsOnSIGTERM(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(s.data, "massimo.db-wal")); err != nil {
 		t.Fatalf("no -wal file while serve runs: %v", err)
 	}
+	m := s.log.Mark()
 	s.stop(t)
 	if _, err := os.Stat(filepath.Join(s.data, "massimo.db-wal")); err == nil {
 		t.Fatal("the store was not closed: its -wal file is left")
 	}
-	if p := s.waitFor(t, "store closed")["path"]; p != store.Path(s.data) {
-		t.Errorf("store closed names %s, want %s", p, store.Path(s.data))
+	if r, _ := s.log.Await(t, m, "store closed", testkit.Msg("store closed"), serveWait); r.Attrs["path"] != store.Path(s.data) {
+		t.Errorf("store closed names %s, want %s", r.Attrs["path"], store.Path(s.data))
 	}
 }
 
@@ -256,7 +248,8 @@ func TestServeAnswersRequestInFlightAtStop(t *testing.T) {
 // and its client sees the end of the stream rather than a cut.
 func TestServeStopEndsEventStreams(t *testing.T) {
 	s := startBuiltServe(t, []string{"MASSIMO_CUBE_ADDRESS=" + startFakeCube(t)}, "-token", "test-token", "-proxy", "off")
-	sn := s.waitFor(t, "cube added from the settings file")["serial"]
+	r, _ := s.log.Await(t, 0, "cube added from the settings file", testkit.Msg("cube added from the settings file"), serveWait)
+	sn := r.Attrs["serial"]
 	req, err := http.NewRequest(http.MethodGet, "http://"+s.addr+"/api/v1/cubes/"+sn+"/events", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -266,28 +259,17 @@ func TestServeStopEndsEventStreams(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
 		t.Fatalf("the stream answered %s", resp.Status)
 	}
-	br := bufio.NewReader(resp.Body)
-	if _, err := br.ReadString('\n'); err != nil {
-		t.Fatalf("no first event: %v", err)
-	}
-	read := make(chan error, 1)
-	go func() {
-		_, err := io.Copy(io.Discard, br)
-		read <- err
-	}()
+	events := testkit.StreamWatch(t, resp.Body)
+	events.Await(t, 0, "a first event", nil)
 	if took := s.stop(t); took > 3*time.Second {
 		t.Errorf("the stop took %s with an event stream open, want it well within the HTTP server's 5 s grace", took.Round(time.Millisecond))
 	}
-	select {
-	case err := <-read:
-		if err != nil {
-			t.Errorf("the stream was cut rather than ended: %v", err)
-		}
-	case <-time.After(testkit.Scale(5 * time.Second)):
-		t.Error("the stream did not end")
+	testkit.Eventually(t, "the stream's end", events.Ended)
+	if err := events.Err(); err != nil {
+		t.Errorf("the stream was cut rather than ended: %v", err)
 	}
 }

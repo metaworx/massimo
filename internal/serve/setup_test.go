@@ -4,7 +4,6 @@
 package serve
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -17,7 +16,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -199,10 +197,10 @@ func TestServeSeveralCubesNeedNamedListeners(t *testing.T) {
 	if _, err := setupCubes(ctx, testStore(t, ""), Config{Proxies: []string{":62910"}}, quietLog()); err == nil || !strings.Contains(err.Error(), "several cubes") {
 		t.Fatalf("unnamed listener with two cubes: %v", err)
 	}
-	var logged bytes.Buffer
-	su, err := setupCubes(ctx, testStore(t, ""), Config{}, slog.New(slog.NewTextHandler(&logged, nil)))
-	if err != nil || len(su.cubes) != 2 || len(su.listeners) != 0 || strings.Count(logged.String(), "without a proxy") != 2 {
-		t.Fatalf("two cubes without proxy addresses: %+v %v %s", su, err, logged.String())
+	logger, logs := testkit.LogWatch(nil)
+	su, err := setupCubes(ctx, testStore(t, ""), Config{}, logger)
+	if err != nil || len(su.cubes) != 2 || len(su.listeners) != 0 || logs.Count(0, testkit.Contains("without a proxy")) != 2 {
+		t.Fatalf("two cubes without proxy addresses: %+v %v %q", su, err, logs.Since(0, nil))
 	}
 	t.Setenv("MASSIMO_CUBE_KEQ0000001_PROXY", "10.0.0.11")
 	t.Setenv("MASSIMO_CUBE_KEQ0000002_PROXY", "10.0.0.12")
@@ -335,11 +333,12 @@ func TestServeRemovedCubeStaysRemoved(t *testing.T) {
 // web UI can add one.
 func TestServeStartsWithoutCubes(t *testing.T) {
 	clearCubeEnv(t)
-	var logged bytes.Buffer
-	su, err := setupCubes(context.Background(), testStore(t, ""), Config{}, slog.New(slog.NewTextHandler(&logged, nil)))
-	if err != nil || len(su.cubes) != 0 || len(su.listeners) != 0 || !strings.Contains(logged.String(), "no cube configured yet") {
-		t.Fatalf("%+v %v %s", su, err, logged.String())
+	logger, logs := testkit.LogWatch(nil)
+	su, err := setupCubes(context.Background(), testStore(t, ""), Config{}, logger)
+	if err != nil || len(su.cubes) != 0 || len(su.listeners) != 0 {
+		t.Fatalf("%+v %v", su, err)
 	}
+	logs.Has(t, 0, "the warning that no cube is configured", testkit.Contains("no cube configured yet"))
 }
 
 // serve -addr runs without the store: no massimo.db, no node.key.
@@ -452,21 +451,18 @@ func TestServePlainSeedCutShort(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			var log syncLog
-			srv := server.New(server.Options{Cubes: su.cubes, Proxy: su.listeners, Store: st, FileCubes: su.fileCubes, Logger: slog.New(slog.NewTextHandler(&log, nil))})
+			logger, logs := testkit.LogWatch(nil)
+			srv := server.New(server.Options{Cubes: su.cubes, Proxy: su.listeners, Store: st, FileCubes: su.fileCubes, Logger: logger})
 			runCtx, cancel := context.WithCancel(ctx)
 			done := make(chan struct{})
 			go func() {
 				srv.Run(runCtx)
 				close(done)
 			}()
-			if !testkit.Within(10*time.Second, func() bool { return strings.Contains(log.String(), "cut short") }) {
-				cancel()
-				<-done
-				t.Fatalf("no write refused:\n%s", log.String())
-			}
-			cancel()
-			<-done
+			func() {
+				defer func() { cancel(); <-done }() // the server stops before a failure ends the test, too
+				logs.Await(t, 0, "a write refused", testkit.Contains("cut short"), testkit.For(10*time.Second))
+			}()
 			if _, err := other.Exec(`DROP TRIGGER cut`); err != nil {
 				t.Fatal(err)
 			}
@@ -477,22 +473,4 @@ func TestServePlainSeedCutShort(t *testing.T) {
 			}
 		})
 	}
-}
-
-// syncLog collects a log written from several goroutines.
-type syncLog struct {
-	mu sync.Mutex
-	b  bytes.Buffer
-}
-
-func (l *syncLog) Write(p []byte) (int, error) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return l.b.Write(p)
-}
-
-func (l *syncLog) String() string {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return l.b.String()
 }

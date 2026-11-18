@@ -4,7 +4,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -14,10 +13,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -167,37 +164,10 @@ func TestServeRestartsThroughTheAPI(t *testing.T) {
 		}
 	}
 	cmd.Env = append(cmd.Env, "MASSIMO_ENV_FILE="+os.DevNull, restartVar+"="+restartExit)
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
-	}
-	defer cmd.Process.Kill()
-	addr := make(chan string, 1)
-	var log strings.Builder
-	var logMu sync.Mutex
-	scanned := make(chan struct{})
-	go func() {
-		defer close(scanned)
-		sc := bufio.NewScanner(stderr)
-		for sc.Scan() {
-			logMu.Lock()
-			log.WriteString(sc.Text() + "\n")
-			logMu.Unlock()
-			if m := regexp.MustCompile(`msg="api listening" source=system addr=(\S+) .*restart=exit`).FindStringSubmatch(sc.Text()); m != nil {
-				addr <- m[1]
-			}
-		}
-	}()
-	var base string
-	select {
-	case a := <-addr:
-		base = "http://" + a
-	case <-time.After(testkit.Scale(10 * time.Second)):
-		t.Fatal("serve did not start, or not with -restart exit")
-	}
+	s := runBuilt(t, cmd)
+	r, _ := s.log.Await(t, 0, "the start, with -restart exit", testkit.Msg("api listening", "source", "system", "restart", "exit"), serveWait)
+	base := "http://" + r.Attrs["addr"]
+	m := s.log.Mark()
 	resp, err := http.Post(base+"/api/v1/restart", "application/json", strings.NewReader("{}"))
 	if err != nil {
 		t.Fatal(err)
@@ -207,21 +177,18 @@ func TestServeRestartsThroughTheAPI(t *testing.T) {
 	if resp.StatusCode != http.StatusAccepted || !strings.Contains(string(body), `"by": "exit"`) {
 		t.Fatalf("POST: %d %s", resp.StatusCode, body)
 	}
-	done := make(chan error, 1)
-	go func() { done <- cmd.Wait() }()
 	select {
-	case err := <-done:
+	case <-s.exited:
 		var ee *exec.ExitError
-		if !errors.As(err, &ee) || ee.ExitCode() != exitRestart {
-			t.Fatalf("serve ended with %v, want exit status %d", err, exitRestart)
+		if !errors.As(s.err, &ee) || ee.ExitCode() != exitRestart {
+			t.Fatalf("serve ended with %v, want exit status %d", s.err, exitRestart)
 		}
 	case <-time.After(testkit.Scale(20 * time.Second)):
 		t.Fatal("serve did not end for the restart")
 	}
-	<-scanned
-	if !strings.Contains(log.String(), `msg="stopped for a restart"`) || strings.Contains(log.String(), "error:") {
-		t.Fatalf("the log:\n%s", log.String())
-	}
+	// Once serve ended, its log is read whole.
+	s.log.Has(t, m, "the stop for a restart", testkit.Msg("stopped for a restart"))
+	s.log.HasNot(t, 0, "an error", testkit.Contains("error:"))
 	if _, err := os.Stat(filepath.Join(data, "massimo.db-wal")); err == nil {
 		t.Fatal("the store was not closed: its -wal file is left")
 	}

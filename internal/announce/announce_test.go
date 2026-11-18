@@ -4,7 +4,6 @@
 package announce
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -255,7 +254,7 @@ func TestBrowseFindsResponder(t *testing.T) {
 // log; with neither, Start fails and names the cause.
 func TestAnnounceWithoutMulticastWarns(t *testing.T) {
 	refuse := errors.New("refused for the test")
-	var log bytes.Buffer
+	log, logged := testkit.LogWatch(nil)
 	port, s := freeUDPPort(t), sink(t)
 	o := options{port: port, sendTo: []net.Addr{s.LocalAddr()}, hostAddrs: func() []net.IP { return testAddrs },
 		listen: func(network string, port int) (net.PacketConn, error) {
@@ -264,14 +263,12 @@ func TestAnnounceWithoutMulticastWarns(t *testing.T) {
 			}
 			return listenShared(network, port)
 		}}
-	r, err := start(context.Background(), testService(), slog.New(slog.NewTextHandler(&log, nil)), o)
+	r, err := start(context.Background(), testService(), log, o)
 	if err != nil {
 		t.Fatal(err)
 	}
 	r.Stop()
-	if !strings.Contains(log.String(), "one address family not announced") || !strings.Contains(log.String(), "refused for the test") {
-		t.Fatalf("log: %s", log.String())
-	}
+	logged.Has(t, 0, "the family not announced, with its error", testkit.Contains("one address family not announced", "refused for the test"))
 	o.listen = func(string, int) (net.PacketConn, error) { return nil, refuse }
 	if _, err := start(context.Background(), testService(), quietLog(), o); err == nil || !errors.Is(err, refuse) || !strings.Contains(err.Error(), "no mDNS socket") {
 		t.Fatalf("no socket: %v", err)

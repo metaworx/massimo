@@ -14,7 +14,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -95,9 +94,9 @@ func TestOpenRunsAgainstFakeCube(t *testing.T) {
 	clearCubeEnv(t)
 	t.Setenv("MASSIMO_CUBE_KEQ0000100_ADDRESS", startFakeCube(t))
 	data := t.TempDir()
-	var log syncLog
+	logger, logs := testkit.LogWatch(nil)
 	inst, err := Open(context.Background(), Config{Listen: "127.0.0.1:0", DataDir: data, Version: "massimo test", Proxies: []string{"off"},
-		RefreshInterval: &never, DiscoverInterval: &never, Logger: slog.New(slog.NewTextHandler(&log, nil))})
+		RefreshInterval: &never, DiscoverInterval: &never, Logger: logger})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,11 +118,10 @@ func TestOpenRunsAgainstFakeCube(t *testing.T) {
 	if err := stop(); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{`msg="serving cube" source=system serial=KEQ0000100`, `msg="api listening" source=system addr=` + inst.Addr() + ` auth=open restart=none reboot=none tls=off data=` + data, `msg="store closed"`} {
-		if !strings.Contains(log.String(), want) {
-			t.Errorf("the log lacks %q:\n%s", want, log.String())
-		}
-	}
+	logs.Has(t, 0, "the cube served", testkit.Msg("serving cube", "source", "system", "serial", "KEQ0000100"))
+	logs.Has(t, 0, "the API listening, open, without TLS", testkit.Msg("api listening", "source", "system", "addr", inst.Addr(),
+		"auth", "open", "restart", "none", "reboot", "none", "tls", "off", "data", data))
+	logs.Has(t, 0, "the store closed", testkit.Msg("store closed"))
 	if _, err := os.Stat(filepath.Join(data, store.FileName)); err != nil {
 		t.Fatal(err)
 	}
@@ -260,9 +258,9 @@ func fakeAnnounce(t *testing.T, err error) (got chan announce.Service, stopped c
 func TestRunAnnounces(t *testing.T) {
 	clearCubeEnv(t)
 	got, stopped := fakeAnnounce(t, nil)
-	var log syncLog
+	logger, logs := testkit.LogWatch(nil)
 	inst, err := Open(context.Background(), Config{Listen: "127.0.0.1:0", DataDir: t.TempDir(), Proxies: []string{"off"}, DiscoverInterval: &never,
-		Announce: Announce{On: true, Name: "box.example.lan", Version: "v0.12.0"}, Logger: slog.New(slog.NewTextHandler(&log, nil))})
+		Announce: Announce{On: true, Name: "box.example.lan", Version: "v0.12.0"}, Logger: logger})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -294,9 +292,7 @@ func TestRunAnnounces(t *testing.T) {
 	default:
 		t.Fatal("Run returned before the announcement stopped")
 	}
-	if !strings.Contains(log.String(), `msg="announced on the LAN" source=system service=_massimo._tcp name=box port=`+port) {
-		t.Fatalf("log:\n%s", log.String())
-	}
+	logs.Has(t, 0, "the announcement", testkit.Msg("announced on the LAN", "source", "system", "service", "_massimo._tcp", "name", "box", "port", port))
 }
 
 // A responder that cannot start is a warning, and the server serves
@@ -304,9 +300,9 @@ func TestRunAnnounces(t *testing.T) {
 func TestRunUnannouncedWarns(t *testing.T) {
 	clearCubeEnv(t)
 	got, _ := fakeAnnounce(t, errors.New("no interface joined the mDNS group"))
-	var log syncLog
+	logger, logs := testkit.LogWatch(nil)
 	inst, err := Open(context.Background(), Config{Listen: "127.0.0.1:0", DataDir: t.TempDir(), Proxies: []string{"off"}, DiscoverInterval: &never,
-		Announce: Announce{On: true}, Logger: slog.New(slog.NewTextHandler(&log, nil))})
+		Announce: Announce{On: true}, Logger: logger})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -317,13 +313,11 @@ func TestRunUnannouncedWarns(t *testing.T) {
 	if err := stop(); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(log.String(), `level=WARN msg="not announced on the LAN" source=system error="no interface joined the mDNS group"`) {
-		t.Fatalf("log:\n%s", log.String())
-	}
+	logs.Has(t, 0, "the warning that nothing was announced", testkit.MsgAt(slog.LevelWarn, "not announced on the LAN", "source", "system", "error", "no interface joined the mDNS group"))
 
-	log = syncLog{}
+	logger, logs = testkit.LogWatch(nil)
 	inst, err = Open(context.Background(), Config{Listen: "127.0.0.1:0", Addr: "127.0.0.1:1", Proxies: []string{"off"}, DiscoverInterval: &never,
-		Announce: Announce{On: true}, Logger: slog.New(slog.NewTextHandler(&log, nil))})
+		Announce: Announce{On: true}, Logger: logger})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -335,9 +329,7 @@ func TestRunUnannouncedWarns(t *testing.T) {
 		t.Fatalf("announced without a store: %+v", svc)
 	default:
 	}
-	if !strings.Contains(log.String(), `msg="not announced on the LAN" source=system reason="no store (-addr), so no node"`) {
-		t.Fatalf("log:\n%s", log.String())
-	}
+	logs.Has(t, 0, "no announcement without a store", testkit.Msg("not announced on the LAN", "source", "system", "reason", "no store (-addr), so no node"))
 }
 
 // postDiscover asks for a search and gives the answer's status and found
@@ -408,8 +400,7 @@ func TestOpenDiscoveryListen(t *testing.T) {
 func TestAnnounceSetting(t *testing.T) {
 	st := testStore(t, t.TempDir())
 	ctx := context.Background()
-	var log syncLog
-	logger := slog.New(slog.NewTextHandler(&log, nil))
+	logger, logs := testkit.LogWatch(nil)
 	for _, c := range []struct {
 		value, listen string
 		want          bool
@@ -426,9 +417,7 @@ func TestAnnounceSetting(t *testing.T) {
 			t.Errorf("%q on %s: %v, want %v", c.value, c.listen, got, c.want)
 		}
 	}
-	if !strings.Contains(log.String(), `msg="setting ignored" key=announce value=sometimes`) {
-		t.Fatalf("log:\n%s", log.String())
-	}
+	logs.Has(t, 0, "the bad setting ignored", testkit.Msg("setting ignored", "key", "announce", "value", "sometimes"))
 	if announceSetting(ctx, nil, "0.0.0.0:8099", logger) != true {
 		t.Fatal("without a store: auto")
 	}

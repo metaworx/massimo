@@ -13,6 +13,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/testkit"
+	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 )
 
 // The budget's holds and the commands of r: lines alone (AP RadioHealth
@@ -38,6 +39,7 @@ func (h *holdRecorder) list() []Hold {
 func TestQueueResetsPassTheHolds(t *testing.T) {
 	var rec holdRecorder
 	srv, q, _ := setup(t, Options{DutyWait: time.Minute, SlotWait: time.Minute, OnHold: rec.note})
+	lines := cubewatch.Lines(srv)
 	srv.Duty = 0x64 // 100 %
 	srv.SetFreeSlots(2)
 	m := roomSetpoint(t)
@@ -53,7 +55,7 @@ func TestQueueResetsPassTheHolds(t *testing.T) {
 	if h := rec.list(); len(h) != 0 {
 		t.Fatalf("holds %+v, want none for r: lines alone", h)
 	}
-	sameSent(t, received(srv), []string{m.String(), reset.String()})
+	sameSent(t, lines, []string{m.String(), reset.String()})
 }
 
 // A command with an s: line waits for free slots as before, also where
@@ -61,6 +63,7 @@ func TestQueueResetsPassTheHolds(t *testing.T) {
 func TestQueueHoldsAResetWithARadiogram(t *testing.T) {
 	var rec holdRecorder
 	srv, q, _ := setup(t, Options{SlotWait: 200 * time.Millisecond, OnHold: rec.note})
+	lines := cubewatch.Lines(srv)
 	srv.SetFreeSlots(2)
 	m := roomSetpoint(t)
 	// The first radio command learns the budget: 2 slots free.
@@ -76,7 +79,7 @@ func TestQueueHoldsAResetWithARadiogram(t *testing.T) {
 	if h := rec.list(); len(h) != 1 || h[0].Reason != HoldMemorySlots || h[0].FreeSlots != 2 {
 		t.Fatalf("holds %+v, want one for the memory slots", h)
 	}
-	sameSent(t, received(srv), []string{m.String(), reset.String(), m.String()})
+	sameSent(t, lines, []string{m.String(), reset.String(), m.String()})
 }
 
 // A command whose Wanted says no once the hold has let it pass is
@@ -88,6 +91,7 @@ func TestQueueDropsAnUnwantedCommand(t *testing.T) {
 	var asked atomic.Int32
 	var once sync.Once
 	srv, q, _ := setup(t, Options{SlotWait: 100 * time.Millisecond, OnHold: func(Hold) { once.Do(func() { wanted.Store(false) }) }})
+	lines := cubewatch.Lines(srv)
 	srv.SetFreeSlots(2)
 	m := roomSetpoint(t)
 	// The first radio command learns the budget: 2 slots free.
@@ -98,11 +102,11 @@ func TestQueueDropsAnUnwantedCommand(t *testing.T) {
 	if !errors.Is(res.Err, ErrUnwanted) || asked.Load() != 1 {
 		t.Fatalf("result %+v, asked %d times", res, asked.Load())
 	}
-	sameSent(t, received(srv), []string{m.String()})
+	sameSent(t, lines, []string{m.String()})
 
 	wanted.Store(true)
 	if res := q.Enqueue(Command{Priority: PriorityLow, Lines: []cube.Message{m}, Wanted: still}).Wait(context.Background()); res.Err != nil {
 		t.Fatalf("a wanted command: %+v", res)
 	}
-	sameSent(t, received(srv), []string{m.String(), m.String()})
+	sameSent(t, lines, []string{m.String(), m.String()})
 }

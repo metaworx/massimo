@@ -4,18 +4,17 @@
 package store
 
 import (
-	"bytes"
 	"context"
-	"log/slog"
-	"strings"
 	"testing"
+
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // MASSIMO_API_TOKEN creates the owner at the first start, is added to
 // an owner's keys when it changes, and is revoked when it goes.
 func TestBootstrap(t *testing.T) {
-	var logged bytes.Buffer
-	s, err := Open(t.TempDir(), Options{Logger: slog.New(slog.NewTextHandler(&logged, nil))})
+	log, logged := testkit.LogWatch(nil)
+	s, err := Open(t.TempDir(), Options{Logger: log})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,10 +27,10 @@ func TestBootstrap(t *testing.T) {
 		t.Fatalf("%+v %v", res, err)
 	}
 	// The first start with a token.
-	logged.Reset()
+	m := logged.Mark()
 	res, err = s.Bootstrap(ctx, "secret-one")
-	if err != nil || !res.OwnerCreated || !res.TokenAdded || res.Users != 1 || !strings.Contains(logged.String(), "owner created from MASSIMO_API_TOKEN") {
-		t.Fatalf("%+v %v %s", res, err, logged.String())
+	if err != nil || !res.OwnerCreated || !res.TokenAdded || res.Users != 1 || logged.Count(m, testkit.Msg("owner created from MASSIMO_API_TOKEN")) == 0 {
+		t.Fatalf("%+v %v %v", res, err, logged.Since(m, nil))
 	}
 	owner, ok, _ := s.User(ctx, BootstrapUser)
 	if !ok || owner.Role != RoleOwner || owner.HasPassword {
