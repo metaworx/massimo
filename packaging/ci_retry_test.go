@@ -865,7 +865,6 @@ func (r *nightlyRepo) pick(t *testing.T, tc nightlyCase) (map[string]string, str
 		"GITHUB_SHA="+head,
 		"GITHUB_OUTPUT="+output,
 		"GITHUB_STEP_SUMMARY="+summary,
-		"NIGHTLY_MAIN="+head,
 		"PLATFORMS="+tc.platforms,
 	)
 	out, err := cmd.CombinedOutput()
@@ -889,18 +888,23 @@ func (r *nightlyRepo) pick(t *testing.T, tc nightlyCase) (map[string]string, str
 }
 
 // TestNightlyPick: What to ship takes the newest commit of main whose
-// suite passed, and runs the macOS or Windows job where the records of it
-// and of the commits before it say the job did not run for its code (AP
-// TestSpeed, D15-B).
+// suite passed, and runs the macOS or Windows job on main's head where
+// the records of it and of the commits before it say the job did not run
+// for its code (AP TestSpeed, D15-B); where that commit is older than
+// main's head, the night is skipped, and no output names a commit to
+// check out.
 func TestNightlyPick(t *testing.T) {
 	r := newNightlyRepo(t)
 	words := func(mac, win string) string {
 		return "ui=true lan=true fuzz=true app=true mac=" + mac + " win=" + win
 	}
 	short := func(name string) string { return r.commits[name][:12] }
-	// What to ship's outputs: sha and test by commit name, site, macos and
-	// windows.
-	type outputs struct{ sha, test, site, macos, windows string }
+	// What to ship's outputs: sha by commit name, site, macos, windows,
+	// and whether it skipped the night.
+	type outputs struct {
+		sha, site, macos, windows string
+		skip                      bool
+	}
 	for _, tc := range []struct {
 		name string
 		in   nightlyCase
@@ -910,52 +914,67 @@ func TestNightlyPick(t *testing.T) {
 		{"a push to main that no macOS runner took",
 			nightlyCase{head: "c3", passed: []string{"c2", "c3"},
 				records: map[string]string{"c2": words("true", "true"), "c3": words("false", "unneeded")}},
-			outputs{"c3", "c3", "true", "true", "false"},
+			outputs{"c3", "true", "true", "false", false},
 			"macOS LaunchDaemon did not run for " + short("c3") + "'s code (mac=false): it runs."},
-		{"documents after it, and a red last commit",
+		{"an older commit to ship, a job needed",
 			nightlyCase{head: "c5", passed: []string{"c2", "c3", "docs4"},
 				records: map[string]string{"c2": words("true", "true"), "c3": words("false", "unneeded")}},
-			outputs{"docs4", "docs4", "true", "true", "false"},
-			"Windows service passed for " + short("c2") + "'s code (win=true): not run."},
+			outputs{"", "true", "false", "false", true},
+			"No nightly build tonight: macOS LaunchDaemon did not pass for the code of " + short("docs4") +
+				", the newest commit of main whose suite passed, and the jobs run on main's head alone, " + short("c5") +
+				", whose suite has not passed; a night after main's head passes ships."},
+		{"an older commit to ship, nothing needed",
+			nightlyCase{head: "c5", passed: []string{"c3"}, records: map[string]string{"c3": words("true", "true")}},
+			outputs{"c3", "true", "false", "false", false},
+			"Windows service passed for " + short("c3") + "'s code (win=true): not run."},
 		{"passed",
 			nightlyCase{head: "c3", passed: []string{"c3"}, records: map[string]string{"c3": words("true", "true")}},
-			outputs{"c3", "c3", "true", "false", "false"}, ""},
+			outputs{"c3", "true", "false", "false", false}, ""},
 		{"unneeded down to the nightly build's commit",
 			nightlyCase{head: "c3", passed: []string{"c3"},
 				records: map[string]string{"c2": words("unneeded", "unneeded"), "c3": words("unneeded", "unneeded")}},
-			outputs{"c3", "c3", "true", "false", "false"},
+			outputs{"c3", "true", "false", "false", false},
 			"Windows service: the nightly build carries " + short("c1") + "'s code for it: not run."},
 		{"a record from before mac= and win=",
 			nightlyCase{head: "c3", passed: []string{"c3"}, records: map[string]string{"c3": "ui=true lan=true fuzz=true app=true"}},
-			outputs{"c3", "c3", "true", "false", "false"}, ""},
+			outputs{"c3", "true", "false", "false", false}, ""},
 		{"no record, code of its own",
 			nightlyCase{head: "c6", passed: []string{"c6"}, records: map[string]string{"c5": words("true", "true")}},
-			outputs{"c6", "c6", "true", "true", "true"},
+			outputs{"c6", "true", "true", "true", false},
 			"macOS LaunchDaemon: " + short("c6") + " has no record and code of its own: it runs."},
 		{"a release commit at main's head",
 			nightlyCase{head: "c7", passed: []string{"c6", "c7"}},
-			outputs{"", "", "false", "false", "false"}, "main's head is the release commit of v1.2.3"},
+			outputs{"", "false", "false", "false", false}, "main's head is the release commit of v1.2.3"},
 		{"a release commit before it",
 			nightlyCase{head: "docs8", passed: []string{"c7", "docs8"}},
-			outputs{"docs8", "docs8", "true", "false", "false"}, "is v1.2.3, whose run passed"},
+			outputs{"docs8", "true", "false", "false", false}, "is v1.2.3, whose run passed"},
 		{"both by hand",
 			nightlyCase{head: "c3", passed: []string{"c3"}, records: map[string]string{"c3": words("true", "true")}, platforms: "both"},
-			outputs{"c3", "c3", "true", "true", "true"}, ""},
+			outputs{"c3", "true", "true", "true", false}, "PLATFORMS=both: both jobs run on main's head, " + short("c3")},
 		{"both by hand, nothing to ship",
 			nightlyCase{head: "c3", platforms: "both"},
-			outputs{"", "c3", "true", "true", "true"}, ""},
+			outputs{"", "true", "true", "true", false}, ""},
+		{"both by hand, an older commit and a job needed",
+			nightlyCase{head: "c5", passed: []string{"docs4"}, records: map[string]string{"c3": words("false", "true")}, platforms: "both"},
+			outputs{"", "true", "true", "true", true}, "No nightly build tonight: macOS LaunchDaemon did not pass"},
 		{"nothing to ship",
 			nightlyCase{head: "c3"},
-			outputs{"", "", "true", "false", "false"},
+			outputs{"", "true", "false", "false", false},
 			"no commit of main after " + r.commits["c1"] + " has passed its suite: no nightly build."},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, summary := r.pick(t, tc.in)
-			for k, v := range map[string]string{"sha": r.commits[tc.want.sha], "test": r.commits[tc.want.test],
+			for k, v := range map[string]string{"sha": r.commits[tc.want.sha],
 				"site": tc.want.site, "macos": tc.want.macos, "windows": tc.want.windows} {
 				if got[k] != v {
 					t.Errorf("%s = %q, want %q\n%s", k, got[k], v, summary)
 				}
+			}
+			if _, ok := got["test"]; ok {
+				t.Errorf("an output test names a commit to check out: %q", got["test"])
+			}
+			if skipped := got["skip"] != ""; skipped != tc.want.skip {
+				t.Errorf("skip = %q, want it set %v\n%s", got["skip"], tc.want.skip, summary)
 			}
 			if tc.says != "" {
 				wants(t, "summary", summary, tc.says)

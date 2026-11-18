@@ -7,7 +7,7 @@
 # main's head (GITHUB_SHA) is a release commit, its version tag at it:
 # that tag's run builds it and deploys the site at the same commit, and
 # Pages keeps the first deploy of a commit (D55-A). Otherwise the newest
-# of main's first parents, at most NIGHTLY_WALK (100), down to the commit
+# of main's first parents from its head, at most NIGHTLY_WALK (100), down to the commit
 # release/nightly carries, whose run of ci.yml (its push, or its tag's)
 # had the job All tests passed succeed, so that a red last commit does
 # not cost a night whose second-last was green (the owner's rule); none
@@ -16,9 +16,11 @@
 # The macOS and Windows jobs, the outputs macos and windows (AP
 # TestSpeed, D15-B): a push to main counts such a job that no runner took
 # as not run, and its Tested record says mac=false or win=false (D16-A),
-# so the nightly build runs the job before it ships the code. For each
-# job the records of the commit and of its first parents, newest first,
-# decide:
+# so the nightly build runs the job before it ships the code: on main's
+# head, the commit the run checks out (GITHUB_SHA), and never on one an
+# input names, as a scheduled run holds the default branch's caches
+# (CodeQL, actions/cache-poisoning). For each job the records of the
+# commit and of its first parents, newest first, decide:
 #   - true, or a record without the word, written before AP TestSpeed,
 #     when every run ran both jobs: it passed for this code;
 #   - false: it did not run for this code, and runs;
@@ -32,14 +34,18 @@
 #     since the nightly build shipped it under this rule, or when a push
 #     to main still failed without both jobs;
 #   - the walk's end (NIGHTLY_WALK commits, or the history's): it runs.
-# PLATFORMS=both runs both whatever the records say (nightly.yml's input
-# platforms). The output test is the commit the jobs check out: the one
-# to ship, or main's head where there is none and PLATFORMS=both.
+# Where a job is to run and the commit is not main's head, whose suite
+# then has not passed, the night is skipped (D15-B: the jobs run on main's
+# head): the output skip says why, sha and the jobs are left empty, and
+# nightly.yml's Platforms passed fails with it. PLATFORMS=both runs both
+# jobs on main's head whatever the records say (nightly.yml's input
+# platforms), and ships the commit where the records do not skip the night.
 #
 # Needs a full history with the version tags, the guidelines
 # (fingerprint.sh, or FPSH), GH_TOKEN with actions: read and statuses:
 # read, GITHUB_REPOSITORY, GITHUB_SHA and GITHUB_OUTPUT; GITHUB_STEP_SUMMARY
-# where GitHub sets it. NIGHTLY_MAIN (origin/main) is the branch walked.
+# where GitHub sets it. NIGHTLY_MAIN (GITHUB_SHA, main's head at the run)
+# is where the walk starts.
 set -euo pipefail
 
 repo="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is not set}"
@@ -47,7 +53,7 @@ head="${GITHUB_SHA:?GITHUB_SHA is not set}"
 output="${GITHUB_OUTPUT:?GITHUB_OUTPUT is not set}"
 summary="${GITHUB_STEP_SUMMARY:-/dev/null}"
 walk="${NIGHTLY_WALK:-100}"
-main="${NIGHTLY_MAIN:-origin/main}"
+main="${NIGHTLY_MAIN:-$head}"
 fpsh="${FPSH:-GUIDELINES/shared/tools/fingerprint.sh}"
 force="${PLATFORMS:-}"
 case "$walk" in '' | *[!0-9]*) walk=100 ;; esac
@@ -135,7 +141,7 @@ runs() {
 	done
 }
 
-sha="" test="" site=true macos=false windows=false cur="" pick=""
+sha="" site=true macos=false windows=false skip="" cur="" pick=""
 at="$(version_tag "$head")"
 if [ -n "$at" ]; then
 	say "main's head is the release commit of ${at}: its own run builds and deploys it; no nightly build, no site."
@@ -155,24 +161,25 @@ else
 	done
 	if [ -n "$pick" ]; then
 		say "the newest commit of main whose suite passed, after ${cur:0:12}: ${pick:0:12}."
-		sha="$pick" test="$pick"
-		if [ "$force" = both ]; then
-			say "PLATFORMS=both: both jobs run, whatever the records say."
-			macos=true windows=true
-		else
-			if runs mac "macOS LaunchDaemon"; then macos=true; fi
-			if runs win "Windows service"; then windows=true; fi
+		sha="$pick"
+		need=""
+		if runs mac "macOS LaunchDaemon"; then macos=true need="macOS LaunchDaemon"; fi
+		if runs win "Windows service"; then windows=true need="${need:+${need} and }Windows service"; fi
+		if [ -n "$need" ] && [ "$pick" != "$head" ]; then
+			skip="No nightly build tonight: ${need} did not pass for the code of ${pick:0:12}, the newest commit of main whose suite passed, and the jobs run on main's head alone, ${head:0:12}, whose suite has not passed; a night after main's head passes ships."
+			say "$skip"
+			sha="" macos=false windows=false
 		fi
 	else
 		say "no commit of main after ${cur:-the start} has passed its suite: no nightly build."
 	fi
 fi
-if [ -z "$pick" ] && [ "$force" = both ]; then
-	say "PLATFORMS=both and nothing to ship: both jobs run on main's head, ${head:0:12}."
-	test="$head" macos=true windows=true
+if [ "$force" = both ]; then
+	say "PLATFORMS=both: both jobs run on main's head, ${head:0:12}, whatever the records say."
+	macos=true windows=true
 fi
 
-echo "sha=${sha} test=${test} site=${site} macos=${macos} windows=${windows}"
+echo "sha=${sha} site=${site} macos=${macos} windows=${windows} skip=${skip:+yes}"
 {
 	echo "### What to ship"
 	echo
@@ -183,16 +190,16 @@ echo "sha=${sha} test=${test} site=${site} macos=${macos} windows=${windows}"
 	echo "| Answer | Value |"
 	echo "|--------|-------|"
 	echo "| sha | \`${sha:-none}\` |"
-	echo "| test | \`${test:-none}\` |"
 	echo "| site | \`${site}\` |"
 	echo "| macos | \`${macos}\` |"
 	echo "| windows | \`${windows}\` |"
+	echo "| skip | ${skip:--} |"
 	echo
 } >>"$summary"
 {
 	echo "sha=${sha}"
-	echo "test=${test}"
 	echo "site=${site}"
 	echo "macos=${macos}"
 	echo "windows=${windows}"
+	echo "skip=${skip}"
 } >>"$output"
