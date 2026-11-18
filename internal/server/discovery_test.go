@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -789,9 +788,10 @@ func TestALostCubeIsSearchedForWhileLost(t *testing.T) {
 
 // fixedCube starts a server over a Cube with a fixed address at
 // 127.0.0.1, which a responder at 127.0.0.3 answers discovery for, and
-// returns the Cube, a count of the warnings that it answers from another
-// address, and the request count.
-func fixedCube(t *testing.T, interval time.Duration) (s *Server, fc *fakecube.Server, connected func() bool, warnings, requests func() int) {
+// returns the Cube, the watch of the server's log, where the warnings
+// that it answers from another address are (elsewhereMsg), and the
+// request count.
+func fixedCube(t *testing.T, interval time.Duration) (s *Server, fc *fakecube.Server, connected func() bool, logs *testkit.Watch[testkit.Record], requests func() int) {
 	t.Helper()
 	greeting, err := fakecube.LoadGreeting(fixture)
 	if err != nil {
@@ -809,9 +809,9 @@ func fixedCube(t *testing.T, interval time.Duration) (s *Server, fc *fakecube.Se
 	}
 	t.Cleanup(func() { elsewhere.Close() })
 	counter, requests := requestCounter(t)
-	var log syncBuffer
+	log, logs := testkit.LogWatch(nil)
 	ts, srv := startDiscovering(t, Options{Cubes: []CubeConfig{{Serial: "KEQ0000100", Addr: addr}}, DiscoverInterval: interval,
-		AddressRetry: 100 * time.Millisecond, Logger: slog.New(slog.NewTextHandler(&log, nil)),
+		AddressRetry: 100 * time.Millisecond, Logger: log,
 		DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{elsewhere.Addr(), counter}})
 	connected = func() bool {
 		var cubes []map[string]any
@@ -820,20 +820,17 @@ func fixedCube(t *testing.T, interval time.Duration) (s *Server, fc *fakecube.Se
 	}
 	testkit.Eventually(t, "the cube connected", connected)
 	testkit.Eventually(t, "no run going", func() bool { return noRunGoing(srv) })
-	warnings = func() int {
-		return strings.Count(log.String(), `msg="cube answers discovery from another address than configured"`)
-	}
-	return srv, fc, connected, warnings, requests
+	return srv, fc, connected, logs, requests
 }
 
 // Without periodic discovery, a lost Cube with a fixed address is not
 // searched for: discovery runs on request only, and cannot move it.
 func TestALostFixedCubeWithoutAnIntervalIsNotSearchedFor(t *testing.T) {
-	_, fc, connected, warnings, requests := fixedCube(t, 0)
+	_, fc, connected, logs, requests := fixedCube(t, 0)
 	fc.Close()
 	testkit.Eventually(t, "the cube lost", func() bool { return !connected() })
 	time.Sleep(500 * time.Millisecond) // five AddressRetry
-	if n, w := requests(), warnings(); n != 0 || w != 0 {
+	if n, w := requests(), logs.Count(0, testkit.Msg(elsewhereMsg)); n != 0 || w != 0 {
 		t.Fatalf("%d searches, %d warnings, want none", n, w)
 	}
 }
@@ -842,16 +839,16 @@ func TestALostFixedCubeWithoutAnIntervalIsNotSearchedFor(t *testing.T) {
 // for, and one that answers from another address is warned of, once
 // however many searches find it there (noteElsewhere).
 func TestALostFixedCubeWithAnIntervalIsSearchedFor(t *testing.T) {
-	s, fc, connected, warnings, requests := fixedCube(t, time.Hour)
+	s, fc, connected, logs, requests := fixedCube(t, time.Hour)
 	// The run at the start may have warned already, where its wait heard
 	// the answer; the searches after the loss repeat until one does.
 	testkit.Eventually(t, "the run at the start", func() bool { return requests() >= 1 && noRunGoing(s) })
 	before := requests()
 	fc.Close()
 	testkit.Eventually(t, "the cube lost", func() bool { return !connected() })
-	testkit.Eventually(t, "a warning after the loss", func() bool { return warnings() == 1 })
+	logs.Await(t, 0, "a warning after the loss", testkit.Msg(elsewhereMsg))
 	testkit.Eventually(t, "searches after the warning", func() bool { return requests() >= before+3 })
-	if n := warnings(); n != 1 {
+	if n := logs.Count(0, testkit.Msg(elsewhereMsg)); n != 1 {
 		t.Errorf("%d warnings over the searches, want 1", n)
 	}
 }
@@ -905,9 +902,9 @@ func TestOneSerialFromACubeAndAProxy(t *testing.T) {
 		}
 		return ""
 	}
-	var log syncBuffer
+	log, logs := testkit.LogWatch(nil)
 	ts, _ := startDiscovering(t, Options{Cubes: []CubeConfig{{Serial: "KEQ0000100"}}, CubePort: port, LookupMAC: mac,
-		Logger:        slog.New(slog.NewTextHandler(&log, nil)),
+		Logger:        log,
 		DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{atCube.Addr(), atProxy.Addr()}})
 	proxyAddr := "127.0.0.3:" + strconv.Itoa(port)
 	testkit.Eventually(t, "the cube through the proxy", func() bool {
@@ -940,8 +937,8 @@ func TestOneSerialFromACubeAndAProxy(t *testing.T) {
 	if cubes[0]["found_address"] != "127.0.0.2" {
 		t.Fatalf("found_address %v, want the Cube's own 127.0.0.2", cubes[0]["found_address"])
 	}
-	if n := strings.Count(log.String(), `msg="cube address from discovery"`); n != 1 {
-		t.Errorf("%d address changes in three runs, want 1:\n%s", n, log.String())
+	if changes := logs.Since(0, testkit.Msg("cube address from discovery")); len(changes) != 1 {
+		t.Errorf("%d address changes in three runs, want 1: %v", len(changes), changes)
 	}
 	if cubeTCP.Connections() != 0 || proxyTCP.Connections() != 1 {
 		t.Errorf("connections: %d to the Cube, %d to the proxy", cubeTCP.Connections(), proxyTCP.Connections())
@@ -954,9 +951,9 @@ func TestOneSerialFromACubeAndAProxy(t *testing.T) {
 func TestAnUnknownAnswerIsNotFollowed(t *testing.T) {
 	port, cubeTCP, proxyTCP, atCube, atProxy := homes(t)
 	atProxy.SetSilent(true)
-	var log syncBuffer
+	log, logs := testkit.LogWatch(nil)
 	ts, _ := startDiscovering(t, Options{Cubes: []CubeConfig{{Serial: "KEQ0000100"}}, CubePort: port,
-		Logger:        slog.New(slog.NewTextHandler(&log, nil)),
+		Logger:        log,
 		DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{atCube.Addr(), atProxy.Addr()}})
 	cubeAddr := "127.0.0.2:" + strconv.Itoa(port)
 	address := func() any {
@@ -974,7 +971,7 @@ func TestAnUnknownAnswerIsNotFollowed(t *testing.T) {
 	if a := address(); a != cubeAddr {
 		t.Fatalf("followed an unknown answer: %v", a)
 	}
-	if n := strings.Count(log.String(), `msg="cube address from discovery"`); n != 1 || proxyTCP.Connections() != 0 || cubeTCP.Connections() != 1 {
+	if n := logs.Count(0, testkit.Msg("cube address from discovery")); n != 1 || proxyTCP.Connections() != 0 || cubeTCP.Connections() != 1 {
 		t.Errorf("%d address changes, %d connections to the proxy, %d to the Cube", n, proxyTCP.Connections(), cubeTCP.Connections())
 	}
 }

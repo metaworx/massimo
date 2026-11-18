@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/testkit"
+	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 )
 
 // programWith reads a programme route, with its tag from the body and the
@@ -68,15 +69,14 @@ func TestProgramTag(t *testing.T) {
 		t.Fatalf("the virtual wall thermostat's tag %s", vtag)
 	}
 
-	sent := len(fc.Received())
+	received := cubewatch.Lines(fc)
+	sent := received.Mark()
 	monday := `{"monday":[{"temp":17,"until":"06:00"},{"temp":21.5,"until":"22:00"},{"temp":17,"until":"24:00"}]}`
 	if code, body := putProgram(t, base+"rooms/2/program", `"p0000"`, monday); code != 412 || body["etag"] != tag {
 		t.Fatalf("an old tag: %d %v", code, body)
 	}
-	for _, m := range fc.Received()[sent:] {
-		if m.Type == 's' {
-			t.Fatalf("a refused write sent %s", m)
-		}
+	if got := received.Since(sent, cubewatch.Type('s')); len(got) != 0 {
+		t.Fatalf("a refused write sent %v", got)
 	}
 	code, body := putProgram(t, base+"rooms/2/program", `W/"`+tag+`"`, monday)
 	if code != 200 || body["etag"] == tag || body["etag"] == "" {
@@ -125,27 +125,19 @@ func TestProgramTag(t *testing.T) {
 func TestProgramConfigEvents(t *testing.T) {
 	_, ts, _, _ := startRoomsOpts(t, roomsOpts{fast: true, slow: true})
 	evs := readStreamURL(t, ts.URL+"/api/v1/cubes/KEQ0000100/events?devices=all")
-	for i := 0; i < 10; i++ {
-		next(t, evs)
-	}
+	_, after := evs.AwaitN(t, 0, "the first burst", 10, isEvent)
 	if code, body := putProgram(t, ts.URL+"/api/v1/cubes/KEQ0000100/rooms/2/program", "", `{"tuesday":[{"temp":18,"until":"24:00"}]}`); code != 200 {
 		t.Fatalf("write: %d %v", code, body)
 	}
-	seen := map[string]bool{}
-	deadline := time.After(testkit.Scale(5 * time.Second))
-	for !(seen["0a0204"] && seen["000002"]) {
-		select {
-		case ev := <-evs:
-			if ev.kind != "config" {
-				continue
+	programOf := func(device string) func(testkit.Event) bool {
+		return func(ev testkit.Event) bool {
+			if ev.Kind != "config" {
+				return false
 			}
 			var e event
-			json.Unmarshal([]byte(ev.data), &e)
-			if len(e.Changed) == 1 && e.Changed[0] == "program" && e.Etag != "" {
-				seen[e.Device] = true
-			}
-		case <-deadline:
-			t.Fatalf("config events with changed and etag: %v", seen)
+			json.Unmarshal([]byte(ev.Data), &e)
+			return e.Device == device && len(e.Changed) == 1 && e.Changed[0] == "program" && e.Etag != ""
 		}
 	}
+	evs.AwaitAll(t, after, "config events with changed and etag of 0a0204 and 000002", programOf("0a0204"), programOf("000002"))
 }

@@ -13,6 +13,7 @@ import (
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/testkit"
+	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 )
 
 const newDevice cube.RFAddress = 0x0a0b0c
@@ -48,6 +49,7 @@ func startPairingCube(t *testing.T, delay time.Duration) (*fakecube.Server, *htt
 
 func TestPairingAndAddingToARoom(t *testing.T) {
 	fc, ts, _ := startPairingCube(t, 50*time.Millisecond)
+	received := cubewatch.Lines(fc)
 	const base = "/api/v1/cubes/KEQ0000100"
 	if code, _ := do(t, ts, "POST", base+"/pairing", `{"seconds":0}`); code != 400 {
 		t.Fatalf("0 seconds: %d", code)
@@ -59,7 +61,9 @@ func TestPairingAndAddingToARoom(t *testing.T) {
 	if code, _ := do(t, ts, "POST", base+"/pairing", ""); code != 409 {
 		t.Fatalf("second start: %d", code)
 	}
-	if got := fc.Received(); len(got) != 1 || got[0].String() != "n:001e" {
+	// n: gets no answer, so the fake may hold it only after the API's.
+	received.Await(t, 0, "the n: at the Cube", cubewatch.Type('n'))
+	if got := received.Since(0, cubewatch.Except('l')); len(got) != 1 || got[0].String() != "n:001e" {
 		t.Fatalf("cube received %v", got)
 	}
 	// The device joins: it is in the state, the log has the event, and
@@ -92,7 +96,7 @@ func TestPairingAndAddingToARoom(t *testing.T) {
 	if code, st := do(t, ts, "DELETE", base+"/pairing", ""); code != 200 || st["active"] != false {
 		t.Fatalf("stop: %d %v", code, st)
 	}
-	if got := fc.Received(); got[len(got)-1].Type != 'x' {
+	if got := received.Since(0, cubewatch.Except('l')); got[len(got)-1].Type != 'x' {
 		t.Fatalf("last line %v", got[len(got)-1])
 	}
 
@@ -100,7 +104,7 @@ func TestPairingAndAddingToARoom(t *testing.T) {
 	if code, _ := do(t, ts, "PUT", base+"/devices/0a0b0c", `{"name":"New"}`); code != 409 {
 		t.Fatalf("rename of an unlisted device: %d", code)
 	}
-	before := len(fc.Received())
+	before := received.Mark()
 	if code, out := do(t, ts, "PUT", base+"/devices/0a0b0c", `{"name":"Neu","room_id":1,"copy":false}`); code != 200 {
 		t.Fatalf("add to room 1: %d %v", code, out)
 	}
@@ -112,7 +116,7 @@ func TestPairingAndAddingToARoom(t *testing.T) {
 	partner := cube.CmdLinkPartner(cube.Target{RFAddress: 0x0a010a, RoomID: 1, Room: true}, true, newDevice, cube.DeviceRadiatorThermostat)
 	own := cube.CmdLinkPartner(cube.Target{RFAddress: newDevice}, true, 0x0a010a, cube.DeviceRadiatorThermostat)
 	group := cube.CmdSetGroup(newDevice, 1, false)
-	got := fc.Received()[before:]
+	got := received.Since(before, cubewatch.Except('l'))
 	want := []string{"z:1e,G,01", partner.String(), own.String(), group.String()}
 	if len(got) != 6 {
 		t.Fatalf("cube received %v", got)
@@ -146,6 +150,7 @@ func TestPairingAndAddingToARoom(t *testing.T) {
 
 func TestPairingEndsWithTheCube(t *testing.T) {
 	fc, ts, _ := startPairingCube(t, time.Hour)
+	received := cubewatch.Lines(fc)
 	const base = "/api/v1/cubes/KEQ0000100"
 	if code, _ := do(t, ts, "POST", base+"/pairing", `{"seconds":1}`); code != 200 {
 		t.Fatal(code)
@@ -154,7 +159,7 @@ func TestPairingEndsWithTheCube(t *testing.T) {
 		_, st := do(t, ts, "GET", base+"/pairing", "")
 		return st["active"] == false && st["ended"] != nil
 	})
-	if got := fc.Received(); got[0].String() != "n:0001" {
+	if got := received.Since(0, cubewatch.Except('l')); got[0].String() != "n:0001" {
 		t.Fatalf("received %v", got)
 	}
 }
@@ -163,13 +168,14 @@ func TestPairingEndsWithTheCube(t *testing.T) {
 // 256 is refused before anything is sent, 255 goes to the Cube as n:00ff.
 func TestPairingTimeLimit(t *testing.T) {
 	fc, ts, _ := startPairingCube(t, time.Hour)
+	received := cubewatch.Lines(fc)
 	const base = "/api/v1/cubes/KEQ0000100"
 	for _, body := range []string{`{"seconds":256}`, `{"seconds":600}`} {
 		if code, out := do(t, ts, "POST", base+"/pairing", body); code != 400 || out["error"] != "seconds must be 1..255" {
 			t.Fatalf("%s: %d %v", body, code, out)
 		}
 	}
-	if got := fc.Received(); len(got) != 0 {
+	if got := received.Since(0, cubewatch.Except('l')); len(got) != 0 {
 		t.Fatalf("a refused pairing sent %v", got)
 	}
 	code, st := do(t, ts, "POST", base+"/pairing", `{"seconds":255}`)
@@ -183,8 +189,8 @@ func TestPairingTimeLimit(t *testing.T) {
 	}
 	// The fake records a line once it read it, which can be after the
 	// answer.
-	testkit.Eventually(t, "the n: at the Cube", func() bool { return len(fc.Received()) > 0 })
-	if got := fc.Received(); len(got) != 1 || got[0].String() != "n:00ff" {
+	received.Await(t, 0, "the n: at the Cube", cubewatch.Type('n'))
+	if got := received.Since(0, cubewatch.Except('l')); len(got) != 1 || got[0].String() != "n:00ff" {
 		t.Fatalf("cube received %v", got)
 	}
 	if code, _ := do(t, ts, "DELETE", base+"/pairing", ""); code != 200 {

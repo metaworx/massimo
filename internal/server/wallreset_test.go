@@ -4,14 +4,19 @@
 package server
 
 import (
+	"fmt"
 	"testing"
-	"time"
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/view"
 )
+
+// eventText is an event of the server's stream as a failure shows it.
+func eventText(ev event) string {
+	return fmt.Sprintf("%s %s %v", ev.Kind, ev.Device, ev.Summary)
+}
 
 // A wall thermostat that comes back after a silence on another mode is
 // a wall_reset in the log, as after new batteries (AP LegacyLogs v1.0,
@@ -39,24 +44,10 @@ func TestWallReset(t *testing.T) {
 		delete(rt.subs, stream)
 		rt.subsMu.Unlock()
 	})
-	var resets []event // the wall thermostat's wall_resets, as the stream had them
-	next := func(what string, ok func(event) bool) {
-		t.Helper()
-		timeout := time.After(testkit.Scale(5 * time.Second))
-		for {
-			select {
-			case ev := <-stream:
-				if ev.Kind == "wall_reset" && ev.Device == "0a0201" {
-					resets = append(resets, ev)
-				}
-				if ok(ev) {
-					return
-				}
-			case <-timeout:
-				t.Fatalf("timed out waiting for %s", what)
-			}
-		}
-	}
+	events := testkit.ChanWatch(t, stream, eventText)
+	at := testkit.Cursor(0) // after the last state event waited for
+	// isReset matches the wall thermostat's wall_reset.
+	isReset := func(ev event) bool { return ev.Kind == "wall_reset" && ev.Device == "0a0201" }
 	// reported sets the wall thermostat's state on the fake Cube and
 	// waits until the pump has handled a view of it with the valid bit
 	// want and, while reported, the mode and setpoint.
@@ -66,7 +57,7 @@ func TestWallReset(t *testing.T) {
 		if err := fc.SetState(wall, st); err != nil {
 			t.Fatal(err)
 		}
-		next("the wall thermostat's state", func(ev event) bool {
+		_, at = events.Await(t, at, "the wall thermostat's state", func(ev event) bool {
 			dv, ok := ev.State.(view.Device)
 			if ev.Kind != "state" || ev.Device != "0a0201" || !ok || dv.Reported != want {
 				return false
@@ -82,12 +73,14 @@ func TestWallReset(t *testing.T) {
 	// The pump emits a return's wall_reset right after its state event,
 	// so the next silence's state event comes after it.
 	reported(false, fakecube.State{}, 0, 0)
-	if len(resets) != 0 {
-		t.Fatalf("a wall_reset for a return on the same mode: %+v", resets[0].Summary)
+	for _, ev := range events.Since(0, nil)[:at] {
+		if isReset(ev) {
+			t.Fatalf("a wall_reset for a return on the same mode: %+v", ev.Summary)
+		}
 	}
 	reported(true, fakecube.State{Mode: &auto, Setpoint: &low}, cube.ModeAuto, 5.5)
-	next("the wall_reset", func(event) bool { return len(resets) > 0 })
-	if sum := resets[0].Summary; sum["mode"] != "auto" || sum["was_mode"] != "manual" || sum["setpoint"] != 5.5 || sum["was_setpoint"] != 6.0 {
+	reset, _ := events.Await(t, 0, "the wall_reset", isReset)
+	if sum := reset.Summary; sum["mode"] != "auto" || sum["was_mode"] != "manual" || sum["setpoint"] != 5.5 || sum["was_setpoint"] != 6.0 {
 		t.Fatalf("wall_reset summary %v", sum)
 	}
 	testkit.Eventually(t, "the wall_reset in the log", func() bool { return hasKind(logKinds(t, ts, 0), "wall_reset:0a0201") })

@@ -18,6 +18,7 @@ import (
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit"
+	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
@@ -32,13 +33,14 @@ func (c *checkClock) add(d time.Duration) { c.off.Add(int64(d)) }
 // driftRig is a server over the fake Cube's rooms fixture whose room
 // checks run only when the test calls check, on the clock of clock.
 type driftRig struct {
-	t     *testing.T
-	fc    *fakecube.Server
-	ts    *httptest.Server
-	s     *Server
-	rt    *runtime
-	st    *store.Store
-	clock *checkClock
+	t        *testing.T
+	fc       *fakecube.Server
+	received *testkit.Watch[cube.Message] // the lines fc received
+	ts       *httptest.Server
+	s        *Server
+	rt       *runtime
+	st       *store.Store
+	clock    *checkClock
 }
 
 // startDrift starts a driftRig: the rooms fixture (room 1 a wall
@@ -83,7 +85,7 @@ func startDrift(t *testing.T, change func([]cube.Message) []cube.Message, edit .
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
 	waitConnected(t, ts, "KEQ0000100")
-	return &driftRig{t: t, fc: fc, ts: ts, s: s, rt: s.cubes["keq0000100"], st: st, clock: clock}
+	return &driftRig{t: t, fc: fc, received: cubewatch.Lines(fc), ts: ts, s: s, rt: s.cubes["keq0000100"], st: st, clock: clock}
 }
 
 // check runs the room checks once.
@@ -151,15 +153,9 @@ func (r *driftRig) outcomes(kind string) []string {
 }
 
 // radioSince are the s: and r: lines the fake Cube received from the
-// n-th line on.
-func (r *driftRig) radioSince(n int) []string {
-	var out []string
-	for _, m := range r.fc.Received()[n:] {
-		if m.Type == 's' || m.Type == 'r' {
-			out = append(out, m.String())
-		}
-	}
-	return out
+// cursor on.
+func (r *driftRig) radioSince(from testkit.Cursor) []string {
+	return lineStrings(r.received.Since(from, cubewatch.Type('s', 'r')))
 }
 
 // setpointLine is the room command that sets a room to mode and temp,
@@ -186,7 +182,7 @@ func TestDisagreeResendsMassimosSetpoint(t *testing.T) {
 		r.waitSetting(rf, "manual", 21)
 	}
 	r.confirmed(2)
-	sent := len(r.fc.Received())
+	sent := r.received.Mark()
 	r.set(0x0a0205, "manual", 18)
 	r.check()
 	r.clock.add(9 * time.Minute)
@@ -287,12 +283,12 @@ func (r *driftRig) disagreeAndResend() {
 	r.check()
 }
 
-// wantResend checks the one room command sent since the n-th line and
+// wantResend checks the one room command sent from the cursor sent on and
 // the re-send's event: its source (from) and mode.
-func (r *driftRig) wantResend(n int, master cube.RFAddress, room uint8, temp float64, mode cube.Mode, from string) {
+func (r *driftRig) wantResend(sent testkit.Cursor, master cube.RFAddress, room uint8, temp float64, mode cube.Mode, from string) {
 	r.t.Helper()
 	want := setpointLine(r.t, master, room, temp, mode)
-	if got := r.radioSince(n); !slices.Equal(got, []string{want}) {
+	if got := r.radioSince(sent); !slices.Equal(got, []string{want}) {
 		r.t.Fatalf("the re-send: %v, want %s", got, want)
 	}
 	ev := r.newest("disagree")
@@ -313,7 +309,7 @@ func TestDisagreeResendsTheMajoritys(t *testing.T) {
 		r.set(0x0a0201, "manual", 19)
 		r.set(0x0a0202, "manual", 22)
 		r.set(0x0a0203, "manual", 22)
-		sent := len(r.fc.Received())
+		sent := r.received.Mark()
 		r.disagreeAndResend()
 		r.wantResend(sent, 0x0a0201, 1, 22, cube.ModeManual, "majority")
 	})
@@ -322,7 +318,7 @@ func TestDisagreeResendsTheMajoritys(t *testing.T) {
 		r.set(0x0a0204, "manual", 18)
 		r.set(0x0a0205, "manual", 23)
 		r.set(0x0a0206, "manual", 18)
-		sent := len(r.fc.Received())
+		sent := r.received.Mark()
 		r.disagreeAndResend()
 		r.wantResend(sent, 0x0a0204, 2, 18, cube.ModeManual, "majority")
 	})
@@ -336,14 +332,14 @@ func TestDisagreeResendsTheWallThermostats(t *testing.T) {
 	r.set(0x0a0201, "manual", 19)
 	r.set(0x0a0202, "manual", 20)
 	r.set(0x0a0203, "manual", 22)
-	sent := len(r.fc.Received())
+	sent := r.received.Mark()
 	r.disagreeAndResend()
 	r.wantResend(sent, 0x0a0201, 1, 19, cube.ModeManual, "wall_thermostat")
 
 	r.set(0x0a0204, "manual", 18)
 	r.set(0x0a0205, "manual", 19)
 	r.set(0x0a0206, "manual", 23)
-	sent = len(r.fc.Received())
+	sent = r.received.Mark()
 	r.disagreeAndResend()
 	if got := r.radioSince(sent); len(got) != 0 {
 		t.Fatalf("sent without a state to take: %v", got)
@@ -382,7 +378,7 @@ func TestDisagreeResendsMassimosAuto(t *testing.T) {
 			r.confirmed(2)
 			r.clock.add(10 * time.Minute) // a person's change ten minutes later
 			r.set(0x0a0205, "manual", 18)
-			sent := len(r.fc.Received())
+			sent := r.received.Mark()
 			r.disagreeAndResend()
 			r.wantResend(sent, 0x0a0204, 2, c.temp, cube.ModeAuto, "massimo")
 		})
@@ -463,7 +459,7 @@ func TestDisagreeLeavesOut(t *testing.T) {
 				r.set(rf, "manual", 21)
 			}
 			c.apart(r)
-			sent := len(r.fc.Received())
+			sent := r.received.Mark()
 			for range 3 {
 				r.check()
 				r.clock.add(11 * time.Minute)
@@ -532,7 +528,7 @@ func TestDriftReported(t *testing.T) {
 	r.set(0x0a0204, "auto", 21)
 	r.set(0x0a0205, "auto", 21)
 	r.set(0x0a0206, "auto", 12)
-	sent := len(r.fc.Received())
+	sent := r.received.Mark()
 	r.check()
 	r.clock.add(4 * time.Minute)
 	r.check()

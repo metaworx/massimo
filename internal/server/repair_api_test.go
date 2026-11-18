@@ -19,6 +19,7 @@ import (
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit"
+	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 )
 
 // The repairs' tests run over copyGreeting (config_api_test.go): room 1
@@ -95,18 +96,6 @@ func startRepairCube(t *testing.T, mod func(*fakecube.Server)) (*fakecube.Server
 		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
 	})
 	return fc, ts, s
-}
-
-// sentSince is what the fake Cube received from the n-th line on, the
-// polls' l: left out.
-func sentSince(fc *fakecube.Server, n int) []cube.Message {
-	var out []cube.Message
-	for _, m := range fc.Received()[n:] {
-		if m.Type != 'l' {
-			out = append(out, m)
-		}
-	}
-	return out
 }
 
 // previewOf GETs a repair's preview.
@@ -191,7 +180,8 @@ func relinkLines(add bool) []string {
 func TestRepairRelink(t *testing.T) {
 	fc, ts, _ := startRepairCube(t, func(fc *fakecube.Server) { withContactInRoom1(t, fc.Greeting) })
 	const path = "/api/v1/cubes/KEQ0000100/rooms/1/repair/relink"
-	sent := len(fc.Received())
+	received := cubewatch.Lines(fc)
+	sent := received.Mark()
 	code, p, body := previewOf(t, ts, path)
 	if code != 200 || p.Action != "relink" || p.Plan == "" || len(p.Steps) != 3 || p.Refused != "" {
 		t.Fatalf("preview: %d %s", code, body)
@@ -210,14 +200,14 @@ func TestRepairRelink(t *testing.T) {
 	if strings.Join(shown, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("preview's lines:\n%s\nwant\n%s", strings.Join(shown, "\n"), strings.Join(want, "\n"))
 	}
-	if got := sentSince(fc, sent); len(got) != 0 {
+	if got := received.Since(sent, cubewatch.Except('l')); len(got) != 0 {
 		t.Fatalf("the preview sent %v", lineStrings(got))
 	}
 	code, out := do(t, ts, "POST", path+"?plan="+p.Plan, "")
 	if code != 200 || out["ok"] != true || out["confirmation"] != "pending" {
 		t.Fatalf("run: %d %v", code, out)
 	}
-	sameLines(t, sentSince(fc, sent), want)
+	sameLines(t, received, sent, want)
 	steps, _ := out["steps"].([]any)
 	if len(steps) != 3 {
 		t.Fatalf("steps %v", out["steps"])
@@ -241,7 +231,8 @@ func TestRepairPreviewCountsTheQueuesResets(t *testing.T) {
 		withErrorFlag(t, fc.Greeting, 0x0a010a, 0x03)
 	})
 	const path = "/api/v1/cubes/KEQ0000100/rooms/1/repair/relink"
-	sent := len(fc.Received())
+	received := cubewatch.Lines(fc)
+	sent := received.Mark()
 	code, p, body := previewOf(t, ts, path)
 	if code != 200 || len(p.Steps) != 3 || p.Resets != 3 || p.Radiograms != 14 {
 		t.Fatalf("preview: %d %s", code, body)
@@ -262,7 +253,7 @@ func TestRepairPreviewCountsTheQueuesResets(t *testing.T) {
 			want = append(want, reset)
 		}
 	}
-	sameLines(t, sentSince(fc, sent), want)
+	sameLines(t, received, sent, want)
 }
 
 // nothingOf asserts that a repair's preview has nothing to send, why
@@ -287,9 +278,10 @@ func nothingOf(t *testing.T, ts *httptest.Server, path, want string) repairPlan 
 // repairs it first.
 func TestRepairRelinkRefusesADisagreeingRoom(t *testing.T) {
 	fc, ts, _ := startRepairCube(t, func(fc *fakecube.Server) { withConfigRoom(t, fc.Greeting, copyContact, 1) })
-	sent := len(fc.Received())
+	received := cubewatch.Lines(fc)
+	sent := received.Mark()
 	nothingOf(t, ts, "/api/v1/cubes/KEQ0000100/rooms/1/repair/relink", "0d0e0f")
-	if got := sentSince(fc, sent); len(got) != 0 {
+	if got := received.Since(sent, cubewatch.Except('l')); len(got) != 0 {
 		t.Fatalf("sent %v", lineStrings(got))
 	}
 }
@@ -299,14 +291,15 @@ func TestRepairRelinkRefusesADisagreeingRoom(t *testing.T) {
 func TestRepairNeedsItsPlan(t *testing.T) {
 	fc, ts, _ := startRepairCube(t, func(fc *fakecube.Server) { withContactInRoom1(t, fc.Greeting) })
 	const path = "/api/v1/cubes/KEQ0000100/rooms/1/repair/relink"
-	sent := len(fc.Received())
+	received := cubewatch.Lines(fc)
+	sent := received.Mark()
 	if code, out := do(t, ts, "POST", path, ""); code != http.StatusBadRequest {
 		t.Fatalf("without a plan: %d %v", code, out)
 	}
 	if code, out := do(t, ts, "POST", path+"?plan=0000", ""); code != http.StatusConflict || !strings.Contains(out["error"].(string), "preview it again") {
 		t.Fatalf("with another plan: %d %v", code, out)
 	}
-	if got := sentSince(fc, sent); len(got) != 0 {
+	if got := received.Since(sent, cubewatch.Except('l')); len(got) != 0 {
 		t.Fatalf("sent %v", lineStrings(got))
 	}
 }
@@ -319,7 +312,8 @@ func TestRepairRefusedForTheSlots(t *testing.T) {
 		fc.SetFreeSlots(8)
 	})
 	const path = "/api/v1/cubes/KEQ0000100/rooms/1/repair/relink"
-	sent := len(fc.Received())
+	received := cubewatch.Lines(fc)
+	sent := received.Mark()
 	code, p, body := previewOf(t, ts, path)
 	if code != 200 || !strings.Contains(p.Refused, "memory slots") {
 		t.Fatalf("preview with 8 slots free: %d %s", code, body)
@@ -327,7 +321,7 @@ func TestRepairRefusedForTheSlots(t *testing.T) {
 	if code, out := do(t, ts, "POST", path+"?plan="+p.Plan, ""); code != http.StatusConflict {
 		t.Fatalf("run: %d %v", code, out)
 	}
-	if got := sentSince(fc, sent); len(got) != 0 {
+	if got := received.Since(sent, cubewatch.Except('l')); len(got) != 0 {
 		t.Fatalf("sent %v", lineStrings(got))
 	}
 }
@@ -359,7 +353,8 @@ func TestRepairReset(t *testing.T) {
 	}
 	t.Run("room", func(t *testing.T) {
 		fc, ts, _ := startRepairCube(t, func(fc *fakecube.Server) { flag(fc); clearOnReset(t, fc) })
-		sent := len(fc.Received())
+		received := cubewatch.Lines(fc)
+		sent := received.Mark()
 		p, code, out := runRepairOf(t, ts, "/api/v1/cubes/KEQ0000100/rooms/1/repair/reset", "")
 		if p.Radiograms != 0 || p.Resets != 1 || p.DutyCostPct != 0 || p.Wakeups != 0 || p.Refused != "" {
 			t.Fatalf("preview %+v", p)
@@ -370,11 +365,12 @@ func TestRepairReset(t *testing.T) {
 		if still, _ := out["still_flagged"].([]any); len(still) != 0 {
 			t.Fatalf("still flagged: %v", still)
 		}
-		sameLines(t, sentSince(fc, sent), []string{cube.CmdResetError(0x0a010a).String()})
+		sameLines(t, received, sent, []string{cube.CmdResetError(0x0a010a).String()})
 	})
 	t.Run("cube", func(t *testing.T) {
 		fc, ts, _ := startRepairCube(t, flag)
-		sent := len(fc.Received())
+		received := cubewatch.Lines(fc)
+		sent := received.Mark()
 		p, code, out := runRepairOf(t, ts, "/api/v1/cubes/KEQ0000100/repair/reset", "")
 		if p.Resets != 2 || p.Radiograms != 0 {
 			t.Fatalf("preview %+v", p)
@@ -383,7 +379,7 @@ func TestRepairReset(t *testing.T) {
 		if code != 200 || len(still) != 2 {
 			t.Fatalf("run, the fake keeping the flags: %d %v", code, out)
 		}
-		sameLines(t, sentSince(fc, sent), []string{cube.CmdResetError(0x0a010d).String(), cube.CmdResetError(0x0a010a).String()})
+		sameLines(t, received, sent, []string{cube.CmdResetError(0x0a010d).String(), cube.CmdResetError(0x0a010a).String()})
 	})
 	t.Run("nothing flagged", func(t *testing.T) {
 		_, ts, _ := startRepairCube(t, nil)
@@ -438,7 +434,8 @@ func TestRepairResendConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	want = append(want, temps.String(), "c:"+copyNew.String())
-	sent := len(fc.Received())
+	received := cubewatch.Lines(fc)
+	sent := received.Mark()
 	p, code, out := runRepairOf(t, ts, "/api/v1/cubes/KEQ0000100/devices/0a0b0c/repair/config", "")
 	if p.Action != "config" || p.Details["others"] != float64(3) || p.Details["temperatures_by"] != float64(2) || p.Details["program_by"] != float64(3) {
 		t.Fatalf("preview %+v", p)
@@ -446,7 +443,7 @@ func TestRepairResendConfig(t *testing.T) {
 	if code != 200 || out["ok"] != true {
 		t.Fatalf("run: %d %v", code, out)
 	}
-	sameLines(t, sentSince(fc, sent), want)
+	sameLines(t, received, sent, want)
 }
 
 // Without a majority, nothing is re-sent and the answer says why: the
@@ -454,10 +451,11 @@ func TestRepairResendConfig(t *testing.T) {
 // alone in its room has nothing to take them from.
 func TestRepairResendRefused(t *testing.T) {
 	fc, ts, _ := startRepairCube(t, func(fc *fakecube.Server) { withRoom1Thermostats(t, fc.Greeting, false) })
-	sent := len(fc.Received())
+	received := cubewatch.Lines(fc)
+	sent := received.Mark()
 	nothingOf(t, ts, "/api/v1/cubes/KEQ0000100/devices/0a0b0c/repair/config", "share no temperatures")
 	nothingOf(t, ts, "/api/v1/cubes/KEQ0000100/devices/0a010d/repair/config", "no other thermostat")
-	if got := sentSince(fc, sent); len(got) != 0 {
+	if got := received.Since(sent, cubewatch.Except('l')); len(got) != 0 {
 		t.Fatalf("sent %v", lineStrings(got))
 	}
 }
@@ -470,7 +468,8 @@ func TestRepairPlace(t *testing.T) {
 		fc, ts, _ := startRepairCube(t, func(fc *fakecube.Server) {
 			listIn(t, fc.Greeting, copyContact, cube.DeviceShutterContact, "IEQ0000003", 1)
 		})
-		sent := len(fc.Received())
+		received := cubewatch.Lines(fc)
+		sent := received.Mark()
 		p, code, out := runRepairOf(t, ts, "/api/v1/cubes/KEQ0000100/devices/0d0e0f/repair/place", "")
 		if p.Action != "move" || len(p.Steps) != 1 || p.Radiograms != 4 {
 			t.Fatalf("preview %+v", p)
@@ -478,7 +477,7 @@ func TestRepairPlace(t *testing.T) {
 		if code != 200 || out["confirmation"] != "pending" {
 			t.Fatalf("run: %d %v", code, out)
 		}
-		sameLines(t, sentSince(fc, sent), []string{"z:1e,G,01",
+		sameLines(t, received, sent, []string{"z:1e,G,01",
 			linkPartner(room1(0x0a010a), true, copyContact, cube.DeviceShutterContact),
 			linkPartner(direct(copyContact), true, 0x0a010a, cube.DeviceRadiatorThermostat),
 			linkPartner(direct(copyContact), true, copyWall, cube.DeviceWallThermostat),
@@ -487,12 +486,13 @@ func TestRepairPlace(t *testing.T) {
 	})
 	t.Run("from room 6", func(t *testing.T) {
 		fc, ts, _ := startRepairCube(t, func(fc *fakecube.Server) { withConfigRoom(t, fc.Greeting, copyWall, 6) })
-		sent := len(fc.Received())
+		received := cubewatch.Lines(fc)
+		sent := received.Mark()
 		_, code, out := runRepairOf(t, ts, "/api/v1/cubes/KEQ0000100/devices/0c0d0e/repair/place", "")
 		if code != 200 {
 			t.Fatalf("run: %d %v", code, out)
 		}
-		sameLines(t, sentSince(fc, sent), []string{"z:1e,G,06",
+		sameLines(t, received, sent, []string{"z:1e,G,06",
 			cube.CmdSetGroup(copyWall, 6, true).String(),
 			linkPartner(cube.Target{RFAddress: 0x0a010d, RoomID: 6, Room: true}, false, copyWall, cube.DeviceWallThermostat),
 			linkPartner(direct(copyWall), false, 0x0a010d, cube.DeviceRadiatorThermostat),
@@ -526,7 +526,8 @@ func listedRoom(s *Server, rf cube.RFAddress) (uint8, bool) {
 func TestRepairList(t *testing.T) {
 	t.Run("another room", func(t *testing.T) {
 		fc, ts, s := startRepairCube(t, func(fc *fakecube.Server) { withConfigRoom(t, fc.Greeting, copyWall, 6) })
-		sent := len(fc.Received())
+		received := cubewatch.Lines(fc)
+		sent := received.Mark()
 		p, code, out := runRepairOf(t, ts, "/api/v1/cubes/KEQ0000100/devices/0c0d0e/repair/list", "")
 		if p.Radiograms != 0 || !p.Metadata || p.DutyCostPct != 0 {
 			t.Fatalf("preview %+v", p)
@@ -534,7 +535,7 @@ func TestRepairList(t *testing.T) {
 		if code != 200 || out["ok"] != true {
 			t.Fatalf("run: %d %v", code, out)
 		}
-		for _, m := range sentSince(fc, sent) {
+		for _, m := range received.Since(sent, cubewatch.Except('l')) {
 			if m.Type != 'm' {
 				t.Fatalf("sent %s", m)
 			}
@@ -595,7 +596,8 @@ func TestRepairListNamesTheDevice(t *testing.T) {
 				})
 			})
 			before := *s.cubes["keq0000100"].client.Snapshot().Metadata()
-			sent := len(fc.Received())
+			received := cubewatch.Lines(fc)
+			sent := received.Mark()
 			p, code, out := runRepairOf(t, ts, path, c.query)
 			if p.Details["name"] != c.want || p.Details["room_name"] != "Wohnzimmer" || p.Details["type"] != "radiator_thermostat" || p.Details["listed"] != false {
 				t.Fatalf("the preview's details %v", p.Details)
@@ -614,7 +616,7 @@ func TestRepairListNamesTheDevice(t *testing.T) {
 			for _, l := range lines {
 				wantLines = append(wantLines, l.String())
 			}
-			for _, m := range sentSince(fc, sent) {
+			for _, m := range received.Since(sent, cubewatch.Except('l')) {
 				got = append(got, m.String())
 			}
 			if strings.Join(got, "\n") != strings.Join(wantLines, "\n") {
@@ -677,7 +679,8 @@ func TestDefaultDeviceName(t *testing.T) {
 // left alone.
 func TestRepairMaster(t *testing.T) {
 	fc, ts, s := startRepairCube(t, func(fc *fakecube.Server) { withRoomMaster(t, fc.Greeting, 1, 0x0a010d) })
-	sent := len(fc.Received())
+	received := cubewatch.Lines(fc)
+	sent := received.Mark()
 	p, code, out := runRepairOf(t, ts, "/api/v1/cubes/KEQ0000100/rooms/1/repair/master", "")
 	if p.Details["new_master"] != copyWall.String() || p.Radiograms != 0 || !p.Metadata {
 		t.Fatalf("preview %+v", p)
@@ -685,7 +688,7 @@ func TestRepairMaster(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("run: %d %v", code, out)
 	}
-	for _, m := range sentSince(fc, sent) {
+	for _, m := range received.Since(sent, cubewatch.Except('l')) {
 		if m.Type != 'm' {
 			t.Fatalf("sent %s", m)
 		}
@@ -706,7 +709,8 @@ func TestRepairPreviewsSendNothing(t *testing.T) {
 		withRoomMaster(t, fc.Greeting, 1, 0x0a010d)
 		withConfigRoom(t, fc.Greeting, copyNew, 1)
 	})
-	sent := len(fc.Received())
+	received := cubewatch.Lines(fc)
+	sent := received.Mark()
 	const base = "/api/v1/cubes/KEQ0000100"
 	for _, path := range []string{"/repair/reset", "/rooms/1/repair/reset", "/rooms/1/repair/master", "/rooms/1/repair/relink",
 		"/rooms/1/repair/unlink-relink", "/devices/0a0b0c/repair/config", "/devices/0a0b0c/repair/place", "/devices/0a0b0c/repair/list"} {
@@ -714,7 +718,7 @@ func TestRepairPreviewsSendNothing(t *testing.T) {
 			t.Fatalf("GET %s: %d %s", path, code, body)
 		}
 	}
-	if got := sentSince(fc, sent); len(got) != 0 {
+	if got := received.Since(sent, cubewatch.Except('l')); len(got) != 0 {
 		t.Fatalf("the previews sent %v", lineStrings(got))
 	}
 }
@@ -729,7 +733,8 @@ func TestRepairNeedsRepair(t *testing.T) {
 	st.AddRole(t.Context(), store.Role{Key: "fixer", Capabilities: []string{"read", "repair"}}, 0)
 	builder := userToken(t, st, "builder", "builder")
 	fixer := userToken(t, st, "fixer", "fixer")
-	sent := len(fc.Received())
+	received := cubewatch.Lines(fc)
+	sent := received.Mark()
 	for _, r := range registeredRoutes(t) {
 		if r.capability != "repair" {
 			continue
@@ -745,7 +750,7 @@ func TestRepairNeedsRepair(t *testing.T) {
 			t.Errorf("fixer: %s %s: %d %s", r.method, r.path, code, text)
 		}
 	}
-	if got := sentSince(fc, sent); len(got) != 0 {
+	if got := received.Since(sent, cubewatch.Except('l')); len(got) != 0 {
 		t.Fatalf("sent %v", lineStrings(got))
 	}
 }
@@ -757,7 +762,8 @@ func TestRepairNeedsRepair(t *testing.T) {
 func TestRepairUnlinkRelink(t *testing.T) {
 	fc, ts, _ := startRepairCube(t, func(fc *fakecube.Server) { withContactInRoom1(t, fc.Greeting) })
 	const path = "/api/v1/cubes/KEQ0000100/rooms/1/repair/unlink-relink"
-	sent := len(fc.Received())
+	received := cubewatch.Lines(fc)
+	sent := received.Mark()
 	code, p, body := previewOf(t, ts, path)
 	if code != 200 || p.Action != "unlink_relink" || !p.Untested || len(p.Notes) != 1 || len(p.Steps) != 6 {
 		t.Fatalf("preview: %d %s", code, body)
@@ -766,12 +772,12 @@ func TestRepairUnlinkRelink(t *testing.T) {
 	if p.Radiograms != 25 || p.Held != 12 || p.Wakeups != 6 || p.Refused != "" {
 		t.Fatalf("preview's cost: %s", body)
 	}
-	if got := sentSince(fc, sent); len(got) != 0 {
+	if got := received.Since(sent, cubewatch.Except('l')); len(got) != 0 {
 		t.Fatalf("the preview sent %v", lineStrings(got))
 	}
 	code, out := do(t, ts, "POST", path+"?plan="+p.Plan, "")
 	if code != 200 || out["ok"] != true || out["confirmation"] != "pending" {
 		t.Fatalf("run: %d %v", code, out)
 	}
-	sameLines(t, sentSince(fc, sent), append(relinkLines(false), relinkLines(true)...))
+	sameLines(t, received, sent, append(relinkLines(false), relinkLines(true)...))
 }

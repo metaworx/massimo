@@ -12,6 +12,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit"
+	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 	"go.metaworx.ch/massimo/internal/update"
 )
 
@@ -97,7 +98,8 @@ func TestRebootRoutes(t *testing.T) {
 			t.Fatalf("%s without a key: %d %s", m, code, text)
 		}
 	}
-	before := len(fc.Received())
+	received := cubewatch.Lines(fc)
+	before := received.Mark()
 	headers := map[string]string{"Idempotency-Key": "reboot-1"}
 	resp, text := callWith(t, ts, "POST", path, "secret", `{"delay": 0}`, headers)
 	var answer rebootAnswer
@@ -123,7 +125,7 @@ func TestRebootRoutes(t *testing.T) {
 	if code, text := callAPI(t, ts, "DELETE", path, "secret", ""); code != 409 || errorOf(text) != rebootBegun {
 		t.Fatalf("taking back a reboot that began: %d %s", code, text)
 	}
-	if got := fc.Received()[before:]; len(got) != 0 {
+	if got := received.Since(before, cubewatch.Except('l')); len(got) != 0 {
 		t.Fatalf("the reboot sent the Cube %v", got)
 	}
 }

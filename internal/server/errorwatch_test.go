@@ -14,6 +14,7 @@ import (
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/testkit"
+	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
@@ -134,6 +135,7 @@ func wantWatch(t *testing.T, ev event, level string, want map[string]any) {
 // the resets take the device again.
 func TestErrorWatchBack(t *testing.T) {
 	fc, addr := startWatchCube(t)
+	received := cubewatch.Lines(fc)
 	clock := &stepClock{t: time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)}
 	ts, s, _ := startResets(t, testStore(t, ""), addr, clock, nil)
 	rt := s.runtimes()[0]
@@ -143,7 +145,7 @@ func TestErrorWatchBack(t *testing.T) {
 
 	settleState(t, fc, ts, s, rf, fakecube.State{Reported: &on, Error: &on, ValvePct: valve(10)}, "valve_pct", float64(10))
 	testkit.Eventually(t, "the error_reset", func() bool { return hasKind(logKinds(t, ts, 0), "error_reset:0a010d") })
-	if n := resets(fc, rf); n != 1 {
+	if n := received.Count(0, resetOf(rf)); n != 1 {
 		t.Fatalf("the first report: %d resets, want 1", n)
 	}
 	// The pump takes a report read before the answer late: the entry has
@@ -168,7 +170,7 @@ func TestErrorWatchBack(t *testing.T) {
 	if !rt.resets.hold(rf, clock.Now()) {
 		t.Fatal("the device back is not held")
 	}
-	if n := resets(fc, rf); n != 1 {
+	if n := received.Count(0, resetOf(rf)); n != 1 {
 		t.Fatalf("back: %d resets, want 1", n)
 	}
 	if a := watchAlerts(t, ts, rf); len(a) != 1 || a[0].Level != "warn" || a[0].ID != lines[0].ID {
@@ -192,7 +194,7 @@ func TestErrorWatchBack(t *testing.T) {
 	if lines := watchLines(t, ts, rf); len(lines) != 2 {
 		t.Fatalf("back again the same day: %+v", lines)
 	}
-	if n := resets(fc, rf); n != 1 {
+	if n := received.Count(0, resetOf(rf)); n != 1 {
 		t.Fatalf("back again: %d resets, want 1", n)
 	}
 
@@ -202,7 +204,7 @@ func TestErrorWatchBack(t *testing.T) {
 	waitWatch(t, ts, rf, 3)
 	clock.add(25 * time.Hour)
 	settleState(t, fc, ts, s, rf, fakecube.State{Error: &on, ValvePct: valve(40)}, "valve_pct", float64(40))
-	if n := resets(fc, rf); n != 2 {
+	if n := received.Count(0, resetOf(rf)); n != 2 {
 		t.Fatalf("clear for a day: %d resets, want 2", n)
 	}
 	if lines := watchLines(t, ts, rf); len(lines) != 3 {

@@ -11,6 +11,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 )
 
 const (
@@ -70,7 +71,7 @@ func as(id, level string) map[string]string {
 // each refusal says which it is.
 func TestOnBehalfChain(t *testing.T) {
 	fc, ts, s, st := startRoomsOpts(t, roomsOpts{slow: true})
-	_ = fc
+	received := cubewatch.Lines(fc)
 	i, key := registerHA(t, st, []string{"read", "setpoint", "lock", "structure"})
 	owner := userToken(t, st, "boss", store.RoleOwner)
 	me := func(h map[string]string) (int, string) {
@@ -94,7 +95,7 @@ func TestOnBehalfChain(t *testing.T) {
 	if resp, text := callWith(t, ts, "PUT", setpoint, key, `{"mode":"manual","temp":21}`, as(haAnna, LevelControl)); resp.StatusCode != 200 {
 		t.Fatalf("a setpoint at control: %d %s", resp.StatusCode, text)
 	}
-	if rc := lastRadio(t, fc); rc.Command != cube.RFSetTemperature || rc.Target.RoomID != 2 {
+	if rc := lastRadio(t, received); rc.Command != cube.RFSetTemperature || rc.Target.RoomID != 2 {
 		t.Fatalf("sent %+v", rc)
 	}
 	rows := auditRows(t, ts, owner, "?limit=1")

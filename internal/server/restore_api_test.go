@@ -19,6 +19,7 @@ import (
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/testkit"
+	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 )
 
 const restoreBase = "/api/v1/cubes/KEQ0000100/restore"
@@ -132,20 +133,13 @@ func plan(t *testing.T, ts *httptest.Server, query string, f *backup.File) map[s
 	return out
 }
 
-// linesAfter returns the commands the fake Cube received from index n
-// on, without the polls and NTP reads.
-func linesAfter(fc *fakecube.Server, n int) []string {
-	var out []string
-	for _, m := range fc.Received()[n:] {
-		if m.Type != 'l' && m.Type != 'f' {
-			out = append(out, m.String())
-		}
-	}
-	return out
-}
+// noReads leaves out the lines that only read: the polls, and the NTP
+// reads of the backups the tests take.
+var noReads = cubewatch.Except('l', 'f')
 
 func TestRestorePlan(t *testing.T) {
 	fc, ts, _ := start(t, "")
+	received := cubewatch.Lines(fc)
 	f := backupOf(t, ts)
 
 	// An unchanged backup gives an empty plan with a stable hash.
@@ -234,7 +228,7 @@ func TestRestorePlan(t *testing.T) {
 		t.Fatalf("body of %d bytes: %d, want 413", len(big), code)
 	}
 	// Planning writes nothing.
-	if got := linesAfter(fc, 0); len(got) != 0 {
+	if got := lineStrings(received.Since(0, noReads)); len(got) != 0 {
 		t.Fatalf("planning sent %v", got)
 	}
 	if code, out := do(t, ts, "GET", restoreBase, ""); code != 200 || out["state"] != "none" {
@@ -252,7 +246,9 @@ func TestRestoreRunSendsThePlan(t *testing.T) {
 	rt.subsMu.Lock()
 	rt.subs[ch] = &subscriber{gone: make(chan struct{})}
 	rt.subsMu.Unlock()
-	before := len(fc.Received())
+	events := testkit.ChanWatch(t, ch, eventText)
+	received := cubewatch.Lines(fc)
+	before := received.Mark()
 	code, out := postBackup(t, ts, restoreBase+"?plan="+hash, "application/json", marshal(t, f))
 	if code != 202 || out["id"] == "" || out["steps"] != 1.0 {
 		t.Fatalf("restore: %d %v", code, out)
@@ -264,7 +260,7 @@ func TestRestoreRunSendsThePlan(t *testing.T) {
 		return st["state"] == "done"
 	})
 	// Exactly the wakeup of room 6 and the 0x11 radiogram.
-	if got := linesAfter(fc, before); len(got) != 2 || got[0] != "z:1e,G,06" || got[1] != ecoLine {
+	if got := lineStrings(received.Since(before, noReads)); len(got) != 2 || got[0] != "z:1e,G,06" || got[1] != ecoLine {
 		t.Fatalf("restore sent %v", got)
 	}
 	// The state has the step with its result.
@@ -277,29 +273,25 @@ func TestRestoreRunSendsThePlan(t *testing.T) {
 		t.Fatalf("step result %v", res)
 	}
 	// The stream got the step and the end.
+	// restore_started is the system's line, without the run's progress.
+	isRun := func(ev event) bool { return ev.Kind == "restore_step" || ev.Kind == "restore_done" }
 	var kinds []string
-	for len(kinds) < 2 {
-		select {
-		case ev := <-ch:
-			if ev.Kind != "restore_step" && ev.Kind != "restore_done" {
-				continue // restore_started is the system's line, without the run's progress
+	for c := testkit.Cursor(0); len(kinds) < 2; {
+		var ev event
+		ev, c = events.Await(t, c, "the restore's step and end on the stream", isRun)
+		kinds = append(kinds, ev.Kind)
+		if ev.Restore == nil || ev.Restore.ID != id || ev.Restore.Steps != 1 || !ev.Restore.OK {
+			t.Fatalf("event %+v", ev)
+		}
+		switch ev.Kind {
+		case "restore_step":
+			if ev.Restore.Step != 1 || ev.Device != "0a010d" || !strings.Contains(ev.Restore.What, "eco 17.0") {
+				t.Fatalf("step event %+v %+v", ev, ev.Restore)
 			}
-			kinds = append(kinds, ev.Kind)
-			if ev.Restore == nil || ev.Restore.ID != id || ev.Restore.Steps != 1 || !ev.Restore.OK {
-				t.Fatalf("event %+v", ev)
+		case "restore_done":
+			if ev.Restore.State != "done" || ev.Restore.Sent != 1 {
+				t.Fatalf("done event %+v", ev.Restore)
 			}
-			switch ev.Kind {
-			case "restore_step":
-				if ev.Restore.Step != 1 || ev.Device != "0a010d" || !strings.Contains(ev.Restore.What, "eco 17.0") {
-					t.Fatalf("step event %+v %+v", ev, ev.Restore)
-				}
-			case "restore_done":
-				if ev.Restore.State != "done" || ev.Restore.Sent != 1 {
-					t.Fatalf("done event %+v", ev.Restore)
-				}
-			}
-		case <-time.After(testkit.Scale(5 * time.Second)):
-			t.Fatalf("events on the stream: %v", kinds)
 		}
 	}
 	if strings.Join(kinds, ",") != "restore_step,restore_done" {
@@ -355,6 +347,7 @@ func TestRestoreRefusals(t *testing.T) {
 	// two steps runs long enough for a second one to be refused.
 	fc := &fakecube.Server{}
 	ts, s := startRestoreCube(t, fc, 500*time.Millisecond)
+	received := cubewatch.Lines(fc)
 	rt := s.cubes["keq0000100"]
 	f := backupWithEco(backupOf(t, ts), 17)
 	hash := plan(t, ts, "", f)["plan"].(string)
@@ -374,14 +367,14 @@ func TestRestoreRefusals(t *testing.T) {
 	if code, _ := postBackup(t, ts, restoreBase+"?plan="+hash, "application/json", big); code != 413 {
 		t.Fatalf("restore with a body of %d bytes: %d, want 413", len(big), code)
 	}
-	if got := linesAfter(fc, 0); len(got) != 0 {
+	if got := lineStrings(received.Since(0, noReads)); len(got) != 0 {
 		t.Fatalf("refused restores sent %v", got)
 	}
 
 	// A second restore while one runs.
 	withRoomName(f, "Renamed")
 	hash = plan(t, ts, "", f)["plan"].(string)
-	before := len(fc.Received())
+	before := received.Mark()
 	code, out := postBackup(t, ts, restoreBase+"?plan="+hash, "application/json", marshal(t, f))
 	if code != 202 || out["steps"] != 2.0 {
 		t.Fatalf("restore: %d %v", code, out)
@@ -396,7 +389,7 @@ func TestRestoreRefusals(t *testing.T) {
 		_, st := do(t, ts, "GET", restoreBase, "")
 		return st["state"] == "done"
 	})
-	got := linesAfter(fc, before)
+	got := lineStrings(received.Since(before, noReads))
 	if len(got) != 3 || !strings.HasPrefix(got[0], "m:00,") || got[1] != "z:1e,G,06" || got[2] != ecoLine {
 		t.Fatalf("restore sent %v", got)
 	}
@@ -424,6 +417,7 @@ func TestRestoreRefusesHighDutyCycle(t *testing.T) {
 	greeting[0].Data = strings.Replace(greeting[0].Data, ",00,32,", ",55,32,", 1)
 	fc := &fakecube.Server{Greeting: greeting}
 	ts, _ := startRestoreCube(t, fc, time.Millisecond)
+	received := cubewatch.Lines(fc)
 	f := backupWithEco(backupOf(t, ts), 17)
 	p := plan(t, ts, "", f)
 	if b := p["budget"].(map[string]any); b["duty_cycle_pct"] != 85.0 {
@@ -444,7 +438,7 @@ func TestRestoreRefusesHighDutyCycle(t *testing.T) {
 		_, st := do(t, ts, "GET", restoreBase, "")
 		return st["state"] == "done"
 	})
-	if got := linesAfter(fc, 0); len(got) != 1 || !strings.HasPrefix(got[0], "m:00,") {
+	if got := lineStrings(received.Since(0, noReads)); len(got) != 1 || !strings.HasPrefix(got[0], "m:00,") {
 		t.Fatalf("restore sent %v", got)
 	}
 }

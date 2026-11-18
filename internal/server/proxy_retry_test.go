@@ -18,21 +18,6 @@ import (
 // quickRetry is the tests' wait between a proxy listener's tries.
 var quickRetry = [2]time.Duration{5 * time.Millisecond, 20 * time.Millisecond}
 
-// countLines counts the log lines that carry every one of parts.
-func countLines(log string, parts ...string) int {
-	n := 0
-	for _, l := range strings.Split(log, "\n") {
-		all := l != ""
-		for _, p := range parts {
-			all = all && strings.Contains(l, p)
-		}
-		if all {
-			n++
-		}
-	}
-	return n
-}
-
 // cubeListening reads the proxy addresses GET /api/v1/cubes lists for
 // the fake Cube.
 func cubeListening(t *testing.T, s *Server) []string {
@@ -49,8 +34,8 @@ func cubeListening(t *testing.T, s *Server) []string {
 // A proxy address whose port is taken is tried again, and listens once
 // the port is free; the failure is logged once at Error, not per try.
 func TestProxyRetriedUntilThePortIsFree(t *testing.T) {
-	var logs syncBuffer
-	_, ts, s, _ := startStored(t, Options{proxyRetry: quickRetry, Logger: slog.New(slog.NewTextHandler(&logs, nil))})
+	log, logs := testkit.LogWatch(nil)
+	_, ts, s, _ := startStored(t, Options{proxyRetry: quickRetry, Logger: log})
 	taken, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -72,12 +57,18 @@ func TestProxyRetriedUntilThePortIsFree(t *testing.T) {
 	if m := greetingAt(t, addr); m.Type != 'H' {
 		t.Fatalf("greeting %q", m.Wire())
 	}
-	log := logs.String()
-	if n := countLines(log, "level=ERROR", `msg="proxy listener not started"`, "addr="+addr); n != 1 {
-		t.Errorf("%d Error lines for the held port, want 1:\n%s", n, log)
+	if got := logs.Since(0, testkit.MsgAt(slog.LevelError, "proxy listener not started", "addr", addr)); len(got) != 1 {
+		t.Errorf("%d Error lines for the held port, want 1: %v", len(got), got)
 	}
-	if n := countLines(log, `msg="cube proxy listening"`, "addr="+addr, "tries="); n != 1 {
-		t.Errorf("no listening line with its tries:\n%s", log)
+	listening := logs.Since(0, testkit.Msg("cube proxy listening", "addr", addr))
+	withTries := 0
+	for _, l := range listening {
+		if _, ok := l.Attrs["tries"]; ok {
+			withTries++
+		}
+	}
+	if withTries != 1 {
+		t.Errorf("no listening line with its tries: %v", listening)
 	}
 }
 
@@ -94,8 +85,8 @@ func TestProxyRetriedUntilTheAddressIsThere(t *testing.T) {
 		}
 		return net.Listen("tcp", addr)
 	}
-	var logs syncBuffer
-	_, ts, s, _ := startStored(t, Options{proxyRetry: quickRetry, proxyListen: listen, Logger: slog.New(slog.NewTextHandler(&logs, nil))})
+	log, logs := testkit.LogWatch(nil)
+	_, ts, s, _ := startStored(t, Options{proxyRetry: quickRetry, proxyListen: listen, Logger: log})
 	addr := freeTCP(t)
 	if code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100", `{"proxy_address":"`+addr+`"}`); code != 200 || out["proxy_listening"] != nil {
 		t.Fatalf("put %d %v", code, out)
@@ -123,8 +114,8 @@ func TestProxyRetriedUntilTheAddressIsThere(t *testing.T) {
 	mu.Unlock()
 	testkit.Eventually(t, "the proxy to listen", func() bool { return len(cubeListening(t, s)) == 1 })
 	greetingAt(t, addr)
-	if n := countLines(logs.String(), "level=ERROR", `msg="proxy listener not started"`); n != 2 {
-		t.Errorf("%d Error lines for two errors, want 2:\n%s", n, logs.String())
+	if got := logs.Since(0, testkit.MsgAt(slog.LevelError, "proxy listener not started")); len(got) != 2 {
+		t.Errorf("%d Error lines for two errors, want 2: %v", len(got), got)
 	}
 	s.proxyMu.Lock()
 	defer s.proxyMu.Unlock()
