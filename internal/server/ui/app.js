@@ -59,15 +59,15 @@ function store(key, value) {
 
 // appBridge is the bridge of the Massimo app on the page it opened
 // (docs/app.md, "The calls of a server's page"): the app keeps the
-// page's token, behind the phone's fingerprint or PIN where the user
-// asked for it, in place of the browser's storage; null in a browser.
+// page's token in place of the browser's storage, and with version 2
+// offers the login by fingerprint (login.js appLogin) and the way back
+// to its servers; null in a browser.
 function appBridge() {
   const b = window.massimo;
   return b && typeof b.token === "function" && typeof b.setToken === "function" ? b : null;
 }
 
-// readToken is the token the page starts with: the app's, which may ask
-// for the fingerprint first (none when that is dismissed), else the one
+// readToken is the token the page starts with: the app's, else the one
 // the browser kept. In the app the browser keeps none.
 async function readToken() {
   const b = appBridge();

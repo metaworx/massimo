@@ -1809,6 +1809,13 @@ massimo-week-program { display: contents; }
 .login-provider-buttons { display: flex; flex-direction: column; gap: 8px; }
 .login-providers button { width: 100%; }
 .login-providers p { margin: 0; }
+/* the login by fingerprint in the app (login.js renderAppLogin) */
+.login-app { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.login-app p { margin: 0; }
+.login-fingerprint { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.login-keep { margin: 4px 0 8px; }
+.login-keep-failed .actions, .login-servers { margin-top: 8px; }
+.login-servers { text-align: center; }
 .user-tokens li .revoke-token { margin-left: auto; }
 .user-key { word-break: break-all; user-select: all; }
 .cap-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 2px 12px; margin: 4px 0; }
@@ -1853,7 +1860,8 @@ massimo-week-program { display: contents; }
 .server-name { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
 .server-where { flex: 1 1 8em; min-width: 0; overflow-wrap: anywhere; }
 .server-badges { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
-.icon-btn.server-cog { flex: none; height: auto; min-height: 36px; }
+.icon-btn.server-cog, .icon-btn.server-login { flex: none; height: auto; min-height: 36px; }
+.server-login-kept { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; }
 .server-row > .server-panel { flex-basis: 100%; }
 .server-panel .field { margin-bottom: 12px; }
 .found-server { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }

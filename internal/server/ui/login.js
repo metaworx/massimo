@@ -4,10 +4,11 @@
 // The Massimo web UI, login: who the page is signed in as (GET
 // /api/v1/me), the sign-in dialog in place of the token prompt (a name
 // and a password, signed in by OPAQUE so that the password stays in the
-// browser, or an API key pasted), Log out, hiding what the role may not
-// do, the own password, and the form that creates the first owner on a
-// server without users. Loaded after app.js; api() calls askLogin on a
-// 401, and sends only a read again once it is in.
+// browser, or an API key pasted, and in the app the login by
+// fingerprint), Log out, hiding what the role may not do, the own
+// password, and the form that creates the first owner on a server
+// without users. Loaded after app.js; api() calls askLogin on a 401, and
+// sends only a read again once it is in.
 "use strict";
 
 // CAPABILITIES are the server's, in its order (docs/api-v1.md,
@@ -348,6 +349,87 @@ async function forgetSession(synced) {
   showView("tiles", "replace");
 }
 
+// --- the login by fingerprint in the app (docs/app.md, "The login by fingerprint")
+
+// appLogin is the bridge's login by fingerprint where the page runs in
+// an app that has it (contract version 2), else null.
+function appLogin() {
+  const b = appBridge();
+  return b && b.login && typeof b.login.status === "function" ? b.login : null;
+}
+
+// appConnect is the bridge's way back to the app's servers, else null.
+function appConnect() {
+  const b = appBridge();
+  return b && typeof b.connect === "function" ? () => b.connect() : null;
+}
+
+// renderAppLogin draws the sign-in card's part of the app as
+// login.status() answers: "Login by fingerprint" where a key is kept,
+// the switch that keeps one where the phone can and none is kept, the
+// notice where the address takes no key (plain HTTP outside the home
+// network), and "Select server". Nothing of it in a browser.
+async function renderAppLogin() {
+  const login = appLogin();
+  let st = null;
+  if (login) {
+    try {
+      st = await login.status();
+    } catch (e) {
+      st = null;
+    }
+  }
+  const kept = !!(st && st.user && !st.plain);
+  $("login-fingerprint").classList.toggle("hidden", !kept);
+  const who = $("login-fingerprint-user");
+  who.textContent = kept ? t("login.fingerprintAs", { name: st.user }) : "";
+  who.classList.toggle("hidden", !kept);
+  const plain = !!(st && st.can && st.plain);
+  $("login-fp-plain").classList.toggle("hidden", !plain);
+  $("login-app").classList.toggle("hidden", !kept && !plain);
+  const offer = !!(st && st.can && !st.plain && !st.user);
+  $("login-keep-row").classList.toggle("hidden", !offer);
+  if (!offer) $("login-keep").checked = false;
+  $("login-servers-row").classList.toggle("hidden", !appConnect());
+}
+
+// keepLogin keeps the login by fingerprint after a sign-in with the
+// switch on (login.keep, which asks for the fingerprint); where it is not
+// kept the card says so and offers Try again and Sign in without it, and
+// resolves once either is chosen.
+async function keepLogin() {
+  const login = appLogin();
+  if (!login) return;
+  const form = $("login-form");
+  const failed = $("login-keep-failed");
+  const retry = $("login-keep-retry");
+  for (;;) {
+    let said;
+    try {
+      if (await whileBusy($("login-form").querySelector("button[type=submit]"), () => login.keep())) break;
+      said = t("login.keepFailed");
+    } catch (e) {
+      said = t("login.keepError", { error: e.message });
+    }
+    $("login-keep-failed-text").textContent = said;
+    form.classList.add("hidden");
+    $("login-app").classList.add("hidden");
+    failed.classList.remove("hidden");
+    retry.focus();
+    const again = await new Promise((resolve) => {
+      retry.onclick = () => resolve(true);
+      $("login-keep-skip").onclick = () => resolve(false);
+    });
+    retry.onclick = null;
+    $("login-keep-skip").onclick = null;
+    failed.classList.add("hidden");
+    form.classList.remove("hidden");
+    if (!again) break;
+  }
+  failed.classList.add("hidden");
+  form.classList.remove("hidden");
+}
+
 // askLogin opens the sign-in dialog and resolves true once a session or
 // a key is in, false when the dialog was dismissed. While it is open the
 // page is signed out: the body's class signed-out hides all of it but
@@ -366,6 +448,7 @@ function askLogin() {
     $("login-user").value = "";
     $("login-password").value = "";
     $("login-token").value = "";
+    $("login-keep").checked = false;
     $("login-token").closest("details").open = sawOpen;
     showResult(error, "", false);
     // a provider's refusal under the providers' buttons
@@ -376,10 +459,13 @@ function askLogin() {
       oidcError = null;
     }
     renderLoginProviders();
+    renderAppLogin();
     const submit = form.querySelector("button[type=submit]");
+    const fingerprint = $("login-fingerprint");
     const done = (ok) => {
       form.onsubmit = null;
       keyForm.onsubmit = null;
+      fingerprint.onclick = null;
       dlg.onclose = null;
       if (dlg.open) dlg.close();
       document.body.classList.remove("signed-out");
@@ -414,6 +500,25 @@ function askLogin() {
         return;
       }
       setToken(session.token);
+      if ($("login-keep").checked && !$("login-keep-row").classList.contains("hidden")) await keepLogin();
+      await settleSignIn(was, held);
+      done(true);
+      if (!startWaits) afterLogin();
+    };
+    // the login by fingerprint: a session from the key the app keeps
+    fingerprint.onclick = async () => {
+      if (isBusy(fingerprint)) return;
+      showResult(error, "", false);
+      let token;
+      try {
+        token = await whileBusy(fingerprint, () => appLogin().fingerprint());
+      } catch (e) {
+        showResult(error, t("login.fingerprintFailed", { error: e.message }), false);
+        renderAppLogin(); // a key the server refused is gone
+        return;
+      }
+      if (!token) return; // the prompt dismissed: the card stays
+      setToken(token);
       await settleSignIn(was, held);
       done(true);
       if (!startWaits) afterLogin();
@@ -773,6 +878,10 @@ function initLogin() {
     if (document.visibilityState === "hidden") flushPreferences();
   });
   $("logout-btn").addEventListener("click", logout);
+  $("login-servers").addEventListener("click", () => {
+    const go = appConnect();
+    if (go) go().catch(() => {});
+  });
   $("menu-logout").addEventListener("click", logout);
   $("setup-form").addEventListener("submit", createOwner);
   checkOwnerName = watchName($("setup-user"), $("setup-name-msg"), () => []);

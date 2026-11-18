@@ -43,11 +43,14 @@ What the shell is, by class (`android/app/src/main/kotlin/ch/metaworx/massimo/`)
 
 | Class | What it does |
 |---|---|
-| `MainActivity` | the one WebView: the connect page from `https://appassets.androidplatform.net/ui/connect.html` (`WebViewAssetLoader`), then the server's page; the pinned certificate in `onReceivedSslError`; links to another origin open in the browser |
-| `Bridge`, `res/raw/bridge.js` | `window.massimo` (docs/app.md): the script, injected at the document's start by `addDocumentStartJavaScript`, makes each call a message over `addWebMessageListener`'s channel; `Bridge` answers it after checking its origin (`Origins`): the connect page gets the server list, a server's page its own token, any other page nothing |
-| `ServerStore` | the servers, in a JSON file of the app's own |
-| `TokenStore`, `KeystoreSealer` | a token per server, sealed with AES-256-GCM under a key of the Android Keystore, the server's id bound into the seal |
-| `Biometric` | the prompt before a token is handed over, for a server whose "Ask for my fingerprint or PIN" is on, and before that switch is turned off |
+| `MainActivity` | the one WebView: the connect page from `https://appassets.androidplatform.net/ui/connect.html` (`WebViewAssetLoader`), then the server's page; the pinned certificate in `onReceivedSslError`; links to another origin open in the browser; for a server whose login is asked at each return, the cover while the app is hidden and no picture in Recents (`setRecentsScreenshotEnabled`, before Android 13 `FLAG_SECURE`) |
+| `Bridge`, `res/raw/bridge.js` | `window.massimo` (docs/app.md, contract version 2): the script, injected at the document's start by `addDocumentStartJavaScript`, makes each call a message over `addWebMessageListener`'s channel; `Bridge` answers it after checking its origin (`Origins`): the connect page gets the server list, a server's page its own session, its login by fingerprint and `connect`, any other page nothing |
+| `ServerStore` | the servers, in a JSON file of the app's own, each with when its fingerprint is asked (`ask`); version 1's switch is reset once, its session forgotten |
+| `TokenStore`, `KeystoreSealer` | a session per server, sealed with AES-256-GCM under a key of the Android Keystore, the server's id bound into the seal |
+| `SessionKeeper` | where a server's session is kept: in memory alone for a kept login asked at each return or start, else in `TokenStore` |
+| `LoginStore`, `LoginKey` | the login by fingerprint: an API key of the user's per server, sealed under a Keystore key that requires the prompt for every use (from Android 11 a strong biometric or the screen lock, before it the strong biometric alone), the server's id, node, pinned fingerprint and the user bound into the seal |
+| `ServerApi` | the adapter's own requests at the address the page was opened at, over the probe's trust: the user (`GET /api/v1/me`), the key (`POST /api/v1/users/{name}/tokens`), the session from it (`POST /api/v1/login/key`), the revoke; never over plain HTTP outside the private ranges |
+| `Biometric` | the prompt, with the key's cipher for a login, without one for the cover |
 | `Prober` | `GET <url>healthz` of each address in parallel, within four seconds; a certificate the system does not trust for the host counts only where its fingerprint is the one given, and is otherwise reported with its fingerprint, nothing read |
 | `Discovery` | `NsdManager` browsing `_massimo._tcp`, each server resolved into a `found` event |
 
@@ -180,7 +183,11 @@ Lint runs with every warning an error.
 The unit tests run on the JVM (`app/src/test/`): the server store,
 the token store with a JVM key, the probe against a local HTTP server,
 the trust manager with a self-signed certificate, fingerprints,
-origins and who may call what, the discovery event.
+origins and who may call what, the discovery event;
+the login store with JVM keys, the login's requests against a local HTTP
+server, and where each choice of when the fingerprint is asked keeps a session.
+The prompt and the Keystore's keys bound to it are a phone's alone:
+they are checked on one (the plan's Verification of Block 8).
 The instrumented test (`app/src/androidTest/`) loads the connect page on a
 phone and checks that the bridge answers it and refuses it a token:
 

@@ -11,7 +11,10 @@ import java.io.IOException
 import java.net.URI
 import java.security.SecureRandom
 
-/** A server the app keeps (docs/app.md, "A server"). */
+/**
+ * A server the app keeps (docs/app.md, "A server"); [ask] is when the
+ * fingerprint is asked once a login is kept, one of [ASKS].
+ */
 data class Server(
     val id: String,
     val name: String,
@@ -19,21 +22,31 @@ data class Server(
     val lan: String,
     val remote: String,
     val fp: String,
-    val biometric: Boolean,
+    val ask: String,
     val push: Boolean,
 ) {
-    fun toJson(): JSONObject = JSONObject()
+    /** toJson is the server as the connect page sees it, with the user whose login is kept, [login], or "". */
+    fun toJson(login: String = ""): JSONObject = JSONObject()
         .put("id", id)
         .put("name", name)
         .put("node", node)
         .put("lan", lan)
         .put("remote", remote)
         .put("fp", fp)
-        .put("biometric", biometric)
+        .put("login", login)
+        .put("ask", ask)
         .put("push", push)
 
     /** has reports whether [url] is one of the server's two addresses. */
     fun has(url: String): Boolean = url.isNotEmpty() && (url == lan || url == remote)
+
+    companion object {
+        /** The choices of when the fingerprint is asked: at each return, at each start, after a logout. */
+        const val ASK_RETURN = "return"
+        const val ASK_START = "start"
+        const val ASK_LOGOUT = "logout"
+        val ASKS = setOf(ASK_RETURN, ASK_START, ASK_LOGOUT)
+    }
 }
 
 /**
@@ -42,6 +55,9 @@ data class Server(
  * beside it renamed over it.
  */
 class ServerStore(private val file: File) {
+    // The servers that had version 1's switch "Ask for my fingerprint or
+    // PIN" on, found by load: their session is forgotten once (takeLegacy).
+    private val legacy = mutableSetOf<String>()
     private val servers: MutableList<Server> = load()
 
     @Synchronized
@@ -70,7 +86,7 @@ class ServerStore(private val file: File) {
             lan = lan,
             remote = remote,
             fp = old?.fp ?: "",
-            biometric = input.opt("biometric") == true,
+            ask = str(input, "ask").takeIf { it in Server.ASKS } ?: old?.ask ?: Server.ASK_START,
             push = input.opt("push") == true,
         )
         val at = servers.indexOfFirst { it.id == s.id }
@@ -95,12 +111,28 @@ class ServerStore(private val file: File) {
         write()
     }
 
+    /**
+     * takeLegacy is the ids of the servers that had version 1's switch on,
+     * once: their sessions were kept behind a prompt the app no longer
+     * asks, so the caller forgets them, and the file is written without
+     * the switch.
+     */
+    @Synchronized
+    fun takeLegacy(): Set<String> {
+        if (legacy.isEmpty()) return emptySet()
+        val ids = legacy.toSet()
+        legacy.clear()
+        write()
+        return ids
+    }
+
     private fun load(): MutableList<Server> {
         if (!file.isFile) return mutableListOf()
         return try {
             val a = JSONArray(file.readText())
             MutableList(a.length()) { i ->
                 val o = a.getJSONObject(i)
+                if (o.opt("biometric") == true) legacy.add(str(o, "id"))
                 Server(
                     id = str(o, "id"),
                     name = str(o, "name"),
@@ -108,7 +140,7 @@ class ServerStore(private val file: File) {
                     lan = str(o, "lan"),
                     remote = str(o, "remote"),
                     fp = str(o, "fp"),
-                    biometric = o.opt("biometric") == true,
+                    ask = str(o, "ask").takeIf { it in Server.ASKS } ?: Server.ASK_START,
                     push = o.opt("push") == true,
                 )
             }.filter { it.id.isNotEmpty() }.toMutableList()

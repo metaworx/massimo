@@ -28,14 +28,28 @@
     <div id="login-provider-buttons" class="login-provider-buttons"></div>
     <p id="login-providers-error" class="small hidden" role="alert"></p>
   </div>
+  <!-- the login by fingerprint where the page runs in the app (docs/app.md,
+       "The login by fingerprint"): the button where a key is kept, the
+       notice where the address takes none (login.js renderAppLogin) -->
+  <div id="login-app" class="login-app hidden">
+    <button type="button" id="login-fingerprint" class="primary login-fingerprint hidden"><svg class="ni" aria-hidden="true"><use href="#icon-fingerprint"/></svg> <span data-i18n="login.fingerprint">Login by fingerprint</span></button>
+    <p id="login-fingerprint-user" class="muted small hidden"></p>
+    <p id="login-fp-plain" class="notice small hidden" role="note" data-i18n="login.fingerprintPlain">Not encrypted here: the login by fingerprint is used only over HTTPS or on the home network. Sign in with your password.</p>
+  </div>
   <form id="login-form" method="post">
     <p class="muted" data-i18n="login.text">This server asks who you are.</p>
     <p id="login-tls" class="notice small hidden" role="note" data-i18n="header.selfSigned">Self-signed certificate: before signing in, compare the SHA-256 fingerprint in your browser's certificate details with the one massimo tls show prints on the server.</p>
     <label><span data-i18n="login.user">Name</span> <input type="text" id="login-user" name="username" autocomplete="username" autocapitalize="none" spellcheck="false"></label>
     <label><span data-i18n="login.password">Password</span> <input type="password" id="login-password" name="password" autocomplete="current-password"></label>
+    <label id="login-keep-row" class="switch login-keep hidden"><input type="checkbox" id="login-keep"><span class="slider" aria-hidden="true"></span><span class="switch-label" data-i18n="login.keepFingerprint">Enable login by fingerprint</span></label>
     <p id="login-error" class="small hidden" role="alert"></p>
     <div class="actions"><button type="submit" class="primary" data-i18n="login.submit">Sign in</button></div>
   </form>
+  <!-- signed in, the login by fingerprint not kept: again, or on without it -->
+  <div id="login-keep-failed" class="login-keep-failed hidden">
+    <p id="login-keep-failed-text" class="small" role="alert"></p>
+    <div class="actions"><button type="button" id="login-keep-skip" data-i18n="login.keepSkip">Sign in without it</button><button type="button" id="login-keep-retry" class="primary" data-i18n="login.keepRetry">Try again</button></div>
+  </div>
   <details class="login-token">
     <summary data-i18n="login.tokenInstead">Or an API key</summary>
     <form id="login-key-form">
@@ -43,4 +57,6 @@
       <div class="actions"><button type="submit" data-i18n="login.submit">Sign in</button></div>
     </form>
   </details>
+  <!-- in the app: back to the connect page's servers -->
+  <p id="login-servers-row" class="login-servers hidden"><button type="button" id="login-servers" data-i18n="app.selectServer">Select server</button></p>
 </dialog>

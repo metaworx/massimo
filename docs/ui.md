@@ -29,6 +29,17 @@ the account not known, no e-mail sent, the e-mail not verified,
 or the account in none of the groups the provider admits.
 The app shows no such button yet:
 the providers refuse a sign-in inside an app's page.
+In the app the card has the login by fingerprint instead (docs/app.md,
+"The login by fingerprint"):
+**Enable login by fingerprint**, a switch under the password where the phone
+has a fingerprint and keeps no login for the server, which after the sign-in
+asks for the fingerprint and keeps an API key of the user's own behind it,
+or says that nothing was kept, with **Try again** and **Sign in without it**;
+**Login by fingerprint**, with the user's name, above the form where a login
+is kept, which signs in with a new session from the key;
+a line instead of both where the page is open over plain HTTP outside the
+home network, where the app sends no key;
+and **Select server** at the card's foot, back to the app's servers.
 While it asks, the page shows its name, its version and the sign-in,
 nothing else, as it does from its first moment until the server has said who is in,
 so that no button shows before the sign-in:
@@ -156,7 +167,9 @@ The compacted header has **↑**, back to the top, first of the page buttons: �
   a blue cube is the sign of the Cubes found and not served.
   Open, it stays open when data comes in, the focus where it was,
   and shows what came: a Cube's new name, a problem, a Cube found.
-  The last entry, **Search for new Cubes…**,
+  In the app the list ends with **Select server**, which shows the app's
+  servers (docs/app.md).
+  The search's entry, **Search for new Cubes…**,
   asks the server to look for Cubes on the LAN (about two seconds;
   the server also looks every 30 minutes by itself),
   and reads **Searching…** meanwhile.

@@ -5,9 +5,12 @@ bridge of fake_bridge.js in place of an app's adapter, put into the page
 by add_init_script as conftest.py puts the token: the server list and
 what each probe found, a tap that opens a server, adding by address and
 from discovery, the fingerprint sheet of a self-signed certificate and
-of a changed one, a server's settings with the biometric switch, the
-card of the server on the phone; a browser without the bridge; and the
-server's page taking its token from the bridge and handing it back.
+of a changed one, a server's settings with when the fingerprint is
+asked, the login by fingerprint from the row, Turn off and Forget all,
+the card of the server on the phone; a browser without the bridge; and
+the server's page taking its token from the bridge and handing it back,
+its login by fingerprint and "Select server" (docs/app.md, contract
+version 2).
 axe-core (axe-playwright-python) finds no violation on the connect page
 in each of its states the tests open.
 
@@ -46,8 +49,8 @@ FP_TITLE = {"en": "Check the certificate", "de": "Zertifikat prüfen"}
 FP_CHANGED = {"en": "The certificate has changed", "de": "Das Zertifikat hat sich geändert"}
 
 
-def server(sid, name, node, lan="", remote="", fp="", biometric=False):
-    return {"id": sid, "name": name, "node": node, "lan": lan, "remote": remote, "fp": fp, "biometric": biometric, "push": False}
+def server(sid, name, node, lan="", remote="", fp="", login="", ask="start"):
+    return {"id": sid, "name": name, "node": node, "lan": lan, "remote": remote, "fp": fp, "login": login, "ask": ask, "push": False}
 
 
 def open_connect(new_context, guard, watch, config=None):
@@ -223,9 +226,10 @@ def test_connect_fingerprint_sheet(new_context, case, watch, guard):
 
 def test_connect_settings(new_context, case, watch, guard):
     """A server's settings open under its row from the cog and from a
-    long press (the context menu): the biometric switch is saved, the
-    notification switch is there where the app has push, and Remove asks
-    in place and forgets the server."""
+    long press (the context menu): when the fingerprint is asked is
+    saved, the notification switch is there where the app has push, a
+    server without a kept login offers no Turn off, and Remove asks in
+    place and forgets the server."""
     config = {"servers": [server("s1", "Home", NODE1, lan=HOME_LAN)], "answers": {HOME_LAN: {"node": NODE1}}, "push": True}
     page = open_connect(new_context, guard, watch, config)
     wait_state(page, "Home", STATE[case.lang]["lan"])
@@ -243,15 +247,17 @@ def test_connect_settings(new_context, case, watch, guard):
     named_buttons(page, "a server's settings")
     assert_axe(page, "a server's settings")
 
-    panel.locator("input[name=biometric] + .slider").click()
+    assert panel.locator("select[name=ask]").input_value() == "start", "when the app starts, until the user chooses"
+    assert panel.locator(".server-login-off").count() == 0 and home.locator(".server-login").is_hidden(), "no kept login, no Turn off"
+    panel.locator("select[name=ask]").select_option("return")
     panel.locator("button[type=submit]").click()
     panel.wait_for(state="detached")
     saved = calls(page, "save")[-1][1]
-    assert saved["biometric"] is True and saved["id"] == "s1" and saved["lan"] == HOME_LAN, f"the switch is saved: {saved}"
+    assert saved["ask"] == "return" and saved["id"] == "s1" and saved["lan"] == HOME_LAN and "biometric" not in saved, f"the choice is saved: {saved}"
     page.locator("#servers-msg.ok").wait_for()
 
     home.locator(".server-cog").click()
-    assert panel.locator("input[name=biometric]").is_checked(), "and shown as saved"
+    assert panel.locator("select[name=ask]").input_value() == "return", "and shown as saved"
     panel.locator(".server-remove").click()
     page.locator(".confirm-box .confirm-yes").click()
     home.wait_for(state="detached")
@@ -354,3 +360,148 @@ def test_server_page_token_from_bridge(new_context, case, watch, guard):
     page.locator("#logout-btn").click()
     assert wait_until(page, "document.getElementById('login-dialog').open", 5)
     assert calls(page, "setToken")[-1] == ["setToken", None], "Sign out forgets the session in the app"
+
+
+def test_connect_login_by_fingerprint(new_context, case, watch, guard):
+    """A server with a kept login has the fingerprint on its row, labelled
+    with the user, which opens it signed in (open with {login: true}); a
+    dismissed prompt leaves the list as it was. Its settings name the
+    user with Turn off, which forgets it at the address the probe chose;
+    Forget all stored credentials asks in place and forgets every one."""
+    config = {
+        "servers": [server("s1", "Home", NODE1, lan=HOME_LAN, login="anna"), server("s2", "Cabin", NODE2, lan=CABIN_LAN, login="bob"),
+                    server("s3", "Office", NODE3, remote=OFFICE_REMOTE)],
+        "answers": {HOME_LAN: {"node": NODE1}, CABIN_LAN: {"node": NODE2}},
+    }
+    page = open_connect(new_context, guard, watch, config)
+    wait_state(page, "Home", STATE[case.lang]["lan"])
+    home, cabin, office = row(page, "Home"), row(page, "Cabin"), row(page, "Office")
+    button = home.locator(".server-login")
+    assert button.is_visible() and "anna" in (button.get_attribute("aria-label") or ""), "the row's fingerprint names the user"
+    assert office.locator(".server-login").is_hidden(), "a server without a kept login has none"
+    assert page.locator("#forget-all").is_visible(), "Forget all where a login is kept"
+    named_buttons(page, "the list with kept logins")
+    assert_axe(page, "the list with kept logins")
+
+    button.click()
+    assert wait_until(page, "window.__fakeBridge.calls.some((c) => c[0] === 'open')", 3)
+    assert calls(page, "open")[-1] == ["open", "s1", HOME_LAN, {"login": True}], f"opened signed in: {calls(page, 'open')}"
+
+    # Turn off: the fingerprint once, the key revoked at the probed address.
+    home.locator(".server-cog").click()
+    panel = home.locator(".server-panel")
+    panel.wait_for(state="visible")
+    assert "anna" in panel.locator(".server-login-kept").inner_text()
+    panel.locator(".server-login-off").click()
+    assert wait_until(page, "window.__fakeBridge.calls.some((c) => c[0] === 'forget')", 3)
+    assert calls(page, "forget") == [["forget", "s1", HOME_LAN]]
+    page.locator("#servers-msg.ok").wait_for()
+    assert wait_until(page, "!document.querySelector(\".server-row[data-id='s1'] .server-login-kept\")", 3), "the settings drawn again without it"
+    assert home.locator(".server-login").is_hidden(), "and the row without its fingerprint"
+
+    # Forget all: asked in place, then every login forgotten.
+    assert cabin.locator(".server-login").is_visible()
+    page.locator("#forget-all").click()
+    page.locator(".confirm-box .confirm-yes").click()
+    assert wait_until(page, "window.__fakeBridge.calls.some((c) => c[0] === 'forgetAll')", 3)
+    # the question stands in the row's place until the app answered
+    assert wait_until(page, "!!document.getElementById('forget-all-row') && document.getElementById('forget-all-row').classList.contains('hidden')", 3), \
+        "no login left, no Forget all"
+    assert cabin.locator(".server-login").is_hidden()
+
+
+def test_connect_login_refused(new_context, case, watch, guard):
+    """A kept key the server refused is forgotten by the app: the open
+    says why, and the row loses its fingerprint."""
+    config = {"servers": [server("s1", "Home", NODE1, lan=HOME_LAN, login="anna")], "answers": {HOME_LAN: {"node": NODE1}},
+              "openLogin": "error:the server no longer takes the kept key"}
+    page = open_connect(new_context, guard, watch, config)
+    wait_state(page, "Home", STATE[case.lang]["lan"])
+    row(page, "Home").locator(".server-login").click()
+    page.locator("#servers-msg:not(.hidden)").wait_for()
+    assert "no longer takes" in page.locator("#servers-msg").inner_text()
+    assert wait_until(page, "document.querySelector(\".server-row[data-id='s1'] .server-login\").classList.contains('hidden')", 3)
+
+
+def server_page(new_context, guard, watch, login, token=None):
+    """The server's page in the app, its bridge with the login by
+    fingerprint as login describes it (fake_bridge.js)."""
+    clear_preferences()
+    ctx = new_context()
+    ctx.add_init_script(f"window.__fakeBridgeConfig = {json.dumps({'kind': 'server', 'token': token, 'login': login})};")
+    ctx.add_init_script(path=FAKE_BRIDGE)
+    page = ctx.new_page()
+    guard.page = page
+    page.set_default_timeout(5000)
+    page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+    page.goto(URL)
+    return page
+
+
+def test_server_page_keeps_the_login(new_context, case, watch, guard):
+    """On the sign-in form of a server's page in the app: the switch where
+    the phone can and nothing is kept; a sign-in with it on asks the app
+    to keep the login, a prompt not passed offers Try again and Sign in
+    without it, and the second try keeps it; Select server goes back to
+    the app's servers. The console is not watched: the page's requests
+    without a token are refused on purpose, as in test_login.py."""
+    page = server_page(new_context, guard, watch, {"status": {"can": True, "user": "", "ask": "start", "plain": False}, "keep": [False, True]})
+    page.locator("#login-dialog[open]").wait_for()
+    page.locator("#login-keep-row").wait_for(state="visible")
+    assert page.locator("#login-fingerprint").is_hidden(), "nothing kept: no Login by fingerprint"
+    assert page.locator("#login-servers").is_visible(), "Select server, the app having its servers"
+    named_buttons(page, "the sign-in in the app")
+    page.locator("#login-servers").click()
+    assert wait_until(page, "window.__fakeBridge.calls.some((c) => c[0] === 'connect')", 3), "Select server calls the app"
+
+    page.locator("#login-user").fill("operator")
+    page.locator("#login-password").fill("op-pass")
+    page.locator("#login-keep-row .slider").click()
+    page.locator("#login-form button[type=submit]").click()
+    page.locator("#login-keep-failed").wait_for(state="visible")
+    assert calls(page, "login.keep") == [["login.keep"]], "the app is asked to keep it, once"
+    sets = calls(page, "setToken")
+    assert len(sets) == 1 and isinstance(sets[0][1], str), f"the session went to the app first: {sets}"
+    assert page.locator("#login-form").is_hidden() and page.locator("#login-keep-retry").is_visible()
+    named_buttons(page, "the login not kept")
+    page.locator("#login-keep-retry").click()
+    page.wait_for_selector(".room", timeout=10000)
+    assert len(calls(page, "login.keep")) == 2, "Try again asks again"
+    assert not page.evaluate("document.getElementById('login-dialog').open"), "and the page is signed in"
+
+    # Signed in: the Cube choice ends with Select server.
+    page.locator("#cube-menu summary").click()
+    entry = page.locator("#cube-menu .menu-items button[data-value='__servers']")
+    entry.wait_for(state="visible")
+    entry.click()
+    assert wait_until(page, "window.__fakeBridge.calls.filter((c) => c[0] === 'connect').length === 2", 3), "the Cube choice's Select server"
+
+
+def test_server_page_login_by_fingerprint(new_context, case, watch, guard):
+    """Where a key is kept, the sign-in form offers Login by fingerprint
+    with the user's name, which signs the page in with the session the
+    app made; a dismissed prompt leaves the form; over plain HTTP outside
+    the home network the form says why it offers the password alone."""
+    page = server_page(new_context, guard, watch, {"status": {"can": True, "user": "operator", "ask": "start", "plain": False}, "fingerprint": TOKEN})
+    page.locator("#login-dialog[open]").wait_for()
+    fingerprint = page.locator("#login-fingerprint")
+    fingerprint.wait_for(state="visible")
+    assert "operator" in page.locator("#login-fingerprint-user").inner_text()
+    assert page.locator("#login-keep-row").is_hidden(), "a key kept: no switch"
+    fingerprint.click()
+    page.wait_for_selector(".room", timeout=10000)
+    assert calls(page, "login.fingerprint") == [["login.fingerprint"]]
+    assert page.evaluate("state.token") == TOKEN, "signed in with the app's session"
+    assert page.evaluate("localStorage.getItem('massimo.token')") is None, "and the browser keeps none"
+
+    plain = server_page(new_context, guard, watch, {"status": {"can": True, "user": "operator", "ask": "start", "plain": True}})
+    plain.locator("#login-dialog[open]").wait_for()
+    plain.locator("#login-fp-plain").wait_for(state="visible")
+    assert plain.locator("#login-fingerprint").is_hidden() and plain.locator("#login-keep-row").is_hidden(), "plain HTTP: neither"
+
+    dismissed = server_page(new_context, guard, watch, {"status": {"can": True, "user": "operator", "ask": "start", "plain": False}, "fingerprint": None})
+    dismissed.locator("#login-fingerprint").wait_for(state="visible")
+    dismissed.locator("#login-fingerprint").click()
+    assert wait_until(dismissed, "window.__fakeBridge.calls.some((c) => c[0] === 'login.fingerprint')", 3)
+    assert wait_until(dismissed, "!document.getElementById('login-fingerprint').classList.contains('busy')", 3)
+    assert dismissed.evaluate("document.getElementById('login-dialog').open"), "a dismissed prompt leaves the form"
