@@ -18,8 +18,10 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.SslErrorHandler
 import android.webkit.ValueCallback
@@ -29,7 +31,9 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
@@ -51,7 +55,9 @@ import java.util.concurrent.Executors
 /**
  * MainActivity is the shell: one WebView that shows the connect page from
  * the app's own copy of the web UI, then the page of the server the user
- * chose, with the bridge (docs/app.md) in both.
+ * chose, with the bridge (docs/app.md) in both. A server whose login by
+ * fingerprint is asked at each return has its page covered while the app
+ * is hidden, until the prompt is passed, and kept out of Recents' pictures.
  */
 class MainActivity : FragmentActivity() {
     private val main = Handler(Looper.getMainLooper())
@@ -60,6 +66,10 @@ class MainActivity : FragmentActivity() {
     private lateinit var bridge: Bridge
     private lateinit var discovery: Discovery
     private lateinit var back: OnBackPressedCallback
+    private lateinit var biometric: Biometric
+    private lateinit var cover: View
+    private var covered = false
+    private var shown: String? = null // the origin of the page the WebView shows
     private var serverScript: ScriptHandler? = null
     private var channelFor: String? = null
     private var listening = false
@@ -101,21 +111,37 @@ class MainActivity : FragmentActivity() {
         val texts = Texts { id, args -> getString(id, *args) }
         val agent = agent()
         discovery = Discovery(this, main)
+        biometric = Biometric(this, getString(android.R.string.cancel))
+        val servers = ServerStore(File(filesDir, "servers.json"))
+        val tokens = TokenStore(File(filesDir, "tokens.json"), KeystoreSealer())
+        // Version 1's switch kept a session behind a prompt the app asks no more.
+        servers.takeLegacy().forEach { tokens.remove(it) }
         bridge = Bridge(
-            host = { url -> openServer(url) },
-            servers = ServerStore(File(filesDir, "servers.json")),
-            tokens = TokenStore(File(filesDir, "tokens.json"), KeystoreSealer()),
+            host = object : Bridge.Host {
+                override fun open(url: String) = openServer(url)
+
+                override fun connectPage() = web.loadUrl(Origins.CONNECT_URL)
+
+                override fun privacy() = this@MainActivity.privacy()
+            },
+            servers = servers,
+            sessions = SessionKeeper(tokens),
+            logins = LoginStore(File(filesDir, "logins.json")),
+            keys = LoginKey(),
+            api = ServerApi(agent),
             prober = Prober(agent, texts),
             discovery = discovery,
-            biometric = Biometric(this),
+            biometric = biometric,
             texts = texts,
+            keyLabel = getString(R.string.login_key_label, Build.MODEL),
             io = io,
             main = main,
         )
         web = WebView(this)
         web.id = R.id.web
         setUp(web, agent)
-        setContentView(insetted(web))
+        cover = coverView()
+        setContentView(insetted(web, cover))
 
         back = object : OnBackPressedCallback(false) {
             override fun handleOnBackPressed() = web.goBack()
@@ -125,7 +151,8 @@ class MainActivity : FragmentActivity() {
         WebViewCompat.addDocumentStartJavaScript(web, script("connect"), setOf(Origins.APP))
         val id = savedInstanceState?.getString(KEY_ID)
         val origin = savedInstanceState?.getString(KEY_ORIGIN)
-        bridge.opened = if (id != null && origin != null) Bridge.Opened(id, origin) else null
+        val url = savedInstanceState?.getString(KEY_URL)
+        bridge.opened = if (id != null && origin != null && url != null) Bridge.Opened(id, origin, url) else null
         channel(bridge.opened?.origin)
         if (savedInstanceState == null || web.restoreState(savedInstanceState) == null) {
             web.loadUrl(Origins.CONNECT_URL)
@@ -137,6 +164,7 @@ class MainActivity : FragmentActivity() {
         if (!::bridge.isInitialized) return
         networkSince = SystemClock.elapsedRealtime()
         getSystemService(ConnectivityManager::class.java)?.registerDefaultNetworkCallback(network)
+        if (covered) unlock()
     }
 
     override fun onStop() {
@@ -144,6 +172,12 @@ class MainActivity : FragmentActivity() {
         if (!::bridge.isInitialized) return
         runCatching { getSystemService(ConnectivityManager::class.java)?.unregisterNetworkCallback(network) }
         discovery.stop()
+        // Hidden: a page asked at each return is covered, but for the app's
+        // own prompt and file chooser, which hide nothing.
+        if (!biometric.asking && files == null && bridge.covers(shown)) {
+            covered = true
+            cover.visibility = View.VISIBLE
+        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -153,6 +187,7 @@ class MainActivity : FragmentActivity() {
         bridge.opened?.let {
             outState.putString(KEY_ID, it.id)
             outState.putString(KEY_ORIGIN, it.origin)
+            outState.putString(KEY_URL, it.url)
         }
     }
 
@@ -209,6 +244,56 @@ class MainActivity : FragmentActivity() {
         web.loadUrl(url)
     }
 
+    // privacy keeps the page out of Recents' pictures while it is guarded
+    // (Bridge.guarded): from Android 13 by setRecentsScreenshotEnabled,
+    // which leaves screenshots allowed, before it by FLAG_SECURE, which
+    // forbids them too.
+    private fun privacy() {
+        val guard = bridge.guarded(shown)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            setRecentsScreenshotEnabled(!guard)
+        } else if (guard) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
+    }
+
+    // unlock asks for the fingerprint to take the cover away; dismissed,
+    // the cover stays, with its button to ask again.
+    private fun unlock() {
+        val name = bridge.opened?.let { bridge.server(it.id)?.name } ?: getString(R.string.app_name)
+        biometric.unlock(getString(R.string.unlock_title, name)) { ok ->
+            if (!ok) return@unlock
+            covered = false
+            cover.visibility = View.GONE
+        }
+    }
+
+    // coverView is what covers a page asked at each return while the app
+    // is hidden: the app's background, a line, and Unlock.
+    private fun coverView(): View {
+        val pad = (24 * resources.displayMetrics.density).toInt()
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(pad, pad, pad, pad)
+            setBackgroundColor(getColor(R.color.background))
+            isClickable = true // nothing reaches the page beneath
+            visibility = View.GONE
+            addView(TextView(this@MainActivity).apply {
+                setText(R.string.cover_text)
+                textSize = 18f
+                gravity = Gravity.CENTER
+                setPadding(0, 0, 0, pad)
+            })
+            addView(Button(this@MainActivity).apply {
+                setText(R.string.cover_unlock)
+                setOnClickListener { unlock() }
+            })
+        }
+    }
+
     private fun script(kind: String): String =
         resources.openRawResource(R.raw.bridge).bufferedReader().use { it.readText() } + "(" + JSONObject.quote(kind) + ");"
 
@@ -232,6 +317,12 @@ class MainActivity : FragmentActivity() {
 
         override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) {
             back.isEnabled = view.canGoBack()
+        }
+
+        // The page shown decides whether Recents may keep its picture.
+        override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
+            shown = url?.let(Origins::of)
+            privacy()
         }
 
         // A certificate the system does not trust is the server's where it
@@ -326,12 +417,13 @@ class MainActivity : FragmentActivity() {
         setContentView(insetted(text))
     }
 
-    // insetted keeps a view clear of the system bars, the cut-out and the
-    // keyboard, as edge-to-edge requires from Android 15.
-    private fun insetted(view: View): View {
+    // insetted keeps views clear of the system bars, the cut-out and the
+    // keyboard, as edge-to-edge requires from Android 15, the later ones
+    // over the earlier.
+    private fun insetted(vararg views: View): View {
         val root = FrameLayout(this)
         root.setBackgroundColor(getColor(R.color.background))
-        root.addView(view, FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+        for (view in views) root.addView(view, FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
         ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
             val i = insets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout() or WindowInsetsCompat.Type.ime(),
@@ -346,6 +438,7 @@ class MainActivity : FragmentActivity() {
         const val CHANNEL = "massimoChannel"
         const val KEY_ID = "massimo.opened.id"
         const val KEY_ORIGIN = "massimo.opened.origin"
+        const val KEY_URL = "massimo.opened.url"
         const val SETTLE_MS = 2000L
 
         // agent names the app and the phone first: the server labels a

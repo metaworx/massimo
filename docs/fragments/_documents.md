@@ -12,6 +12,8 @@ on a document under `docs/` that is not).
   the command line, the versions and channels
 - [packaging/README.md](packaging/README.md): the packages and services,
   the apt repository, Homebrew, updates
+- [docs/user-manual.md](docs/user-manual.md): the user manual, its first
+  chapter the app's login by fingerprint
 - [docs/ui.md](docs/ui.md): using the web UI
 - [docs/app.md](docs/app.md): the apps for Android and iOS
 - [docs/proxy.md](docs/proxy.md): the server as a Cube for other clients

@@ -6,57 +6,74 @@ package ch.metaworx.massimo
 import android.os.Build
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
-import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK
 import androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
+import javax.crypto.Cipher
 
 /**
- * Biometric asks for the fingerprint, the face or the screen lock's PIN
- * before the app hands a server's token to its page. Made in the
- * activity's onCreate, as BiometricPrompt wants.
+ * Biometric asks for the fingerprint before the app uses a kept login
+ * (docs/app.md, "The login by fingerprint"): a strong biometric, with the
+ * screen lock's PIN as the prompt's fallback from Android 11, the one
+ * version from which a prompt with a key takes it (androidx's reference);
+ * on Android 8 to 10 the strong biometric alone. Made in the activity's
+ * onCreate, as BiometricPrompt wants.
  */
-class Biometric(private val activity: FragmentActivity) {
-    // A strong biometric or the screen lock from Android 11; before it the
-    // library takes the screen lock only beside a weak one.
-    private val authenticators =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) BIOMETRIC_STRONG or DEVICE_CREDENTIAL else BIOMETRIC_WEAK or DEVICE_CREDENTIAL
+class Biometric(private val activity: FragmentActivity, private val cancel: String) {
+    private val credential = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+    private val authenticators = if (credential) BIOMETRIC_STRONG or DEVICE_CREDENTIAL else BIOMETRIC_STRONG
 
-    private var pending: ((Boolean) -> Unit)? = null
+    private var pending: ((BiometricPrompt.AuthenticationResult?) -> Unit)? = null
 
     private val prompt = BiometricPrompt(
         activity,
         ContextCompat.getMainExecutor(activity),
         object : BiometricPrompt.AuthenticationCallback() {
-            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) = finish(true)
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) = finish(result)
 
-            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) = finish(false)
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) = finish(null)
         },
     )
 
-    /** available reports whether the phone has a screen lock or a biometric the prompt can ask for. */
-    fun available(): Boolean =
-        BiometricManager.from(activity).canAuthenticate(authenticators) == BiometricManager.BIOMETRIC_SUCCESS
+    /** asking reports whether a prompt shows now: the app is not hidden by it. */
+    val asking: Boolean get() = pending != null
 
-    /** ask shows the prompt titled [title]; [done] learns whether it was passed. A second prompt while one shows is refused. */
-    fun ask(title: String, done: (Boolean) -> Unit) {
-        if (pending != null || !available()) {
-            done(false)
+    /** canStrong reports whether the phone has a strong biometric enrolled, which the login by fingerprint needs. */
+    fun canStrong(): Boolean = BiometricManager.from(activity).canAuthenticate(BIOMETRIC_STRONG) == BiometricManager.BIOMETRIC_SUCCESS
+
+    /** unlock shows the prompt titled [title] without a key, for the cover; [done] learns whether it was passed. */
+    fun unlock(title: String, done: (Boolean) -> Unit) = show(title, null) { done(it != null) }
+
+    /**
+     * withKey shows the prompt titled [title] for [cipher], a key's cipher
+     * that works once the prompt passed it; [done] gets the cipher the
+     * prompt authorised, or null where it was dismissed or failed.
+     */
+    fun withKey(title: String, cipher: Cipher, done: (Cipher?) -> Unit) =
+        show(title, BiometricPrompt.CryptoObject(cipher)) { done(it?.cryptoObject?.cipher) }
+
+    // show shows the prompt; a second while one shows is refused.
+    private fun show(title: String, crypto: BiometricPrompt.CryptoObject?, done: (BiometricPrompt.AuthenticationResult?) -> Unit) {
+        if (pending != null) {
+            done(null)
             return
         }
         pending = done
-        prompt.authenticate(
-            BiometricPrompt.PromptInfo.Builder()
-                .setTitle(title)
-                .setAllowedAuthenticators(authenticators)
-                .build(),
-        )
+        val info = BiometricPrompt.PromptInfo.Builder()
+            .setTitle(title)
+            .setAllowedAuthenticators(authenticators)
+        if (!credential) info.setNegativeButtonText(cancel)
+        try {
+            if (crypto != null) prompt.authenticate(info.build(), crypto) else prompt.authenticate(info.build())
+        } catch (e: IllegalArgumentException) {
+            finish(null)
+        }
     }
 
-    private fun finish(ok: Boolean) {
+    private fun finish(result: BiometricPrompt.AuthenticationResult?) {
         val d = pending
         pending = null
-        d?.invoke(ok)
+        d?.invoke(result)
     }
 }

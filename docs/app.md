@@ -6,8 +6,9 @@ The shell shows one page of the project's own, the connect page,
 and then the page of the server the user chose, as a browser would.
 What a page cannot do itself, the shell's adapter does:
 the list of servers, discovery on the LAN, the probe of an address,
-the pinned certificate of a self-signed server, the token behind a
-fingerprint or PIN, and, later, the server running on the phone and push.
+the pinned certificate of a self-signed server, the session kept for a
+server, the login by fingerprint, and, later, the server running on the
+phone and push.
 The page and the adapter talk through one object, `window.massimo`,
 whose contract is this document.
 
@@ -36,6 +37,8 @@ What the page shows:
   and what the probe found:
   on the LAN, remote, not reachable, or a changed certificate;
   a tap opens the server, a long press (or its ⚙) its settings;
+  a server with a kept login has a fingerprint button on its row,
+  which opens it signed in at once;
 - **add a server**: the servers discovery finds as they arrive,
   or an address typed (`host`, `host:port` or a URL);
   the probe, then the fingerprint sheet for a self-signed certificate;
@@ -47,8 +50,13 @@ What the page shows:
   An address typed that is not one is said under the field,
   and a server's open settings keep their own line;
 - **a server's settings**: the name, the LAN and the remote address,
-  "Ask for my fingerprint or PIN" (`biometric`),
+  "Ask for the fingerprint" (`ask`: each time the app comes back, when the
+  app starts, or only after a logout),
+  the login by fingerprint with the user's name and **Turn off** where one
+  is kept (`login`),
   "Notify me on this phone" (`push`, where the app has push), Remove;
+- **"Forget all stored credentials"**, under the list where a server has
+  a kept login, which asks first;
 - **"Run the server on this phone"**, a card with Start, Stop and the status,
   where the app has the server built in (`core`).
 
@@ -71,14 +79,19 @@ the page sees only what follows.
   and neither platform's channel answers synchronously.
   A failed call rejects with an `Error` whose message the page shows as it is.
 - **Values are JSON**: objects, arrays, strings, numbers, booleans and `null`.
-- **`massimo.version`** is the contract's version, the number `1`.
+- **`massimo.version`** is the contract's version, the number `2`.
   A later version adds calls and fields; the page tests for what it uses
-  (`massimo.core`, `massimo.push`) rather than for a version.
+  (`massimo.login`, `massimo.core`, `massimo.push`) rather than for a version.
+  Version 2 (AP MobileApp v1.1, Block 8) added the login by fingerprint:
+  `login.*` and `connect` on a server's page, `forget` and `forgetAll` and
+  `open`'s options on the connect page, a server's `login` and `ask`,
+  which take the place of version 1's `biometric`.
 - **Where the bridge exists, and with what:**
   - on the connect page, the shell's own origin: every call below
     but `token` and `setToken`;
   - on a server's page, the origin of the address `open` loaded:
-    `version`, `token` and `setToken` alone, for that server alone;
+    `version`, `token`, `setToken`, `login.status`, `login.keep`,
+    `login.fingerprint` and `connect` alone, for that server alone;
   - on any other origin, a page the server's page links to: nothing.
 
   The adapter checks the origin of every message against these,
@@ -91,11 +104,13 @@ the page sees only what follows.
 |---|---|---|
 | `servers()` | an array of servers | reads the saved servers, in their order |
 | `save(server)` | the server as saved | adds a server without an `id`, giving it one, or replaces the one with its `id`; keeps `fp` as `trust` set it |
-| `remove(id)` | `null` | forgets the server, its pinned certificate and its token |
+| `remove(id)` | `null` | forgets the server, its pinned certificate, its session and its kept login, without a prompt |
 | `discover(ms)` | `null`, when the search ends | browses `_massimo._tcp` for `ms` milliseconds (Android `NsdManager`, iOS `NWBrowser`) and sends a `found` event for each server resolved |
 | `probe(urls, fp)` | an array of probe results, in the order of `urls` | `GET <url>healthz` of each in parallel, four seconds at most; `fp`, optional, is a certificate fingerprint it accepts beside those the system trusts |
 | `trust(id, fp)` | `null` | pins the fingerprint for the server: its certificate is accepted in `probe` and in the WebView, and a self-signed one with another fingerprint is refused |
-| `open(id, url)` | `null` | loads `url`, the server's `lan` or `remote`, in the WebView; another URL is refused |
+| `open(id, url, opts)` | `true`, or `false` | loads `url`, the server's `lan` or `remote`, in the WebView; another URL is refused. With `opts` `{login: true}` it first logs in by fingerprint (below): `false`, nothing opened, where the prompt was dismissed; a kept key the server refuses is forgotten and rejects |
+| `forget(id, url)` | `{revoked}` | turns the server's login by fingerprint off: asks for the fingerprint once, revokes the kept key at `url`, an address of the server that answered (`""` for none), and forgets it; where the prompt or the server fails it forgets it all the same, `revoked` `false` |
+| `forgetAll()` | `null` | forgets every kept login, without a prompt; the keys stay listed at their servers, to revoke there |
 | `core.start()`, `core.stop()`, `core.status()` | the core's status | the server on the phone (Block 7); absent where it is not built in |
 | `push` | | push to this phone (Block 8); absent where the app has none |
 
@@ -109,8 +124,9 @@ the page sees only what follows.
 | `lan` | the address on the LAN, a URL ending in `/`, or `""` |
 | `remote` | the address from elsewhere, a URL ending in `/`, or `""` |
 | `fp` | the pinned fingerprint, `""` for none; read only for `save` |
-| `biometric` | `true`: `token` asks for the fingerprint or PIN first |
-| `push` | `true`: the user asked for notifications from this server (Block 8) |
+| `login` | the user whose key the phone keeps for the login by fingerprint, `""` for none; read only for `save` |
+| `ask` | when the fingerprint is asked once a login is kept: `return`, each time the app comes back from being hidden; `start` (the default), when the app starts; `logout`, only after a logout |
+| `push` | `true`: the user asked for notifications from this server (Block 11) |
 
 **A probe result** is an object:
 
@@ -134,11 +150,16 @@ Block 7 adds what else Block 1's `Status()` carries.
 
 | Call | Resolves to | What the adapter does |
 |---|---|---|
-| `token()` | a string, or `null` | the session or API key kept for the server it opened; where its `biometric` is on, after the fingerprint or PIN; `null` when there is none or the prompt was dismissed |
-| `setToken(t)` | `null` | keeps `t` for that server, behind the Keystore (Android) or the Keychain (iOS); `null` forgets it |
+| `token()` | a string, or `null` | the session or API key kept for the server it opened, `null` for none |
+| `setToken(t)` | `null` | keeps `t` for that server, `null` forgets it: sealed by the Keystore (Android) or the Keychain (iOS), or, for a server with a kept login whose `ask` is `return` or `start`, in the app's memory alone |
+| `login.status()` | `{can, user, ask, plain}` | `can`: the phone has a strong biometric enrolled; `user`: the user whose key is kept for the server, `""` for none; `ask`, as the server's; `plain`: the page is open over plain HTTP outside the private ranges, where no key is sent |
+| `login.keep()` | `true`, or `false` | for a page just signed in: makes an API key of the signed-in user's at the server with the page's session (`POST /api/v1/users/{name}/tokens`, labelled with the phone), asks for the fingerprint and keeps the key sealed behind it; `false`, nothing kept and the key revoked again, where the prompt was not passed |
+| `login.fingerprint()` | a string, or `null` | asks for the fingerprint, opens the kept key, makes a session with it (`POST /api/v1/login/key`) and resolves to that session, which it keeps as `setToken` would; `null` where the prompt was dismissed; a key the server refuses is forgotten and rejects |
+| `connect()` | `null` | shows the connect page, "Select server"; the server's session stays as it was |
 
 The page asks `token()` once, at its start, before it asks the server who is in;
-without a token, or with one the server refuses, it shows its sign-in as a browser does.
+without a token, or with one the server refuses, it shows its sign-in as a browser does,
+with the login by fingerprint where `login.status()` offers it (below).
 A sign-in, a key pasted and the first owner hand the new token to `setToken`,
 and Sign out and Forget key hand it `null`.
 The page then keeps no token in `localStorage`
@@ -164,7 +185,7 @@ on the page the event is for, `detail.type` naming it:
 | `found` | `service`: `name`, `host` (an address, IPv6 without brackets, or a name), `port`, `node`, `version`, `tls` (a boolean), `fp` | discovery resolved a server: `host` and `port` from its SRV and address records, the rest from its TXT record (`name`, else the instance's name; `node`; `v`; `tls=1`; `fp`, with TLS) |
 | `network` | | the phone's network changed (Android `ConnectivityManager`, iOS `NWPathMonitor`); the page probes again |
 | `core` | `status`, as `core.status()` | the server on the phone started or stopped (Block 7) |
-| `notification` | | Block 8 |
+| `notification` | | Block 11 |
 
 An unknown `type` is ignored by the page.
 
@@ -205,8 +226,71 @@ An unknown `type` is ignored by the page.
   at an address that is not its `lan`, becomes its `lan`:
   a LAN address that changed is found again.
   No Wi-Fi name is read.
-- **The biometric switch** saves `biometric`; the adapter then wraps the
-  server's token behind the prompt, or unwraps it.
+- **The login by fingerprint** is the next section's:
+  the row's button opens a server with `open(id, url, {login: true})`,
+  **Turn off** calls `forget(id, url)` with the address the probe chose,
+  and "Forget all stored credentials" `forgetAll()`.
+
+## The login by fingerprint
+
+The owner's design of the phone test of 2026-11-17 (AP MobileApp v1.1, Block 8).
+The phone keeps an API key of the user's own, and the adapter holds it:
+it never enters the page.
+The server turns the key into a session (`POST /api/v1/login/key`,
+docs/api-v1.md), which names the key, so that revoking the key,
+under My profile → Sessions and keys by the phone's name, ends the session.
+
+- **Enabling.**
+  The sign-in form asks `login.status()` when it is drawn,
+  and where the phone `can` shows the switch "Enable login by fingerprint".
+  After a sign-in with it on, the page hands the session to `setToken`
+  and calls `login.keep()`;
+  where that resolves `false` or fails, the form offers "Try again" and
+  "Sign in without it".
+- **The login.**
+  Where a key is kept (`user`), the form shows "Login by fingerprint",
+  which calls `login.fingerprint()` and is signed in with the session it
+  resolves to; the password stays the other way.
+  "Select server" calls `connect()`, and in the app the Cube choice ends
+  with the same entry.
+- **When the fingerprint is asked** (`ask`, chosen per server on the
+  connect page; a server without a kept login keeps its session sealed):
+  - `return`: the session is in memory alone;
+    the adapter covers the page when the app is hidden,
+    and the prompt uncovers it, the session and the page as they were.
+    The app's own file chooser does not count as hidden;
+    Android may end a hidden app, and the return is then a start.
+    While such a page is shown the system keeps no picture of it for
+    its recent apps: on Android 13 and later by
+    `setRecentsScreenshotEnabled(false)`, which leaves screenshots allowed,
+    before it by `FLAG_SECURE`, which forbids them there too.
+  - `start`: the session is in memory alone,
+    so a start shows the form with "Login by fingerprint",
+    or the row's button signs in at once.
+  - `logout`: the session is sealed as without a kept login,
+    and the fingerprint is asked on the sign-in form alone.
+- **Logout** ends the session alone; the key stays,
+  and the form offers both ways.
+- **Kept and matched**: one key per server, used at whichever of its
+  two addresses the page opened (D34-B); the record is bound to the
+  server's id, its `node`, its pinned fingerprint and the user's name,
+  so that it opens for nothing else.
+  A certificate trusted anew forgets it.
+- **Plain HTTP**: the key is never sent over plain HTTP to an address
+  outside the private ranges (`plain`, D36-A);
+  there the form offers the password alone and says why.
+- **The prompt**: a strong biometric, with the screen lock's PIN as the
+  prompt's fallback on Android 11 and later;
+  on Android 8 to 10 the fingerprint alone.
+  The key is a Keystore key that requires the prompt for every use,
+  sealing included, so "ask for the fingerprint, then keep" is one step.
+  On Android 8 to 10 a fingerprint enrolled later invalidates it;
+  from Android 11, where the PIN opens it as well, it does not (D35-A).
+  Turning the screen lock off invalidates it on every version.
+  An invalidated key is forgotten, and the form offers the password.
+- **Version 1's switch**, "Ask for my fingerprint or PIN", is gone:
+  a server that had it on starts without a kept login and with its
+  session forgotten.
 
 ## Testing
 
@@ -215,5 +299,6 @@ bridge in `test_connect.py`, put into the page by Playwright's
 `add_init_script` as the token is (`tools/ui-test/README.md`):
 the page holds no code for tests.
 The same fake bridge checks the server's page's `token` and `setToken`,
+the sign-in form's login by fingerprint, the Cube choice's "Select server",
 and the self-signed notice left out there (`test_tls.py`).
 Each adapter tests its own side: Block 3 for Android, Block 9 for iOS.
