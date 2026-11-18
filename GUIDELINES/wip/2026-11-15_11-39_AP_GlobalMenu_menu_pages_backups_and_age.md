@@ -1,4 +1,4 @@
-# AP GlobalMenu v1.4: one menu, four settings pages
+# AP GlobalMenu v1.5: one menu, four settings pages
 
 ## TL;DR
 
@@ -35,10 +35,17 @@ problems.
   the age above the pile → gone, both reads' times in expert mode's
   radio budget line; one clock for all (D180-A, D181-A)
 - the header's row → the logo at the left; the pile, the Cube choice,
-  ↑, ⌂ and ☰ at the right; on a phone the logo with ⌂ and ☰, then the
-  pile and the Cube choice; the whole logo kept from 331 px (D182-A,
-  D183-A)
+  ↑ ⌂ ☰ at the right (D182-A, D194-A); where it is short it folds,
+  measured, step by step: the logo → the M, the Cube choice → a cube
+  button that names the Cube in its tooltip, the pile → the next row
+  (D195-B); the M always there
 - the pile's list → as wide as its content, up to the page's (D184-A)
+- a Cube named → the cube before its name, in the text's colour, its
+  link sign after it; in a panel's pill the link sign leads, in the
+  tick's place, and its list says the link (D190-A, D191-A, D196-A,
+  D197-A)
+- the House tile → named after the Cube, "All rooms of …" its tooltip
+  (D193-A)
 - a tile's notices → entries of its pill (D179-A); the tile's line only
   while the room's commands are refused
 
@@ -70,11 +77,14 @@ Blocks 1–13 are merged (#289, #293, #301, #350, #351, #355). Blocks
     header's shots
 13. TileNotices: a tile's notices as entries of its pill, one line in
     the tile
-14. HeaderRow: the logo left, the pile and the Cube choice right; the
-    reads' times relative, in the list and in expert mode; the list's
-    width; ☰'s version row
+14. HeaderRow: the logo left, the pile and the Cube choice right, the
+    row folding step by step, ↑ ⌂ ☰; the reads' times relative, in the
+    list and in expert mode; the list's width; ☰'s version row
 15. TileLine: a tile's line only while its commands are refused; the
     notices' tests on the page's own reads
+16. CubeSign: the cube before a Cube's name, its link sign after it or
+    leading its pill, the link's row in the pill's list; the House tile
+    named after the Cube
 
 ## Discussion
 
@@ -233,6 +243,46 @@ The tile's line is the owner's own addition, Block 15. `PLAN++` on
 one pull request, a second reader before it; no merge and no
 retirement.
 
+The owner's second look, the same day, before the pull request of
+Blocks 14 and 15: on a phone the Cube choice on the second row should
+take the room left and push the pill to the far left, and the pill take
+the logo's place where the logo goes; the cube's symbol in front of a
+Cube's name and its network sign after it, always, in its state's
+colour. The evaluation that followed (D188–D192) was overtaken by the
+owner's rethinking: the House tile named after the Cube; ↑ left of ⌂;
+the Cube choice a button where it would wrap, its tooltip the Cube; the
+logo the M, there always; the pill to the next row where nothing else
+gives; which folds first; the link sign in a pill where the Cube has one,
+in the tick's place, and a row of its own in the pill's list.
+
+- D188 and D189 (the phone's second row, the pill in the logo's place):
+  withdrawn, the folding of D195 takes their place.
+- D190-A: the cube before a Cube's name wherever a Cube is named with
+  its sign; its link sign after the name, the first of its icons there,
+  always, green, amber or red; where the Cube has a pill (its panel's
+  head), the link sign leads the pill instead.
+- D191-A: the cube in the text's colour, grey in a menu's list as ☰'s
+  icons; a blue cube is a Cube found and not set up.
+- D192: replaced by D198.
+- D193-A: the House tile's title the chosen Cube's name with the cube
+  before it, its tooltip and its name for a screen reader "All rooms of
+  …".
+- D194-A: ↑ ⌂ ☰ at every width, one ↑.
+- D195-B: where the row is short, first the logo becomes the M, then the
+  Cube choice a cube button, its tooltip the chosen Cube, then the pile
+  goes to the next row, at the left; measured, as if ↑ were there, so
+  that scrolling never changes the fold.
+- D196-A: in a Cube's own pill the green link sign stands for the tick;
+  the header's pile keeps its tick, its lead being the server's sign.
+- D197-A: the panel's pill always a list, the Cube's link in words its
+  first row, "connected" too; a broken link's badge is that row.
+- D198-A: this revision rebuilds Block 14, not pushed, and adds Block
+  16; Blocks 14 to 16 in one pull request.
+
+`PLAN++` on 2026-11-18 for this revision, as recommended: Block 14
+rebuilt, Block 15 as it is, Block 16, one pull request after a second
+reader; no merge and no retirement.
+
 Out of scope: the redraws that close an open pill (the evaluation of
 2026-11-15, D118–D121, waits for the chip session's fresh look).
 
@@ -382,6 +432,23 @@ For Blocks 14–15, on main:
   page; the page's next read of the rooms takes them back
   (`docs/ui-testing.md` §9). The fixture `reads` answers the read of the
   rooms (`**/rooms?devices=all`) with what a test puts in.
+
+For Block 16, on main:
+
+- **A Cube's sign** is the network sign in its link's state (`CubeSign`
+  of `model/cube.tsx`, `cubeSignEl` of `header.js` for the plain
+  regions), before the Cube's name in the Cube choice and its list
+  (`header/Choice.tsx`, a `Picker`), in each Cube's heading of the
+  pile's list (`cubeEntry`, its `sign`), in a Cube's panel head
+  (`cubes/Panel.tsx`) and in a Cube's backup fold (`backup.js`).
+- **The panel's pill** is a `Problems` with `ok`: the green check where
+  nothing is wrong, the Cube's heading in its list with the link's badge
+  only where it is not connected; its summary's icons count the link's
+  kind, `net`.
+- **A blue cube** (`icon-cube3d` in the accent) is the pile's sign of
+  the Cubes found and not served.
+- **The House tile's title** is plain markup (`partials/house-tile.html`,
+  `house.title`), the tile's part drawn into `#house-slot` under it.
 
 ## Implementation Plan
 
@@ -675,37 +742,43 @@ nothing where they are not given); their behaviour is tested by Block 12.
 
 ### Block 14: HeaderRow
 
-- `style.css`: the row a flex row on its lower edge, the logo at the
-  left, the pile, the Cube choice (shrinking first), ↑ while compacted
-  and the pages at the right; below 600 px a second row for the pile and
-  the Cube choice at the right, the whole `logo` on the first, its
-  height giving way where the row is short; under 331 px no logo. The
-  pile's line of its own and the age's places go.
+- `partials/header.html` and `style.css`: the row a flex row on its
+  lower edge, the logo at the left, the pile, the Cube choice and ↑ ⌂ ☰
+  at the right; one ↑, before ⌂, while compacted, at every width.
+- `ui/src/header/fold.ts` (new): the row's fold, measured whenever the
+  row, the logo, the pile or the Cube choice change size, as
+  `data-fold` on the row: 0 whole; 1 the logo the M; 2 the Cube choice
+  a cube button, its name, link and chevron hidden, its tooltip the
+  chosen Cube; 3 the pile on the next row, at the left. Measured as if
+  ↑ were there; the M always shown.
 - `ui/src/header/clock.ts` (new): one clock, a signal that ticks each
-  whole second, and `fmtAgo` ("14 sec ago", `Intl.RelativeTimeFormat`
-  in the page's language), shared by the list and the expert line.
+  whole second and at each render, and `fmtAgo` ("14 sec ago",
+  `Intl.RelativeTimeFormat` in the page's language), shared by the list
+  and the expert line.
 - `Pile.tsx`: the pill alone; `RefreshNow`'s times a grid of two
   columns, "Cube read" and "Server replied" relative with their exact
   times as tooltips, "Current time" a clock; `ownLine` and its observer
   go. `Updated.tsx` gives way to the expert line's times.
 - `shared/menu.tsx`: `MenuItem`'s `sub` takes elements too; its row in
   `docs/ui.md`.
-- `partials/header.html`: in `#cube-stats` a slot for the reads' times
-  (`ReadTimes`, a part); ☰'s version row with the `icon` before the
-  version and a rule after it.
+- `partials/header.html`: in `#cube-stats` a slot for the reads' times;
+  ☰'s version row with the `icon` before the version and a rule after
+  it.
 - `style.css`: the pile's list as wide as its content, up to `main`'s
   width, at the pill's right edge; the times' grid; ☰'s version row.
 - i18n: "Cube read", "Server replied", "Current time" without the
   time, in the six languages.
 - `docs/ui.md` "Header"; the header's fragment corrected (not released).
-- Tests: `test_header.py`, `test_server_sign.py`, `test_to_top.py`,
-  `test_main_menu.py`, `test_header_updates.py`, `test_menu_fit.py`
-  and the guard's views where they read the row, the age or the times.
-- `screenshots.py`: the header's shots as they are; the set and the
-  slideshow taken again.
+- Tests: `test_header.py` (the fold's steps in their order, nothing
+  outside the window, the fold the same compacted, the cube button),
+  `test_to_top.py`, `test_server_sign.py`, `test_main_menu.py`,
+  `test_brand.py`, `test_system_layout.py` where they read the row, the
+  age or the times.
+- `screenshots.py`: the header's shots and the pile's list open; the set
+  and the slideshow taken again.
 
 **Verification:** as above; each header shot looked at, at 1100, 700,
-390, 331 and 320 px.
+390 and 320 px.
 
 ### Block 15: TileLine
 
@@ -718,6 +791,31 @@ nothing where they are not given); their behaviour is tested by Block 12.
 - `docs/ui.md` "Rooms"; the tiles' fragment corrected (not released).
 
 **Verification:** as above.
+
+### Block 16: CubeSign
+
+- `model/cube.tsx`: `CubeIcon`, the cube in the text's colour;
+  `cubeEntry` with the cube before the name and the link sign after it,
+  the link's badge where it is not connected, and for the Cube's own
+  pill the link's row always, "connected" too.
+- `shared/problems.tsx`: an entry's `tail`, drawn after its name, and
+  `Problems`' `skip`, kinds its summary leaves out (the link the lead
+  shows); their rows in `docs/ui.md`.
+- `header/Choice.tsx`: the cube before the name, the link sign the
+  first of the icons after it, in the summary and in each row.
+- `cubes/Panel.tsx`: the cube before the name; the pill led by the link
+  sign, in the tick's place, its list the link's row first.
+- `backup.js`: a Cube's backup fold, the cube before the name and the
+  link sign after it.
+- `partials/house-tile.html` and `rooms/House.tsx`: the House tile's
+  title the chosen Cube's name with the cube, "All rooms of …" its
+  tooltip and its name for a screen reader, in the six languages.
+- `docs/ui.md` "Header", "System settings", "Rooms"; a fragment.
+- Tests: the Cube choice, the pile's list, the Cubes' panels, the
+  backups' folds and the House tile where they read a Cube's sign or the
+  title.
+
+**Verification:** as above; the shots taken once, after Block 16.
 
 ## Proposed commit messages
 
@@ -734,8 +832,9 @@ nothing where they are not given); their behaviour is tested by Block 12.
 - Block 11: `feat(ui/shared): A problem list leads with an icon, lists when all is well`
 - Block 12: `feat(ui/header): The server's sign and the age in the pile, the version in ☰`
 - Block 13: `feat(ui/rooms): A tile's notices are entries of its pill`
-- Block 14: `feat(ui/header): The pile at the page's right, the reads' times relative`
+- Block 14: `feat(ui/header): A header that folds, the reads' times relative`
 - Block 15: `feat(ui/rooms): A tile's line only while its commands are refused`
+- Block 16: `feat(ui): A Cube's cube before its name, its link after it`
 
 ## Change History
 
@@ -757,3 +856,7 @@ nothing where they are not given); their behaviour is tested by Block 12.
   times right-aligned and both reads in the expert line as the owner
   added; D183-A replaces D176-A; the TL;DR names the merge of Blocks
   11–13 (#350, #351, #355).
+- v1.5 (2026-11-18): Block 14 rebuilt as the folding header with ↑ ⌂ ☰,
+  and Block 16, a Cube's sign and the House tile's title, by `PLAN++`
+  with D190-A as the owner refined it and D191-A, D193-A to D198-A as
+  recommended; D188 and D189 withdrawn, D192 replaced by D198.
