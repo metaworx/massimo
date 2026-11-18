@@ -12,6 +12,10 @@
  * as if ↑ were among the pages, so that scrolling never changes the fold;
  * again whenever the row or one of its items changes size, and at each of
  * the header's renders, which bring the pile's icons and the Cube's name.
+ * Each fit places an open list of the row again (placeMenus of
+ * components.js): the pill and the Cube choice move as the row folds and
+ * as its items change width, and a list placed for where its summary
+ * was would hang out of the window (the pile's at 390 px).
  */
 
 /** The steps, each a value of data-fold, the first that fits taken. */
@@ -51,6 +55,7 @@ function fit(line: HTMLElement): void {
   const needs = [row(logo, pile, cube), row(mark, pile, cube), row(mark, pile, button)].map((w) => w + join + pages);
   const step = needs.findIndex((n) => n <= line.clientWidth + 0.5);
   line.dataset.fold = STEPS[step < 0 ? STEPS.length - 1 : step];
+  placeMenus(line);
 }
 
 /** The observer of the row and its items, made at the first watch. */

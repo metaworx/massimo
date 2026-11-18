@@ -1337,8 +1337,12 @@ function problemEntry(e) {
 // one of its items (but one marked data-keep-open, whose result shows in
 // the list), by Escape (the focus back on its summary) and by a
 // click outside it. The room tiles' ⋯ and More and the header's 👤 and ☰
-// are such menus.
+// are such menus. Its list is placed as it opens, before it is first
+// drawn: the toggle event comes a task later, after a frame may have
+// drawn the list where the style sheet puts it, out of the window; and
+// again after the toggle listeners, which may fill it.
 function dropdown(details) {
+  new MutationObserver(() => placeMenu(details)).observe(details, { attributes: true, attributeFilter: ["open"] });
   details.addEventListener("toggle", () => {
     if (!details.open) return;
     for (const other of document.querySelectorAll("details.menu[open]")) {
@@ -1359,13 +1363,14 @@ function dropdown(details) {
 // other edge where it fits there, else moved just inside the window,
 // 16 px from its edges; its height capped to the room below it, with a
 // scroll of its own that the page does not take over (style.css
-// .menu-items).
+// .menu-items). Placed again, the cap stays while it is measured, so
+// that a list scrolled in itself keeps its scroll.
 function placeMenu(details) {
   const list = details.querySelector(":scope > .menu-items");
   if (!list || !details.open) return;
   const gap = 16;
   const vw = document.documentElement.clientWidth;
-  Object.assign(list.style, { left: "", right: "", maxHeight: "" });
+  Object.assign(list.style, { left: "", right: "" });
   const box = details.getBoundingClientRect();
   const r = list.getBoundingClientRect();
   const fits = (x) => x >= gap - 0.5 && x + r.width <= vw - gap + 0.5;
@@ -1378,9 +1383,16 @@ function placeMenu(details) {
   list.style.maxHeight = Math.max(160, window.innerHeight - top - gap) + "px";
 }
 
-addEventListener("resize", () => {
-  for (const m of document.querySelectorAll("details.menu[open]")) placeMenu(m);
-});
+// placeMenus places the list of every open menu under root (the whole
+// page by default) again: at a resize of the window, and where the
+// header's row has changed (ui/src/header/fold.ts), which moves the pill
+// and the Cube choice under which their lists hang. placeMenu placed a
+// list for where its summary was, an offset from it.
+function placeMenus(root = document) {
+  for (const m of root.querySelectorAll("details.menu[open]")) placeMenu(m);
+}
+
+addEventListener("resize", () => placeMenus());
 
 // menuArrows lets the arrow keys move the focus between the items of
 // an open dropdown, the elements matching selector: down and up, round
