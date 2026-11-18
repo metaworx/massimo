@@ -369,6 +369,18 @@ def open_house(page):
     page.locator("#house-panel").wait_for(state="visible")
 
 
+def test_house_named_after_the_cube(page, case):
+    """The House tile is named after the chosen Cube, the cube before its
+    name; its tooltip and its name for a screen reader say that it is all
+    the Cube's rooms (AP GlobalMenu, D193-A)."""
+    name = page.evaluate("(() => { const c = state.cubes.find((x) => x.serial === state.serial); return c.name || c.serial; })()")
+    title = page.locator("#house .tile-head h2")
+    assert title.inner_text().strip() == name, f"the Cube's name: {title.inner_text()!r}"
+    assert title.locator(".cube-icon use[href='#icon-cube3d']").count() == 1, "the cube before it"
+    whole = page.evaluate("(n) => t('house.roomsOf', {cube: n})", name)
+    assert title.get_attribute("title") == whole and title.get_attribute("aria-label") == whole, "all the Cube's rooms, its tooltip"
+
+
 def test_house_room_unticked_stays(page, case):
     """A room unticked in the House panel stays unticked through a reload
     of the rooms."""

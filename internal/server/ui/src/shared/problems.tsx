@@ -44,17 +44,19 @@ export interface Item {
 
 /**
  * Entry is who has problems: its icon, or sign where its own state shows,
- * or node, a part of its own with the class problem-icon; its name, a grey detail (a serial, or parts
- * that are not monospaced), its items, and subs, the entries under it (a
- * group's members); info lists the entry and those under it without an
- * item, as information, and summary is what the summary shows after the
- * kinds' icons.
+ * or node, a part of its own with the class problem-icon; its name, tail
+ * after it on its line (a sign of its state where its icon says what it
+ * is), a grey detail (a serial, or parts that are not monospaced), its
+ * items, and subs, the entries under it (a group's members); info lists
+ * the entry and those under it without an item, as information, and
+ * summary is what the summary shows after the kinds' icons.
  */
 export interface Entry {
   icon?: string;
   sign?: { kind: string; state: string };
   node?: ComponentChildren;
   title: string;
+  tail?: ComponentChildren;
   sub?: string | ComponentChildren[];
   items?: Item[];
   subs?: Entry[];
@@ -156,6 +158,7 @@ function ProblemEntry({ e, info }: { e: Entry; info?: boolean }) {
       {icon}
       <div class="problem-who">
         <span class="problem-name">{e.title}</span>
+        {e.tail && <span class="problem-tail">{e.tail}</span>}
         {Array.isArray(e.sub) ? <span class="problem-sub">{e.sub}</span> : sub && <span class="mono problem-sub">{sub}</span>}
       </div>
       {(e.items || []).length > 0 && (
@@ -197,7 +200,7 @@ function ProblemEntry({ e, info }: { e: Entry; info?: boolean }) {
  * the summary. lead is drawn first in the
  * summary, before the kinds' icons (a sign of the place's own state);
  * head first in the list, before the entries (items that act on the
- * place). onOpen and onClose are told when the list opens and closes.
+ * place, or a row of its own state). onOpen and onClose are told when the list opens and closes.
  */
 export function Problems({ entries, label, ok, lead, always, head, onClick, onOpen, onClose }: {
   entries: Entry[];

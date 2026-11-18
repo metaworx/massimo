@@ -4,8 +4,9 @@
 /**
  * @file internal/server/ui/src/rooms/House.tsx
  *
- * The House tile, above the rooms: ECO, AUTO, COMFORT and MANU for the
- * whole house or the rooms ticked, each opening the panel with the mode
+ * The House tile, above the rooms, named after the chosen Cube, the cube
+ * before its name, "All rooms of …" its tooltip: ECO, AUTO, COMFORT and
+ * MANU for the whole house or the rooms ticked, each opening the panel with the mode
  * chosen, its temperature for MANU, permanently or until a date and time,
  * and a room with a thermostat each; Send sets one room after another and
  * says how each went. Built once and updated in place, so that the rooms
@@ -13,10 +14,11 @@
  */
 
 import { useEffect, useLayoutEffect, useRef } from "preact/hooks";
+import { CubeIcon } from "../model/cube";
 import { ResultLine } from "../shared/badge";
 import { DateTime, FormFooter, Stepper } from "../shared/field";
 import { useBusy } from "../shared/question";
-import { house, load } from "./store";
+import { cubesLoad, house, load } from "./store";
 
 /** The modes of the House tile, by their value, with their button's id and their text. */
 const MODES: [string, string, string][] = [["eco", "house-eco", "mode.eco"], ["auto", "house-auto", "mode.auto"], ["comfort", "house-comfort", "mode.comfort"],
@@ -142,8 +144,19 @@ export function House() {
   const tick = (id: number, on: boolean) => {
     house.ticks = { ...house.ticks, [id]: on };
   };
+  cubesLoad.useLoad();
+  // the Cube whose rooms are shown, its name as the Cubes' list last gave it
+  const cube = state.cubes.find((c) => c.serial === (state.roomsOf || state.serial));
+  const name = cube ? cube.name || cube.serial : t("house.title");
+  const whole = cube ? t("house.roomsOf", { cube: name }) : name;
   return (
     <>
+      <header class="tile-head">
+        <h2 class="house-title" title={whole} aria-label={whole}>
+          <CubeIcon />
+          <span class="house-name">{name}</span>
+        </h2>
+      </header>
       <div class="house-modes">
         <span class="muted">{t("house.mode")}</span>
         {MODES.map(([mode, id, key]) => <button key={mode} type="button" id={id} onClick={() => openHouse(mode)}>{t(key)}</button>)}

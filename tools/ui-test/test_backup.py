@@ -83,7 +83,11 @@ def test_backup_folds_in_system_settings(page, case):
     first = folds.first
     assert first.get_attribute("data-serial") == SERIAL and first.get_attribute("open") is not None, "the Cube's, open"
     head = first.locator(":scope > summary")
-    assert head.locator(".conn-sign").count() == 1 and SERIAL in head.inner_text(), "its sign and serial"
+    assert head.locator(".cube-icon").count() == 1 and head.locator(".conn-sign").count() == 1 and SERIAL in head.inner_text(), \
+        "the cube, its serial and its sign"
+    order = head.evaluate("(s) => [...s.children].map((e) => e.classList.contains('cube-icon') ? 'cube' : e.classList.contains('conn-sign') ? 'sign' : "
+                          "e.classList.contains('mono') ? 'serial' : '').filter(Boolean)")
+    assert order == ["cube", "serial", "sign"], f"the cube before the serial, the sign after it: {order}"
     assert wait_until(page, f"backupOf('{SERIAL}').loaded", 10), "its list loaded"
     kept = page.evaluate(f"tn('backup.badge.kept', backupOf('{SERIAL}').list.length)")
     assert wait_until(page, f"document.querySelector('#backups-cubes > .backup-fold .panel-badges').textContent === {kept!r}", 5), \

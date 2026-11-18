@@ -90,8 +90,8 @@ export function Dropdown({ id, cls, summaryId, summaryCls, label, title, summary
  * icon (an element such as a sign; with blank and no icon an empty place
  * of an icon's width, so that the labels line up), its label with icons
  * after it on its line where given, and under it in grey a second line
- * wherever sub is given, empty too (one that fills once loaded), of the
- * classes menu-item-sub and subCls; cls is the button's class, value its
+ * wherever sub is given, a text or elements, empty too (one that fills
+ * once loaded), of the classes menu-item-sub and subCls; cls is the button's class, value its
  * data-value, current marks it aria-current, busy makes it turn while the
  * request it sent runs (busyProps); keepOpen leaves its menu open after
  * a click on it (data-keep-open, which dropdown of components.js reads),
@@ -102,7 +102,7 @@ export function MenuItem({ icon, blank, label, icons, sub, subCls, cls, value, c
   blank?: boolean;
   label: string;
   icons?: ComponentChildren;
-  sub?: string;
+  sub?: ComponentChildren;
   subCls?: string;
   cls?: string;
   value?: string;
@@ -141,9 +141,9 @@ export type PickEntry =
 /**
  * Picker makes a menu the choice of one item (pickerMenu of
  * components.js), where a select could not show the chosen item's name
- * alone while its list shows more: its summary shows shown's icon and
- * label, its tooltip shown.title and its name for a screen reader
- * shown.aria; its list the entries, the item of value marked current. A
+ * alone while its list shows more: its summary shows shown's icon,
+ * label and the icons after it, its tooltip shown.title and its name for
+ * a screen reader shown.aria; its list the entries, the item of value marked current. A
  * click on an item calls onPick with its value; the arrow keys move
  * between the items that can be chosen, and opening puts the focus on the
  * chosen one. id, cls, summaryId and summaryCls are the Dropdown's.
@@ -156,7 +156,7 @@ export function Picker({ id, cls, summaryId, summaryCls, entries, value, onPick,
   entries: PickEntry[];
   value: string;
   onPick: (value: string) => void;
-  shown: { icon?: ComponentChildren; label: string; title?: string; aria?: string };
+  shown: { icon?: ComponentChildren; label: string; icons?: ComponentChildren; title?: string; aria?: string };
 }) {
   const blank = entries.some((e) => "value" in e && !!e.icon);
   return (
@@ -165,6 +165,7 @@ export function Picker({ id, cls, summaryId, summaryCls, entries, value, onPick,
         <>
           <span class="picker-icon">{shown.icon}</span>
           <span class="picker-label">{shown.label}</span>
+          {shown.icons && <span class="picker-icons">{shown.icons}</span>}
           <Icon symbol="icon-chevron-down" cls="ni caret" />
         </>
       }>

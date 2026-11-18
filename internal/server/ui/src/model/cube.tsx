@@ -18,7 +18,7 @@
 
 import type { Cube } from "../api";
 import { unsavedItems } from "../shared/forms";
-import { Sign } from "../shared/icon";
+import { Icon, Sign } from "../shared/icon";
 import { entryItems, kindsLabel, type Entry, type Item } from "../shared/problems";
 import { deviceEntry, deviceProblems } from "./device";
 
@@ -30,10 +30,37 @@ export function chosenCube(): Cube | undefined {
 /**
  * CubeSign is a Cube's network sign in its link's state, named for a
  * screen reader by its link, its mark blinking as the Cube's other signs
- * do (cubeSignEl of header.js, for the plain regions).
+ * do (cubeSignEl of header.js, for the plain regions): after the Cube's
+ * name, the first of its icons, or leading its pill (AP GlobalMenu,
+ * D190-A).
  */
-export function CubeSign({ c }: { c: Cube }) {
-  return <Sign kind="net" state={linkSign(c)} cls="conn-sign" blink={"cube:" + c.serial} label={linkWord(c)} />;
+export function CubeSign({ c, cls }: { c: Cube; cls?: string }) {
+  return <Sign kind="net" state={linkSign(c)} cls={"conn-sign" + (cls ? " " + cls : "")} blink={"cube:" + c.serial} label={linkWord(c)} />;
+}
+
+/**
+ * CubeIcon is what is before a Cube's name: the cube, in the text's
+ * colour, grey in a menu's list; its state is its sign's (CubeSign). A
+ * blue cube is the sign of the Cubes found and not served.
+ */
+export function CubeIcon() {
+  return <Icon symbol="icon-cube3d" cls="ni cube-icon" />;
+}
+
+/**
+ * CubeLink is the first row of a Cube's own pill's list: its sign and its
+ * link in words, "connected" too, where its entry has no badge of the
+ * link (cubeEntry with own).
+ */
+export function CubeLink({ c }: { c: Cube }) {
+  return (
+    <div class="problem-entry cube-link">
+      <CubeSign c={c} cls="problem-icon" />
+      <div class="problem-who">
+        <span class="problem-name">{linkWord(c)}</span>
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -79,22 +106,24 @@ export function cubeSettingItems(c: Cube, who: string): Item[] {
 
 /**
  * cubeEntry is a Cube's problems as an entry of the problem list: the
- * Cube as the heading with its network sign (green where only its devices
- * fail), its link's badge where it is not connected, with own its
- * settings' warnings too (its panel), the unsaved changes of its
- * settings form and of its rooms' forms, each the disk that opens the
- * form, its text naming it, and its devices with a problem
- * under it, "Room › Device", with their badges; a window open briefly is
- * a state, not a problem.
+ * Cube as the heading, the cube before its name and its network sign
+ * after it (green where only its devices fail), its link's badge where it
+ * is not connected; with settings its settings' warnings (for one who
+ * may change them); with own (its panel's pill, whose list says the link
+ * in its first row, CubeLink) no sign and no badge of the link; the
+ * unsaved changes of its settings form and of its
+ * rooms' forms, each the disk that opens the form, its text naming it,
+ * and its devices with a problem under it, "Room › Device", with their
+ * badges; a window open briefly is a state, not a problem.
  */
-export function cubeEntry(c: Cube, own?: boolean): Entry {
+export function cubeEntry(c: Cube, { settings, own }: { settings?: boolean; own?: boolean } = {}): Entry {
   const st = linkSign(c);
-  const items: Item[] = st === "ok" ? [] : [{ kind: "net", icon: "icon-net", sign: "net", tone: st === "bad" ? "bad" : "warn", text: linkWord(c) }];
-  if (own) items.push(...cubeSettingItems(c, ""));
+  const items: Item[] = st === "ok" || own ? [] : [{ kind: "net", icon: "icon-net", sign: "net", tone: st === "bad" ? "bad" : "warn", text: linkWord(c) }];
+  if (settings) items.push(...cubeSettingItems(c, ""));
   items.push(...unsavedItems(cubeFormKey(c.serial)), ...unsavedItems(roomFormKey(c.serial)));
   const subs = (c.problems || []).map((d) =>
     deviceEntry(d, deviceProblems(d, true).filter((it) => it.tone !== "fill-open"), [d.room, deviceName(d)].filter(Boolean).join(" › ")));
-  return { sign: { kind: "net", state: st }, title: c.name || c.serial, sub: c.name ? c.serial : "", items, subs };
+  return { icon: "icon-cube3d", tail: own ? undefined : <CubeSign c={c} />, title: c.name || c.serial, sub: c.name ? c.serial : "", items, subs };
 }
 
 /** The kinds of problems a Cube's label names, in the order it names them. */

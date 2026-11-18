@@ -1,8 +1,10 @@
-<!-- The header: Massimo's word with the version while signed out, and the radio budget (header.js); the pile, the server's sign, the time of the last update, the Cube choice and every Cube's problems and the TLS notice, parts (ui/src/header/), each in its place here; the Rooms button and ☰ with the version (pages.js); back to top (components.js). -->
+<!-- The header: Massimo's word with the version while signed out, and the radio budget (header.js); the pile, the server's sign, the reads' times, the Cube choice and every Cube's problems and the TLS notice, parts (ui/src/header/), each in its place here; the Rooms button and ☰ with the version (pages.js); back to top (components.js). -->
 <header class="top">
-  <!-- one row, a grid on its lower edge (style.css .top-line): the logo,
-       the pile, the Cube choice, ↑ beside it while compacted on a wide
-       page, the pages; on a phone the Cube choice a row of its own -->
+  <!-- one row on its lower edge (style.css .top-line): the logo at the
+       left; the pile, the Cube choice and the pages ↑ ⌂ ☰ at the right.
+       Where it is short it folds, measured (ui/src/header/fold.ts,
+       data-fold): the logo the M, the Cube choice a cube button, the pile
+       on the next row -->
   <div class="top-line">
     <div class="brand">
       <!-- the word, under Massimo's logo once its sprite has come (components.js brandMarks) -->
@@ -11,33 +13,31 @@
            (header.js checkVersion) -->
       <span id="version-out" class="version-out muted mono small"></span>
     </div>
-    <!-- the pile (ui/src/header/Pile.tsx): the chosen Cube's age above
-         every Cube's problems, span#cube-problems, led by the server's sign;
-         its list Refresh now with the times, and what the server's sign
-         offers -->
+    <!-- the pile (ui/src/header/Pile.tsx): every Cube's problems,
+         span#cube-problems, led by the server's sign; its list Refresh now
+         with the reads' times, and what the server's sign offers -->
     <div id="header-pile" class="part-slot"></div>
     <!-- the Cube choice, a menu of the page, details#cube-menu with its
-         summary#cube-choice (ui/src/header/Choice.tsx): the chosen Cube's
-         network sign and its name; the list each Cube with its sign, serial
-         and address -->
+         summary#cube-choice (ui/src/header/Choice.tsx): the cube, the
+         chosen Cube's name and its network sign; the list each Cube with
+         the cube, its name, its sign, its serial and address -->
     <div id="header-cube" class="cube"></div>
-    <!-- back to top beside the Cube choice while the header is compacted,
-         from 600 px (components.js backToTop) -->
-    <button type="button" id="top-btn-wide" class="icon-btn nav-btn top-btn top-btn-wide" aria-label="back to top" title="Back to top" data-i18n-attr="aria-label:page.toTop title:page.toTopTitle"><svg class="ni" aria-hidden="true"><use href="#icon-up"/></svg></button>
     <nav class="nav" aria-label="pages" data-i18n-attr="aria-label:nav.pages">
-      <button type="button" id="view-tiles" class="icon-btn nav-btn active" aria-current="page" aria-label="rooms" title="Rooms" data-i18n-attr="aria-label:nav.rooms title:nav.roomsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-house"/></svg></button>
-      <!-- back to top, left of ☰ while the header is compacted, below
-           600 px (components.js backToTop) -->
+      <!-- back to top, first of the pages while the header is compacted
+           (components.js backToTop) -->
       <button type="button" id="top-btn" class="icon-btn nav-btn top-btn" aria-label="back to top" title="Back to top" data-i18n-attr="aria-label:page.toTop title:page.toTopTitle"><svg class="ni" aria-hidden="true"><use href="#icon-up"/></svg></button>
+      <button type="button" id="view-tiles" class="icon-btn nav-btn active" aria-current="page" aria-label="rooms" title="Rooms" data-i18n-attr="aria-label:nav.rooms title:nav.roomsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-house"/></svg></button>
       <!-- ☰, every page but Rooms, at every width, each for the roles that
            may open it (pages.js mayShow, MENU_VIEWS): the log; the settings
            pages; the personal page and Sign out (login.js renderMe). It
            carries the log's mark (log.js renderLogSign). Its first row is
-           the server's version, which copies itself (header.js). -->
+           Massimo's icon and the server's version, which copies itself
+           (header.js), a rule under it. -->
       <details id="nav-menu" class="menu nav-menu">
         <summary class="nav-btn" aria-label="menu" title="Menu"><svg class="ni" aria-hidden="true"><use href="#icon-menu"/></svg></summary>
         <div class="menu-items">
-          <p class="menu-version"><span id="version-short" class="mono small"></span></p>
+          <p class="menu-version"><span class="menu-brand" data-brand aria-hidden="true"></span><span id="version-short" class="mono small"></span></p>
+          <hr class="menu-sep">
           <button type="button" id="menu-log"><svg class="ni" aria-hidden="true"><use href="#icon-log"/></svg><span data-i18n="nav.logTitle">Log</span></button>
           <hr class="menu-sep">
           <button type="button" id="menu-cube" class="needs-cubes-or-pair"><svg class="ni" aria-hidden="true"><use href="#icon-cube3d"/></svg><span data-i18n="nav.cubeTitle">Cube settings</span></button>
@@ -53,10 +53,12 @@
   </div>
   <!-- the TLS notice, p#tls-notice (ui/src/header/Tls.tsx) -->
   <div id="tls-slot" class="part-slot"></div>
-  <!-- in expert mode, the chosen Cube's radio budget: its name, the duty
-       cycle, the free slots and the radiograms pending, and the commands
-       queued while there are any (header.js renderHeader); the server's facts
-       are System info's, the Cube's its panel's -->
-  <p id="cube-stats" class="cube-stats expert-only"><span id="stats-cube" class="stats-cube"></span><span class="stat"><span data-i18n="budget.duty">Duty cycle</span> <span id="duty">–</span></span><span class="stat"><span data-i18n="budget.slots">Free slots</span> <span id="slots">–</span></span><span class="stat"><span data-i18n="budget.pending">Pending</span> <span id="pending-n">–</span></span><span id="stat-queued" class="stat hidden"><span data-i18n="budget.queued">Queued</span> <span id="queued">–</span></span></p>
+  <!-- in expert mode, the chosen Cube's radio budget: its name, how long
+       ago it was read and the server replied (span#header-times,
+       ui/src/header/Times.tsx), the duty cycle, the free slots and the
+       radiograms pending, and the commands queued while there are any
+       (header.js renderHeader); the server's facts are System info's, the
+       Cube's its panel's -->
+  <p id="cube-stats" class="cube-stats expert-only"><span id="stats-cube" class="stats-cube"></span><span id="header-times" class="part-slot"></span><span class="stat"><span data-i18n="budget.duty">Duty cycle</span> <span id="duty">–</span></span><span class="stat"><span data-i18n="budget.slots">Free slots</span> <span id="slots">–</span></span><span class="stat"><span data-i18n="budget.pending">Pending</span> <span id="pending-n">–</span></span><span id="stat-queued" class="stat hidden"><span data-i18n="budget.queued">Queued</span> <span id="queued">–</span></span></p>
   <p id="pending" class="notice hidden"></p>
 </header>

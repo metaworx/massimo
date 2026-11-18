@@ -15,7 +15,7 @@
 
 import type { TargetedMouseEvent } from "preact";
 import type { Cube, FoundCube } from "../api";
-import { CubeSign, cubeEntry, hostPort, problemsLabelOf } from "../model/cube";
+import { CubeIcon, CubeLink, CubeSign, cubeEntry, hostPort, problemsLabelOf } from "../model/cube";
 import { Badge, Notice } from "../shared/badge";
 import { Fold } from "../shared/fold";
 import { Island } from "../shared/island";
@@ -124,20 +124,25 @@ function keepPanel(ev: TargetedMouseEvent<HTMLDetailsElement>) {
 }
 
 /**
- * Head is what the panel's summary shows: the Cube's sign, name, serial
- * with its host and radio budget at the left, wrapping; its problem list
- * top right whatever wraps, the green check where nothing is wrong; where
- * its settings come from on a line of its own.
+ * Head is what the panel's summary shows: the cube, the Cube's name,
+ * serial with its host and radio budget at the left, wrapping; its
+ * problem list top right whatever wraps, led by the Cube's sign, which
+ * stands for the green check where nothing else is wrong, its list the
+ * link in words first (CubeLink); where its settings come from on a line
+ * of its own.
  */
 function Head({ c }: { c: Cube }) {
   load.useLoad(); // it reads the unsaved forms' signal too, and a part that reads signals is drawn again only for them or new properties
   const { host } = hostPort(c.address);
   const f = budgetFacts(c);
-  const entries = [cubeEntry(c, true)];
+  const entries = [cubeEntry(c, { settings: true, own: true })];
+  // its link first; nothing else wrong said only where the link is fine too
+  const rest = problemsLabelOf(entries);
+  const label = linkSign(c) === "ok" || rest !== t("problem.none") ? [linkWord(c), rest].join(" · ") : linkWord(c);
   return (
     <>
       <span class="cube-head-who">
-        <CubeSign c={c} />
+        <CubeIcon />
         {c.name && <span class="panel-name">{c.name}</span>}
         <span class="mono">{host ? c.serial + " · " + host : c.serial}</span>
         <span class="cube-head-stats muted small">
@@ -145,7 +150,8 @@ function Head({ c }: { c: Cube }) {
         </span>
       </span>
       <span class="cube-pill">
-        <Problems entries={entries} label={problemsLabelOf(entries)} ok={t("problem.none")} onClick={keepPanel} />
+        <Problems entries={entries} label={label} always lead={<CubeSign c={c} />}
+          head={<CubeLink c={c} />} onClick={keepPanel} />
       </span>
       {c.source && (
         <span class="panel-badges">
