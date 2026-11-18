@@ -385,8 +385,9 @@ jobs:
 
       # As -json, which packaging/go-test-report.sh turns back into go
       # test's own log while the tests run, and then names the tests that
-      # skipped, and why, in the summary (GUIDELINES/project/CI.md, section
-      # 3); pipefail keeps go test's exit status as the step's.
+      # skipped, and why, and the slowest tests and packages, in the
+      # summary (GUIDELINES/project/CI.md, section 3); pipefail keeps go
+      # test's exit status as the step's.
       - name: go test
         run: |
           set -o pipefail
@@ -443,7 +444,7 @@ jobs:
   # The race detector (make race, GUIDELINES/project/CI.md, section 2) on
   # the packages whose goroutines meet, beside Vet and test rather than in
   # it, so that neither waits for the other; the tests' -json for the
-  # skipped tests' summary, as in Vet and test.
+  # summary of the skipped and the slowest tests, as in Vet and test.
   race:
     name: Race
     needs: changes
@@ -469,7 +470,8 @@ jobs:
   # GUIDELINES/project/CI.md, section 2): the armv6 binary the armhf
   # package ships, run with -short by Ubuntu's qemu-user as the Raspberry
   # Pi 1's core, beside Vet and test; make cross only builds it. The
-  # tests' -json for the skipped tests' summary, as in Vet and test.
+  # tests' -json for the summary of the skipped and the slowest tests, as
+  # in Vet and test.
   armv6:
     name: Test (armv6, QEMU)
     needs: changes
@@ -589,7 +591,8 @@ jobs:
       # pytest-playwright or pytest-xdist fails the job instead of
       # skipping the suite or running it in one process. run.sh runs the
       # job's two cases in four workers, one per CPU of the runner, each
-      # against a server set of its own, on a push and a pull request.
+      # against a server set of its own, on a push and a pull request; the
+      # log names the 20 slowest phases of the tests (--durations=20).
       - name: Smoke test
         run: tools/ui-test/run.sh
         env:

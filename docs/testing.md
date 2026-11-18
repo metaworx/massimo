@@ -87,6 +87,11 @@ What does not take the scale:
   such as a poll interval or a backup window:
   the product's own clock is not the test's wait.
 
+A test that waits longer than it needs to shows in CI:
+the jobs Vet and test, Race and Test (armv6, QEMU)
+name their 20 slowest tests and their 10 slowest packages in the run's summary
+(`GUIDELINES/project/CI.md`, section 3).
+
 ## The watcher
 
 `Eventually` waits for a state: a count, a flag, an answer of the API.
