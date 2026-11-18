@@ -300,6 +300,8 @@ The compacted header has **â†‘**, back to the top, first of the page buttons: â†
   The page shows no fingerprint itself:
   it comes over the very connection in question,
   and a man in the middle would pass the server's along, or rewrite it.
+  In the apps neither line asks for the comparison:
+  the app pinned the fingerprint when the server was added (`docs/app.md`).
 - A certificate that ends within two weeks, or one the server could not
   get from Let's Encrypt yet, is a warning in the same line.
   The duty cycle and the free memory slots limit how many radio commands the

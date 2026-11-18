@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.61.0)
+# Massimo — CI Conventions (v1.62.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -1056,7 +1056,8 @@ since a site without `apt/` would take the repository offline.
 `.github/dependabot.yml` has Dependabot propose,
 once a month and in one pull request each,
 the updates of the Go modules the code imports directly,
-of the actions the workflows use, of actionlint,
+of the actions the workflows use,
+of the Android app's Gradle dependencies and plugins, of actionlint,
 of esbuild, which bundles the web UI's parts,
 and of the TypeScript that type-checks them.
 Its pull requests differ from the project's in two ways, both on purpose:
@@ -1065,7 +1066,7 @@ Its pull requests differ from the project's in two ways, both on purpose:
   and no `Assisted-by` trailer,
   so the Guidelines job does not read them (section 4).
 - They carry no `CHANGELOG.md` bullet,
-  though `go.mod` and `.github/**` are shipped paths.
+  though `go.mod`, `app/**` and `.github/**` are shipped paths.
   Whoever merges one adds its updates to a bullet
   `- Dependencies updated: …` under `[Unreleased]`, Changed,
   in a commit of the project's form before the next release is cut,
@@ -1080,6 +1081,13 @@ its tag's commit from `gh api repos/<owner>/<repo>/git/ref/tags/<tag>`
 (an annotated tag points at a tag object; its `object.sha` is the commit).
 `github.com/bytemare/ksf` is indirect and replaced by `third_party/bytemare-ksf`,
 so Dependabot leaves it alone until a release has the fix.
+
+The Android app's dependencies and its Gradle plugins are pinned in its
+version catalogue, `app/android/gradle/libs.versions.toml`;
+the Gradle entry, for `/app/android`, groups them into one pull request,
+since a plugin's update can need a library's.
+The job Android app builds it, tests it and checks that the release APK
+is built the same twice (section 2), as F-Droid will.
 
 actionlint is pinned by the `tool` line of `tools/actionlint/go.mod`,
 a module of its own rather than a `tool` line in massimo's `go.mod`,

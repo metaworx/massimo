@@ -32,12 +32,20 @@ since the shell's copy is served without the server's header.
 What the page shows:
 
 - **the servers**, in the order saved,
-  each with its name, its address and what the probe found:
+  each with its name, its address where it is not the name,
+  and what the probe found:
   on the LAN, remote, not reachable, or a changed certificate;
   a tap opens the server, a long press (or its ⚙) its settings;
 - **add a server**: the servers discovery finds as they arrive,
   or an address typed (`host`, `host:port` or a URL);
   the probe, then the fingerprint sheet for a self-signed certificate;
+- **the toast** at the page's foot, the web UI's (`showToast`),
+  saying what an action came to: a server added, saved or removed,
+  one that does not answer, a certificate not trusted, a failure in red;
+  a newer outcome takes the place of the one shown,
+  and a probe that finds a server takes back the toast saying it does not answer.
+  An address typed that is not one is said under the field,
+  and a server's open settings keep their own line;
 - **a server's settings**: the name, the LAN and the remote address,
   "Ask for my fingerprint or PIN" (`biometric`),
   "Notify me on this phone" (`push`, where the app has push), Remove;
@@ -138,6 +146,13 @@ The page then keeps no token in `localStorage`
 OPAQUE runs in the page as in a browser;
 the password never reaches the adapter.
 
+Where the bridge is there, the page also leaves out the web UI's
+notice of a self-signed certificate, on the sign-in and under the header,
+which asks to compare the fingerprint in the browser's certificate details:
+the app pinned the fingerprint the user compared when the server was added,
+and refuses a certificate with another.
+The warnings of a certificate that ends within two weeks, or has ended, stay.
+
 ### The events
 
 The adapter sends an event as
@@ -173,6 +188,15 @@ An unknown `type` is ignored by the page.
 - **Plain HTTP** is allowed; the page warns for an `http://` address outside
   the private ranges, where anyone on the way can read the token and
   change the page.
+- **A server's name.**
+  A server added from discovery is named as discovery heard it;
+  one added by its address is named by its host and port
+  (`192.168.1.20:8099`, `home.example.net`),
+  unless discovery heard its `node` before.
+  A `found` service whose `node` is a saved server's that is still named by
+  one of its addresses gives that server its `name`,
+  saved; a name the user gave stays.
+  A row shows the address only where it differs from the name.
 - **Which address.**
   The page probes both addresses of a server with its `fp`, and takes
   the one that answers with the server's `node`, the LAN one first;
@@ -190,5 +214,6 @@ The pytest suite of `tools/ui-test/` covers the connect page with a fake
 bridge in `test_connect.py`, put into the page by Playwright's
 `add_init_script` as the token is (`tools/ui-test/README.md`):
 the page holds no code for tests.
-The same fake bridge checks the server's page's `token` and `setToken`.
+The same fake bridge checks the server's page's `token` and `setToken`,
+and the self-signed notice left out there (`test_tls.py`).
 Each adapter tests its own side: Block 3 for Android, Block 9 for iOS.
