@@ -411,6 +411,7 @@
   "unit.seconds": "s",
 
   "house.title": "Huis",
+  "house.roomsOf": "Alle ruimtes van {cube}",
   "house.mode": "Modus",
   "house.duration": "Duur",
   "house.permanent": "Permanent",

@@ -412,6 +412,7 @@
   "unit.seconds": "s",
 
   "house.title": "Maison",
+  "house.roomsOf": "Toutes les pièces de {cube}",
   "house.mode": "Mode",
   "house.duration": "Durée",
   "house.permanent": "En permanence",

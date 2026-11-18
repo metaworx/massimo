@@ -410,6 +410,7 @@
   "unit.seconds": "s",
 
   "house.title": "Haus",
+  "house.roomsOf": "Alle Räume von {cube}",
   "house.mode": "Modus",
   "house.duration": "Dauer",
   "house.permanent": "Dauerhaft",

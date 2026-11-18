@@ -14,7 +14,7 @@
  */
 
 import type { Cube } from "../api";
-import { CubeSign, chosenCube, cubeEntry } from "../model/cube";
+import { CubeIcon, CubeSign, chosenCube, cubeEntry } from "../model/cube";
 import { Picker, type PickEntry } from "../shared/menu";
 import { KindIcons, problemKinds } from "../shared/problems";
 import { discoverCubes } from "./send";
@@ -24,10 +24,10 @@ import { discovery, load } from "./store";
 const DISCOVER = "__discover";
 
 /**
- * entryOf is a served Cube's entry: its sign, its name (its serial without
- * one), the icons of its problems after it, its link left out, which its
- * sign shows, and the settings' cog for a role with settings; under it its
- * serial and address.
+ * entryOf is a served Cube's entry: the cube, its name (its serial without
+ * one), after it its sign, always, then the icons of its problems, its
+ * link left out, which its sign shows, and the settings' cog for a role
+ * with settings; under it its serial and address.
  */
 function entryOf(c: Cube): PickEntry {
   const entries = [cubeEntry(c, hasCap("settings"))];
@@ -36,8 +36,13 @@ function entryOf(c: Cube): PickEntry {
     value: c.serial,
     label: c.name || c.serial,
     sub: [c.name ? c.serial : "", c.address || ""].filter(Boolean).join(" · "),
-    icon: <CubeSign c={c} />,
-    icons: problemKinds(entries, skip).length ? <KindIcons entries={entries} skip={skip} /> : undefined,
+    icon: <CubeIcon />,
+    icons: (
+      <>
+        <CubeSign c={c} />
+        {problemKinds(entries, skip).length > 0 && <KindIcons entries={entries} skip={skip} />}
+      </>
+    ),
   };
 }
 
@@ -52,7 +57,9 @@ function pick(v: string): void {
  * Choice is the Cube choice: the served Cubes; those found on the LAN and
  * not served, which open System settings → Cubes for a role with cubes
  * and are information for others; for a role with discover, the search.
- * Its tooltip names the chosen Cube's serial, address and link.
+ * Closed it shows the cube, the chosen Cube's name and its sign after it;
+ * folded to a button (fold.ts) the cube alone. Its tooltip names the
+ * chosen Cube, its serial, address and link.
  */
 export function Choice() {
   load.useLoad();
@@ -71,8 +78,9 @@ export function Choice() {
   return (
     <Picker id="cube-menu" cls="cube-menu" summaryId="cube-choice" summaryCls="cube-choice" entries={entries} value={state.serial || ""} onPick={pick}
       shown={{
-        icon: cube && <CubeSign c={cube} />,
+        icon: cube && <CubeIcon />,
         label: name,
+        icons: cube && <CubeSign c={cube} />,
         title: cube ? [name, cube.name ? cube.serial : "", cube.address || "", conn].filter(Boolean).join(" · ") : name,
         aria: cube ? t("header.cubeChoice", { name, state: conn }) : name,
       }} />

@@ -4,8 +4,9 @@
 /**
  * @file internal/server/ui/src/rooms/House.tsx
  *
- * The House tile, above the rooms: ECO, AUTO, COMFORT and MANU for the
- * whole house or the rooms ticked, each opening the panel with the mode
+ * The House tile, above the rooms, named after the chosen Cube, the cube
+ * before its name, "All rooms of …" its tooltip: ECO, AUTO, COMFORT and
+ * MANU for the whole house or the rooms ticked, each opening the panel with the mode
  * chosen, its temperature for MANU, permanently or until a date and time,
  * and a room with a thermostat each; Send sets one room after another and
  * says how each went. Built once and updated in place, so that the rooms
@@ -13,6 +14,7 @@
  */
 
 import { useEffect, useLayoutEffect, useRef } from "preact/hooks";
+import { CubeIcon, chosenCube } from "../model/cube";
 import { ResultLine } from "../shared/badge";
 import { DateTime, FormFooter, Stepper } from "../shared/field";
 import { useBusy } from "../shared/question";
@@ -142,8 +144,17 @@ export function House() {
   const tick = (id: number, on: boolean) => {
     house.ticks = { ...house.ticks, [id]: on };
   };
+  const cube = chosenCube();
+  const name = cube ? cube.name || cube.serial : t("house.title");
+  const whole = cube ? t("house.roomsOf", { cube: name }) : name;
   return (
     <>
+      <header class="tile-head">
+        <h2 class="house-title" title={whole} aria-label={whole}>
+          <CubeIcon />
+          <span class="house-name">{name}</span>
+        </h2>
+      </header>
       <div class="house-modes">
         <span class="muted">{t("house.mode")}</span>
         {MODES.map(([mode, id, key]) => <button key={mode} type="button" id={id} onClick={() => openHouse(mode)}>{t(key)}</button>)}

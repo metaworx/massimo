@@ -56,7 +56,9 @@ def test_header_problems(page, case):
         heads = page.locator("#cube-problems .problems-list > .problem-entry")
         assert heads.count() == 1, "one Cube"
         cube = heads.first
-        assert "tone-ok" in cube.locator(":scope > .problem-icon").get_attribute("class"), "the Cube's own sign green"
+        assert cube.locator(":scope > .problem-icon use[href='#icon-cube3d']").count() == 1, "the cube before the Cube's name"
+        assert "tone-ok" in cube.locator(":scope > .problem-who .problem-tail .conn-sign").get_attribute("class"), \
+            "the Cube's own sign after its name, green"
         sub = cube.locator(".problem-subs .problem-entry")
         assert sub.locator(".problem-name").inner_text() == "Kitchen › Radiator", "the device under it, Room › Device"
         assert sub.locator(".flag.bad").count() == 1, "with its badge"

@@ -417,6 +417,7 @@
   "unit.seconds": "s",
 
   "house.title": "Dom",
+  "house.roomsOf": "Wszystkie pomieszczenia z {cube}",
   "house.mode": "Tryb",
   "house.duration": "Czas trwania",
   "house.permanent": "Na stałe",

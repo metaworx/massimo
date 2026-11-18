@@ -110,7 +110,7 @@ waits while there are any.
 The header's row has Massimo's logo at the left, the M as tall as the page buttons;
 at the right, the pile, a pill that starts with the server's sign and shows
 every Cube's problems;
-the Cube choice with the server's connection to the Cube as a plug;
+the Cube choice, the cube, the chosen Cube's name and its network sign after it;
 then the house, **Rooms**, and **☰**, the menu of every other page.
 They all end on one line, the logo's baseline and the buttons' lower edge.
 Where the row is short, it folds step by step, as far as it must:
@@ -138,12 +138,17 @@ The compacted header has **↑**, back to the top, first of the page buttons: �
 
 - **Cube**:
   a menu that chooses the Cube when the server has several.
-  Closed it shows the chosen Cube's name (its serial where it has none)
-  and how the server stands with it, as the network's sign:
+  Closed it shows the cube, the chosen Cube's name (its serial where it has none)
+  and after it how the server stands with it, as the network's sign:
   green while connected, a triangle while its lost connection is held open
   or it reboots, a cross while it holds the server's old connection,
   another client has it, or it is gone (see Signs, under How the page is built);
   its tooltip adds the serial, the address and the link in words.
+  In its list each Cube has the cube, its name, its sign after it,
+  always, then the icons of its problems, and under it its serial and address.
+  Wherever a Cube is named with its sign, the cube is before its name,
+  in the text's colour, and the sign after it;
+  a blue cube is the sign of the Cubes found and not served.
   Open, each Cube has its sign, its name with an icon after it for each
   kind of problem it has (the radio, a battery, a window open too long, a
   device's link and, for one who may change the settings, the cog, and the
@@ -192,7 +197,8 @@ The compacted header has **↑**, back to the top, first of the page buttons: �
   or the reload for the server's new version.
   Then the list says that nothing is wrong,
   or it lists every Cube with a problem as a heading,
-  its own sign and its link's badge, and under it its devices with a problem
+  the cube before its name and its sign after it, its link's badge,
+  and under it its devices with a problem
   as "Room › Device" with their badges;
   for one who may change the settings, **Settings**:
   a Cube proxy that does not listen, a settings file that differs,
@@ -530,7 +536,8 @@ Every room has a tile:
 - Each setting has a **?** button that explains it, with the factory values
   from the eQ-3 manuals.
 
-The **House** tile sets several rooms at once: ECO, AUTO,
+The **House** tile, named after the chosen Cube with the cube before its name
+("All rooms of …" its tooltip), sets several rooms at once: ECO, AUTO,
 COMFORT or MANU with a temperature, permanently or until a date and time;
 its **Send** is off while no room is ticked.
 What its panel holds stays when the rooms load again and when it closes:
@@ -1136,13 +1143,16 @@ the browser keeps which cards are folded.
   (red "not connected" for a cross, amber "connection held" or "rebooting"
   for a triangle), the proxies that do not listen,
   the Cubes found at another address and those found and not served.
-  Each is in a panel whose head shows the Cube's sign, the name,
+  Each is in a panel whose head shows the cube, the Cube's name,
   the serial and the address without the port,
   the duty cycle, the free slots and the radiograms pending,
-  a pill with every problem of the Cube (its link, its proxy, its settings file
+  a pill with every problem of the Cube (its proxy, its settings file
   and its devices with theirs, as the header's), top-right whatever wraps,
-  a green check where nothing is wrong, whose click opens its list
-  and not the panel, and under them where its settings come from,
+  led by the Cube's network sign,
+  which stands for the green check where nothing else is wrong;
+  a click on it opens its list and not the panel,
+  the Cube's link in words its first row, "connected" too,
+  and under them where its settings come from,
   all of it following every poll in place, whether the panel is open or not,
   so that an open problem list stays open, and opens with a click:
   its own badges as its top line (its link where it is not connected,
@@ -1392,8 +1402,9 @@ the browser keeps which cards are folded.
 - **Capabilities for every role** (with `capabilities`):
   a switch per capability, which switches it off for every role but the owner.
 - **Backup and restore** (with `backup`):
-  a fold per Cube, its sign, name and serial and how many backups the server
-  keeps of it in its head, a single Cube's open; the card's head counts them all.
+  a fold per Cube, the cube, its name and serial, its sign,
+  and how many backups the server keeps of it in its head, a single Cube's open;
+  the card's head counts them all.
   In each, and on Cube settings for the chosen Cube,
   **Download backup** saves the Cube as it is now, as YAML or JSON (**Format**).
   The server keeps the Cube's backups in its store,
@@ -1705,7 +1716,9 @@ it imports from itself, the shared parts, Preact and the API's types alone
 What one region alone reads stays in the region, anything with state too,
 and what is not about the API's data is a shared part.
 `cube.tsx` holds the Cube chosen in the header (`chosenCube`),
-a Cube's address split into host and port (`hostPort`), its network sign (`CubeSign`)
+a Cube's address split into host and port (`hostPort`),
+the cube before its name (`CubeIcon`),
+its network sign (`CubeSign`), its link's row in its own pill's list (`CubeLink`)
 and its problems as an entry of `Problems` (`cubeEntry`, `cubeSettingItems`)
 with the label naming their kinds and the Cubes found (`problemsLabelOf`);
 `found.tsx` what a Cube or a Massimo proxy found is and who serves it (`foundWhat`);
@@ -1728,7 +1741,7 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `Fold`, `FoldHead` | `fold.tsx` | a details that opens and closes (`detailsPanel`), the toggle of its making not passed on; a panel's head | `cls`, `open`, `onToggle(open)`, `summary`, `summaryProps`, `data`, the body as children; `before`, `name`, `mono`, `badges` |
 | `Dropdown` | `menu.tsx` | a menu that drops down (`dropdown`), with `arrows` its arrow keys (`menuArrows`) and with `focusCurrent` the focus on its current item when it opens (among `arrows`' items, else its list's buttons that are on); a click on any button of its list closes it, as `dropdown()` of `components.js` does for every menu of the page, but on one marked `data-keep-open` (`MenuItem`'s `keepOpen`) | `id`, `cls`, `summaryId`, `summaryCls`, `label` (without it the summary is named by its text), `title` (where the tooltip is not the label), `summary`, `listCls`, `arrows` (a selector of its items), `focusCurrent`, `busy` (the summary turning while a request sent from its list runs), `onClick`, `onOpen` (told each time it opens), `onClose` (told each time it closes), the items as children |
 | `MenuItem` | `menu.tsx` | a menu's button, its icon, label, the icons after it and a grey second line (`menuItem`) | `icon`, `blank`, `label`, `icons`, `sub` (the second line, a text or elements, there whenever given, empty too), `subCls` (its class), `cls`, `value` (its `data-value`), `current`, `disabled`, `busy`, `keepOpen` (a click on it leaves the menu open, for an item whose result shows in the list), `onClick` |
-| `Picker` | `menu.tsx` | a menu that chooses one item, its summary the chosen one (`pickerMenu`) | `id`, `cls`, `summaryId`, `summaryCls`, `entries` (an item `{ value, label, sub, icon, icons, disabled }`, `{ group }` or `{ separator: true }`), `value`, `onPick(value)`, `shown` (`{ icon, label, title, aria }`) |
+| `Picker` | `menu.tsx` | a menu that chooses one item, its summary the chosen one (`pickerMenu`) | `id`, `cls`, `summaryId`, `summaryCls`, `entries` (an item `{ value, label, sub, icon, icons, disabled }`, `{ group }` or `{ separator: true }`), `value`, `onPick(value)`, `shown` (`{ icon, label, icons, title, aria }`, `icons` after the label) |
 | `actionRunner`, `fader` | `action.ts` | a request, a reload, and its outcome (`Outcome`, `{ text, ok }`) in the region's message line (`showResult`) or in a part's state that a `ResultLine` draws, a success fading where a fade is given; `fader` is that fade alone, for a result set by other means | `where()`, `set(res)`, `fade` (ms), `reload()`; gives `run(fn, ok, fail)`, `say(text, ok)`; `set`, `ms` |
 | `Icon` | `icon.tsx` | a symbol of the page (`iconEl`) | `symbol`, `cls`, `mark` (the symbol is a mark, which blinks where the style makes it) |
 | `Sign` | `icon.tsx` | a kind of `SIGNS` in a state, its mark blinking (`signEl`) | `kind`, `state` ("", ok, warn, bad, open), `cls`, `blink` (the mark's key), `label` (named for a screen reader, else hidden) |
@@ -1740,7 +1753,7 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `Age` | `badge.tsx` | how old a value is, filled by `fillAge` (`ageEl`) | `at`, `stale`, `plain` |
 | `Since` | `badge.tsx` | from when a badge's state holds, after its text (a problem list's item) | `at` |
 | `ResultLine` | `badge.tsx` | the line that says how an action went, green or red, hidden while there is none (`showResult`), as an `actionRunner`'s `set` gives it | `res` (an `Outcome` or null), `cls` |
-| `Problems` | `problems.tsx` | the problem list, entries under entries (`problemsEl`), an item with an action a button | `entries`, `label`, `ok` (the green check's label where nothing is wrong), `always` (the list there where nothing is wrong too; where `ok` is given, its summary the green check and `ok` a line of its list), `lead` (drawn first in the summary, a sign of the place's own state), `head` (drawn first in the list, items that act on the place), `onClick`, `onOpen`, `onClose` (as `Dropdown`'s) |
+| `Problems` | `problems.tsx` | the problem list, entries under entries (`problemsEl`), an item with an action a button | `entries`, `label`, `ok` (the green check's label where nothing is wrong), `always` (the list there where nothing is wrong too; where `ok` is given, its summary the green check and `ok` a line of its list), `lead` (drawn first in the summary, a sign of the place's own state), `head` (drawn first in the list, items that act on the place or a row of its own state), `onClick`, `onOpen`, `onClose` (as `Dropdown`'s); an entry's `tail` is drawn after its name (a sign of its state where its icon says what it is) |
 | `KindIcons`, `problemKinds`, `kindsLabel` | `problems.tsx` | the kinds' icons of entries without the list (`kindIcons`); the kinds themselves, to know whether there are any; the label naming the kinds among items in an order of kinds, "" for none | `entries`, `skip`; `entries`, `skip`; `items`, `kinds` |
 | `OkPill` | `problems.tsx` | the green check in a list's place (`okPill`) | `label` |
 | `Field` | `field.tsx` | a label and its control, `.field` or `.field.wide` (`fieldRow`) | `label`, `id`, `wide`, `unit`, `hint`, `draft`, `show`, the control as children |
@@ -1930,7 +1943,7 @@ its Send and Cancel a `FormFooter`;
 Put into a room… and Remove from the Cube;
 the section of the devices without a room is shown and hidden by `rooms.js`,
 its message line, `#unlisted-msg` of the partial, an `actionRunner`'s, a success fading,
-and the House tile's section, with its title, is shown and hidden by `rooms.js` too.
+and the House tile's section is shown and hidden by `rooms.js` too, its title the part's.
 The tile's actions stay plain (`rooms.js`, `tiles.js`) and set `roomUI`,
 which the tile follows: a write running turns its button and keeps the others off,
 a stepper value waiting to be sent shows with Save and Cancel.

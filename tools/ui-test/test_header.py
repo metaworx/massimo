@@ -189,7 +189,9 @@ def test_header_order(page, case):
     order = ["h1", ".pile", "#cube-choice", "#view-tiles", "#nav-menu > summary"]
     b = {sel: box(page, sel) for sel in order}
     row = box(page, ".top-line")
-    assert page.locator("#cube-choice .picker-icon .conn-sign use[href='#icon-net']").count() == 1, "the link, a network sign in the Cube choice"
+    assert page.locator("#cube-choice .picker-icon .cube-icon use[href='#icon-cube3d']").count() == 1, "the cube before the Cube's name"
+    if page.locator("#cube-choice .picker-label").is_visible():
+        assert page.locator("#cube-choice .picker-icons .conn-sign use[href='#icon-net']").count() == 1, "the link, a network sign after it"
     shown = page.locator(".nav > *").evaluate_all("(es) => es.filter((e) => e.offsetParent).map((e) => e.id)")
     assert shown == ["view-tiles", "nav-menu"], f"🏠 and ☰ alone in the header: {shown}"
     assert abs(b["h1"]["x"] - row["x"]) <= 1, f"the logo at the left: {b['h1']} vs {row}"
@@ -237,6 +239,8 @@ def test_header_folds_step_by_step(page, case):
             assert (mark if step else logo).is_visible() and (logo if step else mark).is_hidden(), f"at {w} px the logo or the M"
             label = page.locator("#cube-choice .picker-label")
             assert label.is_hidden() == (step >= 2), f"at {w} px the Cube choice a cube button: {step >= 2}"
+            assert page.locator("#cube-choice .picker-icons").is_hidden() == (step >= 2), f"at {w} px its sign with its name"
+            assert page.locator("#cube-choice .cube-icon").is_visible(), f"at {w} px the cube always"
             pile, home = box(page, ".pile"), box(page, "#view-tiles")
             on_next = pile["y"] >= home["y"] + home["height"] - 1
             assert on_next == (step == 3), f"at {w} px the pile on the next row: {step == 3}"
@@ -612,10 +616,10 @@ def test_pile_list_as_wide_as_its_content(page, case):
 
 
 def test_cube_choice_list_shows_problems(page, case, reads):
-    """Open, the Cube choice's list shows each Cube's problems as icons
-    after its name, its worst tone each, its link left out (the Cube's own
-    sign shows it): here its settings file differing, the cog, for the
-    owner. The problems are in the page's reads of the Cubes
+    """Open, the Cube choice's list shows after each Cube's name its link's
+    sign, first and always, then its problems as icons, its worst tone
+    each, its link not again: here its settings file differing, the cog,
+    for the owner (AP GlobalMenu, D190-A). The problems are in the page's reads of the Cubes
     (helpers.Reads)."""
     reads.cube("KEQ0000100", file_differs=["MASSIMO_CUBE_KEQ0000100_NAME"], connected=False)
     try:
@@ -626,7 +630,8 @@ def test_cube_choice_list_shows_problems(page, case, reads):
         icons = item.locator(".menu-item-icons > svg")
         hrefs = icons.evaluate_all("(es) => es.map((e) => [...e.querySelectorAll('use')].map((u) => u.getAttribute('href')).join(' '))")
         assert any("cog" in h for h in hrefs), f"the settings' cog after the name: {hrefs}"
-        assert not any("#icon-net" in h for h in hrefs), f"not its link, which its sign shows: {hrefs}"
+        assert "#icon-net" in hrefs[0], f"its link's sign first after the name: {hrefs}"
+        assert sum("#icon-net" in h for h in hrefs) == 1, f"its link once, its sign: {hrefs}"
         name, line = item.locator(".menu-item-label").bounding_box(), icons.first.bounding_box()
         assert line["x"] >= name["x"] + name["width"] and abs((line["y"] + line["height"] / 2) - (name["y"] + name["height"] / 2)) <= 6, \
             f"after the name, on its line: {name} {line}"

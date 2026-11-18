@@ -295,6 +295,8 @@ button.copy-icon .ni { width: 16px; height: 16px; }
 .menu.cube-menu > summary:hover, .menu.cube-menu[open] > summary { border-color: var(--accent); }
 .picker-icon { display: inline-flex; flex: none; }
 .picker-icon:empty { display: none; }
+/* after the chosen item's name, its icons: a Cube's sign (Choice.tsx) */
+.picker-icons { display: inline-flex; align-items: center; gap: 4px; flex: none; }
 .picker-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cube-menu .caret { width: 16px; height: 16px; flex: none; margin-left: auto; color: var(--muted); }
 .cube-menu .menu-items { left: 0; right: auto; width: max-content; min-width: 100%; max-width: min(440px, calc(100vw - 32px)); }
@@ -744,7 +746,7 @@ body.scrolled .nav .top-btn { display: inline-flex; }
 .panel.cube-panel > summary { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; }
 .panel.cube-panel > summary::before { grid-column: 1; grid-row: 1; }
 .cube-head-who { grid-column: 2; grid-row: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-width: 0; }
-.cube-head-who > .conn-sign { flex: none; }
+.cube-head-who > .cube-icon { flex: none; }
 .cube-pill { grid-column: 3; grid-row: 1; align-self: start; display: inline-flex; }
 .cube-pill:empty { display: none; }
 .cube-pill .problems-list { right: 0; left: auto; }
@@ -773,7 +775,7 @@ body.scrolled .nav .top-btn { display: inline-flex; }
 /* System settings → Backup and restore: a fold per Cube, its head as a
    Cube's in the Cubes card, its sign before its name */
 .backups-cubes { display: grid; gap: 8px; }
-.backup-fold > summary > .conn-sign { width: 18px; height: 18px; flex: none; }
+.backup-fold > summary > .conn-sign, .backup-fold > summary > .cube-icon { width: 18px; height: 18px; flex: none; }
 .backup-fold > summary > .panel-badges { margin-left: auto; }
 .cube-page .cube-head-who { grid-column: 1; }
 .cube-page .cube-pill { grid-column: 2; }
@@ -996,6 +998,10 @@ button.subtle { color: var(--muted); }
   border-radius: 11px 11px 0 0;
 }
 .tile-head h2 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* the House tile named after the chosen Cube, the cube before its name */
+.tile-head h2.house-title { display: flex; align-items: center; gap: 8px; }
+.house-title .cube-icon { flex: none; }
+.house-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .room-name-btn {
   flex: 1;
   min-width: 0;
@@ -1186,6 +1192,9 @@ html.blink-first .server-icon.state-new use.mark, html.blink-first .server-icon.
 }
 .problem-subs > .problem-entry { padding: 4px 0; border-bottom: 0; }
 .problem-name { font-weight: 600; font-size: 0.95rem; overflow-wrap: anywhere; }
+/* after an entry's name, a sign of its state (a Cube's link, cubeEntry) */
+.problem-tail { display: inline-flex; align-self: center; }
+.problem-tail .ni { width: 16px; height: 16px; }
 .problem-sub { color: var(--muted); font-size: 0.8rem; }
 .problem-flags { display: flex; flex-wrap: wrap; gap: 6px; }
 /* a long one wraps, its age under its text where they do not fit side
