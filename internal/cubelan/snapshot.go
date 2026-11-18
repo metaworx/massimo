@@ -98,7 +98,15 @@ type Event struct {
 	// marks the EventConnected of a held connection that resumed.
 	HeldUntil time.Time
 	Held      bool
+	// seq numbers the event among those the client put on Events (Seq).
+	seq uint64
 }
+
+// Seq is the event's number among those the client put on Events, from
+// 1 and in their order; 0 for an event the client did not send. It is
+// for tests: a reader that keeps the Seq of the last event it handled
+// lets a test wait for it (Client.EventCounts). It changes nothing.
+func (e Event) Seq() uint64 { return e.seq }
 
 // The causes of a connection, for EventConnected.
 const (
