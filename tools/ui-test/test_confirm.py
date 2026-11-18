@@ -11,7 +11,7 @@ The confirmations come from state events applied in the page
 (updateDevice) and from events sent on the stream, since the fake Cube
 takes every write.
 """
-from helpers import scroll_width, show_view, wait_until
+from helpers import isolate_log, scroll_width, show_view, wait_log_live, wait_until
 
 # Gives the first reported thermostat of a room the confirmation cstate
 # (pending or unconfirmed, None for none) of fields, auto at 20 °C.
@@ -106,14 +106,15 @@ def test_unconfirmed_marks(page, case):
     assert wait_until(page, "document.querySelector('.room .tile-head use[href=\"#icon-unconfirmed\"]') === null", 5), "gone once shown"
 
 
-def test_unconfirmed_log_lines(page, case):
+def test_unconfirmed_log_lines(page, case, reads):
     """The stream's unconfirmed line names the write, the room, and each
     device by name with what it shows; a late one the seconds it took."""
     says = SAYS[case.lang]
     dev = page.evaluate(CONFIRMATION, [None, []])
     assert dev, "a reported thermostat"
     show_view(page, "log")
-    page.wait_for_timeout(1600)
+    isolate_log(page, reads)
+    wait_log_live(page)
     page.evaluate("""(dev) => {
       const now = () => new Date().toISOString();
       const send = (kind, ev) => state.events.dispatchEvent(new MessageEvent(kind, { data: JSON.stringify(Object.assign({ kind, time: now() }, ev)) }));
@@ -131,7 +132,7 @@ def test_unconfirmed_log_lines(page, case):
     show_view(page, "tiles")
 
 
-def test_resend_log_lines(page, case):
+def test_resend_log_lines(page, case, reads):
     """A room setpoint's re-send (AP RadioHealth v1.3, Block 8): sent once
     more, still not confirmed with each device and what it shows, not
     sent and why, and confirmed by every thermostat."""
@@ -139,7 +140,8 @@ def test_resend_log_lines(page, case):
     dev = page.evaluate(CONFIRMATION, [None, []])
     assert dev, "a reported thermostat"
     show_view(page, "log")
-    page.wait_for_timeout(1600)
+    isolate_log(page, reads)
+    wait_log_live(page)
     page.evaluate("""(dev) => {
       const now = () => new Date().toISOString();
       const send = (kind, ev) => state.events.dispatchEvent(new MessageEvent(kind, { data: JSON.stringify(Object.assign({ kind, time: now() }, ev)) }));

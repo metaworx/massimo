@@ -16,6 +16,7 @@ each test removes what it made, the four cases sharing the server, and
 the page fixture removes the owner's rules before every page."""
 import json
 import time
+import urllib.error
 
 from axe_playwright_python.sync_playwright import Axe
 
@@ -74,7 +75,8 @@ def assert_axe(page, where):
     it, and a scrolled header on a phone has no room for the brand, the
     page's level-one heading (style.css, body.scrolled)."""
     page.evaluate("window.scrollTo(0, 0)")
-    wait_until(page, "window.scrollY === 0 && !document.body.classList.contains('scrolled')", 3)
+    assert wait_until(page, "window.scrollY === 0 && !document.body.classList.contains('scrolled')", 3), \
+        f"the page at its top, the header not compacted, before axe on {where}"
     results = Axe().run(page)
     assert results.violations_count == 0, f"axe on {where}:\n{results.generate_report()}"
 
@@ -103,10 +105,12 @@ def remove_test_subscriptions():
 
 
 def server_rules():
-    """The owner's notify preference, None for none."""
+    """The owner's notify preference, None for none (a 404)."""
     try:
         return api_call("GET", "api/v1/me/preferences/notify")
-    except Exception:  # 404: none
+    except urllib.error.HTTPError as e:
+        if e.code != 404:
+            raise
         return None
 
 

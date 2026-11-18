@@ -4,13 +4,12 @@
 run.sh's second server, whose Cube sits at a closed port, and with the
 Cube list stubbed for no Cube and for a Cube that dropped after its rooms
 loaded."""
-import json
 import os
 
 import pytest
 
 from conftest import TOKEN
-from helpers import wait_until
+from helpers import CUBES, wait_until
 
 DOWN_URL = os.environ.get("UI_TEST_DOWN_URL", "")
 # the Cube named by its name, its serial in the detail (D5-B)
@@ -75,17 +74,16 @@ def test_no_cube_configured(page, case):
     assert wait_until(page, "document.getElementById('home-notice').classList.contains('hidden')", 5), "gone with the Cube back"
 
 
-def test_a_cube_that_dropped_keeps_its_rooms_under_the_notice(page, case):
+def test_a_cube_that_dropped_keeps_its_rooms_under_the_notice(page, case, reads):
     """A Cube that dropped after its rooms loaded (the list stubbed with
     connected false): the notice above the rooms, which stay, with when
     its last data came."""
-    def dropped(route):
-        cubes = route.fetch().json()
+    def dropped(cubes):
         for c in cubes:
             c["connected"] = False
-        route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes))
+        return cubes
 
-    page.route("**/api/v1/cubes", dropped)
+    reads.change(CUBES, dropped)
     try:
         page.evaluate("loadCubes()")
         assert wait_until(page, NOTICE_SHOWN, 5), "the notice shows"
@@ -99,25 +97,18 @@ def test_a_cube_that_dropped_keeps_its_rooms_under_the_notice(page, case):
         # measures it (a bounding box of None).
         assert wait_until(page, ROOMS_UNDER_NOTICE, 5), "the rooms stay, under the notice"
     finally:
-        page.unroute("**/api/v1/cubes")
+        reads.clear(CUBES)
     page.evaluate("loadCubes()")
     assert wait_until(page, "document.getElementById('home-notice').classList.contains('hidden')", 5), "gone once connected"
 
 
-def test_a_cube_in_another_network_says_how_to_reach_it(page, case):
+def test_a_cube_in_another_network_says_how_to_reach_it(page, case, reads):
     """A Cube not connected whose address lies outside this machine's
     networks (the list stubbed with other_network): the notice's check
     says so, with the address a Cube without a DHCP lease uses and the
     netconfig line with its serial, in place of the usual checks, kept
     across polls; the usual checks come back without it."""
-    def away(route):
-        cubes = route.fetch().json()
-        for c in cubes:
-            if c.get("serial") == "KEQ0000100":
-                c["connected"], c["other_network"] = False, True
-        route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes))
-
-    page.route("**/api/v1/cubes", away)
+    reads.cube("KEQ0000100", connected=False, other_network=True)
     try:
         page.evaluate("loadCubes()")
         assert wait_until(page, NOTICE_SHOWN, 5), "the notice shows"
@@ -130,6 +121,6 @@ def test_a_cube_in_another_network_says_how_to_reach_it(page, case):
         page.wait_for_timeout(300)
         assert page.evaluate("document.querySelector('#home-notice .netconfig-line').dataset.mark") == "1", "kept across a poll"
     finally:
-        page.unroute("**/api/v1/cubes")
+        reads.clear(CUBES)
     page.evaluate("loadCubes()")
     assert wait_until(page, "document.getElementById('home-notice').classList.contains('hidden')", 5), "gone once connected"

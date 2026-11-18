@@ -4,21 +4,25 @@
 renderCubeProblems): a Cube with a problem as the heading, its devices
 under it, the settings last for one who may change them; nothing where
 nothing is wrong."""
+from helpers import CUBES, configured_only, reads_of
 
-# Sets the first Cube's link, devices with a problem and proxy failures
-# as GET /api/v1/cubes would give them, and draws the header again.
-SET = """([link, problems, failing]) => {
-  const c = state.cubes[0];
-  window.__saved = window.__saved || JSON.parse(JSON.stringify(state.cubes));
-  c.link = link ? { state: link } : undefined;
-  c.connected = !link || link === "connected";
-  c.problems = problems;
-  c.proxy_failing = failing;
-  state.found = [];
-  renderCubeSelect();
-}"""
 
-RESTORE = "() => { state.cubes = window.__saved || state.cubes; delete window.__saved; renderCubeSelect(); }"
+def told(page, link, problems, failing):
+    """The fake Cube's link, devices with a problem and proxy failures in
+    GET /api/v1/cubes, without the Cubes found, at every read of the
+    page's from now on (helpers.Reads), and the list read."""
+    reads = reads_of(page)
+    reads.change(CUBES, configured_only)
+    reads.cube("KEQ0000100", link={"state": link} if link else None, connected=not link or link == "connected",
+               problems=problems, proxy_failing=failing)
+    page.evaluate("loadCubes()")
+
+
+def restored(page):
+    """The server's own list again."""
+    reads_of(page).clear(CUBES)
+    page.evaluate("loadCubes()")
+
 
 # A radiator thermostat of the fixture's with a transmit error, as the
 # Cubes' list gives a device with a problem.
@@ -41,12 +45,12 @@ def test_header_problems(page, case):
     settings last, the cog with a triangle. The Cube choice's own list
     keeps each Cube's sign."""
     try:
-        page.evaluate(SET, [None, [], []])
+        told(page, None, [], [])
         assert summary_icons(page)[1:] == ["#icon-check"], f"nothing wrong: the green check after the sign ({summary_icons(page)})"
         page.locator("#cube-problems .problems-sum").click()
         assert page.locator("#cube-problems .problems-ok").inner_text() == page.evaluate("t('problem.none')"), "the list says so"
         page.keyboard.press("Escape")
-        page.evaluate(SET, [None, [FAULTY], []])
+        told(page, None, [FAULTY], [])
         assert summary_icons(page)[1:] == ["#icon-radio-small+#mark-corner-x"], "the radio's cross"
         page.locator("#cube-problems .problems-sum").click()
         heads = page.locator("#cube-problems .problems-list > .problem-entry")
@@ -57,7 +61,7 @@ def test_header_problems(page, case):
         assert sub.locator(".problem-name").inner_text() == "Kitchen › Radiator", "the device under it, Room › Device"
         assert sub.locator(".flag.bad").count() == 1, "with its badge"
         page.keyboard.press("Escape")
-        page.evaluate(SET, ["held", [FAULTY], [{"addr": "0.0.0.0:62910", "error": "in use"}]])
+        told(page, "held", [FAULTY], [{"addr": "0.0.0.0:62910", "error": "in use"}])
         icons = summary_icons(page)[1:]
         assert icons[0] == "#icon-net-base+#mark-net-warn" and icons[-1] == "#icon-cog-small+#mark-corner-warn", \
             f"the held link first, the settings last ({icons})"
@@ -73,4 +77,4 @@ def test_header_problems(page, case):
         assert page.locator("#cube-menu .menu-items .conn-sign").count() >= 1, "the choice's list keeps each Cube's sign"
         page.keyboard.press("Escape")
     finally:
-        page.evaluate(RESTORE)
+        restored(page)

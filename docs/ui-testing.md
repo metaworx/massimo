@@ -1,4 +1,4 @@
-# Testing the web UI (v1.1.0)
+# Testing the web UI (v1.2.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -7,7 +7,8 @@ the other runners on the same footing,
 how each would take a fixed set of screenshots,
 a recommendation with the steps to get there,
 and the questions left for the owner;
-then, apart from the evaluation, the guard of the page's parts (section 8).
+then, apart from the evaluation, the guard of the page's parts (section 8)
+and what a test does about the page's own reads and its stream (section 9).
 Nothing of sections 1 to 7 is implemented; no test code changes with them.
 The figures were measured on 2026-11-06 on the development machine (WSL 2)
 and on the CI runs of that day, unless a section says otherwise.
@@ -666,3 +667,90 @@ The block that moves a region:
 The guard bites: with the room tiles and the Cubes list taken off the list,
 it failed on the page of 2026-11-15, the tiles at every state event and
 rooms reload, the Cubes list's closed panels at every poll.
+
+## 9. The page's own reads and its stream
+
+The page takes its data anew at every read:
+its poll (every 10 s by default, `startPolling` in `app.js`)
+reads the Cubes, the server's health and the log's alerts,
+and events and actions start reads of their own
+(`loadCubes()`, `loadRooms()`, `refresh()`).
+Data a test put into the page alone is gone at the next one,
+and a line of the server's comes into the log among the test's.
+The suite's helpers for it are in `tools/ui-test/helpers.py`
+(AP TestInfrastructure, Block 7):
+
+- **The page's reads answered** (`Reads`, the fixture `reads`):
+  what a test tells it is in the server's answer from then on,
+  every GET of the path answered with the server's JSON as the test changes it,
+  until the test clears it or its page closes;
+  other methods go on to the test's other routes or the server.
+  `reads.cube(serial, **fields)` puts fields into a Cube's entry of
+  `GET /api/v1/cubes`, in place of those told before;
+  `reads.found(cube)` lists a found Cube, once per serial;
+  `reads.change(pattern, fn)` changes any read; `reads.clear(pattern)` ends it.
+  The test then shows it by a read of the page's own (`loadCubes()`),
+  and the page's poll keeps it.
+  A test does not set `state.cubes`, `state.found` or `state.version` in the page:
+  the next poll takes them back,
+  and a version other than the server's makes the page reload.
+  Two tests measure what a poll itself changes, not data a test put in,
+  and so depend on the poll's period:
+  the drawings counted in 2 s (`test_unsaved.py`)
+  and the pile's times that stand still for 1.5 s (`test_header.py`).
+- **What the reads do not keep yet:**
+  a device's state applied in the page (`updateDevice`, a dispatched `state` event)
+  lasts until the rooms are loaded again.
+  The poll does not load them while the stream is open,
+  but the events that start a load do (`connected`, `metadata`, `unconfirmed` and others),
+  among them those the server sends by itself.
+- **The stream watched** (`Stream`, the fixture `stream`):
+  every page of the page fixture has `PAGE_KIT` before its own scripts,
+  which records each event the page's listeners take,
+the server's and the test's, in order,
+  with how many times the page handed it to `appendLogEvent`.
+  `stream.mark()` says "from now on";
+  `stream.wait(what, kind, match=…, mark=…, server=…)` returns the first match from the mark
+  and skips the rest, and on a timeout says what did come since the mark.
+  A mark holds within one document.
+- **A log of the test's own lines** (`isolate_log(page, reads)`):
+  the lines of the events the server sends are kept out of the log
+  (the page's other work on them goes on),
+  and the log's reads of the Cube are answered with no line,
+  so that the log starts empty and `.first` of a kind is the test's;
+  a test that answers the log's reads itself gives no `reads`.
+- **The log live** (`wait_log_live(page)`):
+  the page leaves a stream's first 1.5 s out of the log,
+  the burst of states a connection starts with,
+  and only for `state` events.
+  A probe that the log never shows is sent until the page hands one on to the log,
+  in place of a fixed wait of 1.6 s.
+- **One safe route** (`safe_route(page, pattern, handler)`):
+  on Playwright's error in a handler the request is aborted:
+  where the page closed with it on its way or it was answered already,
+  the abort fails too and nothing more happens;
+  where the page still waited for it, as when the server did not answer `route.fetch()`,
+  the abort goes to the guard, which fails the test.
+  Anything else the handler raises goes to the guard as well, and the request is aborted.
+  The guard's problems are printed as they come,
+  and a test that fails first carries them in its report.
+- **Waits and cleanups:**
+  a wait that returns whether it was met is asserted where it is called
+  (`assert wait_until(…)`, `assert scroll_settled(…)`, `assert wait_held(…)`),
+  so that a timeout fails there and not three steps later;
+  a cleanup's step is `undo(what, call)`,
+  which takes a 404 (or the statuses given) for nothing to undo
+  and fails the test on anything else, naming what it could not undo;
+  `cleanup(*steps)` runs every step of a cleanup, one that fails among them,
+  and raises the first error once all have run.
+- **The server sets** keep the server's 10 s poll of the fake Cube,
+  which brings no line of its own (the fake Cube's states do not change).
+  They take no automatic backup during the run:
+  a Cube without a backup gets one a minute after the start,
+  whatever `backups.auto_min` and `backups.auto_max` say (`internal/server/backups.go`),
+  so `run.sh` takes one by hand as soon as each set is up.
+  With it the Cube is clean,
+  and an automatic backup waits for a change of its configuration and then `backups.auto_min`, 60 minutes;
+  a test that deletes the newest backup leaves the one taken at the start,
+  so the Cube does not count as one without a backup.
+  This is quiet, not off: no setting or flag of `serve` turns them off.

@@ -6,7 +6,6 @@ without -announce, so the choice is Automatic and the server does not
 announce itself. On is stored and waits for the next restart; where
 -announce or MASSIMO_ANNOUNCE decides, the choice is read-only and says
 so. Each case puts the setting back."""
-import json
 
 from conftest import api_call
 from helpers import named_buttons, scroll_width, show_view, wait_until
@@ -40,27 +39,20 @@ def test_announce_choice(page, case):
         show_view(page, "tiles")
 
 
-def test_announce_fixed(page, case):
+def test_announce_fixed(page, case, reads):
     """Where the variable decides, the choice is read-only and names it."""
 
-    def handle(route):
-        # a request still under way when the route is removed is the page
-        # leaving: let it go
-        try:
-            resp = route.fetch()
-            body = resp.json()
-            if route.request.method == "GET" and "announce" in body:
-                body["announce"]["fixed_by"] = "MASSIMO_ANNOUNCE"
-                body["announce"]["in_effect"] = "on"
-            route.fulfill(response=resp, body=json.dumps(body))
-        except Exception:  # Route is already handled, or the page closed
-            pass
+    def fixed(body):
+        if "announce" in body:
+            body["announce"]["fixed_by"] = "MASSIMO_ANNOUNCE"
+            body["announce"]["in_effect"] = "on"
+        return body
 
-    page.route("**/api/v1/settings", handle)
+    reads.change("**/api/v1/settings", fixed)
     try:
         show_view(page, "maint")
         assert wait_until(page, "document.querySelector('#announce-mode').disabled", 5), "read-only where the variable decides"
         assert "MASSIMO_ANNOUNCE" in page.locator("#announce-text").inner_text(), "the hint names what decides"
     finally:
         show_view(page, "tiles")
-        page.unroute("**/api/v1/settings", handle)
+        reads.clear("**/api/v1/settings")

@@ -35,7 +35,9 @@
 # started when each of its programs says it listens on its own port and
 # the server is connected to its fake Cube; every program started must
 # still run then, since a server of another run on one of the ports would
-# answer the same token.
+# answer the same token. For the suite, each set's Cube then gets a
+# backup taken by hand, so that its server takes no automatic one while
+# the tests run (backed_up); its poll of the fake Cube stays at 10 s.
 #
 # The fake Cube has a device that joins pairing mode two seconds after
 # n:, a copy of the radiator thermostat 0a010d as 0abcde (TEQ0000001),
@@ -206,6 +208,32 @@ if [ "$mode" = screenshots ]; then
 	"$py" "$here/screenshots.py" "http://127.0.0.1:$api_port/" "$token"
 	exit
 fi
+
+# backed_up n: set n's Cube has a backup taken by hand, so that its
+# server takes none by itself during the run. A Cube without a backup
+# gets one a minute after the start, which no setting turns off
+# (internal/server/backups.go); with one, the Cube is clean, and an
+# automatic backup waits for a change of its configuration and then
+# backups.auto_min, 60 minutes, longer than a run. The server answers
+# 503 until it has the Cube's greeting, so it is asked again for up to
+# 10 s.
+backed_up() {
+	api="127.0.0.1:$((api_port + 2 * $1))"
+	i=0
+	until curl -sf -X POST -H "Authorization: Bearer $token" -H "Content-Type: application/json" -d '{}' \
+		"http://$api/api/v1/cubes/KEQ0000100/backups" >/dev/null 2>&1; do
+		i=$((i + 1))
+		if [ $i -gt 50 ]; then
+			echo "ui-test: the server of set $1 took no backup of its Cube; its log:" >&2
+			cat "$work/set$1/serve.log" >&2
+			exit 1
+		fi
+		sleep 0.2
+	done
+}
+
+n=0
+while [ $n -lt "$workers" ]; do backed_up $n; n=$((n + 1)); done
 cd "$here"
 n=0
 while [ $n -lt "$workers" ]; do

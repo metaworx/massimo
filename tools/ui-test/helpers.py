@@ -8,8 +8,23 @@ The page's Content-Security-Policy rules out wait_for_function with a
 string, so waiting on the page's state polls page.evaluate from here
 (wait_until). `state` is a top-level const of app.js, in the page's
 global scope but not on window; page.evaluate reaches it there.
+
+What the page reads and what its stream brings (docs/ui-testing.md,
+section 9): Reads answers the page's own reads with the server's data
+and what a test put in; Stream watches the page's event stream from a
+mark; isolate_log keeps a log of the test's own lines; wait_log_live
+waits until the log takes the stream's state events; safe_route is the
+one route handler that lets go a request the page no longer waits for;
+undo is a cleanup that says what it could not undo.
 """
+import json
+import re
+import sys
 import time
+import urllib.error
+import weakref
+
+from playwright.sync_api import Error
 
 OPEN = {"en": "open", "de": "offen"}
 USED = "0" * 48
@@ -146,6 +161,390 @@ def wait_held(page, held, seconds=5):
     return bool(held)
 
 
+# --- what the page reads and what its stream brings -------------------
+
+# PAGE_KIT is put into every page of the page fixture before the page's
+# own scripts (conftest.py). It wraps the page's EventSource, so that
+# every event the page's listeners take is recorded in
+# window.__uiTest.events, in order, the server's and those a test
+# dispatches, each with whether it is trusted (the server's) and how many
+# times the page handed it to appendLogEvent (Stream reads them); and,
+# once the page's scripts are in,
+# its appendLogEvent, which isolate_log can have keep the server's lines
+# out and wait_log_live probes. The page itself is not changed: it calls
+# its own functions by their global names.
+PAGE_KIT = """(() => {
+  const k = window.__uiTest = { events: [], streams: 0, fromServer: false, isolated: false, probes: 0, probed: 0, appends: 0 };
+  const Real = window.EventSource;
+  if (!Real) return;
+  const add = EventTarget.prototype.addEventListener;
+  const remove = EventTarget.prototype.removeEventListener;
+  const wrapped = new WeakMap();
+  const seen = new WeakMap();
+  const record = (es, ev, logged) => {
+    let r = seen.get(ev);
+    if (!r) {
+      const data = typeof ev.data === "string" ? ev.data : null;
+      r = { n: k.events.length, kind: ev.type, id: ev.lastEventId || "", data, server: ev.isTrusted, stream: es.__uiStream || 0,
+        logged: 0, probe: !!data && data.includes('"__probe"'), t: Math.round(performance.now()) };
+      seen.set(ev, r);
+      k.events.push(r);
+    }
+    r.logged += logged;
+  };
+  class Watched extends Real {
+    constructor(url, opts) {
+      super(url, opts);
+      this.__uiStream = ++k.streams;
+      for (const kind of ["open", "error"]) add.call(this, kind, (ev) => record(this, ev, 0));
+    }
+    addEventListener(type, fn, opts) {
+      if (typeof fn !== "function") return add.call(this, type, fn, opts);
+      let w = wrapped.get(fn);
+      if (!w) {
+        w = function (ev) {
+          const was = k.fromServer;
+          const appends = k.appends;
+          k.fromServer = ev.isTrusted;
+          try {
+            return fn.call(this, ev);
+          } finally {
+            k.fromServer = was;
+            record(this, ev, k.appends - appends);
+          }
+        };
+        wrapped.set(fn, w);
+      }
+      return add.call(this, type, w, opts);
+    }
+    removeEventListener(type, fn, opts) {
+      return remove.call(this, type, wrapped.get(fn) || fn, opts);
+    }
+  }
+  window.EventSource = Watched;
+  document.addEventListener("DOMContentLoaded", () => {
+    if (typeof window.appendLogEvent !== "function") return;
+    const append = window.appendLogEvent;
+    window.appendLogEvent = function (ev) {
+      if (ev && ev.__probe) {
+        k.probed = ev.__probe;
+        return;
+      }
+      k.appends++;
+      if (k.isolated && k.fromServer) return;
+      return append.apply(this, arguments);
+    };
+  });
+})();"""
+
+# The guard's problems of each page (report_to), where safe_route says
+# what a route handler of the test's raised.
+_PROBLEMS = weakref.WeakKeyDictionary()
+
+
+def report_to(page, problems):
+    """Has safe_route add what a route handler of the test's raised on
+    page to problems, the guard's (conftest.py's page fixture)."""
+    _PROBLEMS[page] = problems
+
+
+def report(page, problem):
+    """A problem of a route handler's for the guard of page, printed at
+    once as well: the test may fail on its own before the guard looks
+    (conftest.py adds the guard's problems to such a failure)."""
+    print("ui-test: " + problem, file=sys.stderr)
+    if page in _PROBLEMS:
+        _PROBLEMS[page].append(problem)
+
+
+def safe_route(page, pattern, handler):
+    """page.route with handler, the one place that lets go a request the
+    page no longer waits for. Where the handler meets Playwright's Error,
+    the request is aborted: where the page closed with the request on
+    its way, or the request was answered already, the abort fails as
+    well and that is all, since neither is the test's; where the abort
+    goes through, the page still waited for it (the server did not
+    answer route.fetch(), say), and that goes to the guard's problems,
+    which fail the test. Anything else the handler raises (a failed
+    assertion, a typo) is the test's too: Playwright would only print it,
+    so it goes to the guard's problems and the request is aborted, so
+    that the page does not wait for it. Returns the handler as routed,
+    for page.unroute."""
+
+    def routed(route):
+        try:
+            handler(route)
+        except Error as e:
+            try:
+                route.abort()
+            except Error:
+                return  # the page closed, or the request was answered
+            first = (str(e).splitlines() or [""])[0]  # without Playwright's call log
+            report(page, f"the route of {pattern} met {first}; the request was aborted")
+        except Exception as e:  # noqa: BLE001 - reported to the guard, not swallowed
+            report(page, f"the route of {pattern} raised {type(e).__name__}: {e}")
+            try:
+                route.abort()
+            except Error:
+                pass
+
+    page.route(pattern, routed)
+    return routed
+
+
+CUBES = "**/api/v1/cubes"
+
+
+def configured_only(cubes):
+    """GET /api/v1/cubes without the Cubes found on the network."""
+    return [c for c in cubes if c.get("configured") is not False]
+
+
+def found_only(cubes):
+    """GET /api/v1/cubes with the Cubes found on the network alone: the
+    list gives no Cube the server serves."""
+    return [c for c in cubes if c.get("configured") is False]
+
+
+class Reads:
+    """The page's own reads answered with the server's data and what the
+    test put in (D13-A of AP TestInfrastructure). The page takes its data
+    anew from every read: its poll, every 10 s by default, and the reads
+    that events and actions start (loadCubes, loadRooms, refresh), so
+    data a test put into the page alone, into `state` or by an event, is
+    gone at the next one. What a test tells this is in the server's
+    answer from then on: every GET of the pattern is answered with the
+    server's answer, changed by each change told for it in turn, until
+    the test clears it or its page closes. The test then shows it by a
+    read of the page's own, such as loadCubes(); other methods than GET
+    go on to the test's other routes or the server. One per page
+    (reads_of), the fixture reads of conftest.py; it holds its page
+    weakly, so that the page's entry in reads_of goes with the page."""
+
+    def __init__(self, page):
+        self._page = weakref.ref(page)
+        self.changes = {}  # pattern: [the changes told, in turn]
+        self.routed = {}  # pattern: the handler as routed
+        self.cubes = {}  # serial: the fields told for the Cube
+        self.found_cubes = {}  # serial: a found Cube's whole entry
+
+    @property
+    def page(self):
+        """The page, None once it is gone."""
+        return self._page()
+
+    def change(self, pattern, fn):
+        """Every GET of pattern from now on answered with fn(the answer
+        so far), the server's JSON with the changes told before; fn may
+        change it in place and returns it. The same function told again
+        for the pattern is applied once (a new lambda is another)."""
+        if pattern not in self.changes:
+            self.changes[pattern] = []
+            self.routed[pattern] = safe_route(self.page, pattern, lambda route: self._answer(pattern, route))
+        if fn not in self.changes[pattern]:
+            self.changes[pattern].append(fn)
+
+    def _answer(self, pattern, route):
+        if route.request.method != "GET":
+            route.fallback()
+            return
+        answer = route.fetch()
+        if not answer.ok:
+            route.fulfill(response=answer)
+            return
+        text = answer.text()
+        body = json.loads(text) if text else None
+        for fn in list(self.changes.get(pattern, ())):
+            body = fn(body)
+        # the server's own headers, its Date among them, which the page
+        # takes the server's clock from; the length is the new body's
+        headers = {k: v for k, v in answer.headers.items() if k.lower() != "content-length"}
+        route.fulfill(status=answer.status, headers=headers, body=json.dumps(body))
+
+    def clear(self, pattern=CUBES):
+        """The reads of pattern answered by the server alone again, what
+        was told for them forgotten."""
+        if pattern == CUBES:
+            self.cubes.clear()
+            self.found_cubes.clear()
+        self.changes.pop(pattern, None)
+        routed = self.routed.pop(pattern, None)
+        page = self.page
+        if routed is not None and page is not None and not page.is_closed():
+            page.unroute(pattern, routed)
+
+    def cube(self, serial, **fields):
+        """The server's entry of the Cube serial in GET /api/v1/cubes with
+        fields in it, from now on, in place of those told for it before;
+        without fields, the server's own entry again."""
+        self._told_cubes()
+        self.cubes[serial] = fields
+
+    def found(self, cube):
+        """A Cube found on the network in GET /api/v1/cubes from now on, in
+        place of the server's entry of its serial: a server that found a
+        Cube lists it from then on, once per serial."""
+        self._told_cubes()
+        self.found_cubes[cube["serial"]] = cube
+
+    def _told_cubes(self):
+        self.change(CUBES, self._cubes_told)  # once, beside other changes of the list
+
+    def _cubes_told(self, cubes):
+        listed = [dict(c, **self.cubes.get(c.get("serial"), {})) for c in cubes if c.get("serial") not in self.found_cubes]
+        return listed + list(self.found_cubes.values())
+
+
+_READS = weakref.WeakKeyDictionary()
+
+
+def reads_of(page):
+    """The page's Reads, made at the first call: a helper that has the
+    page alone reaches the one its test holds."""
+    if page not in _READS:
+        _READS[page] = Reads(page)
+    return _READS[page]
+
+
+class Stream:
+    """The page's event stream as the page took it (PAGE_KIT): every
+    event its listeners handled, the server's and those a test
+    dispatched, in order, each recorded once the page's listener has run.
+    A mark says "from now on"; wait returns the first event from a mark
+    that matches and skips the rest, and on a timeout says what did come
+    since the mark. A mark holds within one document: a reload starts
+    the record again, and the test marks again after it. The probes of
+    wait_log_live are left out. The fixture stream of conftest.py."""
+
+    def __init__(self, page):
+        self.page = page
+
+    def mark(self):
+        """From now on: the number of events recorded so far."""
+        return self.page.evaluate("window.__uiTest.events.length")
+
+    def since(self, mark=0):
+        """The events recorded since mark, as dicts: n (its place in the
+        record), kind, id, data (the event's JSON), server (the event's
+        isTrusted: true for what the server sent and for the browser's own
+        open and error, false for what a test dispatched), stream (the
+        page's stream it came on, counted from 1), logged (how many times
+        the page handed it to appendLogEvent, those isolate_log keeps out
+        of the log among them), t (the page's milliseconds)."""
+        events = self.page.evaluate("(m) => window.__uiTest.events.slice(m)", mark)
+        for e in events:
+            try:
+                e["data"] = json.loads(e["data"]) if e.get("data") else None
+            except ValueError:
+                pass  # not JSON: the text as it came
+        return [e for e in events if not e["probe"]]
+
+    def wait(self, what, kind, match=None, mark=0, server=None, seconds=5):
+        """The first event of kind since mark for which match(data) holds
+        (any where match is None), trusted or dispatched by a test where
+        server says which (true for the server's), what naming it; on a
+        timeout an AssertionError with the events that came since the
+        mark."""
+        end = time.time() + seconds
+        cursor = mark
+        while True:
+            for e in self.since(cursor):
+                cursor = e["n"] + 1
+                if e["kind"] == kind and (server is None or e["server"] == server) and (match is None or match(e["data"])):
+                    return e
+            if time.time() >= end:
+                break
+            self.page.wait_for_timeout(100)
+        seen = self.since(mark)
+        shown = ", ".join(describe_event(e) for e in seen[-20:])
+        raise AssertionError(f"{what}: no {kind} event within {seconds} s; {len(seen)} since the mark{': ' if seen else ''}{shown}")
+
+
+def describe_event(e):
+    """An event of Stream in a few words: its kind, its device where it
+    has one, and who sent it."""
+    data = e.get("data")
+    device = data.get("device") if isinstance(data, dict) else None
+    return " ".join(x for x in (e["kind"], device, "(server)" if e["server"] else "(test)") if x)
+
+
+# The probe of wait_log_live: a state event without a state, which the
+# page's state listener hands to appendLogEvent once the stream's first
+# 1.5 s are over, and PAGE_KIT's wrapper takes out before the log.
+LOG_PROBE = """() => {
+  const k = window.__uiTest;
+  if (!k || !state.events) return false;
+  const n = ++k.probes;
+  state.events.dispatchEvent(new MessageEvent("state", { data: JSON.stringify({ kind: "state", __probe: n }) }));
+  return k.probed === n;
+}"""
+
+
+def wait_log_live(page, seconds=5):
+    """Waits until the log takes the stream's state events: the page
+    leaves a stream's first 1.5 s out of the log, the burst of states a
+    connection starts with, and again after a resync (app.js,
+    connectEvents). A probe, which the log never shows, is sent until
+    the page's state listener hands one on to the log."""
+    assert wait_until(page, LOG_PROBE, seconds), "the log takes the stream's state events (a stream's first 1.5 s are left out)"
+
+
+# The log's reads of a Cube: its pages, not its alerts (api/v1/log/alerts)
+# nor every Cube's (api/v1/log).
+CUBE_LOG = re.compile(r"/api/v1/cubes/[^/]+/log\?")
+
+
+def no_lines(lines):
+    """A page of the log without a line."""
+    return []
+
+
+def isolate_log(page, reads=None):
+    """Has the log hold the test's own lines alone: the lines of the
+    events the server sends on the stream are kept out of the log from
+    now on (the page's other work on them goes on); with reads, the log's
+    reads of the Cube are answered with no line and the log is loaded
+    anew, so that it starts empty. A test that answers the log's reads
+    itself gives no reads."""
+    page.evaluate("window.__uiTest.isolated = true")
+    if reads is not None:
+        reads.change(CUBE_LOG, no_lines)
+        page.evaluate("loadLog()")
+        assert wait_until(page, "!logState.loading && logState.lines.length === 0", 5), "the log loaded, without a line of the server's"
+
+
+def undo(what, call, absent=(404,)):
+    """A cleanup's step: call(), what naming what it undoes. An answer
+    with a status of absent means there was nothing to undo; anything
+    else that fails is said, so that a test which leaves the shared
+    server changed fails where it did, not a later one on its worker."""
+    try:
+        return call()
+    except urllib.error.HTTPError as e:
+        if e.code in absent:
+            return None
+        raise AssertionError(f"the cleanup could not undo {what}: HTTP {e.code} {e.reason}") from e
+    except Exception as e:  # noqa: BLE001 - said, with what it could not undo
+        raise AssertionError(f"the cleanup could not undo {what}: {type(e).__name__}: {e}") from e
+
+
+def cleanup(*steps):
+    """Runs every step of a cleanup in turn, each a callable without
+    arguments, one that fails among them, so that a failed step leaves no
+    later one undone; the first error is raised once all have run, the
+    later ones as its notes."""
+    errors = []
+    for step in steps:
+        try:
+            step()
+        except Exception as e:  # noqa: BLE001 - raised below, the first of them
+            errors.append(e)
+    if errors:
+        for e in errors[1:]:
+            errors[0].add_note(f"and then: {type(e).__name__}: {e}")
+        raise errors[0]
+
+
 def busy_state(page, selector):
     """A button's [disabled, turning (class busy), aria-busy]."""
     return page.evaluate("(() => { const b = document.querySelector(%r); return b && [b.disabled, b.classList.contains('busy'), "
@@ -231,7 +630,7 @@ def show_view(page, view):
             menu.locator("summary").click()
         menu.locator(f".toc-link[data-target='{view}']").click()
         page.locator(VIEW_SECTION[view]).wait_for(state="visible")
-        scroll_settled(page)  # the menu brings the card in with a smooth scroll
+        assert scroll_settled(page), f"the smooth scroll to {view} comes to rest"  # the menu brings the card in with one
     elif view in VIEW_MENU:
         open_main_menu(page)
         page.locator(VIEW_MENU[view]).click()
