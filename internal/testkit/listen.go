@@ -4,7 +4,9 @@
 package testkit
 
 import (
+	"errors"
 	"net"
+	"syscall"
 	"testing"
 )
 
@@ -38,3 +40,25 @@ func ListenPacket(t testing.TB) net.PacketConn {
 	t.Cleanup(func() { pc.Close() })
 	return pc
 }
+
+// BindOrSkip ends a test whose listen failed with err: it skips the test
+// where the platform lacks the address, as macOS has 127.0.0.1 alone of
+// the loopback's addresses, and fails it on any other error, such as a
+// port another program holds, where the platform has what the test
+// needs: a skip there would leave the run green with the test not run.
+// A nil err ends nothing.
+func BindOrSkip(t testing.TB, err error) {
+	t.Helper()
+	if err == nil {
+		return
+	}
+	var errno syscall.Errno
+	if errors.As(err, &errno) && (errno == syscall.EADDRNOTAVAIL || errno == wsaeAddrNotAvail) {
+		t.Skipf("testkit: the platform lacks the address: %v", err)
+	}
+	t.Fatalf("testkit: listen: %v", err)
+}
+
+// wsaeAddrNotAvail is Windows' WSAEADDRNOTAVAIL, which package syscall
+// does not name there.
+const wsaeAddrNotAvail = syscall.Errno(10049)

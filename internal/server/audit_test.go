@@ -233,8 +233,10 @@ func TestRefusedRequestsAuditedPerMinute(t *testing.T) {
 	if n := read.Load(); n != 0 {
 		t.Errorf("%d bytes of refused bodies read", n)
 	}
-	if rows, _ := opts.Store.AuditList(t.Context(), time.Time{}, 100, ""); len(rows) > 1 {
-		t.Errorf("%d audit rows within the minute, want at most one", len(rows))
+	// A refusal's row is written as its minute ends, by the request that
+	// comes after it or by the stop, never before: none yet.
+	if rows, _ := opts.Store.AuditList(t.Context(), time.Time{}, 100, ""); len(rows) != 0 {
+		t.Errorf("%d audit rows within the minute, want none until it ends", len(rows))
 	}
 	rg.stop()
 	rows, err := opts.Store.AuditList(t.Context(), time.Time{}, 100, "")

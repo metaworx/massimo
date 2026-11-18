@@ -33,7 +33,7 @@ func freeUDP(t *testing.T, ip string) string {
 	t.Helper()
 	pc, err := net.ListenPacket("udp4", ip+":0")
 	if err != nil {
-		t.Skipf("cannot bind %s: %v", ip, err)
+		testkit.BindOrSkip(t, err)
 	}
 	defer pc.Close()
 	return pc.LocalAddr().String()
@@ -326,7 +326,7 @@ func TestDiscoveryLeavesOutALaterProxysAnswers(t *testing.T) {
 func TestDiscoveryLeavesOutItsProxySerialFromAnywhere(t *testing.T) {
 	atProxy, err := fakecube.StartDiscovery("127.0.0.3:0", "KEQ0000999", 0x0a0b0c)
 	if err != nil {
-		t.Skip(err)
+		testkit.BindOrSkip(t, err)
 	}
 	defer atProxy.Close()
 	atProxy.SetIdentifyOnly(true)
@@ -357,7 +357,7 @@ func TestFoundEntriesNameTheirKindAndServer(t *testing.T) {
 	start := func(addr, serial string, rf cube.RFAddress, identifyOnly bool) *fakecube.DiscoveryResponder {
 		d, err := fakecube.StartDiscovery(addr, serial, rf)
 		if err != nil {
-			t.Skip(err)
+			testkit.BindOrSkip(t, err)
 		}
 		t.Cleanup(func() { d.Close() })
 		d.SetIdentifyOnly(identifyOnly)
@@ -571,24 +571,24 @@ func TestCubeConfiguredBySerialFollowsItsAddress(t *testing.T) {
 	first := &fakecube.Server{Greeting: greeting}
 	addr, err := first.Start("127.0.0.2:0")
 	if err != nil {
-		t.Skipf("cannot listen on 127.0.0.2: %v", err)
+		testkit.BindOrSkip(t, err)
 	}
 	defer first.Close()
 	_, portStr, _ := net.SplitHostPort(addr)
 	port, _ := strconv.Atoi(portStr)
 	second := &fakecube.Server{Greeting: greeting}
 	if _, err := second.Start("127.0.0.3:" + portStr); err != nil {
-		t.Skipf("cannot listen on 127.0.0.3: %v", err)
+		testkit.BindOrSkip(t, err)
 	}
 	defer second.Close()
 	at2, err := fakecube.StartDiscovery("127.0.0.2:0", "KEQ0000100", 0x0a0107)
 	if err != nil {
-		t.Skip(err)
+		testkit.BindOrSkip(t, err)
 	}
 	defer at2.Close()
 	at3, err := fakecube.StartDiscovery("127.0.0.3:0", "KEQ0000100", 0x0a0107)
 	if err != nil {
-		t.Skip(err)
+		testkit.BindOrSkip(t, err)
 	}
 	defer at3.Close()
 	at3.SetSilent(true)
@@ -676,21 +676,21 @@ func startMovingCube(t *testing.T, retry time.Duration) *movingCube {
 	m := &movingCube{t: t, first: &fakecube.Server{Greeting: greeting}, second: &fakecube.Server{Greeting: greeting}}
 	addr, err := m.first.Start("127.0.0.2:0")
 	if err != nil {
-		t.Skipf("cannot listen on 127.0.0.2: %v", err)
+		testkit.BindOrSkip(t, err)
 	}
 	t.Cleanup(func() { m.first.Close() })
 	_, m.port, _ = net.SplitHostPort(addr)
 	port, _ := strconv.Atoi(m.port)
 	if _, err := m.second.Start("127.0.0.3:" + m.port); err != nil {
-		t.Skipf("cannot listen on 127.0.0.3: %v", err)
+		testkit.BindOrSkip(t, err)
 	}
 	t.Cleanup(func() { m.second.Close() })
 	if m.at2, err = fakecube.StartDiscovery("127.0.0.2:0", "KEQ0000100", 0x0a0107); err != nil {
-		t.Skip(err)
+		testkit.BindOrSkip(t, err)
 	}
 	t.Cleanup(func() { m.at2.Close() })
 	if m.at3, err = fakecube.StartDiscovery("127.0.0.3:0", "KEQ0000100", 0x0a0107); err != nil {
-		t.Skip(err)
+		testkit.BindOrSkip(t, err)
 	}
 	t.Cleanup(func() { m.at3.Close() })
 	m.at3.SetSilent(true)
@@ -759,7 +759,7 @@ func fixedCube(t *testing.T, interval time.Duration) (s *Server, fc *fakecube.Se
 	t.Helper()
 	elsewhere, err := fakecube.StartDiscovery("127.0.0.3:0", "KEQ0000100", 0x0a0107)
 	if err != nil {
-		t.Skip(err)
+		testkit.BindOrSkip(t, err)
 	}
 	t.Cleanup(func() { elsewhere.Close() })
 	counter, requests := requestCounter(t)
@@ -814,22 +814,22 @@ func homes(t *testing.T) (port int, cubeTCP, proxyTCP *fakecube.Server, atCube, 
 	cubeTCP = &fakecube.Server{Greeting: greeting}
 	addr, err := cubeTCP.Start("127.0.0.2:0")
 	if err != nil {
-		t.Skipf("cannot listen on 127.0.0.2: %v", err)
+		testkit.BindOrSkip(t, err)
 	}
 	t.Cleanup(func() { cubeTCP.Close() })
 	_, portStr, _ := net.SplitHostPort(addr)
 	port, _ = strconv.Atoi(portStr)
 	proxyTCP = &fakecube.Server{Greeting: greeting}
 	if _, err := proxyTCP.Start("127.0.0.3:" + portStr); err != nil {
-		t.Skipf("cannot listen on 127.0.0.3: %v", err)
+		testkit.BindOrSkip(t, err)
 	}
 	t.Cleanup(func() { proxyTCP.Close() })
 	if atCube, err = fakecube.StartDiscovery("127.0.0.2:0", "KEQ0000100", 0x0a0107); err != nil {
-		t.Skip(err)
+		testkit.BindOrSkip(t, err)
 	}
 	t.Cleanup(func() { atCube.Close() })
 	if atProxy, err = fakecube.StartDiscovery("127.0.0.3:0", "KEQ0000100", 0x0a0107); err != nil {
-		t.Skip(err)
+		testkit.BindOrSkip(t, err)
 	}
 	t.Cleanup(func() { atProxy.Close() })
 	atProxy.SetIdentifyOnly(true)

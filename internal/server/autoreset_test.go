@@ -5,13 +5,11 @@ package server
 
 import (
 	"context"
-	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
-	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit"
@@ -32,33 +30,6 @@ func resetOf(rf cube.RFAddress) func(cube.Message) bool {
 	return lineIs(cube.CmdResetError(rf).String())
 }
 
-// reportAndSettle makes rf report st and waits until the server's pump
-// took the report, its state event in the log with key changed to to,
-// then until the queue sent what the report queued: a line queued at
-// low priority after the report runs after a reset the report queued.
-// (The device's view in the API comes from the snapshot, before the
-// pump.)
-func reportAndSettle(t *testing.T, fc *fakecube.Server, ts *httptest.Server, s *Server, rf cube.RFAddress, st fakecube.State, key string, to any) {
-	t.Helper()
-	if err := fc.SetState(rf, st); err != nil {
-		t.Fatal(err)
-	}
-	testkit.Eventually(t, "the report of "+rf.String(), func() bool {
-		var evs []event
-		getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log?limit=500", &evs)
-		for _, e := range evs {
-			if c, ok := e.Changes[key]; ok && e.Kind == "state" && e.Device == rf.String() && c.To == to {
-				return true
-			}
-		}
-		return false
-	})
-	rt := s.runtimes()[0]
-	if res := rt.queue.Enqueue(engine.Command{Priority: engine.PriorityLow, Lines: []cube.Message{cube.CmdGetNTP}}).Wait(context.Background()); res.Err != nil {
-		t.Fatal(res.Err)
-	}
-}
-
 // A flagged device that reports is reset once (AP RadioHealth v1.2,
 // Block 4, D102-B), with an error_reset at info; its next report the
 // same day is not, one a day later is, and a server started anew over
@@ -75,7 +46,7 @@ func TestAutoReset(t *testing.T) {
 	const rf = cube.RFAddress(0x0a010d) // room 6
 	on := true
 	valve := func(n int) *int { return &n }
-	reportAndSettle(t, fc, ts, s, rf, fakecube.State{Reported: &on, Error: &on, ValvePct: valve(10)}, "valve_pct", float64(10))
+	settleState(t, fc, ts, s, rf, fakecube.State{Reported: &on, Error: &on, ValvePct: valve(10)}, "valve_pct", float64(10))
 	if n := received.Count(0, resetOf(rf)); n != 1 {
 		t.Fatalf("the first report: %d resets, want 1", n)
 	}
@@ -96,12 +67,12 @@ func TestAutoReset(t *testing.T) {
 	}
 
 	clock.Add(23 * time.Hour)
-	reportAndSettle(t, fc, ts, s, rf, fakecube.State{ValvePct: valve(20)}, "valve_pct", float64(20))
+	settleState(t, fc, ts, s, rf, fakecube.State{ValvePct: valve(20)}, "valve_pct", float64(20))
 	if n := received.Count(0, resetOf(rf)); n != 1 {
 		t.Fatalf("a report the same day: %d resets, want 1", n)
 	}
 	clock.Add(2 * time.Hour)
-	reportAndSettle(t, fc, ts, s, rf, fakecube.State{ValvePct: valve(30)}, "valve_pct", float64(30))
+	settleState(t, fc, ts, s, rf, fakecube.State{ValvePct: valve(30)}, "valve_pct", float64(30))
 	if n := received.Count(0, resetOf(rf)); n != 2 {
 		t.Fatalf("a report a day later: %d resets, want 2", n)
 	}
@@ -123,14 +94,14 @@ func TestAutoReset(t *testing.T) {
 	clock.Add(time.Hour)
 	r = startServer(t, resetsOn(clock), again(r), noHold)
 	ts, s = r.ts, r.s
-	reportAndSettle(t, fc, ts, s, rf, fakecube.State{ValvePct: valve(40)}, "valve_pct", float64(40))
+	settleState(t, fc, ts, s, rf, fakecube.State{ValvePct: valve(40)}, "valve_pct", float64(40))
 	if n := received.Count(0, resetOf(rf)); n != 2 {
 		t.Fatalf("a report after the restart: %d resets, want 2", n)
 	}
 
 	// The link error alone: no reset.
 	const linked = cube.RFAddress(0x0a0108)
-	reportAndSettle(t, fc, ts, s, linked, fakecube.State{Reported: &on, LinkError: &on, ValvePct: valve(15)}, "link_error", true)
+	settleState(t, fc, ts, s, linked, fakecube.State{Reported: &on, LinkError: &on, ValvePct: valve(15)}, "link_error", true)
 	if n := received.Count(0, resetOf(linked)); n != 0 {
 		t.Fatalf("the link error alone: %d resets, want 0", n)
 	}
@@ -152,7 +123,7 @@ func TestAutoResetHold(t *testing.T) {
 	}))
 	fc, ts, s, received := r.fc, r.ts, r.s, r.lines
 	on := true
-	reportAndSettle(t, fc, ts, s, 0x0a010d, fakecube.State{Reported: &on, Error: &on}, "error", true)
+	settleState(t, fc, ts, s, 0x0a010d, fakecube.State{Reported: &on, Error: &on}, "error", true)
 	if n := received.Count(0, resetOf(0x0a010d)); n != 0 {
 		t.Fatalf("held: %d resets, want 0", n)
 	}
@@ -177,7 +148,7 @@ func TestAutoResetWaitsForTheStoresRow(t *testing.T) {
 	const rf = cube.RFAddress(0x0a010d)
 	on := true
 	valve := func(n int) *int { return &n }
-	reportAndSettle(t, fc, ts, s, rf, fakecube.State{Reported: &on, Error: &on, ValvePct: valve(10)}, "valve_pct", float64(10))
+	settleState(t, fc, ts, s, rf, fakecube.State{Reported: &on, Error: &on, ValvePct: valve(10)}, "valve_pct", float64(10))
 	if id := rt.storeID.Load(); id != 0 {
 		t.Fatalf("the runtime learned a store ID %d: the test needs none", id)
 	}
@@ -190,7 +161,7 @@ func TestAutoResetWaitsForTheStoresRow(t *testing.T) {
 		t.Fatal(err)
 	}
 	rt.storeID.Store(row.ID)
-	reportAndSettle(t, fc, ts, s, rf, fakecube.State{ValvePct: valve(20)}, "valve_pct", float64(20))
+	settleState(t, fc, ts, s, rf, fakecube.State{ValvePct: valve(20)}, "valve_pct", float64(20))
 	if n := received.Count(0, resetOf(rf)); n != 1 {
 		t.Fatalf("with the row known: %d resets, want 1", n)
 	}

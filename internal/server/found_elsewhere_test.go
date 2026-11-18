@@ -26,7 +26,7 @@ func storedElsewhere(t *testing.T) (*httptest.Server, string, *testkit.Watch[tes
 	t.Helper()
 	elsewhere, err := fakecube.StartDiscovery("127.0.0.3:0", "KEQ0000100", 0x0a0107)
 	if err != nil {
-		t.Skip(err)
+		testkit.BindOrSkip(t, err)
 	}
 	t.Cleanup(func() { elsewhere.Close() })
 	log, logs := testkit.LogWatch(slog.LevelDebug)

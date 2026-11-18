@@ -63,9 +63,9 @@ func TestStreamEndsWhenItsCallerIsNotLetIn(t *testing.T) {
 		t.Fatal(err)
 	}
 	testkit.Eventually(t, "the end of the stream of a revoked key", revoked.Ended)
-	for i, c := 0, testkit.Cursor(0); i < 3; i++ {
-		_, c = stays.Await(t, c, "a keep-alive for a caller still allowed", isKeepAlive)
-	}
+	// Counted from the revoked stream's end: keep-alives that came before
+	// the revocation say nothing of it.
+	stays.AwaitN(t, stays.Mark(), "three keep-alives for a caller still allowed, after the revocation", 3, isKeepAlive)
 }
 
 func mustUser(t *testing.T, st *store.Store, name string) store.User {

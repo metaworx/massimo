@@ -183,13 +183,27 @@ func TestLogSurvivesRestart(t *testing.T) {
 		return len(page) == 1
 	})
 	r.stop()
+	// The first run's rows, its stop's included, as the log shows them:
+	// the server's and the Cube's, from info up.
+	info := store.LevelInfo
+	first, err := r.st.Events(context.Background(), store.EventQuery{CubeID: rowID(t, r.st, "KEQ0000100"), Server: true, MinLevel: &info, Limit: store.MaxEventsPage})
+	if err != nil || len(first) == 0 {
+		t.Fatalf("the first run's rows: %d, %v", len(first), err)
+	}
 	ts = startServer(t, again(r), discard).ts
 	testkit.Eventually(t, "the second run's connected", func() bool {
 		_, page := logOf(t, ts, "?kind=connected")
 		return len(page) == 2 && page[0].ID < page[1].ID && !page[0].Time.After(page[1].Time)
 	})
-	if _, all := logOf(t, ts, "?limit=1000"); len(all) < 4 {
-		t.Fatalf("%d events after the restart", len(all))
+	_, all := logOf(t, ts, "?limit=1000")
+	kept := map[int64]string{}
+	for _, e := range all {
+		kept[e.ID] = e.Kind
+	}
+	for _, row := range first {
+		if kept[row.ID] != row.Kind {
+			t.Errorf("the first run's %s (id %d) is not in the log after the restart", row.Kind, row.ID)
+		}
 	}
 }
 

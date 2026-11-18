@@ -57,10 +57,15 @@ func TestFollowUpAfterAWrite(t *testing.T) {
 	if e := eco(); e != float64(15) {
 		t.Fatalf("eco right after the write %v", e)
 	}
+	lines := cubewatch.Lines(fc)
 	fc.SetConfig(withEco(t, recorded(t), 0x0a010a, 17))
 	testkit.Eventually(t, "the new eco temperature", func() bool { return eco() == float64(17) })
+	// The re-read that brought the new line has its answer: any c: for
+	// 0a010a from now on is one more.
+	changed := lines.Mark()
 	// The fake's S reply left one radiogram pending (49 of 50 slots
-	// free), so the follow-up reconnects for a fresh H line.
+	// free), so the follow-up reconnects for a fresh H line, once it
+	// follows no device any more.
 	testkit.Eventually(t, "the budget reconnect", func() bool { return fc.Connections() == 2 })
 	pumpSync(t, s) // the new configuration's line, which the API showed before
 	var evs []event
@@ -72,24 +77,33 @@ func TestFollowUpAfterAWrite(t *testing.T) {
 	if !config {
 		t.Fatal("no config event for the device")
 	}
-	// The re-reads stop once the line changed: no c: for 0a010a after it.
-	time.Sleep(200 * time.Millisecond)
-	if cs := cubewatch.Lines(fc).Count(0, lineIs("c:0a010a")); cs > 4 {
-		t.Fatalf("%d re-reads", cs)
-	}
+	// The re-reads stop once the line changed: no c: for 0a010a after it,
+	// up to the reconnect, which ends the follow-up.
+	lines.HasNot(t, changed, "a re-read of 0a010a after its new line", lineIs("c:0a010a"))
 }
 
 func TestFollowUpGivesUpAndRespectsTheRefreshSwitch(t *testing.T) {
 	// No RefreshInterval: no reconnects for the budget.
-	r := startServer(t, withOptions(Options{FollowUpDelays: []time.Duration{20 * time.Millisecond, 20 * time.Millisecond}, FollowUpReconnectGap: time.Millisecond}))
-	fc, ts := r.fc, r.ts
+	r := startServer(t, withLog(nil), withOptions(Options{FollowUpDelays: []time.Duration{20 * time.Millisecond, 20 * time.Millisecond}, FollowUpReconnectGap: time.Millisecond}))
+	fc, ts, rt, lines, logs := r.fc, r.ts, r.rt, r.lines, r.log
 	if code, _ := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/0a010a/config", `{"eco_temp":17}`); code != 200 {
 		t.Fatal(code)
 	}
-	time.Sleep(300 * time.Millisecond)
-	// One re-read right after the write, then one per follow-up delay.
-	if cs := cubewatch.Lines(fc).Count(0, lineIs("c:0a010a")); cs != 3 || fc.Connections() != 1 {
-		t.Fatalf("%d re-reads, %d connections", cs, fc.Connections())
+	// One re-read right after the write, then one per follow-up delay,
+	// the last of which gives the device up: the write is unconfirmed.
+	logs.Await(t, 0, "the follow-up given up", testkit.Msg("write not shown by its devices in time", "kind", "unconfirmed", "device", "0a010a"))
+	if cs := lines.Count(0, lineIs("c:0a010a")); cs != 3 {
+		t.Fatalf("%d re-reads, want 3", cs)
+	}
+	// No reconnect for the budget with the refresh switched off. The
+	// follow-up runs its steps one after the other, and the step that
+	// gave up would reconnect before it ends, waiting for the new
+	// greeting: the re-read of a write followed after it comes later.
+	next := lines.Mark()
+	rt.afterWrite(0x0a010a)
+	lines.Await(t, next, "the next follow-up's re-read", lineIs("c:0a010a"))
+	if n := fc.Connections(); n != 1 {
+		t.Fatalf("%d connections, want 1: a reconnect for the budget", n)
 	}
 }
 

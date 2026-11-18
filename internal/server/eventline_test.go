@@ -95,18 +95,39 @@ func TestEventLinesMatchTheRows(t *testing.T) {
 	// A line of its own for each row: the lines of the last rows may come
 	// after the rows.
 	type key struct{ kind, source, device, level string }
+	keyOf := func(l testkit.Record) (key, bool) {
+		kind, ok := l.Attrs["kind"]
+		return key{kind, l.Attrs["source"], l.Attrs["device"], strings.ToLower(l.Level.String())}, ok
+	}
 	var lines []func(testkit.Record) bool
+	want := map[key]int{}
 	for _, r := range rows {
 		if r.Level < store.LevelInfo {
 			continue
 		}
 		k := key{r.Kind, r.Source, r.Device, store.LevelName(r.Level)}
+		want[k]++
 		lines = append(lines, func(l testkit.Record) bool {
-			kind, ok := l.Attrs["kind"]
-			return ok && key{kind, l.Attrs["source"], l.Attrs["device"], strings.ToLower(l.Level.String())} == k
+			got, ok := keyOf(l)
+			return ok && got == k
 		})
 	}
 	logs.AwaitAll(t, 0, "a line for each row", lines...)
+	// Each once: once the pump has handled the connect burst, which it
+	// writes the lines of, as many lines say a row's kind, source, device
+	// and level as rows do.
+	pumpSync(t, s)
+	got := map[key]int{}
+	for _, l := range logs.Since(0, nil) {
+		if k, ok := keyOf(l); ok && want[k] > 0 {
+			got[k]++
+		}
+	}
+	for k, n := range want {
+		if got[k] != n {
+			t.Errorf("%d lines of %+v, want %d, one for each row", got[k], k, n)
+		}
+	}
 	for _, l := range logs.Since(0, nil) {
 		if _, ok := l.Attrs["kind"]; !ok && (l.Msg == "device state" || l.Msg == "cube connected") {
 			t.Errorf("a line of %v without kind: %v", l.Attrs["source"], l)

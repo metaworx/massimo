@@ -148,12 +148,12 @@ func TestVirtualWallThermostatEvents(t *testing.T) {
 		return readStreamURL(t, url)
 	}
 	all, real, virtual := stream("all"), stream("real"), stream("virtual")
-	b, atAll := all.AwaitN(t, 0, "the burst of all", 10, isEvent)
+	b, atAll := burstOf(t, all, 0, 10)
 	if !strings.Contains(b[9].Data, `"virtual":true`) {
 		t.Fatalf("the burst of all ends with %s", b[9].Data)
 	}
-	_, atReal := real.AwaitN(t, 0, "the burst of real", 7, isEvent)
-	_, atVirtual := virtual.AwaitN(t, 0, "the burst of virtual", 9, isEvent)
+	_, atReal := burstOf(t, real, 0, 7)
+	_, atVirtual := burstOf(t, virtual, 0, 9)
 
 	temp := 21.0 // 19.0, 21.0, 23.5: the median moves to 21.0
 	if err := fc.SetState(0x0a0205, fakecube.State{ActualTemp: &temp}); err != nil {
@@ -179,13 +179,14 @@ func TestVirtualWallThermostatEvents(t *testing.T) {
 	_, atReal = real.AwaitAll(t, atReal, "the real wall thermostat's state event", is("0a0201", ""))
 	// Once the pump has handled every event the client sent (pumpSync), a
 	// test event ends the checks: what the views would carry of them was
-	// published before it, a pump still behind included.
+	// published before it, a pump still behind included. The checks begin
+	// at the stream's start: the burst is the view's too.
 	rt.pumpSync(t)
 	mark(rt, 1)
-	real.Never(t, atReal, "a virtual wall thermostat's event on the real view", func(e testkit.Event) bool {
+	real.Never(t, 0, "a virtual wall thermostat's event on the real view", func(e testkit.Event) bool {
 		return strings.Contains(e.Data, `"virtual":true`)
 	}, real.Seen(atReal, testkit.Kind("test")))
-	virtual.Never(t, atVirtual, "the real wall thermostat's event on the virtual view", func(e testkit.Event) bool {
+	virtual.Never(t, 0, "the real wall thermostat's event on the virtual view", func(e testkit.Event) bool {
 		return strings.Contains(e.Data, `"device":"0a0201"`)
 	}, virtual.Seen(atVirtual, testkit.Kind("test")))
 	rt.subsMu.Lock()
@@ -208,11 +209,11 @@ func TestVirtualViewLeavesOutTheRealWallsEvents(t *testing.T) {
 	rt := s.cubes["keq0000100"]
 	stream := func(kind string, burst int) (*testkit.Watch[testkit.Event], testkit.Cursor) {
 		evs := readStreamURL(t, ts.URL+"/api/v1/cubes/KEQ0000100/events?devices="+kind)
-		_, after := evs.AwaitN(t, 0, "the burst of "+kind, burst, isEvent)
+		_, after := burstOf(t, evs, 0, burst)
 		return evs, after
 	}
 	all, atAll := stream("all", 10)
-	virtual, atVirtual := stream("virtual", 9)
+	virtual, _ := stream("virtual", 9)
 	mismatch := func(device string) event {
 		return event{Kind: "mismatch", Source: "cube", Level: "warn", Device: device, Time: time.Now(), Summary: map[string]any{"finding": "test"}}
 	}
@@ -220,7 +221,8 @@ func TestVirtualViewLeavesOutTheRealWallsEvents(t *testing.T) {
 	rt.send(mismatch("0a0204")) // a radiator thermostat, in every view
 	// upTo reads a stream up to the test's mismatch of device: the
 	// devices of the test's mismatches, and whether any event named the
-	// real wall thermostat.
+	// real wall thermostat. The virtual view is read from its start, its
+	// burst included.
 	upTo := func(evs *testkit.Watch[testkit.Event], c testkit.Cursor, device string) (got []string, wall bool) {
 		t.Helper()
 		for {
@@ -240,7 +242,7 @@ func TestVirtualViewLeavesOutTheRealWallsEvents(t *testing.T) {
 			}
 		}
 	}
-	if got, wall := upTo(virtual, atVirtual, "0a0204"); !slices.Equal(got, []string{"0a0204"}) || wall {
+	if got, wall := upTo(virtual, 0, "0a0204"); !slices.Equal(got, []string{"0a0204"}) || wall {
 		t.Fatalf("the virtual view's mismatches: %v, the real wall thermostat's event %v", got, wall)
 	}
 	if got, _ := upTo(all, atAll, "0a0204"); !slices.Equal(got, []string{"0a0201", "0a0204"}) {

@@ -25,9 +25,10 @@ func TestPolledStateChangesReachTheLog(t *testing.T) {
 	raw, _ := base64.StdEncoding.DecodeString(l.Data)
 	copy(raw, []byte{0x0b, 0x0a, 0x01, 0x0d, 0x09, 0x12, 0x01, 30, 42, 0, 0, 0})
 	fc.SetDeviceList(cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(raw)})
-	var changed event
-	testkit.Eventually(t, "a state event after connected", func() bool {
-		var evs []event
+	// stateAfter is the log's state events of 0a010d after its connected
+	// event, oldest first: the ring, which has no ids, in its order.
+	stateAfter := func() []event {
+		var evs, out []event
 		getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log", &evs)
 		connected := false
 		for _, e := range evs {
@@ -35,11 +36,18 @@ func TestPolledStateChangesReachTheLog(t *testing.T) {
 				connected = true
 			}
 			if connected && e.Kind == "state" && e.Device == "0a010d" {
-				changed = e
-				return true
+				out = append(out, e)
 			}
 		}
-		return false
+		return out
+	}
+	var changed event
+	testkit.Eventually(t, "a state event after connected", func() bool {
+		evs := stateAfter()
+		if len(evs) > 0 {
+			changed = evs[0]
+		}
+		return len(evs) > 0
 	})
 	// The device had not reported before: the event says so, and what it
 	// reports now.
@@ -61,10 +69,12 @@ func TestPolledStateChangesReachTheLog(t *testing.T) {
 	// A later change of one value is an event with that value only.
 	raw[7] = 50
 	fc.SetDeviceList(cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(raw)})
+	var next []event
 	testkit.Eventually(t, "the valve change", func() bool {
-		var evs []event
-		getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log", &evs)
-		last := evs[len(evs)-1]
-		return last.Kind == "state" && len(last.Changes) == 1 && last.Changes["valve_pct"].From == 30.0 && last.Changes["valve_pct"].To == 50.0
+		next = stateAfter()
+		return len(next) > 1
 	})
+	if c := next[1].Changes; len(c) != 1 || c["valve_pct"].From != 30.0 || c["valve_pct"].To != 50.0 {
+		t.Fatalf("the valve change's event: changes %+v, want valve_pct 30 to 50 alone", c)
+	}
 }
