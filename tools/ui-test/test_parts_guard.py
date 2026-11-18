@@ -41,14 +41,13 @@ language once, since a width changes what is shown and a language
 changes no element. In CI that is once in each UI job, on a worker of
 its own beside the other files.
 """
-import json
 import os
 from dataclasses import dataclass
 from typing import Callable
 
 import pytest
 
-from helpers import open_main_menu, show_view, wait_until
+from helpers import open_main_menu, reads_of, show_view, wait_until
 
 # The cases the guard runs in, as (width, language) (D176-D).
 GUARD_CASES = {(1100, "en"), (390, "de")}
@@ -167,19 +166,17 @@ UNLISTED_STUB = {"rf_address": "0a0f01", "type": "radiator_thermostat", "name": 
                  "unlisted": True, "reported": False}
 
 
+def with_unlisted(devices):
+    """GET …/devices as the server answers it, and UNLISTED_STUB."""
+    return (devices or []) + [UNLISTED_STUB]
+
+
 def unlisted_form(page):
     """The devices without a room with UNLISTED_STUB, GET …/devices
     answered with the server's answer and it at every load, and its form
     that puts it into a room open."""
     on_rooms(page)
-
-    def handle(route):
-        try:
-            devices = route.fetch().json() or []
-            route.fulfill(status=200, content_type="application/json", body=json.dumps(devices + [UNLISTED_STUB]))
-        except Exception:  # the route is already handled, or the page closed
-            pass
-    page.route("**/api/v1/cubes/*/devices?devices=real", handle)
+    reads_of(page).change("**/api/v1/cubes/*/devices?devices=real", with_unlisted)
     page.evaluate("loadRooms()")
     row = page.locator("#unlisted .device[data-rf='0a0f01']")
     row.wait_for(state="visible")
@@ -283,17 +280,10 @@ def stub_cubes(page):
     page, and loads the list."""
     if getattr(page, "_guard_cubes", False):
         return
-
-    def handle(route):
-        try:
-            cubes = route.fetch().json()
-            for c in cubes:
-                if c.get("serial") == "KEQ0000100":
-                    c.update(CUBES_STUB)
-            route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes + FOUND_STUB))
-        except Exception:  # the route is already handled, or the page closed
-            pass
-    page.route("**/api/v1/cubes", handle)
+    reads = reads_of(page)
+    reads.cube("KEQ0000100", **CUBES_STUB)
+    for found in FOUND_STUB:
+        reads.found(found)
     page._guard_cubes = True
     page.evaluate("loadCubes()")
     settle(page)

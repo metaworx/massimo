@@ -25,6 +25,10 @@ The script:
    and every server is connected to its fake Cube,
    and stops if one of them has stopped meanwhile:
    a server of another run on one of the ports would answer the same token;
+   for the suite, it then takes a backup of each set's Cube by hand:
+   a Cube without a backup gets one by itself a minute after the start,
+   and one with a backup gets none during the run while its configuration
+   stays as it was (an automatic backup waits 60 minutes after a change);
 4. runs the pytest suite in this directory with `pytest-playwright` (Chromium),
    in the workers, a file's tests together in one worker (`--dist loadfile`),
    handing worker `gw<n>` set n's page address in `UI_TEST_URL`,
@@ -113,7 +117,21 @@ with the page's DOM, console and network at every step.
   without the token (`new_context`), one request with the token forgets the
   failed token checks its pages counted against 127.0.0.1;
   after every test, the set's store (`massimo.db` beside `UI_TEST_SERVE_LOG`)
-  has none counted against an address, or the test errors at teardown.
+  has none counted against an address, or the test errors at teardown;
+- `reads`: the page's own reads answered with the server's data and what
+  the test put in (`helpers.Reads`), so that the page's poll and the reads
+  that events and actions start keep it:
+  `reads.cube(serial, **fields)`, `reads.found(cube)`,
+  `reads.change(pattern, fn)` and `reads.clear(pattern)`;
+- `stream`: the page's event stream as the page took it, from a mark
+  (`helpers.Stream`): `stream.mark()`, `stream.wait(what, kind, …)`,
+  which on a timeout says what came since the mark, and `stream.since(mark)`.
+
+The page fixture puts `helpers.PAGE_KIT` into the page before its own
+scripts: it records the events the page's listeners take, for `stream`,
+and lets `isolate_log` and `wait_log_live` work on the log;
+the page's code is not changed.
+`docs/ui-testing.md`, section 9, says when a test needs which.
 
 `fake_bridge.js` is the app's bridge for `test_connect.py`,
 `window.massimo` as docs/app.md describes it,
@@ -129,6 +147,14 @@ and `show_view`, which opens a page as a user does:
 Rooms, the log and System settings with their header button,
 or the log and System settings from ☰ on a narrow screen,
 My profile and My settings from the 👤 menu.
+It also holds what the fixtures `reads` and `stream` are made of,
+and `isolate_log` (the log holds the test's own lines alone),
+`wait_log_live` (the log takes the stream's state events: in place of a
+fixed wait of 1.6 s), `safe_route` (the one route handler that lets go
+a request the page no longer waits for, and reports to the guard any
+other error and a request it had to abort), `undo` (a cleanup's step
+that says what it could not undo) and `cleanup`
+(every step of a cleanup runs, the first error raised at the end).
 
 The four cases share the one server of a worker,
 so a test that changes the server's store puts it back;
@@ -530,4 +556,18 @@ Node is not needed.
   before its route is removed, or Playwright lets it through itself.
 - A test starts on a fresh page, so it opens what it needs (the settings,
   a panel) and does not rely on an earlier test;
-  what it changes on the server it puts back.
+  what it changes on the server it puts back;
+  a step of the cleanup that may find nothing to undo goes through `undo`,
+  never a `try` that swallows its error, so that a step that fails says so,
+  and a cleanup of several steps through `cleanup`, so that a failed step
+  leaves no later one undone.
+- Data a test puts into the page goes through the fixture `reads`,
+  not into `state`: the page's poll and the reads that events start
+  take `state` back.
+  A route handler of the test's is routed with `safe_route`,
+  never wrapped in `try`/`except Exception`.
+- A test of the log that sends events opens the log, calls
+  `isolate_log(page, reads)` and `wait_log_live(page)`, then sends them;
+  a test that waits for an event the server sends marks the stream before
+  its action and waits with `stream.wait`.
+- A wait that returns whether it was met is asserted where it is called.

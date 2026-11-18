@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlparse
 
 from conftest import api_call
-from helpers import CHANGES, named_buttons, scroll_width, show_view, wait_held, wait_until
+from helpers import CHANGES, isolate_log, named_buttons, scroll_width, show_view, wait_held, wait_log_live, wait_until
 
 OLDER = {"en": "Older events", "de": "Ältere Ereignisse"}
 NO_OLDER = {"en": "No older events", "de": "Keine älteren Ereignisse"}
@@ -24,14 +24,17 @@ def test_log_opens(page):
     named_buttons(page, "the log")
 
 
-def test_log_changes(page, case):
+def test_log_changes(page, case, reads):
     """A state event with changes (as the server sends after the first
     one of a device) shows what changed, not the whole state. The log is
-    opened first: opening it loads the server's log. The page leaves the
-    stream's first 1.5 s out of the log (the burst of state events a
-    connection starts with), so the event comes after that."""
+    opened first and holds the test's own lines alone (isolate_log); the
+    page leaves the stream's first 1.5 s out of the log (the burst of
+    state events a connection starts with), so the event comes once the
+    log takes them (wait_log_live). The log tests that send events do
+    the same."""
     show_view(page, "log")
-    page.wait_for_timeout(1600)
+    isolate_log(page, reads)
+    wait_log_live(page)
     page.evaluate("""() => {
       const d = JSON.parse(JSON.stringify(state.rooms[0].devices[0]));
       state.events.dispatchEvent(new MessageEvent("state", { data: JSON.stringify({
@@ -43,13 +46,14 @@ def test_log_changes(page, case):
     show_view(page, "tiles")
 
 
-def test_log_radio_faults(page, case):
+def test_log_radio_faults(page, case, reads):
     """The log names a device's flags as its badges do: a communication
     error that came with the radiogram that failed, by its technical
     name and code; another radiogram failing while the error stays; the
     error cleared; a link error."""
     show_view(page, "log")
-    page.wait_for_timeout(1600)
+    isolate_log(page, reads)
+    wait_log_live(page)
     page.evaluate("""() => {
       const d = JSON.parse(JSON.stringify(state.rooms[0].devices[0]));
       const send = (changes) => state.events.dispatchEvent(new MessageEvent("state", { data: JSON.stringify({
@@ -93,7 +97,7 @@ ROOM_CHECK_SAYS = {
 }
 
 
-def test_log_room_check_lines(page, case):
+def test_log_room_check_lines(page, case, reads):
     """The room checks' lines (AP RadioHealth v1.2, Block 9), sent on the
     stream: a room whose thermostats disagree names the room and each
     thermostat with its setting, the state sent again says from where,
@@ -102,7 +106,8 @@ def test_log_room_check_lines(page, case):
     programme says, that it shows it an hour off and the radiogram that
     failed."""
     show_view(page, "log")
-    page.wait_for_timeout(1600)
+    isolate_log(page, reads)
+    wait_log_live(page)
     names = page.evaluate("""() => {
       const r = state.rooms.find((x) => x.devices.filter((d) => !d.virtual).length >= 2);
       const ds = r.devices.filter((d) => !d.virtual);
@@ -131,12 +136,13 @@ def test_log_room_check_lines(page, case):
     show_view(page, "tiles")
 
 
-def test_log_names_devices_by_serial(page, case):
+def test_log_names_devices_by_serial(page, case, reads):
     """A line names a device without a name by its S/N, the radio address
     in expert mode only; the Cube's own configuration is the Cube's; a
     removed device is named by its type, S/N and name as it was."""
     show_view(page, "log")
-    page.wait_for_timeout(1600)
+    isolate_log(page, reads)
+    wait_log_live(page)
     d = page.evaluate("state.rooms[0].devices[0]")
     cube_sn = page.evaluate("state.serial")
     page.evaluate("""([d, cubeSN]) => {
@@ -207,13 +213,14 @@ def test_log_names_devices_once_the_rooms_come(page):
     show_view(page, "tiles")
 
 
-def test_log_names_room_and_device(page, case):
+def test_log_names_room_and_device(page, case, reads):
     """A line names its device by its room and name, "Kitchen › Window";
     one without a name by its room and type; its S/N is the tooltip and,
     beside the radio address, shows in expert mode only; the filter finds
     the line by its room and by its S/N (AP LogCubes v1.0, Block 2)."""
     show_view(page, "log")
-    page.wait_for_timeout(1600)
+    isolate_log(page, reads)
+    wait_log_live(page)
     d = page.evaluate("state.rooms[0].devices[0]")
     room = page.evaluate("state.rooms[0].name")
     page.evaluate("""(d) => state.events.dispatchEvent(new MessageEvent("config", { data: JSON.stringify({
@@ -331,12 +338,13 @@ SAYS = {
 }
 
 
-def test_log_says_what_changed(page, case):
+def test_log_says_what_changed(page, case, reads):
     """A reconnect is one line with its summary, what changed meanwhile
     follows it with a note, a configuration's line says its differences,
     and a debug line shows in expert mode only."""
     show_view(page, "log")
-    page.wait_for_timeout(1600)
+    isolate_log(page, reads)
+    wait_log_live(page)
     d = page.evaluate("state.rooms[0].devices[0]")
     page.evaluate("""(d) => {
       const now = () => new Date().toISOString();
@@ -367,10 +375,11 @@ SERVER_SAYS = {
 }
 
 
-def test_log_server_lines(page, case):
+def test_log_server_lines(page, case, reads):
     """The server's own lines say what they are, and who asked for one."""
     show_view(page, "log")
-    page.wait_for_timeout(1600)
+    isolate_log(page, reads)
+    wait_log_live(page)
     page.evaluate("""() => {
       const now = () => new Date().toISOString();
       const send = (kind, ev) => state.events.dispatchEvent(new MessageEvent(kind, { data: JSON.stringify(ev) }));
@@ -393,11 +402,12 @@ CHANGE_SAYS = {
 }
 
 
-def test_log_change_line(page, case):
+def test_log_change_line(page, case, reads):
     """A change made through the API says what was changed, from and to,
     and by whom."""
     show_view(page, "log")
-    page.wait_for_timeout(1600)
+    isolate_log(page, reads)
+    wait_log_live(page)
     page.evaluate("""() => state.events.dispatchEvent(new MessageEvent("change", { data: JSON.stringify({
       kind: "change", source: "config", level: "info", time: new Date().toISOString(),
       summary: { action: "cube.update", target: "cube:KEQ0000000", changes: { name: { from: "", to: "Upstairs" } } },
@@ -414,13 +424,14 @@ THROUGH_SAYS = {
 }
 
 
-def test_log_names_integration_users(page, case):
+def test_log_names_integration_users(page, case, reads):
     """A change made through an integration for its user linked to anna
     names the integration's user by its chain, ", as anna" after it, and
     is kept by the user filter of either user (AP StoreRaise v1.2, Block
     4)."""
     show_view(page, "log")
-    page.wait_for_timeout(1600)
+    isolate_log(page, reads)
+    wait_log_live(page)
     real = "01a1e000-0000-7000-8000-000000000001:" + "a" * 32
     page.evaluate("""(real) => state.events.dispatchEvent(new MessageEvent("change", { data: JSON.stringify({
       kind: "change", source: "config", level: "info", time: new Date().toISOString(),
@@ -448,12 +459,13 @@ SLOTS_SAYS = {
 }
 
 
-def test_log_slots_lines(page, case):
+def test_log_slots_lines(page, case, reads):
     """A Cube's memory slots that stay held, short and full, and are free
     again, say so with the free slots and since when (AP RadioHealth,
     Block 5, D192-A)."""
     show_view(page, "log")
-    page.wait_for_timeout(1600)
+    isolate_log(page, reads)
+    wait_log_live(page)
     page.evaluate("""() => {
       const since = new Date(Date.now() - 7200e3).toISOString();
       const full_since = new Date(Date.now() - 3600e3).toISOString();
@@ -478,12 +490,13 @@ MISMATCH_SAYS = {
 }
 
 
-def test_log_mismatch_lines(page, case):
+def test_log_mismatch_lines(page, case, reads):
     """A C line in a room for a device the room list does not have, and
     the same agreeing again, name the device and the room (AP
     RadioHealth, Block 7)."""
     show_view(page, "log")
-    page.wait_for_timeout(1600)
+    isolate_log(page, reads)
+    wait_log_live(page)
     page.evaluate("""() => {
       const m = { finding: "unlisted", device: "0a0a01", name: "Ghost", room: 9, room_name: "Upstairs", cube_room: 9,
         cube_room_name: "Upstairs", cube_type: "radiator_thermostat", since: new Date().toISOString() };
@@ -509,12 +522,13 @@ ERROR_RESET_SAYS = {
 }
 
 
-def test_log_error_reset_line(page, case):
+def test_log_error_reset_line(page, case, reads):
     """A device's automatic reset of its communication error, sent on the
     stream, is a line of its device with its kind and what it says (AP
     RadioHealth v1.2, Block 4)."""
     show_view(page, "log")
-    page.wait_for_timeout(1600)
+    isolate_log(page, reads)
+    wait_log_live(page)
     d = page.evaluate("state.rooms[0].devices[0]")
     page.evaluate("""(d) => state.events.dispatchEvent(new MessageEvent("error_reset", { data: JSON.stringify({
       kind: "error_reset", source: "device", level: "info", device: d.rf_address, serial: d.serial, time: new Date().toISOString(),
@@ -541,13 +555,14 @@ ERROR_WATCH_SAYS = {
 }
 
 
-def test_log_error_watch_lines(page, case):
+def test_log_error_watch_lines(page, case, reads):
     """A device's watched flags, sent on the stream, are lines of its device
     with their kind: its communication error back after the automatic reset
     with the radiogram that failed, its link error set for 24 hours, and
     the communication error clear again (AP RadioHealth v1.2, Block 6)."""
     show_view(page, "log")
-    page.wait_for_timeout(1600)
+    isolate_log(page, reads)
+    wait_log_live(page)
     d = page.evaluate("state.rooms[0].devices[0]")
     page.evaluate("""(d) => {
       const send = (level, summary) => state.events.dispatchEvent(new MessageEvent("error_watch", { data: JSON.stringify({
@@ -691,33 +706,15 @@ def test_log_answers(page, case):
     event comes past 2000 lines, and the error line shows with a kind
     chosen. The page's api() holds the log's requests, which the test
     answers in its own time; the log button's question (log/alerts) goes
-    through. Only the events the test sends (sendTestEvent) reach the
-    log: a line of the test server's own, such as an automatic backup an
-    earlier test's change brings or a device's state from the fake Cube's
-    10 s poll, would push one of the 2000 counted out."""
+    through. Only the events the test sends reach the log (isolate_log):
+    a line of the test server's own, such as a backup's or a device's
+    state from the fake Cube's 10 s poll, would push one of the 2000
+    counted out."""
     now = time.time()
     show_view(page, "log")
     all_events(page)
+    isolate_log(page)
     page.evaluate("""() => {
-      // The server's events are kept out of the log at appendLogEvent,
-      // which the stream's listeners call, not at the stream: Chromium
-      // calls an EventSource's listeners in the order they were added, a
-      // capturing one as well, so one added now would come after the
-      // page's own, and selectCube opens a new stream besides. The
-      // stream's other work (the devices, the rooms) goes on.
-      let sending = false;
-      window.sendTestEvent = (kind, data) => {
-        sending = true;
-        try {
-          state.events.dispatchEvent(new MessageEvent(kind, { data: JSON.stringify(data) }));
-        } finally {
-          sending = false;
-        }
-      };
-      const append = appendLogEvent;
-      window.appendLogEvent = (ev) => {
-        if (sending) append(ev);
-      };
       window.logAnswers = [];
       const real = api;
       window.api = (method, path, body) => path.includes("/log") && !path.includes("/log/alerts")
@@ -769,7 +766,8 @@ def test_log_answers(page, case):
     assert "before=1801" in held(), "Older from the oldest of 2000"
     answer(range(1601, 1801))
     assert wait_until(page, hellos + " === 2200", 5), "2200 lines"
-    page.evaluate("""(rf) => sendTestEvent("config", { kind: "config", device: rf, time: new Date().toISOString() })""", rf)
+    page.evaluate("""(rf) => state.events.dispatchEvent(new MessageEvent("config", { data: JSON.stringify({
+      kind: "config", device: rf, time: new Date().toISOString() }) }))""", rf)
     assert wait_until(page, "logState.lines.some((l) => l.kind === 'config')", 5), "the live event in the log"
     assert page.evaluate(hellos) == 2200 and page.evaluate("logState.lines[0].id === 1601 && logState.cursor === '1601'"), \
         "a live event keeps the page fetched"
@@ -778,7 +776,8 @@ def test_log_answers(page, case):
     held()
     answer(range(1, 2001))
     assert wait_until(page, hellos + " === 2000", 5), "a page of 2000"
-    page.evaluate("""(rf) => sendTestEvent("config", { kind: "config", device: rf, time: new Date().toISOString() })""", rf)
+    page.evaluate("""(rf) => state.events.dispatchEvent(new MessageEvent("config", { data: JSON.stringify({
+      kind: "config", device: rf, time: new Date().toISOString() }) }))""", rf)
     assert wait_until(page, "logState.lines[0].id >= 2 && logState.cursor === String(logState.lines[0].id)", 5), \
         "past 2000 lines the oldest go, and Older goes on from the oldest kept"
     assert page.evaluate("document.querySelectorAll('#log-lines .log-line').length === logState.lines.filter(logLineMatches).length"), \
@@ -795,13 +794,13 @@ def test_log_answers(page, case):
 def test_log_keeps_events_that_come_while_it_loads(page, case):
     """A live event that comes while a page of the log is on its way is
     kept after the page, and one the page holds already is not doubled.
-    The page's api() holds the log's request until the test answers it.
-    Only the kinds the test sends are counted: a real event of the server
-    may come meanwhile too, such as a backup an earlier test's change
-    made, and is kept as well."""
+    The page's api() holds the log's request until the test answers it,
+    and the server's own lines are kept out of the log (isolate_log); only
+    the kinds the test sends are counted."""
     now = time.time()
     show_view(page, "log")
     assert wait_until(page, "!logState.loading", 5), "the log loaded"
+    isolate_log(page)
     page.evaluate("""() => {
       window.logAnswers = [];
       const real = api;
@@ -874,7 +873,8 @@ def test_log_reads_newest_first(page, case):
     rf = page.evaluate("state.rooms[0].devices[0].rf_address")
     live = """(rf) => state.events.dispatchEvent(new MessageEvent("config", { data: JSON.stringify({
       kind: "config", device: rf, time: new Date().toISOString() }) }))"""
-    page.wait_for_timeout(1600)  # after the stream's first burst, which the log leaves out
+    isolate_log(page)
+    wait_log_live(page)
     page.evaluate(live, rf)
     assert wait_until(page, "document.querySelector('#log-lines .log-line').classList.contains('kind-config')", 5), "a live event on top"
     box = "document.getElementById('log-lines')"
@@ -900,8 +900,8 @@ def iso(t):
 def test_log_range_is_the_last_20_by_default(page, case):
     """The range is the last 20 events at first: the page asks for 20 and
     no time, has no Older, and keeps the newest 20 as live events come:
-    the three sent, and any the test server's own stream brings meanwhile
-    (a device's state from the fake Cube), push out the oldest."""
+    the three sent push out the oldest, the server's own lines kept out
+    of the log (isolate_log)."""
     now = time.time()
     asked = []
 
@@ -919,7 +919,8 @@ def test_log_range_is_the_last_20_by_default(page, case):
     assert page.locator("#log-range").input_value() == "20", "the last 20 events"
     assert asked[-1].get("limit") == ["20"] and "since" not in asked[-1], f"20 asked for, no time: {asked[-1]}"
     assert page.locator("#log-older").is_hidden(), "no Older"
-    page.wait_for_timeout(1600)  # after the stream's first burst, which the log leaves out
+    isolate_log(page)
+    wait_log_live(page)
     rf = page.evaluate("state.rooms[0].devices[0].rf_address")
     for _ in range(3):
         page.evaluate("""(rf) => state.events.dispatchEvent(new MessageEvent("config", { data: JSON.stringify({
@@ -928,7 +929,7 @@ def test_log_range_is_the_last_20_by_default(page, case):
     assert page.locator("#log-lines .log-line").count() == 20, "the newest 20 kept"
     assert page.evaluate("logState.lines.length") == 20, "and no more held"
     # the stubbed lines left are the newest of them, the oldest gone: three
-    # for the events sent, one more for each the stream brought itself
+    # for the events sent
     kept = sorted(int(i) for i in page.evaluate(
         "[...document.querySelectorAll('#log-lines .kind-hello')].map((l) => l.dataset.id)"))
     assert kept == list(range(21 - len(kept), 21)) and len(kept) <= 17, f"the oldest gone, the newest kept: {kept}"
@@ -1080,15 +1081,18 @@ def test_log_address_with_unknown_values(page, case):
 CMD_SAYS = {"en": {"open": "command ", "head": "setpoint"}, "de": {"open": "Befehl ", "head": "setpoint"}}
 
 
-def test_log_command_detail(page, case):
+def test_log_command_detail(page, case, stream):
     """A line of a command opens the command under it: what was asked,
     its state, its steps and, for the owner, its audit row; the button
-    says whether it is open, and closes it again."""
+    says whether it is open, and closes it again. The command's line
+    comes on the stream, watched from before the write."""
     show_view(page, "log")
-    page.wait_for_timeout(1600)
+    wait_log_live(page)
     serial = page.evaluate("state.serial")
     room = page.evaluate("state.rooms[0].id")
+    mark = stream.mark()
     api_call("PUT", f"api/v1/cubes/{serial}/rooms/{room}/setpoint", {"mode": "auto"})
+    stream.wait("the write's command", "command", mark=mark, server=True, seconds=10)
     btn = page.locator("#log-lines .log-line.kind-command .log-cmd").first
     assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-command .log-cmd').length > 0", 10), "a line of the command"
     assert btn.inner_text().startswith(CMD_SAYS[case.lang]["open"]), f"the button: {btn.inner_text()}"

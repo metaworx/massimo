@@ -20,7 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pytest
 
 from conftest import URL, api_call
-from helpers import named_buttons, show_view, wait_until
+from helpers import cleanup, named_buttons, show_view, undo, wait_until
 
 CLIENT_ID = "massimo-ui-test"
 SECRET = "ui-test-secret"
@@ -152,11 +152,8 @@ def test_sign_in_through_a_provider(page, case, new_context, provider):
         identities = api_call("GET", f"api/v1/users/{user}/identities")
         assert len(identities) == 1 and identities[0]["bound"], f"the identity is bound: {identities}"
     finally:
-        try:
-            api_call("DELETE", f"api/v1/providers/{key}")
-        except Exception:
-            pass
-        api_call("DELETE", f"api/v1/users/{user}")
+        cleanup(lambda: undo(f"the provider {key}", lambda: api_call("DELETE", f"api/v1/providers/{key}")),
+                lambda: api_call("DELETE", f"api/v1/users/{user}"))
 
 
 def sign_in_through(new_context, key, user, name):

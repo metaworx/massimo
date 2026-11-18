@@ -33,7 +33,7 @@ import time
 import pytest
 
 from conftest import URL, api_call
-from helpers import choose_cube, hold, show_view, sign_out, wait_held, wait_until
+from helpers import CUBES, choose_cube, found_only, hold, show_view, sign_out, wait_held, wait_until
 from test_login import sign_in
 
 pytestmark = pytest.mark.clock
@@ -220,7 +220,7 @@ def test_typing_kept_and_the_disk_opens_it(page, case):
     assert page.locator("#cube-problems .problems-list .problem-action").count() == 0, "Reset takes the disk away"
 
 
-def test_forgotten_when_the_cube_goes(page, case):
+def test_forgotten_when_the_cube_goes(page, case, reads):
     """A Cube the list no longer gives takes what was typed for it: back
     in the list, its form shows the stored values and no disk."""
     panel, form = open_panel(page)
@@ -228,19 +228,12 @@ def test_forgotten_when_the_cube_goes(page, case):
     leave(page)
     wait_save(page, form, [False, True, False, "warn"], "left")
 
-    def none(route):
-        try:
-            all_ = route.fetch().json()
-            route.fulfill(status=200, content_type="application/json", body=json.dumps([c for c in all_ if c.get("configured") is False]))
-        except Exception:  # the page closed
-            pass
-
-    page.route("**/api/v1/cubes", none)
+    reads.change(CUBES, found_only)
     try:
         page.evaluate("loadCubes()")
         assert wait_until(page, "!state.cubes.length", 5), "the list gives no Cube"
     finally:
-        page.unroute("**/api/v1/cubes")
+        reads.clear(CUBES)
     page.evaluate("loadCubes()")
     assert wait_until(page, "state.cubes.some((c) => c.serial === 'KEQ0000100')", 5), "the Cube back"
     panel, form = open_panel(page)
@@ -619,7 +612,7 @@ def test_vwt_disk_under_its_cube(page, case):
 
 
 @pytest.mark.parametrize("gone", ["vwt", "room", "cube", "disconnected"])
-def test_vwt_settings_forgotten(page, case, gone):
+def test_vwt_settings_forgotten(page, case, gone, reads):
     """What is typed is forgotten once a load no longer gives the virtual
     thermostat, its room or its Cube: back, its form shows the stored
     values, clean, and no disk. A load from a Cube that is not connected
@@ -629,44 +622,34 @@ def test_vwt_settings_forgotten(page, case, gone):
         form, stored = unsaved(page, room)
         rooms = re.compile(r"/api/v1/cubes/[^/]+/rooms\?devices=all$")
 
-        def without(route):
-            try:
-                all_ = route.fetch().json()
-                if gone in ("room", "disconnected"):
-                    all_ = [] if gone == "disconnected" else [r for r in all_ if r["id"] != room["id"]]
-                else:
-                    for r in all_:
-                        if r["id"] == room["id"]:
-                            r["devices"] = [d for d in r["devices"] if not d.get("virtual")]
-                route.fulfill(status=200, content_type="application/json", body=json.dumps(all_))
-            except Exception:  # the page closed
-                pass
-
-        def no_cubes(route):
-            try:
-                all_ = route.fetch().json()
-                route.fulfill(status=200, content_type="application/json", body=json.dumps([c for c in all_ if c.get("configured") is False]))
-            except Exception:  # the page closed
-                pass
+        def without(all_):
+            if gone in ("room", "disconnected"):
+                return [] if gone == "disconnected" else [r for r in all_ if r["id"] != room["id"]]
+            for r in all_:
+                if r["id"] == room["id"]:
+                    r["devices"] = [d for d in r["devices"] if not d.get("virtual")]
+            return all_
 
         if gone == "cube":
-            page.route("**/api/v1/cubes", no_cubes)
+            reads.change(CUBES, found_only)
             try:
                 page.evaluate("loadCubes()")
                 assert wait_until(page, "!state.cubes.length", 5), "the list gives no Cube"
             finally:
-                page.unroute("**/api/v1/cubes")
+                reads.clear(CUBES)
             page.evaluate("refresh()")
             assert wait_until(page, "state.roomsOf && state.rooms.some((r) => r.vwt)", 5), "the Cube and its rooms back"
         else:
             if gone == "disconnected":
-                page.evaluate("() => { state.cubes.find((c) => c.serial === state.roomsOf).connected = false; }")
-            page.route(rooms, without)
+                reads.cube(page.evaluate("state.roomsOf"), connected=False)
+                page.evaluate("loadCubes()")
+            reads.change(rooms, without)
             try:
                 page.evaluate("loadRooms()")
                 assert wait_until(page, "!state.rooms.some((r) => r.id === %d && r.vwt)" % room["id"], 5), "the load gives it no more"
             finally:
-                page.unroute(rooms)
+                reads.clear(rooms)
+                reads.clear(CUBES)
             page.evaluate("refresh()")
             assert wait_until(page, "state.rooms.some((r) => r.id === %d && r.vwt)" % room["id"], 5), "back"
         expert(page)

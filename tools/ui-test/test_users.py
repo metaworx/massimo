@@ -3,10 +3,9 @@
 """System settings → Users and Roles as the owner (the test token is the
 owner's): the operator run.sh creates is listed with the owner, the
 roles with the six default ones."""
-import json
 
 from conftest import URL, api_call
-from helpers import NAME_BAD, NAME_TAKEN, assert_busy, hold, named_buttons, scroll_width, show_view, sign_out, wait_held, wait_until
+from helpers import NAME_BAD, NAME_TAKEN, assert_busy, hold, named_buttons, scroll_width, show_view, sign_out, undo, wait_held, wait_until
 
 
 def test_users_and_roles(page, case):
@@ -72,23 +71,18 @@ INTEGRATION_USERS = [
 ]
 
 
-def test_integration_users_by_their_chain(page, case):
+def test_integration_users_by_their_chain(page, case, reads):
     """An integration's users (the list stubbed) are shown by their
     chain, "<the integration's name> › <the user's>, as <login name>",
     without their login name, the uuid and the id; the user they act as
     names them so (AP StoreRaise v1.2, Block 4)."""
-    def answer(route):
-        try:
-            resp = route.fetch()
-            body = resp.json()
-            for u in body:
-                if u["name"] == "operator":
-                    u["links"] = [{"integration": INTEGRATION, "id": "a" * 32, "name": "Anna's phone", "display": "Home › Anna's phone"}]
-            route.fulfill(response=resp, body=json.dumps(body + INTEGRATION_USERS))
-        except Exception:  # Route is already handled, or the page closed
-            pass
+    def answer(body):
+        for u in body:
+            if u["name"] == "operator":
+                u["links"] = [{"integration": INTEGRATION, "id": "a" * 32, "name": "Anna's phone", "display": "Home › Anna's phone"}]
+        return body + INTEGRATION_USERS
 
-    page.route("**/api/v1/users", answer)
+    reads.change("**/api/v1/users", answer)
     try:
         show_view(page, "system")
         phone = f".user-panel[data-name='{PHONE}']"
@@ -103,7 +97,7 @@ def test_integration_users_by_their_chain(page, case):
         named_buttons(page, "System settings → Users, an integration's users")
         assert scroll_width(page) <= case.width, "no horizontal scroll with an integration's users"
     finally:
-        page.unroute("**/api/v1/users", answer)
+        reads.clear("**/api/v1/users")
     show_view(page, "tiles")
 
 
@@ -149,11 +143,8 @@ def test_new_key_shown_once(page, case):
 
 
 def remove_user(name):
-    """A user the test made, gone again; none is fine."""
-    try:
-        api_call("DELETE", "api/v1/users/" + name)
-    except Exception:  # noqa: BLE001 - absent already
-        pass
+    """A user the test made, gone again; none is fine (a 404)."""
+    undo(f"the user {name}", lambda: api_call("DELETE", "api/v1/users/" + name))
 
 
 def test_an_unchanged_end_date_is_not_sent(page, case):

@@ -4,21 +4,18 @@
 header's problem list, long, opens inside the window at every width, as
 high as the room below it, and scrolls in itself without the page; its
 badges stay inside it. The Cube choice and ☰ open inside the window too."""
-from helpers import wait_until
+from helpers import CUBES, configured_only, reads_of, wait_until
 
-# The first Cube with many devices in trouble, as GET /api/v1/cubes
-# would give them, and the page made long enough to scroll.
-SET = """(n) => {
-  window.__saved = JSON.parse(JSON.stringify(state.cubes));
-  const c = state.cubes[0];
-  c.problems = [];
-  for (let i = 0; i < n; i++) {
-    c.problems.push({ rf_address: "0a01" + String(10 + i), type: "radiator_thermostat", name: "Radiator by the long window " + i,
-      room: "A room with a rather long name " + i, serial: "MEQ00001" + String(10 + i), reported: true,
-      state: { error: i % 2 === 0, battery_low: true, link_error: i % 3 === 0 } });
-  }
-  state.found = [];
-  renderCubeSelect();
+
+def many_problems(n):
+    """n devices in trouble, as GET /api/v1/cubes gives them."""
+    return [{"rf_address": "0a01" + str(10 + i), "type": "radiator_thermostat", "name": "Radiator by the long window %d" % i,
+             "room": "A room with a rather long name %d" % i, "serial": "MEQ00001" + str(10 + i), "reported": True,
+             "state": {"error": i % 2 == 0, "battery_low": True, "link_error": i % 3 == 0}} for i in range(n)]
+
+
+# The page made long enough to scroll, and back.
+SPACER = """() => {
   const spacer = document.createElement("div");
   spacer.id = "fit-spacer";
   spacer.style.height = "3000px";
@@ -27,9 +24,6 @@ SET = """(n) => {
 
 RESTORE = """() => {
   document.getElementById("fit-spacer")?.remove();
-  state.cubes = window.__saved || state.cubes;
-  delete window.__saved;
-  renderCubeSelect();
   window.scrollTo(0, 0);
 }"""
 
@@ -50,8 +44,14 @@ def inside(b):
 def test_problem_list_fits(page, case):
     """The header's pill opens a long list inside the window, as high as
     the room below it, its badges inside it; the wheel over it scrolls
-    the list, not the page."""
-    page.evaluate(SET, 14)
+    the list, not the page. The first Cube's devices in trouble are in
+    GET /api/v1/cubes, without the Cubes found, at every read of the
+    page's (helpers.Reads)."""
+    reads = reads_of(page)
+    reads.change(CUBES, configured_only)
+    reads.cube("KEQ0000100", problems=many_problems(14))
+    page.evaluate("loadCubes()")
+    page.evaluate(SPACER)
     try:
         page.locator("#cube-problems .problems-sum").click()
         sel = "#cube-problems .problems-list"
@@ -73,6 +73,8 @@ def test_problem_list_fits(page, case):
         page.keyboard.press("Escape")
     finally:
         page.evaluate(RESTORE)
+        reads.clear(CUBES)
+        page.evaluate("loadCubes()")
 
 
 def test_menus_fit(page, case):

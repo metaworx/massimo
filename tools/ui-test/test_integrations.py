@@ -11,7 +11,7 @@ import ssl
 import urllib.request
 
 from conftest import URL, api_call
-from helpers import named_buttons, scroll_width, show_view, wait_until
+from helpers import cleanup, named_buttons, reads_of, safe_route, scroll_width, show_view, undo, wait_until
 
 HEADER = "X-MassimoHA-On-Behalf-Of"
 
@@ -94,11 +94,10 @@ def test_register_and_link(page, case):
         _rename(page, case, uuid, subject)
         _approval_expired(page, case, uuid)
     finally:
-        try:
-            api_call("PUT", f"api/v1/integrations/{uuid}/users/{subject}", {"user": None})
-        except Exception:  # never acted, or not approved: nothing linked
-            pass
-        _end(uuid)
+        # never acted, or not approved: nothing linked (a 404)
+        cleanup(lambda: undo("the integration user's link",
+                             lambda: api_call("PUT", f"api/v1/integrations/{uuid}/users/{subject}", {"user": None})),
+                lambda: _end(uuid))
 
 
 def _rename(page, case, uuid, subject):
@@ -144,19 +143,15 @@ def _approval_expired(page, case, uuid):
     the panel's head and in it, with Register."""
     sel = f".integration-panel[data-uuid='{uuid}']"
 
-    def expired(route):
-        try:
-            resp = route.fetch()
-            body = resp.json()
-            for i in body:
-                if i.get("uuid") == uuid:
-                    i.pop("key_issued_at", None)
-                    i["request_expires"] = "2026-01-01T00:00:00Z"
-            route.fulfill(response=resp, body=json.dumps(body))
-        except Exception:  # Route is already handled, or the page closed
-            pass
+    def expired(body):
+        for i in body:
+            if i.get("uuid") == uuid:
+                i.pop("key_issued_at", None)
+                i["request_expires"] = "2026-01-01T00:00:00Z"
+        return body
 
-    page.route("**/api/v1/integrations", expired)
+    reads = reads_of(page)
+    reads.change("**/api/v1/integrations", expired)
     try:
         show_view(page, "tiles")
         show_view(page, "system")
@@ -173,7 +168,7 @@ def _approval_expired(page, case, uuid):
         named_buttons(page, "System settings → Integrations, approval expired")
         assert scroll_width(page) <= case.width, "no horizontal scroll with approval expired"
     finally:
-        page.unroute("**/api/v1/integrations", expired)
+        reads.clear("**/api/v1/integrations")
 
 
 def _end(uuid):
@@ -225,20 +220,15 @@ def test_why_the_server_does_not_look(page, case):
         show_view(page, "tiles")
 
 
-def test_why_not_where_the_variable_decides(page, case):
+def test_why_not_where_the_variable_decides(page, case, reads):
     """Where MASSIMO_ANNOUNCE decides, Seen on the LAN names it, and no
     link leads to a choice Maintenance cannot change."""
 
-    def handle(route):
-        try:
-            resp = route.fetch()
-            body = resp.json()
-            body["announce"] = {"value": "auto", "in_effect": "off", "fixed_by": "MASSIMO_ANNOUNCE", "why": "fixed"}
-            route.fulfill(response=resp, body=json.dumps(body))
-        except Exception:  # Route is already handled, or the page closed
-            pass
+    def fixed(body):
+        body["announce"] = {"value": "auto", "in_effect": "off", "fixed_by": "MASSIMO_ANNOUNCE", "why": "fixed"}
+        return body
 
-    page.route("**/api/v1/integrations/found*", handle)
+    reads.change("**/api/v1/integrations/found*", fixed)
     try:
         box = found_box(page)
         want = page.evaluate("t('integrations.foundFixed', {by: 'MASSIMO_ANNOUNCE'})")
@@ -246,23 +236,18 @@ def test_why_not_where_the_variable_decides(page, case):
         assert page.locator("#integrations-open-maint").count() == 0, "no link where Maintenance cannot change it"
     finally:
         show_view(page, "tiles")
-        page.unroute("**/api/v1/integrations/found*", handle)
+        reads.clear("**/api/v1/integrations/found*")
 
 
-def test_why_not_without_settings(page, case):
+def test_why_not_without_settings(page, case, reads):
     """A user with integrations but without settings (/me stubbed) reads
     why, without the link to a choice the user may not make."""
 
-    def handle(route):
-        try:
-            resp = route.fetch()
-            body = resp.json()
-            body["capabilities"] = [c for c in body.get("capabilities") or [] if c != "settings"]
-            route.fulfill(response=resp, body=json.dumps(body))
-        except Exception:  # Route is already handled, or the page closed
-            pass
+    def without_settings(body):
+        body["capabilities"] = [c for c in body.get("capabilities") or [] if c != "settings"]
+        return body
 
-    page.route("**/api/v1/me", handle)
+    reads.change("**/api/v1/me", without_settings)
     try:
         page.evaluate("history.replaceState(null, '', location.pathname)")
         page.reload()
@@ -272,7 +257,7 @@ def test_why_not_without_settings(page, case):
         assert box.locator("p").first.inner_text() == page.evaluate("t('integrations.foundLoopback')"), "the reason"
         assert page.locator("#integrations-open-maint").count() == 0, "no link without settings"
     finally:
-        page.unroute("**/api/v1/me", handle)
+        reads.clear("**/api/v1/me")
         page.evaluate("history.replaceState(null, '', location.pathname)")
         page.reload()
         page.wait_for_selector(".room", timeout=10000)
@@ -291,15 +276,12 @@ def test_seen_on_the_lan_register(page, case):
     and Home Assistant's port, and refuses what is not an http(s) address."""
 
     def handle(route):
-        try:
-            route.fulfill(status=200, content_type="application/json", body=json.dumps({"looks": True, "found": [
-                {"name": "ha-one", "location": "Casa Uno", "url": "http://192.0.2.21:8123", "address": "192.0.2.21"},
-                {"name": "ha-two", "location": "Casa Due", "address": "192.0.2.22"},
-            ]}))
-        except Exception:  # Route is already handled, or the page closed
-            pass
+        route.fulfill(status=200, content_type="application/json", body=json.dumps({"looks": True, "found": [
+            {"name": "ha-one", "location": "Casa Uno", "url": "http://192.0.2.21:8123", "address": "192.0.2.21"},
+            {"name": "ha-two", "location": "Casa Due", "address": "192.0.2.22"},
+        ]}))
 
-    page.route("**/api/v1/integrations/found*", handle)
+    handle = safe_route(page, "**/api/v1/integrations/found*", handle)
     try:
         show_view(page, "tiles")
         show_view(page, "system")

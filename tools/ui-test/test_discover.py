@@ -6,12 +6,10 @@ KEQ0000000; the server's own discovery socket is on a loopback port of
 its own (serve -discover-listen, run.sh), so the search needs no UDP
 23272."""
 import json
-import time
 
 import pytest
-from playwright.sync_api import Error
 
-from helpers import FOUND2, SEARCHING, choose_cube, cube_item, found_text, open_found, scroll_width, show_view, wait_until
+from helpers import FOUND2, SEARCHING, choose_cube, cube_item, found_text, open_found, scroll_width, show_view, wait_held, wait_until
 
 GATEWAY = {"en": "gateway", "de": "Gateway"}
 VIA_PROXY = {"en": "via proxy at {address}", "de": "über Proxy {address}"}
@@ -55,9 +53,7 @@ def test_search_held_then_answered(page, case):
     held = []
     page.route("**/api/v1/cubes/discover", lambda route: held.append(route))
     choose_cube(page, "__discover")
-    end = time.time() + 5
-    while not held and time.time() < end:
-        page.wait_for_timeout(100)
+    assert wait_held(page, held), "the search is asked for and held"
     assert SEARCHING[case.lang] in cube_item(page, "__discover").text_content(), "the entry says searching"
     assert page.locator("#toast").is_hidden(), "no toast yet"
     assert cube_item(page, "__discover").is_disabled(), "search entry disabled while searching"
@@ -133,34 +129,17 @@ def test_search_held_then_answered(page, case):
 
 
 @pytest.fixture
-def found_event(page):
+def found_event(page, reads):
     """found_event(cube) tells the page of a found Cube, as the server's
     cube_found does. The page takes its found Cubes anew from every read
     of the Cubes (its poll, every 10 s by default, and the reads that
     events and actions start), so a Cube that only an event brought
     would be gone at the next one. A server that found a Cube lists it
-    from then on, once per serial: the page's reads are answered here
-    with the server's Cubes and those told, a Cube in the list before
-    its event goes out."""
-    told = {}
-
-    def with_told(route):
-        if route.request.method != "GET":
-            route.fallback()
-            return
-        try:
-            answer = route.fetch()
-            if not answer.ok:
-                route.fulfill(response=answer)
-                return
-            cubes = [c for c in answer.json() if c.get("serial") not in told] + list(told.values())
-            route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes))
-        except Error:  # the page closed with a read on its way, or the server did not answer it: that read stays open
-            pass
-    page.route("**/api/v1/cubes", with_told)
+    from then on, once per serial: the page's reads list it (reads.found),
+    a Cube in the list before its event goes out."""
 
     def tell(cube):
-        told[cube["serial"]] = cube
+        reads.found(cube)
         page.evaluate("(c) => state.events.dispatchEvent(new MessageEvent('cube_found', { data: JSON.stringify("
                       "{ kind: 'cube_found', cube: c, time: c.found_at }) }))", cube)
     return tell

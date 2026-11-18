@@ -6,7 +6,7 @@ shown in the address, each page's own scroll position, and expert mode's
 line of the chosen Cube's radio budget."""
 import json
 
-from helpers import VIEWER, css_hidden, hold, open_personal_page, scroll_settled, scroll_width, show_view, wait_held, wait_until
+from helpers import CUBES, VIEWER, css_hidden, hold, open_personal_page, scroll_settled, scroll_width, show_view, wait_held, wait_until
 
 # The symbol a page button shows, drawn in an svg of its own outside the
 # header, so that its size does not depend on whether the button is shown;
@@ -220,26 +220,28 @@ VERSION_TITLE = {"en": "{v} (server version) · click to copy", "de": "{v} (Serv
 # A build's version, as long as one between releases.
 BUILD = "v0.15.0-alpha.1-293-gd36148f"
 
-def test_version_in_the_menu(page, case):
+def test_version_in_the_menu(page, case, reads):
     """The server's version is ☰'s first row, before the log, small and
     grey, whole for a build's long one; its tooltip is the whole version.
-    It is not in the header's row."""
-    page.evaluate("""(v) => { window.__version = [state.version, document.getElementById("version-short").textContent];
-      state.version = v; document.getElementById("version-short").textContent = v; renderVersionTitle(); }""", BUILD)
-    try:
-        page.locator("#nav-menu > summary").click()
-        v = page.locator("#version-short")
-        v.wait_for(state="visible")
-        first = page.locator("#nav-menu .menu-items > *").first
-        assert first.evaluate("(e) => e.contains(document.getElementById('version-short'))"), "☰'s first row"
-        assert v.bounding_box()["y"] < page.locator("#menu-log").bounding_box()["y"], "above the log"
-        assert v.evaluate("(e) => e.scrollWidth <= e.clientWidth + 1"), "whole"
-        assert v.get_attribute("title") == VERSION_TITLE[case.lang].format(v=BUILD), "the tooltip is the whole version"
-        assert page.locator("#version-out").is_hidden(), "none beside the logo while signed in"
-        page.keyboard.press("Escape")
-    finally:
-        page.evaluate("""() => { const [v, short] = window.__version; state.version = v;
-          document.getElementById("version-short").textContent = short; renderVersionTitle(); }""")
+    It is not in the header's row. The server runs the build for the page
+    from its load on: its reads of /healthz, its poll's among them, answer
+    the build's version (helpers.Reads), so that the page never takes the
+    server for one that runs another; the page closes with it."""
+    reads.change("**/healthz", lambda health: dict(health, version=BUILD))
+    page.reload()
+    page.wait_for_selector(".room", timeout=10000)
+    assert wait_until(page, "state.version === %r" % BUILD, 5), "the page loaded with the build's version"
+    page.evaluate("""(v) => { document.getElementById("version-short").textContent = v; renderVersionTitle(); }""", BUILD)
+    page.locator("#nav-menu > summary").click()
+    v = page.locator("#version-short")
+    v.wait_for(state="visible")
+    first = page.locator("#nav-menu .menu-items > *").first
+    assert first.evaluate("(e) => e.contains(document.getElementById('version-short'))"), "☰'s first row"
+    assert v.bounding_box()["y"] < page.locator("#menu-log").bounding_box()["y"], "above the log"
+    assert v.evaluate("(e) => e.scrollWidth <= e.clientWidth + 1"), "whole"
+    assert v.get_attribute("title") == VERSION_TITLE[case.lang].format(v=BUILD), "the tooltip is the whole version"
+    assert page.locator("#version-out").is_hidden(), "none beside the logo while signed in"
+    page.keyboard.press("Escape")
 
 
 def test_pile_on_a_line_of_its_own(page, case):
@@ -341,7 +343,7 @@ DUTY = {"en": "Duty cycle", "de": "Duty Cycle"}
 QUEUED = {"en": "Queued", "de": "Warteschlange"}
 
 
-def test_expert_line_of_the_cube(page, case):
+def test_expert_line_of_the_cube(page, case, reads):
     """In expert mode a line under the header's first: the chosen Cube's
     name, duty cycle, free slots and pending, queued only while commands
     wait; it stays when the header compacts, on every page, and is gone
@@ -355,10 +357,8 @@ def test_expert_line_of_the_cube(page, case):
     text = line.inner_text()
     assert DUTY[case.lang] in text and "%" in text, f"the duty cycle ({text!r})"
     assert page.locator("#stat-queued").is_hidden(), "queued only while commands wait"
-    page.evaluate("""() => {
-      const c = Object.assign({}, state.cubes.find((x) => x.serial === state.serial), { queued: 2 });
-      renderHeader(c);
-    }""")
+    reads.cube(page.evaluate("state.serial"), queued=2)
+    page.evaluate("loadCubes()")
     assert page.locator("#stat-queued").is_visible() and QUEUED[case.lang] + " 2" in line.inner_text(), "queued while commands wait"
     page.evaluate("document.body.classList.add('scrolled')")
     assert line.is_visible(), "the line stays when the header compacts"
@@ -367,6 +367,7 @@ def test_expert_line_of_the_cube(page, case):
     assert line.is_visible(), "on every page"
     assert scroll_width(page) <= case.width, "no horizontal scroll with the line"
     show_view(page, "tiles")
+    reads.clear(CUBES)
     page.evaluate("() => { state.settings.expert = false; applySettings(); }")
     assert line.is_hidden(), "gone outside expert mode"
 
@@ -410,7 +411,7 @@ SPACERS = """() => { for (const id of ['rooms', 'system']) {
 def scrolled_to(page, y):
     """Scrolls the window to y at once and waits until it rests there."""
     page.evaluate("(y) => window.scrollTo({top: y, behavior: 'instant'})", y)
-    scroll_settled(page)
+    assert scroll_settled(page), f"the page rests at {y}"
     return page.evaluate("window.scrollY")
 
 
@@ -425,18 +426,18 @@ def test_each_page_keeps_its_scroll(page, case):
         house = scrolled_to(page, 400)
         assert house == 400, "Rooms scrolled"
         show_view(page, "system")
-        scroll_settled(page)
+        assert scroll_settled(page), "System settings comes to rest"
         assert page.evaluate("window.scrollY") == 0, "System settings at its top the first time"
         system = scrolled_to(page, 250)
         show_view(page, "tiles")
-        scroll_settled(page)
+        assert scroll_settled(page), "Rooms comes to rest"
         assert page.evaluate("window.scrollY") == house, "Rooms back where it was left"
         show_view(page, "system")
-        scroll_settled(page)
+        assert scroll_settled(page), "System settings again comes to rest"
         assert page.evaluate("window.scrollY") == system, "System settings back at its own place"
         page.go_back()
         page.locator("#rooms").wait_for(state="visible")
-        scroll_settled(page)
+        assert scroll_settled(page), "Rooms after back comes to rest"
         assert page.evaluate("window.scrollY") == house, "the back button too"
     finally:
         page.evaluate("document.querySelectorAll('.test-spacer').forEach((e) => e.remove()); window.scrollTo({top: 0, behavior: 'instant'})")
@@ -535,22 +536,15 @@ def test_refresh_now_keeps_the_list_open(page, case):
     assert times.evaluate("(e) => e.textContent") == still, "closed, the times stand still"
 
 
-SET_PROBLEMS = """() => {
-  const c = state.cubes.find((x) => x.serial === 'KEQ0000100');
-  c.file_differs = ['MASSIMO_CUBE_KEQ0000100_NAME'];
-  c.connected = false;
-  renderCubeSelect();
-}"""
-
-
-def test_cube_choice_list_shows_problems(page, case):
+def test_cube_choice_list_shows_problems(page, case, reads):
     """Open, the Cube choice's list shows each Cube's problems as icons
     after its name, its worst tone each, its link left out (the Cube's own
     sign shows it): here its settings file differing, the cog, for the
-    owner. The poll is held meanwhile."""
-    page.evaluate("clearInterval(state.pollTimer)")
+    owner. The problems are in the page's reads of the Cubes
+    (helpers.Reads)."""
+    reads.cube("KEQ0000100", file_differs=["MASSIMO_CUBE_KEQ0000100_NAME"], connected=False)
     try:
-        page.evaluate(SET_PROBLEMS)
+        page.evaluate("loadCubes()")
         page.locator("#cube-choice").click()
         item = page.locator("#cube-menu .menu-items button[data-value='KEQ0000100']")
         item.wait_for(state="visible")
@@ -563,5 +557,6 @@ def test_cube_choice_list_shows_problems(page, case):
             f"after the name, on its line: {name} {line}"
         page.keyboard.press("Escape")
     finally:
-        page.evaluate("startPolling(); poll(true)")
+        reads.clear(CUBES)
+        page.evaluate("loadCubes()")
 

@@ -18,6 +18,12 @@ its room tiles and its event stream open. The four cases share the one server of
 so a test that changes the server's store puts it back; the settings the page
 keeps on the server for the token's user are removed before every page.
 
+The page has helpers.PAGE_KIT before its own scripts, which records
+what its event stream brings. The fixture reads answers the page's own
+reads with the server's data and what the test put in (helpers.Reads),
+and stream watches the page's event stream from a mark (helpers.Stream);
+docs/ui-testing.md, section 9, says when a test needs them.
+
 A test marked used_ticket gets a used ticket for its first stream
 (`watch.refused`), which the server refuses with a 401; its page is
 handed over before the stream opens again.
@@ -65,7 +71,7 @@ if _WORKER.startswith("gw"):
 
 pytest.register_assert_rewrite("helpers")
 
-from helpers import USED, scroll_width, used_ticket_first, wait_until  # noqa: E402
+from helpers import PAGE_KIT, USED, Stream, reads_of, report_to, scroll_width, used_ticket_first, wait_until  # noqa: E402
 
 URL = os.environ.get("UI_TEST_URL", "http://127.0.0.1:8119/")
 TOKEN = os.environ.get("UI_TEST_TOKEN", "")
@@ -186,13 +192,18 @@ def page(context, case, watch, request):
     """The page loaded, with the token, the room tiles shown and, unless
     the test is marked used_ticket, the event stream open; the token's
     user without preferences on the server (clear_preferences); marked
-    clock, under Playwright's clock."""
+    clock, under Playwright's clock. helpers.PAGE_KIT is in it before
+    its own scripts, for the fixture stream, isolate_log and
+    wait_log_live; what a route of safe_route's raises goes to the
+    guard."""
     clear_preferences()
     if TOKEN:
         context.add_init_script(f"localStorage.setItem('massimo.token', {TOKEN!r})")
+    context.add_init_script(PAGE_KIT)
     if request.node.get_closest_marker("clock") is not None:
         context.clock.install()
     page = context.new_page()
+    report_to(page, watch.problems)
     page.set_default_timeout(5000)
     used = request.node.get_closest_marker("used_ticket") is not None
     if used:
@@ -215,6 +226,22 @@ def page(context, case, watch, request):
     if not used and not wait_until(page, "state.eventsOpen", 10):
         raise RuntimeError("the event stream did not open")
     return page
+
+
+@pytest.fixture
+def reads(page):
+    """The page's own reads answered with the server's data and what the
+    test put in (helpers.Reads): the page takes its data anew from its
+    poll and from the reads that events and actions start, so a test
+    that puts data into the page tells it here, and the page keeps it."""
+    return reads_of(page)
+
+
+@pytest.fixture
+def stream(page):
+    """The page's event stream as the page took it, from a mark
+    (helpers.Stream)."""
+    return Stream(page)
 
 
 class Guard:
@@ -244,9 +271,16 @@ def guard(request, case, watch):
 def pytest_runtest_call(item):
     """The guard's checks run as part of the test, so that a console
     error fails the test itself, and pytest-playwright keeps its
-    screenshot, its video and, on run.sh's retry, its trace."""
-    result = yield
+    screenshot, its video and, on run.sh's retry, its trace. A test that
+    fails on its own first carries the guard's problems in its report,
+    often the cause (a route handler's error, a request that failed)."""
     guard = item.funcargs.get("guard")
+    try:
+        result = yield
+    except BaseException as e:
+        if guard is not None and guard.watch.problems:
+            e.add_note("the guard's problems meanwhile: " + "; ".join(guard.watch.problems))
+        raise
     if guard is not None:
         guard.verify()
     return result

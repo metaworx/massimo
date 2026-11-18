@@ -19,7 +19,7 @@ def long_page(page, section):
 
 def scrolled_to(page, y):
     page.evaluate("(y) => window.scrollTo({top: y, behavior: 'instant'})", y)
-    scroll_settled(page)
+    assert scroll_settled(page), f"the page rests at {y}"
 
 
 def test_to_top_on_every_page(page, case):

@@ -8,7 +8,8 @@ as found, with its removed row to restore. Each test puts the server's store bac
 case uses the same server; nothing is sent to the fake Cube."""
 import json
 
-from helpers import assert_busy, busy_state, choose_cube, cube_item, hold, named_buttons, open_found, scroll_width, show_view, wait_held, wait_until
+from helpers import (CUBES, assert_busy, busy_state, choose_cube, cube_item, hold, named_buttons, open_found, safe_route, scroll_width, show_view,
+                     wait_held, wait_until)
 
 PANEL = ".cube-panel[data-serial='KEQ0000100']"
 
@@ -79,7 +80,7 @@ def test_found_cube_added_and_removed(page):
     this test searches."""
     if not page.evaluate("state.found.some((c) => c.serial === 'KEQ0000000')"):
         choose_cube(page, "__discover")
-        wait_until(page, "!document.querySelector(\"#cube-menu button[data-value='__discover']\").disabled", 10)
+        assert wait_until(page, "!document.querySelector(\"#cube-menu button[data-value='__discover']\").disabled", 10), "the search done"
     show_view(page, "system")
     open_found(page)
     found = page.locator(".cube-found-row[data-serial='KEQ0000000']")
@@ -222,7 +223,7 @@ def test_cube_choice_menu(page, case):
 DUTY = {"en": "Duty cycle", "de": "Duty Cycle"}
 
 
-def test_cube_facts(page, case):
+def test_cube_facts(page, case, reads):
     """A Cube's panel: its head names the host without the port and shows
     duty cycle, free slots and pending; open, a table of its facts, which a
     load of the list refreshes in place, what is typed in the form staying."""
@@ -247,12 +248,8 @@ def test_cube_facts(page, case):
     assert fact("duty").endswith(" %") and fact("slots") != "–" and fact("pending") != "–" and fact("queued") != "–", "the radio budget"
     form = panel.locator("form.cube-form")
     form.locator("input[name=name]").fill("Typing")
-    page.evaluate("""() => {
-      const c = state.cubes.find((x) => x.serial === 'KEQ0000100');
-      c.budget = Object.assign({}, c.budget, { duty_cycle_pct: 42 });
-      c.pending_radiograms = 3;
-      cubesPolled();
-    }""")
+    reads.cube("KEQ0000100", budget=dict(cube.get("budget") or {}, duty_cycle_pct=42), pending_radiograms=3)
+    page.evaluate("loadCubes()")
     assert fact("duty") == "42 %" and fact("pending") == "3", "a load of the list refreshes the open panel's facts"
     assert "42 %" in head.locator(".cube-head-stats").inner_text(), "and its head"
     assert form.locator("input[name=name]").input_value() == "Typing", "what is typed stays"
@@ -267,22 +264,13 @@ FAILING = {"addr": "192.0.2.10:62910", "error": "listen tcp 192.0.2.10:62910: bi
 PROXY_BADGE = {"en": "1 proxy not listening", "de": "1 Proxy horcht nicht"}
 
 
-def test_proxy_not_listening(page, case):
+def test_proxy_not_listening(page, case, reads):
     """A proxy listener that does not listen (proxy_failing, stubbed):
     the Cubes card and the Cube's panel say so in a badge (the panel's
     top line), the panel
     under the proxy address with the error and since when; an open
     panel drops the notice once the listener listens."""
-    def failing(route):
-        try:
-            cubes = route.fetch().json()
-            for c in cubes:
-                if c.get("serial") == "KEQ0000100":
-                    c["proxy_failing"] = [FAILING]
-            route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes))
-        except Exception:  # Route is already handled, or the page closed
-            pass
-    page.route("**/api/v1/cubes", failing)
+    reads.cube("KEQ0000100", proxy_failing=[FAILING])
     try:
         show_view(page, "system")
         page.evaluate("loadCubes()")
@@ -298,7 +286,7 @@ def test_proxy_not_listening(page, case):
         assert notice.locator(".notice-since").count() == 1 and notice.get_attribute("title"), "since when, the next try"
         assert scroll_width(page) <= case.width, "no horizontal scroll with a long error"
     finally:
-        page.unroute("**/api/v1/cubes")
+        reads.clear(CUBES)
     page.evaluate("loadCubes()")
     assert wait_until(page, "!document.querySelector(\"%s .cube-proxy-state .notice\")" % PANEL, 5), \
         "the notice gone once the listener listens, the panel open"
@@ -310,36 +298,23 @@ ELSEWHERE_COUNT = {"en": "1 found elsewhere", "de": "1 anderswo gefunden"}
 ELSEWHERE_ITEM = {"en": "found at 192.0.2.24:62910", "de": "gefunden auf 192.0.2.24:62910"}
 
 
-def test_cube_found_elsewhere(page, case):
+def test_cube_found_elsewhere(page, case, reads):
     """A Cube with a fixed address that discovery finds at another one
     (found_elsewhere, stubbed): a badge on the panel's top line and in
     the Cubes card, an item in the Cube's pill, a notice above its facts
     with since when, and two buttons that PUT the found address and
     follow_discovery (the PUT stubbed, nothing changes); the notice goes
     once the Cube answers at its address, the panel open."""
-    # a request still under way when its route is removed (the PUTs'
-    # reload of the Cubes) is let go, as in test_announce_setting.py
-    def elsewhere(route):
-        try:
-            cubes = route.fetch().json()
-            for c in cubes:
-                if c.get("serial") == "KEQ0000100":
-                    c["found_elsewhere"] = ELSEWHERE
-            route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes))
-        except Exception:  # Route is already handled, or the page closed
-            pass
     puts = []
+
     def put(route):
         if route.request.method != "PUT":
             route.fallback()
             return
         puts.append(route.request.post_data_json)
-        try:
-            route.fulfill(status=200, content_type="application/json", body=json.dumps(route.fetch(method="GET").json()))
-        except Exception:  # as above
-            pass
-    page.route("**/api/v1/cubes", elsewhere)
-    page.route("**/api/v1/cubes/KEQ0000100", put)
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(route.fetch(method="GET").json()))
+    reads.cube("KEQ0000100", found_elsewhere=ELSEWHERE)
+    safe_route(page, "**/api/v1/cubes/KEQ0000100", put)
     try:
         show_view(page, "system")
         page.evaluate("loadCubes()")
@@ -366,7 +341,7 @@ def test_cube_found_elsewhere(page, case):
         assert scroll_width(page) <= case.width, "no horizontal scroll with the notice"
     finally:
         page.unroute("**/api/v1/cubes/KEQ0000100")
-        page.unroute("**/api/v1/cubes")
+        reads.clear(CUBES)
     page.evaluate("loadCubes()")
     assert wait_until(page, "!document.querySelector(\"%s .cube-address-state .notice\")" % PANEL, 5), \
         "the notice gone once the Cube answers at its address, the panel open"
@@ -385,28 +360,16 @@ SLOTS_TONE = {"warn": "warn", "error": "bad"}
 SLOTS_REBOOT = {"en": "Reboot the Cube, below", "de": "Ein Neustart des Cubes, unten"}
 
 
-def test_cube_slots_low(page, case):
+def test_cube_slots_low(page, case, reads):
     """A Cube whose memory slots stayed held (slots_low, stubbed), with
     fewer than 5 free a warning, with fewer than 2 an error (D192-A): a
     badge on the panel's top line, amber and red, and a notice above its
     facts with the free slots and since when that points to the Reboot
     below; both go once the slots are free, the panel open."""
-    level = {"now": "warn"}
-
-    def held(route):
-        try:
-            cubes = route.fetch().json()
-            for c in cubes:
-                if c.get("serial") == "KEQ0000100":
-                    c["slots_low"] = SLOTS_LOW[level["now"]]
-            route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes))
-        except Exception:  # Route is already handled, or the page closed
-            pass
-    page.route("**/api/v1/cubes", held)
     try:
         show_view(page, "system")
         for lv in ("warn", "error"):
-            level["now"] = lv
+            reads.cube("KEQ0000100", slots_low=SLOTS_LOW[lv])
             page.evaluate("loadCubes()")
             badge = SLOTS_BADGE[lv][case.lang]
             assert wait_until(page, "!!document.querySelector(\"%s .cube-top-line\") && "
@@ -425,7 +388,7 @@ def test_cube_slots_low(page, case):
             assert panel.locator(".cube-reboot-btn").count() == 1, "the Reboot it points to"
             assert scroll_width(page) <= case.width, "no horizontal scroll with the notice"
     finally:
-        page.unroute("**/api/v1/cubes")
+        reads.clear(CUBES)
     page.evaluate("loadCubes()")
     assert wait_until(page, "!document.querySelector(\"%s .cube-slots-state .notice\")" % PANEL, 5), \
         "the notice gone once the slots are free, the panel open"
@@ -436,19 +399,12 @@ STALE = {"en": "it still holds the server's old connection", "de": "Er hält noc
 STALE_BADGE = {"en": "old connection", "de": "alte Verbindung"}
 
 
-def test_cube_link_stale(page, case):
+def test_cube_link_stale(page, case, reads):
     """A Cube that refuses the server while it holds the server's old
     connection (link stale, stubbed): the panel's badge says so, the open
     panel a notice above its facts with since when, and Rooms' notice
     the same first; the notice goes once the Cube is connected again."""
-    def stale(route):
-        cubes = route.fetch().json()
-        for c in cubes:
-            if c.get("serial") == "KEQ0000100":
-                c["connected"] = False
-                c["link"] = {"state": "stale", "since": "2026-11-13T21:41:24+01:00"}
-        route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes))
-    page.route("**/api/v1/cubes", stale)
+    reads.cube("KEQ0000100", connected=False, link={"state": "stale", "since": "2026-11-13T21:41:24+01:00"})
     try:
         show_view(page, "system")
         page.evaluate("loadCubes()")
@@ -465,7 +421,7 @@ def test_cube_link_stale(page, case):
         assert wait_until(page, "document.querySelector('#home-notice .home-notice-detail').textContent.includes(%s)"
                           % json.dumps(STALE[case.lang]), 5), "Rooms' notice says it"
     finally:
-        page.unroute("**/api/v1/cubes")
+        reads.clear(CUBES)
     page.evaluate("loadCubes()")
     show_view(page, "system")
     assert wait_until(page, "!document.querySelector(\"%s .cube-link-state .notice\")" % PANEL, 5), \
@@ -476,18 +432,12 @@ def test_cube_link_stale(page, case):
 OTHER_NETWORK = {"en": "lies outside the networks of this machine", "de": "liegt außerhalb der Netze dieses Rechners"}
 
 
-def test_cube_in_another_network(page, case):
+def test_cube_in_another_network(page, case, reads):
     """A served Cube not connected whose address lies outside this
     machine's networks (other_network, stubbed): its open panel says so
     above its facts, with the netconfig line of its serial, which copies;
     the notice goes once the Cube is connected."""
-    def away(route):
-        cubes = route.fetch().json()
-        for c in cubes:
-            if c.get("serial") == "KEQ0000100":
-                c["connected"], c["other_network"] = False, True
-        route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes))
-    page.route("**/api/v1/cubes", away)
+    reads.cube("KEQ0000100", connected=False, other_network=True)
     try:
         show_view(page, "system")
         page.evaluate("loadCubes()")
@@ -500,7 +450,7 @@ def test_cube_in_another_network(page, case):
         assert scroll_width(page) <= case.width, "no horizontal scroll with the line"
         panel.locator(":scope > summary").click()
     finally:
-        page.unroute("**/api/v1/cubes")
+        reads.clear(CUBES)
     page.evaluate("loadCubes()")
     assert wait_until(page, "!document.querySelector(\"%s .cube-link-state .other-network\")" % PANEL, 5), \
         "the notice gone once the Cube is connected"
@@ -511,24 +461,23 @@ REBOOT_PENDING = {"en": "that 2 radiograms are not delivered yet", "de": "dass 2
 REBOOTED = {"en": "Cube KEQ0000100 is rebooting", "de": "Cube KEQ0000100 startet neu"}
 
 
-def test_cube_reboot(page, case):
+def test_cube_reboot(page, case, reads):
     """Reboot the Cube (the request stubbed, so that the fake Cube is left
     alone): it asks in place of the button, naming the serial and the
     radiograms pending as the Cube last said; No puts the button back and
     sends nothing, Yes sends the reboot with the count it showed."""
-    def pending(route):
-        cubes = route.fetch().json()
+    def pending(cubes):
         for c in cubes:
             if c.get("serial") == "KEQ0000100":
                 c["pending_radiograms"] = 2
                 c["budget"] = dict(c.get("budget") or {}, updated_at="2026-11-13T21:40:00+01:00")
-        route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes))
+        return cubes
     sent = []
 
     def reboot(route):
         sent.append(route.request.post_data_json)
         route.fulfill(status=202, content_type="application/json", body='{"sent": true, "answered": true, "status": 2}')
-    page.route("**/api/v1/cubes", pending)
+    reads.change(CUBES, pending)
     page.route("**/api/v1/cubes/KEQ0000100/reboot", reboot)
     try:
         show_view(page, "system")
@@ -549,25 +498,18 @@ def test_cube_reboot(page, case):
             "the message says it reboots"
         assert sent == [{"pending": 2}], f"the reboot with the count shown ({sent!r})"
     finally:
-        page.unroute("**/api/v1/cubes")
+        reads.clear(CUBES)
         page.unroute("**/api/v1/cubes/KEQ0000100/reboot")
     page.evaluate("loadCubes()")
     show_view(page, "tiles")
 
 
-def test_cube_head_pill_top_right(page, case):
+def test_cube_head_pill_top_right(page, case, reads):
     """A Cube's head with a long name: its sign, name, serial and radio
     budget wrap at the left, its pill stays top-right on the first line,
     the green check where nothing is wrong, and the source badge takes a
     line of its own under them."""
-    def long(route):
-        cubes = route.fetch().json()
-        for c in cubes:
-            if c.get("serial") == "KEQ0000100":
-                c["name"] = "A Cube with a name long enough to wrap its head on a phone"
-                c["problems"] = []
-        route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes))
-    page.route("**/api/v1/cubes", long)
+    reads.cube("KEQ0000100", name="A Cube with a name long enough to wrap its head on a phone", problems=[])
     try:
         show_view(page, "system")
         page.evaluate("loadCubes()")
@@ -582,41 +524,33 @@ def test_cube_head_pill_top_right(page, case):
         assert b["badges"]["top"] >= b["who"]["bottom"] - 1, f"the source badge a line of its own under them: {b}"
         assert scroll_width(page) <= case.width, "no horizontal scroll"
     finally:
-        page.unroute("**/api/v1/cubes")
+        reads.clear(CUBES)
         page.evaluate("loadCubes()")
         show_view(page, "tiles")
 
 
-def test_cube_panel_pill(page, case):
+def test_cube_panel_pill(page, case, reads):
     """A closed Cube's head: its network sign before the name, one pill
     with every problem, the neutral source badge, no "connected" badge; a
     click on the pill opens its list and leaves the panel closed; the open
     panel shows the Cube's own badges as its top line."""
-    def stale(route):
-        cubes = route.fetch().json()
-        for c in cubes:
-            if c.get("serial") == "KEQ0000100":
-                c["connected"] = False
-                c["link"] = {"state": "stale", "since": "2026-11-13T21:41:24+01:00"}
-                c["problems"] = [{"rf_address": "0a0101", "type": "radiator_thermostat", "name": "Radiator", "room": "Kitchen",
-                                  "serial": "MEQ0000101", "reported": True, "state": {"error": False, "battery_low": True, "link_error": False}}]
-        route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes))
-    def clean(route):
+    def clean(cubes):
         # nothing wrong: the fake's window, open since the server started,
         # counts as a problem once it has been open five minutes
-        cubes = route.fetch().json()
         for c in cubes:
             c["problems"] = []
-        route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes))
+        return cubes
     show_view(page, "system")
     head = page.locator(PANEL).locator(":scope > summary")
-    page.route("**/api/v1/cubes", clean)
+    reads.change(CUBES, clean)
     page.evaluate("loadCubes()")
     assert wait_until(page, "!document.querySelector(\"%s > summary .cube-pill .problems\")" % PANEL, 5), "nothing wrong: no problem pill"
     assert head.locator(".cube-pill .ok-pill").count() == 1, "the green check in its place"
     assert head.locator(".panel-badges .flag").count() == 1, "connected: the source badge alone, no connected badge"
-    page.unroute("**/api/v1/cubes")
-    page.route("**/api/v1/cubes", stale)
+    reads.clear(CUBES)
+    reads.cube("KEQ0000100", connected=False, link={"state": "stale", "since": "2026-11-13T21:41:24+01:00"},
+               problems=[{"rf_address": "0a0101", "type": "radiator_thermostat", "name": "Radiator", "room": "Kitchen",
+                          "serial": "MEQ0000101", "reported": True, "state": {"error": False, "battery_low": True, "link_error": False}}])
     try:
         page.evaluate("loadCubes()")
         assert wait_until(page, "!!document.querySelector(\"%s > summary .cube-pill .problems\")" % PANEL, 5), "the pill"
@@ -638,7 +572,7 @@ def test_cube_panel_pill(page, case):
         assert scroll_width(page) <= case.width, "no horizontal scroll"
         head.locator(".cube-head-stats").click()
     finally:
-        page.unroute("**/api/v1/cubes")
+        reads.clear(CUBES)
     page.evaluate("loadCubes()")
 
 
@@ -682,42 +616,34 @@ HELD_BADGE = {"en": "1 connection held", "de": "1 Verbindung gehalten"}
 LOST_BADGE = {"en": "1 not connected", "de": "1 nicht verbunden"}
 
 
-def test_card_badges_follow_the_poll(page, case):
+def test_card_badges_follow_the_poll(page, case, reads):
     """The Cubes card's badges follow every poll, a Cube's panel open or
     not, one per link state: a held connection amber, an old connection
     (stale) red, nothing once the Cube is back (D92-A, D93-A)."""
-    link = {"state": None}
-
-    def stub(route):
-        cubes = route.fetch().json()
-        for c in cubes:
-            if c.get("serial") == "KEQ0000100" and link["state"]:
-                c["connected"] = False
-                c["link"] = {"state": link["state"], "since": "2026-11-14T20:00:00+01:00", "until": "2026-11-14T20:45:00+01:00"}
-        route.fulfill(status=200, content_type="application/json", body=json.dumps(cubes))
+    def link(state):
+        return {"state": state, "since": "2026-11-14T20:00:00+01:00", "until": "2026-11-14T20:45:00+01:00"}
     badges = page.locator("#sys-cubes .section-badges")
     panel, _ = open_panel(page)
-    page.route("**/api/v1/cubes", stub)
     try:
-        link["state"] = "held"
+        reads.cube("KEQ0000100", connected=False, link=link("held"))
         page.evaluate("loadCubes()")
         assert wait_until(page, "document.querySelector('#sys-cubes .section-badges').textContent.includes(%s)" % json.dumps(HELD_BADGE[case.lang]), 5), \
             "held: the card says so, the panel open"
         held = badges.locator(".flag.warn", has_text=HELD_BADGE[case.lang])
         assert held.count() == 1 and held.locator("svg.mark-sign use").get_attribute("href") == "#mark-warn", "amber, a triangle"
         assert badges.locator(".flag.bad").count() == 0, "not red"
-        link["state"] = "stale"
+        reads.cube("KEQ0000100", connected=False, link=link("stale"))
         page.evaluate("loadCubes()")
         assert wait_until(page, "document.querySelector('#sys-cubes .section-badges .flag.bad') !== null", 5), "stale: red"
         assert LOST_BADGE[case.lang] in badges.locator(".flag.bad").inner_text(), "not connected"
-        link["state"] = None
+        reads.cube("KEQ0000100")
         page.evaluate("loadCubes()")
         assert wait_until(page, "!document.querySelector('#sys-cubes .section-badges .flag.bad') && "
                           "!document.querySelector('#sys-cubes .section-badges').textContent.includes(%s)" % json.dumps(HELD_BADGE[case.lang]), 5), \
             "back: no badge of the link, the panel still open"
         assert panel.get_attribute("open") is not None, "the panel stayed open"
     finally:
-        page.unroute("**/api/v1/cubes")
+        reads.clear(CUBES)
         page.evaluate("loadCubes()")
         panel.locator(":scope > summary").click()
 
