@@ -110,8 +110,10 @@ waits while there are any.
 The header's row has Massimo's logo at the left, the M as tall as the page buttons;
 at the right, the pile, a pill that starts with the server's sign and shows
 every Cube's problems;
-the Cube choice, the cube, the chosen Cube's name and its network sign after it;
-then the house, **Rooms**, and **☰**, the menu of every other page.
+the Cube choice, the cube in the colour of the server's link to it
+and the chosen Cube's name;
+then the house, **Rooms**, and **☰**, the menu of every other page,
+the Cube choice as near to them as they are to each other.
 They all end on one line, the logo's baseline and the buttons' lower edge.
 Where the row is short, it folds step by step, as far as it must:
 first the logo becomes its M, the M with the clock in its V;
@@ -138,12 +140,14 @@ The compacted header has **↑**, back to the top, first of the page buttons: �
 
 - **Cube**:
   a menu that chooses the Cube when the server has several.
-  Closed it shows the cube, the chosen Cube's name (its serial where it has none)
-  and after it how the server stands with it, as the network's sign:
-  green while connected, a triangle while its lost connection is held open
-  or it reboots, a cross while it holds the server's old connection,
-  another client has it, or it is gone (see Signs, under How the page is built);
-  its tooltip adds the serial, the address and the link in words.
+  Closed it shows the cube in the colour of how the server stands with the Cube,
+  then the chosen Cube's name (its serial where it has none):
+  green while connected, amber while its lost connection is held open
+  or it reboots, red while it holds the server's old connection,
+  another client has it, or it is gone;
+  its tooltip adds the serial, the address and the link in words,
+  and the pile shows the link's sign with its mark where it is not connected
+  (see Signs, under How the page is built).
   Open, each Cube has the cube, its name, its sign after it, always,
   then an icon for each kind of problem it has (the radio, a battery,
   a window open too long, a device's link and, for one who may change the settings,
@@ -1741,7 +1745,7 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `Fold`, `FoldHead` | `fold.tsx` | a details that opens and closes (`detailsPanel`), the toggle of its making not passed on; a panel's head | `cls`, `open`, `onToggle(open)`, `summary`, `summaryProps`, `data`, the body as children; `before`, `name`, `mono`, `badges` |
 | `Dropdown` | `menu.tsx` | a menu that drops down (`dropdown`), with `arrows` its arrow keys (`menuArrows`) and with `focusCurrent` the focus on its current item when it opens (among `arrows`' items, else its list's buttons that are on); a click on any button of its list closes it, as `dropdown()` of `components.js` does for every menu of the page, but on one marked `data-keep-open` (`MenuItem`'s `keepOpen`) | `id`, `cls`, `summaryId`, `summaryCls`, `label` (without it the summary is named by its text), `title` (where the tooltip is not the label), `summary`, `listCls`, `arrows` (a selector of its items), `focusCurrent`, `busy` (the summary turning while a request sent from its list runs), `onClick`, `onOpen` (told each time it opens), `onClose` (told each time it closes), the items as children |
 | `MenuItem` | `menu.tsx` | a menu's button, its icon, label, the icons after it and a grey second line (`menuItem`) | `icon`, `blank`, `label`, `icons`, `sub` (the second line, a text or elements, there whenever given, empty too), `subCls` (its class), `cls`, `value` (its `data-value`), `current`, `disabled`, `busy`, `keepOpen` (a click on it leaves the menu open, for an item whose result shows in the list), `onClick` |
-| `Picker` | `menu.tsx` | a menu that chooses one item, its summary the chosen one (`pickerMenu`) | `id`, `cls`, `summaryId`, `summaryCls`, `entries` (an item `{ value, label, sub, icon, icons, disabled }`, `{ group }` or `{ separator: true }`), `value`, `onPick(value)`, `shown` (`{ icon, label, icons, title, aria }`, `icons` after the label) |
+| `Picker` | `menu.tsx` | a menu that chooses one item, its summary the chosen one (`pickerMenu`) | `id`, `cls`, `summaryId`, `summaryCls`, `entries` (an item `{ value, label, sub, icon, icons, disabled }`, `{ group }` or `{ separator: true }`), `value`, `onPick(value)`, `shown` (`{ icon, label, title, aria }`) |
 | `actionRunner`, `fader` | `action.ts` | a request, a reload, and its outcome (`Outcome`, `{ text, ok }`) in the region's message line (`showResult`) or in a part's state that a `ResultLine` draws, a success fading where a fade is given; `fader` is that fade alone, for a result set by other means | `where()`, `set(res)`, `fade` (ms), `reload()`; gives `run(fn, ok, fail)`, `say(text, ok)`; `set`, `ms` |
 | `Icon` | `icon.tsx` | a symbol of the page (`iconEl`) | `symbol`, `cls`, `mark` (the symbol is a mark, which blinks where the style makes it) |
 | `Sign` | `icon.tsx` | a kind of `SIGNS` in a state, its mark blinking (`signEl`) | `kind`, `state` ("", ok, warn, bad, open), `cls`, `blink` (the mark's key), `label` (named for a screen reader, else hidden) |

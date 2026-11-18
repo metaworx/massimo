@@ -184,14 +184,15 @@ def active(page, selector):
 def test_header_order(page, case):
     """The header's row: the logo at the left (its M where the row is
     short); at the right the pile (every Cube's problems, the server's
-    sign first), the Cube choice with the network sign of its link, then
-    🏠 and ☰ alone, all on one lower edge."""
+    sign first), the Cube choice, its cube in its link's colour, then 🏠
+    and ☰ alone, all on one lower edge, the Cube choice as near to 🏠 as
+    the pages are to each other (AP GlobalMenu, D199-A to D201-A)."""
     order = ["h1", ".pile", "#cube-choice", "#view-tiles", "#nav-menu > summary"]
     b = {sel: box(page, sel) for sel in order}
     row = box(page, ".top-line")
-    assert page.locator("#cube-choice .picker-icon .cube-icon use[href='#icon-cube3d']").count() == 1, "the cube before the Cube's name"
-    if page.locator("#cube-choice .picker-label").is_visible():
-        assert page.locator("#cube-choice .picker-icons .conn-sign use[href='#icon-net']").count() == 1, "the link, a network sign after it"
+    assert page.locator("#cube-choice .picker-icon .cube-icon.tone-ok use[href='#icon-cube3d']").count() == 1, \
+        "the cube before the Cube's name, green while connected"
+    assert page.locator("#cube-choice .conn-sign").count() == 0, "no network sign in the closed choice"
     shown = page.locator(".nav > *").evaluate_all("(es) => es.filter((e) => e.offsetParent).map((e) => e.id)")
     assert shown == ["view-tiles", "nav-menu"], f"🏠 and ☰ alone in the header: {shown}"
     assert abs(b["h1"]["x"] - row["x"]) <= 1, f"the logo at the left: {b['h1']} vs {row}"
@@ -202,6 +203,9 @@ def test_header_order(page, case):
     bottom = b["#view-tiles"]["y"] + b["#view-tiles"]["height"]
     assert all(abs(b[sel]["y"] + b[sel]["height"] - bottom) <= 1 for sel in order[1:]), f"on one lower edge: {b}"
     assert b[".pile"]["x"] - (b["h1"]["x"] + b["h1"]["width"]) > 16, f"the pile away from the logo, at the right: {b}"
+    pages = box(page, "#nav-menu > summary")["x"] - (b["#view-tiles"]["x"] + b["#view-tiles"]["width"])
+    choice = b["#view-tiles"]["x"] - (b["#cube-choice"]["x"] + b["#cube-choice"]["width"])
+    assert abs(choice - pages) <= 1, f"the Cube choice as near to 🏠 as the pages to each other: {choice} vs {pages}"
 
 
 # The header's fold at the window's width, the row's height and whether
@@ -239,7 +243,6 @@ def test_header_folds_step_by_step(page, case):
             assert (mark if step else logo).is_visible() and (logo if step else mark).is_hidden(), f"at {w} px the logo or the M"
             label = page.locator("#cube-choice .picker-label")
             assert label.is_hidden() == (step >= 2), f"at {w} px the Cube choice a cube button: {step >= 2}"
-            assert page.locator("#cube-choice .picker-icons").is_hidden() == (step >= 2), f"at {w} px its sign with its name"
             assert page.locator("#cube-choice .cube-icon").is_visible(), f"at {w} px the cube always"
             pile, home = box(page, ".pile"), box(page, "#view-tiles")
             on_next = pile["y"] >= home["y"] + home["height"] - 1

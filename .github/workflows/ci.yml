@@ -5,8 +5,9 @@ name: CI
 # cross build of every release binary, actionlint on the workflows, the
 # types of the web UI's parts, govulncheck, the Debian package in a container, and the Windows
 # service on a Windows runner. A pull
-# request runs the web UI's suite only when it changes the UI, the suite
-# or this file, and on two of its four cases, and the mDNS test against
+# request runs the web UI's suite only when it changes the UI, the
+# server's own Go files, the OpenAPI file, the suite or this file, and
+# then on all four of its cases, and the mDNS test against
 # avahi only when it changes the announcement, discovery, the test or
 # this file, and the Android app's job only when it changes the app, the
 # web UI's files it bundles, its scripts or the release's workflows; a
@@ -64,8 +65,10 @@ jobs:
   # not pass yet (All tests passed writes the status). ui and lan, for the
   # UI test and LAN jobs, are true for
   # a push; for a pull request, ui is true when it touches the web UI, its
-  # bundler (tools/uibundle), the vendored Preact, its suite or this file,
-  # lan when it touches the announcement, discovery,
+  # bundler (tools/uibundle), the vendored Preact, the server's own Go
+  # files, the OpenAPI file of the API the page reads (with code only: a
+  # site document alone answers code=false), its suite or this file, lan
+  # when it touches the announcement, discovery,
   # the shared port, the proxy, the server's own files (not ui/:
   # discovery's runs are decided there), the Go module, the LAN test or
   # this file. A push whose record says lan=unneeded, its pull request's
@@ -87,6 +90,7 @@ jobs:
   changes:
     name: What to test
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # statuses: the Tested status of the commit tested before; actions:
     # the runs Code result's check reads.
     permissions:
@@ -212,7 +216,7 @@ jobs:
           fi
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
             changed="$(git diff --name-only HEAD^1 HEAD)"
-            grep -qE '^(internal/server/ui/|tools/ui-test/|tools/uibundle/|third_party/preact/|\.github/workflows/ci\.yml$)' <<<"$changed" || ui=false
+            grep -qE '^(internal/server/ui/|internal/server/[^/]+\.go$|docs/api-v1-openapi\.yaml$|tools/ui-test/|tools/uibundle/|third_party/preact/|\.github/workflows/ci\.yml$)' <<<"$changed" || ui=false
             grep -qE '^(internal/announce/|internal/serve/|internal/sharedport/|internal/proxy/|internal/server/[^/]+$|internal/cubelan/|cmd/massimo/(discover|serve)\.go$|go\.(mod|sum)$|tools/lan-test/|\.github/workflows/ci\.yml$)' <<<"$changed" || lan=false
             appfiles="$(grep -E '^(app/|packaging/app-[a-z-]+\.sh$|\.github/workflows/(ci|build|release)\.yml$)' <<<"$changed" || true)"
             bundled="$(grep -E '^internal/server/ui/' <<<"$changed" | grep -vE '^internal/server/ui/(index\.html$|partials/|src/|parts\.js$|vendor/)' || true)"
@@ -270,11 +274,17 @@ jobs:
             echo "fuzz_done=${fuzz_done}"
           } >> "$GITHUB_OUTPUT"
 
+  # Each job's time limit (timeout-minutes) is about three times its
+  # longest run among the 57 runs before 2026-11-18, ten minutes at least,
+  # and above the Go tests' own -timeout, so that a hung test fails with
+  # its goroutines in the log rather than the job being cut off
+  # (GUIDELINES/project/CI.md, section 2).
   test:
     name: Vet and test
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -302,8 +312,14 @@ jobs:
           GOOS=windows go vet ./...
           GOOS=darwin go vet ./...
 
+      # As -json, which packaging/go-test-report.sh turns back into go
+      # test's own log while the tests run, and then names the tests that
+      # skipped, and why, in the summary (GUIDELINES/project/CI.md, section
+      # 3); pipefail keeps go test's exit status as the step's.
       - name: go test
-        run: go test ./...
+        run: |
+          set -o pipefail
+          go test -json ./... | packaging/go-test-report.sh "go test"
 
       # The store's benchmarks once each, with -short, to see that they
       # still run (docs/store.md section 5, "Measuring on a box"); no
@@ -323,6 +339,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -345,6 +362,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -353,12 +371,14 @@ jobs:
 
   # The race detector (make race, GUIDELINES/project/CI.md, section 2) on
   # the packages whose goroutines meet, beside Vet and test rather than in
-  # it, so that neither waits for the other.
+  # it, so that neither waits for the other; the tests' -json for the
+  # skipped tests' summary, as in Vet and test.
   race:
     name: Race
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -370,17 +390,21 @@ jobs:
       - uses: ./.github/actions/ui-bundle
 
       - name: make race
-        run: make race
+        run: |
+          set -o pipefail
+          make race TESTFLAGS=-json | packaging/go-test-report.sh "make race"
 
   # Every package's tests on 32-bit ARM (make test-armv6,
   # GUIDELINES/project/CI.md, section 2): the armv6 binary the armhf
   # package ships, run with -short by Ubuntu's qemu-user as the Raspberry
-  # Pi 1's core, beside Vet and test; make cross only builds it.
+  # Pi 1's core, beside Vet and test; make cross only builds it. The
+  # tests' -json for the skipped tests' summary, as in Vet and test.
   armv6:
     name: Test (armv6, QEMU)
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -397,7 +421,9 @@ jobs:
           sudo apt-get install -y -qq --no-install-recommends qemu-user
 
       - name: make test-armv6
-        run: make test-armv6
+        run: |
+          set -o pipefail
+          make test-armv6 TESTFLAGS=-json | packaging/go-test-report.sh "make test-armv6"
 
   # The fuzz targets (make fuzz, GUIDELINES/project/CI.md, section 2), on
   # a push to main only, 10 s a target: a pull request runs their seeds
@@ -408,6 +434,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && github.event_name == 'push' && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.fuzz_done != 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -465,6 +492,7 @@ jobs:
             label: 390 px
             shots: false
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     container:
       image: mcr.microsoft.com/playwright/python:v1.64.1-noble
     env:
@@ -534,6 +562,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.lan != 'false' && needs.changes.outputs.lan_done != 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -648,6 +677,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -683,6 +713,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -736,6 +767,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
     runs-on: windows-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -1071,6 +1103,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
     runs-on: macos-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -1335,6 +1368,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -1381,6 +1415,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && (needs.changes.outputs.site == 'true' || needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true') }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -1458,21 +1493,42 @@ jobs:
     needs: [ changes, test, actionlint, ui-types, race, armv6, fuzz, screenshots, lan, android, govulncheck, deb, windows, macos, guidelines, site, code-result ]
     if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # contents: the report's script; actions: the run's jobs;
+    # pull-requests: the report and the re-run's comment; statuses: the
+    # Tested status.
     permissions:
+      contents: read
       actions: read
       pull-requests: write
       statuses: write
     steps:
-      # Which job did not pass, and how (GUIDELINES/project/CI.md, section
-      # 2): every job of the run in the summary, an error annotation for
-      # each that did not pass, and on a pull request one comment, written
-      # at its first failure and edited by every run after it. The names
-      # come from the run's jobs, which also tell a job no runner took; not
-      # this job's, nor those of the workflows it calls, which are not
-      # among its needs. The verdict is the next step's, from needs; this
-      # one fails nothing.
+      # The report's script alone: this job builds nothing. A checkout that
+      # fails leaves the report undone, and the verdict to the step after.
+      # Each step that calls GitHub has a time limit of its own, within
+      # the job's: continue-on-error lets the job go on after a step that
+      # failed, and the job's limit would cut the verdict off with a hung one.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        continue-on-error: true
+        timeout-minutes: 2
+        with:
+          sparse-checkout: packaging/ci-report.sh
+          sparse-checkout-cone-mode: false
+
+      # Which job did not pass, and how, and which passed only on a re-run
+      # (packaging/ci-report.sh; GUIDELINES/project/CI.md, section 2): every
+      # job of the run in the summary, an error annotation for each that did
+      # not pass and a warning for each that passed only on a re-run, which
+      # counts (AP TestInfrastructure, D10-A); on a pull request the report,
+      # one comment written at its first failure and edited by every run
+      # after it, and a comment of its own where this attempt's re-run made
+      # a job pass, which notifies the author. The names come from the run's
+      # jobs, every attempt's from the second on; not this job's, nor those
+      # of the workflows it calls, which are not among its needs. The
+      # verdict is the next step's, from needs; this one fails nothing.
       - name: Report each job's result
         continue-on-error: true
+        timeout-minutes: 3
         env:
           GH_TOKEN: ${{ github.token }}
           NEEDS: ${{ toJSON(needs) }}
@@ -1480,59 +1536,7 @@ jobs:
           SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           SELF: All tests passed
           CALLED: '^(Build|Release|Deploy site)( / |$)'
-        run: |
-          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          verdict=$(jq -r 'if all(.[]; .result == "success" or .result == "skipped") then "passed" else "failed" end' <<<"$NEEDS")
-          jobs=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?filter=latest&per_page=100" --jq '.jobs[]' |
-            jq -s --arg self "$SELF" --arg called "$CALLED" '
-              map(select(.name != $self and (.name | test($called) | not)) | {name, result: (
-                if .status != "completed" then .status | gsub("_"; " ")
-                elif .conclusion == "cancelled" and (.runner_name // "") == "" and (.steps | length) == 0
-                  then "cancelled before a runner took it"
-                elif .conclusion == "success" then "passed"
-                elif .conclusion == "failure" then "failed"
-                else .conclusion | gsub("_"; " ") end)})') || jobs='[]'
-          if [ "$jobs" = '[]' ] || { [ "$verdict" = failed ] && jq -e 'all(.[]; .result == "passed" or .result == "skipped")' <<<"$jobs" >/dev/null; }; then
-            # The API told nothing, or not what failed: the needs' ids.
-            jobs=$(jq 'to_entries | map({name: .key, result: (.value.result | if . == "success" then "passed" elif . == "failure" then "failed" else . end)})' <<<"$NEEDS")
-          fi
-          jobs=$(jq 'sort_by((.result == "passed" or .result == "skipped"), (.name | ascii_downcase))' <<<"$jobs")
-          bad=$(jq '[.[] | select(.result != "passed" and .result != "skipped")]' <<<"$jobs")
-          n=$(jq length <<<"$bad")
-          if [ "$verdict" = passed ]; then
-            head="Every test job passed or was skipped"
-          else
-            head="$n test job(s) did not pass"
-          fi
-          {
-            echo "### ${head}"
-            echo
-            echo "| Job | Result |"
-            echo "|-----|--------|"
-            jq -r '.[] | "| \(.name) | \(.result) |"' <<<"$jobs"
-          } >>"$GITHUB_STEP_SUMMARY"
-          jq -r '.[] | "::error::\(.name): \(.result)"' <<<"$bad"
-          [ -n "$PR" ] || exit 0
-          marker='<!-- ci-report -->'
-          {
-            echo "$marker"
-            echo "**${head}** on ${SHA:0:7}, [run ${GITHUB_RUN_ID} attempt ${GITHUB_RUN_ATTEMPT}](${run_url})."
-            if [ "$n" -gt 0 ]; then
-              echo
-              echo "| Job | Result |"
-              echo "|-----|--------|"
-              jq -r '.[] | "| \(.name) | \(.result) |"' <<<"$bad"
-            fi
-          } >comment.md
-          id=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" \
-            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- ci-report -->"))) | .id' | tail -n 1) || id=''
-          if [ -n "$id" ]; then
-            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${id}" -F body=@comment.md >/dev/null ||
-              echo "::warning::the pull request's comment was not updated (a read-only token?)"
-          elif [ "$verdict" = failed ]; then
-            gh api -X POST "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" -F body=@comment.md >/dev/null ||
-              echo "::warning::no comment on the pull request (a read-only token?)"
-          fi
+        run: packaging/ci-report.sh
 
       - name: Every test job passed or was skipped
         env:
@@ -1546,6 +1550,7 @@ jobs:
       - name: Write the Tested status
         if: needs.changes.outputs.fp != '' && (github.event_name == 'pull_request' || github.ref == 'refs/heads/main')
         continue-on-error: true
+        timeout-minutes: 2
         env:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.event.pull_request.head.sha || github.sha }}
