@@ -21,12 +21,9 @@ import (
 func TestLogSourceFilter(t *testing.T) {
 	_, ts, s, st := startStored(t, Options{})
 	// The Cube's own events too: its connect is logged as the greeting's
-	// last, after the devices' states.
-	testkit.Eventually(t, "the Cube's states and its connect", func() bool {
-		_, states := logOf(t, ts, "?kind=state")
-		_, cube := logOf(t, ts, "?source=cube")
-		return len(states) > 0 && len(cube) > 0
-	})
+	// last, after the devices' states, once the pump has handled them; a
+	// line still to come would make the counts below differ.
+	pumpSync(t, s)
 	s.logServer(event{Kind: "settings_read", Source: "system", Time: time.Now()}) // beside the start's server_started
 	_, all := logOf(t, ts, "?limit=1000")
 	sources := map[string]int{}

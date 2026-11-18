@@ -120,6 +120,17 @@ type Client struct {
 	// keepaliveSilent on Linux, nil elsewhere; tests set their own.
 	probeSilent func(net.Conn) bool
 	probeEvery  time.Duration
+
+	// emitMu makes emit's numbering (Event.Seq) the order of evs; sent
+	// is the Seq of the last event put on evs, and handling counts the
+	// Cube's lines being handled, those ApplyLocal takes included: for
+	// tests (EventCounts). sent and handling change nothing the client
+	// does; emitMu, one emit at a time, also keeps two emits on a full
+	// channel from losing the newer event, which a drop of the oldest
+	// now always makes room for.
+	emitMu   sync.Mutex
+	sent     atomic.Uint64
+	handling atomic.Int64
 }
 
 type pendingReply struct {
@@ -248,6 +259,21 @@ func (c *Client) Snapshot() *Snapshot { return c.snap }
 // Events delivers connection and state events. The channel is buffered;
 // if nobody reads it, old events are dropped rather than blocking the reader.
 func (c *Client) Events() <-chan Event { return c.evs }
+
+// EventCounts reports, for a test that waits until the reader of Events
+// has handled what the client sent out (the server's pumpSync), how many
+// of the Cube's lines the client is handling now, and the Seq of the
+// last event it put on Events, in that order. A line's change shows in
+// the snapshot before its events are sent: once handling is 0, every
+// line read before has sent its events. An event is read or dropped in
+// the order of its Seq, and a dropped one is followed by a newer one, so
+// a reader that has handled an event of Seq sent or later has every
+// event up to it behind it. The counts exist for tests and change
+// nothing the client does.
+func (c *Client) EventCounts() (handling int64, sent uint64) {
+	handling = c.handling.Load()
+	return handling, c.sent.Load()
+}
 
 // Connected reports whether the client is connected now and has
 // received the connection's complete greeting.
@@ -378,6 +404,7 @@ func (c *Client) session(ctx context.Context, st *runState) (ending, error) {
 				readErr <- err
 				return
 			}
+			c.handling.Add(1) // to the line's end, the connected event included (EventCounts)
 			lines.Add(1)
 			c.handle(m)
 			select {
@@ -415,6 +442,7 @@ func (c *Client) session(ctx context.Context, st *runState) (ending, error) {
 				c.noteLink()
 				c.emit(ev)
 			}
+			c.handling.Add(-1)
 		}
 	}()
 
@@ -601,7 +629,13 @@ func (c *Client) handle(m cube.Message) {
 	}
 }
 
+// emit puts an event on Events and numbers it (Seq), dropping the oldest
+// where the channel is full. One emit at a time, so that the numbers are
+// the channel's order; each is a few selects that never wait.
 func (c *Client) emit(e Event) {
+	c.emitMu.Lock()
+	defer c.emitMu.Unlock()
+	e.seq = c.sent.Load() + 1
 	select {
 	case c.evs <- e:
 	default:
@@ -613,8 +647,10 @@ func (c *Client) emit(e Event) {
 		select {
 		case c.evs <- e:
 		default:
+			return
 		}
 	}
+	c.sent.Store(e.seq)
 }
 
 func (c *Client) write(m cube.Message) error {
@@ -830,7 +866,11 @@ func (c *Client) logGreeting(e Event) {
 // ApplyLocal folds a message into the snapshot as if the Cube had sent
 // it. The LAN proxy uses it after a metadata write (m:) went through,
 // because the Cube does not echo the new M lines.
-func (c *Client) ApplyLocal(m cube.Message) { c.handle(m) }
+func (c *Client) ApplyLocal(m cube.Message) {
+	c.handling.Add(1) // a line as the Cube's (EventCounts)
+	defer c.handling.Add(-1)
+	c.handle(m)
+}
 
 // ForgetDevice drops a device the Cube deleted with t: from the
 // snapshot (Snapshot.Forget) and tells the observers with an

@@ -525,6 +525,10 @@ type runtime struct {
 	// clock is the server's clock of the radio health checks
 	// (Server.checkNow).
 	clock func() time.Time
+	// pumped is the Seq of the last client event the pump has handled,
+	// stored once its handling is over: for tests alone (pumpSync), it
+	// changes nothing.
+	pumped atomic.Uint64
 }
 
 // lockStructure takes the Cube's structure lock, so that one change of
@@ -948,11 +952,16 @@ func (s *Server) proxyRuntime(pl ProxyListener) (*runtime, error) {
 func (s *Server) pump(ctx context.Context, rt *runtime) {
 	defer rt.errWatch.stop()
 	s.rebuildBattery(ctx, rt) // before the first state, so that the replay comes first
-	for {
+	// seq is the event in hand's Seq, stored in rt.pumped at the end of
+	// each turn, once its handling is over: a hidden device's continue
+	// included.
+	var seq uint64
+	for ; ; rt.pumped.Store(seq) {
 		select {
 		case <-ctx.Done():
 			return
 		case e := <-rt.client.Events():
+			seq = e.Seq()
 			if e.Kind == cubelan.EventConnected {
 				if h := rt.client.Snapshot().Hello(); h != nil && rt.learnSerial(h.Serial) {
 					key := strings.ToLower(h.Serial)

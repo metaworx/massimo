@@ -37,6 +37,10 @@ func TestPolledStateChangesReachTheLog(t *testing.T) {
 		var c cubeView
 		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
 	})
+	// The greeting through the pump first: a pump still at the greeting
+	// when the list changes reads the new state for the greeting's line,
+	// and the change has none of its own.
+	pumpSync(t, s)
 	// 0a010d reports: manual, 21 °C, valve 30 %.
 	l := greeting[len(greeting)-1]
 	raw, _ := base64.StdEncoding.DecodeString(l.Data)

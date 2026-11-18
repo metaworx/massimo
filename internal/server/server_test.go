@@ -52,36 +52,16 @@ func startWith(t *testing.T, opts Options) (*fakecube.Server, *httptest.Server, 
 	go s.Run(ctx)
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
-	// Wait for the greeting, and for its events on the stream.
-	testkit.Eventually(t, "the cube's connect and its greeting's events", func() bool {
+	// Wait for the greeting, then for the pump to publish its events: a
+	// test that counts the stream's events, or resumes it, would
+	// otherwise meet them.
+	testkit.Eventually(t, "the cube's connect", func() bool {
 		var cubes []cubeView
 		getJSON(t, ts, token, "/api/v1/cubes", &cubes)
-		return len(cubes) == 1 && cubes[0].Connected && greetingPublished(s)
+		return len(cubes) == 1 && cubes[0].Connected
 	})
+	pumpSync(t, s)
 	return fc, ts, s
-}
-
-// greetingPublished reports whether every Cube's runtime has published
-// its greeting's events, the last of them "connected". The client is
-// connected once the greeting is complete, and the server's event loop
-// publishes its events after that: a test that counts the stream's
-// events, or resumes it, would otherwise meet them.
-func greetingPublished(s *Server) bool {
-	for _, rt := range s.runtimes() {
-		rt.subsMu.Lock()
-		found := false
-		for _, p := range rt.replay {
-			if p.ev.Kind == "connected" {
-				found = true
-				break
-			}
-		}
-		rt.subsMu.Unlock()
-		if !found {
-			return false
-		}
-	}
-	return true
 }
 
 func getJSON(t *testing.T, ts *httptest.Server, token, path string, v any) int {

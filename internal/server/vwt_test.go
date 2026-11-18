@@ -224,8 +224,10 @@ func TestVirtualWallThermostatEvents(t *testing.T) {
 		t.Fatalf("room 1's event: %s", room1[0].Data)
 	}
 	_, atReal = real.AwaitAll(t, atReal, "the real wall thermostat's state event", is("0a0201", ""))
-	// A test event, sent after the events above, ends the checks: what the
-	// views would carry of them has come before it.
+	// Once the pump has handled every event the client sent (pumpSync), a
+	// test event ends the checks: what the views would carry of them was
+	// published before it, a pump still behind included.
+	rt.pumpSync(t)
 	mark(rt, 1)
 	real.Never(t, atReal, "a virtual wall thermostat's event on the real view", func(e testkit.Event) bool {
 		return strings.Contains(e.Data, `"virtual":true`)
@@ -247,6 +249,10 @@ func TestVirtualWallThermostatEvents(t *testing.T) {
 func TestVirtualViewLeavesOutTheRealWallsEvents(t *testing.T) {
 	_, ts, s, _ := startRooms(t)
 	rt := s.cubes["keq0000100"]
+	// The greeting's mismatches through the pump before the streams open:
+	// a pump slow to come to the greeting (armv6 under QEMU) would
+	// publish them on the streams, beside the test's own.
+	rt.pumpSync(t)
 	stream := func(kind string, burst int) (*testkit.Watch[testkit.Event], testkit.Cursor) {
 		evs := readStreamURL(t, ts.URL+"/api/v1/cubes/KEQ0000100/events?devices="+kind)
 		_, after := evs.AwaitN(t, 0, "the burst of "+kind, burst, isEvent)
@@ -254,9 +260,6 @@ func TestVirtualViewLeavesOutTheRealWallsEvents(t *testing.T) {
 	}
 	all, atAll := stream("all", 10)
 	virtual, atVirtual := stream("virtual", 9)
-	// The test's own mismatches carry a finding of their own: a pump
-	// slow to come to the greeting (armv6 under QEMU) publishes the
-	// greeting's mismatches after the streams opened.
 	mismatch := func(device string) event {
 		return event{Kind: "mismatch", Source: "cube", Level: "warn", Device: device, Time: time.Now(), Summary: map[string]any{"finding": "test"}}
 	}
@@ -271,7 +274,7 @@ func TestVirtualViewLeavesOutTheRealWallsEvents(t *testing.T) {
 			var ev testkit.Event
 			ev, c = evs.Await(t, c, "the test's mismatch of "+device, isEvent)
 			wall = wall || strings.Contains(ev.Data, `"device":"0a0201"`)
-			if ev.Kind != "mismatch" || !strings.Contains(ev.Data, `"finding":"test"`) {
+			if ev.Kind != "mismatch" {
 				continue
 			}
 			for _, d := range []string{"0a0201", "0a0204"} {
