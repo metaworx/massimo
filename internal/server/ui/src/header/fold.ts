@@ -43,8 +43,12 @@ function fit(line: HTMLElement): void {
   const mark = (parseFloat(style.getPropertyValue("--brand-h")) || button) * (parseFloat(style.getPropertyValue("--brand-mark-ratio")) || 1.09);
   const pile = width(line.querySelector(".pile"));
   const cube = width(line.querySelector("#cube-choice"));
+  // the Cube choice is one of the pages' group, nearer to them than the
+  // row's gap: the distance as it is, measured
+  const choice = line.querySelector(".cube");
+  const join = choice && choice.getBoundingClientRect().width ? nav.getBoundingClientRect().left - choice.getBoundingClientRect().right : gap;
   const row = (...ws: number[]) => ws.reduce((a, b) => a + b, 0) + gap * (ws.filter(Boolean).length - 1);
-  const needs = [row(logo, pile, cube, pages), row(mark, pile, cube, pages), row(mark, pile, button, pages)];
+  const needs = [row(logo, pile, cube), row(mark, pile, cube), row(mark, pile, button)].map((w) => w + join + pages);
   const step = needs.findIndex((n) => n <= line.clientWidth + 0.5);
   line.dataset.fold = STEPS[step < 0 ? STEPS.length - 1 : step];
 }

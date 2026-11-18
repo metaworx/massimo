@@ -5,7 +5,7 @@
  * @file internal/server/ui/src/header/Choice.tsx
  *
  * The Cube choice in the header, a menu of the page (the shared Picker):
- * closed, the cube, the chosen Cube's name and its network sign after it;
+ * closed, the cube in the chosen Cube's link's colour and its name;
  * open, each Cube with the cube, its name, its sign and the icons of its
  * problems after it, its serial and address, then those found on the LAN and not served, then
  * the entry that searches the LAN for new ones. Built once and updated in
@@ -57,9 +57,11 @@ function pick(v: string): void {
  * Choice is the Cube choice: the served Cubes; those found on the LAN and
  * not served, which open System settings → Cubes for a role with cubes
  * and are information for others; for a role with discover, the search.
- * Closed it shows the cube, the chosen Cube's name and its sign after it;
- * folded to a button (fold.ts) the cube alone. Its tooltip names the
- * chosen Cube, its serial, address and link.
+ * Closed it shows the cube in the chosen Cube's link's colour, green,
+ * amber or red, and its name; folded to a button (fold.ts) the cube
+ * alone. Its tooltip names the chosen Cube, its serial, address and
+ * link, which its name for a screen reader says too (AP GlobalMenu,
+ * D200-A, D201-A).
  */
 export function Choice() {
   load.useLoad();
@@ -78,9 +80,8 @@ export function Choice() {
   return (
     <Picker id="cube-menu" cls="cube-menu" summaryId="cube-choice" summaryCls="cube-choice" entries={entries} value={state.serial || ""} onPick={pick}
       shown={{
-        icon: <CubeIcon />,
+        icon: <CubeIcon state={cube ? linkSign(cube) : undefined} />,
         label: name,
-        icons: cube && <CubeSign c={cube} />,
         title: cube ? [name, cube.name ? cube.serial : "", cube.address || "", conn].filter(Boolean).join(" · ") : name,
         aria: cube ? t("header.cubeChoice", { name, state: conn }) : name,
       }} />
