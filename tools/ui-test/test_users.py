@@ -147,6 +147,33 @@ def test_new_key_shown_once(page, case):
     show_view(page, "tiles")
 
 
+def test_a_key_session_names_its_key(page, case):
+    """A session made from a key (POST /api/v1/login/key, the apps' login
+    by fingerprint) says in the user's token list which key made it, by
+    the key's label; revoking the key ends the session with it."""
+    prefix = f"ui-test-keysession-{case.width}-{case.lang}-"
+    revoke_keys(prefix)
+    key = api_call("POST", "api/v1/users/operator/tokens", {"label": prefix + "phone"})
+    session = api_call("POST", "api/v1/login/key", {"label": prefix + "session"}, token=key["token"])
+    try:
+        show_view(page, "system")
+        panel = page.locator(".user-panel[data-name='operator']")
+        panel.wait_for()
+        panel.locator("summary").click()
+        row = panel.locator(".user-tokens li", has_text=prefix + "session")
+        row.wait_for(timeout=5000)
+        named = row.locator(".token-key")
+        assert named.is_visible() and prefix + "phone" in named.inner_text(), "the session names the key that made it"
+        assert panel.locator(".user-tokens li[data-id='%d'] .token-key" % key["id"]).is_hidden(), "the key itself names none"
+    finally:
+        # the key alone: its session goes with it
+        api_call("DELETE", "api/v1/users/operator/tokens/%d" % key["id"])
+        left = [tk for tk in api_call("GET", "api/v1/users/operator/tokens") or [] if (tk.get("label") or "").startswith(prefix)]
+        revoke_keys(prefix)
+    assert session["token"] and not left, f"revoking the key ended its session: {left}"
+    show_view(page, "tiles")
+
+
 def remove_user(name):
     """A user the test made, gone again; none is fine (a 404)."""
     undo(f"the user {name}", lambda: api_call("DELETE", "api/v1/users/" + name))

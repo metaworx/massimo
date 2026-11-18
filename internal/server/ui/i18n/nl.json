@@ -1563,6 +1563,7 @@
   "users.kind.api": "API-sleutel",
   "users.lastUsed": "laatst gebruikt vanaf {from}",
   "users.neverUsed": "nooit gebruikt",
+  "users.fromKey": "gemaakt met de API-sleutel {label}",
   "users.revoke": "Intrekken",
   "users.revokeLabel": "{label} intrekken",
   "users.revoked": "Token {id} ingetrokken.",

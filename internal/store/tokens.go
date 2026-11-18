@@ -8,7 +8,9 @@ package store
 // 32 random bytes shown once; the store keeps its SHA-256. A revoked
 // token is a tombstone (deleted_at, revoked_at before migration 0024)
 // that keeps its row, so that the audit's token_id still
-// points at something.
+// points at something. A session made from a key names it (parent_id,
+// migration 0025): it lives while the key does, and the key's next
+// session ends it.
 
 import (
 	"context"
@@ -43,6 +45,9 @@ type Token struct {
 	LastUsedFrom string
 	DeletedAt    time.Time // when it was revoked; zero while it lives
 	Version      int64
+	// ParentID is the key a session was made from (AddKeySession), 0
+	// for a session of a sign-in and for a key.
+	ParentID int64
 }
 
 // Expired reports whether the token's end has passed at now.
@@ -63,15 +68,23 @@ func NewSecret() (string, error) {
 	return hex.EncodeToString(b[:]), nil
 }
 
-const tokenColumns = `t.id, t.uuid, t.user_id, t.kind, t.label, t.created_at, t.expires_at, t.last_used_at, t.last_used_from, t.deleted_at, t.version`
+const tokenColumns = `t.id, t.uuid, t.user_id, t.kind, t.label, t.created_at, t.expires_at, t.last_used_at, t.last_used_from, t.deleted_at, t.version, t.parent_id`
+
+// liveKey is the condition on a token t joined to its key p (LEFT JOIN
+// tokens p ON p.id = t.parent_id): a session made from a key counts only
+// while the key does, so that one whose key a binary before migration
+// 0025 revoked is refused all the same.
+const liveKey = `(t.parent_id IS NULL OR (p.id IS NOT NULL AND p.deleted_at IS NULL))`
 
 func scanToken(row scanner) (Token, error) {
 	var t Token
 	var created, expires, used, deleted sql.NullString
-	if err := row.Scan(&t.ID, &t.UUID, &t.UserID, &t.Kind, &t.Label, &created, &expires, &used, &t.LastUsedFrom, &deleted, &t.Version); err != nil {
+	var parent sql.NullInt64
+	if err := row.Scan(&t.ID, &t.UUID, &t.UserID, &t.Kind, &t.Label, &created, &expires, &used, &t.LastUsedFrom, &deleted, &t.Version, &parent); err != nil {
 		return Token{}, err
 	}
 	t.CreatedAt, t.ExpiresAt, t.LastUsedAt, t.DeletedAt = parseTime(created), parseTime(expires), parseTime(used), parseTime(deleted)
+	t.ParentID = parent.Int64
 	return t, nil
 }
 
@@ -119,9 +132,11 @@ func (s *Store) Token(ctx context.Context, id int64) (Token, bool, error) {
 }
 
 // TokenByHash finds a live token by the hash of its secret: not revoked,
-// its user not removed. Whether it has expired is the caller's check.
+// its user not removed, and for a session made from a key, the key not
+// revoked. Whether it has expired is the caller's check.
 func (s *Store) TokenByHash(ctx context.Context, hash string) (Token, bool, error) {
-	t, err := scanToken(s.db.QueryRowContext(ctx, `SELECT `+tokenColumns+` FROM tokens t JOIN users u ON u.id = t.user_id WHERE t.hash = ? AND t.deleted_at IS NULL AND u.deleted_at IS NULL`, hash))
+	t, err := scanToken(s.db.QueryRowContext(ctx, `SELECT `+tokenColumns+` FROM tokens t JOIN users u ON u.id = t.user_id LEFT JOIN tokens p ON p.id = t.parent_id
+		WHERE t.hash = ? AND t.deleted_at IS NULL AND u.deleted_at IS NULL AND `+liveKey, hash))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Token{}, false, nil
 	}
@@ -131,9 +146,11 @@ func (s *Store) TokenByHash(ctx context.Context, hash string) (Token, bool, erro
 	return t, true, nil
 }
 
-// Tokens lists a user's live tokens, oldest first.
+// Tokens lists a user's live tokens, oldest first: a session made from a
+// key only while the key lives.
 func (s *Store) Tokens(ctx context.Context, userID int64) ([]Token, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+tokenColumns+` FROM tokens t WHERE t.user_id = ? AND t.deleted_at IS NULL ORDER BY t.id`, userID)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+tokenColumns+` FROM tokens t LEFT JOIN tokens p ON p.id = t.parent_id
+		WHERE t.user_id = ? AND t.deleted_at IS NULL AND `+liveKey+` ORDER BY t.id`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("store: tokens: %w", err)
 	}
@@ -149,23 +166,90 @@ func (s *Store) Tokens(ctx context.Context, userID int64) ([]Token, error) {
 	return out, rows.Err()
 }
 
-// RevokeToken revokes a live token; ErrNoToken when there is none.
+// RevokeToken revokes a live token, and for a key the live sessions
+// made from it; what each subscribed to push goes with it. ErrNoToken
+// when there is none.
 func (s *Store) RevokeToken(ctx context.Context, id int64) error {
 	if err := s.writable(); err != nil {
 		return err
 	}
-	res, err := s.db.ExecContext(ctx, `UPDATE tokens SET deleted_at = ?, origin = ?, version = version + 1 WHERE id = ? AND deleted_at IS NULL`, s.nowText(), s.nodeID, id)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("store: token %d: %w", id, err)
+	}
+	defer tx.Rollback()
+	now := s.nowText()
+	res, err := tx.ExecContext(ctx, `UPDATE tokens SET deleted_at = ?, origin = ?, version = version + 1 WHERE id = ? AND deleted_at IS NULL`, now, s.nodeID, id)
 	if err != nil {
 		return fmt.Errorf("store: token %d: %w", id, err)
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return fmt.Errorf("%w: %d", ErrNoToken, id)
 	}
+	if err := revokeSessionsOf(ctx, tx, id, now, s.nodeID); err != nil {
+		return fmt.Errorf("store: token %d: %w", id, err)
+	}
 	// What the token subscribed to push goes with it.
-	if err := removePushSubscriptions(ctx, s.db, 0, id); err != nil {
+	if err := removePushSubscriptions(ctx, tx, 0, id); err != nil {
+		return fmt.Errorf("store: token %d: %w", id, err)
+	}
+	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("store: token %d: %w", id, err)
 	}
 	return nil
+}
+
+// revokeSessionsOf revokes the live sessions made from the key keyID,
+// and what they subscribed to push.
+func revokeSessionsOf(ctx context.Context, tx execer, keyID int64, now, node string) error {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM push_subscriptions WHERE token_id IN (SELECT id FROM tokens WHERE parent_id = ? AND deleted_at IS NULL)`, keyID); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, `UPDATE tokens SET deleted_at = ?, origin = ?, version = version + 1 WHERE parent_id = ? AND deleted_at IS NULL`, now, node, keyID)
+	return err
+}
+
+// AddKeySession makes a session from the live API key keyID, with a
+// label and an end, and returns it with the secret, shown once: the
+// session names the key, and the key's earlier sessions are revoked,
+// so that a key has one live session at a time. ErrNoToken where the key
+// is not a live API key.
+func (s *Store) AddKeySession(ctx context.Context, keyID int64, label string, expires time.Time) (Token, string, error) {
+	if err := s.writable(); err != nil {
+		return Token{}, "", err
+	}
+	secret, err := NewSecret()
+	if err != nil {
+		return Token{}, "", err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Token{}, "", fmt.Errorf("store: session of key %d: %w", keyID, err)
+	}
+	defer tx.Rollback()
+	var userID int64
+	err = tx.QueryRowContext(ctx, `SELECT user_id FROM tokens WHERE id = ? AND kind = ? AND deleted_at IS NULL`, keyID, TokenAPI).Scan(&userID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Token{}, "", fmt.Errorf("%w: key %d", ErrNoToken, keyID)
+	}
+	if err != nil {
+		return Token{}, "", fmt.Errorf("store: session of key %d: %w", keyID, err)
+	}
+	now := s.nowText()
+	if err := revokeSessionsOf(ctx, tx, keyID, now, s.nodeID); err != nil {
+		return Token{}, "", fmt.Errorf("store: session of key %d: %w", keyID, err)
+	}
+	res, err := tx.ExecContext(ctx, `INSERT INTO tokens (uuid, user_id, kind, hash, label, created_at, expires_at, origin, parent_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		newUUID(), userID, TokenSession, HashToken(secret), label, now, nullTime(expires), s.nodeID, keyID)
+	if err != nil {
+		return Token{}, "", fmt.Errorf("store: session of key %d: %w", keyID, err)
+	}
+	if err := tx.Commit(); err != nil {
+		return Token{}, "", fmt.Errorf("store: session of key %d: %w", keyID, err)
+	}
+	id, _ := res.LastInsertId()
+	t, _, err := s.Token(ctx, id)
+	return t, secret, err
 }
 
 // RevokeSessions revokes every live session of a user, as a password

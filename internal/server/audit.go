@@ -53,6 +53,7 @@ var actions = map[string]string{
 	"POST /api/v1/login/finish":                                  "login",
 	"POST /api/v1/login/oidc/{key}":                              "login.start",
 	"POST /api/v1/login/oidc/finish":                             "login",
+	"POST /api/v1/login/key":                                     "login.key",
 	"POST /api/v1/logout":                                        "logout",
 	"POST /api/v1/cubes":                                         "cube.add",
 	"PUT /api/v1/cubes/{sn}":                                     "cube.update",
@@ -131,7 +132,7 @@ var actions = map[string]string{
 // sign-in, a preference or a push subscription, a search, a restore's
 // plan. TestEveryActionHasALine holds it to actions.
 var changeLines = map[string]string{
-	"login": "", "login.start": "", "logout": "", "preference.set": "", "preference.delete": "", "discover": "", "restore.plan": "",
+	"login": "", "login.start": "", "login.key": "", "logout": "", "preference.set": "", "preference.delete": "", "discover": "", "restore.plan": "",
 	"push.subscribe": "", "push.unsubscribe": "", "identity.link.start": "", "identity.link.cancel": "",
 	"update.start": "system", "server.restart": "system", "server.reload": "system", "server.reboot": "system",
 	"server.reboot.cancel": "system", "backup.take": "system", "backup.delete": "system", "restore.start": "system",
@@ -150,7 +151,7 @@ var changeLines = map[string]string{
 
 // noCommand are the actions that are audited but are no command: they
 // send nothing to a Cube and a retry of them is harmless (commands.go).
-var noCommand = map[string]bool{"login": true, "login.start": true, "logout": true, "integration.request": true, "preference.set": true, "preference.delete": true,
+var noCommand = map[string]bool{"login": true, "login.start": true, "login.key": true, "logout": true, "integration.request": true, "preference.set": true, "preference.delete": true,
 	"push.subscribe": true, "push.unsubscribe": true, "server.reload": true, "identity.link.start": true,
 	"identity.link.cancel": true}
 

@@ -1562,6 +1562,7 @@
   "users.kind.api": "API-Schlüssel",
   "users.lastUsed": "zuletzt benutzt von {from}",
   "users.neverUsed": "nie benutzt",
+  "users.fromKey": "aus dem API-Schlüssel {label}",
   "users.revoke": "Widerrufen",
   "users.revokeLabel": "{label} widerrufen",
   "users.revoked": "Token {id} widerrufen.",

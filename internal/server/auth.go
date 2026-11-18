@@ -761,6 +761,12 @@ func (s *Server) stillAdmitted(ctx context.Context, p *principal) bool {
 	if err != nil || !ok || !tok.DeletedAt.IsZero() || tok.Expired(now) {
 		return false
 	}
+	if tok.ParentID != 0 {
+		// A session made from a key lives while the key does.
+		if key, ok, err := s.opts.Store.Token(ctx, tok.ParentID); err != nil || !ok || !key.DeletedAt.IsZero() {
+			return false
+		}
+	}
 	np, err := s.principalFor(ctx, tok, now)
 	return err == nil && np.has("read")
 }

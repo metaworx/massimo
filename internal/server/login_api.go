@@ -6,14 +6,16 @@ package server
 // Login in the web UI (docs/store.md section 6): POST /api/v1/login
 // takes a name and a password and answers a session token, which the
 // page keeps in localStorage and sends as the bearer header; POST
-// /api/v1/logout revokes it; GET /api/v1/me says who the caller is and
-// what the caller may do, so that the page can hide what the role may
-// not.
+// /api/v1/login/key makes one from an API key, for the apps' login by
+// fingerprint; POST /api/v1/logout revokes it; GET /api/v1/me says who
+// the caller is and what the caller may do, so that the page can hide
+// what the role may not.
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"maps"
 	"net/http"
 	"strings"
@@ -89,6 +91,9 @@ type tokenView struct {
 	ExpiresAt    *time.Time `json:"expires_at,omitempty"`
 	LastUsedAt   *time.Time `json:"last_used_at,omitempty"`
 	LastUsedFrom string     `json:"last_used_from,omitempty"`
+	// KeyID is the key a session was made from (POST /api/v1/login/key),
+	// absent for a session of a sign-in and for a key.
+	KeyID int64 `json:"key_id,omitempty"`
 }
 
 // meView is the answer of GET /api/v1/me.
@@ -128,7 +133,7 @@ func viewUser(u store.User, invitedBy string) userView {
 }
 
 func viewToken(t store.Token) tokenView {
-	return tokenView{ID: t.ID, Kind: t.Kind, Label: t.Label, CreatedAt: t.CreatedAt, ExpiresAt: optTime(t.ExpiresAt), LastUsedAt: optTime(t.LastUsedAt), LastUsedFrom: t.LastUsedFrom}
+	return tokenView{ID: t.ID, Kind: t.Kind, Label: t.Label, CreatedAt: t.CreatedAt, ExpiresAt: optTime(t.ExpiresAt), LastUsedAt: optTime(t.LastUsedAt), LastUsedFrom: t.LastUsedFrom, KeyID: t.ParentID}
 }
 
 // signIns holds the addresses with a login running, so that an address
@@ -296,6 +301,13 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 // sign in gets a session, with the extra fields, and the counters of the
 // keys are cleared.
 func (s *Server) openSession(w http.ResponseWriter, r *http.Request, u store.User, label string, extra map[string]any, keys ...string) error {
+	return s.openSessionFrom(w, r, u, 0, label, extra, keys...)
+}
+
+// openSessionFrom is openSession for a session made from the API key
+// keyID, which then names the key and ends the key's earlier session; 0
+// for a sign-in.
+func (s *Server) openSessionFrom(w http.ResponseWriter, r *http.Request, u store.User, keyID int64, label string, extra map[string]any, keys ...string) error {
 	ctx := r.Context()
 	st := s.opts.Store
 	ip := s.clientIP(r)
@@ -313,7 +325,17 @@ func (s *Server) openSession(w http.ResponseWriter, r *http.Request, u store.Use
 	if len(label) > maxLabel {
 		label = label[:maxLabel]
 	}
-	tok, secret, err := st.AddToken(ctx, u.ID, store.TokenSession, label, now.Add(SessionLifetime))
+	var tok store.Token
+	var secret string
+	var err error
+	if keyID != 0 {
+		tok, secret, err = st.AddKeySession(ctx, keyID, label, now.Add(SessionLifetime))
+	} else {
+		tok, secret, err = st.AddToken(ctx, u.ID, store.TokenSession, label, now.Add(SessionLifetime))
+	}
+	if errors.Is(err, store.ErrNoToken) {
+		return fail(http.StatusUnauthorized, "%s", errBadToken.Error()) // the key was revoked meanwhile
+	}
 	if err != nil {
 		return fail(http.StatusInternalServerError, "%v", err)
 	}
@@ -337,6 +359,43 @@ func (s *Server) openSession(w http.ResponseWriter, r *http.Request, u store.Use
 	maps.Copy(answer, extra)
 	writeJSON(w, http.StatusOK, answer)
 	return nil
+}
+
+// loginKeyRequest is the optional body of POST /api/v1/login/key.
+type loginKeyRequest struct {
+	// Label names the session as Label of loginRequest does.
+	Label string `json:"label,omitempty"`
+}
+
+// loginKey handles POST /api/v1/login/key: a session from the API key
+// that makes the call, for the apps' login by fingerprint (docs/app.md),
+// answered as POST /api/v1/login answers. The session names the key, and
+// the key's earlier session ends, so that a phone holds one per key.
+// The wrapper has refused a wrong or revoked key, 401 and counted
+// against the address as every failed token check is, and a user or role
+// that may not use the API, 403. A session as the bearer is 400, a
+// registered integration's key 403. It sends no password, so it works
+// where the password sign-in is off.
+func (s *Server) loginKey(w http.ResponseWriter, r *http.Request) error {
+	if err := s.loginMode(r.Context()); err != nil {
+		return err
+	}
+	p := principalOf(r)
+	if !p.named() {
+		return fail(http.StatusConflict, "no users yet: create the first owner with POST /api/v1/users, or massimo user add")
+	}
+	auditTarget(r, "user:"+p.user.Name)
+	if p.token.Kind != store.TokenAPI {
+		return fail(http.StatusBadRequest, "the bearer is a session, not an API key: a session is made from a key")
+	}
+	if p.integration != nil {
+		return fail(http.StatusForbidden, "a registered integration's key makes no session")
+	}
+	var req loginKeyRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+		return fail(http.StatusBadRequest, "bad body: %v", err)
+	}
+	return s.openSessionFrom(w, r, p.user, p.token.ID, req.Label, nil)
 }
 
 // logout handles POST /api/v1/logout: the session that made the call

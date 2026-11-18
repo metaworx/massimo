@@ -295,6 +295,47 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
+  /api/v1/login/key:
+    post:
+      summary: A session from the API key that makes the call
+      x-capability: any
+      description: |
+        For the apps' login by fingerprint (docs/app.md): the bearer is
+        an API key of the user's own, and the answer the session POST
+        /api/v1/login answers. The session names the key (key_id in the
+        token list), the key's earlier session ends, and revoking the key
+        ends the session. A wrong or revoked key is 401 and counts toward
+        the address's lockout as every failed token check does; a
+        disabled user, a guest past its end date or a disabled role is
+        403, and so is a registered integration's key. It sends no
+        password, so it works while auth.password_login is off.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                label: {type: string, maxLength: 64, description: "Names the session under the user's tokens; the User-Agent when absent"}
+      responses:
+        "200":
+          description: The session
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Session"}
+        "400":
+          description: The bearer is a session, not an API key, or the body is not JSON
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          description: No users yet, or no store
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
   /api/v1/logout:
     post:
       summary: End the session that makes the call
@@ -4409,6 +4450,7 @@ components:
         expires_at: {type: string, format: date-time, description: Absent for an API key}
         last_used_at: {type: string, format: date-time}
         last_used_from: {type: string, description: The client's address}
+        key_id: {type: integer, description: "The key a session was made from (POST /api/v1/login/key); absent for a session of a sign-in and for a key"}
     Me:
       type: object
       properties:

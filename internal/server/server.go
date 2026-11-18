@@ -49,6 +49,7 @@
 //	GET  /api/v1/config                              the settings in effect, as massimo config shows, secrets as set
 //	POST /api/v1/login                               a session for a name and a password (login_api.go)
 //	POST /api/v1/login/start, /login/finish          a session by OPAQUE, no password sent (opaque_api.go)
+//	POST /api/v1/login/key                           a session from the API key that calls, the apps' login by fingerprint
 //	POST /api/v1/logout                              end the session
 //	GET  /api/v1/me                                  who the caller is and what the caller may do
 //	GET|POST /api/v1/users, /users/{name}, /users/{name}/tokens    the users and their tokens (users_api.go)
@@ -1405,6 +1406,7 @@ func (s *Server) routes() {
 	api("POST /api/v1/login/oidc/finish", "none", s.oidcFinish)
 	api("GET /api/v1/login/oidc/callback", "none", s.oidcCallback)
 	api("POST /api/v1/login/oidc/{key}", "none", s.oidcStartLogin)
+	api("POST /api/v1/login/key", "any", s.loginKey)
 	api("POST /api/v1/logout", "any", s.logout)
 	api("GET /api/v1/me", "any", s.me)
 	api("GET /api/v1/audit", "audit", s.getAudit)

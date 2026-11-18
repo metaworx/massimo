@@ -274,6 +274,17 @@ func oldBackup(t *testing.T, s *Store, cubeID int64, reason, format string, at t
 // raiseVersion is 0024's number.
 const raiseVersion = 24
 
+// undoneFromNewest is what a downgrade to 23 undoes: every version from
+// the newest down to the raise, newest first, the additive ones after it
+// included (0025).
+func undoneFromNewest() []int {
+	var out []int
+	for v := SchemaVersion(); v >= raiseVersion; v-- {
+		out = append(out, v)
+	}
+	return out
+}
+
 // D14-A: each release's store, migrated to the newest version and
 // downgraded for its own release, equals the same store migrated only as
 // far as that downgrade stops, in sqlite_master and in every row, but
@@ -427,7 +438,7 @@ func TestRaiseOfAFilledStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v, mr := s.SchemaVersion(); v != raiseVersion || mr != raiseVersion {
+	if v, mr := s.SchemaVersion(); v != SchemaVersion() || mr != raiseVersion {
 		t.Fatalf("schema %d min_reader %d", v, mr)
 	}
 	if _, err := os.Stat(Path(dir) + ".before-24"); err != nil {
@@ -613,7 +624,7 @@ func TestRaiseDownLosses(t *testing.T) {
 	s.Close()
 
 	d, err := Downgrade(dir, 23, Options{Logger: quiet(), Now: clock})
-	if err != nil || d.To != 23 || !slices.Equal(d.Undone, []int{raiseVersion}) {
+	if err != nil || d.To != 23 || !slices.Equal(d.Undone, undoneFromNewest()) {
 		t.Fatalf("downgrade %+v %v", d, err)
 	}
 	if got, want := fileSchema(t, rawDB(t, dir)), schemaAt(t, 23); fmt.Sprint(got) != fmt.Sprint(want) {
@@ -672,7 +683,7 @@ func TestRaiseDownLosses(t *testing.T) {
 		t.Errorf("the waiting request's key")
 	}
 	s = open(t, dir)
-	if v, _ := s.SchemaVersion(); v != raiseVersion {
+	if v, _ := s.SchemaVersion(); v != SchemaVersion() {
 		t.Fatalf("migrated again to %d", v)
 	}
 }

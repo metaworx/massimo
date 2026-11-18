@@ -1562,6 +1562,7 @@
   "users.kind.api": "API key",
   "users.lastUsed": "last used from {from}",
   "users.neverUsed": "never used",
+  "users.fromKey": "made from the API key {label}",
   "users.revoke": "Revoke",
   "users.revokeLabel": "revoke {label}",
   "users.revoked": "Token {id} revoked.",
