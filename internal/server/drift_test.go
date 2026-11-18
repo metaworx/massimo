@@ -110,14 +110,18 @@ func (r *driftRig) waitSetting(rf cube.RFAddress, mode string, setpoint float64)
 	})
 }
 
-// confirmed waits until the pump has seen room's thermostats show the
-// writes to them. The snapshot shows a new state before the pump handles
+// confirmed waits until the pump has handled the states the snapshot
+// shows (pumpSync), and checks that they confirmed the writes to room's
+// thermostats. The snapshot shows a new state before the pump handles
 // its state event and confirms the write; a check before that would find
 // the room confirming and pass over it, dropping a disagreement just
 // begun.
 func (r *driftRig) confirmed(room uint8) {
 	r.t.Helper()
-	testkit.Eventually(r.t, "the room's writes confirmed", func() bool { return r.rt.roomConfirmation(room) == nil })
+	r.rt.pumpSync(r.t)
+	if c := r.rt.roomConfirmation(room); c != nil {
+		r.t.Fatalf("room %d's writes not confirmed: %+v", room, c)
+	}
 }
 
 // events are the log's events of a kind, oldest first, once the store

@@ -58,6 +58,9 @@ func TestFollowUpAfterAWrite(t *testing.T) {
 		var c cubeView
 		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
 	})
+	// The greeting through the pump first: its configuration is what the
+	// new one's config line is measured against.
+	pumpSync(t, s)
 	const base = "/api/v1/cubes/KEQ0000100"
 	eco := func() any {
 		_, d := do(t, ts, "GET", base+"/devices/0a010a", "")
@@ -80,6 +83,7 @@ func TestFollowUpAfterAWrite(t *testing.T) {
 	// The fake's S reply left one radiogram pending (49 of 50 slots
 	// free), so the follow-up reconnects for a fresh H line.
 	testkit.Eventually(t, "the budget reconnect", func() bool { return fc.Connections() == 2 })
+	pumpSync(t, s) // the new configuration's line, which the API showed before
 	var evs []event
 	getJSON(t, ts, "", base+"/log", &evs)
 	config := false

@@ -54,9 +54,12 @@ func stateLines(t *testing.T, ts *httptest.Server, rf cube.RFAddress, key string
 
 // settleState changes rf's entry to st, waits for the pump's next state
 // line of rf whose change of key is to (any next one for key ""), then
-// for the queue to send what the line queued.
+// for the queue to send what the line queued. The lines are counted once
+// the pump has handled what came before (pumpSync), so that a line of
+// an earlier report is not taken for the next.
 func settleState(t *testing.T, fc *fakecube.Server, ts *httptest.Server, s *Server, rf cube.RFAddress, st fakecube.State, key string, to any) {
 	t.Helper()
+	pumpSync(t, s)
 	before := stateLines(t, ts, rf, key, to)
 	if err := fc.SetState(rf, st); err != nil {
 		t.Fatal(err)

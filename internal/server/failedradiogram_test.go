@@ -25,7 +25,7 @@ import (
 // takes it away.
 func TestFailedRadiogram(t *testing.T) {
 	log, logs := testkit.LogWatch(nil)
-	fc, ts, _, _ := startStored(t, Options{PollInterval: 100 * time.Millisecond, Logger: log})
+	fc, ts, s, _ := startStored(t, Options{PollInterval: 100 * time.Millisecond, Logger: log})
 	greeting, _ := fakecube.LoadGreeting(fixture)
 	clean := greeting[len(greeting)-1]
 	list := func(b4 byte, flagged bool) {
@@ -70,26 +70,33 @@ func TestFailedRadiogram(t *testing.T) {
 		}
 		return nil
 	}
-	// caughtUp waits until the newest state line of 0a010d shows the
-	// list set last: the flag as flagged, the failed radiogram as want.
-	// The device's state and the alert's radiogram of now are the
+	// shows reports whether a device's state has the flag as flagged
+	// and the failed radiogram as want.
+	shows := func(st map[string]any, flagged bool, want string) bool {
+		return st != nil && st["error"] == flagged && failed(st) == want
+	}
+	// caughtUp waits until 0a010d's state shows the list set last - the
+	// flag as flagged, the failed radiogram as want - and the pump has
+	// handled it, then checks that the newest state line of 0a010d shows
+	// it too. The device's state and the alert's radiogram of now are the
 	// snapshot's, but a line is the pump's: it reads the snapshot when it
 	// takes the event, which a loaded host can delay past the test's next
 	// list. That list's change then comes in the line of the one before,
 	// measured from the one before that, and a line the test waits for or
 	// the alert reads is never written. So before it sets the next list,
-	// the test waits for the line of the last.
+	// the test waits for the pump (pumpSync).
 	caughtUp := func(what string, flagged bool, want string) {
 		t.Helper()
-		testkit.Eventually(t, what, func() bool {
-			evs := stateLines()
-			if len(evs) == 0 {
-				return false
-			}
-			d, _ := evs[len(evs)-1].State.(map[string]any)
-			st, _ := d["state"].(map[string]any)
-			return st != nil && st["error"] == flagged && failed(st) == want
-		})
+		testkit.Eventually(t, what+" in the device's state", func() bool { return shows(state("0a010d"), flagged, want) })
+		pumpSync(t, s)
+		evs := stateLines()
+		if len(evs) == 0 {
+			t.Fatalf("%s: no state line of 0a010d", what)
+		}
+		d, _ := evs[len(evs)-1].State.(map[string]any)
+		if st, _ := d["state"].(map[string]any); !shows(st, flagged, want) {
+			t.Fatalf("%s: the newest state line of 0a010d shows %v", what, st)
+		}
 	}
 
 	list(0x09, false)

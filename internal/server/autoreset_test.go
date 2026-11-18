@@ -117,18 +117,6 @@ func startResets(t *testing.T, st *store.Store, addr string, clock *stepClock, p
 	if prep != nil {
 		prep(s)
 	}
-	connected := func() int {
-		var evs []event
-		getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log?kind=connected&limit=50", &evs)
-		return len(evs)
-	}
-	if err := st.FlushEvents(ctx); err != nil {
-		t.Fatal(err)
-	}
-	before, err := st.Events(ctx, store.EventQuery{CubeID: row.ID, Kind: "connected", Limit: 50})
-	if err != nil {
-		t.Fatal(err)
-	}
 	runCtx, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})
 	go func() { s.Run(runCtx); close(done) }()
@@ -137,10 +125,10 @@ func startResets(t *testing.T, st *store.Store, addr string, clock *stepClock, p
 	stop = func() { once.Do(func() { ts.Close(); cancel(); <-done }) }
 	t.Cleanup(stop)
 	waitConnected(t, ts, "KEQ0000100")
-	// The pump has taken the greeting's states once its connected event
-	// is in the log: a report before that would be the devices' first
-	// state there, without changes.
-	testkit.Eventually(t, "the pump's connected event", func() bool { return connected() > len(before) })
+	// The pump takes the greeting's states after the API shows the Cube
+	// connected: a report before that would be the devices' first state
+	// there, without changes.
+	pumpSync(t, s)
 	return ts, s, stop
 }
 
@@ -326,11 +314,7 @@ func TestAutoResetWaitsForTheStoresRow(t *testing.T) {
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(func() { ts.Close(); cancel(); <-done; fc.Close() })
 	waitConnected(t, ts, "KEQ0000100")
-	testkit.Eventually(t, "the pump's connected event", func() bool {
-		var evs []event
-		getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log?kind=connected&limit=50", &evs)
-		return len(evs) > 0
-	})
+	pumpSync(t, s) // the greeting's states, before the report
 	rt := s.runtimes()[0]
 	const rf = cube.RFAddress(0x0a010d)
 	on := true

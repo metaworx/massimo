@@ -123,7 +123,10 @@ func TestProgramTag(t *testing.T) {
 // what changed and the new tag, and of its room's virtual wall
 // thermostat.
 func TestProgramConfigEvents(t *testing.T) {
-	_, ts, _, _ := startRoomsOpts(t, roomsOpts{fast: true, slow: true})
+	_, ts, s, _ := startRoomsOpts(t, roomsOpts{fast: true, slow: true})
+	// The greeting through the pump first: its configurations are what
+	// the write's config events are measured against.
+	pumpSync(t, s)
 	evs := readStreamURL(t, ts.URL+"/api/v1/cubes/KEQ0000100/events?devices=all")
 	_, after := evs.AwaitN(t, 0, "the first burst", 10, isEvent)
 	if code, body := putProgram(t, ts.URL+"/api/v1/cubes/KEQ0000100/rooms/2/program", "", `{"tuesday":[{"temp":18,"until":"24:00"}]}`); code != 200 {

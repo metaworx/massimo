@@ -600,6 +600,9 @@ func listedRF(t *testing.T, ts *httptest.Server, rf string) (device, inRoom bool
 // devices, the rooms and the counts, and the metadata event came.
 func TestRemoveListedDevice(t *testing.T) {
 	fc, ts, s := startCopyCube(t, nil)
+	// The greeting through the pump first: its metadata is what the
+	// removal's metadata line is measured against.
+	pumpSync(t, s)
 	const base = "/api/v1/cubes/KEQ0000100"
 	var before cubeView
 	getJSON(t, ts, "", base, &before)

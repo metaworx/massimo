@@ -165,7 +165,66 @@ so "once the action is over" holds for it only once the item that shows it
 came through the watch: a `Has` or `HasNot` right after the action can miss
 an item still in the channel.
 
+## The pump
+
+The API shows a Cube's devices, rooms and connection from the Cube client's snapshot,
+which changes the moment the client reads the Cube's line.
+The server's event pump takes the client's event after that,
+and only then writes the log's line, publishes the stream's event,
+confirms a write or queues a reset.
+A test that saw a change through the API and goes on to read the log,
+the stream or an alert, or changes the Cube again,
+can be ahead of the pump: on a loaded runner it is.
+
+In `internal/server`'s tests, `rt.pumpSync(t)` waits until the runtime's pump
+has handled every event its client had sent out at the call,
+those of the Cube's lines the client was handling then included;
+`pumpSync(t, s)` does it for each of the server's Cubes.
+After it:
+
+- **the log** holds the pump's lines: `GET …/log` writes the store's pending
+  events before it reads;
+- **a subscriber's channel** holds the pump's events,
+  as `TestWallReset`'s does;
+  a stream read over HTTP still needs a watch's `Await`,
+  since the handler writes it in a goroutine of its own;
+- **what the pump does in its turn** is done:
+  a room's confirmation, a reset queued, a backup's window touched.
+
+When a test needs it:
+
+- **after the start, before the first action**, where what the test checks is
+  measured against the greeting:
+  a configuration's or a list's changes, a state line's.
+  `startWith` calls it; the other starts do not, yet;
+- **after it saw a change through the API**,
+  before it reads the log, the stream's events or the alerts,
+  or changes the Cube again;
+- **before a test event** (`mark`) that ends a `Never` on the stream:
+  what the pump makes of the steps before is then published before it.
+
+What it does not cover:
+
+- **a change the client makes outside the Cube's lines** -
+  a lost connection, a held connection that resumes, a pairing -
+  which the test waits for by its event,
+  or by the call that made it, as a device forgotten by the removal;
+- **what the pump starts and does not wait for**:
+  a command it queues (its line on the fake Cube, through `cubewatch`),
+  a re-read, a notification;
+- **the server's timers**,
+  such as a backup window, a follow-up's delays or a write's deadline.
+
+It rests on three values that exist for tests:
+the Cube client's count of the Cube's lines it is handling,
+and the number of the last event it sent out
+(`cubelan.Event.Seq`; both through `Client.EventCounts`),
+and the pump's number of the last event it handled (`runtime.pumped`).
+An event dropped because no one read it leaves no gap:
+a newer one follows it, and the pump that handled that one is past both.
+
 ## Still written by hand
 
 - **A sleep before "nothing came"** stays where the test has no end to wait for
-  yet, and takes no scale.
+  yet, and takes no scale:
+  the server's timers, which `pumpSync` does not end, are such waits.
