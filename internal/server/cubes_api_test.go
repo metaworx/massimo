@@ -14,52 +14,11 @@ import (
 
 	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
-	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/view"
 )
-
-// startStored starts a server whose one Cube, the fake Cube KEQ0000100,
-// is a row of a store in a temporary directory, once the Cube is connected
-// and the server's start is written.
-func startStored(t *testing.T, opts Options) (*fakecube.Server, *httptest.Server, *Server, *store.Store) {
-	t.Helper()
-	greeting, err := fakecube.LoadGreeting(fixture)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fc := &fakecube.Server{Greeting: greeting}
-	addr, err := fc.Start("127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	st := testStore(t, "")
-	row, err := st.AddCube(context.Background(), store.Cube{Serial: "KEQ0000100", Configured: true, Address: addr, Source: store.SourceEnv})
-	if err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := CubeFromRow(row)
-	if err != nil {
-		t.Fatal(err)
-	}
-	opts.Cubes, opts.Store = []CubeConfig{cfg}, st
-	opts.Queue = engine.Options{Gap: time.Millisecond}
-	s := New(opts)
-	ctx, cancel := context.WithCancel(context.Background())
-	go s.Run(ctx)
-	ts := httptest.NewServer(s.Handler())
-	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
-	waitConnected(t, ts, "KEQ0000100")
-	// server_started waits in the writer's batch, and a line the test
-	// writes itself does not: written after that line, in its
-	// millisecond, it would settle a restart the test adds (logAlerts).
-	if err := st.FlushEvents(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	return fc, ts, s, st
-}
 
 // waitConnected waits until the Cube of serial is listed as connected.
 func waitConnected(t *testing.T, ts *httptest.Server, serial string) map[string]any {
@@ -112,7 +71,8 @@ func freeTCP(t *testing.T) string {
 // PUT changes the row and applies it at once: the name, the hidden list
 // (the device leaves the views), the proxy address (the listener moves).
 func TestPutCube(t *testing.T) {
-	_, ts, _, st := startStored(t, Options{})
+	r := startServer(t, stored())
+	ts, st := r.ts, r.st
 	ctx := context.Background()
 
 	var devs []view.Device
@@ -169,7 +129,8 @@ func TestPutCube(t *testing.T) {
 // DELETE stops serving the Cube and removes its row, which is kept with
 // its history (D20-B); POST serves it again, as new.
 func TestDeleteAndAddCube(t *testing.T) {
-	_, ts, _, st := startStored(t, Options{})
+	r := startServer(t, stored())
+	ts, st := r.ts, r.st
 	ctx := context.Background()
 	before, _, _ := st.Cube(ctx, "KEQ0000100")
 	cubeAddr := before.Address
@@ -222,7 +183,7 @@ func TestRestoreRemovedCube(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer other.Close()
-	greeting, _ := fakecube.LoadGreeting(fixture)
+	greeting := recorded(t)
 	second := &fakecube.Server{Greeting: greeting}
 	addr2, err := second.Start("127.0.0.1:0")
 	if err != nil {
@@ -231,7 +192,8 @@ func TestRestoreRemovedCube(t *testing.T) {
 	defer second.Close()
 	_, port, _ := net.SplitHostPort(addr2)
 	p, _ := strconv.Atoi(port)
-	_, ts, _, st := startStored(t, Options{DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{other.Addr()}, DiscoveryWait: 200 * time.Millisecond, CubePort: p})
+	rg := startServer(t, stored(), withOptions(Options{DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{other.Addr()}, DiscoveryWait: 200 * time.Millisecond, CubePort: p}))
+	ts, st := rg.ts, rg.st
 	ctx := context.Background()
 	if code, _ := postDiscovery(t, ts); code != 200 {
 		t.Fatal(code)
@@ -312,7 +274,7 @@ func TestAddFoundCube(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer other.Close()
-	greeting, _ := fakecube.LoadGreeting(fixture)
+	greeting := recorded(t)
 	second := &fakecube.Server{Greeting: greeting}
 	addr2, err := second.Start("127.0.0.1:0")
 	if err != nil {
@@ -321,7 +283,8 @@ func TestAddFoundCube(t *testing.T) {
 	defer second.Close()
 	_, port, _ := net.SplitHostPort(addr2)
 	p, _ := strconv.Atoi(port)
-	_, ts, _, st := startStored(t, Options{DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{other.Addr()}, DiscoveryWait: 200 * time.Millisecond, CubePort: p})
+	r := startServer(t, stored(), withOptions(Options{DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{other.Addr()}, DiscoveryWait: 200 * time.Millisecond, CubePort: p}))
+	ts, st := r.ts, r.st
 	if code, _ := postDiscovery(t, ts); code != 200 {
 		t.Fatal(code)
 	}
@@ -342,15 +305,15 @@ func TestAddFoundCube(t *testing.T) {
 	}
 }
 
-// serveRows starts a server over the store's configured rows, as serve
-// does at a start; stop ends it and waits for its end, as a restart
-// would.
-func serveRows(t *testing.T, st *store.Store, opts Options) (ts *httptest.Server, s *Server, stop func()) {
+// configuredCubes is the store's configured rows, as serve takes them
+// for the Cubes it serves at a start.
+func configuredCubes(t *testing.T, st *store.Store) []CubeConfig {
 	t.Helper()
 	rows, err := st.Cubes(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
+	var out []CubeConfig
 	for _, row := range rows {
 		if !row.Configured {
 			continue
@@ -359,31 +322,9 @@ func serveRows(t *testing.T, st *store.Store, opts Options) (ts *httptest.Server
 		if err != nil {
 			t.Fatal(err)
 		}
-		opts.Cubes = append(opts.Cubes, cfg)
+		out = append(out, cfg)
 	}
-	opts.Store = st
-	opts.Queue = engine.Options{Gap: time.Millisecond}
-	s = New(opts)
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() { s.Run(ctx); close(done) }()
-	ts = httptest.NewServer(s.Handler())
-	var once bool
-	stop = func() {
-		if once {
-			return
-		}
-		once = true
-		ts.Close()
-		cancel()
-		select {
-		case <-done:
-		case <-time.After(testkit.Scale(5 * time.Second)):
-			t.Fatal("the server did not stop")
-		}
-	}
-	t.Cleanup(stop)
-	return ts, s, stop
+	return out
 }
 
 // removedListed removes the Cube of serial through the API and reports
@@ -439,7 +380,7 @@ func TestRemovedCubeIsListedAsFound(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer disc.Close()
-		greeting, _ := fakecube.LoadGreeting(fixture)
+		greeting := recorded(t)
 		fc := &fakecube.Server{Greeting: greeting}
 		addr, err := fc.Start("127.0.0.1:0")
 		if err != nil {
@@ -450,7 +391,8 @@ func TestRemovedCubeIsListedAsFound(t *testing.T) {
 		p, _ := strconv.Atoi(port)
 		opts := Options{DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{disc.Addr()}, DiscoveryWait: 200 * time.Millisecond, CubePort: p}
 		st := testStore(t, "")
-		ts, _, stop := serveRows(t, st, opts)
+		r := startServer(t, onStore(st), withOptions(opts), withCubes(configuredCubes(t, st)...))
+		ts := r.ts
 		if code, _ := postDiscovery(t, ts); code != 200 {
 			t.Fatal(code)
 		}
@@ -458,9 +400,9 @@ func TestRemovedCubeIsListedAsFound(t *testing.T) {
 			t.Fatalf("add the found cube %d %v", code, out)
 		}
 		waitConnected(t, ts, "KEQ0000100")
-		stop()
+		r.stop()
 
-		ts, _, _ = serveRows(t, st, opts)
+		ts = startServer(t, onStore(st), withOptions(opts), withCubes(configuredCubes(t, st)...)).ts
 		removedListed(t, ts, "KEQ0000100")
 		postDiscovery(t, ts)
 		if n := listedFound(t, ts, "KEQ0000100"); n != 1 {
@@ -469,7 +411,8 @@ func TestRemovedCubeIsListedAsFound(t *testing.T) {
 	})
 
 	t.Run("settings file", func(t *testing.T) {
-		_, ts, s, _ := startStored(t, Options{DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{freeUDP(t, "127.0.0.1")}})
+		r := startServer(t, stored(), withOptions(Options{DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{freeUDP(t, "127.0.0.1")}}))
+		ts, s := r.ts, r.s
 		s.note(ctx, lan, time.Now())
 		if n := removedListed(t, ts, "KEQ0000100"); n != 1 {
 			t.Fatalf("the removed cube is listed %d times", n)
@@ -477,7 +420,7 @@ func TestRemovedCubeIsListedAsFound(t *testing.T) {
 	})
 
 	t.Run("plain address", func(t *testing.T) {
-		greeting, _ := fakecube.LoadGreeting(fixture)
+		greeting := recorded(t)
 		fc := &fakecube.Server{Greeting: greeting}
 		addr, err := fc.Start("127.0.0.1:0")
 		if err != nil {
@@ -486,8 +429,10 @@ func TestRemovedCubeIsListedAsFound(t *testing.T) {
 		defer fc.Close()
 		st := testStore(t, "")
 		plain := store.FileCube{Values: map[string]store.FileValue{store.FieldAddress: {Variable: "MASSIMO_CUBE_ADDRESS", Value: addr}}}
-		ts, s, _ := serveRows(t, st, Options{Cubes: []CubeConfig{{Addr: addr, Source: store.SourceEnv, SeedFromFile: true}}, FileCubes: map[string]store.FileCube{"": plain},
-			DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{freeUDP(t, "127.0.0.1")}})
+		r := startServer(t, onStore(st), withOptions(Options{FileCubes: map[string]store.FileCube{"": plain},
+			DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{freeUDP(t, "127.0.0.1")}}),
+			withCubes(append([]CubeConfig{{Addr: addr, Source: store.SourceEnv, SeedFromFile: true}}, configuredCubes(t, st)...)...))
+		ts, s := r.ts, r.s
 		testkit.Eventually(t, "the plain address's cube seeded", func() bool {
 			row, ok, _ := st.Cube(ctx, "KEQ0000100")
 			return ok && row.Configured
@@ -501,7 +446,7 @@ func TestRemovedCubeIsListedAsFound(t *testing.T) {
 
 // Without a store the Cube and settings routes say so.
 func TestCubeRoutesNeedAStore(t *testing.T) {
-	_, ts, _ := start(t, "")
+	ts := startServer(t).ts
 	for _, r := range [][3]string{{"PUT", "/api/v1/cubes/KEQ0000100", `{"name":"x"}`}, {"DELETE", "/api/v1/cubes/KEQ0000100", ""}, {"POST", "/api/v1/cubes", `{"serial":"KEQ0000001"}`}, {"GET", "/api/v1/settings", ""}} {
 		if code, _ := do(t, ts, r[0], r[1], r[2]); code != 503 {
 			t.Errorf("%s %s: %d", r[0], r[1], code)
@@ -513,7 +458,8 @@ func TestCubeRoutesNeedAStore(t *testing.T) {
 // The poll interval's default is 10 s; a flag that decides a setting for
 // the run is its fixed_by.
 func TestSettingsAPI(t *testing.T) {
-	_, ts, srv, st := startStored(t, Options{PollInterval: 2 * time.Minute, SettingsFixedBy: map[string]string{store.PollIntervalKey: "-poll"}})
+	r := startServer(t, stored(), withOptions(Options{PollInterval: 2 * time.Minute, SettingsFixedBy: map[string]string{store.PollIntervalKey: "-poll"}}))
+	ts, srv, st := r.ts, r.s, r.st
 	code, out := do(t, ts, "GET", "/api/v1/settings", "")
 	stale, _ := out["stale_after"].(map[string]any)
 	poll, _ := out["poll_interval"].(map[string]any)
@@ -584,7 +530,8 @@ func TestSettingsAPI(t *testing.T) {
 // what fixes it, at the next start; auto, on and off taken, null back to
 // auto, anything else refused.
 func TestAnnounceSettingAPI(t *testing.T) {
-	_, ts, _, st := startStored(t, Options{Announce: AnnounceState{On: true, FixedBy: "MASSIMO_ANNOUNCE"}})
+	r := startServer(t, stored(), withOptions(Options{Announce: AnnounceState{On: true, FixedBy: "MASSIMO_ANNOUNCE"}}))
+	ts, st := r.ts, r.st
 	code, out := do(t, ts, "GET", "/api/v1/settings", "")
 	ann, _ := out[store.AnnounceKey].(map[string]any)
 	if code != 200 || ann["value"] != "auto" || ann["default"] != "auto" || ann["set"] != false || ann["in_effect"] != "on" || ann["applies"] != "restart" ||

@@ -17,19 +17,15 @@ import (
 	"go.metaworx.ch/massimo/internal/testkit"
 )
 
-type fakeClock struct{ t time.Time }
-
-func (c *fakeClock) now() time.Time { return c.t }
-
 func TestAuthLimiter(t *testing.T) {
 	ctx := context.Background()
-	clock := &fakeClock{t: time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)}
-	l := newAuthLimiter(3, time.Minute, 5*time.Minute, clock.now)
+	clock := testkit.NewClock(time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC))
+	l := newAuthLimiter(3, time.Minute, 5*time.Minute, clock.Now)
 	if l.fail(ctx, "a") || l.fail(ctx, "a") {
 		t.Fatal("locked too early")
 	}
 	// Failures in an earlier window do not count.
-	clock.t = clock.t.Add(2 * time.Minute)
+	clock.Add(2 * time.Minute)
 	if l.fail(ctx, "a") || l.fail(ctx, "a") {
 		t.Fatal("old failures counted")
 	}
@@ -43,7 +39,7 @@ func TestAuthLimiter(t *testing.T) {
 		t.Fatal("other address locked")
 	}
 	l.succeed(ctx, "a") // a success during the lockout does not lift it
-	clock.t = clock.t.Add(5*time.Minute + time.Second)
+	clock.Add(5*time.Minute + time.Second)
 	if l.lockedFor(ctx, "a") != 0 {
 		t.Fatal("still locked after the lockout")
 	}
@@ -55,10 +51,10 @@ func TestAuthLimiter(t *testing.T) {
 }
 
 func TestTicketStore(t *testing.T) {
-	clock := &fakeClock{t: time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)}
-	s := newTicketStore(clock.now)
+	clock := testkit.NewClock(time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC))
+	s := newTicketStore(clock.Now)
 	id, exp, err := s.issue("keq0000100", nil)
-	if err != nil || len(id) != 48 || !exp.Equal(clock.t.Add(TicketLifetime)) {
+	if err != nil || len(id) != 48 || !exp.Equal(clock.Now().Add(TicketLifetime)) {
 		t.Fatalf("issue %q %v %v", id, exp, err)
 	}
 	if _, ok := s.redeem(id, "keq0000200"); ok {
@@ -72,7 +68,7 @@ func TestTicketStore(t *testing.T) {
 		t.Fatal("ticket used twice")
 	}
 	id, _, _ = s.issue("keq0000100", nil)
-	clock.t = clock.t.Add(TicketLifetime)
+	clock.Add(TicketLifetime)
 	if _, ok := s.redeem(id, "keq0000100"); ok {
 		t.Fatal("expired ticket accepted")
 	}
@@ -119,7 +115,7 @@ func ticketFor(t *testing.T, ts *httptest.Server, token, sn string) string {
 }
 
 func TestEventStreamTicket(t *testing.T) {
-	_, ts, _ := start(t, "secret")
+	ts := startServer(t, withOptions(Options{Token: "secret"})).ts
 	events := ts.URL + "/api/v1/cubes/KEQ0000100/events"
 	if r := send(t, "POST", ts.URL+"/api/v1/cubes/KEQ0000100/events/ticket", ""); r.StatusCode != 401 {
 		t.Fatalf("ticket without the token: %d", r.StatusCode)
@@ -146,7 +142,7 @@ func TestEventStreamTicket(t *testing.T) {
 }
 
 func TestFailedTokensLockTheAddressOut(t *testing.T) {
-	_, ts, _ := startWith(t, Options{Token: "secret", AuthFailures: 3})
+	ts := startServer(t, withOptions(Options{Token: "secret", AuthFailures: 3})).ts
 	cubes := ts.URL + "/api/v1/cubes"
 	// A success in between forgets the failures.
 	send(t, "GET", cubes, "wrong")
@@ -169,7 +165,7 @@ func TestFailedTokensLockTheAddressOut(t *testing.T) {
 		t.Fatalf("stream during the lockout: %d", r.StatusCode)
 	}
 	// Without a token configured nothing is limited.
-	_, open, _ := startWith(t, Options{AuthFailures: 1})
+	open := startServer(t, withOptions(Options{AuthFailures: 1})).ts
 	for i := 0; i < 3; i++ {
 		if r := send(t, "GET", open.URL+"/api/v1/cubes", "wrong"); r.StatusCode != 200 {
 			t.Fatalf("open server: %d", r.StatusCode)
@@ -187,7 +183,8 @@ func TestRequestsWithoutTokenAreNotCounted(t *testing.T) {
 	dir := t.TempDir()
 	opts := storeOptions(t, dir, "secret")
 	opts.AuthFailures = 3
-	_, ts, s := startWith(t, opts)
+	rg := startServer(t, withOptions(opts))
+	ts, s := rg.ts, rg.s
 	cubes := ts.URL + "/api/v1/cubes"
 	stream := cubes + "/KEQ0000100/events"
 	for i := 0; i < 5; i++ {

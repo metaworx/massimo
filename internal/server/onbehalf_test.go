@@ -70,7 +70,8 @@ func as(id, level string) map[string]string {
 // integration's maximum, the integration user's role and the level; and
 // each refusal says which it is.
 func TestOnBehalfChain(t *testing.T) {
-	fc, ts, s, st := startRoomsOpts(t, roomsOpts{slow: true})
+	r := startServer(t, storedRooms(), quiet())
+	fc, ts, s, st := r.fc, r.ts, r.s, r.st
 	received := cubewatch.Lines(fc)
 	i, key := registerHA(t, st, []string{"read", "setpoint", "lock", "structure"})
 	owner := userToken(t, st, "boss", store.RoleOwner)

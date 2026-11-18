@@ -19,8 +19,6 @@ import (
 	"testing"
 	"time"
 
-	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
-	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit"
@@ -49,7 +47,8 @@ func rawLog(t *testing.T, ts *httptest.Server, query string) []map[string]any {
 // id and by time, filters by kind and device, the stored copy without
 // the received times, a change of a device as a state event.
 func TestLogFromStore(t *testing.T) {
-	fc, ts, _, _ := startStored(t, Options{PollInterval: 50 * time.Millisecond})
+	r := startServer(t, stored(), withOptions(Options{PollInterval: 50 * time.Millisecond}))
+	fc, ts := r.fc, r.ts
 	var all []event
 	testkit.Eventually(t, "the connect burst in the log", func() bool {
 		_, all = logOf(t, ts, "?limit=1000")
@@ -141,7 +140,7 @@ func TestLogFromStore(t *testing.T) {
 	}
 
 	// A change of a device's values is a state event with its changes.
-	greeting, _ := fakecube.LoadGreeting(fixture)
+	greeting := recorded(t)
 	l := greeting[len(greeting)-1]
 	raw, _ := base64.StdEncoding.DecodeString(l.Data)
 	copy(raw, []byte{0x0b, 0x0a, 0x01, 0x0d, 0x09, 0x12, 0x01, 30, 42, 0, 0, 0})
@@ -177,36 +176,15 @@ func ids(evs []event) []int64 {
 // The log survives a restart of the server on the same store: the
 // first run's events come before the second's connected.
 func TestLogSurvivesRestart(t *testing.T) {
-	greeting, err := fakecube.LoadGreeting(fixture)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fc := &fakecube.Server{Greeting: greeting}
-	addr, err := fc.Start("127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer fc.Close()
-	st := testStore(t, "")
-	row, _ := st.AddCube(context.Background(), store.Cube{Serial: "KEQ0000100", Configured: true, Address: addr, Source: store.SourceEnv})
-	run := func() (*httptest.Server, func()) {
-		cfg, _ := CubeFromRow(row)
-		s := New(Options{Cubes: []CubeConfig{cfg}, Store: st, Queue: engine.Options{Gap: time.Millisecond}, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
-		ctx, cancel := context.WithCancel(context.Background())
-		done := make(chan struct{})
-		go func() { s.Run(ctx); close(done) }()
-		ts := httptest.NewServer(s.Handler())
-		waitConnected(t, ts, "KEQ0000100")
-		return ts, func() { ts.Close(); cancel(); <-done }
-	}
-	ts, stop := run()
+	discard := withOptions(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	r := startServer(t, stored(), discard)
+	ts := r.ts
 	testkit.Eventually(t, "the first run's connected", func() bool {
 		_, page := logOf(t, ts, "?kind=connected")
 		return len(page) == 1
 	})
-	stop()
-	ts, stop = run()
-	defer stop()
+	r.stop()
+	ts = startServer(t, again(r), discard).ts
 	testkit.Eventually(t, "the second run's connected", func() bool {
 		_, page := logOf(t, ts, "?kind=connected")
 		return len(page) == 2 && page[0].ID < page[1].ID && !page[0].Time.After(page[1].Time)
@@ -220,26 +198,8 @@ func TestLogSurvivesRestart(t *testing.T) {
 // restore_done does, is in the store once Run has returned: the writer
 // stops after the server's goroutines, not with them.
 func TestLogLastEvents(t *testing.T) {
-	greeting, err := fakecube.LoadGreeting(fixture)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fc := &fakecube.Server{Greeting: greeting}
-	addr, err := fc.Start("127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer fc.Close()
-	st := testStore(t, "")
-	row, _ := st.AddCube(context.Background(), store.Cube{Serial: "KEQ0000100", Configured: true, Address: addr, Source: store.SourceEnv})
-	cfg, _ := CubeFromRow(row)
-	s := New(Options{Cubes: []CubeConfig{cfg}, Store: st, Queue: engine.Options{Gap: time.Millisecond}, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() { s.Run(ctx); close(done) }()
-	ts := httptest.NewServer(s.Handler())
-	defer ts.Close()
-	waitConnected(t, ts, "KEQ0000100")
+	r := startServer(t, stored(), withOptions(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil))}))
+	s, st := r.s, r.st
 	tctx := s.track()
 	if tctx == nil {
 		t.Fatal("Run tracks nothing")
@@ -252,9 +212,8 @@ func TestLogLastEvents(t *testing.T) {
 			rt.emit(event{Kind: "restore_done", Time: time.Now()})
 		}
 	}()
-	cancel()
-	<-done
-	page, err := st.Events(context.Background(), store.EventQuery{CubeID: row.ID, Kind: "restore_done"})
+	r.stop()
+	page, err := st.Events(context.Background(), store.EventQuery{CubeID: rowID(t, st, "KEQ0000100"), Kind: "restore_done"})
 	if err != nil || len(page) != 1 {
 		t.Fatalf("the event emitted as Run ended: %d, %v", len(page), err)
 	}
@@ -264,7 +223,7 @@ func TestLogLastEvents(t *testing.T) {
 // applied in memory, an id bound empty, a device and a time as on the
 // store.
 func TestLogWithoutStore(t *testing.T) {
-	_, ts, _ := start(t, "")
+	ts := startServer(t).ts
 	var all []event
 	testkit.Eventually(t, "the connect burst in the ring", func() bool {
 		_, all = logOf(t, ts, "?limit=1000")
@@ -330,7 +289,8 @@ func TestLogWithoutStore(t *testing.T) {
 // an event of the audit visibility is on the page of a user with audit
 // and on no other user's; command takes a positive id.
 func TestLogByCommandAndVisibility(t *testing.T) {
-	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, s := r.ts, r.s
 	st := s.opts.Store
 	ctx := t.Context()
 	viewer := userToken(t, st, "anna", store.RoleViewer)
@@ -376,7 +336,7 @@ func TestLogByCommandAndVisibility(t *testing.T) {
 // at debug, acknowledged at info, and its change line, each naming the
 // command.
 func TestSetpointLinesByCommand(t *testing.T) {
-	_, ts, _ := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	ts := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret"))).ts
 	if code, text := callAPI(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/rooms/6/setpoint", "secret", `{"mode":"auto"}`); code != 200 {
 		t.Fatalf("setpoint: %d %s", code, text)
 	}
@@ -413,7 +373,8 @@ func TestSetpointLinesByCommand(t *testing.T) {
 // A sign-in, a failed one and a lockout are the server's lines, which a
 // user with audit sees and a viewer does not, on the log and the stream.
 func TestSignInLinesForAuditorsAlone(t *testing.T) {
-	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, s := r.ts, r.s
 	viewer := userToken(t, s.opts.Store, "anna", store.RoleViewer)
 	s.logSignIn("login", "anna", 0, "192.0.2.1")
 	s.logSignIn("login_failed", "bob", 0, "192.0.2.2")
@@ -465,7 +426,8 @@ func TestProxyClientsCommandInTheLog(t *testing.T) {
 	}
 	proxyAddr := ln.Addr().String()
 	ln.Close()
-	fc, ts, _, st := startStored(t, Options{PollInterval: 50 * time.Millisecond, Proxy: []ProxyListener{{Addr: proxyAddr}}})
+	rg := startServer(t, stored(), withOptions(Options{PollInterval: 50 * time.Millisecond, Proxy: []ProxyListener{{Addr: proxyAddr}}}))
+	fc, ts, st := rg.fc, rg.ts, rg.st
 	conn, r := proxyClient(t, proxyAddr)
 	m, err := cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a010d}, 21, cube.ModeManual, cube.Until{})
 	if err != nil {
@@ -506,7 +468,7 @@ func TestProxyClientsCommandInTheLog(t *testing.T) {
 	})
 
 	// The device's new state names the command.
-	greeting, _ := fakecube.LoadGreeting(fixture)
+	greeting := recorded(t)
 	raw, _ := base64.StdEncoding.DecodeString(greeting[len(greeting)-1].Data)
 	copy(raw, []byte{0x0b, 0x0a, 0x01, 0x0d, 0x09, 0x12, 0x01, 30, 42, 0, 0, 0})
 	fc.SetDeviceList(cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(raw)})
@@ -526,49 +488,18 @@ func TestProxyClientsCommandInTheLog(t *testing.T) {
 	}
 }
 
-// startTwoCubes starts a server with the fake Cube KEQ0000100 and a
-// second Cube, KEQ0000200, that never connects; with stored, both are
-// rows of a store, returned with the second Cube's row id.
-func startTwoCubes(t *testing.T, stored bool) (*httptest.Server, *Server, *store.Store, int64) {
+// secondCube is a second Cube, KEQ0000200, that never connects, for
+// alsoCube.
+var secondCube = CubeConfig{Serial: "KEQ0000200", Addr: "127.0.0.1:9"}
+
+// rowID is the id of serial's row in st.
+func rowID(t *testing.T, st *store.Store, serial string) int64 {
 	t.Helper()
-	greeting, err := fakecube.LoadGreeting(fixture)
-	if err != nil {
-		t.Fatal(err)
+	row, ok, err := st.Cube(context.Background(), serial)
+	if err != nil || !ok {
+		t.Fatalf("no row of %s: %v", serial, err)
 	}
-	fc := &fakecube.Server{Greeting: greeting}
-	addr, err := fc.Start("127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	opts := Options{Queue: engine.Options{Gap: time.Millisecond}}
-	var st *store.Store
-	var second int64
-	if stored {
-		st = testStore(t, "")
-		ctx := context.Background()
-		for _, c := range []store.Cube{{Serial: "KEQ0000100", Address: addr}, {Serial: "KEQ0000200", Address: "127.0.0.1:9"}} {
-			c.Configured, c.Source = true, store.SourceEnv
-			row, err := st.AddCube(ctx, c)
-			if err != nil {
-				t.Fatal(err)
-			}
-			cfg, err := CubeFromRow(row)
-			if err != nil {
-				t.Fatal(err)
-			}
-			opts.Cubes, second = append(opts.Cubes, cfg), row.ID
-		}
-		opts.Store = st
-	} else {
-		opts.Cubes = []CubeConfig{{Serial: "KEQ0000100", Addr: addr}, {Serial: "KEQ0000200", Addr: "127.0.0.1:9"}}
-	}
-	s := New(opts)
-	ctx, cancel := context.WithCancel(context.Background())
-	go s.Run(ctx)
-	ts := httptest.NewServer(s.Handler())
-	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
-	waitConnected(t, ts, "KEQ0000100")
-	return ts, s, st, second
+	return row.ID
 }
 
 // allLog reads a page of every Cube's log.
@@ -586,7 +517,8 @@ func allLog(t *testing.T, ts *httptest.Server, query string) []event {
 // Cubes, every row once; a device by its S/N or by its radio address on
 // every Cube; a Cube's own log carries no Cube's S/N.
 func TestLogOfEveryCube(t *testing.T) {
-	ts, s, st, second := startTwoCubes(t, true)
+	r := startServer(t, stored(), alsoCube(secondCube))
+	ts, s, st, second := r.ts, r.s, r.st, rowID(t, r.st, "KEQ0000200")
 	testkit.Eventually(t, "the fake Cube's burst in the store", func() bool {
 		_, own := logOf(t, ts, "?kind=state")
 		return len(own) >= 6
@@ -656,7 +588,8 @@ func TestLogOfEveryCube(t *testing.T) {
 // each Cube's events with its S/N and the server's once, though every
 // ring keeps them.
 func TestLogOfEveryCubeWithoutStore(t *testing.T) {
-	ts, s, _, _ := startTwoCubes(t, false)
+	r := startServer(t, alsoCube(secondCube))
+	ts, s := r.ts, r.s
 	testkit.Eventually(t, "the fake Cube's burst in its ring", func() bool {
 		_, own := logOf(t, ts, "?kind=state")
 		return len(own) >= 6

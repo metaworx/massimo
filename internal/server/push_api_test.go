@@ -21,7 +21,6 @@ import (
 	"testing"
 	"time"
 
-	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/notify"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/push"
@@ -65,7 +64,7 @@ func subscription(t *testing.T, endpoint, label string) string {
 // shows, and made anew where it no longer opens.
 func TestVAPIDKey(t *testing.T) {
 	opts := storeOptions(t, t.TempDir(), "secret")
-	_, ts, _ := startWith(t, opts)
+	ts := startServer(t, withOptions(opts)).ts
 	code, text := callAPI(t, ts, "GET", "/api/v1/push/vapid", "secret", "")
 	var v struct {
 		Key string `json:"key"`
@@ -82,7 +81,7 @@ func TestVAPIDKey(t *testing.T) {
 	if !ok || !strings.HasPrefix(string(kept), `"v2:`) || strings.Contains(string(kept), "private") {
 		t.Fatalf("not kept sealed in the store: %s", kept)
 	}
-	_, again, _ := startWith(t, opts)
+	again := startServer(t, withOptions(opts)).ts
 	if _, text := callAPI(t, again, "GET", "/api/v1/push/vapid", "secret", ""); !strings.Contains(text, v.Key) {
 		t.Fatalf("another key for the next server: %s", text)
 	}
@@ -91,11 +90,11 @@ func TestVAPIDKey(t *testing.T) {
 	}
 	// one that no longer opens is made anew (AP SealedSecrets v1.0, D36-A)
 	opts.Store.SetSetting(t.Context(), store.VAPIDKey, "v2:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
-	_, lost, _ := startWith(t, opts)
+	lost := startServer(t, withOptions(opts)).ts
 	if code, text := callAPI(t, lost, "GET", "/api/v1/push/vapid", "secret", ""); code != 200 || strings.Contains(text, v.Key) {
 		t.Fatalf("a lost key: %d %s", code, text)
 	}
-	_, legacy, _ := start(t, "secret")
+	legacy := startServer(t, withOptions(Options{Token: "secret"})).ts
 	if code, _ := callAPI(t, legacy, "GET", "/api/v1/push/vapid", "secret", ""); code != 503 {
 		t.Fatalf("without a store: %d", code)
 	}
@@ -105,7 +104,8 @@ func TestVAPIDKey(t *testing.T) {
 // key: listed without its keys, the same endpoint again updating it,
 // removed by its owner only; the audit has both, and no command.
 func TestPushSubscriptionRoutes(t *testing.T) {
-	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	rg := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, s := rg.ts, rg.s
 	st := s.opts.Store
 	const owner = "secret"
 	body := subscription(t, "https://push.example.net/send/a", "Firefox on the phone")
@@ -194,13 +194,13 @@ func TestPushSubscriptionRoutes(t *testing.T) {
 
 // Without a signed-in user the routes answer 409, without a store 503.
 func TestPushWithoutUser(t *testing.T) {
-	_, open, _ := startWith(t, storeOptions(t, t.TempDir(), ""))
+	open := startServer(t, withOptions(storeOptions(t, t.TempDir(), ""))).ts
 	for _, m := range []string{"GET", "POST"} {
 		if code, text := callAPI(t, open, m, "/api/v1/me/push", "", subscription(t, "https://push.example.net/a", "")); code != 409 || !strings.Contains(text, "no user signed in") {
 			t.Errorf("open server %s: %d %s", m, code, text)
 		}
 	}
-	_, legacy, _ := start(t, "secret")
+	legacy := startServer(t, withOptions(Options{Token: "secret"})).ts
 	if code, _ := callAPI(t, legacy, "GET", "/api/v1/me/push", "secret", ""); code != 503 {
 		t.Fatalf("no store: %d", code)
 	}
@@ -209,7 +209,7 @@ func TestPushWithoutUser(t *testing.T) {
 // The notify preference is read as the rules read it: a document they
 // cannot is refused.
 func TestNotifyPreferenceChecked(t *testing.T) {
-	_, ts, _ := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	ts := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret"))).ts
 	for _, bad := range []string{`{"window_open": {"on": true, "after_min": 0}}`, `{"sunshine": {"on": true}}`, `[]`} {
 		if code, text := callAPI(t, ts, "PUT", "/api/v1/me/preferences/notify", "secret", bad); code != 400 {
 			t.Errorf("%s: %d %s", bad, code, text)
@@ -233,7 +233,8 @@ func TestNotificationFromTheCube(t *testing.T) {
 	var logs *testkit.Watch[testkit.Record]
 	opts.Logger, logs = testkit.LogWatch(nil)
 	opts.PollInterval = 100 * time.Millisecond
-	fc, ts, s := startWith(t, opts)
+	rg := startServer(t, withOptions(opts))
+	fc, ts, s := rg.fc, rg.ts, rg.s
 	userToken(t, s.opts.Store, "op", store.RoleOperator)
 	if code, text := callAPI(t, ts, "POST", "/api/v1/me/push", "secret", subscription(t, "https://push.example.net/send/a", "phone")); code != 201 {
 		t.Fatalf("subscribe: %d %s", code, text)
@@ -243,7 +244,7 @@ func TestNotificationFromTheCube(t *testing.T) {
 		return getJSON(t, ts, "secret", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
 	})
 	// 0a010d reports manual, 21 °C, valve 30 %; then an error.
-	greeting, _ := fakecube.LoadGreeting(fixture)
+	greeting := recorded(t)
 	l := greeting[len(greeting)-1]
 	raw, _ := base64.StdEncoding.DecodeString(l.Data)
 	copy(raw, []byte{0x0b, 0x0a, 0x01, 0x0d, 0x09, 0x12, 0x01, 30, 42, 0, 0, 0})
@@ -284,7 +285,8 @@ func TestNotificationDelivered(t *testing.T) {
 		defer mu.Unlock()
 		local = append(local, fmt.Sprintf("%d %s %s", user, n.Kind, n.Device))
 	})}
-	fc, ts, s := startWith(t, opts)
+	rg := startServer(t, withOptions(opts))
+	fc, ts, s := rg.fc, rg.ts, rg.s
 	st := s.opts.Store
 	op := userToken(t, st, "op", store.RoleOperator)
 	_, text := callAPI(t, ts, "GET", "/api/v1/push/vapid", "secret", "")
@@ -306,7 +308,7 @@ func TestNotificationDelivered(t *testing.T) {
 	mine, theirs := openStream(t, ts, "secret"), openStream(t, ts, op)
 	// 0a010d reports manual, 21 °C, valve 30 %; then a communication
 	// error, a setpoint's radiogram (0x40) having failed.
-	greeting, _ := fakecube.LoadGreeting(fixture)
+	greeting := recorded(t)
 	l := greeting[len(greeting)-1]
 	raw, _ := base64.StdEncoding.DecodeString(l.Data)
 	copy(raw, []byte{0x0b, 0x0a, 0x01, 0x0d, 0x09, 0x12, 0x01, 30, 42, 0, 0, 0})
@@ -359,7 +361,8 @@ func TestNotificationRemovesGoneSubscription(t *testing.T) {
 	opts := storeOptions(t, t.TempDir(), "secret")
 	var logs *testkit.Watch[testkit.Record]
 	opts.Logger, logs = testkit.LogWatch(nil)
-	_, ts, s := startWith(t, opts)
+	r := startServer(t, withOptions(opts))
+	ts, s := r.ts, r.s
 	svc := pushtest.New(t, nil, http.StatusGone)
 	if code, text := callAPI(t, ts, "POST", "/api/v1/me/push", "secret", svc.Subscription("/send/gone", "phone")); code != 201 {
 		t.Fatalf("subscribe: %d %s", code, text)

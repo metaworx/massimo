@@ -4,7 +4,6 @@
 package server
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http/httptest"
@@ -16,6 +15,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // auditRows reads GET /api/v1/audit with a query.
@@ -45,7 +45,7 @@ func detailOf(t *testing.T, row auditView) map[string]any {
 // with the caller, the Cube, the target and how it went; the reads and
 // the stream ticket leave none.
 func TestAuditOfEveryWrite(t *testing.T) {
-	_, ts, _ := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	ts := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret"))).ts
 	// A read and the stream ticket leave no row.
 	callAPI(t, ts, "GET", "/api/v1/cubes/KEQ0000100/rooms", "secret", "")
 	ticketFor(t, ts, "secret", "KEQ0000100")
@@ -122,7 +122,8 @@ func TestAuditOfEveryWrite(t *testing.T) {
 // The rows' targets, the refused ones, the secrets removed, and the
 // listing's filters.
 func TestAuditDetails(t *testing.T) {
-	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	rg := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, s := rg.ts, rg.s
 	st := s.opts.Store
 	viewer := userToken(t, st, "vi", store.RoleViewer)
 	callAPI(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/rooms/6/setpoint", "secret", `{"mode":"auto"}`)
@@ -183,7 +184,7 @@ func TestAuditDetails(t *testing.T) {
 		t.Fatalf("a viewer reads the audit: %d", code)
 	}
 	// A server without a store audits nothing and has no audit route.
-	_, legacy, _ := start(t, "secret")
+	legacy := startServer(t, withOptions(Options{Token: "secret"})).ts
 	if code, _ := callAPI(t, legacy, "GET", "/api/v1/audit", "secret", ""); code != 503 {
 		t.Fatalf("audit without a store: %d", code)
 	}
@@ -211,11 +212,8 @@ func (b countingBody) Close() error { return nil }
 // request, locks the address out for the last ten.
 func TestRefusedRequestsAuditedPerMinute(t *testing.T) {
 	opts := storeOptions(t, t.TempDir(), "secret")
-	s := New(opts)
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() { s.Run(ctx); close(done) }()
-	defer func() { cancel(); <-done }()
+	rg := startServer(t, withOptions(opts), withCubes())
+	s := rg.s
 	var read atomic.Int64
 	body := strings.Repeat(`{"mode":"auto"}`, 1000)
 	codes := map[int]int{}
@@ -238,8 +236,7 @@ func TestRefusedRequestsAuditedPerMinute(t *testing.T) {
 	if rows, _ := opts.Store.AuditList(t.Context(), time.Time{}, 100, ""); len(rows) > 1 {
 		t.Errorf("%d audit rows within the minute, want at most one", len(rows))
 	}
-	cancel()
-	<-done
+	rg.stop()
 	rows, err := opts.Store.AuditList(t.Context(), time.Time{}, 100, "")
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("%d audit rows, want one: %v", len(rows), err)
@@ -258,11 +255,11 @@ func TestRefusedRequestsAuditedPerMinute(t *testing.T) {
 // after its minute, and when more addresses are open than the limit,
 // the oldest first.
 func TestRefusalAuditWindows(t *testing.T) {
-	clock := &fakeClock{t: time.Date(2026, 11, 7, 8, 0, 0, 0, time.UTC)}
+	clock := testkit.NewClock(time.Date(2026, 11, 7, 8, 0, 0, 0, time.UTC))
 	var written []refusal
 	var mu sync.Mutex
 	ra := newRefusalAudit(func(f refusal) { mu.Lock(); written = append(written, f); mu.Unlock() })
-	ra.now, ra.max = clock.now, 2
+	ra.now, ra.max = clock.Now, 2
 	defer ra.close()
 	rows := func() []refusal {
 		mu.Lock()
@@ -278,16 +275,16 @@ func TestRefusalAuditWindows(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		ra.note(r, "POST /api/v1/users", "user.add", "192.0.2.10", 401)
 	}
-	clock.t = clock.t.Add(refusalWindow)
+	clock.Add(refusalWindow)
 	ra.note(r, "POST /api/v1/users", "user.add", "192.0.2.10", 429)
 	if got := rows(); len(got) != 1 || got[0].count != 3 || got[0].status != 401 || got[0].remote != "192.0.2.10" {
 		t.Fatalf("after the minute: %+v", got)
 	}
 	// Each address a second later than the one before, so that the
 	// oldest is one.
-	clock.t = clock.t.Add(time.Second)
+	clock.Add(time.Second)
 	ra.note(r, "POST /api/v1/users", "user.add", "192.0.2.11", 401)
-	clock.t = clock.t.Add(time.Second)
+	clock.Add(time.Second)
 	ra.note(r, "POST /api/v1/users", "user.add", "192.0.2.12", 401) // a third address: the oldest goes
 	if got := rows(); len(got) != 2 || got[1].remote != "192.0.2.10" || got[1].count != 1 || got[1].status != 429 || open() != 2 {
 		t.Fatalf("over the limit: %+v, %d open", got, open())

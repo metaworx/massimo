@@ -245,7 +245,8 @@ func TestUpdateCommandIsAcknowledged(t *testing.T) {
 	opts := storeOptions(t, t.TempDir(), "secret")
 	opts.Update = UpdateOptions{Version: "v0.1.0-alpha.9", Channel: "alpha", Request: filepath.Join(dir, "update-request"), Status: filepath.Join(dir, "status.json"),
 		Finder: &fakeFinder{tag: "v0.1.0-alpha.10"}}
-	_, ts, s := startWith(t, opts)
+	r := startServer(t, withOptions(opts))
+	ts, s := r.ts, r.s
 	stores[ts] = s.opts.Store
 	headers := map[string]string{"Idempotency-Key": "update-1"}
 	if resp, text := callWith(t, ts, "POST", "/api/v1/update", "secret", "{}", headers); resp.StatusCode != 202 {
@@ -313,7 +314,8 @@ func TestUpdateChannelFromTheStore(t *testing.T) {
 	f := &fakeFinder{tag: "v0.2.0-beta.2"}
 	opts := storeOptions(t, t.TempDir(), "secret")
 	opts.Update = UpdateOptions{Version: "v0.2.0-beta.1", Flavour: "beta", Request: filepath.Join(dir, "update-request"), Status: filepath.Join(dir, "status.json"), Finder: f}
-	_, ts, s := startWith(t, opts)
+	r := startServer(t, withOptions(opts))
+	ts, s := r.ts, r.s
 	ctx := context.Background()
 	get := func() map[string]any {
 		t.Helper()
@@ -391,7 +393,8 @@ func TestUpdateChannelFromAptSuite(t *testing.T) {
 	opts := storeOptions(t, t.TempDir(), "secret")
 	opts.Update = UpdateOptions{Version: "v0.2.0-alpha.1", Flavour: "alpha", Manager: "apt", Suite: func() string { return suite },
 		Request: filepath.Join(dir, "update-request"), Status: filepath.Join(dir, "status.json"), Finder: f}
-	_, ts, s := startWith(t, opts)
+	r := startServer(t, withOptions(opts))
+	ts, s := r.ts, r.s
 	get := func() map[string]any {
 		t.Helper()
 		resp, text := callWith(t, ts, "GET", "/api/v1/update", "secret", "", nil)

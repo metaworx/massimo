@@ -34,7 +34,8 @@ func sendWith(t *testing.T, ts *httptest.Server, method, path, body string, head
 // with users; reads, the page's own writes and clients that are not
 // browsers pass.
 func TestCrossOriginWritesRefused(t *testing.T) {
-	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), ""))
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "")))
+	ts, s := r.ts, r.s
 	st := s.opts.Store
 	owner := `{"name":"intruder","role":"owner","password":"placeholder-pass-1234"}`
 	plain := "text/plain;charset=UTF-8"
@@ -74,7 +75,7 @@ func TestCrossOriginWritesRefused(t *testing.T) {
 	}
 
 	// With users, a cross-site write is refused even with the right key.
-	_, ts, _ = startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	ts = startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret"))).ts
 	body := `{"name":"anna","role":"operator","password":"pw"}`
 	if code, text := sendWith(t, ts, "POST", "/api/v1/users", body, map[string]string{"Authorization": "Bearer secret", "Sec-Fetch-Site": "cross-site"}); code != http.StatusForbidden {
 		t.Errorf("users mode, cross-site: %d %s", code, text)

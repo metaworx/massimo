@@ -4,14 +4,12 @@
 package server
 
 import (
-	"context"
 	"net/http/httptest"
 	"reflect"
 	"testing"
 	"time"
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
-	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/view"
@@ -19,30 +17,19 @@ import (
 
 const confirmBase = "/api/v1/cubes/KEQ0000100"
 
-// startConfirmCube starts a server over the fake Cube's rooms fixture
-// (fakecube.RoomsFixture), which applies the commands it takes after
+// confirming is the start of the confirmations' tests: the fake Cube's
+// rooms fixture (rooms), which applies the commands it takes after
 // applyAfter, polled often, a write's devices given within to show it
 // (AP RoomConfirm v1.0, Block 1), and a written C line re-read after
 // follow, nil for the defaults, without reconnects.
-func startConfirmCube(t *testing.T, within, applyAfter time.Duration, follow ...time.Duration) (*fakecube.Server, *httptest.Server, *runtime) {
-	t.Helper()
-	greeting, err := fakecube.RoomsFixture()
-	if err != nil {
-		t.Fatal(err)
+func confirming(within, applyAfter time.Duration, follow ...time.Duration) startOpt {
+	return func(c *startConfig) {
+		rooms()(c)
+		withFake(func(fc *fakecube.Server) { fc.ApplyAfter = applyAfter })(c)
+		editOptions(func(o *Options) {
+			o.PollInterval, o.FollowUpDelays, o.FollowUpReconnectGap, o.confirmWithin = 50*time.Millisecond, follow, time.Hour, within
+		})(c)
 	}
-	fc := &fakecube.Server{Greeting: greeting, Apply: true, ApplyAfter: applyAfter}
-	addr, err := fc.Start("127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0000100", Addr: addr}}, Queue: engine.Options{Gap: time.Millisecond},
-		PollInterval: 50 * time.Millisecond, FollowUpDelays: follow, FollowUpReconnectGap: time.Hour, confirmWithin: within})
-	ctx, cancel := context.WithCancel(context.Background())
-	go s.Run(ctx)
-	ts := httptest.NewServer(s.Handler())
-	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
-	waitConnected(t, ts, "KEQ0000100")
-	return fc, ts, s.cubes["keq0000100"]
 }
 
 // confirmRoom is a room of the API's list.
@@ -104,7 +91,8 @@ func openWrites(rt *runtime) int {
 // A room command its members take is pending, then done once every
 // member shows it, with no line.
 func TestRoomCommandConfirmed(t *testing.T) {
-	_, ts, rt := startConfirmCube(t, 3*time.Second, 100*time.Millisecond)
+	r := startServer(t, confirming(3*time.Second, 100*time.Millisecond))
+	ts, rt := r.ts, r.rt
 	code, out := do(t, ts, "PUT", confirmBase+"/rooms/2/setpoint", `{"mode":"manual","temp":22}`)
 	if code != 200 || out["confirmation"] != "pending" {
 		t.Fatalf("setpoint: %d %v", code, out)
@@ -121,7 +109,8 @@ func TestRoomCommandConfirmed(t *testing.T) {
 // either (resend.go), the room and the device say so until it shows it,
 // which a line at info says.
 func TestRoomCommandNotConfirmed(t *testing.T) {
-	fc, ts, _ := startConfirmCube(t, 600*time.Millisecond, 0)
+	r := startServer(t, confirming(600*time.Millisecond, 0))
+	fc, ts := r.fc, r.ts
 	fc.SetDeaf(0x0a0205, true)
 	on := true
 	if err := fc.SetState(0x0a0205, fakecube.State{Error: &on}); err != nil {
@@ -181,7 +170,8 @@ func TestRoomCommandNotConfirmed(t *testing.T) {
 // A newer setpoint of a room replaces the one before it: one warning, for
 // the newer, at its deadline.
 func TestNewerWriteReplaces(t *testing.T) {
-	fc, ts, rt := startConfirmCube(t, 600*time.Millisecond, 0)
+	r := startServer(t, confirming(600*time.Millisecond, 0))
+	fc, ts, rt := r.fc, r.ts, r.rt
 	fc.SetDeaf(0x0a0205, true)
 	for _, body := range []string{`{"mode":"manual","temp":22}`, `{"mode":"manual","temp":23}`} {
 		if code, out := do(t, ts, "PUT", confirmBase+"/rooms/2/setpoint", body); code != 200 || out["confirmation"] != "pending" {
@@ -204,7 +194,8 @@ func TestNewerWriteReplaces(t *testing.T) {
 // A setpoint a client of the LAN proxy sent to a room is confirmed by
 // the room's thermostats as the API's are: here none takes it.
 func TestProxyWriteConfirmed(t *testing.T) {
-	_, ts, rt := startConfirmCube(t, 300*time.Millisecond, 0)
+	r := startServer(t, confirming(300*time.Millisecond, 0))
+	ts, rt := r.ts, r.rt
 	m, err := cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a0204, RoomID: 2, Room: true}, 21.5, cube.ModeManual, cube.Until{})
 	if err != nil {
 		t.Fatal(err)
@@ -227,7 +218,8 @@ func TestProxyWriteConfirmed(t *testing.T) {
 // A key lock and a display mode are confirmed by the L entry, and the
 // display write is no C line's to follow.
 func TestLockAndDisplayConfirmed(t *testing.T) {
-	_, ts, rt := startConfirmCube(t, 3*time.Second, 100*time.Millisecond)
+	r := startServer(t, confirming(3*time.Second, 100*time.Millisecond))
+	ts, rt := r.ts, r.rt
 	if code, out := do(t, ts, "PUT", confirmBase+"/devices/0a0204/lock", `{"locked":true}`); code != 200 || out["confirmation"] != "pending" {
 		t.Fatalf("lock: %d %v", code, out)
 	}
@@ -285,7 +277,8 @@ var shortFollow = []time.Duration{50 * time.Millisecond, 50 * time.Millisecond, 
 // A configuration write the C line shows at once, as the writer re-reads
 // it, is confirmed in the answer.
 func TestConfigWriteShownAtOnce(t *testing.T) {
-	_, ts, rt := startConfirmCube(t, time.Minute, 0, shortFollow...)
+	r := startServer(t, confirming(time.Minute, 0, shortFollow...))
+	ts, rt := r.ts, r.rt
 	if code, out := do(t, ts, "PUT", confirmBase+"/devices/0a0206/config", `{"eco_temp":16}`); code != 200 || out["confirmation"] != "confirmed" {
 		t.Fatalf("config: %d %v", code, out)
 	}
@@ -296,7 +289,8 @@ func TestConfigWriteShownAtOnce(t *testing.T) {
 
 // A configuration write the C line shows is pending, then done.
 func TestConfigWriteConfirmed(t *testing.T) {
-	_, ts, rt := startConfirmCube(t, time.Minute, 150*time.Millisecond, shortFollow...)
+	r := startServer(t, confirming(time.Minute, 150*time.Millisecond, shortFollow...))
+	ts, rt := r.ts, r.rt
 	code, out := do(t, ts, "PUT", confirmBase+"/devices/0a0204/config", `{"eco_temp":16.5,"boost_minutes":10}`)
 	if code != 200 || out["confirmation"] != "pending" {
 		t.Fatalf("config: %d %v", code, out)
@@ -310,7 +304,8 @@ func TestConfigWriteConfirmed(t *testing.T) {
 // A configuration write the device does not take is not confirmed after
 // the follow-up's last re-read, the fields that differ named.
 func TestConfigWriteNotConfirmed(t *testing.T) {
-	fc, ts, _ := startConfirmCube(t, time.Minute, 0, shortFollow...)
+	r := startServer(t, confirming(time.Minute, 0, shortFollow...))
+	fc, ts := r.fc, r.ts
 	fc.SetDeaf(0x0a0205, true)
 	code, out := do(t, ts, "PUT", confirmBase+"/devices/0a0205/config", `{"eco_temp":16.5,"boost_minutes":10}`)
 	if code != 200 || out["confirmation"] != "pending" {
@@ -334,7 +329,8 @@ func TestConfigWriteNotConfirmed(t *testing.T) {
 // A room's week programme is confirmed by each thermostat's C line: the
 // one that does not take the day is named with it.
 func TestProgramDayNotConfirmed(t *testing.T) {
-	fc, ts, rt := startConfirmCube(t, time.Minute, 0, shortFollow...)
+	r := startServer(t, confirming(time.Minute, 0, shortFollow...))
+	fc, ts, rt := r.fc, r.ts, r.rt
 	fc.SetDeaf(0x0a0205, true)
 	body := `{"monday": [{"temp": 17, "until": "07:00"}, {"temp": 21, "until": "20:30"}, {"temp": 17, "until": "24:00"}]}`
 	if code, out := do(t, ts, "PUT", confirmBase+"/rooms/2/program", body); code != 200 || out["confirmation"] != "pending" {
@@ -355,7 +351,8 @@ func TestProgramDayNotConfirmed(t *testing.T) {
 // A LAN proxy client's 0x11 to a room is compared with each thermostat's
 // C line: here none takes it.
 func TestProxyConfigWriteConfirmed(t *testing.T) {
-	_, ts, rt := startConfirmCube(t, time.Minute, 0, shortFollow...)
+	r := startServer(t, confirming(time.Minute, 0, shortFollow...))
+	ts, rt := r.ts, r.rt
 	m, err := cube.CmdSetTemperatures(cube.Target{RFAddress: 0x0a0204, RoomID: 2, Room: true},
 		cube.TemperatureSettings{Comfort: 22.5, Eco: 16.5, Max: 30.5, Min: 4.5, WindowOpen: 12, WindowOpenMinutes: 15})
 	if err != nil {

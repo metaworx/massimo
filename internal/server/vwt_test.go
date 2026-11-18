@@ -13,80 +13,31 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
-	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
-	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
-// startRooms starts a server with a store over the fake Cube's rooms
-// fixture: room 1 with a wall thermostat and two radiator thermostats,
-// room 2 with three radiator thermostats, room 3 with a contact alone.
-// The server polls often, so that a state the fake is given arrives.
-func startRooms(t *testing.T) (*fakecube.Server, *httptest.Server, *Server, *store.Store) {
-	t.Helper()
-	return startRoomsOpts(t, roomsOpts{})
+// storedRooms is the start of the rooms' tests: the fake Cube's rooms
+// fixture (rooms), the Cube a row of a store, polled often, so that a
+// state the fake is given arrives. A test of several writes in a row
+// adds quiet: a poll waiting for its answer makes a write fail meanwhile
+// (cubelan.ErrBusy).
+func storedRooms() startOpt {
+	return func(c *startConfig) {
+		rooms()(c)
+		stored()(c)
+		editOptions(func(o *Options) { o.PollInterval = 50 * time.Millisecond })(c)
+	}
 }
 
-// roomsOpts are startRoomsOpts' choices.
-type roomsOpts struct {
-	change     func([]cube.Message) []cube.Message // the fixture's lines changed first
-	applyAfter time.Duration                       // the fake Cube applies a command this long after its S reply
-	// fast re-reads a written device's configuration within a few tenths
-	// of a second; slow polls every two minutes. A test of several writes
-	// in a row needs neither: a poll or a re-read waiting for its answer
-	// makes a write fail meanwhile (cubelan.ErrBusy).
-	fast, slow bool
-}
-
-// startRoomsOpts is startRooms with choices.
-func startRoomsOpts(t *testing.T, o roomsOpts) (*fakecube.Server, *httptest.Server, *Server, *store.Store) {
-	t.Helper()
-	change, applyAfter := o.change, o.applyAfter
-	greeting, err := fakecube.RoomsFixture()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if change != nil {
-		greeting = change(greeting)
-	}
-	fc := &fakecube.Server{Greeting: greeting, Apply: true, ApplyAfter: applyAfter}
-	addr, err := fc.Start("127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	st := testStore(t, "")
-	row, err := st.AddCube(context.Background(), store.Cube{Serial: "KEQ0000100", Configured: true, Address: addr, Source: store.SourceEnv})
-	if err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := CubeFromRow(row)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var follow []time.Duration
-	if o.fast {
-		follow = []time.Duration{100 * time.Millisecond, 100 * time.Millisecond, 200 * time.Millisecond, 400 * time.Millisecond, 800 * time.Millisecond}
-	}
-	poll := 50 * time.Millisecond
-	if o.slow {
-		poll = 2 * time.Minute
-	}
-	s := New(Options{Cubes: []CubeConfig{cfg}, Store: st, Queue: engine.Options{Gap: time.Millisecond}, PollInterval: poll,
-		FollowUpDelays: follow})
-	ctx, cancel := context.WithCancel(context.Background())
-	go s.Run(ctx)
-	ts := httptest.NewServer(s.Handler())
-	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
-	waitConnected(t, ts, "KEQ0000100")
-	testkit.Eventually(t, "the rooms' uids", func() bool {
-		var rooms []view.Room
-		getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/rooms", &rooms)
-		return len(rooms) == 3 && rooms[2].UID != ""
+// fastFollowUps re-reads a written device's configuration within a few
+// tenths of a second.
+func fastFollowUps() startOpt {
+	return editOptions(func(o *Options) {
+		o.FollowUpDelays = []time.Duration{100 * time.Millisecond, 100 * time.Millisecond, 200 * time.Millisecond, 400 * time.Millisecond, 800 * time.Millisecond}
 	})
-	return fc, ts, s, st
 }
 
 // devicesIn is a room's devices in a view, by radio address.
@@ -108,7 +59,8 @@ func devicesIn(t *testing.T, ts *httptest.Server, kind string, room int) []view.
 // The four views of the rooms and devices, the rooms' uids from the
 // store, and the room's temperature.
 func TestVirtualWallThermostatViews(t *testing.T) {
-	_, ts, _, st := startRooms(t)
+	r := startServer(t, storedRooms())
+	ts, st := r.ts, r.st
 	addrs := func(ds []view.Device) string {
 		var out []string
 		for _, d := range ds {
@@ -164,7 +116,7 @@ func TestVirtualWallThermostatViews(t *testing.T) {
 // A virtual wall thermostat is found by its room, its serial and its
 // address, with its room's settings and week programme.
 func TestVirtualWallThermostatDevice(t *testing.T) {
-	_, ts, _, _ := startRooms(t)
+	ts := startServer(t, storedRooms()).ts
 	for _, name := range []string{"room-2", "ROOM-2", "VWT0000002", "000002"} {
 		var d vwtDetail
 		if code := getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices/"+name, &d); code != 200 {
@@ -188,7 +140,8 @@ func TestVirtualWallThermostatDevice(t *testing.T) {
 // of the virtual wall thermostat too, on the streams whose view shows it;
 // the virtual view leaves the real wall thermostat's events out.
 func TestVirtualWallThermostatEvents(t *testing.T) {
-	fc, ts, s, _ := startRooms(t)
+	r := startServer(t, storedRooms())
+	fc, ts, s := r.fc, r.ts, r.s
 	rt := s.cubes["keq0000100"]
 	stream := func(kind string) *testkit.Watch[testkit.Event] {
 		url := ts.URL + "/api/v1/cubes/KEQ0000100/events?devices=" + kind
@@ -247,12 +200,12 @@ func TestVirtualWallThermostatEvents(t *testing.T) {
 // configuration too, which a stream opened before the pump came to it
 // would otherwise carry; the views that show it carry the event.
 func TestVirtualViewLeavesOutTheRealWallsEvents(t *testing.T) {
-	_, ts, s, _ := startRooms(t)
+	// The start has the greeting's mismatches through the pump before
+	// the streams open: a pump slow to come to the greeting (armv6 under
+	// QEMU) would publish them on the streams, beside the test's own.
+	r := startServer(t, storedRooms())
+	ts, s := r.ts, r.s
 	rt := s.cubes["keq0000100"]
-	// The greeting's mismatches through the pump before the streams open:
-	// a pump slow to come to the greeting (armv6 under QEMU) would
-	// publish them on the streams, beside the test's own.
-	rt.pumpSync(t)
 	stream := func(kind string, burst int) (*testkit.Watch[testkit.Event], testkit.Cursor) {
 		evs := readStreamURL(t, ts.URL+"/api/v1/cubes/KEQ0000100/events?devices="+kind)
 		_, after := evs.AwaitN(t, 0, "the burst of "+kind, burst, isEvent)
@@ -314,7 +267,8 @@ func lastRadio(t *testing.T, received *testkit.Watch[cube.Message]) cube.RadioCo
 // wall thermostat; its settings the store; it is neither renamed, moved
 // nor deleted.
 func TestVirtualWallThermostatCommands(t *testing.T) {
-	fc, ts, s, st := startRoomsOpts(t, roomsOpts{slow: true})
+	r := startServer(t, storedRooms(), quiet())
+	fc, ts, s, st := r.fc, r.ts, r.s, r.st
 	received := cubewatch.Lines(fc)
 	path := "/api/v1/cubes/KEQ0000100/devices/"
 	room := func(rc cube.RadioCommand, cmd byte, id uint8) bool {
@@ -397,14 +351,15 @@ func TestVirtualWallThermostatCommands(t *testing.T) {
 // A room takes one wall thermostat: adding or moving a second into it is
 // refused before anything is sent, as the original software refuses it.
 func TestSecondWallThermostatRefused(t *testing.T) {
-	fc, ts, _, _ := startRoomsOpts(t, roomsOpts{slow: true, change: func(lines []cube.Message) []cube.Message {
+	r := startServer(t, storedRooms(), changeGreeting(func(lines []cube.Message) []cube.Message {
 		p, err := fakecube.PairingFrom(lines, 0x0a0201, 0x0a0299, "NEQ0000299", 0)
 		if err != nil {
 			t.Fatal(err)
 		}
 		out := append([]cube.Message(nil), lines[:len(lines)-1]...)
 		return append(out, p.Config, lines[len(lines)-1])
-	}})
+	}), quiet())
+	fc, ts := r.fc, r.ts
 	received := cubewatch.Lines(fc)
 	before := received.Mark()
 	code, body := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/0a0299", `{"room_id":1,"name":"Zweiter"}`)
@@ -420,7 +375,8 @@ func TestSecondWallThermostatRefused(t *testing.T) {
 // mode 3, carrying the setpoint the room has; on a virtual wall
 // thermostat too. The fake Cube applies it as the devices do.
 func TestBoostOverTheAir(t *testing.T) {
-	fc, ts, _, _ := startRoomsOpts(t, roomsOpts{slow: true})
+	r := startServer(t, storedRooms(), quiet())
+	fc, ts := r.fc, r.ts
 	received := cubewatch.Lines(fc)
 	for _, path := range []string{"rooms/2/setpoint", "devices/0a0205/setpoint", "devices/room-2/setpoint"} {
 		code, body := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/"+path, `{"mode":"boost"}`)
@@ -439,7 +395,8 @@ func TestBoostOverTheAir(t *testing.T) {
 // a virtual wall thermostat per room whose C line and L entry read as a
 // wall thermostat's, with the room's programme and temperature.
 func TestProxyVirtualOption(t *testing.T) {
-	_, ts, s, st := startRoomsOpts(t, roomsOpts{slow: true})
+	r := startServer(t, storedRooms(), quiet())
+	ts, s, st := r.ts, r.s, r.st
 	rt := s.cubes["keq0000100"]
 	if vs := s.proxyVirtuals(rt); vs != nil {
 		t.Fatalf("off by default: %d", len(vs))

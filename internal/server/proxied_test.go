@@ -109,7 +109,7 @@ func TestSystemBehindAProxy(t *testing.T) {
 	defer proxy.Close()
 	_, port, _ := net.SplitHostPort(proxy.Listener.Addr().String())
 	trusted, _ := ParseTrustedProxies("127.0.0.1,::1")
-	_, ts, _ := startWith(t, Options{Token: "secret", TrustedProxies: trusted})
+	ts := startServer(t, withOptions(Options{Token: "secret", TrustedProxies: trusted})).ts
 	get := func(ts *httptest.Server) systemView {
 		t.Helper()
 		req, _ := http.NewRequest("GET", ts.URL+"/api/v1/system", nil)
@@ -143,7 +143,7 @@ func TestSystemBehindAProxy(t *testing.T) {
 	if c == nil || c.Error != "" || c.Trusted || c.CheckedAt.IsZero() || len(c.Names) == 0 {
 		t.Fatalf("the proxy's certificate %+v", c)
 	}
-	_, untrusting, _ := startWith(t, Options{Token: "secret"})
+	untrusting := startServer(t, withOptions(Options{Token: "secret"})).ts
 	if v := get(untrusting); v.Proxy != nil {
 		t.Fatalf("headers of an untrusted peer taken: %+v", v.Proxy)
 	}
@@ -155,7 +155,8 @@ func TestSystemBehindAProxy(t *testing.T) {
 // changes nothing.
 func TestProxiedURL(t *testing.T) {
 	trusted, _ := ParseTrustedProxies("127.0.0.1,::1")
-	_, ts, s, st := startStored(t, Options{TrustedProxies: trusted})
+	r := startServer(t, stored(), withOptions(Options{TrustedProxies: trusted}))
+	ts, s, st := r.ts, r.s, r.st
 	owner := userToken(t, st, "boss", store.RoleOwner)
 	call := func(path, token string, h map[string]string) {
 		t.Helper()

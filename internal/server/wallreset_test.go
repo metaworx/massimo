@@ -30,7 +30,8 @@ func TestWallReset(t *testing.T) {
 	old := wallSilence.Load()
 	wallSilence.Store(0)
 	t.Cleanup(func() { wallSilence.Store(old) })
-	fc, ts, s, _ := startRooms(t)
+	r := startServer(t, storedRooms())
+	fc, ts, s := r.fc, r.ts, r.s
 	const wall = 0x0a0201
 	s.mu.RLock()
 	rt := s.cubes["keq0000100"]

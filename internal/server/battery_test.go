@@ -18,7 +18,8 @@ import (
 // runtime started anew over the same store rebuilds the level from the
 // log's state rows.
 func TestBatteryLevel(t *testing.T) {
-	fc, ts, s, st := startStored(t, Options{PollInterval: 100 * time.Millisecond})
+	r := startServer(t, stored(), withOptions(Options{PollInterval: 100 * time.Millisecond}))
+	fc, ts, s, st := r.fc, r.ts, r.s, r.st
 	var d deviceDetail
 	// 0a010d has no state in the fixture, and so no level.
 	if getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices/0a010d", &d) != 200 || d.Battery != "" {

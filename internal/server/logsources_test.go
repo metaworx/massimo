@@ -19,11 +19,12 @@ import (
 // A Cube's log holds the server's events, kept once with no Cube; source=
 // keeps one source, and every event says its own.
 func TestLogSourceFilter(t *testing.T) {
-	_, ts, s, st := startStored(t, Options{})
 	// The Cube's own events too: its connect is logged as the greeting's
-	// last, after the devices' states, once the pump has handled them; a
-	// line still to come would make the counts below differ.
-	pumpSync(t, s)
+	// last, after the devices' states, once the pump has handled them,
+	// as it has once the start returns; a line still to come would make
+	// the counts below differ.
+	r := startServer(t, stored())
+	ts, s, st := r.ts, r.s, r.st
 	s.logServer(event{Kind: "settings_read", Source: "system", Time: time.Now()}) // beside the start's server_started
 	_, all := logOf(t, ts, "?limit=1000")
 	sources := map[string]int{}
@@ -59,7 +60,8 @@ func TestLogSourceFilter(t *testing.T) {
 // level= keeps that level and above, info by default: the H line is at
 // debug, a lost connection at warn.
 func TestLogLevelFilter(t *testing.T) {
-	_, ts, s, _ := startStored(t, Options{})
+	r := startServer(t, stored())
+	ts, s := r.ts, r.s
 	testkit.Eventually(t, "the greeting's hello", func() bool {
 		_, evs := logOf(t, ts, "?kind=hello&level=debug")
 		return len(evs) > 0
@@ -97,7 +99,8 @@ func TestLogLevelFilter(t *testing.T) {
 // page names them as the users table does now; a name the store does not
 // know has none.
 func TestLogUserFilter(t *testing.T) {
-	_, ts, s, st := startStored(t, Options{})
+	r := startServer(t, stored())
+	ts, s, st := r.ts, r.s, r.st
 	ctx := context.Background()
 	token := userToken(t, st, "anna", store.RoleViewer)
 	if _, err := st.UpdateUser(ctx, "anna", func(u *store.User) error { u.DisplayName = "Anna"; return nil }, 0); err != nil {
@@ -134,7 +137,8 @@ func TestLogUserFilter(t *testing.T) {
 // A Cube found on the LAN is an event of the server's: kept once, with no
 // Cube, and in the configured Cube's log.
 func TestFoundCubeStoredOnce(t *testing.T) {
-	_, ts, s, st := startStored(t, Options{})
+	r := startServer(t, stored())
+	ts, s, st := r.ts, r.s, r.st
 	s.cubeFound(foundCube{Serial: "KEQ0000009", Address: "192.0.2.9", LastSeen: time.Now()})
 	_, evs := logOf(t, ts, "?kind=cube_found")
 	if len(evs) != 1 || evs[0].Cube == nil || evs[0].Cube.Serial != "KEQ0000009" || evs[0].Source != "cube" || evs[0].Serial != "KEQ0000009" {

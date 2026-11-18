@@ -4,13 +4,10 @@
 package server
 
 import (
-	"context"
-	"net/http/httptest"
 	"testing"
 	"time"
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
-	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
@@ -18,37 +15,24 @@ import (
 
 const newDevice cube.RFAddress = 0x0a0b0c
 
-// startPairingCube starts a server over a fake Cube in which a radiator
-// thermostat, a copy of 0a010d at newDevice, joins delay after n:.
-func startPairingCube(t *testing.T, delay time.Duration) (*fakecube.Server, *httptest.Server, *Server) {
-	t.Helper()
-	greeting, err := fakecube.LoadGreeting(fixture)
-	if err != nil {
-		t.Fatal(err)
+// pairing is the start of the pairing's tests: a fake Cube in which a
+// radiator thermostat, a copy of 0a010d at newDevice, joins delay after
+// n:.
+func pairing(delay time.Duration) startOpt {
+	return func(c *startConfig) {
+		withFake(func(fc *fakecube.Server) {
+			pair, err := fakecube.PairingFrom(fc.Greeting, 0x0a010d, newDevice, "TEQ0000001", delay)
+			if err != nil {
+				c.t.Fatal(err)
+			}
+			fc.Pair = pair
+		})(c)
 	}
-	pair, err := fakecube.PairingFrom(greeting, 0x0a010d, newDevice, "TEQ0000001", delay)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fc := &fakecube.Server{Greeting: greeting, Pair: pair}
-	addr, err := fc.Start("127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0000100", Addr: addr}}, Queue: engine.Options{Gap: time.Millisecond}})
-	ctx, cancel := context.WithCancel(context.Background())
-	go s.Run(ctx)
-	ts := httptest.NewServer(s.Handler())
-	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
-	testkit.Eventually(t, "the cube's connect", func() bool {
-		var c cubeView
-		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
-	})
-	return fc, ts, s
 }
 
 func TestPairingAndAddingToARoom(t *testing.T) {
-	fc, ts, _ := startPairingCube(t, 50*time.Millisecond)
+	rg := startServer(t, pairing(50*time.Millisecond))
+	fc, ts := rg.fc, rg.ts
 	received := cubewatch.Lines(fc)
 	const base = "/api/v1/cubes/KEQ0000100"
 	if code, _ := do(t, ts, "POST", base+"/pairing", `{"seconds":0}`); code != 400 {
@@ -149,7 +133,8 @@ func TestPairingAndAddingToARoom(t *testing.T) {
 }
 
 func TestPairingEndsWithTheCube(t *testing.T) {
-	fc, ts, _ := startPairingCube(t, time.Hour)
+	r := startServer(t, pairing(time.Hour))
+	fc, ts := r.fc, r.ts
 	received := cubewatch.Lines(fc)
 	const base = "/api/v1/cubes/KEQ0000100"
 	if code, _ := do(t, ts, "POST", base+"/pairing", `{"seconds":1}`); code != 200 {
@@ -167,7 +152,8 @@ func TestPairingEndsWithTheCube(t *testing.T) {
 // The API asks for at most 255 s, the longest a Cube keeps the mode:
 // 256 is refused before anything is sent, 255 goes to the Cube as n:00ff.
 func TestPairingTimeLimit(t *testing.T) {
-	fc, ts, _ := startPairingCube(t, time.Hour)
+	r := startServer(t, pairing(time.Hour))
+	fc, ts := r.fc, r.ts
 	received := cubewatch.Lines(fc)
 	const base = "/api/v1/cubes/KEQ0000100"
 	for _, body := range []string{`{"seconds":256}`, `{"seconds":600}`} {

@@ -17,7 +17,8 @@ import (
 // handed to it holds.
 func TestStoreAndConfigViews(t *testing.T) {
 	opts := storeOptions(t, t.TempDir(), "secret")
-	_, ts, s := startWith(t, opts)
+	r := startServer(t, withOptions(opts))
+	ts, s := r.ts, r.s
 	manager := userToken(t, s.opts.Store, "manager1", store.RoleManager)
 	code, text := callAPI(t, ts, "GET", "/api/v1/store", "secret", "")
 	var sv storeView

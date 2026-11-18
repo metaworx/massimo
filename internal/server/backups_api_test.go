@@ -47,7 +47,8 @@ func reasons(l backupList) string {
 // backups.auto_min, and one backups.auto_max after the first change
 // however long the quiet window.
 func TestBackupAutomatic(t *testing.T) {
-	_, ts, _, st := startStored(t, Options{BackupMinute: 20 * time.Millisecond})
+	r := startServer(t, stored(), withOptions(Options{BackupMinute: 20 * time.Millisecond}))
+	ts, st := r.ts, r.st
 	ctx := context.Background()
 	st.SetSetting(ctx, store.BackupsAutoMinKey, 3)
 	st.SetSetting(ctx, store.BackupsAutoMaxKey, 10)
@@ -93,7 +94,8 @@ func TestBackupAutomatic(t *testing.T) {
 // Deleting the newest backup makes the one before it the reference: the
 // configuration differs from it, so changed and due appear.
 func TestBackupDeleteNewest(t *testing.T) {
-	_, ts, s, st := startStored(t, Options{BackupMinute: 20 * time.Millisecond})
+	r := startServer(t, stored(), withOptions(Options{BackupMinute: 20 * time.Millisecond}))
+	ts, s, st := r.ts, r.s, r.st
 	ctx := context.Background()
 	st.SetSetting(ctx, store.BackupsAutoMinKey, 3)
 	st.SetSetting(ctx, store.BackupsAutoMaxKey, 10)
@@ -139,7 +141,8 @@ func TestBackupDeleteNewest(t *testing.T) {
 // Deleting all of a Cube's backups leaves it without one, so it gets one
 // at once.
 func TestBackupDeleteAll(t *testing.T) {
-	_, ts, _, st := startStored(t, Options{BackupMinute: 20 * time.Millisecond})
+	r := startServer(t, stored(), withOptions(Options{BackupMinute: 20 * time.Millisecond}))
+	ts, st := r.ts, r.st
 	ctx := context.Background()
 	var l backupList
 	testkit.Eventually(t, "the first backup", func() bool {
@@ -163,7 +166,8 @@ func TestBackupDeleteAll(t *testing.T) {
 // With backups.keep_newest 0 a prune can remove a Cube's only backup,
 // and the Cube then gets one at once, as after a delete.
 func TestBackupPruneNewest(t *testing.T) {
-	_, ts, s, st := startStored(t, Options{BackupMinute: 20 * time.Millisecond})
+	r := startServer(t, stored(), withOptions(Options{BackupMinute: 20 * time.Millisecond}))
+	ts, s, st := r.ts, r.s, r.st
 	ctx := context.Background()
 	var l backupList
 	testkit.Eventually(t, "the first backup", func() bool {
@@ -193,7 +197,7 @@ func TestBackupPruneNewest(t *testing.T) {
 // other format, deleted; a bad request, an unknown id and a Cube without
 // a row in the store are refused.
 func TestBackupsAPI(t *testing.T) {
-	_, ts, _, _ := startStored(t, Options{})
+	ts := startServer(t, stored()).ts
 	if code, l := historyOf(t, ts.URL); code != 200 || l.Backups == nil || len(l.Backups) != 0 {
 		t.Fatalf("empty: %d %+v", code, l)
 	}
@@ -244,7 +248,7 @@ func TestBackupsAPI(t *testing.T) {
 		t.Fatalf("after the delete: %s", reasons(l))
 	}
 
-	_, plain, _ := start(t, "")
+	plain := startServer(t).ts
 	if code, _ := historyOf(t, plain.URL); code != http.StatusServiceUnavailable {
 		t.Fatalf("a Cube without a row: %d", code)
 	}
@@ -254,7 +258,8 @@ func TestBackupsAPI(t *testing.T) {
 // sent; a stored backup is restored by its id, without an upload; after
 // a restore the Cube is as the file says, so no automatic backup follows.
 func TestRestoreKeepsBackups(t *testing.T) {
-	_, ts, _, st := startStored(t, Options{BackupMinute: 20 * time.Millisecond})
+	r := startServer(t, stored(), withOptions(Options{BackupMinute: 20 * time.Millisecond}))
+	ts, st := r.ts, r.st
 	ctx := context.Background()
 	st.SetSetting(ctx, store.BackupsAutoMinKey, 2)
 	st.SetSetting(ctx, store.BackupsAutoMaxKey, 4)
@@ -311,7 +316,8 @@ func TestRestoreKeepsBackups(t *testing.T) {
 // file, not with the before_restore backup of the state before it, which
 // took an automatic backup of the state just restored (AP RestoreRace).
 func TestRestoreDoneAfterItsReference(t *testing.T) {
-	_, ts, s, _ := startStored(t, Options{})
+	r := startServer(t, stored())
+	ts, s := r.ts, r.s
 	rt := s.cubes["keq0000100"]
 	f := withRoomName(backupOf(t, ts), "Restored")
 	want := backup.ConfigHash(f)
@@ -338,7 +344,7 @@ func TestRestoreDoneAfterItsReference(t *testing.T) {
 
 // The five settings in the API, auto_min never above auto_max.
 func TestBackupSettingsAPI(t *testing.T) {
-	_, ts, _, _ := startStored(t, Options{})
+	ts := startServer(t, stored()).ts
 	var all map[string]settingView
 	getJSON(t, ts, "", "/api/v1/settings", &all)
 	for key, def := range map[string]string{store.BackupsAutoMinKey: "60", store.BackupsAutoMaxKey: "120", store.BackupsKeepDaysAutoKey: "90",
@@ -374,7 +380,8 @@ func TestBackupSettingsAPI(t *testing.T) {
 // setting and a programme against an edited copy; an unknown id or a
 // missing against are refused.
 func TestBackupDiff(t *testing.T) {
-	_, ts, s, st := startStored(t, Options{})
+	r := startServer(t, stored())
+	ts, s, st := r.ts, r.s, r.st
 	code, out := do(t, ts, "POST", backupsBase, "")
 	if code != 201 {
 		t.Fatalf("take: %d %v", code, out)

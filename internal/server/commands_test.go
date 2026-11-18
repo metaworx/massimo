@@ -73,7 +73,8 @@ func serverStore(t *testing.T, ts *httptest.Server) *store.Store {
 // A write is a command with its steps; the audit row names it; a retry
 // with the Idempotency-Key answers the same and sends nothing twice.
 func TestCommandsOfWrites(t *testing.T) {
-	fc, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	fc, ts, s := r.fc, r.ts, r.s
 	received := cubewatch.Lines(fc)
 	stores[ts] = s.opts.Store
 	setpoint := "/api/v1/cubes/KEQ0000100/rooms/6/setpoint"
@@ -162,7 +163,8 @@ func TestCommandsOfWrites(t *testing.T) {
 
 // A restore's command is sent with its 202 and finished by its run.
 func TestRestoreCommand(t *testing.T) {
-	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, s := r.ts, r.s
 	stores[ts] = s.opts.Store
 	code0, data := callAPI(t, ts, "GET", "/api/v1/cubes/KEQ0000100/backup", "secret", "")
 	f, err := backup.Unmarshal([]byte(data), false)
@@ -199,7 +201,8 @@ func TestCommandsAtStart(t *testing.T) {
 		t.Fatal(err)
 	}
 	st.Close()
-	_, ts, s := startWith(t, storeOptions(t, dir, "secret"))
+	r := startServer(t, withOptions(storeOptions(t, dir, "secret")))
+	ts, s := r.ts, r.s
 	if pending, _ := s.opts.Store.Pending(t.Context()); len(pending) != 0 {
 		t.Fatalf("pending after the start: %+v", pending)
 	}
@@ -235,7 +238,8 @@ func TestCommandsAtStart(t *testing.T) {
 // nor GET /api/v1/commands/{id}, nor a replay of the request with its
 // Idempotency-Key gives the secret out again.
 func TestTokenCreationKeepsNoSecret(t *testing.T) {
-	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, s := r.ts, r.s
 	stores[ts] = s.opts.Store
 	userToken(t, s.opts.Store, "anna", store.RoleViewer)
 	headers := map[string]string{"Idempotency-Key": "key-1"}
@@ -277,7 +281,8 @@ func TestTokenCreationKeepsNoSecret(t *testing.T) {
 // a slow handler holds it, its calls still return at once, and the step
 // rows are written once the lock is free.
 func TestStepObserverDoesNotWaitOnTheStore(t *testing.T) {
-	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, s := r.ts, r.s
 	stores[ts] = s.opts.Store
 	st := s.opts.Store
 	parent, err := st.AddCommand(t.Context(), store.Command{Action: "setpoint"})
@@ -321,7 +326,8 @@ func TestStepObserverDoesNotWaitOnTheStore(t *testing.T) {
 // its row dropped at the start with no status answered, gets 503 with
 // what the row says, not a panic.
 func TestReplayOfADroppedCommand(t *testing.T) {
-	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, s := r.ts, r.s
 	st := s.opts.Store
 	owner, _, _ := st.User(t.Context(), store.BootstrapUser)
 	path, body := "/api/v1/cubes/KEQ0000100/rooms/6/setpoint", `{"mode":"auto"}`
@@ -350,7 +356,8 @@ func TestReplayOfADroppedCommand(t *testing.T) {
 // A replay answers what the first request answered: a restore's 202
 // with its id and steps, also once its run has finished the command.
 func TestReplayOfARestoreKeepsItsAnswer(t *testing.T) {
-	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, s := r.ts, r.s
 	stores[ts] = s.opts.Store
 	_, data := callAPI(t, ts, "GET", "/api/v1/cubes/KEQ0000100/backup", "secret", "")
 	f, err := backup.Unmarshal([]byte(data), false)

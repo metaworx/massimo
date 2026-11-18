@@ -13,9 +13,7 @@ package server
 import (
 	"context"
 	"fmt"
-	"net/http/httptest"
 	"slices"
-	"sync"
 	"testing"
 	"time"
 
@@ -25,66 +23,23 @@ import (
 	"go.metaworx.ch/massimo/internal/testkit"
 )
 
-// testClock is a clock the test moves on.
-type testClock struct {
-	mu sync.Mutex
-	t  time.Time
-}
-
-func (c *testClock) now() time.Time {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.t
-}
-
-func (c *testClock) add(d time.Duration) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.t = c.t.Add(d)
-}
-
 // slotsCube is a server with a store over a fake Cube whose S replies
 // and greetings say free slots, its readings on clock; seed, where set,
 // writes to the store before the server starts.
 type slotsCube struct {
-	fc    *fakecube.Server
-	ts    *httptest.Server
-	s     *Server
-	clock *testClock
+	*rig
+	clock *testkit.Clock
 }
 
 func startSlotsCube(t *testing.T, free int, seed func(st *store.Store, cubeID int64)) *slotsCube {
 	t.Helper()
-	greeting, err := fakecube.LoadGreeting(fixture)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fc := &fakecube.Server{Greeting: greeting}
-	fc.SetFreeSlots(free)
-	addr, err := fc.Start("127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	st := testStore(t, "")
-	row, err := st.AddCube(context.Background(), store.Cube{Serial: "KEQ0000100", Configured: true, Address: addr, Source: store.SourceEnv})
-	if err != nil {
-		t.Fatal(err)
-	}
+	clock := testkit.NewClock(time.Date(2026, 11, 15, 8, 0, 0, 0, time.UTC))
+	opts := []startOpt{stored(), withFake(func(fc *fakecube.Server) { fc.SetFreeSlots(free) }),
+		withOptions(Options{Queue: engine.Options{Gap: time.Millisecond, SlotWait: time.Millisecond}, checkClock: clock.Now})}
 	if seed != nil {
-		seed(st, row.ID)
+		opts = append(opts, seedStore(seed))
 	}
-	cfg, err := CubeFromRow(row)
-	if err != nil {
-		t.Fatal(err)
-	}
-	clock := &testClock{t: time.Date(2026, 11, 15, 8, 0, 0, 0, time.UTC)}
-	s := New(Options{Cubes: []CubeConfig{cfg}, Store: st, Queue: engine.Options{Gap: time.Millisecond, SlotWait: time.Millisecond}, checkClock: clock.now})
-	ctx, cancel := context.WithCancel(context.Background())
-	go s.Run(ctx)
-	ts := httptest.NewServer(s.Handler())
-	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
-	waitConnected(t, ts, "KEQ0000100")
-	c := &slotsCube{fc: fc, ts: ts, s: s, clock: clock}
+	c := &slotsCube{rig: startServer(t, opts...), clock: clock}
 	c.waitReadings(t, 1) // the first greeting's, before the clock moves
 	return c
 }
@@ -163,10 +118,10 @@ func (c *slotsCube) waitSlotsEvents(t *testing.T, n int) []event {
 // free again, at info, which settles the alert.
 func TestSlotsStayFull(t *testing.T) {
 	c := startSlotsCube(t, 1, nil)
-	t0 := c.clock.now()
-	c.clock.add(30 * time.Minute)
+	t0 := c.clock.Now()
+	c.clock.Add(30 * time.Minute)
 	c.reconnect(t)
-	c.clock.add(31 * time.Minute)
+	c.clock.Add(31 * time.Minute)
 	c.reconnect(t)
 	full := c.waitSlotsEvents(t, 1)[0]
 	if full.Level != "error" || full.Source != "cube" || full.Summary["state"] != slotsStateFull || full.Summary["free_slots"] != float64(1) ||
@@ -181,7 +136,7 @@ func TestSlotsStayFull(t *testing.T) {
 	}
 
 	c.fc.SetFreeSlots(0)
-	c.clock.add(time.Hour)
+	c.clock.Add(time.Hour)
 	c.reconnect(t)
 	testkit.Eventually(t, "the count of the last reading", func() bool { f := c.slotsLowOf(t); return f != nil && f.FreeSlots == 0 })
 
@@ -205,7 +160,7 @@ func TestSlotsStayFull(t *testing.T) {
 // the warning; four free still short; five free: free again (D192-A).
 func TestSlotsShortThenFullAndBack(t *testing.T) {
 	c := startSlotsCube(t, 4, nil)
-	c.clock.add(61 * time.Minute)
+	c.clock.Add(61 * time.Minute)
 	c.reconnect(t)
 	low := c.waitSlotsEvents(t, 1)[0]
 	if low.Level != "warn" || low.Summary["state"] != slotsStateLow || low.Summary["free_slots"] != float64(4) || low.Summary["full_since"] != nil {
@@ -217,7 +172,7 @@ func TestSlotsShortThenFullAndBack(t *testing.T) {
 
 	c.fc.SetFreeSlots(1)
 	c.reconnect(t) // below 2 from now on
-	c.clock.add(61 * time.Minute)
+	c.clock.Add(61 * time.Minute)
 	c.reconnect(t)
 	full := c.waitSlotsEvents(t, 2)[1]
 	if full.Level != "error" || full.Summary["state"] != slotsStateFull || full.Summary["from"] != slotsStateLow {
@@ -241,7 +196,7 @@ func TestSlotsShortThenFullAndBack(t *testing.T) {
 	}
 
 	c.fc.SetFreeSlots(4)
-	c.clock.add(2 * time.Hour)
+	c.clock.Add(2 * time.Hour)
 	c.reconnect(t)
 	c.fc.SetFreeSlots(5)
 	c.reconnect(t)
@@ -259,12 +214,12 @@ func TestSlotsShortThenFullAndBack(t *testing.T) {
 // reading an hour after the first.
 func TestSlotsInFlightNotCounted(t *testing.T) {
 	c := startSlotsCube(t, 1, nil)
-	c.clock.add(61 * time.Minute)
+	c.clock.Add(61 * time.Minute)
 	if code, out := do(t, c.ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/0a010a/setpoint", `{"mode":"manual","temp":21.5}`); code != 200 {
 		t.Fatalf("setpoint: %d %v", code, out)
 	}
 	c.reconnect(t)
-	c.clock.add(16 * time.Minute)
+	c.clock.Add(16 * time.Minute)
 	c.reconnect(t)
 	full := c.waitSlotsEvents(t, 1)[0]
 	connected := c.events(t, "connected")

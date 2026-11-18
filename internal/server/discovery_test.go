@@ -18,7 +18,6 @@ import (
 
 	"go.metaworx.ch/massimo/internal/announce"
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
-	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/sharedport"
 	"go.metaworx.ch/massimo/internal/testkit"
@@ -35,32 +34,13 @@ func freeUDP(t *testing.T, ip string) string {
 	return pc.LocalAddr().String()
 }
 
-// startDiscovering starts a server over the fake Cube KEQ0000100 with the
-// given options for discovery.
-func startDiscovering(t *testing.T, opts Options) (*httptest.Server, *Server) {
-	t.Helper()
-	greeting, err := fakecube.LoadGreeting(fixture)
-	if err != nil {
-		t.Fatal(err)
+// discovering is the start of the discovery's tests: the server's
+// options o, a run's wait 200 ms where o sets none.
+func discovering(o Options) startOpt {
+	if o.DiscoveryWait == 0 {
+		o.DiscoveryWait = 200 * time.Millisecond
 	}
-	fc := &fakecube.Server{Greeting: greeting}
-	addr, err := fc.Start("127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if opts.Cubes == nil {
-		opts.Cubes = []CubeConfig{{Serial: "KEQ0000100", Addr: addr}}
-	}
-	opts.Queue = engine.Options{Gap: time.Millisecond}
-	if opts.DiscoveryWait == 0 {
-		opts.DiscoveryWait = 200 * time.Millisecond
-	}
-	s := New(opts)
-	ctx, cancel := context.WithCancel(context.Background())
-	go s.Run(ctx)
-	ts := httptest.NewServer(s.Handler())
-	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
-	return ts, s
+	return withOptions(o)
 }
 
 // postDiscovery asks for a run and fails the test where the answer's
@@ -95,7 +75,8 @@ func TestACallDuringARunGetsTheNext(t *testing.T) {
 	}
 	defer a.Close()
 	// A long wait, so that the calls below come while the first run goes.
-	ts, s := startDiscovering(t, Options{DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{a.Addr()}, DiscoveryWait: time.Second})
+	r := startServer(t, discovering(Options{DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{a.Addr()}, DiscoveryWait: time.Second}))
+	ts, s := r.ts, r.s
 	ctx := context.Background()
 	go s.discover(ctx)
 	var going *discoveryRun
@@ -131,7 +112,7 @@ func TestDiscoveryFindsUnconfiguredCubes(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer other.Close()
-	ts, _ := startDiscovering(t, Options{DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{other.Addr()}})
+	ts := startServer(t, discovering(Options{DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{other.Addr()}})).ts
 
 	code, out := postDiscovery(t, ts)
 	if code != 200 || out["ran_at"] == nil {
@@ -203,7 +184,7 @@ func TestDiscoveryDHCPFlag(t *testing.T) {
 	}
 	defer mute.Close()
 	mute.SetConfigSilent(true)
-	ts, _ := startDiscovering(t, Options{DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{static.Addr(), mute.Addr()}})
+	ts := startServer(t, discovering(Options{DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{static.Addr(), mute.Addr()}})).ts
 
 	flags := func(found []any) map[string]any {
 		out := map[string]any{}
@@ -271,13 +252,10 @@ func TestDiscoveryLeavesOutTheProxysOwnAnswers(t *testing.T) {
 	}
 	proxyAddr := tcp.Addr().String()
 	tcp.Close()
-	ts, _ := startDiscovering(t, Options{DiscoveryAddr: own, DiscoveryTargets: []string{own, other.Addr()},
-		Proxy: []ProxyListener{{Addr: proxyAddr, Discovery: true}}})
-	// Wait for the proxy's greeting data, without which it answers nothing.
-	testkit.Eventually(t, "the cube", func() bool {
-		var c cubeView
-		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
-	})
+	// The start waits for the Cube, whose greeting data the proxy needs
+	// to answer at all.
+	ts := startServer(t, discovering(Options{DiscoveryAddr: own, DiscoveryTargets: []string{own, other.Addr()},
+		Proxy: []ProxyListener{{Addr: proxyAddr, Discovery: true}}})).ts
 	_, out := postDiscovery(t, ts)
 	found, _ := out["found"].([]any)
 	if len(found) != 1 || found[0].(map[string]any)["serial"] != "KEQ0000000" {
@@ -295,8 +273,8 @@ func TestDiscoveryHearsAServedCubeOnThisHost(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer atHost.Close()
-	ts, _ := startDiscovering(t, Options{Cubes: []CubeConfig{{Serial: "KEQ0000000", Addr: "127.0.0.1:9"}},
-		DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{atHost.Addr()}})
+	ts := startServer(t, discovering(Options{DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{atHost.Addr()}}),
+		withCubes(CubeConfig{Serial: "KEQ0000000", Addr: "127.0.0.1:9"})).ts
 	if got := foundSerials(t, ts); len(got) != 1 || got[0] != "KEQ0000000" {
 		t.Fatalf("found %v, want the served Cube KEQ0000000", got)
 	}
@@ -335,11 +313,8 @@ func TestDiscoveryLeavesOutALaterProxysAnswers(t *testing.T) {
 	}
 	proxyAddr := tcp.Addr().String()
 	tcp.Close()
-	ts, s := startDiscovering(t, Options{DiscoveryAddr: own, DiscoveryTargets: []string{own, other.Addr()}})
-	testkit.Eventually(t, "the cube", func() bool {
-		var c cubeView
-		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
-	})
+	r := startServer(t, discovering(Options{DiscoveryAddr: own, DiscoveryTargets: []string{own, other.Addr()}}))
+	ts, s := r.ts, r.s
 	if !s.startProxy(ProxyListener{Serial: "KEQ0000100", Addr: proxyAddr, Discovery: true, DiscoverySerial: "KEQ0000999"}) {
 		t.Fatal("the proxy did not start")
 	}
@@ -364,8 +339,8 @@ func TestDiscoveryLeavesOutItsProxySerialFromAnywhere(t *testing.T) {
 		}
 		return ""
 	}
-	ts, _ := startDiscovering(t, Options{Cubes: []CubeConfig{{Serial: "KEQ0000100", ProxySerial: "KEQ0000999"}}, LookupMAC: mac,
-		DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{atProxy.Addr()}})
+	ts := startServer(t, discovering(Options{LookupMAC: mac, DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{atProxy.Addr()}}),
+		withCubes(CubeConfig{Serial: "KEQ0000100", ProxySerial: "KEQ0000999"})).ts
 	if got := foundSerials(t, ts); len(got) != 0 {
 		t.Fatalf("found %v, want none", got)
 	}
@@ -413,8 +388,8 @@ func TestFoundEntriesNameTheirKindAndServer(t *testing.T) {
 			{Host: "box-b.local.", Port: 8080, From: net.IPv4(127, 0, 0, 5)},
 		}, nil
 	}
-	ts, _ := startDiscovering(t, Options{LookupMAC: mac, BrowseServers: browse, DiscoveryAddr: "127.0.0.1:0",
-		DiscoveryTargets: []string{atProxy.Addr(), atCube.Addr(), atServer.Addr()}})
+	ts := startServer(t, discovering(Options{LookupMAC: mac, BrowseServers: browse, DiscoveryAddr: "127.0.0.1:0",
+		DiscoveryTargets: []string{atProxy.Addr(), atCube.Addr(), atServer.Addr()}})).ts
 	_, out := postDiscovery(t, ts)
 	if got, want := asked.Load(), "127.0.0.3 127.0.0.4 127.0.0.5 200ms"; got != want {
 		t.Errorf("servers asked at %v, want %q", got, want)
@@ -459,7 +434,7 @@ func TestDiscoveryWithoutThePort(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer taken.Close()
-	ts, _ := startDiscovering(t, Options{DiscoveryAddr: taken.LocalAddr().String()})
+	ts := startServer(t, discovering(Options{DiscoveryAddr: taken.LocalAddr().String()})).ts
 	if code, out := postDiscovery(t, ts); code != http.StatusServiceUnavailable || out["error"] == nil {
 		t.Fatalf("discover with the port taken: %d %v", code, out)
 	}
@@ -477,7 +452,7 @@ func TestDiscoveryPortShared(t *testing.T) {
 	}
 	proxyAddr := tcp.Addr().String()
 	tcp.Close()
-	_, s := startDiscovering(t, Options{DiscoveryAddr: own, Proxy: []ProxyListener{{Addr: proxyAddr, Discovery: true}}})
+	s := startServer(t, discovering(Options{DiscoveryAddr: own, Proxy: []ProxyListener{{Addr: proxyAddr, Discovery: true}}})).s
 	testkit.Eventually(t, "the proxies' discovery socket", func() bool {
 		s.mu.RLock()
 		defer s.mu.RUnlock()
@@ -538,7 +513,7 @@ func TestSearchListsOnlyCubesThatAnswered(t *testing.T) {
 	}
 	bAddr := b.Addr()
 	st := testStore(t, "")
-	ts, _ := startDiscovering(t, Options{Store: st, DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{a.Addr(), bAddr}})
+	ts := startServer(t, discovering(Options{Store: st, DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{a.Addr(), bAddr}})).ts
 
 	postDiscovery(t, ts)
 	if got := listedSerials(t, ts); len(got) != 2 || got[0] != "KEQ0000000" || got[1] != "KEQ0000001" {
@@ -580,7 +555,8 @@ func TestFailedRunChangesNothing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ts, s := startDiscovering(t, Options{DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{a.Addr()}})
+	r := startServer(t, discovering(Options{DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{a.Addr()}}))
+	ts, s := r.ts, r.s
 	postDiscovery(t, ts)
 	a.Close()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -596,10 +572,7 @@ func TestFailedRunChangesNothing(t *testing.T) {
 // A Cube configured by serial only is connected at the address it
 // answers discovery from, and follows it when it changes.
 func TestCubeConfiguredBySerialFollowsItsAddress(t *testing.T) {
-	greeting, err := fakecube.LoadGreeting(fixture)
-	if err != nil {
-		t.Fatal(err)
-	}
+	greeting := recorded(t)
 	// Two homes for the same Cube on one port, 127.0.0.2 and 127.0.0.3
 	// (other addresses than this host's own, which mean its own proxy).
 	first := &fakecube.Server{Greeting: greeting}
@@ -627,8 +600,8 @@ func TestCubeConfiguredBySerialFollowsItsAddress(t *testing.T) {
 	defer at3.Close()
 	at3.SetSilent(true)
 
-	ts, _ := startDiscovering(t, Options{Cubes: []CubeConfig{{Serial: "KEQ0000100"}}, CubePort: port,
-		DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{at2.Addr(), at3.Addr()}})
+	ts := startServer(t, discovering(Options{CubePort: port, DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{at2.Addr(), at3.Addr()}}),
+		withCubes(CubeConfig{Serial: "KEQ0000100"})).ts
 	// The first run at the start finds it; no interval is needed for that.
 	cube := func() map[string]any {
 		var cubes []map[string]any
@@ -706,10 +679,7 @@ type movingCube struct {
 
 func startMovingCube(t *testing.T, retry time.Duration) *movingCube {
 	t.Helper()
-	greeting, err := fakecube.LoadGreeting(fixture)
-	if err != nil {
-		t.Fatal(err)
-	}
+	greeting := recorded(t)
 	m := &movingCube{t: t, first: &fakecube.Server{Greeting: greeting}, second: &fakecube.Server{Greeting: greeting}}
 	addr, err := m.first.Start("127.0.0.2:0")
 	if err != nil {
@@ -733,8 +703,9 @@ func startMovingCube(t *testing.T, retry time.Duration) *movingCube {
 	m.at3.SetSilent(true)
 	counter, requests := requestCounter(t)
 	m.requests = requests
-	m.ts, m.s = startDiscovering(t, Options{Cubes: []CubeConfig{{Serial: "KEQ0000100"}}, CubePort: port, AddressRetry: retry,
-		DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{m.at2.Addr(), m.at3.Addr(), counter}})
+	r := startServer(t, discovering(Options{CubePort: port, AddressRetry: retry,
+		DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{m.at2.Addr(), m.at3.Addr(), counter}}), withCubes(CubeConfig{Serial: "KEQ0000100"}))
+	m.ts, m.s = r.ts, r.s
 	testkit.Eventually(t, "the cube at 127.0.0.2", func() bool { return m.at(addr) })
 	testkit.Eventually(t, "the run at the start to end", func() bool { return noRunGoing(m.s) })
 	return m
@@ -793,34 +764,21 @@ func TestALostCubeIsSearchedForWhileLost(t *testing.T) {
 // request count.
 func fixedCube(t *testing.T, interval time.Duration) (s *Server, fc *fakecube.Server, connected func() bool, logs *testkit.Watch[testkit.Record], requests func() int) {
 	t.Helper()
-	greeting, err := fakecube.LoadGreeting(fixture)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fc = &fakecube.Server{Greeting: greeting}
-	addr, err := fc.Start("127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { fc.Close() })
 	elsewhere, err := fakecube.StartDiscovery("127.0.0.3:0", "KEQ0000100", 0x0a0107)
 	if err != nil {
 		t.Skip(err)
 	}
 	t.Cleanup(func() { elsewhere.Close() })
 	counter, requests := requestCounter(t)
-	log, logs := testkit.LogWatch(nil)
-	ts, srv := startDiscovering(t, Options{Cubes: []CubeConfig{{Serial: "KEQ0000100", Addr: addr}}, DiscoverInterval: interval,
-		AddressRetry: 100 * time.Millisecond, Logger: log,
-		DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{elsewhere.Addr(), counter}})
+	r := startServer(t, withLog(nil), discovering(Options{DiscoverInterval: interval, AddressRetry: 100 * time.Millisecond,
+		DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{elsewhere.Addr(), counter}}))
 	connected = func() bool {
 		var cubes []map[string]any
-		getJSON(t, ts, "", "/api/v1/cubes", &cubes)
+		getJSON(t, r.ts, "", "/api/v1/cubes", &cubes)
 		return len(cubes) == 1 && cubes[0]["connected"] == true
 	}
-	testkit.Eventually(t, "the cube connected", connected)
-	testkit.Eventually(t, "no run going", func() bool { return noRunGoing(srv) })
-	return srv, fc, connected, logs, requests
+	testkit.Eventually(t, "no run going", func() bool { return noRunGoing(r.s) })
+	return r.s, r.fc, connected, r.log, requests
 }
 
 // Without periodic discovery, a lost Cube with a fixed address is not
@@ -859,10 +817,7 @@ func TestALostFixedCubeWithAnIntervalIsSearchedFor(t *testing.T) {
 // has no ARP entries, so mac gives the MACs the search sees.
 func homes(t *testing.T) (port int, cubeTCP, proxyTCP *fakecube.Server, atCube, atProxy *fakecube.DiscoveryResponder) {
 	t.Helper()
-	greeting, err := fakecube.LoadGreeting(fixture)
-	if err != nil {
-		t.Fatal(err)
-	}
+	greeting := recorded(t)
 	cubeTCP = &fakecube.Server{Greeting: greeting}
 	addr, err := cubeTCP.Start("127.0.0.2:0")
 	if err != nil {
@@ -903,9 +858,8 @@ func TestOneSerialFromACubeAndAProxy(t *testing.T) {
 		return ""
 	}
 	log, logs := testkit.LogWatch(nil)
-	ts, _ := startDiscovering(t, Options{Cubes: []CubeConfig{{Serial: "KEQ0000100"}}, CubePort: port, LookupMAC: mac,
-		Logger:        log,
-		DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{atCube.Addr(), atProxy.Addr()}})
+	ts := startServer(t, discovering(Options{CubePort: port, LookupMAC: mac, Logger: log,
+		DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{atCube.Addr(), atProxy.Addr()}}), withCubes(CubeConfig{Serial: "KEQ0000100"})).ts
 	proxyAddr := "127.0.0.3:" + strconv.Itoa(port)
 	testkit.Eventually(t, "the cube through the proxy", func() bool {
 		var cubes []map[string]any
@@ -952,9 +906,8 @@ func TestAnUnknownAnswerIsNotFollowed(t *testing.T) {
 	port, cubeTCP, proxyTCP, atCube, atProxy := homes(t)
 	atProxy.SetSilent(true)
 	log, logs := testkit.LogWatch(nil)
-	ts, _ := startDiscovering(t, Options{Cubes: []CubeConfig{{Serial: "KEQ0000100"}}, CubePort: port,
-		Logger:        log,
-		DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{atCube.Addr(), atProxy.Addr()}})
+	ts := startServer(t, discovering(Options{CubePort: port, Logger: log,
+		DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{atCube.Addr(), atProxy.Addr()}}), withCubes(CubeConfig{Serial: "KEQ0000100"})).ts
 	cubeAddr := "127.0.0.2:" + strconv.Itoa(port)
 	address := func() any {
 		var cubes []map[string]any

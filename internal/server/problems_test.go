@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/testkit"
 )
@@ -17,11 +16,12 @@ import (
 // each with its room's name: a transmit error and a low battery; a
 // device without one is not, nor a hidden one.
 func TestCubeProblems(t *testing.T) {
-	fc, ts, _, _ := startStored(t, Options{PollInterval: 100 * time.Millisecond})
+	r := startServer(t, stored(), withOptions(Options{PollInterval: 100 * time.Millisecond}))
+	fc, ts := r.fc, r.ts
 	if code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100", `{"hidden":["0a0108"]}`); code != 200 {
 		t.Fatalf("hide: %d %v", code, out)
 	}
-	greeting, _ := fakecube.LoadGreeting(fixture)
+	greeting := recorded(t)
 	raw, _ := base64.StdEncoding.DecodeString(greeting[len(greeting)-1].Data)
 	// 0a010d: valid, a transmit error, manual, its battery low;
 	// 0a0108: valid, a link error, but hidden.

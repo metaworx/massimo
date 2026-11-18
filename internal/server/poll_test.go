@@ -4,14 +4,10 @@
 package server
 
 import (
-	"context"
 	"encoding/base64"
-	"net/http/httptest"
 	"testing"
 	"time"
 
-	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
-	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/testkit"
 )
@@ -19,28 +15,11 @@ import (
 // A state change the Cube reports in the answer to a later l: poll is a
 // state event in the log, after the connected event.
 func TestPolledStateChangesReachTheLog(t *testing.T) {
-	greeting, err := fakecube.LoadGreeting(fixture)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fc := &fakecube.Server{Greeting: greeting}
-	addr, err := fc.Start("127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0000100", Addr: addr}}, PollInterval: 100 * time.Millisecond, Queue: engine.Options{Gap: time.Millisecond}})
-	ctx, cancel := context.WithCancel(context.Background())
-	go s.Run(ctx)
-	ts := httptest.NewServer(s.Handler())
-	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
-	testkit.Eventually(t, "the cube", func() bool {
-		var c cubeView
-		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
-	})
-	// The greeting through the pump first: a pump still at the greeting
-	// when the list changes reads the new state for the greeting's line,
-	// and the change has none of its own.
-	pumpSync(t, s)
+	// The start has the greeting through the pump: a pump still at the
+	// greeting when the list changes reads the new state for the
+	// greeting's line, and the change has none of its own.
+	r := startServer(t, withOptions(Options{PollInterval: 100 * time.Millisecond}))
+	fc, ts, greeting := r.fc, r.ts, recorded(t)
 	// 0a010d reports: manual, 21 °C, valve 30 %.
 	l := greeting[len(greeting)-1]
 	raw, _ := base64.StdEncoding.DecodeString(l.Data)

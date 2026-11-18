@@ -19,11 +19,9 @@ import (
 // Linux's), is listed with link busy: discovery's answer is what tells
 // it from a Cube that is off.
 func TestABusyCubeIsListedAsBusy(t *testing.T) {
-	greeting, err := fakecube.LoadGreeting(fixture)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fc := &fakecube.Server{Greeting: greeting, SingleClient: true}
+	// The fake is the test's own, at 127.0.0.2 and held by another
+	// client before the server starts: the start waits for no Cube.
+	fc := &fakecube.Server{Greeting: recorded(t), SingleClient: true}
 	addr, err := fc.Start("127.0.0.2:0")
 	if err != nil {
 		t.Skipf("cannot listen on 127.0.0.2: %v", err)
@@ -48,9 +46,9 @@ func TestABusyCubeIsListedAsBusy(t *testing.T) {
 		d := net.Dialer{Timeout: 150 * time.Millisecond}
 		return d.DialContext(ctx, "tcp", a)
 	}
-	ts, _ := startDiscovering(t, Options{Cubes: []CubeConfig{{Serial: "KEQ0000100", Addr: addr}}, DiscoverInterval: time.Hour,
-		DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{at.Addr()},
-		cubeOptions: func(o *cubelan.Options) { o.Dialer, o.Backoff = quick, 50*time.Millisecond }})
+	ts := startServer(t, discovering(Options{DiscoverInterval: time.Hour, DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{at.Addr()},
+		cubeOptions: func(o *cubelan.Options) { o.Dialer, o.Backoff = quick, 50*time.Millisecond }}),
+		withCubes(CubeConfig{Serial: "KEQ0000100", Addr: addr})).ts
 	link := func() map[string]any {
 		var cubes []map[string]any
 		getJSON(t, ts, "", "/api/v1/cubes", &cubes)

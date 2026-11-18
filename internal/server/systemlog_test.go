@@ -14,7 +14,6 @@ import (
 	"io"
 	"log/slog"
 	"net"
-	"net/http/httptest"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -22,29 +21,10 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/cubelan"
-	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
-	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/update"
 )
-
-// runOver starts a server of a version over a store and a Cube's row,
-// and returns its HTTP server and its stop, which waits for its Run.
-func runOver(t *testing.T, st *store.Store, row store.Cube, opts Options) (*httptest.Server, func()) {
-	t.Helper()
-	cfg, _ := CubeFromRow(row)
-	opts.Cubes, opts.Store = []CubeConfig{cfg}, st
-	opts.Queue = engine.Options{Gap: time.Millisecond}
-	opts.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
-	s := New(opts)
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() { s.Run(ctx); close(done) }()
-	ts := httptest.NewServer(s.Handler())
-	waitConnected(t, ts, "KEQ0000100")
-	return ts, func() { ts.Close(); cancel(); <-done }
-}
 
 // systemRows reads the server's rows of a kind from the store.
 func systemRows(t *testing.T, st *store.Store, kind string) []map[string]any {
@@ -68,19 +48,11 @@ func systemRows(t *testing.T, st *store.Store, kind string) []map[string]any {
 // The start says the version, and the one before when it changed; the
 // stop says why, written before the store closes.
 func TestServerStartAndStopLogged(t *testing.T) {
-	greeting, _ := fakecube.LoadGreeting(fixture)
-	fc := &fakecube.Server{Greeting: greeting}
-	addr, err := fc.Start("127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer fc.Close()
-	st := testStore(t, "")
-	row, _ := st.AddCube(context.Background(), store.Cube{Serial: "KEQ0000100", Configured: true, Address: addr, Source: store.SourceEnv})
-	_, stop := runOver(t, st, row, Options{Version: "v1.0.0"})
-	stop()
-	_, stop = runOver(t, st, row, Options{Version: "v1.1.0"})
-	stop()
+	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
+	first := startServer(t, stored(), withOptions(Options{Version: "v1.0.0", Logger: discard}))
+	first.stop()
+	startServer(t, again(first), withOptions(Options{Version: "v1.1.0", Logger: discard})).stop()
+	st := first.st
 	started := systemRows(t, st, "server_started")
 	if len(started) != 2 {
 		t.Fatalf("%d starts", len(started))
@@ -102,7 +74,8 @@ func TestServerStartAndStopLogged(t *testing.T) {
 // The settings file read again names the variables, never their values;
 // read through the API, it says who asked.
 func TestSettingsReadNamesOnly(t *testing.T) {
-	_, ts, s, st := startStored(t, Options{})
+	r := startServer(t, stored())
+	ts, s, st := r.ts, r.s, r.st
 	token := userToken(t, st, "anna", store.RoleOwner)
 	s.SetReloader("/etc/massimo/massimo.env", func(ctx context.Context) (ReloadResult, error) {
 		s.LogSettingsRead(ctx, "the API", []string{"MASSIMO_LOG_LEVEL"}, []string{"MASSIMO_CUBE_KEQ0000000_ADDRESS"})
@@ -128,7 +101,8 @@ func TestSettingsReadNamesOnly(t *testing.T) {
 // the old file's name and the files kept and deleted; a failed step at
 // warn with its error.
 func TestLogRotatedLine(t *testing.T) {
-	_, ts, s, st := startStored(t, Options{})
+	r := startServer(t, stored())
+	ts, s, st := r.ts, r.s, r.st
 	token := userToken(t, st, "anna", store.RoleOwner)
 	s.LogRotated("size", "serve.log.1", 8, []string{"serve.log.9.gz"}, nil)
 	s.LogRotated("sighup", "serve.log.1", 3, nil, errors.New("log not rotated: permission denied"))
@@ -158,23 +132,15 @@ func TestLogRotatedLine(t *testing.T) {
 // An update's outcome the helper reported is logged once, at the first
 // start after it, a failure at warn.
 func TestUpdateResultLoggedOnce(t *testing.T) {
-	greeting, _ := fakecube.LoadGreeting(fixture)
-	fc := &fakecube.Server{Greeting: greeting}
-	addr, err := fc.Start("127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer fc.Close()
 	status := filepath.Join(t.TempDir(), "status.json")
 	if err := update.WriteStatus(status, update.Status{State: "failed", From: "v1.0.0", To: "v1.1.0", Message: "checksum", Time: time.Now().Add(-time.Minute)}); err != nil {
 		t.Fatal(err)
 	}
-	st := testStore(t, "")
-	row, _ := st.AddCube(context.Background(), store.Cube{Serial: "KEQ0000100", Configured: true, Address: addr, Source: store.SourceEnv})
-	for i := 0; i < 2; i++ {
-		_, stop := runOver(t, st, row, Options{Version: "v1.0.0", Update: UpdateOptions{Status: status}})
-		stop()
-	}
+	opts := Options{Version: "v1.0.0", Update: UpdateOptions{Status: status}, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	first := startServer(t, stored(), withOptions(opts))
+	first.stop()
+	startServer(t, again(first), withOptions(opts)).stop()
+	st := first.st
 	rows := systemRows(t, st, "update_result")
 	if len(rows) != 1 || rows[0]["level"] != "warn" || rows[0]["error"] != "checksum" {
 		t.Fatalf("the update's outcome: %v", rows)
@@ -184,7 +150,8 @@ func TestUpdateResultLoggedOnce(t *testing.T) {
 // A backup by hand says its reason and who took it; a deletion says
 // which and who; both are the Cube's lines of the system.
 func TestBackupsLogged(t *testing.T) {
-	_, ts, _, st := startStored(t, Options{})
+	r := startServer(t, stored())
+	ts, st := r.ts, r.st
 	token := userToken(t, st, "anna", store.RoleOwner)
 	code, body := callAPI(t, ts, "POST", "/api/v1/cubes/KEQ0000100/backups", token, `{}`)
 	if code != 201 {
@@ -215,7 +182,8 @@ func TestBackupsLogged(t *testing.T) {
 func TestAddressChangedLogged(t *testing.T) {
 	// The Cube is lost at the new address and searched for: on the
 	// loopback, not the LAN.
-	_, ts, s, _ := startStored(t, Options{DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{freeUDP(t, "127.0.0.1")}})
+	r := startServer(t, stored(), withOptions(Options{DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{freeUDP(t, "127.0.0.1")}}))
+	ts, s := r.ts, r.s
 	rt := s.cubes["keq0000100"]
 	rt.cfgMu.Lock()
 	rt.cfg.FollowDiscovery = true
@@ -235,7 +203,8 @@ func TestAddressChangedLogged(t *testing.T) {
 // A found Cube that no longer answers is a line of the server's, in the
 // configured Cube's log.
 func TestCubeGoneLogged(t *testing.T) {
-	_, ts, s, _ := startStored(t, Options{})
+	r := startServer(t, stored())
+	ts, s := r.ts, r.s
 	s.cubeGone(foundCube{Serial: "KEQ0000009", Address: "192.0.2.9"})
 	_, evs := logOf(t, ts, "?kind=cube_gone")
 	if len(evs) != 1 || evs[0].Cube == nil || evs[0].Cube.Serial != "KEQ0000009" || evs[0].Source != "cube" {

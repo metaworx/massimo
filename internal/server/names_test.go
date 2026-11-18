@@ -18,7 +18,8 @@ import (
 // user finds the rows made with its rights and by it; and the keys of
 // before stay, undocumented.
 func TestIntegrationNamesShown(t *testing.T) {
-	_, ts, _, st := startRoomsOpts(t, roomsOpts{slow: true})
+	rg := startServer(t, storedRooms(), quiet())
+	ts, st := rg.ts, rg.st
 	ctx := t.Context()
 	i, key := registerHA(t, st, []string{"read", "setpoint"})
 	owner := userToken(t, st, "boss", store.RoleOwner)

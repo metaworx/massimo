@@ -17,7 +17,8 @@ import (
 // A login answers a session that works until it is logged out; wrong
 // pairs, disabled users and API keys are refused where they should be.
 func TestLogin(t *testing.T) {
-	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, s := r.ts, r.s
 	st := s.opts.Store
 	ctx := t.Context()
 	anna, err := st.AddUser(ctx, store.User{Name: "anna", DisplayName: "Anna", Role: store.RoleOperator}, "pw", 0)
@@ -104,7 +105,8 @@ func TestLogin(t *testing.T) {
 func TestLoginLockout(t *testing.T) {
 	opts := storeOptions(t, t.TempDir(), "secret")
 	opts.AuthFailures = 3
-	_, ts, s := startWith(t, opts)
+	r := startServer(t, withOptions(opts))
+	ts, s := r.ts, r.s
 	st := s.opts.Store
 	st.AddUser(t.Context(), store.User{Name: "anna", Role: store.RoleViewer}, "pw", 0)
 	for i := 0; i < 2; i++ {
@@ -137,7 +139,8 @@ func TestLoginLockout(t *testing.T) {
 func TestLoginOneAtATime(t *testing.T) {
 	opts := storeOptions(t, t.TempDir(), "secret")
 	opts.AuthFailures = 2
-	_, ts, s := startWith(t, opts)
+	rg := startServer(t, withOptions(opts))
+	ts, s := rg.ts, rg.s
 	s.opts.Store.AddUser(t.Context(), store.User{Name: "anna", Role: store.RoleViewer}, "pw", 0)
 	login := func(password string) *http.Response {
 		t.Helper()
@@ -181,7 +184,8 @@ func TestMeModes(t *testing.T) {
 		json.Unmarshal([]byte(ts), &me)
 		return me
 	}
-	_, open, s := startWith(t, storeOptions(t, t.TempDir(), ""))
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "")))
+	open, s := r.ts, r.s
 	code, text := callAPI(t, open, "GET", "/api/v1/me", "", "")
 	if me := read(text); code != 200 || me.Mode != "open" || me.User != nil || !me.Setup || len(me.Capabilities) != len(capabilities) {
 		t.Fatalf("open: %d %+v", code, text)
@@ -194,7 +198,7 @@ func TestMeModes(t *testing.T) {
 		t.Fatalf("me without a token in users mode: %d", code)
 	}
 
-	_, legacy, _ := start(t, "secret")
+	legacy := startServer(t, withOptions(Options{Token: "secret"})).ts
 	code, text = callAPI(t, legacy, "GET", "/api/v1/me", "secret", "")
 	if me := read(text); code != 200 || me.Mode != "token" || me.User != nil || me.Setup {
 		t.Fatalf("token mode: %d %s", code, text)
@@ -205,7 +209,7 @@ func TestMeModes(t *testing.T) {
 	if code, _ := callAPI(t, legacy, "POST", "/api/v1/logout", "secret", ""); code != 400 {
 		t.Fatalf("logout without a store: %d", code)
 	}
-	_, none, _ := start(t, "")
+	none := startServer(t).ts
 	code, text = callAPI(t, none, "GET", "/api/v1/me", "", "")
 	if me := read(text); code != 200 || me.Mode != "none" {
 		t.Fatalf("no authentication: %d %s", code, text)

@@ -14,25 +14,8 @@ import (
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/testkit"
-	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 	"go.metaworx.ch/massimo/internal/view"
 )
-
-// startWatchCube starts a fake Cube with the recorded greeting.
-func startWatchCube(t *testing.T) (*fakecube.Server, string) {
-	t.Helper()
-	greeting, err := fakecube.LoadGreeting(fixture)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fc := &fakecube.Server{Greeting: greeting}
-	addr, err := fc.Start("127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { fc.Close() })
-	return fc, addr
-}
 
 // stateLines counts rf's state lines in the log whose change of key is
 // to, or all of them for key "".
@@ -137,10 +120,9 @@ func wantWatch(t *testing.T, ev event, level string, want map[string]any) {
 // device; back again the same day is no second warning; clear for a day,
 // the resets take the device again.
 func TestErrorWatchBack(t *testing.T) {
-	fc, addr := startWatchCube(t)
-	received := cubewatch.Lines(fc)
-	clock := &stepClock{t: time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)}
-	ts, s, _ := startResets(t, testStore(t, ""), addr, clock, nil)
+	clock := testkit.NewClock(time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC))
+	r := startServer(t, resetsOn(clock))
+	fc, ts, s, received := r.fc, r.ts, r.s, r.lines
 	rt := s.runtimes()[0]
 	const rf = cube.RFAddress(0x0a010d)
 	on, off := true, false
@@ -163,7 +145,7 @@ func TestErrorWatchBack(t *testing.T) {
 		t.Fatalf("the flag cleared by the reset: %+v", lines)
 	}
 
-	clock.add(time.Hour)
+	clock.Add(time.Hour)
 	settleState(t, fc, ts, s, rf, fakecube.State{Error: &on, ValvePct: valve(20)}, "valve_pct", float64(20))
 	lines := waitWatch(t, ts, rf, 1)
 	wantWatch(t, lines[0], "warn", map[string]any{"what": "back", "flag": "error", "minutes": float64(60), "next_report": true, "held": true})
@@ -192,7 +174,7 @@ func TestErrorWatchBack(t *testing.T) {
 	}
 
 	// Back again the same day: no second warning, no reset.
-	clock.add(2 * time.Hour)
+	clock.Add(2 * time.Hour)
 	settleState(t, fc, ts, s, rf, fakecube.State{Error: &on, ValvePct: valve(30)}, "valve_pct", float64(30))
 	if lines := watchLines(t, ts, rf); len(lines) != 2 {
 		t.Fatalf("back again the same day: %+v", lines)
@@ -205,7 +187,7 @@ func TestErrorWatchBack(t *testing.T) {
 	// and is no return (the reset is more than a day old).
 	settleState(t, fc, ts, s, rf, fakecube.State{Error: &off}, "error", false)
 	waitWatch(t, ts, rf, 3)
-	clock.add(25 * time.Hour)
+	clock.Add(25 * time.Hour)
 	settleState(t, fc, ts, s, rf, fakecube.State{Error: &on, ValvePct: valve(40)}, "valve_pct", float64(40))
 	if n := received.Count(0, resetOf(rf)); n != 2 {
 		t.Fatalf("clear for a day: %d resets, want 2", n)
@@ -224,25 +206,25 @@ func TestErrorWatchBack(t *testing.T) {
 // timer and an alert until its clear, an info line; a flag cleared
 // before stops its timer.
 func TestErrorWatchLasting(t *testing.T) {
-	fc, addr := startWatchCube(t)
-	clock := &stepClock{t: time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)}
-	ts, s, _ := startResets(t, testStore(t, ""), addr, clock, nil)
+	clock := testkit.NewClock(time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC))
+	r := startServer(t, resetsOn(clock))
+	fc, ts, s := r.fc, r.ts, r.s
 	const silent, linked, cleared = cube.RFAddress(0x0a010d), cube.RFAddress(0x0a0108), cube.RFAddress(0x0a0109)
 	on, off := true, false
 	t0 := clock.Now()
 	settleState(t, fc, ts, s, silent, fakecube.State{Error: &on}, "", nil)
 	settleState(t, fc, ts, s, linked, fakecube.State{Reported: &on, LinkError: &on}, "link_error", true)
 	settleState(t, fc, ts, s, cleared, fakecube.State{Error: &on}, "", nil)
-	clock.add(10 * time.Hour)
+	clock.Add(10 * time.Hour)
 	settleState(t, fc, ts, s, cleared, fakecube.State{Error: &off}, "", nil)
 
-	clock.add(14*time.Hour - time.Second)
+	clock.Add(14*time.Hour - time.Second)
 	for _, rf := range []cube.RFAddress{silent, linked, cleared} {
 		if lines := watchLines(t, ts, rf); len(lines) != 0 {
 			t.Fatalf("%s before 24 hours: %+v", rf, lines)
 		}
 	}
-	clock.add(time.Second)
+	clock.Add(time.Second)
 	lines := waitWatch(t, ts, silent, 1)
 	wantWatch(t, lines[0], "error", map[string]any{"what": "lasting", "flag": "error", "hours": float64(24), "silent": true, "held": false,
 		"since": t0.Format(time.RFC3339)})
@@ -259,11 +241,11 @@ func TestErrorWatchLasting(t *testing.T) {
 			t.Fatalf("%s: the alerts %+v", rf, a)
 		}
 	}
-	if n := clock.pending(); n != 0 {
+	if n := clock.Pending(); n != 0 {
 		t.Fatalf("%d timers left", n)
 	}
 
-	clock.add(time.Hour)
+	clock.Add(time.Hour)
 	settleState(t, fc, ts, s, linked, fakecube.State{LinkError: &off}, "link_error", false)
 	link = waitWatch(t, ts, linked, 2)
 	wantWatch(t, link[1], "info", map[string]any{"what": "clear", "flag": "link_error", "hours": float64(25)})
@@ -286,10 +268,9 @@ func TestErrorWatchLasting(t *testing.T) {
 // without a state has no flag in its lines, and its day starts with the
 // server; one started after the errors gives none again.
 func TestErrorWatchLastingAcrossRestart(t *testing.T) {
-	fc, addr := startWatchCube(t)
-	st := testStore(t, "")
-	clock := &stepClock{t: time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)}
-	ts, s, stop := startResets(t, st, addr, clock, nil)
+	clock := testkit.NewClock(time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC))
+	r := startServer(t, resetsOn(clock))
+	fc, ts, s, st := r.fc, r.ts, r.s, r.st
 	const flagged, linked, silent = cube.RFAddress(0x0a010a), cube.RFAddress(0x0a010b), cube.RFAddress(0x0a010c)
 	on := true
 	valve := func(n int) *int { return &n }
@@ -301,10 +282,11 @@ func TestErrorWatchLastingAcrossRestart(t *testing.T) {
 	if err := st.FlushEvents(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	stop()
+	r.stop()
 
-	clock.add(10 * time.Hour)
-	ts, s, stop = startResets(t, st, addr, clock, nil)
+	clock.Add(10 * time.Hour)
+	r = startServer(t, resetsOn(clock), again(r))
+	ts, s = r.ts, r.s
 	w := &s.runtimes()[0].errWatch
 	w.mu.Lock()
 	d := w.devices[flagged]
@@ -313,11 +295,11 @@ func TestErrorWatchLastingAcrossRestart(t *testing.T) {
 	if !since.Equal(t0) || !linkSince.Equal(t0) || !silentSince.Equal(clock.Now()) {
 		t.Fatalf("seeded since %v, %v and %v", since, linkSince, silentSince)
 	}
-	clock.add(14*time.Hour - time.Second)
+	clock.Add(14*time.Hour - time.Second)
 	if lines := watchLines(t, ts, flagged); len(lines) != 0 {
 		t.Fatalf("before 24 hours: %+v", lines)
 	}
-	clock.add(time.Second)
+	clock.Add(time.Second)
 	lines := waitWatch(t, ts, flagged, 1)
 	wantWatch(t, lines[0], "error", map[string]any{"what": "lasting", "flag": "error", "since": t0.Format(time.RFC3339)})
 	link := waitWatch(t, ts, linked, 1)
@@ -325,15 +307,16 @@ func TestErrorWatchLastingAcrossRestart(t *testing.T) {
 	if lines := watchLines(t, ts, silent); len(lines) != 0 {
 		t.Fatalf("the device without a state, a day after the first start: %+v", lines)
 	}
-	clock.add(10 * time.Hour)
+	clock.Add(10 * time.Hour)
 	wantWatch(t, waitWatch(t, ts, silent, 1)[0], "error", map[string]any{"what": "lasting", "flag": "error", "silent": true})
 	if err := st.FlushEvents(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	stop()
+	r.stop()
 
-	clock.add(time.Hour)
-	ts, s, _ = startResets(t, st, addr, clock, nil)
+	clock.Add(time.Hour)
+	r = startServer(t, resetsOn(clock), again(r))
+	ts, s = r.ts, r.s
 	w = &s.runtimes()[0].errWatch
 	w.mu.Lock()
 	lasting, open, linkLasting := w.devices[flagged].err.lasting, w.devices[flagged].err.open, w.devices[linked].link.lasting
@@ -342,7 +325,7 @@ func TestErrorWatchLastingAcrossRestart(t *testing.T) {
 	if !lasting || !open || !linkLasting || !silentLasting {
 		t.Fatalf("seeded lasting %v, open %v, link lasting %v, silent lasting %v", lasting, open, linkLasting, silentLasting)
 	}
-	clock.add(48 * time.Hour)
+	clock.Add(48 * time.Hour)
 	if lines := watchLines(t, ts, flagged); len(lines) != 1 {
 		t.Fatalf("after the second restart: %+v", lines)
 	}
@@ -352,7 +335,7 @@ func TestErrorWatchLastingAcrossRestart(t *testing.T) {
 	if lines := watchLines(t, ts, silent); len(lines) != 1 {
 		t.Fatalf("the device without a state after the second restart: %+v", lines)
 	}
-	if n := clock.pending(); n != 0 {
+	if n := clock.Pending(); n != 0 {
 		t.Fatalf("%d timers left", n)
 	}
 }
@@ -360,20 +343,20 @@ func TestErrorWatchLastingAcrossRestart(t *testing.T) {
 // A flag's day that comes up while the Cube is away is no error yet: its
 // flags are not known then, and the timer looks again in a minute.
 func TestErrorWatchWaitsForTheCube(t *testing.T) {
-	fc, addr := startWatchCube(t)
-	clock := &stepClock{t: time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)}
-	ts, s, _ := startResets(t, testStore(t, ""), addr, clock, nil)
+	clock := testkit.NewClock(time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC))
+	r := startServer(t, resetsOn(clock))
+	fc, ts, s := r.fc, r.ts, r.s
 	const rf = cube.RFAddress(0x0a010d)
 	on := true
 	settleState(t, fc, ts, s, rf, fakecube.State{Error: &on}, "", nil)
 	fc.Close()
 	rt := s.runtimes()[0]
 	testkit.Eventually(t, "the Cube away", func() bool { return !rt.client.Connected() })
-	clock.add(25 * time.Hour)
+	clock.Add(25 * time.Hour)
 	if lines := watchLines(t, ts, rf); len(lines) != 0 {
 		t.Fatalf("with the Cube away: %+v", lines)
 	}
-	if n := clock.pending(); n != 1 {
+	if n := clock.Pending(); n != 1 {
 		t.Fatalf("%d timers, want the one looking again", n)
 	}
 }

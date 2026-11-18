@@ -82,7 +82,8 @@ func TestRebootRoutes(t *testing.T) {
 	f := newRebootFake(nil)
 	opts := storeOptions(t, t.TempDir(), "secret")
 	opts.Reboot = rebootOptions(f)
-	fc, ts, s := startWith(t, opts)
+	r := startServer(t, withOptions(opts))
+	fc, ts, s := r.fc, r.ts, r.s
 	stores[ts] = s.opts.Store
 	manager := userToken(t, s.opts.Store, "manager1", store.RoleManager)
 	path := "/api/v1/reboot"
@@ -138,7 +139,8 @@ func TestRebootDelayAndTakeBack(t *testing.T) {
 	opts := storeOptions(t, t.TempDir(), "secret")
 	opts.Reboot = rebootOptions(f)
 	opts.Restart = RestartOptions{By: "systemd", Restart: func() error { t.Error("restarted"); return nil }}
-	_, ts, s := startWith(t, opts)
+	r := startServer(t, withOptions(opts))
+	ts, s := r.ts, r.s
 	stores[ts] = s.opts.Store
 	path := "/api/v1/reboot"
 	for _, body := range []string{`{"delay": -1}`, `{"delay": 3601}`, `{"delay": "60"}`, `{"delay": 1.5}`, `[`} {
@@ -202,7 +204,7 @@ func TestRebootBlocked(t *testing.T) {
 		t.Helper()
 		opts := storeOptions(t, t.TempDir(), "secret")
 		opts.Reboot, opts.Update = o, update
-		_, ts, _ := startWith(t, opts)
+		ts := startServer(t, withOptions(opts)).ts
 		code, text := callAPI(t, ts, "GET", path, "secret", "")
 		if v := decodeReboot(t, text); code != 200 || v.Available || v.Blocked != want {
 			t.Fatalf("GET, want %q: %d %s", want, code, text)
@@ -233,7 +235,8 @@ func TestRebootBlocked(t *testing.T) {
 	failing := newRebootFake(errors.New("the reboot helper did not take the request within 30s"))
 	opts := storeOptions(t, t.TempDir(), "secret")
 	opts.Reboot = rebootOptions(failing)
-	_, ts, s := startWith(t, opts)
+	r := startServer(t, withOptions(opts))
+	ts, s := r.ts, r.s
 	if code, text := callAPI(t, ts, "POST", path, "secret", `{"delay": 0}`); code != 202 {
 		t.Fatalf("POST: %d %s", code, text)
 	}
@@ -290,7 +293,7 @@ func TestRebootOpenServer(t *testing.T) {
 	opts := storeOptions(t, t.TempDir(), "")
 	opts.Reboot = rebootOptions(f)
 	opts.TrustedProxies = trusted
-	_, ts, _ := startWith(t, opts)
+	ts := startServer(t, withOptions(opts)).ts
 	path := "/api/v1/reboot"
 	h := map[string]string{"X-Forwarded-For": "192.168.1.20"}
 	if code, text := sendWith(t, ts, "GET", path, "", h); code != 200 || decodeReboot(t, text).Available || decodeReboot(t, text).Blocked != openRebootRefused {

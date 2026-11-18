@@ -4,7 +4,6 @@
 package server
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -14,10 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
-	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/store"
-	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 )
 
@@ -108,7 +104,8 @@ func fillRoute(path string) string {
 // starts, and a key of the owner's own survives all that.
 func TestBootstrapThroughServer(t *testing.T) {
 	dir := t.TempDir()
-	_, ts, s := startWith(t, storeOptions(t, dir, "secret"))
+	r := startServer(t, withOptions(storeOptions(t, dir, "secret")))
+	ts, s := r.ts, r.s
 	if s.AuthMode() != "users" {
 		t.Fatalf("mode %s", s.AuthMode())
 	}
@@ -129,11 +126,12 @@ func TestBootstrapThroughServer(t *testing.T) {
 	if code, _ := callAPI(t, ts, "GET", "/api/v1/cubes/KEQ0000100/events?ticket="+tk, "", ""); code != 200 {
 		t.Fatalf("stream with a ticket: %d", code)
 	}
-	ts.Close()
+	r.stop()
 	s.opts.Store.Close()
 
 	// The file's token changed: the old key is revoked, the new one works.
-	_, ts, s = startWith(t, storeOptions(t, dir, "other"))
+	r = startServer(t, withOptions(storeOptions(t, dir, "other")))
+	ts, s = r.ts, r.s
 	for _, c := range []struct {
 		token string
 		want  int
@@ -142,12 +140,12 @@ func TestBootstrapThroughServer(t *testing.T) {
 			t.Fatalf("after the change, token %q: %d, want %d", c.token, code, c.want)
 		}
 	}
-	ts.Close()
+	r.stop()
 	s.opts.Store.Close()
 
 	// The variable removed: its key is revoked, the user's own key stays,
 	// and the API still needs a token.
-	_, ts, s = startQuiet(t, storeOptions(t, dir, ""))
+	ts = startServer(t, withOptions(storeOptions(t, dir, ""))).ts
 	for _, c := range []struct {
 		token string
 		want  int
@@ -160,7 +158,8 @@ func TestBootstrapThroughServer(t *testing.T) {
 
 // A store without users is open; the first user closes it.
 func TestOpenMode(t *testing.T) {
-	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), ""))
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "")))
+	ts, s := r.ts, r.s
 	if s.AuthMode() != "open" {
 		t.Fatalf("mode %s", s.AuthMode())
 	}
@@ -179,7 +178,8 @@ func TestOpenMode(t *testing.T) {
 // Each default role against each route: the registered capability
 // decides, and nothing else answers 403 with that message.
 func TestRolesAgainstRoutes(t *testing.T) {
-	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	rg := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, s := rg.ts, rg.s
 	routes := registeredRoutes(t)
 	// Removing the Cube last, so that the other routes still find it.
 	sort.SliceStable(routes, func(i, j int) bool {
@@ -220,7 +220,8 @@ func TestRolesAgainstRoutes(t *testing.T) {
 
 // A move needs structure and a rename needs rename, on the one route.
 func TestMoveNeedsStructure(t *testing.T) {
-	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, s := r.ts, r.s
 	st := s.opts.Store
 	st.AddRole(t.Context(), store.Role{Key: "mover", Capabilities: []string{"read", "structure"}}, 0)
 	st.AddRole(t.Context(), store.Role{Key: "namer", Capabilities: []string{"read", "rename"}}, 0)
@@ -250,7 +251,8 @@ func TestMoveNeedsStructure(t *testing.T) {
 // a role with structure alone is refused before anything is sent, and
 // moves without the copy.
 func TestCopyNeedsConfigure(t *testing.T) {
-	fc, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	fc, ts, s := r.fc, r.ts, r.s
 	st := s.opts.Store
 	st.AddRole(t.Context(), store.Role{Key: "mover", Capabilities: []string{"read", "structure"}}, 0)
 	mover := userToken(t, st, "mover", "mover")
@@ -272,7 +274,8 @@ func TestCopyNeedsConfigure(t *testing.T) {
 // A created role, a disabled capability, a disabled role, a disabled or
 // expired user, and a revoked or expired token.
 func TestRoleRules(t *testing.T) {
-	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, s := r.ts, r.s
 	st := s.opts.Store
 	ctx := t.Context()
 	setpoint := "/api/v1/cubes/KEQ0000100/rooms/6/setpoint"
@@ -345,7 +348,8 @@ func TestLockoutSurvivesRestart(t *testing.T) {
 	dir := t.TempDir()
 	opts := storeOptions(t, dir, "secret")
 	opts.AuthFailures = 3
-	_, ts, s := startWith(t, opts)
+	r := startServer(t, withOptions(opts))
+	ts, s := r.ts, r.s
 	for i := 0; i < 3; i++ {
 		if code, _ := callAPI(t, ts, "GET", "/api/v1/cubes", "wrong", ""); code != 401 {
 			t.Fatalf("failure %d: %d", i+1, code)
@@ -354,44 +358,12 @@ func TestLockoutSurvivesRestart(t *testing.T) {
 	if code, _ := callAPI(t, ts, "GET", "/api/v1/cubes", "secret", ""); code != 429 {
 		t.Fatalf("after the limit: %d", code)
 	}
-	ts.Close()
+	r.stop()
 	s.opts.Store.Close()
 	opts = storeOptions(t, dir, "secret")
 	opts.AuthFailures = 3
-	_, ts, s = startQuiet(t, opts)
+	ts = startServer(t, withOptions(opts)).ts
 	if code, _ := callAPI(t, ts, "GET", "/api/v1/cubes", "secret", ""); code != 429 {
 		t.Fatalf("after the restart: %d", code)
 	}
-}
-
-// startQuiet starts a server over the fake Cube like startWith, but
-// waits for the connection through the runtime rather than the API,
-// for a server whose API refuses the test's address or token.
-func startQuiet(t *testing.T, opts Options) (*fakecube.Server, *httptest.Server, *Server) {
-	t.Helper()
-	greeting, err := fakecube.LoadGreeting(fixture)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fc := &fakecube.Server{Greeting: greeting}
-	addr, err := fc.Start("127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	opts.Cubes = []CubeConfig{{Serial: "KEQ0000100", Addr: addr}}
-	opts.Queue = engine.Options{Gap: time.Millisecond}
-	s := New(opts)
-	ctx, cancel := context.WithCancel(context.Background())
-	go s.Run(ctx)
-	ts := httptest.NewServer(s.Handler())
-	t.Cleanup(func() { ts.Close(); cancel(); fc.Close() })
-	testkit.Eventually(t, "the cube's connect", func() bool {
-		for _, rt := range s.runtimes() {
-			if rt.client.Connected() && rt.client.Snapshot().Hello() != nil {
-				return true
-			}
-		}
-		return false
-	})
-	return fc, ts, s
 }

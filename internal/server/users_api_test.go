@@ -25,7 +25,8 @@ func decodeUserView(text string) userView {
 // The users routes: create, list, change, remove, the own user, a
 // guests holder, the tokens, the last owner.
 func TestUsersRoutes(t *testing.T) {
-	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, s := r.ts, r.s
 	st := s.opts.Store
 	ctx := t.Context()
 	owner := "secret"
@@ -233,7 +234,8 @@ func TestUsersRoutes(t *testing.T) {
 
 // The first owner is created on an open server from the local network.
 func TestFirstOwner(t *testing.T) {
-	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), ""))
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "")))
+	ts, s := r.ts, r.s
 	users := "/api/v1/users"
 	for _, c := range []struct {
 		body string
@@ -269,7 +271,8 @@ func TestFirstOwner(t *testing.T) {
 
 // The roles and capabilities routes.
 func TestRolesRoutes(t *testing.T) {
-	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, s := r.ts, r.s
 	st := s.opts.Store
 	owner := "secret"
 	roles := "/api/v1/roles"
@@ -401,7 +404,7 @@ func TestPasswordBusy(t *testing.T) {
 // the store's "store: " prefix, which the web UI showed as it came:
 // `test manager: store: bad user name: "test manager"`.
 func TestUsersRefusalsWithoutStorePrefix(t *testing.T) {
-	_, ts, _ := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	ts := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret"))).ts
 	owner := "secret"
 	for _, c := range []struct {
 		method, path, body string
@@ -437,7 +440,8 @@ func TestUsersRefusalsWithoutStorePrefix(t *testing.T) {
 // such a user and nothing else.
 func TestRankRule(t *testing.T) {
 	opts := storeOptions(t, t.TempDir(), "secret")
-	_, ts, s := startWith(t, opts)
+	r := startServer(t, withOptions(opts))
+	ts, s := r.ts, r.s
 	st := s.opts.Store
 	ctx := t.Context()
 	if _, err := st.AddRole(ctx, store.Role{Key: "keeper", Capabilities: []string{"read", "preferences", "users"}}, 0); err != nil {
@@ -485,7 +489,8 @@ func TestRankRule(t *testing.T) {
 // for every user.
 func TestFirstOwnPassword(t *testing.T) {
 	opts := storeOptions(t, t.TempDir(), "secret")
-	_, ts, s := startWith(t, opts)
+	r := startServer(t, withOptions(opts))
+	ts, s := r.ts, r.s
 	key := userToken(t, s.opts.Store, "keysonly", store.RoleViewer)
 	path := "/api/v1/users/keysonly"
 	code, text := callAPI(t, ts, "PUT", path, key, `{"password":"first-pass-1"}`)
@@ -506,7 +511,8 @@ func TestFirstOwnPassword(t *testing.T) {
 // its keys and its push subscriptions go with it, and a new user under
 // the name starts with none of it (docs/store.md, "users").
 func TestRemovedUserKeepsItsHistory(t *testing.T) {
-	_, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	rg := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, s := rg.ts, rg.s
 	st := s.opts.Store
 	ctx := t.Context()
 	anna := userToken(t, st, "anna", store.RoleViewer)

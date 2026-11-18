@@ -69,8 +69,8 @@ func TestFoundCubeInAnotherNetwork(t *testing.T) {
 	var host atomic.Pointer[[]*net.IPNet]
 	lan := nets(t, "192.0.2.0/24")
 	host.Store(&lan)
-	ts, s := startDiscovering(t, Options{DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{other.Addr()},
-		hostNets: func() []*net.IPNet { return *host.Load() }})
+	r := startServer(t, discovering(Options{DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{other.Addr()}, hostNets: func() []*net.IPNet { return *host.Load() }}))
+	ts, s := r.ts, r.s
 
 	code, out := postDiscovery(t, ts)
 	found, _ := out["found"].([]any)
