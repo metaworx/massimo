@@ -232,6 +232,78 @@ func TestDisagreeResendsMassimosSetpoint(t *testing.T) {
 	}
 }
 
+// A disagreement not yet reported starts again while a write to the
+// room confirms (AP TestInfrastructure, D19-A): roomChecks leaves a room
+// out while a member has not shown a write to it (roomConfirmation), and
+// pause drops what the checks had counted of a disagreement not yet
+// reported, so that its ten minutes start at the first check after every
+// member showed the write.
+// Here a member differs before a room setpoint of Massimo's and does not
+// take it; the members differ for eleven minutes while the write
+// confirms, and nothing is reported. Once the write is confirmed they
+// still differ, and the Warn and the re-send of Massimo's setpoint come
+// ten and twenty minutes after that check, as in
+// TestDisagreeResendsMassimosSetpoint.
+func TestDisagreeStartsAgainOnceTheWriteConfirms(t *testing.T) {
+	r := startDrift(t, nil)
+	r.set(0x0a0205, "manual", 18)
+	r.check() // the disagreement begins
+
+	r.fc.SetDeaf(0x0a0205, true) // 0a0205 does not take the write
+	r.setRoom2("21")
+	r.waitSetting(0x0a0204, "manual", 21)
+	r.waitSetting(0x0a0206, "manual", 21)
+	r.rt.pumpSync(t)
+	if c := r.rt.roomConfirmation(2); c == nil || c.State != confirmPending || !slices.Equal(c.Devices, []string{"0a0205"}) {
+		t.Fatalf("the room's confirmation: %+v", c)
+	}
+	sent := r.lines.Mark()
+	r.check()
+	r.clock.add(6 * time.Minute)
+	r.check()
+	r.clock.add(5 * time.Minute)
+	r.check()
+	if got := r.outcomes("disagree"); len(got) != 0 {
+		t.Fatalf("reported while the write confirms, eleven minutes after the disagreement began: %v", got)
+	}
+
+	// 0a0206 is set to 18 by hand, and 0a0205 takes the write at last:
+	// the members still differ, the write is confirmed.
+	r.set(0x0a0206, "manual", 18)
+	r.fc.SetDeaf(0x0a0205, false)
+	r.set(0x0a0205, "manual", 21)
+	r.confirmed(2)
+	r.check() // the disagreement starts again
+	r.clock.add(9 * time.Minute)
+	r.check()
+	if got := r.outcomes("disagree"); len(got) != 0 {
+		t.Fatalf("reported nine minutes after the write was confirmed: %v", got)
+	}
+	r.clock.add(2 * time.Minute)
+	r.check()
+	evs := r.events("disagree")
+	if len(evs) != 1 || evs[0].Level != "warn" || summaryText(&evs[0], "outcome") != "differ" || summaryText(&evs[0], "room") != "2" ||
+		summaryText(&evs[0], "minutes") != "11" || summaryText(&evs[0], "differs") != "[setpoint]" ||
+		!strings.Contains(summaryText(&evs[0], "members"), "rf:0a0206 setpoint:18") {
+		t.Fatalf("the report: %+v", evs)
+	}
+	r.clock.add(9 * time.Minute)
+	r.check()
+	if got := r.radioSince(sent); len(got) != 0 {
+		t.Fatalf("sent before the second check: %v", got)
+	}
+	r.clock.add(2 * time.Minute)
+	r.check()
+	r.wantResend(sent, 0x0a0204, 2, 21, cube.ModeManual, fromMassimo)
+	r.waitSetting(0x0a0206, "manual", 21)
+	r.confirmed(2)
+	r.clock.add(time.Minute)
+	r.check()
+	if got := r.outcomes("disagree"); !slices.Equal(got, []string{"differ", "resent", "agree"}) {
+		t.Fatalf("outcomes %v", got)
+	}
+}
+
 // alertKinds are the kinds of the log's unsettled warnings and errors.
 func alertKinds(t *testing.T, ts *httptest.Server) []string {
 	t.Helper()
