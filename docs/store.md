@@ -396,9 +396,11 @@ CREATE TABLE tokens (
     expires_at     TEXT,                         -- NULL: never (API keys); sessions: moved on every use
     last_used_at   TEXT,
     last_used_from TEXT    NOT NULL DEFAULT '',  -- the client's address
-    deleted_at     TEXT                          -- revoked; revoked_at until migration 0024 (D7)
+    deleted_at     TEXT,                         -- revoked; revoked_at until migration 0024 (D7)
+    parent_id      INTEGER                       -- migration 0025: the key a session was made from; NULL for a sign-in's and for a key
 );
 CREATE INDEX tokens_user ON tokens (user_id);
+CREATE INDEX tokens_parent ON tokens (parent_id) WHERE parent_id IS NOT NULL;  -- migration 0025
 
 CREATE TABLE settings (
     key        TEXT    NOT NULL,   -- 'stale_after', 'poll_interval', 'log.keep_days', 'backups.keep_days_auto', …
@@ -966,6 +968,15 @@ log, backups, rooms, commands and audit rows;
 A binary for 23 reads only the Cubes not removed, and every read of the log
 is by `cube_id`, so their lines do not meet;
 0024 takes the `~<id>` off again.
+`0025_token_parent.sql` (AP MobileApp v1.1, Block 8, D31-A) adds
+`tokens.parent_id` and its index, additively, keeping `min_reader` 24:
+a session made from a key names it (section 6, "A session from a key").
+A binary for 24 writes its tokens without the column and makes no session
+from a key; one that revokes a key leaves the key's session live in its row,
+which a binary since 0025 refuses, a session counting only while its key does.
+The column has no foreign key, so that its down part,
+`0025_token_parent.down.sql`, can drop it and the index;
+it loses which key made a session, and only that.
 On a store of 500 000 log rows (149 MB, a tenth with a user) a desktop took
 2.0 s for the raise, its copy `massimo.db.before-24` included, and 2.2 s for the
 down part, its copy included (`TestRaiseTimes` with
@@ -1300,6 +1311,24 @@ and so is one of another argon2 version than 19 or with a salt under 8 bytes.
 A hash is the cost of the call, so the answers that need none come first:
 a user add finds a taken name or an unknown role,
 and a password change a user that is not there, before it hashes.
+
+### A session from a key
+
+The apps' login by fingerprint (docs/app.md) keeps an API key of the user's
+own on the phone, made by `POST /api/v1/users/{name}/tokens`,
+and `POST /api/v1/login/key` turns it into a session (docs/api-v1.md).
+A session is extended at each use,
+so without a tie a revoked key's session would live as long as the phone used it:
+the session names its key in `tokens.parent_id` (migration 0025),
+empty for a session of a sign-in and for a key.
+`RevokeToken` of a key revokes its live sessions with it,
+and what they subscribed to push;
+the key's next session revokes its earlier one, in the same transaction,
+so a key has one live session at a time;
+and a session counts only while its key does (`TokenByHash`, `Tokens`),
+which also ends one whose key a binary before 0025 revoked.
+A password set by someone else ends the sessions, those made from keys
+among them, and leaves the keys.
 
 ### The sign-in by OPAQUE
 

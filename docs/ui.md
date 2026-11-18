@@ -837,6 +837,8 @@ as the settings' ⓘ do:
 - **Sessions and keys**: the own sessions and API keys,
   each with where and when it was last used and **Revoke**,
   which signs another browser out without an administrator;
+  a session made from a key, as the app's login by fingerprint makes one,
+  names the key by its label, and revoking the key ends it;
   **Create key** shows the new key once.
 - **Linked accounts**, where a sign-in provider is enabled or an account is linked:
   the own accounts at the providers, each with its e-mail or user ID,

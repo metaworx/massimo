@@ -1564,6 +1564,7 @@
   "users.kind.api": "chiave API",
   "users.lastUsed": "ultimo uso da {from}",
   "users.neverUsed": "mai usata",
+  "users.fromKey": "creata dalla chiave API {label}",
   "users.revoke": "Revoca",
   "users.revokeLabel": "revoca {label}",
   "users.revoked": "Token {id} revocato.",

@@ -596,6 +596,11 @@ export interface Token {
   last_used_at?: string;
   /** The client's address */
   last_used_from?: string;
+  /**
+   * The key a session was made from (POST /api/v1/login/key); absent for a
+   * session of a sign-in and for a key
+   */
+  key_id?: number;
 }
 
 export interface Me {

@@ -1609,6 +1609,7 @@
   "users.kind.api": "klucz API",
   "users.lastUsed": "ostatnio użyty z {from}",
   "users.neverUsed": "nigdy nie użyty",
+  "users.fromKey": "utworzona z klucza API {label}",
   "users.revoke": "Unieważnij",
   "users.revokeLabel": "unieważnij {label}",
   "users.revoked": "Token {id} unieważniony.",

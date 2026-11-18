@@ -1564,6 +1564,7 @@
   "users.kind.api": "clé API",
   "users.lastUsed": "dernière utilisation depuis {from}",
   "users.neverUsed": "jamais utilisée",
+  "users.fromKey": "créée à partir de la clé API {label}",
   "users.revoke": "Révoquer",
   "users.revokeLabel": "révoquer {label}",
   "users.revoked": "Jeton {id} révoqué.",

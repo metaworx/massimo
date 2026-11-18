@@ -149,7 +149,8 @@ The page and its files are public, the API behind them is not.
 The server authenticates in one of three ways, by what it has:
 
 - **Users**, a store with at least one user: every `/api` request carries
-  `Authorization: Bearer <token>`, a session from `POST /api/v1/login` or
+  `Authorization: Bearer <token>`, a session from `POST /api/v1/login`
+  (or made from a key by `POST /api/v1/login/key`) or
   an API key from `POST /api/v1/users/{name}/tokens`; otherwise `401`.
   The token names a user, the user's role grants capabilities,
   and every route needs one of them (the table below);
@@ -458,6 +459,34 @@ the one that may create the first owner.
 `auth_version` 1 says the server hashes the password;
 2, that the user signs in by OPAQUE (below) and the server never sees it.
 
+### POST /api/v1/login/key
+
+A session from an API key, for the apps' login by fingerprint
+([app.md](app.md)): the phone keeps a key of the user's own, made by
+`POST /api/v1/users/{name}/tokens`, and turns it into a session when the
+user passes the fingerprint.
+The bearer is the key; the optional body `{"label": "…"}` names the session
+as `POST /api/v1/login`'s does (the `User-Agent` when absent),
+and the answer is that route's: `token`, `expires_at`, `user`, `role`,
+`capabilities`.
+
+The session names its key: `key_id` in the token list and in `GET /api/v1/me`.
+The key's next session ends the earlier one, so a phone holds one live
+session per key,
+and revoking the key (`DELETE /api/v1/users/{name}/tokens/{id}`) ends the
+session at its next request.
+A password set by someone else ends the sessions and leaves the keys,
+as it does for every key.
+
+A wrong or revoked key is `401` and counts toward the address's lockout,
+as every failed token check does (Authentication above);
+a session as the bearer is `400`;
+a disabled user, a guest past its end date, a disabled role
+and a registered integration's key are `403`;
+`409` on a server without users or without a store.
+It sends no password, so it works while `auth.password_login` is off.
+Its audit action is `login.key`.
+
 ### The sign-in by OPAQUE: POST /api/v1/login/start, POST /api/v1/login/finish
 
 A user of `auth_version` 2 signs in without sending the password,
@@ -669,6 +698,8 @@ and a retry with its `Idempotency-Key` answers `201` without it too.
 
 `DELETE …/tokens/{id}` revokes a session or a key by the `id` of the list;
 a token of another user is `404`.
+A session made from a key (`POST /api/v1/login/key`) carries the key's id
+as `key_id`; revoking the key revokes that session with it.
 
 ### Identities: /api/v1/users/{name}/identities
 

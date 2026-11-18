@@ -216,12 +216,16 @@ function removeUser(u, actions) {
 }
 
 // tokenRow is one session or key of a user, from its template, with
-// Revoke.
-function tokenRow(u, tk, where) {
+// Revoke; a session made from a key names it by its label, from labels,
+// the list's keys by id (POST /api/v1/login/key).
+function tokenRow(u, tk, where, labels) {
   const li = fromTemplate("tpl-token-row");
   li.dataset.id = String(tk.id);
   li.querySelector(".token-kind").textContent = t("users.kind." + tk.kind);
   li.querySelector(".token-label").textContent = tk.label || "";
+  const fromKey = li.querySelector(".token-key");
+  fromKey.textContent = tk.key_id ? t("users.fromKey", { label: (labels && labels.get(tk.key_id)) || "#" + tk.key_id }) : "";
+  fromKey.classList.toggle("hidden", !tk.key_id);
   const used = li.querySelector(".token-used");
   if (tk.last_used_at) {
     used.textContent = t("users.lastUsed", { from: tk.last_used_from || "?" }) + " ";
@@ -251,7 +255,8 @@ async function fillTokens(u, box, where) {
     return;
   }
   if (!tokens.length) ul.appendChild(textEl("li", t("users.tokensNone"), "muted small"));
-  for (const tk of tokens) ul.appendChild(tokenRow(u, tk, where));
+  const labels = new Map(tokens.map((tk) => [tk.id, tk.label || t("users.kind." + tk.kind)]));
+  for (const tk of tokens) ul.appendChild(tokenRow(u, tk, where, labels));
   const key = usersUI.keys[u.name];
   const shown = box.querySelector(".user-key-box");
   shown.classList.toggle("hidden", !key);
