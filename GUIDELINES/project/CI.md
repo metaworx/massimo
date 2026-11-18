@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.63.0)
+# Massimo — CI Conventions (v1.64.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -26,7 +26,7 @@ this document is the source of truth for *why*.
 
 | Platform | Files |
 |----------|-------|
-| GitHub Actions | `.github/workflows/ci.yml` (a push to `main` or of a version tag, a pull request), `.github/workflows/build.yml` (the release's build, called by ci.yml beside its tests and by nightly.yml), `.github/workflows/release.yml` (signing and publishing, called by ci.yml once its tests have passed and the build is done, and by nightly.yml), `.github/workflows/nightly.yml` (the nightly build, daily at 02:30 UTC and by hand on `main`), `.github/workflows/publish.yml` (called by release.yml, or run by hand for a tag) |
+| GitHub Actions | `.github/workflows/ci.yml` (a push to `main` or of a version tag, a pull request), `.github/workflows/build.yml` (the release's build, called by ci.yml beside its tests and by nightly.yml), `.github/workflows/release.yml` (signing and publishing, called by ci.yml once its tests have passed and the build is done, and by nightly.yml), `.github/workflows/nightly.yml` (the nightly build, daily at 02:30 UTC and by hand on `main`), `.github/workflows/platforms.yml` (the Windows service and macOS LaunchDaemon jobs, called by ci.yml beside its tests and by nightly.yml before its build), `.github/workflows/retry.yml` (a macOS or Windows job no runner took, run again in a tag's run of ci.yml and in a nightly run, once that run has ended), `.github/workflows/publish.yml` (called by release.yml, or run by hand for a tag) |
 
 There is no other platform.
 
@@ -39,7 +39,7 @@ the table and the paragraphs below give each step's reasons.
 flowchart TD
     start{{"What started the run"}}
     start -->|"a pull request, a push to main, a version tag: ci.yml"| relcommit
-    start -->|"02:30 UTC or by hand: nightly.yml, no tests"| kind
+    start -->|"02:30 UTC or by hand: nightly.yml"| pick
     start -->|"a push to a release branch"| idle["Nothing runs"]
 
     subgraph gate ["ci.yml, What to test: the answers every job reads"]
@@ -65,28 +65,36 @@ flowchart TD
     paths["A pull request runs UI test, LAN, Android app,<br/>macOS and Windows only where it touches their paths"]
     retest -.- paths
     full -.- paths
-    docs --> atp["All tests passed:<br/>green, it writes the Tested record"]
+    docs --> atp["All tests passed:<br/>green, it writes the Tested record;<br/>a macOS or Windows job no runner took<br/>is not run on a pull request or main,<br/>run again by Retry on a tag"]
     retest --> atp
     full --> atp
     atp -->|"green, a push to main, site=true"| deploy["Deploy site"]
     codetrue -->|"a push: Build beside the tests"| kind
 
+    subgraph night ["nightly.yml, What to ship, then Platforms"]
+        pick{"A commit of main newer than<br/>release/nightly whose suite passed?"}
+        ship{"Do the Tested records say macOS<br/>or Windows did not run for its code?"}
+        plat["Platforms: that job on the commit,<br/>run again by Retry where no runner came"]
+        pick -->|"yes: the newest"| ship
+        ship -->|yes| plat
+    end
+
     subgraph build ["build.yml, What to release"]
         kind{"What does the run release?"}
         devel{"Is release/devel at<br/>or after the commit?"}
-        pick{"A commit of main newer than<br/>release/nightly whose suite passed?"}
         nothing["Nothing to release"]
         rdevel["devel: binaries, packages,<br/>SHA256SUMS, manifest, unsigned"]
         rtag["the release: the same, and the<br/>app's APK and AAB, unsigned"]
         rnightly["nightly: the same as devel,<br/>and the nightly APK, unsigned"]
         kind -->|"a push to main"| devel
         kind -->|"a version tag"| rtag
-        kind -->|"the nightly build"| pick
+        kind -->|"the nightly build"| rnightly
         devel -->|no| rdevel
         devel -->|yes| nothing
-        pick -->|"yes: the newest"| rnightly
-        pick -->|"no, or main's head is a release commit"| nothing
     end
+    ship -->|no| kind
+    plat -->|"passed; else the night is skipped"| kind
+    pick -->|"no, or main's head is a release commit"| nothing
 
     subgraph rel ["release.yml, signing and publishing"]
         sign["Sign and publish, the app's two jobs,<br/>Homebrew and apt: one approval in signing,<br/>the release key, the release branch moved"]
@@ -101,18 +109,19 @@ flowchart TD
 
     rtag -->|"once All tests passed"| sign
     rdevel -->|"once All tests passed"| rolling
-    rnightly -->|"its suite passed before"| rolling
+    rnightly -->|"its suite, and Platforms, passed before"| rolling
     nothing -->|"Site still, but not at a release commit"| site
 ```
 
 | Trigger | Jobs |
 |---------|------|
-| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test with its skipped tests named in the summary, the store's benchmarks once each with `-short`, `make cross`); actionlint (`make actionlint`: the workflows by actionlint, their `run:` scripts by the runner's shellcheck); UI types (`make ui-check`: `tsc --noEmit` over the web UI's parts, `internal/server/ui/src/`, then Biome's two hooks rules over them); Race (`make race`, the race detector on `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve`, `internal/announce`, `internal/notify`, `internal/engine`, `internal/cubeio` and `internal/certs`, `-count=1` and `-timeout 30m`, its skipped tests named in the summary); Test (armv6, QEMU) (`make test-armv6`, every package's tests with `-short` and `-timeout 30m` on 32-bit ARM, run by Ubuntu's `qemu-user` as the Raspberry Pi 1's core, its skipped tests named in the summary); Fuzz on a push to `main` only (`make fuzz`, every fuzz target for 10 s, a crash's input kept as the artifact `fuzz-crash`, Go 1.26's own deadline passed with a warning); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, then under systemd, each case in a container of its own (`make deb-systemd-test`: the first start, the restart, the upgrade from v0.12.0-alpha.1 with the service running), and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Windows service (the unit tests of the update, the installer, the command line, discovery and `internal/safefile`; install, run, update from the API and by hand, roll back, remove, on a Windows runner; then a second `serve` announcing itself beside Windows' own mDNS, found by `massimo discover`; on a pull request only when it changes the job's own paths or the announcement's, as the job What to test answers, and not on the merge of a pull request that found it not needed); macOS LaunchDaemon (the unit tests of the update, the installer, the command line and `internal/safefile`; first `install` on the template's settings, `packaging/launchd/template-test.sh`: the message and its owner line run as printed, a loaded job restarted, a booted-out one left stopped, the web UI's way, the purge; then the same as Windows on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`; then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker; then a second `serve` beside Apple's mDNSResponder, found and resolved by `dns-sd`; on a pull request as the Windows job, with its own paths); UI test (the web UI's pytest suite, a job per width with both languages, "UI test (1100 px, screenshots)" and "UI test (390 px)", each its two cases in four workers; in the 1100 px job then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only; on failure the failed tests' screenshots and videos and the traces of their run once more as `ui-test-results-<width>`; on a pull request only when it changes the UI, its bundler (`tools/uibundle`), the vendored Preact, the server's own Go files, the OpenAPI file, its suite or `ci.yml`, as the job What to test answers); LAN against avahi (`make lan-test`: a second `serve`'s searches finding a fake Cube, losing it with its cable pulled and finding it again, then from a box's proxy too; `serve` beside avahi-daemon, `avahi-browse` and `massimo discover` on a client; a third `serve` following the Cube by its serial to another address after the loss; in Docker; on a pull request only when it changes the announcement, discovery, the shared port, the server's own files, the proxy, the Go module, the LAN test or `ci.yml`, as the job What to test answers, and not on the merge of a pull request that found it not needed); Android app (`app/version.json` against its tag, the debug build with its unit tests and lint, the release APK built at two paths and compared byte for byte, then the AAB and the nightly APK signed with a key made for the run; on a pull request only when it changes `app/`, the web UI's files the app bundles, `packaging/app-*.sh`, `ci.yml`, `build.yml` or `release.yml`, as the job What to test answers, and not on the merge of a pull request that found it not needed); Guidelines (section 4); Site (`packaging/site/build.sh --no-apt`: the site's pages and the docs of the commit, every link checked, a document under `docs/` missing from `docs/fragments/_documents.md` failing it; never deployed; also for a change to the site's documents alone); Code result, for a change to documents alone only (`packaging/code-result.sh`: the verdict of the last run that tested the code, below) |
+| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test with its skipped tests named in the summary, the store's benchmarks once each with `-short`, `make cross`); actionlint (`make actionlint`: the workflows by actionlint, their `run:` scripts by the runner's shellcheck); UI types (`make ui-check`: `tsc --noEmit` over the web UI's parts, `internal/server/ui/src/`, then Biome's two hooks rules over them); Race (`make race`, the race detector on `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve`, `internal/announce`, `internal/notify`, `internal/engine`, `internal/cubeio` and `internal/certs`, `-count=1` and `-timeout 30m`, its skipped tests named in the summary); Test (armv6, QEMU) (`make test-armv6`, every package's tests with `-short` and `-timeout 30m` on 32-bit ARM, run by Ubuntu's `qemu-user` as the Raspberry Pi 1's core, its skipped tests named in the summary); Fuzz on a push to `main` only (`make fuzz`, every fuzz target for 10 s, a crash's input kept as the artifact `fuzz-crash`, Go 1.26's own deadline passed with a warning); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, then under systemd, each case in a container of its own (`make deb-systemd-test`: the first start, the restart, the upgrade from v0.12.0-alpha.1 with the service running), and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Platforms (platforms.yml, which nightly.yml calls too, its jobs "Platforms / Windows service" and "Platforms / macOS LaunchDaemon"): Windows service (the unit tests of the update, the installer, the command line, discovery and `internal/safefile`; install, run, update from the API and by hand, roll back, remove, on a Windows runner; then a second `serve` announcing itself beside Windows' own mDNS, found by `massimo discover`; on a pull request only when it changes the job's own paths or the announcement's, as the job What to test answers, and not on the merge of a pull request that found it not needed); macOS LaunchDaemon (the unit tests of the update, the installer, the command line and `internal/safefile`; first `install` on the template's settings, `packaging/launchd/template-test.sh`: the message and its owner line run as printed, a loaded job restarted, a booted-out one left stopped, the web UI's way, the purge; then the same as Windows on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`; then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker; then a second `serve` beside Apple's mDNSResponder, found and resolved by `dns-sd`; on a pull request as the Windows job, with its own paths); UI test (the web UI's pytest suite, a job per width with both languages, "UI test (1100 px, screenshots)" and "UI test (390 px)", each its two cases in four workers; in the 1100 px job then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only; on failure the failed tests' screenshots and videos and the traces of their run once more as `ui-test-results-<width>`; on a pull request only when it changes the UI, its bundler (`tools/uibundle`), the vendored Preact, the server's own Go files, the OpenAPI file, its suite or `ci.yml`, as the job What to test answers); LAN against avahi (`make lan-test`: a second `serve`'s searches finding a fake Cube, losing it with its cable pulled and finding it again, then from a box's proxy too; `serve` beside avahi-daemon, `avahi-browse` and `massimo discover` on a client; a third `serve` following the Cube by its serial to another address after the loss; in Docker; on a pull request only when it changes the announcement, discovery, the shared port, the server's own files, the proxy, the Go module, the LAN test or `ci.yml`, as the job What to test answers, and not on the merge of a pull request that found it not needed); Android app (`app/version.json` against its tag, the debug build with its unit tests and lint, the release APK built at two paths and compared byte for byte, then the AAB and the nightly APK signed with a key made for the run; on a pull request only when it changes `app/`, the web UI's files the app bundles, `packaging/app-*.sh`, `ci.yml`, `build.yml` or `release.yml`, as the job What to test answers, and not on the merge of a pull request that found it not needed); Guidelines (section 4); Site (`packaging/site/build.sh --no-apt`: the site's pages and the docs of the commit, every link checked, a document under `docs/` missing from `docs/fragments/_documents.md` failing it; never deployed; also for a change to the site's documents alone); Code result, for a change to documents alone only (`packaging/code-result.sh`: the verdict of the last run that tested the code, below) |
 | beside the jobs above, on a push | Build (build.yml): What to release decides what the run releases, then every target built without cgo with the Debian packages, the build record, `SHA256SUMS` and the manifest, the provenance attested; for a version tag the Android app's APK and AAB, for the nightly build its nightly APK, unsigned, attested too; nothing signed (section 6) |
-| after every job above | All tests passed: fails unless none of them failed or was cancelled, but for a macOS or Windows job no runner took on a pull request, which counts as not run, and names each with its result in its summary, an annotation for each that did not pass, and on a pull request in one comment; a job that passed only on a re-run counts, and is named in a line of the summary, a warning, that comment and, on a pull request, a comment of its own; then, on a push, once Build is done, Release (release.yml): a push to `main` becomes the `devel` build, the GitHub release `release/devel` replaced in place, signed with the rolling key (section 6); then, at every run of release.yml, Site (site.yml): the site built with the newest release's signed apt index and the docs of every channel, and deployed to GitHub Pages; nothing where no release carries the index yet; for a push to `main` of the site's documents alone, which has no Build and so no Release, Deploy site (site.yml) instead |
+| after every job above | All tests passed: fails unless none of them failed or was cancelled, but for a macOS or Windows job no runner took on a pull request or a push to `main`, which counts as not run, and names each with its result in its summary, an annotation for each that did not pass, and on a pull request in one comment; a job that passed only on a re-run counts, and is named in a line of the summary, a warning, that comment and, on a pull request, a comment of its own; then, on a push, once Build is done, Release (release.yml): a push to `main` becomes the `devel` build, the GitHub release `release/devel` replaced in place, signed with the rolling key (section 6); then, at every run of release.yml, Site (site.yml): the site built with the newest release's signed apt index and the docs of every channel, and deployed to GitHub Pages; nothing where no release carries the index yet; for a push to `main` of the site's documents alone, which has no Build and so no Release, Deploy site (site.yml) instead |
 | push to a release branch (`release/alpha`, later `release/beta` and `release/stable`) | nothing: ci.yml listens to `main` and the tags; the release moved the branch to a commit ci.yml had tested |
-| a version tag | every job above, as for a push to `main`, Build included; then release.yml: sign the manifest and `SHA256SUMS` with the release key, verify the signatures against the public key compiled into `massimo`, publish the GitHub release; with the app's keys set, sign the Android app, add it to the release and its lines to `SHA256SUMS`, sign that again and attest the signed files (section 6); then, with the deploy key set, the Homebrew formula of the release's channel rendered and pushed to the tap (publish.yml, section 6), and, with the apt key set, the apt repository rebuilt from the releases and deployed to GitHub Pages |
-| daily at 02:30 UTC, or by hand (`gh workflow run nightly.yml --ref main`) | nightly.yml: build.yml, then release.yml, no tests: the nightly build, `release/nightly`, of the newest commit of `main` whose suite passed and that is newer than the one it carries; nothing where there is none (section 6) |
+| a version tag | every job above, as for a push to `main`, Build included, a macOS or Windows job no runner took failing it, which Retry runs again; then release.yml: sign the manifest and `SHA256SUMS` with the release key, verify the signatures against the public key compiled into `massimo`, publish the GitHub release; with the app's keys set, sign the Android app, add it to the release and its lines to `SHA256SUMS`, sign that again and attest the signed files (section 6); then, with the deploy key set, the Homebrew formula of the release's channel rendered and pushed to the tap (publish.yml, section 6), and, with the apt key set, the apt repository rebuilt from the releases and deployed to GitHub Pages |
+| daily at 02:30 UTC, or by hand (`gh workflow run nightly.yml --ref main`) | nightly.yml: What to ship (`packaging/nightly-pick.sh`) picks the newest commit of `main` whose suite passed and that is newer than the one the nightly build carries, and Platforms runs the macOS or Windows job on it first where the Tested records say the job did not run for its code; once Platforms passed or was not needed (Platforms passed), build.yml, then release.yml: the nightly build, `release/nightly`; nothing where there is no such commit, and nothing, the site included, where Platforms did not pass (section 6). By hand, `dry_run` ships nothing and `platforms` runs both jobs |
+| a tag's run of ci.yml or a nightly run that ended failed | retry.yml: where a macOS or Windows job no runner took is all that failed, the run's failed jobs and those after them run again, about 20 minutes later, at most twice (`packaging/ci-retry.sh`; below) |
 | by hand (`gh workflow run publish.yml -f tag=<tag>`) | publish.yml: the formula of a release already out, such as the one published before the tap existed |
 
 Each commit runs the workflow once:
@@ -346,41 +355,102 @@ and falls back to the `needs`' ids where the API tells nothing.
 It leaves out All tests passed itself and the jobs of the workflows the run calls,
 Build, Release and Deploy site, which are not among its `needs`:
 the API knows a job by its name, not by its id,
-so the step names them, and a new job calling a workflow is added there.
+so the step names them, and a new job calling a workflow is added there
+where it is not among the `needs`; Platforms' jobs are kept, as Platforms is.
 On a pull request, a macOS or Windows job that no runner took counts as not run (owner,
 2026-11-18, AP TestSpeed, D5-A):
 GitHub's macOS runners are few,
 and a job that waited for one ended cancelled with no runner and no step
 on pull request #225 twice and again on 2026-11-17,
 holding a pull request whose code it had nothing to say about.
-The step is given those two jobs by name with their ids (`UNRUN_JOBS`);
-one of them that GitHub gives as `abandoned` among the `needs` (or `cancelled`),
-and as "cancelled before a runner took it" in the API,
+A push to `main` counts it as not run too (owner, 2026-11-18, D16-A, the owner's split):
+of six runs on 2026-11-17 and 2026-11-18 whose macOS job no runner took,
+four were pushes to `main`,
+where it failed All tests passed, and so the devel and nightly builds,
+until the job was re-run.
+GitHub gave up on each after about a quarter of an hour in the queue.
+The two jobs run in a workflow of their own, platforms.yml (D15-B),
+which ci.yml's job Platforms calls,
+so the API names them "Platforms / Windows service" and "Platforms / macOS LaunchDaemon",
+and the `needs` know only Platforms, with the two jobs' results together.
+ci.yml gives those two names with their caller's id
+(`UNRUN_JOBS`, in the workflow's `env`);
+one of them that the API gives as "cancelled before a runner took it",
 its conclusion `cancelled` with no runner and no step,
 is named in the summary as "not run, as no runner took it",
 with a warning and in the pull request's report where there is one,
-and its id is the step's output `unrun`.
-`needs` said `abandoned` for every such job that was looked at,
-in runs 44125840544, 44148743439, 44150911350, 44151208458 and 44335801523.
-The verdict counts an abandoned or cancelled job named there as passed,
-on a pull request alone;
-the Tested record then says `mac=false` or `win=false`, as the job did not pass,
-so the push of the merged tree, reading the record, runs it,
+and its caller's id is the step's output `unrun`,
+where every job of `UNRUN_JOBS` with that id passed, was skipped or was not taken either,
+and the id's result among the `needs` is `abandoned`, `cancelled` or `failure`.
+From the second attempt on, the job's runs in the earlier attempts count too:
+where its last run that a runner took failed, it fails,
+so that a re-run no runner took does not hide a failure,
+and so does every such job where the earlier attempts could not be read.
+`needs` said `abandoned` for every such job of ci.yml's own that was looked at,
+in runs 44125840544, 44148743439, 44150911350, 44151208458 and 44335801523;
+what GitHub gives a called workflow's caller for it is not known,
+and a caller's result is that of its jobs together,
+so the three are let through where the API shows nothing else in the call.
+The verdict counts an abandoned, cancelled or failed caller named there as passed,
+on a pull request and a push to `main` alone;
+the Tested record then says `mac=false` or `win=false`, as the job did not pass
+(`packaging/tested-record.sh`, from Platforms' outputs `macos` and `windows`,
+each true where its job passed).
+On a pull request the push of the merged tree, reading the record, runs the job,
 and a failure there shows on `main`,
-where a job no runner took fails All tests passed as before,
-and GitHub's failure email reaches whoever pushed.
-A job cancelled once a runner had taken it fails on a pull request too,
-and so does every abandoned or cancelled job where the step did not run or read no jobs,
+where GitHub's failure email reaches whoever pushed;
+on `main` the devel build goes on,
+and the nightly build runs the job before it ships the code (D15-B, section 6).
+A job cancelled once a runner had taken it fails on both,
+and so does every such caller where the step did not run or read no jobs,
 since only its output lets one through.
 The pull request's next run with the same code runs the job again,
 where its paths ask for it, as the record does not say it passed.
-A push is not spared, a known limit:
-of six runs on 2026-11-17 and 2026-11-18 whose macOS job no runner took,
-four were pushes to `main`,
-where it still fails All tests passed, and so the devel and nightly builds,
-until the job is re-run;
-the gates only make the job run on fewer pushes,
-a merge whose pull request found it not needed skipping it.
+Code result takes such a job for no verdict on the code
+(`packaging/code-result.sh`, from the same `UNRUN_JOBS`),
+so that a change to documents after such a push is not red for it;
+it reads every attempt's jobs,
+and a failure in an earlier attempt that no runner's later run passed is red.
+A tag is not spared: its release needs both jobs,
+and a job no runner took fails All tests passed there, in its first attempt as before.
+Retry (`retry.yml`, `packaging/ci-retry.sh`; D16-A) follows a tag's run of ci.yml
+and a nightly run to their end (`workflow_run`),
+as a run cannot re-run itself while it runs:
+where every job of the run's first attempt passed or was skipped,
+but for jobs of "Platforms / …" that no runner took and the verdict job,
+All tests passed or nightly.yml's Platforms passed, which failed for them,
+it waits 20 minutes and asks GitHub to re-run the run's failed jobs
+(`rerun-failed-jobs`, `actions: write`, its only permission beside reading the script),
+which runs them and every job after them, the release among them, in a new attempt;
+it then waits for the jobs it re-ran to end,
+and where one was again not taken, for the attempt to end, and does it once more.
+It acts on a run's first attempt alone and makes both re-runs from that one job,
+so whatever GitHub does with the attempts it starts there are two re-runs at most;
+after them, without a runner, it fails with an error, and so does the run:
+the tag's release fails, or the night is skipped.
+It leaves the run alone where anything else failed or was cancelled,
+where the verdict did not fail (as in a run someone cancelled),
+and where the run is at another attempt (someone ran it again);
+a re-run that leaves out a job it was to take fails with an error naming it,
+as GitHub's documentation names failed jobs alone and a job no runner took is cancelled.
+The summary of a tag's All tests passed says Retry will run such a job again;
+the re-run attempt's names it as passed only on a re-run (below).
+It runs from `main`'s copy of the workflow and the script,
+checks out no code of the run, holds no secret,
+and passes the event's values through `env` alone.
+A pull request can add a workflow of any name, or change one,
+so neither the condition nor the script goes by a workflow's name:
+both take a run of this repository whose head is this repository's too,
+by its workflow's path and its event,
+ci.yml's push of a tag, or nightly.yml's schedule or start by hand on `main`;
+the script reads that from the run, which must be the event's branch and commit,
+at the start and again before each re-run,
+checks that the tag is a version tag (`vX.Y.Z`, `vX.Y.Z-<label>`)
+at the run's commit and no branch's name,
+and refuses any other run with an error,
+as it does a run it cannot read after its wait, three tries apart.
+Each wait for an attempt ends within an hour (`RETRY_DEADLINE`),
+so that both waits and both attempts end within the job's three hours.
 On a pull request it keeps one comment (`pull-requests: write`),
 starting with `<!-- ci-report -->`:
 written at the pull request's first failing run,
@@ -576,7 +646,8 @@ the LaunchDaemons' plists and `template-test.sh` (`packaging/launchd/`),
 the Homebrew formula (`packaging/homebrew/`),
 `packaging/embed.go` and the settings template `packaging/env.template`,
 which install writes,
-`.github/workflows/ci.yml`, and what sets the job up on its runner,
+`.github/workflows/ci.yml` and the jobs' own `.github/workflows/platforms.yml`,
+and what sets the job up on its runner,
 the UI bundle's action (`.github/actions/`) and its bundler (`tools/uibundle/`).
 The Windows job's own paths are the same but for the darwin ones,
 `_windows` in place of `_darwin`,
@@ -612,10 +683,11 @@ A change the lists miss runs neither job until a later run takes it whole:
 a push to `main` without such a record, or a tag.
 A tag's run reads no record (it has no run before it) and filters no path,
 so it runs both jobs, as every job, before any release on a channel.
-The nightly build runs no tests (section 6):
-it takes the newest commit of `main` whose run had All tests passed succeed,
+The nightly build takes the newest commit of `main` whose run had All tests passed succeed,
 so the commit it ships had the two jobs run where its change asked for them,
-and where its pull request found them not needed, at the last change that did.
+and where its pull request found them not needed, at the last change that did,
+or no runner took one, which its record says;
+nightly.yml then runs that job first (section 6, D15-B).
 
 The Android app job (AP MobileApp, Block 4) builds `app/android` with the
 image's JDK 17 and Android SDK (platform and build-tools 36),
@@ -1006,17 +1078,41 @@ and `CHANGELOG.md`'s `[Unreleased]` as `changelog.sh preview` writes it,
 once the guidelines carry that command (v4.54.0).
 Once a day nightly.yml runs build.yml and release.yml for the `nightly` build,
 `release/nightly`, replaced in place as `devel` is.
-It runs no tests: it walks `main`'s first parents from the newest,
+Its first job, What to ship (`packaging/nightly-pick.sh`),
+walks `main`'s first parents from the newest,
 down to the commit the nightly build carries,
 and takes the first whose run of ci.yml (its push, or its tag's)
 had "All tests passed" succeed,
 so that a red newest commit does not cost a night whose second-last was green
-(the owner's rule); `meta` reads the runs with `actions: read`,
-which the `build` jobs of ci.yml and nightly.yml grant.
+(the owner's rule); it reads the runs with `actions: read`
+and the Tested records with `statuses: read`,
+and hands the commit to build.yml (its inputs `nightly_sha` and `nightly_site`),
+whose What to release reads no runs.
+Before the build, the macOS and Windows jobs run on that commit (owner,
+2026-11-18, AP TestSpeed, D15-B), through platforms.yml as in ci.yml,
+each only where the records say it did not run for the commit's code:
+a push to `main` that no runner took the job on says `false`
+(section 2, D16-A),
+and What to ship reads the commit's record and its first parents' newest first:
+`true`, or a record from before `mac=` and `win=` (every run ran both then), passed;
+`false` runs the job;
+`unneeded` goes on to the parent, whose code the job's is;
+a commit without a record goes on where its code is its parent's (documents alone),
+passed where it is a release commit whose tag's run passed,
+and runs the job otherwise, as the walk's end does;
+the commit the nightly build carries, or one before it, passed.
+The build waits for Platforms passed, which fails where Platforms did not pass:
+the night is then skipped, the site's deploy with it,
+after Retry ran a job no runner took again,
+at most twice, about 20 minutes apart (section 2).
+By hand, `-f dry_run=true` decides and runs the jobs it asks for and ships nothing,
+and `-f platforms=true` runs both whatever the records say,
+on `main`'s head where there is nothing to ship:
+together they try Platforms, and Retry where no runner came, without a release.
 `rolling` takes `nightly` only from the schedule or by hand on `main`.
 Where `main`'s head is a release commit, its version tag at it,
 the nightly build builds nothing and deploys no site,
-by `meta`'s output `site` and release.yml's input (D55-A):
+by What to ship's output `site`, `meta`'s and release.yml's input (D55-A):
 the tag's run deploys the same commit,
 and Pages keeps the first deploy of a commit.
 On 2026-11-11 the nightly build started while the release of v0.14.0-alpha.1
@@ -1128,9 +1224,10 @@ since a site without `apt/` would take the repository offline.
 - The macOS job runs the LaunchDaemons as root on the runner;
   `launchctl` needs the system domain there, not a user's.
 - GitHub's macOS runners are few: a job can wait for one
-  and end cancelled with no runner and no step,
+  and end cancelled with no runner and no step, after about a quarter of an hour,
   so the job runs on a pull request only where its paths changed,
-  and a pull request it never ran on is not held by it (section 2, D5-A).
+  a pull request or a push to `main` it never ran on is not held by it,
+  and a tag's run and the nightly run have Retry run it again (section 2, D5-A, D16-A).
 - The macOS job's update from the API installs the newest alpha release,
   which knows no `-tls` until a release with it is cut:
   that server serves plain HTTP, the helper's `https://` health check fails,

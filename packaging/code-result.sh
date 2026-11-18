@@ -19,7 +19,12 @@
 #     result ran (a verdict carried, so the walk goes on to the run that made
 #     it, whose latest attempt holds a re-run's result), and a run whose code
 #     jobs were all skipped: no verdict;
-#   - a code job that failed, timed out or was cancelled: red;
+#   - a code job that failed, timed out or was cancelled: red, but for a
+#     job of UNRUN_JOBS that no runner took (cancelled with no runner and
+#     no step), which says nothing of the code (AP TestSpeed, D16-A): a
+#     push to main counts it as not run, unless its last run that a runner
+#     took, in an earlier attempt, did not pass: a re-run that no runner
+#     took does not hide a failure (the jobs of every attempt are read);
 #   - else green: the code jobs passed.
 # Where no run on a commit gives a verdict and none carried one, its record
 # does, read where What to test reads it: the Tested status on the commit,
@@ -41,7 +46,8 @@
 # could not be read; the run tests it too.
 # Needs a full history, the guidelines (fingerprint.sh), GH_TOKEN with actions: read and statuses: read, and
 # GITHUB_REPOSITORY; GITHUB_RUN_ID, GITHUB_EVENT_NAME and
-# GITHUB_STEP_SUMMARY where GitHub sets them. CODE_HEAD (HEAD) names the
+# GITHUB_STEP_SUMMARY where GitHub sets them; UNRUN_JOBS, ci.yml's JSON
+# object whose names are those jobs, optional. CODE_HEAD (HEAD) names the
 # commit to judge, for a test by hand.
 set -euo pipefail
 
@@ -54,6 +60,7 @@ self="${GITHUB_RUN_ID:-}"
 cfg=GUIDELINES/config.ini
 fpsh=GUIDELINES/shared/tools/fingerprint.sh
 check="${CODE_CHECK:-}"
+unrun_jobs="${UNRUN_JOBS:-}"
 end=$((SECONDS + deadline))
 
 # The verdict, said once: on stdout, in the summary, and as the exit code.
@@ -98,10 +105,26 @@ while IFS= read -r p; do
 	skip+=(":!${p}")
 done < <(git config -f "$cfg" --get-all ci.untested || true; git config -f "$cfg" --get-all ci.site || true)
 
-# The latest attempt's jobs of a run, one "<conclusion>\t<name>" a line.
+# A run's jobs, one "<conclusion>\t<name>" a line, as the latest attempt
+# left each: "not taken" for a job cancelled with no runner and no step,
+# "earlier <conclusion>" for one no runner took whose last run that a
+# runner took, in an earlier attempt, did not pass.
 jobs_of() { # <run id>
-	gh api --paginate "repos/${repo}/actions/runs/${1}/jobs?filter=latest&per_page=100" \
-		--jq '.jobs[] | "\(.conclusion // .status)\t\(.name)"'
+	gh api --paginate "repos/${repo}/actions/runs/${1}/jobs?filter=all&per_page=100" --jq '.jobs[]' |
+		jq -rs '
+			def state: if .status != "completed" then .status
+				elif .conclusion == "cancelled" and (.runner_name // "") == "" and (.steps // [] | length) == 0 then "not taken"
+				else .conclusion // "no conclusion" end;
+			map(select((.name | type) == "string")) | group_by(.name)[]
+			| sort_by(.run_attempt // 1)
+			| (last | state) as $now
+			| ([.[] | state | select(. != "not taken" and . != "skipped")] | last // "success") as $ran
+			| "\(if $now == "not taken" and ($ran | IN("success", "neutral") | not) then "earlier \($ran)" else $now end)\t\(.[0].name)"'
+}
+
+# Whether a job no runner took says nothing of the code: one of UNRUN_JOBS.
+unrun_job() { # <name>
+	[ -n "$unrun_jobs" ] && jq -e --arg n "$1" 'type == "object" and has($n)' <<<"$unrun_jobs" >/dev/null 2>&1
 }
 
 # Whether a job is one of the code's: every job but the gate, the checks of
@@ -168,6 +191,8 @@ while :; do
 			case "$c" in
 			success) passed=true ;;
 			skipped | neutral) ;;
+			"not taken") unrun_job "$name" || bad="${bad}${bad:+, }${name} (cancelled before a runner took it)" ;;
+			"earlier "*) bad="${bad}${bad:+, }${name} (${c#earlier } in an earlier attempt, no runner since)" ;;
 			*) bad="${bad}${bad:+, }${name} (${c})" ;;
 			esac
 		done <<<"$jobs"

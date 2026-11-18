@@ -24,24 +24,31 @@
 #     <!-- ci-rerun -->, which notifies the pull request's author: once
 #     for each re-run that made a job pass.
 #   - A push (no PR) gets the summary and the annotations alone.
-#   - On a pull request, a job of UNRUN_JOBS cancelled before a runner took
-#     it, abandoned or cancelled among the needs, counts as not run (AP
-#     TestSpeed, D5-A): named in the summary, with
-#     a warning, and in the report where there is one, and its id among the
-#     needs written as the step's output unrun, which the verdict reads; the
-#     Tested record then leaves it out, and the push of the merged tree
-#     runs it. A job cancelled after a runner took it, and any job on a
-#     push, fails as before.
+#   - On a pull request and a push to main (GITHUB_EVENT_NAME and
+#     GITHUB_REF), a job of UNRUN_JOBS cancelled before a runner took it
+#     counts as not run (AP TestSpeed, D5-A, D16-A), where every job of
+#     UNRUN_JOBS with the same id among the needs passed, was skipped or
+#     was not taken either, that id's result there is abandoned, cancelled
+#     or failure (a called workflow's caller has its jobs' results
+#     together), and the job's last run that a runner took in an earlier
+#     attempt, if any, passed: named in the summary, with a warning, and in the
+#     report where there is one, and its id written as the step's output
+#     unrun, which the verdict reads. The Tested record says false for
+#     it: on a pull request the push of the merged tree runs it, on main
+#     the nightly build runs it before it ships the code. A job cancelled
+#     after a runner took it fails as before, and so does any job on a
+#     tag, where the summary says that Retry (retry.yml) runs a job no
+#     runner took again.
 # A comment that cannot be written, as with a read-only token, Dependabot's
 # or a fork's, leaves a warning, in the summary too.
 #
 # Needs GH_TOKEN with actions: read, and pull-requests: write for the
 # comments; GITHUB_REPOSITORY, GITHUB_RUN_ID, GITHUB_RUN_ATTEMPT,
-# GITHUB_SERVER_URL, GITHUB_STEP_SUMMARY and GITHUB_OUTPUT, which GitHub
-# sets; NEEDS, the job's needs as JSON; SHA, the commit tested; SELF and
-# CALLED as above; UNRUN_JOBS, a JSON object of job names and their ids
-# among the needs, optional. Exits 0 but where one of them is missing or
-# NEEDS is no JSON.
+# GITHUB_SERVER_URL, GITHUB_STEP_SUMMARY, GITHUB_OUTPUT, GITHUB_EVENT_NAME
+# and GITHUB_REF, which GitHub sets; NEEDS, the job's needs as JSON; SHA,
+# the commit tested; SELF and CALLED as above; UNRUN_JOBS, a JSON object
+# of job names and their ids among the needs, optional. Exits 0 but where
+# one of them is missing or NEEDS is no JSON.
 set -euo pipefail
 
 repo="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is not set}"
@@ -55,6 +62,14 @@ pr="${PR:-}"
 sha="${SHA:-}"
 unrun_jobs="${UNRUN_JOBS:-}"
 output="${GITHUB_OUTPUT:-/dev/null}"
+ref="${GITHUB_REF:-}"
+# Where a job no runner took counts as not run: a pull request, a push to main.
+spare=""
+if [ -n "$pr" ]; then
+	spare="pull request"
+elif [ "${GITHUB_EVENT_NAME:-}" = push ] && [ "$ref" = refs/heads/main ]; then
+	spare=main
+fi
 run_url="${GITHUB_SERVER_URL:-https://github.com}/${repo}/actions/runs/${run}"
 case "$attempt" in '' | *[!0-9]*) attempt=1 ;; esac
 
@@ -88,24 +103,49 @@ if [ "$jobs" = '[]' ] || { [ "$verdict" = failed ] && jq -e 'all(.[]; .result ==
 	jobs=$(jq 'to_entries | map({name: .key, result: (.value.result | if . == "success" then "passed" elif . == "failure" then "failed" else . end)})' <<<"$needs")
 fi
 
-# On a pull request, a job of UNRUN_JOBS that no runner took counts as not
-# run (D5-A): cancelled with no runner and no step in the API, and
-# abandoned among the needs, which is how GitHub reports it there, or
-# cancelled. Its id goes into the output unrun, and the verdict counts it
-# as passed. Names that UNRUN_JOBS does not hold, a push, and UNRUN_JOBS
-# that is no JSON object leave every such job failed.
+# Every attempt's jobs, from the second attempt on: the re-run jobs below,
+# and the earlier runs of a job no runner took now. all_read is false where
+# they could not be read.
+all='[]'
+all_read=true
+if [ "$attempt" -gt 1 ]; then
+	all=$(api_jobs all | jq -s .) || { all='[]'; all_read=false; }
+fi
+
+# On a pull request and a push to main, a job of UNRUN_JOBS that no runner
+# took counts as not run (D5-A, D16-A): cancelled with no runner and no
+# step in the API, and its id among the needs abandoned, which is how
+# GitHub gave a job of its own there, cancelled, or failed, as a called
+# workflow's caller may give it, where every job of UNRUN_JOBS with that
+# id passed, was skipped or was not taken either, and where the job's last
+# run that a runner took in an earlier attempt, if any, passed: a failure
+# that a re-run no runner took would hide fails. Its id goes into the
+# output unrun, and the verdict counts it as passed. Names that UNRUN_JOBS
+# does not hold, a tag, UNRUN_JOBS that is no JSON object, and earlier
+# attempts that could not be read leave every such job failed.
 unrun_result="not run, as no runner took it"
 unrun='[]'
-if [ -n "$pr" ] && [ -n "$unrun_jobs" ] &&
-	marked=$(jq --argjson ok "$unrun_jobs" --argjson needs "$needs" --arg not "$unrun_result" '
-		map(if .result == "cancelled before a runner took it" and $ok[.name] != null
-			and ($needs[$ok[.name]].result | IN("cancelled", "abandoned"))
+if [ -n "$spare" ] && [ -n "$unrun_jobs" ] && [ "$all_read" = true ] &&
+	marked=$(jq --argjson ok "$unrun_jobs" --argjson needs "$needs" --arg not "$unrun_result" \
+		--argjson all "$all" --argjson attempt "$attempt" '
+		([.[] | select($ok[.name] != null)] | group_by($ok[.name])
+			| map({key: $ok[.[0].name], value: all(.[]; .result | IN("passed", "skipped", "cancelled before a runner took it"))})
+			| from_entries) as $clean
+		| ([$all[] | select((.name | type) == "string" and (.run_attempt // 1) < $attempt and .status == "completed"
+				and .conclusion != "skipped"
+				and ((.conclusion == "cancelled" and (.runner_name // "") == "" and (.steps // [] | length) == 0) | not))]
+			| group_by(.name)
+			| map({key: .[0].name, value: (sort_by(.run_attempt // 1) | last | .conclusion | IN("success", "neutral"))})
+			| from_entries) as $earlier
+		| map(if .result == "cancelled before a runner took it" and $ok[.name] != null and $clean[$ok[.name]]
+			and $earlier[.name] != false
+			and ($needs[$ok[.name]].result | IN("cancelled", "abandoned", "failure"))
 		then .result = $not | .need = $ok[.name] else . end)' <<<"$jobs" 2>/dev/null); then
 	jobs="$marked"
 	unrun=$(jq '[.[] | .need // empty] | unique' <<<"$jobs")
 	verdict=$(jq -r --argjson unrun "$unrun" '
 		if all(to_entries[]; .value.result == "success" or .value.result == "skipped"
-			or ((.value.result | IN("cancelled", "abandoned")) and (.key | IN($unrun[]))))
+			or ((.value.result | IN("cancelled", "abandoned", "failure")) and (.key | IN($unrun[]))))
 		then "passed" else "failed" end' <<<"$needs")
 fi
 echo "unrun=$(jq -r 'join(" ")' <<<"$unrun")" >>"$output"
@@ -123,7 +163,7 @@ n=$(jq length <<<"$bad")
 reruns='[]'
 reruns_failed=false
 if [ "$attempt" -gt 1 ]; then
-	if all=$(api_jobs all | jq -s .); then
+	if [ "$all_read" = true ]; then
 		reruns=$(jq --argjson jobs "$jobs" --argjson attempt "$attempt" --arg self "$self" --arg called "$called" "${jq_result}"'
 			def bad: .conclusion != "success" and .conclusion != "skipped" and .conclusion != "neutral";
 			($jobs | map(select(.result == "passed") | {key: .name, value: true}) | from_entries) as $passed
@@ -160,7 +200,22 @@ fi
 unrun_lines() {
 	jq -r --arg not "$unrun_result" '.[] | select(.result == $not) | "- \(.name)"' <<<"$jobs"
 }
-unrun_head="Not run, as no runner took them; the Tested record leaves them out, and the push of the merged tree runs them:"
+if [ "$spare" = main ]; then
+	unrun_head="Not run, as no runner took them; the Tested record says so, and the nightly build runs them before it ships this code:"
+	unrun_warning="no runner took it, so it did not run on this push to main; the nightly build runs it before it ships this code"
+else
+	unrun_head="Not run, as no runner took them; the Tested record leaves them out, and the push of the merged tree runs them:"
+	unrun_warning="no runner took it, so it did not run on this pull request; the push of the merged tree runs it"
+fi
+# On a tag, the jobs of UNRUN_JOBS that no runner took: failed, and run
+# again by Retry where nothing else failed.
+untaken=''
+case "$ref" in
+refs/tags/*)
+	untaken=$(jq -r --argjson ok "$unrun_jobs" '.[]
+		| select(.result == "cancelled before a runner took it" and $ok[.name] != null) | "- \(.name)"' <<<"$jobs" 2>/dev/null) || untaken=''
+	;;
+esac
 {
 	echo "### ${head}"
 	echo
@@ -173,6 +228,12 @@ unrun_head="Not run, as no runner took them; the Tested record leaves them out, 
 		echo
 		unrun_lines
 	fi
+	if [ -n "$untaken" ]; then
+		echo
+		echo "No runner took them, which fails a tag's run; where nothing else failed, Retry (retry.yml) runs them again, at most twice, about 20 minutes after the first attempt and after the second:"
+		echo
+		echo "$untaken"
+	fi
 	if [ "$r" -gt 0 ]; then
 		echo
 		echo "Passed only on a re-run, and counted as passed:"
@@ -182,8 +243,8 @@ unrun_head="Not run, as no runner took them; the Tested record leaves them out, 
 	echo
 } >>"$summary"
 jq -r '.[] | "::error::\(.name): \(.result)"' <<<"$bad"
-jq -r --arg not "$unrun_result" '.[] | select(.result == $not)
-	| "::warning::\(.name): no runner took it, so it did not run on this pull request; the push of the merged tree runs it"' <<<"$jobs"
+jq -r --arg not "$unrun_result" --arg warning "$unrun_warning" '.[] | select(.result == $not)
+	| "::warning::\(.name): \($warning)"' <<<"$jobs"
 jq -r "${jq_before}"'.[] | "::warning::\(.name) passed only on a re-run: \(before)"' <<<"$reruns"
 [ "$reruns_failed" = false ] || warn "the earlier attempts' jobs could not be read: a job that passed only on a re-run is not named."
 

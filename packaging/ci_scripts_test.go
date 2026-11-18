@@ -120,6 +120,7 @@ type ciReportRun struct {
 	comments   string  // the pull request's comments, JSON
 	failWrites bool
 	unrunJobs  string // UNRUN_JOBS, where not ci.yml's
+	ref        string // GITHUB_REF of a push: refs/heads/main where empty
 }
 
 // ciReportResult is what a run of ci-report.sh left: its output, the
@@ -130,8 +131,10 @@ type ciReportResult struct {
 }
 
 // ciUnrunJobs is UNRUN_JOBS as ci.yml gives it: the jobs that a pull
-// request leaves unrun where no runner took them (AP TestSpeed, D5-A).
-const ciUnrunJobs = `{"macOS LaunchDaemon": "macos", "Windows service": "windows"}`
+// request and a push to main leave unrun where no runner took them (AP
+// TestSpeed, D5-A, D16-A), by the names the API gives a called workflow's
+// jobs, with their caller's id among the needs.
+const ciUnrunJobs = `{"Platforms / macOS LaunchDaemon": "platforms", "Platforms / Windows service": "platforms"}`
 
 // runCIReport runs packaging/ci-report.sh against fakeGH and fails the
 // test where it exits with anything but 0.
@@ -180,6 +183,13 @@ func runCIReport(t *testing.T, r ciReportRun) ciReportResult {
 	if unrunJobs == "" {
 		unrunJobs = ciUnrunJobs
 	}
+	// GitHub's own, which a test run on GitHub would otherwise pass on.
+	event, ref := "push", r.ref
+	if r.pr != "" {
+		event, ref = "pull_request", "refs/pull/"+r.pr+"/merge"
+	} else if ref == "" {
+		ref = "refs/heads/main"
+	}
 	cmd := exec.Command(bash, "ci-report.sh")
 	cmd.Env = append(os.Environ(),
 		"PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"),
@@ -196,6 +206,8 @@ func runCIReport(t *testing.T, r ciReportRun) ciReportResult {
 		"SELF=All tests passed",
 		"CALLED=^(Build|Release|Deploy site)( / |$)",
 		"UNRUN_JOBS="+unrunJobs,
+		"GITHUB_EVENT_NAME="+event,
+		"GITHUB_REF="+ref,
 	)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -231,7 +243,7 @@ func lacks(t *testing.T, what, s string, subs ...string) {
 	}
 }
 
-const passedNeeds = `{"changes":{"result":"success"},"test":{"result":"success"},"android":{"result":"success"},"macos":{"result":"success"},"fuzz":{"result":"skipped"}}`
+const passedNeeds = `{"changes":{"result":"success"},"test":{"result":"success"},"android":{"result":"success"},"platforms":{"result":"success"},"fuzz":{"result":"skipped"}}`
 
 // TestCIReportFirstAttempt: a push's first attempt reads the latest jobs
 // alone, lists them, and comments nowhere; this job and a called
@@ -265,7 +277,7 @@ func rerunJobs() (latest, all []ciJob) {
 		ran(1, 1, "What to test", "success", 0),
 		ran(2, 1, "Vet and test", "success", 1),
 		ran(3, 1, "Android app", "failure", 1),
-		notRun(4, 1, "macOS LaunchDaemon", "cancelled"),
+		notRun(4, 1, "Platforms / macOS LaunchDaemon", "cancelled"),
 		notRun(5, 1, "Fuzz", "skipped"),
 		ran(6, 1, "All tests passed", "failure", 9),
 	}
@@ -273,7 +285,7 @@ func rerunJobs() (latest, all []ciJob) {
 		ran(11, 2, "What to test", "success", 0),
 		ran(12, 2, "Vet and test", "success", 1),
 		ran(13, 2, "Android app", "success", 20),
-		ran(14, 2, "macOS LaunchDaemon", "success", 20),
+		ran(14, 2, "Platforms / macOS LaunchDaemon", "success", 20),
 		notRun(15, 2, "Fuzz", "skipped"),
 		running(16, 2),
 	}
@@ -297,11 +309,11 @@ func TestCIReportRerunOnAPullRequest(t *testing.T) {
 		"| Android app | passed |",
 		"Passed only on a re-run, and counted as passed:\n\n"+
 			"- Android app: attempt 1 failed, passed in attempt 2\n"+
-			"- macOS LaunchDaemon: attempt 1 cancelled before a runner took it, passed in attempt 2\n")
+			"- Platforms / macOS LaunchDaemon: attempt 1 cancelled before a runner took it, passed in attempt 2\n")
 	lacks(t, "summary", res.summary, "- Vet and test", "Warning")
 	wants(t, "output", res.out,
 		"::warning::Android app passed only on a re-run: attempt 1 failed, passed in attempt 2\n",
-		"::warning::macOS LaunchDaemon passed only on a re-run: attempt 1 cancelled before a runner took it, passed in attempt 2\n")
+		"::warning::Platforms / macOS LaunchDaemon passed only on a re-run: attempt 1 cancelled before a runner took it, passed in attempt 2\n")
 	lacks(t, "output", res.out, "::error::")
 	wants(t, "calls", res.calls,
 		"GET repos/owner/repo/actions/runs/100/jobs?filter=all&per_page=100\n",
@@ -310,7 +322,7 @@ func TestCIReportRerunOnAPullRequest(t *testing.T) {
 			"[run 100 attempt 2](https://github.example.invalid/owner/repo/actions/runs/100).\n",
 		"| Android app | attempt 1 failed | passed in attempt 2 |\n",
 		"POST repos/owner/repo/issues/7/comments\n<!-- ci-rerun -->\n**2 job(s) passed only on a re-run** on abcdef0",
-		"| macOS LaunchDaemon | attempt 1 cancelled before a runner took it | passed in attempt 2 |\n")
+		"| Platforms / macOS LaunchDaemon | attempt 1 cancelled before a runner took it | passed in attempt 2 |\n")
 	lacks(t, "calls", res.calls, "comments/12")
 	if n := strings.Count(res.calls, "POST "); n != 1 {
 		t.Errorf("%d comments written, want the re-run's alone:\n%s", n, res.calls)
@@ -336,7 +348,7 @@ func TestCIReportRerunAgain(t *testing.T) {
 		ran(21, 3, "What to test", "success", 30),
 		ran(22, 3, "Vet and test", "success", 31),
 		ran(23, 3, "Android app", "success", 20), // carried, as it started in attempt 2
-		ran(24, 3, "macOS LaunchDaemon", "success", 32),
+		ran(24, 3, "Platforms / macOS LaunchDaemon", "success", 32),
 		notRun(25, 3, "Fuzz", "skipped"),
 		running(26, 3),
 	}
@@ -346,7 +358,7 @@ func TestCIReportRerunAgain(t *testing.T) {
 	})
 	wants(t, "summary", res.summary,
 		"- Android app: attempt 1 failed, passed in attempt 2\n",
-		"- macOS LaunchDaemon: attempt 1 cancelled before a runner took it, passed in attempt 2\n")
+		"- Platforms / macOS LaunchDaemon: attempt 1 cancelled before a runner took it, passed in attempt 2\n")
 	wants(t, "calls", res.calls, "PATCH repos/owner/repo/issues/comments/11\n")
 	lacks(t, "calls", res.calls, "POST", "ci-rerun")
 }
@@ -444,27 +456,29 @@ func TestCIReportEarlierAttemptsUnreadable(t *testing.T) {
 	lacks(t, "calls", res.calls, "ci-rerun")
 }
 
-// macosNeeds is a run's needs with macOS LaunchDaemon's result as given.
-func macosNeeds(result string) string {
-	return `{"changes":{"result":"success"},"test":{"result":"success"},"windows":{"result":"success"},"macos":{"result":"` +
+// platformsNeeds is a run's needs with Platforms' result as given, the
+// result GitHub gives the caller of platforms.yml's two jobs together.
+func platformsNeeds(result string) string {
+	return `{"changes":{"result":"success"},"test":{"result":"success"},"platforms":{"result":"` +
 		result + `"},"fuzz":{"result":"skipped"}}`
 }
 
 // unrunNeeds is a run's needs where no runner took macOS LaunchDaemon:
-// abandoned, as GitHub gives it (runs 44151208458 and 44335801523).
-var unrunNeeds = macosNeeds("abandoned")
+// abandoned, as GitHub gave a job of ci.yml's own (runs 44151208458 and
+// 44335801523).
+var unrunNeeds = platformsNeeds("abandoned")
 
 // unrunJobs is a first attempt whose macOS LaunchDaemon no runner took,
 // or, with started, one that a runner took before it was cancelled.
 func unrunJobs(started bool) []ciJob {
-	macos := notRun(4, 1, "macOS LaunchDaemon", "cancelled")
+	macos := notRun(4, 1, "Platforms / macOS LaunchDaemon", "cancelled")
 	if started {
-		macos = ran(4, 1, "macOS LaunchDaemon", "cancelled", 2)
+		macos = ran(4, 1, "Platforms / macOS LaunchDaemon", "cancelled", 2)
 	}
 	return []ciJob{
 		ran(1, 1, "What to test", "success", 0),
 		ran(2, 1, "Vet and test", "success", 1),
-		ran(3, 1, "Windows service", "success", 1),
+		ran(3, 1, "Platforms / Windows service", "success", 1),
 		macos,
 		notRun(5, 1, "Fuzz", "skipped"),
 		running(6, 1),
@@ -472,14 +486,14 @@ func unrunJobs(started bool) []ciJob {
 }
 
 // TestCIReportUnrunOnAPullRequest: on a pull request, a macOS job no
-// runner took counts as not run (AP TestSpeed, D5-A), abandoned among the
-// needs as GitHub gives it, or cancelled: its id is the output unrun, the
-// summary names it with a warning and passes, and no report is written
-// for it alone.
+// runner took counts as not run (AP TestSpeed, D5-A), its caller
+// abandoned, cancelled or failed among the needs, as a called workflow's
+// may be: its caller's id is the output unrun, the summary names it with
+// a warning and passes, and no report is written for it alone.
 func TestCIReportUnrunOnAPullRequest(t *testing.T) {
-	for _, result := range []string{"abandoned", "cancelled"} {
+	for _, result := range []string{"abandoned", "cancelled", "failure"} {
 		t.Run(result, func(t *testing.T) {
-			testUnrunOnAPullRequest(t, macosNeeds(result))
+			testUnrunOnAPullRequest(t, platformsNeeds(result))
 		})
 	}
 }
@@ -489,17 +503,18 @@ func TestCIReportUnrunOnAPullRequest(t *testing.T) {
 func testUnrunOnAPullRequest(t *testing.T, needs string) {
 	t.Helper()
 	res := runCIReport(t, ciReportRun{attempt: 1, pr: "7", needs: needs, latest: unrunJobs(false)})
-	if res.outputs != "unrun=macos\n" {
-		t.Errorf("outputs = %q, want unrun=macos", res.outputs)
+	if res.outputs != "unrun=platforms\n" {
+		t.Errorf("outputs = %q, want unrun=platforms", res.outputs)
 	}
 	wants(t, "summary", res.summary,
 		"### Every test job passed or was skipped, 1 not run for want of a runner\n",
-		"| macOS LaunchDaemon | not run, as no runner took it |",
+		"| Platforms / macOS LaunchDaemon | not run, as no runner took it |",
 		"Not run, as no runner took them; the Tested record leaves them out, and the push of the merged tree runs them:\n\n"+
-			"- macOS LaunchDaemon\n")
+			"- Platforms / macOS LaunchDaemon\n")
 	wants(t, "output", res.out,
-		"::warning::macOS LaunchDaemon: no runner took it, so it did not run on this pull request; the push of the merged tree runs it\n")
+		"::warning::Platforms / macOS LaunchDaemon: no runner took it, so it did not run on this pull request; the push of the merged tree runs it\n")
 	lacks(t, "output", res.out, "::error::")
+	lacks(t, "summary", res.summary, "Retry")
 	lacks(t, "calls", res.calls, "POST", "PATCH")
 }
 
@@ -512,81 +527,254 @@ func TestCIReportUnrunInTheReport(t *testing.T) {
 		"PATCH repos/owner/repo/issues/comments/11\n<!-- ci-report -->\n"+
 			"**Every test job passed or was skipped, 1 not run for want of a runner** on abcdef0",
 		"Not run, as no runner took them; the Tested record leaves them out, and the push of the merged tree runs them:\n\n"+
-			"- macOS LaunchDaemon\n")
-	lacks(t, "calls", res.calls, "| macOS LaunchDaemon |", "POST")
+			"- Platforms / macOS LaunchDaemon\n")
+	lacks(t, "calls", res.calls, "| Platforms / macOS LaunchDaemon |", "POST")
 }
 
-// TestCIReportUnrunOnAPush: on a push, the merge's included, a job no
-// runner took fails as before.
-func TestCIReportUnrunOnAPush(t *testing.T) {
-	res := runCIReport(t, ciReportRun{attempt: 1, needs: unrunNeeds, latest: unrunJobs(false)})
-	if res.outputs != "unrun=\n" {
-		t.Errorf("outputs = %q, want unrun empty", res.outputs)
-	}
-	wants(t, "summary", res.summary, "### 1 test job(s) did not pass\n",
-		"| macOS LaunchDaemon | cancelled before a runner took it |")
-	wants(t, "output", res.out, "::error::macOS LaunchDaemon: cancelled before a runner took it\n")
-	lacks(t, "summary", res.summary, "not run")
-}
-
-// TestCIReportCancelledAfterItStarted: a macOS job cancelled once a
-// runner had taken it fails on a pull request too.
-func TestCIReportCancelledAfterItStarted(t *testing.T) {
-	res := runCIReport(t, ciReportRun{attempt: 1, pr: "7", needs: macosNeeds("cancelled"), latest: unrunJobs(true)})
-	if res.outputs != "unrun=\n" {
-		t.Errorf("outputs = %q, want unrun empty", res.outputs)
-	}
-	wants(t, "summary", res.summary, "### 1 test job(s) did not pass\n", "| macOS LaunchDaemon | cancelled |")
-	wants(t, "output", res.out, "::error::macOS LaunchDaemon: cancelled\n")
-	wants(t, "calls", res.calls, "POST repos/owner/repo/issues/7/comments\n<!-- ci-report -->\n**1 test job(s) did not pass**")
-}
-
-// TestCIReportUnrunOnlyForItsJobs: a job that UNRUN_JOBS does not name,
-// or whose needs say neither abandoned nor cancelled, or UNRUN_JOBS that
-// is no object, leaves a job no runner took failed.
-func TestCIReportUnrunOnlyForItsJobs(t *testing.T) {
-	for name, r := range map[string]ciReportRun{
-		"another job": {unrunJobs: `{"Windows service": "windows"}`},
-		"another id":  {unrunJobs: `{"macOS LaunchDaemon": "windows"}`},
-		"failed":      {needs: macosNeeds("failure")},
-		"no object":   {unrunJobs: `["macOS LaunchDaemon"]`},
-		"no JSON":     {unrunJobs: `macos`},
-	} {
-		t.Run(name, func(t *testing.T) {
-			r.attempt, r.pr, r.latest = 1, "7", unrunJobs(false)
-			if r.needs == "" {
-				r.needs = unrunNeeds
+// TestCIReportUnrunOnMain: on a push to main, a merge's included, a job no
+// runner took counts as not run too (AP TestSpeed, D16-A): the run passes,
+// and the summary says that the nightly build runs it.
+func TestCIReportUnrunOnMain(t *testing.T) {
+	for _, result := range []string{"abandoned", "cancelled", "failure"} {
+		t.Run(result, func(t *testing.T) {
+			res := runCIReport(t, ciReportRun{attempt: 1, needs: platformsNeeds(result), latest: unrunJobs(false)})
+			if res.outputs != "unrun=platforms\n" {
+				t.Errorf("outputs = %q, want unrun=platforms", res.outputs)
 			}
-			res := runCIReport(t, r)
-			if res.outputs != "unrun=\n" {
-				t.Errorf("outputs = %q, want unrun empty", res.outputs)
-			}
-			wants(t, "output", res.out, "::error::macOS LaunchDaemon: cancelled before a runner took it\n")
+			wants(t, "summary", res.summary,
+				"### Every test job passed or was skipped, 1 not run for want of a runner\n",
+				"| Platforms / macOS LaunchDaemon | not run, as no runner took it |",
+				"Not run, as no runner took them; the Tested record says so, and the nightly build runs them before it ships this code:\n\n"+
+					"- Platforms / macOS LaunchDaemon\n")
+			wants(t, "output", res.out,
+				"::warning::Platforms / macOS LaunchDaemon: no runner took it, so it did not run on this push to main; the nightly build runs it before it ships this code\n")
+			lacks(t, "output", res.out, "::error::")
+			lacks(t, "calls", res.calls, "comments", "POST", "PATCH")
 		})
 	}
 }
 
+// TestCIReportUnrunOnATag: on a tag a job no runner took fails as before,
+// in the first attempt as in any; the summary says that Retry runs it
+// again.
+func TestCIReportUnrunOnATag(t *testing.T) {
+	res := runCIReport(t, ciReportRun{attempt: 1, needs: unrunNeeds, latest: unrunJobs(false), ref: "refs/tags/v1.2.3-alpha.1"})
+	if res.outputs != "unrun=\n" {
+		t.Errorf("outputs = %q, want unrun empty", res.outputs)
+	}
+	wants(t, "summary", res.summary, "### 1 test job(s) did not pass\n",
+		"| Platforms / macOS LaunchDaemon | cancelled before a runner took it |",
+		"No runner took them, which fails a tag's run; where nothing else failed, Retry (retry.yml) runs them again, "+
+			"at most twice, about 20 minutes after the first attempt and after the second:\n\n- Platforms / macOS LaunchDaemon\n")
+	wants(t, "output", res.out, "::error::Platforms / macOS LaunchDaemon: cancelled before a runner took it\n")
+	lacks(t, "summary", res.summary, "not run")
+	lacks(t, "output", res.out, "::warning::")
+}
+
+// TestCIReportRerunOnATag: Retry's re-run of a tag's run, in which a
+// runner took the job, passes, and names the job that passed only on it.
+func TestCIReportRerunOnATag(t *testing.T) {
+	first := unrunJobs(false)
+	first[5] = ran(6, 1, "All tests passed", "failure", 9)
+	second := []ciJob{
+		ran(1, 2, "What to test", "success", 0),
+		ran(2, 2, "Vet and test", "success", 1),
+		ran(3, 2, "Platforms / Windows service", "success", 1),
+		ran(14, 2, "Platforms / macOS LaunchDaemon", "success", 40),
+		notRun(5, 2, "Fuzz", "skipped"),
+		running(16, 2),
+	}
+	res := runCIReport(t, ciReportRun{attempt: 2, needs: platformsNeeds("success"), latest: second,
+		all: append(first, second...), ref: "refs/tags/v1.2.3-alpha.1"})
+	wants(t, "summary", res.summary, "### Every test job passed or was skipped, 1 only on a re-run\n",
+		"- Platforms / macOS LaunchDaemon: attempt 1 cancelled before a runner took it, passed in attempt 2\n")
+	lacks(t, "output", res.out, "::error::")
+	lacks(t, "summary", res.summary, "Retry")
+}
+
+// TestCIReportCancelledAfterItStarted: a macOS job cancelled once a
+// runner had taken it fails on a pull request and on main too.
+func TestCIReportCancelledAfterItStarted(t *testing.T) {
+	for name, pr := range map[string]string{"pull request": "7", "main": ""} {
+		t.Run(name, func(t *testing.T) {
+			res := runCIReport(t, ciReportRun{attempt: 1, pr: pr, needs: platformsNeeds("cancelled"), latest: unrunJobs(true)})
+			if res.outputs != "unrun=\n" {
+				t.Errorf("outputs = %q, want unrun empty", res.outputs)
+			}
+			wants(t, "summary", res.summary, "### 1 test job(s) did not pass\n", "| Platforms / macOS LaunchDaemon | cancelled |")
+			wants(t, "output", res.out, "::error::Platforms / macOS LaunchDaemon: cancelled\n")
+		})
+	}
+}
+
+// TestCIReportUnrunOnlyForItsJobs: a job that UNRUN_JOBS does not name,
+// or whose caller's other job failed, or whose caller's needs say it
+// passed or was skipped, or UNRUN_JOBS that is no object, leaves a job no
+// runner took failed; a failed job never passes.
+func TestCIReportUnrunOnlyForItsJobs(t *testing.T) {
+	windowsFailed := unrunJobs(false)
+	windowsFailed[2] = ran(3, 1, "Platforms / Windows service", "failure", 1)
+	for name, r := range map[string]ciReportRun{
+		"another job":    {unrunJobs: `{"Platforms / Windows service": "platforms"}`},
+		"another id":     {unrunJobs: `{"Platforms / macOS LaunchDaemon": "test", "Platforms / Windows service": "platforms"}`},
+		"windows failed": {latest: windowsFailed, needs: platformsNeeds("failure")},
+		"passed":         {needs: platformsNeeds("success")},
+		"no object":      {unrunJobs: `["Platforms / macOS LaunchDaemon"]`},
+		"no JSON":        {unrunJobs: `platforms`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			for _, pr := range []string{"7", ""} {
+				r.attempt, r.pr = 1, pr
+				if r.latest == nil {
+					r.latest = unrunJobs(false)
+				}
+				if r.needs == "" {
+					r.needs = unrunNeeds
+				}
+				res := runCIReport(t, r)
+				if res.outputs != "unrun=\n" {
+					t.Errorf("pr %q: outputs = %q, want unrun empty", pr, res.outputs)
+				}
+				wants(t, "output", res.out, "::error::Platforms / macOS LaunchDaemon: cancelled before a runner took it\n")
+			}
+		})
+	}
+}
+
+// TestCIReportUnrunBesideAFailure: a job no runner took counts as not run
+// beside another job that failed, which fails the run.
+func TestCIReportUnrunBesideAFailure(t *testing.T) {
+	latest := unrunJobs(false)
+	latest[1] = ran(2, 1, "Vet and test", "failure", 1)
+	res := runCIReport(t, ciReportRun{attempt: 1, needs: `{"test":{"result":"failure"},"platforms":{"result":"abandoned"}}`, latest: latest})
+	if res.outputs != "unrun=platforms\n" {
+		t.Errorf("outputs = %q, want unrun=platforms", res.outputs)
+	}
+	wants(t, "summary", res.summary, "### 1 test job(s) did not pass\n", "| Vet and test | failed |",
+		"| Platforms / macOS LaunchDaemon | not run, as no runner took it |")
+	wants(t, "output", res.out, "::error::Vet and test: failed\n")
+}
+
+// TestCIReportUnrunAfterAFailure: a re-run no runner took does not hide
+// a failure: where the job's last run that a runner took, in an earlier
+// attempt, failed, it fails, on a pull request and on main, and so it does
+// where the earlier attempts cannot be read; a job that passed earlier, or
+// that no runner took before either, counts as not run.
+func TestCIReportUnrunAfterAFailure(t *testing.T) {
+	const mac = "Platforms / macOS LaunchDaemon"
+	attempt := func(n int, macos ciJob) []ciJob {
+		jobs := unrunJobs(false)
+		for i := range jobs {
+			jobs[i].RunAttempt = n
+		}
+		jobs[3] = macos
+		jobs[5] = running(int64(6+10*n), n)
+		return jobs
+	}
+	failedThenNotTaken := append(attempt(1, ran(4, 1, mac, "failure", 2)), attempt(2, notRun(14, 2, mac, "cancelled"))...)
+	notTakenTwice := append(attempt(1, notRun(4, 1, mac, "cancelled")), attempt(2, notRun(14, 2, mac, "cancelled"))...)
+	failedPassedNotTaken := append(append(attempt(1, ran(4, 1, mac, "failure", 2)), attempt(2, ran(14, 2, mac, "success", 20))...),
+		attempt(3, notRun(24, 3, mac, "cancelled"))...)
+	for _, tc := range []struct {
+		name    string
+		attempt int
+		all     []ciJob
+		spared  bool
+	}{
+		{"failed, then no runner", 2, failedThenNotTaken, false},
+		{"earlier attempts unread", 2, nil, false},
+		{"no runner twice", 2, notTakenTwice, true},
+		{"failed, passed, then no runner", 3, failedPassedNotTaken, true},
+	} {
+		for _, pr := range []string{"7", ""} {
+			latest := attempt(tc.attempt, notRun(int64(4+10*tc.attempt), tc.attempt, mac, "cancelled"))
+			res := runCIReport(t, ciReportRun{attempt: tc.attempt, pr: pr, needs: platformsNeeds("failure"), latest: latest, all: tc.all})
+			if tc.spared {
+				if res.outputs != "unrun=platforms\n" {
+					t.Errorf("%s, pr %q: outputs = %q, want unrun=platforms", tc.name, pr, res.outputs)
+				}
+				lacks(t, tc.name+" output", res.out, "::error::")
+				continue
+			}
+			if res.outputs != "unrun=\n" {
+				t.Errorf("%s, pr %q: outputs = %q, want unrun empty", tc.name, pr, res.outputs)
+			}
+			wants(t, tc.name+" output", res.out, "::error::"+mac+": cancelled before a runner took it\n")
+		}
+	}
+}
+
 // TestCIReportUnrunJobsAreCIJobs: the names and ids ci.yml gives as
-// UNRUN_JOBS are those of its jobs, so that a renamed job does not
+// UNRUN_JOBS are those of its jobs: the caller Platforms, which calls
+// platforms.yml, and that workflow's jobs, which are all of its jobs, so
+// that the report sees every job of the call; a renamed job would
 // silently fail a pull request again.
 func TestCIReportUnrunJobsAreCIJobs(t *testing.T) {
-	b, err := os.ReadFile(filepath.Join("..", ".github", "workflows", "ci.yml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	ci := string(b)
-	if !strings.Contains(ci, "UNRUN_JOBS: '"+ciUnrunJobs+"'\n") {
+	ci := readWorkflow(t, "ci.yml")
+	if !strings.Contains(ci, "\n  UNRUN_JOBS: '"+ciUnrunJobs+"'\n") {
 		t.Fatalf("ci.yml does not give UNRUN_JOBS as %s", ciUnrunJobs)
 	}
 	var jobs map[string]string
 	if err := json.Unmarshal([]byte(ciUnrunJobs), &jobs); err != nil {
 		t.Fatal(err)
 	}
+	called := workflowJobNames(t, "platforms.yml")
 	for name, id := range jobs {
-		if !strings.Contains(ci, "\n  "+id+":\n    name: "+name+"\n") {
-			t.Errorf("ci.yml has no job %s named %q", id, name)
+		caller, job, ok := strings.Cut(name, " / ")
+		if !ok {
+			t.Errorf("%q is no called workflow's job", name)
+			continue
+		}
+		if !strings.Contains(ci, "\n  "+id+":\n    name: "+caller+"\n") {
+			t.Errorf("ci.yml has no job %s named %q", id, caller)
+		}
+		if !strings.Contains(ci, "\n    name: "+caller+"\n    needs: changes\n") ||
+			!strings.Contains(ci, "    uses: ./.github/workflows/platforms.yml\n") {
+			t.Errorf("ci.yml's %s does not call platforms.yml", id)
+		}
+		if !called[job] {
+			t.Errorf("platforms.yml has no job named %q", job)
 		}
 	}
+	if len(called) != len(jobs) {
+		t.Errorf("platforms.yml's jobs %v, UNRUN_JOBS %v: every job of the call must be one of UNRUN_JOBS", called, jobs)
+	}
+}
+
+// readWorkflow returns the workflow file of .github/workflows given.
+func readWorkflow(t *testing.T, name string) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join("..", ".github", "workflows", name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+// workflowJobNames returns the names of a workflow's jobs, the lines
+// "    name: " that follow a job's id at two spaces.
+func workflowJobNames(t *testing.T, name string) map[string]bool {
+	t.Helper()
+	names := map[string]bool{}
+	lines := strings.Split(readWorkflow(t, name), "\n")
+	jobs := false
+	for i, line := range lines {
+		if line == "jobs:" {
+			jobs = true
+			continue
+		}
+		if !jobs || i+1 >= len(lines) || !strings.HasPrefix(line, "  ") || strings.HasPrefix(line, "   ") ||
+			strings.HasPrefix(line, "  #") || !strings.HasSuffix(line, ":") {
+			continue
+		}
+		if n, ok := strings.CutPrefix(lines[i+1], "    name: "); ok {
+			names[n] = true
+		}
+	}
+	if len(names) == 0 {
+		t.Fatalf("%s has no named jobs", name)
+	}
+	return names
 }
 
 // ciGateLines open the lines of ci.yml's What to test that make the macOS
@@ -729,6 +917,22 @@ func TestCIGatesHoldPlatformFiles(t *testing.T) {
 	if darwinOnly == 0 || windowsOnly == 0 || len(notWin) == 0 {
 		t.Fatalf("%d files for darwin alone, %d for windows alone, %d left out of Windows by name: the walk found too little",
 			darwinOnly, windowsOnly, len(notWin))
+	}
+}
+
+// TestCIGatesHoldTheirWorkflow: a pull request that changes the jobs'
+// own workflow, platforms.yml, or ci.yml, which calls it, runs both; the
+// nightly workflow, which runs them on main alone, runs neither.
+func TestCIGatesHoldTheirWorkflow(t *testing.T) {
+	paths := []string{".github/workflows/platforms.yml", ".github/workflows/ci.yml", ".github/workflows/nightly.yml"}
+	mac, win, _, _ := ciPlatformGates(t, paths)
+	for _, p := range paths[:2] {
+		if !mac[p] || !win[p] {
+			t.Errorf("%s: macOS %v, Windows %v; want both", p, mac[p], win[p])
+		}
+	}
+	if mac[paths[2]] || win[paths[2]] {
+		t.Errorf("%s runs a platform's job", paths[2])
 	}
 }
 

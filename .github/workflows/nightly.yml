@@ -1,36 +1,135 @@
 name: Nightly
 
 # The nightly build, release/nightly: once a day, and by hand with
-# `gh workflow run nightly.yml --ref main`. build.yml's What to release
-# takes the newest commit of main whose run of ci.yml had All tests
-# passed succeed and that is newer than the one the nightly build carries;
-# it runs no tests of its own. build.yml builds it and release.yml signs
-# it with the rolling key and publishes it, as ci.yml does for the devel
-# build; both see this workflow's event, schedule or workflow_dispatch,
-# from which the rolling job admits the flavour nightly alone, and its
-# ref, main, which the signing-rolling environment admits. The site is
-# deployed also for a run that has nothing to build, but for one at a
-# release commit, main's head while its tag's run is still going: that
-# run deploys the same commit, and Pages keeps the first deploy of one.
+# `gh workflow run nightly.yml --ref main`. What to ship
+# (packaging/nightly-pick.sh) takes the newest commit of main whose run of
+# ci.yml had All tests passed succeed and that is newer than the one the
+# nightly build carries, and reads the Tested records of it and of the
+# commits before it: where they say that the macOS or the Windows job did
+# not run for its code, as a push to main records a job no runner took
+# (AP TestSpeed, D16-A), Platforms (platforms.yml) runs that job on the
+# commit first (D15-B). The nightly build ships only once Platforms passed
+# or was not needed (Platforms passed); a job no runner took is run again
+# by Retry (retry.yml), at most twice, about 20 minutes after an attempt,
+# and where none came the night is skipped. build.yml builds the commit
+# and release.yml signs it with the rolling key and publishes it, as
+# ci.yml does for the devel build; both see this workflow's event,
+# schedule or workflow_dispatch, from which the rolling job admits the
+# flavour nightly alone, and its ref, main, which the signing-rolling
+# environment admits. The site is deployed also for a run that has
+# nothing to build, but for one at a release commit, main's head while
+# its tag's run is still going: that run deploys the same commit, and
+# Pages keeps the first deploy of one; and not on a night that is
+# skipped.
+#
+# By hand, dry_run decides and runs the jobs it asks for, and builds,
+# signs and publishes nothing; platforms runs both jobs whatever the
+# records say, on main's head where there is nothing to ship. Both
+# together try Platforms and Retry safely:
+# `gh workflow run nightly.yml --ref main -f dry_run=true -f platforms=true`.
 on:
   schedule:
     - cron: '30 2 * * *'
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Ship nothing: decide, and run the macOS and Windows jobs where needed'
+        type: boolean
+        default: false
+      platforms:
+        description: 'Run the macOS and Windows jobs whatever the Tested records say'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 jobs:
-  # actions: What to release reads ci.yml's runs; id-token and
-  # attestations: the build's provenance.
-  build:
-    name: Build
+  # actions: the runs of ci.yml whose All tests passed succeeded;
+  # statuses: the Tested records. The guidelines for fingerprint.sh.
+  what:
+    name: What to ship
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
       actions: read
+      statuses: read
+    outputs:
+      sha: ${{ steps.what.outputs.sha }}
+      test: ${{ steps.what.outputs.test }}
+      site: ${{ steps.what.outputs.site }}
+      macos: ${{ steps.what.outputs.macos }}
+      windows: ${{ steps.what.outputs.windows }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          submodules: true
+
+      - name: What to ship
+        id: what
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLATFORMS: ${{ inputs.platforms && 'both' || '' }}
+        run: packaging/nightly-pick.sh
+
+  # The macOS and Windows jobs on the commit to ship, where What to ship
+  # asks for them; named Platforms as ci.yml's caller is, so that Retry
+  # knows its jobs by the same names.
+  platforms:
+    name: Platforms
+    needs: what
+    if: ${{ needs.what.outputs.macos == 'true' || needs.what.outputs.windows == 'true' }}
+    uses: ./.github/workflows/platforms.yml
+    with:
+      ref: ${{ needs.what.outputs.test }}
+      windows: ${{ needs.what.outputs.windows == 'true' }}
+      macos: ${{ needs.what.outputs.macos == 'true' }}
+
+  # One check for Platforms, as ci.yml's All tests passed is for its
+  # suite: green where it passed or was not needed; red otherwise, which
+  # skips the night (Build waits for it) and which Retry reads as the
+  # verdict that a job no runner took failed.
+  tested:
+    name: Platforms passed
+    needs: [ what, platforms ]
+    if: ${{ !cancelled() && needs.what.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: The macOS and Windows jobs passed or were not needed
+        env:
+          RESULT: ${{ needs.platforms.result }}
+        run: |
+          echo "Platforms: ${RESULT}"
+          case "$RESULT" in
+          success | skipped) ;;
+          *)
+            echo "::error::the macOS or the Windows job did not pass (${RESULT}): no nightly build tonight; Retry runs a job no runner took again."
+            exit 1
+            ;;
+          esac
+
+  # The commit What to ship picked, once Platforms passed or was not
+  # needed; not on a dry run. id-token and attestations: the build's
+  # provenance; What to release reads no runs. Each job after one that can
+  # be skipped names a status function: GitHub otherwise adds success(),
+  # which is false while any job up the chain was skipped, as Platforms is
+  # on most nights.
+  build:
+    name: Build
+    needs: [ what, tested ]
+    if: ${{ !cancelled() && needs.tested.result == 'success' && !inputs.dry_run }}
+    permissions:
+      contents: read
       id-token: write
       attestations: write
     uses: ./.github/workflows/build.yml
+    with:
+      nightly_sha: ${{ needs.what.outputs.sha }}
+      nightly_site: ${{ needs.what.outputs.site }}
 
   # contents to publish, pages and id-token to deploy the site, actions
   # for the release's jobs that wait for Sign and publish, attestations
@@ -39,6 +138,7 @@ jobs:
   release:
     name: Release
     needs: build
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
     permissions:
       contents: write
       pages: write
