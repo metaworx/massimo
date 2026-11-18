@@ -96,3 +96,14 @@ export function Age({ at, stale, plain }: { at?: string; stale?: boolean; plain?
     </span>
   );
 }
+
+/**
+ * Since says from when a badge's state holds, "since 16.11., 00:41", an
+ * API time, after its text (an item of a problem list); nothing without
+ * a time. Notice says its own since in its line.
+ */
+export function Since({ at }: { at?: string }) {
+  const from = Date.parse(at || "");
+  if (isNaN(from)) return null;
+  return <span class="badge-since">{t("badge.since", { time: fmtShortTime(from) })}</span>;
+}

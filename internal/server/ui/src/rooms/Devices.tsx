@@ -29,7 +29,7 @@ import { Icon } from "../shared/icon";
 import { Island } from "../shared/island";
 import { Problems } from "../shared/problems";
 import { busyProps, useBusy } from "../shared/question";
-import { deviceBadges, deviceItems, problemsLabel, vwtItems } from "./facts";
+import { deviceBadges, deviceItems, mismatchWords, problemsLabel, vwtItems } from "./facts";
 import { load, openSettings, vwtFormKey } from "./store";
 
 /**
@@ -250,7 +250,7 @@ export function DeviceRow({ d, ui, room, actions, children }: {
         <span class="device-badges">
           <Problems entries={[deviceEntry(d, items)]} label={problemsLabel(items)} />
           {(d.mismatches || []).map((m, i) => (
-            <Badge key={"m" + i} kind="warn mismatch-badge" text={t("mismatchBadge." + m.finding, mismatchArgs(m))} title={mismatchText(m)} />
+            <Badge key={"m" + i} kind="warn mismatch-badge" text={mismatchWords(m)} title={mismatchText(m)} />
           ))}
           {deviceBadges(d).map((b) => (
             <Badge key={b.kind + ":" + b.text} kind={b.kind} text={b.text} title={b.kind.includes("stale-badge") && seenLine ? seenLine : undefined}>
