@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
 """Massimo's logo (components.js brandMarks, ui/brand/ from make ui-brand):
-drawn over the word in the header, the full logo at full width and the
-small mark alone under 600 px, in the colours of the mode chosen, on every
-element marked for it; and the word, which a screen reader reads, in view
-where the sprite never comes."""
+drawn over the word in the header, the full logo, the small mark alone
+where the header's row is short, in the colours of the mode chosen, on
+every element marked for it; and the word, which a screen reader reads,
+in view where the sprite never comes."""
 import base64
 
 from helpers import scroll_width, wait_until
@@ -35,28 +35,33 @@ def colour_count(page, locator, rgb, tolerance=40):
     }""", [shot, list(rgb), tolerance])
 
 
-def visible_drawing(case):
-    return ".top .brand-name .brand-mark" if case.width < 600 else ".top .brand-name .brand-logo"
+def visible_drawing(page):
+    """The drawing the header shows: the small mark where its row folds the logo (data-fold)."""
+    folded = "logo" in (page.locator(".top-line").get_attribute("data-fold") or "")
+    return ".top .brand-name .brand-mark" if folded else ".top .brand-name .brand-logo"
 
 
 def test_logo_over_the_word(page, case):
     """The header's logo: the sprite comes and the drawing shows its hands
-    in orange; the full logo at full width, the small mark alone under
-    600 px with the rest of the word for screen readers only; the word the
+    in orange; the full logo, the small mark alone where the row is short
+    with the rest of the word for screen readers only; the word the
     heading's text; the M's colour that of the mode chosen; every element
     marked for it drawn, the letters' overshoot below the box not cut."""
     h1 = page.locator(".top h1.brand-name")
     assert h1.inner_text().replace("\n", "") == "Massimo", "the heading's text is the word"
-    drawing = page.locator(visible_drawing(case))
-    hidden = ".top .brand-name .brand-logo" if case.width < 600 else ".top .brand-name .brand-mark"
-    assert drawing.is_visible() and page.locator(hidden).is_hidden(), "the logo at full width, the mark alone under 600 px"
-    if case.width < 600:
+    assert wait_until(page, "['', 'logo', 'logo cube', 'logo cube pile'].includes(document.querySelector('.top-line').dataset.fold)", 3), \
+        "the row measured"
+    shown = visible_drawing(page)
+    drawing = page.locator(shown)
+    hidden = ".top .brand-name .brand-logo" if shown.endswith("mark") else ".top .brand-name .brand-mark"
+    assert drawing.is_visible() and page.locator(hidden).is_hidden(), "the logo, or the small mark alone"
+    if shown.endswith("mark"):
         width = page.evaluate("document.querySelector('.top .brand-rest').getBoundingClientRect().width")
         assert width <= 1, "the rest of the word for screen readers only"
     assert wait_until(page, "document.querySelectorAll('.top .brand-name svg').length === 2", 5), "the drawings added"
     page.wait_for_timeout(300)
     assert colour_count(page, h1, ORANGE) > 4, "the drawing's hands, the sprite come"
-    m = page.locator(visible_drawing(case) + " use.brand-m")
+    m = page.locator(visible_drawing(page) + " use.brand-m")
     assert m.evaluate("(u) => getComputedStyle(u).fill") == LIGHT_M, "the M's blue on a light page"
     page.evaluate("document.documentElement.dataset.theme = 'dark'")
     assert m.evaluate("(u) => getComputedStyle(u).fill") == DARK_M, "the lighter blue in dark mode"

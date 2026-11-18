@@ -107,18 +107,19 @@ waits while there are any.
 
 ## Header
 
-The header's row reads, from the left:
-Massimo's logo, the M as tall as the page buttons;
-the pile, how long ago the chosen Cube was heard from above a pill
-that starts with the server's sign and shows every Cube's problems;
+The header's row has Massimo's logo at the left, the M as tall as the page buttons;
+at the right, the pile, a pill that starts with the server's sign and shows
+every Cube's problems;
 the Cube choice with the server's connection to the Cube as a plug;
-then, at the right, the house, **Rooms**, and **☰**, the menu of every other page.
+then the house, **Rooms**, and **☰**, the menu of every other page.
 They all end on one line, the logo's baseline and the buttons' lower edge.
-On a screen narrower than 600 px the Cube choice takes the second row to itself,
-and the logo is the mark alone, the M with the clock in its V.
-Where the logo, the pile and the page buttons do not fit the first row,
-the pile takes a line of its own under them, the age at its right.
-Under 331 px the logo goes.
+Where the row is short, it folds step by step, as far as it must:
+first the logo becomes its M, the M with the clock in its V;
+then the Cube choice becomes a button with the Cube's sign,
+whose tooltip names the chosen Cube and which opens the same list;
+then the pile goes to a row of its own under them, at the left.
+The M stays at every width.
+The row is measured as if ↑ were there, so that scrolling never changes how it folds.
 
 The logo lies over the word "Massimo", which a screen reader reads:
 the word shows until the drawing has come (`ui/brand/brand.svg`,
@@ -133,8 +134,7 @@ The header stays at the top while the page scrolls.
 Scrolled, it keeps its rows as they are, the logo too,
 and the lines under them go until the page is back
 at its top, expert mode's line of the Cube's radio budget apart.
-The compacted header has **↑**, back to the top:
-right of the Cube choice from 600 px, left of ☰ below.
+The compacted header has **↑**, back to the top, first of the page buttons: ↑ ⌂ ☰.
 
 - **Cube**:
   a menu that chooses the Cube when the server has several.
@@ -173,19 +173,20 @@ right of the Cube choice from 600 px, left of ☰ below.
   for others the choice's entries cannot be chosen.
   A Cube the server finds by itself appears without reloading the page,
   and in the log.
-- **The pile**, between the logo and the Cube choice:
-  how long ago the chosen Cube was heard from, centred above a pill
-  that starts with the server's sign (below), then
+- **The pile**, before the Cube choice:
+  a pill that starts with the server's sign (below), then
   a green check where nothing is wrong on any Cube; where something is,
   an icon per kind (a Cube's link, the radio, a battery, a window
   open too long, the settings).
   The pill opens a list, whatever is wrong or not.
   Its first item is **Refresh now**, which asks the server for the current state now,
   turns while it asks and leaves the list open;
-  under it, a line each, the times in the browser's time zone:
-  when the chosen Cube was read (the last message the server took from it),
-  when the server last answered the page, and the time now,
-  which moves on each second while the list is open.
+  under it, a row each, a label and its time, the times right-aligned:
+  **Cube read**, how long ago the chosen Cube was read
+  (the last message the server took from it, measured on the server's clock),
+  **Server replied**, how long ago the server last answered the page,
+  each "14 sec ago" in the page's language with its time of day as its tooltip,
+  and **Current time** in the browser's time zone; they move on each second.
   While the server's sign offers something to do,
   that is the list's second item: **Software update** with the version,
   or the reload for the server's new version.
@@ -205,17 +206,14 @@ right of the Cube choice from 600 px, left of ☰ below.
   for a proxy the Cube it serves, and the Massimo server serving it,
   its name a link to the address its announcement on the network gives.
   A window open briefly is not listed: it is a state, not a problem.
-  Its list, as every menu of the page, opens inside the window,
+  Its list is as wide as its entries need, up to the page's width,
+  and, as every menu of the page, opens inside the window,
   no higher than the room below it, and scrolls in itself, not the page.
   An open list stays open when data comes in, and follows it:
   a problem that comes is listed, one that goes leaves the list,
   until nothing is left to list and the list says so, the green check in the pill.
-- **How long ago the chosen Cube was heard from**, above the pill:
-  "8 sec" since the server last took a message from the Cube,
-  measured on the server's clock,
-  counting on by itself, each second under a minute, then each minute, each hour;
-  the time itself is under Refresh now.
-- **The version** is ☰'s first row, short and small; its tooltip is the whole version,
+- **The version** is ☰'s first row, short and small, after Massimo's icon,
+  a rule under it; its tooltip is the whole version,
   "(server version)", and a click copies it.
   Signed out, when there is no ☰, it stands beside the logo.
   The Cube's clock is in the Cube's facts, under System settings → **Cubes**:
@@ -264,8 +262,7 @@ right of the Cube choice from 600 px, left of ☰ below.
   a page opened for the first time starts at its top.
 - **↑**, round and filled in the accent's blue at the bottom right,
   shows on every page once it is a screen down,
-  and another ↑ in the compacted header, right of the Cube choice from 600 px,
-  left of ☰ below;
+  and another ↑ in the compacted header, first of the page buttons;
   each takes the page back to its top,
   the focus on the page's sections menu where it has one.
 - **The server's sign**, first in the pile's pill,
@@ -277,10 +274,12 @@ right of the Cube choice from 600 px, left of ☰ below.
   (the list's second item reloads the page);
   the open plug, blinking, the pill filled red, after a poll without an answer:
   the page's other signs are greyed, their state not known,
-  the age is that of the last update, and the page tries again at every poll.
+  Cube read says how long ago the last update came,
+  and the page tries again at every poll.
   After an update the page reloads by itself only when nothing is open:
   no setting being edited, no panel and none of the settings pages.
 - In expert mode a line under the first shows the chosen Cube's name,
+  how long ago it was read and the server replied, as under Refresh now,
   its duty cycle, free slots and radiograms pending,
   and the commands queued while there are any.
   The server's facts are in ☰ → **System info**,
@@ -1729,7 +1728,7 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `Island` | `island.tsx` | a plain piece inside a part: an element the part draws empty and plain code fills, again where a key or the language changed | `tag` (div, p, span), `cls`, `keys`, `fill(el)` |
 | `Fold`, `FoldHead` | `fold.tsx` | a details that opens and closes (`detailsPanel`), the toggle of its making not passed on; a panel's head | `cls`, `open`, `onToggle(open)`, `summary`, `summaryProps`, `data`, the body as children; `before`, `name`, `mono`, `badges` |
 | `Dropdown` | `menu.tsx` | a menu that drops down (`dropdown`), with `arrows` its arrow keys (`menuArrows`) and with `focusCurrent` the focus on its current item when it opens (among `arrows`' items, else its list's buttons that are on); a click on any button of its list closes it, as `dropdown()` of `components.js` does for every menu of the page, but on one marked `data-keep-open` (`MenuItem`'s `keepOpen`) | `id`, `cls`, `summaryId`, `summaryCls`, `label` (without it the summary is named by its text), `title` (where the tooltip is not the label), `summary`, `listCls`, `arrows` (a selector of its items), `focusCurrent`, `busy` (the summary turning while a request sent from its list runs), `onClick`, `onOpen` (told each time it opens), `onClose` (told each time it closes), the items as children |
-| `MenuItem` | `menu.tsx` | a menu's button, its icon, label, the icons after it and a grey second line (`menuItem`) | `icon`, `blank`, `label`, `icons`, `sub` (the second line, there whenever given, empty too), `subCls` (its class), `cls`, `value` (its `data-value`), `current`, `disabled`, `busy`, `keepOpen` (a click on it leaves the menu open, for an item whose result shows in the list), `onClick` |
+| `MenuItem` | `menu.tsx` | a menu's button, its icon, label, the icons after it and a grey second line (`menuItem`) | `icon`, `blank`, `label`, `icons`, `sub` (the second line, a text or elements, there whenever given, empty too), `subCls` (its class), `cls`, `value` (its `data-value`), `current`, `disabled`, `busy`, `keepOpen` (a click on it leaves the menu open, for an item whose result shows in the list), `onClick` |
 | `Picker` | `menu.tsx` | a menu that chooses one item, its summary the chosen one (`pickerMenu`) | `id`, `cls`, `summaryId`, `summaryCls`, `entries` (an item `{ value, label, sub, icon, icons, disabled }`, `{ group }` or `{ separator: true }`), `value`, `onPick(value)`, `shown` (`{ icon, label, title, aria }`) |
 | `actionRunner`, `fader` | `action.ts` | a request, a reload, and its outcome (`Outcome`, `{ text, ok }`) in the region's message line (`showResult`) or in a part's state that a `ResultLine` draws, a success fading where a fade is given; `fader` is that fade alone, for a result set by other means | `where()`, `set(res)`, `fade` (ms), `reload()`; gives `run(fn, ok, fail)`, `say(text, ok)`; `set`, `ms` |
 | `Icon` | `icon.tsx` | a symbol of the page (`iconEl`) | `symbol`, `cls`, `mark` (the symbol is a mark, which blinks where the style makes it) |
@@ -1883,18 +1882,23 @@ and the devices loaded for the hide choice;
 so in the panel head's pill and in the header's entry of the Cube),
 and `index.tsx` forgets a Cube's form when the list no longer gives the Cube.
 The header (`ui/src/header/`) is the second:
-`index.tsx` draws the pile in `#header-pile` (`Pile.tsx`: the chosen Cube's age,
-`Updated.tsx`, above every Cube's problems, `CubeProblems.tsx`,
-led by the server's sign, `ServerSign.tsx`, with Refresh now and the times),
-the Cube choice in `#header-cube`, the certificate's line in `#tls-slot`
+`index.tsx` draws the pile in `#header-pile` (`Pile.tsx`: every Cube's problems,
+`CubeProblems.tsx`, led by the server's sign, `ServerSign.tsx`,
+with Refresh now and the reads' times, `Times.tsx`),
+the Cube choice in `#header-cube`, the reads' times of expert mode's line
+in `#header-times`, the certificate's line in `#tls-slot`
 and the home notice inside `#home-notice`, and registers `render` and `tls`,
 which `header.js` calls as `renderCubeSelect`, `renderUpdated`, `renderServerSign`
 and `renderTLS`, and `home.js` as `renderHomeNotice`;
 `store.ts` holds its counter, the search under way and the certificate,
-`send.ts` the search.
+`send.ts` the search,
+and `clock.ts` the header's one clock, a signal that moves on each second,
+which every time the header shows reads,
+and `fmtAgo`, how long ago in the page's language;
+`fold.ts` measures the row and folds it where it is short (`data-fold` on `.top-line`).
 The choice is a `Picker`, the problems a `Problems` with `lead`, `always` and `head`,
-Refresh now a `MenuItem` with `keepOpen`, the certificate's line a `Notice`.
-The pile measures in an effect whether it needs a line of its own (`data-line`).
+Refresh now a `MenuItem` with `keepOpen` and its times as `sub`,
+the certificate's line a `Notice`.
 The logo, the version (in ☰, and beside the logo while signed out) and ↑ stay plain,
 around the parts' places and not in them,
 and the home notice's place is shown and hidden by the plain code (and by `pages.js`),

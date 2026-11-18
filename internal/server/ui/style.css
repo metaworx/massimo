@@ -107,48 +107,44 @@ body:not(.expert) .expert-only { display: none !important; }
   border-bottom: 1px solid var(--line);
   margin-bottom: 16px;
 }
-/* The row, a grid on its lower edge, where the logo's letters stand (the
-   drawing's bottom edge is their baseline) and the buttons end: the logo,
-   the pile (the chosen Cube's age above every Cube's problems, led by the
-   server's sign; ui/src/header/Pile.tsx), the Cube choice, ↑ beside it
-   while compacted, and the pages at the right. Below 600 px the Cube
-   choice has the second row to itself, compacted too; where the logo, the
-   pile and the pages do not fit the first, the pile takes a line of its
-   own, the age at its right (Pile.tsx measures it). Under 331 px the logo
-   goes. */
+/* The row on its lower edge, where the logo's letters stand (the
+   drawing's bottom edge is their baseline) and the buttons end: the logo
+   at the left; the pile (every Cube's problems, led by the server's sign;
+   ui/src/header/Pile.tsx), the Cube choice and the pages ↑ ⌂ ☰ at the
+   right. Where it is short it folds, step by step, as
+   ui/src/header/fold.ts measures it (data-fold): "logo" the M in the
+   logo's place, "cube" the Cube choice a cube button, "pile" the pile on
+   the next row, at the left; "measure" the items at their whole widths,
+   for the measure alone. */
 .top-line {
-  display: grid;
-  grid-template-columns: auto auto minmax(0, auto) auto minmax(0, 1fr) auto;
-  grid-template-areas: "brand pile cube up . nav";
-  align-items: end;
+  display: flex;
+  align-items: flex-end;
   gap: 8px 16px;
   width: 100%;
 }
-.top-line > .brand { grid-area: brand; }
-.top-line .pile { grid-area: pile; }
-.top-line > .cube { grid-area: cube; min-width: 0; }
-.top-line > .top-btn-wide { grid-area: up; }
-.top-line > .nav { grid-area: nav; justify-self: end; }
-@media (max-width: 599px) {
-  .top-line { grid-template-columns: auto auto minmax(0, 1fr) auto; grid-template-areas: "brand pile . nav" "cube cube cube cube"; }
-  .top-line:has(.pile[data-line="own"]) { grid-template-areas: "brand . . nav" "pile pile pile pile" "cube cube cube cube"; }
-  .top-line > .top-btn-wide { display: none !important; }
+.top-line > .brand { flex: 0 1 auto; margin-right: auto; }
+.top-line .pile, .top-line > .nav { flex: none; }
+.top-line > .cube { flex: 0 1 auto; min-width: 0; }
+.top-line[data-fold="measure"] > .brand, .top-line[data-fold="measure"] > .cube { flex: none; }
+.top-line[data-fold~="logo"] .brand-name { min-width: calc(var(--brand-h) * var(--brand-mark-ratio, 1.09)); }
+.top-line[data-fold~="logo"] .brand-name .brand-logo { display: none; }
+.top-line[data-fold~="logo"] .brand-name .brand-mark { display: block; }
+.top-line[data-fold~="logo"] .brand-rest {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
-@media (max-width: 330px) {
-  .top-line > .brand { display: none; }
-  .top-line { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "pile . nav" "cube cube cube"; }
-  .top-line:has(.pile[data-line="own"]) { grid-template-areas: ". . nav" "pile pile pile" "cube cube cube"; }
-}
-/* The pile: the age centred above the pill, its digits of one width so
-   that it does not move as it counts; on a line of its own the age at the
-   pill's right. */
-.pile { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
-.pile[data-line="own"] { flex-direction: row; justify-self: start; gap: 10px; }
-.pile[data-line="own"] > .pile-age { order: 2; }
+.top-line[data-fold~="cube"] .cube-choice > :not(.picker-icon) { display: none; }
+.top-line[data-fold~="cube"] .menu.cube-menu > summary { width: 40px; padding: 0; justify-content: center; }
+.top-line[data-fold~="pile"] { flex-wrap: wrap; }
+.top-line[data-fold~="pile"] .pile { order: 1; flex: 0 0 100%; }
+.pile { display: inline-flex; min-width: 0; }
 /* the pill a block of its own, so that no line box adds a descender's
    room under it: its lower edge is the row's */
 .pile .menu.problems > summary.problems-sum { display: flex; }
-.pile-age { min-height: 1em; color: var(--muted); font-size: 0.8rem; line-height: 1; font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* The server's sign, first in the pill: its state's colour; red fills
    the pill, its icon blinking as a failure's mark does */
 .problems-sum .server-icon { color: var(--ok); stroke-width: 2; }
@@ -156,13 +152,20 @@ body:not(.expert) .expert-only { display: none !important; }
 .problems-sum .server-icon.state-new { color: var(--warn-mark); }
 .pile[data-server="down"] .menu.problems > summary.problems-sum { background: var(--fill-bad); border-color: var(--fill-bad); color: var(--fill-fg); }
 .pile[data-server="down"] .problems-sum .server-icon { color: var(--fill-fg); }
-/* Refresh now: its three times under it, a line each */
-.refresh-times { white-space: pre-line; font-variant-numeric: tabular-nums; }
-/* ☰'s first row: the server's version, small, which copies itself */
-.menu-version { margin: 2px 10px 6px; color: var(--muted); }
-.menu-version #version-short { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* the version beside the logo, while signed out alone (☰ is not there) */
-.brand .version-out { display: none; }
+/* Refresh now: its times under it, a label and its time a row, the
+   times right-aligned (Times.tsx) */
+.read-times { display: grid; grid-template-columns: auto auto; gap: 0 12px; font-variant-numeric: tabular-nums; }
+.read-times > :nth-child(even) { text-align: right; white-space: nowrap; }
+/* ☰'s first row: Massimo's icon and the server's version, small, which
+   copies itself; a rule under it */
+.menu-version { display: flex; align-items: center; gap: 8px; margin: 2px 10px 0; color: var(--muted); }
+.menu-version #version-short { display: block; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.menu-brand { --brand-cover: var(--card); display: inline-grid; flex: none; }
+.menu-brand > svg { grid-area: 1 / 1; height: 16px; overflow: visible; }
+.menu-brand .brand-logo { display: none; }
+/* the version beside the logo, while signed out alone (☰ is not there);
+   under it where the row is short */
+.brand .version-out { display: none; overflow-wrap: anywhere; }
 body.signed-out .brand .version-out { display: inline; }
 /* the page's other signs greyed while the server is gone: their state is
    not known */
@@ -172,7 +175,6 @@ body.server-down .pile .problems-sum > :not(.server-icon) { filter: grayscale(1)
    nothing of the page or of the last session. */
 body.signed-out .top-line .pile,
 body.signed-out .top-line > .cube,
-body.signed-out .top-line > .top-btn-wide,
 body.signed-out .top-line > .nav,
 body.signed-out header.top > :not(.top-line),
 body.signed-out main,
@@ -242,15 +244,16 @@ button.copy-icon .ni { width: 16px; height: 16px; }
 .nav-menu .menu-items { width: max-content; min-width: 200px; max-width: min(320px, calc(100vw - 32px)); }
 .ni { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .icon-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
-.brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.brand { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 10px; min-width: 0; }
 /* Massimo's logo over the word (components.js brandMarks; its colours and
    proportions in brand.css, make ui-brand): the word in the box the logo
    takes, under the drawing's cover once the sprite has come, in view until
    then and where it never comes; the cover the place's background
-   (--brand-cover, else --bg). Under 600 px the header has the small mark
-   alone, over the word's M, the rest of the word for screen readers.
-   Both drawings are tight (brand.svg): their bottom edge is the letters'
-   baseline, and the place's; the M as tall as the page buttons. */
+   (--brand-cover, else --bg). In the header the small mark takes the
+   logo's place where the row is short (data-fold "logo"), over the word's
+   M, the rest of the word for screen readers. Both drawings are tight
+   (brand.svg): their bottom edge is the letters' baseline, and the
+   place's; the M as tall as the page buttons. */
 .brand-name {
   --brand-h: 36px;
   display: inline-grid;
@@ -270,19 +273,6 @@ button.copy-icon .ni { width: 16px; height: 16px; }
 .brand-name svg { height: var(--brand-h); overflow: visible; }
 .brand-name .brand-mark { display: none; }
 .brand-big { --brand-h: 3rem; --brand-cover: var(--card); display: grid; justify-content: center; margin: 2px 0 14px; font-size: 2.6rem; }
-@media (max-width: 599px) {
-  .top .brand-name { min-width: calc(var(--brand-h) * var(--brand-mark-ratio, 1.09)); }
-  .top .brand-name .brand-logo { display: none; }
-  .top .brand-name .brand-mark { display: block; }
-  .top .brand-rest {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-}
 .cube { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 100%; }
 /* The Cube choice, a menu of the page (ui/src/header/Choice.tsx): closed
    the chosen Cube's plug and name, open as wide as its entries need, each
@@ -308,10 +298,6 @@ button.copy-icon .ni { width: 16px; height: 16px; }
 .picker-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cube-menu .caret { width: 16px; height: 16px; flex: none; margin-left: auto; color: var(--muted); }
 .cube-menu .menu-items { left: 0; right: auto; width: max-content; min-width: 100%; max-width: min(440px, calc(100vw - 32px)); }
-@media (max-width: 599px) {
-  .cube-menu { flex: 1 1 160px; }
-  .menu.cube-menu > summary { width: 100%; max-width: 100%; }
-}
 /* a Cube's network sign (header.js cubeSignEl): its link's state, the colour
    of its tone over the list's muted icons */
 .ni.conn-sign { width: 18px; height: 18px; }
@@ -733,11 +719,8 @@ body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8p
 }
 .icon-btn.to-top:hover, .icon-btn.to-top:focus-visible { background: color-mix(in srgb, var(--accent) 85%, var(--fg)); }
 .top-btn { display: none; }
-/* ↑ beside the Cube choice from 600 px, left of ☰ below (backToTop) */
-body.scrolled .top-btn-wide { display: inline-flex; }
-@media (max-width: 599px) {
-  body.scrolled .nav .top-btn { display: inline-flex; }
-}
+/* ↑ first of the pages while the header is compacted (backToTop) */
+body.scrolled .nav .top-btn { display: inline-flex; }
 @media (prefers-reduced-motion: reduce) {
   .fold-i { transition: none; }
 }
@@ -1143,7 +1126,7 @@ button.subtle { color: var(--muted); }
    name. */
 .menu.problems { flex: none; }
 .cube-problems { display: inline-flex; }
-.cube-problems .problems-list { left: 0; right: auto; } /* the pile at the header's left: the list opens to the right */
+.cube-problems .problems-list { width: max-content; max-width: calc(min(100vw, 1100px) - 32px); } /* as wide as its content, up to the page's width (the body's, less its gutters) */
 .menu.problems > summary.problems-sum {
   display: inline-flex;
   align-items: center;

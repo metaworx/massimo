@@ -68,9 +68,9 @@ function noteServerClock(resp) {
   if (Math.abs(skew - serverSkew) > 1500) serverSkew = skew;
 }
 
-// renderUpdated draws the chosen Cube's age above the header's pile
-// (ui/src/header/Pile.tsx), which counts on by itself; the time itself is
-// in the pile's list, under Refresh now.
+// renderUpdated draws again how long ago the chosen Cube was read, in the
+// pile's list under Refresh now and in expert mode's radio budget line
+// (ui/src/header/Times.tsx), which count on by the header's clock.
 function renderUpdated() {
   MassimoParts.header.render();
 }

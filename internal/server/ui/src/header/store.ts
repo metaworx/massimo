@@ -18,7 +18,7 @@ import { live } from "../shared/live";
 
 /**
  * The header's load counter: bumped at every load of the Cubes' list, of
- * the server's state and of the chosen Cube's age (renderCubeSelect,
+ * the server's state and of the chosen Cube's last read (renderCubeSelect,
  * renderServerSign, renderUpdated, renderHomeNotice); every header part
  * uses it.
  */

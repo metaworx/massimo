@@ -1,3 +1,3 @@
-- The web UI's header: the server's sign and the Cube's age join the
-  problem pile before the Cube choice, whose list has Refresh now, and
-  the version moves into ☰ (docs/ui.md, "Header").
+- The web UI's header: the logo, then the pile led by the server's sign,
+  with Refresh now and the reads' times, the Cube choice and ↑ ⌂ ☰; it
+  folds where it is short; the version in ☰ (docs/ui.md, "Header").

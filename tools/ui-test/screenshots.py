@@ -124,6 +124,7 @@ PAGES = {
     "log": None,                                    # its lines run the full width
     "me": None,                                     # the personal page, ☰'s, at its top
     "cube-choice": None,                            # the Cube choice open over the rooms
+    "pile-list": None,                              # the pile's list open: Refresh now with the reads' times, the problems
     "profile": "#profile",                          # My profile, the owner's with keys only
     "prefs": "#prefs",                              # My settings
     "notify": "#notify",                            # Notifications, this browser not notified
@@ -148,7 +149,7 @@ WIDE = [p for p in PAGES if not p.startswith("header")]
 SETS = [
     (1100, "light", "en", WIDE),
     (1100, "dark", "en", WIDE),
-    (390, "light", "en", ["rooms", "nav-menu", "cube-choice", "prefs", "cube-settings", "system", "maintenance", "system-info"]),
+    (390, "light", "en", ["rooms", "nav-menu", "cube-choice", "pile-list", "prefs", "cube-settings", "system", "maintenance", "system-info"]),
     (1100, "light", "de", ["rooms"]),
     # the header at each width: wide, wide compacted, medium, phone and
     # very narrow compacted (AP GlobalMenu, Block 12)
@@ -401,6 +402,9 @@ def step(page, which):
         page.locator("#scheme-customise").click()
         page.locator("#scheme-editor").wait_for(state="visible")
         to_top(page, page.locator("#prefs .appearance"))
+    elif which == "pile-list":
+        page.locator("#cube-problems .problems-sum").click()
+        page.locator("#cube-problems .problems-list").wait_for(state="visible")
     elif which == "cube-found":
         page.locator("#cube-problems .problems-sum .found-count").wait_for(state="visible")
     elif which == "cubes":
