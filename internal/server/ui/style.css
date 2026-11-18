@@ -125,6 +125,10 @@ body:not(.expert) .expert-only { display: none !important; }
 .top-line > .brand { flex: 0 1 auto; margin-right: auto; }
 .top-line .pile, .top-line > .nav { flex: none; }
 .top-line > .cube { flex: 0 1 auto; min-width: 0; }
+/* the Cube choice one of the pages' group, as far from ↑ ⌂ ☰ as they
+   are from each other (4 px, .nav's gap): the row's 16 px less 12;
+   fold.ts measures the distance as it is */
+.top-line > .cube { margin-right: -12px; }
 .top-line[data-fold="measure"] > .brand, .top-line[data-fold="measure"] > .cube { flex: none; }
 .top-line[data-fold~="logo"] .brand-name { min-width: calc(var(--brand-h) * var(--brand-mark-ratio, 1.09)); }
 .top-line[data-fold~="logo"] .brand-name .brand-logo { display: none; }
@@ -275,8 +279,8 @@ button.copy-icon .ni { width: 16px; height: 16px; }
 .brand-big { --brand-h: 3rem; --brand-cover: var(--card); display: grid; justify-content: center; margin: 2px 0 14px; font-size: 2.6rem; }
 .cube { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 100%; }
 /* The Cube choice, a menu of the page (ui/src/header/Choice.tsx): closed
-   the cube, the chosen Cube's name and its sign, open as wide as its
-   entries need, each the cube, the name, its sign and its problems' icons
+   the cube in the link's colour and the chosen Cube's name, open as wide
+   as its entries need, each the cube, the name, its sign and its problems' icons
    and under it the serial and the address. */
 .cube-menu { position: relative; min-width: 0; }
 .menu.cube-menu > summary {
@@ -296,17 +300,15 @@ button.copy-icon .ni { width: 16px; height: 16px; }
 .menu.cube-menu > summary:hover, .menu.cube-menu[open] > summary { border-color: var(--accent); }
 .picker-icon { display: inline-flex; flex: none; }
 .picker-icon:empty { display: none; }
-/* after the chosen item's name, its icons: a Cube's sign (Choice.tsx) */
-.picker-icons { display: inline-flex; align-items: center; gap: 4px; flex: none; }
 .picker-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cube-menu .caret { width: 16px; height: 16px; flex: none; margin-left: auto; color: var(--muted); }
 .cube-menu .menu-items { left: 0; right: auto; width: max-content; min-width: 100%; max-width: min(440px, calc(100vw - 32px)); }
 /* a Cube's network sign (header.js cubeSignEl): its link's state, the colour
    of its tone */
 .ni.conn-sign { width: 18px; height: 18px; }
-.ni.conn-sign.tone-ok { color: var(--ok); }
-.ni.conn-sign.tone-warn { color: var(--warn-mark); }
-.ni.conn-sign.tone-bad { color: var(--bad); }
+.ni.conn-sign.tone-ok, .ni.cube-icon.tone-ok { color: var(--ok); }
+.ni.conn-sign.tone-warn, .ni.cube-icon.tone-warn { color: var(--warn-mark); }
+.ni.conn-sign.tone-bad, .ni.cube-icon.tone-bad { color: var(--bad); }
 /* a menu item of two lines (components.js menuItem), a group's heading,
    a separator, the item chosen */
 .menu-item-text { display: flex; flex-direction: column; min-width: 0; }

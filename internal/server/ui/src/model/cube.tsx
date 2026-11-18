@@ -40,11 +40,13 @@ export function CubeSign({ c, cls }: { c: Cube; cls?: string }) {
 
 /**
  * CubeIcon is what is before a Cube's name: the cube, in the text's
- * colour, grey in a menu's list; its state is its sign's (CubeSign). A
- * blue cube is the sign of the Cubes found and not served.
+ * colour, grey in a menu's list, its state its sign's (CubeSign); with
+ * state, a link's state (linkSign), in that state's colour, as the
+ * header's Cube choice shows it in place of the sign (AP GlobalMenu,
+ * D201-A). A blue cube is the sign of the Cubes found and not served.
  */
-export function CubeIcon() {
-  return <Icon symbol="icon-cube3d" cls="ni cube-icon" />;
+export function CubeIcon({ state }: { state?: string } = {}) {
+  return <Icon symbol="icon-cube3d" cls={"ni cube-icon" + (state ? " tone-" + state : "")} />;
 }
 
 /**

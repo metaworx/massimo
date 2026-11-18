@@ -193,16 +193,21 @@ def test_save_is_off_until_a_change_and_turns(page, case):
 
 
 def test_cube_choice_menu(page, case):
-    """The Cube choice is a menu of the page: closed the cube, the chosen
-    Cube's name and its network sign after it, its tooltip the serial,
-    address and link; open the cube, the name, the sign after it and under
-    it the serial and address per Cube, the chosen
+    """The Cube choice is a menu of the page: closed the cube in the
+    link's colour and the chosen Cube's name, no sign, its tooltip the
+    serial, address and link, its name for a screen reader the link too;
+    open the cube, the name, the sign after it and under it the serial and
+    address per Cube, the chosen
     one marked and focused, the arrow keys moving between the entries;
     choosing the Cube shown closes it and keeps it."""
     summary = page.locator("#cube-choice")
-    assert summary.locator(".picker-icon .cube-icon").count() == 1, "the cube before the name"
-    assert summary.locator(".picker-icons .conn-sign.tone-ok").count() == 1, "the chosen Cube connected, a green network sign after it"
-    assert summary.locator(".conn-sign").get_attribute("aria-label"), "the sign named for a screen reader"
+    assert summary.locator(".picker-icon .cube-icon.tone-ok").count() == 1, "the chosen Cube connected: the cube before the name, green"
+    assert summary.locator(".conn-sign").count() == 0, "no network sign in the closed choice"
+    link = page.evaluate("linkWord(state.cubes.find((c) => c.serial === 'KEQ0000100'))")
+    assert link in (summary.get_attribute("aria-label") or ""), "the link named for a screen reader"
+    green = page.evaluate("getComputedStyle(document.querySelector('#cube-choice .cube-icon')).color")
+    assert green == page.evaluate("(() => { const p = document.createElement('i'); p.style.color = 'var(--ok)'; document.body.appendChild(p);"
+                                  " const c = getComputedStyle(p).color; p.remove(); return c; })()"), f"in the link's colour: {green}"
     title = summary.get_attribute("title") or ""
     assert "KEQ0000100" in title and "127.0.0.1" in title, f"the tooltip has the serial and the address ({title!r})"
     summary.click()

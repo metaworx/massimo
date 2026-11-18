@@ -53,8 +53,8 @@ def test_to_top_on_every_page(page, case):
 
 def test_to_top_in_the_compacted_header(page, case):
     """The header's ↑ shows while the header is compacted, first of the
-    pages, ↑ 🏠 ☰, after the Cube choice, level with them, at every
-    width, and takes the page to its top."""
+    pages, ↑ 🏠 ☰, after the Cube choice and as near to it as to 🏠, level
+    with them, at every width, and takes the page to its top."""
     btn = page.locator("#top-btn")
     long_page(page, "rooms")
     try:
@@ -67,6 +67,8 @@ def test_to_top_in_the_compacted_header(page, case):
         h = page.locator("#view-tiles").bounding_box()
         assert c["x"] + c["width"] <= b["x"] and b["x"] + b["width"] <= h["x"] and abs(b["y"] - h["y"]) <= 1, \
             f"after the Cube choice, before 🏠, level with it: {b} vs {c}, {h}"
+        near = (b["x"] - (c["x"] + c["width"]), h["x"] - (b["x"] + b["width"]))
+        assert abs(near[0] - near[1]) <= 1, f"the Cube choice as near to ↑ as ↑ to 🏠 (AP GlobalMenu, D199-A): {near}"
         btn.click()
         assert wait_until(page, "window.scrollY === 0", 3), "↑ takes the page to its top"
         assert wait_until(page, "!document.body.classList.contains('scrolled')", 3), "the header whole again"
