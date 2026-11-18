@@ -20,6 +20,7 @@ import (
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/testkit"
+	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 )
 
 const fixture = "../protocol/cube/testdata/cube-fw0113-greeting.txt"
@@ -176,6 +177,8 @@ func TestPlanAndRestore(t *testing.T) {
 		t.Fatalf("portal plan %+v", p2.Steps)
 	}
 
+	lines := cubewatch.Lines(srv)
+	m := lines.Mark()
 	q := engine.NewQueue(c, engine.Options{Gap: time.Millisecond})
 	go q.Run(ctx)
 	res, err := p.Run(ctx, cubeio.Writer{Client: c, Queue: q}, nil)
@@ -185,11 +188,10 @@ func TestPlanAndRestore(t *testing.T) {
 	if len(res) != 4 {
 		t.Fatalf("results %+v", res)
 	}
+	// Each line was received before its answer, which Run waited for.
 	var got []string
-	for _, m := range srv.Received() {
-		if m.Type != 'l' {
-			got = append(got, m.String())
-		}
+	for _, l := range lines.Since(m, cubewatch.Except('l')) {
+		got = append(got, l.String())
 	}
 	want := []string{"f:pool.ntp.org", "v:", "m:00,", "z:1e,G,06", "s:AARAAAAACgENBmY=", "s:"}
 	if len(got) != 7 {

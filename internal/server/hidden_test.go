@@ -15,6 +15,7 @@ import (
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/testkit"
+	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
@@ -76,8 +77,8 @@ func TestHiddenDevicesInvisible(t *testing.T) {
 			t.Fatalf("%s: %d, want 404", c.path, resp.StatusCode)
 		}
 	}
-	if len(fc.Received()) != 0 {
-		t.Fatalf("commands reached the cube: %v", fc.Received())
+	if got := cubewatch.Lines(fc).Since(0, cubewatch.Except('l')); len(got) != 0 {
+		t.Fatalf("commands reached the cube: %v", got)
 	}
 	resp, _ := http.Get(ts.URL + "/api/v1/cubes/KEQ0000100/backup?format=json")
 	body := make([]byte, 64<<10)

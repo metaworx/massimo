@@ -5,12 +5,12 @@ package engine
 
 import (
 	"context"
-	"log/slog"
-	"strings"
 	"sync"
 	"testing"
 
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/testkit"
+	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 )
 
 // The resets of the flagged devices a command's direct lines address
@@ -57,27 +57,27 @@ func strs(lines ...cube.Message) []string {
 // the reset with the device; a flagged device the command does not
 // address is left alone.
 func TestQueueResetsAFlaggedAddressee(t *testing.T) {
-	var log syncBuffer
-	srv, q, _ := setup(t, Options{Logger: slog.New(slog.NewTextHandler(&log, nil))},
+	logger, logs := testkit.LogWatch(nil)
+	srv, q, _ := setup(t, Options{Logger: logger},
 		room3(t, map[cube.RFAddress][2]byte{0x0a0109: {0x08, 0}, 0x0a010d: {0x08, 0}}))
+	lines := cubewatch.Lines(srv)
 	cmd := roomConfigWrite(t)
 	if res := q.Enqueue(cmd).Wait(context.Background()); res.Err != nil || res.Retried {
 		t.Fatalf("result %+v", res)
 	}
-	sameSent(t, received(srv), append([]string{"z:1e,G,03", "r:01,CgEJ"}, strs(cmd.Lines...)...))
-	if want := `msg="communication error reset before a command" device=0a0109 room=3`; !strings.Contains(log.String(), want) {
-		t.Errorf("log lacks %q:\n%s", want, log.String())
-	}
+	sameSent(t, lines, append([]string{"z:1e,G,03", "r:01,CgEJ"}, strs(cmd.Lines...)...))
+	logs.Has(t, 0, "the reset of 0a0109", testkit.Msg("communication error reset before a command", "device", "0a0109", "room", "3"))
 }
 
 // An addressee with the link error (0x40) alone is not reset (D111-A).
 func TestQueueLeavesAnAddresseesLinkErrorAlone(t *testing.T) {
 	srv, q, _ := setup(t, Options{}, room3(t, map[cube.RFAddress][2]byte{0x0a0109: {0, 0x40}}))
+	lines := cubewatch.Lines(srv)
 	cmd := roomConfigWrite(t)
 	if res := q.Enqueue(cmd).Wait(context.Background()); res.Err != nil {
 		t.Fatal(res.Err)
 	}
-	sameSent(t, received(srv), append([]string{"z:1e,G,03"}, strs(cmd.Lines...)...))
+	sameSent(t, lines, append([]string{"z:1e,G,03"}, strs(cmd.Lines...)...))
 }
 
 // A direct line the Cube discards is retried once, after its flagged
@@ -86,6 +86,7 @@ func TestQueueLeavesAnAddresseesLinkErrorAlone(t *testing.T) {
 // thermostats.
 func TestQueueRetriesADiscardedDirectLine(t *testing.T) {
 	srv, q, _ := setup(t, Options{}, room3(t, map[cube.RFAddress][2]byte{0x0a0109: {0x08, 0}}))
+	lines := cubewatch.Lines(srv)
 	to08, to09 := directLines(t, 0x0a0108)[0], directLines(t, 0x0a0109)[0]
 	var mu sync.Mutex
 	discarded := false
@@ -102,7 +103,7 @@ func TestQueueRetriesADiscardedDirectLine(t *testing.T) {
 	if res.Err != nil || res.Discarded || !res.Retried {
 		t.Fatalf("result %+v", res)
 	}
-	sameSent(t, received(srv), []string{"z:1e,G,03", "r:01,CgEJ", to08.String(), to09.String(), "r:01,CgEJ", to09.String()})
+	sameSent(t, lines, []string{"z:1e,G,03", "r:01,CgEJ", to08.String(), to09.String(), "r:01,CgEJ", to09.String()})
 }
 
 // An addressee the command resets otherwise is not reset twice: the
@@ -113,26 +114,29 @@ func TestQueueResetsAnAddresseeOnce(t *testing.T) {
 	lines := directLines(t, 0x0a0109)
 
 	srv, q, _ := setup(t, Options{}, room3(t, flagged))
+	sent := cubewatch.Lines(srv)
 	if res := q.Enqueue(Command{Target: 0x0a0109, Lines: lines}).Wait(context.Background()); res.Err != nil {
 		t.Fatal(res.Err)
 	}
-	sameSent(t, received(srv), append([]string{"r:01,CgEJ"}, strs(lines...)...))
+	sameSent(t, sent, append([]string{"r:01,CgEJ"}, strs(lines...)...))
 
 	srv, q, _ = setup(t, Options{}, room3(t, flagged))
+	sent = cubewatch.Lines(srv)
 	own := cube.CmdResetError(0x0a0109)
 	if res := q.Enqueue(Command{Lines: append([]cube.Message{own}, lines...)}).Wait(context.Background()); res.Err != nil {
 		t.Fatal(res.Err)
 	}
-	sameSent(t, received(srv), append([]string{"r:01,CgEJ"}, strs(lines...)...))
+	sameSent(t, sent, append([]string{"r:01,CgEJ"}, strs(lines...)...))
 
-	var log syncBuffer
-	srv, q, _ = setup(t, Options{Logger: slog.New(slog.NewTextHandler(&log, nil))}, room3(t, flagged))
+	logger, logs := testkit.LogWatch(nil)
+	srv, q, _ = setup(t, Options{Logger: logger}, room3(t, flagged))
+	sent = cubewatch.Lines(srv)
 	m := roomSetpoint(t)
 	if res := q.Enqueue(Command{Lines: []cube.Message{m, lines[0]}}).Wait(context.Background()); res.Err != nil {
 		t.Fatal(res.Err)
 	}
-	sameSent(t, received(srv), []string{"r:01,CgEJ", m.String(), lines[0].String()})
-	if n := strings.Count(log.String(), "communication error reset before"); n != 1 {
-		t.Fatalf("%d resets logged, want the room's one:\n%s", n, log.String())
-	}
+	sameSent(t, sent, []string{"r:01,CgEJ", m.String(), lines[0].String()})
+	reset := testkit.Contains("communication error reset before")
+	_, after := logs.Has(t, 0, "the room's reset", reset)
+	logs.HasNot(t, after, "a second reset, the room's one only", reset)
 }

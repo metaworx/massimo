@@ -4,7 +4,6 @@
 package certs
 
 import (
-	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -280,8 +279,7 @@ func TestDNS01(t *testing.T) {
 	t.Setenv("MASSIMO_API_TOKEN", "secret")
 	ca.records = func() map[string][]string { r, _ := hookCalls(calls); return r }
 	data := t.TempDir()
-	var buf bytes.Buffer
-	log := slog.New(slog.NewTextHandler(&buf, nil))
+	log, logged := testkit.LogWatch(nil)
 	names := []string{"*.example.net", "example.net"}
 
 	for _, bad := range []struct {
@@ -316,7 +314,7 @@ func TestDNS01(t *testing.T) {
 	d.Check(now)
 	st := d.Status()
 	if st.Fingerprint == "" || st.Warning != "" || strings.Join(st.Names, ",") != "*.example.net,example.net" || st.NotAfter.Before(now.Add(89*24*time.Hour)) {
-		t.Fatalf("status after the order: %+v\n%s", st, buf.String())
+		t.Fatalf("status after the order: %+v %v", st, logged.Since(0, nil))
 	}
 	cert, err := d.GetCertificate(&tls.ClientHelloInfo{ServerName: "a.example.net"})
 	if err != nil {
@@ -326,9 +324,7 @@ func TestDNS01(t *testing.T) {
 	if strings.Join(leaf.DNSNames, ",") != "*.example.net,example.net" || len(cert.Certificate) != 2 {
 		t.Fatalf("leaf %v, chain of %d", leaf.DNSNames, len(cert.Certificate))
 	}
-	if !strings.Contains(buf.String(), "certificate issued by DNS-01") {
-		t.Fatalf("not logged:\n%s", buf.String())
-	}
+	logged.Has(t, 0, "the certificate issued", testkit.Msg("tls: certificate issued by DNS-01"))
 	_, callLines := hookCalls(calls)
 	if len(callLines) != 4 || !strings.HasPrefix(callLines[0], "set _acme-challenge.example.net ") || !strings.HasPrefix(callLines[1], "clear _acme-challenge.example.net ") ||
 		!strings.HasPrefix(callLines[2], "set _acme-challenge.example.net ") || strings.Fields(callLines[0])[2] == strings.Fields(callLines[2])[2] {
@@ -372,13 +368,13 @@ func TestDNS01(t *testing.T) {
 
 	// A validation the CA refuses: logged, the certificate kept, the
 	// record cleared, the warning set.
-	buf.Reset()
+	m := logged.Mark()
 	ca.mu.Lock()
 	ca.failNext = true
 	ca.mu.Unlock()
 	d2.Check(renewed.NotAfter.Add(-20 * 24 * time.Hour))
-	if d2.Status().Fingerprint != renewed.Fingerprint || !strings.Contains(buf.String(), "order failed") || !strings.Contains(d2.Status().Warning, "failed") {
-		t.Fatalf("after a refused validation: %+v\n%s", d2.Status(), buf.String())
+	if d2.Status().Fingerprint != renewed.Fingerprint || logged.Count(m, testkit.Msg("tls: the DNS-01 order failed; the next check tries again")) == 0 || !strings.Contains(d2.Status().Warning, "failed") {
+		t.Fatalf("after a refused validation: %+v %v", d2.Status(), logged.Since(m, nil))
 	}
 	if records, _ := hookCalls(calls); len(records["_acme-challenge.example.net"]) != 0 {
 		t.Fatalf("records left behind: %v", records)
@@ -444,8 +440,7 @@ func TestDNS01ClearsAfterItsTime(t *testing.T) {
 	calls := filepath.Join(hookDir, "calls.txt")
 	// The hook records its calls; its clear fails.
 	os.WriteFile(hook, []byte("#!/bin/sh\necho \"$1 $2 $3\" >> \""+calls+"\"\n[ \"$1\" = set ]\n"), 0o755)
-	var buf bytes.Buffer
-	log := slog.New(slog.NewTextHandler(&buf, nil))
+	log, logged := testkit.LogWatch(nil)
 	d, err := OpenDNS01(t.TempDir(), []string{"example.net"}, "", ca.url("/directory"), hook, log)
 	if err != nil {
 		t.Fatal(err)
@@ -462,9 +457,7 @@ func TestDNS01ClearsAfterItsTime(t *testing.T) {
 	if len(callLines) != 2 || !strings.HasPrefix(callLines[0], "set _acme-challenge.example.net ") || !strings.HasPrefix(callLines[1], "clear _acme-challenge.example.net ") {
 		t.Fatalf("hook calls %q", callLines)
 	}
-	if !strings.Contains(buf.String(), "could not clear") {
-		t.Fatalf("the failed clear is not logged:\n%s", buf.String())
-	}
+	logged.Has(t, 0, "the failed clear", testkit.Msg("tls: the dns hook could not clear the record"))
 }
 
 // A set that fails, as one may after its provider made the record, is
@@ -479,8 +472,7 @@ func TestDNS01ClearsAfterAFailedSet(t *testing.T) {
 	calls := filepath.Join(hookDir, "calls.txt")
 	// The hook records its calls; its set fails.
 	os.WriteFile(hook, []byte("#!/bin/sh\necho \"$1 $2 $3\" >> \""+calls+"\"\n[ \"$1\" = clear ]\n"), 0o755)
-	var buf bytes.Buffer
-	log := slog.New(slog.NewTextHandler(&buf, nil))
+	log, logged := testkit.LogWatch(nil)
 	d, err := OpenDNS01(t.TempDir(), []string{"example.net"}, "", ca.url("/directory"), hook, log)
 	if err != nil {
 		t.Fatal(err)
@@ -503,7 +495,5 @@ func TestDNS01ClearsAfterAFailedSet(t *testing.T) {
 	if looked {
 		t.Fatal("the order waited for the record of a set that failed")
 	}
-	if strings.Contains(buf.String(), "could not clear") {
-		t.Fatalf("a clear that worked is logged as failed:\n%s", buf.String())
-	}
+	logged.HasNot(t, 0, "a clear that worked logged as failed", testkit.Msg("tls: the dns hook could not clear the record"))
 }

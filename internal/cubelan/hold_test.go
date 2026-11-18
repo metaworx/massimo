@@ -6,6 +6,7 @@ package cubelan
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net"
 	"strings"
 	"sync/atomic"
@@ -15,14 +16,17 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/testkit"
+	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 )
 
 // heldClient starts a client against a fake with short polls, so that
-// two missed polls begin a hold quickly.
-func heldClient(t *testing.T, opts Options) (*Client, *fakecube.Server, *logLines, *eventCount) {
+// two missed polls begin a hold quickly, and waits for its greeting; it
+// returns the watches of the client's log, Debug included, and of its
+// events.
+func heldClient(t *testing.T, opts Options) (*Client, *fakecube.Server, *testkit.Watch[testkit.Record], *testkit.Watch[Event]) {
 	t.Helper()
 	srv, addr := startFake(t)
-	logs := &logLines{}
+	logger, logs := testkit.LogWatch(slog.LevelDebug)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	opts.Addr = addr
@@ -31,11 +35,11 @@ func heldClient(t *testing.T, opts Options) (*Client, *fakecube.Server, *logLine
 	}
 	opts.ReplyTimeout = 50 * time.Millisecond
 	opts.Backoff = 10 * time.Millisecond
-	opts.Logger = logs.logger()
+	opts.Logger = logger
 	c := New(opts)
-	evs := countEvents(ctx, c)
+	evs := events(t, c)
 	go c.Run(ctx)
-	testkit.Eventually(t, "first greeting", func() bool { return evs.get(EventConnected) == 1 })
+	evs.Await(t, 0, "first greeting", kind(EventConnected))
 	return c, srv, logs, evs
 }
 
@@ -45,6 +49,8 @@ func heldClient(t *testing.T, opts Options) (*Client, *fakecube.Server, *logLine
 // and Reconnect answer ErrNotConnected at once.
 func TestAHeldConnectionResumes(t *testing.T) {
 	c, srv, logs, evs := heldClient(t, Options{Hold: time.Minute})
+	lines := cubewatch.Lines(srv)
+	at := evs.Mark()
 	srv.SetSilent(true)
 	testkit.Eventually(t, "the loss", func() bool { return c.Lost() && c.Held() })
 	if c.Connected() {
@@ -60,25 +66,29 @@ func TestAHeldConnectionResumes(t *testing.T) {
 	if err := c.Reconnect(ctx); !errors.Is(err, ErrNotConnected) {
 		t.Errorf("Reconnect while held: %v", err)
 	}
-	n := pollsReceived(srv)
+	// No end to wait for: a held client writes nothing and logs nothing
+	// at its polls' ticks.
+	whileHeld := lines.Mark()
 	time.Sleep(300 * time.Millisecond)
-	if m := pollsReceived(srv); m != n {
-		t.Errorf("%d polls written while held", m-n)
+	if n := lines.Count(whileHeld, cubewatch.Type('l')); n != 0 {
+		t.Errorf("%d polls written while held", n)
 	}
 
 	srv.SetSilent(false)
 	testkit.Eventually(t, "the resumption", func() bool { return c.Connected() && !c.Lost() && !c.Held() })
+	// The return's line comes after the state the wait saw, and before
+	// the return's event.
+	evs.Await(t, at, "the return's event", kind(EventConnected))
 	if srv.Connections() != 1 {
 		t.Errorf("%d connections, want the held one only", srv.Connections())
 	}
-	if lost := logs.lines("WARN", "cube connection lost"); len(lost) != 1 || !strings.Contains(lost[0], "held_until=") {
+	if lost := logs.Since(0, connLost); len(lost) != 1 || lost[0].Attrs["held_until"] == "" {
 		t.Errorf("loss lines: %q", lost)
 	}
-	if back := logs.lines("INFO", "cube connection re-established"); len(back) != 1 || !strings.Contains(back[0], "held=true") {
+	if back := logs.Since(0, reEstablished); len(back) != 1 || back[0].Attrs["held"] != "true" {
 		t.Errorf("return lines: %q", back)
 	}
-	testkit.Eventually(t, "the return's event", func() bool { return evs.get(EventConnected) == 2 })
-	if n := evs.get(EventDisconnected); n != 1 {
+	if n := evs.Count(0, kind(EventDisconnected)); n != 1 {
 		t.Errorf("%d disconnected events, want 1", n)
 	}
 	if _, err := c.Send(ctx, cube.CmdList); err != nil {
@@ -90,18 +100,19 @@ func TestAHeldConnectionResumes(t *testing.T) {
 // second loss warning, and the next greeting says the Cube is back.
 func TestAHoldEndsAtItsTime(t *testing.T) {
 	c, srv, logs, evs := heldClient(t, Options{Hold: 300 * time.Millisecond})
+	at := evs.Mark()
 	srv.SetSilent(true)
 	testkit.Eventually(t, "the loss", c.Held)
-	testkit.Eventually(t, "the hold's end", func() bool { return logs.count("WARN", "cube held connection ended") == 1 })
+	logs.Await(t, 0, "the hold's end", holdEnded)
 	if !c.Lost() || c.Held() {
 		t.Errorf("after the hold: lost %v, held %v", c.Lost(), c.Held())
 	}
 	srv.SetSilent(false)
-	testkit.Eventually(t, "the greeting after the hold", func() bool { return evs.get(EventConnected) == 2 })
+	evs.Await(t, at, "the greeting after the hold", kind(EventConnected))
 	if srv.Connections() != 2 {
 		t.Errorf("%d connections, want a second after the hold", srv.Connections())
 	}
-	if n := logs.count("WARN", "cube connection lost"); n != 1 {
+	if n := logs.Count(0, connLost); n != 1 {
 		t.Errorf("%d loss lines, want 1", n)
 	}
 }
@@ -113,6 +124,7 @@ func TestAHoldEndsOnceTheCubeIsHeard(t *testing.T) {
 	srv.SetSilent(true)
 	defer srv.SetSilent(false)
 	testkit.Eventually(t, "the loss", c.Held)
+	// No end to wait for: the hold's ticks leave no trace while it holds.
 	time.Sleep(300 * time.Millisecond)
 	if !c.Held() {
 		t.Fatal("the hold ended though discovery heard nothing")
@@ -129,21 +141,21 @@ func TestAHoldEndsOnceTheCubeIsHeard(t *testing.T) {
 			}
 		}
 	}()
-	testkit.Eventually(t, "the hold's end", func() bool { return logs.count("WARN", "cube held connection ended") == 1 })
-	if l := logs.lines("WARN", "cube held connection ended")[0]; !strings.Contains(l, "answered discovery") {
-		t.Errorf("hold's end: %q", l)
+	if r, _ := logs.Await(t, 0, "the hold's end", holdEnded); !strings.Contains(r.Attrs["error"], "answered discovery") {
+		t.Errorf("hold's end: %q", r)
 	}
 }
 
 // The Cube's close of a held connection ends the hold at once.
 func TestTheCubesCloseEndsAHold(t *testing.T) {
 	c, srv, logs, evs := heldClient(t, Options{Hold: time.Hour})
+	at := evs.Mark()
 	srv.SetSilent(true)
 	testkit.Eventually(t, "the loss", c.Held)
 	srv.Drop()
-	testkit.Eventually(t, "the hold's end", func() bool { return logs.count("WARN", "cube held connection ended") == 1 })
+	logs.Await(t, 0, "the hold's end", holdEnded)
 	srv.SetSilent(false)
-	testkit.Eventually(t, "the greeting after the hold", func() bool { return evs.get(EventConnected) == 2 })
+	evs.Await(t, at, "the greeting after the hold", kind(EventConnected))
 }
 
 // A Cube found elsewhere ends the hold: ReconnectIfMoved drops the held
@@ -170,25 +182,26 @@ func TestAMovedCubeEndsAHold(t *testing.T) {
 // a poll, whose answer resumes it.
 func TestUnansweredKeepaliveProbesBeginAHold(t *testing.T) {
 	srv, addr := startFake(t)
-	var logs logLines
+	logger, logs := testkit.LogWatch(slog.LevelDebug)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	c := New(Options{Addr: addr, PollInterval: time.Hour, Hold: time.Minute, Backoff: 10 * time.Millisecond, Logger: logs.logger()})
+	c := New(Options{Addr: addr, PollInterval: time.Hour, Hold: time.Minute, Backoff: 10 * time.Millisecond, Logger: logger})
 	var silent atomic.Bool
 	c.probeSilent = func(net.Conn) bool { return silent.Load() }
 	c.probeEvery = 20 * time.Millisecond
 	go c.Run(ctx)
 	testkit.Eventually(t, "first greeting", c.Connected)
 
-	n := pollsReceived(srv)
+	lines := cubewatch.Lines(srv)
+	at := lines.Mark()
 	srv.SetSilent(true)
 	silent.Store(true)
 	testkit.Eventually(t, "the loss", c.Held)
 	silent.Store(false)
-	if lost := logs.lines("WARN", "cube connection lost"); len(lost) != 1 || !strings.Contains(lost[0], "probes unanswered") {
+	if lost := logs.Since(0, connLost); len(lost) != 1 || !strings.Contains(lost[0].Attrs["error"], "probes unanswered") {
 		t.Errorf("loss lines: %q", lost)
 	}
-	testkit.Eventually(t, "the hold's poll", func() bool { return pollsReceived(srv) == n+1 })
+	lines.Await(t, at, "the hold's poll", cubewatch.Type('l'))
 	srv.SetSilent(false)
 	testkit.Eventually(t, "the resumption", func() bool { return c.Connected() && !c.Held() })
 	if srv.Connections() != 1 {

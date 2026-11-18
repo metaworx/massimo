@@ -4,7 +4,6 @@
 package server
 
 import (
-	"bufio"
 	"context"
 	"crypto/ecdh"
 	"crypto/ecdsa"
@@ -13,10 +12,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net"
 	"net/http"
-	"net/http/httptest"
 	"net/netip"
 	"strconv"
 	"strings"
@@ -233,8 +230,8 @@ func TestNotifyPreferenceChecked(t *testing.T) {
 // tests have it.)
 func TestNotificationFromTheCube(t *testing.T) {
 	opts := storeOptions(t, t.TempDir(), "secret")
-	var log syncBuffer
-	opts.Logger = slog.New(slog.NewTextHandler(&log, nil))
+	var logs *testkit.Watch[testkit.Record]
+	opts.Logger, logs = testkit.LogWatch(nil)
 	opts.PollInterval = 100 * time.Millisecond
 	fc, ts, s := startWith(t, opts)
 	userToken(t, s.opts.Store, "op", store.RoleOperator)
@@ -250,52 +247,25 @@ func TestNotificationFromTheCube(t *testing.T) {
 	l := greeting[len(greeting)-1]
 	raw, _ := base64.StdEncoding.DecodeString(l.Data)
 	copy(raw, []byte{0x0b, 0x0a, 0x01, 0x0d, 0x09, 0x12, 0x01, 30, 42, 0, 0, 0})
+	at := logs.Mark()
 	fc.SetDeviceList(cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(raw)})
-	testkit.Eventually(t, "the first state", func() bool { return strings.Contains(log.String(), "device=0a010d") })
+	logs.Await(t, at, "the first state", func(r testkit.Record) bool { return r.Attrs["device"] == "0a010d" })
 	raw[5] |= 0x08
 	fc.SetDeviceList(cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(raw)})
-	testkit.Eventually(t, "the notification", func() bool {
-		return strings.Contains(log.String(), "msg=notification") && strings.Contains(log.String(), "kind=device_error cube=KEQ0000100 device=0a010d")
-	})
-	if n := strings.Count(log.String(), "msg=notification"); n != 1 {
-		t.Fatalf("%d notifications, want the subscriber's one:\n%s", n, log.String())
+	logs.Await(t, at, "the notification", testkit.Msg("notification", "kind", "device_error", "cube", "KEQ0000100", "device", "0a010d"))
+	if got := logs.Since(0, testkit.Msg("notification")); len(got) != 1 {
+		t.Fatalf("%d notifications, want the subscriber's one: %v", len(got), got)
 	}
 }
 
-// notificationEvents opens a Cube's event stream with the token and
-// returns a channel of the notifications it sends.
-func notificationEvents(t *testing.T, ts *httptest.Server, token string) <-chan notify.Notification {
-	t.Helper()
-	req, _ := http.NewRequest("GET", ts.URL+"/api/v1/cubes/KEQ0000100/events", nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil || resp.StatusCode != 200 {
-		t.Fatalf("stream: %v %v", resp, err)
+// notificationOf reads the notification a stream's notification event
+// carries.
+func notificationOf(ev testkit.Event) notify.Notification {
+	var e struct {
+		Notification notify.Notification `json:"notification"`
 	}
-	out := make(chan notify.Notification, 8)
-	go func() {
-		defer resp.Body.Close()
-		rd := bufio.NewReader(resp.Body)
-		kind := ""
-		for {
-			l, err := rd.ReadString('\n')
-			if err != nil {
-				return
-			}
-			switch {
-			case strings.HasPrefix(l, "event: "):
-				kind = strings.TrimSpace(strings.TrimPrefix(l, "event: "))
-			case strings.HasPrefix(l, "data: ") && kind == "notification":
-				var ev struct {
-					Notification notify.Notification `json:"notification"`
-				}
-				json.Unmarshal([]byte(strings.TrimPrefix(l, "data: ")), &ev)
-				out <- ev.Notification
-			}
-		}
-	}()
-	t.Cleanup(func() { resp.Body.Close() })
-	return out
+	json.Unmarshal([]byte(ev.Data), &e)
+	return e.Notification
 }
 
 // A notification reaches its user by Web Push, encrypted for the
@@ -304,8 +274,8 @@ func notificationEvents(t *testing.T, ts *httptest.Server, token string) <-chan 
 // embedding the server gives.
 func TestNotificationDelivered(t *testing.T) {
 	opts := storeOptions(t, t.TempDir(), "secret")
-	var log syncBuffer
-	opts.Logger = slog.New(slog.NewTextHandler(&log, nil))
+	var logs *testkit.Watch[testkit.Record]
+	opts.Logger, logs = testkit.LogWatch(nil)
 	opts.PollInterval = 100 * time.Millisecond
 	var mu sync.Mutex
 	var local []string
@@ -333,25 +303,22 @@ func TestNotificationDelivered(t *testing.T) {
 		var c cubeView
 		return getJSON(t, ts, "secret", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
 	})
-	mine, theirs := notificationEvents(t, ts, "secret"), notificationEvents(t, ts, op)
+	mine, theirs := openStream(t, ts, "secret"), openStream(t, ts, op)
 	// 0a010d reports manual, 21 °C, valve 30 %; then a communication
 	// error, a setpoint's radiogram (0x40) having failed.
 	greeting, _ := fakecube.LoadGreeting(fixture)
 	l := greeting[len(greeting)-1]
 	raw, _ := base64.StdEncoding.DecodeString(l.Data)
 	copy(raw, []byte{0x0b, 0x0a, 0x01, 0x0d, 0x09, 0x12, 0x01, 30, 42, 0, 0, 0})
+	at := logs.Mark()
 	fc.SetDeviceList(cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(raw)})
-	testkit.Eventually(t, "the first state", func() bool { return strings.Contains(log.String(), "device=0a010d") })
+	logs.Await(t, at, "the first state", func(r testkit.Record) bool { return r.Attrs["device"] == "0a010d" })
 	raw[4], raw[5] = byte(cube.RadiogramControlMode), raw[5]|0x08
 	fc.SetDeviceList(cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(raw)})
 
-	select {
-	case n := <-mine:
-		if n.Kind != notify.KindDeviceError || n.Cube != "KEQ0000100" || n.Device != "0a010d" {
-			t.Fatalf("the stream's notification: %+v", n)
-		}
-	case <-time.After(testkit.Scale(10 * time.Second)):
-		t.Fatal("no notification on the user's stream")
+	ev, _ := mine.Await(t, 0, "a notification on the user's stream", testkit.Kind("notification"), testkit.For(10*time.Second))
+	if n := notificationOf(ev); n.Kind != notify.KindDeviceError || n.Cube != "KEQ0000100" || n.Device != "0a010d" {
+		t.Fatalf("the stream's notification: %+v", n)
 	}
 	testkit.Eventually(t, "the push", func() bool { return len(svc.Received()) == 1 })
 	got := svc.Received()[0]
@@ -380,19 +347,18 @@ func TestNotificationDelivered(t *testing.T) {
 		json.Unmarshal([]byte(text), &list)
 		return len(list) == 1 && list[0].LastOKAt != nil && list[0].Failures == 0
 	})
-	select {
-	case n := <-theirs:
-		t.Fatalf("another user's stream got %+v", n)
-	case <-time.After(200 * time.Millisecond):
-	}
+	// A test event after the notification ends the check: the
+	// notification, sent to the streams at once, would have come before.
+	mark(s.cubes["keq0000100"], 1)
+	theirs.Never(t, 0, "a notification on another user's stream", testkit.Kind("notification"), theirs.Seen(0, testkit.Kind("test")))
 }
 
 // A subscription its push service knows no more is removed at the
 // first notification.
 func TestNotificationRemovesGoneSubscription(t *testing.T) {
 	opts := storeOptions(t, t.TempDir(), "secret")
-	var log syncBuffer
-	opts.Logger = slog.New(slog.NewTextHandler(&log, nil))
+	var logs *testkit.Watch[testkit.Record]
+	opts.Logger, logs = testkit.LogWatch(nil)
 	_, ts, s := startWith(t, opts)
 	svc := pushtest.New(t, nil, http.StatusGone)
 	if code, text := callAPI(t, ts, "POST", "/api/v1/me/push", "secret", svc.Subscription("/send/gone", "phone")); code != 201 {
@@ -409,7 +375,5 @@ func TestNotificationRemovesGoneSubscription(t *testing.T) {
 	if _, text := callAPI(t, ts, "GET", "/api/v1/me/push", "secret", ""); strings.TrimSpace(text) != "[]" {
 		t.Fatalf("the subscription stayed: %s", text)
 	}
-	if !strings.Contains(log.String(), "push subscription removed: its push service knows it no more") {
-		t.Fatalf("no line:\n%s", log.String())
-	}
+	logs.Has(t, 0, "the subscription's removal", testkit.Msg("push subscription removed: its push service knows it no more"))
 }

@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -18,6 +17,8 @@ import (
 
 	"golang.org/x/crypto/acme"
 	"golang.org/x/crypto/acme/autocert"
+
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 func TestOpenACME(t *testing.T) {
@@ -32,8 +33,8 @@ func TestOpenACME(t *testing.T) {
 	dir := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.NotFound(w, r) }))
 	defer dir.Close()
 	data := t.TempDir()
-	var buf bytes.Buffer
-	a, err := OpenACME(data, []string{"massimo.example.net"}, "owner@example.net", dir.URL+"/directory", slog.New(slog.NewTextHandler(&buf, nil)))
+	log, logged := testkit.LogWatch(nil)
+	a, err := OpenACME(data, []string{"massimo.example.net"}, "owner@example.net", dir.URL+"/directory", log)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,8 +47,8 @@ func TestOpenACME(t *testing.T) {
 	}
 	a.Check(time.Now())
 	a.Check(time.Now())
-	if n := strings.Count(buf.String(), "no certificate from the ACME directory"); n != 1 {
-		t.Fatalf("logged %d times:\n%s", n, buf.String())
+	if n := logged.Count(0, testkit.Msg("tls: no certificate from the ACME directory")); n != 1 {
+		t.Fatalf("logged %d times: %v", n, logged.Since(0, nil))
 	}
 	if _, err := a.GetCertificate(&tls.ClientHelloInfo{ServerName: "other.example.net"}); err == nil {
 		t.Fatal("a name outside the whitelist served")
@@ -104,25 +105,26 @@ func TestFilesWarnBeforeExpiry(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Now()
 	certPath, keyPath, _ := writePair(t, dir, []string{"localhost"}, now.Add(100*24*time.Hour), now)
-	var buf bytes.Buffer
-	f, err := OpenFiles(certPath, keyPath, slog.New(slog.NewTextHandler(&buf, nil)))
+	log, logged := testkit.LogWatch(nil)
+	f, err := OpenFiles(certPath, keyPath, log)
 	if err != nil {
 		t.Fatal(err)
 	}
 	f.Check(now)
-	if f.Status().Warning != "" || buf.Len() != 0 {
-		t.Fatalf("warned early: %+v\n%s", f.Status(), buf.String())
+	if f.Status().Warning != "" || logged.Count(0, nil) != 0 {
+		t.Fatalf("warned early: %+v %v", f.Status(), logged.Since(0, nil))
 	}
+	m := logged.Mark()
 	f.Check(now.Add(90 * 24 * time.Hour))
-	if w := f.Status().Warning; w != "the certificate expires in 10 days" && w != "the certificate expires in 9 days" || !strings.Contains(buf.String(), "expires in") {
-		t.Fatalf("not warned: %q\n%s", w, buf.String())
+	if w := f.Status().Warning; w != "the certificate expires in 10 days" && w != "the certificate expires in 9 days" ||
+		logged.Count(m, testkit.Contains("expires in")) == 0 {
+		t.Fatalf("not warned: %q %v", w, logged.Since(m, nil))
 	}
 	f.Check(now.Add(101 * 24 * time.Hour))
 	if f.Status().Warning != "the certificate has expired" {
 		t.Fatalf("expired: %q", f.Status().Warning)
 	}
 	// Watch checks at once.
-	buf.Reset()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	Watch(ctx, f, time.Hour)
@@ -131,13 +133,13 @@ func TestFilesWarnBeforeExpiry(t *testing.T) {
 // cachedACME is an ACME source whose cache holds an ECDSA certificate for
 // the name, as autocert writes it, and whose directory answers nothing,
 // so that every certificate it serves comes from the cache.
-func cachedACME(t *testing.T, name string) (a *ACME, fingerprint string, logs *bytes.Buffer) {
+func cachedACME(t *testing.T, name string) (a *ACME, fingerprint string, logged *testkit.Watch[testkit.Record]) {
 	t.Helper()
 	dir := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.NotFound(w, r) }))
 	t.Cleanup(dir.Close)
 	data := t.TempDir()
-	logs = &bytes.Buffer{}
-	a, err := OpenACME(data, []string{name}, "", dir.URL+"/directory", slog.New(slog.NewTextHandler(logs, nil)))
+	log, logged := testkit.LogWatch(nil)
+	a, err := OpenACME(data, []string{name}, "", dir.URL+"/directory", log)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,14 +150,14 @@ func cachedACME(t *testing.T, name string) (a *ACME, fingerprint string, logs *b
 	if err := os.WriteFile(filepath.Join(data, "tls", "acme", name), append(keyPEM, certPEM...), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	return a, fp, logs
+	return a, fp, logged
 }
 
 // A handshake without a server name, as Go makes to an address (the
 // update helper's https://127.0.0.1 health check, a browser at
 // https://<ip>), gets the certificate of the first name.
 func TestACMEWithoutServerName(t *testing.T) {
-	a, fp, logs := cachedACME(t, "massimo.example.net")
+	a, fp, logged := cachedACME(t, "massimo.example.net")
 	ln, err := tls.Listen("tcp", "127.0.0.1:0", Config(a))
 	if err != nil {
 		t.Fatal(err)
@@ -172,7 +174,7 @@ func TestACMEWithoutServerName(t *testing.T) {
 	}()
 	conn, err := tls.Dial("tcp", ln.Addr().String(), &tls.Config{InsecureSkipVerify: true})
 	if err != nil {
-		t.Fatalf("a handshake without SNI: %v\n%s", err, logs.String())
+		t.Fatalf("a handshake without SNI: %v %v", err, logged.Since(0, nil))
 	}
 	defer conn.Close()
 	if got := Fingerprint(conn.ConnectionState().PeerCertificates[0].Raw); got != fp {
@@ -184,14 +186,12 @@ func TestACMEWithoutServerName(t *testing.T) {
 // one under the name's key: with that cached it orders nothing, and the
 // status shows its fingerprint.
 func TestACMECheckAsksAsABrowser(t *testing.T) {
-	a, fp, logs := cachedACME(t, "massimo.example.net")
+	a, fp, logged := cachedACME(t, "massimo.example.net")
 	a.Check(time.Now())
 	if st := a.Status(); st.Fingerprint != fp || st.Warning != "" {
-		t.Fatalf("status %+v, want the cached %s\n%s", st, fp, logs.String())
+		t.Fatalf("status %+v, want the cached %s %v", st, fp, logged.Since(0, nil))
 	}
-	if strings.Contains(logs.String(), "no certificate from the ACME directory") {
-		t.Fatalf("the check ordered another certificate:\n%s", logs.String())
-	}
+	logged.HasNot(t, 0, "another certificate ordered by the check", testkit.Msg("tls: no certificate from the ACME directory"))
 }
 
 // A certificate autocert stores is a new one, and goes into the log with
@@ -199,8 +199,8 @@ func TestACMECheckAsksAsABrowser(t *testing.T) {
 // certificate do not, and a certificate an earlier run left in the cache
 // is served without the line.
 func TestACMELogsIssued(t *testing.T) {
-	var logs bytes.Buffer
-	c := logCache{Cache: autocert.DirCache(t.TempDir()), log: slog.New(slog.NewTextHandler(&logs, nil))}
+	log, logged := testkit.LogWatch(nil)
+	c := logCache{Cache: autocert.DirCache(t.TempDir()), log: log}
 	certPath, keyPath, fp := writePair(t, t.TempDir(), []string{"massimo.example.net"}, time.Now().Add(80*24*time.Hour), time.Now())
 	keyPEM, _ := os.ReadFile(keyPath)
 	certPEM, _ := os.ReadFile(certPath)
@@ -211,15 +211,14 @@ func TestACMELogsIssued(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if logs.Len() != 0 {
-		t.Fatalf("logged what is no certificate of the server's:\n%s", logs.String())
-	}
+	logged.HasNot(t, 0, "a line for what is no certificate of the server's", nil)
+	m := logged.Mark()
 	if err := c.Put(ctx, "massimo.example.net", data); err != nil {
 		t.Fatal(err)
 	}
-	line := logs.String()
-	if strings.Count(line, "tls: certificate issued by the ACME directory") != 1 || !strings.Contains(line, "name=massimo.example.net") || !strings.Contains(line, "fingerprint="+fp) {
-		t.Fatalf("log %q, want one line with the fingerprint %s", line, fp)
+	if issued := logged.Since(m, testkit.Msg("tls: certificate issued by the ACME directory")); len(issued) != 1 ||
+		issued[0].Attrs["name"] != "massimo.example.net" || issued[0].Attrs["fingerprint"] != fp {
+		t.Fatalf("log %v, want one line with the fingerprint %s", logged.Since(m, nil), fp)
 	}
 	if got, err := c.Get(ctx, "massimo.example.net"); err != nil || !bytes.Equal(got, data) {
 		t.Fatalf("stored %d bytes, %v", len(got), err)
@@ -236,7 +235,5 @@ func TestACMELogsIssued(t *testing.T) {
 	if got := Fingerprint(cert.Certificate[0]); got != cachedFP {
 		t.Fatalf("served %s, want the cached %s", got, cachedFP)
 	}
-	if strings.Contains(cached.String(), "certificate issued") {
-		t.Fatalf("a cached certificate logged as issued:\n%s", cached.String())
-	}
+	cached.HasNot(t, 0, "a cached certificate logged as issued", testkit.Contains("certificate issued"))
 }

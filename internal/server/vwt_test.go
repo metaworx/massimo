@@ -17,6 +17,7 @@ import (
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit"
+	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
@@ -189,23 +190,17 @@ func TestVirtualWallThermostatDevice(t *testing.T) {
 func TestVirtualWallThermostatEvents(t *testing.T) {
 	fc, ts, s, _ := startRooms(t)
 	rt := s.cubes["keq0000100"]
-	stream := func(kind string) <-chan sseEvent {
+	stream := func(kind string) *testkit.Watch[testkit.Event] {
 		url := ts.URL + "/api/v1/cubes/KEQ0000100/events?devices=" + kind
 		return readStreamURL(t, url)
 	}
-	burstOf := func(evs <-chan sseEvent, n int) []sseEvent {
-		var out []sseEvent
-		for i := 0; i < n; i++ {
-			out = append(out, next(t, evs))
-		}
-		return out
-	}
 	all, real, virtual := stream("all"), stream("real"), stream("virtual")
-	if b := burstOf(all, 10); !strings.Contains(b[9].data, `"virtual":true`) {
-		t.Fatalf("the burst of all ends with %s", b[9].data)
+	b, atAll := all.AwaitN(t, 0, "the burst of all", 10, isEvent)
+	if !strings.Contains(b[9].Data, `"virtual":true`) {
+		t.Fatalf("the burst of all ends with %s", b[9].Data)
 	}
-	burstOf(real, 7)
-	burstOf(virtual, 9)
+	_, atReal := real.AwaitN(t, 0, "the burst of real", 7, isEvent)
+	_, atVirtual := virtual.AwaitN(t, 0, "the burst of virtual", 9, isEvent)
 
 	temp := 21.0 // 19.0, 21.0, 23.5: the median moves to 21.0
 	if err := fc.SetState(0x0a0205, fakecube.State{ActualTemp: &temp}); err != nil {
@@ -216,47 +211,28 @@ func TestVirtualWallThermostatEvents(t *testing.T) {
 	// a room's new temperature before the member's own event. So each
 	// stream is read until every event wanted has come, in any order, a
 	// room's older events passed over.
-	is := func(ev sseEvent, device, has string) bool {
-		return ev.kind == "state" && strings.Contains(ev.data, `"device":"`+device+`"`) && strings.Contains(ev.data, has)
+	is := func(device, has string) func(testkit.Event) bool {
+		return testkit.Kind("state", `"device":"`+device+`"`, has)
 	}
-	waitAll := func(evs <-chan sseEvent, want ...[2]string) map[string]sseEvent {
-		t.Helper()
-		got := map[string]sseEvent{}
-		for len(got) < len(want) {
-			ev := next(t, evs)
-			for _, w := range want {
-				if _, ok := got[w[0]]; !ok && is(ev, w[0], w[1]) {
-					got[w[0]] = ev
-				}
-			}
-		}
-		return got
-	}
-	waitAll(all, [2]string{"0a0205", ""}, [2]string{"000002", `"actual_temp":21`})
+	all.AwaitAll(t, atAll, "the member's and room 2's state events", is("0a0205", ""), is("000002", `"actual_temp":21`))
 	wall := 20.1
 	if err := fc.SetState(0x0a0201, fakecube.State{ActualTemp: &wall}); err != nil {
 		t.Fatal(err)
 	}
-	if ev := waitAll(virtual, [2]string{"000001", `"actual_temp":20.1`})["000001"]; !strings.Contains(ev.data, `"changes"`) {
-		t.Fatalf("room 1's event: %s", ev.data)
+	room1, atVirtual := virtual.AwaitAll(t, atVirtual, "room 1's state event", is("000001", `"actual_temp":20.1`))
+	if !strings.Contains(room1[0].Data, `"changes"`) {
+		t.Fatalf("room 1's event: %s", room1[0].Data)
 	}
-	waitAll(real, [2]string{"0a0201", ""})
-	for {
-		select {
-		case e := <-real:
-			if strings.Contains(e.data, `"virtual":true`) {
-				t.Fatalf("the real view got %s", e.data)
-			}
-			continue
-		case e := <-virtual:
-			if strings.Contains(e.data, `"device":"0a0201"`) {
-				t.Fatalf("the virtual view got the real wall thermostat: %s", e.data)
-			}
-			continue
-		case <-time.After(300 * time.Millisecond):
-		}
-		break
-	}
+	_, atReal = real.AwaitAll(t, atReal, "the real wall thermostat's state event", is("0a0201", ""))
+	// A test event, sent after the events above, ends the checks: what the
+	// views would carry of them has come before it.
+	mark(rt, 1)
+	real.Never(t, atReal, "a virtual wall thermostat's event on the real view", func(e testkit.Event) bool {
+		return strings.Contains(e.Data, `"virtual":true`)
+	}, real.Seen(atReal, testkit.Kind("test")))
+	virtual.Never(t, atVirtual, "the real wall thermostat's event on the virtual view", func(e testkit.Event) bool {
+		return strings.Contains(e.Data, `"device":"0a0201"`)
+	}, virtual.Seen(atVirtual, testkit.Kind("test")))
 	rt.subsMu.Lock()
 	defer rt.subsMu.Unlock()
 	if len(rt.replay) == 0 {
@@ -271,14 +247,13 @@ func TestVirtualWallThermostatEvents(t *testing.T) {
 func TestVirtualViewLeavesOutTheRealWallsEvents(t *testing.T) {
 	_, ts, s, _ := startRooms(t)
 	rt := s.cubes["keq0000100"]
-	stream := func(kind string, burst int) <-chan sseEvent {
+	stream := func(kind string, burst int) (*testkit.Watch[testkit.Event], testkit.Cursor) {
 		evs := readStreamURL(t, ts.URL+"/api/v1/cubes/KEQ0000100/events?devices="+kind)
-		for range burst {
-			next(t, evs)
-		}
-		return evs
+		_, after := evs.AwaitN(t, 0, "the burst of "+kind, burst, isEvent)
+		return evs, after
 	}
-	all, virtual := stream("all", 10), stream("virtual", 9)
+	all, atAll := stream("all", 10)
+	virtual, atVirtual := stream("virtual", 9)
 	// The test's own mismatches carry a finding of their own: a pump
 	// slow to come to the greeting (armv6 under QEMU) publishes the
 	// greeting's mismatches after the streams opened.
@@ -290,47 +265,46 @@ func TestVirtualViewLeavesOutTheRealWallsEvents(t *testing.T) {
 	// upTo reads a stream up to the test's mismatch of device: the
 	// devices of the test's mismatches, and whether any event named the
 	// real wall thermostat.
-	upTo := func(evs <-chan sseEvent, device string) (got []string, wall bool) {
+	upTo := func(evs *testkit.Watch[testkit.Event], c testkit.Cursor, device string) (got []string, wall bool) {
 		t.Helper()
 		for {
-			ev := next(t, evs)
-			wall = wall || strings.Contains(ev.data, `"device":"0a0201"`)
-			if ev.kind != "mismatch" || !strings.Contains(ev.data, `"finding":"test"`) {
+			var ev testkit.Event
+			ev, c = evs.Await(t, c, "the test's mismatch of "+device, isEvent)
+			wall = wall || strings.Contains(ev.Data, `"device":"0a0201"`)
+			if ev.Kind != "mismatch" || !strings.Contains(ev.Data, `"finding":"test"`) {
 				continue
 			}
 			for _, d := range []string{"0a0201", "0a0204"} {
-				if strings.Contains(ev.data, `"device":"`+d+`"`) {
+				if strings.Contains(ev.Data, `"device":"`+d+`"`) {
 					got = append(got, d)
 				}
 			}
-			if strings.Contains(ev.data, `"device":"`+device+`"`) {
+			if strings.Contains(ev.Data, `"device":"`+device+`"`) {
 				return got, wall
 			}
 		}
 	}
-	if got, wall := upTo(virtual, "0a0204"); !slices.Equal(got, []string{"0a0204"}) || wall {
+	if got, wall := upTo(virtual, atVirtual, "0a0204"); !slices.Equal(got, []string{"0a0204"}) || wall {
 		t.Fatalf("the virtual view's mismatches: %v, the real wall thermostat's event %v", got, wall)
 	}
-	if got, _ := upTo(all, "0a0204"); !slices.Equal(got, []string{"0a0201", "0a0204"}) {
+	if got, _ := upTo(all, atAll, "0a0204"); !slices.Equal(got, []string{"0a0201", "0a0204"}) {
 		t.Fatalf("the view all's mismatches: %v", got)
 	}
 }
 
-// lastRadio is the last radio command the fake Cube received.
-func lastRadio(t *testing.T, fc *fakecube.Server) cube.RadioCommand {
+// lastRadio is the last radio command among the lines a fake Cube
+// received.
+func lastRadio(t *testing.T, received *testkit.Watch[cube.Message]) cube.RadioCommand {
 	t.Helper()
-	got := fc.Received()
-	for i := len(got) - 1; i >= 0; i-- {
-		if got[i].Type == 's' {
-			rc, err := cube.ParseRadioCommand(got[i].Data)
-			if err != nil {
-				t.Fatal(err)
-			}
-			return rc
-		}
+	got := received.Since(0, cubewatch.Type('s'))
+	if len(got) == 0 {
+		t.Fatal("no radio command")
 	}
-	t.Fatal("no radio command")
-	return cube.RadioCommand{}
+	rc, err := cube.ParseRadioCommand(got[len(got)-1].Data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return rc
 }
 
 // A virtual wall thermostat's commands reach its room, or its room's real
@@ -338,15 +312,16 @@ func lastRadio(t *testing.T, fc *fakecube.Server) cube.RadioCommand {
 // nor deleted.
 func TestVirtualWallThermostatCommands(t *testing.T) {
 	fc, ts, s, st := startRoomsOpts(t, roomsOpts{slow: true})
+	received := cubewatch.Lines(fc)
 	path := "/api/v1/cubes/KEQ0000100/devices/"
 	room := func(rc cube.RadioCommand, cmd byte, id uint8) bool {
 		return rc.Command == cmd && rc.Target.Room && rc.Target.RoomID == id
 	}
 
-	if code, body := do(t, ts, "PUT", path+"room-2/setpoint", `{"mode":"manual","temp":21.5}`); code != 200 || !room(lastRadio(t, fc), cube.RFSetTemperature, 2) {
-		t.Fatalf("setpoint: %d %v %+v", code, body, lastRadio(t, fc))
+	if code, body := do(t, ts, "PUT", path+"room-2/setpoint", `{"mode":"manual","temp":21.5}`); code != 200 || !room(lastRadio(t, received), cube.RFSetTemperature, 2) {
+		t.Fatalf("setpoint: %d %v %+v", code, body, lastRadio(t, received))
 	}
-	if code, body := do(t, ts, "PUT", path+"000002/program", `{"monday":[{"temp":17,"until":"06:00"},{"temp":21,"until":"24:00"}]}`); code != 200 || !room(lastRadio(t, fc), cube.RFSetWeekProgram, 2) {
+	if code, body := do(t, ts, "PUT", path+"000002/program", `{"monday":[{"temp":17,"until":"06:00"},{"temp":21,"until":"24:00"}]}`); code != 200 || !room(lastRadio(t, received), cube.RFSetWeekProgram, 2) {
 		t.Fatalf("program: %d %v", code, body)
 	}
 
@@ -355,7 +330,7 @@ func TestVirtualWallThermostatCommands(t *testing.T) {
 	if code != 200 || body["room"] == nil || body["settings"] == nil {
 		t.Fatalf("config: %d %v", code, body)
 	}
-	if rc := lastRadio(t, fc); rc.Command != cube.RFSetTemperatures {
+	if rc := lastRadio(t, received); rc.Command != cube.RFSetTemperatures {
 		t.Fatalf("config sent %+v", rc)
 	}
 	rows, _ := st.Rooms(context.Background(), 1)
@@ -378,7 +353,7 @@ func TestVirtualWallThermostatCommands(t *testing.T) {
 	}
 	if code, body := do(t, ts, "PUT", path+"room-1/config", `{"display_actual":true}`); code != 200 {
 		t.Fatalf("display: %d %v", code, body)
-	} else if rc := lastRadio(t, fc); rc.Command != cube.RFSetDisplayMode || rc.Target.RFAddress != 0x0a0201 {
+	} else if rc := lastRadio(t, received); rc.Command != cube.RFSetDisplayMode || rc.Target.RFAddress != 0x0a0201 {
 		t.Fatalf("display sent %+v", rc)
 	}
 	if code, _ := do(t, ts, "PUT", path+"room-2/lock", `{"locked":true}`); code != 409 {
@@ -386,7 +361,7 @@ func TestVirtualWallThermostatCommands(t *testing.T) {
 	}
 	if code, body := do(t, ts, "PUT", path+"room-1/lock", `{"locked":true}`); code != 200 {
 		t.Fatalf("lock: %d %v", code, body)
-	} else if rc := lastRadio(t, fc); rc.Command != cube.RFLockControls || rc.Target.RFAddress != 0x0a0201 {
+	} else if rc := lastRadio(t, received); rc.Command != cube.RFLockControls || rc.Target.RFAddress != 0x0a0201 {
 		t.Fatalf("lock sent %+v", rc)
 	}
 
@@ -427,15 +402,14 @@ func TestSecondWallThermostatRefused(t *testing.T) {
 		out := append([]cube.Message(nil), lines[:len(lines)-1]...)
 		return append(out, p.Config, lines[len(lines)-1])
 	}})
-	before := len(fc.Received())
+	received := cubewatch.Lines(fc)
+	before := received.Mark()
 	code, body := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/0a0299", `{"room_id":1,"name":"Zweiter"}`)
 	if code != 409 || !strings.Contains(body["error"].(string), "wall thermostat already") {
 		t.Fatalf("a second wall thermostat: %d %v", code, body)
 	}
-	for _, m := range fc.Received()[before:] {
-		if m.Type == 's' || m.Type == 'm' {
-			t.Fatalf("sent %s", m)
-		}
+	if got := received.Since(before, cubewatch.Type('s', 'm')); len(got) != 0 {
+		t.Fatalf("sent %v", got)
 	}
 }
 
@@ -444,13 +418,14 @@ func TestSecondWallThermostatRefused(t *testing.T) {
 // thermostat too. The fake Cube applies it as the devices do.
 func TestBoostOverTheAir(t *testing.T) {
 	fc, ts, _, _ := startRoomsOpts(t, roomsOpts{slow: true})
+	received := cubewatch.Lines(fc)
 	for _, path := range []string{"rooms/2/setpoint", "devices/0a0205/setpoint", "devices/room-2/setpoint"} {
 		code, body := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/"+path, `{"mode":"boost"}`)
 		if code != 200 {
 			t.Fatalf("%s: %d %v", path, code, body)
 		}
-		got := fc.Received()
-		want, _ := cube.CmdSetTemperature(cube.Target{RFAddress: lastRadio(t, fc).Target.RFAddress, RoomID: 2, Room: true}, 20, cube.ModeBoost, cube.Until{})
+		got := received.Since(0, cubewatch.Except('l'))
+		want, _ := cube.CmdSetTemperature(cube.Target{RFAddress: lastRadio(t, received).Target.RFAddress, RoomID: 2, Room: true}, 20, cube.ModeBoost, cube.Until{})
 		if last := got[len(got)-1]; last.String() != want.String() {
 			t.Fatalf("%s sent %s, want %s", path, last, want)
 		}

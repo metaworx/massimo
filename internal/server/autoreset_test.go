@@ -17,6 +17,7 @@ import (
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit"
+	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 )
 
 // stepClock is a clock the test moves on (a notify.Clock): add runs the
@@ -143,15 +144,9 @@ func startResets(t *testing.T, st *store.Store, addr string, clock *stepClock, p
 	return ts, s, stop
 }
 
-// resets counts the r: lines for rf the fake Cube received.
-func resets(fc *fakecube.Server, rf cube.RFAddress) int {
-	n := 0
-	for _, m := range fc.Received() {
-		if m.String() == cube.CmdResetError(rf).String() {
-			n++
-		}
-	}
-	return n
+// resetOf matches the r: line for rf.
+func resetOf(rf cube.RFAddress) func(cube.Message) bool {
+	return lineIs(cube.CmdResetError(rf).String())
 }
 
 // reportAndSettle makes rf report st and waits until the server's pump
@@ -199,6 +194,7 @@ func TestAutoReset(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { fc.Close() })
+	received := cubewatch.Lines(fc)
 	st := testStore(t, "")
 	clock := &stepClock{t: time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)}
 	noHold := func(s *Server) { s.runtimes()[0].resets.hold = nil }
@@ -208,7 +204,7 @@ func TestAutoReset(t *testing.T) {
 	on := true
 	valve := func(n int) *int { return &n }
 	reportAndSettle(t, fc, ts, s, rf, fakecube.State{Reported: &on, Error: &on, ValvePct: valve(10)}, "valve_pct", float64(10))
-	if n := resets(fc, rf); n != 1 {
+	if n := received.Count(0, resetOf(rf)); n != 1 {
 		t.Fatalf("the first report: %d resets, want 1", n)
 	}
 	var ev event
@@ -229,12 +225,12 @@ func TestAutoReset(t *testing.T) {
 
 	clock.add(23 * time.Hour)
 	reportAndSettle(t, fc, ts, s, rf, fakecube.State{ValvePct: valve(20)}, "valve_pct", float64(20))
-	if n := resets(fc, rf); n != 1 {
+	if n := received.Count(0, resetOf(rf)); n != 1 {
 		t.Fatalf("a report the same day: %d resets, want 1", n)
 	}
 	clock.add(2 * time.Hour)
 	reportAndSettle(t, fc, ts, s, rf, fakecube.State{ValvePct: valve(30)}, "valve_pct", float64(30))
-	if n := resets(fc, rf); n != 2 {
+	if n := received.Count(0, resetOf(rf)); n != 2 {
 		t.Fatalf("a report a day later: %d resets, want 2", n)
 	}
 
@@ -255,14 +251,14 @@ func TestAutoReset(t *testing.T) {
 	clock.add(time.Hour)
 	ts, s, _ = startResets(t, st, addr, clock, noHold)
 	reportAndSettle(t, fc, ts, s, rf, fakecube.State{ValvePct: valve(40)}, "valve_pct", float64(40))
-	if n := resets(fc, rf); n != 2 {
+	if n := received.Count(0, resetOf(rf)); n != 2 {
 		t.Fatalf("a report after the restart: %d resets, want 2", n)
 	}
 
 	// The link error alone: no reset.
 	const linked = cube.RFAddress(0x0a0108)
 	reportAndSettle(t, fc, ts, s, linked, fakecube.State{Reported: &on, LinkError: &on, ValvePct: valve(15)}, "link_error", true)
-	if n := resets(fc, linked); n != 0 {
+	if n := received.Count(0, resetOf(linked)); n != 0 {
 		t.Fatalf("the link error alone: %d resets, want 0", n)
 	}
 }
@@ -280,6 +276,7 @@ func TestAutoResetHold(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { fc.Close() })
+	received := cubewatch.Lines(fc)
 	clock := &stepClock{t: time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)}
 	var mu sync.Mutex
 	var asked []string
@@ -293,7 +290,7 @@ func TestAutoResetHold(t *testing.T) {
 	})
 	on := true
 	reportAndSettle(t, fc, ts, s, 0x0a010d, fakecube.State{Reported: &on, Error: &on}, "error", true)
-	if n := resets(fc, 0x0a010d); n != 0 {
+	if n := received.Count(0, resetOf(0x0a010d)); n != 0 {
 		t.Fatalf("held: %d resets, want 0", n)
 	}
 	mu.Lock()
@@ -317,6 +314,7 @@ func TestAutoResetWaitsForTheStoresRow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	received := cubewatch.Lines(fc)
 	st := testStore(t, "")
 	clock := &stepClock{t: time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)}
 	// A store without a row for the Cube: the runtime has no store ID.
@@ -341,7 +339,7 @@ func TestAutoResetWaitsForTheStoresRow(t *testing.T) {
 	if id := rt.storeID.Load(); id != 0 {
 		t.Fatalf("the runtime learned a store ID %d: the test needs none", id)
 	}
-	if n := resets(fc, rf); n != 0 {
+	if n := received.Count(0, resetOf(rf)); n != 0 {
 		t.Fatalf("without the store's row: %d resets, want 0", n)
 	}
 
@@ -351,7 +349,7 @@ func TestAutoResetWaitsForTheStoresRow(t *testing.T) {
 	}
 	rt.storeID.Store(row.ID)
 	reportAndSettle(t, fc, ts, s, rf, fakecube.State{ValvePct: valve(20)}, "valve_pct", float64(20))
-	if n := resets(fc, rf); n != 1 {
+	if n := received.Count(0, resetOf(rf)); n != 1 {
 		t.Fatalf("with the row known: %d resets, want 1", n)
 	}
 }

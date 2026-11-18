@@ -4,14 +4,12 @@
 package server
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -318,12 +316,10 @@ func TestStoreLimiterWritesOnlyAfterFailures(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer ro.Close()
-	var buf bytes.Buffer
-	rl := newLimiter(Options{Store: ro}, slog.New(slog.NewTextHandler(&buf, nil)))
+	log, logs := testkit.LogWatch(nil)
+	rl := newLimiter(Options{Store: ro}, log)
 	for i := 0; i < 3; i++ {
 		rl.succeed(ctx, store.LockoutAddr("192.0.2.11"))
 	}
-	if strings.Contains(buf.String(), "not forgotten") {
-		t.Fatalf("a success without failures wrote the store:\n%s", buf.String())
-	}
+	logs.HasNot(t, 0, "a store write for a success without failures", testkit.Contains("not forgotten"))
 }

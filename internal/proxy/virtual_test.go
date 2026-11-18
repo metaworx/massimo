@@ -16,6 +16,7 @@ import (
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/testkit"
+	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 )
 
 // virtualsOfRooms is the virtual wall thermostats of the fake Cube's
@@ -160,18 +161,17 @@ func listed(t *testing.T, l cube.Message, rf cube.RFAddress) bool {
 // one is a link with the real wall thermostat.
 func TestVirtualCommands(t *testing.T) {
 	fc, r, conn, _ := setupVirtual(t)
+	lines := cubewatch.Lines(fc)
 	last := func() cube.RadioCommand {
 		t.Helper()
-		got := fc.Received()
-		for i := len(got) - 1; i >= 0; i-- {
-			if got[i].Type == 's' {
-				rc, _ := cube.ParseRadioCommand(got[i].Data)
-				return rc
-			}
+		got := lines.Since(0, cubewatch.Type('s'))
+		if len(got) == 0 {
+			return cube.RadioCommand{}
 		}
-		return cube.RadioCommand{}
+		rc, _ := cube.ParseRadioCommand(got[len(got)-1].Data)
+		return rc
 	}
-	sent := func() int { return countType(fc, 's') }
+	radio := cubewatch.Type('s')
 
 	set, _ := cube.CmdSetTemperature(cube.Target{RFAddress: 0x000002}, 21, cube.ModeManual, cube.Until{})
 	if s := sendLine(t, conn, r, set); s.Type != 'S' {
@@ -184,20 +184,24 @@ func TestVirtualCommands(t *testing.T) {
 	if rc := last(); rc.Command != cube.RFLockControls || rc.Target.RFAddress != 0x0a0201 {
 		t.Fatalf("lock sent %+v", rc)
 	}
-	before := sent()
-	if s := sendLine(t, conn, r, cube.CmdLockControls(cube.Target{RFAddress: 0x000002}, true)); s.Type != 'S' || sent() != before {
-		t.Fatalf("a lock without a real wall thermostat: %s, sent %d", s, sent()-before)
+	before := lines.Mark()
+	if s := sendLine(t, conn, r, cube.CmdLockControls(cube.Target{RFAddress: 0x000002}, true)); s.Type != 'S' || lines.Count(before, radio) != 0 {
+		t.Fatalf("a lock without a real wall thermostat: %s, sent %d", s, lines.Count(before, radio))
 	}
 	link := cube.CmdLinkPartner(cube.Target{RFAddress: 0x0a0202}, true, 0x000001, cube.DeviceWallThermostat)
+	before = lines.Mark()
 	sendLine(t, conn, r, link)
-	got := fc.Received()
+	got := lines.Since(before, nil)
+	if len(got) == 0 {
+		t.Fatal("the link reached no Cube")
+	}
 	raw, _ := base64.StdEncoding.DecodeString(got[len(got)-1].Data)
 	if cube.RFAddressFromBytes(raw[10:13]) != 0x0a0201 {
 		t.Fatalf("link partner %x", raw[10:13])
 	}
-	before = sent()
+	before = lines.Mark()
 	link = cube.CmdLinkPartner(cube.Target{RFAddress: 0x0a0204}, true, 0x000002, cube.DeviceWallThermostat)
-	if s := sendLine(t, conn, r, link); s.Type != 'S' || sent() != before {
+	if s := sendLine(t, conn, r, link); s.Type != 'S' || lines.Count(before, radio) != 0 {
 		t.Fatalf("a link with a virtual one without a real wall thermostat: %s", s)
 	}
 }
@@ -206,9 +210,10 @@ func TestVirtualCommands(t *testing.T) {
 // real wall thermostat back; one the proxy cannot read is not sent; a
 // virtual wall thermostat is not deleted.
 func TestVirtualMetadataAndDelete(t *testing.T) {
-	fc, r, conn, lines := setupVirtual(t)
+	fc, r, conn, greeting := setupVirtual(t)
+	lines := cubewatch.Lines(fc)
 	var parts []cube.MetadataPart
-	for _, m := range lines {
+	for _, m := range greeting {
 		if m.Type == 'M' {
 			part, _ := cube.ParseMetadataPart(m.Data)
 			parts = append(parts, part)
@@ -224,12 +229,10 @@ func TestVirtualMetadataAndDelete(t *testing.T) {
 		t.Fatalf("m: answered %s", a)
 	}
 	var written *cube.Metadata
-	for _, m := range fc.Received() {
-		if m.Type == 'm' {
-			_, data, _ := strings.Cut(m.Data, ",")
-			raw, _ := base64.StdEncoding.DecodeString(data)
-			written, _ = cube.DecodeMetadata(raw)
-		}
+	for _, m := range lines.Since(0, cubewatch.Type('m')) {
+		_, data, _ := strings.Cut(m.Data, ",")
+		raw, _ := base64.StdEncoding.DecodeString(data)
+		written, _ = cube.DecodeMetadata(raw)
 	}
 	if written == nil {
 		t.Fatal("no metadata written")
@@ -242,12 +245,12 @@ func TestVirtualMetadataAndDelete(t *testing.T) {
 		t.Fatalf("written metadata %+v", written)
 	}
 
-	ms := countType(fc, 'm')
-	if a := sendLine(t, conn, r, cube.Message{Type: 'm', Data: "01," + base64.StdEncoding.EncodeToString([]byte("rest"))}); a.Type != 'A' || countType(fc, 'm') != ms {
-		t.Fatalf("a second part: %s, sent %d", a, countType(fc, 'm')-ms)
+	ms := lines.Mark()
+	if a := sendLine(t, conn, r, cube.Message{Type: 'm', Data: "01," + base64.StdEncoding.EncodeToString([]byte("rest"))}); a.Type != 'A' || lines.Count(ms, cubewatch.Type('m')) != 0 {
+		t.Fatalf("a second part: %s, sent %d", a, lines.Count(ms, cubewatch.Type('m')))
 	}
-	ts := countType(fc, 't')
-	if a := sendLine(t, conn, r, cube.CmdDeleteDevices(true, 0x000001)); a.Type != 'A' || countType(fc, 't') != ts {
-		t.Fatalf("delete of a virtual one: %s, sent %d", a, countType(fc, 't')-ts)
+	ts := lines.Mark()
+	if a := sendLine(t, conn, r, cube.CmdDeleteDevices(true, 0x000001)); a.Type != 'A' || lines.Count(ts, cubewatch.Type('t')) != 0 {
+		t.Fatalf("delete of a virtual one: %s, sent %d", a, lines.Count(ts, cubewatch.Type('t')))
 	}
 }

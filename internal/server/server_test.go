@@ -20,20 +20,11 @@ import (
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/testkit"
+	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
 const fixture = "../protocol/cube/testdata/cube-fw0113-greeting.txt"
-
-func countType(fc *fakecube.Server, typ byte) int {
-	n := 0
-	for _, m := range fc.Received() {
-		if m.Type == typ {
-			n++
-		}
-	}
-	return n
-}
 
 func start(t *testing.T, token string) (*fakecube.Server, *httptest.Server, *Server) {
 	t.Helper()
@@ -128,6 +119,7 @@ func TestCubeTimeAt(t *testing.T) {
 
 func TestServerReadsAndSetpoints(t *testing.T) {
 	fc, ts, s := start(t, "")
+	received := cubewatch.Lines(fc)
 	var c cubeView
 	if getJSON(t, ts, "", "/api/v1/cubes/keq0000100", &c) != 200 || c.Rooms != 6 || c.Devices != 6 || c.Firmware != "1.1.3" || len(c.RoomList) != 6 {
 		t.Fatalf("cube %+v", c)
@@ -172,12 +164,7 @@ func TestServerReadsAndSetpoints(t *testing.T) {
 		if resp.StatusCode != 200 || res["ok"] != true {
 			t.Fatalf("%s: %d %v", c.path, resp.StatusCode, res)
 		}
-		var got []string
-		for _, m := range fc.Received() {
-			if m.Type == 's' {
-				got = append(got, m.String())
-			}
-		}
+		got := lineStrings(received.Since(0, cubewatch.Type('s')))
 		if got[len(got)-1] != c.want {
 			t.Fatalf("%s sent %v, want last %s", c.path, got, c.want)
 		}
@@ -192,10 +179,7 @@ func TestServerReadsAndSetpoints(t *testing.T) {
 	if resp.StatusCode != 200 {
 		t.Fatalf("lock: %d", resp.StatusCode)
 	}
-	var lines []string
-	for _, m := range fc.Received() {
-		lines = append(lines, m.String())
-	}
+	lines := lineStrings(received.Since(0, cubewatch.Except('l')))
 	if n := len(lines); n < 2 || lines[n-1] != "s:AACAAAAACgENAAA=" || !strings.HasPrefix(lines[n-2], "z:1e,G,06") {
 		t.Fatalf("lock sent %v", lines)
 	}
@@ -218,12 +202,12 @@ func TestServerReadsAndSetpoints(t *testing.T) {
 	cmds, _ := cube.WriteMetadataCommands(&withRoom)
 	_, data, _ := strings.Cut(cmds[0].Data, ",")
 	rt.client.ApplyLocal(cube.Message{Type: 'M', Data: "00,01," + data})
-	before := countType(fc, 'm')
+	before := received.Mark()
 	req, _ = http.NewRequest("DELETE", ts.URL+"/api/v1/cubes/KEQ0000100/rooms/7", nil)
 	resp, _ = http.DefaultClient.Do(req)
 	resp.Body.Close()
-	if resp.StatusCode != 200 || countType(fc, 'm') != before+1 || len(rt.client.Snapshot().Metadata().Rooms) != 6 {
-		t.Fatalf("DELETE empty room: %d, m lines %d→%d, rooms %d", resp.StatusCode, before, countType(fc, 'm'), len(rt.client.Snapshot().Metadata().Rooms))
+	if n := received.Count(before, cubewatch.Type('m')); resp.StatusCode != 200 || n != 1 || len(rt.client.Snapshot().Metadata().Rooms) != 6 {
+		t.Fatalf("DELETE empty room: %d, %d m lines, rooms %d", resp.StatusCode, n, len(rt.client.Snapshot().Metadata().Rooms))
 	}
 	// Bad requests.
 	req, _ = http.NewRequest("PUT", ts.URL+"/api/v1/cubes/KEQ0000100/devices/0a010d/setpoint", strings.NewReader(`{"mode":"turbo"}`))

@@ -4,7 +4,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"io"
@@ -14,10 +13,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strings"
-	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -51,20 +48,19 @@ func TestSighupAction(t *testing.T) {
 // A SIGHUP before serve hands over its reload is logged at Warn and
 // dropped; afterwards it runs the reload, and logs nothing of its own.
 func TestHupReloadBeforeReady(t *testing.T) {
-	var out strings.Builder
-	h := &hupReload{log: slog.New(slog.NewTextHandler(&out, nil))}
+	log, w := testkit.LogWatch(nil)
+	h := &hupReload{log: log}
 	h.handle()
-	if got := out.String(); !strings.Contains(got, `level=WARN msg="SIGHUP during the start, ignored"`) || !strings.Contains(got, "reason=") {
-		t.Fatalf("before ready: %q", got)
-	}
-	out.Reset()
+	w.Has(t, 0, "before ready: the warning, with its reason", testkit.ContainsAt(slog.LevelWarn, "SIGHUP during the start, ignored", "reason="))
+	m := w.Mark()
 	runs := 0
 	h.ready(func() { runs++ })
 	h.handle()
 	h.handle()
-	if runs != 2 || out.Len() != 0 {
-		t.Fatalf("after ready: %d runs, logged %q", runs, out.String())
+	if runs != 2 {
+		t.Fatalf("after ready: %d runs", runs)
 	}
+	w.HasNot(t, m, "after ready: a line of its own", nil)
 }
 
 // The watch reads a changed file once it held still for one more look,
@@ -180,9 +176,8 @@ func TestSettingsReloader(t *testing.T) {
 }
 
 // startServe builds massimo and runs serve with the settings file and
-// the arguments, a store of its own; it returns the command, the API's
-// base URL and the log so far.
-func startServe(t *testing.T, settingsFile, data string, args ...string) (*exec.Cmd, string, func() string, chan struct{}) {
+// the arguments, a store of its own; it returns once the API listens.
+func startServe(t *testing.T, settingsFile, data string, args ...string) *builtServe {
 	t.Helper()
 	bin := filepath.Join(t.TempDir(), "massimo")
 	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
@@ -194,37 +189,11 @@ func startServe(t *testing.T, settingsFile, data string, args ...string) (*exec.
 			cmd.Env = append(cmd.Env, kv)
 		}
 	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { cmd.Process.Kill() })
-	addr := make(chan string, 1)
-	var mu sync.Mutex
-	var log strings.Builder
-	scanned := make(chan struct{})
-	go func() {
-		defer close(scanned)
-		sc := bufio.NewScanner(stderr)
-		for sc.Scan() {
-			mu.Lock()
-			log.WriteString(sc.Text() + "\n")
-			mu.Unlock()
-			if m := regexp.MustCompile(`msg="api listening" source=system addr=(\S+)`).FindStringSubmatch(sc.Text()); m != nil {
-				addr <- m[1]
-			}
-		}
-	}()
-	select {
-	case a := <-addr:
-		return cmd, "http://" + a, func() string { mu.Lock(); defer mu.Unlock(); return log.String() }, scanned
-	case <-time.After(testkit.Scale(10 * time.Second)):
-		t.Fatal("serve did not start")
-	}
-	return nil, "", nil, nil
+	s := runBuilt(t, cmd)
+	s.data = data
+	r, _ := s.log.Await(t, 0, "the start: api listening", testkit.Msg("api listening", "source", "system"), serveWait)
+	s.addr = r.Attrs["addr"]
+	return s
 }
 
 func get(t *testing.T, url, token string) (int, string) {
@@ -255,17 +224,19 @@ func TestServeAppliesTheTokenOnSIGHUP(t *testing.T) {
 	}
 	settingsFile := filepath.Join(t.TempDir(), "env")
 	os.WriteFile(settingsFile, []byte("# no token yet\n"), 0o600)
-	cmd, base, log, scanned := startServe(t, settingsFile, t.TempDir(), "-sighup", "reload")
+	s := startServe(t, settingsFile, t.TempDir(), "-sighup", "reload")
+	base := "http://" + s.addr
 	if code, text := get(t, base+"/api/v1/cubes", ""); code != 200 {
 		t.Fatalf("the open server: %d %s", code, text)
 	}
 	os.WriteFile(settingsFile, []byte(tokenVar+"=placeholder-token-1\n"+env.TrustedProxies+"=127.0.0.1\n"), 0o600)
-	cmd.Process.Signal(syscall.SIGHUP)
+	m := s.log.Mark()
+	s.cmd.Process.Signal(syscall.SIGHUP)
 	if !testkit.Within(5*time.Second, func() bool {
 		code, _ := get(t, base+"/api/v1/cubes", "")
 		return code == 401
 	}) {
-		t.Fatalf("the server does not ask for the token after the SIGHUP; log:\n%s", log())
+		t.Fatal("the server does not ask for the token after the SIGHUP") // serve's log follows
 	}
 	if code, text := get(t, base+"/api/v1/cubes", "placeholder-token-1"); code != 200 {
 		t.Fatalf("with the token: %d %s", code, text)
@@ -273,19 +244,14 @@ func TestServeAppliesTheTokenOnSIGHUP(t *testing.T) {
 	if code, text := get(t, base+"/api/v1/restart", "placeholder-token-1"); code != 200 || !strings.Contains(text, `"pending": [`) || !strings.Contains(text, env.TrustedProxies) {
 		t.Fatalf("GET /api/v1/restart: %d %s", code, text)
 	}
-	cmd.Process.Signal(syscall.SIGTERM)
-	if err := cmd.Wait(); err != nil {
-		t.Fatalf("serve ended with %v", err)
-	}
-	<-scanned
-	for _, want := range []string{`msg="settings file read again" source=system why=SIGHUP changed=`, `msg="api token applied" source=server owner_created=true`, `msg="store checkpointed"`} {
-		if !strings.Contains(log(), want) {
-			t.Errorf("the log lacks %s:\n%s", want, log())
-		}
-	}
-	if strings.Contains(log(), "placeholder-token-1") {
-		t.Error("the log shows the token")
-	}
+	// Once serve ended, its log is read whole; the token first, which no
+	// line shows.
+	s.stop(t)
+	s.log.HasNot(t, 0, "the token in the log", testkit.Contains("placeholder-token-1"))
+	s.log.Has(t, m, "the settings file read again for the SIGHUP, with what changed",
+		testkit.Contains(`msg="settings file read again"`, "source=system", "why=SIGHUP", "changed="))
+	s.log.Has(t, m, "the token applied, its owner created", testkit.Msg("api token applied", "source", "server", "owner_created", "true"))
+	s.log.Has(t, m, "the store checkpointed", testkit.Msg("store checkpointed"))
 }
 
 // With -sighup stop, a SIGHUP stops serve as SIGTERM does: exit 0 and
@@ -298,19 +264,17 @@ func TestServeStopsOnSIGHUP(t *testing.T) {
 		t.Skip("builds the binary")
 	}
 	data := t.TempDir()
-	cmd, _, log, _ := startServe(t, os.DevNull, data, "-sighup", "stop")
-	cmd.Process.Signal(syscall.SIGHUP)
-	done := make(chan error, 1)
-	go func() { done <- cmd.Wait() }()
+	s := startServe(t, os.DevNull, data, "-sighup", "stop")
+	s.cmd.Process.Signal(syscall.SIGHUP)
 	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatalf("serve ended on SIGHUP with %v", err)
+	case <-s.exited:
+		if s.err != nil {
+			t.Fatalf("serve ended on SIGHUP with %v", s.err)
 		}
 	case <-time.After(testkit.Scale(20 * time.Second)):
 		t.Fatal("serve did not stop on SIGHUP")
 	}
 	if _, err := os.Stat(filepath.Join(data, "massimo.db-wal")); err == nil {
-		t.Fatalf("the store was not closed; log:\n%s", log())
+		t.Fatal("the store was not closed") // serve's log follows
 	}
 }

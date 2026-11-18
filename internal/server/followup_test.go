@@ -4,14 +4,11 @@
 package server
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
-	"log/slog"
 	"net"
 	"net/http/httptest"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -19,6 +16,7 @@ import (
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/testkit"
+	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 )
 
 // withEco returns rf's C line from the greeting with another eco
@@ -93,13 +91,7 @@ func TestFollowUpAfterAWrite(t *testing.T) {
 	}
 	// The re-reads stop once the line changed: no c: for 0a010a after it.
 	time.Sleep(200 * time.Millisecond)
-	var cs int
-	for _, m := range fc.Received() {
-		if m.String() == "c:0a010a" {
-			cs++
-		}
-	}
-	if cs > 4 {
+	if cs := cubewatch.Lines(fc).Count(0, lineIs("c:0a010a")); cs > 4 {
 		t.Fatalf("%d re-reads", cs)
 	}
 }
@@ -129,34 +121,10 @@ func TestFollowUpGivesUpAndRespectsTheRefreshSwitch(t *testing.T) {
 		t.Fatal(code)
 	}
 	time.Sleep(300 * time.Millisecond)
-	var cs int
-	for _, m := range fc.Received() {
-		if m.String() == "c:0a010a" {
-			cs++
-		}
-	}
 	// One re-read right after the write, then one per follow-up delay.
-	if cs != 3 || fc.Connections() != 1 {
+	if cs := cubewatch.Lines(fc).Count(0, lineIs("c:0a010a")); cs != 3 || fc.Connections() != 1 {
 		t.Fatalf("%d re-reads, %d connections", cs, fc.Connections())
 	}
-}
-
-// syncBuffer collects log output from several goroutines.
-type syncBuffer struct {
-	mu sync.Mutex
-	b  bytes.Buffer
-}
-
-func (b *syncBuffer) Write(p []byte) (int, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.b.Write(p)
-}
-
-func (b *syncBuffer) String() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.b.String()
 }
 
 // proxyClient connects to a proxy and reads its greeting.
@@ -214,11 +182,11 @@ func TestFollowUpAfterAProxyClientsWrite(t *testing.T) {
 	}
 	proxyAddr := ln.Addr().String()
 	ln.Close()
-	var logs syncBuffer
+	log, logs := testkit.LogWatch(nil)
 	s := New(Options{Cubes: []CubeConfig{{Serial: "KEQ0000100", Addr: addr}}, Queue: engine.Options{Gap: time.Millisecond},
 		RefreshInterval: time.Hour, FollowUpDelays: []time.Duration{40 * time.Millisecond, 40 * time.Millisecond, 40 * time.Millisecond, 40 * time.Millisecond, 40 * time.Millisecond},
 		FollowUpReconnectGap: time.Millisecond, Proxy: []ProxyListener{{Addr: proxyAddr}},
-		Logger: slog.New(slog.NewTextHandler(&logs, nil))})
+		Logger: log})
 	ctx, cancel := context.WithCancel(context.Background())
 	go s.Run(ctx)
 	ts := httptest.NewServer(s.Handler())
@@ -227,16 +195,9 @@ func TestFollowUpAfterAProxyClientsWrite(t *testing.T) {
 		var c cubeView
 		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100", &c) == 200 && c.Connected
 	})
+	received := cubewatch.Lines(fc)
 	sent := func() (rereads, others int) {
-		for _, m := range fc.Received() {
-			switch {
-			case m.String() == "c:0a010a":
-				rereads++
-			case m.Type == 'c':
-				others++
-			}
-		}
-		return rereads, others
+		return received.Count(0, lineIs("c:0a010a")), received.Count(0, func(m cube.Message) bool { return m.Type == 'c' && m.String() != "c:0a010a" })
 	}
 
 	// A 0x11 (preset temperatures) to 0a010a, as the original software
@@ -254,18 +215,17 @@ func TestFollowUpAfterAProxyClientsWrite(t *testing.T) {
 	}
 	conn, r := proxyClient(t, proxyAddr)
 	proxyWrite(t, conn, r, m.Data)
-	testkit.Eventually(t, "a re-read", func() bool { n, _ := sent(); return n >= 1 })
+	received.Await(t, 0, "a re-read", lineIs("c:0a010a"))
+	took := logs.Mark()
 	fc.SetConfig(changed)
-	testkit.Eventually(t, "the device's new configuration", func() bool {
-		return strings.Contains(logs.String(), "device configuration taken over by the device")
-	})
+	logs.Await(t, took, "the device's new configuration", testkit.Msg("device configuration taken over by the device"))
 	_, d := do(t, ts, "GET", "/api/v1/cubes/KEQ0000100/devices/0a010a", "")
 	if th, _ := d["thermostat"].(map[string]any); th["eco_temp"] != float64(17) {
 		t.Fatalf("eco after the follow-up %v", th["eco_temp"])
 	}
 	// The fake's S reply left one radiogram pending.
 	testkit.Eventually(t, "the budget reconnect", func() bool { return fc.Connections() == 2 })
-	testkit.Eventually(t, "the budget refresh logged", func() bool { return strings.Contains(logs.String(), "budget refreshed after writes") })
+	logs.Await(t, 0, "the budget refresh logged", testkit.Msg("budget refreshed after writes"))
 	time.Sleep(200 * time.Millisecond)
 	before, others := sent()
 	if before > 5 || others != 0 {

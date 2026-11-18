@@ -88,6 +88,12 @@ type Server struct {
 	restarts  int           // Restart calls
 
 	free *int // free memory slots set with SetFreeSlots
+
+	// recvMu orders the lines received and their hooks (OnReceive): it
+	// is held from a line's record to the end of its hooks, and taken
+	// before mu.
+	recvMu    sync.Mutex
+	onReceive []func(cube.Message) // guarded by recvMu
 }
 
 // SetFreeSlots makes the fake report free memory slots in its S replies
@@ -373,6 +379,34 @@ func (s *Server) Received() []cube.Message {
 	return append([]cube.Message(nil), s.received...)
 }
 
+// OnReceive calls f with each command the fake receives: first with
+// each one received so far, then with each as it comes, one at a time
+// and in the order Received has them, after Received holds it and before
+// the fake answers it. It is for tests, which watch the lines this way
+// rather than poll Received (internal/testkit/cubewatch); the fake
+// behaves the same with it as without. f holds up the line's answer
+// while it runs, so it is to return soon, and must not call OnReceive.
+func (s *Server) OnReceive(f func(cube.Message)) {
+	s.recvMu.Lock()
+	defer s.recvMu.Unlock()
+	for _, m := range s.Received() {
+		f(m)
+	}
+	s.onReceive = append(s.onReceive, f)
+}
+
+// record keeps a command received and hands it to the OnReceive hooks.
+func (s *Server) record(m cube.Message) {
+	s.recvMu.Lock()
+	defer s.recvMu.Unlock()
+	s.mu.Lock()
+	s.received = append(s.received, m)
+	s.mu.Unlock()
+	for _, f := range s.onReceive {
+		f(m)
+	}
+}
+
 // Connections returns how many clients connected so far.
 func (s *Server) Connections() int {
 	s.mu.Lock()
@@ -501,9 +535,7 @@ func (s *Server) serve(conn net.Conn) {
 		if err != nil {
 			continue
 		}
-		s.mu.Lock()
-		s.received = append(s.received, m)
-		s.mu.Unlock()
+		s.record(m)
 		if !s.audibleOr(gone) {
 			return // the client left during the silence
 		}

@@ -10,6 +10,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 )
 
 // withZeroEntry adds to a greeting what one of the owner's Cubes sent on
@@ -47,7 +48,8 @@ func TestZeroEntryIsNoDevice(t *testing.T) {
 			t.Fatalf("GET %s: %d, names 000000: %s", path, code, body)
 		}
 	}
-	sent := len(fc.Received())
+	received := cubewatch.Lines(fc)
+	sent := received.Mark()
 	for _, c := range []struct{ method, path, body string }{
 		{"GET", "/devices/000000", ""},
 		{"GET", "/devices/000000/program", ""},
@@ -63,7 +65,7 @@ func TestZeroEntryIsNoDevice(t *testing.T) {
 			t.Errorf("%s %s: %d %s, want 400", c.method, c.path, code, body)
 		}
 	}
-	if got := fc.Received()[sent:]; len(got) != 0 {
+	if got := received.Since(sent, cubewatch.Except('l')); len(got) != 0 {
 		t.Fatalf("sent to the Cube: %v", lineStrings(got))
 	}
 }

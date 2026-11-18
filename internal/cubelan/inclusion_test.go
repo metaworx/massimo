@@ -100,8 +100,9 @@ func TestInclusionDeliversNewDevices(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	c := New(Options{Addr: addr})
+	evs := events(t, c)
 	go c.Run(ctx)
-	waitEvent(t, c, EventConnected)
+	_, at := evs.Await(t, 0, "the connection", kind(EventConnected))
 
 	if err := c.StartInclusion(30 * time.Second); err != nil {
 		t.Fatal(err)
@@ -109,22 +110,19 @@ func TestInclusionDeliversNewDevices(t *testing.T) {
 	if err := c.StartInclusion(30 * time.Second); err != ErrInclusionActive {
 		t.Fatalf("second start: %v", err)
 	}
-	lines, stop := c.WatchInclusion()
+	ch, stop := c.WatchInclusion()
 	defer stop()
+	lines := testkit.ChanWatch(t, ch, cube.Message.String)
 	// n: has no immediate reply: Send returns after the write.
 	if _, err := c.Send(ctx, cube.CmdInclusion(30*time.Second)); err != nil {
 		t.Fatal(err)
 	}
-	select {
-	case m := <-lines:
-		nd, err := cube.ParseNewDevice(m.Data)
-		if err != nil || nd.RFAddress != 0x0a0b0c || nd.Serial != "TEQ0000001" || nd.Type != cube.DeviceRadiatorThermostat {
-			t.Fatalf("N line %v: %+v %v", m, nd, err)
-		}
-	case <-time.After(testkit.Scale(5 * time.Second)):
-		t.Fatal("no N line")
+	m, next := lines.Await(t, 0, "the N line", nil)
+	if nd, err := cube.ParseNewDevice(m.Data); err != nil || nd.RFAddress != 0x0a0b0c || nd.Serial != "TEQ0000001" || nd.Type != cube.DeviceRadiatorThermostat {
+		t.Fatalf("N line %v: %+v %v", m, nd, err)
 	}
-	if e := waitEvent(t, c, EventPaired); e.Device != 0x0a0b0c || e.New == nil {
+	e, at := evs.Await(t, at, "the paired event", kind(EventPaired))
+	if e.Device != 0x0a0b0c || e.New == nil {
 		t.Fatalf("paired event %+v", e)
 	}
 	if st := c.Inclusion(); !st.Active || len(st.Paired) != 1 || st.Paired[0].RFAddress != 0x0a0b0c {
@@ -134,13 +132,11 @@ func TestInclusionDeliversNewDevices(t *testing.T) {
 	if _, err := c.Send(ctx, cube.CmdCancelInclusion); err != nil {
 		t.Fatal(err)
 	}
-	waitEvent(t, c, EventPairingEnded)
-	if m, ok := <-lines; !ok || m.Data != "" {
-		t.Fatalf("end line %v %v", m, ok)
+	evs.Await(t, at, "the pairing's end", kind(EventPairingEnded))
+	if m, next = lines.Await(t, next, "the end line", nil); m.Data != "" {
+		t.Fatalf("end line %v", m)
 	}
-	if _, ok := <-lines; ok {
-		t.Fatal("watch still open")
-	}
+	lines.Never(t, next, "a line after the end line", nil, lines.Ended)
 	if st := c.Inclusion(); st.Active || st.Ended.IsZero() || len(st.Paired) != 1 {
 		t.Fatalf("state after the end %+v", st)
 	}
@@ -155,11 +151,12 @@ func TestInclusionEndsOnItsOwn(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	c := New(Options{Addr: addr})
+	evs := events(t, c)
 	go c.Run(ctx)
-	waitEvent(t, c, EventConnected)
+	_, at := evs.Await(t, 0, "the connection", kind(EventConnected))
 	c.StartInclusion(time.Second)
 	c.Send(ctx, cube.CmdInclusion(time.Second)) // the fake ends it after a second with N:
-	waitEvent(t, c, EventPairingEnded)
+	evs.Await(t, at, "the pairing's end", kind(EventPairingEnded))
 	if c.Inclusion().Active {
 		t.Fatal("still active")
 	}

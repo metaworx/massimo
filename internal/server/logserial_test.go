@@ -15,6 +15,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit"
+	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 )
 
 // serialsOf maps the Cube's devices' radio addresses to their serials,
@@ -87,11 +88,12 @@ func TestLogForgottenDeviceHasSerial(t *testing.T) {
 	if serial == "" || name == "" {
 		t.Fatalf("the device without serial or name: %v", dev)
 	}
-	sent := len(fc.Received())
+	received := cubewatch.Lines(fc)
+	sent := received.Mark()
 	if code, out := do(t, ts, "DELETE", base+"/devices/"+strings.ToLower(serial), ""); code != 200 || out["ok"] != true {
 		t.Fatalf("remove by serial: %d %v", code, out)
 	}
-	if got := lineStrings(fc.Received()[sent:]); len(got) == 0 || !containsLine(got, "t:01,1,CgEK") {
+	if got := lineStrings(received.Since(sent, cubewatch.Except('l'))); len(got) == 0 || !containsLine(got, "t:01,1,CgEK") {
 		t.Fatalf("the removal sent %v, want its t:", got)
 	}
 	var gone *event
@@ -131,6 +133,7 @@ func containsLine(lines []string, want string) bool {
 // serial the Cube does not have is a 404, neither form a 400.
 func TestDeviceRoutesTakeSerial(t *testing.T) {
 	fc, ts, _ := startCopyCube(t, nil)
+	received := cubewatch.Lines(fc)
 	const base = "/api/v1/cubes/KEQ0000100/devices/"
 	serial := serialsOf(t, ts, "")["0a010a"]
 	var byRF, bySN map[string]any
@@ -143,25 +146,25 @@ func TestDeviceRoutesTakeSerial(t *testing.T) {
 		{"PUT", "/lock", `{"locked":false}`},
 		{"PUT", "/config", `{"eco_temp":17}`},
 	} {
-		sent := len(fc.Received())
+		sent := received.Mark()
 		if code, out := do(t, ts, c.method, base+"0a010a"+c.path, c.body); code != 200 {
 			t.Fatalf("%s by radio address: %d %v", c.path, code, out)
 		}
-		want := lineStrings(fc.Received()[sent:])
-		sent = len(fc.Received())
+		want := lineStrings(received.Since(sent, cubewatch.Except('l')))
+		sent = received.Mark()
 		if code, out := do(t, ts, c.method, base+strings.ToLower(serial)+c.path, c.body); code != 200 {
 			t.Fatalf("%s by serial: %d %v", c.path, code, out)
 		}
-		got := lineStrings(fc.Received()[sent:])
+		got := lineStrings(received.Since(sent, cubewatch.Except('l')))
 		if len(want) == 0 || strings.Join(got, "\n") != strings.Join(want, "\n") {
 			t.Fatalf("%s by serial sent\n%s\nby radio address\n%s", c.path, strings.Join(got, "\n"), strings.Join(want, "\n"))
 		}
 	}
-	sent := len(fc.Received())
+	sent := received.Mark()
 	if code, out := do(t, ts, "PUT", base+serial, `{"name":"By serial"}`); code != 200 {
 		t.Fatalf("rename by serial: %d %v", code, out)
 	}
-	if got := lineStrings(fc.Received()[sent:]); len(got) == 0 || !strings.HasPrefix(got[len(got)-1], "m:") {
+	if got := lineStrings(received.Since(sent, cubewatch.Except('l'))); len(got) == 0 || !strings.HasPrefix(got[len(got)-1], "m:") {
 		t.Fatalf("the rename sent %v", got)
 	}
 	var renamed map[string]any

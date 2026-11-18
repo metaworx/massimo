@@ -12,6 +12,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/testkit"
+	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 )
 
 // A queue command sent while the connection's poll waits for a slow
@@ -40,18 +41,10 @@ func TestQueueCommandWaitsForAPollInFlight(t *testing.T) {
 	q := NewQueue(c, Options{Gap: time.Millisecond})
 	go q.Run(ctx)
 
-	count := func(typ byte) int {
-		n := 0
-		for _, m := range srv.Received() {
-			if m.Type == typ {
-				n++
-			}
-		}
-		return n
-	}
-	polls := count('l')
+	lines := cubewatch.Lines(srv)
+	polls := lines.Mark()
 	srv.SetSilent(true)
-	testkit.Eventually(t, "a poll while the Cube is silent", func() bool { return count('l') != polls })
+	lines.Await(t, polls, "a poll while the Cube is silent", cubewatch.Type('l'))
 
 	// A setpoint, as a user's write: the poll's l: holds the line.
 	m, err := cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a010d, RoomID: 6, Room: true}, 19, cube.ModeManual, cube.Until{})
@@ -59,12 +52,14 @@ func TestQueueCommandWaitsForAPollInFlight(t *testing.T) {
 		t.Fatal(err)
 	}
 	ticket := q.Enqueue(Command{Lines: []cube.Message{m}})
+	// No end to wait for: a command waiting for the line's turn writes
+	// nothing, and the polls that find the line busy write nothing.
 	select {
 	case res := <-ticket.Done():
 		t.Fatalf("the command ended while the poll waited for its reply: %v", res.Err)
 	case <-time.After(150 * time.Millisecond):
 	}
-	if n := count('s'); n != 0 {
+	if n := lines.Count(0, cubewatch.Type('s')); n != 0 {
 		t.Fatalf("%d s: lines written while the poll waited for its reply", n)
 	}
 
@@ -75,7 +70,7 @@ func TestQueueCommandWaitsForAPollInFlight(t *testing.T) {
 	if res.Err != nil || len(res.Replies) != 1 || res.Replies[0].Type != 'S' {
 		t.Fatalf("the command after the poll: %v %v", res.Replies, res.Err)
 	}
-	if n := count('s'); n != 1 {
+	if n := lines.Count(0, cubewatch.Type('s')); n != 1 {
 		t.Errorf("%d s: lines, want 1", n)
 	}
 }

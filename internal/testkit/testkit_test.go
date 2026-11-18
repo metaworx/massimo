@@ -153,8 +153,9 @@ func TestNever(t *testing.T) {
 // kitImport is the package's import path.
 const kitImport = "go.metaworx.ch/massimo/internal/testkit"
 
-// The kit is test code: no file of the module but a test imports it or a
-// package under it, so that nothing shipped waits as a test does.
+// The kit is test code: no file of the module but a test, or one of the
+// kit's own, imports it or a package under it, so that nothing shipped
+// waits as a test does.
 func TestOnlyTestsImportTheKit(t *testing.T) {
 	root, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
@@ -182,7 +183,8 @@ func TestOnlyTestsImportTheKit(t *testing.T) {
 			}
 			return nil
 		}
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") || filepath.Dir(path) == here {
+		// The kit's own packages build on each other (cubewatch on the kit).
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") || strings.HasPrefix(path, here+string(filepath.Separator)) {
 			return nil
 		}
 		f, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)

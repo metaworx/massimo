@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/testkit"
+	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 )
 
 // zeroEntry is the L entry one of the owner's Cubes listed at radio
@@ -123,17 +125,17 @@ func TestClientWarnsOfZeroEntry(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { srv.Close() })
-	var logs logLines
+	logger, logs := testkit.LogWatch(slog.LevelDebug)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	c := New(Options{Addr: addr, Logger: logs.logger()})
+	c := New(Options{Addr: addr, Logger: logger})
 	go c.Run(ctx)
-	const kept, entry = "cube: a line it sent cannot be read; kept as received for the proxy and backups",
-		"cube: its device list has an entry at radio address 000000; it is no device, not shown and sent nothing"
-	// Within, not Eventually: where the entry's warning does not come, the
+	kept := testkit.MsgAt(slog.LevelWarn, "cube: a line it sent cannot be read; kept as received for the proxy and backups")
+	entry := testkit.MsgAt(slog.LevelWarn, "cube: its device list has an entry at radio address 000000; it is no device, not shown and sent nothing")
+	// Within, not Await: where the entry's warning does not come, the
 	// check below shows both warnings as they are.
-	testkit.Within(testkit.Wait, func() bool { return len(logs.lines("WARN", entry)) > 0 })
-	if k, e := logs.lines("WARN", kept), logs.lines("WARN", entry); len(k) != 1 || len(e) != 1 {
+	testkit.Within(testkit.Wait, logs.Seen(0, entry))
+	if k, e := logs.Since(0, kept), logs.Since(0, entry); len(k) != 1 || len(e) != 1 {
 		t.Fatalf("warnings: kept %q, entry %q", k, e)
 	}
 	for _, rf := range c.Snapshot().Devices() {
@@ -156,9 +158,7 @@ func TestClientRefusesZero(t *testing.T) {
 	if _, err := c.Send(ctx, cube.CmdDeleteDevices(true, cube.ZeroAddress)); !errors.Is(err, cube.ErrZeroAddress) {
 		t.Fatalf("t: to 000000: %v, want ErrZeroAddress", err)
 	}
-	for _, m := range srv.Received() {
-		if m.Type == 't' {
-			t.Fatalf("the Cube got %s", m)
-		}
+	if got := cubewatch.Lines(srv).Since(0, cubewatch.Type('t')); len(got) != 0 {
+		t.Fatalf("the Cube got %s", got[0])
 	}
 }

@@ -4,12 +4,10 @@
 package proxy
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"log/slog"
 	"net"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -216,55 +214,28 @@ func TestDiscoverCutShortByAnotherProgramsSearch(t *testing.T) {
 	}
 }
 
-// syncBuffer is a log's buffer that the test reads while the responder
-// writes it.
-type syncBuffer struct {
-	mu sync.Mutex
-	b  bytes.Buffer
-}
-
-func (b *syncBuffer) Write(p []byte) (int, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.b.Write(p)
-}
-
-// lines returns the lines logged at level that contain s.
-func (b *syncBuffer) lines(level, s string) []string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	var out []string
-	for _, l := range strings.Split(b.b.String(), "\n") {
-		if strings.Contains(l, "level="+level) && strings.Contains(l, s) {
-			out = append(out, l)
-		}
-	}
-	return out
-}
-
 // A Cube's answer that no Discover or Reboot asked for is logged at
 // Warn, once per source and opcode a minute; not one from this host, an
 // identify answer, nor one during or just after an operation of the
 // responder's own.
 func TestResponderWarnsOfAnswersItDidNotAskFor(t *testing.T) {
-	var buf syncBuffer
-	r, fc := fakeResponderLog(t, slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	logger, logs := testkit.LogWatch(slog.LevelDebug)
+	r, fc := fakeResponderLog(t, logger)
 	cube := &net.UDPAddr{IP: net.IPv4(192, 0, 2, 23), Port: cubelan.DiscoveryPort}
 	answer := func(op byte) []byte { return cubelan.UDPReply("KEQ0000000", op, []byte{0}) }
-	const msg = "answered another program on this host"
-	warned := func() int { return len(buf.lines("WARN", msg)) }
+	warning := testkit.ContainsAt(slog.LevelWarn, "answered another program on this host")
 
 	fc.in <- fakePacket{answer('c'), cube}
-	testkit.Eventually(t, "the first warning", func() bool { return warned() == 1 })
+	_, next := logs.Await(t, 0, "the first warning", warning)
 	fc.in <- fakePacket{answer('c'), cube}                                    // again within the minute
 	fc.in <- fakePacket{answer('c'), &net.UDPAddr{IP: hostAddr, Port: 23272}} // this host
 	fc.in <- fakePacket{answer('I'), cube}                                    // identify
 	fc.in <- fakePacket{answer('C'), cube}                                    // another opcode
-	testkit.Eventually(t, "the second warning", func() bool { return warned() == 2 })
-	if l := buf.lines("WARN", msg); !strings.Contains(l[0], "serial=KEQ0000000") || !strings.Contains(l[0], "op=c") || !strings.Contains(l[1], "op=C") {
+	_, next = logs.Await(t, next, "the second warning", warning)
+	if l := logs.Since(0, warning); l[0].Attrs["serial"] != "KEQ0000000" || l[0].Attrs["op"] != "c" || l[1].Attrs["op"] != "C" {
 		t.Errorf("warnings %q", l)
 	}
-	testkit.Eventually(t, "the identify answer at Debug", func() bool { return len(buf.lines("DEBUG", "identify answer")) == 1 })
+	logs.Await(t, 0, "the identify answer at Debug", testkit.ContainsAt(slog.LevelDebug, "identify answer"))
 
 	// During an operation of the responder's own, and within the grace
 	// after it, an answer is that operation's.
@@ -282,8 +253,7 @@ func TestResponderWarnsOfAnswersItDidNotAskFor(t *testing.T) {
 	r.mu.Unlock()
 	time.Sleep(10 * time.Millisecond)
 	fc.in <- fakePacket{answer('R'), cube}
-	testkit.Eventually(t, "the warning after the grace", func() bool { return warned() == 3 })
-	if l := buf.lines("WARN", msg); !strings.Contains(l[2], "op=R") {
-		t.Errorf("third warning %q, want the one after the grace", l[2])
+	if w, _ := logs.Await(t, next, "the warning after the grace", warning); w.Attrs["op"] != "R" {
+		t.Errorf("third warning %q, want the one after the grace", w)
 	}
 }

@@ -18,6 +18,7 @@ import (
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit"
+	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 )
 
 // roleSets are the default roles' capabilities as docs/store.md section
@@ -257,7 +258,7 @@ func TestCopyNeedsConfigure(t *testing.T) {
 	if code, text := callAPI(t, ts, "PUT", path, mover, `{"room_id":1}`); code != 403 || errorOf(text) != `capability "configure" required` {
 		t.Fatalf("a move with the copy and without configure: %d %s", code, text)
 	}
-	if got := fc.Received(); len(got) != 0 {
+	if got := cubewatch.Lines(fc).Since(0, cubewatch.Except('l')); len(got) != 0 {
 		t.Fatalf("sent before the refusal: %v", got)
 	}
 	if code, text := callAPI(t, ts, "PUT", path, mover, `{"room_id":1,"copy":false}`); code != 200 || strings.Contains(text, "copied") {

@@ -4,7 +4,6 @@
 package server
 
 import (
-	"bufio"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -16,15 +15,10 @@ import (
 	"go.metaworx.ch/massimo/internal/view"
 )
 
-// sseEvent is an event as a stream sends it.
-type sseEvent struct {
-	id, kind, data string
-}
-
 // readStream opens a Cube's event stream, with the header or the
-// parameter naming the last id where given, and returns a channel of the
-// events it sends, closed when the stream ends.
-func readStream(t *testing.T, ts *httptest.Server, header, param string) <-chan sseEvent {
+// parameter naming the last id where given, and returns the watch of
+// what it sends, which ends with the stream.
+func readStream(t *testing.T, ts *httptest.Server, header, param string) *testkit.Watch[testkit.Event] {
 	t.Helper()
 	url := ts.URL + "/api/v1/cubes/KEQ0000100/events"
 	if param != "" {
@@ -34,14 +28,14 @@ func readStream(t *testing.T, ts *httptest.Server, header, param string) <-chan 
 }
 
 // readStreamURL opens the event stream at url.
-func readStreamURL(t *testing.T, url string) <-chan sseEvent {
+func readStreamURL(t *testing.T, url string) *testkit.Watch[testkit.Event] {
 	t.Helper()
 	return readStreamFrom(t, url, "")
 }
 
 // readStreamFrom opens an event stream, with the header naming the last
 // id where given.
-func readStreamFrom(t *testing.T, url, header string) <-chan sseEvent {
+func readStreamFrom(t *testing.T, url, header string) *testkit.Watch[testkit.Event] {
 	t.Helper()
 	req, _ := http.NewRequest("GET", url, nil)
 	if header != "" {
@@ -52,82 +46,35 @@ func readStreamFrom(t *testing.T, url, header string) <-chan sseEvent {
 		t.Fatal(err)
 	}
 	if resp.StatusCode != 200 {
+		resp.Body.Close()
 		t.Fatalf("stream: %d", resp.StatusCode)
 	}
-	out := make(chan sseEvent, 2*replaySize)
-	go func() {
-		defer close(out)
-		defer resp.Body.Close()
-		rd := bufio.NewReader(resp.Body)
-		var ev sseEvent
-		for {
-			l, err := rd.ReadString('\n')
-			if err != nil {
-				return
-			}
-			l = strings.TrimRight(l, "\n")
-			switch {
-			case strings.HasPrefix(l, "id: "):
-				ev.id = strings.TrimPrefix(l, "id: ")
-			case strings.HasPrefix(l, "event: "):
-				ev.kind = strings.TrimPrefix(l, "event: ")
-			case strings.HasPrefix(l, "data: "):
-				ev.data = strings.TrimPrefix(l, "data: ")
-			case l == "" && ev.kind != "":
-				out <- ev
-				ev = sseEvent{}
-			}
-		}
-	}()
-	t.Cleanup(func() { resp.Body.Close() })
-	return out
+	return testkit.StreamWatch(t, resp.Body)
 }
 
-// next returns the stream's next event, failing after a while.
-func next(t *testing.T, evs <-chan sseEvent) sseEvent {
-	t.Helper()
-	select {
-	case ev, ok := <-evs:
-		if !ok {
-			t.Fatal("the stream ended")
-		}
-		return ev
-	case <-time.After(testkit.Scale(5 * time.Second)):
-		t.Fatal("no event")
-	}
-	return sseEvent{}
-}
+// isEvent matches an event of a stream, its comments (the keep-alive)
+// left out.
+func isEvent(e testkit.Event) bool { return e.Kind != "" }
 
-// nextTest returns the stream's next test event, skipping what the fake
-// Cube's connection sends meanwhile.
-func nextTest(t *testing.T, evs <-chan sseEvent) sseEvent {
+// burst reads a connection's state events from the cursor on and
+// returns the id the last of them carries, with the cursor after it.
+func burst(t *testing.T, evs *testkit.Watch[testkit.Event], from testkit.Cursor, devices int) (string, testkit.Cursor) {
 	t.Helper()
-	for {
-		if ev := next(t, evs); ev.kind == "test" {
-			return ev
-		}
-	}
-}
-
-// burst reads a first connection's state events and returns the id the
-// last of them carries.
-func burst(t *testing.T, evs <-chan sseEvent, devices int) string {
-	t.Helper()
+	got, after := evs.AwaitN(t, from, "the state burst", devices, isEvent)
 	id := ""
-	for i := 0; i < devices; i++ {
-		ev := next(t, evs)
-		if ev.kind != "state" {
-			t.Fatalf("event %d: %q, want state", i, ev.kind)
+	for i, ev := range got {
+		if ev.Kind != "state" {
+			t.Fatalf("event %d: %q, want state", i, ev.Kind)
 		}
-		if i < devices-1 && ev.id != "" {
-			t.Fatalf("state %d carries id %q; only the last does", i, ev.id)
+		if i < devices-1 && ev.ID != "" {
+			t.Fatalf("state %d carries id %q; only the last does", i, ev.ID)
 		}
-		id = ev.id
+		id = ev.ID
 	}
 	if id == "" {
 		t.Fatal("the last state event carries no id")
 	}
-	return id
+	return id, after
 }
 
 // mark sends a test event on the Cube's stream.
@@ -154,36 +101,37 @@ func TestStreamResumes(t *testing.T) {
 	rt := s.cubes["keq0000100"]
 	devices := len(s.devicesOf(rt, view.KindDefault))
 	first := readStream(t, ts, "", "")
-	head := burst(t, first, devices)
+	head, c := burst(t, first, 0, devices)
 	for i := 1; i <= 3; i++ {
 		mark(rt, i)
 	}
 	var ids []string
 	prev := seqOf(t, head)
-	for i := 0; i < 3; i++ {
-		ev := nextTest(t, first)
-		if n := seqOf(t, ev.id); n <= prev {
-			t.Fatalf("id %s after %d does not count up", ev.id, prev)
+	tests, _ := first.AwaitN(t, c, "the three test events", 3, testkit.Kind("test"))
+	for _, ev := range tests {
+		if n := seqOf(t, ev.ID); n <= prev {
+			t.Fatalf("id %s after %d does not count up", ev.ID, prev)
 		} else {
 			prev = n
 		}
-		ids = append(ids, ev.id)
+		ids = append(ids, ev.ID)
 	}
 	mark(rt, 4)
 	mark(rt, 5)
-	for name, evs := range map[string]<-chan sseEvent{
+	for name, evs := range map[string]*testkit.Watch[testkit.Event]{
 		"header":    readStream(t, ts, ids[2], ""),
 		"parameter": readStream(t, ts, "", ids[2]),
 		"both":      readStream(t, ts, ids[2], "nonsense-1"),
 	} {
 		var got []string
-		for len(got) < 2 {
-			ev := next(t, evs)
-			switch ev.kind {
+		for c := testkit.Cursor(0); len(got) < 2; {
+			var ev testkit.Event
+			ev, c = evs.Await(t, c, name+": the next event", isEvent)
+			switch ev.Kind {
 			case "state", "resync":
-				t.Fatalf("%s: a resumed stream sent %s", name, ev.kind)
+				t.Fatalf("%s: a resumed stream sent %s", name, ev.Kind)
 			case "test":
-				got = append(got, ev.data)
+				got = append(got, ev.Data)
 			}
 		}
 		for i, want := range []int{4, 5} {
@@ -200,7 +148,7 @@ func TestStreamResyncs(t *testing.T) {
 	_, ts, s := start(t, "")
 	rt := s.cubes["keq0000100"]
 	devices := len(s.devicesOf(rt, view.KindDefault))
-	head := burst(t, readStream(t, ts, "", ""), devices)
+	head, _ := burst(t, readStream(t, ts, "", ""), 0, devices)
 	for i := 0; i < replaySize+2; i++ {
 		mark(rt, i)
 	}
@@ -214,10 +162,11 @@ func TestStreamResyncs(t *testing.T) {
 		"malformed":   "garbage",
 	} {
 		evs := readStream(t, ts, last, "")
-		if ev := next(t, evs); ev.kind != "resync" {
-			t.Fatalf("%s: first event %q, want resync", name, ev.kind)
+		ev, c := evs.Await(t, 0, name+": the first event", isEvent)
+		if ev.Kind != "resync" {
+			t.Fatalf("%s: first event %q, want resync", name, ev.Kind)
 		}
-		burst(t, evs, devices)
+		burst(t, evs, c, devices)
 	}
 }
 
@@ -265,22 +214,12 @@ func TestStreamOfASlowClientEnds(t *testing.T) {
 	}
 
 	evs := readStream(t, ts, "", "")
-	burst(t, evs, len(s.devicesOf(rt, view.KindDefault)))
+	burst(t, evs, 0, len(s.devicesOf(rt, view.KindDefault)))
 	rt.subsMu.Lock()
 	for ch, sub := range rt.subs {
 		delete(rt.subs, ch)
 		close(sub.gone)
 	}
 	rt.subsMu.Unlock()
-	deadline := time.After(testkit.Scale(5 * time.Second))
-	for {
-		select {
-		case _, ok := <-evs:
-			if !ok {
-				return
-			}
-		case <-deadline:
-			t.Fatal("the stream did not end")
-		}
-	}
+	testkit.Eventually(t, "the stream's end", evs.Ended)
 }

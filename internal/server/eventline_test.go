@@ -10,7 +10,6 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
-	"time"
 
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/store"
@@ -72,8 +71,8 @@ func TestEventLine(t *testing.T) {
 // states, each once, with no second line of the server's or the Cube
 // client's saying it again.
 func TestEventLinesMatchTheRows(t *testing.T) {
-	var buf syncBuffer
-	_, _, s, st := startStored(t, Options{Logger: slog.New(slog.NewJSONHandler(&buf, nil))})
+	log, logs := testkit.LogWatch(nil)
+	_, _, s, st := startStored(t, Options{Logger: log})
 	s.logServer(systemEvent("backups_pruned", 0, map[string]any{"removed": 2}))
 	ctx := context.Background()
 	var rows []store.Event
@@ -92,28 +91,25 @@ func TestEventLinesMatchTheRows(t *testing.T) {
 		}
 		return states >= 6
 	})
-	time.Sleep(50 * time.Millisecond) // the lines of the last rows
+	// A line of its own for each row: the lines of the last rows may come
+	// after the rows.
 	type key struct{ kind, source, device, level string }
-	lines := map[key]int{}
-	for _, l := range jsonLines(t, buf.String()) {
-		if l["kind"] == nil {
-			if m, _ := l["msg"].(string); m == "device state" || m == "cube connected" {
-				t.Errorf("a line of %v without kind: %v", l["source"], l)
-			}
-			continue
-		}
-		dev, _ := l["device"].(string)
-		lines[key{l["kind"].(string), l["source"].(string), dev, strings.ToLower(l["level"].(string))}]++
-	}
+	var lines []func(testkit.Record) bool
 	for _, r := range rows {
 		if r.Level < store.LevelInfo {
 			continue
 		}
 		k := key{r.Kind, r.Source, r.Device, store.LevelName(r.Level)}
-		if lines[k] == 0 {
-			t.Errorf("no line for the row %+v; lines %v", k, lines)
+		lines = append(lines, func(l testkit.Record) bool {
+			kind, ok := l.Attrs["kind"]
+			return ok && key{kind, l.Attrs["source"], l.Attrs["device"], strings.ToLower(l.Level.String())} == k
+		})
+	}
+	logs.AwaitAll(t, 0, "a line for each row", lines...)
+	for _, l := range logs.Since(0, nil) {
+		if _, ok := l.Attrs["kind"]; !ok && (l.Msg == "device state" || l.Msg == "cube connected") {
+			t.Errorf("a line of %v without kind: %v", l.Attrs["source"], l)
 		}
-		lines[k]--
 	}
 }
 

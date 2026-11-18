@@ -5,6 +5,7 @@ package cubelan
 
 import (
 	"context"
+	"log/slog"
 	"net"
 	"testing"
 	"time"
@@ -43,13 +44,13 @@ func TestRebootIsAnswered(t *testing.T) {
 // link is rebooting until the greeting after it, and connected then.
 func TestRebootingIsNoLoss(t *testing.T) {
 	srv, addr := startFake(t)
-	var logs logLines
+	logger, logs := testkit.LogWatch(slog.LevelDebug)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	c := New(Options{Addr: addr, Backoff: 10 * time.Millisecond, Logger: logs.logger()})
-	evs := countEvents(ctx, c)
+	c := New(Options{Addr: addr, Backoff: 10 * time.Millisecond, Logger: logger})
+	evs := events(t, c)
 	go c.Run(ctx)
-	testkit.Eventually(t, "first greeting", func() bool { return evs.get(EventConnected) == 1 })
+	_, at := evs.Await(t, 0, "first greeting", kind(EventConnected))
 
 	srv.SetSilent(true) // the Cube restarts: no greeting for a while
 	c.Rebooting(time.Minute)
@@ -61,14 +62,14 @@ func TestRebootingIsNoLoss(t *testing.T) {
 		t.Errorf("link %+v before the greeting, want rebooting", l)
 	}
 	srv.SetSilent(false)
-	testkit.Eventually(t, "the greeting after the reboot", func() bool { return evs.get(EventConnected) == 2 })
+	evs.Await(t, at, "the greeting after the reboot", kind(EventConnected))
 	if l := c.Link(); l.State != LinkConnected {
 		t.Errorf("link %+v after the greeting", l)
 	}
-	if n := logs.count("WARN", "cube connection lost"); n != 0 || c.Lost() {
+	if n := logs.Count(0, connLost); n != 0 || c.Lost() {
 		t.Errorf("%d loss lines, lost %v", n, c.Lost())
 	}
-	if n := logs.count("INFO", "cube rebooting"); n != 1 {
+	if n := logs.Count(0, testkit.MsgAt(slog.LevelInfo, "cube rebooting")); n != 1 {
 		t.Errorf("%d rebooting lines", n)
 	}
 }

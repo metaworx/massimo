@@ -6,7 +6,6 @@ package server
 import (
 	"encoding/base64"
 	"encoding/json"
-	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -25,8 +24,8 @@ import (
 // severe (D181); a code the list lacks stays a number; the flag cleared
 // takes it away.
 func TestFailedRadiogram(t *testing.T) {
-	var buf syncBuffer
-	fc, ts, _, _ := startStored(t, Options{PollInterval: 100 * time.Millisecond, Logger: slog.New(slog.NewJSONHandler(&buf, nil))})
+	log, logs := testkit.LogWatch(nil)
+	fc, ts, _, _ := startStored(t, Options{PollInterval: 100 * time.Millisecond, Logger: log})
 	greeting, _ := fakecube.LoadGreeting(fixture)
 	clean := greeting[len(greeting)-1]
 	list := func(b4 byte, flagged bool) {
@@ -96,6 +95,7 @@ func TestFailedRadiogram(t *testing.T) {
 	list(0x09, false)
 	testkit.Eventually(t, "the report", func() bool { st := state("0a010d"); return st != nil && st["failed_radiogram"] == nil })
 	caughtUp("the report's line", false, "null")
+	flagged := logs.Mark()
 	list(0x03, true)
 	testkit.Eventually(t, "the communication error", func() bool { return state("0a010d")["error"] == true })
 	if got := failed(state("0a010d")); got != `{"code":3,"name":"TimeInformation"}` {
@@ -109,17 +109,10 @@ func TestFailedRadiogram(t *testing.T) {
 	if change(line, "failed_radiogram") != `{"from":null,"to":{"code":3,"name":"TimeInformation"}}` {
 		t.Fatalf("the line's changes %v", line.Changes)
 	}
-	var logLine map[string]any
-	testkit.Eventually(t, "the process log's line", func() bool {
-		for _, l := range jsonLines(t, buf.String()) {
-			if l["kind"] == "state" && l["device"] == "0a010d" && l["error"] == true {
-				logLine = l
-				return true
-			}
-		}
-		return false
+	logLine, _ := logs.Await(t, flagged, "the process log's line", func(l testkit.Record) bool {
+		return l.Attrs["kind"] == "state" && l.Attrs["device"] == "0a010d" && l.Attrs["error"] == "true"
 	})
-	if logLine["failed_radiogram"] != "TimeInformation" || !strings.Contains(logLine["changed"].(string), "failed_radiogram") {
+	if logLine.Attrs["failed_radiogram"] != "TimeInformation" || !strings.Contains(logLine.Attrs["changed"], "failed_radiogram") {
 		t.Fatalf("the process log's line %v", logLine)
 	}
 	var alerts logAlertsView

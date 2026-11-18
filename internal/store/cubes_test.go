@@ -4,14 +4,14 @@
 package store
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
-	"log/slog"
 	"strings"
 	"testing"
 	"time"
+
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 func fileCube(serial string, kv ...string) FileCube {
@@ -27,8 +27,8 @@ func fileCube(serial string, kv ...string) FileCube {
 // to the file later is seeded then.
 func TestSeedAndPrecedence(t *testing.T) {
 	dir := t.TempDir()
-	var logged bytes.Buffer
-	s, err := Open(dir, Options{Logger: slog.New(slog.NewTextHandler(&logged, nil))})
+	log, logged := testkit.LogWatch(nil)
+	s, err := Open(dir, Options{Logger: log})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,8 +42,8 @@ func TestSeedAndPrecedence(t *testing.T) {
 	if err != nil || len(res.Added) != 2 || len(res.Differences) != 0 {
 		t.Fatalf("first seed %+v %v", res, err)
 	}
-	if strings.Count(logged.String(), "cube added from the settings file") != 2 {
-		t.Fatalf("log %s", logged.String())
+	if logged.Count(0, testkit.Msg("cube added from the settings file")) != 2 {
+		t.Fatalf("log %v", logged.Since(0, nil))
 	}
 	c1, ok, _ := s.Cube(ctx, "keq0000001")
 	if !ok || !c1.Configured || c1.Source != SourceEnv || c1.Address != "10.0.0.1" || c1.FollowDiscovery || c1.Name != "Cellar" || c1.ProxyAddress != "10.0.0.11" ||
@@ -56,9 +56,9 @@ func TestSeedAndPrecedence(t *testing.T) {
 	}
 
 	// Seeding the same file again changes nothing.
-	logged.Reset()
-	if res, err := s.Seed(ctx, "x.env", file); err != nil || len(res.Added) != 0 || len(res.Differences) != 0 || logged.Len() != 0 {
-		t.Fatalf("second seed %+v %v %s", res, err, logged.String())
+	m := logged.Mark()
+	if res, err := s.Seed(ctx, "x.env", file); err != nil || len(res.Added) != 0 || len(res.Differences) != 0 || logged.Count(m, nil) != 0 {
+		t.Fatalf("second seed %+v %v %v", res, err, logged.Since(m, nil))
 	}
 
 	// The UI renames the Cube and hides another device; the file keeps
@@ -81,9 +81,7 @@ func TestSeedAndPrecedence(t *testing.T) {
 		res.Differences[0].Variable != "MASSIMO_CUBE_KEQ0000001_NAME" || res.Differences[1].Field != FieldHidden {
 		t.Fatalf("differences %+v", res.Differences)
 	}
-	if !strings.Contains(logged.String(), "settings file differs from the store, the store wins") || !strings.Contains(logged.String(), "MASSIMO_CUBE_KEQ0000001_NAME") {
-		t.Fatalf("log %s", logged.String())
-	}
+	logged.Has(t, m, "the difference, the store's kept", testkit.Msg("settings file differs from the store, the store wins", "variable", "MASSIMO_CUBE_KEQ0000001_NAME"))
 	c1, _, _ = s.Cube(ctx, "KEQ0000001")
 	if c1.Name != "Basement" || c1.Version != 2 {
 		t.Fatalf("store did not win: %+v", c1)

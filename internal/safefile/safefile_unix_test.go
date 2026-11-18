@@ -6,18 +6,18 @@
 package safefile
 
 import (
-	"bytes"
 	"errors"
 	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"syscall"
 	"testing"
 
 	"golang.org/x/sys/unix"
+
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // The replaced file's mode is kept unless Options.Mode sets one.
@@ -149,17 +149,15 @@ func TestInPlaceFallback(t *testing.T) {
 	before, _ := os.Stat(p)
 	os.Chmod(dir, 0o500)
 	t.Cleanup(func() { os.Chmod(dir, 0o700) })
-	var log bytes.Buffer
-	if err := Write(p, []byte("new\n"), Options{Logger: slog.New(slog.NewTextHandler(&log, nil))}); err != nil {
+	log, logged := testkit.LogWatch(nil)
+	if err := Write(p, []byte("new\n"), Options{Logger: log}); err != nil {
 		t.Fatal(err)
 	}
 	after, _ := os.Stat(p)
 	if got := readString(t, p); got != "new\n" || !os.SameFile(before, after) {
 		t.Fatalf("content %q, same file %v", got, os.SameFile(before, after))
 	}
-	if !strings.Contains(log.String(), "level=WARN") || !strings.Contains(log.String(), "written in place") {
-		t.Fatalf("log: %s", log.String())
-	}
+	logged.Has(t, 0, "the warning of the write in place", testkit.MsgAt(slog.LevelWarn, "file written in place: its directory takes no new file"))
 }
 
 // As root, a replaced file another user owns keeps its owner and group,

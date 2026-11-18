@@ -4,7 +4,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -106,12 +105,13 @@ func TestRebootRequester(t *testing.T) {
 	if err := rebootRequester(filepath.Join(t.TempDir(), "missing", "reboot-request"))(); err == nil || !strings.Contains(err.Error(), "writing the reboot request") {
 		t.Fatalf("a missing directory: %v", err)
 	}
-	var log bytes.Buffer
+	log, w := testkit.LogWatch(nil)
 	os.WriteFile(path, []byte("x"), 0o600)
-	removeStaleReboot(path, slog.New(slog.NewTextHandler(&log, nil)))
-	if _, err := os.Lstat(path); !os.IsNotExist(err) || !strings.Contains(log.String(), "a reboot request left from before removed") {
-		t.Fatalf("the stale request: %v, %s", err, log.String())
+	removeStaleReboot(path, log)
+	if _, err := os.Lstat(path); !os.IsNotExist(err) {
+		t.Fatalf("the stale request is left: %v", err)
 	}
+	w.Has(t, 0, "the stale request's removal", testkit.Msg("a reboot request left from before removed"))
 }
 
 // Windows reboots at once through shutdown.exe of its system directory,

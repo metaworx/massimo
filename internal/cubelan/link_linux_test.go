@@ -5,6 +5,7 @@ package cubelan
 
 import (
 	"context"
+	"log/slog"
 	"net"
 	"testing"
 	"time"
@@ -44,11 +45,11 @@ func quickDial(ctx context.Context, addr string) (net.Conn, error) {
 // the link is connected again.
 func TestAStaleCubeAfterTheHold(t *testing.T) {
 	srv, addr := singleFake(t)
-	var logs logLines
+	logger, logs := testkit.LogWatch(slog.LevelDebug)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	c := New(Options{Addr: addr, PollInterval: 100 * time.Millisecond, ReplyTimeout: 50 * time.Millisecond, Backoff: 10 * time.Millisecond,
-		Hold: 200 * time.Millisecond, Logger: logs.logger(), Dialer: quickDial})
+		Hold: 200 * time.Millisecond, Logger: logger, Dialer: quickDial})
 	go c.Run(ctx)
 	testkit.Eventually(t, "first greeting", c.Connected)
 	if l := c.Link(); l.State != LinkConnected {
@@ -62,7 +63,7 @@ func TestAStaleCubeAfterTheHold(t *testing.T) {
 	}
 	testkit.Eventually(t, "the dead session", srv.HeldDead)
 	srv.SetSilent(false) // the network is back, the Cube still holds the session
-	testkit.Eventually(t, "two dials timed out", func() bool { return logs.count("DEBUG", "cube connection attempt failed") >= 2 })
+	logs.AwaitN(t, 0, "two dials timed out", 2, attemptFailed)
 	if l := c.Link(); l.State != LinkOffline {
 		t.Errorf("link %+v before discovery heard the Cube, want offline", l)
 	}
@@ -71,14 +72,14 @@ func TestAStaleCubeAfterTheHold(t *testing.T) {
 		t.Fatalf("link %+v, want stale", l)
 	}
 	c.Heard()
-	if n := logs.count("WARN", "cube holds serve's old connection"); n != 1 {
+	if n := logs.Count(0, testkit.MsgAt(slog.LevelWarn, "cube holds serve's old connection")); n != 1 {
 		t.Errorf("%d stale lines, want 1", n)
 	}
 
 	srv.Release()
 	testkit.Eventually(t, "the connection after the release", func() bool { return c.Link().State == LinkConnected })
 	// The line follows the state, written right after the greeting.
-	testkit.Eventually(t, "the line of the refusal's end", func() bool { return logs.count("INFO", "cube no longer refuses") == 1 })
+	logs.Await(t, 0, "the line of the refusal's end", testkit.MsgAt(slog.LevelInfo, "cube no longer refuses"))
 }
 
 // A Cube that another client holds, with no connection of serve's left
@@ -92,14 +93,14 @@ func TestABusyCube(t *testing.T) {
 	defer other.Close()
 	testkit.Eventually(t, "the other client served", func() bool { return srv.Connections() == 1 })
 
-	var logs logLines
+	logger, logs := testkit.LogWatch(slog.LevelDebug)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	c := New(Options{Addr: addr, PollInterval: time.Minute, Backoff: 10 * time.Millisecond, Logger: logs.logger(), Dialer: quickDial})
+	c := New(Options{Addr: addr, PollInterval: time.Minute, Backoff: 10 * time.Millisecond, Logger: logger, Dialer: quickDial})
 	go c.Run(ctx)
-	testkit.Eventually(t, "two dials timed out", func() bool { return logs.count("DEBUG", "cube connection attempt failed") >= 1 })
+	logs.Await(t, 0, "two dials timed out", attemptFailed)
 	testkit.Eventually(t, "the busy link", func() bool { c.Heard(); return c.Link().State == LinkBusy })
-	if n := logs.count("WARN", "cube busy with another client"); n != 1 {
+	if n := logs.Count(0, testkit.MsgAt(slog.LevelWarn, "cube busy with another client")); n != 1 {
 		t.Errorf("%d busy lines, want 1", n)
 	}
 

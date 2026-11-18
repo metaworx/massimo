@@ -4,7 +4,6 @@
 package certs
 
 import (
-	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -20,6 +19,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 func TestGenerate(t *testing.T) {
@@ -70,8 +71,7 @@ func TestOpenSelfSigned(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC)
 	clock := func() time.Time { return now }
-	var buf bytes.Buffer
-	log := slog.New(slog.NewTextHandler(&buf, nil))
+	log, logged := testkit.LogWatch(nil)
 	names := []string{"pi", "localhost", "127.0.0.1"}
 
 	s, err := OpenSelfSigned(dir, names, log, clock)
@@ -79,40 +79,41 @@ func TestOpenSelfSigned(t *testing.T) {
 		t.Fatal(err)
 	}
 	first := s.Status()
-	if !first.SelfSigned || first.Source != "self-signed" || !strings.Contains(buf.String(), "no certificate yet") || !strings.Contains(buf.String(), first.Fingerprint) {
-		t.Fatalf("first start: %+v\n%s", first, buf.String())
+	if !first.SelfSigned || first.Source != "self-signed" ||
+		logged.Count(0, testkit.Msg("tls: self-signed certificate made", "reason", "no certificate yet", "fingerprint", first.Fingerprint)) == 0 {
+		t.Fatalf("first start: %+v %v", first, logged.Since(0, nil))
 	}
 
 	// A second start keeps the pair; a missing name is logged, not fixed.
-	buf.Reset()
+	m := logged.Mark()
 	s, err = OpenSelfSigned(dir, append(names, "192.0.2.20"), log, clock)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.Status().Fingerprint != first.Fingerprint || !strings.Contains(buf.String(), RegenerateCommand) || !strings.Contains(buf.String(), "192.0.2.20") {
-		t.Fatalf("second start: %+v\n%s", s.Status(), buf.String())
+	if s.Status().Fingerprint != first.Fingerprint || logged.Count(m, testkit.Contains(RegenerateCommand, "192.0.2.20")) == 0 {
+		t.Fatalf("second start: %+v %v", s.Status(), logged.Since(m, nil))
 	}
 
 	// Within 30 days of the end: made anew at the start, and by Check.
-	buf.Reset()
+	m = logged.Mark()
 	now = first.NotAfter.Add(-20 * 24 * time.Hour)
 	s, err = OpenSelfSigned(dir, names, log, clock)
 	if err != nil {
 		t.Fatal(err)
 	}
 	second := s.Status()
-	if second.Fingerprint == first.Fingerprint || !strings.Contains(buf.String(), "expires") {
-		t.Fatalf("not renewed at the start:\n%s", buf.String())
+	if second.Fingerprint == first.Fingerprint || logged.Count(m, testkit.Contains("expires")) == 0 {
+		t.Fatalf("not renewed at the start: %v", logged.Since(m, nil))
 	}
-	buf.Reset()
+	m = logged.Mark()
 	s.Check(now)
-	if s.Status().Fingerprint != second.Fingerprint || buf.Len() != 0 {
-		t.Fatalf("renewed too early:\n%s", buf.String())
+	if s.Status().Fingerprint != second.Fingerprint || logged.Count(m, nil) != 0 {
+		t.Fatalf("renewed too early: %v", logged.Since(m, nil))
 	}
 	s.Check(second.NotAfter.Add(-RenewBefore + time.Hour))
 	third := s.Status()
-	if third.Fingerprint == second.Fingerprint || !strings.Contains(buf.String(), "renewed") {
-		t.Fatalf("Check did not renew:\n%s", buf.String())
+	if third.Fingerprint == second.Fingerprint || logged.Count(m, testkit.Msg("tls: self-signed certificate renewed")) == 0 {
+		t.Fatalf("Check did not renew: %v", logged.Since(m, nil))
 	}
 	if cert, _ := s.GetCertificate(nil); Fingerprint(cert.Certificate[0]) != third.Fingerprint {
 		t.Fatal("the renewed pair is not served")

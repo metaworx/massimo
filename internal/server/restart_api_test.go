@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 	"go.metaworx.ch/massimo/internal/update"
 )
 
@@ -68,7 +69,8 @@ func TestRestartRoutes(t *testing.T) {
 			t.Fatalf("%s without a key: %d %s", m, code, text)
 		}
 	}
-	before := len(fc.Received())
+	received := cubewatch.Lines(fc)
+	before := received.Mark()
 	headers := map[string]string{"Idempotency-Key": "restart-1"}
 	resp, text := callWith(t, ts, "POST", path, manager, "{}", headers)
 	var answer struct {
@@ -97,7 +99,7 @@ func TestRestartRoutes(t *testing.T) {
 	if code, text := callAPI(t, ts, "GET", path, "secret", ""); code != 200 || decodeRestart(t, text).Available || decodeRestart(t, text).Blocked != "a restart is under way" {
 		t.Fatalf("GET during the restart: %d %s", code, text)
 	}
-	if got := fc.Received()[before:]; len(got) != 0 {
+	if got := received.Since(before, cubewatch.Except('l')); len(got) != 0 {
 		t.Fatalf("the restart sent the Cube %v", got)
 	}
 }
@@ -241,7 +243,8 @@ func TestReloadRoute(t *testing.T) {
 		s.SetSettingsRead(at)
 		return ReloadResult{Changed: []string{"MASSIMO_LISTEN"}, Pending: []string{"MASSIMO_LISTEN"}, ReadAt: at}, nil
 	})
-	before := len(fc.Received())
+	received := cubewatch.Lines(fc)
+	before := received.Mark()
 	code, text := callAPI(t, ts, "POST", path, manager, "{}")
 	var res ReloadResult
 	if err := json.Unmarshal([]byte(text), &res); err != nil || code != 200 || calls != 1 ||
@@ -265,7 +268,7 @@ func TestReloadRoute(t *testing.T) {
 	if code, text := callAPI(t, ts, "POST", path, "secret", "{}"); code != 500 || !strings.Contains(errorOf(text), "permission denied") {
 		t.Fatalf("a file that cannot be read: %d %s", code, text)
 	}
-	if got := fc.Received()[before:]; len(got) != 0 {
+	if got := received.Since(before, cubewatch.Except('l')); len(got) != 0 {
 		t.Fatalf("the reload sent the Cube %v", got)
 	}
 }

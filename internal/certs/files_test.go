@@ -4,7 +4,6 @@
 package certs
 
 import (
-	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -12,7 +11,6 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
-	"log/slog"
 	"math/big"
 	"net"
 	"os"
@@ -20,6 +18,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // writePair writes a self-signed ECDSA P-256 certificate for the names
@@ -85,8 +85,8 @@ func TestFilesServesAndReloads(t *testing.T) {
 	expires := time.Now().Add(400 * 24 * time.Hour).Truncate(time.Second)
 	base := time.Now().Add(-time.Minute)
 	certPath, keyPath, fpA := writePair(t, dir, []string{"massimo.example.net", "192.0.2.10"}, expires, base)
-	var buf bytes.Buffer
-	f, err := OpenFiles(certPath, keyPath, slog.New(slog.NewTextHandler(&buf, nil)))
+	log, logged := testkit.LogWatch(nil)
+	f, err := OpenFiles(certPath, keyPath, log)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,12 +109,10 @@ func TestFilesServesAndReloads(t *testing.T) {
 	if Fingerprint(cert.Certificate[0]) != fpB {
 		t.Fatal("rewritten pair not served")
 	}
-	if !strings.Contains(buf.String(), "certificate reloaded") || !strings.Contains(buf.String(), fpB) {
-		t.Fatalf("reload not logged:\n%s", buf.String())
-	}
+	logged.Has(t, 0, "the reload", testkit.Msg("tls: certificate reloaded", "fingerprint", fpB))
 
 	// A bad rewrite: the loaded pair stays, said once.
-	buf.Reset()
+	m := logged.Mark()
 	os.WriteFile(certPath, []byte("not a certificate\n"), 0o600)
 	os.Chtimes(certPath, base.Add(4*time.Second), base.Add(4*time.Second))
 	for i := 0; i < 3; i++ {
@@ -123,8 +121,8 @@ func TestFilesServesAndReloads(t *testing.T) {
 			t.Fatal("bad pair served")
 		}
 	}
-	if n := strings.Count(buf.String(), "do not load"); n != 1 {
-		t.Fatalf("warned %d times:\n%s", n, buf.String())
+	if n := logged.Count(m, testkit.Msg("tls: certificate files changed but do not load; keeping the loaded certificate")); n != 1 {
+		t.Fatalf("warned %d times: %v", n, logged.Since(m, nil))
 	}
 	if f.Status().Fingerprint != fpB {
 		t.Fatal("status changed on a bad pair")

@@ -15,11 +15,11 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/backup"
-	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit"
+	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 )
 
 // callWith sends a request with extra headers and returns the response.
@@ -70,27 +70,18 @@ func serverStore(t *testing.T, ts *httptest.Server) *store.Store {
 	return st
 }
 
-func countRadio(fc *fakecube.Server) int {
-	n := 0
-	for _, m := range fc.Received() {
-		if m.Type == 's' {
-			n++
-		}
-	}
-	return n
-}
-
 // A write is a command with its steps; the audit row names it; a retry
 // with the Idempotency-Key answers the same and sends nothing twice.
 func TestCommandsOfWrites(t *testing.T) {
 	fc, ts, s := startWith(t, storeOptions(t, t.TempDir(), "secret"))
+	received := cubewatch.Lines(fc)
 	stores[ts] = s.opts.Store
 	setpoint := "/api/v1/cubes/KEQ0000100/rooms/6/setpoint"
 	resp, text := callWith(t, ts, "PUT", setpoint, "secret", `{"mode":"auto"}`, map[string]string{"Idempotency-Key": "k1"})
 	if resp.StatusCode != 200 || resp.Header.Get("Idempotent-Replayed") != "" {
 		t.Fatalf("setpoint: %d %s", resp.StatusCode, text)
 	}
-	sent := countRadio(fc)
+	sent := received.Mark()
 	rows := auditRows(t, ts, "secret", "?limit=1")
 	if len(rows) != 1 || rows[0].CommandID == 0 {
 		t.Fatalf("audit row %+v", rows)
@@ -118,8 +109,8 @@ func TestCommandsOfWrites(t *testing.T) {
 	if resp2.StatusCode != 200 || resp2.Header.Get("Idempotent-Replayed") != "true" || text2 != text {
 		t.Fatalf("replay: %d %q %q (first %q)", resp2.StatusCode, resp2.Header.Get("Idempotent-Replayed"), text2, text)
 	}
-	if countRadio(fc) != sent {
-		t.Fatal("the replay sent a radio command")
+	if got := received.Since(sent, cubewatch.Type('s')); len(got) != 0 {
+		t.Fatalf("the replay sent a radio command: %v", got)
 	}
 	if again := auditRows(t, ts, "secret", "?limit=10"); len(again) != 1 {
 		t.Fatalf("the replay left an audit row: %d", len(again))
@@ -133,8 +124,8 @@ func TestCommandsOfWrites(t *testing.T) {
 		t.Fatalf("a long key: %d", resp.StatusCode)
 	}
 	op := userToken(t, s.opts.Store, "op", store.RoleOperator)
-	if resp, _ := callWith(t, ts, "PUT", setpoint, op, `{"mode":"auto"}`, map[string]string{"Idempotency-Key": "k1"}); resp.StatusCode != 200 || countRadio(fc) != sent+1 {
-		t.Fatalf("another user's key: %d, radio %d", resp.StatusCode, countRadio(fc))
+	if resp, _ := callWith(t, ts, "PUT", setpoint, op, `{"mode":"auto"}`, map[string]string{"Idempotency-Key": "k1"}); resp.StatusCode != 200 || received.Count(sent, cubewatch.Type('s')) != 1 {
+		t.Fatalf("another user's key: %d, radio %v", resp.StatusCode, received.Since(sent, cubewatch.Type('s')))
 	}
 
 	// A refused request is no command, a failed one a dropped command.

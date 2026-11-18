@@ -4,10 +4,8 @@
 package server
 
 import (
-	"bufio"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -16,9 +14,8 @@ import (
 )
 
 // openStream opens a Cube's event stream with the token, "" for none,
-// and returns a channel that gets the keep-alives it reads and is closed
-// when the stream ends.
-func openStream(t *testing.T, ts *httptest.Server, token string) <-chan string {
+// and returns the watch of what it sends, which ends with the stream.
+func openStream(t *testing.T, ts *httptest.Server, token string) *testkit.Watch[testkit.Event] {
 	t.Helper()
 	req, _ := http.NewRequest("GET", ts.URL+"/api/v1/cubes/KEQ0000100/events", nil)
 	if token != "" {
@@ -29,42 +26,14 @@ func openStream(t *testing.T, ts *httptest.Server, token string) <-chan string {
 		t.Fatal(err)
 	}
 	if resp.StatusCode != 200 {
+		resp.Body.Close()
 		t.Fatalf("stream: %d", resp.StatusCode)
 	}
-	lines := make(chan string, 64)
-	go func() {
-		defer close(lines)
-		defer resp.Body.Close()
-		rd := bufio.NewReader(resp.Body)
-		for {
-			l, err := rd.ReadString('\n')
-			if err != nil {
-				return
-			}
-			if strings.HasPrefix(l, ": keep-alive") {
-				lines <- l
-			}
-		}
-	}()
-	t.Cleanup(func() { resp.Body.Close() })
-	return lines
+	return testkit.StreamWatch(t, resp.Body)
 }
 
-// ended waits for the stream to end, failing after a while.
-func ended(t *testing.T, lines <-chan string, what string) {
-	t.Helper()
-	deadline := time.After(testkit.Scale(5 * time.Second))
-	for {
-		select {
-		case _, ok := <-lines:
-			if !ok {
-				return
-			}
-		case <-deadline:
-			t.Fatalf("%s: the stream did not end", what)
-		}
-	}
-}
+// isKeepAlive matches the stream's keep-alive comment.
+func isKeepAlive(e testkit.Event) bool { return e.Kind == "" && e.Comment == "keep-alive" }
 
 // An event stream asks at each keep-alive whether its caller would be
 // let in now: one opened on an open server ends once a user exists, one
@@ -75,15 +44,11 @@ func TestStreamEndsWhenItsCallerIsNotLetIn(t *testing.T) {
 	s.streamKeepAlive.Store(int64(30 * time.Millisecond))
 	st := s.opts.Store
 	open := openStream(t, ts, "")
-	select {
-	case <-open:
-	case <-time.After(testkit.Scale(5 * time.Second)):
-		t.Fatal("no keep-alive on the open server")
-	}
+	open.Await(t, 0, "a keep-alive on the open server", isKeepAlive)
 	if _, err := st.AddUser(t.Context(), store.User{Name: "owner1", Role: store.RoleOwner}, "placeholder-pass", 0); err != nil {
 		t.Fatal(err)
 	}
-	ended(t, open, "the open server's first user")
+	testkit.Eventually(t, "the end of the open server's stream at its first user", open.Ended)
 
 	viewer := userToken(t, st, "viewer1", store.RoleViewer)
 	operator := userToken(t, st, "operator1", store.RoleOperator)
@@ -96,16 +61,9 @@ func TestStreamEndsWhenItsCallerIsNotLetIn(t *testing.T) {
 	if err := st.RevokeToken(t.Context(), toks[0].ID); err != nil {
 		t.Fatal(err)
 	}
-	ended(t, revoked, "a revoked key")
-	for i := 0; i < 3; i++ {
-		select {
-		case _, ok := <-stays:
-			if !ok {
-				t.Fatal("the stream of a caller still allowed ended")
-			}
-		case <-time.After(testkit.Scale(5 * time.Second)):
-			t.Fatal("no keep-alive for a caller still allowed")
-		}
+	testkit.Eventually(t, "the end of the stream of a revoked key", revoked.Ended)
+	for i, c := 0, testkit.Cursor(0); i < 3; i++ {
+		_, c = stays.Await(t, c, "a keep-alive for a caller still allowed", isKeepAlive)
 	}
 }
 
@@ -123,14 +81,10 @@ func mustUser(t *testing.T, st *store.Store, name string) store.User {
 func TestLegacyStreamEndsWithItsToken(t *testing.T) {
 	_, ts, s := startWith(t, Options{Token: "secret"})
 	s.streamKeepAlive.Store(int64(30 * time.Millisecond))
-	lines := openStream(t, ts, "secret")
-	select {
-	case <-lines:
-	case <-time.After(testkit.Scale(5 * time.Second)):
-		t.Fatal("no keep-alive")
-	}
+	evs := openStream(t, ts, "secret")
+	evs.Await(t, 0, "a keep-alive", isKeepAlive)
 	if err := s.SetToken(t.Context(), "placeholder-token-2"); err != nil {
 		t.Fatal(err)
 	}
-	ended(t, lines, "a new token")
+	testkit.Eventually(t, "the end of the stream at a new token", evs.Ended)
 }

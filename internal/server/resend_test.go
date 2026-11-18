@@ -105,7 +105,7 @@ func TestUnconfirmedRoomCommandResent(t *testing.T) {
 	r.fc.SetDeaf(0x0a0205, true)
 	r.flag(0x0a0205)
 	reset := cube.CmdResetError(0x0a0205).String()
-	sent := len(r.fc.Received())
+	sent := r.received.Mark()
 	r.setRoom2("22")
 	r.waitOutcome("not_confirmed", 1)
 	resent := r.waitOutcome("resent", 1)
@@ -161,7 +161,7 @@ func TestUnconfirmedRoomCommandResent(t *testing.T) {
 
 	// A day later, it is sent again.
 	r.clock.add(25 * time.Hour)
-	n := len(r.fc.Received())
+	n := r.received.Mark()
 	r.setRoom2("21")
 	r.waitOutcome("resent", 2)
 	write = setpointLine(t, 0x0a0204, 2, 21, cube.ModeManual)
@@ -177,7 +177,7 @@ func TestUnconfirmedRoomCommandResentBehindTheHold(t *testing.T) {
 	r := startDrift(t, nil, resendOptions(400*time.Millisecond, 1500*time.Millisecond))
 	r.fc.SetDeaf(0x0a0205, true)
 	r.fc.SetFreeSlots(2) // the write's answer: 2 free, so that its re-send waits
-	sent := len(r.fc.Received())
+	sent := r.received.Mark()
 	r.setRoom2("22")
 	r.waitOutcome("not_confirmed", 1)
 	testkit.Eventually(t, "the queue's hold", func() bool { return len(r.events("hold")) > 0 })
@@ -208,7 +208,7 @@ func TestUnconfirmedRoomCommandResentBehindTheHold(t *testing.T) {
 	// The room checks: the members differ, are reported, and nothing is
 	// sent, the day's re-send taken.
 	r.set(0x0a0206, "manual", 18)
-	n := len(r.fc.Received())
+	n := r.received.Mark()
 	r.disagreeAndResend()
 	last := r.newest("disagree")
 	if got := r.outcomes("disagree"); !slices.Equal(got, []string{"differ", "not_resent"}) || summaryText(&last, "why") != "today" {
@@ -226,7 +226,7 @@ func TestRoomChecksWaitForAPendingWrite(t *testing.T) {
 	r := startDrift(t, nil)
 	r.fc.SetDeaf(0x0a0205, true)
 	r.setRoom2("22")
-	sent := len(r.fc.Received())
+	sent := r.received.Mark()
 	r.waitSetting(0x0a0206, "manual", 22)
 	for range 3 {
 		r.check()
@@ -253,7 +253,7 @@ func TestRoomChecksResendTakesTheDay(t *testing.T) {
 		t.Fatalf("the room checks: %v", got)
 	}
 	r.fc.SetDeaf(0x0a0205, true)
-	sent := len(r.fc.Received())
+	sent := r.received.Mark()
 	r.setRoom2("22")
 	r.waitOutcome("not_confirmed", 1)
 	if ev := r.waitOutcome("not_resent", 1); ev.Summary["why"] != whyToday {
@@ -272,7 +272,7 @@ func TestUnconfirmedRoomCommandNotResent(t *testing.T) {
 	t.Run("superseded", func(t *testing.T) {
 		r := startDrift(t, nil, resendOptions(400*time.Millisecond, 0))
 		r.fc.SetDeaf(0x0a0205, true)
-		sent := len(r.fc.Received())
+		sent := r.received.Mark()
 		r.setRoom2("22")
 		if code, out := do(t, r.ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/0a0204/setpoint", `{"mode":"manual","temp":19}`); code != 200 {
 			t.Fatalf("device setpoint: %d %v", code, out)
@@ -289,7 +289,7 @@ func TestUnconfirmedRoomCommandNotResent(t *testing.T) {
 		r := startDrift(t, nil, resendOptions(400*time.Millisecond, 800*time.Millisecond))
 		r.fc.SetDeaf(0x0a0205, true)
 		r.fc.SetFreeSlots(2)
-		sent := len(r.fc.Received())
+		sent := r.received.Mark()
 		r.setRoom2("22")
 		r.waitOutcome("not_confirmed", 1)
 		testkit.Eventually(t, "the re-send in the queue", func() bool {
@@ -347,7 +347,7 @@ func TestUnconfirmedRoomCommandNotResent(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		sent := len(r.fc.Received())
+		sent := r.received.Mark()
 		r.rt.proxyWrote(c) // as if the Cube had taken it
 		if ev := r.waitOutcome("not_confirmed", 1); ev.Summary["source"] != "proxy" {
 			t.Fatalf("the report: %+v", ev)

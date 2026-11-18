@@ -19,6 +19,7 @@ import (
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/testkit"
+	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 )
 
 const fixture = "../protocol/cube/testdata/cube-fw0113-greeting.txt"
@@ -58,6 +59,15 @@ func setupWith(t *testing.T, mod func(*fakecube.Server)) (*fakecube.Server, *Pro
 	return fc, p, c, ctx
 }
 
+// strs is the lines as the Cube received them.
+func strs(lines []cube.Message) []string {
+	var out []string
+	for _, m := range lines {
+		out = append(out, m.String())
+	}
+	return out
+}
+
 func readLine(t *testing.T, r *cube.Reader) cube.Message {
 	t.Helper()
 	m, err := r.Read()
@@ -67,18 +77,9 @@ func readLine(t *testing.T, r *cube.Reader) cube.Message {
 	return m
 }
 
-func countType(fc *fakecube.Server, typ byte) int {
-	n := 0
-	for _, m := range fc.Received() {
-		if m.Type == typ {
-			n++
-		}
-	}
-	return n
-}
-
 func TestProxyGreetingReadsAndPassthrough(t *testing.T) {
 	fc, p, c, ctx := setup(t)
+	lines := cubewatch.Lines(fc)
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -124,12 +125,12 @@ func TestProxyGreetingReadsAndPassthrough(t *testing.T) {
 	greetingL := last
 
 	// l: is answered locally.
-	polls := countType(fc, 'l')
+	polls := lines.Mark()
 	conn.Write([]byte("l:\r\n"))
 	if l := readLine(t, r); l.Type != 'L' || l.Data != greetingL.Data {
 		t.Fatalf("l: answered %s", l)
 	}
-	if countType(fc, 'l') != polls {
+	if lines.Count(polls, cubewatch.Type('l')) != 0 {
 		t.Fatal("l: reached the cube")
 	}
 
@@ -138,7 +139,7 @@ func TestProxyGreetingReadsAndPassthrough(t *testing.T) {
 	if cl := readLine(t, r); cl.Type != 'C' || !strings.HasPrefix(cl.Data, "0a010d,") {
 		t.Fatalf("c: answered %s", cl)
 	}
-	if countType(fc, 'c') != 0 {
+	if lines.Count(0, cubewatch.Type('c')) != 0 {
 		t.Fatal("c: reached the cube")
 	}
 
@@ -147,8 +148,8 @@ func TestProxyGreetingReadsAndPassthrough(t *testing.T) {
 	if s := readLine(t, r); s.Type != 'S' || s.Data != "19,0,31" {
 		t.Fatalf("s: answered %s", s)
 	}
-	if countType(fc, 's') != 1 {
-		t.Fatalf("cube received %d s commands", countType(fc, 's'))
+	if n := lines.Count(0, cubewatch.Type('s')); n != 1 {
+		t.Fatalf("cube received %d s commands", n)
 	}
 
 	// m: goes through, is answered A: and updates the snapshot.
@@ -163,7 +164,7 @@ func TestProxyGreetingReadsAndPassthrough(t *testing.T) {
 	if a := readLine(t, r); a.Type != 'A' {
 		t.Fatalf("m: answered %s", a)
 	}
-	if countType(fc, 'm') != 1 {
+	if lines.Count(0, cubewatch.Type('m')) != 1 {
 		t.Fatal("m: did not reach the cube")
 	}
 	if got := c.Snapshot().Metadata().Rooms[0].Name; got != "Renamed" {
@@ -179,6 +180,7 @@ func TestProxyGreetingReadsAndPassthrough(t *testing.T) {
 
 func TestProxyDiscardsWhenBudgetExhausted(t *testing.T) {
 	fc, p, _, ctx := setup(t)
+	lines := cubewatch.Lines(fc)
 	fc.Duty = 0x61 // 97 %
 	// A command through the queue teaches the client the budget.
 	p.opts.Queue.Enqueue(engine.Command{Passthrough: true, Lines: []cube.Message{{Type: 's', Data: "AARAAAAACgENBgA="}}}).Wait(ctx)
@@ -196,12 +198,12 @@ func TestProxyDiscardsWhenBudgetExhausted(t *testing.T) {
 	r := cube.NewReader(conn)
 	for m := readLine(t, r); m.Type != 'L'; m = readLine(t, r) {
 	}
-	sent := countType(fc, 's')
+	sent := lines.Mark()
 	conn.Write([]byte("s:AARAAAAACgENBgA=\r\n"))
 	if s := readLine(t, r); s.Type != 'S' || !strings.HasPrefix(s.Data, "61,1,") {
 		t.Fatalf("answered %s", s)
 	}
-	if countType(fc, 's') != sent {
+	if lines.Count(sent, cubewatch.Type('s')) != 0 {
 		t.Fatal("radio command reached the cube with the duty cycle exhausted")
 	}
 }
@@ -318,6 +320,7 @@ func TestProxyDiscoverySilentWhileCubeLost(t *testing.T) {
 
 func TestProxyHidesHiddenDevices(t *testing.T) {
 	fc, p, c, ctx := setup(t)
+	lines := cubewatch.Lines(fc)
 	hidden := cube.RFAddress(0x0a010d) // in room 6 of the fixture
 	p.opts.Hidden = []cube.RFAddress{hidden}
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -382,12 +385,10 @@ func TestProxyHidesHiddenDevices(t *testing.T) {
 		t.Fatalf("m: answered %s", a)
 	}
 	var sent *cube.Metadata
-	for _, m := range fc.Received() {
-		if m.Type == 'm' {
-			_, data, _ := strings.Cut(m.Data, ",")
-			raw, _ := base64.StdEncoding.DecodeString(data)
-			sent, _ = cube.DecodeMetadata(raw)
-		}
+	for _, m := range lines.Since(0, cubewatch.Type('m')) {
+		_, data, _ := strings.Cut(m.Data, ",")
+		raw, _ := base64.StdEncoding.DecodeString(data)
+		sent, _ = cube.DecodeMetadata(raw)
 	}
 	found := false
 	for _, d := range sent.Devices {
@@ -462,6 +463,7 @@ func TestProxyHidesHiddenDevices(t *testing.T) {
 
 func TestProxyRefusesToDeleteHiddenDevices(t *testing.T) {
 	fc, p, c, ctx := setup(t)
+	lines := cubewatch.Lines(fc)
 	hidden := cube.RFAddress(0x0a010d) // in room 6 of the fixture
 	other := cube.RFAddress(0x0a010a)
 	p.opts.Hidden = []cube.RFAddress{hidden}
@@ -483,7 +485,7 @@ func TestProxyRefusesToDeleteHiddenDevices(t *testing.T) {
 	if a := readLine(t, r); a.Type != 'A' {
 		t.Fatalf("t: answered %s", a)
 	}
-	if n := countType(fc, 't'); n != 0 {
+	if n := lines.Count(0, cubewatch.Type('t')); n != 0 {
 		t.Fatalf("%d t: reached the cube", n)
 	}
 	if c.Snapshot().Config(hidden) == nil {
@@ -497,13 +499,7 @@ func TestProxyRefusesToDeleteHiddenDevices(t *testing.T) {
 			t.Fatalf("t: answered %s", a)
 		}
 	}
-	var got []cube.Message
-	for _, m := range fc.Received() {
-		if m.Type == 't' {
-			got = append(got, m)
-		}
-	}
-	if len(got) != 1 || got[0].String() != cube.CmdDeleteDevices(true, other).String() {
+	if got := lines.Since(0, cubewatch.Type('t')); len(got) != 1 || got[0].String() != cube.CmdDeleteDevices(true, other).String() {
 		t.Fatalf("cube received %v", got)
 	}
 	if c.Snapshot().Config(other) != nil || c.Snapshot().Config(hidden) == nil {
@@ -520,7 +516,7 @@ func TestProxyRefusesToDeleteHiddenDevices(t *testing.T) {
 	if a := readLine(t, r); a.Type != 'A' {
 		t.Fatalf("t: answered %s", a)
 	}
-	if n := countType(fc, 't'); n != 2 {
+	if n := lines.Count(0, cubewatch.Type('t')); n != 2 {
 		t.Fatalf("%d t: reached the cube, want 2", n)
 	}
 }
@@ -542,6 +538,7 @@ func TestProxyPairing(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(func() { cancel(); fc.Close() })
+	lines := cubewatch.Lines(fc)
 	c := cubelan.New(cubelan.Options{Addr: addr})
 	go c.Run(ctx)
 	<-c.Ready()
@@ -590,11 +587,7 @@ func TestProxyPairing(t *testing.T) {
 	if c.Inclusion().Active {
 		t.Fatal("pairing still active")
 	}
-	var got []string
-	for _, m := range fc.Received() {
-		got = append(got, m.String())
-	}
-	if strings.Join(got, " ") != "n:001e c:0a0b0c x:" {
+	if got := strs(lines.Since(0, cubewatch.Except('l'))); strings.Join(got, " ") != "n:001e c:0a0b0c x:" {
 		t.Fatalf("cube received %v", got)
 	}
 }
@@ -605,6 +598,7 @@ func TestProxyPairing(t *testing.T) {
 // alone.
 func TestProxyPairingCapped(t *testing.T) {
 	fc, p, c, ctx := setup(t)
+	lines := cubewatch.Lines(fc)
 	var mu sync.Mutex
 	var events []Event
 	p.opts.OnEvent = func(e Event) {
@@ -634,10 +628,11 @@ func TestProxyPairingCapped(t *testing.T) {
 	for readLine(t, r).Type != 'L' {
 	}
 
+	from := lines.Mark()
 	conn.Write([]byte("n:012c\r\n"))
 	testkit.Eventually(t, "the pairing's event", func() bool { return len(noted()) == 1 })
-	testkit.Eventually(t, "the n: at the Cube", func() bool { return countType(fc, 'n') > 0 })
-	if got := fc.Received(); len(got) != 1 || got[0].String() != "n:00ff" {
+	lines.Await(t, from, "the n: at the Cube", cubewatch.Type('n'))
+	if got := lines.Since(0, cubewatch.Except('l')); len(got) != 1 || got[0].String() != "n:00ff" {
 		t.Fatalf("cube received %v", got)
 	}
 	if st := c.Inclusion(); !st.Active || st.Until.Sub(st.Started) != 255*time.Second {
@@ -648,19 +643,18 @@ func TestProxyPairingCapped(t *testing.T) {
 	}
 	conn.Write([]byte("n:003c\r\n"))
 	testkit.Eventually(t, "the join's event", func() bool { return len(noted()) >= 2 })
-	time.Sleep(50 * time.Millisecond)
-	if ev := noted(); len(ev) != 2 || len(ev[1].Summary) != 1 || ev[1].Summary["joined"] != true {
-		t.Fatalf("events %+v", ev)
-	}
+	beforeX := lines.Mark()
 	conn.Write([]byte("x:\r\n"))
 	if m := readLine(t, r); m.Type != 'N' || m.Data != "" {
 		t.Fatalf("end of pairing relayed as %s", m)
 	}
-	var got []string
-	for _, m := range fc.Received() {
-		got = append(got, m.String())
+	// The proxy reads a client's lines in turn: by the x: at the Cube,
+	// the join had noted all its events.
+	testkit.Never(t, "a third pairing event", func() bool { return len(noted()) > 2 }, lines.Seen(beforeX, cubewatch.Type('x')))
+	if ev := noted(); len(ev) != 2 || len(ev[1].Summary) != 1 || ev[1].Summary["joined"] != true {
+		t.Fatalf("events %+v", ev)
 	}
-	if strings.Join(got, " ") != "n:00ff x:" {
+	if got := strs(lines.Since(0, cubewatch.Except('l'))); strings.Join(got, " ") != "n:00ff x:" {
 		t.Fatalf("cube received %v", got)
 	}
 }
@@ -671,6 +665,7 @@ func TestProxyPairingCapped(t *testing.T) {
 func TestProxyReportsWrites(t *testing.T) {
 	for _, discard := range []bool{false, true} {
 		fc, p, _, ctx := setupWith(t, func(fc *fakecube.Server) { fc.Discard = discard })
+		lines := cubewatch.Lines(fc)
 		var mu sync.Mutex
 		var got []cube.RadioCommand
 		p.opts.OnWrite = func(c cube.RadioCommand) {
@@ -702,7 +697,7 @@ func TestProxyReportsWrites(t *testing.T) {
 		if m := readLine(t, r); m.Type != 'F' {
 			t.Fatalf("f: answered %s", m)
 		}
-		if countType(fc, 'f') != 1 || len(reported()) != 0 {
+		if lines.Count(0, cubewatch.Type('f')) != 1 || len(reported()) != 0 {
 			t.Fatalf("a read reported as a write: %v", reported())
 		}
 		// The preset temperatures of one device, then a room setpoint.
@@ -712,8 +707,8 @@ func TestProxyReportsWrites(t *testing.T) {
 				t.Fatalf("s: answered %s", m)
 			}
 		}
-		if countType(fc, 's') != 2 {
-			t.Fatalf("cube received %d s commands", countType(fc, 's'))
+		if n := lines.Count(0, cubewatch.Type('s')); n != 2 {
+			t.Fatalf("cube received %d s commands", n)
 		}
 		want := []cube.RadioCommand{
 			{Command: cube.RFSetTemperatures, Target: cube.Target{RFAddress: 0x0a010a}, Payload: []byte{0x2c, 0x1e, 0x3d, 0x09, 0x03, 0x0a, 0x03}},
@@ -732,6 +727,7 @@ func TestProxyReportsWrites(t *testing.T) {
 // command after it its own answer.
 func TestProxyDeleteOfSeveralDevices(t *testing.T) {
 	fc, p, _, ctx := setupWith(t, func(fc *fakecube.Server) { fc.ReplyGap = 100 * time.Millisecond })
+	lines := cubewatch.Lines(fc)
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -758,10 +754,8 @@ func TestProxyDeleteOfSeveralDevices(t *testing.T) {
 		t.Fatalf("z: answered %s", a)
 	}
 	var order []byte
-	for _, m := range fc.Received() {
-		if m.Type == 't' || m.Type == 'z' {
-			order = append(order, m.Type)
-		}
+	for _, m := range lines.Since(0, cubewatch.Type('t', 'z')) {
+		order = append(order, m.Type)
 	}
 	if string(order) != "tz" {
 		t.Fatalf("the Cube received %q", order)
