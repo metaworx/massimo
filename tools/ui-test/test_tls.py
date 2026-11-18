@@ -21,12 +21,12 @@ def stub_health(page, tls):
     certificate, and the header is refreshed."""
     body = json.dumps({"ok": True, "version": page.evaluate("state.version"), "started_at": "2026-11-06T12:00:00Z", "tls": tls})
     page.route("**/healthz", lambda route: route.fulfill(status=200, content_type="application/json", body=body))
-    page.locator("#refresh-btn").click()
+    page.evaluate("poll(true)")
 
 
 def unstub_health(page):
     page.unroute("**/healthz")
-    page.locator("#refresh-btn").click()
+    page.evaluate("poll(true)")
     assert wait_until(page, "document.getElementById('tls-notice').classList.contains('hidden')", 5), "notice gone without TLS"
 
 

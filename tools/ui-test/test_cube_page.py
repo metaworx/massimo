@@ -81,7 +81,9 @@ def test_cube_page_saves_as_system_settings_shows(page, case):
     assert wait_until(page, "state.cubes.some((c) => c.serial === 'KEQ0000100' && c.name === 'Renamed')", 5), "saved"
     assert wait_until(page, "document.querySelector('#cube-page .cube-panel .panel-name').textContent === 'Renamed'", 5), \
         "the page's head names it"
-    assert page.locator("#cube-page-msg").is_visible(), "the outcome under the panel"
+    # The outcome comes after the reload that draws the name: waited for.
+    assert wait_until(page, "!document.getElementById('cube-page-msg').classList.contains('hidden')", 5), \
+        "the outcome under the panel"
     show_view(page, "system")
     assert wait_until(page, "(() => { const n = document.querySelector(\"#cubes-list .cube-panel[data-serial='KEQ0000100'] .panel-name\");"
                       " return !!n && n.textContent === 'Renamed'; })()", 5), "System settings shows the new name"

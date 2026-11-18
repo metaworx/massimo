@@ -1,46 +1,43 @@
-<!-- The header: Massimo's word, the version, the refresh button and the radio budget (header.js); the server's sign, the time of the last update, the Cube choice and every Cube's problems and the TLS notice, parts (ui/src/header/), each in its place here; the Rooms button and ☰ (pages.js); back to top (components.js). -->
+<!-- The header: Massimo's word with the version while signed out, and the radio budget (header.js); the pile, the server's sign, the time of the last update, the Cube choice and every Cube's problems and the TLS notice, parts (ui/src/header/), each in its place here; the Rooms button and ☰ with the version (pages.js); back to top (components.js). -->
 <header class="top">
+  <!-- one row, a grid on its lower edge (style.css .top-line): the logo,
+       the pile, the Cube choice, ↑ beside it while compacted on a wide
+       page, the pages; on a phone the Cube choice a row of its own -->
   <div class="top-line">
-    <div class="top-left">
-      <div class="brand">
-        <!-- the word, under Massimo's logo once its sprite has come (components.js brandMarks) -->
-        <h1 class="brand-name" data-brand><span class="brand-word"><span class="brand-initial">M</span><span class="brand-rest">assimo</span></span></h1>
-      </div>
-      <!-- the version, the server's sign and the time of the last update,
-           which wrap as one -->
-      <div class="top-facts">
-        <span id="version-short" class="muted mono small"></span>
-        <span class="sign-updated">
-          <!-- the server's sign, button#server-sign (ui/src/header/ServerSign.tsx):
-               connected, an update out (a click opens Software update), a new
-               version running (a click reloads), unreachable (a click tries
-               again) -->
-          <span id="server-sign-slot" class="part-slot"></span>
-          <!-- the time of the last successful poll (ui/src/header/Updated.tsx)
-               and the refresh icon, one button without a frame, its tap area
-               larger than it (header.js renderUpdated) -->
-          <button type="button" id="refresh-btn" class="refresh-btn" aria-label="refresh now" title="Refresh now" data-i18n-attr="title:header.refreshTitle"><span id="updated"></span><svg class="ni" aria-hidden="true"><use href="#icon-refresh"/></svg></button>
-        </span>
-      </div>
+    <div class="brand">
+      <!-- the word, under Massimo's logo once its sprite has come (components.js brandMarks) -->
+      <h1 class="brand-name" data-brand><span class="brand-word"><span class="brand-initial">M</span><span class="brand-rest">assimo</span></span></h1>
+      <!-- the version while signed out, when ☰ that holds it is not there
+           (header.js checkVersion) -->
+      <span id="version-out" class="version-out muted mono small"></span>
     </div>
+    <!-- the pile (ui/src/header/Pile.tsx): the chosen Cube's age above
+         every Cube's problems, span#cube-problems, led by the server's sign;
+         its list Refresh now with the times, and what the server's sign
+         offers -->
+    <div id="header-pile" class="part-slot"></div>
     <!-- the Cube choice, a menu of the page, details#cube-menu with its
          summary#cube-choice (ui/src/header/Choice.tsx): the chosen Cube's
          network sign and its name; the list each Cube with its sign, serial
-         and address; and every Cube's problems, span#cube-problems
-         (CubeProblems.tsx) -->
+         and address -->
     <div id="header-cube" class="cube"></div>
+    <!-- back to top beside the Cube choice while the header is compacted,
+         from 600 px (components.js backToTop) -->
+    <button type="button" id="top-btn-wide" class="icon-btn nav-btn top-btn top-btn-wide" aria-label="back to top" title="Back to top" data-i18n-attr="aria-label:page.toTop title:page.toTopTitle"><svg class="ni" aria-hidden="true"><use href="#icon-up"/></svg></button>
     <nav class="nav" aria-label="pages" data-i18n-attr="aria-label:nav.pages">
       <button type="button" id="view-tiles" class="icon-btn nav-btn active" aria-current="page" aria-label="rooms" title="Rooms" data-i18n-attr="aria-label:nav.rooms title:nav.roomsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-house"/></svg></button>
-      <!-- back to top, left of ☰ while the header is compacted
-           (components.js backToTop) -->
+      <!-- back to top, left of ☰ while the header is compacted, below
+           600 px (components.js backToTop) -->
       <button type="button" id="top-btn" class="icon-btn nav-btn top-btn" aria-label="back to top" title="Back to top" data-i18n-attr="aria-label:page.toTop title:page.toTopTitle"><svg class="ni" aria-hidden="true"><use href="#icon-up"/></svg></button>
       <!-- ☰, every page but Rooms, at every width, each for the roles that
            may open it (pages.js mayShow, MENU_VIEWS): the log; the settings
            pages; the personal page and Sign out (login.js renderMe). It
-           carries the log's mark (log.js renderLogSign). -->
+           carries the log's mark (log.js renderLogSign). Its first row is
+           the server's version, which copies itself (header.js). -->
       <details id="nav-menu" class="menu nav-menu">
         <summary class="nav-btn" aria-label="menu" title="Menu"><svg class="ni" aria-hidden="true"><use href="#icon-menu"/></svg></summary>
         <div class="menu-items">
+          <p class="menu-version"><span id="version-short" class="mono small"></span></p>
           <button type="button" id="menu-log"><svg class="ni" aria-hidden="true"><use href="#icon-log"/></svg><span data-i18n="nav.logTitle">Log</span></button>
           <hr class="menu-sep">
           <button type="button" id="menu-cube" class="needs-cubes-or-pair"><svg class="ni" aria-hidden="true"><use href="#icon-cube3d"/></svg><span data-i18n="nav.cubeTitle">Cube settings</span></button>

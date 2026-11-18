@@ -4,8 +4,8 @@
 /**
  * @file internal/server/ui/src/header/send.ts
  *
- * The header's requests: the search for Cubes on the LAN from the Cube
- * choice, and a poll now from the server's sign.
+ * The header's request: the search for Cubes on the LAN from the Cube
+ * choice. A poll now is the pile's Refresh now (Pile.tsx).
  */
 
 import type { Discovery } from "../api";
@@ -33,9 +33,4 @@ export async function discoverCubes(): Promise<void> {
   } finally {
     discovery.running = false;
   }
-}
-
-/** pollNow asks the server for the current state at once, the refresh button turning meanwhile (whileBusy of components.js). */
-export function pollNow(): void {
-  whileBusy($("refresh-btn"), () => poll(true));
 }

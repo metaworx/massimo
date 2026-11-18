@@ -4,36 +4,28 @@
 /**
  * @file internal/server/ui/src/header/index.tsx
  *
- * The header as parts (AP UiParts, Block 6): the Cube choice and every
- * Cube's problems, the chosen Cube's age, the server's sign, the line
- * about the certificate, and the home notice on Rooms, each drawn once
- * into its place in the page and updated in place. The plain code calls
- * MassimoParts.header (header.js renderCubeSelect, renderUpdated,
- * renderServerSign and renderTLS, home.js renderHomeNotice). The facts
- * row with its fitting, the version and the refresh button around the
- * age stay plain, in elements the parts leave alone.
+ * The header as parts (AP UiParts, Block 6): the pile, the chosen Cube's
+ * age above every Cube's problems led by the server's sign (AP GlobalMenu,
+ * Block 12); the Cube choice; the line about the certificate; and the
+ * home notice on Rooms, each drawn once into its place in the page and
+ * updated in place. The plain code calls MassimoParts.header (header.js
+ * renderCubeSelect, renderUpdated, renderServerSign and renderTLS,
+ * home.js renderHomeNotice). The logo, the version and the pages stay
+ * plain, in elements the parts leave alone.
  */
 
 import type { CertStatus } from "../api";
 import { mounter, register } from "../shared/region";
 import { Choice } from "./Choice";
-import { CubeProblems } from "./CubeProblems";
 import { HomeNotice } from "./HomeNotice";
-import { ServerSign } from "./ServerSign";
+import { Pile } from "./Pile";
 import { TlsNotice } from "./Tls";
-import { Updated } from "./Updated";
 import { cert, load } from "./store";
 
 /** The header's places, each the element of the page with the id, and what is drawn there. */
 const mounts = [
-  mounter("header-cube", () => (
-    <>
-      <Choice />
-      <span id="cube-problems" class="cube-problems"><CubeProblems /></span>
-    </>
-  )),
-  mounter("updated", () => <Updated />),
-  mounter("server-sign-slot", () => <ServerSign />),
+  mounter("header-pile", () => <Pile />),
+  mounter("header-cube", () => <Choice />),
   mounter("tls-slot", () => <TlsNotice />),
   mounter("home-notice", () => <HomeNotice />),
 ];

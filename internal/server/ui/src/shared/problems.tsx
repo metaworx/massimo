@@ -188,26 +188,40 @@ function ProblemEntry({ e, info }: { e: Entry; info?: boolean }) {
  * click in it (a list inside a panel's summary keeps a click in it from
  * folding the panel). Where no item has a kind and no entry a summary,
  * nothing is wrong: the green check (OkPill) where ok gives its label,
- * else nothing. An entry's summary alone is information, said after the
- * green check in the summary.
+ * else nothing; with always the list stays, and where ok is given its
+ * summary is the green check and its list says ok's words as a line. An
+ * entry's summary alone is information, said after the green check in
+ * the summary. lead is drawn first in the
+ * summary, before the kinds' icons (a sign of the place's own state);
+ * head first in the list, before the entries (items that act on the
+ * place). onOpen and onClose are told when the list opens and closes.
  */
-export function Problems({ entries, label, ok, onClick }: {
+export function Problems({ entries, label, ok, lead, always, head, onClick, onOpen, onClose }: {
   entries: Entry[];
   label: string;
   ok?: string;
+  lead?: ComponentChildren;
+  always?: boolean;
+  head?: ComponentChildren;
   onClick?: (ev: TargetedMouseEvent<HTMLDetailsElement>) => void;
+  onOpen?: () => void;
+  onClose?: () => void;
 }) {
   const kinds = problemKinds(entries);
   const extra = entries.filter((e) => e.summary);
-  if (!kinds.length && !extra.length) return ok ? <OkPill label={ok} /> : null;
+  const well = !kinds.length && !extra.length;
+  if (well && !always) return ok ? <OkPill label={ok} /> : null;
   return (
-    <Dropdown cls="problems" summaryCls="problems-sum" listCls="problems-list" label={label} onClick={onClick} summary={
+    <Dropdown cls="problems" summaryCls="problems-sum" listCls="problems-list" label={label} onClick={onClick} onOpen={onOpen} onClose={onClose} summary={
       <>
+        {lead}
         <KindIcons entries={entries} />
-        {!kinds.length && <Icon symbol="icon-check" cls="ni ok-check" />}
+        {!kinds.length && (!well || ok) && <Icon symbol="icon-check" cls="ni ok-check" />}
         {extra.map((e) => <Fragment key={entryKey(e)}>{e.summary}</Fragment>)}
       </>
     }>
+      {head}
+      {well && ok && <p class="problems-ok">{ok}</p>}
       {entries.map((e) => <ProblemEntry key={entryKey(e)} e={e} />)}
     </Dropdown>
   );

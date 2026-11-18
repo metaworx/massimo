@@ -282,6 +282,21 @@ function cancelSetpoint(room) {
   ui.pending = null;
 }
 
+// dropPendingSetpoints drops every tile's stepped setpoint that still
+// waits for its time to be sent, as the sign-in opens (askLogin,
+// login.js): sent after it, it would go out under whoever signs in. Its
+// tile says it was not sent, as a write that met the 401; one already on
+// its way gets its own answer.
+function dropPendingSetpoints() {
+  for (const room of state.rooms) {
+    const ui = state.ui[room.id];
+    if (!ui || !ui.timer || ui.pending === null) continue;
+    const label = t("label.manual", { temp: fmtNum(ui.pending, 1) });
+    cancelSetpoint(room);
+    showTileResult(room.id, t("result.error", { label, error: notSentText() }), false); // app.js
+  }
+}
+
 // flushSetpoint sends the stepper's value, which stays shown, with Save
 // turning, until the answer; a value whose time comes while another
 // write of the tile runs waits for that one's answer.

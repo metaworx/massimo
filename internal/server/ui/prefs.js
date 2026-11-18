@@ -35,7 +35,6 @@ function initSettings() {
   $("expert-toggle").addEventListener("change", onExpert);
   // the version copies whole, as its tooltip names it (D94-A)
   copyable($("version-short"), () => state.version, ""); // components.js
-  $("refresh-btn").addEventListener("click", (ev) => whileBusy(ev.currentTarget, () => poll(true)));
   $("clock-select").addEventListener("change", (ev) => {
     setSetting("clock", validSetting("clock", ev.target.value) || "browser");
     applySettings();

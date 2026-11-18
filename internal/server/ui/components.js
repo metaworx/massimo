@@ -646,7 +646,14 @@ function showResult(el, text, ok) {
   el.classList.toggle("hidden", !text);
   el.classList.toggle("ok", !!text && !!ok);
   el.classList.toggle("bad", !!text && !ok);
+  if (text && !ok) failedLines.add(el);
+  else failedLines.delete(el);
 }
+
+// failedLines are the lines that showResult shows a failure in, so that
+// the page can take back what it told a user who is gone (forgetNotSent,
+// app.js).
+const failedLines = new Set();
 
 // markRange marks a number field by what its required, min, max and step
 // allow, or by ok where the caller judges the value itself (the
@@ -1075,10 +1082,10 @@ function stickyHeader() {
   onScroll();
 }
 
-// backToTop wires the two back-to-top buttons: ↑ at the bottom right
-// of every page once it is a screen down (#to-top), and the header's,
-// left of ☰, while the header is compacted (#top-btn,
-// style.css). Each takes the page back to its top, the focus on the
+// backToTop wires the back-to-top buttons: ↑ at the bottom right of
+// every page once it is a screen down (#to-top), and the header's while
+// it is compacted, beside the Cube choice from 600 px (#top-btn-wide),
+// left of ☰ below (#top-btn, style.css). Each takes the page back to its top, the focus on the
 // page's sections menu where it has one, else on its button in the
 // header.
 function backToTop() {
@@ -1097,6 +1104,7 @@ function backToTop() {
   };
   btn.addEventListener("click", go);
   document.getElementById("top-btn").addEventListener("click", go);
+  document.getElementById("top-btn-wide").addEventListener("click", go);
 }
 
 // settleAtTop keeps a scroll to the top from ending a few pixels short:
@@ -1328,7 +1336,8 @@ function problemEntry(e) {
 
 // dropdown makes a <details class="menu"> a menu that drops down: one
 // open at a time, kept in the window (placeMenu), closed by a choice of
-// one of its items, by Escape (the focus back on its summary) and by a
+// one of its items (but one marked data-keep-open, whose result shows in
+// the list), by Escape (the focus back on its summary) and by a
 // click outside it. The room tiles' ⋯ and More and the header's 👤 and ☰
 // are such menus.
 function dropdown(details) {
@@ -1341,7 +1350,8 @@ function dropdown(details) {
     requestAnimationFrame(() => placeMenu(details));
   });
   details.addEventListener("click", (ev) => {
-    if (ev.target.closest(".menu-items button")) details.open = false;
+    const b = ev.target.closest(".menu-items button");
+    if (b && !b.hasAttribute("data-keep-open")) details.open = false;
   });
   return details;
 }

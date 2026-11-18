@@ -6,7 +6,7 @@ shown in the address, each page's own scroll position, and expert mode's
 line of the chosen Cube's radio budget."""
 import json
 
-from helpers import VIEWER, css_hidden, hold, open_personal_page, scroll_settled, scroll_width, set_version, show_view, wait_held, wait_until
+from helpers import VIEWER, css_hidden, hold, open_personal_page, scroll_settled, scroll_width, show_view, wait_held, wait_until
 
 # The symbol a page button shows, drawn in an svg of its own outside the
 # header, so that its size does not depend on whether the button is shown;
@@ -170,45 +170,41 @@ def box(page, selector):
     return page.locator(selector).bounding_box()
 
 
+def edge(page, selector):
+    """An element's lower edge."""
+    b = box(page, selector)
+    return b["y"] + b["height"]
+
+
 def active(page, selector):
     return page.locator(selector).evaluate("(e) => e.classList.contains('active')")
 
 
 def test_header_order_and_the_narrow_header(page, case):
-    """At full width the brand and the time of the last update with ↻
-    beside it at the left (the version and the time under the brand, both,
-    where they leave no room), then on the first line the Cube choice with
-    the network sign of its link, then 🏠 and ☰ alone. Below 600 px 🏠 ☰
-    beside the brand and the Cube choice on a line of its own under them."""
-    order = ["h1", "#updated", "#refresh-btn", "#refresh-btn svg", "#cube-choice", "#view-tiles", "#nav-menu > summary"]
+    """The header's row: the logo, the pile (the age above every Cube's
+    problems, the server's sign first), the Cube choice with the network
+    sign of its link, then 🏠 and ☰ alone at the right. Below 600 px the
+    logo, the pile, 🏠 and ☰ on the first row and the Cube choice alone
+    under them, as wide as the row."""
+    order = ["h1", ".pile", "#cube-choice", "#view-tiles", "#nav-menu > summary"]
     b = {sel: box(page, sel) for sel in order}
-    assert b["#updated"]["x"] < b["#refresh-btn svg"]["x"], "↻ after the time it renews, in the same button"
     assert page.locator("#cube-choice .picker-icon .conn-sign use[href='#icon-net']").count() == 1, "the link, a network sign in the Cube choice"
-    assert b["#view-tiles"]["x"] < b["#nav-menu > summary"]["x"], "🏠 left of ☰"
     shown = page.locator(".nav > *").evaluate_all("(es) => es.filter((e) => e.offsetParent).map((e) => e.id)")
     assert shown == ["view-tiles", "nav-menu"], f"🏠 and ☰ alone in the header: {shown}"
+    first = ["h1", ".pile", "#view-tiles", "#nav-menu > summary"]
     if case.width >= 600:
-        right = ["#cube-choice", "#view-tiles", "#nav-menu > summary"]
-        xs = [b[sel]["x"] for sel in right]
-        assert xs == sorted(xs), f"left to right in this order: {right}"
-        assert max(b[sel]["x"] + b[sel]["width"] for sel in ("h1", "#updated", "#refresh-btn")) < b["#cube-choice"]["x"], \
-            f"the brand and the time left of the Cube choice: {b}"
-        first_line = b["h1"]["y"] + b["h1"]["height"]
-        assert all(b[sel]["y"] < first_line for sel in right), f"the Cube choice and the pages on the first line: {b}"
+        first = order
+    xs = [b[sel]["x"] for sel in first]
+    assert xs == sorted(xs), f"left to right in this order: {first}: {b}"
+    bottom = b["#view-tiles"]["y"] + b["#view-tiles"]["height"]
+    assert all(abs(b[sel]["y"] + b[sel]["height"] - bottom) <= 1 for sel in first if sel != "h1"), f"on the first row's lower edge: {b}"
+    if case.width >= 600:
         return
-    assert b["#cube-choice"]["y"] >= b["#view-tiles"]["y"] + b["#view-tiles"]["height"], "the Cube choice under them"
+    c = b["#cube-choice"]
+    assert c["y"] >= bottom, "the Cube choice under them"
+    row = box(page, ".top-line")
+    assert abs(c["x"] - row["x"]) <= 1 and abs(c["width"] - row["width"]) <= 1, f"as wide as the row: {c} vs {row}"
 
-
-# The baseline of an element's text: the bottom of an empty inline-block
-# put at its end, whose baseline is its bottom edge.
-BASELINE = """(sel) => {
-  const probe = document.createElement('span');
-  probe.style.display = 'inline-block';
-  document.querySelector(sel).appendChild(probe);
-  const y = probe.getBoundingClientRect().bottom;
-  probe.remove();
-  return y;
-}"""
 
 # The drawing shown in the header's brand, the logo or (under 600 px) the
 # small mark: its box.
@@ -218,143 +214,96 @@ BRAND_BOX = """() => {
   return {top: b.top, bottom: b.bottom, height: b.height};
 }"""
 
-# The middle of an element's digits: its baseline less half the height
-# of a 0 in its font.
-DIGITS_MIDDLE = """(sel) => {
-  const e = document.querySelector(sel);
-  const probe = document.createElement('span');
-  probe.style.display = 'inline-block';
-  e.appendChild(probe);
-  const base = probe.getBoundingClientRect().bottom;
-  probe.remove();
-  const ctx = document.createElement('canvas').getContext('2d');
-  ctx.font = getComputedStyle(e).font;
-  return base - ctx.measureText('0').actualBoundingBoxAscent / 2;
-}"""
-
 VERSION_TITLE = {"en": "{v} (server version) · click to copy", "de": "{v} (Server-Version) · Klick kopiert"}
 
 
 # A build's version, as long as one between releases.
 BUILD = "v0.15.0-alpha.1-293-gd36148f"
 
-# The facts' state: the version cut or not, shown or not, the time shown,
-# all inside the window, and whether they have a row of their own.
-FACTS = """() => {
-  const v = document.getElementById("version-short");
-  const r = (e) => e.getBoundingClientRect();
-  const right = Math.max(r(v).right, r(document.getElementById("refresh-btn")).right);
-  return { cut: v.scrollWidth > v.clientWidth + 1, version: v.offsetParent !== null, time: document.getElementById("updated").offsetParent !== null,
-    inside: right <= document.documentElement.clientWidth + 0.5, row: document.querySelector(".top-line").classList.contains("facts-row") };
-}"""
-
-
-def test_version_never_hidden(page, case):
-    """A build's long version, at widths from a wide screen to a phone:
-    beside the logo where it fits, else on a row of its own, never cut,
-    inside the window; compacted, the version goes and the server's sign
-    and the time stay."""
-    size = page.viewport_size
+def test_version_in_the_menu(page, case):
+    """The server's version is ☰'s first row, before the log, small and
+    grey, whole for a build's long one; its tooltip is the whole version.
+    It is not in the header's row."""
     page.evaluate("""(v) => { window.__version = [state.version, document.getElementById("version-short").textContent];
       state.version = v; document.getElementById("version-short").textContent = v; renderVersionTitle(); }""", BUILD)
     try:
-        rows = {}
-        for w in (1280, 1100, 900, 750, 600, 520, 430, 390):
-            page.set_viewport_size({"width": w, "height": size["height"]})
-            page.wait_for_timeout(150)
-            f = page.evaluate(FACTS)
-            rows[w] = f["row"]
-            assert f["version"] and not f["cut"] and f["time"] and f["inside"], f"at {w} px the version whole, the time, inside: {f}"
-            page.evaluate("document.body.classList.add('scrolled')")
-            f = page.evaluate(FACTS)
-            assert not f["version"] and f["time"], f"at {w} px compacted: the time, not the version: {f}"
-            page.evaluate("document.body.classList.remove('scrolled')")
-            page.wait_for_timeout(50)
-        assert rows[390], f"a row of their own on a phone: {rows}"
+        page.locator("#nav-menu > summary").click()
+        v = page.locator("#version-short")
+        v.wait_for(state="visible")
+        first = page.locator("#nav-menu .menu-items > *").first
+        assert first.evaluate("(e) => e.contains(document.getElementById('version-short'))"), "☰'s first row"
+        assert v.bounding_box()["y"] < page.locator("#menu-log").bounding_box()["y"], "above the log"
+        assert v.evaluate("(e) => e.scrollWidth <= e.clientWidth + 1"), "whole"
+        assert v.get_attribute("title") == VERSION_TITLE[case.lang].format(v=BUILD), "the tooltip is the whole version"
+        assert page.locator("#version-out").is_hidden(), "none beside the logo while signed in"
+        page.keyboard.press("Escape")
     finally:
-        page.set_viewport_size(size)
         page.evaluate("""() => { const [v, short] = window.__version; state.version = v;
           document.getElementById("version-short").textContent = short; renderVersionTitle(); }""")
-        page.wait_for_timeout(150)
 
 
-def test_facts_fitted_again_when_the_time_comes(page, case):
-    """The version, the sign and the time are fitted again when what they
-    show changes: with a short version (a build's from a checkout without
-    tags, as CI's) they fit beside the logo on a phone before the time of
-    the last update has come, and the time then takes them to their row,
-    the version whole, not cut under the logo. The poll is held meanwhile
-    and the chosen Cube has no time of its own until the test gives it
-    one, so that the test alone brings the time (the age is a part,
-    ui/src/header/Updated.tsx, drawn from the Cube's updated)."""
-    page.evaluate("""() => { clearInterval(state.pollTimer);
-      const v = document.getElementById('version-short'), c = state.cubes.find((x) => x.serial === state.serial);
-      window.__facts = [v.textContent, c.updated]; v.textContent = 'v0.0.0-dev'; c.updated = ''; renderUpdated(); fitFacts(); }""")
+def test_pile_on_a_line_of_its_own(page, case):
+    """Where the logo, the pile and the pages do not fit one row (here a
+    window 230 px wide, compacted, ↑ among the pages), the pile takes a
+    line of its own under them, the age at the pill's right; back on the
+    first row when they fit again; all inside the window."""
+    size = page.viewport_size
     try:
-        assert wait_until(page, "document.getElementById('updated').textContent === ''", 3), "no time before it comes"
-        page.wait_for_timeout(100)
-        page.evaluate("""() => { const c = state.cubes.find((x) => x.serial === state.serial);
-          c.updated = new Date(Date.now() - 59000).toISOString(); renderUpdated(); }""")
-        assert wait_until(page, "document.getElementById('updated').textContent !== ''", 3), "the time came"
-        assert wait_until(page, "(() => { const v = document.getElementById('version-short'); "
-                          "return v.scrollWidth <= v.clientWidth + 1; })()", 3), "the version whole once the time came"
+        page.set_viewport_size({"width": 230, "height": size["height"]})
+        assert wait_until(page, "!document.querySelector('.pile').dataset.line", 3), "230 px whole: the pile fits beside the pages"
+        page.evaluate("document.body.classList.add('scrolled')")
+        assert wait_until(page, "document.querySelector('.pile').dataset.line === 'own'", 3), "compacted: a line of its own"
+        pill, age, nav = box(page, "#cube-problems .problems-sum"), box(page, ".pile-age"), box(page, ".nav")
+        assert pill["y"] >= nav["y"] + nav["height"] - 1, f"under the pages: {pill} vs {nav}"
+        assert age["x"] >= pill["x"] + pill["width"], f"the age at the pill's right: {age} vs {pill}"
+        assert abs((age["y"] + age["height"] / 2) - (pill["y"] + pill["height"] / 2)) <= 3, f"level with it: {age} vs {pill}"
+        assert box(page, "#cube-choice")["y"] >= pill["y"] + pill["height"], "the Cube choice under it"
+        assert page.evaluate("document.querySelector('header.top').scrollWidth") <= 230, "the header inside the window"
+        page.evaluate("document.body.classList.remove('scrolled')")
+        assert wait_until(page, "!document.querySelector('.pile').dataset.line", 3), "on the first row again"
     finally:
-        page.evaluate("""() => { const [v, u] = window.__facts; document.getElementById('version-short').textContent = v;
-          state.cubes.find((x) => x.serial === state.serial).updated = u; renderUpdated(); startPolling(); }""")
+        page.evaluate("document.body.classList.remove('scrolled')")
+        page.set_viewport_size(size)
+
+
+def test_logo_by_width(page, case):
+    """The logo stays, compacted too, down to 331 px (the M alone under
+    600 px); under 331 px it goes, the pile first in the row."""
+    size = page.viewport_size
+    try:
+        for w, shown in ((390, True), (331, True), (330, False), (300, False)):
+            page.set_viewport_size({"width": w, "height": size["height"]})
+            for scrolled in (False, True):
+                page.evaluate(f"document.body.classList.toggle('scrolled', {str(scrolled).lower()})")
+                page.wait_for_timeout(50)
+                assert page.locator(".top-line > .brand").is_visible() == shown, f"at {w} px, compacted {scrolled}: the logo {shown}"
+            if not shown:
+                assert abs(box(page, ".pile")["x"] - box(page, ".top-line")["x"]) <= 1, f"at {w} px the pile first"
+    finally:
+        page.evaluate("document.body.classList.remove('scrolled')")
+        page.set_viewport_size(size)
 
 
 def test_header_on_one_baseline(page, case):
-    """The logo (the small mark under 600 px), the version and the time of
-    the last update stand on one baseline, the drawing's bottom edge, and
-    the M is as tall as the page buttons, where they fit beside it: a
-    release's short version (CI's build has one too) always does, a long
-    build's on a phone does not, and then the version and the time stand
-    under the mark, the version whole, on the time's line or a line of its
-    own above it. Each version is set here, so that the build's own does
-    not decide which case is tested. ↻ stands on the digits' middle.
-    The time and ↻ are one button without a frame, larger to a finger
-    than it looks; the version's tooltip is the whole version."""
+    """The row stands on one line: the logo's drawing (the small mark under
+    600 px) with its bottom edge, the letters' baseline, the pill of the
+    pile, the Cube choice beside it at full width and the page buttons end
+    there; the M is as tall as the page buttons. The age stands centred
+    above the pill, its digits of one width."""
     brand = page.evaluate(BRAND_BOX)
     button = box(page, "#view-tiles")
     assert abs(brand["height"] - button["height"]) <= 1, f"the M as tall as the page buttons: {brand} vs {button}"
-    assert abs(brand["top"] - button["y"]) <= 1, f"and level with them: {brand} vs {button}"
-    # fitted once the version has come (header.js fitFacts)
-    assert wait_until(page, "(() => { const v = document.getElementById('version-short'); return v.textContent !== '' && v.scrollWidth <= v.clientWidth + 1; })()", 5), \
-        "the version whole"
-    real = page.locator("#version-short").inner_text()
-    try:
-        for version, beside in (("v0.0.0-dev", True), ("v0.0.0-dev+0123456789ab-dirty", case.width >= 600)):
-            set_version(page, version)
-            assert wait_until(page, "(() => { const v = document.getElementById('version-short'); return v.scrollWidth <= v.clientWidth + 1; })()", 3), \
-                f"{version} whole"
-            lines = {sel: page.evaluate(BASELINE, sel) for sel in ("#version-short", "#updated")}
-            if beside:
-                assert abs(lines["#version-short"] - lines["#updated"]) <= 1, f"{version} and the time on one line: {lines}"
-                assert abs(lines["#updated"] - brand["bottom"]) <= 1, f"on the logo's baseline with {version}: {lines} vs {brand['bottom']}"
-            else:
-                assert lines["#version-short"] <= lines["#updated"] + 1, f"{version} on the time's line or above it: {lines}"
-                assert lines["#version-short"] > brand["bottom"] + 8, f"both under the mark with {version}: {lines} vs {brand['bottom']}"
-    finally:
-        set_version(page, real)
-    icon = box(page, "#refresh-btn svg")
-    digits = page.evaluate(DIGITS_MIDDLE, "#updated")
-    assert abs(icon["y"] + icon["height"] / 2 - digits) <= 1, f"↻ on the digits' middle: {icon} vs {digits}"
-    btn = page.locator("#refresh-btn")
-    assert btn.evaluate("(e) => getComputedStyle(e).borderTopStyle") == "none", "no frame"
-    b = box(page, "#refresh-btn")
-    x = b["x"] + b["width"] / 2
-    for y in (b["y"] - 8, b["y"] + b["height"] + 8):
-        # the button, or another control where one is that close (the Cube
-        # choice under it on a phone)
-        hit = page.evaluate("([x, y]) => { const e = document.elementFromPoint(x, y); "
-                            "return !!e && (!!e.closest('#refresh-btn') || !!e.closest('button, summary, a, input, select')); }", [x, y])
-        assert hit, f"a tap 8 px off the button still hits it, where no other control is (y {y}, button {b})"
-    label = btn.get_attribute("aria-label") or ""
-    assert label == btn.get_attribute("title") and label != page.evaluate("t('header.refreshTitle')"), \
-        f"its tooltip and its name say the time: {label!r}"
-    version = page.evaluate("state.version")
-    assert page.locator("#version-short").get_attribute("title") == VERSION_TITLE[case.lang].format(v=version), \
-        "the tooltip is the whole version"
+    bottom = button["y"] + button["height"]
+    ends = {"logo": brand["bottom"], "pill": edge(page, "#cube-problems .problems-sum")}
+    if case.width >= 600:
+        ends["cube"] = edge(page, "#cube-choice")
+    assert all(abs(y - bottom) <= 1 for y in ends.values()), f"on the buttons' lower edge {bottom}: {ends}"
+    pill, age = box(page, "#cube-problems .problems-sum"), box(page, ".pile-age")
+    assert wait_until(page, "document.querySelector('.pile-age').textContent !== ''", 5), "the age has come"
+    age = box(page, ".pile-age")
+    assert age["y"] + age["height"] <= pill["y"] + 1, f"the age above the pill: {age} vs {pill}"
+    assert abs((age["x"] + age["width"] / 2) - (pill["x"] + pill["width"] / 2)) <= 1, f"centred over it: {age} vs {pill}"
+    assert "tabular-nums" in page.locator(".pile-age").evaluate("(e) => getComputedStyle(e).fontVariantNumeric"), "digits of one width"
 
 
 def test_cube_clock_in_its_facts(page, case):
@@ -495,14 +444,17 @@ def test_each_page_keeps_its_scroll(page, case):
 
 
 def test_versions_copy(page, case):
-    """The header's version and System Info's copy the whole version, as
+    """☰'s version and System Info's copy the whole version, as
     the tooltip names it, without " (server version)"; System Info's by a
     click on it and by its icon (D94-A)."""
     page.context.grant_permissions(["clipboard-read", "clipboard-write"], origin=page.evaluate("location.origin"))
     whole = page.evaluate("state.version")
     page.evaluate("navigator.clipboard.writeText('')")
+    page.locator("#nav-menu > summary").click()
     page.locator("#version-short").click()
-    assert wait_until(page, "navigator.clipboard.readText().then((t) => t === state.version)", 3), "the header's version copies whole"
+    assert wait_until(page, "navigator.clipboard.readText().then((t) => t === state.version)", 3), "☰'s version copies whole"
+    assert page.evaluate("document.getElementById('nav-menu').open"), "☰ stays open"
+    page.keyboard.press("Escape")
     assert "(" not in whole or "server version" not in whole, "without the tooltip's words"
     show_view(page, "info")
     cell = page.locator("#info-version")
@@ -524,34 +476,63 @@ SET_AGE = """async ([ago, skew]) => {
   c.updated = new Date(Date.now() - ago * 1000).toISOString();
   renderUpdated();
   await new Promise((done) => setTimeout(done)); // the part draws the age after the call
-  const d = new Date(Date.parse(c.updated)), pad = (n) => String(n).padStart(2, '0');
-  const time = pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
-  return [document.getElementById('updated').textContent, document.getElementById('refresh-btn').title,
-          t('header.refreshUpdated', {time})];
+  const time = fmtTimeOfDay(new Date(Date.parse(c.updated) - skew)); // on the browser's clock, as the age
+  return [document.querySelector('.pile-age').textContent, t('header.cubeRead', {time})];
 }"""
 
 
 def test_updated_is_the_cubes_age(page, case):
-    """Beside ↻ how long ago the chosen Cube was heard from (its updated),
-    on the server's clock: seconds under a minute, then minutes, hours,
-    days; it counts on by itself; ↻'s tooltip says the time itself. The
-    server's clock is taken from its answers. The poll is held meanwhile,
-    so that it does not bring the Cube's own time back."""
+    """Above the pile how long ago the chosen Cube was heard from (its
+    updated), on the server's clock: seconds under a minute, then minutes,
+    hours, days; it counts on by itself; the pile's Refresh now says the
+    time itself. The server's clock is taken from its answers. The poll is
+    held meanwhile, so that it does not bring the Cube's own time back."""
     assert wait_until(page, "Math.abs(serverSkew) < 3000", 5), "the server's clock from its answers: this machine's"
     page.evaluate("clearInterval(state.pollTimer)")
     try:
         for ago, n, unit in AGES:
-            text, title, want = page.evaluate(SET_AGE, [ago, 0])
+            text, line = page.evaluate(SET_AGE, [ago, 0])
             assert text == page.evaluate(f"fmtUnit({n}, '{unit}')"), f"{ago} s ago: {text!r}"
-            assert title == want, f"the tooltip says the time: {title!r}"
-        text, _, _ = page.evaluate(SET_AGE, [0, 60000])
+            times = page.locator("#cube-problems .refresh-times").evaluate("(e) => e.textContent")
+            assert times.split("\n")[0] == line, f"Refresh now says the time, with its date where not today's: {times!r} vs {line!r}"
+        text, _ = page.evaluate(SET_AGE, [0, 60000])
         assert text == page.evaluate("fmtUnit(1, 'minute')"), f"on the server's clock, a minute ahead: {text!r}"
         page.evaluate(SET_AGE, [3, 0])
-        assert wait_until(page, "document.getElementById('updated').textContent === fmtUnit(5, 'second')", 4), "it counts on"
-        assert page.locator("#updated").evaluate("(e) => getComputedStyle(e).fontVariantNumeric").find("tabular-nums") >= 0, \
-            "digits of one width"
+        assert wait_until(page, "document.querySelector('.pile-age').textContent === fmtUnit(5, 'second')", 4), "it counts on"
     finally:
         page.evaluate("startPolling(); poll(true)")
+
+
+def test_refresh_now_keeps_the_list_open(page, case):
+    """The pile's list starts with Refresh now, under it when the chosen
+    Cube was read, when the server last answered and the time now, a line
+    each, the time now moving on while the list is open. A click polls
+    and leaves the list open, the server's answer then newer; closed, the
+    times stand still."""
+    page.locator("#cube-problems .problems-sum").click()
+    first = page.locator("#cube-problems .problems-list > *").first
+    first.wait_for(state="visible")
+    assert "refresh-now" in (first.get_attribute("class") or ""), "Refresh now first"
+    assert first.locator(".menu-item-label").inner_text() == page.evaluate("t('header.refreshTitle')"), "named so"
+    times = page.locator("#cube-problems .refresh-times")
+    lines = times.evaluate("(e) => e.textContent").split("\n")
+    words = page.evaluate("['header.cubeRead', 'header.serverReplied', 'header.timeNow'].map((k) => t(k, {time: ''}).trim())")
+    assert len(lines) == 3 and all(line.startswith(w) for line, w in zip(lines, words)), f"three times: {lines}"
+    tall = times.evaluate("(e) => e.getBoundingClientRect().height / parseFloat(getComputedStyle(e).lineHeight || '16')")
+    assert tall >= 2.5, f"a line each: {tall} lines tall"
+    now = lines[2]
+    assert wait_until(page, f"document.querySelector('#cube-problems .refresh-times').textContent.split('\\n')[2] !== {now!r}", 3), \
+        "the time now moves on"
+    page.evaluate("window.__replied = state.repliedAt")
+    page.wait_for_timeout(1100)  # a second on, so that the answer's time shows newer
+    first.click()
+    assert wait_until(page, "state.repliedAt > window.__replied", 5), "a click polls"
+    assert page.evaluate("document.querySelector('#cube-problems details').open"), "and leaves the list open"
+    page.keyboard.press("Escape")
+    assert wait_until(page, "!document.querySelector('#cube-problems details').open", 3), "Escape closes it"
+    still = times.evaluate("(e) => e.textContent")
+    page.wait_for_timeout(1500)
+    assert times.evaluate("(e) => e.textContent") == still, "closed, the times stand still"
 
 
 SET_PROBLEMS = """() => {
