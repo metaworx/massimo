@@ -114,13 +114,17 @@ func TestWaitingSendEndsWithItsContext(t *testing.T) {
 	if d := time.Since(start); d > time.Second {
 		t.Errorf("waiting Send returned after %v, its context ended after 50 ms", d)
 	}
-	if n := lines.Count(0, cubewatch.Type('c')); n != 0 {
-		t.Errorf("%d c: lines written, want none", n)
-	}
 	srv.SetSilent(false)
 	if s := outcome(t, "first", first); s.err != nil {
 		t.Errorf("first: %v", s.err)
 	}
+	// The turn after the first is the end: a line the ended Send wrote
+	// once the first was answered reached the Cube before the next
+	// Send's reply.
+	if _, err := c.Send(ctx, cube.CmdGetNTP); err != nil {
+		t.Fatal(err)
+	}
+	lines.HasNot(t, 0, "a c: line of the ended Send", cubewatch.Type('c'))
 }
 
 // A Send waiting its turn ends with ErrNotConnected when the connection

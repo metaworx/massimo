@@ -37,7 +37,7 @@ func TestTimedOutPairingIsWithdrawn(t *testing.T) {
 	q := engine.NewQueue(c, engine.Options{Gap: time.Millisecond, DutyWait: 600 * time.Millisecond})
 	go c.Run(ctx)
 	go q.Run(ctx)
-	<-c.Ready()
+	ready(t, c)
 	w := Writer{Client: c, Queue: q}
 	radio := cube.Message{Type: 's', Data: "AARAAAAACgENBms="}
 	// The first radio command reports the duty cycle exhausted; the

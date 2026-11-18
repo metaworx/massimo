@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/binary"
+	"errors"
 	"net"
 	"reflect"
 	"strings"
@@ -47,16 +48,22 @@ func setupWith(t *testing.T, mod func(*fakecube.Server)) (*fakecube.Server, *Pro
 	ctx, cancel := context.WithCancel(context.Background())
 	c := cubelan.New(cubelan.Options{Addr: addr})
 	go c.Run(ctx)
-	select {
-	case <-c.Ready():
-	case <-time.After(testkit.Scale(5 * time.Second)):
-		t.Fatal("client not ready")
-	}
+	ready(t, c)
 	q := engine.NewQueue(c, engine.Options{Gap: time.Millisecond})
 	go q.Run(ctx)
 	p := New(Options{Client: c, Queue: q, ReplyTimeout: 5 * time.Second})
 	t.Cleanup(func() { cancel(); fc.Close() })
 	return fc, p, c, ctx
+}
+
+// ready waits for the client's first complete greeting (Ready).
+func ready(t *testing.T, c *cubelan.Client) {
+	t.Helper()
+	select {
+	case <-c.Ready():
+	case <-time.After(testkit.Scale(testkit.Wait)):
+		t.Fatalf("client not ready within %v", testkit.Scale(testkit.Wait))
+	}
 }
 
 // strs is the lines as the Cube received them.
@@ -75,6 +82,18 @@ func readLine(t *testing.T, r *cube.Reader) cube.Message {
 		t.Fatalf("read: %v", err)
 	}
 	return m
+}
+
+// passedOn sends an f: through the proxy and reads its F:: the end of a
+// check that a line did not reach the Cube. The proxy passes a client's
+// lines on one at a time, in their order, through the queue and the
+// Cube client, so a line it passed on before the f: reached the Cube
+// before the F: came back.
+func passedOn(t *testing.T, conn net.Conn, r *cube.Reader) {
+	t.Helper()
+	if f := sendLine(t, conn, r, cube.CmdGetNTP); f.Type != 'F' {
+		t.Fatalf("f: answered %s", f)
+	}
 }
 
 func TestProxyGreetingReadsAndPassthrough(t *testing.T) {
@@ -130,20 +149,15 @@ func TestProxyGreetingReadsAndPassthrough(t *testing.T) {
 	if l := readLine(t, r); l.Type != 'L' || l.Data != greetingL.Data {
 		t.Fatalf("l: answered %s", l)
 	}
-	if lines.Count(polls, cubewatch.Type('l')) != 0 {
-		t.Fatal("l: reached the cube")
-	}
 
 	// c: for a known device is answered locally.
 	conn.Write([]byte("c:0a010d\r\n"))
 	if cl := readLine(t, r); cl.Type != 'C' || !strings.HasPrefix(cl.Data, "0a010d,") {
 		t.Fatalf("c: answered %s", cl)
 	}
-	if lines.Count(0, cubewatch.Type('c')) != 0 {
-		t.Fatal("c: reached the cube")
-	}
 
-	// s: goes through and the S reply comes back.
+	// s: goes through and the S reply comes back; it is the end of the
+	// checks that l: and c: did not reach the Cube (passedOn).
 	conn.Write([]byte("s:AARAAAAACgENBgA=\r\n"))
 	if s := readLine(t, r); s.Type != 'S' || s.Data != "19,0,31" {
 		t.Fatalf("s: answered %s", s)
@@ -151,6 +165,8 @@ func TestProxyGreetingReadsAndPassthrough(t *testing.T) {
 	if n := lines.Count(0, cubewatch.Type('s')); n != 1 {
 		t.Fatalf("cube received %d s commands", n)
 	}
+	lines.HasNot(t, polls, "the l: at the cube", cubewatch.Type('l'))
+	lines.HasNot(t, 0, "the c: at the cube", cubewatch.Type('c'))
 
 	// m: goes through, is answered A: and updates the snapshot.
 	md := *c.Snapshot().Metadata()
@@ -171,10 +187,12 @@ func TestProxyGreetingReadsAndPassthrough(t *testing.T) {
 		t.Fatalf("snapshot room name %q after m:", got)
 	}
 
-	// q: closes.
+	// q: closes: the read ends with the close, and one that times out
+	// found the connection open.
 	conn.Write([]byte("q:\r\n"))
-	if _, err := r.Read(); err == nil {
-		t.Fatal("connection still open after q:")
+	var ne net.Error
+	if _, err := r.Read(); err == nil || errors.As(err, &ne) && ne.Timeout() {
+		t.Fatalf("connection still open after q:: %v", err)
 	}
 }
 
@@ -203,9 +221,8 @@ func TestProxyDiscardsWhenBudgetExhausted(t *testing.T) {
 	if s := readLine(t, r); s.Type != 'S' || !strings.HasPrefix(s.Data, "61,1,") {
 		t.Fatalf("answered %s", s)
 	}
-	if lines.Count(sent, cubewatch.Type('s')) != 0 {
-		t.Fatal("radio command reached the cube with the duty cycle exhausted")
-	}
+	passedOn(t, conn, r)
+	lines.HasNot(t, sent, "a radio command at the cube with the duty cycle exhausted", cubewatch.Type('s'))
 }
 
 func TestProxyDiscovery(t *testing.T) {
@@ -269,11 +286,7 @@ func TestProxyDiscoverySilentWhileCubeLost(t *testing.T) {
 	t.Cleanup(cancel)
 	c := cubelan.New(cubelan.Options{Addr: addr, Backoff: 10 * time.Millisecond})
 	go c.Run(ctx)
-	select {
-	case <-c.Ready():
-	case <-time.After(testkit.Scale(5 * time.Second)):
-		t.Fatal("client not ready")
-	}
+	ready(t, c)
 	p := New(Options{Client: c})
 	pc, err := net.ListenPacket("udp4", "127.0.0.1:0")
 	if err != nil {
@@ -539,7 +552,7 @@ func TestProxyPairing(t *testing.T) {
 	lines := cubewatch.Lines(fc)
 	c := cubelan.New(cubelan.Options{Addr: addr})
 	go c.Run(ctx)
-	<-c.Ready()
+	ready(t, c)
 	q := engine.NewQueue(c, engine.Options{Gap: time.Millisecond})
 	go q.Run(ctx)
 	p := New(Options{Client: c, Queue: q, ReplyTimeout: 5 * time.Second})

@@ -36,13 +36,19 @@ func connect(t *testing.T) (*fakecube.Server, Writer, context.Context) {
 	q := engine.NewQueue(c, engine.Options{Gap: time.Millisecond})
 	go c.Run(ctx)
 	go q.Run(ctx)
-	select {
-	case <-c.Ready():
-	case <-time.After(testkit.Scale(5 * time.Second)):
-		t.Fatal("client not ready")
-	}
+	ready(t, c)
 	t.Cleanup(func() { cancel(); srv.Close() })
 	return srv, Writer{Client: c, Queue: q}, ctx
+}
+
+// ready waits for the client's first complete greeting (Ready).
+func ready(t *testing.T, c *cubelan.Client) {
+	t.Helper()
+	select {
+	case <-c.Ready():
+	case <-time.After(testkit.Scale(testkit.Wait)):
+		t.Fatalf("client not ready within %v", testkit.Scale(testkit.Wait))
+	}
 }
 
 func TestWriteMetadataIsMirrored(t *testing.T) {
@@ -226,7 +232,7 @@ func TestRereadIsAStepOfTheRequest(t *testing.T) {
 	q := engine.NewQueue(c, engine.Options{Gap: time.Millisecond, Observer: obs})
 	go c.Run(ctx)
 	go q.Run(ctx)
-	<-c.Ready()
+	ready(t, c)
 	w := Writer{Client: c, Queue: q, ID: "request-1"}
 	rf := cube.RFAddress(0x0a010d)
 	if res := w.Do(ctx, engine.Command{Lines: []cube.Message{{Type: 's', Data: "AARAAAAACgENBms="}}}, rf); res.Err != nil {

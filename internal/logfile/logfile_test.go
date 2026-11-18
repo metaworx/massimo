@@ -92,7 +92,7 @@ func TestRotateAtSize(t *testing.T) {
 		}
 	}
 	// The size's Rotations are handed on in goroutines of their own.
-	testkit.Within(5*time.Second, func() bool { return len(got()) >= 4 })
+	testkit.Eventually(t, "the four rotations handed on", func() bool { return len(got()) >= 4 })
 	if w := []string{"serve.log", "serve.log.1", "serve.log.2.gz", "serve.log.3.gz", "serve.log.4.gz"}; !slices.Equal(names(t, dir), w) {
 		t.Fatalf("files %v, want %v", names(t, dir), w)
 	}

@@ -98,8 +98,18 @@ func TestABusyCube(t *testing.T) {
 	defer cancel()
 	c := New(Options{Addr: addr, PollInterval: time.Minute, Backoff: 10 * time.Millisecond, Logger: logger, Dialer: quickDial})
 	go c.Run(ctx)
-	logs.Await(t, 0, "two dials timed out", attemptFailed)
-	testkit.Eventually(t, "the busy link", func() bool { c.Heard(); return c.Link().State == LinkBusy })
+	// The first timeout is the loss, the second an attempt: a refusal
+	// takes two (refusedAfter), and the third is 170 ms and more away.
+	logs.Await(t, 0, "the first dial timed out", connLost)
+	logs.Await(t, 0, "the second dial timed out", attemptFailed)
+	if l := c.Link(); l.State != LinkOffline {
+		t.Errorf("link %+v before discovery heard the Cube, want offline", l)
+	}
+	c.Heard()
+	if l := c.Link(); l.State != LinkBusy || l.Since.IsZero() {
+		t.Fatalf("link %+v after two timed out dials, want busy", l)
+	}
+	c.Heard()
 	if n := logs.Count(0, testkit.MsgAt(slog.LevelWarn, "cube busy with another client")); n != 1 {
 		t.Errorf("%d busy lines, want 1", n)
 	}
