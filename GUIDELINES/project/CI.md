@@ -74,10 +74,13 @@ flowchart TD
     subgraph night ["nightly.yml, What to ship, then Platforms"]
         pick{"A commit of main newer than<br/>release/nightly whose suite passed?"}
         ship{"Do the Tested records say macOS<br/>or Windows did not run for its code?"}
-        plat["Platforms: that job on the commit,<br/>run again by Retry where no runner came"]
+        athead{"Is it main's head?"}
+        plat["Platforms: that job on main's head,<br/>run again by Retry where no runner came"]
         pick -->|"yes: the newest"| ship
-        ship -->|yes| plat
+        ship -->|yes| athead
+        athead -->|yes| plat
     end
+    athead -->|"no: the night is skipped"| skipnight["No nightly build, no site"]
 
     subgraph build ["build.yml, What to release"]
         kind{"What does the run release?"}
@@ -120,7 +123,7 @@ flowchart TD
 | after every job above | All tests passed: fails unless none of them failed or was cancelled, but for a macOS or Windows job no runner took on a pull request or a push to `main`, which counts as not run, and names each with its result in its summary, an annotation for each that did not pass, and on a pull request in one comment; a job that passed only on a re-run counts, and is named in a line of the summary, a warning, that comment and, on a pull request, a comment of its own; then, on a push, once Build is done, Release (release.yml): a push to `main` becomes the `devel` build, the GitHub release `release/devel` replaced in place, signed with the rolling key (section 6); then, at every run of release.yml, Site (site.yml): the site built with the newest release's signed apt index and the docs of every channel, and deployed to GitHub Pages; nothing where no release carries the index yet; for a push to `main` of the site's documents alone, which has no Build and so no Release, Deploy site (site.yml) instead |
 | push to a release branch (`release/alpha`, later `release/beta` and `release/stable`) | nothing: ci.yml listens to `main` and the tags; the release moved the branch to a commit ci.yml had tested |
 | a version tag | every job above, as for a push to `main`, Build included, a macOS or Windows job no runner took failing it, which Retry runs again; then release.yml: sign the manifest and `SHA256SUMS` with the release key, verify the signatures against the public key compiled into `massimo`, publish the GitHub release; with the app's keys set, sign the Android app, add it to the release and its lines to `SHA256SUMS`, sign that again and attest the signed files (section 6); then, with the deploy key set, the Homebrew formula of the release's channel rendered and pushed to the tap (publish.yml, section 6), and, with the apt key set, the apt repository rebuilt from the releases and deployed to GitHub Pages |
-| daily at 02:30 UTC, or by hand (`gh workflow run nightly.yml --ref main`) | nightly.yml: What to ship (`packaging/nightly-pick.sh`) picks the newest commit of `main` whose suite passed and that is newer than the one the nightly build carries, and Platforms runs the macOS or Windows job on it first where the Tested records say the job did not run for its code; once Platforms passed or was not needed (Platforms passed), build.yml, then release.yml: the nightly build, `release/nightly`; nothing where there is no such commit, and nothing, the site included, where Platforms did not pass (section 6). By hand, `dry_run` ships nothing and `platforms` runs both jobs |
+| daily at 02:30 UTC, or by hand (`gh workflow run nightly.yml --ref main`) | nightly.yml: What to ship (`packaging/nightly-pick.sh`) picks the newest commit of `main` whose suite passed and that is newer than the one the nightly build carries, and Platforms runs the macOS or Windows job first, on `main`'s head, where the Tested records say the job did not run for its code, the night skipped where that commit is not `main`'s head; once Platforms passed or was not needed (Platforms passed), build.yml, then release.yml: the nightly build, `release/nightly`; nothing where there is no such commit, and nothing, the site included, where Platforms did not pass (section 6). By hand, `dry_run` ships nothing and `platforms` runs both jobs on `main`'s head |
 | a tag's run of ci.yml or a nightly run that ended failed | retry.yml: where a macOS or Windows job no runner took is all that failed, the run's failed jobs and those after them run again, about 20 minutes later, at most twice (`packaging/ci-retry.sh`; below) |
 | by hand (`gh workflow run publish.yml -f tag=<tag>`) | publish.yml: the formula of a release already out, such as the one published before the tap existed |
 
@@ -687,7 +690,8 @@ The nightly build takes the newest commit of `main` whose run had All tests pass
 so the commit it ships had the two jobs run where its change asked for them,
 and where its pull request found them not needed, at the last change that did,
 or no runner took one, which its record says;
-nightly.yml then runs that job first (section 6, D15-B).
+nightly.yml then runs that job first, on `main`'s head,
+and skips the night where the commit is older (section 6, D15-B).
 
 The Android app job (AP MobileApp, Block 4) builds `app/android` with the
 image's JDK 17 and Android SDK (platform and build-tools 36),
@@ -1110,9 +1114,9 @@ so that a red newest commit does not cost a night whose second-last was green
 and the Tested records with `statuses: read`,
 and hands the commit to build.yml (its inputs `nightly_sha` and `nightly_site`),
 whose What to release reads no runs.
-Before the build, the macOS and Windows jobs run on that commit (owner,
+Before the build, the macOS and Windows jobs run on `main`'s head (owner,
 2026-11-18, AP TestSpeed, D15-B), through platforms.yml as in ci.yml,
-each only where the records say it did not run for the commit's code:
+each only where the records say it did not run for the code of the commit to ship:
 a push to `main` that no runner took the job on says `false`
 (section 2, D16-A),
 and What to ship reads the commit's record and its first parents' newest first:
@@ -1123,13 +1127,21 @@ a commit without a record goes on where its code is its parent's (documents alon
 passed where it is a release commit whose tag's run passed,
 and runs the job otherwise, as the walk's end does;
 the commit the nightly build carries, or one before it, passed.
+The jobs check out what the run checks out, `main`'s head (`github.sha`),
+and no commit an input or an output names:
+a scheduled run holds the default branch's caches,
+and CodeQL took the commit to ship, handed to platforms.yml as an input,
+for cache poisoning (12 alerts on pull request #373).
+So where a job is needed and the commit to ship is older than `main`'s head,
+whose own suite has not passed, the night is skipped:
+What to ship's summary and Platforms passed's error say so,
+and a night after `main`'s head passes ships.
 The build waits for Platforms passed, which fails where Platforms did not pass:
 the night is then skipped, the site's deploy with it,
 after Retry ran a job no runner took again,
 at most twice, about 20 minutes apart (section 2).
 By hand, `-f dry_run=true` decides and runs the jobs it asks for and ships nothing,
-and `-f platforms=true` runs both whatever the records say,
-on `main`'s head where there is nothing to ship:
+and `-f platforms=true` runs both on `main`'s head whatever the records say:
 together they try Platforms, and Retry where no runner came, without a release.
 `rolling` takes `nightly` only from the schedule or by hand on `main`.
 Where `main`'s head is a release commit, its version tag at it,

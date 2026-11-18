@@ -3,9 +3,9 @@ name: Platforms
 # The Windows service and the macOS LaunchDaemon for real, each on its
 # platform's runner (GUIDELINES/project/CI.md, section 2): called by
 # ci.yml beside its other test jobs, where What to test asks for them,
-# and by nightly.yml before the nightly build, where the Tested record of
-# the commit it would ship says one of them did not run (AP TestSpeed,
-# D15-B). The caller's job is named Platforms in both, so that the API
+# and by nightly.yml before the nightly build, where the Tested records of
+# the commit it would ship, main's head, say one of them did not run (AP
+# TestSpeed, D15-B). The caller's job is named Platforms in both, so that the API
 # names these jobs "Platforms / Windows service" and "Platforms / macOS
 # LaunchDaemon": All tests passed's UNRUN_JOBS, Code result and Retry
 # know them by those names. GitHub's macOS runners are few, and a job can
@@ -13,8 +13,11 @@ name: Platforms
 # request and a push to main count it as not run, and a tag's run and the
 # nightly run have Retry (retry.yml) run it again (D5-A, D16-A).
 #
-# inputs.windows and inputs.macos choose the jobs, inputs.ref the commit
-# they check out (the caller's own where empty). Each job's output
+# inputs.windows and inputs.macos choose the jobs. They check out the
+# caller run's own commit, a pull request's merge commit or a push's, and
+# main's head for the nightly run, and never one an input names: a
+# scheduled run holds the default branch's caches, which a commit chosen
+# by an input could poison (CodeQL, actions/cache-poisoning). Each job's output
 # passed, true where every step of it passed, is this workflow's output
 # of the same name: the caller's result is that of both jobs together,
 # and the Tested record needs each one's. Nothing here holds a secret;
@@ -30,10 +33,6 @@ on:
         description: 'whether the macOS LaunchDaemon job runs'
         type: boolean
         default: true
-      ref:
-        description: 'the commit to check out; the caller run''s own where empty'
-        type: string
-        default: ''
     outputs:
       windows:
         description: 'true where the Windows service job passed'
@@ -65,8 +64,6 @@ jobs:
       passed: ${{ steps.passed.outputs.passed }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ inputs.ref }}
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -412,8 +409,6 @@ jobs:
       passed: ${{ steps.passed.outputs.passed }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ inputs.ref }}
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
