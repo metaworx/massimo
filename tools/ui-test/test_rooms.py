@@ -4,12 +4,29 @@
 configuration; the problems in a tile's head and in a device's; the ages
 of the values, a stale device, and what expert mode adds.
 
-The window and the staleness come from state events applied in the page
-(updateDevice), since the fake Cube does not change its states.
+The window comes from state events applied in the page (updateDevice);
+the staleness, a room not ready and the Cube's findings from the page's
+own reads of the rooms, answered by the fixture reads (ROOMS), since the
+fake Cube does not change its states.
 """
 import re
 
 from helpers import ECO_BUTTON, OPEN, STALE, named_buttons, scroll_width, wait_until
+
+# The page's read of the chosen Cube's rooms (fetchRooms of app.js), which
+# the fixture reads answers with what a test puts in.
+ROOMS = "**/rooms?devices=all"
+
+
+def change_room(room_id, fn):
+    """A change of the rooms read (reads.change) that applies fn to the
+    room room_id alone."""
+    def change(rooms):
+        for r in rooms or []:
+            if r.get("id") == room_id:
+                fn(r)
+        return rooms
+    return change
 
 
 def test_tiles_device_list_configuration(page, case):
@@ -254,38 +271,34 @@ def test_problems_in_the_heads(page, case):
     room.locator(".room-name-btn").click()
 
 
-def test_stale_and_expert(page, case):
-    """The first room's devices made 30 hours old and stale: the tile's
-    line says there is a notice and opens its pill, which lists each
+def test_stale_and_expert(page, case, reads):
+    """The first room's devices made 30 hours old and stale: the clock
+    among the tile's pill's icons, no line on the tile; the pill lists each
     device not seen for 30 hours; the values are greyed and the device list
     says so; expert mode
     adds the type, the radio address, the exact times and the Cube's
     radio budget in the header."""
-    page.evaluate("""() => {
-      const iso = new Date(Date.now() - 30 * 3600 * 1000).toISOString();
-      for (const x of state.rooms[0].devices) {
-        const d = JSON.parse(JSON.stringify(x));
-        d.stale = true;
-        d.last_seen = iso;
-        for (const k of Object.keys(d.received || {})) d.received[k] = iso;
-        updateDevice(d);
-      }
-      // The room's virtual wall thermostat, as the server makes it stale
-      // when every source of its temperature is.
-      const v = JSON.parse(JSON.stringify(state.rooms[0].vwt));
-      v.stale = true;
-      for (const k of Object.keys(v.received || {})) v.received[k] = iso;
-      updateDevice(v);
-    }""")
+    iso = page.evaluate("new Date(Date.now() - 30 * 3600 * 1000).toISOString()")
+
+    def stale(room):
+        # its devices, the virtual wall thermostat among them, as the
+        # server makes that stale when every source of its temperature is
+        room["stale"] = True
+        for d in room.get("devices") or []:
+            d["stale"] = True
+            d["last_seen"] = iso
+            for k in d.get("received") or {}:
+                d["received"][k] = iso
+
+    reads.change(ROOMS, change_room(page.evaluate("state.rooms[0].id"), stale))
+    page.evaluate("loadRooms()")
     tile = page.locator(".room").first
-    line = tile.locator(".tile-notices")
-    assert line.is_visible() and line.inner_text().startswith(page.evaluate("tn('room.notices', 1)")), \
-        f"one notice on the tile: {line.inner_text()!r}"
-    line.locator(".tile-notices-show").click()
+    tile.locator(".room-problems .problems-sum use[href='#icon-set-dial']").wait_for(state="attached", timeout=5000)
+    assert tile.locator(".tile-notices").is_hidden(), "no line on the tile: the room's commands are not refused"
+    tile.locator(".room-problems .problems-sum").click()
     listed = tile.locator(".room-problems .problems-list")
     listed.wait_for(state="visible")
     assert STALE[case.lang] in listed.inner_text(), "the pill lists the devices not seen for long"
-    assert tile.locator(".room-problems .problems-sum use[href='#icon-set-dial']").count() == 1, "the clock among the pill's icons"
     page.keyboard.press("Escape")
     assert tile.locator(".temp-val.stale").count() == 1, "stale measured temperature greyed"
     assert "30" in tile.locator(".temp-age").inner_text(), "the measured temperature is 30 hours old"
@@ -506,22 +519,32 @@ def test_out_of_date_device(page, case):
     page.evaluate("() => updateDevice(window.__dev)")
 
 
-def test_not_ready_line(page, case):
+def test_not_ready_line(page, case, reads):
     """A room whose devices have not all reported since the Cube started:
     the tile's line says that its commands are discarded, Show opens its
     pill, which lists the room's own notice and the device not reported,
     the pause sign among its icons; a device the Cube no longer hears is
-    out of date there, as its row says; the line goes once it reports."""
-    page.evaluate("""() => {
+    out of date there with its age, as its row says; the line goes once
+    the rooms are the server's again."""
+    names = page.evaluate("""() => {
       const r = state.rooms.find((r) => r.devices.some((d) => isThermostat(d) && !d.virtual && d.reported));
       const d = r.devices.find((d) => isThermostat(d) && !d.virtual && d.reported);
-      window.__room = r.name;
-      window.__dev = JSON.parse(JSON.stringify(d));
-      const x = JSON.parse(JSON.stringify(d));
-      x.reported = false;
-      updateDevice(x);
+      return { id: r.id, room: r.name, rf: d.rf_address, seen: new Date(Date.now() - 600e3).toISOString() };
     }""")
-    tile = page.locator(".room", has=page.locator(".room-name", has_text=page.evaluate("window.__room"))).first
+    told = {"out_of_date": False}
+
+    def unreported(room):
+        room["ready"] = False
+        for d in room.get("devices") or []:
+            if d.get("rf_address") == names["rf"]:
+                d["reported"] = False
+                if told["out_of_date"]:
+                    d["out_of_date"] = True
+                    d["last_seen"] = names["seen"]
+
+    reads.change(ROOMS, change_room(names["id"], unreported))
+    page.evaluate("loadRooms()")
+    tile = page.locator(".room", has=page.locator(".room-name", has_text=names["room"])).first
     line = tile.locator(".tile-notices")
     not_ready = page.evaluate("t('room.notReady')")
     line.wait_for(state="visible", timeout=5000)
@@ -534,19 +557,16 @@ def test_not_ready_line(page, case):
     assert page.evaluate("t('badge.notReported')") in text, f"the device not reported: {text!r}"
     assert tile.locator(".room-problems .problems-sum use[href='#icon-paused']").count() == 1, "the pause sign among the pill's icons"
     page.keyboard.press("Escape")
-    page.evaluate("""() => {
-      const x = JSON.parse(JSON.stringify(window.__dev));
-      x.reported = false;
-      x.out_of_date = true;
-      updateDevice(x);
-    }""")
+    told["out_of_date"] = True
+    page.evaluate("loadRooms()")
     line.locator(".tile-notices-show").click()
     listed.wait_for(state="visible")
     assert wait_until(page, "[...document.querySelectorAll('.room-problems .problems-list')]"
                       ".some((l) => l.innerText.includes(t('badge.outOfDate')))", 5), "out of date, as the device's row says"
     assert listed.locator(".flag .age").count() > 0, "with its age"
     page.keyboard.press("Escape")
-    page.evaluate("() => updateDevice(window.__dev)")
+    reads.clear(ROOMS)
+    page.evaluate("loadRooms()")
     line.wait_for(state="hidden", timeout=5000)
 
 
@@ -558,33 +578,38 @@ MISMATCH_BADGE = {"en": "in {cube} for the Cube", "de": "in {cube} laut Cube"}
 MISMATCH_PROGRAMME = {"en": "own week programme", "de": "eigenes Wochenprogramm"}
 
 
-def test_mismatch_marks(page, case):
+def test_mismatch_marks(page, case, reads):
     """A device whose C line names another room than the room list, and a
     member whose week programme differs (mismatches, as the server sends
-    them; AP RadioHealth, Block 7): the tile's line counts them and opens
-    its pill, where the device's entry has a badge for each, with since
-    when, the whole sentence naming the device and both rooms its tooltip;
+    them; AP RadioHealth, Block 7): the sliders among the tile's pill's
+    icons, no line on the tile; in the pill the device's entry has a badge
+    for each, with since when, the whole sentence naming the device and both rooms its tooltip;
     the device's row has the same badges; the marks go with the
     findings."""
     names = page.evaluate("""() => {
       const r = state.rooms.find((r) => r.devices.some((d) => isThermostat(d) && !d.virtual));
       const other = state.rooms.find((x) => x.id !== r.id);
       const d = r.devices.find((d) => isThermostat(d) && !d.virtual);
-      window.__room = JSON.parse(JSON.stringify(r));
       const since = new Date(Date.now() - 600e3).toISOString();
       const moved = { finding: "room", device: d.rf_address, name: d.name, room: r.id, room_name: r.name,
         cube_room: other.id, cube_room_name: other.name, list_room: r.id, list_room_name: r.name, since };
       const programme = { finding: "programme", device: d.rf_address, name: d.name, room: r.id, room_name: r.name, since };
-      r.mismatches = [moved, programme];
-      d.mismatches = [moved, programme];
-      roomUI(r).open = true;
-      rerenderRoom(r);
-      return { room: r.name, other: other.name, device: deviceName(d) };
+      return { id: r.id, rf: d.rf_address, findings: [moved, programme], room: r.name, other: other.name, device: deviceName(d) };
     }""")
+
+    def found(room):
+        room["mismatches"] = names["findings"]
+        for d in room.get("devices") or []:
+            if d.get("rf_address") == names["rf"]:
+                d["mismatches"] = names["findings"]
+
+    reads.change(ROOMS, change_room(names["id"], found))
+    page.evaluate("loadRooms()")
     tile = page.locator(".room", has=page.locator(".room-name", has_text=names["room"])).first
-    line = tile.locator(".tile-notices")
-    assert line.inner_text().startswith(page.evaluate("tn('room.notices', 2)")), f"two notices: {line.inner_text()!r}"
-    line.locator(".tile-notices-show").click()
+    sliders = tile.locator(".room-problems .problems-sum use[href='#icon-sliders']")
+    sliders.wait_for(state="attached", timeout=5000)
+    assert tile.locator(".tile-notices").is_hidden(), "no line on the tile: the room's commands are not refused"
+    tile.locator(".room-problems .problems-sum").click()
     tile.locator(".room-problems .problems-list").wait_for(state="visible")
     entry = tile.locator(".room-problems .problems-list .problem-entry", has=page.locator(".problem-name", has_text=names["device"])).first
     flags = entry.locator(".flag", has=page.locator(".badge-since"))
@@ -594,18 +619,14 @@ def test_mismatch_marks(page, case):
     assert first.inner_text().startswith(MISMATCH_BADGE[case.lang].format(cube=names["other"])), f"the row's words: {first.inner_text()!r}"
     assert first.get_attribute("title") == want, f"the whole sentence its tooltip: {first.get_attribute('title')!r}"
     page.keyboard.press("Escape")
+    tile.locator(".room-name-btn").click()
     badge = tile.locator(".device .mismatch-badge").first
     assert badge.inner_text().strip().endswith(MISMATCH_BADGE[case.lang].format(cube=names["other"])), \
         f"the device's badge: {badge.inner_text()!r}"
     assert badge.get_attribute("title") == want, "the badge's title the whole sentence"
     assert MISMATCH_PROGRAMME[case.lang] in tile.locator(".device .device-badges").first.inner_text(), "the programme's badge"
     assert scroll_width(page) <= case.width, "no horizontal scroll with the badges"
-    page.evaluate("""() => {
-      const r = state.rooms.find((x) => x.id === window.__room.id);
-      Object.assign(r, window.__room);
-      delete r.mismatches;
-      for (const d of r.devices) delete d.mismatches;
-      roomUI(r).open = false;
-      rerenderRoom(r);
-    }""")
-    assert tile.locator(".tile-notices").is_hidden(), "the line gone with the findings"
+    reads.clear(ROOMS)
+    page.evaluate("loadRooms()")
+    sliders.wait_for(state="detached", timeout=5000)
+    assert tile.locator(".device .mismatch-badge").count() == 0, "the device's badges gone with the findings"

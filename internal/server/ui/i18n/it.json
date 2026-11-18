@@ -540,8 +540,6 @@
   "room.degUntil": "°C fino a",
   "room.deleteConfirm": "Eliminare questo locale vuoto dal Cube?",
   "room.notReady": "I comandi del locale vengono scartati finché ogni dispositivo non si è segnalato",
-  "room.notices.one": "{n} avviso",
-  "room.notices.other": "{n} avvisi",
   "room.noSetpoint": "nessuna temperatura impostata nota; sceglila con i pulsanti",
   "room.deleted": "Locale {name} eliminato.",
   "room.deleteFailed": "Eliminazione del locale {name}: {error}",

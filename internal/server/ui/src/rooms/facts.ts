@@ -8,8 +8,7 @@
  * fields, which no other region reads: a mode's badge, the problems of a
  * tile's head and of a device's row with the label that names them, the
  * unsaved settings of a room's virtual wall thermostat among them, the
- * room's notices among them and their count for the tile's line, and a
- * device's badges in words. A room's facts (roomThermostat, roomModes,
+ * room's notices among them, and a device's badges in words. A room's facts (roomThermostat, roomModes,
  * staleText, …) and the texts of a write not confirmed (confirmItem and
  * its helpers) stay in rooms.js, the parts calling them there: other
  * sessions change them on main, and a move would set their changes
@@ -19,14 +18,11 @@
 import type { Device, Mismatch } from "../api";
 import { deviceEntry, deviceProblems, WINDOW_TONE, windowState } from "../model/device";
 import { unsavedItems } from "../shared/forms";
-import { entryItems, kindsLabel, type Entry, type Item } from "../shared/problems";
+import { kindsLabel, type Entry, type Item } from "../shared/problems";
 import { vwtFormKey } from "./store";
 
 /** The kinds of problems a tile's head and a device's row name, in their order there; a holiday is listed with its end. */
 const KINDS = ["radio", "battery", "window", "unconfirmed", "mixed", "unsaved", "notready", "stale", "mismatch"];
-
-/** The kinds that were the tile's notices, which its one line counts (roomNotices). */
-const NOTICE_KINDS = ["notready", "stale", "mismatch"];
 
 /** MODE_TONE colours a mode's badge: auto green, manual (and boost) amber, holiday violet. */
 const MODE_TONE: Record<string, string> = { auto: "fill-ok", manual: "fill-warn", holiday: "fill-info" };
@@ -99,15 +95,6 @@ function roomOwnItems(room: PageRoom): Item[] {
   const own = new Set(room.devices.map((d) => d.rf_address));
   for (const m of room.mismatches || []) if (!m.device || !own.has(m.device)) items.push(mismatchItem(m, true));
   return items;
-}
-
-/**
- * roomNotices counts the notices among a tile's entries (roomEntries), as
- * its line says them: its commands held back, each device not reported or
- * not seen for long, each finding of its mismatches; as its list shows them.
- */
-export function roomNotices(entries: Entry[]): number {
-  return entries.flatMap(entryItems).filter((it) => NOTICE_KINDS.includes(it.kind || "")).length;
 }
 
 /**

@@ -540,8 +540,6 @@
   "room.degUntil": "°C jusqu’au",
   "room.deleteConfirm": "Supprimer cette pièce vide du Cube ?",
   "room.notReady": "Les commandes de la pièce sont rejetées tant que tous les appareils ne se sont pas signalés",
-  "room.notices.one": "{n} avertissement",
-  "room.notices.other": "{n} avertissements",
   "room.noSetpoint": "aucune consigne connue pour l’instant ; choisissez-en une avec les boutons de réglage",
   "room.deleted": "Pièce {name} supprimée.",
   "room.deleteFailed": "Supprimer la pièce {name} : {error}",

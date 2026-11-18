@@ -538,8 +538,6 @@
   "room.degUntil": "°C until",
   "room.deleteConfirm": "Delete this empty room from the cube?",
   "room.notReady": "Room commands are discarded until every device has reported",
-  "room.notices.one": "{n} notice",
-  "room.notices.other": "{n} notices",
   "room.noSetpoint": "no setpoint known yet; choose one with the stepper",
   "room.deleted": "Room {name} deleted.",
   "room.deleteFailed": "Delete room {name}: {error}",

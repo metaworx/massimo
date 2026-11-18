@@ -369,12 +369,11 @@ Every room has a tile:
   An icon goes as soon as its problem does.
   The room's virtual wall thermostat is not listed:
   its flags are the wall thermostat's.
-- **One line under the tile's head** while the room has notices,
-  which its icons list:
-  "Room commands are discarded until every device has reported" while that holds,
-  as that is why a change does nothing; otherwise how many of them its list holds,
-  "2 notices", a device not seen for long, not reported or with a finding each.
-  **Show** opens the list of the tile's icons.
+- **One line under the tile's head** while the room's commands are refused:
+  "Room commands are discarded until every device has reported",
+  as that is why a change does nothing;
+  **Show** opens the list of the tile's icons, which names the devices that have not.
+  The tile's other notices are in that list alone.
 - **Values may be old**:
   a thermostat of the room has not been heard from for more than 24 hours,
   and its entry says how long, "Not seen for 30 hours".
@@ -1922,8 +1921,7 @@ across its close too,
 and the timer of an open window's next state by the clock;
 `facts.ts` what the rooms alone read of a room and its devices
 (a mode's badge, the problems of a tile's head and of a device's row with their label,
-the room's notices among them and their count for the tile's line,
-a device's badges in words);
+the room's notices among them, a device's badges in words);
 `Tile.tsx` the tile, `Devices.tsx` a device's row and a tile's device list,
 `House.tsx` the House tile, its temperature a `Stepper`, its end a `DateTime`,
 its mode and its duration a choice of radio buttons side by side of its own (`Segments`),
@@ -1948,7 +1946,7 @@ its typing kept across a fill by the object it is given.
 The menus are `Dropdown`s, their items `MenuItem`s, the problems a `Problems`,
 the info and the cog `IconButton`s, the holiday form's temperature a `Stepper`
 and its end a `DateTime`,
-the deletion's question a `Question`, the line of its notices a `Notice`,
+the deletion's question a `Question`, the line of a refused room a `Notice`,
 the result lines `ResultLine`s,
 a device's badges `Badge`s with their `Age`, its identifiers a `DeviceIds`,
 the virtual thermostat's two settings a `Select` and a `TextField` with their drafts (`useDraft`),

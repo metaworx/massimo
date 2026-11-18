@@ -539,8 +539,6 @@
   "room.degUntil": "°C tot",
   "room.deleteConfirm": "Deze lege ruimte uit de Cube verwijderen?",
   "room.notReady": "Opdrachten voor de ruimte worden verworpen tot elk apparaat zich heeft gemeld",
-  "room.notices.one": "{n} melding",
-  "room.notices.other": "{n} meldingen",
   "room.noSetpoint": "nog geen ingestelde temperatuur bekend; kies er een met de pijltjes",
   "room.deleted": "Ruimte {name} verwijderd.",
   "room.deleteFailed": "Ruimte {name} verwijderen: {error}",

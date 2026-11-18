@@ -538,8 +538,6 @@
   "room.degUntil": "°C bis",
   "room.deleteConfirm": "Diesen leeren Raum aus dem Cube löschen?",
   "room.notReady": "Raumbefehle werden verworfen, bis jedes Gerät sich gemeldet hat",
-  "room.notices.one": "{n} Hinweis",
-  "room.notices.other": "{n} Hinweise",
   "room.noSetpoint": "noch keine Solltemperatur bekannt; mit den Pfeiltasten eine wählen",
   "room.deleted": "Raum {name} gelöscht.",
   "room.deleteFailed": "Raum {name} löschen: {error}",
