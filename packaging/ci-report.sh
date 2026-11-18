@@ -24,14 +24,24 @@
 #     <!-- ci-rerun -->, which notifies the pull request's author: once
 #     for each re-run that made a job pass.
 #   - A push (no PR) gets the summary and the annotations alone.
+#   - On a pull request, a job of UNRUN_JOBS cancelled before a runner took
+#     it, abandoned or cancelled among the needs, counts as not run (AP
+#     TestSpeed, D5-A): named in the summary, with
+#     a warning, and in the report where there is one, and its id among the
+#     needs written as the step's output unrun, which the verdict reads; the
+#     Tested record then leaves it out, and the push of the merged tree
+#     runs it. A job cancelled after a runner took it, and any job on a
+#     push, fails as before.
 # A comment that cannot be written, as with a read-only token, Dependabot's
 # or a fork's, leaves a warning, in the summary too.
 #
 # Needs GH_TOKEN with actions: read, and pull-requests: write for the
 # comments; GITHUB_REPOSITORY, GITHUB_RUN_ID, GITHUB_RUN_ATTEMPT,
-# GITHUB_SERVER_URL and GITHUB_STEP_SUMMARY, which GitHub sets; NEEDS, the
-# job's needs as JSON; SHA, the commit tested; SELF and CALLED as above.
-# Exits 0 but where one of them is missing or NEEDS is no JSON.
+# GITHUB_SERVER_URL, GITHUB_STEP_SUMMARY and GITHUB_OUTPUT, which GitHub
+# sets; NEEDS, the job's needs as JSON; SHA, the commit tested; SELF and
+# CALLED as above; UNRUN_JOBS, a JSON object of job names and their ids
+# among the needs, optional. Exits 0 but where one of them is missing or
+# NEEDS is no JSON.
 set -euo pipefail
 
 repo="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is not set}"
@@ -43,6 +53,8 @@ self="${SELF:-All tests passed}"
 called="${CALLED:-^$}"
 pr="${PR:-}"
 sha="${SHA:-}"
+unrun_jobs="${UNRUN_JOBS:-}"
+output="${GITHUB_OUTPUT:-/dev/null}"
 run_url="${GITHUB_SERVER_URL:-https://github.com}/${repo}/actions/runs/${run}"
 case "$attempt" in '' | *[!0-9]*) attempt=1 ;; esac
 
@@ -75,8 +87,32 @@ if [ "$jobs" = '[]' ] || { [ "$verdict" = failed ] && jq -e 'all(.[]; .result ==
 	# The API told nothing, or not what failed: the needs' ids.
 	jobs=$(jq 'to_entries | map({name: .key, result: (.value.result | if . == "success" then "passed" elif . == "failure" then "failed" else . end)})' <<<"$needs")
 fi
+
+# On a pull request, a job of UNRUN_JOBS that no runner took counts as not
+# run (D5-A): cancelled with no runner and no step in the API, and
+# abandoned among the needs, which is how GitHub reports it there, or
+# cancelled. Its id goes into the output unrun, and the verdict counts it
+# as passed. Names that UNRUN_JOBS does not hold, a push, and UNRUN_JOBS
+# that is no JSON object leave every such job failed.
+unrun_result="not run, as no runner took it"
+unrun='[]'
+if [ -n "$pr" ] && [ -n "$unrun_jobs" ] &&
+	marked=$(jq --argjson ok "$unrun_jobs" --argjson needs "$needs" --arg not "$unrun_result" '
+		map(if .result == "cancelled before a runner took it" and $ok[.name] != null
+			and ($needs[$ok[.name]].result | IN("cancelled", "abandoned"))
+		then .result = $not | .need = $ok[.name] else . end)' <<<"$jobs" 2>/dev/null); then
+	jobs="$marked"
+	unrun=$(jq '[.[] | .need // empty] | unique' <<<"$jobs")
+	verdict=$(jq -r --argjson unrun "$unrun" '
+		if all(to_entries[]; .value.result == "success" or .value.result == "skipped"
+			or ((.value.result | IN("cancelled", "abandoned")) and (.key | IN($unrun[]))))
+		then "passed" else "failed" end' <<<"$needs")
+fi
+echo "unrun=$(jq -r 'join(" ")' <<<"$unrun")" >>"$output"
+u=$(jq length <<<"$unrun")
+
 jobs=$(jq 'sort_by((.result == "passed" or .result == "skipped"), (.name | ascii_downcase))' <<<"$jobs")
-bad=$(jq '[.[] | select(.result != "passed" and .result != "skipped")]' <<<"$jobs")
+bad=$(jq --arg not "$unrun_result" '[.[] | select(.result != "passed" and .result != "skipped" and .result != $not)]' <<<"$jobs")
 n=$(jq length <<<"$bad")
 
 # The jobs that pass now and did not in an earlier attempt: each with the
@@ -115,16 +151,28 @@ jq_before='def before: (.before | map("attempt \(.attempt) \(.result)") | join("
 
 if [ "$verdict" = passed ]; then
 	head="Every test job passed or was skipped"
+	[ "$u" -eq 0 ] || head="${head}, ${u} not run for want of a runner"
 	[ "$r" -eq 0 ] || head="${head}, ${r} only on a re-run"
 else
 	head="$n test job(s) did not pass"
 fi
+# The jobs not run, a line each, for the summary and the report.
+unrun_lines() {
+	jq -r --arg not "$unrun_result" '.[] | select(.result == $not) | "- \(.name)"' <<<"$jobs"
+}
+unrun_head="Not run, as no runner took them; the Tested record leaves them out, and the push of the merged tree runs them:"
 {
 	echo "### ${head}"
 	echo
 	echo "| Job | Result |"
 	echo "|-----|--------|"
 	jq -r '.[] | "| \(.name) | \(.result) |"' <<<"$jobs"
+	if [ "$u" -gt 0 ]; then
+		echo
+		echo "$unrun_head"
+		echo
+		unrun_lines
+	fi
 	if [ "$r" -gt 0 ]; then
 		echo
 		echo "Passed only on a re-run, and counted as passed:"
@@ -134,6 +182,8 @@ fi
 	echo
 } >>"$summary"
 jq -r '.[] | "::error::\(.name): \(.result)"' <<<"$bad"
+jq -r --arg not "$unrun_result" '.[] | select(.result == $not)
+	| "::warning::\(.name): no runner took it, so it did not run on this pull request; the push of the merged tree runs it"' <<<"$jobs"
 jq -r "${jq_before}"'.[] | "::warning::\(.name) passed only on a re-run: \(before)"' <<<"$reruns"
 [ "$reruns_failed" = false ] || warn "the earlier attempts' jobs could not be read: a job that passed only on a re-run is not named."
 
@@ -158,6 +208,12 @@ trap 'rm -f "$comment"' EXIT
 		echo "| Job | Result |"
 		echo "|-----|--------|"
 		jq -r '.[] | "| \(.name) | \(.result) |"' <<<"$bad"
+	fi
+	if [ "$u" -gt 0 ]; then
+		echo
+		echo "$unrun_head"
+		echo
+		unrun_lines
 	fi
 	if [ "$r" -gt 0 ]; then
 		echo

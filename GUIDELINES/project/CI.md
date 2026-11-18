@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.62.0)
+# Massimo — CI Conventions (v1.63.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -60,9 +60,9 @@ flowchart TD
 
     relcommit -->|"yes: suite=false"| skipped["Every job skipped, nothing built:<br/>the tag's run tests the commit"]
     known -->|"yes, or a pull request"| docs["Guidelines and Code result,<br/>Site where site=true"]
-    record -->|"yes: tested=true"| retest["Guidelines, and what had not passed<br/>for this code: UI test, LAN,<br/>Android app, Fuzz"]
+    record -->|"yes: tested=true"| retest["Guidelines, and what had not passed<br/>for this code: UI test, LAN,<br/>Android app, Fuzz, macOS, Windows"]
     record -->|no| full["Every test job, Guidelines, Site;<br/>Fuzz on a push only"]
-    paths["A pull request runs UI test, LAN and Android app<br/>only where it touches their paths"]
+    paths["A pull request runs UI test, LAN, Android app,<br/>macOS and Windows only where it touches their paths"]
     retest -.- paths
     full -.- paths
     docs --> atp["All tests passed:<br/>green, it writes the Tested record"]
@@ -107,9 +107,9 @@ flowchart TD
 
 | Trigger | Jobs |
 |---------|------|
-| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test with its skipped tests named in the summary, the store's benchmarks once each with `-short`, `make cross`); actionlint (`make actionlint`: the workflows by actionlint, their `run:` scripts by the runner's shellcheck); UI types (`make ui-check`: `tsc --noEmit` over the web UI's parts, `internal/server/ui/src/`, then Biome's two hooks rules over them); Race (`make race`, the race detector on `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve`, `internal/announce`, `internal/notify`, `internal/engine`, `internal/cubeio` and `internal/certs`, `-count=1` and `-timeout 30m`, its skipped tests named in the summary); Test (armv6, QEMU) (`make test-armv6`, every package's tests with `-short` and `-timeout 30m` on 32-bit ARM, run by Ubuntu's `qemu-user` as the Raspberry Pi 1's core, its skipped tests named in the summary); Fuzz on a push to `main` only (`make fuzz`, every fuzz target for 10 s, a crash's input kept as the artifact `fuzz-crash`, Go 1.26's own deadline passed with a warning); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, then under systemd, each case in a container of its own (`make deb-systemd-test`: the first start, the restart, the upgrade from v0.12.0-alpha.1 with the service running), and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Windows service (the unit tests of the update, the installer, the command line, discovery and `internal/safefile`; install, run, update from the API and by hand, roll back, remove, on a Windows runner; then a second `serve` announcing itself beside Windows' own mDNS, found by `massimo discover`); macOS LaunchDaemon (the unit tests of the update, the installer, the command line and `internal/safefile`; first `install` on the template's settings, `packaging/launchd/template-test.sh`: the message and its owner line run as printed, a loaded job restarted, a booted-out one left stopped, the web UI's way, the purge; then the same as Windows on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`; then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker; then a second `serve` beside Apple's mDNSResponder, found and resolved by `dns-sd`); UI test (the web UI's pytest suite, a job per width with both languages, "UI test (1100 px, screenshots)" and "UI test (390 px)", each its two cases in four workers; in the 1100 px job then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only; on failure the failed tests' screenshots and videos and the traces of their run once more as `ui-test-results-<width>`; on a pull request only when it changes the UI, its bundler (`tools/uibundle`), the vendored Preact, the server's own Go files, the OpenAPI file, its suite or `ci.yml`, as the job What to test answers); LAN against avahi (`make lan-test`: a second `serve`'s searches finding a fake Cube, losing it with its cable pulled and finding it again, then from a box's proxy too; `serve` beside avahi-daemon, `avahi-browse` and `massimo discover` on a client; a third `serve` following the Cube by its serial to another address after the loss; in Docker; on a pull request only when it changes the announcement, discovery, the shared port, the server's own files, the proxy, the Go module, the LAN test or `ci.yml`, as the job What to test answers, and not on the merge of a pull request that found it not needed); Android app (`app/version.json` against its tag, the debug build with its unit tests and lint, the release APK built at two paths and compared byte for byte, then the AAB and the nightly APK signed with a key made for the run; on a pull request only when it changes `app/`, the web UI's files the app bundles, `packaging/app-*.sh`, `ci.yml`, `build.yml` or `release.yml`, as the job What to test answers, and not on the merge of a pull request that found it not needed); Guidelines (section 4); Site (`packaging/site/build.sh --no-apt`: the site's pages and the docs of the commit, every link checked, a document under `docs/` missing from `docs/fragments/_documents.md` failing it; never deployed; also for a change to the site's documents alone); Code result, for a change to documents alone only (`packaging/code-result.sh`: the verdict of the last run that tested the code, below) |
+| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test with its skipped tests named in the summary, the store's benchmarks once each with `-short`, `make cross`); actionlint (`make actionlint`: the workflows by actionlint, their `run:` scripts by the runner's shellcheck); UI types (`make ui-check`: `tsc --noEmit` over the web UI's parts, `internal/server/ui/src/`, then Biome's two hooks rules over them); Race (`make race`, the race detector on `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve`, `internal/announce`, `internal/notify`, `internal/engine`, `internal/cubeio` and `internal/certs`, `-count=1` and `-timeout 30m`, its skipped tests named in the summary); Test (armv6, QEMU) (`make test-armv6`, every package's tests with `-short` and `-timeout 30m` on 32-bit ARM, run by Ubuntu's `qemu-user` as the Raspberry Pi 1's core, its skipped tests named in the summary); Fuzz on a push to `main` only (`make fuzz`, every fuzz target for 10 s, a crash's input kept as the artifact `fuzz-crash`, Go 1.26's own deadline passed with a warning); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, then under systemd, each case in a container of its own (`make deb-systemd-test`: the first start, the restart, the upgrade from v0.12.0-alpha.1 with the service running), and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Windows service (the unit tests of the update, the installer, the command line, discovery and `internal/safefile`; install, run, update from the API and by hand, roll back, remove, on a Windows runner; then a second `serve` announcing itself beside Windows' own mDNS, found by `massimo discover`; on a pull request only when it changes the job's own paths or the announcement's, as the job What to test answers, and not on the merge of a pull request that found it not needed); macOS LaunchDaemon (the unit tests of the update, the installer, the command line and `internal/safefile`; first `install` on the template's settings, `packaging/launchd/template-test.sh`: the message and its owner line run as printed, a loaded job restarted, a booted-out one left stopped, the web UI's way, the purge; then the same as Windows on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`; then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker; then a second `serve` beside Apple's mDNSResponder, found and resolved by `dns-sd`; on a pull request as the Windows job, with its own paths); UI test (the web UI's pytest suite, a job per width with both languages, "UI test (1100 px, screenshots)" and "UI test (390 px)", each its two cases in four workers; in the 1100 px job then the screenshot set, uploaded as the artifact `ui-screenshots`, the PNGs only; on failure the failed tests' screenshots and videos and the traces of their run once more as `ui-test-results-<width>`; on a pull request only when it changes the UI, its bundler (`tools/uibundle`), the vendored Preact, the server's own Go files, the OpenAPI file, its suite or `ci.yml`, as the job What to test answers); LAN against avahi (`make lan-test`: a second `serve`'s searches finding a fake Cube, losing it with its cable pulled and finding it again, then from a box's proxy too; `serve` beside avahi-daemon, `avahi-browse` and `massimo discover` on a client; a third `serve` following the Cube by its serial to another address after the loss; in Docker; on a pull request only when it changes the announcement, discovery, the shared port, the server's own files, the proxy, the Go module, the LAN test or `ci.yml`, as the job What to test answers, and not on the merge of a pull request that found it not needed); Android app (`app/version.json` against its tag, the debug build with its unit tests and lint, the release APK built at two paths and compared byte for byte, then the AAB and the nightly APK signed with a key made for the run; on a pull request only when it changes `app/`, the web UI's files the app bundles, `packaging/app-*.sh`, `ci.yml`, `build.yml` or `release.yml`, as the job What to test answers, and not on the merge of a pull request that found it not needed); Guidelines (section 4); Site (`packaging/site/build.sh --no-apt`: the site's pages and the docs of the commit, every link checked, a document under `docs/` missing from `docs/fragments/_documents.md` failing it; never deployed; also for a change to the site's documents alone); Code result, for a change to documents alone only (`packaging/code-result.sh`: the verdict of the last run that tested the code, below) |
 | beside the jobs above, on a push | Build (build.yml): What to release decides what the run releases, then every target built without cgo with the Debian packages, the build record, `SHA256SUMS` and the manifest, the provenance attested; for a version tag the Android app's APK and AAB, for the nightly build its nightly APK, unsigned, attested too; nothing signed (section 6) |
-| after every job above | All tests passed: fails unless none of them failed or was cancelled, and names each with its result in its summary, an annotation for each that did not pass, and on a pull request in one comment; a job that passed only on a re-run counts, and is named in a line of the summary, a warning, that comment and, on a pull request, a comment of its own; then, on a push, once Build is done, Release (release.yml): a push to `main` becomes the `devel` build, the GitHub release `release/devel` replaced in place, signed with the rolling key (section 6); then, at every run of release.yml, Site (site.yml): the site built with the newest release's signed apt index and the docs of every channel, and deployed to GitHub Pages; nothing where no release carries the index yet; for a push to `main` of the site's documents alone, which has no Build and so no Release, Deploy site (site.yml) instead |
+| after every job above | All tests passed: fails unless none of them failed or was cancelled, but for a macOS or Windows job no runner took on a pull request, which counts as not run, and names each with its result in its summary, an annotation for each that did not pass, and on a pull request in one comment; a job that passed only on a re-run counts, and is named in a line of the summary, a warning, that comment and, on a pull request, a comment of its own; then, on a push, once Build is done, Release (release.yml): a push to `main` becomes the `devel` build, the GitHub release `release/devel` replaced in place, signed with the rolling key (section 6); then, at every run of release.yml, Site (site.yml): the site built with the newest release's signed apt index and the docs of every channel, and deployed to GitHub Pages; nothing where no release carries the index yet; for a push to `main` of the site's documents alone, which has no Build and so no Release, Deploy site (site.yml) instead |
 | push to a release branch (`release/alpha`, later `release/beta` and `release/stable`) | nothing: ci.yml listens to `main` and the tags; the release moved the branch to a commit ci.yml had tested |
 | a version tag | every job above, as for a push to `main`, Build included; then release.yml: sign the manifest and `SHA256SUMS` with the release key, verify the signatures against the public key compiled into `massimo`, publish the GitHub release; with the app's keys set, sign the Android app, add it to the release and its lines to `SHA256SUMS`, sign that again and attest the signed files (section 6); then, with the deploy key set, the Homebrew formula of the release's channel rendered and pushed to the tap (publish.yml, section 6), and, with the apt key set, the apt repository rebuilt from the releases and deployed to GitHub Pages |
 | daily at 02:30 UTC, or by hand (`gh workflow run nightly.yml --ref main`) | nightly.yml: build.yml, then release.yml, no tests: the nightly build, `release/nightly`, of the newest commit of `main` whose suite passed and that is newer than the one it carries; nothing where there is none (section 6) |
@@ -184,11 +184,20 @@ on the commit the run tested:
 a pull request's head, or the commit pushed to `main`.
 It holds `fingerprint.sh fingerprint` of the tree that ran,
 a pull request's merge commit in its run,
-and whether the UI tests, LAN, Fuzz and the Android app passed for that code
-(`fp1:<hex> ui=… lan=… fuzz=… app=…`);
+and whether the UI tests, LAN, Fuzz, the Android app, macOS and Windows
+passed for that code (`fp1:<hex> ui=… lan=… fuzz=… app=… mac=… win=…`);
 LAN is `unneeded` where What to test answered `lan=false`, a pull request's
 filter finding it not needed, and it did not pass,
-and so is the Android app where it answered `app=false` (AP MobileApp, D17-A).
+and so is the Android app where it answered `app=false` (AP MobileApp, D17-A),
+and so are macOS and Windows, where it answered `macos=false` or `windows=false`
+(AP TestSpeed, D1-A, D2-A).
+GitHub takes 140 characters for a status's description,
+and the record fills them at its longest:
+the fingerprint's 68 and the six words' 72,
+`ui=false lan=unneeded fuzz=false app=unneeded mac=unneeded win=unneeded`,
+which is why macOS and Windows are `mac` and `win` there;
+a longer record leaves a warning in the step, which fails nothing,
+and a new word needs room made first.
 What to test reads the status on the commit the run before tested:
 for a pull request its head's first parent,
 for a merge into `main` its second parent, the pull request's head.
@@ -196,9 +205,10 @@ Where it is green, written by `github-actions[bot]` and its fingerprint the comm
 it answers `tested=true`:
 the jobs that passed for that code are skipped,
 Fuzz, which a pull request never runs,
-and the UI tests, LAN and the Android app run where they had not passed,
-but for LAN and the Android app on a push where the record says `unneeded` (owner,
-2026-11-15, AP SiteOnly, D78-C),
+and the UI tests, LAN, the Android app,
+macOS and Windows run where they had not passed,
+but for the last four on a push where the record says `unneeded` (owner,
+2026-11-15, AP SiteOnly, D78-C; AP TestSpeed, D1-A),
 and Guidelines, All tests passed, Build and Release run as always;
 the run's own Tested status then carries the record on.
 So a branch's retirement after its green run tests nothing again,
@@ -337,6 +347,40 @@ It leaves out All tests passed itself and the jobs of the workflows the run call
 Build, Release and Deploy site, which are not among its `needs`:
 the API knows a job by its name, not by its id,
 so the step names them, and a new job calling a workflow is added there.
+On a pull request, a macOS or Windows job that no runner took counts as not run (owner,
+2026-11-18, AP TestSpeed, D5-A):
+GitHub's macOS runners are few,
+and a job that waited for one ended cancelled with no runner and no step
+on pull request #225 twice and again on 2026-11-17,
+holding a pull request whose code it had nothing to say about.
+The step is given those two jobs by name with their ids (`UNRUN_JOBS`);
+one of them that GitHub gives as `abandoned` among the `needs` (or `cancelled`),
+and as "cancelled before a runner took it" in the API,
+its conclusion `cancelled` with no runner and no step,
+is named in the summary as "not run, as no runner took it",
+with a warning and in the pull request's report where there is one,
+and its id is the step's output `unrun`.
+`needs` said `abandoned` for every such job that was looked at,
+in runs 44125840544, 44148743439, 44150911350, 44151208458 and 44335801523.
+The verdict counts an abandoned or cancelled job named there as passed,
+on a pull request alone;
+the Tested record then says `mac=false` or `win=false`, as the job did not pass,
+so the push of the merged tree, reading the record, runs it,
+and a failure there shows on `main`,
+where a job no runner took fails All tests passed as before,
+and GitHub's failure email reaches whoever pushed.
+A job cancelled once a runner had taken it fails on a pull request too,
+and so does every abandoned or cancelled job where the step did not run or read no jobs,
+since only its output lets one through.
+The pull request's next run with the same code runs the job again,
+where its paths ask for it, as the record does not say it passed.
+A push is not spared, a known limit:
+of six runs on 2026-11-17 and 2026-11-18 whose macOS job no runner took,
+four were pushes to `main`,
+where it still fails All tests passed, and so the devel and nightly builds,
+until the job is re-run;
+the gates only make the job run on fewer pushes,
+a merge whose pull request found it not needed skipping it.
 On a pull request it keeps one comment (`pull-requests: write`),
 starting with `<!-- ci-report -->`:
 written at the pull request's first failing run,
@@ -487,11 +531,9 @@ It is the announcement's only test against another implementation on Linux;
 the macOS and Windows jobs add Apple's mDNSResponder and Windows' mDNS,
 with a second `serve` on every address in a step of their own,
 the macOS one as a launchd daemon (section 7).
-A pull request runs the job only when it changes `internal/announce/`,
-`internal/serve/`, `internal/sharedport/`, `internal/proxy/`,
-`internal/cubelan/`, a file directly in `internal/server/`,
-`cmd/massimo/discover.go`, `cmd/massimo/serve.go`, `go.mod`, `go.sum`,
-`tools/lan-test/` or `.github/workflows/ci.yml`,
+A pull request runs the job only when it changes the announcement's paths (below),
+`internal/proxy/`, `internal/cubelan/`, a file directly in `internal/server/`,
+`cmd/massimo/discover.go`, `tools/lan-test/` or `.github/workflows/ci.yml`,
 as the job What to test answers, and a push to `main` always,
 as the UI test jobs do,
 but for the merge of a pull request that found it not needed for the same code
@@ -506,6 +548,74 @@ The server's own files are among them because discovery's runs are decided there
 which the follower's step checks;
 `internal/server/ui/` is not,
 since the LAN test never reaches the web UI (owner, 2026-11-15, D1-A).
+
+The Windows service and macOS LaunchDaemon jobs are gated the same way (owner,
+2026-11-18, AP TestSpeed, D1-A, D2-A, D3-A),
+since the macOS job was often cancelled for want of a runner,
+and both ran for any code that had not passed yet.
+A pull request runs each only where it changes the announcement's paths or the job's own;
+a push to `main` and a tag always,
+but for the merge of a pull request that found the job not needed for the same code
+(`mac=unneeded`, `win=unneeded`).
+The announcement's paths are one list in What to test (D3-A),
+which the LAN, macOS and Windows gates all read,
+as each job tests the announcement beside another implementation,
+avahi, Apple's mDNSResponder and Windows' mDNS:
+`internal/announce/`, `internal/sharedport/`, `internal/serve/`,
+which sets the announcement up, `cmd/massimo/serve.go`, its flags,
+`go.mod` and `go.sum`, for `golang.org/x/net`.
+The macOS job's own paths are those of its steps:
+`internal/install/`, `internal/update/`, `internal/safefile/`,
+the server's update route (`internal/server/update_api*.go`),
+which the web UI's update goes through,
+the command line's install, update, service, restart and reboot files
+(`cmd/massimo/{install,update,service,restart,reboot}*.go`),
+`serve_brew*.go`, `serve_packaged*.go`,
+every Go file under `cmd/` and `internal/` named `_darwin` or `_other`,
+the LaunchDaemons' plists and `template-test.sh` (`packaging/launchd/`),
+the Homebrew formula (`packaging/homebrew/`),
+`packaging/embed.go` and the settings template `packaging/env.template`,
+which install writes,
+`.github/workflows/ci.yml`, and what sets the job up on its runner,
+the UI bundle's action (`.github/actions/`) and its bundler (`tools/uibundle/`).
+The Windows job's own paths are the same but for the darwin ones,
+`_windows` in place of `_darwin`,
+and add discovery, which its unit tests run:
+`internal/cubelan/`,
+the server's discovery, runtime and update files its `-run` covers
+(`internal/server/{discovery,hostnets,runtimes,update_api,update_history}*.go`:
+`runtimes.go` opens the shared discovery socket the proxy's responder answers on),
+`internal/proxy/proxy.go`, the responder,
+which binds a socket to each proxy's address beside that wildcard one,
+as Windows binds otherwise than Linux (section 3),
+and `cmd/massimo/discover.go`, which its mDNS step asks;
+the rest of `internal/proxy/` is not, as the job runs none of its tests.
+Windows has no packaging of its own beyond `massimo install`.
+A Go file named for another system (`_windows`, `_linux`, `_darwin`, `_unix`)
+is not built on the platform and does not count for its job;
+`_unix` is no file name Go knows,
+and holds by the build tag each such file carries.
+`TestCIGatesHoldPlatformFiles` (`packaging/ci_scripts_test.go`) runs the two gates
+over every Go file under `cmd/` and `internal/` and asks `go/build`:
+a file built for darwin or windows and not for linux must pass its job's gate,
+since no Linux test builds it,
+and a file a gate leaves out by its name must not be built for that platform.
+`_other` files are let through on both, as most are built on one of the two,
+`internal/cubelan/fakecube/listen_other.go` on both,
+which `massimo fakecube` runs there.
+The platforms' compile errors are caught on every pull request by Vet and test's
+`GOOS=darwin` and `GOOS=windows` vet;
+the lists are of the paths that hold the platforms' behaviour,
+since `cmd/massimo` imports nearly everything,
+and a gate on Go dependencies would run the jobs almost always.
+A change the lists miss runs neither job until a later run takes it whole:
+a push to `main` without such a record, or a tag.
+A tag's run reads no record (it has no run before it) and filters no path,
+so it runs both jobs, as every job, before any release on a channel.
+The nightly build runs no tests (section 6):
+it takes the newest commit of `main` whose run had All tests passed succeed,
+so the commit it ships had the two jobs run where its change asked for them,
+and where its pull request found them not needed, at the last change that did.
 
 The Android app job (AP MobileApp, Block 4) builds `app/android` with the
 image's JDK 17 and Android SDK (platform and build-tools 36),
@@ -1017,6 +1127,10 @@ since a site without `apt/` would take the repository offline.
   and the answer is 409.
 - The macOS job runs the LaunchDaemons as root on the runner;
   `launchctl` needs the system domain there, not a user's.
+- GitHub's macOS runners are few: a job can wait for one
+  and end cancelled with no runner and no step,
+  so the job runs on a pull request only where its paths changed,
+  and a pull request it never ran on is not held by it (section 2, D5-A).
 - The macOS job's update from the API installs the newest alpha release,
   which knows no `-tls` until a release with it is cut:
   that server serves plain HTTP, the helper's `https://` health check fails,
