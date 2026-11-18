@@ -71,7 +71,8 @@ export function watchFold(): void {
   const line = document.querySelector<HTMLElement>(".top-line");
   if (!line) return;
   if (!observer) observer = new ResizeObserver(() => later(line));
-  for (const el of [line, ...line.querySelectorAll(".brand, .pile, #cube-choice, .nav")]) {
+  // the pill itself: on its own row the pile is as wide as the row
+  for (const el of [line, ...line.querySelectorAll(".brand, #cube-problems, #cube-choice, .nav")]) {
     if (watched.has(el)) continue;
     watched.add(el);
     observer.observe(el);

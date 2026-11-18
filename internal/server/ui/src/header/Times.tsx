@@ -12,7 +12,6 @@
  * #header-times.
  */
 
-import { useRef } from "preact/hooks";
 import { clockOf, fmtAgo, lastReads, now } from "./clock";
 import { load } from "./store";
 
@@ -24,9 +23,8 @@ import { load } from "./store";
  */
 export function ListTimes({ open }: { open: boolean }) {
   load.useLoad();
-  const last = useRef(now.peek());
-  if (open) last.current = now.value;
-  const at = last.current;
+  // the clock read, and so followed, only while the list is open
+  const at = open ? now.value : now.peek();
   const r = lastReads();
   return (
     <span class="read-times">
@@ -40,10 +38,15 @@ export function ListTimes({ open }: { open: boolean }) {
   );
 }
 
-/** ExpertTimes are the two reads in expert mode's radio budget line, each a fact of the line. */
+/**
+ * ExpertTimes are the two reads in expert mode's radio budget line, each a
+ * fact of the line; they move on with the clock only in expert mode, the
+ * line hidden otherwise (applySettings draws the header again when it
+ * changes).
+ */
 export function ExpertTimes() {
   load.useLoad();
-  const at = now.value;
+  const at = state.settings.expert ? now.value : now.peek();
   const r = lastReads();
   return (
     <>

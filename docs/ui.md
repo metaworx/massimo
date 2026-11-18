@@ -115,7 +115,7 @@ then the house, **Rooms**, and **☰**, the menu of every other page.
 They all end on one line, the logo's baseline and the buttons' lower edge.
 Where the row is short, it folds step by step, as far as it must:
 first the logo becomes its M, the M with the clock in its V;
-then the Cube choice becomes a button with the Cube's sign,
+then the Cube choice becomes a button with the cube alone,
 whose tooltip names the chosen Cube and which opens the same list;
 then the pile goes to a row of its own under them, at the left.
 The M stays at every width.
@@ -144,18 +144,16 @@ The compacted header has **↑**, back to the top, first of the page buttons: �
   or it reboots, a cross while it holds the server's old connection,
   another client has it, or it is gone (see Signs, under How the page is built);
   its tooltip adds the serial, the address and the link in words.
-  In its list each Cube has the cube, its name, its sign after it,
-  always, then the icons of its problems, and under it its serial and address.
+  Open, each Cube has the cube, its name, its sign after it, always,
+  then an icon for each kind of problem it has (the radio, a battery,
+  a window open too long, a device's link and, for one who may change the settings,
+  the cog, and the disk while the Cube's settings or the settings of one of its
+  rooms' virtual wall thermostats are unsaved or a save of them failed),
+  each in its worst colour, and under it its serial and address,
+  the list as wide as they need; the arrow keys move between them.
   Wherever a Cube is named with its sign, the cube is before its name,
   in the text's colour, and the sign after it;
   a blue cube is the sign of the Cubes found and not served.
-  Open, each Cube has its sign, its name with an icon after it for each
-  kind of problem it has (the radio, a battery, a window open too long, a
-  device's link and, for one who may change the settings, the cog, and the
-  disk while the Cube's settings or the settings of one of its rooms' virtual
-  wall thermostats are unsaved or a save of them failed), each in
-  its worst colour, and under it its serial and address,
-  the list as wide as they need; the arrow keys move between them.
   Open, it stays open when data comes in, the focus where it was,
   and shows what came: a Cube's new name, a problem, a Cube found.
   The last entry, **Search for new Cubes…**,

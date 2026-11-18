@@ -108,17 +108,18 @@ export function cubeSettingItems(c: Cube, who: string): Item[] {
  * cubeEntry is a Cube's problems as an entry of the problem list: the
  * Cube as the heading, the cube before its name and its network sign
  * after it (green where only its devices fail), its link's badge where it
- * is not connected; with own (its panel's pill, whose list says the link
- * in its first row, CubeLink) no sign and no badge of the link, and its
- * settings' warnings; the unsaved changes of its settings form and of its
+ * is not connected; with settings its settings' warnings (for one who
+ * may change them); with own (its panel's pill, whose list says the link
+ * in its first row, CubeLink) no sign and no badge of the link; the
+ * unsaved changes of its settings form and of its
  * rooms' forms, each the disk that opens the form, its text naming it,
  * and its devices with a problem under it, "Room › Device", with their
  * badges; a window open briefly is a state, not a problem.
  */
-export function cubeEntry(c: Cube, own?: boolean): Entry {
+export function cubeEntry(c: Cube, { settings, own }: { settings?: boolean; own?: boolean } = {}): Entry {
   const st = linkSign(c);
   const items: Item[] = st === "ok" || own ? [] : [{ kind: "net", icon: "icon-net", sign: "net", tone: st === "bad" ? "bad" : "warn", text: linkWord(c) }];
-  if (own) items.push(...cubeSettingItems(c, ""));
+  if (settings) items.push(...cubeSettingItems(c, ""));
   items.push(...unsavedItems(cubeFormKey(c.serial)), ...unsavedItems(roomFormKey(c.serial)));
   const subs = (c.problems || []).map((d) =>
     deviceEntry(d, deviceProblems(d, true).filter((it) => it.tone !== "fill-open"), [d.room, deviceName(d)].filter(Boolean).join(" › ")));

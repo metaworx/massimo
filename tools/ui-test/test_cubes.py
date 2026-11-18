@@ -214,9 +214,8 @@ def test_cube_choice_menu(page, case):
     page.keyboard.press("ArrowDown")
     assert page.evaluate("document.activeElement.closest('#cube-menu') !== null && document.activeElement.tagName === 'BUTTON'"), \
         "ArrowDown moves within the list"
-    if case.width >= 600:
-        widths = page.evaluate("[document.querySelector('#cube-menu .menu-items').offsetWidth, document.querySelector('#cube-choice').offsetWidth]")
-        assert widths[0] >= widths[1], f"the list at least as wide as the closed choice ({widths})"
+    widths = page.evaluate("[document.querySelector('#cube-menu .menu-items').offsetWidth, document.querySelector('#cube-choice').offsetWidth]")
+    assert widths[0] >= widths[1], f"the list at least as wide as the closed choice ({widths})"
     item.click()
     assert page.locator("#cube-menu").get_attribute("open") is None, "a choice closes the menu"
     assert page.evaluate("state.serial") == "KEQ0000100", "the Cube stays chosen"

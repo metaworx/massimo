@@ -275,8 +275,9 @@ button.copy-icon .ni { width: 16px; height: 16px; }
 .brand-big { --brand-h: 3rem; --brand-cover: var(--card); display: grid; justify-content: center; margin: 2px 0 14px; font-size: 2.6rem; }
 .cube { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 100%; }
 /* The Cube choice, a menu of the page (ui/src/header/Choice.tsx): closed
-   the chosen Cube's plug and name, open as wide as its entries need, each
-   a plug, the name and under it the serial and the address. */
+   the cube, the chosen Cube's name and its sign, open as wide as its
+   entries need, each the cube, the name, its sign and its problems' icons
+   and under it the serial and the address. */
 .cube-menu { position: relative; min-width: 0; }
 .menu.cube-menu > summary {
   display: inline-flex;
@@ -301,12 +302,11 @@ button.copy-icon .ni { width: 16px; height: 16px; }
 .cube-menu .caret { width: 16px; height: 16px; flex: none; margin-left: auto; color: var(--muted); }
 .cube-menu .menu-items { left: 0; right: auto; width: max-content; min-width: 100%; max-width: min(440px, calc(100vw - 32px)); }
 /* a Cube's network sign (header.js cubeSignEl): its link's state, the colour
-   of its tone over the list's muted icons */
+   of its tone */
 .ni.conn-sign { width: 18px; height: 18px; }
-.ni.conn-sign.tone-ok, .menu-items button > .ni.conn-sign.tone-ok { color: var(--ok); }
-.ni.conn-sign.tone-warn, .menu-items button > .ni.conn-sign.tone-warn { color: var(--warn-mark); }
-.ni.conn-sign.tone-bad, .menu-items button > .ni.conn-sign.tone-bad { color: var(--bad); }
-.menu-items button > .ni.conn-sign { width: 20px; height: 20px; }
+.ni.conn-sign.tone-ok { color: var(--ok); }
+.ni.conn-sign.tone-warn { color: var(--warn-mark); }
+.ni.conn-sign.tone-bad { color: var(--bad); }
 /* a menu item of two lines (components.js menuItem), a group's heading,
    a separator, the item chosen */
 .menu-item-text { display: flex; flex-direction: column; min-width: 0; }
@@ -738,11 +738,12 @@ body.scrolled .nav .top-btn { display: inline-flex; }
 .cube-cols > .cube-info { grid-area: info; margin-bottom: 10px; align-self: start; }
 /* a Cube's radio budget in its head, between its serial and its badges */
 .cube-head-stats { font-variant-numeric: tabular-nums; }
-/* a Cube's panel's head (ui/src/cubes/Panel.tsx Head): its sign,
+/* a Cube's panel's head (ui/src/cubes/Panel.tsx Head): the cube, its
    name, serial and radio budget at the left, wrapping; its problems in
-   one pill top-right, whatever wraps, a green check where nothing is
-   wrong; the neutral source badge a line of its own under them; its own
-   badges the top line of the open panel */
+   one pill top-right, whatever wraps, led by its sign, which stands for
+   the green check where nothing else is wrong; the neutral source badge a
+   line of its own under them; its own badges the top line of the open
+   panel */
 .panel.cube-panel > summary { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; }
 .panel.cube-panel > summary::before { grid-column: 1; grid-row: 1; }
 .cube-head-who { grid-column: 2; grid-row: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-width: 0; }
@@ -1059,6 +1060,8 @@ button.subtle { color: var(--muted); }
 .menu-items button { display: flex; align-items: center; gap: 10px; }
 .menu-items button > .ni { width: 18px; height: 18px; flex: none; color: var(--muted); }
 .menu-items button:hover > .ni { color: var(--accent); }
+/* a Cube's cube stays grey: a blue cube is a Cube found and not served */
+.menu-items button:hover > .ni.cube-icon { color: var(--muted); }
 
 .tile .notice { margin: 10px 14px 0; width: auto; font-size: 0.9rem; }
 /* Rooms without a connected Cube (home.js renderHomeNotice) */

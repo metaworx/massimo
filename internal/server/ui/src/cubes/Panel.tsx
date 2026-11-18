@@ -135,7 +135,10 @@ function Head({ c }: { c: Cube }) {
   load.useLoad(); // it reads the unsaved forms' signal too, and a part that reads signals is drawn again only for them or new properties
   const { host } = hostPort(c.address);
   const f = budgetFacts(c);
-  const entries = [cubeEntry(c, true)];
+  const entries = [cubeEntry(c, { settings: true, own: true })];
+  // its link first; nothing else wrong said only where the link is fine too
+  const rest = problemsLabelOf(entries);
+  const label = linkSign(c) === "ok" || rest !== t("problem.none") ? [linkWord(c), rest].join(" · ") : linkWord(c);
   return (
     <>
       <span class="cube-head-who">
@@ -147,7 +150,7 @@ function Head({ c }: { c: Cube }) {
         </span>
       </span>
       <span class="cube-pill">
-        <Problems entries={entries} label={[linkWord(c), problemsLabelOf(entries)].join(" · ")} always lead={<CubeSign c={c} />}
+        <Problems entries={entries} label={label} always lead={<CubeSign c={c} />}
           head={<CubeLink c={c} />} onClick={keepPanel} />
       </span>
       {c.source && (
