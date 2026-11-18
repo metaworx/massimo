@@ -199,6 +199,8 @@ func TestApplyBoost(t *testing.T) {
 	// A setpoint during a boost ends it and stays.
 	c.send(must(cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a0204, RoomID: 2, Room: true}, 20, cube.ModeBoost, cube.Until{})))
 	c.send(must(cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a0204, RoomID: 2, Room: true}, 21, cube.ModeManual, cube.Until{})))
+	// No end to wait for: the boost's timer, stopped by the setpoint,
+	// leaves no trace.
 	time.Sleep(400 * time.Millisecond)
 	if st := c.states()[0x0a0204]; st.Mode != cube.ModeManual || *st.Setpoint != 21 || *st.ValvePct != 0 {
 		t.Fatalf("a setpoint after a boost: %+v", st)
