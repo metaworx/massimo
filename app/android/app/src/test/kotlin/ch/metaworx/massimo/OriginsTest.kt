@@ -45,11 +45,11 @@ class OriginsTest {
 
     @Test
     fun whoMayCallWhat() {
-        for (call in listOf("servers", "save", "remove", "discover", "probe", "trust", "open")) {
+        for (call in listOf("servers", "save", "remove", "discover", "probe", "trust", "open", "forget", "forgetAll")) {
             assertTrue(call, Origins.allowed(Caller.CONNECT, call))
             assertFalse(call, Origins.allowed(Caller.SERVER, call))
         }
-        for (call in listOf("token", "setToken")) {
+        for (call in listOf("token", "setToken", "login.status", "login.keep", "login.fingerprint", "connect")) {
             assertFalse(call, Origins.allowed(Caller.CONNECT, call))
             assertTrue(call, Origins.allowed(Caller.SERVER, call))
         }
@@ -57,5 +57,24 @@ class OriginsTest {
         assertTrue(Origins.allowed(Caller.SERVER, "hello"))
         for (call in listOf("hello", "servers", "token", "anything")) assertFalse(call, Origins.allowed(Caller.NONE, call))
         assertFalse(Origins.allowed(Caller.CONNECT, "anything"))
+    }
+
+    @Test
+    fun theHomeNetwork() {
+        for (h in listOf("192.168.1.20", "10.0.0.5", "172.16.0.1", "172.31.255.1", "127.0.0.1", "169.254.1.1", "localhost", "massimo.local", "box",
+            "[::1]", "fd00::1", "[fe80::1]")) {
+            assertTrue(h, Origins.isPrivateHost(h))
+        }
+        for (h in listOf("172.32.0.1", "8.8.8.8", "massimo.example.net", "2001:db8::1")) assertFalse(h, Origins.isPrivateHost(h))
+    }
+
+    @Test
+    fun noKeyOverPlainHttpOutside() {
+        assertTrue(Origins.plainOutside("http://massimo.example.net/"))
+        assertTrue(Origins.plainOutside("http://8.8.8.8:8099/"))
+        assertFalse(Origins.plainOutside("http://192.168.1.20:8099/"))
+        assertFalse(Origins.plainOutside("https://massimo.example.net/"))
+        assertFalse(Origins.plainOutside("http://[fd00::1]:8099/"))
+        assertTrue(Origins.plainOutside("http://bad host/"))
     }
 }
