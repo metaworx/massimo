@@ -1,4 +1,4 @@
-# Testing the web UI (v1.3.0)
+# Testing the web UI (v1.3.1)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -774,6 +774,13 @@ the server's and the test's, in order,
   the four cases' among them (`test_log.py`).
 - **The server sets** keep the server's 10 s poll of the fake Cube,
   which brings no line of its own (the fake Cube's states do not change).
+  What changes is their age:
+  the window contact's window, open from the start (`greeting.txt`),
+  counts as open long five minutes after its set started,
+  and as open too long after ten (`window_warn_after`, `window_alert_after`),
+  so from then on the Cube's problems list MEQ0000001, its panel's pill too.
+  A test that reads a Cube's problems from the server holds whether they list it or not;
+  one that needs none tells `reads`.
   They take no automatic backup during the run:
   a Cube without a backup gets one a minute after the start,
   whatever `backups.auto_min` and `backups.auto_max` say (`internal/server/backups.go`),

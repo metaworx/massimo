@@ -238,7 +238,10 @@ def test_cube_facts(page, case, reads):
     host, port = cube["address"].rsplit(":", 1)
     panel = page.locator(PANEL)
     head = panel.locator(":scope > summary")
-    assert head.locator(".mono").inner_text() == "KEQ0000100 · " + host, "the serial and the host, without the port"
+    # the head's own serial: the pill's list beside it has the serials of
+    # the devices with a problem, the window contact's once its window has
+    # been open five minutes into the run (docs/ui-testing.md, section 9)
+    assert head.locator(".cube-head-who > .mono").inner_text() == "KEQ0000100 · " + host, "the serial and the host, without the port"
     stats = head.locator(".cube-head-stats").inner_text()
     assert stats.startswith(DUTY[case.lang] + " ") and stats.count(" · ") == 2, f"duty cycle, free slots and pending in the head ({stats!r})"
     head.click()
