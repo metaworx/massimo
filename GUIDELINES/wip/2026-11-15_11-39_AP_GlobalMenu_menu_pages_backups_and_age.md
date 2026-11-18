@@ -1,4 +1,4 @@
-# AP GlobalMenu v1.3: one menu, four settings pages
+# AP GlobalMenu v1.4: one menu, four settings pages
 
 ## TL;DR
 
@@ -27,17 +27,23 @@ problems.
 - "updated 20:51:00" → "8 s": the chosen Cube's last message, on the
   server's clock; its tooltip "updated 20:51:00, click to reload" (D134-A)
 - Cube choice's list → each Cube's problem icons after its name (spec v10)
-- the server's sign and the age → in the header's pile, the age above it;
-  the pile always a list, "Refresh now" first with three times; the
-  version → ☰'s first row (D177-A, D178-A)
-- the header's row → logo, pile, Cube choice, ↑ beside it; on a phone
-  the Cube choice alone on the second row; the M kept from 331 px
-  (D176-A)
-- a tile's notices → entries of its pill, one line left in the tile
-  (D179-A)
+- the server's sign → in the header's pile, always a list, "Refresh
+  now" first; the version → ☰'s first row, after the icon, a rule under
+  it (D177-A, D185-A)
+- the pile's times → two columns, the times right-aligned: "Cube read
+  14 sec ago", "Server replied 5 sec ago", "Current time 09:27:08";
+  the age above the pile → gone, both reads' times in expert mode's
+  radio budget line; one clock for all (D180-A, D181-A)
+- the header's row → the logo at the left; the pile, the Cube choice,
+  ↑, ⌂ and ☰ at the right; on a phone the logo with ⌂ and ☰, then the
+  pile and the Cube choice; the whole logo kept from 331 px (D182-A,
+  D183-A)
+- the pile's list → as wide as its content, up to the page's (D184-A)
+- a tile's notices → entries of its pill (D179-A); the tile's line only
+  while the room's commands are refused
 
-Blocks 1–10 are merged (#289, #293, #301). Blocks 11–13 are built on the
-Preact parts of AP UiParts, stacked on #347.
+Blocks 1–13 are merged (#289, #293, #301, #350, #351, #355). Blocks
+11–15 are built on the Preact parts of AP UiParts.
 
 ### Blocks
 
@@ -64,6 +70,11 @@ Preact parts of AP UiParts, stacked on #347.
     header's shots
 13. TileNotices: a tile's notices as entries of its pill, one line in
     the tile
+14. HeaderRow: the logo left, the pile and the Cube choice right; the
+    reads' times relative, in the list and in expert mode; the list's
+    width; ☰'s version row
+15. TileLine: a tile's line only while its commands are refused; the
+    notices' tests on the page's own reads
 
 ## Discussion
 
@@ -178,6 +189,48 @@ the refresh button) it left plain. The owner sent `PLAN++` with all as
 recommended, stacking onto #347 (AP UnsavedMarks, Block 3) rather than
 starting from main: one branch and pull request per block, Block 11 on
 #347's branch, Blocks 12 and 13 on Block 11's. No merge and no
+retirement.
+
+The owner's look at the merged header on a phone and at a tile,
+2026-11-18: the times should be aligned under each other, leading the
+rows or right-aligned; relative, "{n} {unit} ago"; "Current time" for
+"Now"; the pile and the Cube choice at the page's right, next to ⌂; the
+open list wider, up to the screen's or `main`'s width; the logo goes
+below 600 px already, not as agreed (the image is the `logo` or the
+`icon`, as the brand's files are named); the age above the pile does not
+agree with the list's times; the age out of the pile, into expert mode's
+line of the Cube's radio budget; a rule after ☰'s version and a small M
+before it. Of the tiles: the notices are in the pill now, but the tile's
+line should go but where it says that the room's commands are refused.
+
+The age and the list's times use the same clock and the same skew, but
+tick on two timers: the age on its own, at its value's whole seconds,
+the list each second from its opening; each cuts to the second, so the
+two can differ by a second and change at different moments.
+
+- D180-A: two columns, the label and its time, the times right-aligned;
+  the two reads relative, their exact time the tooltip; one clock that
+  ticks each second for the list and the expert line, one formatter.
+- D181-A: the age above the pile goes; in expert mode, the radio budget
+  line has both reads' times, "Cube read" and "Server replied".
+- D182-A: from 600 px, the logo at the left, then at the right the pile,
+  the Cube choice, ↑ while compacted, ⌂ and ☰.
+- D183-A: below 600 px, the first row the whole logo (the `logo`, not
+  the `icon`) with ⌂ and ☰, the second the pile and the Cube choice, at
+  the right; under 331 px the logo goes. This replaces D176-A, the M on
+  a phone, which predated the owner's word and was not what was meant.
+- D184-A: the pile's list as wide as its content, up to `main`'s width,
+  under the pile at its right edge, kept in the window.
+- D185-A: ☰'s version row: the small `icon` before the version, a rule
+  after it.
+- D186-A: this plan's Block 14, not a plan of its own.
+- D187-B: the notices' tests, moved to the page's own reads (AP
+  TestInfrastructure, Block 7), ride with this revision's blocks, not a
+  pull request of their own.
+
+The tile's line is the owner's own addition, Block 15. `PLAN++` on
+2026-11-18 for this revision: Blocks 14 and 15 on one branch from main,
+one pull request, a second reader before it; no merge and no
 retirement.
 
 Out of scope: the redraws that close an open pill (the evaluation of
@@ -301,6 +354,34 @@ For Blocks 11–13, on #347's branch:
   before Go builds, `make ui-check` for the parts. The parts' guard
   (`test_parts_guard.py`) has the view `header_problems`; its `main-menu`
   view names `.top-facts`, which Block 12 removes.
+
+For Blocks 14–15, on main:
+
+- **The header's row** (`style.css` `.top-line`): a grid on its lower
+  edge, `brand pile cube up . nav`; below 600 px `brand pile . nav` and
+  the Cube choice on a second row, or the pile on a line of its own,
+  which `Pile.tsx` measures with a `ResizeObserver` (`ownLine`); under
+  331 px no logo. Below 600 px `.top .brand-name` shows the `icon` (the
+  sprite's `mark-*`) in place of the `logo` (`logo-*`), a rule of AP
+  WebBrand; `brandMarks` (`components.js`) draws both into every
+  `[data-brand]`, and the CSS shows one. The logo is 36 px high and 5.33
+  times as wide, 192 px.
+- **The pile** (`ui/src/header/Pile.tsx`): `Updated` (the age, its own
+  timer) above the pill; `RefreshNow`'s times one string of three lines,
+  `MenuItem`'s `sub`, which takes a string alone; its own timer while
+  the list is open. Its list opens to the right (`.cube-problems
+  .problems-list`), `min-width` 240 px, as wide as the window less 32 px.
+- **The expert line** (`#cube-stats`, plain, `header.js` `renderHeader`):
+  the Cube's name and its radio budget, each value set by its id.
+- **The width of `main`:** the body is at most 1100 px with 16 px
+  gutters, so the page's content is `min(100vw, 1100px) - 32px`.
+- **The tile** (`ui/src/rooms/Tile.tsx` `NoticeLine`): the line counts
+  the notices (`roomNotices` of `facts.ts`, `room.notices` in the six
+  languages), or says that the room's commands are refused.
+- **The notices' tests** (`test_rooms.py`) set rooms and devices in the
+  page; the page's next read of the rooms takes them back
+  (`docs/ui-testing.md` §9). The fixture `reads` answers the read of the
+  rooms (`**/rooms?devices=all`) with what a test puts in.
 
 ## Implementation Plan
 
@@ -592,6 +673,52 @@ nothing where they are not given); their behaviour is tested by Block 12.
 
 **Verification:** as above.
 
+### Block 14: HeaderRow
+
+- `style.css`: the row a flex row on its lower edge, the logo at the
+  left, the pile, the Cube choice (shrinking first), ↑ while compacted
+  and the pages at the right; below 600 px a second row for the pile and
+  the Cube choice at the right, the whole `logo` on the first, its
+  height giving way where the row is short; under 331 px no logo. The
+  pile's line of its own and the age's places go.
+- `ui/src/header/clock.ts` (new): one clock, a signal that ticks each
+  whole second, and `fmtAgo` ("14 sec ago", `Intl.RelativeTimeFormat`
+  in the page's language), shared by the list and the expert line.
+- `Pile.tsx`: the pill alone; `RefreshNow`'s times a grid of two
+  columns, "Cube read" and "Server replied" relative with their exact
+  times as tooltips, "Current time" a clock; `ownLine` and its observer
+  go. `Updated.tsx` gives way to the expert line's times.
+- `shared/menu.tsx`: `MenuItem`'s `sub` takes elements too; its row in
+  `docs/ui.md`.
+- `partials/header.html`: in `#cube-stats` a slot for the reads' times
+  (`ReadTimes`, a part); ☰'s version row with the `icon` before the
+  version and a rule after it.
+- `style.css`: the pile's list as wide as its content, up to `main`'s
+  width, at the pill's right edge; the times' grid; ☰'s version row.
+- i18n: "Cube read", "Server replied", "Current time" without the
+  time, in the six languages.
+- `docs/ui.md` "Header"; the header's fragment corrected (not released).
+- Tests: `test_header.py`, `test_server_sign.py`, `test_to_top.py`,
+  `test_main_menu.py`, `test_header_updates.py`, `test_menu_fit.py`
+  and the guard's views where they read the row, the age or the times.
+- `screenshots.py`: the header's shots as they are; the set and the
+  slideshow taken again.
+
+**Verification:** as above; each header shot looked at, at 1100, 700,
+390, 331 and 320 px.
+
+### Block 15: TileLine
+
+- `rooms/Tile.tsx`: the line only while the room's commands are
+  refused, its Show opening the pill; `roomNotices` and the texts of
+  the count go.
+- `test_rooms.py`: the notices' tests put their rooms into the page's
+  own reads (`reads`, `ROOMS`); the stale and mismatch tests open the
+  pill by its summary.
+- `docs/ui.md` "Rooms"; the tiles' fragment corrected (not released).
+
+**Verification:** as above.
+
 ## Proposed commit messages
 
 - Block 1: `feat(ui): Cube settings has its title row`
@@ -607,6 +734,8 @@ nothing where they are not given); their behaviour is tested by Block 12.
 - Block 11: `feat(ui/shared): A problem list leads with an icon, lists when all is well`
 - Block 12: `feat(ui/header): The server's sign and the age in the pile, the version in ☰`
 - Block 13: `feat(ui/rooms): A tile's notices are entries of its pill`
+- Block 14: `feat(ui/header): The pile at the page's right, the reads' times relative`
+- Block 15: `feat(ui/rooms): A tile's line only while its commands are refused`
 
 ## Change History
 
@@ -623,3 +752,8 @@ nothing where they are not given); their behaviour is tested by Block 12.
   notices on the Preact parts, by `PLAN++` with D175-A to D179-A as
   recommended, stacked on #347; the TL;DR names the merge of Block 10
   (#301).
+- v1.4 (2026-11-18): Blocks 14 and 15, the header's row and times and
+  the tile's line, by `PLAN++` with D180-A to D186-A and D187-B, the
+  times right-aligned and both reads in the expert line as the owner
+  added; D183-A replaces D176-A; the TL;DR names the merge of Blocks
+  11–13 (#350, #351, #355).
