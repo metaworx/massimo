@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.59.0)
+# Massimo — CI Conventions (v1.60.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -31,6 +31,79 @@ this document is the source of truth for *why*.
 There is no other platform.
 
 ## 2. What Runs, and When
+
+How a run decides what it does, in the order it decides;
+the table and the paragraphs below give each step's reasons.
+
+```mermaid
+flowchart TD
+    start{{"What started the run"}}
+    start -->|"a pull request, a push to main, a version tag: ci.yml"| relcommit
+    start -->|"02:30 UTC or by hand: nightly.yml, no tests"| kind
+    start -->|"a push to a release branch"| idle["Nothing runs"]
+
+    subgraph gate ["ci.yml, What to test: the answers every job reads"]
+        relcommit{"A push to main of<br/>a release commit?"}
+        same{"The same code as before?<br/>fingerprint.sh same"}
+        siteonly{"The site's documents<br/>and untested ones alone?"}
+        known{"On a push: is this code's<br/>verdict known?<br/>code-result.sh"}
+        codetrue["code=true"]
+        record{"Does the Tested record<br/>before hold this code's<br/>fingerprint?"}
+        relcommit -->|no| same
+        same -->|"yes: code=false"| known
+        same -->|no| siteonly
+        siteonly -->|"yes: code=false, site=true"| known
+        siteonly -->|no| codetrue
+        known -->|"no: test it after all"| codetrue
+        codetrue --> record
+    end
+
+    relcommit -->|"yes: suite=false"| skipped["Every job skipped, nothing built:<br/>the tag's run tests the commit"]
+    known -->|"yes, or a pull request"| docs["Guidelines and Code result,<br/>Site where site=true"]
+    record -->|"yes: tested=true"| retest["Guidelines, and what had not passed<br/>for this code: UI test, LAN,<br/>Android app, Fuzz"]
+    record -->|no| full["Every test job, Guidelines, Site;<br/>Fuzz on a push only"]
+    paths["A pull request runs UI test, LAN and Android app<br/>only where it touches their paths"]
+    retest -.- paths
+    full -.- paths
+    docs --> atp["All tests passed:<br/>green, it writes the Tested record"]
+    retest --> atp
+    full --> atp
+    atp -->|"green, a push to main, site=true"| deploy["Deploy site"]
+    codetrue -->|"a push: Build beside the tests"| kind
+
+    subgraph build ["build.yml, What to release"]
+        kind{"What does the run release?"}
+        devel{"Is release/devel at<br/>or after the commit?"}
+        pick{"A commit of main newer than<br/>release/nightly whose suite passed?"}
+        nothing["Nothing to release"]
+        rdevel["devel: binaries, packages,<br/>SHA256SUMS, manifest, unsigned"]
+        rtag["the release: the same, and the<br/>app's APK and AAB, unsigned"]
+        rnightly["nightly: the same as devel,<br/>and the nightly APK, unsigned"]
+        kind -->|"a push to main"| devel
+        kind -->|"a version tag"| rtag
+        kind -->|"the nightly build"| pick
+        devel -->|no| rdevel
+        devel -->|yes| nothing
+        pick -->|"yes: the newest"| rnightly
+        pick -->|"no, or main's head is a release commit"| nothing
+    end
+
+    subgraph rel ["release.yml, signing and publishing"]
+        sign["Sign and publish, the app's two jobs,<br/>Homebrew and apt: one approval in signing,<br/>the release key, the release branch moved"]
+        rolling["The rolling build: the rolling key in<br/>signing-rolling, its release replaced,<br/>the nightly APK signed"]
+        attest["Attest the signed files"]
+        site["Site: built and deployed to Pages"]
+        sign --> attest
+        rolling --> attest
+        sign --> site
+        rolling --> site
+    end
+
+    rtag -->|"once All tests passed"| sign
+    rdevel -->|"once All tests passed"| rolling
+    rnightly -->|"its suite passed before"| rolling
+    nothing -->|"Site still, but not at a release commit"| site
+```
 
 | Trigger | Jobs |
 |---------|------|
