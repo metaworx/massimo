@@ -61,7 +61,7 @@ as it does without pytest-xdist and more than one worker.
 make ui-test                                          # the whole suite
 PYTEST_ADDOPTS='-k cubes' make ui-test                # the tests whose names match
 PYTEST_ADDOPTS='-k "hidden and 390-de"' make ui-test  # one test in one case
-UI_TEST_CASES=390-en,390-de make ui-test              # some cases, as a CI job runs them
+UI_TEST_CASES=390-en,390-de make ui-test              # some cases; a CI job runs one
 tools/ui-test/run.sh smoke test_log.py                # one file
 tools/ui-test/run.sh smoke 'test_log.py::test_log_changes[1100-en-chromium]' -x
 UI_TEST_WORKERS=1 make ui-test                        # in one process
@@ -75,18 +75,24 @@ whose working directory is `tools/ui-test/`, so files are named from there.
 A test's id carries its case: `1100-en`, `390-en`, `1100-de`, `390-de`,
 then the browser.
 
-Of a failed test, pytest-playwright keeps
-the screenshot and the video in `tools/ui-test/results/`,
+pytest-playwright keeps a failed test's screenshot in `tools/ui-test/results/`,
 one directory per test (gitignored, emptied at the start of every run).
-The first pass records no trace:
-its DOM snapshots make every step slower,
+The first pass records no trace and no video:
+the trace's DOM snapshots make every step slower,
 840 ms instead of 14 for a step in System settings at 1100 px,
-and slow every wait with it.
-When tests fail, `run.sh` runs them once more with the trace
-(`--last-failed --tracing retain-on-failure`, the same arguments),
-and keeps the trace of each that fails again in `tools/ui-test/results/retry/`;
+and slow every wait with it;
+the video took a quarter of a second of every test's set-up and tear-down:
+1100-en took 250 s with it and 218 without, in four workers,
+on 2026-11-19 (AP TestSpeed, D8-A).
+When tests fail, `run.sh` runs them once more with both
+(`--last-failed --video retain-on-failure --tracing retain-on-failure`,
+the same arguments),
+and keeps the screenshot, the video and the trace of each that fails again
+in `tools/ui-test/results/retry/`;
 it says whether they failed again, and the run fails either way:
 a test that passes only the second time is flaky, not fixed.
+`PYTEST_ADDOPTS='--video retain-on-failure' make ui-test`
+records the first pass's videos as well.
 The first pass ends with its 20 slowest phases,
 each a test's set-up, call or tear-down (`--durations=20`),
 in CI's UI jobs' logs too, so that a run shows where its time went;
@@ -102,6 +108,12 @@ with the page's DOM, console and network at every step.
 - `case`:
   every test runs four times, at 1100 and 390 px,
   in English and in German (from the browser context's locale);
+- the mark `cases`, with case ids such as `1100-en`:
+  the test runs in those cases alone,
+  and is deselected in the others as the suite is collected,
+  before a fixture loads a page for it (AP TestSpeed, D9-A),
+  as `test_parts_guard.py` is;
+  an id that is not a case fails the marked test in every case;
 - `page`:
   a browser context of its own per test and case (pytest-playwright's `context`,
   with `browser_context_args` set from `case`),
@@ -437,7 +449,8 @@ hence `failed_checks_forgotten`.
   every request but a GET is refused and fails the test,
   so nothing reaches the fake Cube or the store.
   It runs in two of the four cases, 1100 px in English and 390 px in
-  German, each width and each language once.
+  German, each width and each language once,
+  and is deselected in the other two (`GUARD_CASES`, the mark `cases`).
 - Every button on every page the tests open has an accessible name (its text,
   `aria-label`, `aria-labelledby` or `title`),
   and the pages have no horizontal scroll where the tests look for one.
@@ -508,13 +521,15 @@ It needs ImageMagick;
 It lives here, next to what takes the pictures,
 because the repository keeps its developer tools under `tools/`.
 
-CI's Screenshots job runs the suite (with `UI_TEST_REQUIRED=1`) and then takes the set
-on every push to `main` and every pull request,
+CI runs the suite (with `UI_TEST_REQUIRED=1`) in a job per case,
+"UI test (1100-en)" to "UI test (390-de)",
+and takes the set in a job of its own beside them, "UI test (screenshots)",
+on every push to `main` and every pull request that changes the UI's paths,
 in Microsoft's Playwright image,
 and uploads the PNGs as the artifact `ui-screenshots` (`GUIDELINES/project/CI.md`);
-when a step fails it also uploads `tools/ui-test/results/`,
-the failed tests' screenshots and videos and the retry's traces,
-as the artifact `ui-test-results`.
+when a case's step fails it also uploads `tools/ui-test/results/`,
+the failed tests' screenshots and the retry's screenshots, videos and traces,
+as the artifact `ui-test-results-<case>`.
 It does not make the slideshow, which needs ImageMagick:
 `slideshow.sh` is run where the set is taken, and the GIF committed with it.
 
