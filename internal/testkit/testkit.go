@@ -5,8 +5,9 @@
 // every wait, a wait until a condition holds, a check that something
 // does not happen before a given end, and a watch of what comes - log
 // records, a stream's events, a channel's values - that waits for the
-// next one of a kind (Watch). Its subpackage cubewatch watches the lines
-// a fake Cube receives.
+// next one of a kind (Watch), and a clock the test moves on in place of
+// waiting for the real one (Clock). Its subpackage cubewatch watches the
+// lines a fake Cube receives.
 //
 // Every wait is scaled by MASSIMO_TEST_SCALE, a positive number, 1 where
 // it is not set: make race sets 2 and make test-armv6 4, so that a slow

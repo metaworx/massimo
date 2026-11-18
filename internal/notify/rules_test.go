@@ -7,73 +7,25 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
-// fakeClock is a clock the test moves: Advance runs the timers that
-// come due, in their order.
-type fakeClock struct {
-	mu     sync.Mutex
-	now    time.Time
-	timers []*fakeTimer
-}
+// kitClock is the kit's clock as the Clock a Sink takes, its timers
+// this package's Timer.
+type kitClock struct{ *testkit.Clock }
 
-type fakeTimer struct {
-	c       *fakeClock
-	at      time.Time
-	f       func()
-	stopped bool
-}
-
-func (t *fakeTimer) Stop() bool {
-	t.c.mu.Lock()
-	defer t.c.mu.Unlock()
-	was := !t.stopped
-	t.stopped = true
-	return was
-}
-
-func (c *fakeClock) Now() time.Time {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.now
-}
-
-func (c *fakeClock) AfterFunc(d time.Duration, f func()) Timer {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	t := &fakeTimer{c: c, at: c.now.Add(d), f: f}
-	c.timers = append(c.timers, t)
-	return t
-}
-
-func (c *fakeClock) Advance(d time.Duration) {
-	c.mu.Lock()
-	c.now = c.now.Add(d)
-	var due []*fakeTimer
-	for _, t := range c.timers {
-		if !t.stopped && !t.at.After(c.now) {
-			t.stopped = true
-			due = append(due, t)
-		}
-	}
-	c.mu.Unlock()
-	sort.SliceStable(due, func(i, j int) bool { return due[i].at.Before(due[j].at) })
-	for _, t := range due {
-		t.f()
-	}
-}
+func (c kitClock) AfterFunc(d time.Duration, f func()) Timer { return c.Clock.AfterFunc(d, f) }
 
 // harness runs a Sink on the fake clock and records what it delivers.
 type harness struct {
 	t       *testing.T
-	clock   *fakeClock
+	clock   *testkit.Clock
 	sink    *Sink
 	mu      sync.Mutex
 	users   []User
@@ -88,7 +40,7 @@ type delivered struct {
 
 func newHarness(t *testing.T, users ...User) *harness {
 	t.Helper()
-	h := &harness{t: t, clock: &fakeClock{now: time.Date(2026, 11, 9, 6, 0, 0, 0, time.UTC)}, users: users}
+	h := &harness{t: t, clock: testkit.NewClock(time.Date(2026, 11, 9, 6, 0, 0, 0, time.UTC)), users: users}
 	h.sink = New(Options{
 		Users: func(context.Context) ([]User, error) {
 			h.mu.Lock()
@@ -105,7 +57,7 @@ func newHarness(t *testing.T, users ...User) *harness {
 			defer h.mu.Unlock()
 			return append([]Device(nil), h.devices...)
 		},
-		Clock: h.clock,
+		Clock: kitClock{h.clock},
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -134,7 +86,7 @@ func (h *harness) push(ev Event) {
 }
 
 func (h *harness) advance(d time.Duration) {
-	h.clock.Advance(d)
+	h.clock.Add(d)
 	h.sink.sync()
 }
 
