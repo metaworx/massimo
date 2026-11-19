@@ -784,22 +784,16 @@ func workflowJobNames(t *testing.T, name string) map[string]bool {
 // paths, the Go files each platform leaves out by name, and the two lists.
 var ciGateLines = []string{"announce=", "notmac=", "macfiles=", "winfiles="}
 
-// ciPlatformGates runs ci.yml's macOS and Windows gates over the paths
-// given, as What to test does on a pull request, and returns the paths
-// each lets through and those each leaves out by name.
-func ciPlatformGates(t *testing.T, paths []string) (mac, win, notMac, notWin map[string]bool) {
+// ciWhatLines returns the lines of ci.yml that open with the prefixes
+// given, in the file's order, one line each: the parts of What to test's
+// script that a test runs.
+func ciWhatLines(t *testing.T, prefixes []string) string {
 	t.Helper()
-	bash := scriptShell(t)
-	b, err := os.ReadFile(filepath.Join("..", ".github", "workflows", "ci.yml"))
-	if err != nil {
-		t.Fatal(err)
-	}
 	var script strings.Builder
-	script.WriteString("set -euo pipefail\nchanged=\"$(cat)\"\n")
 	found := map[string]bool{}
-	for _, line := range strings.Split(string(b), "\n") {
+	for _, line := range strings.Split(readWorkflow(t, "ci.yml"), "\n") {
 		line = strings.TrimSpace(line)
-		for _, p := range ciGateLines {
+		for _, p := range prefixes {
 			if strings.HasPrefix(line, p) {
 				if found[p] {
 					t.Fatalf("ci.yml has two lines opening with %s", p)
@@ -809,11 +803,23 @@ func ciPlatformGates(t *testing.T, paths []string) (mac, win, notMac, notWin map
 			}
 		}
 	}
-	for _, p := range ciGateLines {
+	for _, p := range prefixes {
 		if !found[p] {
 			t.Fatalf("ci.yml has no line opening with %s", p)
 		}
 	}
+	return script.String()
+}
+
+// ciPlatformGates runs ci.yml's macOS and Windows gates over the paths
+// given, as What to test does on a pull request, and returns the paths
+// each lets through and those each leaves out by name.
+func ciPlatformGates(t *testing.T, paths []string) (mac, win, notMac, notWin map[string]bool) {
+	t.Helper()
+	bash := scriptShell(t)
+	var script strings.Builder
+	script.WriteString("set -euo pipefail\nchanged=\"$(cat)\"\n")
+	script.WriteString(ciWhatLines(t, ciGateLines))
 	script.WriteString(`out() { while IFS= read -r f; do [ -z "$f" ] || echo "$1 $f"; done; }
 out mac <<<"$macfiles"
 out win <<<"$winfiles"
@@ -935,6 +941,52 @@ func TestCIGatesHoldTheirWorkflow(t *testing.T) {
 	}
 	if mac[paths[2]] || win[paths[2]] {
 		t.Errorf("%s runs a platform's job", paths[2])
+	}
+}
+
+// ciUILines open the lines of ci.yml's What to test that answer ui on a
+// pull request: the paths the UI tests read, and the answer.
+var ciUILines = []string{"uifiles=", `[ -n "$uifiles" ] || ui=false`}
+
+// ciUIGate runs ci.yml's UI gate over a pull request's paths, as What to
+// test does, and returns its answer ui.
+func ciUIGate(t *testing.T, paths []string) string {
+	t.Helper()
+	bash := scriptShell(t)
+	script := "set -euo pipefail\nchanged=\"$(cat)\"\nui=true\n" + ciWhatLines(t, ciUILines) + "echo \"$ui\"\n"
+	cmd := exec.Command(bash, "-c", script)
+	cmd.Stdin = strings.NewReader(strings.Join(paths, "\n") + "\n")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("the UI gate: %v\n%s", err, out)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// TestCIUIGateLeavesOutServerTests: a pull request that changes the
+// server's tests alone runs no UI job, since the binary under test does
+// not hold them (AP TestSpeed, D9-A); one that changes a server Go file
+// beside them, the page, the suite or the jobs' workflow runs them.
+func TestCIUIGateLeavesOutServerTests(t *testing.T) {
+	for _, tc := range []struct {
+		paths []string
+		want  string
+	}{
+		{[]string{"internal/server/rooms_test.go"}, "false"},
+		{[]string{"internal/server/rooms_test.go", "internal/server/api_test.go", "internal/store/store.go"}, "false"},
+		{[]string{"internal/server/rooms_test.go", "internal/server/rooms.go"}, "true"},
+		{[]string{"internal/server/rooms.go"}, "true"},
+		{[]string{"internal/server/ui/app.js"}, "true"},
+		{[]string{"internal/server/ui/src/rooms/tile.tsx", "internal/server/rooms_test.go"}, "true"},
+		{[]string{"tools/ui-test/test_parts_guard.py"}, "true"},
+		{[]string{".github/workflows/ci.yml"}, "true"},
+		{[]string{"docs/api-v1-openapi.yaml"}, "true"},
+		{[]string{"internal/server/testdata/greeting.txt"}, "false"},
+		{[]string{"internal/store/store.go", "docs/ui.md"}, "false"},
+	} {
+		if got := ciUIGate(t, tc.paths); got != tc.want {
+			t.Errorf("%v: ui=%s, want %s", tc.paths, got, tc.want)
+		}
 	}
 }
 

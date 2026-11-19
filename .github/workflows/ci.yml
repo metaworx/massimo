@@ -6,8 +6,9 @@ name: CI
 # types of the web UI's parts, govulncheck, the Debian package in a container, and the Windows
 # service and the macOS LaunchDaemon on their runners (platforms.yml). A pull
 # request runs the web UI's suite only when it changes the UI, the
-# server's own Go files, the OpenAPI file, the suite or this file, and
-# then on all four of its cases, and the mDNS test against
+# server's own Go files but for its tests, the OpenAPI file, the suite or
+# this file, and then on all four of its cases, a job each, with the
+# screenshot set in a job of its own, and the mDNS test against
 # avahi only when it changes the announcement, discovery, the test or
 # this file, the Windows and macOS jobs only when they change their
 # platform's code or the announcement, and the Android app's job only
@@ -76,8 +77,10 @@ jobs:
   # UI test and LAN jobs, are true for
   # a push; for a pull request, ui is true when it touches the web UI, its
   # bundler (tools/uibundle), the vendored Preact, the server's own Go
-  # files, the OpenAPI file of the API the page reads (with code only: a
-  # site document alone answers code=false), its suite or this file, lan
+  # files but for its tests (internal/server/*_test.go, which the binary
+  # under test does not hold: AP TestSpeed, D9-A), the OpenAPI file of
+  # the API the page reads (with code only: a site document alone answers
+  # code=false), its suite or this file, lan
   # when it touches the announcement, discovery,
   # the shared port, the proxy, the server's own files (not ui/:
   # discovery's runs are decided there), the Go module, the LAN test or
@@ -259,7 +262,10 @@ jobs:
             # the shared port, serve's setup and flags, and the Go module,
             # whose golang.org/x/net it sends with.
             announce='internal/announce/|internal/sharedport/|internal/serve/|cmd/massimo/serve\.go$|go\.(mod|sum)$'
-            grep -qE '^(internal/server/ui/|internal/server/[^/]+\.go$|docs/api-v1-openapi\.yaml$|tools/ui-test/|tools/uibundle/|third_party/preact/|\.github/workflows/ci\.yml$)' <<<"$changed" || ui=false
+            # The UI tests' paths, the server's own Go files but its tests
+            # (D9-A), which the binary under test does not hold.
+            uifiles="$(grep -vE '^internal/server/[^/]+_test\.go$' <<<"$changed" | grep -E '^(internal/server/ui/|internal/server/[^/]+\.go$|docs/api-v1-openapi\.yaml$|tools/ui-test/|tools/uibundle/|third_party/preact/|\.github/workflows/ci\.yml$)' || true)"
+            [ -n "$uifiles" ] || ui=false
             grep -qE "^(${announce}|internal/proxy/|internal/server/[^/]+$|internal/cubelan/|cmd/massimo/discover\.go$|tools/lan-test/|\.github/workflows/ci\.yml$)" <<<"$changed" || lan=false
             # Each platform's own paths (D1-A, D2-A): what its unit tests and
             # its install, update and removal on the runner run, the Go files
@@ -529,47 +535,50 @@ jobs:
           path: internal/**/testdata/fuzz/
           if-no-files-found: ignore
 
-  # The web UI in Chromium against the fake Cube: the pytest suite, a
-  # job per width with both languages (UI_TEST_CASES), and in the
-  # 1100 px one after its suite the screenshot set, uploaded as the
-  # artifact ui-screenshots (tools/ui-test/README.md). Nothing is
+  # The web UI in Chromium against the fake Cube (tools/ui-test/README.md):
+  # the pytest suite, a job per case (UI_TEST_CASES) on a runner of its
+  # own, and the screenshot set in a job of its own beside them, uploaded
+  # as the artifact ui-screenshots (AP TestSpeed, D7-A). Nothing is
   # compared with the committed set: a job fails when a test fails or a
-  # shot cannot be taken, not when a picture changed; a failed test's
-  # screenshot and video, and the trace of its run once more, kept in
-  # tools/ui-test/results/, are uploaded as ui-test-results-<width>.
-  # The jobs keep the id screenshots, which All tests passed needs and
-  # reads as one, passed where both passed. They
+  # shot cannot be taken, not when a picture changed. A failed test's
+  # screenshot, and the video and the trace of its run once more (the
+  # first pass records neither, D8-A), kept in tools/ui-test/results/,
+  # are uploaded as ui-test-results-<case>. The five jobs keep the id
+  # screenshots, which All tests passed needs and reads as one, passed
+  # where all five passed. They
   # run in Microsoft's Playwright image, which holds the browsers and
   # their system libraries, so that nothing goes
   # through apt (which took up to 11 minutes on the runner). The image's
   # version and the pip pin below move together (GUIDELINES/project/CI.md,
   # section 3). The image has no make: the steps run what the make
   # targets run. The slideshow is built and committed with the set, not
-  # here. It runs for every push to main and for a pull request whose
+  # here. They run for every push to main and for a pull request whose
   # What to test answered ui=true; skipped by this condition, the
-  # required check counts as passed.
+  # required check counts as passed. Until the jobs have runs of their
+  # own, their limits are about three times what they are estimated to
+  # take from the two-case jobs' longest run, 15.4 minutes: a case about
+  # half of it, 30, and the set, its minute and the job's set-up, 15.
   screenshots:
-    name: UI test (${{ matrix.label }})
+    name: UI test (${{ matrix.case }})
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.ui != 'false' && needs.changes.outputs.ui_done != 'true' }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - width: 1100
-            cases: 1100-en,1100-de
-            label: 1100 px, screenshots
-            shots: true
-          - width: 390
-            cases: 390-en,390-de
-            label: 390 px
-            shots: false
+        # The suite's four cases, as conftest.py names them, and the
+        # screenshot set.
+        case: [ 1100-en, 1100-de, 390-en, 390-de, screenshots ]
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: ${{ matrix.case == 'screenshots' && 15 || 30 }}
     container:
       image: mcr.microsoft.com/playwright/python:v1.64.1-noble
     env:
       UI_TEST_PYTHON: python
+      # UI_TEST_REQUIRED: a missing Playwright, pytest,
+      # pytest-playwright or pytest-xdist fails the job instead of
+      # skipping the suite or running it in one process, and the set's
+      # job instead of uploading the committed set.
+      UI_TEST_REQUIRED: 1
       # The checkout belongs to another user than the container's root,
       # so git refuses it and go build cannot stamp the version from it;
       # the binary under test needs none.
@@ -587,24 +596,22 @@ jobs:
       - name: Playwright
         run: pip install "playwright==1.64.1" -r tools/ui-test/requirements.txt
 
-      # UI_TEST_REQUIRED: a missing Playwright, pytest,
-      # pytest-playwright or pytest-xdist fails the job instead of
-      # skipping the suite or running it in one process. run.sh runs the
-      # job's two cases in four workers, one per CPU of the runner, each
-      # against a server set of its own, on a push and a pull request; the
-      # log names the 20 slowest phases of the tests (--durations=20).
+      # run.sh runs the job's case in four workers, one per CPU of the
+      # runner, each against a server set of its own, on a push and a
+      # pull request; the log names the 20 slowest phases of the tests
+      # (--durations=20).
       - name: Smoke test
+        if: ${{ matrix.case != 'screenshots' }}
         run: tools/ui-test/run.sh
         env:
-          UI_TEST_REQUIRED: 1
-          UI_TEST_CASES: ${{ matrix.cases }}
+          UI_TEST_CASES: ${{ matrix.case }}
 
       - name: Screenshots
-        if: ${{ matrix.shots }}
+        if: ${{ matrix.case == 'screenshots' }}
         run: tools/ui-test/run.sh screenshots
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: ${{ !cancelled() && matrix.shots }}
+        if: ${{ !cancelled() && matrix.case == 'screenshots' }}
         with:
           name: ui-screenshots
           path: |
@@ -612,9 +619,9 @@ jobs:
           if-no-files-found: error
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: failure()
+        if: ${{ failure() && matrix.case != 'screenshots' }}
         with:
-          name: ui-test-results-${{ matrix.width }}
+          name: ui-test-results-${{ matrix.case }}
           path: tools/ui-test/results/
           if-no-files-found: ignore
 

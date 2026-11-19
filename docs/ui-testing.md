@@ -1,4 +1,4 @@
-# Testing the web UI (v1.3.1)
+# Testing the web UI (v1.4.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -564,6 +564,11 @@ It knows nothing of a part, so a region drawn anew fails it without a test
 of its own.
 It runs in two of the suite's four cases, 1100 px in English and 390 px
 in German: each width and each language once.
+In the other two its tests are deselected as the suite is collected,
+by the mark `cases` that `GUARD_CASES` gives the file (`conftest.py`),
+so that none loads a page only to be skipped:
+the 28 skips of 1100-de took 42 s of the guard's worker, under load,
+before the mark (AP TestSpeed, D9-A).
 
 ### What it checks
 

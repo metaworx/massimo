@@ -38,8 +38,10 @@ is shown to bite.
 The guard runs in two of the suite's four cases, 1100 px in English and
 390 px in German (GUARD_CASES, D176-D): each width once and each
 language once, since a width changes what is shown and a language
-changes no element. In CI that is once in each UI job, on a worker of
-its own beside the other files.
+changes no element. In the other two its tests are deselected as the
+suite is collected (the mark cases, conftest.py), so that none loads a
+page only to be skipped (AP TestSpeed, D9-A). In CI that is in the jobs
+of 1100-en and 390-de, on a worker of its own beside the other files.
 """
 import os
 from dataclasses import dataclass
@@ -49,16 +51,10 @@ import pytest
 
 from helpers import open_main_menu, reads_of, show_view, wait_until
 
-# The cases the guard runs in, as (width, language) (D176-D).
-GUARD_CASES = {(1100, "en"), (390, "de")}
-
-
-@pytest.fixture(autouse=True)
-def guard_case(case):
-    """Skips the guard in the cases it does not run in, before a page is
-    loaded for it."""
-    if (case.width, case.lang) not in GUARD_CASES:
-        pytest.skip("the guard runs at 1100 px in English and at 390 px in German")
+# The cases the guard runs in (D176-D); in the others its tests are
+# deselected at collection (D9-A).
+GUARD_CASES = ("1100-en", "390-de")
+pytestmark = pytest.mark.cases(*GUARD_CASES)
 
 
 @dataclass(frozen=True)

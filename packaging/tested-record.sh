@@ -14,9 +14,10 @@
 #     Windows job that no runner took on a pull request or a push to main
 #     counts as not run (AP TestSpeed, D5-A, D16-A): the merge's push runs
 #     it, and the nightly build runs it before it ships the code.
-# The UI tests passed where their matrix job did (screenshots, both
-# widths); macOS and Windows where platforms.yml's output says so, as the
-# call's result is that of both jobs together.
+# The UI tests passed where their matrix job did (screenshots: the four
+# cases and the screenshot set, AP TestSpeed, D7-A); macOS and Windows
+# where platforms.yml's output says so, as the call's result is that of
+# both jobs together.
 #
 # Needs NEEDS, the job's needs as JSON, and FP, the fingerprint. Prints
 # the description, with a warning annotation where it is longer than the
