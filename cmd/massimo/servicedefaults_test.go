@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"go.metaworx.ch/massimo/internal/env"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // serviceFiles puts the service's settings file, owned by the user the
@@ -19,6 +20,7 @@ import (
 // back after the test.
 func serviceFiles(t *testing.T) (envPath, stateDir string) {
 	t.Helper()
+	testkit.Swapping(t)
 	dir := t.TempDir()
 	envPath, stateDir = filepath.Join(dir, "env"), filepath.Join(dir, "state")
 	if err := os.WriteFile(envPath, []byte("MASSIMO_TEST_SERVICE=1\n"), 0o600); err != nil {
@@ -42,6 +44,7 @@ func serviceFiles(t *testing.T) (envPath, stateDir string) {
 // The data directory is -data or MASSIMO_DATA, then the service user's
 // default, then the current directory.
 func TestDataDirOrder(t *testing.T) {
+	testkit.Swapping(t)
 	_, stateDir := serviceFiles(t)
 	if d := dataDir(); d != "." {
 		t.Fatalf("no default: %q", d)
@@ -64,6 +67,7 @@ func TestDataDirOrder(t *testing.T) {
 
 // config's two lines say when they are the service user's defaults.
 func TestConfigLinesNameTheDefault(t *testing.T) {
+	testkit.Swapping(t)
 	envPath, stateDir := serviceFiles(t)
 	if l := envFileLine(); l != "env file:      .env (not found)" && l != "env file:      .env (loaded)" {
 		t.Fatalf("without the default: %q", l)
@@ -88,6 +92,7 @@ func TestConfigLinesNameTheDefault(t *testing.T) {
 // The usage texts' example runs this binary for the service: as the
 // service user, or on Windows with the service's -env and -data.
 func TestServiceExample(t *testing.T) {
+	t.Parallel()
 	got := serviceExample("store", "info")
 	if !strings.HasSuffix(got, " store info") {
 		t.Fatalf("args: %q", got)

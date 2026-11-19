@@ -11,9 +11,11 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 func TestNetConfigFrame(t *testing.T) {
+	t.Parallel()
 	cfg := NetConfig{
 		IP:      net.ParseIP("192.168.1.50"),
 		Gateway: net.ParseIP("192.168.1.1"),
@@ -87,6 +89,7 @@ func TestNetConfigFrame(t *testing.T) {
 }
 
 func TestNetAddrsFromN(t *testing.T) {
+	t.Parallel()
 	a, ok := parseNetAddrs([]byte{192, 168, 1, 118, 192, 168, 1, 1, 255, 255, 255, 0, 192, 168, 1, 1, 0, 0, 0, 0})
 	if !ok || a.IP.String() != "192.168.1.118" || a.Gateway.String() != "192.168.1.1" || a.Netmask.String() != "255.255.255.0" || len(a.DNS) != 1 {
 		t.Fatalf("%+v", a)
@@ -104,6 +107,7 @@ func TestNetAddrsFromN(t *testing.T) {
 // The fake listens on the loopback, so the write sends no broadcast.
 func shortWaits(t *testing.T, fake *fakecube.DiscoveryResponder) {
 	t.Helper()
+	testkit.Swapping(t)
 	a, b, c, d, e, f := setReplyWait, setSettle, rereadWait, restartWait, askWait, probeEvery
 	t.Cleanup(func() { setReplyWait, setSettle, rereadWait, restartWait, askWait, probeEvery = a, b, c, d, e, f })
 	setReplyWait, setSettle, rereadWait, restartWait, askWait, probeEvery = 300*time.Millisecond, 10*time.Millisecond, time.Second, 3*time.Second, 200*time.Millisecond, 250*time.Millisecond

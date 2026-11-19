@@ -82,6 +82,7 @@ func (c testClient) login(s *Store, name, password string) (OpaqueStart, []byte)
 // The key file is made once, 0600, and read back: a record made under it
 // still signs in after the store is opened again.
 func TestOpaqueKeyFile(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	s := open(t, dir)
 	ctx := context.Background()
@@ -117,6 +118,7 @@ func TestOpaqueKeyFile(t *testing.T) {
 // A user of version 2 signs in; a wrong password cannot even finish, and
 // a KE3 of another sign-in or of nothing is a wrong password.
 func TestOpaqueSignIn(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	ctx := context.Background()
 	rec := newTestClient(t).register(s, "Anna", "secret")
@@ -162,6 +164,7 @@ func TestOpaqueSignIn(t *testing.T) {
 // time and stays the same once the name has a record, so neither tells
 // which names exist.
 func TestOpaqueUnknownName(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	ctx := context.Background()
 	if _, err := s.AddUser(ctx, User{Name: "bert"}, "secret", 0); err != nil {
@@ -207,6 +210,7 @@ func TestOpaqueUnknownName(t *testing.T) {
 
 // A password of version 1 replaces a record, and a record a hash.
 func TestOpaqueAndPassword(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	ctx := context.Background()
 	if _, err := s.AddUser(ctx, User{Name: "anna"}, "old", 0); err != nil {
@@ -243,6 +247,7 @@ func TestOpaqueAndPassword(t *testing.T) {
 // A record that does not decode, and key stretching out of bounds, are
 // refused before anything is written.
 func TestOpaqueRecordChecked(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	ctx := context.Background()
 	rec := newTestClient(t).register(s, "anna", "secret")
@@ -326,6 +331,7 @@ func BenchmarkOpaqueLogin(b *testing.B) {
 // and a missing user are refused before the key stretching, and a store
 // opened read-only reads the key to check a sign-in.
 func TestOpaqueInProcess(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	s := open(t, dir)
 	ctx := context.Background()
@@ -366,6 +372,7 @@ func TestOpaqueInProcess(t *testing.T) {
 // conversion needs no bound; 16 is the ceiling, 17 is over it, and a
 // number past 255 is malformed.
 func TestParseKSFLanes(t *testing.T) {
+	t.Parallel()
 	if _, _, p, err := ParseKSF("m=19456,t=2,p=16"); err != nil || p != 16 {
 		t.Errorf("p=16: %d %v", p, err)
 	}

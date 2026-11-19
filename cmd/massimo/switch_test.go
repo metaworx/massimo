@@ -13,6 +13,7 @@ import (
 // A switch is on or off in the usual spellings, enabled and disabled
 // among them; anything else is refused with the variable's name.
 func TestParseSwitch(t *testing.T) {
+	t.Parallel()
 	for v, want := range map[string]bool{"on": true, "ON": true, "true": true, "yes": true, "1": true, " on ": true, "enabled": true, "Enabled": true,
 		"": false, "off": false, "false": false, "no": false, "0": false, "disabled": false, "DISABLED": false} {
 		if got, err := parseSwitch(rebootVar, v); err != nil || got != want {
@@ -27,6 +28,7 @@ func TestParseSwitch(t *testing.T) {
 // A switch flag takes the same values, stands alone for on, and starts
 // from its variable's value; an empty variable leaves it unset.
 func TestSwitchFlag(t *testing.T) {
+	t.Parallel()
 	parse := func(variable string, args ...string) (*switchFlag, error) {
 		f, err := newSwitchFlag("announce", "MASSIMO_ANNOUNCE", variable)
 		if err != nil {

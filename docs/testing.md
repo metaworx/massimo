@@ -308,9 +308,11 @@ One test runs the server by hand, since it tests `Run`'s start and end:
 
 ## Parallel tests
 
-`internal/server`'s tests run in parallel:
+The tests of `internal/server`, `internal/store`, `cmd/massimo`,
+`internal/cubelan` with its fake Cube, and `internal/serve` run in parallel:
 every test calls `t.Parallel()` as its first statement,
-but those on `serialTests` in `parallel_test.go`, each with its reason.
+but those on its package's `serialTests` in `parallel_test.go`,
+each with its reason.
 Go runs the listed tests first, one after the other,
 and the parallel ones once the listed ones have ended,
 as many at a time as `-parallel` says (by default as many as there are CPUs).
@@ -318,8 +320,13 @@ The other packages' tests still run one after the other.
 
 A test goes on the list where it:
 
-- **swaps a package variable**, such as a hook (`lookupCNAME`, `oidcClient`),
+- **swaps a package variable** (`lookupCNAME`, `argonKey`, `pruneChunk`)
   or calls `t.Setenv`, which panics in a parallel test;
+- **changes what the whole process shares**:
+  its environment, its working directory (`t.Chdir`),
+  a signal sent to it (`TestCatchSighup`),
+  or what it counts for all its goroutines,
+  such as the allocations of `runtime.MemStats`;
 - **binds a fixed port**,
   such as a Cube added through the API as the only one,
   whose proxy listens on the Cube's port, :62910;
@@ -327,17 +334,27 @@ A test goes on the list where it:
   such as "the observer's calls return within 500 ms",
   which the tests beside it would stretch.
 
-A swap goes through `swapping(t)`, called before it,
+`cmd/massimo` keeps its options in package variables,
+such as the selected Cube of `-sn`, the log level and the update's hooks,
+and reads its settings from the environment;
+`internal/serve` reads the settings file's Cubes from the environment.
+A test of either that sets them stays on the list,
+until the product takes them as arguments.
+
+A swap goes through `testkit.Swapping(t)`, called before it,
 in the test or in the helper that makes the swap, as `fakeDiscovery` does.
 It sets an environment variable through `t.Setenv`,
 so a swap in a parallel test panics at once instead of racing with the tests beside it.
 
-`TestParallelOrListed` reads the package's test files and fails where a test
-neither calls `t.Parallel()` first nor is on the list,
+`TestParallelOrListed` in each of the packages calls
+`testkit.ParallelOrListed(t, ".", serialTests)`,
+which reads the package's test files, those of every system,
+and fails where a test neither calls `t.Parallel()` first nor is on the list,
 where a listed test calls it,
 where the list names a test that is not there or gives no reason,
 and where `Parallel()` is called outside a test's own body and a subtest's
 function literal, such as in a helper.
+The kit's own test holds the guard to each of these.
 
 A subtest calls `t.Parallel()` where it builds its own server,
 as those of `TestUnconfirmedRoomCommandNotResent` do;
@@ -350,10 +367,20 @@ What the parallel tests share:
   `recorded(t)` returns the test's own copy;
 - **a helper's state across tests**,
   such as `serverStore`'s map of each test's store, which is a `sync.Map`;
+- **the environment as `TestMain` left it**:
+  `internal/serve`'s unsets every `MASSIMO_CUBE_*` variable before the tests run,
+  its parallel tests fail where one is set (`noCubeEnv`),
+  and `clearCubeEnv` makes the plain forms the serial test's,
+  so that what a settings file it loads sets is undone at its end;
+- **massimo built once** (`builtBinary` in `cmd/massimo`),
+  which the tests that run `massimo serve` as a process start side by side,
+  each with a data directory of its own and the API at port 0;
 - **SQLite's allocator**,
   since `modernc.org/libc` takes one lock for every `malloc` and `free` of the process:
   the tests that open a fresh store wait for each other while its migrations run.
-  About a fifth of the package's CPU time goes on that lock.
+  About a fifth of the server's CPU time goes on that lock,
+  and a third of the store's,
+  whose tests take no less time on more than four cores.
 
 On a busy machine, a step that a quiet one always wins can come second:
 

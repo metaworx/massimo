@@ -37,6 +37,7 @@ func queryPlan(t *testing.T, s *Store, query string, args ...any) string {
 // which SQLite takes only where the query names the states as its WHERE
 // does, literally; the drop at a start too (AP StoreRaise v1.2, Block 2).
 func TestPendingUsesItsIndex(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	if StateQueued != "queued" || StateSent != "sent" {
 		t.Fatal("the states differ from those pendingWhere and commands_pending name")
@@ -54,6 +55,7 @@ func TestPendingUsesItsIndex(t *testing.T) {
 // The audit's filter by user finds the rows by the indexes audit_user
 // and audit_real_user, by the user's id rather than a join on the name.
 func TestAuditUserFilterUsesItsIndex(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	if plan := queryPlan(t, s, auditSelect+` WHERE `+auditByUser+` ORDER BY a.id DESC LIMIT ?`, int64(1), int64(1), "", "", 10); !strings.Contains(plan, "audit_user") ||
 		!strings.Contains(plan, "audit_real_user") {

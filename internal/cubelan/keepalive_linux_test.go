@@ -17,6 +17,7 @@ import (
 // polling, TCP_USER_TIMEOUT covers the hold and the time the loss takes
 // to be marked (Options.kernelHold), and without, none.
 func TestDefaultDialerKeepAlive(t *testing.T) {
+	t.Parallel()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -98,6 +99,7 @@ func sockopts(t *testing.T, conn net.Conn) map[string]int {
 // keepaliveSilent reads the kernel's count of unanswered probes: none on
 // a connection whose peer is alive.
 func TestKeepaliveSilentOnALiveConnection(t *testing.T) {
+	t.Parallel()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)

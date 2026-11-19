@@ -54,6 +54,7 @@ func isContent(table, col string) bool {
 // No index of the migrated schema, the automatic ones of UNIQUE and
 // PRIMARY KEY included, covers a content column.
 func TestNoIndexOnContent(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	rows, err := s.db.Query(`SELECT m.name, m.tbl_name, i.name FROM sqlite_master m JOIN pragma_index_info(m.name) i WHERE m.type = 'index'`)
 	if err != nil {
@@ -121,6 +122,7 @@ func contentFilters(stmt string) []string {
 // Go files that contain WHERE; a literal joined from pieces is checked
 // piece by piece, and the WHERE piece names its table.
 func TestNoFilterOnContent(t *testing.T) {
+	t.Parallel()
 	if got := contentFilters(`SELECT id FROM cubes WHERE name = ? AND serial = ?`); len(got) != 1 || got[0] != "cubes.name" {
 		t.Fatalf("the check misses a filter on a content column: %v", got)
 	}

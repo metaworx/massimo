@@ -29,17 +29,47 @@ import (
 
 // clearCubeEnv unsets every MASSIMO_CUBE_* variable for the test, and
 // points the settings file and the data directory away from the
-// checkout's.
+// checkout's. The plain forms are the test's whether set or not, so
+// that what a settings file the test loads sets in the process
+// (env.LoadFile) is undone at its end, before the parallel tests read
+// the environment (noCubeEnv). A test that calls it is serial.
 func clearCubeEnv(t *testing.T) {
 	t.Helper()
+	names := []string{env.Address, env.Name, env.Proxy, env.ProxySerial, env.SN, env.Ignore}
 	for _, kv := range os.Environ() {
 		if k, _, _ := strings.Cut(kv, "="); strings.HasPrefix(k, env.Prefix) {
-			t.Setenv(k, "")
-			os.Unsetenv(k)
+			names = append(names, k)
 		}
+	}
+	for _, k := range names {
+		t.Setenv(k, "")
+		os.Unsetenv(k)
 	}
 	t.Setenv(env.FileVar, os.DevNull)
 	t.Setenv(env.DataVar, t.TempDir())
+}
+
+// unsetCubeEnv unsets every MASSIMO_CUBE_* variable of the process, as
+// TestMain does before the tests run.
+func unsetCubeEnv() {
+	for _, kv := range os.Environ() {
+		if k, _, _ := strings.Cut(kv, "="); strings.HasPrefix(k, env.Prefix) {
+			os.Unsetenv(k)
+		}
+	}
+}
+
+// noCubeEnv fails the test where a MASSIMO_CUBE_* variable is set: a
+// parallel test serves no Cube from the environment, and reads it as
+// TestMain left it, since every serial test restored what it set
+// (clearCubeEnv).
+func noCubeEnv(t *testing.T) {
+	t.Helper()
+	for _, kv := range os.Environ() {
+		if k, _, _ := strings.Cut(kv, "="); strings.HasPrefix(k, env.Prefix) {
+			t.Fatalf("%s is set: a serial test left it", k)
+		}
+	}
 }
 
 func quietLog() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
@@ -336,7 +366,8 @@ func TestServeRemovedCubeStaysRemoved(t *testing.T) {
 // Without any Cube configured serve starts anyway, with a warning: the
 // web UI can add one.
 func TestServeStartsWithoutCubes(t *testing.T) {
-	clearCubeEnv(t)
+	t.Parallel()
+	noCubeEnv(t)
 	logger, logs := testkit.LogWatch(nil)
 	su, err := setupCubes(context.Background(), testStore(t, ""), Config{}, logger)
 	if err != nil || len(su.cubes) != 0 || len(su.listeners) != 0 {
@@ -347,7 +378,8 @@ func TestServeStartsWithoutCubes(t *testing.T) {
 
 // serve -addr runs without the store: no massimo.db, no node.key.
 func TestServeAddrOpensNoStore(t *testing.T) {
-	clearCubeEnv(t)
+	t.Parallel()
+	noCubeEnv(t)
 	dir := t.TempDir()
 	st, err := openStore(Config{Addr: "10.0.0.9", DataDir: dir}, quietLog())
 	if err != nil || st != nil {

@@ -88,6 +88,7 @@ func caughtUp(t *testing.T, c *Client, evs *testkit.Watch[Event]) {
 }
 
 func TestClientGreetingAndSnapshot(t *testing.T) {
+	t.Parallel()
 	_, addr := startFake(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -123,6 +124,7 @@ func TestClientGreetingAndSnapshot(t *testing.T) {
 }
 
 func TestClientSendAndPoll(t *testing.T) {
+	t.Parallel()
 	srv, addr := startFake(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -151,6 +153,7 @@ func TestClientSendAndPoll(t *testing.T) {
 }
 
 func TestClientReconnects(t *testing.T) {
+	t.Parallel()
 	srv, addr := startFake(t)
 	var mu sync.Mutex
 	current := addr
@@ -189,6 +192,7 @@ func TestClientReconnects(t *testing.T) {
 }
 
 func TestReconnectRefreshesTheSnapshot(t *testing.T) {
+	t.Parallel()
 	srv, addr := startFake(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -237,6 +241,7 @@ func TestReconnectRefreshesTheSnapshot(t *testing.T) {
 }
 
 func TestConnectedFollowsTheConnection(t *testing.T) {
+	t.Parallel()
 	srv, addr := startFake(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -258,6 +263,7 @@ func TestConnectedFollowsTheConnection(t *testing.T) {
 }
 
 func TestClientWaitsForItsAddress(t *testing.T) {
+	t.Parallel()
 	srv, addr := startFake(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -300,6 +306,7 @@ func TestClientWaitsForItsAddress(t *testing.T) {
 // entry included, and says so once with a device_forgotten event; the
 // other devices stay.
 func TestForgetDevice(t *testing.T) {
+	t.Parallel()
 	_, addr := startFake(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -372,6 +379,7 @@ func TestForgetDevice(t *testing.T) {
 // and device list; and the serial finds the device until then, in any
 // case (AP Logging v1.1, Block 1).
 func TestForgetDeviceCarriesLastView(t *testing.T) {
+	t.Parallel()
 	_, addr := startFake(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -445,6 +453,7 @@ func TestForgetDeviceCarriesLastView(t *testing.T) {
 // Send returns once an L or C reply is in the snapshot, also when the
 // reader is slow to apply it, so that a read right after sees the reply.
 func TestSendReturnsWithTheReplyApplied(t *testing.T) {
+	t.Parallel()
 	_, addr := startFake(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -484,6 +493,7 @@ func TestSendReturnsWithTheReplyApplied(t *testing.T) {
 // Send returns only after the last, so that the next command's reply is
 // its own and not a late A of the deletion.
 func TestSendWaitsForEveryAOfADelete(t *testing.T) {
+	t.Parallel()
 	greeting, err := fakecube.LoadGreeting(fixture)
 	if err != nil {
 		t.Fatal(err)
@@ -524,6 +534,7 @@ func goneFake(t *testing.T) (*fakecube.Server, string) {
 // The backoff is a minute from the first failed dial, far longer than
 // the test waits for the connection.
 func TestSetAddressCutsTheBackoffShort(t *testing.T) {
+	t.Parallel()
 	_, addr := startFake(t)
 	_, gone := goneFake(t)
 	logger, logs := testkit.LogWatch(slog.LevelDebug)
@@ -542,6 +553,7 @@ func TestSetAddressCutsTheBackoffShort(t *testing.T) {
 // backoff is a minute from the first failed dial, far longer than the
 // test waits for the reconnect.
 func TestReconnectWhileDisconnected(t *testing.T) {
+	t.Parallel()
 	srv, addr := goneFake(t)
 	logger, logs := testkit.LogWatch(slog.LevelDebug)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -566,6 +578,7 @@ func TestReconnectWhileDisconnected(t *testing.T) {
 // C lines as its reply; that line is applied all the same, so the
 // device it describes is still there when the greeting ends.
 func TestGreetingCLineAnsweringASend(t *testing.T) {
+	t.Parallel()
 	greeting, err := fakecube.LoadGreeting(fixture)
 	if err != nil {
 		t.Fatal(err)
@@ -659,6 +672,7 @@ var (
 // retries, and its return once, with how long it was down; the next
 // loss is reported again.
 func TestALostCubeIsReportedOnce(t *testing.T) {
+	t.Parallel()
 	srv, addr := startFake(t)
 	logger, logs := testkit.LogWatch(slog.LevelDebug)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -701,6 +715,7 @@ func TestALostCubeIsReportedOnce(t *testing.T) {
 // Lost holds from the loss Run reports to the next complete greeting;
 // a deliberate Reconnect is none.
 func TestLostFromALossToTheNextGreeting(t *testing.T) {
+	t.Parallel()
 	srv, addr := startFake(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -762,6 +777,7 @@ func TestLostFromALossToTheNextGreeting(t *testing.T) {
 // two unanswered polls, long before the read deadline of three polls and
 // 30 s, and connected again once it answers.
 func TestSilentCubeIsLostAfterTwoPolls(t *testing.T) {
+	t.Parallel()
 	srv, addr := startFake(t)
 	logger, logs := testkit.LogWatch(slog.LevelDebug)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -805,6 +821,7 @@ func (h holdLost) Handle(_ context.Context, r slog.Record) error {
 // being written, Lost is false and no EventDisconnected is sent; after
 // it, both follow (AP LostOrder).
 func TestLostAfterItsWarning(t *testing.T) {
+	t.Parallel()
 	srv, addr := startFake(t)
 	h := holdLost{once: new(sync.Once), held: make(chan struct{}), release: make(chan struct{})}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -842,6 +859,7 @@ func TestLostAfterItsWarning(t *testing.T) {
 // One poll the Cube answers late, or not at all, followed by one it
 // answers, keeps the connection.
 func TestOneMissedPollKeepsTheConnection(t *testing.T) {
+	t.Parallel()
 	srv, addr := startFake(t)
 	logger, logs := testkit.LogWatch(slog.LevelDebug)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -869,6 +887,7 @@ func TestOneMissedPollKeepsTheConnection(t *testing.T) {
 // since whether the Cube answers l: then is unconfirmed; once pairing
 // ends they do.
 func TestSilentCubeWhilePairingIsKept(t *testing.T) {
+	t.Parallel()
 	srv, addr := startFake(t)
 	logger, logs := testkit.LogWatch(slog.LevelDebug)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -894,6 +913,7 @@ func TestSilentCubeWhilePairingIsKept(t *testing.T) {
 // A Cube never reached since the start is reported once, at the first
 // failed attempt, and the first greeting says it is back.
 func TestAnUnreachableCubeIsReportedOnce(t *testing.T) {
+	t.Parallel()
 	srv, addr := goneFake(t)
 	logger, logs := testkit.LogWatch(slog.LevelDebug)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -928,6 +948,7 @@ func TestAnUnreachableCubeIsReportedOnce(t *testing.T) {
 // A Cube that stays unreachable is warned of again every RemindEvery,
 // with how long it has been down, and without another event.
 func TestAReminderWhileTheCubeStaysDown(t *testing.T) {
+	t.Parallel()
 	_, addr := goneFake(t)
 	logger, logs := testkit.LogWatch(slog.LevelDebug)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -953,6 +974,7 @@ func TestAReminderWhileTheCubeStaysDown(t *testing.T) {
 // A deliberate Reconnect whose dial then fails is a loss like any
 // other: reported once, and its end once.
 func TestAFailedReconnectIsALoss(t *testing.T) {
+	t.Parallel()
 	_, addr := startFake(t)
 	var refuse atomic.Bool
 	dial := func(ctx context.Context, a string) (net.Conn, error) {

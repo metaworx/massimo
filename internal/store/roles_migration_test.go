@@ -33,6 +33,7 @@ func integrationCaps(t *testing.T, s *Store) []string {
 // holds exactly its seeded capabilities, and leaves a role the owner
 // narrowed or widened as it is (AP HomeAssistant v1.0, Block 2).
 func TestMigration12(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	for name, tc := range map[string]struct {
 		change string

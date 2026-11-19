@@ -16,6 +16,7 @@ import (
 
 // Reboot sends R to the Cube and returns its answer, status 2.
 func TestRebootIsAnswered(t *testing.T) {
+	t.Parallel()
 	d, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000100", 0x0a0b0c)
 	if err != nil {
 		t.Fatal(err)
@@ -43,6 +44,7 @@ func TestRebootIsAnswered(t *testing.T) {
 // A reboot closes the client's connection without a loss warning, the
 // link is rebooting until the greeting after it, and connected then.
 func TestRebootingIsNoLoss(t *testing.T) {
+	t.Parallel()
 	srv, addr := startFake(t)
 	logger, logs := testkit.LogWatch(slog.LevelDebug)
 	ctx, cancel := context.WithCancel(context.Background())

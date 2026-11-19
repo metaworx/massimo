@@ -15,6 +15,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/env"
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // runMainVar makes the test binary run massimo's main with its
@@ -28,7 +29,11 @@ func TestMain(m *testing.M) {
 		main()
 		os.Exit(0)
 	}
-	os.Exit(m.Run())
+	code := m.Run()
+	if built.dir != "" {
+		os.RemoveAll(built.dir)
+	}
+	os.Exit(code)
 }
 
 // massimoBinaries copies the test binary, as massimo, to a directory of
@@ -73,6 +78,7 @@ func massimoBinaries(t *testing.T, withKept bool) (target, kept string) {
 // that row's down part. It returns the directory.
 func raisedStore(t *testing.T) string {
 	t.Helper()
+	testkit.Swapping(t)
 	dir := t.TempDir()
 	t.Setenv(env.DataVar, dir)
 	old := serviceStateDir
@@ -101,6 +107,7 @@ func raisedStore(t *testing.T) string {
 // stoppedUnits records what stopService was asked to stop.
 func stoppedUnits(t *testing.T) *[]string {
 	t.Helper()
+	testkit.Swapping(t)
 	var units []string
 	old := stopService
 	stopService = func(name string) error { units = append(units, name); return nil }

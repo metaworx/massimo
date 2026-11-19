@@ -26,11 +26,13 @@ import (
 // shared level back to info afterwards.
 func resetLogLevel(t *testing.T) {
 	t.Helper()
+	testkit.Swapping(t)
 	t.Setenv(env.LogLevel, "")
 	t.Cleanup(func() { logLevel.Set(slog.LevelInfo) })
 }
 
 func TestParseLogLevel(t *testing.T) {
+	t.Parallel()
 	for in, want := range map[string]slog.Level{
 		"debug": slog.LevelDebug, "DEBUG": slog.LevelDebug, " Debug ": slog.LevelDebug,
 		"info": slog.LevelInfo, "": slog.LevelInfo,
@@ -125,6 +127,7 @@ func TestServeRefusesAnUnknownLogLevel(t *testing.T) {
 // Info lines would be missing, and at debug the proxy logs a malformed
 // line from its client.
 func TestServeLogLevelFlagWins(t *testing.T) {
+	t.Parallel()
 	proxyAddr := freeAddr(t)
 	s := startBuiltServe(t, []string{"MASSIMO_CUBE_ADDRESS=" + startFakeCube(t), env.LogLevel + "=error"}, "-log-level", "debug", "-proxy", proxyAddr)
 	s.log.Await(t, 0, "cube proxy listening", testkit.Msg("cube proxy listening"), serveWait)
@@ -168,6 +171,7 @@ func TestReloadListsTheLogLevel(t *testing.T) {
 }
 
 func TestParseLogFormat(t *testing.T) {
+	t.Parallel()
 	for in, want := range map[string]logFormat{"": "", "json": formatJSON, " JSON ": formatJSON, "plain": formatPlain, "Plain": formatPlain} {
 		if got, err := parseLogFormat(in, false); err != nil || got != want {
 			t.Errorf("parseLogFormat(%q) = %q, %v; want %q", in, got, err, want)
@@ -189,6 +193,7 @@ func TestParseLogFormat(t *testing.T) {
 // The more specific setting wins over -log-format, and that over the
 // default: JSON in the file, plain on stderr.
 func TestLogFormatPrecedence(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		given         logFormatFlags
 		file, process logFormat
@@ -254,6 +259,7 @@ func TestServeLoggerFormats(t *testing.T) {
 }
 
 func TestParseLogSize(t *testing.T) {
+	t.Parallel()
 	for in, want := range map[string]int64{"": 7, "0": 0, "1234": 1234, "10M": 10 << 20, "10MB": 10 << 20, "10MiB": 10 << 20, "5m": 5 << 20,
 		"500k": 500 << 10, "500KB": 500 << 10, "1G": 1 << 30, " 2M ": 2 << 20, "12b": 12} {
 		if got, err := parseLogSize(in, 7); err != nil || got != want {
@@ -282,6 +288,7 @@ func TestParseLogSize(t *testing.T) {
 // on SIGHUP: each old file ends with the rotation in its own format, and
 // the new one starts with it, as stderr says it too.
 func TestServeLogFile(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "serve.log")
 	os.WriteFile(path, []byte("time=2026-11-10T10:00:00Z level=INFO msg=\"api listening\"\n"), 0o644)
 	s := startBuiltServe(t, []string{"MASSIMO_CUBE_ADDRESS=" + startFakeCube(t)}, "-log", path, "-proxy", "off", "-sighup", "reload")

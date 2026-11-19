@@ -86,6 +86,7 @@ func schemaOfFresh(t *testing.T) string {
 // copy of the file as it was is left, and the later binary migrates the
 // file again.
 func TestDowngrade(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	dir := t.TempDir()
 	later, raise := raiseMigrations(t, true)
@@ -157,6 +158,7 @@ func TestDowngrade(t *testing.T) {
 // later binary wrote into the file; a row without one gets it at the
 // later binary's next start.
 func TestDowngradeFromTheStoresDownParts(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	dir := t.TempDir()
 	later, raise := raiseMigrations(t, true)
@@ -201,6 +203,7 @@ func TestDowngradeFromTheStoresDownParts(t *testing.T) {
 // A file that a binary for the target version reads already is left
 // alone: no copy, no change.
 func TestDowngradeNothingToDo(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	later, raise := raiseMigrations(t, true)
 	s, err := Open(dir, Options{Logger: quiet(), migrations: later})
@@ -226,6 +229,7 @@ func TestDowngradeNothingToDo(t *testing.T) {
 // the downgrade before anything changes, naming the copy made before the
 // raise.
 func TestDowngradeWithoutDownPart(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	later, raise := raiseMigrations(t, false)
 	s, err := Open(dir, Options{Logger: quiet(), migrations: later})
@@ -247,6 +251,7 @@ func TestDowngradeWithoutDownPart(t *testing.T) {
 
 // A down part that fails leaves the file as it was and no copy.
 func TestDowngradeFailingDownPart(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	later, raise := raiseMigrations(t, true)
 	s, err := Open(dir, Options{Logger: quiet(), migrations: later})
@@ -269,6 +274,7 @@ func TestDowngradeFailingDownPart(t *testing.T) {
 // A store that a serve has open is refused with ErrInUse, and is not
 // changed.
 func TestDowngradeRefusesAnOpenStore(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	later, raise := raiseMigrations(t, true)
 	s, err := Open(dir, Options{Logger: quiet(), migrations: later})
@@ -286,6 +292,7 @@ func TestDowngradeRefusesAnOpenStore(t *testing.T) {
 
 // A down part without its migration is refused with the set.
 func TestDownPartWithoutMigration(t *testing.T) {
+	t.Parallel()
 	if _, err := loadMigrations(testMigrations(t, map[string]string{"0002_x.down.sql": "SELECT 1;"})); err == nil {
 		t.Fatal("a down part without its migration was accepted")
 	}
@@ -300,6 +307,7 @@ func TestDownPartWithoutMigration(t *testing.T) {
 // additive ones included, since they were made on the raised schema
 // (docs/store.md section 5, "Migrations").
 func TestRaisingMigrationsHaveDownParts(t *testing.T) {
+	t.Parallel()
 	ms, err := loadMigrations(embeddedMigrations())
 	if err != nil {
 		t.Fatal(err)

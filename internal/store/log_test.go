@@ -43,6 +43,7 @@ func openBefore(t *testing.T, dir string, version int, now func() time.Time) *St
 // the newest command leaves its id unused; and the pruned command's log
 // rows lose their link, not themselves.
 func TestLogMigration(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	at := time.Now().UTC().Truncate(time.Second)
 	clock := func() time.Time { return at }
@@ -136,6 +137,7 @@ func TestLogMigration(t *testing.T) {
 // A page by command holds that command's rows alone, and the rows of
 // the audit visibility only for a page that asks for them.
 func TestLogCommandAndVisibility(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := open(t, t.TempDir())
 	c, _ := s.AddCube(ctx, Cube{Serial: "KEQ0000001", Configured: true})
@@ -184,6 +186,7 @@ func TestLogCommandAndVisibility(t *testing.T) {
 // refused, the file left as it was, when a row then names no row; the
 // connection has its foreign keys again either way.
 func TestMigrationForeignKeysOff(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	orphan := testMigrations(t, map[string]string{"0002_orphan.sql": "-- min_reader: 1\n-- foreign_keys: off\n" +
 		"INSERT INTO audit (uuid, time, action, cube_id) VALUES ('a', '', 'x', 99);\n"})
@@ -208,6 +211,7 @@ func TestMigrationForeignKeysOff(t *testing.T) {
 // The audit keeps a year by default: the prune removes the rows older
 // than audit.keep_days and writes audit_pruned; 0 keeps every row.
 func TestAuditPruned(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := open(t, t.TempDir())
 	now := time.Now().UTC().Truncate(time.Second)

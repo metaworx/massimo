@@ -12,6 +12,7 @@ import (
 // The lockout keeps the authLimiter's rules on auth_failures and the
 // counters survive a restart of the store.
 func TestLockout(t *testing.T) {
+	t.Parallel()
 	clock := time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC)
 	now := func() time.Time { return clock }
 	dir := t.TempDir()

@@ -37,6 +37,7 @@ func openAt(t *testing.T, dir string, version int) *Store {
 // serial from the event, its device view, another row of the device, or
 // for the Cube's own C line the Cube's.
 func TestMigration9(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	ctx := context.Background()
 	s8 := openAt(t, dir, 8)
@@ -110,6 +111,7 @@ func TestMigration9(t *testing.T) {
 // once when paged back by id, the other Cube's never, within the time
 // bounds and the terms.
 func TestEventsWithServerRows(t *testing.T) {
+	t.Parallel()
 	s, a, b := eventsStore(t, t.TempDir())
 	ctx := context.Background()
 	at := time.Now().UTC().Truncate(time.Millisecond)
@@ -175,6 +177,7 @@ func TestEventsWithServerRows(t *testing.T) {
 // terms; without Server, the Cubes' own rows; a Cube named twice is
 // walked once.
 func TestEventsOfSeveralCubes(t *testing.T) {
+	t.Parallel()
 	s, a, b := eventsStore(t, t.TempDir())
 	ctx := context.Background()
 	at := time.Now().UTC().Truncate(time.Millisecond)
@@ -226,6 +229,7 @@ func TestEventsOfSeveralCubes(t *testing.T) {
 
 // A level keeps that level and above; nil keeps every level.
 func TestEventsByLevel(t *testing.T) {
+	t.Parallel()
 	s, a, _ := eventsStore(t, t.TempDir())
 	ctx := context.Background()
 	levels := []int{LevelDebug, LevelInfo, LevelWarn, LevelError, LevelDebug, LevelInfo}
@@ -265,6 +269,7 @@ func ptr(n int) *int { return &n }
 
 // The prune takes the server's old rows as it takes a Cube's.
 func TestPruneServerEvents(t *testing.T) {
+	t.Parallel()
 	s, a, _ := eventsStore(t, t.TempDir())
 	ctx := context.Background()
 	now := time.Now().UTC()

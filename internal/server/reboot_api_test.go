@@ -253,7 +253,7 @@ func TestRebootBlocked(t *testing.T) {
 	}
 
 	// A reboot the helper took but the computer did not carry out.
-	swapping(t)
+	testkit.Swapping(t)
 	stuck := rebootStuck
 	t.Cleanup(func() { rebootStuck = stuck })
 	rebootStuck = 50 * time.Millisecond

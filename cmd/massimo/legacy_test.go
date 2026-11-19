@@ -6,6 +6,7 @@ package main
 import "testing"
 
 func TestDerivedLANLines(t *testing.T) {
+	t.Parallel()
 	cases := map[string]string{
 		`15:56:31,042 INFO  [de.eq3.max.il.local.CubeGateway:methodCalled] () --> commitDeviceRadiogram(DeviceRadiogram(opCode=s:, payload=[0,4,64,0,0,0,10,1,2,5,42]))`: "s:AARAAAAACgECBSo=",
 		`16:16:30,706 INFO  [de.eq3.max.il.local.CubeGateway:methodCalled] () --> deleteDevices([655617],true)`:                                                          "t:01,1,CgEB",
@@ -25,6 +26,7 @@ func TestDerivedLANLines(t *testing.T) {
 // The Cube search prints without a log prefix; those lines are kept, the
 // framework's own chatter is not.
 func TestLegacyKeepsTheCubeSearch(t *testing.T) {
+	t.Parallel()
 	keep := []string{
 		`--> bind multicast address to each active network interface available`,
 		`eth3 : 169.254.244.146 : subnetMask 255.255.0.0`,

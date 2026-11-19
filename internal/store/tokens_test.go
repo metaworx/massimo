@@ -13,6 +13,7 @@ import (
 // A token is found by the hash of its secret while it is live, touched
 // on use, and revoked one at a time or by kind.
 func TestTokens(t *testing.T) {
+	t.Parallel()
 	clock := time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC)
 	s, err := Open(t.TempDir(), Options{Logger: quiet(), Now: func() time.Time { return clock }})
 	if err != nil {
@@ -88,6 +89,7 @@ func TestTokens(t *testing.T) {
 // and what that subscribed to push, a session cannot make one, and a
 // session whose key a binary before 0025 revoked counts no more.
 func TestKeySessions(t *testing.T) {
+	t.Parallel()
 	clock := time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC)
 	s, err := Open(t.TempDir(), Options{Logger: quiet(), Now: func() time.Time { return clock }})
 	if err != nil {

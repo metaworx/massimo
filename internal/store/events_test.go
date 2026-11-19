@@ -71,6 +71,7 @@ func flush(t *testing.T, s *Store) {
 // A burst is one transaction; 250 events need three; a flush makes them
 // readable, in order.
 func TestEventsBatched(t *testing.T) {
+	t.Parallel()
 	s, a, _ := eventsStore(t, t.TempDir())
 	ctx := context.Background()
 	at := time.Now()
@@ -124,6 +125,7 @@ func TestEventsBatched(t *testing.T) {
 // A full queue drops and counts; the writer then takes what was queued.
 // A store opened read-only drops with the error logged.
 func TestEventsDropped(t *testing.T) {
+	testkit.Swapping(t)
 	keep := eventBuffer
 	eventBuffer = 8
 	t.Cleanup(func() { eventBuffer = keep })
@@ -161,6 +163,7 @@ func TestEventsDropped(t *testing.T) {
 // where several share a time; by time, the events before it; the kind
 // and the device filter, together too.
 func TestEventsPaged(t *testing.T) {
+	t.Parallel()
 	s, a, b := eventsStore(t, t.TempDir())
 	ctx := context.Background()
 	t0 := time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC)
@@ -246,6 +249,7 @@ func TestEventsPaged(t *testing.T) {
 // The prune removes the events older than the retention, per Cube and
 // in chunks; 0 keeps everything; a second prune finds nothing more.
 func TestEventsPruned(t *testing.T) {
+	testkit.Swapping(t)
 	keep := pruneChunk
 	pruneChunk = 7
 	t.Cleanup(func() { pruneChunk = keep })
@@ -347,6 +351,7 @@ func fill(t testing.TB, s *Store, cube int64, n int, start time.Time, step time.
 // runs in its goroutine and may come after the fill, and would delete
 // rows filled at the edge (under QEMU, the server's one warning).
 func TestEventsPageQuery(t *testing.T) {
+	t.Parallel()
 	s, a, b := eventsStore(t, t.TempDir())
 	ctx := context.Background()
 	n := 90000
@@ -505,6 +510,7 @@ func TestEventsPageQuery(t *testing.T) {
 // A prune hands over between its chunks: a flush during it is answered,
 // the event written, while the prune goes on to the end.
 func TestEventsPruneYields(t *testing.T) {
+	testkit.Swapping(t)
 	keep := pruneChunk
 	pruneChunk = 10
 	// Registered before the writer starts, so run after it stopped.
@@ -552,6 +558,7 @@ func TestEventsPruneYields(t *testing.T) {
 // A done ctx ends a prune between two chunks; the writer's last write
 // still follows.
 func TestEventsPruneStops(t *testing.T) {
+	testkit.Swapping(t)
 	keep := pruneChunk
 	pruneChunk = 10
 	t.Cleanup(func() { pruneChunk, pruneStep = keep, nil })
@@ -591,6 +598,7 @@ func TestEventsPruneStops(t *testing.T) {
 // in the file, the indexes included: 2000 of them written and the WAL
 // checkpointed. docs/store.md states the figure.
 func TestEventSize(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	s, a, _ := eventsStore(t, dir)
 	ctx := context.Background()

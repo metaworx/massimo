@@ -48,6 +48,7 @@ func heldClient(t *testing.T, opts Options) (*Client, *fakecube.Server, *testkit
 // again: one loss, one return, no second connection. While held, Send
 // and Reconnect answer ErrNotConnected at once.
 func TestAHeldConnectionResumes(t *testing.T) {
+	t.Parallel()
 	c, srv, logs, evs := heldClient(t, Options{Hold: time.Minute})
 	lines := cubewatch.Lines(srv)
 	at := evs.Mark()
@@ -99,6 +100,7 @@ func TestAHeldConnectionResumes(t *testing.T) {
 // A hold ends at Options.Hold; the client then dials again, with no
 // second loss warning, and the next greeting says the Cube is back.
 func TestAHoldEndsAtItsTime(t *testing.T) {
+	t.Parallel()
 	c, srv, logs, evs := heldClient(t, Options{Hold: 300 * time.Millisecond})
 	at := evs.Mark()
 	srv.SetSilent(true)
@@ -120,6 +122,7 @@ func TestAHoldEndsAtItsTime(t *testing.T) {
 // A hold ends once discovery has heard the Cube for HoldHeard without
 // the connection resuming.
 func TestAHoldEndsOnceTheCubeIsHeard(t *testing.T) {
+	t.Parallel()
 	c, srv, logs, _ := heldClient(t, Options{Hold: time.Hour, HoldHeard: 200 * time.Millisecond})
 	srv.SetSilent(true)
 	defer srv.SetSilent(false)
@@ -148,6 +151,7 @@ func TestAHoldEndsOnceTheCubeIsHeard(t *testing.T) {
 
 // The Cube's close of a held connection ends the hold at once.
 func TestTheCubesCloseEndsAHold(t *testing.T) {
+	t.Parallel()
 	c, srv, logs, evs := heldClient(t, Options{Hold: time.Hour})
 	at := evs.Mark()
 	srv.SetSilent(true)
@@ -161,6 +165,7 @@ func TestTheCubesCloseEndsAHold(t *testing.T) {
 // A Cube found elsewhere ends the hold: ReconnectIfMoved drops the held
 // connection and the client connects at the new address.
 func TestAMovedCubeEndsAHold(t *testing.T) {
+	t.Parallel()
 	c, srv, _, _ := heldClient(t, Options{Hold: time.Hour})
 	srv.SetSilent(true)
 	defer srv.SetSilent(false)
@@ -181,6 +186,7 @@ func TestAMovedCubeEndsAHold(t *testing.T) {
 // hold between polls, about 30 s after the Cube went; the hold writes
 // a poll, whose answer resumes it.
 func TestUnansweredKeepaliveProbesBeginAHold(t *testing.T) {
+	t.Parallel()
 	srv, addr := startFake(t)
 	logger, logs := testkit.LogWatch(slog.LevelDebug)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -212,6 +218,7 @@ func TestUnansweredKeepaliveProbesBeginAHold(t *testing.T) {
 // How long a connection is held: the default, a value of its own, none
 // when asked or without polling.
 func TestHoldFor(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		o    Options
 		want time.Duration
@@ -230,6 +237,7 @@ func TestHoldFor(t *testing.T) {
 // Where only the probe count keeps the kernel from ending a held
 // connection, the count covers the hold, at most 255 probes.
 func TestKeepAliveCovering(t *testing.T) {
+	t.Parallel()
 	if k := keepAliveCovering(0); k != keepAlive {
 		t.Errorf("no hold: %+v", k)
 	}
@@ -249,6 +257,7 @@ func TestKeepAliveCovering(t *testing.T) {
 // unacknowledged: two polls and their reply timeouts, or the keepalive's
 // silence and probes, whichever is longer, and a probe's interval.
 func TestKernelHold(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		o    Options
 		want time.Duration

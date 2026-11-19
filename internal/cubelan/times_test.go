@@ -21,6 +21,7 @@ func entry(setpoint float64, valve int, actualTenths int) cube.Message {
 }
 
 func TestStateTimes(t *testing.T) {
+	t.Parallel()
 	lines, err := fakecube.LoadGreeting(fixture)
 	if err != nil {
 		t.Fatal(err)
@@ -90,6 +91,7 @@ func TestStateTimes(t *testing.T) {
 // values still carry exactly the time of the first line, the Cube's
 // observed_since, while a later L line carries its own time.
 func TestFirstDeviceListCarriesObservedSince(t *testing.T) {
+	t.Parallel()
 	lines, err := fakecube.LoadGreeting(fixture)
 	if err != nil {
 		t.Fatal(err)
@@ -142,6 +144,7 @@ func TestFirstDeviceListCarriesObservedSince(t *testing.T) {
 // entries report none, on vacation too, until a new one comes; a device
 // forgotten forgets it.
 func TestLastTemperatureKept(t *testing.T) {
+	t.Parallel()
 	t0 := time.Date(2026, 11, 5, 8, 0, 0, 0, time.UTC)
 	s := newSnapshot()
 	lines, err := fakecube.LoadGreeting(fixture)

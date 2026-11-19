@@ -79,6 +79,7 @@ func listed(t *testing.T, l cube.Message, rf cube.RFAddress) bool {
 // L entries are gone, from a new connection's greeting too; a device in
 // Keep stays, as one that never answers does on hardware.
 func TestDeleteDevices(t *testing.T) {
+	t.Parallel()
 	greeting, err := LoadGreeting(fixture)
 	if err != nil {
 		t.Fatal(err)
@@ -120,6 +121,7 @@ func TestDeleteDevices(t *testing.T) {
 
 // The Pair device, deleted with t:, joins again with the next n:.
 func TestDeletedPairDeviceJoinsAgain(t *testing.T) {
+	t.Parallel()
 	greeting, err := LoadGreeting(fixture)
 	if err != nil {
 		t.Fatal(err)
@@ -158,6 +160,7 @@ func TestDeletedPairDeviceJoinsAgain(t *testing.T) {
 // The device that joins after n: does not join once x: ended the
 // inclusion before its delay, and a second n: makes it join once.
 func TestPairDeviceJoinsOnlyWhileIncluding(t *testing.T) {
+	t.Parallel()
 	greeting, err := LoadGreeting(fixture)
 	if err != nil {
 		t.Fatal(err)
@@ -224,6 +227,7 @@ func TestInclusionTimeIsTheLowByte(t *testing.T) {
 // it comes, in the order Received has them, before the fake answers the
 // line; the lines of two clients at once come one at a time.
 func TestOnReceive(t *testing.T) {
+	t.Parallel()
 	greeting, err := LoadGreeting(fixture)
 	if err != nil {
 		t.Fatal(err)

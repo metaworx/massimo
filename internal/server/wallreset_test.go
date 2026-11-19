@@ -27,7 +27,7 @@ func eventText(ev event) string {
 // to the event, so a pump behind a poll would take two steps' states
 // for one and never see the step between them.
 func TestWallReset(t *testing.T) {
-	swapping(t)
+	testkit.Swapping(t)
 	old := wallSilence.Load()
 	wallSilence.Store(0)
 	t.Cleanup(func() { wallSilence.Store(old) })

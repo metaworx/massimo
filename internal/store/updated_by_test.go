@@ -26,6 +26,7 @@ func rowOrigin(t *testing.T, s *Store, table, where string, args ...any) (int64,
 // itself as NULL, and every write of a room or a token names this node
 // as its origin (AP StoreRaise v1.2, Block 2).
 func TestWritersFillUpdatedBy(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	s := open(t, t.TempDir())
 	anna, err := s.AddUser(ctx, User{Name: "anna", Role: RoleOperator}, "pw", 0)

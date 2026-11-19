@@ -18,6 +18,7 @@ import (
 // one dropped to make room is the oldest: what is left of a burst no one
 // read is its newest, numbered on, and the count is the last number.
 func TestEventSeqAcrossDrops(t *testing.T) {
+	t.Parallel()
 	c := New(Options{})
 	const n = 100
 	for i := 1; i <= n; i++ {
@@ -41,6 +42,7 @@ func TestEventSeqAcrossDrops(t *testing.T) {
 // Events sent from several goroutines at once come in the order of their
 // numbers, those dropped left out, and the newest is never dropped.
 func TestEventSeqUnderConcurrentSends(t *testing.T) {
+	t.Parallel()
 	c := New(Options{})
 	const senders, each = 4, 200
 	var wg sync.WaitGroup
@@ -100,6 +102,7 @@ func (h onLine) Handle(_ context.Context, r slog.Record) error {
 // event: there, the one moment the event is not counted yet, the line
 // it handles still is.
 func TestEventCountsCoverTheGreeting(t *testing.T) {
+	t.Parallel()
 	_, addr := startFake(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

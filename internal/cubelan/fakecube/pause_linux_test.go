@@ -30,6 +30,7 @@ func listenSharing(addr string) (net.Listener, error) {
 // as it can while the pause holds the port (holdPort), a second time
 // too.
 func TestResumedPortIsNotShared(t *testing.T) {
+	t.Parallel()
 	srv, addr := startFake(t)
 	for round := range 2 {
 		srv.Pause()

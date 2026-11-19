@@ -14,6 +14,8 @@ import (
 	goruntime "runtime"
 	"testing"
 	"time"
+
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // GET /api/v1/system: the version and start /healthz has, how the server
@@ -153,7 +155,7 @@ func TestListenedInterfaces(t *testing.T) {
 // The API's listener and the proxies' running now are the server's
 // listeners; GET /api/v1/system lists their interfaces and the API's port.
 func TestGetSystemInterfaces(t *testing.T) {
-	swapping(t)
+	testkit.Swapping(t)
 	saved := hostInterfaces
 	defer func() { hostInterfaces = saved }()
 	hostInterfaces = func() ([]hostInterface, error) {
@@ -200,7 +202,7 @@ func TestTimeZoneName(t *testing.T) {
 // The full name is the canonical one, without its final dot; the short
 // one where the lookup fails.
 func TestFullName(t *testing.T) {
-	swapping(t)
+	testkit.Swapping(t)
 	saved := lookupCNAME
 	defer func() { lookupCNAME = saved }()
 	lookupCNAME = func(_ context.Context, host string) (string, error) { return host + ".example.net.", nil }

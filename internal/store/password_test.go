@@ -94,6 +94,7 @@ func BenchmarkPassword(b *testing.B) {
 // for, refuses the next with ErrBusy, and lets a waiter go when its
 // context ends.
 func TestHashGate(t *testing.T) {
+	t.Parallel()
 	g := newHashGate(1, 1)
 	ctx := t.Context()
 	leave, err := g.enter(ctx)
@@ -139,6 +140,7 @@ func TestPasswordChecksBounded(t *testing.T) {
 	}
 	s.hashes = newHashGate(2, 16)
 	var running, most atomic.Int32
+	testkit.Swapping(t)
 	real := argonKey
 	argonKey = func(password, salt []byte, time, memory uint32, threads uint8, keyLen uint32) []byte {
 		n := running.Add(1)
@@ -226,6 +228,7 @@ func heapObjects() uint64 {
 // password, a current hash, a hash changed meanwhile and a read-only
 // store keep the hash they have.
 func TestRehashAtSignIn(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	s := open(t, dir)
 	ctx := t.Context()
@@ -287,6 +290,7 @@ func TestNoHashForAKnownAnswer(t *testing.T) {
 	s.AddUser(ctx, User{Name: "gone", Role: RoleViewer}, "", 0)
 	s.DeleteUser(ctx, "gone", 0)
 	var hashes atomic.Int32
+	testkit.Swapping(t)
 	real := argonKey
 	argonKey = func(password, salt []byte, time, memory uint32, threads uint8, keyLen uint32) []byte {
 		hashes.Add(1)
@@ -317,6 +321,7 @@ func TestNoHashForAKnownAnswer(t *testing.T) {
 // compute as version 19 and so never match, or with a salt shorter than
 // the PHC format's minimum, is refused as malformed.
 func TestParseHashRefusesOtherVersionsAndShortSalts(t *testing.T) {
+	t.Parallel()
 	h, err := HashPassword("secret")
 	if err != nil {
 		t.Fatal(err)
