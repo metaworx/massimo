@@ -110,7 +110,7 @@ func schemaSQL(ctx context.Context, s *Store) (string, error) {
 // -update writes it again.
 func TestStoreSQL(t *testing.T) {
 	t.Parallel()
-	s := open(t, t.TempDir())
+	s := openFresh(t, t.TempDir())
 	got, err := schemaSQL(context.Background(), s)
 	if err != nil {
 		t.Fatal(err)

@@ -347,7 +347,7 @@ func TestMigration15(t *testing.T) {
 		}
 	}
 	s15.Close()
-	s := open(t, dir)
+	s := openFresh(t, dir)
 	got, _ = names(s)
 	want = map[string]string{"u1": "anna", "u2": "bob", "u3": "bob-del-20261103-2359", "u4": "carl"}
 	for k, v := range want {

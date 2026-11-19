@@ -98,7 +98,7 @@ name their 20 slowest tests and their 10 slowest packages in the run's summary
 each conversion of an `unsafe.Pointer` to a typed pointer and its arithmetic.
 `modernc.org/sqlite` is SQLite's C translated to Go and made of such steps:
 under `-race`, checking them was half the time of opening a fresh store,
-as many of the server's tests and most of the store's do.
+which the migrations make and most tests now copy ("The store's template").
 So `make race` turns `checkptr` off for the packages under `modernc.org` alone
 (`RACEGCFLAGS` in the `Makefile`),
 and the store-heavy tests take about half as long.
@@ -287,7 +287,7 @@ The options:
 |--------|--------------|
 | `withOptions(o)` | the server's options; the start sets their Cubes, and a gap of 1 ms where `o.Queue` sets none |
 | `editOptions(f)` | changes them, after `withOptions` whatever the order |
-| `stored()`, `onStore(st)` | a store, new or one given, whose row of KEQ0000100 is the Cube, added where it has none; `seedStore(f)` writes to it before the server starts |
+| `stored()`, `onStore(st)` | a store, a copy of the template ("The store's template") or one given, whose row of KEQ0000100 is the Cube, added where it has none; `seedStore(f)` writes to it before the server starts |
 | `withGreeting(g)`, `changeGreeting(f)`, `rooms()` | another greeting, a change to it, the rooms fixture (`fakecube.RoomsFixture`) with the commands applied |
 | `withFake(f)`, `withCube(f)` | a change to the fake before it starts, to the Cube's configuration |
 | `withCubes(cfg…)`, `alsoCube(cfg)` | other Cubes in place of the fake's, for a Cube that is late, held or found; one beside it; the start waits for neither |
@@ -375,12 +375,15 @@ What the parallel tests share:
 - **massimo built once** (`builtBinary` in `cmd/massimo`),
   which the tests that run `massimo serve` as a process start side by side,
   each with a data directory of its own and the API at port 0;
+- **the store's template**, made once per test binary and only read;
+  each test writes a copy of its own ("The store's template");
 - **SQLite's allocator**,
   since `modernc.org/libc` takes one lock for every `malloc` and `free` of the process:
-  the tests that open a fresh store wait for each other while its migrations run.
-  About a fifth of the server's CPU time goes on that lock,
-  and a third of the store's,
-  whose tests take no less time on more than four cores.
+  the tests that open a fresh store wait for each other while its migrations run,
+  which is why most tests open a copy of the template instead.
+  The store's tests still take no less time on more than four cores:
+  under `make race` their time is that of the migrations' own tests,
+  which migrate released stores and take up to 50 seconds each.
 
 On a busy machine, a step that a quiet one always wins can come second:
 
@@ -390,6 +393,68 @@ On a busy machine, a step that a quiet one always wins can come second:
 - **a C line set with the fake's `SetConfig`** is not in its greeting,
   so a reconnect brings the old one back:
   `takeConfig` sets both, as the Cube's greeting carries what its devices took.
+
+## The store's template
+
+A store the migrations make costs about a tenth of a second,
+and under `make race` most of a second,
+much of it under the one lock of SQLite's allocator ("Parallel tests"):
+sixteen opened side by side take as long as sixteen one after the other.
+The migrations therefore run once per test binary, into a template,
+and a test that opens a store itself opens a copy of it,
+which costs a few milliseconds, 25 under `make race`,
+unless it needs a fresh store (below).
+
+`storekit.Open(t, dir)` (`internal/testkit/storekit`) opens the store of `dir`,
+of a new temporary directory where `dir` is `""`,
+and closes it at the test's end;
+where `dir` has no `massimo.db`, its file is first a copy of the template,
+and a file already there is opened as it is, as a restart's is.
+`internal/server`'s `testStore` and the start's `stored()`,
+`internal/serve`'s `testStore`,
+and the tests of `cmd/massimo` that open a store for a server they build
+open their stores through it.
+
+- **The template** is a store that `store.Open` makes in a temporary directory,
+  at the version `test`, the first time a test asks for it:
+  it is closed, its file read, and the directory removed at once.
+  The close brings the WAL into the file;
+  a `-wal` or `-shm` left behind, which would hold what a copy lacks,
+  or a file below the binary's schema version, which every copy would migrate,
+  fails each test that asks for the template.
+- **A copy** is the template's bytes, mode 0600.
+  `store.Open` finds nothing to migrate,
+  and makes `node.key` and `opaque.key` as it does for a fresh store.
+  What the file holds is the template's in every copy of the binary:
+  `node.id` and `tenant.id`, the seeded rows and their times;
+  and `Created()` reports false.
+- **A test opens a fresh store** where a copy is not what it checks:
+  a migration's own test, an upgrade, a raise or a downgrade,
+  and a test of what the migrations make of an empty file,
+  such as the schema (`TestStoreSQL`, `TestSyncColumns`),
+  the seeded roles and the node's identity.
+  A test that needs two distinct node identities,
+  such as a test of two nodes' sync,
+  opens fresh stores too: copies share `node.id` and `tenant.id`.
+- **Where the product opens the store itself**,
+  as `serve.Open`, a `massimo serve` process and `massimo user` do,
+  it makes its store on the empty data directory, as at a first start,
+  and the test copies nothing into it.
+
+The half of the template that needs no store is the kit's,
+as `testkit` holds the watch that `cubewatch` builds on ("The watcher"):
+`testkit.FileTemplate(name, build, check)` makes the file `name` once per test binary
+in a temporary directory, refuses a `-wal` or `-shm` beside it,
+takes its bytes, runs `check` on it, and removes the directory;
+`testkit.WriteNew(path, b)` writes a copy, mode 0600,
+where no file is at `path` yet.
+`storekit` builds on them with `store.Open` and a read-only open,
+and so do `internal/store`'s own tests (`template_test.go`),
+which cannot import `storekit`, since it imports the store:
+`open(t, dir)` opens a copy where `dir` has no store yet,
+`copied(t)` is a temporary directory that holds one,
+for a test that opens it with options of its own, such as a clock or a log,
+and `openFresh(t, dir)` runs the migrations.
 
 ## Ports
 

@@ -6,8 +6,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
-	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -20,6 +18,7 @@ import (
 	"go.metaworx.ch/massimo/internal/env"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit"
+	"go.metaworx.ch/massimo/internal/testkit/storekit"
 	"go.metaworx.ch/massimo/internal/update"
 )
 
@@ -170,10 +169,7 @@ func TestUpdateChannelSources(t *testing.T) {
 	if c, from := updateChannel(true); c != "beta" || from != fromFlavour {
 		t.Fatalf("no store: %s from %s", c, from)
 	}
-	st, err := store.Open(data, store.Options{Version: "test", Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
-	if err != nil {
-		t.Fatal(err)
-	}
+	st := storekit.Open(t, data)
 	if err := st.SetSetting(context.Background(), store.UpdateChannelKey, "alpha"); err != nil {
 		t.Fatal(err)
 	}

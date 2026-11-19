@@ -21,8 +21,8 @@ import (
 
 	"go.metaworx.ch/massimo/internal/env"
 	"go.metaworx.ch/massimo/internal/server"
-	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit"
+	"go.metaworx.ch/massimo/internal/testkit/storekit"
 )
 
 // What SIGHUP does: a reload under a service manager and after nohup, a
@@ -131,11 +131,7 @@ func TestSettingsReloader(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "env")
 	os.WriteFile(p, nil, 0o600)
 	t.Cleanup(func() { os.WriteFile(p, nil, 0o600); env.ReloadFile(p) }) // the env package forgets the test's names
-	st, err := store.Open(t.TempDir(), store.Options{Version: "test", Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st.Close()
+	st := storekit.Open(t, "")
 	srv := server.New(server.Options{Store: st, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Restart: server.RestartOptions{By: "systemd", Restart: func() error { return nil }}})
 	r := newSettingsReloader(p, slog.New(slog.NewTextHandler(io.Discard, nil)), srv, settings(), map[string]bool{"log": true})
 	if srv.AuthMode() != "open" {
@@ -162,11 +158,7 @@ func TestSettingsReloader(t *testing.T) {
 	}
 
 	// With -token, the file's token does not count.
-	st2, err := store.Open(t.TempDir(), store.Options{Version: "test", Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st2.Close()
+	st2 := storekit.Open(t, "")
 	srv2 := server.New(server.Options{Store: st2, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	os.WriteFile(p, nil, 0o600)
 	env.ReloadFile(p)

@@ -64,7 +64,7 @@ func TestMigration9(t *testing.T) {
 	}
 	s8.Close()
 
-	s := open(t, dir)
+	s := openFresh(t, dir)
 	if v, _ := s.SchemaVersion(); v != SchemaVersion() {
 		t.Fatalf("schema %d", v)
 	}

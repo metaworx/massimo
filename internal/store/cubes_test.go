@@ -27,7 +27,7 @@ func fileCube(serial string, kv ...string) FileCube {
 // to the file later is seeded then.
 func TestSeedAndPrecedence(t *testing.T) {
 	t.Parallel()
-	dir := t.TempDir()
+	dir := copied(t)
 	log, logged := testkit.LogWatch(nil)
 	s, err := Open(dir, Options{Logger: log})
 	if err != nil {
@@ -203,7 +203,7 @@ func TestCubeProxyVirtual(t *testing.T) {
 func TestRemovedCubeAddedOrRestored(t *testing.T) {
 	t.Parallel()
 	clock := time.Date(2026, 11, 16, 8, 0, 0, 0, time.UTC)
-	s, err := Open(t.TempDir(), Options{Logger: quiet(), Now: func() time.Time { return clock }})
+	s, err := Open(copied(t), Options{Logger: quiet(), Now: func() time.Time { return clock }})
 	if err != nil {
 		t.Fatal(err)
 	}

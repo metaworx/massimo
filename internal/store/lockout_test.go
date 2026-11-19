@@ -15,7 +15,7 @@ func TestLockout(t *testing.T) {
 	t.Parallel()
 	clock := time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC)
 	now := func() time.Time { return clock }
-	dir := t.TempDir()
+	dir := copied(t)
 	s, err := Open(dir, Options{Logger: quiet(), Now: now})
 	if err != nil {
 		t.Fatal(err)

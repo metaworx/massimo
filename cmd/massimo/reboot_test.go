@@ -17,8 +17,8 @@ import (
 	"go.metaworx.ch/massimo/internal/env"
 	"go.metaworx.ch/massimo/internal/install"
 	"go.metaworx.ch/massimo/internal/server"
-	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit"
+	"go.metaworx.ch/massimo/internal/testkit/storekit"
 )
 
 // Who reboots: the Windows service itself; systemd's and launchd's
@@ -151,11 +151,7 @@ func TestReloadAppliesTheRebootSwitch(t *testing.T) {
 	os.WriteFile(p, nil, 0o600)
 	t.Cleanup(func() { os.WriteFile(p, nil, 0o600); env.ReloadFile(p) })
 	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
-	st, err := store.Open(t.TempDir(), store.Options{Version: "test", Logger: quiet})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st.Close()
+	st := storekit.Open(t, "")
 	opts := server.RebootOptions{By: bySystemd, Reboot: func() error { t.Error("rebooted"); return nil }}
 	srv := server.New(server.Options{Store: st, Logger: quiet, Reboot: opts})
 	available := func(srv *server.Server) bool {
