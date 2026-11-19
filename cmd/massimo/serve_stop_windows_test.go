@@ -33,6 +33,7 @@ import (
 // (stopServe), with a fake Cube, a data directory and a %ProgramData% of
 // its own.
 func TestServiceStopClosesTheStore(t *testing.T) {
+	testkit.Swapping(t)
 	clearCubeEnv(t)
 	tempServiceLog(t)
 	data := os.Getenv(env.DataVar)

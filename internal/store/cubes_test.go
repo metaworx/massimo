@@ -26,6 +26,7 @@ func fileCube(serial string, kv ...string) FileCube {
 // store wins and a differing line is reported and logged; a Cube added
 // to the file later is seeded then.
 func TestSeedAndPrecedence(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	log, logged := testkit.LogWatch(nil)
 	s, err := Open(dir, Options{Logger: log})
@@ -96,6 +97,7 @@ func TestSeedAndPrecedence(t *testing.T) {
 // names it; one removed through the API stays removed, an unconfigured
 // row of before RemoveCube as a removed row (D20-B).
 func TestSeedFoundAndRemoved(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	ctx := context.Background()
 	if _, isNew, err := s.NoteDiscovered(ctx, Discovered{Serial: "KEQ0000001", Address: "10.0.0.1", MAC: "00:1a:22:00:00:01", RFAddress: "0aa001", Firmware: "1.1.3"}); err != nil || !isNew {
@@ -134,6 +136,7 @@ func TestSeedFoundAndRemoved(t *testing.T) {
 // A found Cube is a row that survives reopening; a later answer updates
 // the discovery columns and keeps the first sighting and a known MAC.
 func TestFoundCubeSurvivesRestart(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	t0 := time.Date(2026, 11, 6, 8, 0, 0, 0, time.UTC)
 	s := open(t, dir)
@@ -165,6 +168,7 @@ func TestFoundCubeSurvivesRestart(t *testing.T) {
 // proxy_virtual is a column of the Cube's row (migration 0024, which
 // merged cube_options into cubes): off by default, kept by UpdateCube.
 func TestCubeProxyVirtual(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	ctx := context.Background()
 	c, err := s.AddCube(ctx, Cube{Serial: "KEQ0000001", Configured: true})
@@ -197,6 +201,7 @@ func TestCubeProxyVirtual(t *testing.T) {
 // its log, backups, rooms, commands and audit; RemovedCubes lists what
 // can be restored.
 func TestRemovedCubeAddedOrRestored(t *testing.T) {
+	t.Parallel()
 	clock := time.Date(2026, 11, 16, 8, 0, 0, 0, time.UTC)
 	s, err := Open(t.TempDir(), Options{Logger: quiet(), Now: func() time.Time { return clock }})
 	if err != nil {

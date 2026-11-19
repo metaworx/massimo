@@ -15,6 +15,7 @@ import (
 // A parent command and its steps move through the states; a key answers
 // a retry; the prune clears keys and, with a retention, finished rows.
 func TestCommands(t *testing.T) {
+	t.Parallel()
 	clock := time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC)
 	s, err := Open(t.TempDir(), Options{Logger: quiet(), Now: func() time.Time { return clock }})
 	if err != nil {
@@ -144,6 +145,7 @@ func TestCommands(t *testing.T) {
 // A final row stays final when sent comes late, taking the status only;
 // a status below zero keeps the one the row has.
 func TestCommandStateOrder(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	ctx := context.Background()
 	p, _ := s.AddCommand(ctx, Command{Action: "restore.start"})
@@ -175,6 +177,7 @@ func TestCommandStateOrder(t *testing.T) {
 // row past the retention goes with the first write an hour after the
 // last prune.
 func TestCommandsPrunedHourly(t *testing.T) {
+	t.Parallel()
 	clock := time.Date(2026, 11, 7, 12, 0, 0, 0, time.UTC)
 	s, err := Open(t.TempDir(), Options{Logger: quiet(), Now: func() time.Time { return clock }})
 	if err != nil {
@@ -208,6 +211,7 @@ func TestCommandsPrunedHourly(t *testing.T) {
 // idempotency_key), and a key is found for its 24 hours only, whenever
 // the prune last ran.
 func TestKeyLookup(t *testing.T) {
+	t.Parallel()
 	clock := time.Date(2026, 11, 7, 12, 0, 0, 0, time.UTC)
 	s, err := Open(t.TempDir(), Options{Logger: quiet(), Now: func() time.Time { return clock }})
 	if err != nil {

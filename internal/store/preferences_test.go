@@ -16,6 +16,7 @@ import (
 // leaves a tombstone, which the next write clears; the key and the value
 // are checked.
 func TestPreferences(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	ctx := context.Background()
 	anna, _ := s.AddUser(ctx, User{Name: "anna", Role: RoleOperator}, "pw", 0)
@@ -91,6 +92,7 @@ func TestPreferences(t *testing.T) {
 // a row of its own: the removed user's preferences stay behind with its
 // row, as tombstones.
 func TestRemovedUserPreferencesGo(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	ctx := context.Background()
 	anna, _ := s.AddUser(ctx, User{Name: "anna", Role: RoleOperator}, "pw", 0)

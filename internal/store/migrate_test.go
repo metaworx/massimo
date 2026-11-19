@@ -109,6 +109,7 @@ func schemaSQL(ctx context.Context, s *Store) (string, error) {
 // migrations/store.sql says what the migrations make of an empty file;
 // -update writes it again.
 func TestStoreSQL(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	got, err := schemaSQL(context.Background(), s)
 	if err != nil {
@@ -149,6 +150,7 @@ func TestStoreSQL(t *testing.T) {
 // which loadMigrations would otherwise skip without a word, or
 // store.sql; the binary embeds exactly the numbered ones.
 func TestMigrationFilesNamed(t *testing.T) {
+	t.Parallel()
 	entries, err := os.ReadDir("migrations")
 	if err != nil {
 		t.Fatal(err)

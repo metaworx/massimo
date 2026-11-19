@@ -373,8 +373,13 @@ func (s *Server) Pause() {
 		return
 	}
 	s.paused = true
+	// The clients leave the slot at once, not once their connections'
+	// goroutines have seen the close: a client that dials right after
+	// Resume is greeted, where a SingleClient fake would otherwise
+	// refuse it beside a client it already dropped.
 	for c := range s.open {
 		c.Close()
+		delete(s.open, c)
 	}
 	// The one-client rule's refusal ends with the pause, which refuses
 	// every client, and accept stops waiting for the slot (waitFree).

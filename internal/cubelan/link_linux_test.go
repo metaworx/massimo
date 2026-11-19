@@ -44,6 +44,7 @@ func quickDial(ctx context.Context, addr string) (net.Conn, error) {
 // is stale, logged once; once the Cube lets go the client connects and
 // the link is connected again.
 func TestAStaleCubeAfterTheHold(t *testing.T) {
+	t.Parallel()
 	srv, addr := singleFake(t)
 	logger, logs := testkit.LogWatch(slog.LevelDebug)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -85,6 +86,7 @@ func TestAStaleCubeAfterTheHold(t *testing.T) {
 // A Cube that another client holds, with no connection of serve's left
 // behind, is busy.
 func TestABusyCube(t *testing.T) {
+	t.Parallel()
 	srv, addr := singleFake(t)
 	other, err := net.Dial("tcp", addr)
 	if err != nil {

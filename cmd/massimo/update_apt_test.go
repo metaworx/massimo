@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/install"
+	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/update"
 )
 
@@ -79,6 +80,7 @@ func (f *fakeApt) run(_ context.Context, name string, args ...string) ([]byte, e
 // apt; it returns the request and status files.
 func aptHelper(t *testing.T, f *fakeApt) (request, status string) {
 	t.Helper()
+	testkit.Swapping(t)
 	oldPackaged, oldRun, oldSource, oldVersion := packaged, aptRun, aptSourcePath, version
 	oldWait, oldEvery, oldHealth := aptLockWait, aptLockEvery, healthEvery
 	t.Cleanup(func() {
@@ -183,6 +185,7 @@ func TestAptUpdateWaitsForTheListsLock(t *testing.T) {
 // TestAptUpdateBusy: a lock that stays taken is reported, and nothing is
 // installed.
 func TestAptUpdateBusy(t *testing.T) {
+	testkit.Swapping(t)
 	locked := aptReply{"E: Could not get lock /var/lib/apt/lists/lock. It is held by process 4242 (apt-get)", errors.New("exit status 100")}
 	f := &fakeApt{before: "0.12.0~alpha.1", after: "0.13.0~alpha.1", updates: []aptReply{locked}}
 	req, status := aptHelper(t, f)
@@ -285,6 +288,7 @@ func TestAptUpdateOnlyAsTheHelper(t *testing.T) {
 }
 
 func TestDebTag(t *testing.T) {
+	t.Parallel()
 	for v, want := range map[string]string{
 		"0.13.0~alpha.1": "v0.13.0-alpha.1", "1.0.0": "v1.0.0", "0.13.0~alpha.1~rc~2": "v0.13.0-alpha.1-rc-2",
 		"0.13.0~alpha.2+3.gabc1234":       "v0.13.0-alpha.2-3-gabc1234",
@@ -306,6 +310,7 @@ func TestDebTag(t *testing.T) {
 // cannot refuse a label without its number (v1.2.3-rc); a tag push of one
 // stops at build.yml's flavour check.
 func TestMakeVersionTags(t *testing.T) {
+	t.Parallel()
 	makeCmd, err := exec.LookPath("make")
 	if err != nil {
 		t.Skip("no make")
@@ -362,6 +367,7 @@ func TestMakeVersionTags(t *testing.T) {
 // tag it follows and before the next one, so that apt never takes it
 // back to its tag.
 func TestDebVersion(t *testing.T) {
+	t.Parallel()
 	makeCmd, err := exec.LookPath("make")
 	if err != nil {
 		t.Skip("no make")
@@ -413,6 +419,7 @@ const aptSnippet = "# The Massimo apt repository\nTypes: deb\nURIs: https://mass
 // a request for channel, and the rolling keyring there or not.
 func aptSwitchHelper(t *testing.T, f *fakeApt, source, channel string, rollingKey bool) (request, status string) {
 	t.Helper()
+	testkit.Swapping(t)
 	request, status = aptHelper(t, f)
 	oldKeyring := aptRollingKeyring
 	t.Cleanup(func() { aptRollingKeyring = oldKeyring })

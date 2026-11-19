@@ -12,6 +12,7 @@ import (
 // as on a Cube whose radiograms wait for devices that never answer; none
 // while the Cube has not reported its budget.
 func TestBudgetPending(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)
 	for _, c := range []struct {
 		name string

@@ -48,6 +48,7 @@ func testPair(t *testing.T, dir string) (certPath, keyPath, fingerprint string) 
 }
 
 func TestTLSSource(t *testing.T) {
+	t.Parallel()
 	certPath, keyPath, _ := testPair(t, t.TempDir())
 	if src, err := tlsSource(TLS{}, "", "", nil); err != nil || src != nil {
 		t.Fatalf("off: %v %v", src, err)
@@ -96,6 +97,7 @@ func TestTLSSource(t *testing.T) {
 // TestServeTLS serves the API over the listener serve builds and reads
 // /healthz over https.
 func TestServeTLS(t *testing.T) {
+	t.Parallel()
 	certPath, keyPath, fp := testPair(t, t.TempDir())
 	src, err := tlsSource(TLS{Mode: "files", Cert: certPath, Key: keyPath}, "", "", quietLog())
 	if err != nil {

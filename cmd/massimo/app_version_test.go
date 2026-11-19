@@ -18,6 +18,7 @@ import (
 // tag: what a nightly build is called, what make release writes for the
 // release to come, and what check accepts.
 func TestAppVersion(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("a release is cut on Linux or macOS")
 	}

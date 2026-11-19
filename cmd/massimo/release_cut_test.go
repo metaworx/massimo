@@ -14,6 +14,7 @@ import (
 // cuts next, for tag lists that hold rolling tags and tags that only look
 // like a version beside the version tags.
 func TestNextVersion(t *testing.T) {
+	t.Parallel()
 	bash, err := exec.LookPath("bash")
 	if err != nil {
 		t.Skip("no bash")
@@ -69,6 +70,7 @@ func TestNextVersion(t *testing.T) {
 // it has no flavour from the command line, the build's VERSION or
 // RELEASE, a word that is no flavour, or two.
 func TestMakeReleaseRefuses(t *testing.T) {
+	t.Parallel()
 	makeCmd, err := exec.LookPath("make")
 	if err != nil {
 		t.Skip("no make")

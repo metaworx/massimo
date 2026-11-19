@@ -14,6 +14,7 @@ import (
 // integrations, keeping every identity; the role integration's users keep
 // their set in integration-v0, and integration is fixed at the ceiling.
 func TestMigration21(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	dir := t.TempDir()
 	s20 := openAt(t, dir, 20)
@@ -69,6 +70,7 @@ func TestMigration21(t *testing.T) {
 
 // A store without the role integration's users gets no integration-v0.
 func TestMigration21WithoutIntegrationUsers(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	if _, ok, _ := s.Role(context.Background(), RoleIntegrationV0); ok {
 		t.Fatal("integration-v0 made for nobody")
@@ -77,6 +79,7 @@ func TestMigration21WithoutIntegrationUsers(t *testing.T) {
 
 // The role integration is fixed, as owner is.
 func TestIntegrationRoleFixed(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	ctx := context.Background()
 	if _, err := s.UpdateRole(ctx, RoleIntegration, func(r *Role) error { r.Capabilities = []string{"read"}; return nil }, 0); !errors.Is(err, ErrImmutable) {

@@ -10,9 +10,11 @@ import (
 	"testing"
 
 	"go.metaworx.ch/massimo/internal/env"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 func TestGlobalOptionsSelectTheCube(t *testing.T) {
+	testkit.Swapping(t)
 	t.Setenv("MASSIMO_CUBE_NAME", "default")
 	t.Setenv("MASSIMO_CUBE_KEQ0000001_NAME", "one")
 	t.Setenv("MASSIMO_CUBE_KEQ0000001_ADDRESS", "10.0.0.1")
@@ -76,6 +78,7 @@ func TestNoEnv(t *testing.T) {
 }
 
 func TestDirectAndNoDirect(t *testing.T) {
+	testkit.Swapping(t)
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)

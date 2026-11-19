@@ -16,6 +16,7 @@ import (
 // hold and the time the loss takes to be marked (TCP_MAXRT, in seconds,
 // Options.kernelHold), read back from the socket.
 func TestDefaultDialerMaxRT(t *testing.T) {
+	t.Parallel()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)

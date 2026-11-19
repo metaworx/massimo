@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -23,10 +24,10 @@ import (
 	"go.metaworx.ch/massimo/internal/testkit"
 )
 
-// builtServe is massimo serve run from a binary the test built (runBuilt),
-// stopped by a signal as systemd, launchd and kill stop it;
-// launchBuiltServe's has a data directory of its own and no settings
-// file.
+// builtServe is massimo serve run from the binary the tests built
+// (builtBinary, runBuilt), stopped by a signal as systemd, launchd and
+// kill stop it; launchBuiltServe's has a data directory of its own and
+// no settings file.
 type builtServe struct {
 	cmd  *exec.Cmd
 	data string
@@ -46,7 +47,38 @@ type builtServe struct {
 // scale: a binary that starts beside the other tests' builds.
 var serveWait = testkit.For(10 * time.Second)
 
-// startBuiltServe builds massimo and starts serve with args after its
+// built is massimo built once for the tests that run it as a binary of
+// their own (builtBinary), in a directory TestMain removes after the run.
+var built struct {
+	once     sync.Once
+	dir, bin string
+	out      []byte // go build's output
+	err      error
+}
+
+// builtBinary returns massimo built from this package, once for every
+// test that runs it: the tests run the one binary side by side, each
+// with a data directory and an API port of its own.
+func builtBinary(t *testing.T) string {
+	t.Helper()
+	built.once.Do(func() {
+		dir, err := os.MkdirTemp("", "massimo-test-bin-")
+		if err != nil {
+			built.err = fmt.Errorf("a directory for the binary: %w", err)
+			return
+		}
+		built.dir, built.bin = dir, filepath.Join(dir, "massimo")
+		if built.out, err = exec.Command("go", "build", "-o", built.bin, ".").CombinedOutput(); err != nil {
+			built.err = fmt.Errorf("go build: %w", err)
+		}
+	})
+	if built.err != nil {
+		t.Fatalf("%v\n%s", built.err, built.out)
+	}
+	return built.bin
+}
+
+// startBuiltServe starts serve from the built massimo with args after its
 // own, env added to this process's environment without its MASSIMO_
 // variables; it returns once the API listens.
 func startBuiltServe(t *testing.T, env []string, args ...string) *builtServe {
@@ -67,12 +99,8 @@ func launchBuiltServe(t *testing.T, env []string, args ...string) *builtServe {
 	if testing.Short() {
 		t.Skip("builds the binary")
 	}
-	bin := filepath.Join(t.TempDir(), "massimo")
-	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
-		t.Fatalf("go build: %v\n%s", err, out)
-	}
 	data := t.TempDir()
-	cmd := exec.Command(bin, append([]string{"-data", data, "serve", "-listen", "127.0.0.1:0", "-discover-interval", "0"}, args...)...)
+	cmd := exec.Command(builtBinary(t), append([]string{"-data", data, "serve", "-listen", "127.0.0.1:0", "-discover-interval", "0"}, args...)...)
 	for _, kv := range os.Environ() {
 		if !strings.HasPrefix(kv, "MASSIMO_") {
 			cmd.Env = append(cmd.Env, kv)
@@ -163,6 +191,7 @@ func (s *builtServe) wait(t *testing.T, since time.Time) time.Duration {
 // SQLite shows by removing its -wal file at the last close, and the log
 // says so.
 func TestServeStopsOnSIGTERM(t *testing.T) {
+	t.Parallel()
 	s := startBuiltServe(t, nil)
 	if _, err := os.Stat(filepath.Join(s.data, "massimo.db-wal")); err != nil {
 		t.Fatalf("no -wal file while serve runs: %v", err)
@@ -182,6 +211,7 @@ func TestServeStopsOnSIGTERM(t *testing.T) {
 // the stop waits for the HTTP server's shutdown before the store closes.
 // The process used to end as soon as the listener closed.
 func TestServeAnswersRequestInFlightAtStop(t *testing.T) {
+	t.Parallel()
 	s := startBuiltServe(t, nil, "-token", "test-token")
 	conn, err := net.Dial("tcp", s.addr)
 	if err != nil {
@@ -247,6 +277,7 @@ func TestServeAnswersRequestInFlightAtStop(t *testing.T) {
 // so that the stop does not wait out the HTTP server's grace for it,
 // and its client sees the end of the stream rather than a cut.
 func TestServeStopEndsEventStreams(t *testing.T) {
+	t.Parallel()
 	s := startBuiltServe(t, []string{"MASSIMO_CUBE_ADDRESS=" + startFakeCube(t)}, "-token", "test-token", "-proxy", "off")
 	r, _ := s.log.Await(t, 0, "cube added from the settings file", testkit.Msg("cube added from the settings file"), serveWait)
 	sn := r.Attrs["serial"]

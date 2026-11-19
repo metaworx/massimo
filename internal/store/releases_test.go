@@ -26,6 +26,7 @@ import (
 // backup its file in backup_data. TestReleasedStoresDownAgain takes
 // each down again (raise_test.go).
 func TestMigratesReleasedStores(t *testing.T) {
+	t.Parallel()
 	dumps, err := filepath.Glob(filepath.Join("testdata", "releases", "v*.sql"))
 	if err != nil || len(dumps) < 6 {
 		t.Fatalf("the releases' dumps: %v, %v", dumps, err)

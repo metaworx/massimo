@@ -76,6 +76,7 @@ func must(m cube.Message, err error) cube.Message {
 
 // The rooms fixture holds the house the room thermostat's tests need.
 func TestRoomsFixture(t *testing.T) {
+	t.Parallel()
 	s := startRooms(t, &Server{})
 	c := dial(t, s.ln.Addr().String())
 	var md *cube.Metadata
@@ -111,6 +112,7 @@ func TestRoomsFixture(t *testing.T) {
 // A room setpoint changes every thermostat of the room and nothing else;
 // a direct one only its device.
 func TestApplySetpoint(t *testing.T) {
+	t.Parallel()
 	s := startRooms(t, &Server{})
 	c := dial(t, s.ln.Addr().String())
 	c.send(must(cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a0204, RoomID: 2, Room: true}, 22.5, cube.ModeManual, cube.Until{})))
@@ -136,6 +138,7 @@ func TestApplySetpoint(t *testing.T) {
 // A deaf device keeps its entry while the other members of its room
 // take a room command, and takes the next one once it hears again.
 func TestApplyDeaf(t *testing.T) {
+	t.Parallel()
 	s := startRooms(t, &Server{})
 	s.SetDeaf(0x0a0205, true)
 	c := dial(t, s.ln.Addr().String())
@@ -157,6 +160,7 @@ func TestApplyDeaf(t *testing.T) {
 // Auto without a temperature takes the programme's; vacation keeps its
 // end, and leaving it drops the bytes that carried it.
 func TestApplyAutoAndVacation(t *testing.T) {
+	t.Parallel()
 	s := startRooms(t, &Server{})
 	c := dial(t, s.ln.Addr().String())
 	room1 := cube.Target{RFAddress: 0x0a0201, RoomID: 1, Room: true}
@@ -178,6 +182,7 @@ func TestApplyAutoAndVacation(t *testing.T) {
 // A boost opens a radiator thermostat's valve to its boost opening and
 // ends by itself with the mode and valve it had.
 func TestApplyBoost(t *testing.T) {
+	t.Parallel()
 	s := startRooms(t, &Server{BoostFor: 200 * time.Millisecond})
 	c := dial(t, s.ln.Addr().String())
 	c.send(must(cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a0203, RoomID: 1, Room: true}, 20, cube.ModeBoost, cube.Until{})))
@@ -211,6 +216,7 @@ func TestApplyBoost(t *testing.T) {
 // 0x10 and padded to 6 points; the fake keeps both parts, so the C line
 // reads back the whole day, of 8 points as of 13.
 func TestApplyLongDay(t *testing.T) {
+	t.Parallel()
 	s := startRooms(t, &Server{})
 	c := dial(t, s.ln.Addr().String())
 	rf := cube.RFAddress(0x0a0204)
@@ -242,6 +248,7 @@ func TestApplyLongDay(t *testing.T) {
 // A day's programme, the preset temperatures and the lock reach the C
 // line and the L entry; a new connection's greeting carries them.
 func TestApplyProgramTemperaturesLock(t *testing.T) {
+	t.Parallel()
 	s := startRooms(t, &Server{})
 	c := dial(t, s.ln.Addr().String())
 	room2 := cube.Target{RFAddress: 0x0a0204, RoomID: 2, Room: true}
@@ -287,6 +294,7 @@ func TestApplyProgramTemperaturesLock(t *testing.T) {
 // With ApplyAfter the device's entry changes some time after the S
 // reply; a discarded command and a fake without Apply change nothing.
 func TestApplyDelayDiscardAndOff(t *testing.T) {
+	t.Parallel()
 	s := startRooms(t, &Server{ApplyAfter: 300 * time.Millisecond})
 	c := dial(t, s.ln.Addr().String())
 	room2 := cube.Target{RFAddress: 0x0a0204, RoomID: 2, Room: true}
@@ -327,6 +335,7 @@ func TestApplyDelayDiscardAndOff(t *testing.T) {
 // The control sets a device's report, takes it out of its room and puts
 // it back; over HTTP as well.
 func TestControl(t *testing.T) {
+	t.Parallel()
 	s := startRooms(t, &Server{})
 	temp, battery := 18.2, true
 	if err := s.SetState(0x0a0201, State{ActualTemp: &temp, BatteryLow: &battery}); err != nil {

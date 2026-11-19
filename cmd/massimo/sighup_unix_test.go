@@ -43,6 +43,7 @@ func TestCatchSighup(t *testing.T) {
 // created, while it migrates: serve does not end, and logs the SIGHUP as
 // ignored; a SIGHUP once it runs is a reload, with the log's rotation.
 func TestServeSighupDuringTheStart(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "serve.log")
 	s := launchBuiltServe(t, []string{"MASSIMO_CUBE_ADDRESS=" + startFakeCube(t)}, "-log", path, "-proxy", "off", "-sighup", "reload")
 	s.log.Await(t, 0, "store created", testkit.Msg("store created"), serveWait)

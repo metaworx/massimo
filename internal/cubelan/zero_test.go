@@ -60,6 +60,7 @@ func zeroGreeting(t *testing.T) []cube.Message {
 // byte for byte, for the proxy and a backup; a backup's lines read back,
 // and a later greeting without them forgets the kept line.
 func TestZeroEntryIsKeptAndNoDevice(t *testing.T) {
+	t.Parallel()
 	greeting, err := fakecube.LoadGreeting(fixture)
 	if err != nil {
 		t.Fatal(err)
@@ -119,6 +120,7 @@ func TestZeroEntryIsKeptAndNoDevice(t *testing.T) {
 // A greeting with the entry at 000000 is logged once, at Warn: the line
 // that cannot be read, kept, and the entry, not shown.
 func TestClientWarnsOfZeroEntry(t *testing.T) {
+	t.Parallel()
 	srv := &fakecube.Server{Greeting: zeroGreeting(t)}
 	addr, err := srv.Start("127.0.0.1:0")
 	if err != nil {
@@ -149,6 +151,7 @@ func TestClientWarnsOfZeroEntry(t *testing.T) {
 // deletion that would make the Cube send a factory reset there is
 // refused before it is written.
 func TestClientRefusesZero(t *testing.T) {
+	t.Parallel()
 	srv, addr := startFake(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

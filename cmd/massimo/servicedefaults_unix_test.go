@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"go.metaworx.ch/massimo/internal/env"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // The owner of the service's settings file, without -env or
@@ -18,6 +19,7 @@ import (
 // directory; -env, -no-env, MASSIMO_ENV_FILE, root, another user and a
 // box without the file keep ./.env and the current directory.
 func TestServiceUserDefaults(t *testing.T) {
+	testkit.Swapping(t)
 	uid := os.Geteuid()
 	if uid == 0 {
 		t.Skip("the test's files are root's, and root has no defaults")
@@ -67,6 +69,7 @@ func TestServiceUserDefaults(t *testing.T) {
 
 // A settings file this user cannot see is no service user's.
 func TestServiceUserUnseenFile(t *testing.T) {
+	t.Parallel()
 	if os.Geteuid() == 0 {
 		t.Skip("root sees every file")
 	}

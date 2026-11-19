@@ -11,11 +11,13 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // runNetconfigTest runs the command with the given arguments and stdin.
 func runNetconfigTest(t *testing.T, stdin string, args ...string) (string, string, error) {
 	t.Helper()
+	testkit.Swapping(t)
 	selectedSN, snExplicit = "", false
 	t.Cleanup(func() { selectedSN, snExplicit = "", false })
 	var out, errw bytes.Buffer

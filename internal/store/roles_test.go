@@ -16,6 +16,7 @@ var allCaps = []string{"read", "preferences", "setpoint", "lock", "configure", "
 // Roles are listed with their sets, created, renamed, given another
 // set, disabled and removed under the rules of docs/store.md section 6.
 func TestRoles(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	ctx := context.Background()
 	roles, err := s.Roles(ctx)
@@ -88,6 +89,7 @@ func TestRoles(t *testing.T) {
 // The effective set: everything for owner, nothing for a disabled role,
 // the role's set minus the disabled capabilities otherwise.
 func TestEffective(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	ctx := context.Background()
 	caps, off, err := s.Effective(ctx, RoleOwner, allCaps)

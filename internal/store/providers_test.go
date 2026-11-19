@@ -14,6 +14,7 @@ import (
 // removal frees the key and deletes its identities (AP Oidc v1.0,
 // Block 1).
 func TestProviders(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	ctx := context.Background()
 	good := AuthProvider{Key: "Cloud", Name: "Nextcloud", Issuer: "https://cloud.example.com", ClientID: "massimo", ClientSecret: "s3cret", Enabled: true}
@@ -90,6 +91,7 @@ func TestProviders(t *testing.T) {
 // e-mail is one per provider; a removed user's identities go with it;
 // a user created for a subject takes a free name.
 func TestIdentities(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	ctx := context.Background()
 	p, err := s.AddProvider(ctx, AuthProvider{Key: "cloud", Issuer: "https://cloud.example.com", ClientID: "m", Enabled: true}, 0)

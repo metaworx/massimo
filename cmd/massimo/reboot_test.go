@@ -25,6 +25,7 @@ import (
 // services through their helper, which is there once its mark is;
 // nobody for Homebrew's service, a terminal, or Linux without systemd.
 func TestRebootBy(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	unit := processInfo{goos: "linux", getenv: envOf(map[string]string{"INVOCATION_ID": "0123abcd", "SYSTEMD_EXEC_PID": "4242"}), pid: 4242, ppid: 1}
 	daemon := processInfo{goos: "darwin", getenv: envOf(map[string]string{"XPC_SERVICE_NAME": install.Label}), pid: 4242, ppid: 1}
@@ -71,6 +72,7 @@ func TestRebootBy(t *testing.T) {
 // helper took it; one the helper did not take is removed after the wait,
 // and a directory that is missing is an error at once.
 func TestRebootRequester(t *testing.T) {
+	testkit.Swapping(t)
 	take, poll := rebootTake, rebootPoll
 	t.Cleanup(func() { rebootTake, rebootPoll = take, poll })
 	rebootTake, rebootPoll = 300*time.Millisecond, 10*time.Millisecond
@@ -118,6 +120,7 @@ func TestRebootRequester(t *testing.T) {
 // with a planned reason and without forcing programs to close; its
 // failure names the command and what it printed.
 func TestWindowsRebooter(t *testing.T) {
+	testkit.Swapping(t)
 	name, args := windowsShutdown(`D:\Win`)
 	if name != `D:\Win\System32\shutdown.exe` || strings.Join(args, " ") != "/r /t 0 /d p:4:1 /c Massimo: reboot requested from the web UI" {
 		t.Fatalf("%s %q", name, args)

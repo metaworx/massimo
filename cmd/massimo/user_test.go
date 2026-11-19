@@ -20,12 +20,14 @@ import (
 
 	"go.metaworx.ch/massimo/internal/env"
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // runUserWith runs massimo user with a standard input and returns what
 // it printed.
 func runUserWith(t *testing.T, input string, args ...string) (string, error) {
 	t.Helper()
+	testkit.Swapping(t)
 	var out bytes.Buffer
 	stdin, stdout = strings.NewReader(input), &out
 	defer func() { stdin, stdout = nil, nil }()
@@ -325,6 +327,7 @@ func TestHelpCreatesNoStore(t *testing.T) {
 // the service's draws a warning. The service's directory is the test's
 // (serviceFiles), which Windows does not use.
 func TestUserStoreDir(t *testing.T) {
+	testkit.Swapping(t)
 	if runtime.GOOS == "windows" {
 		t.Skip("the service's store is under %ProgramData% on Windows")
 	}

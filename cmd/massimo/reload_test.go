@@ -28,6 +28,7 @@ import (
 // What SIGHUP does: a reload under a service manager and after nohup, a
 // stop in a terminal, unless -sighup says.
 func TestSighupAction(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		mode             string
 		managed, ignored bool
@@ -48,6 +49,7 @@ func TestSighupAction(t *testing.T) {
 // A SIGHUP before serve hands over its reload is logged at Warn and
 // dropped; afterwards it runs the reload, and logs nothing of its own.
 func TestHupReloadBeforeReady(t *testing.T) {
+	t.Parallel()
 	log, w := testkit.LogWatch(nil)
 	h := &hupReload{log: log}
 	h.handle()
@@ -66,6 +68,7 @@ func TestHupReloadBeforeReady(t *testing.T) {
 // The watch reads a changed file once it held still for one more look,
 // once; a missing file and an unchanged one ask for nothing.
 func TestWatchSettings(t *testing.T) {
+	t.Parallel()
 	p := filepath.Join(t.TempDir(), "env")
 	// put writes the file whole, renamed into place: os.WriteFile
 	// truncates first and writes after, and a busy machine that pauses
@@ -175,15 +178,11 @@ func TestSettingsReloader(t *testing.T) {
 	}
 }
 
-// startServe builds massimo and runs serve with the settings file and
+// startServe runs serve from the built massimo with the settings file and
 // the arguments, a store of its own; it returns once the API listens.
 func startServe(t *testing.T, settingsFile, data string, args ...string) *builtServe {
 	t.Helper()
-	bin := filepath.Join(t.TempDir(), "massimo")
-	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
-		t.Fatalf("go build: %v\n%s", err, out)
-	}
-	cmd := exec.Command(bin, append([]string{"-env", settingsFile, "-data", data, "serve", "-listen", "127.0.0.1:0", "-discover-interval", "0"}, args...)...)
+	cmd := exec.Command(builtBinary(t), append([]string{"-env", settingsFile, "-data", data, "serve", "-listen", "127.0.0.1:0", "-discover-interval", "0"}, args...)...)
 	for _, kv := range os.Environ() {
 		if !strings.HasPrefix(kv, "MASSIMO_") && !strings.HasPrefix(kv, "INVOCATION_ID=") {
 			cmd.Env = append(cmd.Env, kv)
@@ -216,6 +215,7 @@ func get(t *testing.T, url, token string) (int, string) {
 // lists a setting that waits for the next start, and checkpoints its
 // store.
 func TestServeAppliesTheTokenOnSIGHUP(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("no SIGHUP")
 	}
@@ -257,6 +257,7 @@ func TestServeAppliesTheTokenOnSIGHUP(t *testing.T) {
 // With -sighup stop, a SIGHUP stops serve as SIGTERM does: exit 0 and
 // the store closed.
 func TestServeStopsOnSIGHUP(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("no SIGHUP")
 	}

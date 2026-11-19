@@ -14,6 +14,7 @@ import (
 // gains it, a role of the owner's and integration-v0 included (AP
 // RadioHealth v1.2, Block 10, D166-A).
 func TestMigration22(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	dir := t.TempDir()
 	s21 := openAt(t, dir, 21)

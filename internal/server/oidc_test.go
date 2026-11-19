@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // fakeIdP is an OpenID Connect provider for the tests: its discovery
@@ -449,7 +450,7 @@ func TestOIDCUserinfo(t *testing.T) {
 // "" for an issuer not reached.
 func fakeDiscovery(t *testing.T, says map[string]string) {
 	t.Helper()
-	swapping(t)
+	testkit.Swapping(t)
 	old := oidcClient
 	oidcClient = &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
 		asked := strings.TrimSuffix(r.URL.Scheme+"://"+r.URL.Host+strings.TrimSuffix(r.URL.Path, "/.well-known/openid-configuration"), "/")
