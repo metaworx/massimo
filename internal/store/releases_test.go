@@ -40,7 +40,7 @@ func TestMigratesReleasedStores(t *testing.T) {
 			if version > SchemaVersion() {
 				t.Fatalf("the dump is at schema %d, this binary's is %d", version, SchemaVersion())
 			}
-			s := open(t, dir)
+			s := openFresh(t, dir)
 			ctx := context.Background()
 			if v, _ := s.SchemaVersion(); v != SchemaVersion() {
 				t.Fatalf("schema %d after the migration, want %d", v, SchemaVersion())

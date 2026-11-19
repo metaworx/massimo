@@ -25,6 +25,7 @@ import (
 	"go.metaworx.ch/massimo/internal/server"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit"
+	"go.metaworx.ch/massimo/internal/testkit/storekit"
 )
 
 // clearCubeEnv unsets every MASSIMO_CUBE_* variable for the test, and
@@ -74,18 +75,11 @@ func noCubeEnv(t *testing.T) {
 
 func quietLog() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
 
-// testStore opens a store in a temporary directory.
+// testStore opens a store in a temporary directory, or in dir: a copy of
+// the migrated template where dir has no store yet (storekit.Open).
 func testStore(t *testing.T, dir string) *store.Store {
 	t.Helper()
-	if dir == "" {
-		dir = t.TempDir()
-	}
-	st, err := store.Open(dir, store.Options{Version: "test", Logger: quietLog()})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { st.Close() })
-	return st
+	return storekit.Open(t, dir)
 }
 
 // greetingFile is the fake Cube's recorded greeting.

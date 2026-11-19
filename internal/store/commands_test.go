@@ -17,7 +17,7 @@ import (
 func TestCommands(t *testing.T) {
 	t.Parallel()
 	clock := time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC)
-	s, err := Open(t.TempDir(), Options{Logger: quiet(), Now: func() time.Time { return clock }})
+	s, err := Open(copied(t), Options{Logger: quiet(), Now: func() time.Time { return clock }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,7 +179,7 @@ func TestCommandStateOrder(t *testing.T) {
 func TestCommandsPrunedHourly(t *testing.T) {
 	t.Parallel()
 	clock := time.Date(2026, 11, 7, 12, 0, 0, 0, time.UTC)
-	s, err := Open(t.TempDir(), Options{Logger: quiet(), Now: func() time.Time { return clock }})
+	s, err := Open(copied(t), Options{Logger: quiet(), Now: func() time.Time { return clock }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +213,7 @@ func TestCommandsPrunedHourly(t *testing.T) {
 func TestKeyLookup(t *testing.T) {
 	t.Parallel()
 	clock := time.Date(2026, 11, 7, 12, 0, 0, 0, time.UTC)
-	s, err := Open(t.TempDir(), Options{Logger: quiet(), Now: func() time.Time { return clock }})
+	s, err := Open(copied(t), Options{Logger: quiet(), Now: func() time.Time { return clock }})
 	if err != nil {
 		t.Fatal(err)
 	}

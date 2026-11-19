@@ -27,16 +27,6 @@ import (
 
 func quiet() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
 
-func open(t *testing.T, dir string) *Store {
-	t.Helper()
-	s, err := Open(dir, Options{Version: "test", Logger: quiet()})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
-	return s
-}
-
 // An empty directory gets massimo.db at the latest version, mode 0600,
 // in WAL mode with foreign keys on.
 func TestOpenMigratesAnEmptyFile(t *testing.T) {
@@ -108,7 +98,7 @@ func TestOpenMigratesAnEmptyFile(t *testing.T) {
 // docs/store.md section 5 add.
 func TestSyncColumns(t *testing.T) {
 	t.Parallel()
-	s := open(t, t.TempDir())
+	s := openFresh(t, t.TempDir())
 	cols := func(table string) map[string]bool {
 		rows, err := s.db.Query(`SELECT name FROM pragma_table_info(?)`, table)
 		if err != nil {
@@ -158,7 +148,7 @@ func TestSyncColumns(t *testing.T) {
 // for both by 0022); owner has every capability by code and no rows.
 func TestSeededRoles(t *testing.T) {
 	t.Parallel()
-	s := open(t, t.TempDir())
+	s := openFresh(t, t.TempDir())
 	want := map[string][]string{
 		"owner":       nil,
 		"manager":     {"backup", "configure", "discover", "guests", "integrations", "lock", "pair", "passwords", "preferences", "read", "rename", "repair", "restart", "restore", "setpoint", "structure"},
@@ -204,7 +194,7 @@ func TestSeededRoles(t *testing.T) {
 func TestNodeIdentity(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	s := open(t, dir)
+	s := openFresh(t, dir)
 	id := s.NodeID()
 	tenant, err := s.TenantID()
 	if err != nil {
@@ -235,7 +225,7 @@ func TestNodeIdentity(t *testing.T) {
 	key1, _ := os.ReadFile(KeyPath(dir))
 	s.Close()
 
-	s2 := open(t, dir)
+	s2 := openFresh(t, dir)
 	key2, _ := os.ReadFile(KeyPath(dir))
 	if s2.NodeID() != id || !bytes.Equal(s2.NodePublicKey(), pub) || !bytes.Equal(key1, key2) {
 		t.Fatal("identity changed on the second open")
@@ -506,7 +496,7 @@ func copyAlone(t *testing.T, dir string) *Store {
 // stay as it was created, its rows only in the WAL.
 func TestCloseCheckpointsBesideAnotherConnection(t *testing.T) {
 	t.Parallel()
-	dir := t.TempDir()
+	dir := copied(t)
 	s, err := Open(dir, Options{Version: "test", Logger: quiet()})
 	if err != nil {
 		t.Fatal(err)
@@ -577,7 +567,7 @@ func TestMigratesAVersionOneFile(t *testing.T) {
 		t.Fatalf("version %d after the first open", v)
 	}
 	s1.Close()
-	s := open(t, dir)
+	s := openFresh(t, dir)
 	if v, mr := s.SchemaVersion(); v != SchemaVersion() || v < 2 || mr != binaryMinReader(t) {
 		t.Fatalf("schema %d min_reader %d", v, mr)
 	}

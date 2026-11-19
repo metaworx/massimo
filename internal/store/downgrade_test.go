@@ -72,7 +72,7 @@ func padVersion(v int) string { return fmt.Sprintf("%04d", v) }
 // schemaOfFresh is the schema an empty file gets from this binary.
 func schemaOfFresh(t *testing.T) string {
 	t.Helper()
-	s := open(t, t.TempDir())
+	s := openFresh(t, t.TempDir())
 	q, err := schemaSQL(context.Background(), s)
 	if err != nil {
 		t.Fatal(err)
@@ -90,7 +90,7 @@ func TestDowngrade(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	later, raise := raiseMigrations(t, true)
-	s := open(t, dir)
+	s := openFresh(t, dir)
 	if _, err := s.AddCube(ctx, Cube{Serial: "KEQ0000001", Name: "Hall", Configured: true}); err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func TestDowngrade(t *testing.T) {
 		t.Fatalf("copy: %v %v", fi, err)
 	}
 
-	s = open(t, dir)
+	s = openFresh(t, dir)
 	if v, _ := s.SchemaVersion(); v != SchemaVersion() {
 		t.Fatalf("version %d after the downgrade", v)
 	}
@@ -190,7 +190,7 @@ func TestDowngradeFromTheStoresDownParts(t *testing.T) {
 	if d.To != raise-1 {
 		t.Fatalf("downgraded %+v", d)
 	}
-	s = open(t, dir)
+	s = openFresh(t, dir)
 	got, err := schemaSQL(ctx, s)
 	if err != nil {
 		t.Fatal(err)

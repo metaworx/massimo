@@ -17,7 +17,7 @@ func TestPushSubscriptions(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	clock := time.Date(2026, 11, 9, 6, 0, 0, 0, time.UTC)
-	s, err := Open(t.TempDir(), Options{Logger: quiet(), Now: func() time.Time { return clock }})
+	s, err := Open(copied(t), Options{Logger: quiet(), Now: func() time.Time { return clock }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestPushSubscriptionsThatMayBeSentTo(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	clock := time.Date(2026, 11, 9, 6, 0, 0, 0, time.UTC)
-	s, err := Open(t.TempDir(), Options{Logger: quiet(), Now: func() time.Time { return clock }})
+	s, err := Open(copied(t), Options{Logger: quiet(), Now: func() time.Time { return clock }})
 	if err != nil {
 		t.Fatal(err)
 	}

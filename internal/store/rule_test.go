@@ -55,7 +55,7 @@ func isContent(table, col string) bool {
 // PRIMARY KEY included, covers a content column.
 func TestNoIndexOnContent(t *testing.T) {
 	t.Parallel()
-	s := open(t, t.TempDir())
+	s := openFresh(t, t.TempDir())
 	rows, err := s.db.Query(`SELECT m.name, m.tbl_name, i.name FROM sqlite_master m JOIN pragma_index_info(m.name) i WHERE m.type = 'index'`)
 	if err != nil {
 		t.Fatal(err)

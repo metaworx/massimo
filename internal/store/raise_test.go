@@ -685,7 +685,7 @@ func TestRaiseDownLosses(t *testing.T) {
 	if n := count(`SELECT count(*) FROM integrations WHERE key = 'request-01a1e000-0000-7000-8000-000000000002'`); n != 1 {
 		t.Errorf("the waiting request's key")
 	}
-	s = open(t, dir)
+	s = openFresh(t, dir)
 	if v, _ := s.SchemaVersion(); v != SchemaVersion() {
 		t.Fatalf("migrated again to %d", v)
 	}
@@ -820,7 +820,7 @@ func TestRaiseDownKeepsBothRowsOfASerial(t *testing.T) {
 	if got := logRows(); !slices.Equal(got, wantLog) {
 		t.Errorf("the log up again:\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(wantLog, "\n"))
 	}
-	s = open(t, dir)
+	s = openFresh(t, dir)
 	if removed, err := s.RemovedCubes(ctx, "KEQ0000001"); err != nil || len(removed) != 1 || removed[0].ID != old.ID {
 		t.Fatalf("the removed row up again: %+v %v", removed, err)
 	}
@@ -843,7 +843,7 @@ func schemaAt(t *testing.T, version int) map[string]string {
 func TestRaiseRefusedAndDownAgain(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	s := open(t, dir)
+	s := openFresh(t, dir)
 	s.Close()
 	_, err := Open(dir, Options{Logger: quiet(), migrations: migrationsUpTo(t, 23), readerVersion: 23})
 	if !errors.Is(err, ErrRefused) || !strings.Contains(err.Error(), "massimo store downgrade -to 23") {

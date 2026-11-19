@@ -31,7 +31,7 @@ func TestMigration22(t *testing.T) {
 		}
 	}
 	s21.Close()
-	s := open(t, dir)
+	s := openFresh(t, dir)
 	for key, want := range map[string]bool{RoleManager: true, RoleIntegration: true, RoleOperator: false, RoleGuest: false, RoleViewer: false, "house": false} {
 		r, ok, err := s.Role(ctx, key)
 		if err != nil || !ok {

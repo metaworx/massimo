@@ -15,7 +15,7 @@ import (
 func TestBootstrap(t *testing.T) {
 	t.Parallel()
 	log, logged := testkit.LogWatch(nil)
-	s, err := Open(t.TempDir(), Options{Logger: log})
+	s, err := Open(copied(t), Options{Logger: log})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -201,7 +201,7 @@ func TestBackupsMigration(t *testing.T) {
 		}
 	}
 	old.Close()
-	s := open(t, dir)
+	s := openFresh(t, dir)
 	rows, err := s.db.Query(`SELECT reason FROM backups ORDER BY taken_at`)
 	if err != nil {
 		t.Fatal(err)
@@ -324,7 +324,7 @@ func TestBackupsAutoincrementMigration(t *testing.T) {
 	want := rows(old, `length(body) FROM backups`)
 	old.Close()
 
-	s := open(t, dir)
+	s := openFresh(t, dir)
 	if got := rows(s, `coalesce((SELECT length(d.data) FROM backup_data d WHERE d.id = backups.id), 0) FROM backups`); fmt.Sprint(got) != fmt.Sprint(want) ||
 		len(got) != 2 || got[1].Deleted == "" {
 		t.Fatalf("copied %+v, want %+v", got, want)

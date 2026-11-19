@@ -4,28 +4,20 @@
 package server
 
 import (
-	"io"
-	"log/slog"
 	"testing"
 	"time"
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit/storekit"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
-// testStore opens a store in a temporary directory, or in dir.
+// testStore opens a store in a temporary directory, or in dir: a copy of
+// the migrated template where dir has no store yet (storekit.Open).
 func testStore(t *testing.T, dir string) *store.Store {
 	t.Helper()
-	if dir == "" {
-		dir = t.TempDir()
-	}
-	st, err := store.Open(dir, store.Options{Version: "test", Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { st.Close() })
-	return st
+	return storekit.Open(t, dir)
 }
 
 // The stale threshold is the server's, not the process's.

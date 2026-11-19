@@ -37,7 +37,7 @@ func TestMigration21(t *testing.T) {
 	}
 	s20.Close()
 
-	s := open(t, dir)
+	s := openFresh(t, dir)
 	ids, err := s.Identities(ctx, anna.ID)
 	if err != nil || len(ids) != 1 || ids[0].Subject != "sub-1" || ids[0].Provider != "cloud" {
 		t.Fatalf("the OIDC identity after the migration: %+v %v", ids, err)
@@ -71,7 +71,7 @@ func TestMigration21(t *testing.T) {
 // A store without the role integration's users gets no integration-v0.
 func TestMigration21WithoutIntegrationUsers(t *testing.T) {
 	t.Parallel()
-	s := open(t, t.TempDir())
+	s := openFresh(t, t.TempDir())
 	if _, ok, _ := s.Role(context.Background(), RoleIntegrationV0); ok {
 		t.Fatal("integration-v0 made for nobody")
 	}
