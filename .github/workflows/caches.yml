@@ -1,0 +1,55 @@
+name: Caches
+
+# CodeQL's overlay databases of older commits, deleted from the
+# repository's Actions caches every hour (AP TestSpeed, D10-A;
+# GUIDELINES/project/CI.md, section 3; packaging/cache-prune.sh). Code
+# scanning's default setup, which no workflow file here holds, saves one
+# for each language at every commit of main it analyses, about 90 MB a
+# commit, restores only the newest, and deletes none: on 2026-11-19 they
+# held 10.0 of the repository's 10.8 GB, past GitHub's 10 GB, so that
+# GitHub evicted the least recently used caches, the Go jobs' among them.
+# The newest three commits' stay for each language; every other cache,
+# the Go jobs' and setup-go's among them, is never touched. The deletes
+# come a second apart, the oldest first, and GitHub's rate limit ends a
+# run, whose rest the next one deletes. By hand,
+# -f dry_run=true names what would go and deletes nothing. The job's one
+# write permission is actions, which deleting a cache needs; it reads the
+# script and nothing else of the checkout, and holds no secret.
+on:
+  schedule:
+    - cron: '23 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Name what would be deleted, and delete nothing
+        type: boolean
+        default: false
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    name: Prune CodeQL's caches
+    runs-on: ubuntu-latest
+    # The first run deletes some 335 entries, a second and a call apart:
+    # about seven minutes.
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: packaging/cache-prune.sh
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Delete the overlay databases of older commits
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
+        run: packaging/cache-prune.sh

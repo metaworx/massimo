@@ -256,11 +256,13 @@ race: ui
 # their waits are four times as long (MASSIMO_TEST_SCALE,
 # docs/testing.md), and a package has 30 minutes: internal/server's tests
 # add up to about 21 with four CPUs under load, past Go's default ten (AP
-# TestInfrastructure, D14-A).
+# TestInfrastructure, D14-A). -count=1 as in make race, which neither
+# takes a result from the cache nor leaves one: under -exec go test
+# caches none anyway, and CI's job restores a cache (AP TestSpeed, D10-A).
 QEMU_ARM ?= qemu-arm -cpu arm1176
 
 test-armv6: ui
-	GOOS=linux GOARCH=arm GOARM=6 CGO_ENABLED=0 MASSIMO_ENV_FILE=/dev/null MASSIMO_TEST_SCALE=4 go test -short -timeout 30m $(TESTFLAGS) -exec '$(QEMU_ARM)' ./...
+	GOOS=linux GOARCH=arm GOARM=6 CGO_ENABLED=0 MASSIMO_ENV_FILE=/dev/null MASSIMO_TEST_SCALE=4 go test -short -count=1 -timeout 30m $(TESTFLAGS) -exec '$(QEMU_ARM)' ./...
 
 # The fuzz targets (Fuzz* in the packages that parse untrusted bytes:
 # the Cube's and LAN clients' lines, uploaded backups, stored hashes),
