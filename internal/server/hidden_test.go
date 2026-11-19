@@ -17,6 +17,7 @@ import (
 
 // In the fixture 0a010d is the only device of room 6.
 func TestHiddenDevicesInvisible(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, withCube(func(c *CubeConfig) { c.Hidden = []cube.RFAddress{0x0a010d} }))
 	fc, ts := r.fc, r.ts
 	var c cubeView
@@ -75,6 +76,7 @@ func TestHiddenDevicesInvisible(t *testing.T) {
 
 // With ShowHidden the listed devices are shown too.
 func TestShowHiddenShowsListedDevices(t *testing.T) {
+	t.Parallel()
 	ts := startServer(t, withOptions(Options{ShowHidden: true}), withCube(func(c *CubeConfig) { c.Hidden = []cube.RFAddress{0x0a010d} })).ts
 	if !testkit.Within(5*time.Second, func() bool {
 		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices/0a010d", nil) == 200

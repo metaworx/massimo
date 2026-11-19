@@ -40,6 +40,7 @@ func historyServer(t *testing.T, st *store.Store, manager string) (*Server, *htt
 // An update started through the API is an entry with who started it,
 // waiting; the next start with its version completes it.
 func TestUpdateHistoryStartedThenReached(t *testing.T) {
+	t.Parallel()
 	st := testStore(t, "")
 	s, ts, _ := historyServer(t, st, "")
 	token := userToken(t, st, "anna", store.RoleOwner)
@@ -62,6 +63,7 @@ func TestUpdateHistoryStartedThenReached(t *testing.T) {
 // through the box's package manager; so does one beyond the version an
 // entry waits for, which keeps waiting.
 func TestUpdateHistoryOutside(t *testing.T) {
+	t.Parallel()
 	st := testStore(t, "")
 	s, _, _ := historyServer(t, st, "apt")
 	s.noteVersionStart(t.Context(), "v0.1.0-alpha.9", "v0.1.0-alpha.10", nil)
@@ -81,6 +83,7 @@ func TestUpdateHistoryOutside(t *testing.T) {
 // A start with the version of the last one, or without a last one,
 // adds nothing.
 func TestUpdateHistoryUnchangedStart(t *testing.T) {
+	t.Parallel()
 	st := testStore(t, "")
 	s, _, _ := historyServer(t, st, "apt")
 	s.noteVersionStart(t.Context(), "", "v0.1.0-alpha.9", nil)
@@ -92,6 +95,7 @@ func TestUpdateHistoryUnchangedStart(t *testing.T) {
 
 // The row keeps the newest ten.
 func TestUpdateHistoryKeepsTen(t *testing.T) {
+	t.Parallel()
 	st := testStore(t, "")
 	s, _, _ := historyServer(t, st, "")
 	for i := 1; i <= 11; i++ {
@@ -108,6 +112,7 @@ func TestUpdateHistoryKeepsTen(t *testing.T) {
 // rolled back after the new one ran, or while the helper restarts the
 // old one; an older status is not this update's.
 func TestUpdateHistoryHelperOutcome(t *testing.T) {
+	t.Parallel()
 	st := testStore(t, "")
 	s, _, _ := historyServer(t, st, "")
 	ctx := t.Context()
@@ -139,6 +144,7 @@ func TestUpdateHistoryHelperOutcome(t *testing.T) {
 // The start writes the history: a second start with a new version and
 // no update started is one from outside, by the box's manager.
 func TestUpdateHistoryAtStart(t *testing.T) {
+	t.Parallel()
 	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
 	first := startServer(t, stored(), withOptions(Options{Version: "v1.0.0", Logger: discard}))
 	first.stop()
@@ -154,6 +160,7 @@ func TestUpdateHistoryAtStart(t *testing.T) {
 // GET /api/v1/update answers the history, newest first, and an empty
 // list before the first update.
 func TestUpdateHistoryInTheAnswer(t *testing.T) {
+	t.Parallel()
 	st := testStore(t, "")
 	s, ts, _ := historyServer(t, st, "apt")
 	token := userToken(t, st, "anna", store.RoleOwner)

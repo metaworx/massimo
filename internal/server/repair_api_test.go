@@ -161,6 +161,7 @@ func relinkLines(add bool) []string {
 // preview names those lines and their cost and sends nothing, and the
 // run sends exactly them, then reads the slots back.
 func TestRepairRelink(t *testing.T) {
+	t.Parallel()
 	rg := startServer(t, repairing(), withFake(func(fc *fakecube.Server) { withContactInRoom1(t, fc.Greeting) }))
 	fc, ts := rg.fc, rg.ts
 	const path = "/api/v1/cubes/KEQ0000100/rooms/1/repair/relink"
@@ -210,6 +211,7 @@ func TestRepairRelink(t *testing.T) {
 // line reaches; the run sends exactly those r:, after each wakeup, the
 // fake keeping the flag.
 func TestRepairPreviewCountsTheQueuesResets(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, repairing(), withFake(func(fc *fakecube.Server) {
 		withContactInRoom1(t, fc.Greeting)
 		withErrorFlag(t, fc.Greeting, 0x0a010a, 0x03)
@@ -262,6 +264,7 @@ func nothingOf(t *testing.T, ts *httptest.Server, path, want string) repairPlan 
 // A room whose list and Cube disagree is not re-linked: the placement
 // repairs it first.
 func TestRepairRelinkRefusesADisagreeingRoom(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, repairing(), withFake(func(fc *fakecube.Server) { withConfigRoom(t, fc.Greeting, copyContact, 1) }))
 	fc, ts := r.fc, r.ts
 	received := cubewatch.Lines(fc)
@@ -275,6 +278,7 @@ func TestRepairRelinkRefusesADisagreeingRoom(t *testing.T) {
 // A run needs the preview's plan, and one whose plan differs from the
 // repair as it is now is refused: nothing is sent.
 func TestRepairNeedsItsPlan(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, repairing(), withFake(func(fc *fakecube.Server) { withContactInRoom1(t, fc.Greeting) }))
 	fc, ts := r.fc, r.ts
 	const path = "/api/v1/cubes/KEQ0000100/rooms/1/repair/relink"
@@ -294,6 +298,7 @@ func TestRepairNeedsItsPlan(t *testing.T) {
 // A repair that would leave fewer free slots than the queue waits for
 // is refused before it starts, in its preview and its run.
 func TestRepairRefusedForTheSlots(t *testing.T) {
+	t.Parallel()
 	rg := startServer(t, repairing(), withFake(func(fc *fakecube.Server) {
 		withContactInRoom1(t, fc.Greeting)
 		fc.SetFreeSlots(8)
@@ -335,6 +340,7 @@ func clearOnReset(t *testing.T, fc *fakecube.Server) {
 // their C lines, free; the device list read after them shows the flags
 // gone, or names those still set.
 func TestRepairReset(t *testing.T) {
+	t.Parallel()
 	flag := func(fc *fakecube.Server) {
 		withErrorFlag(t, fc.Greeting, 0x0a010a, cube.RFRemoveLink)
 		withErrorFlag(t, fc.Greeting, 0x0a010d, 0x03)
@@ -405,6 +411,7 @@ func withRoom1Thermostats(t *testing.T, greeting []cube.Message, same bool) {
 // shared temperatures with its own offset and window-open minutes, and
 // its C line is read again.
 func TestRepairResendConfig(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, repairing(), withFake(func(fc *fakecube.Server) { withRoom1Thermostats(t, fc.Greeting, true) }))
 	fc, ts, s := r.fc, r.ts, r.s
 	snap := s.cubes["keq0000100"].client.Snapshot()
@@ -441,6 +448,7 @@ func TestRepairResendConfig(t *testing.T) {
 // two other thermostats of room 1 differ in their temperatures; a device
 // alone in its room has nothing to take them from.
 func TestRepairResendRefused(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, repairing(), withFake(func(fc *fakecube.Server) { withRoom1Thermostats(t, fc.Greeting, false) }))
 	fc, ts := r.fc, r.ts
 	received := cubewatch.Lines(fc)
@@ -456,6 +464,7 @@ func TestRepairResendRefused(t *testing.T) {
 // placed there with the placement's link half, the metadata left as it
 // is; one whose C line names room 6 is moved from there.
 func TestRepairPlace(t *testing.T) {
+	t.Parallel()
 	t.Run("from no room", func(t *testing.T) {
 		r := startServer(t, repairing(), withFake(func(fc *fakecube.Server) {
 			listIn(t, fc.Greeting, copyContact, cube.DeviceShutterContact, "IEQ0000003", 1)
@@ -518,6 +527,7 @@ func listedRoom(s *Server, rf cube.RFAddress) (uint8, bool) {
 // it does not have, is listed there once the room has a name, the
 // device its master.
 func TestRepairList(t *testing.T) {
+	t.Parallel()
 	t.Run("another room", func(t *testing.T) {
 		rg := startServer(t, repairing(), withFake(func(fc *fakecube.Server) { withConfigRoom(t, fc.Greeting, copyWall, 6) }))
 		fc, ts, s := rg.fc, rg.ts, rg.s
@@ -567,6 +577,7 @@ func TestRepairList(t *testing.T) {
 // fixture's room 1 is "Wohnzimmer", its devices 0a010a and the wall
 // thermostat.
 func TestRepairListNamesTheDevice(t *testing.T) {
+	t.Parallel()
 	const path = "/api/v1/cubes/KEQ0000100/devices/0a0b0c/repair/list"
 	for _, c := range []struct {
 		name  string
@@ -641,6 +652,7 @@ func TestRepairListNamesTheDevice(t *testing.T) {
 // with a room's name of umlauts or a two-digit n, the room's name
 // dropped, "<type> <n>", n the lowest free in that form.
 func TestDefaultDeviceName(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		room  string
 		typ   cube.DeviceType
@@ -675,6 +687,7 @@ func TestDefaultDeviceName(t *testing.T) {
 // gets its wall thermostat as master, metadata only; a valid master is
 // left alone.
 func TestRepairMaster(t *testing.T) {
+	t.Parallel()
 	rg := startServer(t, repairing(), withFake(func(fc *fakecube.Server) { withRoomMaster(t, fc.Greeting, 1, 0x0a010d) }))
 	fc, ts, s := rg.fc, rg.ts, rg.s
 	received := cubewatch.Lines(fc)
@@ -701,6 +714,7 @@ func TestRepairMaster(t *testing.T) {
 
 // Every preview sends nothing to the Cube, whichever repair.
 func TestRepairPreviewsSendNothing(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, repairing(), withFake(func(fc *fakecube.Server) {
 		withContactInRoom1(t, fc.Greeting)
 		withErrorFlag(t, fc.Greeting, 0x0a010a, 0x03)
@@ -726,6 +740,7 @@ func TestRepairPreviewsSendNothing(t *testing.T) {
 // and sends nothing; one with repair alone is let through, but for
 // "unlink all and re-link", which needs structure as well.
 func TestRepairNeedsRepair(t *testing.T) {
+	t.Parallel()
 	rg := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
 	fc, ts, s := rg.fc, rg.ts, rg.s
 	st := s.opts.Store
@@ -760,6 +775,7 @@ func TestRepairNeedsRepair(t *testing.T) {
 // the re-link of every member; its preview says it has not yet run on
 // hardware, and its run sends exactly the lines it showed.
 func TestRepairUnlinkRelink(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, repairing(), withFake(func(fc *fakecube.Server) { withContactInRoom1(t, fc.Greeting) }))
 	fc, ts := r.fc, r.ts
 	const path = "/api/v1/cubes/KEQ0000100/rooms/1/repair/unlink-relink"

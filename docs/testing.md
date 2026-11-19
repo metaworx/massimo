@@ -306,6 +306,64 @@ The recorded greeting is read once for every test:
 One test runs the server by hand, since it tests `Run`'s start and end:
 `TestNothingStartsAfterRun`.
 
+## Parallel tests
+
+`internal/server`'s tests run in parallel:
+every test calls `t.Parallel()` as its first statement,
+but those on `serialTests` in `parallel_test.go`, each with its reason.
+Go runs the listed tests first, one after the other,
+and the parallel ones once the listed ones have ended,
+as many at a time as `-parallel` says (by default as many as there are CPUs).
+The other packages' tests still run one after the other.
+
+A test goes on the list where it:
+
+- **swaps a package variable**, such as a hook (`lookupCNAME`, `oidcClient`),
+  or calls `t.Setenv`, which panics in a parallel test;
+- **binds a fixed port**,
+  such as a Cube added through the API as the only one,
+  whose proxy listens on the Cube's port, :62910;
+- **checks a time as the product's**,
+  such as "the observer's calls return within 500 ms",
+  which the tests beside it would stretch.
+
+A swap goes through `swapping(t)`, called before it,
+in the test or in the helper that makes the swap, as `fakeDiscovery` does.
+It sets an environment variable through `t.Setenv`,
+so a swap in a parallel test panics at once instead of racing with the tests beside it.
+
+`TestParallelOrListed` reads the package's test files and fails where a test
+neither calls `t.Parallel()` first nor is on the list,
+where a listed test calls it,
+where the list names a test that is not there or gives no reason,
+and where `Parallel()` is called outside a test's own body and a subtest's
+function literal, such as in a helper.
+
+A subtest calls `t.Parallel()` where it builds its own server,
+as those of `TestUnconfirmedRoomCommandNotResent` do;
+one that goes on from what the subtest before it left does not.
+The guard does not check which subtests call it.
+
+What the parallel tests share:
+
+- **the recorded greeting**, read once;
+  `recorded(t)` returns the test's own copy;
+- **a helper's state across tests**,
+  such as `serverStore`'s map of each test's store, which is a `sync.Map`;
+- **SQLite's allocator**,
+  since `modernc.org/libc` takes one lock for every `malloc` and `free` of the process:
+  the tests that open a fresh store wait for each other while its migrations run.
+  About a fifth of the package's CPU time goes on that lock.
+
+On a busy machine, a step that a quiet one always wins can come second:
+
+- **a wait for the Cube client to see a fake that closed** is `awayWait`,
+  the kit's wait and the client's reply timeout,
+  since a poll the close cut off waits that out first;
+- **a C line set with the fake's `SetConfig`** is not in its greeting,
+  so a reconnect brings the old one back:
+  `takeConfig` sets both, as the Cube's greeting carries what its devices took.
+
 ## Ports
 
 A test holds a port for as long as it needs it, and hands the listener on.

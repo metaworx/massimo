@@ -63,6 +63,7 @@ func subscription(t *testing.T, endpoint, label string) string {
 // the same for the next server over it, not among the settings the API
 // shows, and made anew where it no longer opens.
 func TestVAPIDKey(t *testing.T) {
+	t.Parallel()
 	opts := storeOptions(t, t.TempDir(), "secret")
 	ts := startServer(t, withOptions(opts)).ts
 	code, text := callAPI(t, ts, "GET", "/api/v1/push/vapid", "secret", "")
@@ -104,6 +105,7 @@ func TestVAPIDKey(t *testing.T) {
 // key: listed without its keys, the same endpoint again updating it,
 // removed by its owner only; the audit has both, and no command.
 func TestPushSubscriptionRoutes(t *testing.T) {
+	t.Parallel()
 	rg := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
 	ts, s := rg.ts, rg.s
 	st := s.opts.Store
@@ -194,6 +196,7 @@ func TestPushSubscriptionRoutes(t *testing.T) {
 
 // Without a signed-in user the routes answer 409, without a store 503.
 func TestPushWithoutUser(t *testing.T) {
+	t.Parallel()
 	open := startServer(t, withOptions(storeOptions(t, t.TempDir(), ""))).ts
 	for _, m := range []string{"GET", "POST"} {
 		if code, text := callAPI(t, open, m, "/api/v1/me/push", "", subscription(t, "https://push.example.net/a", "")); code != 409 || !strings.Contains(text, "no user signed in") {
@@ -209,6 +212,7 @@ func TestPushWithoutUser(t *testing.T) {
 // The notify preference is read as the rules read it: a document they
 // cannot is refused.
 func TestNotifyPreferenceChecked(t *testing.T) {
+	t.Parallel()
 	ts := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret"))).ts
 	for _, bad := range []string{`{"window_open": {"on": true, "after_min": 0}}`, `{"sunshine": {"on": true}}`, `[]`} {
 		if code, text := callAPI(t, ts, "PUT", "/api/v1/me/preferences/notify", "secret", bad); code != 400 {
@@ -229,6 +233,7 @@ func TestNotifyPreferenceChecked(t *testing.T) {
 // level changes, after minutes: internal/notify's and battery_test.go's
 // tests have it.)
 func TestNotificationFromTheCube(t *testing.T) {
+	t.Parallel()
 	opts := storeOptions(t, t.TempDir(), "secret")
 	var logs *testkit.Watch[testkit.Record]
 	opts.Logger, logs = testkit.LogWatch(nil)
@@ -274,6 +279,7 @@ func notificationOf(ev testkit.Event) notify.Notification {
 // own event stream and no one else's, and through the deliverers an app
 // embedding the server gives.
 func TestNotificationDelivered(t *testing.T) {
+	t.Parallel()
 	opts := storeOptions(t, t.TempDir(), "secret")
 	var logs *testkit.Watch[testkit.Record]
 	opts.Logger, logs = testkit.LogWatch(nil)
@@ -358,6 +364,7 @@ func TestNotificationDelivered(t *testing.T) {
 // A subscription its push service knows no more is removed at the
 // first notification.
 func TestNotificationRemovesGoneSubscription(t *testing.T) {
+	t.Parallel()
 	opts := storeOptions(t, t.TempDir(), "secret")
 	var logs *testkit.Watch[testkit.Record]
 	opts.Logger, logs = testkit.LogWatch(nil)

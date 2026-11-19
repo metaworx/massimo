@@ -23,6 +23,7 @@ const (
 // The header's notation: parameters, a quoted value, a name in RFC 8187,
 // the flag alone; what it may not say is refused.
 func TestParseOnBehalf(t *testing.T) {
+	t.Parallel()
 	ob, err := parseOnBehalf(`id=` + strings.ToUpper(haAnna) + `; level=Control; name*=UTF-8''J%C3%BCrg%20M; instance="` + haInstance + `"; system_generated`)
 	if err != nil || ob.id != haAnna || ob.level != LevelControl || ob.name != "Jürg M" || ob.instance != haInstance || !ob.systemGenerated {
 		t.Fatalf("%+v %v", ob, err)
@@ -70,6 +71,7 @@ func as(id, level string) map[string]string {
 // integration's maximum, the integration user's role and the level; and
 // each refusal says which it is.
 func TestOnBehalfChain(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, storedRooms(), quiet())
 	fc, ts, s, st := r.fc, r.ts, r.s, r.st
 	received := cubewatch.Lines(fc)

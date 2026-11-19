@@ -30,6 +30,7 @@ func testStore(t *testing.T, dir string) *store.Store {
 
 // The stale threshold is the server's, not the process's.
 func TestStaleAfterPerServer(t *testing.T) {
+	t.Parallel()
 	a := New(Options{StaleAfter: 36 * time.Hour})
 	b := New(Options{})
 	if a.StaleAfter() != 36*time.Hour || b.StaleAfter() != view.StaleAfter {
@@ -45,6 +46,7 @@ func TestStaleAfterPerServer(t *testing.T) {
 // server it is listed again once a run has heard it, not before, and
 // not announced a second time.
 func TestFoundCubeSurvivesRestart(t *testing.T) {
+	t.Parallel()
 	other, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000000", 0x0a0b0c)
 	if err != nil {
 		t.Fatal(err)

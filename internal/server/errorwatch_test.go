@@ -120,6 +120,7 @@ func wantWatch(t *testing.T, ev event, level string, want map[string]any) {
 // device; back again the same day is no second warning; clear for a day,
 // the resets take the device again.
 func TestErrorWatchBack(t *testing.T) {
+	t.Parallel()
 	clock := testkit.NewClock(time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC))
 	r := startServer(t, resetsOn(clock))
 	fc, ts, s, received := r.fc, r.ts, r.s, r.lines
@@ -206,6 +207,7 @@ func TestErrorWatchBack(t *testing.T) {
 // timer and an alert until its clear, an info line; a flag cleared
 // before stops its timer.
 func TestErrorWatchLasting(t *testing.T) {
+	t.Parallel()
 	clock := testkit.NewClock(time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC))
 	r := startServer(t, resetsOn(clock))
 	fc, ts, s := r.fc, r.ts, r.s
@@ -268,6 +270,7 @@ func TestErrorWatchLasting(t *testing.T) {
 // without a state has no flag in its lines, and its day starts with the
 // server; one started after the errors gives none again.
 func TestErrorWatchLastingAcrossRestart(t *testing.T) {
+	t.Parallel()
 	clock := testkit.NewClock(time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC))
 	r := startServer(t, resetsOn(clock))
 	fc, ts, s, st := r.fc, r.ts, r.s, r.st
@@ -343,6 +346,7 @@ func TestErrorWatchLastingAcrossRestart(t *testing.T) {
 // A flag's day that comes up while the Cube is away is no error yet: its
 // flags are not known then, and the timer looks again in a minute.
 func TestErrorWatchWaitsForTheCube(t *testing.T) {
+	t.Parallel()
 	clock := testkit.NewClock(time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC))
 	r := startServer(t, resetsOn(clock))
 	fc, ts, s := r.fc, r.ts, r.s
@@ -351,7 +355,7 @@ func TestErrorWatchWaitsForTheCube(t *testing.T) {
 	settleState(t, fc, ts, s, rf, fakecube.State{Error: &on}, "", nil)
 	fc.Close()
 	rt := s.runtimes()[0]
-	testkit.Eventually(t, "the Cube away", func() bool { return !rt.client.Connected() })
+	testkit.Eventually(t, "the Cube away", func() bool { return !rt.client.Connected() }, awayWait)
 	clock.Add(25 * time.Hour)
 	if lines := watchLines(t, ts, rf); len(lines) != 0 {
 		t.Fatalf("with the Cube away: %+v", lines)

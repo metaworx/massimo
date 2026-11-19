@@ -16,6 +16,7 @@ import (
 // each with its room's name: a transmit error and a low battery; a
 // device without one is not, nor a hidden one.
 func TestCubeProblems(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, stored(), withOptions(Options{PollInterval: 100 * time.Millisecond}))
 	fc, ts := r.fc, r.ts
 	if code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100", `{"hidden":["0a0108"]}`); code != 200 {

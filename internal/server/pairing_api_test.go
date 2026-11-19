@@ -31,6 +31,7 @@ func pairing(delay time.Duration) startOpt {
 }
 
 func TestPairingAndAddingToARoom(t *testing.T) {
+	t.Parallel()
 	rg := startServer(t, pairing(50*time.Millisecond))
 	fc, ts := rg.fc, rg.ts
 	received := cubewatch.Lines(fc)
@@ -46,8 +47,11 @@ func TestPairingAndAddingToARoom(t *testing.T) {
 		t.Fatalf("second start: %d", code)
 	}
 	// n: gets no answer, so the fake may hold it only after the API's.
+	// The device joins 50 ms after it, and the server reads its C line,
+	// which a busy machine can show by now: that line is the join's.
 	received.Await(t, 0, "the n: at the Cube", cubewatch.Type('n'))
-	if got := received.Since(0, cubewatch.Except('l')); len(got) != 1 || got[0].String() != "n:001e" {
+	notJoin := func(m cube.Message) bool { return m.Type != 'l' && m.String() != "c:0a0b0c" }
+	if got := received.Since(0, notJoin); len(got) != 1 || got[0].String() != "n:001e" {
 		t.Fatalf("cube received %v", got)
 	}
 	// The device joins: it is in the state, the log has the event, and
@@ -133,6 +137,7 @@ func TestPairingAndAddingToARoom(t *testing.T) {
 }
 
 func TestPairingEndsWithTheCube(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, pairing(time.Hour))
 	fc, ts := r.fc, r.ts
 	received := cubewatch.Lines(fc)
@@ -152,6 +157,7 @@ func TestPairingEndsWithTheCube(t *testing.T) {
 // The API asks for at most 255 s, the longest a Cube keeps the mode:
 // 256 is refused before anything is sent, 255 goes to the Cube as n:00ff.
 func TestPairingTimeLimit(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, pairing(time.Hour))
 	fc, ts := r.fc, r.ts
 	received := cubewatch.Lines(fc)

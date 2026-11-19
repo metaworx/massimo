@@ -30,6 +30,7 @@ func featuresAt(t *testing.T, ts *httptest.Server) map[string]string {
 // GET /healthz names what this server can do: with a store all of it,
 // without one the features that need it left out, as their routes are.
 func TestHealthzFeatures(t *testing.T) {
+	t.Parallel()
 	ts := startServer(t, storedRooms()).ts // with a store
 	with := featuresAt(t, ts)
 	for _, name := range []string{"event_ids", "idempotency", "commands", "vwt", "program_etag", "boost", "proxy_virtual", "integration"} {

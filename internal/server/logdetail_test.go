@@ -24,6 +24,7 @@ import (
 // The differences of two room and device lists, rooms first, each in the
 // list's order; the hidden devices and their rooms left out.
 func TestMetadataChanges(t *testing.T) {
+	t.Parallel()
 	old := &cube.Metadata{
 		Rooms: []cube.RoomMeta{{ID: 1, Name: "Bath"}, {ID: 2, Name: "Kitchen"}, {ID: 3, Name: "Attic"}, {ID: 9, Name: "Secret"}},
 		Devices: []cube.DeviceMeta{
@@ -68,6 +69,7 @@ func TestMetadataChanges(t *testing.T) {
 // The differences of two configurations, by their JSON names; a day's
 // program by its name alone.
 func TestConfigChanges(t *testing.T) {
+	t.Parallel()
 	prog := cube.WeekProgram{}
 	old := &cube.DeviceConfig{Type: cube.DeviceRadiatorThermostat, Firmware: 0x10,
 		Thermostat: &cube.ThermostatConfig{ComfortTemp: 21, EcoTemp: 17, TempOffset: 0, WeekProgram: prog}}
@@ -100,6 +102,7 @@ func TestConfigChanges(t *testing.T) {
 
 // What the summaries say.
 func TestGreetingSummaries(t *testing.T) {
+	t.Parallel()
 	h := &cube.Hello{FirmwareVersion: "1.1.3", DutyCycle: 3, FreeMemorySlots: 180}
 	if got := helloSummary(h); got["firmware"] != "1.1.3" || got["duty_cycle_pct"] != 3 || got["free_memory_slots"] != 180 {
 		t.Fatalf("hello %v", got)
@@ -163,6 +166,7 @@ func newLines(t *testing.T, s string, all []event, n int) []event {
 // saying the devices, rooms, firmware, budget and cause; the greeting's
 // own lines are at debug, each with its summary.
 func TestReconnectAtInfoIsOneLine(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, stored())
 	fc, ts := r.fc, r.ts
 	testkit.Eventually(t, "the first connected", func() bool {
@@ -210,6 +214,7 @@ func TestReconnectAtInfoIsOneLine(t *testing.T) {
 // A room renamed while the Cube was disconnected follows the connected
 // line at info, as a metadata line that says so.
 func TestChangedWhileDisconnected(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, stored())
 	fc, ts := r.fc, r.ts
 	testkit.Eventually(t, "the first connected", func() bool {
@@ -237,6 +242,7 @@ func TestChangedWhileDisconnected(t *testing.T) {
 // After a restart the reference is the newest backup: a room renamed
 // while the server was down shows after the first connected line.
 func TestChangedWhileServerDown(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, stored())
 	fc, ts, s, st := r.fc, r.ts, r.s, r.st
 	rt := s.cubes["keq0000100"]
@@ -274,6 +280,7 @@ func TestChangedWhileServerDown(t *testing.T) {
 // A C line read again that changed nothing is at debug; one that changed
 // says what at info.
 func TestSameConfigAtDebug(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, stored())
 	fc, ts, s := r.fc, r.ts, r.s
 	rt := s.cubes["keq0000100"]

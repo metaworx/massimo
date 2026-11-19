@@ -109,6 +109,7 @@ func opaqueSignIn(t *testing.T, ts *httptest.Server, name, password, purpose str
 // wrong password and an unknown name are answered alike at the start and
 // refused at the finish; the audit keeps none of the messages.
 func TestOpaqueSignIn(t *testing.T) {
+	t.Parallel()
 	ts := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret"))).ts
 	rec := opaqueRecord(t, ts, "secret", "anna", "correct horse")
 	code, body := callAPI(t, ts, "POST", "/api/v1/users", "secret", `{"name":"anna","role":"operator","record":"`+rec+`","ksf":"`+store.OpaqueKSF+`"}`)
@@ -159,6 +160,7 @@ func TestOpaqueSignIn(t *testing.T) {
 // once, so that starts never finished lock out as wrong passwords do;
 // a finished sign-in clears the count.
 func TestOpaqueStartCounts(t *testing.T) {
+	t.Parallel()
 	opts := storeOptions(t, t.TempDir(), "secret")
 	opts.AuthFailures = 3
 	r := startServer(t, withOptions(opts))
@@ -202,6 +204,7 @@ func TestOpaqueStartCounts(t *testing.T) {
 // password sign-in from it are 429 meanwhile, a finished or an ended
 // start lets the next one in, and a login is finished once.
 func TestOpaqueOneAtATime(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
 	ts, s := r.ts, r.s
 	rec := opaqueRecord(t, ts, "secret", "anna", "pw")
@@ -254,6 +257,7 @@ func TestOpaqueOneAtATime(t *testing.T) {
 // one, good once; someone with users needs none, and ends the user's
 // sessions.
 func TestOpaqueOwnPassword(t *testing.T) {
+	t.Parallel()
 	ts := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret"))).ts
 	callAPI(t, ts, "POST", "/api/v1/users", "secret", `{"name":"anna","role":"operator","password":"old"}`)
 	_, body := callAPI(t, ts, "POST", "/api/v1/login", "", `{"user":"anna","password":"old"}`)
@@ -306,6 +310,7 @@ func TestOpaqueOwnPassword(t *testing.T) {
 // add its user, the first owner from the local network among them; bad
 // messages are 400.
 func TestOpaqueRegister(t *testing.T) {
+	t.Parallel()
 	open := startServer(t, withOptions(storeOptions(t, t.TempDir(), ""))).ts
 	rec := opaqueRecord(t, open, "", "root", "pw")
 	if code, body := callAPI(t, open, "POST", "/api/v1/users", "", `{"name":"root","record":"`+rec+`","ksf":"`+store.OpaqueKSF+`"}`); code != 201 {
@@ -369,6 +374,7 @@ func must[T any](v T, err error) T {
 // lockout its start set, and answers a proof to upgrade with, good once,
 // with which the user's own record replaces the hash.
 func TestOpaqueUpgrade(t *testing.T) {
+	t.Parallel()
 	opts := storeOptions(t, t.TempDir(), "secret")
 	opts.AuthFailures = 2
 	ts := startServer(t, withOptions(opts)).ts
@@ -436,6 +442,7 @@ func TestOpaqueUpgrade(t *testing.T) {
 // without, and the start says so; the sign-in by OPAQUE and the API keys
 // go on, and null brings the default back.
 func TestPasswordLoginOff(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
 	ts, s := r.ts, r.s
 	key := userToken(t, s.opts.Store, "vera", store.RoleViewer)

@@ -18,6 +18,7 @@ import (
 // runtime started anew over the same store rebuilds the level from the
 // log's state rows.
 func TestBatteryLevel(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, stored(), withOptions(Options{PollInterval: 100 * time.Millisecond}))
 	fc, ts, s, st := r.fc, r.ts, r.s, r.st
 	var d deviceDetail

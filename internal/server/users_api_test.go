@@ -25,6 +25,7 @@ func decodeUserView(text string) userView {
 // The users routes: create, list, change, remove, the own user, a
 // guests holder, the tokens, the last owner.
 func TestUsersRoutes(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
 	ts, s := r.ts, r.s
 	st := s.opts.Store
@@ -234,6 +235,7 @@ func TestUsersRoutes(t *testing.T) {
 
 // The first owner is created on an open server from the local network.
 func TestFirstOwner(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "")))
 	ts, s := r.ts, r.s
 	users := "/api/v1/users"
@@ -271,6 +273,7 @@ func TestFirstOwner(t *testing.T) {
 
 // The roles and capabilities routes.
 func TestRolesRoutes(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
 	ts, s := r.ts, r.s
 	st := s.opts.Store
@@ -389,6 +392,7 @@ func TestRolesRoutes(t *testing.T) {
 // waited until the client went away, answers 503 with Retry-After;
 // a wrong password is not that.
 func TestPasswordBusy(t *testing.T) {
+	t.Parallel()
 	for _, err := range []error{store.ErrBusy, fmt.Errorf("store: password check: %w", context.Canceled)} {
 		var he *httpError
 		if !errors.As(userFail(err), &he) || he.status != 503 || he.retryAfter != busyRetry {
@@ -404,6 +408,7 @@ func TestPasswordBusy(t *testing.T) {
 // the store's "store: " prefix, which the web UI showed as it came:
 // `test manager: store: bad user name: "test manager"`.
 func TestUsersRefusalsWithoutStorePrefix(t *testing.T) {
+	t.Parallel()
 	ts := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret"))).ts
 	owner := "secret"
 	for _, c := range []struct {
@@ -439,6 +444,7 @@ func TestUsersRefusalsWithoutStorePrefix(t *testing.T) {
 // an owner. passwords, the manager's by default, sets the password of
 // such a user and nothing else.
 func TestRankRule(t *testing.T) {
+	t.Parallel()
 	opts := storeOptions(t, t.TempDir(), "secret")
 	r := startServer(t, withOptions(opts))
 	ts, s := r.ts, r.s
@@ -488,6 +494,7 @@ func TestRankRule(t *testing.T) {
 // current one it has not; the next change asks for the current one, as
 // for every user.
 func TestFirstOwnPassword(t *testing.T) {
+	t.Parallel()
 	opts := storeOptions(t, t.TempDir(), "secret")
 	r := startServer(t, withOptions(opts))
 	ts, s := r.ts, r.s
@@ -511,6 +518,7 @@ func TestFirstOwnPassword(t *testing.T) {
 // its keys and its push subscriptions go with it, and a new user under
 // the name starts with none of it (docs/store.md, "users").
 func TestRemovedUserKeepsItsHistory(t *testing.T) {
+	t.Parallel()
 	rg := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
 	ts, s := rg.ts, rg.s
 	st := s.opts.Store

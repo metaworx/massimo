@@ -38,6 +38,7 @@ func jsonLines(t *testing.T, text string) []map[string]any {
 // that failed says so in its message; a line below the logger's level is
 // not written.
 func TestEventLine(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	log := slog.New(slog.NewJSONHandler(&buf, nil))
 	ev := event{Kind: "backup", Source: "system", Level: "info", Device: "0a0101", Serial: "MEQ0000101", Command: 7,
@@ -71,6 +72,7 @@ func TestEventLine(t *testing.T) {
 // states, each once, with no second line of the server's or the Cube
 // client's saying it again.
 func TestEventLinesMatchTheRows(t *testing.T) {
+	t.Parallel()
 	log, logs := testkit.LogWatch(nil)
 	rg := startServer(t, stored(), withOptions(Options{Logger: log}))
 	s, st := rg.s, rg.st
@@ -137,6 +139,7 @@ func TestEventLinesMatchTheRows(t *testing.T) {
 
 // A step's line says its state, a hold's what the radio waits for.
 func TestEventMessages(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		ev   event
 		want string

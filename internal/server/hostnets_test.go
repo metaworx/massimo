@@ -30,6 +30,7 @@ func nets(t *testing.T, cidrs ...string) []*net.IPNet {
 // or without its port; a host name, or a host whose networks are not
 // known, is not judged.
 func TestOtherNetwork(t *testing.T) {
+	t.Parallel()
 	home := nets(t, "192.168.178.0/24", "127.0.0.0/8", "fd00::/64")
 	for _, c := range []struct {
 		addr string
@@ -59,6 +60,7 @@ func TestOtherNetwork(t *testing.T) {
 // cube_found event; inside them, the field is absent. A proxy is never
 // marked.
 func TestFoundCubeInAnotherNetwork(t *testing.T) {
+	t.Parallel()
 	other, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000000", 0x0a0b0c)
 	if err != nil {
 		t.Fatal(err)

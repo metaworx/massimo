@@ -42,6 +42,7 @@ func serialsOf(t *testing.T, ts *httptest.Server, token string) map[string]strin
 // the source "device", a configuration also before the device has a
 // state; the Cube's own C line is the Cube's, under its serial.
 func TestLogEventsCarrySerial(t *testing.T) {
+	t.Parallel()
 	ts := startServer(t, stored()).ts
 	serials := serialsOf(t, ts, "")
 	var cubeRF string
@@ -77,6 +78,7 @@ func TestLogEventsCarrySerial(t *testing.T) {
 // its event names it as it was: its serial, type, name and room, though
 // the snapshot no longer has it.
 func TestLogForgottenDeviceHasSerial(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, withGreeting(copyGreeting(t)))
 	fc, ts := r.fc, r.ts
 	const base = "/api/v1/cubes/KEQ0000100"
@@ -133,6 +135,7 @@ func containsLine(lines []string, want string) bool {
 // address: the same lines reach the Cube, the same device is read; a
 // serial the Cube does not have is a 404, neither form a 400.
 func TestDeviceRoutesTakeSerial(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, withGreeting(copyGreeting(t)))
 	fc, ts := r.fc, r.ts
 	received := cubewatch.Lines(fc)
@@ -190,6 +193,7 @@ func TestDeviceRoutesTakeSerial(t *testing.T) {
 // The log's device= takes the serial, in any case, as the radio address;
 // a serial the Cube does not have answers an empty page.
 func TestLogDeviceFilterBySerial(t *testing.T) {
+	t.Parallel()
 	ts := startServer(t, stored()).ts
 	serials := serialsOf(t, ts, "")
 	var byRF []event
@@ -215,6 +219,7 @@ func TestLogDeviceFilterBySerial(t *testing.T) {
 
 // The audit names a device by its serial, whichever form the path held.
 func TestAuditTargetBySerial(t *testing.T) {
+	t.Parallel()
 	ts := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret"))).ts
 	serial := serialsOf(t, ts, "secret")["0a010d"]
 	callAPI(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/0a010d/lock", "secret", `{"locked":false}`)

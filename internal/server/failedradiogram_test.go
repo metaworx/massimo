@@ -23,6 +23,7 @@ import (
 // severe (D181); a code the list lacks stays a number; the flag cleared
 // takes it away.
 func TestFailedRadiogram(t *testing.T) {
+	t.Parallel()
 	log, logs := testkit.LogWatch(nil)
 	rg := startServer(t, stored(), withOptions(Options{PollInterval: 100 * time.Millisecond, Logger: log}))
 	fc, ts, s := rg.fc, rg.ts, rg.s
@@ -182,6 +183,7 @@ func TestFailedRadiogram(t *testing.T) {
 // it was: the wall thermostat's communication error and failed
 // radiogram are not in it.
 func TestVirtualEntryLeavesTheCommunicationErrorOut(t *testing.T) {
+	t.Parallel()
 	sp, at := 21.0, 20.5
 	failed := cube.RadiogramTimeInformation
 	d := view.Device{RFAddress: "0a0101", Type: cube.DeviceWallThermostat, Reported: true,

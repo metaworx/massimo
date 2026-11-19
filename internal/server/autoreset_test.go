@@ -38,6 +38,7 @@ func resetOf(rf cube.RFAddress) func(cube.Message) bool {
 // left out: the fake Cube's r: does not clear the flag, so it would be
 // back at every report after the first (TestErrorWatchBack).
 func TestAutoReset(t *testing.T) {
+	t.Parallel()
 	clock := testkit.NewClock(time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC))
 	noHold := beforeRun(func(s *Server) { s.runtimes()[0].resets.hold = nil })
 	r := startServer(t, resetsOn(clock), noHold)
@@ -110,6 +111,7 @@ func TestAutoReset(t *testing.T) {
 // The hold hook (Block 6's) holds a flagged device back: it is asked
 // with the device and the report's time, and nothing is sent.
 func TestAutoResetHold(t *testing.T) {
+	t.Parallel()
 	clock := testkit.NewClock(time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC))
 	var mu sync.Mutex
 	var asked []string
@@ -139,6 +141,7 @@ func TestAutoResetHold(t *testing.T) {
 // reset less than a day old may be there. Once the row is known, the
 // device's next report reads the log and resets it.
 func TestAutoResetWaitsForTheStoresRow(t *testing.T) {
+	t.Parallel()
 	st := testStore(t, "")
 	clock := testkit.NewClock(time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC))
 	// A store without a row for the Cube: the runtime has no store ID.

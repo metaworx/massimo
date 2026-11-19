@@ -59,6 +59,7 @@ func devicesIn(t *testing.T, ts *httptest.Server, kind string, room int) []view.
 // The four views of the rooms and devices, the rooms' uids from the
 // store, and the room's temperature.
 func TestVirtualWallThermostatViews(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, storedRooms())
 	ts, st := r.ts, r.st
 	addrs := func(ds []view.Device) string {
@@ -116,6 +117,7 @@ func TestVirtualWallThermostatViews(t *testing.T) {
 // A virtual wall thermostat is found by its room, its serial and its
 // address, with its room's settings and week programme.
 func TestVirtualWallThermostatDevice(t *testing.T) {
+	t.Parallel()
 	ts := startServer(t, storedRooms()).ts
 	for _, name := range []string{"room-2", "ROOM-2", "VWT0000002", "000002"} {
 		var d vwtDetail
@@ -140,6 +142,7 @@ func TestVirtualWallThermostatDevice(t *testing.T) {
 // of the virtual wall thermostat too, on the streams whose view shows it;
 // the virtual view leaves the real wall thermostat's events out.
 func TestVirtualWallThermostatEvents(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, storedRooms())
 	fc, ts, s := r.fc, r.ts, r.s
 	rt := s.cubes["keq0000100"]
@@ -201,6 +204,7 @@ func TestVirtualWallThermostatEvents(t *testing.T) {
 // configuration too, which a stream opened before the pump came to it
 // would otherwise carry; the views that show it carry the event.
 func TestVirtualViewLeavesOutTheRealWallsEvents(t *testing.T) {
+	t.Parallel()
 	// The start has the greeting's mismatches through the pump before
 	// the streams open: a pump slow to come to the greeting (armv6 under
 	// QEMU) would publish them on the streams, beside the test's own.
@@ -269,6 +273,7 @@ func lastRadio(t *testing.T, received *testkit.Watch[cube.Message]) cube.RadioCo
 // wall thermostat; its settings the store; it is neither renamed, moved
 // nor deleted.
 func TestVirtualWallThermostatCommands(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, storedRooms(), quiet())
 	fc, ts, s, st := r.fc, r.ts, r.s, r.st
 	received := cubewatch.Lines(fc)
@@ -353,6 +358,7 @@ func TestVirtualWallThermostatCommands(t *testing.T) {
 // A room takes one wall thermostat: adding or moving a second into it is
 // refused before anything is sent, as the original software refuses it.
 func TestSecondWallThermostatRefused(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, storedRooms(), changeGreeting(func(lines []cube.Message) []cube.Message {
 		p, err := fakecube.PairingFrom(lines, 0x0a0201, 0x0a0299, "NEQ0000299", 0)
 		if err != nil {
@@ -377,6 +383,7 @@ func TestSecondWallThermostatRefused(t *testing.T) {
 // mode 3, carrying the setpoint the room has; on a virtual wall
 // thermostat too. The fake Cube applies it as the devices do.
 func TestBoostOverTheAir(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, storedRooms(), quiet())
 	fc, ts := r.fc, r.ts
 	received := cubewatch.Lines(fc)
@@ -397,6 +404,7 @@ func TestBoostOverTheAir(t *testing.T) {
 // a virtual wall thermostat per room whose C line and L entry read as a
 // wall thermostat's, with the room's programme and temperature.
 func TestProxyVirtualOption(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, storedRooms(), quiet())
 	ts, s, st := r.ts, r.s, r.st
 	rt := s.cubes["keq0000100"]
