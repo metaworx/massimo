@@ -19,6 +19,7 @@ import (
 // Every audited action says which line it writes, and the table names
 // no action the routes do not have.
 func TestEveryActionHasALine(t *testing.T) {
+	t.Parallel()
 	seen := map[string]bool{}
 	for route, action := range actions {
 		if action == "" {
@@ -43,6 +44,7 @@ func TestEveryActionHasALine(t *testing.T) {
 // Naming a Cube is the Cube's change line, with the name from and to and
 // who; a setpoint is a line of its device.
 func TestCubeNamedIsLogged(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, stored())
 	ts, st := r.ts, r.st
 	token := userToken(t, st, "anna", "owner")
@@ -77,6 +79,7 @@ func TestCubeNamedIsLogged(t *testing.T) {
 // A user created is a line of the server's naming the user as created:
 // ids and names; the password is in it nowhere.
 func TestUserChangeCarriesIds(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
 	ts, s := r.ts, r.s
 	if code, body := callAPI(t, ts, "POST", "/api/v1/users", "secret", `{"name":"Zed","display_name":"Zed Z.","password":"pw-secret-123","role":"viewer"}`); code != 201 {
@@ -104,6 +107,7 @@ func TestUserChangeCarriesIds(t *testing.T) {
 // No change line holds a secret: the passwords, the keys and the OPAQUE
 // records are left out of what a request set.
 func TestNoSecretInLine(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
 	ts, s := r.ts, r.s
 	callAPI(t, ts, "POST", "/api/v1/users", "secret", `{"name":"zed","password":"pw-secret-123","role":"owner"}`)

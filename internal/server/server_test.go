@@ -44,6 +44,7 @@ func getJSON(t *testing.T, ts *httptest.Server, token, path string, v any) int {
 // A Cube's summary says when its clock was read, at the greeting, so that
 // a client can move the clock on.
 func TestCubeTimeAt(t *testing.T) {
+	t.Parallel()
 	before := time.Now()
 	ts := startServer(t).ts
 	var c cubeView
@@ -56,6 +57,7 @@ func TestCubeTimeAt(t *testing.T) {
 }
 
 func TestServerReadsAndSetpoints(t *testing.T) {
+	t.Parallel()
 	rg := startServer(t)
 	fc, ts, s := rg.fc, rg.ts, rg.s
 	received := cubewatch.Lines(fc)
@@ -166,6 +168,7 @@ func TestServerReadsAndSetpoints(t *testing.T) {
 }
 
 func TestServerToken(t *testing.T) {
+	t.Parallel()
 	ts := startServer(t, withOptions(Options{Token: "secret"})).ts
 	if getJSON(t, ts, "", "/api/v1/cubes", nil) != 401 {
 		t.Fatal("no token accepted")
@@ -179,6 +182,7 @@ func TestServerToken(t *testing.T) {
 }
 
 func TestHealthzStarted(t *testing.T) {
+	t.Parallel()
 	before := time.Now()
 	ts := startServer(t, withOptions(Options{Token: "secret"})).ts
 	var h struct {
@@ -194,6 +198,7 @@ func TestHealthzStarted(t *testing.T) {
 }
 
 func TestPeriodicRefreshReconnects(t *testing.T) {
+	t.Parallel()
 	fc := startServer(t, withOptions(Options{RefreshInterval: 50 * time.Millisecond})).fc
 	testkit.Within(5*time.Second, func() bool { return fc.Connections() >= 3 })
 	if fc.Connections() < 3 {
@@ -202,6 +207,7 @@ func TestPeriodicRefreshReconnects(t *testing.T) {
 }
 
 func TestDeviceValueTimes(t *testing.T) {
+	t.Parallel()
 	greeting := recorded(t)
 	// 0a010d reports in the greeting: manual, 21 °C, valve 30 %.
 	l := &greeting[len(greeting)-1]
@@ -243,6 +249,7 @@ func (f fakeSource) GetCertificate(*tls.ClientHelloInfo) (*tls.Certificate, erro
 func (f fakeSource) Status() certs.Status { return f.st }
 
 func TestHSTSAndHealthzTLS(t *testing.T) {
+	t.Parallel()
 	st := certs.Status{Source: "files", Names: []string{"massimo.example.net"}, NotAfter: time.Now().Add(24 * time.Hour).Truncate(time.Second), Fingerprint: "SHA256:00:11"}
 	header := func(ts *httptest.Server, token, path string) (string, map[string]any) {
 		t.Helper()
@@ -294,6 +301,7 @@ func TestHSTSAndHealthzTLS(t *testing.T) {
 // TestLockoutBehindProxy counts failed token checks per client the proxy
 // names, not per proxy, and the stream asks nginx not to buffer.
 func TestLockoutBehindProxy(t *testing.T) {
+	t.Parallel()
 	proxies, _ := ParseTrustedProxies("127.0.0.1,::1")
 	ts := startServer(t, withOptions(Options{Token: "secret", TrustedProxies: proxies, AuthFailures: 3})).ts
 	try := func(client, token string) int {

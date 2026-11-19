@@ -234,10 +234,13 @@ func (s *Server) rebootNow(gen uint64) {
 		return
 	}
 	// The helper took it; a server still here later did not go down
-	// with the computer, and the next reboot may be asked for.
-	time.AfterFunc(rebootStuck, func() {
-		if p.failed(gen, "the computer has not rebooted within "+rebootStuck.String()+"; the reboot helper's log says why") {
-			s.log.Error("the computer has not rebooted", "after", rebootStuck.String())
+	// with the computer, and the next reboot may be asked for. The
+	// length is read once, so that the timer does not read the variable
+	// a test may have changed meanwhile.
+	stuck := rebootStuck
+	time.AfterFunc(stuck, func() {
+		if p.failed(gen, "the computer has not rebooted within "+stuck.String()+"; the reboot helper's log says why") {
+			s.log.Error("the computer has not rebooted", "after", stuck.String())
 		}
 	})
 }

@@ -34,6 +34,7 @@ func sendWith(t *testing.T, ts *httptest.Server, method, path, body string, head
 // with users; reads, the page's own writes and clients that are not
 // browsers pass.
 func TestCrossOriginWritesRefused(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "")))
 	ts, s := r.ts, r.s
 	st := s.opts.Store

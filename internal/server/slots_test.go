@@ -117,6 +117,7 @@ func (c *slotsCube) waitSlotsEvents(t *testing.T, n int) []event {
 // another reading at none says no more; 50 free at the next greeting:
 // free again, at info, which settles the alert.
 func TestSlotsStayFull(t *testing.T) {
+	t.Parallel()
 	c := startSlotsCube(t, 1, nil)
 	t0 := c.clock.Now()
 	c.clock.Add(30 * time.Minute)
@@ -159,6 +160,7 @@ func TestSlotsStayFull(t *testing.T) {
 // step to the error, the newest the alert; three free: the step back to
 // the warning; four free still short; five free: free again (D192-A).
 func TestSlotsShortThenFullAndBack(t *testing.T) {
+	t.Parallel()
 	c := startSlotsCube(t, 4, nil)
 	c.clock.Add(61 * time.Minute)
 	c.reconnect(t)
@@ -213,6 +215,7 @@ func TestSlotsShortThenFullAndBack(t *testing.T) {
 // count, the greeting's either: the error comes with the first counting
 // reading an hour after the first.
 func TestSlotsInFlightNotCounted(t *testing.T) {
+	t.Parallel()
 	c := startSlotsCube(t, 1, nil)
 	c.clock.Add(61 * time.Minute)
 	if code, out := do(t, c.ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/0a010a/setpoint", `{"mode":"manual","temp":21.5}`); code != 200 {
@@ -232,6 +235,7 @@ func TestSlotsInFlightNotCounted(t *testing.T) {
 // the level logged: with 50 free at the first greeting after the start,
 // the slots are free again; with 3 free after a warning, nothing new.
 func TestSlotsSeededFromTheLog(t *testing.T) {
+	t.Parallel()
 	since := time.Date(2026, 11, 14, 8, 0, 0, 0, time.UTC)
 	seed := func(level, state string) func(st *store.Store, cubeID int64) {
 		return func(st *store.Store, cubeID int64) {

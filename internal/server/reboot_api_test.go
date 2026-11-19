@@ -79,12 +79,13 @@ func rebootOptions(f *rebootFake) RebootOptions {
 // acknowledged command, its retry replayed, and the Cube sent nothing;
 // GET then says the reboot has begun.
 func TestRebootRoutes(t *testing.T) {
+	t.Parallel()
 	f := newRebootFake(nil)
 	opts := storeOptions(t, t.TempDir(), "secret")
 	opts.Reboot = rebootOptions(f)
 	r := startServer(t, withOptions(opts))
 	fc, ts, s := r.fc, r.ts, r.s
-	stores[ts] = s.opts.Store
+	keepStore(t, ts, s.opts.Store)
 	manager := userToken(t, s.opts.Store, "manager1", store.RoleManager)
 	path := "/api/v1/reboot"
 	code, text := callAPI(t, ts, "GET", path, "secret", "")
@@ -135,13 +136,14 @@ func TestRebootRoutes(t *testing.T) {
 // taken back meanwhile; while it waits the server neither takes another
 // nor restarts. A delay outside 0 to 3600 seconds is refused.
 func TestRebootDelayAndTakeBack(t *testing.T) {
+	t.Parallel()
 	f := newRebootFake(nil)
 	opts := storeOptions(t, t.TempDir(), "secret")
 	opts.Reboot = rebootOptions(f)
 	opts.Restart = RestartOptions{By: "systemd", Restart: func() error { t.Error("restarted"); return nil }}
 	r := startServer(t, withOptions(opts))
 	ts, s := r.ts, r.s
-	stores[ts] = s.opts.Store
+	keepStore(t, ts, s.opts.Store)
 	path := "/api/v1/reboot"
 	for _, body := range []string{`{"delay": -1}`, `{"delay": 3601}`, `{"delay": "60"}`, `{"delay": 1.5}`, `[`} {
 		if code, text := callAPI(t, ts, "POST", path, "secret", body); code != 400 {
@@ -251,6 +253,7 @@ func TestRebootBlocked(t *testing.T) {
 	}
 
 	// A reboot the helper took but the computer did not carry out.
+	swapping(t)
 	stuck := rebootStuck
 	t.Cleanup(func() { rebootStuck = stuck })
 	rebootStuck = 50 * time.Millisecond
@@ -285,6 +288,7 @@ func TestRebootBlocked(t *testing.T) {
 // An open server reboots only for a request from the box itself, and
 // takes a reboot back only for one; anyone else gets the reason.
 func TestRebootOpenServer(t *testing.T) {
+	t.Parallel()
 	f := newRebootFake(nil)
 	trusted, err := ParseTrustedProxies("127.0.0.1")
 	if err != nil {

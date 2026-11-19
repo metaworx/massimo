@@ -14,6 +14,7 @@ import (
 // A Cube whose connection is held is listed with link held, since the
 // loss and until the hold's end, and connected again once it resumes.
 func TestAHeldCubeIsListedAsHeld(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, withOptions(Options{PollInterval: 100 * time.Millisecond, CubeHold: time.Minute,
 		cubeOptions: func(o *cubelan.Options) { o.ReplyTimeout = 50 * time.Millisecond }}))
 	fc, ts := r.fc, r.ts

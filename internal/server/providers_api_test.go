@@ -88,6 +88,7 @@ func TestProvidersAPI(t *testing.T) {
 // without the subject, removed; a guests holder reaches a guest's only,
 // and a user lists its own without users but assigns none (AP Oidc v1.1).
 func TestIdentitiesAPI(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
 	ts, s := r.ts, r.s
 	st := s.opts.Store

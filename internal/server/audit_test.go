@@ -45,6 +45,7 @@ func detailOf(t *testing.T, row auditView) map[string]any {
 // with the caller, the Cube, the target and how it went; the reads and
 // the stream ticket leave none.
 func TestAuditOfEveryWrite(t *testing.T) {
+	t.Parallel()
 	ts := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret"))).ts
 	// A read and the stream ticket leave no row.
 	callAPI(t, ts, "GET", "/api/v1/cubes/KEQ0000100/rooms", "secret", "")
@@ -124,6 +125,7 @@ func TestAuditOfEveryWrite(t *testing.T) {
 // The rows' targets, the refused ones, the secrets removed, and the
 // listing's filters.
 func TestAuditDetails(t *testing.T) {
+	t.Parallel()
 	rg := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
 	ts, s := rg.ts, rg.s
 	st := s.opts.Store
@@ -213,6 +215,7 @@ func (b countingBody) Close() error { return nil }
 // wrong tokens count toward the lockout: the tenth, the twentieth
 // request, locks the address out for the last ten.
 func TestRefusedRequestsAuditedPerMinute(t *testing.T) {
+	t.Parallel()
 	opts := storeOptions(t, t.TempDir(), "secret")
 	rg := startServer(t, withOptions(opts), withCubes())
 	s := rg.s
@@ -259,6 +262,7 @@ func TestRefusedRequestsAuditedPerMinute(t *testing.T) {
 // after its minute, and when more addresses are open than the limit,
 // the oldest first.
 func TestRefusalAuditWindows(t *testing.T) {
+	t.Parallel()
 	clock := testkit.NewClock(time.Date(2026, 11, 7, 8, 0, 0, 0, time.UTC))
 	var written []refusal
 	var mu sync.Mutex

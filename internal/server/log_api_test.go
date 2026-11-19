@@ -46,6 +46,7 @@ func rawLog(t *testing.T, ts *httptest.Server, query string) []map[string]any {
 // id and by time, filters by kind and device, the stored copy without
 // the received times, a change of a device as a state event.
 func TestLogFromStore(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, stored(), withOptions(Options{PollInterval: 50 * time.Millisecond}))
 	fc, ts := r.fc, r.ts
 	var all []event
@@ -175,6 +176,7 @@ func ids(evs []event) []int64 {
 // The log survives a restart of the server on the same store: the
 // first run's events come before the second's connected.
 func TestLogSurvivesRestart(t *testing.T) {
+	t.Parallel()
 	discard := withOptions(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	r := startServer(t, stored(), discard)
 	ts := r.ts
@@ -211,6 +213,7 @@ func TestLogSurvivesRestart(t *testing.T) {
 // restore_done does, is in the store once Run has returned: the writer
 // stops after the server's goroutines, not with them.
 func TestLogLastEvents(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, stored(), withOptions(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil))}))
 	s, st := r.s, r.st
 	tctx := s.track()
@@ -236,6 +239,7 @@ func TestLogLastEvents(t *testing.T) {
 // applied in memory, an id bound empty, a device and a time as on the
 // store.
 func TestLogWithoutStore(t *testing.T) {
+	t.Parallel()
 	ts := startServer(t).ts
 	var all []event
 	testkit.Eventually(t, "the connect burst in the ring", func() bool {
@@ -302,6 +306,7 @@ func TestLogWithoutStore(t *testing.T) {
 // an event of the audit visibility is on the page of a user with audit
 // and on no other user's; command takes a positive id.
 func TestLogByCommandAndVisibility(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
 	ts, s := r.ts, r.s
 	st := s.opts.Store
@@ -349,6 +354,7 @@ func TestLogByCommandAndVisibility(t *testing.T) {
 // at debug, acknowledged at info, and its change line, each naming the
 // command.
 func TestSetpointLinesByCommand(t *testing.T) {
+	t.Parallel()
 	ts := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret"))).ts
 	if code, text := callAPI(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/rooms/6/setpoint", "secret", `{"mode":"auto"}`); code != 200 {
 		t.Fatalf("setpoint: %d %s", code, text)
@@ -386,6 +392,7 @@ func TestSetpointLinesByCommand(t *testing.T) {
 // A sign-in, a failed one and a lockout are the server's lines, which a
 // user with audit sees and a viewer does not, on the log and the stream.
 func TestSignInLinesForAuditorsAlone(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
 	ts, s := r.ts, r.s
 	viewer := userToken(t, s.opts.Store, "anna", store.RoleViewer)
@@ -433,6 +440,7 @@ func TestSignInLinesForAuditorsAlone(t *testing.T) {
 // the client's address, whose step and the device's next state are found
 // by ?command=; the client's connection is a line of source proxy.
 func TestProxyClientsCommandInTheLog(t *testing.T) {
+	t.Parallel()
 	ports := &heldPorts{}
 	proxyAddr := ports.hold(t)
 	rg := startServer(t, stored(), withOptions(Options{PollInterval: 50 * time.Millisecond, Proxy: []ProxyListener{{Addr: proxyAddr}}}), listenOn(ports))
@@ -526,6 +534,7 @@ func allLog(t *testing.T, ts *httptest.Server, query string) []event {
 // Cubes, every row once; a device by its S/N or by its radio address on
 // every Cube; a Cube's own log carries no Cube's S/N.
 func TestLogOfEveryCube(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, stored(), alsoCube(secondCube))
 	ts, s, st, second := r.ts, r.s, r.st, rowID(t, r.st, "KEQ0000200")
 	testkit.Eventually(t, "the fake Cube's burst in the store", func() bool {
@@ -597,6 +606,7 @@ func TestLogOfEveryCube(t *testing.T) {
 // each Cube's events with its S/N and the server's once, though every
 // ring keeps them.
 func TestLogOfEveryCubeWithoutStore(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, alsoCube(secondCube))
 	ts, s := r.ts, r.s
 	testkit.Eventually(t, "the fake Cube's burst in its ring", func() bool {

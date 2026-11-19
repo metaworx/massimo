@@ -27,6 +27,7 @@ func serveFrom(s *Server, method, path, addr string, headers map[string]string) 
 // names a client in a forwarding header without a trusted proxy. With
 // users, or a token, the address does not matter.
 func TestOpenServerAnswersItsNetwork(t *testing.T) {
+	t.Parallel()
 	s := startServer(t, withOptions(storeOptions(t, t.TempDir(), ""))).s
 	cubes := "/api/v1/cubes"
 	for addr, want := range map[string]int{
@@ -86,6 +87,7 @@ func TestOpenServerAnswersItsNetwork(t *testing.T) {
 
 // Without a store, the same holds without a token, and a token lifts it.
 func TestOpenLegacyServerAnswersItsNetwork(t *testing.T) {
+	t.Parallel()
 	s := New(Options{})
 	if rec := serveFrom(s, "GET", "/api/v1/cubes", "192.168.1.20:5000", nil); rec.Code != http.StatusOK {
 		t.Errorf("from the LAN: %d %s", rec.Code, rec.Body.String())

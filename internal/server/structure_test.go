@@ -50,6 +50,7 @@ func structureEvent(t *testing.T, ts *httptest.Server, device string) event {
 // are back at their count before it: the S replies say 49 free, the
 // greeting of the reconnect 50, as before the removal.
 func TestStructureDone(t *testing.T) {
+	t.Parallel()
 	ts := startServer(t, structured()).ts
 	code, out := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0000100/devices/0a010a", "")
 	if code != 200 || out["confirmation"] != "pending" {
@@ -66,6 +67,7 @@ func TestStructureDone(t *testing.T) {
 // as the base64 string JSON makes of a []uint8 ("BQ==" for room 5, seen
 // on hardware 2026-11-16).
 func TestStructureRoomsOfARoomRepair(t *testing.T) {
+	t.Parallel()
 	ts := startServer(t, structured(), withFake(func(fc *fakecube.Server) { withContactInRoom1(t, fc.Greeting) })).ts
 	const path = "/api/v1/cubes/KEQ0000100/rooms/1/repair/relink"
 	if _, p, body := previewOf(t, ts, path); p.Plan == "" {
@@ -84,6 +86,7 @@ func TestStructureRoomsOfARoomRepair(t *testing.T) {
 // not confirmed, with the slots named, and a member the move left
 // flagged is named too.
 func TestStructureNotConfirmed(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, structured())
 	fc, ts := r.fc, r.ts
 	fc.SetFreeSlots(47)

@@ -61,6 +61,7 @@ func greetingAt(t *testing.T, addr string) cube.Message {
 // PUT changes the row and applies it at once: the name, the hidden list
 // (the device leaves the views), the proxy address (the listener moves).
 func TestPutCube(t *testing.T) {
+	t.Parallel()
 	ports := &heldPorts{}
 	r := startServer(t, stored(), listenOn(ports))
 	ts, st := r.ts, r.st
@@ -169,6 +170,7 @@ func TestDeleteAndAddCube(t *testing.T) {
 // removed row, or with "restore" revives the removed row it names, one
 // of two, with its id and settings.
 func TestRestoreRemovedCube(t *testing.T) {
+	t.Parallel()
 	other, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000000", 0x0a0b0c)
 	if err != nil {
 		t.Fatal(err)
@@ -260,6 +262,7 @@ func TestRestoreRemovedCube(t *testing.T) {
 // POST of a found Cube connects it at the address discovery saw, and it
 // follows discovery from then on.
 func TestAddFoundCube(t *testing.T) {
+	t.Parallel()
 	other, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000000", 0x0a0b0c)
 	if err != nil {
 		t.Fatal(err)
@@ -437,6 +440,7 @@ func TestRemovedCubeIsListedAsFound(t *testing.T) {
 
 // Without a store the Cube and settings routes say so.
 func TestCubeRoutesNeedAStore(t *testing.T) {
+	t.Parallel()
 	ts := startServer(t).ts
 	for _, r := range [][3]string{{"PUT", "/api/v1/cubes/KEQ0000100", `{"name":"x"}`}, {"DELETE", "/api/v1/cubes/KEQ0000100", ""}, {"POST", "/api/v1/cubes", `{"serial":"KEQ0000001"}`}, {"GET", "/api/v1/settings", ""}} {
 		if code, _ := do(t, ts, r[0], r[1], r[2]); code != 503 {
@@ -449,6 +453,7 @@ func TestCubeRoutesNeedAStore(t *testing.T) {
 // The poll interval's default is 10 s; a flag that decides a setting for
 // the run is its fixed_by.
 func TestSettingsAPI(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, stored(), withOptions(Options{PollInterval: 2 * time.Minute, SettingsFixedBy: map[string]string{store.PollIntervalKey: "-poll"}}))
 	ts, srv, st := r.ts, r.s, r.st
 	code, out := do(t, ts, "GET", "/api/v1/settings", "")
@@ -521,6 +526,7 @@ func TestSettingsAPI(t *testing.T) {
 // what fixes it, at the next start; auto, on and off taken, null back to
 // auto, anything else refused.
 func TestAnnounceSettingAPI(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, stored(), withOptions(Options{Announce: AnnounceState{On: true, FixedBy: "MASSIMO_ANNOUNCE"}}))
 	ts, st := r.ts, r.st
 	code, out := do(t, ts, "GET", "/api/v1/settings", "")

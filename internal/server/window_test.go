@@ -17,6 +17,7 @@ import (
 // once and is stored, the alert never under the warning, null goes back
 // to the default.
 func TestWindowSettings(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, stored())
 	ts, srv, st := r.ts, r.s, r.st
 	lim := func(out map[string]any, key string) map[string]any { m, _ := out[key].(map[string]any); return m }
@@ -50,6 +51,7 @@ func TestWindowSettings(t *testing.T) {
 // An open window's device carries its times by the limits in effect;
 // a closed one and one without the time it opened none.
 func TestWindowTimes(t *testing.T) {
+	t.Parallel()
 	srv := New(Options{})
 	srv.SetWindowLimits(3*time.Minute, 7*time.Minute)
 	at := time.Date(2026, 11, 14, 12, 0, 0, 0, time.UTC)

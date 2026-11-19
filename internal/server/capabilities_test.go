@@ -103,6 +103,7 @@ func fillRoute(path string) string {
 // MASSIMO_API_TOKEN bootstraps the owner, follows the file at later
 // starts, and a key of the owner's own survives all that.
 func TestBootstrapThroughServer(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	r := startServer(t, withOptions(storeOptions(t, dir, "secret")))
 	ts, s := r.ts, r.s
@@ -158,6 +159,7 @@ func TestBootstrapThroughServer(t *testing.T) {
 
 // A store without users is open; the first user closes it.
 func TestOpenMode(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "")))
 	ts, s := r.ts, r.s
 	if s.AuthMode() != "open" {
@@ -178,6 +180,7 @@ func TestOpenMode(t *testing.T) {
 // Each default role against each route: the registered capability
 // decides, and nothing else answers 403 with that message.
 func TestRolesAgainstRoutes(t *testing.T) {
+	t.Parallel()
 	rg := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
 	ts, s := rg.ts, rg.s
 	routes := registeredRoutes(t)
@@ -220,6 +223,7 @@ func TestRolesAgainstRoutes(t *testing.T) {
 
 // A move needs structure and a rename needs rename, on the one route.
 func TestMoveNeedsStructure(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
 	ts, s := r.ts, r.s
 	st := s.opts.Store
@@ -251,6 +255,7 @@ func TestMoveNeedsStructure(t *testing.T) {
 // a role with structure alone is refused before anything is sent, and
 // moves without the copy.
 func TestCopyNeedsConfigure(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
 	fc, ts, s := r.fc, r.ts, r.s
 	st := s.opts.Store
@@ -274,6 +279,7 @@ func TestCopyNeedsConfigure(t *testing.T) {
 // A created role, a disabled capability, a disabled role, a disabled or
 // expired user, and a revoked or expired token.
 func TestRoleRules(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
 	ts, s := r.ts, r.s
 	st := s.opts.Store
@@ -345,6 +351,7 @@ func TestRoleRules(t *testing.T) {
 // The lockout counters are in the store, so a restart of the server
 // does not clear them.
 func TestLockoutSurvivesRestart(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	opts := storeOptions(t, dir, "secret")
 	opts.AuthFailures = 3

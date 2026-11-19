@@ -268,6 +268,7 @@ func (c *mismatchCube) alerted(t *testing.T, device string) bool {
 // greeting again warns no more; once the C line names room 1 again, the
 // finding clears at info, the marks go and the alert is settled.
 func TestMismatchRoomAndClear(t *testing.T) {
+	t.Parallel()
 	f := loadFixtureLines(t)
 	f.setRoom(0x0a010a, 2)
 	c := startMismatchCube(t, f.greeting(), nil, nil)
@@ -324,6 +325,7 @@ func TestMismatchRoomAndClear(t *testing.T) {
 // in room 6 without a C line though it has an L entry; a type that
 // differs; each warned of with its rooms, and marked.
 func TestMismatchLineCases(t *testing.T) {
+	t.Parallel()
 	f := loadFixtureLines(t)
 	f.addConfig(0x0a0a01, 0x0a010b, 4, "MEQ0000201")
 	f.list(0x0a0a02, cube.DeviceRadiatorThermostat, 3, "MEQ0000202", "Listed only")
@@ -366,6 +368,7 @@ func TestMismatchLineCases(t *testing.T) {
 // device of the Cube, or no thermostat; a room without a thermostat is
 // not looked at.
 func TestMismatchRoomMaster(t *testing.T) {
+	t.Parallel()
 	f := loadFixtureLines(t)
 	contact := append([]byte{0x11, 0, 0, 0, byte(cube.DeviceShutterContact), 0, 0x10, 0xa0}, make([]byte, 10)...)
 	f.raws[0x0a0a03] = contact
@@ -399,6 +402,7 @@ func TestMismatchRoomMaster(t *testing.T) {
 // A room master's warning is given again while it holds once someone
 // marked it seen, and not while it is unread.
 func TestMismatchMasterWarnedAgainOnceRead(t *testing.T) {
+	t.Parallel()
 	f := loadFixtureLines(t)
 	f.master(3, 0x0a0109)
 	c := startMismatchCube(t, f.greeting(), nil, nil)
@@ -444,6 +448,7 @@ func TestMismatchMasterWarnedAgainOnceRead(t *testing.T) {
 // those most of them share; of two that differ, the one the room's master
 // is not.
 func TestMismatchMembers(t *testing.T) {
+	t.Parallel()
 	f := loadFixtureLines(t)
 	f.addConfig(0x0a0a01, 0x0a010a, 1, "MEQ0000201")
 	f.addConfig(0x0a0a02, 0x0a010a, 1, "MEQ0000202")
@@ -477,6 +482,7 @@ func TestMismatchMembers(t *testing.T) {
 // Massimo's own structure change and its rooms, until its C line follows
 // or the time is up.
 func TestMismatchLeftOut(t *testing.T) {
+	t.Parallel()
 	f := loadFixtureLines(t)
 	f.setRoom(0x0a010c, 2) // hidden by the list
 	f.listed(0x0a010b).RoomID = cube.HiddenRoom
@@ -528,6 +534,7 @@ func TestMismatchLeftOut(t *testing.T) {
 // that still holds is not warned of again, one that no longer does is
 // cleared.
 func TestMismatchSeededFromTheLog(t *testing.T) {
+	t.Parallel()
 	f := loadFixtureLines(t)
 	f.setRoom(0x0a010a, 2)
 	two, one := uint8(2), uint8(1)
@@ -555,6 +562,7 @@ func TestMismatchSeededFromTheLog(t *testing.T) {
 
 // The log's line of a finding names it.
 func TestMismatchEventLine(t *testing.T) {
+	t.Parallel()
 	m := view.Mismatch{Finding: view.MismatchMaster, Device: "0a0109", Room: 3, Why: "other_room"}
 	if got := eventMessage(mismatchEvent(nil, m, "found")); !strings.Contains(got, "master (other_room)") || !strings.Contains(got, "differ") {
 		t.Fatalf("line %q", got)

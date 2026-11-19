@@ -43,6 +43,14 @@ func recorded(t testing.TB) []cube.Message {
 	return slices.Clone(g)
 }
 
+// awayWait is how long a test waits for the Cube client to see that a
+// fake Cube closed: the kit's wait, and the client's reply timeout (10 s,
+// cubelan.Options.ReplyTimeout), which a poll the close cut off waits
+// out before the client sees the connection gone. The more often the
+// client polls and the busier the machine, the likelier a poll is on
+// its way at the close.
+var awayWait = testkit.For(testkit.Wait + 10*time.Second)
+
 // kitClock is the kit's clock as the notify.Clock of the server's
 // options (Options.clock, Options.notifyClock).
 type kitClock struct{ *testkit.Clock }

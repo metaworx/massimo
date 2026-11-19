@@ -22,6 +22,7 @@ import (
 // Every kind of settleRules, and every kind that settles one, is a kind
 // the log keeps.
 func TestSettleRulesKnowTheirKinds(t *testing.T) {
+	t.Parallel()
 	for kind, rule := range settleRules {
 		if !slices.Contains(eventKinds, kind) {
 			t.Errorf("%s: not a kind of the log", kind)
@@ -38,6 +39,7 @@ func TestSettleRulesKnowTheirKinds(t *testing.T) {
 // Cube below warn; a hold by its end; a kind without a counterpart only
 // by a mark.
 func TestUnsettled(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	ev := func(id int64, kind, level, cube string, summary map[string]any) event {
 		return event{ID: id, Kind: kind, Level: level, CubeSerial: cube, Summary: summary, Time: now.Add(time.Duration(id-100) * time.Second)}
@@ -79,6 +81,7 @@ func TestUnsettled(t *testing.T) {
 // the store gives them back, and the device's state now; a line before
 // the flag's counts not.
 func TestFlagRadiogram(t *testing.T) {
+	t.Parallel()
 	line := func(id int64, code int) event {
 		st := map[string]any{"error": true}
 		if code >= 0 {
@@ -122,6 +125,7 @@ func TestFlagRadiogram(t *testing.T) {
 // error of the server's left, a device's transmit error while it is set,
 // at the line that set it; after leaves out the older ones.
 func TestLogAlertsRoute(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, stored(), withOptions(Options{PollInterval: 100 * time.Millisecond}))
 	fc, ts, st := r.fc, r.ts, r.st
 	ctx := t.Context()
@@ -176,6 +180,7 @@ func TestLogAlertsRoute(t *testing.T) {
 // line's mark that line alone; another person's alerts stay; a document
 // that is not marks is refused.
 func TestLogAlertsSeenMarks(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, stored())
 	ts, st := r.ts, r.st
 	ctx := t.Context()

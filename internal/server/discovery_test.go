@@ -74,6 +74,7 @@ func postDiscovery(t *testing.T, ts *httptest.Server) (int, map[string]any) {
 // every call that came meanwhile shares; the discovery loop's call
 // shares the run going.
 func TestACallDuringARunGetsTheNext(t *testing.T) {
+	t.Parallel()
 	a, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000000", 0x0a0b0c)
 	if err != nil {
 		t.Fatal(err)
@@ -112,6 +113,7 @@ func TestACallDuringARunGetsTheNext(t *testing.T) {
 }
 
 func TestDiscoveryFindsUnconfiguredCubes(t *testing.T) {
+	t.Parallel()
 	other, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000000", 0x0a0b0c)
 	if err != nil {
 		t.Fatal(err)
@@ -177,6 +179,7 @@ func TestDiscoveryFindsUnconfiguredCubes(t *testing.T) {
 // address, absent for a Cube that never answered c, and kept when a
 // later run gets no answer to c.
 func TestDiscoveryDHCPFlag(t *testing.T) {
+	t.Parallel()
 	static, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000000", 0x0a0b0c)
 	if err != nil {
 		t.Fatal(err)
@@ -243,6 +246,7 @@ func TestDiscoveryDHCPFlag(t *testing.T) {
 }
 
 func TestDiscoveryLeavesOutTheProxysOwnAnswers(t *testing.T) {
+	t.Parallel()
 	other, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000000", 0x0a0b0c)
 	if err != nil {
 		t.Fatal(err)
@@ -269,6 +273,7 @@ func TestDiscoveryLeavesOutTheProxysOwnAnswers(t *testing.T) {
 // same serial from this host answering the identify request alone is the
 // server's own proxy's, and left out.
 func TestDiscoveryHearsAServedCubeOnThisHost(t *testing.T) {
+	t.Parallel()
 	atHost, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000000", 0x0a0b0c)
 	if err != nil {
 		t.Fatal(err)
@@ -302,6 +307,7 @@ func foundSerials(t *testing.T, ts *httptest.Server) []string {
 // its own, which no configured Cube has: the server's own answer, never a
 // Cube found.
 func TestDiscoveryLeavesOutALaterProxysAnswers(t *testing.T) {
+	t.Parallel()
 	other, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000000", 0x0a0b0c)
 	if err != nil {
 		t.Fatal(err)
@@ -324,6 +330,7 @@ func TestDiscoveryLeavesOutALaterProxysAnswers(t *testing.T) {
 // with is this server's from any address, as through NAT or from a
 // container; a Cube's own answer with it is not.
 func TestDiscoveryLeavesOutItsProxySerialFromAnywhere(t *testing.T) {
+	t.Parallel()
 	atProxy, err := fakecube.StartDiscovery("127.0.0.3:0", "KEQ0000999", 0x0a0b0c)
 	if err != nil {
 		testkit.BindOrSkip(t, err)
@@ -354,6 +361,7 @@ func TestDiscoveryLeavesOutItsProxySerialFromAnywhere(t *testing.T) {
 // Cube the server one of its proxies runs on. The servers are asked at
 // the discovery targets' addresses, as long as the run waits.
 func TestFoundEntriesNameTheirKindAndServer(t *testing.T) {
+	t.Parallel()
 	start := func(addr, serial string, rf cube.RFAddress, identifyOnly bool) *fakecube.DiscoveryResponder {
 		d, err := fakecube.StartDiscovery(addr, serial, rf)
 		if err != nil {
@@ -426,6 +434,7 @@ func TestFoundEntriesNameTheirKindAndServer(t *testing.T) {
 }
 
 func TestDiscoveryWithoutThePort(t *testing.T) {
+	t.Parallel()
 	taken, err := net.ListenPacket("udp4", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -442,6 +451,7 @@ func TestDiscoveryWithoutThePort(t *testing.T) {
 // original software's MulticastSocket does; a plain bind, the command
 // line's, is refused and falls back to another port.
 func TestDiscoveryPortShared(t *testing.T) {
+	t.Parallel()
 	own := freeUDP(t, "127.0.0.1")
 	ports := &heldPorts{}
 	proxyAddr := ports.hold(t)
@@ -495,6 +505,7 @@ func foundEvents(t *testing.T, ts *httptest.Server) map[string]int {
 // leaves the list, its row keeping when it was last seen, and is found
 // and announced again when it answers again.
 func TestSearchListsOnlyCubesThatAnswered(t *testing.T) {
+	t.Parallel()
 	a, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000000", 0x0a0b0c)
 	if err != nil {
 		t.Fatal(err)
@@ -544,6 +555,7 @@ func TestSearchListsOnlyCubesThatAnswered(t *testing.T) {
 // A run that fails cannot tell a Cube gone from one not heard: the list
 // stays as it was.
 func TestFailedRunChangesNothing(t *testing.T) {
+	t.Parallel()
 	a, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000000", 0x0a0b0c)
 	if err != nil {
 		t.Fatal(err)
@@ -565,6 +577,7 @@ func TestFailedRunChangesNothing(t *testing.T) {
 // A Cube configured by serial only is connected at the address it
 // answers discovery from, and follows it when it changes.
 func TestCubeConfiguredBySerialFollowsItsAddress(t *testing.T) {
+	t.Parallel()
 	greeting := recorded(t)
 	// Two homes for the same Cube on one port, 127.0.0.2 and 127.0.0.3
 	// (other addresses than this host's own, which mean its own proxy).
@@ -715,6 +728,7 @@ func (m *movingCube) at(addr string) bool {
 // and followed to its new address without a call of the API: the minute
 // between searches is left as it is.
 func TestALostCubeIsSearchedForAtOnce(t *testing.T) {
+	t.Parallel()
 	m := startMovingCube(t, 0)
 	m.at2.SetSilent(true)
 	m.at3.SetSilent(false)
@@ -727,6 +741,7 @@ func TestALostCubeIsSearchedForAtOnce(t *testing.T) {
 // A Cube still lost after the search at the loss is searched for again
 // every AddressRetry until it answers.
 func TestALostCubeIsSearchedForWhileLost(t *testing.T) {
+	t.Parallel()
 	m := startMovingCube(t, 200*time.Millisecond)
 	m.at2.SetSilent(true)
 	before := m.requests()
@@ -777,9 +792,10 @@ func fixedCube(t *testing.T, interval time.Duration) (s *Server, fc *fakecube.Se
 // Without periodic discovery, a lost Cube with a fixed address is not
 // searched for: discovery runs on request only, and cannot move it.
 func TestALostFixedCubeWithoutAnIntervalIsNotSearchedFor(t *testing.T) {
+	t.Parallel()
 	_, fc, connected, logs, requests := fixedCube(t, 0)
 	fc.Close()
-	testkit.Eventually(t, "the cube lost", func() bool { return !connected() })
+	testkit.Eventually(t, "the cube lost", func() bool { return !connected() }, awayWait)
 	time.Sleep(500 * time.Millisecond) // five AddressRetry
 	if n, w := requests(), logs.Count(0, testkit.Msg(elsewhereMsg)); n != 0 || w != 0 {
 		t.Fatalf("%d searches, %d warnings, want none", n, w)
@@ -790,13 +806,14 @@ func TestALostFixedCubeWithoutAnIntervalIsNotSearchedFor(t *testing.T) {
 // for, and one that answers from another address is warned of, once
 // however many searches find it there (noteElsewhere).
 func TestALostFixedCubeWithAnIntervalIsSearchedFor(t *testing.T) {
+	t.Parallel()
 	s, fc, connected, logs, requests := fixedCube(t, time.Hour)
 	// The run at the start may have warned already, where its wait heard
 	// the answer; the searches after the loss repeat until one does.
 	testkit.Eventually(t, "the run at the start", func() bool { return requests() >= 1 && noRunGoing(s) })
 	before := requests()
 	fc.Close()
-	testkit.Eventually(t, "the cube lost", func() bool { return !connected() })
+	testkit.Eventually(t, "the cube lost", func() bool { return !connected() }, awayWait)
 	logs.Await(t, 0, "a warning after the loss", testkit.Msg(elsewhereMsg))
 	testkit.Eventually(t, "searches after the warning", func() bool { return requests() >= before+3 })
 	if n := logs.Count(0, testkit.Msg(elsewhereMsg)); n != 1 {
@@ -840,6 +857,7 @@ func homes(t *testing.T) (port int, cubeTCP, proxyTCP *fakecube.Server, atCube, 
 // at its own address; configured by serial, it follows the proxy, whose
 // serve holds the Cube's one LAN slot, and stays there run after run.
 func TestOneSerialFromACubeAndAProxy(t *testing.T) {
+	t.Parallel()
 	port, cubeTCP, proxyTCP, atCube, atProxy := homes(t)
 	mac := func(ip net.IP) string {
 		switch ip.String() {
@@ -896,6 +914,7 @@ func TestOneSerialFromACubeAndAProxy(t *testing.T) {
 // followed away from the address a Cube has, even when the Cube's own
 // answer is missing.
 func TestAnUnknownAnswerIsNotFollowed(t *testing.T) {
+	t.Parallel()
 	port, cubeTCP, proxyTCP, atCube, atProxy := homes(t)
 	atProxy.SetSilent(true)
 	log, logs := testkit.LogWatch(nil)

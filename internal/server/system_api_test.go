@@ -20,6 +20,7 @@ import (
 // was installed, the computer, and the caller's address, the client a
 // trusted proxy names.
 func TestGetSystem(t *testing.T) {
+	t.Parallel()
 	proxies, _ := ParseTrustedProxies("127.0.0.1,::1")
 	ts := startServer(t, withOptions(Options{Token: "secret", Version: "v0.0.0-test (go1.26.0)", Install: "apt", TrustedProxies: proxies})).ts
 	get := func(forwarded string) systemView {
@@ -64,6 +65,7 @@ func TestGetSystem(t *testing.T) {
 
 // A server that does not say how it was installed is "other".
 func TestGetSystemInstallOther(t *testing.T) {
+	t.Parallel()
 	ts := startServer(t, withOptions(Options{Token: "secret"})).ts
 	var v systemView
 	if code := getJSON(t, ts, "secret", "/api/v1/system", &v); code != 200 || v.Install != InstallOther {
@@ -74,6 +76,7 @@ func TestGetSystemInstallOther(t *testing.T) {
 // The distribution's name comes from os-release's PRETTY_NAME, quoted
 // or not; none without the file.
 func TestOSName(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	for _, c := range []struct{ body, want string }{
 		{"NAME=\"Debian GNU/Linux\"\nPRETTY_NAME=\"Debian GNU/Linux 13 (trixie)\"\nID=debian\n", "Debian GNU/Linux 13 (trixie)"},
@@ -97,6 +100,7 @@ func TestOSName(t *testing.T) {
 // every address takes each interface that is up but the loopback; one on
 // an address, that address's interface; link-local addresses are left out.
 func TestListenedInterfaces(t *testing.T) {
+	t.Parallel()
 	ifs := []hostInterface{
 		{Name: "lo", Up: true, Loopback: true, IPs: []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("::1")}},
 		{Name: "eth0", MAC: "02:00:00:00:00:01", Up: true, IPs: []net.IP{net.ParseIP("192.168.1.8"), net.ParseIP("192.168.1.31"), net.ParseIP("2001:db8::8"), net.ParseIP("fe80::1")}},
@@ -149,6 +153,7 @@ func TestListenedInterfaces(t *testing.T) {
 // The API's listener and the proxies' running now are the server's
 // listeners; GET /api/v1/system lists their interfaces and the API's port.
 func TestGetSystemInterfaces(t *testing.T) {
+	swapping(t)
 	saved := hostInterfaces
 	defer func() { hostInterfaces = saved }()
 	hostInterfaces = func() ([]hostInterface, error) {
@@ -173,6 +178,7 @@ func TestGetSystemInterfaces(t *testing.T) {
 // The zone's name: TZ, a name or a path into zoneinfo, else what
 // /etc/localtime links to, else the abbreviation.
 func TestTimeZoneName(t *testing.T) {
+	t.Parallel()
 	if got := timeZoneName(":Europe/Zurich", ""); got != "Europe/Zurich" {
 		t.Errorf("TZ with a colon: %q", got)
 	}
@@ -194,6 +200,7 @@ func TestTimeZoneName(t *testing.T) {
 // The full name is the canonical one, without its final dot; the short
 // one where the lookup fails.
 func TestFullName(t *testing.T) {
+	swapping(t)
 	saved := lookupCNAME
 	defer func() { lookupCNAME = saved }()
 	lookupCNAME = func(_ context.Context, host string) (string, error) { return host + ".example.net.", nil }

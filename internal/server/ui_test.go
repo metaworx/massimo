@@ -29,6 +29,7 @@ import (
 )
 
 func TestUIServed(t *testing.T) {
+	t.Parallel()
 	ts := startServer(t, withOptions(Options{Token: "secret"})).ts
 	get := func(path string) (int, string, string) {
 		resp, err := http.Get(ts.URL + path)
@@ -239,6 +240,7 @@ func pageIDs(t *testing.T, name, page string) map[string]bool {
 // type; /favicon.ico at the root, where browsers look; an SVG with a
 // policy that lets its own style be, the dark rule of the favicon.
 func TestUIBrand(t *testing.T) {
+	t.Parallel()
 	ts := startServer(t).ts
 	get := func(p string) (*http.Response, string) {
 		t.Helper()
@@ -295,6 +297,7 @@ func TestUIBrand(t *testing.T) {
 // (fromTemplate("…"), fragmentFromTemplate("…")) is in it, or, for the
 // script of another page (uiPageScripts), in that page.
 func TestUIPage(t *testing.T) {
+	t.Parallel()
 	files, err := fs.Glob(uiFiles, "ui/partials/*.html")
 	if err != nil {
 		t.Fatal(err)
@@ -372,6 +375,7 @@ func TestUIPage(t *testing.T) {
 // uiPage replaces each marker with its partials, indented as the marker
 // is, and refuses a skeleton without a marker or with one twice.
 func TestUIPageMarkers(t *testing.T) {
+	t.Parallel()
 	part := "<p>\n  x\n</p>\n"
 	files := fstest.MapFS{"partials/" + uiPartials[0].files[0]: {Data: []byte(part)}}
 	for _, p := range uiPartials {
@@ -411,6 +415,7 @@ func TestUIPageMarkers(t *testing.T) {
 // (docs/reverse-proxy.md): no file names /ui/, /api/ or /healthz with a
 // leading slash, and no href or src starts at the root.
 func TestUIRelativeURLs(t *testing.T) {
+	t.Parallel()
 	absolute := regexp.MustCompile(`"/(ui/|api/|healthz)|(href|src)="/`)
 	err := fs.WalkDir(uiFiles, "ui", func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
@@ -436,6 +441,7 @@ func TestUIRelativeURLs(t *testing.T) {
 // esm/index.js as published (ui/vendor/README.md): a change to it is
 // a change on purpose, with the README.
 func TestVendoredOpaque(t *testing.T) {
+	t.Parallel()
 	b, err := uiFiles.ReadFile("ui/vendor/opaque.js")
 	if err != nil {
 		t.Fatal(err)
@@ -476,6 +482,7 @@ var vendoredPreact = map[string]string{
 // SHA-256, and the README names each, so that a change to one is a
 // change on purpose, with the README.
 func TestVendoredPreact(t *testing.T) {
+	t.Parallel()
 	const dir = "../../third_party/preact"
 	readme, err := os.ReadFile(dir + "/README.md")
 	if err != nil {
@@ -515,6 +522,7 @@ func TestVendoredPreact(t *testing.T) {
 }
 
 func TestUIETagVersion(t *testing.T) {
+	t.Parallel()
 	started := time.Unix(0, 36*36)
 	for v, want := range map[string]string{
 		"massimo v0.2.0-alpha.1 (go1.26.8, linux/amd64)":        "v0.2.0-alpha.1",
@@ -544,6 +552,7 @@ var uiLanguages = []string{"en", "de", "fr", "it", "nl", "pl"}
 // start of a line, the scripts' indentation putting everything nested
 // further in.
 func TestUIScriptGlobals(t *testing.T) {
+	t.Parallel()
 	pages := map[string][]byte{"the page": assembledPage(t)}
 	for name := range uiPageScripts {
 		b, err := uiFiles.ReadFile(name)
@@ -586,6 +595,7 @@ func TestUIScriptGlobals(t *testing.T) {
 // can use it. They are read from the disk: the bundle is made from them,
 // and they are not embedded.
 func TestSharedPartsKnowNoRegion(t *testing.T) {
+	t.Parallel()
 	partsImportOnly(t, "ui/src/shared")
 }
 
@@ -594,6 +604,7 @@ func TestSharedPartsKnowNoRegion(t *testing.T) {
 // from Preact and from the API's types alone, so that two regions that
 // both need it never import from each other.
 func TestModelKnowsNoRegion(t *testing.T) {
+	t.Parallel()
 	partsImportOnly(t, "ui/src/model", "shared")
 }
 
@@ -602,6 +613,7 @@ func TestModelKnowsNoRegion(t *testing.T) {
 // is a region, and imports from itself, from the shared parts, from the
 // model, from Preact and from the API's types alone.
 func TestRegionsKnowNoOtherRegion(t *testing.T) {
+	t.Parallel()
 	dirs, err := os.ReadDir("ui/src")
 	if err != nil {
 		t.Fatal(err)
@@ -682,6 +694,7 @@ func alsoText(also []string) string {
 // LINTING.md, which names the file's own path from the repository root
 // and says in a sentence what the file is for.
 func TestUIFileHeaders(t *testing.T) {
+	t.Parallel()
 	spdx := regexp.MustCompile(`^(?://|/\*) SPDX-License-Identifier: AGPL-3\.0-or-later$`)
 	copyright := regexp.MustCompile(`^(?://|\s*) ?Copyright \(C\) \d{4}(?:-\d{4})? The Massimo Authors(?: \*/)?$`)
 	plain := 0
@@ -760,6 +773,7 @@ func partHeader(lines []string, want string) string {
 // would write over the text the part owns (rule 3 of AP UiParts). Comments
 // are left out, so that prose may name what the code must not do.
 func TestUINoHTMLInjection(t *testing.T) {
+	t.Parallel()
 	banned := []struct {
 		re   *regexp.Regexp
 		what string
@@ -895,6 +909,7 @@ func jsCode(lines []string) []string {
 // and the machine-translation note), and English has every key the
 // markup, the scripts and the parts ask for.
 func TestUITranslations(t *testing.T) {
+	t.Parallel()
 	js, err := uiFiles.ReadFile("ui/i18n.js")
 	if err != nil {
 		t.Fatal(err)
@@ -1112,6 +1127,7 @@ func contrastRatio(a, b string) float64 {
 // the icons' amber (warn-mark), green and red stand out from a tile at
 // 3, WCAG's contrast for a graphic.
 func TestUIDefaultSchemeMatchesCSS(t *testing.T) {
+	t.Parallel()
 	css, err := uiFiles.ReadFile("ui/style.css")
 	if err != nil {
 		t.Fatal(err)
@@ -1173,6 +1189,7 @@ func TestUIDefaultSchemeMatchesCSS(t *testing.T) {
 // server's (eventKinds) and the Cube driver's (cubelan.EventKind) one
 // list.
 func TestLogKinds(t *testing.T) {
+	t.Parallel()
 	js, err := uiFiles.ReadFile("ui/log.js")
 	if err != nil {
 		t.Fatal(err)

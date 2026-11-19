@@ -18,6 +18,7 @@ import (
 // session ends it, revoking the key ends it at its next request, and
 // what may not make one is refused with the status the docs give.
 func TestLoginKey(t *testing.T) {
+	t.Parallel()
 	opts := storeOptions(t, t.TempDir(), "secret")
 	opts.AuthFailures = 3
 	r := startServer(t, withOptions(opts))
@@ -121,6 +122,7 @@ func TestLoginKey(t *testing.T) {
 // The login by key works where the password sign-in is off, and is 409
 // on a server without users.
 func TestLoginKeyModes(t *testing.T) {
+	t.Parallel()
 	open := startServer(t, withOptions(Options{Store: testStore(t, t.TempDir())})).ts
 	if code, text := callAPI(t, open, "POST", "/api/v1/login/key", "", ""); code != 409 {
 		t.Fatalf("open server: %d %s", code, text)
