@@ -367,10 +367,31 @@ jobs:
         with:
           fetch-depth: 0 # git describe needs the tags
 
+      # setup-go's own cache off: the first job of a run to end saves it
+      # for all, and that was a light one's, 13 MB, so that every job
+      # compiled from scratch. The job's own cache instead (AP TestSpeed,
+      # D10-A; packaging/go-cache.sh): restored by every run, saved by a
+      # push to main, a new one each week and with each new Go or go.sum.
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
+          cache: false
+
+      - name: The Go cache's key
+        id: gocache
+        run: packaging/go-cache.sh key vet
+
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: gocache-restore
+        with:
+          path: ${{ steps.gocache.outputs.path }}
+          key: ${{ steps.gocache.outputs.key }}
+          restore-keys: ${{ steps.gocache.outputs.restore-keys }}
+
+      - name: Keep the restored cache from Go's trim
+        if: steps.gocache.outputs.save != 'true' || steps.gocache-restore.outputs.cache-hit == 'true'
+        run: packaging/go-cache.sh hold
 
       - uses: ./.github/actions/ui-bundle
 
@@ -393,11 +414,39 @@ jobs:
       # test's own log while the tests run, and then names the tests that
       # skipped, and why, and the slowest tests and packages, in the
       # summary (GUIDELINES/project/CI.md, section 3); pipefail keeps go
-      # test's exit status as the step's.
+      # test's exit status as the step's. -count=1: go test neither takes
+      # a result from the restored cache nor leaves one in what main
+      # saves; it would take a package's pass where it sees no change,
+      # blind to what a test reads through another program, such as
+      # packaging/'s scripts and tools/identifiers' git ls-files.
       - name: go test
         run: |
           set -o pipefail
-          go test -json ./... | packaging/go-test-report.sh "go test"
+          go test -count=1 -json ./... | packaging/go-test-report.sh "go test"
+
+      # The three tests that need root, which skip above, once more as
+      # root, by name (AP TestSpeed, D14-A): a file replaced as root keeps
+      # its owner (internal/safefile), the kept binary runs as the
+      # store's owner (internal/update), and the store's rollback leaves
+      # nothing of root's in the data directory (cmd/massimo). sudo keeps
+      # the runner's PATH, with setup-go's Go, and the job's caches, so
+      # that nothing is built again. Each must pass: a name that no longer
+      # matches would run nothing, and the step would pass.
+      - name: go test, as root
+        env:
+          ROOT_TESTS: TestOwnerKeptAsRoot TestRunsAsTheStoresOwner TestRollbackStoreRunsAsTheStoresOwner
+        run: |
+          set -o pipefail
+          events="${RUNNER_TEMP}/root-tests.json"
+          sudo -E env "PATH=${PATH}" "GOCACHE=$(go env GOCACHE)" "GOMODCACHE=$(go env GOMODCACHE)" MASSIMO_ENV_FILE=/dev/null \
+            go test -count=1 -json -run "^($(tr ' ' '|' <<<"$ROOT_TESTS"))\$" ./internal/safefile ./internal/update ./cmd/massimo |
+            tee "$events" | packaging/go-test-report.sh "go test, as root"
+          for name in $ROOT_TESTS; do
+            if ! jq -e --arg t "$name" 'select(.Test == $t and .Action == "pass")' "$events" >/dev/null; then
+              echo "::error::${name} did not pass as root"
+              exit 1
+            fi
+          done
 
       # The store's benchmarks once each, with -short, to see that they
       # still run (docs/store.md section 5, "Measuring on a box"); no
@@ -407,6 +456,14 @@ jobs:
 
       - name: Cross build
         run: make cross
+
+      # Once every step passed: a week's key is saved once, and a run
+      # that stopped early would leave the week a cache of what it got to.
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: steps.gocache.outputs.save == 'true' && steps.gocache-restore.outputs.cache-hit != 'true'
+        with:
+          path: ${{ steps.gocache.outputs.path }}
+          key: ${{ steps.gocache.outputs.key }}
 
   # The workflows by actionlint, their run: scripts by the runner's
   # shellcheck (make actionlint, GUIDELINES/project/CI.md, section 2): the
@@ -460,10 +517,28 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # The job's own Go cache, setup-go's off, as in Vet and test: its
+      # -race build is its own.
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
+          cache: false
+
+      - name: The Go cache's key
+        id: gocache
+        run: packaging/go-cache.sh key race
+
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: gocache-restore
+        with:
+          path: ${{ steps.gocache.outputs.path }}
+          key: ${{ steps.gocache.outputs.key }}
+          restore-keys: ${{ steps.gocache.outputs.restore-keys }}
+
+      - name: Keep the restored cache from Go's trim
+        if: steps.gocache.outputs.save != 'true' || steps.gocache-restore.outputs.cache-hit == 'true'
+        run: packaging/go-cache.sh hold
 
       - uses: ./.github/actions/ui-bundle
 
@@ -471,6 +546,12 @@ jobs:
         run: |
           set -o pipefail
           make race TESTFLAGS=-json | packaging/go-test-report.sh "make race"
+
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: steps.gocache.outputs.save == 'true' && steps.gocache-restore.outputs.cache-hit != 'true'
+        with:
+          path: ${{ steps.gocache.outputs.path }}
+          key: ${{ steps.gocache.outputs.key }}
 
   # Every package's tests on 32-bit ARM (make test-armv6,
   # GUIDELINES/project/CI.md, section 2): the armv6 binary the armhf
@@ -487,10 +568,28 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # The job's own Go cache, setup-go's off, as in Vet and test: its
+      # 32-bit ARM build is its own.
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
+          cache: false
+
+      - name: The Go cache's key
+        id: gocache
+        run: packaging/go-cache.sh key armv6
+
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: gocache-restore
+        with:
+          path: ${{ steps.gocache.outputs.path }}
+          key: ${{ steps.gocache.outputs.key }}
+          restore-keys: ${{ steps.gocache.outputs.restore-keys }}
+
+      - name: Keep the restored cache from Go's trim
+        if: steps.gocache.outputs.save != 'true' || steps.gocache-restore.outputs.cache-hit == 'true'
+        run: packaging/go-cache.sh hold
 
       - uses: ./.github/actions/ui-bundle
 
@@ -503,6 +602,12 @@ jobs:
         run: |
           set -o pipefail
           make test-armv6 TESTFLAGS=-json | packaging/go-test-report.sh "make test-armv6"
+
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: steps.gocache.outputs.save == 'true' && steps.gocache-restore.outputs.cache-hit != 'true'
+        with:
+          path: ${{ steps.gocache.outputs.path }}
+          key: ${{ steps.gocache.outputs.key }}
 
   # The fuzz targets (make fuzz, GUIDELINES/project/CI.md, section 2), on
   # a push to main only, 10 s a target: a pull request runs their seeds
@@ -885,10 +990,14 @@ jobs:
       # The check for serials, MACs and radio addresses (tools/identifiers)
       # reads the project's documents and changelog too, which a change to
       # documents alone does not run Vet and test for (What to test).
+      # setup-go's cache off: the job builds one small package and ends
+      # early, and so saved setup-go's cache for every job, 13 MB of it
+      # (AP TestSpeed, D10-A).
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
+          cache: false
       - name: Identifiers
         run: MASSIMO_ENV_FILE=/dev/null go test ./tools/identifiers
       # HEAD..HEAD, an empty range, reads no commit message: a push to main,

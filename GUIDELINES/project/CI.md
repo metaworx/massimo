@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.67.0)
+# Massimo — CI Conventions (v1.68.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -26,7 +26,7 @@ this document is the source of truth for *why*.
 
 | Platform | Files |
 |----------|-------|
-| GitHub Actions | `.github/workflows/ci.yml` (a push to `main` or of a version tag, a pull request), `.github/workflows/build.yml` (the release's build, called by ci.yml beside its tests and by nightly.yml), `.github/workflows/release.yml` (signing and publishing, called by ci.yml once its tests have passed and the build is done, and by nightly.yml), `.github/workflows/nightly.yml` (the nightly build, daily at 02:30 UTC and by hand on `main`), `.github/workflows/platforms.yml` (the Windows service and macOS LaunchDaemon jobs, called by ci.yml beside its tests and by nightly.yml before its build), `.github/workflows/retry.yml` (a macOS or Windows job no runner took, run again in a tag's run of ci.yml and in a nightly run, once that run has ended), `.github/workflows/publish.yml` (called by release.yml, or run by hand for a tag) |
+| GitHub Actions | `.github/workflows/ci.yml` (a push to `main` or of a version tag, a pull request), `.github/workflows/build.yml` (the release's build, called by ci.yml beside its tests and by nightly.yml), `.github/workflows/release.yml` (signing and publishing, called by ci.yml once its tests have passed and the build is done, and by nightly.yml), `.github/workflows/nightly.yml` (the nightly build, daily at 02:30 UTC and by hand on `main`), `.github/workflows/platforms.yml` (the Windows service and macOS LaunchDaemon jobs, called by ci.yml beside its tests and by nightly.yml before its build), `.github/workflows/retry.yml` (a macOS or Windows job no runner took, run again in a tag's run of ci.yml and in a nightly run, once that run has ended), `.github/workflows/publish.yml` (called by release.yml, or run by hand for a tag), `.github/workflows/caches.yml` (CodeQL's overlay databases of older commits deleted from the Actions caches, every hour) |
 
 There is no other platform.
 
@@ -118,7 +118,7 @@ flowchart TD
 
 | Trigger | Jobs |
 |---------|------|
-| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test with its skipped tests and its slowest tests and packages named in the summary, the store's benchmarks once each with `-short`, `make cross`); actionlint (`make actionlint`: the workflows by actionlint, their `run:` scripts by the runner's shellcheck); UI types (`make ui-check`: `tsc --noEmit` over the web UI's parts, `internal/server/ui/src/`, then Biome's two hooks rules over them); Race (`make race`, the race detector on `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve`, `internal/announce`, `internal/notify`, `internal/engine`, `internal/cubeio` and `internal/certs`, `-count=1` and `-timeout 30m`, `checkptr` off for the packages under `modernc.org` alone, its skipped and its slowest tests named in the summary); Test (armv6, QEMU) (`make test-armv6`, every package's tests with `-short` and `-timeout 30m` on 32-bit ARM, run by Ubuntu's `qemu-user` as the Raspberry Pi 1's core, its skipped and its slowest tests named in the summary); Fuzz on a push to `main` only (`make fuzz`, every fuzz target for 10 s, a crash's input kept as the artifact `fuzz-crash`, Go 1.26's own deadline passed with a warning); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, then under systemd, each case in a container of its own (`make deb-systemd-test`: the first start, the restart, the upgrade from v0.12.0-alpha.1 with the service running), and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Platforms (platforms.yml, which nightly.yml calls too, its jobs "Platforms / Windows service" and "Platforms / macOS LaunchDaemon"): Windows service (the unit tests of the update, the installer, the command line, discovery and `internal/safefile`; install, run, update from the API and by hand, roll back, remove, on a Windows runner; then a second `serve` announcing itself beside Windows' own mDNS, found by `massimo discover`; on a pull request only when it changes the job's own paths or the announcement's, as the job What to test answers, and not on the merge of a pull request that found it not needed); macOS LaunchDaemon (the unit tests of the update, the installer, the command line and `internal/safefile`; first `install` on the template's settings, `packaging/launchd/template-test.sh`: the message and its owner line run as printed, a loaded job restarted, a booted-out one left stopped, the web UI's way, the purge; then the same as Windows on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`; then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker; then a second `serve` beside Apple's mDNSResponder, found and resolved by `dns-sd`; on a pull request as the Windows job, with its own paths); UI test (the web UI's pytest suite, a job per case, "UI test (1100-en)", "UI test (1100-de)", "UI test (390-en)" and "UI test (390-de)", each its case in four workers, its log naming the 20 slowest phases of the tests; on failure the failed tests' screenshots, and the screenshots, videos and traces of their run once more, as `ui-test-results-<case>`; and "UI test (screenshots)", the screenshot set in a job of its own, uploaded as the artifact `ui-screenshots`, the PNGs only; on a pull request only when it changes the UI, its bundler (`tools/uibundle`), the vendored Preact, the server's own Go files but for its tests, the OpenAPI file, its suite or `ci.yml`, as the job What to test answers); LAN against avahi (`make lan-test`: a second `serve`'s searches finding a fake Cube, losing it with its cable pulled and finding it again, then from a box's proxy too; `serve` beside avahi-daemon, `avahi-browse` and `massimo discover` on a client; a third `serve` following the Cube by its serial to another address after the loss; in Docker; on a pull request only when it changes the announcement, discovery, the shared port, the server's own files, the proxy, the Go module, the LAN test or `ci.yml`, as the job What to test answers, and not on the merge of a pull request that found it not needed); Android app (`app/version.json` against its tag, the debug build with its unit tests and lint, the release APK built at two paths and compared byte for byte, then the AAB and the nightly APK signed with a key made for the run; on a pull request only when it changes `app/`, the web UI's files the app bundles, `packaging/app-*.sh`, `ci.yml`, `build.yml` or `release.yml`, as the job What to test answers, and not on the merge of a pull request that found it not needed); Guidelines (section 4); Site (`packaging/site/build.sh --no-apt`: the site's pages and the docs of the commit, every link checked, a document under `docs/` missing from `docs/fragments/_documents.md` failing it; never deployed; also for a change to the site's documents alone); Code result, for a change to documents alone only (`packaging/code-result.sh`: the verdict of the last run that tested the code, below) |
+| push to `main`, pull request (each push to its branch) | Vet and test (gofmt, go vet per platform, go test with `-count=1`, its skipped tests and its slowest tests and packages named in the summary, the three tests that need root once more as root, the store's benchmarks once each with `-short`, `make cross`); actionlint (`make actionlint`: the workflows by actionlint, their `run:` scripts by the runner's shellcheck); UI types (`make ui-check`: `tsc --noEmit` over the web UI's parts, `internal/server/ui/src/`, then Biome's two hooks rules over them); Race (`make race`, the race detector on `internal/server`, `internal/store`, `internal/cubelan`, `internal/proxy`, `internal/serve`, `internal/announce`, `internal/notify`, `internal/engine`, `internal/cubeio` and `internal/certs`, `-count=1` and `-timeout 30m`, `checkptr` off for the packages under `modernc.org` alone, its skipped and its slowest tests named in the summary); Test (armv6, QEMU) (`make test-armv6`, every package's tests with `-short`, `-count=1` and `-timeout 30m` on 32-bit ARM, run by Ubuntu's `qemu-user` as the Raspberry Pi 1's core, its skipped and its slowest tests named in the summary); Fuzz on a push to `main` only (`make fuzz`, every fuzz target for 10 s, a crash's input kept as the artifact `fuzz-crash`, Go 1.26's own deadline passed with a warning); govulncheck for linux and windows; Debian package (`make packages`, then the amd64 one installed, checked and purged in a trixie and a bookworm container, then under systemd, each case in a container of its own (`make deb-systemd-test`: the first start, the restart, the upgrade from v0.12.0-alpha.1 with the service running), and installed again from an apt repository built with a throwaway key; the packages uploaded as the artifact `packages`); Platforms (platforms.yml, which nightly.yml calls too, its jobs "Platforms / Windows service" and "Platforms / macOS LaunchDaemon"): Windows service (the unit tests of the update, the installer, the command line, discovery and `internal/safefile`; install, run, update from the API and by hand, roll back, remove, on a Windows runner; then a second `serve` announcing itself beside Windows' own mDNS, found by `massimo discover`; on a pull request only when it changes the job's own paths or the announcement's, as the job What to test answers, and not on the merge of a pull request that found it not needed); macOS LaunchDaemon (the unit tests of the update, the installer, the command line and `internal/safefile`; first `install` on the template's settings, `packaging/launchd/template-test.sh`: the message and its owner line run as printed, a loaded job restarted, a booted-out one left stopped, the web UI's way, the purge; then the same as Windows on a macOS runner, with a self-signed certificate: the service installed with `-tls self-signed`, the health check and the API over `https://`; then the Homebrew formula rendered for a tarball of the checkout, built from source, tested and checked for the marker; then a second `serve` beside Apple's mDNSResponder, found and resolved by `dns-sd`; on a pull request as the Windows job, with its own paths); UI test (the web UI's pytest suite, a job per case, "UI test (1100-en)", "UI test (1100-de)", "UI test (390-en)" and "UI test (390-de)", each its case in four workers, its log naming the 20 slowest phases of the tests; on failure the failed tests' screenshots, and the screenshots, videos and traces of their run once more, as `ui-test-results-<case>`; and "UI test (screenshots)", the screenshot set in a job of its own, uploaded as the artifact `ui-screenshots`, the PNGs only; on a pull request only when it changes the UI, its bundler (`tools/uibundle`), the vendored Preact, the server's own Go files but for its tests, the OpenAPI file, its suite or `ci.yml`, as the job What to test answers); LAN against avahi (`make lan-test`: a second `serve`'s searches finding a fake Cube, losing it with its cable pulled and finding it again, then from a box's proxy too; `serve` beside avahi-daemon, `avahi-browse` and `massimo discover` on a client; a third `serve` following the Cube by its serial to another address after the loss; in Docker; on a pull request only when it changes the announcement, discovery, the shared port, the server's own files, the proxy, the Go module, the LAN test or `ci.yml`, as the job What to test answers, and not on the merge of a pull request that found it not needed); Android app (`app/version.json` against its tag, the debug build with its unit tests and lint, the release APK built at two paths and compared byte for byte, then the AAB and the nightly APK signed with a key made for the run; on a pull request only when it changes `app/`, the web UI's files the app bundles, `packaging/app-*.sh`, `ci.yml`, `build.yml` or `release.yml`, as the job What to test answers, and not on the merge of a pull request that found it not needed); Guidelines (section 4); Site (`packaging/site/build.sh --no-apt`: the site's pages and the docs of the commit, every link checked, a document under `docs/` missing from `docs/fragments/_documents.md` failing it; never deployed; also for a change to the site's documents alone); Code result, for a change to documents alone only (`packaging/code-result.sh`: the verdict of the last run that tested the code, below) |
 | beside the jobs above, on a push | Build (build.yml): What to release decides what the run releases, then every target built without cgo with the Debian packages, the build record, `SHA256SUMS` and the manifest, the provenance attested; for a version tag the Android app's APK and AAB, for the nightly build its nightly APK, unsigned, attested too; nothing signed (section 6) |
 | after every job above | All tests passed: fails unless none of them failed or was cancelled, but for a macOS or Windows job no runner took on a pull request or a push to `main`, which counts as not run, and names each with its result in its summary, an annotation for each that did not pass, and on a pull request in one comment; a job that passed only on a re-run counts, and is named in a line of the summary, a warning, that comment and, on a pull request, a comment of its own; then, on a push, once Build is done, Release (release.yml): a push to `main` becomes the `devel` build, the GitHub release `release/devel` replaced in place, signed with the rolling key (section 6); then, at every run of release.yml, Site (site.yml): the site built with the newest release's signed apt index and the docs of every channel, and deployed to GitHub Pages; nothing where no release carries the index yet; for a push to `main` of the site's documents alone, which has no Build and so no Release, Deploy site (site.yml) instead |
 | push to a release branch (`release/alpha`, later `release/beta` and `release/stable`) | nothing: ci.yml listens to `main` and the tags; the release moved the branch to a commit ci.yml had tested |
@@ -126,6 +126,7 @@ flowchart TD
 | daily at 02:30 UTC, or by hand (`gh workflow run nightly.yml --ref main`) | nightly.yml: What to ship (`packaging/nightly-pick.sh`) picks the newest commit of `main` whose suite passed and that is newer than the one the nightly build carries, and Platforms runs the macOS or Windows job first, on `main`'s head, where the Tested records say the job did not run for its code, the night skipped where that commit is not `main`'s head; once Platforms passed or was not needed (Platforms passed), build.yml, then release.yml: the nightly build, `release/nightly`; nothing where there is no such commit, and nothing, the site included, where Platforms did not pass (section 6). By hand, `dry_run` ships nothing and `platforms` runs both jobs on `main`'s head |
 | a tag's run of ci.yml or a nightly run that ended failed | retry.yml: where a macOS or Windows job no runner took is all that failed, the run's failed jobs and those after them run again, about 20 minutes later, at most twice (`packaging/ci-retry.sh`; below) |
 | by hand (`gh workflow run publish.yml -f tag=<tag>`) | publish.yml: the formula of a release already out, such as the one published before the tap existed |
+| every hour at :23, or by hand (`gh workflow run caches.yml`, `-f dry_run=true` to delete nothing) | caches.yml: CodeQL's overlay databases of all but the three newest commits of `main` deleted from the Actions caches, for each language (`packaging/cache-prune.sh`; section 3) |
 
 Each commit runs the workflow once:
 a push to a pull request's branch runs it as the pull request's,
@@ -850,6 +851,95 @@ Where CI differs, and why:
   its `ok` line saying `(cached)`, is left out of both tables and counted:
   its tests' times are those of the run that was cached.
   The Windows and macOS jobs' unit tests run as before, without the summary.
+- Vet and test, Race and Test (armv6, QEMU) keep a Go cache each,
+  the build's and the modules' (`go env GOCACHE GOMODCACHE`),
+  through `packaging/go-cache.sh` and `actions/cache` (AP TestSpeed, D10-A),
+  with setup-go's own cache off.
+  setup-go keeps one cache for every job of a run that uses it,
+  keyed by `go.sum`, and the first job to end saves it:
+  that was Guidelines, which builds one small package,
+  so every job restored 13 MB and compiled everything again,
+  Vet and test's `go vet` 95 s and its cross build 204 s of it.
+  Guidelines has setup-go's cache off too;
+  the other jobs keep it,
+  and its 13 MB entry stays until the next Go or `go.sum`.
+  A job's key is its name (Race's `-race` build and armv6's 32-bit one are their own),
+  the runner's system and CPU, the Go version,
+  the hash of `go.sum` and `tools/uibundle/go.sum`, and the ISO week:
+  a new cache each week, and with each new Go or `go.sum`.
+  Only a push to `main` saves,
+  once every step passed and where it did not find its key:
+  a pull request's cache would be its own, which no other run restores,
+  and a tag's would only take the quota.
+  Every run restores the newest with the same Go and `go.sum`,
+  or else the newest with the same Go;
+  a pull request restores what `main` saved.
+  A go command that builds deletes, once a day,
+  the cache's entries last used five days before or more,
+  which in a cache saved five days before is all of it:
+  a run that saves nothing,
+  a push to `main` that found its week's key among them,
+  writes the time of that trim as now once the cache is restored (`go-cache.sh hold`),
+  so that it builds with all of it,
+  and a push to `main` that saves trims as Go does,
+  so that what it saves is what `main` used in its last five days.
+  Measured on four CPUs on 2026-11-19, with a cache of a day older `main`
+  in which every package of the module's own compiled again:
+  Vet and test's builds took 342 s without a cache and 56 s with it,
+  Race's 70 and 20 s, armv6's 55 and 15 s.
+  A week's cache, compressed, is about 0.4 GB for Vet and test
+  and 0.2 GB for each of the other two, the modules' 0.1 GB in each,
+  and GitHub keeps a cache seven days after its last use:
+  two weeks hold about 1.6 GB of the repository's 10 GB,
+  and each new Go or `go.sum`, a new key for all three jobs, about 0.8 GB more.
+- The Go jobs that gate run their tests with `-count=1`:
+  Vet and test's `go test`, `make race`, `make test-armv6`,
+  and the Windows and macOS jobs' unit tests.
+  With it go test neither takes a result from the cache nor leaves one there,
+  so the caches `main` saves hold builds and no results;
+  the platform jobs' setup-go caches, saved before, held their runs' results.
+  Without it go test takes a package's pass from a cache where the test binary,
+  the files the test opened and the environment it read are the same:
+  blind to what a test reads through another program,
+  such as `packaging/`'s scripts or `tools/identifiers`' `git ls-files`.
+  Under `-exec`, as armv6's QEMU, it caches no result anyway.
+- Vet and test runs the three tests that need root once more as root, by name
+  (AP TestSpeed, D14-A): `TestOwnerKeptAsRoot` (`internal/safefile`),
+  `TestRunsAsTheStoresOwner` (`internal/update`)
+  and `TestRollbackStoreRunsAsTheStoresOwner` (`cmd/massimo`),
+  what an update does as root to the owners of a file and of the store.
+  They skip without root, and so ran in no job before.
+  `sudo -E env "PATH=$PATH"` keeps setup-go's Go,
+  and the job's `GOCACHE` and `GOMODCACHE` are passed on,
+  so that nothing is built again.
+  The step fails unless each of the three passed:
+  a name that no longer matched would run nothing, and pass.
+- CodeQL's default setup,
+  which the repository's settings hold and no workflow here (section 8),
+  saves an overlay database for each language at every commit of `main` it analyses,
+  about 90 MB a commit, restores only the newest whose key has its prefix,
+  and deletes none.
+  On 2026-11-19 they held 10.0 of the repository's 10.8 GB of Actions caches,
+  345 entries of 115 commits;
+  past 10 GB, GitHub evicts the least recently used caches,
+  the Go jobs' and the macOS and Windows jobs' among them.
+  caches.yml runs `packaging/cache-prune.sh` every hour:
+  for each key's stem (the key without its commit, run and attempt:
+  CodeQL's hash, the language and the CLI's version)
+  it keeps the entries of the three newest commits,
+  and deletes the rest of `main`'s by their ids, the oldest first.
+  It never deletes an entry of another ref, nor one whose key has another form,
+  nor any other cache, whatever the API lists;
+  the summary counts the entries whose key has another form,
+  with a warning where there are any, since CodeQL changing its keys' form
+  would leave every entry alone.
+  The deletes come a second apart (`PRUNE_PAUSE`),
+  as GitHub's secondary rate limits refuse many writes in a row:
+  a 429, or a 403 that names a rate limit, ends the run with a notice,
+  and the next run deletes the rest;
+  another 403 ends it and fails it.
+  Its one write permission is `actions`, which deleting a cache needs.
+  A dry run on 2026-11-19 named 335 entries, 9.7 GB.
 - `make fuzz` runs on a push to `main` only.
   A pull request runs the fuzz targets' seeds in `go test`, the crashes found
   before among them;

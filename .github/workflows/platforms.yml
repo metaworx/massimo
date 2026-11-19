@@ -74,11 +74,14 @@ jobs:
 
       # Discovery's tests as well: Windows binds UDP ports otherwise than
       # Linux, a wildcard beside an address's own port (CI.md, section 3).
+      # -count=1: setup-go's cache, which main's run of this job saved,
+      # holds that run's results, and go test would take a package's pass
+      # from it where it sees no change (AP TestSpeed, D10-A).
       - name: Unit tests
         shell: bash
         run: |
-          go test ./internal/update/... ./internal/install/... ./cmd/... ./internal/cubelan/... ./internal/safefile/...
-          go test -run 'Update|Discovery|Search|FailedRun|FoundCube|RemovedCubeIsListedAsFound|FollowsItsAddress' ./internal/server/
+          go test -count=1 ./internal/update/... ./internal/install/... ./cmd/... ./internal/cubelan/... ./internal/safefile/...
+          go test -count=1 -run 'Update|Discovery|Search|FailedRun|FoundCube|RemovedCubeIsListedAsFound|FollowsItsAddress' ./internal/server/
 
       # The service against the fake Cube, with the update from the web
       # UI's request (docs/update-windows.md, section 6): the server
@@ -417,8 +420,9 @@ jobs:
 
       - uses: ./.github/actions/ui-bundle
 
+      # -count=1, as in the Windows job.
       - name: Unit tests
-        run: go test ./internal/update/... ./internal/install/... ./cmd/... ./internal/safefile/...
+        run: go test -count=1 ./internal/update/... ./internal/install/... ./cmd/... ./internal/safefile/...
 
       # install on the template's settings, as a new Mac gets it
       # (packaging/launchd/template-test.sh): left for its owner with the
