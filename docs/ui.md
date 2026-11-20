@@ -1736,7 +1736,7 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `Sign` | `icon.tsx` | a kind of `SIGNS` in a state, its mark blinking (`signEl`) | `kind`, `state` ("", ok, warn, bad, open), `cls`, `blink` (the mark's key), `label` (named for a screen reader, else hidden) |
 | `Mark` | `icon.tsx` | a mark alone (`markEl`) | `state` (warn, bad), `blink` |
 | `CountIcon` | `icon.tsx` | an icon with a number in its corner (`foundCountEl`) | `symbol`, `n`, `cls` |
-| `IconButton` | `icon.tsx` | a button that is an icon alone, named for a screen reader (`iconButton`): a tile's info and cog, the copy icon | `symbol`, `label` (its name, and its tooltip without `title`), `title`, `cls`, `mark`, and the button's own attributes (`id`, `aria-expanded`, `data-…`, the handlers) |
+| `IconButton` | `icon.tsx` | a button that is an icon alone, named for a screen reader (`iconButton`): a tile's info and cog, the copy icon, help's question mark | `symbol`, `label` (its name, and its tooltip without `title`), `title`, `cls`, `iconCls` (the icon's class, `ni` by default, `hi` for help's line drawing), `mark`, and the button's own attributes (`id`, `aria-expanded`, `aria-controls`, `data-…`, the handlers) |
 | `Badge` | `badge.tsx` | a `.flag` led by its mark for a warning or a failure (`badgeEl`) | `kind`, `text`, `blink`, `title`, children after the text |
 | `Notice` | `badge.tsx` | a lasting warning with since when (`noticeEl`) | `text`, `since`, `next`, `cls`, `id`, `role`, `hidden` (the class `hidden`, the line kept in its place), children after |
 | `Age` | `badge.tsx` | how old a value is, filled by `fillAge` (`ageEl`) | `at`, `stale`, `plain` |
@@ -1745,11 +1745,15 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `Problems` | `problems.tsx` | the problem list, entries under entries (`problemsEl`), an item with an action a button | `entries`, `label`, `ok` (the green check's label where nothing is wrong), `always` (the list there where nothing is wrong too; where `ok` is given, its summary the green check and `ok` a line of its list), `lead` (drawn first in the summary, a sign of the place's own state), `head` (drawn first in the list, items that act on the place), `onClick`, `onOpen`, `onClose` (as `Dropdown`'s) |
 | `KindIcons`, `problemKinds`, `kindsLabel` | `problems.tsx` | the kinds' icons of entries without the list (`kindIcons`); the kinds themselves, to know whether there are any; the label naming the kinds among items in an order of kinds, "" for none | `entries`, `skip`; `entries`, `skip`; `items`, `kinds` |
 | `OkPill` | `problems.tsx` | the green check in a list's place (`okPill`) | `label` |
-| `Field` | `field.tsx` | a label and its control, `.field` or `.field.wide` (`fieldRow`) | `label`, `id`, `wide`, `unit`, `hint`, `draft`, `show`, the control as children |
-| `TextField` | `field.tsx` | a row with a text input that shows a stored text, from its draft | `label`, `id`, `name`, `draft`, `show`, `wide` (on by default), `unit`, `hint`, `placeholder`, `type`, `maxLength`, `pattern`, `disabled` |
-| `Select` | `field.tsx` | a row with a select (`selectInput`), its options as `fillOptions` takes them | `label`, `id`, `name`, `options` (`[value, label, disabled]` or `{ group, options }`), `value` and `onChange`, or `draft` and `show`; `wide`, `unit`, `hint`, `disabled` |
+| `HelpButton`, `HelpText` | `help.tsx` | a setting's help (`helpParts`): the question mark that shows and hides its explanation, `help.<key>` of the texts, shown by its key wherever it is drawn again, in the page's one set of keys shown (`helpOpen` of `app.js`), the parts drawn again by a signal of their own, so a key is drawn by one side only; `Field` and `Switch` draw both from their `help` | `help` (the key), `id` (the explanation's, which the button controls), `label` (the setting's name); `help`, `id` |
+| `Field` | `field.tsx` | a label and its control, `.field` or `.field.wide` (`fieldRow`) | `label`, `id`, `wide`, `unit`, `hint`, `help` (the key of the setting's help: its button after the label, its explanation under the control), `cls` (classes the row adds, a capability's `needs-…`), `draft`, `show`, the control as children |
+| `TextField` | `field.tsx` | a row with a text input that shows a stored text, from its draft | `label`, `id`, `name`, `draft`, `show`, `wide` (on by default), `unit`, `hint`, `help`, `cls`, `placeholder`, `type`, `maxLength`, `pattern`, `required`, `disabled` |
+| `NumberField`, `numberNorm` | `field.tsx` | a number input that shows a stored number (`numberInput`), its draft the input's text, "" for none; with `row={false}` the input alone, in a row of the caller's, which draws its notice (`Meanwhile`); how such a draft compares, as a number | `label`, `id`, `name`, `min`, `max`, `step`, `draft`, `show`, `aria` (its name where no label names it), `disabled`, `row`, and a row's `wide`, `unit`, `hint`, `help`, `cls`; `v` |
+| `Select` | `field.tsx` | a row with a select (`selectInput`), its options as `fillOptions` takes them; with `row={false}` the select alone, in a row of the caller's, which draws its notice | `label`, `id`, `name`, `options` (`[value, label, disabled]` or `{ group, options }`), `value` and `onChange`, or `draft` and `show`; `row`, `wide`, `unit`, `hint`, `help`, `cls`, `disabled` |
 | `DateTime` | `field.tsx` | a date and time field (`datetime-local`), its value as the input takes it | `value`, `set`, `id`, `cls`, `step`, `required`, `disabled`, `inputRef` |
-| `Switch` | `field.tsx` | a checkbox drawn as a switch (`switchEl`) | `name`, `label`, `checked` and `onChange`, or `draft` and `show`; `row`, `cls` (the switch's classes), `id`, `disabled`, `title`, children after the label |
+| `Switch` | `field.tsx` | a checkbox drawn as a switch (`switchEl`), in its own row with its help where asked (`fieldRow` without a label) | `name`, `label`, `checked` and `onChange`, or `draft` and `show`; `row`, `help`, `cls` (the switch's classes), `id`, `disabled`, `title`, children after the label |
+| `Choices` | `choices.tsx` | a choice of several among a list: a group of switches under its heading, All and None as buttons where asked (the configuration's Copy tab), or of checkboxes, All a checkbox first (`look` `check`, the House panel); its next users, the capabilities of a role (`roles.js` `capGrid`) and of an integration (`integrations.js` `capsBox`), add a legend, an option fixed on and a badge or a title per option | `title`, `label` (the group's name for a screen reader), `id`, `options` (`[value, label, disabled]`), `chosen`, `set(chosen)`, `all` (`{ all, none }`, their labels, `none` left out for All alone), `empty` (said where there is no option), `look` (`switch`, the default, or `check`) |
+| `Tabs` | `tabs.tsx` | a row of tabs: a tab list of buttons, each with its key in `data-tab`, the one shown active and selected, and what follows the list (a close button) | `cls` (the row's class), `listCls`, `label` (the list's name), `tabs` (`{ key, label, cls }`), `current`, `onPick(key)`, children after the list |
 | `Stepper` | `field.tsx` | a number field between − and + (`stepper`), the step within its range; its buttons are named for a temperature, half a degree less and more, and the first user of another unit adds their names | `value`, `set`, `min`, `max`, `step`, `id` and `cls` of the field, `hidden` (the whole kept in its place unseen), children after the + (a unit) |
 | `useDraft`, `Meanwhile` | `field.tsx` | a field that shows stored data keeps a draft: untouched it follows, changed it says "changed meanwhile" with Take theirs (D59-A); with a place, a form's (`useForm`), the draft is kept there | `stored`, `norm`, `place`; gives `value`, `stored`, `set`, `changed`, `meanwhile`, `take`; `draft`, `show` |
 | `FormFooter` | `field.tsx` | a form's row of actions (`formFooter`, `sendWhenChanged`); with `look`, Save shows the form's state | `submit`, `busy`, `off`, `cancel` (its button of the class `form-cancel`, as the plain footer's), `cancelLabel`, `reset` (Reset, of the class `form-reset`, one fixed class per footer button as Cancel's `form-cancel`, off while clean), `look` (a `FormLook` of `useForm`), `extra` |
@@ -1815,20 +1819,17 @@ What the table cannot say:
   so that its drafts start from them and nothing typed meanwhile is lost.
 
 These builders of `components.js` and `app.js` have no part yet, since no region
-that has moved uses them: the help button (`helpParts`) and a field row without
-a label, `numberInput` (but the one of `Stepper`), `markRange`, `kvList`,
+that has moved uses them: `markRange`, `kvList`,
 `countList` and `sectionBadges`.
 Known gaps, for the blocks that meet them:
 a `ResultLine` with something after its text (`config.js`'s Load the current programme);
-a `Select` without a row of its own, beside another control in the caller's row
-(`config.js`'s day and hour);
 the conversion of a `DateTime`'s value to the API's time, which stays with its users
 (`apiUntil` of `rooms.js`), and which the block that moves the users' expiry fields
 (`users-panel.html`, `users.js`, `app.js`'s `localDateTimeValue`) brings to the part;
 a device row's head (icon, name, type, identifiers), which `pairing.js` draws a twin of,
 taken into `model/` by the block that moves the pairing, since no region imports another;
-choosing rooms, checkboxes with All in the House panel and switches with All and None
-in the configuration's Copy tab, one shared list once the configuration moves;
+choosing rooms by checkboxes with All, as the House panel does,
+where `Choices` has switches with All and None;
 a room's write's outcome in words, built in three places
 (`House.tsx` `houseRequests`, `rooms.js` `resultText`, `config.js`'s copy);
 a failed save's error with its unsaved form's item (its tooltip),

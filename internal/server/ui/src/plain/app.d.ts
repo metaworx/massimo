@@ -7,7 +7,7 @@
  * The globals of the plain script ui/app.js that the parts call: the
  * page's state, the API, the reload, the loads and the poll, the Cube
  * chosen, the ages of values and the times, a Cube's link and clock, a
- * device's path, detail and name, a temperature.
+ * device's path, detail and name, a temperature, the explanations shown.
  */
 
 import type { Cube, Device, DeviceDetail, FoundCube, Room } from "../api";
@@ -94,6 +94,8 @@ declare global {
   function deviceDetail(d: Device): Promise<DeviceDetail>;
   /** A temperature with one decimal and its unit, " °C" unless given; "–" when unknown. */
   function fmtTemp(v: number | undefined | null, unit?: string): string;
+  /** The keys of the settings' explanations shown (helpParts), the plain help buttons' and the parts'. */
+  const helpOpen: Set<string>;
   /** The default end of a temporary setting, tomorrow at six, as a datetime-local value. */
   function tomorrowMorning(): string;
 }

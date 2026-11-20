@@ -90,20 +90,22 @@ export function CountIcon({ symbol, n, cls }: { symbol: string; n: number; cls: 
 /**
  * IconButton is a button that shows an icon alone (iconButton of
  * components.js): label names it for a screen reader and, without title,
- * is its tooltip; cls is its class, mark draws the symbol as a mark
- * (Icon); the other properties are the button's (an id, aria-expanded,
- * data- attributes, the handlers).
+ * is its tooltip; cls is its class, iconCls the icon's ("ni" by default,
+ * "hi" for help's line drawing), mark draws the symbol as a mark (Icon);
+ * the other properties are the button's (an id, aria-expanded,
+ * aria-controls, data- attributes, the handlers).
  */
-export function IconButton({ symbol, label, title, cls, mark, ...rest }: {
+export function IconButton({ symbol, label, title, cls, iconCls, mark, ...rest }: {
   symbol: string;
   label: string;
   title?: string;
   cls?: string;
+  iconCls?: string;
   mark?: boolean;
 } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "class" | "title" | "children" | "type">) {
   return (
     <button type="button" class={cls} aria-label={label} title={title || label} {...rest}>
-      <Icon symbol={symbol} cls="ni" mark={mark} />
+      <Icon symbol={symbol} cls={iconCls || "ni"} mark={mark} />
     </button>
   );
 }
