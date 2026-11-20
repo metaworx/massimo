@@ -28,6 +28,7 @@ import { ResultLine } from "../shared/badge";
 import { Choices } from "../shared/choices";
 import { FormFooter, TextField, numberNorm, useDraft } from "../shared/field";
 import { Island } from "../shared/island";
+import { NAME_BYTES } from "../shared/name";
 import { Tabs } from "../shared/tabs";
 import { ConfigDevices, NumberRows, type NumberRow } from "./ConfigDevices";
 import {

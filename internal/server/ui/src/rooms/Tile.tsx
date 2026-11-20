@@ -15,28 +15,24 @@
  * room and updated in place, so that an open menu, the focus, a click and
  * what is typed stay when data comes in. The tile's actions are the plain
  * ones (rooms.js, tiles.js), which set the tile's live state (roomUI); the
- * repairs (repair.js) stay plain, in an element the part leaves to them;
- * the configuration is a part of its own (Config.tsx).
+ * room's repairs are the shared RepairBox, opened from ⋯; the
+ * configuration is a part of its own (Config.tsx).
  */
 
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import { Age, Notice, ResultLine } from "../shared/badge";
+import { hid } from "../shared/cls";
 import { DateTime, FormFooter, Stepper, Switch } from "../shared/field";
 import { Icon, IconButton } from "../shared/icon";
-import { Island } from "../shared/island";
 import { Dropdown, MenuItem } from "../shared/menu";
 import { Problems } from "../shared/problems";
 import { busyProps, Question } from "../shared/question";
+import { RepairBox, repairScope, toggleRepair } from "../shared/repair";
 import { Config } from "./Config";
 import { closeConfig, openConfig } from "./configuration";
 import { DeviceList } from "./Devices";
 import { problemsLabel, roomEntries } from "./facts";
 import { load, tickOf } from "./store";
-
-/** hid is the class hidden, with its space, where off. */
-function hid(off: boolean): string {
-  return off ? " hidden" : "";
-}
 
 /** The arrow keys of More move between these: its buttons that are on, and the Hold switch where shown. */
 const MORE_ITEMS = ".menu-items button:not(:disabled), .menu-items .switch:not(.hidden) input";
@@ -70,7 +66,7 @@ function NotReadyLine({ room, tile }: { room: PageRoom; tile: () => HTMLElement 
 /**
  * RoomMenu is the tile's ⋯ menu: a Boost, lock and unlock of the room's
  * thermostats, the deletion of an empty room, and Repair…, which opens the
- * room's repairs under the tile (repair.js). A room with devices but no
+ * room's repairs under the tile (RepairBox). A room with devices but no
  * thermostat has nothing to offer, so its menu is hidden.
  */
 function RoomMenu({ room, ui, tile }: { room: PageRoom; ui: RoomUI; tile: () => HTMLElement | null }) {
@@ -95,7 +91,7 @@ function RoomMenu({ room, ui, tile }: { room: PageRoom; ui: RoomUI; tile: () => 
       }} />
       <MenuItem cls="menu-repair needs-repair" label={t("repair.open")} onClick={() => {
         closeMenu(tile());
-        toggleRepair(roomRepairScope(room), "room", base() + "/rooms/" + room.id);
+        toggleRepair(repairScope(state.serial || "", "room", room.id), "room", base() + "/rooms/" + room.id);
       }} />
     </Dropdown>
   );
@@ -286,7 +282,7 @@ export function Tile({ room }: { room: PageRoom }) {
       </div>
       <Vacation room={room} ui={ui} />
       <DeleteQuestion room={room} ui={ui} tile={tile} />
-      <Island cls="repair-area" keys={[roomRepairScope(room)]} fill={(el) => el.replaceChildren(repairSlot(roomRepairScope(room)))} />
+      <RepairBox scope={repairScope(state.serial || "", "room", room.id)} />
       <ResultLine res={res} cls="tile-result" />
       <div class={"devices" + hid(!ui.open)}>{ui.open && <DeviceList room={room} ui={ui} />}</div>
       <Config room={room} ui={ui} />

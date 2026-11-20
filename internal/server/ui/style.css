@@ -847,8 +847,9 @@ body.scrolled .nav .top-btn { display: inline-flex; }
 .cubes-msg { margin: 4px 0 0; overflow-wrap: anywhere; }
 .cubes-msg.ok { color: var(--ok); }
 .cubes-msg.bad { color: var(--bad); }
-/* pairing in a Cube's panel (pairing.js), and the form that puts a device
-   into a room, there and under Devices without a room (ui/src/rooms/Unlisted.tsx) */
+/* pairing in a Cube's panel (ui/src/cubes/Pairing.tsx), and the form that
+   puts a device into a room (ui/src/shared/put.tsx), there and under
+   Devices without a room (ui/src/rooms/Unlisted.tsx) */
 .cube-pairing { margin: 0 0 12px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
 .no-cubes .cube-pairing { border-bottom: none; padding-bottom: 0; }
 .pairing-form, .pairing-running { margin-top: 2px; }
@@ -1542,9 +1543,11 @@ massimo-week-program { display: contents; }
    amber (.warn-text) before it, twice as far from the box as the unit */
 .field input[type="number"][aria-invalid="true"] { border-color: var(--bad); outline-color: var(--bad); }
 .field .inline > .warn-text { margin-right: 6px; }
-/* a name longer than the Cube keeps (markNameBytes): the box red, the
-   limit in amber after the label, before the box on its own line */
-.field input.name-bytes[aria-invalid="true"] { border-color: var(--bad); outline-color: var(--bad); }
+/* a value a part's field refuses (ui/src/shared/field.tsx, its limit),
+   a name longer than the Cube keeps among them: the box after the
+   limit's line red, as markRange's; a name's limit after the label,
+   before the box on its own line */
+.field .field-limit + input[aria-invalid="true"] { border-color: var(--bad); outline-color: var(--bad); }
 .field.wide > .field-control { flex: 1 1 100%; margin-left: 0; min-width: 0; width: 100%; }
 .field-hint { flex-basis: 100%; margin: 0; }
 /* the window's and the radio's drawing as chosen, beside its choice
@@ -1921,7 +1924,7 @@ massimo-week-program { display: contents; }
 /* its action (components.js showToast): Show for the Cubes a search found */
 .toast-action { flex: none; align-self: center; padding: 4px 10px; color: var(--accent); border-color: var(--accent); font-weight: 600; }
 
-/* the repairs of a room, a device or a Cube (repair.js): a box under the
+/* the repairs of a room, a device or a Cube (ui/src/shared/repair.tsx): a box under the
    tile, the device's row or the panel's actions, a repair per block */
 .repair-box { margin-top: 8px; display: flex; flex-direction: column; gap: 10px; }
 .repair-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

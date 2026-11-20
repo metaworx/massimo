@@ -23,6 +23,7 @@ import type { Budget, Device, DeviceResult, ProgramWithTag, RoomConfig } from ".
 import type { Outcome } from "../shared/action";
 import { focusForm, useForm, type Form, type FormName } from "../shared/forms";
 import { liveMap } from "../shared/live";
+import { byteLength, NAME_BYTES } from "../shared/name";
 import { cfgFormKey, openRoom, roomOf } from "./store";
 
 /** The common fields of a room's configuration on the Temperatures tab, as GET and PUT /rooms/{id}/config have them, in the order they are sent. */

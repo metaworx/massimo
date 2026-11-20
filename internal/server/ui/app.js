@@ -902,7 +902,7 @@ async function connectEvents() {
   };
   on("hello", logged(() => loadCubes()));
   on("metadata", logged(() => loadRooms()));
-  // Pairing (pairing.js): a device that joined is among the devices
+  // Pairing (cubes.js, ui/src/cubes/flow.ts): a device that joined is among the devices
   // without a room once the server read its C line, which the reload
   // after its config event finds as well.
   on("pairing_started", logged(() => pairingEvent(serial)));

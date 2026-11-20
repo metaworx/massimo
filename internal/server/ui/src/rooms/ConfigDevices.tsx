@@ -22,6 +22,7 @@ import { Notice } from "../shared/badge";
 import { DeviceIds } from "../shared/device";
 import { Field, FormFooter, Meanwhile, NumberField, Select, Switch, TextField, numberNorm, useDraft, type Draft } from "../shared/field";
 import { Icon } from "../shared/icon";
+import { NAME_BYTES } from "../shared/name";
 import { Question, useAsk } from "../shared/question";
 import {
   cancelOf,
