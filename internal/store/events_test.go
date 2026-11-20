@@ -372,10 +372,14 @@ func TestEventsForwardWhileWriting(t *testing.T) {
 			}
 		}
 	}()
+	// The reader pages until the writer has ended and a page comes back
+	// empty; the writer's end bounds it, not a wait of its own, which a
+	// loaded machine outran. It never returns before the writer, which
+	// would write into a store the test's end closes.
 	read := []int64{}
 	var after int64
-	testkit.Eventually(t, "the writes' end", func() bool {
-		over := false
+	var bad []int64
+	for over := false; bad == nil; {
 		select {
 		case <-done:
 			over = true // and the page below comes after the last write
@@ -383,20 +387,29 @@ func TestEventsForwardWhileWriting(t *testing.T) {
 		}
 		page, err := s.Events(ctx, EventQuery{CubeID: a.ID, Server: true, Forward: true, AfterID: after, Limit: 50})
 		if err != nil {
-			t.Fatal(err)
+			t.Error(err)
+			break
 		}
 		for i, e := range page {
 			if e.ID <= after || i > 0 && e.ID <= page[i-1].ID {
-				t.Fatalf("the page after %d: %v", after, eventIDs(page))
+				bad = eventIDs(page)
+				break
 			}
 		}
 		read = append(read, eventIDs(page)...)
 		if len(page) > 0 {
 			after = page[len(page)-1].ID
-			return false
+		} else if over {
+			break
 		}
-		return over
-	}, testkit.For(4*testkit.Wait), testkit.Every(100*time.Microsecond))
+	}
+	<-done
+	if bad != nil {
+		t.Fatalf("a page after %d: %v", after, bad)
+	}
+	if t.Failed() {
+		return
+	}
 	if len(read) != 2*n || read[0] != 1 || read[len(read)-1] != 2*n {
 		missed := []int64{}
 		for id := int64(1); id <= 2*n && len(missed) < 10; id++ {
