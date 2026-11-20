@@ -536,30 +536,6 @@ func withConfigRoom(t *testing.T, greeting []cube.Message, rf cube.RFAddress, ro
 	t.Fatalf("no C line for %s", rf)
 }
 
-// logKinds returns the kinds of the Cube's log events from the n-th on.
-func logKinds(t *testing.T, ts *httptest.Server, n int) []string {
-	t.Helper()
-	var evs []event
-	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log?limit=500", &evs)
-	var kinds []string
-	for i, e := range evs {
-		if i >= n {
-			kinds = append(kinds, e.Kind+":"+e.Device)
-		}
-	}
-	return kinds
-}
-
-// hasKind reports whether kinds holds kind.
-func hasKind(kinds []string, kind string) bool {
-	for _, k := range kinds {
-		if k == kind {
-			return true
-		}
-	}
-	return false
-}
-
 // listedRF reports whether the device list, or a room's, names rf.
 func listedRF(t *testing.T, ts *httptest.Server, rf string) (device, inRoom bool) {
 	t.Helper()
@@ -592,7 +568,7 @@ func TestRemoveListedDevice(t *testing.T) {
 	const base = "/api/v1/cubes/KEQ0000100"
 	var before cubeView
 	getJSON(t, ts, "", base, &before)
-	events := len(logKinds(t, ts, 0))
+	m := logMark(t, ts)
 	received := cubewatch.Lines(fc)
 	sent := received.Mark()
 	if code, out := do(t, ts, "DELETE", base+"/devices/0a010a", ""); code != 200 || out["ok"] != true || out["budget"] == nil {
@@ -620,12 +596,10 @@ func TestRemoveListedDevice(t *testing.T) {
 	if after.Devices != before.Devices-1 || after.Rooms != before.Rooms {
 		t.Fatalf("counts %d devices %d rooms, before %d and %d", after.Devices, after.Rooms, before.Devices, before.Rooms)
 	}
-	testkit.Eventually(t, "the events", func() bool {
-		kinds := logKinds(t, ts, events)
-		// The list written without the device is a metadata line of that
-		// one device (AP Logging v1.1, Block 4).
-		return hasKind(kinds, "metadata:0a010a") && hasKind(kinds, "device_forgotten:0a010a")
-	})
+	// The list written without the device is a metadata line of that one
+	// device (AP Logging v1.1, Block 4).
+	logAfter(t, m, "the metadata line", logLine("metadata", "0a010a"))
+	logAfter(t, m, "device_forgotten", logLine("device_forgotten", "0a010a"))
 }
 
 // A device in no room by the metadata and by its C line gets t: alone.
@@ -633,7 +607,7 @@ func TestRemoveUnlistedDevice(t *testing.T) {
 	t.Parallel()
 	r := startServer(t, withGreeting(copyGreeting(t)))
 	fc, ts := r.fc, r.ts
-	events := len(logKinds(t, ts, 0))
+	m := logMark(t, ts)
 	received := cubewatch.Lines(fc)
 	sent := received.Mark()
 	if code, out := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0000100/devices/0a0b0c", ""); code != 200 {
@@ -643,7 +617,7 @@ func TestRemoveUnlistedDevice(t *testing.T) {
 	if device, _ := listedRF(t, ts, "0a0b0c"); device {
 		t.Fatal("still among the devices")
 	}
-	testkit.Eventually(t, "device_forgotten", func() bool { return hasKind(logKinds(t, ts, events), "device_forgotten:0a0b0c") })
+	logAfter(t, m, "device_forgotten", logLine("device_forgotten", "0a0b0c"))
 }
 
 // A device in no room by the metadata whose C line names room 1, as one
