@@ -1531,6 +1531,10 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top
 /* The week editor (week-program.js) lays its parts out in the form, as if
    they were the form's own. */
 massimo-week-program { display: contents; }
+/* The places the programme tab (ui/src/rooms/Config.tsx) leaves to the
+   editor and to its two resets, as if their content were the form's and
+   the footer's own. */
+.prog-slot, .prog-resets { display: contents; }
 /* a row of a label and its control (components.js fieldRow, and the
    rows of the settings): the label at the left, the control at the
    right on the same line, wrapping under the label where there is no
@@ -1707,13 +1711,14 @@ massimo-week-program { display: contents; }
 .log-cmd-detail p, .log-cmd-detail ol { margin: 2px 0; }
 .log-cmd-head { color: var(--fg); }
 
-/* copy tab */
-.copy-section { display: flex; flex-direction: column; gap: 6px; }
-.copy-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.copy-head h4 { margin: 8px auto 6px 0; }
-.copy-head button { padding: 4px 10px; font-size: 0.85rem; }
-.copy-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(13em, 1fr)); gap: 8px 16px; }
-.copy-list .switch { color: var(--fg); }
+/* a choice of several (ui/src/shared/choices.tsx Choices), as the
+   configuration's Copy tab has them */
+.choices { display: flex; flex-direction: column; gap: 6px; }
+.choices-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.choices-head h4 { margin: 8px auto 6px 0; }
+.choices-head button { padding: 4px 10px; font-size: 0.85rem; }
+.choices-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(13em, 1fr)); gap: 8px 16px; }
+.choices-list .switch { color: var(--fg); }
 
 /* help: a small round button next to a setting, the text below it */
 .help-btn {

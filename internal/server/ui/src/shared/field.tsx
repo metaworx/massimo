@@ -5,7 +5,8 @@
  * @file internal/server/ui/src/shared/field.tsx
  *
  * A form's pieces as parts: the field row (.field, .field.wide for a
- * control on a line of its own), a text field and a switch, a field's
+ * control on a line of its own) with a setting's help, a text field, a
+ * number field, a select and a switch, a field's
  * draft against the value stored on the server (D59-A), and the form's
  * row of actions. A field that shows stored data keeps a draft (rule 1 of
  * AP UiParts): untouched it follows the stored value, changed it keeps
@@ -14,9 +15,10 @@
  */
 
 import type { ComponentChildren, Ref } from "preact";
-import { useRef, useState } from "preact/hooks";
+import { useId, useRef, useState } from "preact/hooks";
 import { Notice } from "./badge";
 import type { FormLook, Place } from "./forms";
+import { HelpButton, HelpText } from "./help";
 import { Icon, Mark } from "./icon";
 import { busyProps } from "./question";
 
@@ -107,27 +109,36 @@ interface Row {
   unit?: string;
   /** A grey line under the row. */
   hint?: string;
+  /** The key of the setting's help (help.<key> of the texts): its button after the label, its explanation under the control. */
+  help?: string;
+  /** Classes the row adds to field (a capability's needs-…). */
+  cls?: string;
 }
 
 /**
  * Field is a label with its control (fieldRow of components.js): the
  * control, given as children, carries the id and, without a unit, the
  * class field-control; a unit follows it, the two then the row's
- * .field-control; hint is a grey line under the row. With a draft the
- * row is followed by its "changed meanwhile" notice (show names the
- * value). A help button (helpParts) is not covered yet.
+ * .field-control; help is the key of the setting's help, its button
+ * after the label and its explanation under the control (helpParts);
+ * hint is a grey line under the row; cls adds classes to the row. With a
+ * draft the row is followed by its "changed meanwhile" notice (show
+ * names the value).
  */
-export function Field<T>({ label, id, wide, unit, hint, draft, show, children }: Row & { draft?: Draft<T>; show?: (v: T) => string; children: ComponentChildren }) {
+export function Field<T>({ label, id, wide, unit, hint, help, cls, draft, show, children }: Row & { draft?: Draft<T>; show?: (v: T) => string; children: ComponentChildren }) {
+  const helpId = useId();
   return (
     <>
-      <div class={wide ? "field wide" : "field"}>
+      <div class={"field" + (wide ? " wide" : "") + (cls ? " " + cls : "")}>
         <label for={id}>{label}</label>
+        {help && <HelpButton help={help} id={helpId} label={label} />}
         {unit ? (
           <span class="inline field-control">
             {children}
             <span class="muted">{unit}</span>
           </span>
         ) : children}
+        {help && <HelpText help={help} id={helpId} />}
         {hint && <p class="muted small field-hint">{hint}</p>}
       </div>
       {draft && <Meanwhile draft={draft} show={show} />}
@@ -138,25 +149,65 @@ export function Field<T>({ label, id, wide, unit, hint, draft, show, children }:
 /**
  * TextField is a row with a text input that shows a stored text, as its
  * draft: name, placeholder, maxLength and pattern (what a valid value
- * looks like), type (text by default; a password is no stored text) and
- * disabled (off) are the input's; the row is wide unless wide is false.
+ * looks like), type (text by default; a password is no stored text),
+ * required and disabled (off) are the input's; the row is wide unless
+ * wide is false.
  */
-export function TextField({ label, id, wide = true, unit, hint, name, placeholder, type, maxLength, pattern, disabled, draft, show }: Row & {
+export function TextField({ label, id, wide = true, unit, hint, help, cls, name, placeholder, type, maxLength, pattern, required, disabled, draft, show }: Row & {
   name: string;
   disabled?: boolean;
   placeholder?: string;
   type?: "text" | "email" | "url" | "search";
   maxLength?: number;
   pattern?: string;
+  required?: boolean;
   draft: Draft<string>;
   show?: (v: string) => string;
 }) {
   return (
-    <Field label={label} id={id} wide={wide} unit={unit} hint={hint} draft={draft} show={show}>
+    <Field label={label} id={id} wide={wide} unit={unit} hint={hint} help={help} cls={cls} draft={draft} show={show}>
       <input id={id} type={(type || "text") as "text"} name={name} class={unit ? undefined : "field-control"} autocomplete="off" spellcheck={false}
-        placeholder={placeholder} maxLength={maxLength} pattern={pattern} disabled={disabled} value={draft.value} onInput={(ev) => draft.set(ev.currentTarget.value)} />
+        placeholder={placeholder} maxLength={maxLength} pattern={pattern} required={required} disabled={disabled} value={draft.value}
+        onInput={(ev) => draft.set(ev.currentTarget.value)} />
     </Field>
   );
+}
+
+/**
+ * NumberField is a number input that shows a stored number, as its
+ * draft of the input's text ("" for none; compare with numberNorm): min,
+ * max and step are the input's, name, disabled and aria (its name for a
+ * screen reader where no label names it) too. It draws its row with its
+ * "changed meanwhile" notice, or with row false the input alone, inside
+ * a row of the caller's (a field with two controls), whose notice the
+ * caller then draws (Meanwhile).
+ */
+export function NumberField({ label, id, wide, unit, hint, help, cls, name, min, max, step, aria, disabled, draft, show, row = true }: Partial<Row> & {
+  name?: string;
+  min: number;
+  max: number;
+  step: number;
+  aria?: string;
+  disabled?: boolean;
+  draft: Draft<string>;
+  show?: (v: string) => string;
+  row?: boolean;
+}) {
+  const input = (
+    <input id={id} type="number" name={name} class={!row || unit ? undefined : "field-control"} min={String(min)} max={String(max)} step={String(step)}
+      aria-label={aria} disabled={disabled} value={draft.value} onInput={(ev) => draft.set(ev.currentTarget.value)} />
+  );
+  if (!row || label === undefined || id === undefined) return input;
+  return (
+    <Field label={label} id={id} wide={wide} unit={unit} hint={hint} help={help} cls={cls} draft={draft} show={show}>
+      {input}
+    </Field>
+  );
+}
+
+/** numberNorm is how a NumberField's draft compares: as a number, "" for none. */
+export function numberNorm(v: string): unknown {
+  return v.trim() === "" ? "" : Number(v);
 }
 
 /**
@@ -171,9 +222,11 @@ export type SelectOption = [value: string, label: string, disabled?: boolean] | 
  * options as fillOptions takes them, the value chosen from a draft of a
  * stored value (with its "changed meanwhile" notice) or from value and
  * onChange; name and disabled (off) are the select's, the row narrow
- * unless wide.
+ * unless wide; inputRef gives it the focus. With row false it is the
+ * select alone, inside a row of the caller's (a field with two controls),
+ * whose notice the caller draws.
  */
-export function Select({ label, id, wide, unit, hint, name, options, value, onChange, disabled, draft, show }: Row & {
+export function Select({ label, id, wide, unit, hint, help, cls, name, options, value, onChange, disabled, draft, show, row = true, inputRef }: Partial<Row> & {
   name?: string;
   disabled?: boolean;
   options: SelectOption[];
@@ -181,17 +234,23 @@ export function Select({ label, id, wide, unit, hint, name, options, value, onCh
   onChange?: (v: string) => void;
   draft?: Draft<string>;
   show?: (v: string) => string;
+  row?: boolean;
+  inputRef?: Ref<HTMLSelectElement>;
 }) {
   const opt = ([v, l, off]: [string, string, boolean?]) => <option key={v} value={v} disabled={off}>{l}</option>;
+  const select = (
+    <select ref={inputRef} id={id} name={name} class={!row || unit ? undefined : "field-control"} disabled={disabled} value={draft ? draft.value : value} onChange={(ev) => {
+      const v = ev.currentTarget.value;
+      if (draft) draft.set(v);
+      if (onChange) onChange(v);
+    }}>
+      {options.map((o) => (Array.isArray(o) ? opt(o) : <optgroup key={"group:" + o.group} label={o.group}>{o.options.map(opt)}</optgroup>))}
+    </select>
+  );
+  if (!row || label === undefined || id === undefined) return select;
   return (
-    <Field label={label} id={id} wide={wide} unit={unit} hint={hint} draft={draft} show={show}>
-      <select id={id} name={name} class={unit ? undefined : "field-control"} disabled={disabled} value={draft ? draft.value : value} onChange={(ev) => {
-        const v = ev.currentTarget.value;
-        if (draft) draft.set(v);
-        if (onChange) onChange(v);
-      }}>
-        {options.map((o) => (Array.isArray(o) ? opt(o) : <optgroup key={"group:" + o.group} label={o.group}>{o.options.map(opt)}</optgroup>))}
-      </select>
+    <Field label={label} id={id} wide={wide} unit={unit} hint={hint} help={help} cls={cls} draft={draft} show={show}>
+      {select}
     </Field>
   );
 }
@@ -223,10 +282,12 @@ export function DateTime({ value, set, id, cls, step, required, disabled, inputR
  * from checked, or from a draft of a stored setting, whose "changed
  * meanwhile" notice follows it; onChange gets its state. It draws its own
  * .field row unless row is false (a switch inside another row, or an item
- * of a menu); cls adds classes to the switch; id, name, disabled and
- * title are the checkbox's; children follow the label (a help button).
+ * of a menu), with help, the key of the setting's help, its button after
+ * the switch and its explanation under it; cls adds classes to the
+ * switch; id, name, disabled and title are the checkbox's; children
+ * follow the label.
  */
-export function Switch({ name, label, checked, onChange, draft, show, row = true, cls, id, disabled, title, children }: {
+export function Switch({ name, label, checked, onChange, draft, show, row = true, help, cls, id, disabled, title, children }: {
   name?: string;
   label: string;
   checked?: boolean;
@@ -234,12 +295,14 @@ export function Switch({ name, label, checked, onChange, draft, show, row = true
   draft?: Draft<boolean>;
   show?: (v: boolean) => string;
   row?: boolean;
+  help?: string;
   cls?: string;
   id?: string;
   disabled?: boolean;
   title?: string;
   children?: ComponentChildren;
 }) {
+  const helpId = useId();
   const sw = (
     <label class={cls ? "switch " + cls : "switch"} title={title}>
       <input id={id} type="checkbox" name={name} disabled={disabled} checked={draft ? draft.value : !!checked} onChange={(ev) => {
@@ -256,7 +319,9 @@ export function Switch({ name, label, checked, onChange, draft, show, row = true
     <>
       <div class="field">
         {sw}
+        {help && <HelpButton help={help} id={helpId} label={label} />}
         {children}
+        {help && <HelpText help={help} id={helpId} />}
       </div>
       {draft && <Meanwhile draft={draft} show={show} />}
     </>

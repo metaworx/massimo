@@ -523,11 +523,13 @@ Every room has a tile:
   - **Room**:
     the name.
   - **Temperatures**:
-    comfort, eco, open window and its duration, maximum and minimum.
-    For radiator thermostats also Boost, descaling,
-    maximum valve and valve offset.
+    comfort, eco, open window and its duration, maximum and minimum,
+    and which thermostat the values come from.
   - **Devices**:
-    name, room, temperature offset,
+    for a room with radiator thermostats first their settings,
+    Boost and its valve, descaling, maximum valve and valve offset,
+    with a **Send** of their own;
+    then per device its name, room, temperature offset,
     and for a wall thermostat whether its display shows the measured temperature.
     A device that has not shown a write by its deadline says which values first,
     "Not confirmed by the device: eco, Monday's program".
@@ -564,16 +566,52 @@ Every room has a tile:
   - **Copy**:
     copies this room's stored settings (temperatures, week programme,
     radiator settings) to other rooms.
-    It copies what is stored, not changes that haven't been sent yet.
+    It copies what is stored, not changes that haven't been sent yet,
+    and the week programme as the last **Send** of the Week programme tab left it.
+    It is a command, as the House tile's panel is, and no settings form:
+    what is chosen stays while the configuration is open and when it closes,
+    marks nothing unsaved, and a copy that went through clears the rooms chosen,
+    what is copied staying as it was set.
   - **Send** is off while nothing differs from what the Cube has,
     or on the Copy tab while no room is ticked.
+    While one of the configuration's writes runs, its **Send** turns
+    and every other **Send** of the configuration is off.
+  - A field that shows what is stored keeps what is typed,
+    where the stored value changed meanwhile, as another client renames the room,
+    it says so under the field, with **Take theirs**.
+  - Room, Temperatures and Week programme are settings forms, each of its own,
+    and on the Devices tab the radiator settings and each device:
+    what is typed stays until it is sent, reset or cancelled,
+    from one tab to another and when the configuration closes;
+    opened again, the configuration shows the tab it was on, with what was typed,
+    and the week programme's edits, its days marked changed.
+    It is forgotten as the virtual thermostat's settings are,
+    a device's form also when the device has left the room.
+    **Send** and **Reset** say how a form stands, as in Cube settings:
+    off and plain while nothing is changed, in the accent colour once something is,
+    with the warning mark once the focus has left the form,
+    its tab or the configuration was closed or a minute has passed since the last change,
+    a key typed or a change of the week programme making it changed again,
+    with the cross after a write that failed, the Cube discarded or a device did not take,
+    the form then still changed, and the check after one that went through;
+    **Cancel** resets the form and closes the configuration.
+    The week programme keeps its own **Reset day** and **Reset all**.
+    While a form is unsaved, or its write failed,
+    the room's entry in the tile's problem list,
+    and the Cube's problem lists, in the header and in its panel's head,
+    show the disk, "Living room, Temperatures: not saved",
+    "Living room, Devices: Radiator: not saved" for a device;
+    a click on it, from any page, chooses the Cube where another is chosen,
+    shows the rooms, opens the configuration on the form's tab
+    and puts the focus into the form.
 - Each setting has a **?** button that explains it, with the factory values
-  from the eQ-3 manuals.
+  from the eQ-3 manuals; an explanation shown stays shown when its tab is drawn again.
 
 The **House** tile, named after the chosen Cube with the cube before its name
 ("All rooms of …" its tooltip), sets several rooms at once: ECO, AUTO,
 COMFORT or MANU with a temperature, permanently or until a date and time;
-its **Send** is off while no room is ticked.
+its **Send** is off while no room is ticked,
+the rooms a choice of checkboxes with **All rooms** first.
 What its panel holds stays when the rooms load again and when it closes:
 the rooms ticked, the mode, the end typed.
 
@@ -596,8 +634,9 @@ A tile is drawn once and follows the data in place:
 a menu open, the focus, a click under way, a text selected, the result line,
 the holiday form and what is typed in it stay
 when a device reports or the rooms are loaded again.
-The configuration is drawn again at such a time, but not while the focus is in it:
-then once the focus has left it.
+So does the configuration, with the focus in it or not:
+its tab, what is typed, an explanation shown, the week programme's edits
+and a click on its buttons.
 
 ### Repairs
 
@@ -1613,9 +1652,11 @@ come from `components.js`; the scripts never use `innerHTML`.
 The week programme editor is an element of its own, `<massimo-week-program>`
 (`week-program.js`), so that a Home Assistant card can use the same editor:
 it holds the editor's behaviour, works on a model the page keeps,
-builds its controls with a kit the page gives it (`components.js`, `t()`),
+builds its controls with a kit the page gives it (`components.js`, `t()`,
+`weekKit` of `config.js`),
 and tells the page of every edit with a `change` event;
-the programme tab puts it in a form with Cancel, Send and the two resets.
+the programme tab, a part (`ui/src/rooms/Config.tsx`), makes it once in an element
+it leaves to it and puts its two resets beside Cancel and Send.
 A plain panel that opens, a user's or a role's, is a `detailsPanel`:
 its head the name, the serial, login or key, and the badges,
 its body the form cloned from the feature's template.
@@ -1703,7 +1744,8 @@ a script for each region of the page, in the order the page loads them:
   and a finding of the Cube's lines in words;
   `unlisted.js`, a device removed from the Cube;
   `house.js`, the House tile's plain names, which call its part;
-- `week-program.js` and `config.js`, a room's configuration;
+- `week-program.js`, the week programme editor; `config.js`, how long a name may be,
+  the name a device is offered, and the editor's kit;
 - `log.js`, the log and its sign for unseen problems;
   `pages.js`, the pages, the main menu, the address and the scroll;
 - `update.js`, Software update; `maintenance.js`, the Maintenance card;
@@ -1786,7 +1828,7 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `Sign` | `icon.tsx` | a kind of `SIGNS` in a state, its mark blinking (`signEl`) | `kind`, `state` ("", ok, warn, bad, open), `cls`, `blink` (the mark's key), `label` (named for a screen reader, else hidden) |
 | `Mark` | `icon.tsx` | a mark alone (`markEl`) | `state` (warn, bad), `blink` |
 | `CountIcon` | `icon.tsx` | an icon with a number in its corner (`foundCountEl`) | `symbol`, `n`, `cls` |
-| `IconButton` | `icon.tsx` | a button that is an icon alone, named for a screen reader (`iconButton`): a tile's info and cog, the copy icon | `symbol`, `label` (its name, and its tooltip without `title`), `title`, `cls`, `mark`, and the button's own attributes (`id`, `aria-expanded`, `data-…`, the handlers) |
+| `IconButton` | `icon.tsx` | a button that is an icon alone, named for a screen reader (`iconButton`): a tile's info and cog, the copy icon, help's question mark | `symbol`, `label` (its name, and its tooltip without `title`), `title`, `cls`, `iconCls` (the icon's class, `ni` by default, `hi` for help's line drawing), `mark`, and the button's own attributes (`id`, `aria-expanded`, `aria-controls`, `data-…`, the handlers) |
 | `Badge` | `badge.tsx` | a `.flag` led by its mark for a warning or a failure (`badgeEl`) | `kind`, `text`, `blink`, `title`, children after the text |
 | `Notice` | `badge.tsx` | a lasting warning with since when (`noticeEl`) | `text`, `since`, `next`, `cls`, `id`, `role`, `hidden` (the class `hidden`, the line kept in its place), children after |
 | `Age` | `badge.tsx` | how old a value is, filled by `fillAge` (`ageEl`) | `at`, `stale`, `plain` |
@@ -1795,11 +1837,15 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `Problems` | `problems.tsx` | the problem list, entries under entries (`problemsEl`), an item with an action a button | `entries`, `label`, `ok` (the green check's label where nothing is wrong), `always` (the list there where nothing is wrong too; where `ok` is given, its summary the green check and `ok` a line of its list), `lead` (drawn first in the summary, a sign of the place's own state), `head` (drawn first in the list, items that act on the place or a row of its own state), `onClick`, `onOpen`, `onClose` (as `Dropdown`'s); an entry's `tail` is drawn after its name (a sign of its state where its icon says what it is) |
 | `KindIcons`, `problemKinds`, `kindsLabel` | `problems.tsx` | the kinds' icons of entries without the list (`kindIcons`); the kinds themselves, to know whether there are any; the label naming the kinds among items in an order of kinds, "" for none | `entries`, `skip`; `entries`, `skip`; `items`, `kinds` |
 | `OkPill` | `problems.tsx` | the green check in a list's place (`okPill`) | `label` |
-| `Field` | `field.tsx` | a label and its control, `.field` or `.field.wide` (`fieldRow`) | `label`, `id`, `wide`, `unit`, `hint`, `draft`, `show`, the control as children |
-| `TextField` | `field.tsx` | a row with a text input that shows a stored text, from its draft | `label`, `id`, `name`, `draft`, `show`, `wide` (on by default), `unit`, `hint`, `placeholder`, `type`, `maxLength`, `pattern`, `disabled` |
-| `Select` | `field.tsx` | a row with a select (`selectInput`), its options as `fillOptions` takes them | `label`, `id`, `name`, `options` (`[value, label, disabled]` or `{ group, options }`), `value` and `onChange`, or `draft` and `show`; `wide`, `unit`, `hint`, `disabled` |
+| `HelpButton`, `HelpText` | `help.tsx` | a setting's help (`helpParts`): the question mark that shows and hides its explanation, `help.<key>` of the texts, shown by its key wherever it is drawn again, in the page's one set of keys shown (`helpOpen` of `app.js`), the parts drawn again by a signal of their own, so a key is drawn by one side only; `Field` and `Switch` draw both from their `help` | `help` (the key), `id` (the explanation's, which the button controls), `label` (the setting's name); `help`, `id` |
+| `Field` | `field.tsx` | a label and its control, `.field` or `.field.wide` (`fieldRow`) | `label`, `id`, `wide`, `unit`, `hint`, `help` (the key of the setting's help: its button after the label, its explanation under the control), `cls` (classes the row adds, a capability's `needs-…`), `draft`, `show`, the control as children |
+| `TextField` | `field.tsx` | a row with a text input that shows a stored text, from its draft | `label`, `id`, `name`, `draft`, `show`, `wide` (on by default), `unit`, `hint`, `help`, `cls`, `placeholder`, `type`, `maxLength`, `pattern`, `required`, `disabled` |
+| `NumberField`, `numberNorm` | `field.tsx` | a number input that shows a stored number (`numberInput`), its draft the input's text, "" for none; with `row={false}` the input alone, in a row of the caller's, which draws its notice (`Meanwhile`); how such a draft compares, as a number | `label`, `id`, `name`, `min`, `max`, `step`, `draft`, `show`, `aria` (its name where no label names it), `disabled`, `row`, and a row's `wide`, `unit`, `hint`, `help`, `cls`; `v` |
+| `Select` | `field.tsx` | a row with a select (`selectInput`), its options as `fillOptions` takes them; with `row={false}` the select alone, in a row of the caller's, which draws its notice | `label`, `id`, `name`, `options` (`[value, label, disabled]` or `{ group, options }`), `value` and `onChange`, or `draft` and `show`; `row`, `wide`, `unit`, `hint`, `help`, `cls`, `disabled` |
 | `DateTime` | `field.tsx` | a date and time field (`datetime-local`), its value as the input takes it | `value`, `set`, `id`, `cls`, `step`, `required`, `disabled`, `inputRef` |
-| `Switch` | `field.tsx` | a checkbox drawn as a switch (`switchEl`) | `name`, `label`, `checked` and `onChange`, or `draft` and `show`; `row`, `cls` (the switch's classes), `id`, `disabled`, `title`, children after the label |
+| `Switch` | `field.tsx` | a checkbox drawn as a switch (`switchEl`), in its own row with its help where asked (`fieldRow` without a label) | `name`, `label`, `checked` and `onChange`, or `draft` and `show`; `row`, `help`, `cls` (the switch's classes), `id`, `disabled`, `title`, children after the label |
+| `Choices` | `choices.tsx` | a choice of several among a list: a group of switches under its heading, All and None as buttons where asked (the configuration's Copy tab), or of checkboxes, All a checkbox first (`look` `check`, the House panel); its next users, the capabilities of a role (`roles.js` `capGrid`) and of an integration (`integrations.js` `capsBox`), add a legend, an option fixed on and a badge or a title per option | `title`, `label` (the group's name for a screen reader), `id`, `options` (`[value, label, disabled]`), `chosen`, `set(chosen)`, `all` (`{ all, none }`, their labels, `none` left out for All alone), `empty` (said where there is no option), `look` (`switch`, the default, or `check`) |
+| `Tabs` | `tabs.tsx` | a row of tabs: a tab list of buttons, each with its key in `data-tab`, the one shown active and selected, and what follows the list (a close button) | `cls` (the row's class), `listCls`, `label` (the list's name), `tabs` (`{ key, label, cls }`), `current`, `onPick(key)`, children after the list |
 | `Stepper` | `field.tsx` | a number field between − and + (`stepper`), the step within its range; its buttons are named for a temperature, half a degree less and more, and the first user of another unit adds their names | `value`, `set`, `min`, `max`, `step`, `id` and `cls` of the field, `hidden` (the whole kept in its place unseen), children after the + (a unit) |
 | `useDraft`, `Meanwhile` | `field.tsx` | a field that shows stored data keeps a draft: untouched it follows, changed it says "changed meanwhile" with Take theirs (D59-A); with a place, a form's (`useForm`), the draft is kept there | `stored`, `norm`, `place`; gives `value`, `stored`, `set`, `changed`, `meanwhile`, `take`; `draft`, `show` |
 | `FormFooter` | `field.tsx` | a form's row of actions (`formFooter`, `sendWhenChanged`); with `look`, Save shows the form's state | `submit`, `busy`, `off`, `cancel` (its button of the class `form-cancel`, as the plain footer's), `cancelLabel`, `reset` (Reset, of the class `form-reset`, one fixed class per footer button as Cancel's `form-cancel`, off while clean), `look` (a `FormLook` of `useForm`), `extra` |
@@ -1865,33 +1911,21 @@ What the table cannot say:
   so that its drafts start from them and nothing typed meanwhile is lost.
 
 These builders of `components.js` and `app.js` have no part yet, since no region
-that has moved uses them: the help button (`helpParts`) and a field row without
-a label, `numberInput` (but the one of `Stepper`), `markRange`, `kvList`,
+that has moved uses them: `markRange`, `kvList`,
 `countList` and `sectionBadges`.
 Known gaps, for the blocks that meet them:
-a `ResultLine` with something after its text (`config.js`'s Load the current programme);
-a `Select` without a row of its own, beside another control in the caller's row
-(`config.js`'s day and hour);
 the conversion of a `DateTime`'s value to the API's time, which stays with its users
 (`apiUntil` of `rooms.js`), and which the block that moves the users' expiry fields
 (`users-panel.html`, `users.js`, `app.js`'s `localDateTimeValue`) brings to the part;
 a device row's head (icon, name, type, identifiers), which `pairing.js` draws a twin of,
 taken into `model/` by the block that moves the pairing, since no region imports another;
-choosing rooms, checkboxes with All in the House panel and switches with All and None
-in the configuration's Copy tab, one shared list once the configuration moves;
 a room's write's outcome in words, built in three places
-(`House.tsx` `houseRequests`, `rooms.js` `resultText`, `config.js`'s copy);
+(`House.tsx` `houseRequests`, `rooms.js` `resultText`, `configuration.ts` `sendCopy`);
 a failed save's error with its unsaved form's item (its tooltip),
 which `actionRunner`'s `run` does not hand back:
 it says only whether the request was taken,
 and the error is in the message line;
-a Cancel of `useForm` (Reset and the form's close) and the "unsaved" form of a
-section without a pill (AP UnsavedMarks, Blocks 4 and 5);
-a room's own entry in the tile's problem list, where a configuration tab lists its
-form, which today goes through the virtual wall thermostat's entry, and one list of
-the room's forms that does not name the virtual thermostat twice, and a tab's open
-by `openConfig(room, el, tab)` (`config.js`), where the virtual thermostat's open
-closes the configuration (AP UnsavedMarks, Block 4);
+the "unsaved" form of a section without a pill (AP UnsavedMarks, Block 5);
 the page's modal dialog: `FormsDialog` is the list of forms with a title,
 and a later modal takes its shell out of it
 (its opening by a property, the focus, its closing);
@@ -1959,14 +1993,14 @@ The rooms (`ui/src/rooms/`) are the third:
 `index.tsx` draws the House tile's modes and panel in `#house-slot`,
 a tile per room of the chosen Cube in `#rooms`,
 kept by the Cube and the room's id, and the devices without a room in `#unlisted-devices`,
-and registers `render`, `data`, `unlisted`, `room`, `result`, `ui`, `loaded`,
+and registers `render`, `data`, `unlisted`, `result`, `ui`, `loaded`,
 `houseOpen` and `closeHouse`,
 which `rooms.js` calls as `renderRooms`, `updateDevice` (`data` for a room's device,
-`unlisted` for one in no room), `rerenderRoom`, `showTileResult`, `roomUI`
+`unlisted` for one in no room), `showTileResult`, `roomUI`
 and `roomsLoaded`,
 and `house.js` by their own names;
 `store.ts` holds its counter, a counter per room that a state event of one of its
-devices raises and one per room's configuration, what a tile keeps (`newUI`,
+devices raises, what a tile keeps (`newUI`,
 the live object `roomUI` gives the plain actions, which set it as before)
 and what the House tile's panel keeps (`house`: the mode, the duration,
 the temperature and the end typed, the rooms unticked, the last result),
@@ -1976,8 +2010,11 @@ and the timer of an open window's next state by the clock;
 (a mode's badge, the problems of a tile's head and of a device's row with their label,
 the room's notices among them, a device's badges in words);
 `Tile.tsx` the tile, `Devices.tsx` a device's row and a tile's device list,
+`Config.tsx` a tile's configuration with its tabs, `ConfigDevices.tsx` its Devices tab,
+`configuration.ts` what the configuration keeps and sends,
 `House.tsx` the House tile, its temperature a `Stepper`, its end a `DateTime`,
 its mode and its duration a choice of radio buttons side by side of its own (`Segments`),
+its rooms a `Choices` of checkboxes with All,
 its Send and Cancel a `FormFooter`;
 `Unlisted.tsx` the devices without a room, each row a device's row with
 Put into a room… and Remove from the Cube;
@@ -1987,11 +2024,35 @@ and the House tile's section is shown and hidden by `rooms.js` too, its title th
 The tile's actions stay plain (`rooms.js`, `tiles.js`) and set `roomUI`,
 which the tile follows: a write running turns its button and keeps the others off,
 a stepper value waiting to be sent shows with Save and Cancel.
-The configuration stays plain inside the tile (`config.js`, AP UiParts Block 8),
-an `Island` that `renderConfig` fills: again where the configuration asks for it
-(`rerenderRoom`), where it opens or closes, and at a data event,
-but while the focus is in it,
-where the fill waits until the focus has left it (`configFocused`).
+The configuration (AP UiParts Block 8) is a part of the tile, open while `roomUI`'s
+`config` says so: `configuration.ts` keeps per room of its Cube, live,
+the tab shown and the Copy tab's choice, kept across a close, the configuration
+and the week programme as loaded with the programme's tag, which a Send of the programme
+makes the one it sent, the result line and the write under way,
+and sends what each tab sends, as `config.js` sent it;
+its tabs are `Tabs`, its fields `TextField`s, `NumberField`s, `Select`s and `Switch`es
+with their drafts and their help, the Copy tab's rooms and settings `Choices`,
+a move and a removal `Question`s, each footer a `FormFooter`,
+the result line a `ResultLine`,
+followed by Load the current programme where the programme changed elsewhere;
+the week programme editor stays the element it is (`week-program.js`), made once
+in an `Island`, its two resets in another.
+Each tab but Copy, a command, is a `useForm` (`useConfigForm` of `configuration.ts`)
+of the key `cfgFormKey(serial, id, form)` of `store.ts`,
+`<room>:cfg:<form>` under the room's `roomFormKey` beside the virtual thermostat's `:vwt`,
+the form `room`, `temps` or `program`,
+and on the Devices tab `valves` and `device:<radio address>`;
+a write the Cube discarded or a device did not take leaves the stored values as they were,
+so the form stays changed and failed;
+its Cancel resets the form and closes (`cancelOf`), and the programme's draft is the
+programme kept in its form's place, a later load taking its place only where
+nothing of it differs or the user loaded it again.
+The room's own entry in the tile's problem list lists their `unsavedItems`
+(`cfgFormKey(serial, id)`, `facts.ts`), so the virtual thermostat's are listed
+once, under its own entry;
+a click opens the tab from anywhere (`openForm`), by `openRoom` of `store.ts`,
+which `openSettings` uses too and which keeps the request until the Cube's rooms
+have loaded; `loaded` forgets a device's form when the room no longer has the device.
 A room's repairs and a device's Repair… stay plain too (`repair.js`), each an `Island`,
 and so does the form that puts a device without a room into one
 (`pairDeviceForm`, Block 9),
