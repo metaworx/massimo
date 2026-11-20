@@ -299,7 +299,7 @@ def test_version_in_the_menu(page, case, reads):
     assert icon.is_visible() and first.locator(".menu-brand .brand-logo").is_hidden(), "the icon, not the logo"
     assert icon.bounding_box()["x"] + icon.bounding_box()["width"] <= v.bounding_box()["x"], "before the version"
     assert first.evaluate("(e) => e.nextElementSibling.tagName") == "HR", "a rule under the row"
-    assert page.locator("#version-out").is_hidden(), "none beside the logo while signed in"
+    assert page.locator("#login-version").is_hidden(), "not the sign-in card's while signed in"
     page.keyboard.press("Escape")
 
 

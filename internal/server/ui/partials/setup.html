@@ -17,6 +17,8 @@
       <label for="setup-again" data-i18n="setup.again">Again</label>
       <input type="password" id="setup-again" class="field-control" autocomplete="new-password" required>
     </div>
+    <!-- in the app where the phone can: keep the login by fingerprint, as the sign-in offers it (login.js renderSetupKeep) -->
+    <label id="setup-keep-row" class="switch login-keep hidden"><input type="checkbox" id="setup-keep"><span class="slider" aria-hidden="true"></span><span class="switch-label" data-i18n="login.keepFingerprint">Enable login by fingerprint</span></label>
     <div class="actions"><span class="actions-right"><button type="submit" class="primary" data-i18n="setup.create">Create the owner</button></span></div>
     <p id="setup-msg" class="small cubes-msg hidden" role="status"></p>
   </form>

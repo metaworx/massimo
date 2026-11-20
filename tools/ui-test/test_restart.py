@@ -129,12 +129,12 @@ def test_reload_settings(page):
 
 
 def test_sign_in_offers_the_key_after_an_open_server(page):
-    """The sign-in dialog opens its API-key part once the page has seen
-    the server open, since the owner made from MASSIMO_API_TOKEN has no
-    password; before that it stays folded."""
+    """The sign-in dialog chooses its API key's form once the page has
+    seen the server open, since the owner made from MASSIMO_API_TOKEN has
+    no password; before that the name's form."""
     page.evaluate("askLogin(); null")
     assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the dialog opens"
-    assert not page.evaluate("document.getElementById('login-token').closest('details').open"), "folded on a server that always asked"
+    assert page.locator("#login-form").is_visible() and page.locator("#login-key-form").is_hidden(), "the name's form on a server that always asked"
     page.evaluate("document.getElementById('login-dialog').close()")
     # askLogin() hands out the open dialog's promise until its close event ran.
     assert wait_until(page, "loginPromise === null", 5), "the dialog's close handled"
@@ -144,7 +144,7 @@ def test_sign_in_offers_the_key_after_an_open_server(page):
     page.unroute("**/api/v1/me")
     page.evaluate("askLogin(); null")
     assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the dialog opens again"
-    assert page.evaluate("document.getElementById('login-token').closest('details').open"), "the API-key part is open"
+    assert page.locator("#login-key-form").is_visible() and page.locator("#login-form").is_hidden(), "the API key's form is chosen"
     page.evaluate("document.getElementById('login-dialog').close()")
 
 

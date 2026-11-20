@@ -6,16 +6,18 @@ on the address its `-listen` names.
 The page works on a phone as well as on a desktop,
 and follows the system's light or dark mode.
 
-The page asks who you are on a card in the page, not over it:
-a name and a password,
-or an API key pasted into the field under "Or an API key", a form of its own,
-which is open from the start once the page has seen the server ask for no key
+The page asks who you are on a card in the page, not over it,
+its row **Sign in with: Name | API key** choosing the form:
+a name and a password, chosen at first,
+or an API key pasted into a form of its own,
+which is chosen from the start once the page has seen the server ask for no key
 (the owner made from `MASSIMO_API_TOKEN` has no password).
 The password form holds the one password field, its fields named,
 so that a password manager such as KeePassXC fills it.
 The page keeps the session in the browser for 30 days from its last use;
 **Sign out** in ☰, or on the personal settings, ends it.
-The card's ☰ sets the language and the appearance (light, dark, as the system)
+The card's ☰ shows the version first,
+then sets the language and the appearance (light, dark, as the system)
 before anyone signs in, the same settings as My settings,
 kept in this browser.
 Above the form, a button per enabled OpenID Connect provider,
@@ -31,17 +33,23 @@ The app shows no such button yet:
 the providers refuse a sign-in inside an app's page.
 In the app the card has the login by fingerprint instead (docs/app.md,
 "The login by fingerprint"):
-**Enable login by fingerprint**, a switch under the password where the phone
-has a fingerprint and keeps no login for the server, which after the sign-in
-asks for the fingerprint and keeps an API key of the user's own behind it,
+**Enable login by fingerprint**, a switch under the password, its label to
+its right, where the phone has a fingerprint and keeps no login for the
+server, which after the sign-in asks for the fingerprint and keeps an API key
+of the user's own behind it,
 or says that nothing was kept, with **Try again** and **Sign in without it**;
-**Login by fingerprint**, with the user's name, above the form where a login
-is kept, which signs in with a new session from the key;
+the same switch on the form that creates the first owner;
+the fingerprint first in the row **Sign in with** where a login is kept,
+named with the user's name, which signs in at once with a new session from
+the key, Name staying the form chosen;
 a line instead of both where the page is open over plain HTTP outside the
 home network, where the app sends no key;
-and **Select server** at the card's foot, back to the app's servers.
-While it asks, the page shows its name, its version and the sign-in,
-nothing else, as it does from its first moment until the server has said who is in,
+and **Select server**, back to the app's servers,
+at the card's foot and last in the card's ☰.
+While it asks, the page shows the card alone, with the logo and,
+at its foot, the version, and no header;
+from its first moment until the server has said who is in,
+the header's logo and name alone,
 so that no button shows before the sign-in:
 Sign out forgets what the page loaded of the Cubes,
 so that the next to sign in sees nothing of the last session.
@@ -92,7 +100,11 @@ asks first with the same dialog, with **Stay** and the button that signs out;
 without such changes it signs out at once.
 The dialog closes by itself once the last of its settings is saved or reset,
 and a sign-out it asked about then goes on, since nothing is lost any more.
-A session that expires, or ends in another tab, asks for a sign-in and nothing more:
+A session that expires, is revoked, or ends in another tab,
+asks for a sign-in and nothing more:
+the page forgets it at the first request the server refuses,
+so that its reads and its stream do not go on sending it until the server
+locks the address out (ten failed checks a minute);
 the same user signed in again finds the changes,
 another user does not.
 What the page was reading when the session ended it reads again after the sign-in;
@@ -228,7 +240,8 @@ The compacted header has **↑**, back to the top, first of the page buttons: �
   its name a link to the address its announcement on the network gives.
   A window open briefly is not listed: it is a state, not a problem.
   Its list is as wide as its entries need, up to the page's width,
-  and, as every menu of the page, opens inside the window,
+  and, as every menu of the page, has a border a little stronger than a
+  card's and a shadow, in dark mode a faint light glow, and opens inside the window,
   no higher than the room below it, and scrolls in itself, not the page;
   open, it stays inside the window as its pill moves,
   when the pill grows with the problems that come or the row folds.
@@ -238,7 +251,8 @@ The compacted header has **↑**, back to the top, first of the page buttons: �
 - **The version** is ☰'s first row, short and small, after Massimo's icon,
   a rule under it; its tooltip is the whole version,
   "(server version)", and a click copies it.
-  Signed out, when there is no ☰, it stands beside the logo.
+  While the sign-in's card is open there is no header:
+  the version is at the card's foot and first in its ☰.
   The Cube's clock is in the Cube's facts, under System settings → **Cubes**:
   the Cube tells it when the server connects, to the minute,
   and the page moves it on from then;
@@ -252,6 +266,7 @@ The compacted header has **↑**, back to the top, first of the page buttons: �
   **Maintenance**, for those and a role with `update`, `restart` or `reboot`,
   and **System info**, for every role with `read`;
   **Personal settings**, its tooltip naming whose they are, by display name and login,
+  in the app **Select server**, back to the app's servers;
   and **Sign out** (Forget key for an API key or the token, none on an open server),
   in the accent and bold, as the personal page's button.
   It is highlighted while one of its pages is shown, as a page button is,
@@ -905,6 +920,9 @@ as the settings' ⓘ do:
   which signs another browser out without an administrator;
   a session made from a key, as the app's login by fingerprint makes one,
   names the key by its label, and revoking the key ends it;
+  the session or key the page is signed in with says **this device**,
+  the key that session was made from **its key**,
+  and Revoke on this device signs out, as **Sign out** does;
   **Create key** shows the new key once.
 - **Linked accounts**, where a sign-in provider is enabled or an account is linked:
   the own accounts at the providers, each with its e-mail or user ID,
@@ -1733,7 +1751,7 @@ a script for each region of the page, in the order the page loads them:
   the event stream, the language and `init`;
 - `header.js`, the plain names of the header, which call its parts (`ui/src/header/`),
   and what stays plain there: the radio budget, the server's clock and its last answer,
-  the version in ☰ and beside the logo while signed out, the server's state;
+  the version in ☰ and in the sign-in card, the server's state;
   `home.js`, the home notice's place shown or hidden, the Cubes a `cube_found` event adds
   and the way to them;
   `prefs.js`, the wiring of My settings' rows and the language choice;
@@ -2026,7 +2044,7 @@ and after each measure places an open list of the row in the window again (`plac
 The choice is a `Picker`, the problems a `Problems` with `lead`, `always` and `head`,
 Refresh now a `MenuItem` with `keepOpen` and its times as `sub`,
 the certificate's line a `Notice`.
-The logo, the version (in ☰, and beside the logo while signed out) and ↑ stay plain,
+The logo, the version (in ☰, and in the sign-in card) and ↑ stay plain,
 around the parts' places and not in them,
 and the home notice's place is shown and hidden by the plain code (and by `pages.js`),
 the part drawing inside it.

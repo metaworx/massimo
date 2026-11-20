@@ -8,6 +8,9 @@
   --card: #ffffff;
   --card-head: #eeeeea;
   --line: #dcdcd6;
+  /* an open menu's shadow (.menu-items); in dark mode a faint light glow,
+     where a black shadow does not show */
+  --menu-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
   --accent: #1f63c6; /* buttons, icons, selection; red is for alerts */
   --accent-fg: #ffffff;
   --heat: #b5452c; /* warm end of the week programme's temperature bars */
@@ -32,6 +35,7 @@
     --card: #202020;
     --card-head: #2a2a29;
     --line: #353533;
+    --menu-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 6px 22px rgba(255, 255, 255, 0.1);
     --accent: #6ea8fe;
     --accent-fg: #151514;
     --heat: #e0674a;
@@ -55,6 +59,7 @@
   --card: #202020;
   --card-head: #2a2a29;
   --line: #353533;
+  --menu-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 6px 22px rgba(255, 255, 255, 0.1);
   --accent: #6ea8fe;
   --accent-fg: #151514;
   --heat: #e0674a;
@@ -167,20 +172,19 @@ body:not(.expert) .expert-only { display: none !important; }
 .menu-brand { --brand-cover: var(--card); display: inline-grid; flex: none; }
 .menu-brand > svg { grid-area: 1 / 1; height: 16px; overflow: visible; }
 .menu-brand .brand-logo { display: none; }
-/* the version beside the logo, while signed out alone (☰ is not there);
-   under it where the row is short */
-.brand .version-out { display: none; overflow-wrap: anywhere; }
-body.signed-out .brand .version-out { display: inline; }
 /* the page's other signs greyed while the server is gone: their state is
    not known */
 body.server-down main .ni.sign, body.server-down main .problems-sum, body.server-down .conn-sign,
 body.server-down .pile .problems-sum > :not(.server-icon) { filter: grayscale(1); opacity: 0.55; }
-/* Signed out (login.js, askLogin): the name, the version and the sign-in,
-   nothing of the page or of the last session. */
+/* Signed out (login.js, askLogin): until the server has said who is in,
+   the logo and the name alone; while the sign-in's card is open, the card
+   alone, which holds the logo and the version; nothing of the page or of
+   the last session. */
 body.signed-out .top-line .pile,
 body.signed-out .top-line > .cube,
 body.signed-out .top-line > .nav,
 body.signed-out header.top > :not(.top-line),
+body.signed-out:has(#login-dialog[open]) header.top,
 body.signed-out main,
 body.signed-out #toast { display: none !important; }
 /* A part's place inside plain markup (AP UiParts): the element a part is
@@ -1046,10 +1050,11 @@ button.subtle { color: var(--muted); }
   overflow-y: auto;
   overscroll-behavior: contain;
   background: var(--card);
-  border: 1px solid var(--line);
+  /* its edge darker than a card's line, in every colour scheme */
+  border: 1px solid color-mix(in srgb, var(--line), var(--fg) 25%);
   border-radius: 10px;
   padding: 6px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--menu-shadow);
 }
 .menu-items button {
   text-align: left;
@@ -1480,6 +1485,8 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
 .login-menu .menu-items { gap: 10px; padding: 10px; width: min(300px, calc(100vw - 64px)); }
 .login-menu label { margin-bottom: 0; }
 dialog label { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+/* a switch's label beside it, the switch at the left */
+dialog label.switch { flex-direction: row; align-items: center; align-self: flex-start; gap: 8px; }
 dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
 /* the forms with changes not saved, asked about when the page is left
    or at a sign-out (ui/src/shared/dialog.tsx): a button per form, its
@@ -1759,7 +1766,6 @@ massimo-week-program { display: contents; }
 .no-lock.no-structure.no-repair .room .menu { display: none; }
 
 /* the sign-in dialog, the first-owner form, System settings → Users and Roles */
-.login-token summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; margin-bottom: 8px; }
 #login-error.bad { color: var(--bad); }
 .setup { margin-bottom: 16px; }
 .setup-form { padding: 0 14px 12px; display: flex; flex-direction: column; gap: 8px; }
@@ -1819,11 +1825,34 @@ massimo-week-program { display: contents; }
 .login-provider-buttons { display: flex; flex-direction: column; gap: 8px; }
 .login-providers button { width: 100%; }
 .login-providers p { margin: 0; }
-/* the login by fingerprint in the app (login.js renderAppLogin) */
-.login-app { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
-.login-app p { margin: 0; }
-.login-fingerprint { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+/* the ways to sign in (login.js chooseWay), as System settings' page row
+   looks (.page-link), but never folded to icons: in the app the
+   fingerprint first, then Name and API key, the one chosen filled */
+.login-ways { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 14px; }
+#login-ways-label { flex-basis: 100%; }
+.login-way {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 40px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--fg);
+  font-size: 0.9rem;
+}
+.login-way:hover { border-color: var(--accent); }
+.login-way[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.login-way-fp { padding: 0; width: 40px; }
+.login-way-fp > .ni { width: 22px; height: 22px; }
+#login-fp-plain { margin: 0 0 12px; }
 .login-keep { margin: 4px 0 8px; }
+/* the version at the card's foot, as ☰ holds it while signed in */
+.login-version { margin: 14px 0 0; text-align: center; overflow-wrap: anywhere; }
+#login-dialog > .brand-big { margin-bottom: 26px; }
 .login-keep-failed .actions, .login-servers { margin-top: 8px; }
 .login-servers { text-align: center; }
 .user-tokens li .revoke-token { margin-left: auto; }
