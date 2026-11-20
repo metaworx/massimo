@@ -4,23 +4,27 @@
 package server
 
 // The log (docs/store.md section 9 (d)): the events a Cube's stream
-// sends, kept so that GET …/log can page back through them. A Cube with
-// a row in the store keeps them there (remember hands them to the
-// store's writer), which survives a restart and keeps log.keep_days of
-// them; a Cube without one, a Cube of serve -addr or a server without a
-// store, keeps the last logSize in the runtime's ring, as before the
-// store. The stored copy leaves out a device's received times, which the
-// tiles' ages read and the log does not, and its mismatches, which the
-// log's own mismatch events say.
+// sends, kept so that GET …/log can page back through them, and forward
+// from a cursor (after=, AP LogCursor). A Cube with a row in the store
+// keeps them there (remember hands them to the store's writer), which
+// survives a restart and keeps log.keep_days of them; a Cube without
+// one, a Cube of serve -addr or a server without a store, keeps the last
+// logSize in the runtime's ring, as before the store, each with an id of
+// the server's ring counter (logRing). The stored copy leaves out a
+// device's received times, which the tiles' ages read and the log does
+// not, and its mismatches, which the log's own mismatch events say.
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"maps"
 	"net/http"
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"go.metaworx.ch/massimo/internal/protocol/cube"
@@ -87,6 +91,10 @@ var logSources = []string{"device", "cube", "system", "config", "queue", "server
 
 // logQuery is a request's page of the log.
 type logQuery struct {
+	// after is the cursor of a page forward, with forward: the first
+	// limit events whose id is above it, oldest first; 0 is the start.
+	after    int64
+	forward  bool
 	beforeID int64
 	before   time.Time
 	since    time.Time
@@ -102,7 +110,8 @@ type logQuery struct {
 	limit    int
 }
 
-// parseLogQuery reads before (an event's id, or an RFC 3339 time), since
+// parseLogQuery reads after (an event's id, 0 for the start: the page
+// forward from it), before (an event's id, or an RFC 3339 time), since
 // (an RFC 3339 time, not after a before time), limit (1 to 1000, 200 by
 // default), kind, source (device, cube, system or config), level (debug,
 // info, warn or error: that level and above, info by default), device
@@ -111,6 +120,13 @@ type logQuery struct {
 func parseLogQuery(r *http.Request) (logQuery, error) {
 	q := r.URL.Query()
 	lq := logQuery{limit: defaultLogPage, kind: q.Get("kind"), minLevel: store.LevelInfo, user: q.Get("user")}
+	if v := q.Get("after"); v != "" {
+		id, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || id < 0 {
+			return lq, fail(http.StatusBadRequest, "bad after %q: an event's id, or 0 for the start", v)
+		}
+		lq.after, lq.forward = id, true
+	}
 	if v := q.Get("before"); v != "" {
 		if id, err := strconv.ParseInt(v, 10, 64); err == nil {
 			if id < 1 {
@@ -189,13 +205,14 @@ func (lq *logQuery) resolveDevice(rt *runtime) {
 }
 
 // getLog handles GET /cubes/{sn}/log: the page of the Cube's events and
-// the server's, before the cursor and since a time, of a kind, a source,
-// a device (by its serial number or its radio address), a user and a
-// command, at a level and above, at most limit, oldest first, the same
-// objects the event stream sends; from the store, with each event's id,
-// or from the ring. A user the store does not know has none. The rows
-// of the audit visibility (sign-ins, lockouts) are only for a caller
-// with audit.
+// the server's, after a cursor and before one, since a time, of a kind,
+// a source, a device (by its serial number or its radio address), a user
+// and a command, at a level and above, at most limit, oldest first: the
+// first limit after the cursor, or else the last; the same objects the
+// event stream sends, each with its id; from the store, or from the
+// ring. A user the store does not know has none. The rows of the audit
+// visibility (sign-ins, lockouts) are only for a caller with audit. A
+// cursor beyond the log's newest id is 409 (afterBeyond).
 func (s *Server) getLog(w http.ResponseWriter, r *http.Request) error {
 	rt, err := s.cube(r)
 	if err != nil {
@@ -221,7 +238,11 @@ func (s *Server) getLog(w http.ResponseWriter, r *http.Request) error {
 		writeJSON(w, http.StatusOK, evs)
 		return nil
 	}
-	writeJSON(w, http.StatusOK, filterEvents(rt.recent(0), lq))
+	rings, newest := s.ringRead(rt)
+	if err := lq.beyond(newest); err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, filterEvents(rings[0], lq))
 	return nil
 }
 
@@ -230,7 +251,7 @@ func (s *Server) getLog(w http.ResponseWriter, r *http.Request) error {
 // with the Cube's S/N (cube_serial); a radio address names the device of
 // that address on every Cube. A Cube without a row in the store yet
 // (before its first connection) adds nothing. Without a store, the
-// Cubes' rings merged by time, the server's events, which every ring
+// Cubes' rings merged by id, the server's events, which every ring
 // holds, once.
 func (s *Server) getAllLog(w http.ResponseWriter, r *http.Request) error {
 	lq, err := parseLogQuery(r)
@@ -259,18 +280,27 @@ func (s *Server) getAllLog(w http.ResponseWriter, r *http.Request) error {
 		writeJSON(w, http.StatusOK, evs)
 		return nil
 	}
-	writeJSON(w, http.StatusOK, ringLog(rts, lq))
+	evs, err := s.ringLog(rts, lq)
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, evs)
 	return nil
 }
 
 // ringLog is a page of every Cube's ring, oldest first, without a store:
 // each Cube's events with its S/N, and the server's own once, from the
-// first Cube's ring, since every ring keeps them.
-func ringLog(rts []*runtime, lq logQuery) []event {
+// first Cube's ring, since every ring keeps them; merged by id, which
+// the rings took from one counter.
+func (s *Server) ringLog(rts []*runtime, lq logQuery) ([]event, error) {
+	rings, newest := s.ringRead(rts...)
+	if err := lq.beyond(newest); err != nil {
+		return nil, err
+	}
 	var all []event
-	for i, rt := range rts {
-		sn := rt.cubeSerial()
-		for _, ev := range rt.recent(0) {
+	for i, ring := range rings {
+		sn := rts[i].cubeSerial()
+		for _, ev := range ring {
 			if ev.server {
 				if i > 0 {
 					continue
@@ -281,8 +311,60 @@ func ringLog(rts []*runtime, lq logQuery) []event {
 			all = append(all, ev)
 		}
 	}
-	slices.SortStableFunc(all, func(a, b event) int { return a.Time.Compare(b.Time) })
-	return filterEvents(all, lq)
+	slices.SortFunc(all, func(a, b event) int { return cmp.Compare(a.ID, b.ID) })
+	return filterEvents(all, lq), nil
+}
+
+// logRing numbers the events of the rings, the log of the Cubes without
+// a row in the store (remember), from one counter for the server that
+// starts at its start in microseconds: the ids grow across a restart
+// without a store, unless a run gave out more than one a microsecond or
+// the clock went back; they stay below 2^53, which JavaScript reads
+// exactly, and far above the store's. An event takes its id and goes
+// into its ring under the one lock, under which a page copies the
+// rings: once a page has seen an id, every lower one is in its ring
+// already, which a lock of each ring's own would not hold, so that a
+// page after a cursor misses nothing.
+type logRing struct {
+	mu   sync.Mutex
+	next int64 // the id of the next event
+}
+
+// take gives out the next id; under mu.
+func (r *logRing) take() int64 {
+	id := r.next
+	r.next++
+	return id
+}
+
+// ringRead copies the rings of rts, and the newest id given out, under
+// the rings' lock (logRing).
+func (s *Server) ringRead(rts ...*runtime) ([][]event, int64) {
+	s.ring.mu.Lock()
+	defer s.ring.mu.Unlock()
+	rings := make([][]event, len(rts))
+	for i, rt := range rts {
+		rings[i] = slices.Clone(rt.events)
+	}
+	return rings, s.ring.next - 1
+}
+
+// beyond is a page of the ring's answer to a cursor beyond the newest id
+// the rings have given out (afterBeyond), nil for any other.
+func (lq logQuery) beyond(newest int64) error {
+	if lq.forward && lq.after > newest {
+		return afterBeyond(lq.after)
+	}
+	return nil
+}
+
+// afterBeyond is the answer to a cursor beyond the log's newest id, one
+// the log never gave out: a store restored from an older copy, or that
+// the prune emptied (store.ErrBeyondNewest); a ring whose run started
+// with the clock set back, or the ring of a Cube that has since gained
+// its row in the store. 409, after which the client reads the log again.
+func afterBeyond(after int64) error {
+	return fail(http.StatusConflict, "after %d is beyond the log's newest line: reload the log", after)
 }
 
 // logUser finds the row of a page's user, by login name; none reports a
@@ -306,25 +388,34 @@ func (s *Server) logUser(ctx context.Context, lq *logQuery) (none bool, err erro
 
 // storedLog reads a page from the store, the rows of the Cubes of cubes
 // (each Cube's row id to the S/N its events carry as cube_serial, "" for
-// none) and the server's, after the writer wrote what is pending, and
-// turns it round, oldest first; who started an event is named as the
-// users table names them now, each with its chain (names.go). Without a
-// Cube, the server's rows alone.
+// none) and the server's, after the writer wrote what is pending, oldest
+// first: a page back turned round, a page forward as it comes; every
+// walk of the page up to the store's newest row once the pending events
+// are written, against which a cursor beyond it is 409 (store.Events,
+// afterBeyond). Who started an event is named as the users table names
+// them now, each with its chain (names.go). Without a Cube, the server's
+// rows alone.
 func (s *Server) storedLog(ctx context.Context, st *store.Store, cubes map[int64]string, lq logQuery) ([]event, error) {
 	if err := st.FlushEvents(ctx); err != nil {
 		s.log.Warn("api: the log's pending events not written", "error", err)
 	}
 	minLevel := lq.minLevel
 	ids := slices.Sorted(maps.Keys(cubes))
-	rows, err := st.Events(ctx, store.EventQuery{CubeIDs: ids, Server: true, BeforeID: lq.beforeID, Before: lq.before, Since: lq.since,
-		Kind: lq.kind, Source: lq.source, Device: lq.device, Serial: lq.serial, UserID: lq.userID, CommandID: lq.command, MinLevel: &minLevel,
-		Audit: lq.audit, Limit: lq.limit})
+	rows, err := st.Events(ctx, store.EventQuery{CubeIDs: ids, Server: true, AfterID: lq.after, Forward: lq.forward, BeforeID: lq.beforeID,
+		Before: lq.before, Since: lq.since, Kind: lq.kind, Source: lq.source, Device: lq.device, Serial: lq.serial, UserID: lq.userID,
+		CommandID: lq.command, MinLevel: &minLevel, Audit: lq.audit, Limit: lq.limit})
+	if errors.Is(err, store.ErrBeyondNewest) {
+		return nil, afterBeyond(lq.after)
+	}
 	if err != nil {
 		return nil, fail(http.StatusInternalServerError, "%v", err)
 	}
+	if !lq.forward {
+		slices.Reverse(rows)
+	}
 	n := st.Namer()
 	out := make([]event, 0, len(rows))
-	for i := len(rows) - 1; i >= 0; i-- {
+	for i := range rows {
 		var ev event
 		if err := json.Unmarshal(rows[i].Data, &ev); err != nil {
 			s.log.Warn("api: a stored event not read", "id", rows[i].ID, "error", err)
@@ -347,19 +438,17 @@ func (s *Server) storedLog(ctx context.Context, st *store.Store, cubes map[int64
 	return out, nil
 }
 
-// filterEvents is a page of the ring, oldest first: the events before the
-// time and not before since, of the kind, the source, the device, the
-// user and the command, at the level and above, the audit's only for an
-// auditor, the last limit of them. The ring's events have no id, so none
-// lies before one.
+// filterEvents is a page of the ring, its events in id order, oldest
+// first: the events after the cursor and before the id or the time and
+// not before since, of the kind, the source, the device, the user and
+// the command, at the level and above, the audit's only for an auditor;
+// the first limit of them after a cursor, else the last limit.
 func filterEvents(all []event, lq logQuery) []event {
 	out := []event{}
-	if lq.beforeID != 0 {
-		return out
-	}
 	for _, ev := range all {
 		level, _ := store.ParseLevel(ev.Level)
-		if !lq.before.IsZero() && !ev.Time.Before(lq.before) || !lq.since.IsZero() && ev.Time.Before(lq.since) ||
+		if lq.forward && ev.ID <= lq.after || lq.beforeID != 0 && ev.ID >= lq.beforeID ||
+			!lq.before.IsZero() && !ev.Time.Before(lq.before) || !lq.since.IsZero() && ev.Time.Before(lq.since) ||
 			lq.kind != "" && ev.Kind != lq.kind || lq.source != "" && ev.Source != lq.source ||
 			lq.serial != "" && ev.Serial != lq.serial || lq.device != "" && ev.Device != lq.device ||
 			lq.userID != 0 && ev.userID != lq.userID && ev.realUserID != lq.userID || lq.command != 0 && ev.Command != lq.command ||
@@ -367,6 +456,9 @@ func filterEvents(all []event, lq logQuery) []event {
 			continue
 		}
 		out = append(out, ev)
+		if lq.forward && len(out) == lq.limit {
+			break
+		}
 	}
 	if len(out) > lq.limit {
 		out = out[len(out)-lq.limit:]

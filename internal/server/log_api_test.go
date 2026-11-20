@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -235,28 +236,40 @@ func TestLogLastEvents(t *testing.T) {
 	}
 }
 
-// A Cube without a row keeps its log in the ring: no ids, the filters
-// applied in memory, an id bound empty, a device and a time as on the
-// store.
+// A Cube without a row keeps its log in the ring, each line with an id
+// of the server's ring counter (logRing), in order from the server's
+// start in microseconds: the filters applied in memory, a page before an
+// id the last lines before it, an id below the ring's an empty page, a
+// device and a time as on the store.
 func TestLogWithoutStore(t *testing.T) {
 	t.Parallel()
-	ts := startServer(t).ts
+	r := startServer(t)
+	ts := r.ts
 	var all []event
 	testkit.Eventually(t, "the connect burst in the ring", func() bool {
 		_, all = logOf(t, ts, "?limit=1000")
 		return len(all) >= 6
 	})
-	for _, e := range all {
-		if e.ID != 0 {
-			t.Fatalf("a ring event with an id: %+v", e)
+	for i, e := range all {
+		if e.ID < r.s.started.UnixMicro() || i > 0 && e.ID <= all[i-1].ID {
+			t.Fatalf("a ring event's id at %d: %v, the server started at %d µs", i, ids(all), r.s.started.UnixMicro())
 		}
 	}
 	_, states := logOf(t, ts, "?kind=state&limit=2")
 	if len(states) != 2 || states[0].Kind != "state" || states[1].Kind != "state" {
 		t.Fatalf("kind=state&limit=2: %+v", states)
 	}
+	// The connect burst may have added events since the first read, all
+	// of them with higher ids.
+	newest := strconv.FormatInt(all[len(all)-1].ID, 10)
+	if _, page := logOf(t, ts, "?limit=1000&before="+newest); !slices.Equal(ids(page), ids(all[:len(all)-1])) {
+		t.Fatalf("before=%s on the ring: %v of %v", newest, ids(page), ids(all))
+	}
+	if _, page := logOf(t, ts, "?limit=2&before="+newest); !slices.Equal(ids(page), ids(all[len(all)-3:len(all)-1])) {
+		t.Fatalf("before=%s&limit=2 on the ring: %v of %v", newest, ids(page), ids(all))
+	}
 	if _, page := logOf(t, ts, "?before=5"); len(page) != 0 {
-		t.Fatalf("an id bound on the ring: %d", len(page))
+		t.Fatalf("an id bound below the ring's ids: %d", len(page))
 	}
 	rf := states[0].Device
 	_, mine := logOf(t, ts, "?limit=1000&device="+rf)
@@ -602,9 +615,11 @@ func TestLogOfEveryCube(t *testing.T) {
 	}
 }
 
-// Without a store, every Cube's log merges the Cubes' rings by time,
-// each Cube's events with its S/N and the server's once, though every
-// ring keeps them.
+// Without a store, every Cube's log merges the Cubes' rings by id, which
+// they take from one counter, each Cube's events with its S/N and the
+// server's once, though every ring keeps them: a line stamped an hour
+// before it was kept comes last. Paged back by id across the rings,
+// every line once.
 func TestLogOfEveryCubeWithoutStore(t *testing.T) {
 	t.Parallel()
 	r := startServer(t, alsoCube(secondCube))
@@ -613,12 +628,18 @@ func TestLogOfEveryCubeWithoutStore(t *testing.T) {
 		_, own := logOf(t, ts, "?kind=state")
 		return len(own) >= 6
 	})
-	s.logServer(systemEvent("settings_read", 0, nil))
+	late := systemEvent("settings_read", 0, nil)
+	late.Time = late.Time.Add(-time.Hour)
+	s.logServer(late)
 	all := allLog(t, ts, "?limit=1000")
+	at := slices.IndexFunc(all, func(e event) bool { return e.Kind == "settings_read" })
+	if at < 1 || !all[at-1].Time.After(late.Time) {
+		t.Fatalf("the line stamped an hour before it was kept, at %d, not after the lines before it: %v", at, ids(all))
+	}
 	servers, cubes := map[string]int{}, map[string]int{}
 	for i, e := range all {
-		if i > 0 && e.Time.Before(all[i-1].Time) {
-			t.Fatalf("not by time at %d", i)
+		if i > 0 && e.ID <= all[i-1].ID {
+			t.Fatalf("not by id at %d: %v", i, ids(all))
 		}
 		if e.CubeSerial == "" {
 			if e.Source != "system" && e.Source != "server" {
@@ -633,5 +654,22 @@ func TestLogOfEveryCubeWithoutStore(t *testing.T) {
 	}
 	if cubes["KEQ0000100"] < 6 || cubes["KEQ0000200"] == 0 || len(cubes) != 3 {
 		t.Fatalf("the lines by Cube: %v", cubes)
+	}
+	seen := map[int64]bool{}
+	for before := all[len(all)-1].ID + 1; ; {
+		page := allLog(t, ts, "?limit=4&before="+strconv.FormatInt(before, 10))
+		if len(page) == 0 {
+			break
+		}
+		for _, e := range page {
+			if seen[e.ID] || e.ID >= before {
+				t.Fatalf("paging: %d before %d", e.ID, before)
+			}
+			seen[e.ID] = true
+		}
+		before = page[0].ID
+	}
+	if len(seen) != len(all) {
+		t.Fatalf("paged %d of %d", len(seen), len(all))
 	}
 }

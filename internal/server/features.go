@@ -20,6 +20,7 @@ func (s *Server) featuresOf() map[string]string {
 		"vwt":          "1.0", // virtual wall thermostats, ?devices=, room_uid, temp_method
 		"program_etag": "1.0", // the programme's tag, If-Match, 412, pending, changed and etag
 		"boost":        "1.0", // {"mode": "boost"} on the setpoint routes
+		"log_after":    "1.0", // after=<id> on the log's routes, the ring's ids, 409 for a cursor beyond the newest
 	}
 	if s.opts.Store != nil {
 		f["idempotency"] = "1.0"   // Idempotency-Key, kept with the command

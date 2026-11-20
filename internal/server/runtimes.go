@@ -116,6 +116,7 @@ func (s *Server) newRuntime(c CubeConfig, addr string) *runtime {
 	rt.battery = &battery.Tracker{DecalcOf: rt.decalcOf}
 	rt.confirms.within = cmp.Or(opts.confirmWithin, defaultConfirmWithin)
 	rt.clock = s.checkNow
+	rt.ring = &s.ring
 	rt.resets.hold = rt.errWatch.hold // a flag that keeps coming back (errorwatch.go)
 	copts := cubelan.Options{Addr: addr, PollInterval: opts.PollInterval, Hold: opts.CubeHold, Logger: s.partLog("cube", rt.serial), EventLines: true}
 	if opts.cubeOptions != nil {
