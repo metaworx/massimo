@@ -158,6 +158,6 @@ function closeVacation(room) {
 function toggleDevices(room, el) {
   const ui = roomUI(room);
   ui.open = !ui.open;
-  if (ui.open) ui.config = null; // one of device list and configuration at a time
+  if (ui.open) ui.config = false; // one of device list and configuration at a time
   closeMenu(el);
 }

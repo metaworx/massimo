@@ -8,15 +8,15 @@
  * panel in #house-slot, a tile per room of the chosen Cube in #rooms, with
  * its device list, and the devices without a room in #unlisted-devices,
  * each built once per room or device and updated in place. The plain code
- * calls MassimoParts.rooms (rooms.js renderRooms, rerenderRoom,
+ * calls MassimoParts.rooms (rooms.js renderRooms,
  * updateDevice, showTileResult, roomUI and roomsLoaded, house.js houseOpen and
  * closeHouse);
  * the tile's actions stay plain and set the tile's live state, which the
  * tile follows. A room's forms are forgotten once a load no longer gives
  * the room, or the virtual thermostat whose settings they hold, and the
  * settings asked to be opened from elsewhere are opened once their
- * Cube's rooms have loaded. The
- * configuration (config.js), the repairs (repair.js) and
+ * Cube's rooms have loaded. A tile's configuration is a part of the tile
+ * (Config.tsx); the repairs (repair.js) and
  * the form that puts a device into a room (pairing.js) stay plain inside.
  */
 
@@ -27,7 +27,7 @@ import { mounter, register } from "../shared/region";
 import { closeHouse, House } from "./House";
 import { Tile } from "./Tile";
 import { UNLISTED, Unlisted } from "./Unlisted";
-import { changed, cubesLoad, house, load, newUI, planWindows, roomOf, takeOpening, tickOf, vwtFormKey } from "./store";
+import { cfgFormKey, changed, cubesLoad, house, load, newUI, planWindows, roomOf, takeOpening, tickOf, vwtFormKey } from "./store";
 
 /** Rooms is a tile per room, kept by its Cube and its id for as long as the room is there. */
 function Rooms() {
@@ -53,13 +53,21 @@ function resultOf(id: number): (res: Outcome | null) => void {
   return set;
 }
 
-/** Per Cube, the rooms its last load gave, by id, each with whether it had its virtual wall thermostat. */
-const loaded = new Map<string, Map<number, boolean>>();
+/** What a load of a Cube's rooms gave of a room: whether it had its virtual wall thermostat, and its devices by their radio addresses. */
+interface Loaded {
+  vwt: boolean;
+  devices: Set<string>;
+}
+
+/** Per Cube, the rooms its last load gave, by id. */
+const loaded = new Map<string, Map<number, Loaded>>();
 
 /**
  * forgetGone forgets the forms of the rooms the last load of the Cube's
- * rooms no longer gives, and the settings of a virtual thermostat it no
- * longer gives: deleted or hidden, by this page or another client. It
+ * rooms no longer gives, the settings of a virtual thermostat it no
+ * longer gives, and the form of a device in a room's configuration that
+ * the room no longer has: deleted, hidden, moved or removed, by this page
+ * or another client. It
  * runs at loaded alone, which loadRooms calls after a load that went
  * through, with the rooms of the Cube state.roomsOf names; a load that
  * fails throws before it. It forgets only where that Cube is connected
@@ -71,24 +79,29 @@ const loaded = new Map<string, Map<number, boolean>>();
 function forgetGone(): void {
   const serial = state.roomsOf;
   if (!serial || !state.cubes.find((c) => c.serial === serial)?.connected) return;
-  const now = new Map(state.rooms.map((r) => [r.id, !!r.vwt]));
-  for (const [id, vwt] of loaded.get(serial) || []) {
-    if (!now.has(id)) forgetForms(roomFormKey(serial, id));
-    else if (vwt && !now.get(id)) forgetForms(vwtFormKey(serial, id));
+  const now = new Map(state.rooms.map((r): [number, Loaded] => [r.id, { vwt: !!r.vwt, devices: new Set(r.devices.map((d) => d.rf_address)) }]));
+  for (const [id, was] of loaded.get(serial) || []) {
+    const is = now.get(id);
+    if (!is) {
+      forgetForms(roomFormKey(serial, id));
+      continue;
+    }
+    if (was.vwt && !is.vwt) forgetForms(vwtFormKey(serial, id));
+    for (const rf of was.devices) if (!is.devices.has(rf)) forgetForms(cfgFormKey(serial, id, "device:" + rf));
   }
   loaded.set(serial, now);
 }
 
 /** The functions the plain code calls, MassimoParts.rooms. */
 const rooms = register("rooms", {
-  /** render draws the rooms as the page has them now (renderRooms): every tile follows in place, its configuration filled again unless the focus is in it. */
+  /** render draws the rooms as the page has them now (renderRooms): every tile follows in place, its configuration with it. */
   render(): void {
     for (const m of mounts) m();
     load.bump();
     for (const r of state.rooms) changed(r.id);
     planWindows();
   },
-  /** data takes a state event of a device of the room (updateDevice): its tile follows, its configuration is filled again once the focus is not in it. */
+  /** data takes a state event of a device of the room (updateDevice): its tile follows, its configuration with it. */
   data(id: number): void {
     changed(id);
     planWindows();
@@ -110,11 +123,6 @@ const rooms = register("rooms", {
   loaded(): void {
     forgetGone();
     takeOpening();
-  },
-  /** room draws the room's tile again and fills its configuration again at once, as the configuration asks for (rerenderRoom). */
-  room(id: number): void {
-    changed(id, true);
-    planWindows();
   },
   /**
    * result shows how an action went on the room's tile (showTileResult), a
