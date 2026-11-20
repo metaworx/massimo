@@ -25,6 +25,7 @@ import { forgetForms } from "./shared/forms";
 import { languageChanged } from "./shared/lang";
 import { iconsChanged } from "./shared/look";
 import { parts, register } from "./shared/region";
+import { forgetRepairs } from "./shared/repair";
 
 /** The parts the plain code calls, by region. */
 export interface MassimoParts {
@@ -35,7 +36,8 @@ export interface MassimoParts {
   /**
    * A sign-out, or another user's sign-in after a 401 (login.js
    * forgetSession): every form's drafts and marks forgotten
-   * (shared/forms.ts), and every Cube's pairing and rooms (cubes/).
+   * (shared/forms.ts), every box of repairs (shared/repair.tsx), and
+   * every Cube's pairing and rooms (cubes/).
    */
   signedOut(): void;
   /** System settings → Cubes and Cube settings (cubes/). */
@@ -59,6 +61,7 @@ register("language", languageChanged);
 register("icons", iconsChanged);
 register("signedOut", () => {
   forgetForms("");
+  forgetRepairs();
   cubesSignedOut();
 });
 window.MassimoParts = parts as unknown as MassimoParts;

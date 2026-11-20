@@ -4506,6 +4506,7 @@ components:
         time: {type: string, format: date-time}
     RepairPlan:
       type: object
+      required: [plan, steps, radiograms, duty_cost_pct, slots, held_slots, resets, wakeups, metadata, notes]
       properties:
         action: {type: string, enum: [reset, master, relink, unlink_relink, config, move, list]}
         plan: {type: string, description: "SHA-256 over the action and the lines; the run takes it"}

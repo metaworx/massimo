@@ -25,6 +25,7 @@ import sys
 import time
 import urllib.error
 import weakref
+from urllib.parse import parse_qs, urlparse
 
 from playwright.sync_api import Error
 
@@ -696,3 +697,92 @@ def owner_page(new_context, guard, watch, url, token):
     page.wait_for_selector(".room", timeout=10000)
     assert wait_until(page, "state.eventsOpen", 10), "the stream is open"
     return page
+
+
+# --- the repairs' routes --------------------------------------------------
+
+# The radio budget a repair's preview and run name, as the Cube reports it.
+REPAIR_BUDGET = {"duty_cycle_pct": 3, "free_memory_slots": 50, "updated_at": "2026-11-15T10:00:00Z"}
+
+
+def repair_nothing(repair, why):
+    """The preview of a repair with nothing to send, and why."""
+    return {"action": repair, "plan": "", "steps": [], "radiograms": 0, "duty_cost_pct": 0, "slots": 0, "held_slots": 0, "resets": 0,
+            "wakeups": 0, "metadata": False, "notes": [], "budget": REPAIR_BUDGET, "nothing": why}
+
+
+class RepairStub:
+    """The repairs' routes (safe_route): a GET answers previews[repair],
+    the repair the path's last part, a preview, the text of one with
+    nothing to do, or a function of the query (parse_qs) that returns
+    either; with previews["list-name"] a listing without room_name asks
+    for room 7's name. With runs a POST is kept in runs with its path and
+    query and answers a run whose steps the Cube accepted; without, it
+    goes on to the test's other routes (the guard's, which refuse it)."""
+
+    PATTERN = "**/repair/**"
+
+    def __init__(self, page, previews, runs=True):
+        self.page, self.previews, self.answer_runs, self.runs = page, previews, runs, []
+        self.routed = safe_route(page, self.PATTERN, self.handle)
+
+    def handle(self, route):
+        url = urlparse(route.request.url)
+        repair = url.path.rsplit("/", 1)[1]
+        query = parse_qs(url.query)
+        if route.request.method != "GET":
+            if not self.answer_runs:
+                route.fallback()
+                return
+            self.runs.append((url.path, query))
+            body = {"ok": True, "action": repair, "steps": [{"what": "x", "lines": 3, "accepted": 3}], "budget": REPAIR_BUDGET}
+            if repair in ("relink", "unlink-relink"):
+                body["confirmation"] = "pending"
+            if repair == "reset":
+                body["still_flagged"] = []
+            route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
+            return
+        answer = self.previews.get(repair, "nothing to repair")
+        if callable(answer):
+            answer = answer(query)
+        if repair == "list" and "room_name" not in query and self.previews.get("list-name"):
+            answer = dict(repair_nothing(repair, "room 7 is not in the list"), details={"code": "room_name_needed", "room": 7})
+        elif not isinstance(answer, dict):
+            answer = repair_nothing(repair, answer)
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(answer))
+
+    def close(self):
+        """The repairs' routes answered by the server again."""
+        page = self.page
+        if not page.is_closed():
+            page.unroute(self.PATTERN, self.routed)
+
+
+# --- a state event per device ---------------------------------------------
+
+# A state event of the stream for every device of the chosen Cube, as the
+# server sends it, the devices without a room's too; without a stream,
+# the page's updateDevice. A function for page.evaluate; the guard's
+# round calls it too (test_parts_guard.py, GUARD_JS).
+STATE_EVENTS_JS = """() => {
+    const devices = [];
+    for (const r of state.rooms) {
+      devices.push(...r.devices);
+      if (r.vwt) devices.push(r.vwt);
+    }
+    devices.push(...state.unlisted);
+    for (const d of devices) {
+      const copy = JSON.parse(JSON.stringify(d));
+      if (state.events) {
+        state.events.dispatchEvent(new MessageEvent("state", { data: JSON.stringify({
+          kind: "state", device: copy.rf_address, state: copy, time: new Date().toISOString() }) }));
+      } else {
+        updateDevice(copy);
+      }
+    }
+  }"""
+
+
+def state_events(page):
+    """A state event per device, as STATE_EVENTS_JS sends them."""
+    page.evaluate(STATE_EVENTS_JS)

@@ -255,6 +255,16 @@ hence `failed_checks_forgotten`.
   the joined device's form holds nothing typed, no request of the pairing goes
   while the sign-in is asked, and the Cube's rooms are asked for again
   before the form offers any.
+- `test_repair_updates.py`, the repairs as parts (AP UiParts, Block 9),
+  the repairs' routes stubbed with a preview:
+  a device's box, its listing's name typed and its question open,
+  with the focus in the name, stays the elements it was with Repair…
+  through a state event, a reload of the rooms and a rename of the device;
+  the Cube's box with its question open stays, the focus on No,
+  through a rename of the Cube by a poll;
+  a box with its question open is gone after a sign-out
+  and for another user signed in after an expired session.
+  Both failed on the page before the move.
 - `test_stream.py`:
   the event stream opens with tickets only, never with the token,
   and after a refused stream (the test hands out a used ticket first,

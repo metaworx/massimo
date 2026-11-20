@@ -646,7 +646,17 @@ and the box says how many lines the Cube accepted,
 that the devices take radiograms at their next wakeup and the log says when
 it is done (its **device change** line),
 or for resets whether the Cube's device list still shows the error.
-**Close** closes the box; it stays open while the tile is drawn again.
+**Close** closes the box.
+A box follows the data in place: while the tile, the device's row or the panel
+follows a device's report, a reload of the rooms or a poll,
+a rename of the device or the Cube among them,
+it stays open, and a name typed in it, a question open and the focus stay.
+A question never outlives the preview it asked about:
+where a repair's preview is read again,
+after a run in the same box or a name given,
+its question is gone and **Run…** asks again.
+At a sign-out, and when another user signs in after an expired session,
+every box is closed and forgotten with what it held.
 
 - In a room: **Reset the communication errors** of its devices, free;
   **Name the room's master**, where the Cube's list names no thermostat of
@@ -1102,7 +1112,7 @@ what a joined device's form holds stays while the panel moves
 between System settings and Cube settings,
 and is forgotten at a sign-out, as the Cubes' rooms are,
 and when another user signs in after an expired session.
-Repair… keeps its own drawing inside the panel until its own move to parts.
+So does Repair… with its box (Rooms, Repairs).
 What is typed in a Cube's settings stays until it is saved or reset:
 when the panel closes, from System settings to Cube settings and back,
 and when another Cube is chosen, each Cube's with its Cube;
@@ -1733,8 +1743,7 @@ a script for each region of the page, in the order the page loads them:
   and a finding of the Cube's lines in words;
   `unlisted.js`, a device removed from the Cube;
   `house.js`, the House tile's plain names, which call its part;
-- `week-program.js`, the week programme editor; `config.js`, how long a name may be,
-  the name a device is offered, and the editor's kit;
+- `week-program.js`, the week programme editor; `config.js`, the editor's kit;
 - `log.js`, the log and its sign for unseen problems;
   `pages.js`, the pages, the main menu, the address and the scroll;
 - `update.js`, Software update; `maintenance.js`, the Maintenance card;
@@ -1742,8 +1751,6 @@ a script for each region of the page, in the order the page loads them:
 - `cubes.js`, the plain names of System settings → Cubes and Cube settings,
   the pairing's among them, which call their part (`ui/src/cubes/`),
   and the Cubes card's badges;
-  `repair.js`, the repairs of a room,
-  a device and a Cube;
 - `login.js`, `users.js`, `providers.js`, `integrations.js`,
   `backup.js` and `roles.js`, the sign-in and the cards of System settings;
 - `theme.js`, the mode and the colour schemes, applied as the script loads;
@@ -1788,10 +1795,12 @@ What one region alone reads stays in the region, anything with state too,
 and what is not about the API's data is a shared part.
 A part with state that two regions draw is a shared part too (UiParts D193),
 since `model/` holds no state and no region imports another:
-the form that puts a device into a room (`put.tsx`).
+the form that puts a device into a room (`put.tsx`) and the repairs (`repair.tsx`),
+with how long a name may be and the name a device is offered (`name.ts`),
+which they read.
 Such a part knows the API's data and sends its own requests,
 and still knows no region:
-it imports none, its texts are keys of its own (`put.…`),
+it imports none, its texts are keys of its own (`put.…`, `repair.…`, `name.…`),
 and it reads no id or class of a region's markup it does not draw itself.
 `cube.tsx` holds the Cube chosen in the header (`chosenCube`),
 a Cube's address split into host and port (`hostPort`),
@@ -1860,6 +1869,8 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `cubePath` | `path.ts` | a Cube's path in the API, which every part's request about a Cube starts from; `base()` of `app.js` and `backup.js`'s own are its next users, with their blocks | `serial` |
 | `hid` | `cls.ts` | the class `hidden`, with its space, for an element kept in its place and hidden | `off` |
 | `PutForm`, `newPut` | `put.tsx` | the form that puts a device in no room into one (with `structure`), wherever such a device is shown, a device that joined while its Cube pairs or one of the devices without a room: its name (with `rename`), offered for the room chosen until one is typed (D200-A) and marked where it is too long for the Cube (D201), the room, for a thermostat the copy of the room's settings (with `configure`), on by default, then `PUT …/devices/{rf}` and its outcome; what the caller keeps of it, live; the room chosen is pinned at its first drawing, the first of the rooms, and moves only where it is gone; a part with state that two regions draw, its texts its own (`put.…`, `help.putCopy`, and `name.long` for the name's limit) | `id` (its fields' ids' beginning), `serial`, `dev`, `rooms`, `put` (what `newPut` makes: the name typed, the room and the copy, the request under way, the outcome, done), `reload` (what follows the request, before `onDone` or `onFail`), `onDone`, `onFail`, `onCancel` (its Cancel, of the class `form-cancel`, none without), `focus` (its first field takes the focus when it comes) |
+| `RepairButton`, `RepairBox`, `toggleRepair`, `repairScope`, `forgetRepairs` | `repair.tsx` | the repairs of a Cube, a room or a device (with `repair`), wherever it is shown (Rooms, Repairs): the button that opens and closes the box of a scope, and the box while it is open, each repair with its preview (`GET`, which sends nothing), its cost, its lines in expert mode, a name it asks for, and Run… that asks in its place before it sends (`POST` with the preview's plan), "unlink all and re-link" warning first and asking twice; a box's state kept by its scope, live, across its being drawn again, a question gone wherever its preview is read again, nothing read for a box closed meanwhile; the box opened from elsewhere (a tile's ⋯); a box's scope; every box forgotten at a sign-out and for another user after a 401 (`MassimoParts.signedOut`); a part with state that two regions draw, its texts its own (`repair.…`, and `name.long` for the name's limit) | `scope`, `kind` (`cube`, `room`, `device`), `path` (the API path its routes hang off), `label` (what it repairs, in its accessible name), `skip` (the repairs it leaves out), `names(room)` (the names of a room's devices, for the name a listing offers); `scope`; `scope`, `kind`, `path`, `{ skip, names }`; `serial`, `kind`, `id`; – |
+| `NAME_BYTES`, `byteLength`, `nameFits`, `defaultDeviceName` | `name.ts` | a name as the Cube keeps it, at most 32 bytes of UTF-8; the name a device is offered in a room, "<room> <type> <n>" with the lowest free number whatever the case (D185, D200-A), as the server's default; the text of the limit, `name.long`, is the shared parts' | –; `s`; `s`; `room`, `word`, `taken` |
 
 What the table cannot say:
 
@@ -1990,6 +2001,8 @@ by `forgetSession` of `login.js`),
 with its `limit`, Start and Cancel a `FormFooter`,
 the outcome a `ResultLine`, each joined device its type, a `DeviceIds`
 and the shared `PutForm`;
+`Actions.tsx` the row of a Cube's actions, Repair… with its box
+the shared `RepairButton` and `RepairBox`;
 `Form.tsx` a Cube's settings as a `useForm` of the key `cubeFormKey(serial)`
 (`model/cube.tsx`, which lists its `unsavedItems` in `cubeEntry`,
 so in the panel head's pill and in the header's entry of the Cube),
@@ -2081,7 +2094,9 @@ once, under its own entry;
 a click opens the tab from anywhere (`openForm`), by `openRoom` of `store.ts`,
 which `openSettings` uses too and which keeps the request until the Cube's rooms
 have loaded; `loaded` forgets a device's form when the room no longer has the device.
-A room's repairs and a device's Repair… stay plain too (`repair.js`), each an `Island`;
+A room's repairs and a device's Repair… are the shared `RepairButton` and `RepairBox`,
+the room's opened from ⋯ by `toggleRepair`, a device's box under its row,
+its listing offering the name its room's devices leave free;
 the form that puts a device without a room into one is the shared `PutForm`,
 over the chosen Cube's rooms, what it holds kept while it is open.
 The menus are `Dropdown`s, their items `MenuItem`s, the problems a `Problems`,

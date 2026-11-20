@@ -6,35 +6,32 @@
  *
  * A Cube's actions in one row at the bottom of its panel: Pair a device,
  * with its progress under the row (Pairing.tsx), and Repair… with its
- * box, plain (repair.js) in an element the part leaves to it; Reboot the
+ * box (the shared RepairBox); Reboot the
  * Cube and Remove, each asking in its own place. Reboot's question names
  * the radiograms pending as the Cube says now (D126).
  */
 
 import type { Cube } from "../api";
-import { Island } from "../shared/island";
 import { cubePath } from "../shared/path";
 import { Question, useAsk } from "../shared/question";
+import { RepairBox, RepairButton, repairScope } from "../shared/repair";
 import { Pairing } from "./Pairing";
 import { rebootCube, removeCube } from "./send";
 import { cubeUI } from "./store";
 
 /**
- * Repair is the Cube's Repair… and the box of its repairs, plain
- * (repair.js, an Island), which redraws the box inside the element by
- * itself; the part fills it again only where the Cube, its name or the
- * language changed.
+ * Repair is the Cube's Repair… and the box of its repairs (the shared
+ * RepairBox) under it.
  */
 function Repair({ c }: { c: Cube }) {
-  const label = c.name || c.serial;
+  const scope = repairScope(c.serial, "cube");
   return (
-    <Island cls="cube-repair-area needs-repair" keys={[c.serial, label]} fill={(el) => {
-      const scope = repairScope(c.serial, "cube");
-      const row = document.createElement("div");
-      row.className = "actions cube-repair needs-repair";
-      row.append(repairButton(scope, "cube", cubePath(c.serial), { label }));
-      el.replaceChildren(row, repairSlot(scope));
-    }} />
+    <div class="cube-repair-area needs-repair">
+      <div class="actions cube-repair needs-repair">
+        <RepairButton scope={scope} kind="cube" path={cubePath(c.serial)} label={c.name || c.serial} />
+      </div>
+      <RepairBox scope={scope} />
+    </div>
   );
 }
 

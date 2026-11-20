@@ -50,7 +50,7 @@ from typing import Callable
 
 import pytest
 
-from helpers import open_main_menu, reads_of, show_view, wait_until
+from helpers import STATE_EVENTS_JS, RepairStub, open_main_menu, reads_of, show_view, wait_until
 
 # The cases the guard runs in (D176-D); in the others its tests are
 # deselected at collection (D9-A).
@@ -182,6 +182,68 @@ def unlisted_form(page):
     settle(page)
 
 
+# A repair's preview, as GET …/repair/… answers one with something to
+# send: the fixture's previews mostly have nothing to do, and a listing
+# asks for a name only for a device the Cube's list lacks. A run is a
+# POST, which Writes refuses.
+REPAIR_STUB = {"plan": "plan-guard", "radiograms": 2, "duty_cost_pct": 2.5, "slots": 2, "held_slots": 0, "resets": 0, "wakeups": 1,
+               "metadata": False, "notes": [], "budget": {"duty_cycle_pct": 3, "free_memory_slots": 50, "updated_at": "2026-11-15T10:00:00Z"},
+               "steps": [{"what": "link", "device": "0a0101", "room": 1, "lines": ["s:AAAA", "s:BBBB"]}]}
+LISTING_STUB = {"from": 0, "to": 1, "listed": False, "new_room": False, "name": "Bath radiator thermostat 1", "room_name": "Bath",
+                "type": "radiator_thermostat"}
+
+
+def stub_repairs(page):
+    """Answers every GET of a repair's preview with REPAIR_STUB, a
+    listing's as of a device the Cube's list lacks, once per page
+    (RepairStub); the other methods go on to Writes."""
+    if getattr(page, "_guard_repairs", False):
+        return
+    previews = {key: dict(REPAIR_STUB, action=key, details={}) for key in ("reset", "master", "relink", "unlink-relink", "config", "place")}
+    previews["list"] = dict(REPAIR_STUB, action="list", details=LISTING_STUB)
+    RepairStub(page, previews, runs=False)
+    page._guard_repairs = True
+
+
+def ask_run(item):
+    """Run… of a repair's item clicked: its question open in its place."""
+    item.locator(".repair-run").wait_for(state="visible")
+    item.locator(".repair-run").click()
+    item.locator(".confirm-box").wait_for(state="visible")
+
+
+def rooms_repair_tile(page):
+    """A room's repairs open under its tile from ⋯ (stub_repairs), the
+    re-link's question open."""
+    stub_repairs(page)
+    on_rooms(page)
+    room = tile(page)
+    if room.locator(".repair-box:not(.hidden)").count() == 0:
+        room.locator(".tile-head > details.menu > summary").click()
+        room.locator(".menu-repair").click()
+    ask_run(room.locator(".repair-box .repair-item[data-repair=relink]"))
+    settle(page)
+
+
+def rooms_repair_device(page):
+    """A device's repairs open under its row in its tile's device list
+    (stub_repairs), its listing's name there for the guard to type and its
+    question open."""
+    stub_repairs(page)
+    on_rooms(page)
+    room = tile(page)
+    if not room.locator(".devices .device").first.is_visible():
+        room.locator(".tile-info").click()
+    device = room.locator(".devices .device:not(.virtual)").first
+    device.wait_for(state="visible")
+    if device.locator(".repair-box:not(.hidden)").count() == 0:
+        device.locator(".repair-open").click()
+    item = device.locator(".repair-item[data-repair=list]")
+    item.locator("input[name=name]").wait_for(state="visible")
+    ask_run(item)
+    settle(page)
+
+
 def house_panel(page):
     on_rooms(page)
     page.locator("#house-auto").click()
@@ -310,6 +372,30 @@ def cubes_problems(page):
         panel.locator(":scope > summary .cube-head-who").click()
     panel.locator(":scope > summary .cube-pill .problems-sum").click()
     panel.locator(":scope > summary .cube-pill .problems-list").wait_for(state="visible")
+
+
+def cubes_repair(page):
+    """A Cube's panel open with its repairs open (stub_repairs), the
+    reset's question open."""
+    stub_repairs(page)
+    cubes_open(page)
+    panel = page.locator("#cubes-list .cube-panel").first
+    if panel.locator(".repair-box:not(.hidden)").count() == 0:
+        panel.locator(".cube-repair .repair-open").click()
+    ask_run(panel.locator(".repair-box .repair-item[data-repair=reset]"))
+    settle(page)
+
+
+def cube_page_repair(page):
+    """Cube settings with the Cube's repairs open (stub_repairs), the
+    reset's question open."""
+    stub_repairs(page)
+    cube_page(page)
+    panel = page.locator("#cube-page-body .cube-panel")
+    if panel.locator(".repair-box:not(.hidden)").count() == 0:
+        panel.locator(".cube-repair .repair-open").click()
+    ask_run(panel.locator(".repair-box .repair-item[data-repair=reset]"))
+    settle(page)
 
 
 def cubes_found(page):
@@ -464,6 +550,18 @@ REGIONS = (
         View("a tile's problems list open", rooms_problems),
         View("a tile's holiday form, another's device list", rooms_holiday_and_devices),
         View("the virtual thermostat's settings, expert mode", rooms_virtual),
+        # Passed on the page before the move as well: repair.js drew a box
+        # again at its own reads alone, and the islands around it at a
+        # rename, none of SOURCES. From now on it guards that a box, its
+        # question open, stays through the data; the renames and the
+        # reads again are test_repair_updates.py's and test_repair.py's.
+        View("a room's repairs open, the re-link's question open", rooms_repair_tile),
+        # Passed on the page before the move as well: repair.js drew a box
+        # again at its own reads alone, and the islands around it at a
+        # rename, none of SOURCES. From now on it guards that a box, its
+        # question open and its listing's name typed, stays through the data; the renames and the
+        # reads again are test_repair_updates.py's and test_repair.py's.
+        View("a device's repairs open, its listing's name and question", rooms_repair_device),
     ), exclude=".config-area"),
     Region("room-config", ("#rooms .room .config-area",),
            tuple(View(f"a tile's configuration, tab {tab}", room_config(tab)) for tab in ("room", "temps", "devices", "program", "copy"))),
@@ -474,10 +572,22 @@ REGIONS = (
         View("a closed Cube's problem list open", cubes_problems),
         View("a Cube's panel open", cubes_open),
         View("the found Cubes' fold and its lines open", cubes_found),
+        # Passed on the page before the move as well: repair.js drew a box
+        # again at its own reads alone, and the islands around it at a
+        # rename, none of SOURCES. From now on it guards that a box, its
+        # question open, stays through the data; the renames and the
+        # reads again are test_repair_updates.py's and test_repair.py's.
+        View("a Cube's repairs open, the reset's question open", cubes_repair),
     ), exclude=".cube-pairing"),
     Region("cube-settings", ("#cube-page-body", "#cube-page-msg"), (
         View("the chosen Cube's panel", cube_page),
         View("its problem list open", cube_page_problems),
+        # Passed on the page before the move as well: repair.js drew a box
+        # again at its own reads alone, and the islands around it at a
+        # rename, none of SOURCES. From now on it guards that a box, its
+        # question open, stays through the data; the renames and the
+        # reads again are test_repair_updates.py's and test_repair.py's.
+        View("the Cube's repairs open, the reset's question open", cube_page_repair),
     ), exclude=".cube-pairing"),
     Region("pairing", ("#cube-page-body .cube-pairing",), (
         View("the pairing form on Cube settings", pairing_form),
@@ -655,23 +765,7 @@ GUARD_JS = r"""() => {
     }
     return typed;
   }
-  function stateEvents() {
-    const devices = [];
-    for (const r of state.rooms) {
-      devices.push(...r.devices);
-      if (r.vwt) devices.push(r.vwt);
-    }
-    devices.push(...state.unlisted);
-    for (const d of devices) {
-      const copy = JSON.parse(JSON.stringify(d));
-      if (state.events) {
-        state.events.dispatchEvent(new MessageEvent("state", { data: JSON.stringify({
-          kind: "state", device: copy.rf_address, state: copy, time: new Date().toISOString() }) }));
-      } else {
-        updateDevice(copy);
-      }
-    }
-  }
+  const stateEvents = """ + STATE_EVENTS_JS + r""";
   async function run(source) {
     switch (source) {
       case "poll(false)": return poll(false);

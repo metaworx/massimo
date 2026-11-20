@@ -24,6 +24,7 @@ import { ResultLine } from "./badge";
 import { FormFooter, Select, Switch, TextField } from "./field";
 import { useLang } from "./lang";
 import { live } from "./live";
+import { byteLength, defaultDeviceName, NAME_BYTES } from "./name";
 import { cubePath } from "./path";
 
 /** What a form that puts a device into a room keeps: the name typed, the room and the copy chosen, its request under way, its outcome, and done once the device is in its room. */
@@ -50,7 +51,7 @@ type Joined = { type: Device["type"]; rf_address: string; serial?: string; name?
 /** The answer of PUT …/devices/{rf}, as far as the form reads it: what of the room's settings was copied, the radio budget, a confirmation pending. */
 type Answer = { copied?: { days?: number; mode_not_set?: boolean }; budget?: { duty_cycle_pct?: number; free_memory_slots?: number }; confirmation?: string };
 
-/** offered is the name the form offers in room: the room's name, the device type's word in the page's language and the lowest free number (defaultDeviceName of config.js). */
+/** offered is the name the form offers in room: the room's name, the device type's word in the page's language and the lowest free number (defaultDeviceName). */
 function offered(dev: Joined, room: Room | undefined): string {
   if (!room) return "";
   return defaultDeviceName(room.name, typeName(dev.type), (room.devices || []).map((d) => d.name || ""));
