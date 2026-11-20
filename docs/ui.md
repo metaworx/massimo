@@ -1212,9 +1212,9 @@ A card folds with the button in its heading,
 which also says what it holds at a glance (**up to date**, **1 served**,
 **2 users**, **all on**, **3 kept**), also while it is folded;
 the browser keeps which cards are folded.
-A settings form of Users, Roles and Sign-in providers
-(a user's, a role's, an identity's, a provider's)
-keeps what is typed in it until it is saved or reset:
+A settings form of Users, Roles, Sign-in providers and Integrations
+(a user's, a role's, an identity's, a provider's, an integration's name
+and its maximum) keeps what is typed in it until it is saved or reset:
 through a change saved in another panel, the list read again,
 the panel closed and opened again and another page shown;
 its **Save** says its state, with **Reset** beside it, as Cube settings' does
@@ -1227,7 +1227,8 @@ its **System settings** the disk; so do ☰ and its **Cube settings** for a Cube
 settings unsaved (UnsavedMarks D24), which also have their panel's pill and the
 header's entry of the Cube.
 An item opens its card first where the card is folded.
-A switch saved at once (the password sign-in, a capability for every role) shows the position
+A switch saved at once (the password sign-in, a capability for every role,
+whether integrations may ask, an integration's **Enabled**) shows the position
 chosen while its request runs and stays where the focus is; a second change
 meanwhile sends nothing; refused, it shows what is stored again.
 A form that adds an item, the switches saved at once and a restore are no
@@ -1464,18 +1465,23 @@ settings forms and have none of it.
   **Register**.
   Every integration in a panel, its name, **disabled**,
   **new installation** and **approval expired** as badges:
-  its **Name** with **Save the name**, off while the name is as stored,
+  its **Name** with **Save the name**, off while the name is as stored, and **Reset**,
   the name its users are shown under (the integration's own user's
   display name);
   its **Name in Home Assistant** where Home Assistant reports another,
   its id, installation id, address, version, when its key was issued and
   whether the LAN saw it;
   for a call from another installation, **Accept the new installation**;
-  **Enabled**, its maximum with **Save the maximum**,
+  **Enabled**, saved at once, its maximum with **Save the maximum** and **Reset**,
   its users (read when the panel opens), the system user first,
   each with its id's first eight characters, its level and when it acted
   last, and **Acts as**: its own user or a Massimo user, the one of the
-  same name proposed, with **Link**; and **Revoke**, which asks first.
+  same name proposed, with **Link**, the choice following what is stored
+  until it is changed, without the marks of a settings form (UnsavedMarks D25):
+  Link also takes a proposal the select already shows, so it cannot be off
+  while nothing is changed, and it is a command; and **Revoke**, which asks first.
+  A request's maximum and what it was registered as before stay as chosen
+  while the integrations are read again, until it is approved or refused.
   Under them the Home Assistant installations the server saw on the LAN,
   each with its address as a link, or as text where it announced none,
   either with a copy icon, and **registered** or **not registered**;
@@ -1788,9 +1794,8 @@ a script for each region of the page, in the order the page loads them:
   `providers.js`, the enabled sign-in providers and the plain name of
   Sign-in providers; `linked.js`, My profile's linked accounts;
   `backup.js`, Backup and restore;
-  `integrations.js`, Integrations;
-  `roles.js`, the plain name of Roles and Capabilities (`ui/src/admin/`),
-  and what a capability allows in words, which `integrations.js` reads;
+  `roles.js`, the plain name of Roles and Capabilities (`ui/src/admin/`);
+  Integrations has none, a part alone (`ui/src/integrations/`);
 - `theme.js`, the mode and the colour schemes, applied as the script loads;
   `appearance.js`, the Appearance card, the editor, export and import;
 - `notifytext.js` and `notify.js`, the notifications.
@@ -1828,7 +1833,7 @@ every directory of `ui/src/` but `shared`, `model` and `plain` is a region,
 and imports from itself, `shared`, `model`, Preact and the API's types alone).
 What several regions read of the API's data beside its fields is under `ui/src/model/`
 (`capLabel` of `cap.ts`, what a capability allows,
-for the roles, among it, its next user an integration's maximum):
+for the roles and the integrations, among it):
 it knows the API's data and no region, holds no state and no part with hooks of its own,
 and may put shared parts together into a small piece of that data;
 it imports from itself, the shared parts, Preact and the API's types alone
@@ -1893,8 +1898,8 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `DateTime` | `field.tsx` | a date and time field (`datetime-local`), its value as the input takes it | `value`, `set`, `id`, `cls`, `step`, `required`, `disabled`, `inputRef` |
 | `localOf`, `isoOf` | `time.ts` | a `DateTime`'s value and the API's time as each other, for a field that shows a stored end and sends it (a user's end); the draft compares the field's minute, all it holds | `iso`; `local` |
 | `Switch` | `field.tsx` | a checkbox drawn as a switch (`switchEl`), in its own row with its help where asked (`fieldRow` without a label) | `name`, `label`, `checked` and `onChange`, or `draft` and `show`; `row`, `help`, `rowCls` (classes its own row adds, a capability's `needs-…`), `cls` (the switch's classes), `id`, `disabled`, `title`, `badge` (inside the switch after its label, a capability's state), children after the switch |
-| `Choices` | `choices.tsx` | a choice of several among a list: a group of switches under its heading, All and None as buttons where asked (the configuration's Copy tab), or without a heading (a role's capabilities, Capabilities for every role), or of checkboxes, All a checkbox first (`look` `check`, the House panel); an option locked shows whether it is chosen and is off (the owner's set, a capability while its request runs); its next user, an integration's maximum (`integrations.js` `capsBox`), adds a legend | `title`, `label` (the group's name for a screen reader), `id`, `cls` (a class the group adds, `cap-grid`), `options` (`[value, label, disabled, { title, badge, lock }]`, the last for switches alone), `chosen`, `set(chosen)`, `all` (`{ all, none }`, their labels, `none` left out for All alone), `empty` (said where there is no option), `look` (`switch`, the default, or `check`) |
-| `ChoiceGroup` | `choices.tsx` | the frame of a choice of several drawn as switches, which `Choices` is drawn with and a region uses where each switch is a part of its own (Capabilities for every role, each switch saved at once) | `id`, `cls`, `label` (the group's name for a screen reader), `head`, the switches as children |
+| `Choices` | `choices.tsx` | a choice of several among a list: a group of switches under its heading, All and None as buttons where asked (the configuration's Copy tab), under a legend (an integration's maximum) or without a heading (a role's capabilities, Capabilities for every role), or of checkboxes, All a checkbox first (`look` `check`, the House panel); an option locked shows whether it is chosen and is off (the owner's set, a capability while its request runs) | `title`, `legend` (a fieldset under it), `label` (the group's name for a screen reader), `id`, `cls` (a class the group adds, `cap-grid`, `integration-caps`), `options` (`[value, label, disabled, { title, badge, lock }]`, the last for switches alone), `chosen`, `set(chosen)`, `all` (`{ all, none }`, their labels, `none` left out for All alone), `empty` (said where there is no option), `look` (`switch`, the default, or `check`) |
+| `ChoiceGroup` | `choices.tsx` | the frame of a choice of several drawn as switches, which `Choices` is drawn with and a region uses where each switch is a part of its own (Capabilities for every role, each switch saved at once) | `id`, `cls`, `label` (the group's name for a screen reader), `legend` (a fieldset under it), `head`, the switches as children |
 | `Tabs` | `tabs.tsx` | a row of tabs: a tab list of buttons, each with its key in `data-tab`, the one shown active and selected, and what follows the list (a close button) | `cls` (the row's class), `listCls`, `label` (the list's name), `tabs` (`{ key, label, cls }`), `current`, `onPick(key)`, children after the list |
 | `Stepper` | `field.tsx` | a number field between − and + (`stepper`), the step within its range; its buttons are named for a temperature, half a degree less and more, and the first user of another unit adds their names | `value`, `set`, `min`, `max`, `step`, `id` and `cls` of the field, `hidden` (the whole kept in its place unseen), children after the + (a unit) |
 | `useDraft`, `Meanwhile` | `field.tsx` | a field that shows stored data keeps a draft: untouched it follows, changed it says "changed meanwhile" with Take theirs (D59-A); with a place, a form's (`useForm`), the draft is kept there | `stored`, `norm`, `place`; gives `value`, `stored`, `set`, `changed`, `meanwhile`, `take`; `draft`, `show` |
@@ -1908,10 +1913,11 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `Question` | `question.tsx` | a question in the page, No and Yes, Escape for No (`confirmBox`) | `text`, `yes`, `no`, `onYes` (its request's promise), `onNo` |
 | `useAsk` | `question.tsx` | a row that asks in its own place, the focus back on its button (`confirmInPlace`) | gives `asking`, `ask`, `done`, `ref` |
 | `useBusy`, `busyProps` | `question.tsx` | a button's request under way: busy, off, `aria-busy` (`whileBusy`, `setBusy`) | `run(fn)`; `busyProps(cls, busy, off)` |
-| `useSetAtOnce` | `question.tsx` | a setting saved at once, a switch without a Save: the user's choice shown while its request runs, the control on so that the focus stays on it, a change meanwhile sending nothing and drawn back, then what is stored, the old value where it was refused (the password sign-in, a capability for every role) | `stored`; gives `value`, `busy`, `set(v, fn)` |
-| `BusyButton` | `question.tsx` | a button that sends a request and turns until its answer (`useBusy`, `busyProps`), a click meanwhile sending nothing | `cls`, `label`, `run`, `aria` (its name where the text is not enough) |
+| `useSetAtOnce` | `question.tsx` | a setting saved at once, a switch without a Save: the user's choice shown while its request runs, the control on so that the focus stays on it, a change meanwhile sending nothing and drawn back, then what is stored, the old value where it was refused (the password sign-in, a capability for every role, whether integrations may ask, an integration's Enabled) | `stored`; gives `value`, `busy`, `set(v, fn)` |
+| `BusyButton` | `question.tsx` | a button that sends a request and turns until its answer (`useBusy`, `busyProps`), a click meanwhile sending nothing | `id`, `cls`, `label`, `run`, `aria` (its name where the text is not enough) |
 | `session`, `stillSession`, `newSession` | `session.ts` | the session's number, raised by `MassimoParts.signedOut` before anything is forgotten: a store takes it before an await and drops the answer, its message and its next timer where it changed; `actionRunner`'s `bound` does so for a runner | –; `n`; – |
 | `Adder` | `adder.tsx` | the end of a list that adds an item: the new item's form in its place while shown, the button that shows it hidden meanwhile, the focus in the form's first field when it comes and back on the button when it goes (Users, Roles, Sign-in providers) | `id` (the button's), `formId` (the form's place), `label`, `shown`, `set(shown)`, the form as children |
+| `KvList` | `kv.tsx` | a list of facts, a name and its value each (`kvList`), every fact given; the caller leaves out those it does not show | `facts` (`[name, value, mono]`) |
 | `Copy`, `CopyIcon` | `copy.tsx` | a text that copies itself, a copy icon (`copyEl`, `copyIcon`) | `text`, `value` (what it copies, where it is not the text), `label`, `icon`, `cls`; `get`, `label` |
 | `Link` | `link.tsx` | a link in a tab of its own, the text alone for a url that is not http(s) (`linkEl`) | `url`, `text`, `cls` |
 | `DeviceIds` | `device.tsx` | a device's serial and radio address (`deviceIds`) | `serial`, `rf`, `always` |
@@ -1971,7 +1977,7 @@ What the table cannot say:
   so that its drafts start from them and nothing typed meanwhile is lost.
 
 These builders of `components.js` and `app.js` have no part yet, since no region
-that has moved uses them: `kvList`, `countList`;
+that has moved uses them: `countList`;
 `sectionBadges` is the page's chrome's, plain until Block 14, and a part that
 counts what a card holds calls it, with `badgeEl`, from an effect.
 Known gaps, for the blocks that meet them:
@@ -2218,10 +2224,22 @@ a section's pill in its `span.section-pill` beside the plain badges, which
 the forms it shows the beginnings of their keys in `data-forms`, its entry's name
 the text key in `data-title`;
 a menu item's disk in its `span.menu-item-mark` with its `data-forms`
-(System settings': `users roles providers`; Cube settings': `cube`);
+(System settings': `users roles providers integrations`; Cube settings': `cube`);
 ☰'s mark in `#nav-menu-mark`, the worse of the log's, which `renderLogSign` of `log.js`
 hands it as `MassimoParts.chrome.log(count, tone)`,
 and the forms' of every menu item (`unsavedTone`), with ☰'s name and tooltip.
+Integrations (`ui/src/integrations/`) is a part alone, drawn into `#sys-integrations-body`
+and read each time System settings is shown; no plain script calls it:
+`store.ts` holds its counter, what it shows as the last loads gave it,
+each panel open, each request closed, the message line and the readings of an approval
+again, every 3 s in its first minute and every 15 s after, stopped while the list is not
+visible (another page, the card folded) and at a sign-out, and started again by every load
+of the list that went through, which says a key collected meanwhile, and what it sends;
+`Integrations.tsx` its parts, the facts a `KvList`, a request's maximum and an
+integration's a `Choices` under a legend, of the class `integration-caps`,
+an integration's name and its maximum each a `useForm` of the key
+`integrations:<uuid>:name` and `:max`, Acts as a `Select` with its draft beside Link,
+Refuse and Revoke a `useAsk` with a `Question`.
 Leaving the page (`ui/src/leaving/`) is a region of its own,
 a dialog without a place in any page's region:
 the page's chrome stays plain until AP UiParts' Block 14, and no region imports another,

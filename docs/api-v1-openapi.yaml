@@ -1330,11 +1330,13 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [found, looks]
                 properties:
                   found:
                     type: array
                     items:
                       type: object
+                      required: [kind, name, instance_id, address]
                       properties:
                         kind: {type: string}
                         name: {type: string}
@@ -5218,6 +5220,7 @@ components:
         version: {type: string, maxLength: 32}
     Integration:
       type: object
+      required: [uuid, kind, name, reported_name, state, instance_id, created_at]
       properties:
         uuid: {type: string}
         kind: {type: string}
@@ -5245,6 +5248,7 @@ components:
           items: {$ref: "#/components/schemas/IntegrationUser"}
     IntegrationUser:
       type: object
+      required: [id, name, display, user, own_user, linked]
       properties:
         id: {type: string, description: "Its id at the integration, or system"}
         name: {type: string, description: "Its name there, from its last call"}

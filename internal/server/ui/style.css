@@ -1808,7 +1808,6 @@ massimo-week-program { display: contents; }
 .integration-user p { margin: 2px 0; }
 .integration-user .inline { display: flex; gap: 6px; flex-wrap: wrap; }
 .integration-user select { flex: 1 1 12em; min-width: 0; }
-.integration-name .inline { display: flex; gap: 6px; flex-wrap: wrap; }
 .integration-name input { flex: 1 1 12em; min-width: 0; }
 .integration-body .kv dd { overflow-wrap: anywhere; }
 .integrations-found-list li { overflow-wrap: anywhere; }

@@ -344,6 +344,49 @@ def test_a_providers_draft_stays_and_its_secret_is_kept_nowhere(page, case):
     show_view(page, "tiles")
 
 
+def test_an_integrations_drafts_stay_and_a_request_keeps_its_choice(page, case):
+    """An integration's name typed and a capability of its maximum switched,
+    and a request's maximum narrowed, none of it sent: Look again and
+    System settings shown again keep the panels, their fields and their
+    buttons the elements they were, with what is typed and chosen; the
+    forms left, the section's pill shows their disks; Reset clears them.
+    The fixture's server does not look on the LAN, so GET …/found is
+    answered as looking, with nothing found, and Look again is there.
+    The request and the integration are stubbed (stub_integrations):
+    nothing is registered."""
+    reads_of(page).change("**/api/v1/integrations/found*", lambda body: dict(body or {}, looks=True, found=[]))
+    made = stub_integrations(page)
+    try:
+        show_view(page, "system")
+        sel = f".integration-panel[data-uuid='{made[0]}']"
+        req = f".integration-request[data-uuid='{made[1]}']"
+        panel = open_panel(page, sel)
+        panel.locator(f"#integration-name-{made[0]}").fill("Typed integration")
+        cap = panel.locator(".integration-max .switch").last
+        was = cap.locator("input").is_checked()
+        cap.click()
+        request = page.locator(req)
+        request.locator(".switch").first.click()
+        sels = [f"#integration-name-{made[0]}", sel + " .integration-max .switch:last-child input", sel + " .integration-max button[type=submit]",
+                req + " .switch:first-child input", req + " .approve-integration"]
+        mark(page, sels)
+        page.locator("#integrations-look").click()
+        assert wait_until(page, "!document.getElementById('integrations-look').classList.contains('busy')", 10), "looked again"
+        show_view(page, "tiles")
+        show_view(page, "system")
+        assert wait_until(page, "!!document.querySelector('#sys-integrations .section-pill .problems')", 5), "the section's pill shows the disks"
+        assert replaced(page, sels) == [], f"the same elements: {replaced(page, sels)}"
+        assert page.locator(f"#integration-name-{made[0]}").input_value() == "Typed integration", "the name typed kept"
+        assert cap.locator("input").is_checked() != was, "the maximum switched kept"
+        assert not request.locator(".switch").first.locator("input").is_checked(), "the request's choice kept"
+        for form in ("form.integration-name", "form.integration-max"):
+            panel.locator(form + " .form-reset").click()
+        assert wait_until(page, "!document.querySelector('#sys-integrations .section-pill .problems')", 5), "Reset: no pill"
+    finally:
+        page.unroute(f"**/api/v1/integrations/{made[0]}")
+    show_view(page, "tiles")
+
+
 def out(page):
     """Sign out, through the leaving dialog where a form has changes."""
     sign_out(page)
@@ -675,6 +718,16 @@ def test_a_closed_panel_reads_no_identities(page, case, provider):
     show_view(page, "tiles")
 
 
+def test_integrations_may_ask_keeps_the_focus(page, case, watch):
+    """B4: "Integrations may ask", refused: the same."""
+    show_view(page, "system")
+    asks = page.locator("#sys-integrations-body .switch").first
+    asks.wait_for()
+    switch_saved_at_once(page, asks, "**/api/v1/settings", True)
+    watch.problems[:] = [p for p in watch.problems if "403" not in p]
+    show_view(page, "tiles")
+
+
 def test_an_identitys_change(page, case, provider):
     """A2, A3: an identity at an enabled provider, its Change typed and
     left: the pill names it; saved with another e-mail, the form closes;
@@ -710,3 +763,137 @@ def test_an_identitys_change(page, case, provider):
         remove_user(user)
         undo(f"the provider {key}", lambda: api_call("DELETE", f"api/v1/providers/{key}"))
     show_view(page, "tiles")
+
+
+def stub_integrations(page):
+    """GET /api/v1/integrations answered with a request and an integration
+    of the guard's (test_parts_guard.py), the integration's own read with
+    its user; their uuids. The server takes ten registration requests from
+    one address in ten minutes, and the suite's four cases share it: the
+    tests that only read the integrations use this, and only the
+    approval's test makes a request of its own."""
+    from test_parts_guard import GUARD_IG, GUARD_REQ, IG_STUB, IG_USER, REQ_STUB
+    reads_of(page).change("**/api/v1/integrations", lambda body: [REQ_STUB, IG_STUB])
+    safe_route(page, f"**/api/v1/integrations/{GUARD_IG}", lambda r: r.fulfill(
+        status=200, content_type="application/json", body=json.dumps(dict(IG_STUB, users=[IG_USER]))))
+    return [GUARD_IG, GUARD_REQ]
+
+
+def made_integrations(case, n=1, approve=True):
+    """Requests the test makes, the first approved; their uuids."""
+    from test_integrations import raw_call
+    made = []
+    for k in range(n):
+        status, req = raw_call("POST", "api/v1/integrations/requests",
+                               {"kind": "homeassistant", "name": f"Rw {k} {case.width} {case.lang}",
+                                "instance_id": ("rw%d%04d%s" % (k, case.width, case.lang)).encode().hex().ljust(32, "d")[:32],
+                                "url": "http://192.0.2.33:8123", "version": "2026.11.1"})
+        assert status == 201, "the request is taken"
+        made.append((req["id"], req["code"]))
+    if approve:
+        api_call("POST", f"api/v1/integrations/{made[0][0]}/approve", {"max_caps": ["read"]})
+    return made
+
+
+@pytest.mark.clock
+def test_an_approval_is_followed_across_pages_and_not_while_folded(page, case):
+    """B1: an approval whose key waits: the card folded, no GET of it goes
+    while the page's clock is run on past the readings' pace (3 s in their
+    first minute); Rooms shown and System settings again, unfolded, the key
+    collected meanwhile is said."""
+    from test_integrations import _end, raw_call
+    made = made_integrations(case)
+    uuid, code = made[0]
+    gets = []
+    page.on("request", lambda r: gets.append(r.url) if r.method == "GET" and r.url.endswith(f"/integrations/{uuid}") else None)
+    try:
+        show_view(page, "system")
+        page.locator(f".integration-panel[data-uuid='{uuid}'] .integration-key-waiting").wait_for(state="attached")
+        page.locator("#sys-integrations .section-fold").click()
+        assert wait_until(page, "document.getElementById('sys-integrations').classList.contains('folded')", 5), "the card folded"
+        before = len(gets)
+        page.clock.run_for(5000)  # past the reading's next tick
+        frames(page)
+        assert len(gets) == before, f"no reading while folded: {gets[before:]}"
+        show_view(page, "tiles")
+        status, key = raw_call("GET", f"api/v1/integrations/requests/{uuid}?code={code}")
+        assert status == 200 and key["key"], "the key collected"
+        show_view(page, "system")
+        page.locator("#sys-integrations .section-fold").click()
+        want = page.evaluate("(n) => t('integrations.collected', {name: n})", f"Rw 0 {case.width} {case.lang}")
+        assert wait_until(page, f"!document.querySelector(\".integration-panel[data-uuid='{uuid}'] .integration-key-waiting\")", 10), \
+            "the panel follows the collection"
+        assert wait_until(page, f"document.getElementById('integrations-msg').textContent === {json.dumps(want)}", 10), "and says so"
+    finally:
+        _end(uuid)
+        page.evaluate("localStorage.removeItem('massimo.fold.sys-integrations')")
+    show_view(page, "tiles")
+
+
+def integrations_typed(page, case):
+    """A request's choice narrowed, an integration's name typed and its
+    panel open with its users; the uuids."""
+    made = stub_integrations(page)
+    show_view(page, "system")
+    panel = open_panel(page, f".integration-panel[data-uuid='{made[0]}']")
+    panel.locator(f"#integration-name-{made[0]}").fill("Typed by the first")
+    page.locator(f".integration-request[data-uuid='{made[1]}'] .switch").first.click()
+
+
+def integrations_gone(page):
+    frames(page)
+    assert page.locator(".integration-panel, .integration-request").count() == 0, "no integration, no request"
+    assert page.locator("#sys-integrations .section-badges").inner_text().strip() == "", "the card's counts cleared"
+
+
+def test_sign_out_forgets_the_integrations(new_context, case, watch, guard):
+    """B2: Sign out, and the operator signed in finds no integration, no
+    request, nothing typed and no counts."""
+    page = owner_page(new_context, guard, watch, URL, TOKEN)
+    integrations_typed(page, case)
+    out(page)
+    sign_in(page, "operator", "op-pass")
+    integrations_gone(page)
+
+
+def test_another_user_after_a_401_finds_no_integrations(new_context, case, watch, guard):
+    """B2: the same, the session taken as expired."""
+    page = owner_page(new_context, guard, watch, URL, TOKEN)
+    integrations_typed(page, case)
+    expire(page)
+    sign_in(page, "operator", "op-pass")
+    integrations_gone(page)
+
+
+def across(page, how):
+    """The session ended as how says: a sign-out, or expired with another user's sign-in."""
+    if how == "sign-out":
+        out(page)
+    else:
+        expire(page)
+    sign_in(page, "operator", "op-pass")
+
+
+@pytest.mark.parametrize("how", ["sign-out", "expired"])
+def test_a_late_list_of_integrations_reaches_nothing_of_the_next_user(new_context, case, watch, guard, how):
+    """B3: the integrations' list read again and held while the session
+    ends; let go once the operator is in, it shows nothing of the first
+    user."""
+    page = owner_page(new_context, guard, watch, URL, TOKEN)
+    made = stub_integrations(page)
+    lists = []
+    try:
+        show_view(page, "system")
+        page.locator(f".integration-request[data-uuid='{made[1]}']").wait_for()
+        hold(page, "**/api/v1/integrations", "GET", lists, [])
+        show_view(page, "tiles")
+        show_view(page, "system")
+        assert wait_held(page, lists), "the list asked for"
+        across(page, how)
+        with page.expect_response(lambda r: r.request.method == "GET" and r.url.endswith("/api/v1/integrations")):
+            for r in lists:
+                r.fallback()  # to the stub's answer, which holds the first user's integrations
+        frames(page)
+        assert page.locator(".integration-request, .integration-panel").count() == 0, "no integration of the first"
+    finally:
+        page.unroute("**/api/v1/integrations")

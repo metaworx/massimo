@@ -7,8 +7,9 @@
  * A choice of several among a list as a part: a group with a control per
  * option, and where asked All, which chooses every option that is on, and
  * None. Drawn as switches under a heading, with All and None as buttons in
- * the heading's row (the configuration's Copy tab), or without a heading (a
- * role's capabilities); or as checkboxes in a row, All a checkbox of its own before them (the House
+ * the heading's row (the configuration's Copy tab), or under a legend (an
+ * integration's maximum), or without a heading (a role's capabilities); or
+ * as checkboxes in a row, All a checkbox of its own before them (the House
  * panel). An option may be locked (shown chosen or not, as it is, and off:
  * the owner's set, a capability's switch while its request runs), and carry
  * a tooltip and a badge (a capability disabled for every role). The caller
@@ -38,13 +39,15 @@ export type Choice = [value: string, label: string, disabled?: boolean, more?: C
  * value; set is told of what is chosen after each change; empty is said
  * where there is no option. look "switch" (the default) draws switches
  * under the heading title, all giving the labels of All and None, buttons
- * in the heading's row, each off where it would change nothing; without a
- * heading or All it draws no head. look "check" draws checkboxes (.checks), all.all the
+ * in the heading's row, each off where it would change nothing, or with
+ * legend a fieldset under that legend; without a heading, a legend or All
+ * it draws no head. look "check" draws checkboxes (.checks), all.all the
  * label of All, a checkbox first, on while every option is chosen, and no
  * None (all.none left out), its options without more.
  */
-export function Choices({ title, label, id, cls, options, chosen, set, all, empty, look = "switch" }: {
+export function Choices({ title, legend, label, id, cls, options, chosen, set, all, empty, look = "switch" }: {
   title?: string;
+  legend?: string;
   label: string;
   id?: string;
   cls?: string;
@@ -83,7 +86,7 @@ export function Choices({ title, label, id, cls, options, chosen, set, all, empt
     </div>
   );
   return (
-    <ChoiceGroup id={id} cls={cls} label={label} head={head || undefined}>
+    <ChoiceGroup id={id} cls={cls} label={label} legend={legend} head={head || undefined}>
       {options.length === 0 && empty && <p class="muted">{empty}</p>}
       {options.map(([v, l, off, more]) => (
         <Switch key={v} row={false} label={l} checked={!off && chosen.includes(v)} disabled={off || more?.lock} title={more?.title}
@@ -97,21 +100,33 @@ export function Choices({ title, label, id, cls, options, chosen, set, all, empt
  * ChoiceGroup is the frame of a choice of several drawn as switches, which
  * Choices is drawn with and a region uses where each switch is a part of
  * its own (Capabilities for every role, each saved at once): the group of
- * the class choices and cls, named label for a screen reader; its head (a
- * heading, All and None) where given; and its list (.choices-list), the
- * switches as children.
+ * the class choices and cls, named label for a screen reader, or a
+ * fieldset under legend; its head (a heading, All and None) where given;
+ * and its list (.choices-list), the switches as children.
  */
-export function ChoiceGroup({ id, cls, label, head, children }: {
+export function ChoiceGroup({ id, cls, label, legend, head, children }: {
   id?: string;
   cls?: string;
   label: string;
+  legend?: string;
   head?: ComponentChildren;
   children?: ComponentChildren;
 }) {
+  const c = "choices" + (cls ? " " + cls : "");
+  const list = <div class="choices-list">{children}</div>;
+  if (legend) {
+    return (
+      <fieldset id={id} class={c}>
+        <legend>{legend}</legend>
+        {head}
+        {list}
+      </fieldset>
+    );
+  }
   return (
-    <div id={id} class={"choices" + (cls ? " " + cls : "")} role="group" aria-label={label}>
+    <div id={id} class={c} role="group" aria-label={label}>
       {head}
-      <div class="choices-list">{children}</div>
+      {list}
     </div>
   );
 }

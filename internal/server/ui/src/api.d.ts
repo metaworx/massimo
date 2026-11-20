@@ -1778,21 +1778,21 @@ export interface IntegrationRequest {
 }
 
 export interface Integration {
-  uuid?: string;
-  kind?: string;
+  uuid: string;
+  kind: string;
   /**
    * Its name as the owner gives it (PUT), its own user's display name; it
    * follows reported_name while it is the name reported before. A request's is
    * the name it reported.
    */
-  name?: string;
+  name: string;
   /**
    * The name the integration reports, when it asks and when a request is
    * attached to it
    */
-  reported_name?: string;
-  state?: "pending" | "active" | "disabled";
-  instance_id?: string;
+  reported_name: string;
+  state: "pending" | "active" | "disabled";
+  instance_id: string;
   /** An installation id a call came with, not accepted yet */
   pending_instance?: string;
   url?: string;
@@ -1812,7 +1812,7 @@ export interface Integration {
   /** @format date-time */
   key_issued_at?: string;
   /** @format date-time */
-  created_at?: string;
+  created_at: string;
   /** The last look at the LAN saw its installation id */
   seen?: boolean;
   /** Its users, in GET /api/v1/integrations/{uuid} alone */
@@ -1821,19 +1821,19 @@ export interface Integration {
 
 export interface IntegrationUser {
   /** Its id at the integration, or system */
-  id?: string;
+  id: string;
   /** Its name there, from its last call */
-  name?: string;
+  name: string;
   /**
    * Its chain, <the integration's name> › <its user's display name>, with ",
    * as <login name>" where linked
    */
-  display?: string;
+  display: string;
   /** The user its calls act as */
-  user?: string;
+  user: string;
   /** The user made at its first call */
-  own_user?: string;
-  linked?: boolean;
+  own_user: string;
+  linked: boolean;
   system_generated?: boolean;
   last_level?: "view" | "control" | "admin";
   /** @format date-time */

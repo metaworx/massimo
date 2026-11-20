@@ -484,13 +484,24 @@ def providers(page):
     page.locator("#provider-new input").first.wait_for(state="visible")
 
 
-# The fixture has no sign-in provider: the view of a provider's panel
-# answers GET /api/v1/providers with one constant answer, so that the
-# data stay as they were.
+# The fixture has no sign-in provider and no integration: the views of
+# their panels answer GET /api/v1/providers and the integrations' reads
+# with one constant answer each, so that the data stay as they were.
 PROVIDER_STUB = {"key": "guard", "name": "Guard", "issuer": "https://issuer.example.org", "client_id": "guard", "has_secret": True,
                  "secret_lost": False, "scopes": "openid email profile", "auto_create": True, "auto_role": "viewer", "auto_domains": ["example.org"],
                  "groups_claim": "", "allowed_groups": [], "enabled": False, "callback": "api/v1/login/oidc/callback",
                  "created_at": "2026-11-15T10:00:00Z", "updated_at": "2026-11-15T10:00:00Z"}
+GUARD_IG = "01a1e000-0000-7000-8000-00000000a001"
+GUARD_REQ = "01a1e000-0000-7000-8000-00000000a002"
+IG_STUB = {"uuid": GUARD_IG, "kind": "homeassistant", "name": "Guard home", "reported_name": "Guard home", "state": "active",
+           "instance_id": "a1" * 16, "url": "http://192.0.2.30:8123", "version": "2026.11.1", "max_caps": ["read", "setpoint"],
+           "key_issued_at": "2026-11-15T10:00:00Z", "created_at": "2026-11-15T10:00:00Z", "seen": True}
+REQ_STUB = {"uuid": GUARD_REQ, "kind": "homeassistant", "name": "Guard request", "reported_name": "Guard request", "state": "pending",
+            "instance_id": "a2" * 16, "request_code": "GRD-123", "request_remote": "192.0.2.31", "created_at": "2026-11-15T10:00:00Z",
+            "request_expires": "2099-01-01T00:00:00Z"}
+IG_USER = {"id": "b" * 32, "name": "Guard user", "display": "Guard home › Guard user", "user": GUARD_IG + ":" + "b" * 32,
+           "own_user": GUARD_IG + ":" + "b" * 32, "linked": False, "last_level": "control", "last_used_at": "2026-11-15T10:00:00Z"}
+FOUND_IG = {"found": [{"kind": "homeassistant", "name": "Guard LAN", "instance_id": "a3" * 16, "address": "192.0.2.32"}], "looks": True}
 
 
 def provider_panel(page):
@@ -503,6 +514,23 @@ def provider_panel(page):
     if page.locator("#provider-add").is_visible():
         page.locator("#provider-add").click()
     page.locator("#provider-new input").first.wait_for(state="visible")
+
+
+def integrations(page):
+    """A request waiting, an integration's panel open with a user and its
+    choice of whom it acts as, and an installation seen on the LAN with
+    Register's address asked for."""
+    reads_of(page).change("**/api/v1/integrations", lambda body: [REQ_STUB, IG_STUB])
+    safe_route(page, f"**/api/v1/integrations/{GUARD_IG}", lambda route: route.fulfill(
+        status=200, content_type="application/json", body=json.dumps(dict(IG_STUB, users=[IG_USER]))))
+    reads_of(page).change("**/api/v1/integrations/found*", lambda body: FOUND_IG)
+    show_view(page, "tiles")
+    system(page)
+    panel = page.locator(f".integration-panel[data-uuid='{GUARD_IG}']")
+    panel.locator("> summary").click()
+    panel.locator(".integration-user select").wait_for(state="visible")
+    page.locator("#integrations-found .register-integration").click()
+    page.locator("#integrations-found .register-address input").wait_for(state="visible")
 
 
 def backups_system(page):
@@ -648,7 +676,14 @@ REGIONS = (
         # again, the page shown again) are test_admin_updates.py's.
         View("a provider's panel open and the new provider's form", provider_panel),
     )),
-    Region("integrations", ("#sys-integrations-body",), (View("System settings", system),)),
+    Region("integrations", ("#sys-integrations-body",), (
+        View("System settings", system),
+        # Passed on the page before the move as well: none of SOURCES draws
+        # the integrations again. From now on it guards that a request, an integration's panel and Register's address stays through the data;
+        # the list's own reads (an action in another panel, the list read
+        # again, the page shown again) are test_admin_updates.py's.
+        View("a request, an integration's panel with a user, Register's address", integrations),
+    )),
     Region("backups", ("#sys-backup-body", "#cube-backup-body"), (
         View("System settings, the Cube's fold open", backups_system),
         View("Cube settings", backups_cube),

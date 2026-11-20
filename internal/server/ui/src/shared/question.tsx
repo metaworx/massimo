@@ -69,12 +69,13 @@ export function useSetAtOnce<T>(stored: T): { value: T; busy: boolean; set(v: T,
 /**
  * BusyButton is a button that sends a request and turns until its answer
  * (useBusy, busyProps): cls its class, label its text, run the request;
- * aria-label names it for a screen reader where its text does not say
- * enough; a click while it turns sends nothing.
+ * id its element's (a button the page names); aria-label names it for a
+ * screen reader where its text does not say enough; a click while it
+ * turns sends nothing.
  */
-export function BusyButton({ cls, label, run, aria }: { cls?: string; label: string; run: () => Promise<unknown>; aria?: string }) {
+export function BusyButton({ id, cls, label, run, aria }: { id?: string; cls?: string; label: string; run: () => Promise<unknown>; aria?: string }) {
   const b = useBusy();
-  return <button type="button" {...busyProps(cls || "", b.busy)} aria-label={aria} onClick={() => b.run(run)}>{label}</button>;
+  return <button type="button" id={id} {...busyProps(cls || "", b.busy)} aria-label={aria} onClick={() => b.run(run)}>{label}</button>;
 }
 
 /**

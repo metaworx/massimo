@@ -1,4 +1,4 @@
-# Testing the web UI (v1.8.0)
+# Testing the web UI (v1.9.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -669,7 +669,10 @@ a run is a POST, which the guard refuses.
 System settings' lists (AP UiParts, Block 10) are checked with a panel open,
 every field of its form typed, a question asked in its place and the new item's
 form beside it: a user's Remove asking; a provider's panel, `GET /api/v1/providers`
-answered with one provider off (`PROVIDER_STUB`), since the fixture has none.
+answered with one provider off (`PROVIDER_STUB`), since the fixture has none;
+a request and an integration with a user and the choice of whom it acts as, and
+an installation seen on the LAN with Register's address asked for,
+the integrations' reads answered so (`REQ_STUB`, `IG_STUB`, `IG_USER`, `FOUND_IG`).
 These views passed on the page before the move as well, since none of the
 guard's sources draws the lists again: from now on they guard that a poll, a
 state event or a reload of the Cubes and the rooms leaves them as they were,

@@ -25,6 +25,7 @@ import "./leaving";
 import type { LeavingPart } from "./leaving";
 import "./rooms";
 import type { RoomsPart } from "./rooms";
+import { signedOut as integrationsSignedOut } from "./integrations";
 import { forgetForms } from "./shared/forms";
 import { languageChanged } from "./shared/lang";
 import { iconsChanged } from "./shared/look";
@@ -43,7 +44,8 @@ export interface MassimoParts {
    * forgetSession): every form's drafts and marks forgotten
    * (shared/forms.ts), every box of repairs (shared/repair.tsx), and
    * every Cube's pairing and rooms (cubes/), and System settings' lists
-   * with what is typed in their new items' forms (admin/).
+   * with what is typed in their new items' forms (admin/) and the
+   * integrations with the readings of an approval (integrations/).
    */
   signedOut(): void;
   /** Where the page's chrome says that settings are unsaved: a section's pill, ☰'s mark joined with the log's, a menu item's disk (chrome/). */
@@ -79,5 +81,6 @@ register("signedOut", () => {
   forgetRepairs();
   cubesSignedOut();
   adminSignedOut();
+  integrationsSignedOut();
 });
 window.MassimoParts = parts as unknown as MassimoParts;
