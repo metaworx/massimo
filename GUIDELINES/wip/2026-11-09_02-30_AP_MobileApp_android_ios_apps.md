@@ -1,21 +1,20 @@
-# AP MobileApp v1.1: the Android and iOS apps
+# AP MobileApp v1.2: the Android and iOS apps
 
 ## TL;DR
 
 Roadmap items 16 and 17: an app for Android, on F-Droid and Google Play,
 and one for iOS from the same source: the web UI in a thin native shell,
 connected to a `serve` or with one embedded.
-The connect page, the Android shell and the release's jobs are on `main`;
-v1.1 adds the login by fingerprint the owner designed at the phone test.
+On `main`: the connect page, the Android shell, the release's jobs,
+the login by fingerprint and the phone test's polish;
+v1.2 adds the findings of the login's check on the owner's phone.
 
-- the token behind a switch → a key of the user's own,
-  behind the phone's fingerprint, makes a new session; the page never sees it
-- the server → `POST /api/v1/login/key`; `tokens.parent_id`:
-  a revoked key ends its sessions
-- asked → the user's choice per server: each return, each start, after a logout
-- in the app → "Enable login by fingerprint", "Login by fingerprint",
-  "Select server", also in the Cube choice
-- Push → Block 11; the phone test's findings → Block 12
+- the check of 2026-11-20 → Block 13: the sign-in card, the menus,
+  the server list's menu, sessions and default server, the certificate,
+  the app's appearance
+- a dead session at a 401 → dropped, no lockout of the address
+- Turn off → signs out and revokes the key with the session
+- decisions → D40 to D53 (the check's D38 to D51, renumbered)
 - first release → the client with the login; the core second
 
 ### Blocks
@@ -31,13 +30,16 @@ v1.1 adds the login by fingerprint the owner designed at the phone test.
 7. Local: the stand-alone mode on Android, the foreground service
 8. Login: the login by fingerprint: the server's route and a session's key,
    the bridge's calls, the Keystore key bound to the fingerprint,
-   the page's buttons, "Select server" in the Cube choice
+   the page's buttons, "Select server" in the Cube choice (done)
 9. iOS: the Swift shell, the same bridge, the App Store (item 17)
 10. Documents: `docs/app.md`, `app/README.md`, the README, the roadmap
 11. Push: UnifiedPush and the embedded FCM distributor
 12. Polish: the connect page's toasts and names,
     the self-signed notice in the app, the README's notes from the phone test,
-    Dependabot for Gradle
+    Dependabot for Gradle (done)
+13. Check: the findings of the login's check on the owner's phone:
+    the sign-in card, the menus, the server list, Turn off, the certificate,
+    the appearance
 
 ## Discussion
 
@@ -91,6 +93,13 @@ UnifiedPush.
   the sums and the attestation, the keys, the nightly app, the versionCode
   (`2026-11-17_18-27_NOTE_MobileApp_v1.0_block_4_refit.md`);
 - **D22 to D31** at this revision's gate of 2026-11-18, below.
+
+**Revision v1.2 (2026-11-20).**
+Blocks 8 and 12 are on `main` (pull requests 365, 366 and 368).
+The owner checked the login by fingerprint on the phone on 2026-11-20
+(`2026-11-20_20-05_NOTE_MobileApp_v1.1_phone_check_block_8.md`):
+it works, and the check found 24 points, two not reproduced,
+which this revision gathers as Block 13 with the decisions D40 to D53.
 
 **Revision v1.1 (2026-11-17 and 2026-11-18).**
 Blocks 2 and 3 are on `main`: the connect page with the bridge's contract,
@@ -157,17 +166,40 @@ a decision of the TL;DR gate without a number in this plan.
   every table has it, the id of the node that last changed the row,
   for the sync.
 
-**Open, for Block 8's gate:**
+**Decided at Block 8's gate and since** (2026-11-18 to 2026-11-20),
+each in its NOTE:
 
-- **D32, the stored servers in the Cube choice**
-  (the owner's thought of 2026-11-18):
-  "Select server" heads a group of the list,
-  and the stored servers are its entries.
-  A server's page then learns the names the user gave the other servers.
-  - A (recommended): their names and ids, nothing else: no address,
-    no fingerprint, no user; choosing one is the adapter's to carry out.
-  - B: the one entry "Select server", which shows the connect page;
-    a server's page learns nothing of the others.
+- **D32-B to D37-A** at Block 8's gate:
+  "Select server" alone in the Cube choice; no Recents picture of a page
+  asked at each return; one key per server; the PIN and a new fingerprint;
+  no key over plain HTTP outside the private ranges; the user manual's first
+  chapter (`2026-11-18_13-47_NOTE_MobileApp_v1.1_block_8_decisions.md`).
+- **D38-A, D39-A** at Block 12's gate: the toasts, discovery's name
+  (`2026-11-18_16-03_NOTE_MobileApp_v1.1_how_block_12_went.md`).
+- **D40 to D53** at the phone check of 2026-11-20, numbered D38 to D51 there
+  before Block 12's took D38 and D39
+  (`2026-11-20_20-05_NOTE_MobileApp_v1.1_phone_check_block_8.md`):
+  - **D40**: the fingerprint icon v2d, the outer line broken twice;
+  - **D41-A**: "this device" on the session or key in use, "its key" on its key;
+  - **D42-A**: "Enable login by fingerprint" on the first-owner form too;
+  - **D43-A**: "Open at start", one server at most, on for the first added;
+  - **D44-A**: no header while signed out; the version at the card's foot
+    and first in its ☰;
+  - **D45-A**: "Sign in with: Name | API key", "Select server" apart;
+  - **D46-A**: the server list marks where the app holds a session,
+    checked at each probe; Sign out per server and of all;
+  - **D47-A**: the fingerprint per server; an app-wide lock may come later;
+  - **D48-A**: a stronger border and shadow on every menu;
+  - **D49**, the owner's variant of A: the sign-in row starts with a
+    fingerprint button where a login is kept, which logs in at once;
+    Name stays the pane chosen;
+  - **D50-A**: a faint light glow around the menus in dark mode;
+  - **D51-B**: a server's certificate as a line in its settings and a
+    dialog with its subject, issuer, names, validity, fingerprint and
+    when it was trusted;
+  - **D52-A**: the findings as this revision's Block 13;
+  - **D53-A**: an app-wide Appearance in an App settings card, applied to the
+    list and to every server's page set to "as the system".
 
 **Names chosen here**, routine and not decisions of the owner's:
 the directories `app/core`, `app/android`, `app/ios`;
@@ -623,6 +655,43 @@ what is neither the login nor the asset path fixed in the test:
   a phone's VPN that does not allow LAN connections and so reaches no LAN server,
   and `adb reverse` stalling on one port.
 
+### The phone check's findings (Block 13)
+
+The owner's check of the login by fingerprint on 2026-11-20 passed:
+enabling it with Try again, the login, the three choices with the cover
+and the restart, the PIN, "Select server", a revoked key ending its session.
+What it found, by where it is fixed:
+
+| # | Finding | Fix |
+|---|---|---|
+| F7 | after a 401 the page keeps its dead session; its polls and tickets lock its own address out (seen twice) | the page drops the token at the first 401 and the app forgets it; what follows carries none and counts as nothing |
+| F2 | My profile does not mark what is in use | D41-A; Revoke on "this device" signs out |
+| F8 | the signed-out page shows the header | D44-A |
+| F9, F11 | the switch's label below it; too little space under the card's logo | the label right of the switch; more margin |
+| F10, F12 | "Or an API key" | D45-A, D49 |
+| F4 | no switch on the first-owner form | D42-A |
+| F13 | "Select server" only at the card's foot | also last in the card's ☰, and in the main ☰ before Sign out |
+| F14 | the open menus hardly stand out in dark mode | D48-A, D50-A, every menu |
+| F3 | the fingerprint icon's top lines run together | D40 |
+| F21, F16 | Forget all under the list | a ☰ on the Servers card: Add server…, Sign out of all, Forget all stored credentials, App settings… |
+| F22 | the Add a server card always shows | only for an empty list or from the ☰, with ✕; closed once a server is added; its search when it opens |
+| F17 | a server's settings focus its name, and the keyboard covers half the screen | the panel takes the focus |
+| F5 | no server opens at start | D43-A |
+| F15 | the list does not show where the app is signed in | D46-A |
+| F6 | Turn off sent no revoke and kept the session | sign out; revoke with the session, the key's id kept in clear; with the key after the prompt where no session is held; a failed revoke in the app's log |
+| F23 | a server's certificate is not shown | D51-B |
+| F24 | the WebView reported a light scheme while the phone was dark | D53-A, the theme's `android:isLightTheme` set for day and night |
+| F19 | a revoked key's login met the lockout | F7 |
+| F1, F18 | a changed certificate not opening; "after a logout" asking again after a restart | not reproduced: the first fell into the rig's outage |
+
+The bridge's contract becomes version 3 (`docs/app.md`):
+a server's `start` and `session` (the user of a session the app holds,
+checked), `trusted_at`; a probe's `subject`, `issuer`, `names`,
+`not_before` and `not_after` for HTTPS;
+the calls `session(id, url)`, `signOut(id, url)`, `signOutAll()`,
+`settings()` and `saveSettings(s)` on the connect page;
+on a server's page, a dead session handed to `setToken(null)`.
+
 ### Risks
 
 - gomobile is experimental by its own README; the core's surface is small,
@@ -793,70 +862,14 @@ holds the fake Cube over an hour with the screen off, and frees it when stopped.
 
 ### Block 8: Login
 
-The block's gate first: D32,
-and whether the window is marked secure while `return` covers the page.
-Two pull requests, the server's first.
-
-1. The store: migration 0025, `tokens.parent_id`, with `store.sql`,
-   the way down and `docs/store.md` as the store's rules ask;
-   `RevokeToken` of a key revokes its live sessions and their push subscriptions;
-   a session made by a key revokes that key's earlier one; tests for each.
-2. The server: `POST /api/v1/login/key` in `internal/server/login_api.go`
-   as the Analysis describes, its audit kind in `audit.go`;
-   a session's key in the token list (`users_api.go`) and under My profile;
-   tests for a key, a session as the bearer, a revoked key, a disabled user,
-   the lockout's count, a revoked key's session refused at its next request,
-   and the earlier session ended by the next; `docs/api-v1.md`,
-   `docs/api-v1-openapi.yaml` (`TestOpenAPICoversRoutes`).
-3. The contract, `docs/app.md`, version 2: the calls of the Analysis,
-   a server's `login` and `ask` in place of `biometric`.
-4. The sign-in form, `partials/login.html` and `login.js`,
-   where the bridge has `login`: `login.status()` asked when the form is drawn;
-   the switch "Enable login by fingerprint";
-   after a sign-in with it on, `login.keep`,
-   with "Try again" and "Sign in without it" where it fails;
-   the button "Login by fingerprint" with the fingerprint icon where credentials are kept;
-   "Select server".
-   The texts in six languages.
-5. The Cube choice, `src/header/Choice.tsx`, where the page runs in the app:
-   "Select server" after the Cubes and the search, as D32 is answered.
-6. The connect page: the mark and the fingerprint button on a server with
-   kept credentials; in its entry the user's name with Turn off,
-   and the choice of when the fingerprint is asked (D30-A);
-   "Forget all stored credentials" with a confirm; the switch
-   "Ask for my fingerprint or PIN" removed.
-7. The Android adapter: `LoginKey`, `LoginStore`,
-   `Biometric` asking with a crypto object,
-   the two requests over `Prober`'s connection; the three choices:
-   the cover and its prompt for `return`,
-   the session in memory alone for `return` and `start`, sealed for `logout`;
-   the old switch's servers reset; strings in six languages.
-8. Tests: the UI suite with the fake bridge for the form,
-   the choice and the list; unit tests of `LoginStore` with a fake sealer,
-   of the two requests against a fake server,
-   and of what each of the three choices keeps.
-9. `docs/ui.md` (the sign-in in the app, the Cube choice's entry),
-   `app/README.md`.
-10. The fragments, Added:
-
-    ```
-    - `POST /api/v1/login/key` makes a session from an API key; a session
-      names the key that made it, and revoking the key ends it
-      (`docs/api-v1.md`).
-    - The Android app logs in by fingerprint: a key kept behind the phone's
-      fingerprint makes a new session, asked for at each return to the
-      app, at its start or after a logout, as the user chooses
-      (`docs/app.md`).
-    ```
-
-**Verification:**
-the touched Go tests and UI test files, the Gradle tasks; on the owner's phone:
-enabling at the sign-in, a logout and the login by fingerprint,
-each of the three choices, the row's button,
-"Select server" from the Cube choice,
-Turn off revoking the key at the server,
-a key revoked under My profile ending its session at the next request,
-a newly enrolled fingerprint ending it.
+Done on 2026-11-18, pull requests 365 (the server's route and
+`tokens.parent_id`) and 368 (the bridge's version 2, the sign-in form,
+the connect page, the Android adapter), under a gate of its own (D32 to D37),
+and checked on the owner's phone on 2026-11-20.
+Its NOTEs are `2026-11-18_13-47_NOTE_MobileApp_v1.1_block_8_decisions.md`,
+`2026-11-18_16-38_NOTE_MobileApp_v1.1_how_block_8_went.md` and
+`2026-11-20_20-05_NOTE_MobileApp_v1.1_phone_check_block_8.md`;
+the check's findings are Block 13.
 
 ### Block 9: iOS
 
@@ -917,64 +930,76 @@ with the app closed.
 
 ### Block 12: Polish
 
-1. `connect.html`, `connect.js`: the toast's markup in the page and
-   `showToast` for "added", "known", "removed" and "does not answer";
-   a probe that finds the server takes its "does not answer" back;
-   a server added by its address named by the host, and by discovery's
-   name once its node is heard; a row shows an address only where it
-   differs from the name.
-2. The self-signed notice left out where the page runs in the app (`appBridge()`
-   of `app.js`): `partials/login.html` with `login.js`, `header.js`,
-   `src/header/Tls.tsx`; the warnings of a certificate near its end stay.
-3. `app/README.md`:
-   the phone test's rig, the VPN, `adb reverse`.
-4. `.github/dependabot.yml`
-   (D29-A): the `gradle` ecosystem for `app/android`,
-   grouped and scheduled as the file's other entries are.
-5. Tests: `test_connect.py` for the toasts and the names, the sign-in's
-   test with the fake bridge for the notice.
-6. The fragments, each under the heading COMMIT.md 5.2 gives it:
+Done on 2026-11-18, pull request 366, under a gate of its own (D38, D39).
+Its NOTE is `2026-11-18_16-03_NOTE_MobileApp_v1.1_how_block_12_went.md`.
 
-   ```
-   - The apps' connect page says what happened in a toast and names a
-     server once; in the app the sign-in no longer asks to compare a
-     certificate the app has pinned (`docs/app.md`).
-   - Dependabot proposes the updates of the Android app's Gradle
-     dependencies.
-   ```
+### Block 13: Check
+
+The findings of the login's check (the Analysis, "The phone check's
+findings"), with D40 to D53, in two pull requests:
+the web UI's on `claude/mobile-check-ui`, the app's on `claude/mobile-check-app`.
+
+1. The page and a dead session (F7, F19): `app.js` drops the token at the
+   first 401 and the app's with `setToken(null)`; a test that a revoked
+   session sends nothing that counts.
+2. My profile (F2, D41-A): "this device" and "its key"; Revoke on "this
+   device" is Sign out.
+3. The sign-in card (F8 to F13, D44-A, D45-A, D49, D42-A): no header while
+   signed out, the version at the card's foot and first in its ☰;
+   "Sign in with: [fingerprint] | Name | API key"; the switch's layout;
+   the margin under the logo; the switch on the first-owner form in the app;
+   "Select server" last in the card's ☰ and before Sign out in the main ☰.
+4. The menus (F14, D48-A, D50-A): border, shadow, the glow in dark mode.
+5. The icon (F3, D40), in `index.html` and `connect.html`.
+6. The connect page (F21, F22, F16, F17, D43-A, D46-A, F23, D51-B, D53-A):
+   the Servers card's ☰; Add a server on demand; the panel's focus;
+   "Open at start"; the sessions in the list, Sign out and Sign out of all;
+   the certificate's line and dialog; App settings with Appearance.
+7. The adapter (F5, F6, F15, F23, F24, D53-A): the contract's version 3;
+   the server opened at start; `session` checked with `GET /api/v1/me`;
+   `signOut` with `POST /api/v1/logout`; Turn off revoking with the session,
+   the key's id in clear in `LoginStore`, a failed revoke logged; the probe's
+   certificate details; the appearance applied to the activity's theme,
+   `android:isLightTheme` set for day and night.
+8. Tests: the UI suite for the page, the card, the menus' style, My profile
+   and the connect page with the fake bridge's version 3; unit tests of the
+   adapter's sessions, the revoke and the certificate's details.
+9. `docs/app.md`, `docs/ui.md`, `docs/user-manual.md`, `app/README.md`.
+10. The fragments, under the headings COMMIT.md 5.2 gives them.
 
 **Verification:**
-the touched UI test files in all four cases;
-`make ui` and `make ui-check` for the part's change;
-on the phone at the next test.
+the touched Go and UI test files in the four cases, `make ui-check`, the
+Gradle tasks; on the owner's phone the findings again, the default server,
+Sign out of all, the certificate's dialog and each Appearance.
 
 ## Proposed commit message
 
-The revision's registration, a commit of its own on `main`:
+The revision's registration, a commit of its own on `main`, with the
+phone check's NOTE:
 
 ```
-chore(aps): +MobileApp v1.1
+chore(aps): +MobileApp v1.2, +NOTE MobileApp v1.1, the phone check
 
-The plan gains the login by fingerprint the owner designed at the phone test, as Block 8: a key of the user's own behind the phone's fingerprint, turned into a session by a new route. A session names its key, so that revoking the key ends it, and the user chooses when the fingerprint is asked. Push becomes Block 11, the test's findings Block 12, and Blocks 2, 3 and 4 are marked done.
+The login by fingerprint passed the owner's check on the phone; its findings become Block 13, with the decisions D40 to D53, and Blocks 8 and 12 are marked done.
 
 Key changes:
-- GUIDELINES/wip/2026-11-09_02-30_AP_MobileApp_android_ios_apps.md: v1.1, rewritten for the plan as it stands; D22 to D31 decided at its gate, D32 open for Block 8's.
+- GUIDELINES/wip/2026-11-09_02-30_AP_MobileApp_android_ios_apps.md: v1.2: Block 13, the check's findings in the Analysis, D32 to D53 recorded, Blocks 8 and 12 done.
+- GUIDELINES/wip/2026-11-20_20-05_NOTE_MobileApp_v1.1_phone_check_block_8.md: the check, what passed, the findings, the decisions as numbered there and here.
 
-File-revision-v1: GUIDELINES/wip/2026-11-09_02-30_AP_MobileApp_android_ios_apps.md::v1.1::2026-11-18::TL;DR, Discussion, Analysis, Implementation Plan, Proposed commit message, Change History::the login by fingerprint as Block 8; Push as Block 11; the phone test's findings as Block 12; Blocks 2 to 4 done
-Assisted-by: claude-code:claude-fable-5-2
+File-revision-v1: GUIDELINES/wip/2026-11-09_02-30_AP_MobileApp_android_ios_apps.md::v1.2::2026-11-20::TL;DR, Discussion, Analysis, Implementation Plan, Proposed commit message, Change History::Block 13, the phone check's findings
+File-revision-v1: GUIDELINES/wip/2026-11-20_20-05_NOTE_MobileApp_v1.1_phone_check_block_8.md::v1.1::2026-11-20::All::the phone check of Block 8
+Assisted-by: claude-code:claude-opus-5-5
 ```
 
 The blocks' commits still to come:
 
 1. `feat(app): The server as app/core, bound by gomobile`
 7. `feat(app): The Android app runs the server itself`
-8. `feat(api): A session from an API key, POST /api/v1/login/key`, and
-   `feat(app): The login by fingerprint`
 9. `feat(app): The iOS app`
 10. `docs(app): The apps' documents`
 11. `feat(app): Push through UnifiedPush`
-12. `fix(app): The connect page's toasts and names, the notice left out`,
-    and `chore(ci): Dependabot reads the app's Gradle files`
+13. `fix(ui): The sign-in card, the menus and a dead session, as the phone check found`,
+    and `feat(app): The server list's menu, sessions, default server and certificate`
 
 Blocks 5 and 6 commit nothing but `app/README.md`'s sections.
 
@@ -989,3 +1014,7 @@ Blocks 5 and 6 commit nothing but `app/README.md`'s sections.
   Blocks 2, 3 and 4 marked done, D1 to D21 restated as decided;
   two slips of v1.0 corrected;
   D22 to D31 decided at its gate, D32 open for Block 8's.
+- v1.2 (2026-11-20): Blocks 8 and 12 done; the owner's check of the login
+  on the phone, its findings as Block 13 with the decisions D40 to D53
+  (D38 to D51 at the check, renumbered after Block 12's D38 and D39);
+  D32 to D39 recorded as decided.
