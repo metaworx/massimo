@@ -16,10 +16,10 @@ import (
 )
 
 // serialTests are the tests that do not run in parallel, and why: each
-// changes a package variable every client reads, or checks a time that
-// the tests beside it would stretch.
+// checks a time that the tests beside it would stretch. The network
+// configuration's waits are an option of each call (NetWaits), not a
+// package variable to swap.
 var serialTests = map[string]string{
-	"TestNetConfigRoundTrip":            "shortens the network write's waits (shortWaits)",
 	"TestWaitingSendEndsWithItsContext": "the Send returns within 1 s of its context's 50 ms",
 }
 

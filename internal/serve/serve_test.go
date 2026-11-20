@@ -367,7 +367,8 @@ func postDiscover(t *testing.T, base string) (int, []string) {
 // Config.DiscoveryListen is the discovery socket's address: held by
 // another socket, a search answers 503 however free UDP 23272 is; once
 // it is free, the search finds the fake Cube that DiscoveryTargets asks,
-// which answers to that address.
+// which answers to that address within the search's wait: 200 ms,
+// scaled, the deadline for its answer.
 func TestOpenDiscoveryListen(t *testing.T) {
 	t.Parallel()
 	noCubeEnv(t)
@@ -383,7 +384,7 @@ func TestOpenDiscoveryListen(t *testing.T) {
 	defer responder.Close()
 	inst, err := Open(context.Background(), Config{Listen: "127.0.0.1:0", Addr: startFakeCube(t), DataDir: t.TempDir(), Proxies: []string{"off"},
 		RefreshInterval: &never, DiscoverInterval: &never, DiscoveryTargets: []string{responder.Addr()}, DiscoveryListen: held.LocalAddr().String(),
-		Logger: quietLog()})
+		discoveryWait: testkit.Scale(200 * time.Millisecond), Logger: quietLog()})
 	if err != nil {
 		t.Fatal(err)
 	}

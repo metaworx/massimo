@@ -72,11 +72,12 @@ the R goes to serve as well.
 func runNetconfig(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	return netconfig(ctx, args, os.Stdout, os.Stderr, os.Stdin)
+	return netconfig(ctx, args, cubelan.NetWaits{}, os.Stdout, os.Stderr, os.Stdin)
 }
 
-// netconfig is runNetconfig with its streams given, for tests.
-func netconfig(ctx context.Context, args []string, stdout, stderr io.Writer, stdin io.Reader) error {
+// netconfig is runNetconfig with the waits of the reads and the write
+// (the zero value: their defaults) and its streams given, for tests.
+func netconfig(ctx context.Context, args []string, waits cubelan.NetWaits, stdout, stderr io.Writer, stdin io.Reader) error {
 	fs := flag.NewFlagSet("netconfig", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	addr := fs.String("addr", "", "the Cube's address, host[:port] (port 23272); with -broadcast the target to send to (default 255.255.255.255)")
@@ -107,7 +108,7 @@ func netconfig(ctx context.Context, args []string, stdout, stderr io.Writer, std
 		if write || *encryption || *gateway != "" || *netmask != "" || *dns != "" {
 			return errors.New("netconfig: -reboot writes nothing; leave out -static, -dhcp and their flags")
 		}
-		return netconfigReboot(ctx, *addr, *broadcast, *dryRun, *yes, *asJSON, stdout, stderr, stdin)
+		return netconfigReboot(ctx, waits, *addr, *broadcast, *dryRun, *yes, *asJSON, stdout, stderr, stdin)
 	}
 	switch {
 	case *static != "" && *dhcp:
@@ -145,7 +146,7 @@ func netconfig(ctx context.Context, args []string, stdout, stderr io.Writer, std
 		if dest == "" {
 			dest = net.IPv4bcast.String()
 		}
-		if st, err := cubelan.FindNetConfig(ctx, dest, serial); err == nil {
+		if st, err := cubelan.FindNetConfig(ctx, dest, serial, waits); err == nil {
 			cur, inUse = &st.Stored, st.Current
 			fmt.Fprintf(info, "found    cube %s answered the broadcast read from %s; its stored addresses and encryption flag are kept\n", serial, st.From.IP)
 		} else if errors.Is(err, cubelan.ErrNoReply) {
@@ -155,7 +156,7 @@ func netconfig(ctx context.Context, args []string, stdout, stderr io.Writer, std
 			return fmt.Errorf("netconfig: %w", err)
 		}
 	} else {
-		st, err := cubelan.QueryNetConfig(ctx, *addr)
+		st, err := cubelan.QueryNetConfig(ctx, *addr, waits)
 		if err != nil {
 			return fmt.Errorf("netconfig: %w (a Cube stranded on a wrong address: netconfig -sn <serial> -broadcast -dhcp)", err)
 		}
@@ -215,7 +216,7 @@ func netconfig(ctx context.Context, args []string, stdout, stderr io.Writer, std
 		}
 	}
 
-	res, err := cubelan.SetNetConfig(ctx, dest, serial, next)
+	res, err := cubelan.SetNetConfig(ctx, dest, serial, next, waits)
 	fmt.Fprintf(info, "write    %s\n", statusText(res.Status))
 	if res.RebootSent {
 		fmt.Fprintf(info, "restart  sent R: %s\n", statusText(res.RebootStatus))
@@ -378,8 +379,9 @@ func printNetState(w io.Writer, st cubelan.NetState, asJSON bool) error {
 }
 
 // netconfigReboot is netconfig -reboot: R to the Cube at addr, or as a
-// broadcast carrying the serial, after a warning and a question.
-func netconfigReboot(ctx context.Context, addr string, broadcast, dryRun, yes, asJSON bool, stdout, stderr io.Writer, stdin io.Reader) error {
+// broadcast carrying the serial, after a warning and a question; waits
+// are the read's of the serial.
+func netconfigReboot(ctx context.Context, waits cubelan.NetWaits, addr string, broadcast, dryRun, yes, asJSON bool, stdout, stderr io.Writer, stdin io.Reader) error {
 	info := stdout
 	if asJSON {
 		info = stderr
@@ -393,7 +395,7 @@ func netconfigReboot(ctx context.Context, addr string, broadcast, dryRun, yes, a
 	case !broadcast && dest == "":
 		return errors.New("netconfig: -addr is required (massimo discover lists the Cubes)")
 	case !broadcast && !snExplicit:
-		st, err := cubelan.QueryNetConfig(ctx, dest)
+		st, err := cubelan.QueryNetConfig(ctx, dest, waits)
 		if err != nil {
 			return fmt.Errorf("netconfig: %w (on the box of a running serve the Cube answers serve: give its serial with -sn)", err)
 		}

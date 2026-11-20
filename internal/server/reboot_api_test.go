@@ -201,6 +201,7 @@ func TestRebootDelayAndTakeBack(t *testing.T) {
 // is reported, and the next one may be asked for. Switching the reboot
 // off takes back one that waits.
 func TestRebootBlocked(t *testing.T) {
+	t.Parallel()
 	path := "/api/v1/reboot"
 	refused := func(o RebootOptions, update UpdateOptions, want string) {
 		t.Helper()
@@ -237,6 +238,7 @@ func TestRebootBlocked(t *testing.T) {
 	failing := newRebootFake(errors.New("the reboot helper did not take the request within 30s"))
 	opts := storeOptions(t, t.TempDir(), "secret")
 	opts.Reboot = rebootOptions(failing)
+	opts.rebootStuck = 50 * time.Millisecond // a taken reboot counts as failed after it
 	r := startServer(t, withOptions(opts))
 	ts, s := r.ts, r.s
 	if code, text := callAPI(t, ts, "POST", path, "secret", `{"delay": 0}`); code != 202 {
@@ -253,10 +255,6 @@ func TestRebootBlocked(t *testing.T) {
 	}
 
 	// A reboot the helper took but the computer did not carry out.
-	testkit.Swapping(t)
-	stuck := rebootStuck
-	t.Cleanup(func() { rebootStuck = stuck })
-	rebootStuck = 50 * time.Millisecond
 	failing.err = nil
 	if code, text := callAPI(t, ts, "POST", path, "secret", `{"delay": 0}`); code != 202 {
 		t.Fatalf("POST: %d %s", code, text)
