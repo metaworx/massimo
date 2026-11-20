@@ -22,9 +22,15 @@ class ProberTest {
     private val noSystemTrust = Prober.SystemTrust { _, _, _ -> throw CertificateException("not trusted") }
     private val prober = Prober("Massimo/test", texts, noSystemTrust)
 
-    private val cert: X509Certificate = javaClass.getResourceAsStream("/selfsigned.pem")!!.use {
+    private fun pem(name: String): X509Certificate = javaClass.getResourceAsStream(name)!!.use {
         CertificateFactory.getInstance("X.509").generateCertificate(it) as X509Certificate
     }
+
+    private val cert = pem("/selfsigned.pem")
+
+    // A certificate made for this test, its key thrown away: a subject of
+    // two parts, two DNS names and a private address among its names.
+    private val withNames = pem("/san.pem")
 
     @Test
     fun healthzOfAnAddress() {
@@ -68,6 +74,30 @@ class ProberTest {
 
         val down = ProbeResult("https://192.168.1.20/", ok = false, tls = Tls(fp, false, true), error = "down").toJson()
         assertEquals("down", down.get("error"))
+        assertFalse("no details where the handshake read none", down.has("subject"))
+
+        val details = CertDetails("CN=massimo", "CN=massimo", listOf("massimo.local", "192.168.1.20"), "2026-11-01T00:00:00Z", "2027-11-01T00:00:00Z")
+        val shown = ProbeResult("https://192.168.1.20/", ok = true, node = "n", tls = Tls(fp, true, true, details)).toJson()
+        assertEquals("CN=massimo", shown.get("subject"))
+        assertEquals("CN=massimo", shown.get("issuer"))
+        assertEquals(listOf("massimo.local", "192.168.1.20"), shown.getJSONArray("names").let { a -> List(a.length()) { a.getString(it) } })
+        assertEquals("2026-11-01T00:00:00Z", shown.get("not_before"))
+        assertEquals("2027-11-01T00:00:00Z", shown.get("not_after"))
+    }
+
+    @Test
+    fun theCertificatesDetails() {
+        val d = CertDetails.of(withNames)
+        assertEquals("CN=massimo.example.net,O=Massimo Test", d.subject)
+        assertEquals("its own issuer", d.subject, d.issuer)
+        assertEquals(listOf("massimo.example.net", "massimo.local", "192.168.1.20"), d.names)
+        assertEquals("2026-11-20T20:55:53Z", d.notBefore)
+        assertEquals("2036-11-17T20:55:53Z", d.notAfter)
+
+        val bare = CertDetails.of(cert)
+        assertEquals("CN=massimo-test", bare.subject)
+        assertEquals("a certificate without names has none", emptyList<String>(), bare.names)
+        assertEquals("2126-10-16T03:39:06Z", bare.notAfter)
     }
 
     @Test
@@ -75,7 +105,7 @@ class ProberTest {
         val fp = Fingerprint.of(cert.encoded)
         val tm = PinningTrustManager(noSystemTrust, "192.168.1.20", fp)
         tm.checkServerTrusted(arrayOf(cert), "ECDHE_ECDSA")
-        assertEquals(Tls(fp, selfSigned = true, trusted = true), tm.seen())
+        assertEquals(Tls(fp, selfSigned = true, trusted = true, cert = CertDetails.of(cert)), tm.seen())
     }
 
     @Test
@@ -88,7 +118,7 @@ class ProberTest {
         } catch (e: CertificateException) {
             // refused in the handshake
         }
-        assertEquals(Tls(Fingerprint.of(cert.encoded), selfSigned = true, trusted = false), tm.seen())
+        assertEquals("refused, and still reported with its details", Tls(Fingerprint.of(cert.encoded), selfSigned = true, trusted = false, cert = CertDetails.of(cert)), tm.seen())
     }
 
     @Test

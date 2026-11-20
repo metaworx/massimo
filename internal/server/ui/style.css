@@ -1897,7 +1897,13 @@ massimo-week-program { display: contents; }
 .server-where { flex: 1 1 8em; min-width: 0; overflow-wrap: anywhere; }
 .server-badges { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
 .icon-btn.server-cog, .icon-btn.server-login { flex: none; height: auto; min-height: 36px; }
-.server-login-kept { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; }
+/* a server's lines in its settings: the login kept, the session, the
+   certificate, each with its button */
+.server-login-kept, .server-fact { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; overflow-wrap: anywhere; }
+/* the list's ☰ in the card's head, its items dropping down from it */
+.menu.nav-menu.servers-menu { position: relative; flex: none; }
+.servers-ask:not(:empty) { margin-top: 10px; }
+.cert-value { overflow-wrap: anywhere; }
 .server-row > .server-panel { flex-basis: 100%; }
 .server-panel .field { margin-bottom: 12px; }
 .found-server { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }

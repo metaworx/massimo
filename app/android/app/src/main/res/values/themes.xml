@@ -1,9 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <!-- AppCompat, since androidx.biometric's dialogs before Android 9
-         want it; DayNight, so that the WebView's prefers-color-scheme
-         follows the phone. -->
+         want it, and the app's appearance is AppCompat's night mode
+         (App settings, MainActivity); DayNight, with values-night's
+         twin. android:isLightTheme is what the WebView's
+         prefers-color-scheme follows (Android 10 and later), set here
+         for day and there for night: the DayNight theme alone left the
+         WebView light on a dark phone (AP MobileApp, F24). -->
     <style name="Theme.Massimo" parent="Theme.AppCompat.DayNight.NoActionBar">
         <item name="android:windowBackground">@color/background</item>
+        <item name="android:isLightTheme" tools:targetApi="29">true</item>
     </style>
 </resources>

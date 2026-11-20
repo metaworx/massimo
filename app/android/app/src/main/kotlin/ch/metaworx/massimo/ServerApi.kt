@@ -15,11 +15,12 @@ import javax.net.ssl.HttpsURLConnection
 import javax.net.ssl.SSLContext
 
 /**
- * ServerApi makes the adapter's own requests of the login by fingerprint
- * (docs/app.md) at a server's address [base], a URL ending in `/`, over a
- * connection that trusts what the probe trusts: a certificate the system
- * trusts, or the server's pinned fingerprint. The page never sees what they
- * carry. No key or token is ever written to a log.
+ * ServerApi makes the adapter's own requests (docs/app.md) at a server's
+ * address [base], a URL ending in `/`, over a connection that trusts what
+ * the probe trusts: a certificate the system trusts, or the server's pinned
+ * fingerprint: the login by fingerprint's, and the check and the end of a
+ * session the app holds. The page never sees what they carry. No key or
+ * token is ever written to a log.
  */
 class ServerApi(
     private val userAgent: String,
@@ -58,6 +59,11 @@ class ServerApi(
         val token = ServerStore.str(o, "token")
         if (token.isEmpty()) throw Failed(HttpURLConnection.HTTP_OK, "no session in the answer")
         return token
+    }
+
+    /** logout ends [session] (`POST /api/v1/logout`); [Refused] where the server had ended it already. */
+    fun logout(base: String, fp: String, session: String) {
+        request("POST", base, "api/v1/logout", fp, session, JSONObject(), HttpURLConnection.HTTP_OK)
     }
 
     /** revoke revokes the key [id] of [user]'s, with [bearer], the key itself or a session of the user's. */

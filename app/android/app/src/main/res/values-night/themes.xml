@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- The night twin of values/themes.xml: the WebView's
+         prefers-color-scheme dark (AP MobileApp, F24). -->
+    <style name="Theme.Massimo" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:windowBackground">@color/background</item>
+        <item name="android:isLightTheme" tools:targetApi="29">false</item>
+    </style>
+</resources>

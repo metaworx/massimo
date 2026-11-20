@@ -45,7 +45,10 @@ class OriginsTest {
 
     @Test
     fun whoMayCallWhat() {
-        for (call in listOf("servers", "save", "remove", "discover", "probe", "trust", "open", "forget", "forgetAll")) {
+        val connect = listOf("servers", "save", "remove", "discover", "probe", "trust", "open", "forget", "forgetAll")
+        // contract version 3: the sessions the app holds, and its settings
+        val v3 = listOf("session", "signOut", "signOutAll", "settings", "saveSettings")
+        for (call in connect + v3) {
             assertTrue(call, Origins.allowed(Caller.CONNECT, call))
             assertFalse(call, Origins.allowed(Caller.SERVER, call))
         }

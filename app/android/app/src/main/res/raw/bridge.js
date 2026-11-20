@@ -2,7 +2,7 @@
 // Copyright (C) 2026 The Massimo Authors
 
 // The Massimo app's bridge, window.massimo (docs/app.md, contract
-// version 2). The Android shell injects this script at the document's
+// version 3). The Android shell injects this script at the document's
 // start into the connect page and into the page of the server it opened,
 // and calls it with the page's kind, "connect" or "server". The calls go as messages over the
 // channel the shell adds, window.massimoChannel, which answers each one;
@@ -60,7 +60,7 @@
     });
   }
 
-  const api = { version: 2 };
+  const api = { version: 3 };
   if (kind === "connect") {
     api.servers = () => call("servers");
     api.save = (server) => call("save", server);
@@ -71,6 +71,11 @@
     api.open = (id, url, opts) => call("open", id, url, opts || null);
     api.forget = (id, url) => call("forget", id, url || "");
     api.forgetAll = () => call("forgetAll");
+    api.session = (id, url) => call("session", id, url || "");
+    api.signOut = (id, url) => call("signOut", id, url || "");
+    api.signOutAll = () => call("signOutAll");
+    api.settings = () => call("settings");
+    api.saveSettings = (s) => call("saveSettings", s || {});
   } else {
     api.token = () => call("token");
     api.setToken = (t) => call("setToken", t === undefined ? null : t);
