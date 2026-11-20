@@ -47,7 +47,7 @@ TWIN = """(rid) => {
   const twin = JSON.parse(JSON.stringify(r.devices.find(isThermostat)));
   Object.assign(twin, { rf_address: "0a0fff", serial: "MEQ0000999", name: "Twin" });
   r.devices.push(twin);
-  rerenderRoom(r);
+  MassimoParts.rooms.data(r.id);
 }"""
 
 

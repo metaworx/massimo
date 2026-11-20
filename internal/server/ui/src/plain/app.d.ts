@@ -7,7 +7,8 @@
  * The globals of the plain script ui/app.js that the parts call: the
  * page's state, the API, the reload, the loads and the poll, the Cube
  * chosen, the ages of values and the times, a Cube's link and clock, a
- * device's path, detail and name, a temperature, the app's bridge.
+ * device's path, detail and name, a temperature, the app's bridge, the
+ * explanations shown.
  */
 
 import type { Cube, Device, DeviceDetail, FoundCube, Room } from "../api";
@@ -50,12 +51,14 @@ declare global {
   function $(id: string): HTMLElement | null;
   /** The Massimo app's bridge on the page it opened (docs/app.md), null in a browser; connect, from version 2, shows the app's servers. */
   function appBridge(): { connect?: () => Promise<null> } | null;
-  /** A request to the API with the page's token; the answer's JSON, or an error with the server's message. */
-  function api<T = unknown>(method: string, path: string, body?: unknown): Promise<T>;
+  /** A request to the API with the page's token, headers added to its own; the answer's JSON, or an error with the server's message (and its status). */
+  function api<T = unknown>(method: string, path: string, body?: unknown, headers?: Record<string, string>): Promise<T>;
   /** Loads the Cubes, the rooms and the log's alerts again. */
   function refresh(): Promise<void>;
   /** Loads the Cubes' list into state.cubes and state.found and draws what shows them. */
   function loadCubes(): Promise<void>;
+  /** Loads the chosen Cube's rooms and its devices in no room, and draws them. */
+  function loadRooms(): Promise<void>;
   /** Asks the server for the current state now, the rooms too with rooms. */
   function poll(rooms?: boolean): Promise<void>;
   /** Chooses the Cube the page shows, by its serial, and loads it. */
@@ -96,6 +99,8 @@ declare global {
   function deviceDetail(d: Device): Promise<DeviceDetail>;
   /** A temperature with one decimal and its unit, " °C" unless given; "–" when unknown. */
   function fmtTemp(v: number | undefined | null, unit?: string): string;
+  /** The keys of the settings' explanations shown (helpParts), the plain help buttons' and the parts'. */
+  const helpOpen: Set<string>;
   /** The default end of a temporary setting, tomorrow at six, as a datetime-local value. */
   function tomorrowMorning(): string;
 }

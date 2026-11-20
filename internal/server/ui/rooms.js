@@ -76,9 +76,9 @@ function received(d, field) {
 // plain actions set as before and the tile follows. open is its device
 // list, pending and timer a stepper value waiting to be sent, vacation
 // and confirm the holiday form and the deletion's question, config the
-// configuration (config.js), deferred a state event waiting for the focus
-// to leave the configuration, sending the write running (tileWrite), hold
-// the Hold switch, result the result line (showTileResult).
+// configuration open (ui/src/rooms/Config.tsx, which keeps the rest),
+// sending the write running (tileWrite), hold the Hold switch, result the
+// result line (showTileResult).
 function roomUI(room) {
   if (!state.ui[room.id]) state.ui[room.id] = MassimoParts.rooms.ui();
   return state.ui[room.id];
@@ -107,8 +107,7 @@ function fmtUntil(text) {
 
 // renderRooms draws the rooms as the page has them now: every tile and
 // every row of the devices without a room follows in place
-// (MassimoParts.rooms.render), a tile's configuration filled again unless
-// the focus is in it, where that waits for the focus to leave; the House
+// (MassimoParts.rooms.render), a tile's configuration with it; the House
 // tile and the devices without a room are shown where they have
 // something.
 function renderRooms() {
@@ -126,25 +125,9 @@ function roomsLoaded() {
   MassimoParts.rooms.loaded();
 }
 
-// rerenderRoom draws a room's tile again after a change of the room or of
-// its configuration, and fills its configuration (config.js) again at
-// once (MassimoParts.rooms.room).
-function rerenderRoom(room) {
-  MassimoParts.rooms.room(room.id);
-}
-
-// configFocused reports whether the focus is in a room tile's
-// configuration, which a state event then does not fill again until the
-// focus has left it (ui/src/rooms/store.ts changed).
-function configFocused(room) {
-  const area = document.querySelector('.room[data-id="' + room.id + '"] .config-area');
-  return !!(area && area.contains(document.activeElement));
-}
-
 // updateDevice applies a state event to the room or the unlisted list.
-// The room's tile follows in place (MassimoParts.rooms.data); its
-// configuration is not filled again under the user's typing: the state is
-// taken, and the configuration filled once the focus leaves it.
+// The room's tile follows in place (MassimoParts.rooms.data), its
+// configuration with it, with the focus in it or not.
 function updateDevice(d) {
   if (d.virtual) {
     const r = state.rooms.find((x) => x.id === d.room_id);

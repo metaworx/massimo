@@ -194,11 +194,11 @@ def test_copy_send_is_off_until_a_room_is_ticked(page, case):
     open_tab(tile, "copy")
     send = tile.locator(".config-body form button[type=submit]")
     assert send.is_disabled(), "Send is off with no room ticked"
-    room = tile.locator(".copy-section").first.locator(".copy-list .switch").first
+    room = tile.locator(".choices").first.locator(".choices-list .switch").first
     room.wait_for()
     room.click()
     assert send.is_enabled(), "a room ticked turns Send on"
-    tile.locator(".copy-section").first.locator(".copy-list .switch").first.click()
+    tile.locator(".choices").first.locator(".choices-list .switch").first.click()
     assert send.is_disabled(), "the room unticked turns Send off"
     tile.locator(".config-tabs .close").click()
 
@@ -208,9 +208,9 @@ def test_house_send_turns_and_needs_a_room(page, case):
     turns, and a second click sends nothing."""
     page.locator("#house-auto").click()
     send = page.locator("#house-panel button[type=submit]")
-    page.locator("#house-all").uncheck()
+    page.locator("#house-rooms .check-all input").uncheck()
     assert send.is_disabled(), "Send is off with no room ticked"
-    page.locator("#house-all").check()
+    page.locator("#house-rooms .check-all input").check()
     assert send.is_enabled(), "All rooms turns Send on"
     held, sent = [], []
     hold(page, "**/rooms/*/setpoint", "PUT", held, sent)

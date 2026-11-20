@@ -13,6 +13,11 @@ with the focus in it. What is typed goes with the page from System
 settings to Cube settings and back, and is forgotten when the Cube is no
 longer served.
 
+A room's configuration (Block 4): each tab is a form of its own, kept
+when the tab or the configuration closes, its disk in the tile's pill
+naming the tab, which a click opens from any page; Cancel resets and
+closes.
+
 Leaving the page (Block 3): while a form has changes, also one still
 being typed in, an attempt to close or reload the page asks with the
 browser's prompt; staying, the page's dialog lists the forms, each
@@ -759,6 +764,343 @@ class Prompts(list):
     """The types of the browser's prompts on leaving the page, in order;
     accept says how the next is answered."""
     accept = False
+
+
+# A room's configuration (Block 4): each tab a form of its own, under the
+# room's key, kept when the tab or the configuration closes.
+
+CFG_UNSAVED = {"en": "{room}, {tab}: not saved", "de": "{room}, {tab}: nicht gespeichert"}
+CFG_FAILED = {"en": "{room}, {tab}: saving failed", "de": "{room}, {tab}: Speichern fehlgeschlagen"}
+CFG_PATH = "**/api/v1/cubes/*/rooms/*/config"
+
+
+def cfg_room(page):
+    """The first room with a thermostat: {id, name}."""
+    return page.evaluate("(() => { const r = state.rooms.find(roomThermostat); return {id: r.id, name: r.name}; })()")
+
+
+def cfg_tab(page, room, tab):
+    """The room's configuration open on tab; its first form."""
+    tile = page.locator(at(room))
+    if tile.locator(".config-body").count() == 0:
+        tile.locator(".tile-cog").click()
+    tile.locator(".config-tabs [role=tab][data-tab=%s]" % tab).click()
+    form = tile.locator(".config-body form").first
+    form.wait_for(state="visible")
+    return form
+
+
+def cfg_close(page, room):
+    page.locator(at(room, ".config-tabs .close")).click()
+
+
+def cfg_shown(page, room):
+    """The tab the room's configuration shows, None while it is closed."""
+    tab = page.locator(at(room, ".config-tabs [role=tab][aria-selected=true]"))
+    return tab.get_attribute("data-tab") if tab.count() else None
+
+
+def tab_name(page, tab):
+    return page.evaluate("(k) => t(k)", "cfg.tab." + tab)
+
+
+def other_temp(value):
+    """A temperature half a degree from value, within the thermostats' range."""
+    v = float(value)
+    return "%g" % (v + 0.5 if v < 30 else v - 0.5)
+
+
+def test_config_tab_kept_and_the_disk_opens_it(page, case):
+    """A tab of a room's configuration: Save off and plain while clean,
+    Reset off; changed, then unsaved once the focus left, with the disk in
+    the tile's pill naming the room and the tab; what is typed stays on
+    another tab and back, and when the configuration closes and opens
+    again, on the tab it was on; from another page the disk under the
+    room's Cube opens the tab with the focus in its form; Cancel resets
+    and closes."""
+    room = cfg_room(page)
+    form = cfg_tab(page, room, "temps")
+    comfort = form.locator("input[name=comfort_temp]")
+    stored = comfort.input_value()
+    other = other_temp(stored)
+    want = CFG_UNSAVED[case.lang].format(room=room["name"], tab=tab_name(page, "temps"))
+    assert save_state(form) == [True, False, False, ""], "clean: off, plain, no sign"
+    assert form.locator(".form-reset").is_disabled(), "Reset off while clean"
+    comfort.fill(other)
+    wait_save(page, form, [False, True, False, ""], "changed")
+    assert tile_disk(page, room).count() == 0, "no disk while the user is in the form"
+    leave_tile(page, room)
+    wait_save(page, form, [False, True, False, "warn"], "left")
+    disk = tile_disk(page, room)
+    assert disk.count() == 1 and disk.text_content().strip() == want, f"the disk in the tile's pill: {disk.all_text_contents()}"
+    cfg_tab(page, room, "room")
+    form = cfg_tab(page, room, "temps")
+    assert form.locator("input[name=comfort_temp]").input_value() == other, "kept on another tab and back"
+    cfg_close(page, room)
+    assert cfg_shown(page, room) is None, "closed"
+    assert tile_disk(page, room).count() == 1, "the disk stays while the configuration is closed"
+    page.locator(at(room, ".tile-cog")).click()
+    page.locator(at(room, ".config-body form")).first.wait_for(state="visible")
+    assert cfg_shown(page, room) == "temps", "opened again on the tab it was on"
+    form = page.locator(at(room, ".config-body form")).first
+    assert form.locator("input[name=comfort_temp]").input_value() == other, "with what was typed"
+    assert save_state(form)[3] == "warn", "still unsaved"
+    cfg_close(page, room)
+    show_view(page, "system")
+    page.locator("#cube-problems .problems-sum").click()
+    disk = page.locator("#cube-problems .problems-list .problem-action", has_text=want)
+    assert disk.count() == 1, f"the disk under the room's Cube: {item(page, '#cube-problems').all_text_contents()}"
+    disk.click()
+    page.locator("#rooms").wait_for(state="visible")
+    sel = json.dumps(at(room, ".config-body form input[name=comfort_temp]"))
+    assert wait_until(page, "document.activeElement === document.querySelector(%s)" % sel, 5), "the tab opened, the focus in its form"
+    form = page.locator(at(room, ".config-body form")).first
+    assert form.locator("input[name=comfort_temp]").input_value() == other, "with what was typed"
+    form.locator(".form-cancel").click()
+    assert cfg_shown(page, room) is None, "Cancel closes"
+    assert tile_disk(page, room).count() == 0, "and leaves no disk"
+    form = cfg_tab(page, room, "temps")
+    assert form.locator("input[name=comfort_temp]").input_value() == stored, "Cancel took the stored value"
+    assert save_state(form) == [True, False, False, ""], "clean"
+    cfg_close(page, room)
+
+
+def test_config_tab_saved_and_failed(page, case, watch):
+    """A tab's save sends the field changed, turns, then shows the check,
+    the field as the server has it now; one not reached turns Save and the
+    tile's disk red, and Reset takes the stored value and clears it."""
+    room = cfg_room(page)
+    form = cfg_tab(page, room, "temps")
+    comfort = form.locator("input[name=comfort_temp]")
+    stored = comfort.input_value()
+    other = other_temp(stored)
+    held, sent = [], []
+    hold(page, CFG_PATH, "PUT", held, sent)
+    try:
+        comfort.fill(other)
+        form.locator("button[type=submit]").click()
+        assert wait_held(page, held), "the PUT is sent"
+        assert save_state(form)[:3] == [True, True, True], "saving: off and turning"
+        assert sent == [{"comfort_temp": float(other)}], f"the field changed alone: {sent}"
+        for route in held:
+            route.fulfill(status=200, content_type="application/json", body='{"ok": true, "devices": []}')
+        held.clear()
+        wait_save(page, form, [True, False, False, "ok"], "saved")
+        assert comfort.input_value() == other, "the field as the server has it now"
+        assert tile_disk(page, room).count() == 0, "no disk once saved"
+    finally:
+        page.unroute(CFG_PATH)
+    watch.expected.append(("/config", "ERR_FAILED"))
+    page.route(CFG_PATH, lambda route: route.abort() if route.request.method == "PUT" else route.continue_())
+    try:
+        comfort.fill(stored)
+        form.locator("button[type=submit]").click()
+        wait_save(page, form, [False, True, False, "bad"], "failed")
+        leave_tile(page, room)
+        disk = tile_disk(page, room)
+        want = CFG_FAILED[case.lang].format(room=room["name"], tab=tab_name(page, "temps"))
+        assert disk.count() == 1 and disk.text_content().strip() == want, f"the disk says it: {disk.all_text_contents()}"
+        assert disk.locator(".flag.bad").count() == 1, "red"
+        form.locator(".form-reset").click()
+        wait_save(page, form, [True, False, False, ""], "reset")
+        assert comfort.input_value() == other, "Reset takes the value stored"
+        assert tile_disk(page, room).count() == 0, "no disk after Reset"
+    finally:
+        page.unroute(CFG_PATH)
+    cfg_close(page, room)
+
+
+def test_config_programme_kept_and_cancelled(page, case):
+    """The week programme's edit stays when the configuration closes and
+    opens again, the day marked changed, with the disk in the tile's pill;
+    its Cancel puts every day back and closes."""
+    room = cfg_room(page)
+    form = cfg_tab(page, room, "program")
+    temp = form.locator(".prog-point input[type=number]").first
+    was = temp.input_value()
+    temp.fill(other_temp(was))
+    temp.press("Tab")
+    assert wait_until(page, "!!document.querySelector(%s)" % json.dumps(at(room, ".prog-days .day.dirty")), 5), "a day changed"
+    cfg_close(page, room)
+    want = CFG_UNSAVED[case.lang].format(room=room["name"], tab=tab_name(page, "program"))
+    disk = tile_disk(page, room)
+    disk.first.wait_for(state="attached", timeout=5000)  # the form taken away is unsaved at its next drawing
+    assert disk.count() == 1 and disk.text_content().strip() == want, f"the disk in the tile's pill: {disk.all_text_contents()}"
+    page.locator(at(room, ".tile-cog")).click()
+    page.locator(at(room, ".prog-days")).wait_for(state="visible")
+    assert cfg_shown(page, room) == "program", "opened again on the programme"
+    assert page.locator(at(room, ".prog-days .day.dirty")).count() > 0, "the day still marked changed"
+    assert page.locator(at(room, ".prog-point input[type=number]")).first.input_value() == other_temp(was), "the edit kept"
+    page.locator(at(room, ".config-body form .form-cancel")).click()
+    assert cfg_shown(page, room) is None, "Cancel closes"
+    assert tile_disk(page, room).count() == 0, "and leaves no disk"
+    cfg_tab(page, room, "program")
+    assert page.locator(at(room, ".prog-days .day.dirty")).count() == 0, "every day back"
+    cfg_close(page, room)
+
+
+def test_config_discarded_save_stays_failed(page, case):
+    """A write the Cube discarded on a device is a failed save: Save shows
+    the cross, the field keeps what was typed, the tile's disk is red; Reset
+    takes the value stored before, which the write did not change."""
+    room = cfg_room(page)
+    form = cfg_tab(page, room, "temps")
+    comfort = form.locator("input[name=comfort_temp]")
+    stored = comfort.input_value()
+    other = other_temp(stored)
+    sent = []
+
+    def discard(route):
+        if route.request.method != "PUT":
+            route.continue_()
+            return
+        sent.append(route.request.post_data_json)
+        route.fulfill(status=200, content_type="application/json",
+                      body=json.dumps({"ok": False, "devices": [{"rf_address": "0a0101", "discarded": True}]}))
+
+    page.route(CFG_PATH, discard)
+    try:
+        comfort.fill(other)
+        form.locator("button[type=submit]").click()
+        wait_save(page, form, [False, True, False, "bad"], "discarded")
+        assert sent == [{"comfort_temp": float(other)}], f"the field sent: {sent}"
+        assert comfort.input_value() == other, "the draft kept"
+        leave_tile(page, room)
+        wait_save(page, form, [False, True, False, "bad"], "still failed once left")
+        disk = tile_disk(page, room)
+        want = CFG_FAILED[case.lang].format(room=room["name"], tab=tab_name(page, "temps"))
+        assert disk.count() == 1 and disk.text_content().strip() == want, f"the disk says it: {disk.all_text_contents()}"
+        assert disk.locator(".flag.bad").count() == 1, "red"
+        form.locator(".form-reset").click()
+        wait_save(page, form, [True, False, False, ""], "reset")
+        assert comfort.input_value() == stored, "Reset takes the value stored before"
+    finally:
+        page.unroute(CFG_PATH)
+    cfg_close(page, room)
+
+
+def test_config_copy_takes_the_programme_sent(page, case):
+    """The programme edited, the configuration closed and opened again,
+    then sent: a copy with the week programme copies the days sent, not the
+    programme loaded at the opening. A copy that went through clears the
+    rooms chosen and keeps what is copied. Nothing reaches the fake Cube:
+    every write is answered by a route."""
+    room = cfg_room(page)
+    target = page.evaluate("(id) => { const r = state.rooms.find((x) => x.id !== id && roomThermostat(x)); return r ? {id: r.id, name: r.name} : null; }",
+                           room["id"])
+    assert target, "the fixture has a second room with a thermostat"
+    form = cfg_tab(page, room, "program")
+    temp = form.locator(".prog-point input[type=number]").first
+    new = other_temp(temp.input_value())
+    temp.fill(new)
+    temp.press("Tab")
+    assert wait_until(page, "!!document.querySelector(%s)" % json.dumps(at(room, ".prog-days .day.dirty")), 5), "a day changed"
+    cfg_close(page, room)
+    page.locator(at(room, ".tile-cog")).click()
+    page.locator(at(room, ".prog-days .day.dirty")).first.wait_for(state="attached")
+    sent = []
+
+    def answer(route):
+        if route.request.method != "PUT":
+            route.continue_()
+            return
+        sent.append((route.request.url, route.request.post_data_json))
+        body = {"etag": "psent"} if route.request.url.endswith("/program") else {"ok": True, "devices": []}
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
+
+    page.route("**/api/v1/cubes/*/rooms/*/*", answer)
+    try:
+        page.locator(at(room, ".config-body form button[type=submit]")).first.click()
+        assert wait_until(page, "!document.querySelector(%s)" % json.dumps(at(room, ".prog-days .day.dirty")), 5), "the days sent"
+        assert len(sent) == 1 and sent[0][0].endswith("/rooms/%d/program" % room["id"]), f"the programme sent: {sent}"
+        days = sent[0][1]
+        cfg_tab(page, room, "copy")
+        choices = page.locator(at(room, ".config-body .choices"))
+        choices.first.locator(".switch", has_text=target["name"]).click()
+        program = choices.nth(1).locator(".switch").nth(1)
+        program.click()
+        assert program.locator("input").is_checked(), "the week programme ticked"
+        copied = "/rooms/%d/program" % target["id"]
+        submit = json.dumps(at(room, ".config-body form button[type=submit]"))
+        with page.expect_request(lambda r: r.method == "PUT" and r.url.endswith(copied)):
+            page.locator(at(room, ".config-body form button[type=submit]")).click()
+        assert wait_until(page, "!document.querySelector(%s).classList.contains('busy')" % submit, 5), "the copy done"
+        bodies = [b for (u, b) in sent if u.endswith(copied)]
+        assert len(bodies) == 1, f"the programme copied: {[u for (u, _) in sent]}"
+        for day, points in days.items():
+            assert bodies[0][day] == points, f"{day}: the days sent are copied, not the programme loaded at the opening: {bodies[0][day]} != {points}"
+        assert choices.first.locator("input:checked").count() == 0, "the rooms chosen cleared after the copy"
+        assert program.locator("input").is_checked(), "what is copied kept"
+    finally:
+        page.unroute("**/api/v1/cubes/*/rooms/*/*")
+    cfg_close(page, room)
+
+
+def test_config_copy_is_a_command(page, case):
+    """A room ticked on the Copy tab marks nothing unsaved: no disk, no sign
+    on its button, nothing the page asks about on leaving; it stays ticked
+    when the configuration closes and opens again."""
+    room = cfg_room(page)
+    form = cfg_tab(page, room, "copy")
+    first = form.locator(".choices").first.locator(".switch").first
+    first.click()
+    leave_tile(page, room)
+    button = form.locator("button[type=submit]")
+    assert button.is_enabled() and button.locator(".mark-sign").count() == 0, "on, without a sign"
+    cfg_close(page, room)
+    page.evaluate("new Promise((done) => requestAnimationFrame(() => setTimeout(done)))")
+    assert tile_disk(page, room).count() == 0, "no disk"
+    assert page.evaluate("MassimoParts.leaving.changes()") is False, "nothing to ask about on leaving"
+    page.locator(at(room, ".tile-cog")).click()
+    page.locator(at(room, ".config-body .choices")).first.wait_for(state="visible")
+    assert cfg_shown(page, room) == "copy", "opened again on Copy"
+    assert page.locator(at(room, ".config-body .choices")).first.locator("input:checked").count() == 1, "the room still ticked"
+    cfg_close(page, room)
+
+
+def test_config_move_waits_for_another_write(page, case):
+    """A device's move asked while the radiator settings' write runs: Yes
+    sends nothing and is no failed save, the question stays; Keep puts the
+    room back and the focus on the device's room select. Nothing reaches
+    the fake Cube."""
+    room = cfg_room(page)
+    cfg_tab(page, room, "devices")
+    device = page.locator(at(room, ".config-body .cfg-device")).first
+    select = device.locator("select[name=room_id]")
+    others = [v for v in select.locator("option").evaluate_all("(os) => os.map((o) => o.value)") if v != str(room["id"])]
+    assert others, "another room to move to"
+    select.select_option(others[0])
+    device.locator("button[type=submit]").click()
+    question = device.locator(".confirm-box")
+    question.wait_for(state="visible")
+    moved = []
+    page.route("**/api/v1/cubes/*/devices/**", lambda route: (moved.append(route.request.url), route.abort())
+               if route.request.method == "PUT" else route.continue_())
+    held, sent = [], []
+    hold(page, CFG_PATH, "PUT", held, sent)
+    try:
+        valves = page.locator(at(room, ".config-body form")).first
+        boost = valves.locator("input[name=boost_minutes]")
+        boost.fill("25" if boost.input_value() != "25" else "30")
+        valves.locator("button[type=submit]").click()
+        assert wait_held(page, held), "the radiator settings' write runs"
+        question.locator(".confirm-yes").click()
+        page.evaluate("new Promise((done) => requestAnimationFrame(() => setTimeout(done)))")
+        assert not moved, f"Yes sent nothing while the other write runs: {moved}"
+        assert question.is_visible(), "the question stays"
+        assert save_state(device)[3] != "bad", "no failed save"
+        for route in held:
+            route.fulfill(status=200, content_type="application/json", body='{"ok": true, "devices": []}')
+        held.clear()
+        question.locator(".confirm-no").click()
+        assert wait_until(page, "document.activeElement === document.querySelector(%s)"
+                          % json.dumps(at(room, ".config-body .cfg-device select[name=room_id]")), 3), "Keep puts the focus on the room's select"
+        assert select.input_value() == str(room["id"]), "Keep puts the room back"
+        assert not moved, f"nothing moved: {moved}"
+    finally:
+        page.unroute(CFG_PATH)
+        page.unroute("**/api/v1/cubes/*/devices/**")
+    cfg_close(page, room)
 
 
 def prompts(page, accept=False):

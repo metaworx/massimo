@@ -495,9 +495,6 @@ REGIONS = (
 # cannot show, stays here until it can; the devices without a room,
 # which it cannot show either, are given one by their view's stub.
 NOT_MOVED = {
-    "room-config": "plain inside its tile (config.js, Block 8): a data event fills it again, but while the focus is in it; "
-                   "once the focus leaves, the fill put off comes: every element is new, and what is typed and not yet "
-                   "taken by a change event is gone",
     "sign-in": "the dialog is filled again at each askLogin",
 }
 
