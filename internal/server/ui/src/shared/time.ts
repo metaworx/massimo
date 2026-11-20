@@ -1,0 +1,25 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 The Massimo Authors
+
+/**
+ * @file internal/server/ui/src/shared/time.ts
+ *
+ * A DateTime's value ("YYYY-MM-DDTHH:MM", the browser's time) and the
+ * API's time as each other: for a field that shows a stored end and sends
+ * it (a user's end), whose draft compares the minute the field holds. Moved from users.js with System settings →
+ * Users (AP UiParts, Block 10); rooms.js apiUntil, the stepped setpoint's
+ * end, stays with its users.
+ */
+
+/** localOf is an API time as a DateTime's value, "" for none (localDateTimeValue of app.js). */
+export function localOf(iso: string | null | undefined): string {
+  const ms = Date.parse(iso || "");
+  return isNaN(ms) ? "" : localDateTimeValue(new Date(ms));
+}
+
+/** isoOf is a DateTime's value as an API time, null where it is empty or no time. */
+export function isoOf(local: string): string | null {
+  if (!local) return null;
+  const d = new Date(local);
+  return isNaN(d.getTime()) ? null : d.toISOString();
+}

@@ -203,7 +203,10 @@ def test_an_unchanged_end_date_is_not_sent(page, case):
         page.wait_for_timeout(300)
         assert not puts, f"nothing is sent without a change: {puts}"
         panel.locator("input[name=display_name]").fill("Guest with an end")
-        save.click()
+        # the save reads the list again, then the open panel's sessions and keys: waited for, so
+        # that the cleanup's removal does not come before that read, which then meets a 404
+        with page.expect_response(lambda r: r.request.method == "GET" and r.url.endswith(f"/users/{name}/tokens")):
+            save.click()
         assert wait_until(page, "document.querySelector(\".user-panel[data-name='%s'] .panel-name\").textContent === 'Guest with an end'" % name, 5), \
             "the display name is saved"
         assert puts == [{"display_name": "Guest with an end"}], f"the display name alone is sent: {puts}"
@@ -347,7 +350,7 @@ def test_new_user_name_checked_while_typed(page, case, watch):
         assert "store:" not in page.locator("#users-msg").inner_text(), "no store: in the list's message"
     finally:
         remove_user(late)
-    page.locator("#user-new .cancel-user").click()
+    page.locator("#user-new .form-cancel").click()
     show_view(page, "tiles")
 
 
@@ -407,8 +410,9 @@ def test_manager_sets_passwords_but_not_the_owners(new_context, case, watch, gua
         assert form.locator("input[name=display_name]").is_hidden() and form.locator("select[name=role]").is_hidden(), \
             "nothing else of it"
         assert op.locator(".user-tokens-box").is_hidden(), "nor its keys"
-        options = page.evaluate("roleOptions('viewer').map((o) => o[0])")
-        assert "owner" not in options, f"no owner role to give ({options})"
+        page.locator("#user-add").click()
+        options = page.locator("#user-new select[name=role] option").evaluate_all("(os) => os.map((o) => o.value)")
+        assert options and "owner" not in options, f"no owner role to give ({options})"
         sign_out(page)
     finally:
         api_call("DELETE", "api/v1/users/" + name)

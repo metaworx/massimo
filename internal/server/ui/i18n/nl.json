@@ -1403,6 +1403,7 @@
   "providers.added": "Provider {name} toegevoegd.",
 
   "providers.failed": "{name}: niet uitgevoerd: {error}",
+  "providers.formName": "Aanmeldprovider {name}",
 
   "providers.off": "uitgeschakeld",
 
@@ -1490,6 +1491,8 @@
   "users.removed": "{name} verwijderd.",
   "users.failed": "{name}: {error}",
   "users.unchanged": "Niets gewijzigd.",
+  "users.formName": "Gebruiker {name}",
+  "users.noEnd": "geen einde",
   "users.tokens": "Sessies en sleutels",
   "users.tokensNone": "Geen.",
 
@@ -1528,6 +1531,7 @@
   "users.identityChangeLabel": "{email} bij {provider} wijzigen",
 
   "users.identityChanged": "Identiteit gewijzigd.",
+  "users.identityFormName": "Gebruiker {name}, identiteit {account}",
 
   "users.identityGroups": "groepen: {groups}",
 
@@ -1615,6 +1619,7 @@
   "roles.disabledNow": "{role} uitgeschakeld: de gebruikers blijven aangemeld en worden alles geweigerd.",
   "roles.enabledNow": "{role} ingeschakeld.",
   "roles.failed": "{role}: {error}",
+  "roles.formName": "Rol {name}",
   "roles.capsTitle": "Bevoegdheden voor alle rollen",
   "roles.capsShort": "Bevoegdheden",
   "roles.badge.allOn": "alle aan",

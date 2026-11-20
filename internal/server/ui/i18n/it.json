@@ -1404,6 +1404,7 @@
   "providers.added": "Provider {name} aggiunto.",
 
   "providers.failed": "{name}: non eseguito: {error}",
+  "providers.formName": "Provider di accesso {name}",
 
   "providers.off": "disattivato",
 
@@ -1491,6 +1492,8 @@
   "users.removed": "{name} rimosso.",
   "users.failed": "{name}: {error}",
   "users.unchanged": "Niente è cambiato.",
+  "users.formName": "Utente {name}",
+  "users.noEnd": "nessuna fine",
   "users.tokens": "Sessioni e chiavi",
   "users.tokensNone": "Nessuna.",
 
@@ -1529,6 +1532,7 @@
   "users.identityChangeLabel": "Modifica {email} presso {provider}",
 
   "users.identityChanged": "Identità modificata.",
+  "users.identityFormName": "Utente {name}, identità {account}",
 
   "users.identityGroups": "gruppi: {groups}",
 
@@ -1616,6 +1620,7 @@
   "roles.disabledNow": "{role} disattivato: i suoi utenti restano connessi e viene loro rifiutato tutto.",
   "roles.enabledNow": "{role} attivato.",
   "roles.failed": "{role}: {error}",
+  "roles.formName": "Ruolo {name}",
   "roles.capsTitle": "Capacità per tutti i ruoli",
   "roles.capsShort": "Capacità",
   "roles.badge.allOn": "tutte attive",

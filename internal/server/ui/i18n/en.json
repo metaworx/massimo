@@ -1402,6 +1402,7 @@
   "providers.added": "Provider {name} added.",
 
   "providers.failed": "{name}: not done: {error}",
+  "providers.formName": "Sign-in provider {name}",
 
   "providers.off": "disabled",
 
@@ -1489,6 +1490,8 @@
   "users.removed": "{name} removed.",
   "users.failed": "{name}: {error}",
   "users.unchanged": "Nothing changed.",
+  "users.formName": "User {name}",
+  "users.noEnd": "no end",
   "users.tokens": "Sessions and keys",
   "users.tokensNone": "None.",
 
@@ -1527,6 +1530,7 @@
   "users.identityChangeLabel": "Change {email} at {provider}",
 
   "users.identityChanged": "Identity changed.",
+  "users.identityFormName": "User {name}, identity {account}",
 
   "users.identityGroups": "groups: {groups}",
 
@@ -1614,6 +1618,7 @@
   "roles.disabledNow": "{role} disabled: its users keep their login and are refused everything.",
   "roles.enabledNow": "{role} enabled.",
   "roles.failed": "{role}: {error}",
+  "roles.formName": "Role {name}",
   "roles.capsTitle": "Capabilities for every role",
   "roles.capsShort": "Capabilities",
   "roles.badge.allOn": "all on",

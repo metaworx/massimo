@@ -1445,6 +1445,7 @@
   "providers.added": "Dodano dostawcę {name}.",
 
   "providers.failed": "{name}: nie wykonano: {error}",
+  "providers.formName": "Dostawca logowania {name}",
 
   "providers.off": "wyłączony",
 
@@ -1536,6 +1537,8 @@
   "users.removed": "{name} usunięty.",
   "users.failed": "{name}: {error}",
   "users.unchanged": "Nic się nie zmieniło.",
+  "users.formName": "Użytkownik {name}",
+  "users.noEnd": "bez końca",
   "users.tokens": "Sesje i klucze",
   "users.tokensNone": "Brak.",
 
@@ -1574,6 +1577,7 @@
   "users.identityChangeLabel": "Zmień {email} u {provider}",
 
   "users.identityChanged": "Tożsamość zmieniona.",
+  "users.identityFormName": "Użytkownik {name}, tożsamość {account}",
 
   "users.identityGroups": "grupy: {groups}",
 
@@ -1665,6 +1669,7 @@
   "roles.disabledNow": "{role} wyłączona: jej użytkownicy pozostają zalogowani i odmawia się im wszystkiego.",
   "roles.enabledNow": "{role} włączona.",
   "roles.failed": "{role}: {error}",
+  "roles.formName": "Rola {name}",
   "roles.capsTitle": "Uprawnienia dla wszystkich ról",
   "roles.capsShort": "Uprawnienia",
   "roles.badge.allOn": "wszystkie włączone",

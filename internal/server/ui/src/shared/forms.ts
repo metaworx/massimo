@@ -219,6 +219,23 @@ export function unsavedItems(key: string): Item[] {
 }
 
 /**
+ * unsavedTone is the worse state of the unsaved and the failed forms
+ * whose key is one of keys or begins with one + ":", as their disks
+ * show it: "bad" where a save failed, else "warn" where one is unsaved,
+ * "" where none is; the merely changed count for nothing, as in
+ * unsavedItems. A part that reads it is drawn again when it changes.
+ */
+export function unsavedTone(keys: string[]): "" | "warn" | "bad" {
+  let tone: "" | "warn" | "bad" = "";
+  for (const u of pending.value) {
+    if (u.state === "changed" || !keys.some((k) => under(u.key, k))) continue;
+    if (u.state === "failed") return "bad";
+    tone = "warn";
+  }
+  return tone;
+}
+
+/**
  * changedItems are the items of every form with changes not saved, the
  * merely changed ones and those saving too, as unsavedItems draws them:
  * what leaving the page would drop. A part that reads them is drawn

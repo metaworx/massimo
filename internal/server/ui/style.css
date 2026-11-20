@@ -669,7 +669,7 @@ body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8p
   .section-grid > #sys-maint { grid-column: 1 / -1; }
   .section-flow { display: block; columns: 2; column-gap: 16px; }
   .section-flow > .section-card { break-inside: avoid; margin-bottom: 16px; }
-  .section-flow .cap-grid { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .section-flow .cap-grid .choices-list { grid-template-columns: minmax(0, 1fr); gap: 4px; }
   /* Users alone, for a role without roles and capabilities: one column */
   .no-roles.no-capabilities .section-flow { columns: 1; }
 }
@@ -1679,10 +1679,13 @@ massimo-week-program { display: contents; }
 .log-mark { padding: 0 8px; font-size: 0.85rem; }
 .menu-items button > .ni.sign.tone-warn { color: var(--warn-mark); }
 .menu-items button > .ni.sign.tone-bad { color: var(--bad); }
-/* the log's mark on ☰, at its corner on a disc of the card's colour, so
-   that amber and red read on the filled ☰ too (D172-A) */
+/* the log's mark on ☰, the worse of it and the unsaved settings'
+   (ui/src/chrome/, its span.menu-mark in #nav-menu-mark), at its corner
+   on a disc of the card's colour, so that amber and red read on the
+   filled ☰ too (D172-A) */
 #nav-menu > summary { position: relative; }
-#nav-menu > summary > .mark-sign {
+#nav-menu > summary .menu-mark { display: contents; }
+#nav-menu > summary .menu-mark > .mark-sign {
   position: absolute;
   right: -5px;
   bottom: -5px;
@@ -1694,6 +1697,11 @@ massimo-week-program { display: contents; }
   background: var(--card);
   stroke-width: 2.6;
 }
+/* a menu item's disk where a page it leads to has settings unsaved
+   (ui/src/chrome/ ItemMark), at the item's right end */
+.menu-items button .menu-unsaved { margin-left: auto; padding-left: 8px; box-sizing: content-box; }
+.menu-items button .menu-unsaved.tone-warn { color: var(--warn-mark); }
+.menu-items button .menu-unsaved.tone-bad { color: var(--bad); }
 /* ☰'s Sign out in the accent, as the personal page's button (D171-A) */
 #menu-logout { color: var(--accent); font-weight: 600; }
 .nav-btn.active > .ni.sign { color: inherit; }
@@ -1828,7 +1836,8 @@ massimo-week-program { display: contents; }
 .login-servers { text-align: center; }
 .user-tokens li .revoke-token { margin-left: auto; }
 .user-key { word-break: break-all; user-select: all; }
-.cap-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 2px 12px; margin: 4px 0; }
+.cap-grid { margin: 4px 0; }
+.cap-grid .choices-list { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 2px 12px; }
 .cap-grid .switch { align-items: center; }
 .cap-grid .flag { margin-left: 4px; }
 

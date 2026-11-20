@@ -43,6 +43,7 @@ suite is collected (the mark cases, conftest.py), so that none loads a
 page only to be skipped (AP TestSpeed, D9-A). In CI that is in the jobs
 of 1100-en and 390-de, on a worker of its own beside the other files.
 """
+import json
 import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -50,7 +51,7 @@ from typing import Callable
 
 import pytest
 
-from helpers import STATE_EVENTS_JS, RepairStub, open_main_menu, reads_of, show_view, wait_until
+from helpers import STATE_EVENTS_JS, RepairStub, open_main_menu, reads_of, safe_route, show_view, wait_until
 
 # The cases the guard runs in (D176-D); in the others its tests are
 # deselected at collection (D9-A).
@@ -453,10 +454,12 @@ def pairing_running(page):
 def users(page):
     system(page)
     panel = page.locator(".user-panel[data-name='operator']")
-    panel.locator("summary").click()
+    if not panel.evaluate("(d) => d.open"):  # open already in a view before
+        panel.locator("summary").click()
     assert wait_until(page, "document.querySelectorAll(\".user-panel[data-name='operator'] .user-tokens li\").length >= 1", 5), \
         "the operator's tokens are listed"
-    page.locator("#user-add").click()
+    if page.locator("#user-add").is_visible():  # shown already in a view before
+        page.locator("#user-add").click()
     page.locator("#user-new input").first.wait_for(state="visible")
 
 
@@ -467,9 +470,38 @@ def roles(page):
     page.locator("#role-new input").first.wait_for(state="visible")
 
 
+def users_question(page):
+    """A user's Remove asking in its panel, the operator's."""
+    users(page)
+    page.locator(".user-panel[data-name='operator'] .remove-user").click()
+    page.locator(".user-panel[data-name='operator'] .confirm-box").wait_for()
+
+
 def providers(page):
     system(page)
-    page.locator("#provider-add").click()
+    if page.locator("#provider-add").is_visible():  # shown already in a view before
+        page.locator("#provider-add").click()
+    page.locator("#provider-new input").first.wait_for(state="visible")
+
+
+# The fixture has no sign-in provider: the view of a provider's panel
+# answers GET /api/v1/providers with one constant answer, so that the
+# data stay as they were.
+PROVIDER_STUB = {"key": "guard", "name": "Guard", "issuer": "https://issuer.example.org", "client_id": "guard", "has_secret": True,
+                 "secret_lost": False, "scopes": "openid email profile", "auto_create": True, "auto_role": "viewer", "auto_domains": ["example.org"],
+                 "groups_claim": "", "allowed_groups": [], "enabled": False, "callback": "api/v1/login/oidc/callback",
+                 "created_at": "2026-11-15T10:00:00Z", "updated_at": "2026-11-15T10:00:00Z"}
+
+
+def provider_panel(page):
+    """A provider's panel open, its form with every field, the new provider's form beside it."""
+    reads_of(page).change("**/api/v1/providers", lambda body: [PROVIDER_STUB])
+    show_view(page, "tiles")
+    system(page)
+    page.locator(".provider-panel[data-key='guard'] > summary").click()
+    page.locator(".provider-panel[data-key='guard'] input[name=name]").wait_for(state="visible")
+    if page.locator("#provider-add").is_visible():
+        page.locator("#provider-add").click()
     page.locator("#provider-new input").first.wait_for(state="visible")
 
 
@@ -598,10 +630,24 @@ REGIONS = (
         # own events are test_pairing_updates.py's.
         View("a pairing running, a device joined with its room chosen", pairing_running),
     )),
-    Region("users", ("#sys-users-body",), (View("the operator's panel and the new user's form", users),)),
+    Region("users", ("#sys-users-body",), (
+        View("the operator's panel and the new user's form", users),
+        # Passed on the page before the move as well: none of SOURCES draws
+        # the users again. From now on it guards that the question stays through the data;
+        # the list's own reads (an action in another panel, the list read
+        # again, the page shown again) are test_admin_updates.py's.
+        View("the operator's Remove asking", users_question),
+    )),
     Region("roles", ("#sys-roles-body",), (View("the operator role's panel and the new role's form", roles),)),
     Region("capabilities", ("#sys-caps-body",), (View("System settings", system),)),
-    Region("providers", ("#sys-providers-body",), (View("the new provider's form", providers),)),
+    Region("providers", ("#sys-providers-body",), (
+        View("the new provider's form", providers),
+        # Passed on the page before the move as well: none of SOURCES draws
+        # the providers again. From now on it guards that a provider's panel with its form typed stays through the data;
+        # the list's own reads (an action in another panel, the list read
+        # again, the page shown again) are test_admin_updates.py's.
+        View("a provider's panel open and the new provider's form", provider_panel),
+    )),
     Region("integrations", ("#sys-integrations-body",), (View("System settings", system),)),
     Region("backups", ("#sys-backup-body", "#cube-backup-body"), (
         View("System settings, the Cube's fold open", backups_system),

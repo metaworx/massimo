@@ -1402,6 +1402,7 @@
   "providers.added": "Anmeldedienst {name} hinzugefügt.",
 
   "providers.failed": "{name}: nicht ausgeführt: {error}",
+  "providers.formName": "Anmeldedienst {name}",
 
   "providers.off": "deaktiviert",
 
@@ -1489,6 +1490,8 @@
   "users.removed": "{name} entfernt.",
   "users.failed": "{name}: {error}",
   "users.unchanged": "Nichts geändert.",
+  "users.formName": "Benutzer {name}",
+  "users.noEnd": "kein Ende",
   "users.tokens": "Sitzungen und Schlüssel",
   "users.tokensNone": "Keine.",
 
@@ -1527,6 +1530,7 @@
   "users.identityChangeLabel": "{email} bei {provider} ändern",
 
   "users.identityChanged": "Identität geändert.",
+  "users.identityFormName": "Benutzer {name}, Identität {account}",
 
   "users.identityGroups": "Gruppen: {groups}",
 
@@ -1614,6 +1618,7 @@
   "roles.disabledNow": "{role} gesperrt: ihre Benutzer bleiben angemeldet und bekommen alles verweigert.",
   "roles.enabledNow": "{role} freigegeben.",
   "roles.failed": "{role}: {error}",
+  "roles.formName": "Rolle {name}",
   "roles.capsTitle": "Fähigkeiten für alle Rollen",
   "roles.capsShort": "Fähigkeiten",
   "roles.badge.allOn": "alle an",

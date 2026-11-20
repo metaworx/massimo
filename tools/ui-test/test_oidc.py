@@ -194,7 +194,7 @@ def test_assign_by_user_id(page, case, new_context, provider):
         box.wait_for(state="visible")
         box.locator("select[name=provider]").select_option(key)
         box.locator("select[name=kind]").select_option("subject")
-        assert box.locator(".identity-value-label").inner_text() == page.evaluate("t('users.identitySubject')"), \
+        assert box.locator(f"label[for='user-identity-account-{user}']").inner_text() == page.evaluate("t('users.identitySubject')"), \
             "the field asks for the user id"
         box.locator("input[name=account]").fill("a-typo")
         box.locator(".add-identity").click()

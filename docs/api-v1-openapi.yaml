@@ -1511,6 +1511,7 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [roles, capabilities]
                 properties:
                   roles:
                     type: array
@@ -4182,6 +4183,7 @@ components:
         proof: {type: string, description: "A proof of the current password from POST /api/v1/login/finish with the purpose proof, in place of current_password"}
     Role:
       type: object
+      required: [key, builtin, disabled, users, created_at, updated_at]
       properties:
         key: {type: string}
         name: {type: string, description: The display name; empty shows the key's translated default}
@@ -4213,6 +4215,7 @@ components:
           items: {type: string}
     Capability:
       type: object
+      required: [key, disabled]
       properties:
         key: {type: string, example: pair}
         disabled: {type: boolean, description: Denied to every role but owner}
@@ -4258,12 +4261,14 @@ components:
         label: {type: string, maxLength: 64, description: Names the session under the user's tokens; the User-Agent when absent}
     Provider:
       type: object
+      required: [key, name, issuer, client_id, has_secret, secret_lost, scopes, auto_create, auto_role, groups_claim, enabled, callback, created_at, updated_at]
       properties:
         key: {type: string}
         name: {type: string, description: On the sign-in button; the key shows where empty}
         issuer: {type: string, example: "https://cloud.example.com"}
         client_id: {type: string}
         has_secret: {type: boolean, description: The client secret is set; it is never answered}
+        secret_lost: {type: boolean, description: "The client secret is set and sealed, and the key of opaque.key does not open it: it is to be entered again"}
         scopes: {type: string, example: openid email profile}
         auto_create: {type: boolean, description: A sign-in without an identity creates the user}
         auto_role: {type: string, description: "The role of a user created so, viewer by default"}
@@ -4292,6 +4297,7 @@ components:
         enabled: {type: boolean}
     Identity:
       type: object
+      required: [id, provider, email, subject, bound, name, username, created_at]
       properties:
         id: {type: integer}
         provider: {type: string, description: The provider's key}
@@ -4327,6 +4333,7 @@ components:
         subject: {type: string, description: The user id at the provider (sub)}
     LoginProvider:
       type: object
+      required: [key, name]
       properties:
         key: {type: string}
         name: {type: string, description: On the sign-in button; the key where the provider has none}
@@ -4397,6 +4404,7 @@ components:
           example: "Home › Anna, as anna"
     User:
       type: object
+      required: [name, role, disabled, has_password, auth_version, created_at, updated_at]
       properties:
         name: {type: string, description: "The login name, lower case; an integration's users' are <the integration's uuid>:, <uuid>:system and <uuid>:<its id there>"}
         display_name: {type: string}
@@ -4415,6 +4423,13 @@ components:
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
         last_login_at: {type: string, format: date-time}
+        may:
+          type: object
+          description: "In the users routes' answers: what the caller may do with the user, change it beyond its own name and password (manage) or set its password (password); absent elsewhere"
+          required: [manage, password]
+          properties:
+            manage: {type: boolean}
+            password: {type: boolean}
         integration:
           type: object
           description: "An integration's user, with its integration's uuid; in GET /api/v1/users id, name and linked_to for one of its users, absent for the integration's own"
@@ -4442,6 +4457,7 @@ components:
     Token:
       type: object
       description: A session or an API key, without its secret
+      required: [id, kind, created_at]
       properties:
         id: {type: integer}
         kind: {type: string, enum: [session, api]}

@@ -1404,6 +1404,7 @@
   "providers.added": "Fournisseur {name} ajouté.",
 
   "providers.failed": "{name} : non effectué : {error}",
+  "providers.formName": "Fournisseur de connexion {name}",
 
   "providers.off": "désactivé",
 
@@ -1491,6 +1492,8 @@
   "users.removed": "{name} supprimé.",
   "users.failed": "{name} : {error}",
   "users.unchanged": "Rien n'a changé.",
+  "users.formName": "Utilisateur {name}",
+  "users.noEnd": "pas de fin",
   "users.tokens": "Sessions et clés",
   "users.tokensNone": "Aucune.",
 
@@ -1529,6 +1532,7 @@
   "users.identityChangeLabel": "Modifier {email} chez {provider}",
 
   "users.identityChanged": "Identité modifiée.",
+  "users.identityFormName": "Utilisateur {name}, identité {account}",
 
   "users.identityGroups": "groupes : {groups}",
 
@@ -1616,6 +1620,7 @@
   "roles.disabledNow": "{role} désactivé : ses utilisateurs restent connectés et tout leur est refusé.",
   "roles.enabledNow": "{role} activé.",
   "roles.failed": "{role} : {error}",
+  "roles.formName": "Rôle {name}",
   "roles.capsTitle": "Capacités pour tous les rôles",
   "roles.capsShort": "Capacités",
   "roles.badge.allOn": "toutes actives",

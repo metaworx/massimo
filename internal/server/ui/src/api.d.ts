@@ -229,20 +229,20 @@ export interface UserChange {
 }
 
 export interface Role {
-  key?: string;
+  key: string;
   /** The display name; empty shows the key's translated default */
   name?: string;
   /** One of the six default roles, which keep their keys */
-  builtin?: boolean;
-  disabled?: boolean;
+  builtin: boolean;
+  disabled: boolean;
   /** The role's set, sorted; every capability for owner */
   capabilities?: string[];
   /** Users with this role */
-  users?: number;
+  users: number;
   /** @format date-time */
-  created_at?: string;
+  created_at: string;
   /** @format date-time */
-  updated_at?: string;
+  updated_at: string;
 }
 
 export interface RoleCreate {
@@ -261,9 +261,9 @@ export interface RoleChange {
 }
 
 export interface Capability {
-  key?: string;
+  key: string;
   /** Denied to every role but owner */
-  disabled?: boolean;
+  disabled: boolean;
 }
 
 export interface Disabled {
@@ -318,34 +318,39 @@ export interface LoginFinish {
 }
 
 export interface Provider {
-  key?: string;
+  key: string;
   /** On the sign-in button; the key shows where empty */
-  name?: string;
-  issuer?: string;
-  client_id?: string;
+  name: string;
+  issuer: string;
+  client_id: string;
   /** The client secret is set; it is never answered */
-  has_secret?: boolean;
-  scopes?: string;
+  has_secret: boolean;
+  /**
+   * The client secret is set and sealed, and the key of opaque.key does not
+   * open it: it is to be entered again
+   */
+  secret_lost: boolean;
+  scopes: string;
   /** A sign-in without an identity creates the user */
-  auto_create?: boolean;
+  auto_create: boolean;
   /** The role of a user created so, viewer by default */
-  auto_role?: string;
+  auto_role: string;
   /** The e-mail domains it creates users for; none for any */
   auto_domains?: string[];
   /** The claim of the account's groups, groups by default */
-  groups_claim?: string;
+  groups_claim: string;
   /**
    * The groups it admits: an account in none of them neither signs in nor
    * links; none for any
    */
   allowed_groups?: string[];
-  enabled?: boolean;
+  enabled: boolean;
   /** The redirect URI's path under the page's address */
-  callback?: string;
+  callback: string;
   /** @format date-time */
-  created_at?: string;
+  created_at: string;
   /** @format date-time */
-  updated_at?: string;
+  updated_at: string;
 }
 
 export interface ProviderWrite {
@@ -371,23 +376,23 @@ export interface ProviderWrite {
 }
 
 export interface Identity {
-  id?: number;
+  id: number;
   /** The provider's key */
-  provider?: string;
+  provider: string;
   /** Lower case */
-  email?: string;
+  email: string;
   /** The user id at the provider (sub); empty until bound */
-  subject?: string;
+  subject: string;
   /** The identity has the provider's subject */
-  bound?: boolean;
+  bound: boolean;
   /** The name at the provider, from the last sign-in or link */
-  name?: string;
+  name: string;
   /** The user name at the provider (preferred_username), likewise */
-  username?: string;
+  username: string;
   /** The groups at the provider, likewise */
   groups?: string[];
   /** @format date-time */
-  created_at?: string;
+  created_at: string;
   /** @format date-time */
   bound_at?: string;
   /** @format date-time */
@@ -419,9 +424,9 @@ export interface IdentityAdd {
 }
 
 export interface LoginProvider {
-  key?: string;
+  key: string;
   /** On the sign-in button; the key where the provider has none */
-  name?: string;
+  name: string;
 }
 
 export interface OIDCStart {
@@ -520,7 +525,7 @@ export interface User {
    * The login name, lower case; an integration's users' are <the integration's
    * uuid>:, <uuid>:system and <uuid>:<its id there>
    */
-  name?: string;
+  name: string;
   display_name?: string;
   /**
    * How the user is shown: its display name, else its login name; an
@@ -529,10 +534,10 @@ export interface User {
    */
   display?: string;
   /** The role's key */
-  role?: string;
-  disabled?: boolean;
+  role: string;
+  disabled: boolean;
   /** False for a user with keys only */
-  has_password?: boolean;
+  has_password: boolean;
   /**
    * Guests: disabled from then on
    * @format date-time
@@ -544,13 +549,22 @@ export interface User {
    * 1: the server hashes the password; 2: OPAQUE, the server keeps a record and
    * never sees the password
    */
-  auth_version?: number;
+  auth_version: number;
   /** @format date-time */
-  created_at?: string;
+  created_at: string;
   /** @format date-time */
-  updated_at?: string;
+  updated_at: string;
   /** @format date-time */
   last_login_at?: string;
+  /**
+   * In the users routes' answers: what the caller may do with the user, change
+   * it beyond its own name and password (manage) or set its password
+   * (password); absent elsewhere
+   */
+  may?: {
+    manage: boolean;
+    password: boolean;
+  };
   /**
    * An integration's user, with its integration's uuid; in GET /api/v1/users
    * id, name and linked_to for one of its users, absent for the integration's
@@ -582,11 +596,11 @@ export interface RoleRef {
 
 /** A session or an API key, without its secret */
 export interface Token {
-  id?: number;
-  kind?: "session" | "api";
+  id: number;
+  kind: "session" | "api";
   label?: string;
   /** @format date-time */
-  created_at?: string;
+  created_at: string;
   /**
    * Absent for an API key
    * @format date-time

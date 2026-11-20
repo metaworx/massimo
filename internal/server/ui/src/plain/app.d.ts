@@ -11,7 +11,7 @@
  * explanations shown.
  */
 
-import type { Cube, Device, DeviceDetail, FoundCube, Room } from "../api";
+import type { Cube, Device, DeviceDetail, FoundCube, Me, Room } from "../api";
 
 declare global {
   /** A room as the page keeps it: its virtual wall thermostat taken out of its devices (app.js splitVirtual). */
@@ -42,6 +42,8 @@ declare global {
     repliedAt: number;
     /** The event stream is open: the server reports the chosen Cube's changes as they come. */
     eventsOpen: boolean;
+    /** Who the page is signed in as (GET /api/v1/me), null before it is read and after a sign-out. */
+    me: Me | null;
     /** The person's settings, as far as a part reads them. */
     settings: { poll: number; expert: boolean };
   };
@@ -103,6 +105,10 @@ declare global {
   function fmtTemp(v: number | undefined | null, unit?: string): string;
   /** The keys of the settings' explanations shown (helpParts), the plain help buttons' and the parts'. */
   const helpOpen: Set<string>;
+  /** A Date as a datetime-local input's value, the browser's time. */
+  function localDateTimeValue(d: Date): string;
+  /** A request to the API as the answer itself, for a file or a body of another type; an error with the server's message where it fails. */
+  function apiRaw(method: string, path: string, body?: unknown, contentType?: string): Promise<Response>;
   /** The default end of a temporary setting, tomorrow at six, as a datetime-local value. */
   function tomorrowMorning(): string;
 }
