@@ -87,6 +87,34 @@ What does not take the scale:
   such as a poll interval or a backup window:
   the product's own clock is not the test's wait.
 
+**A product timer a test waits out** - a wait for an answer that never comes,
+a window that runs to its end - is shortened through an option:
+a field of the product's options or of the call's, 0 for the product's default,
+which only the test sets.
+A new one is never a package variable the test swaps,
+which keeps the test off the parallel ones ("Parallel tests");
+the tests that still swap one,
+such as `TestWallReset` its `wallSilence` and `cmd/massimo`'s apt tests `healthEvery`,
+are on their package's `serialTests`.
+The network configuration's reads and writes take `cubelan.NetWaits`,
+which `massimo netconfig` leaves 0.
+Its tests against the fake Cube give the calls it answers deadlines of half a second,
+scaled, and 5 s for a restart;
+the calls it leaves unanswered get short waits of their own (`silentWaits`),
+not scaled, since those are waited out in full.
+The search's wait for the N and c answers of an answer is
+`cubelan.SearchOptions.LateWait`, the server's `Options.discoveryLate`:
+a second from the answer, which outlasts a test's run of 200 ms
+wherever a proxy answers the identify request alone;
+500 ms, scaled, in the runs of `discovering`.
+Of such an option, a deadline for an answer that comes takes the scale,
+since a slow runner would fail it, as `NetWaits.Ask` does;
+a window waited out where nothing answers, as `NetWaits.Reread`,
+and a pace the product keeps, as `NetWaits.Settle`, do not.
+Where the length is what the test checks,
+such as the second a late Cube gets (`TestSearchWaitsForALateAnswer`),
+the test keeps the product's.
+
 A test that waits longer than it needs to shows in CI:
 the jobs Vet and test, Race and Test (armv6, QEMU)
 name their 20 slowest tests and their 10 slowest packages in the run's summary

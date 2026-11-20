@@ -4,6 +4,7 @@
 package cubelan
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"net"
@@ -54,10 +55,15 @@ type SearchOptions struct {
 	Packets <-chan Packet
 	// MAC gives the MAC of an address; nil is LookupMAC.
 	MAC func(net.IP) string
+	// LateWait is how long, from an answer, its N and c replies are
+	// waited for where Wait ends sooner; 0 is a second. A test whose
+	// fakes answer at once, or never, shortens it.
+	LateWait time.Duration
 }
 
 // lateWait is how long Search waits past its wait for the N and c
-// replies of a Cube that answered late.
+// replies of a Cube that answered late, where SearchOptions.LateWait
+// says nothing.
 const lateWait = time.Second
 
 // pending is one answer Search is completing.
@@ -72,7 +78,7 @@ type pending struct {
 // in the order they came: a massimo proxy answers with the serial of the
 // Cube it serves, so a serial can come twice. Each answer is asked N and
 // c at once, from pc, and its addresses in use and DHCP flag are filled
-// in from the replies; one that answered late gets a second more for
+// in from the replies; one that answered late gets o.LateWait more for
 // them. Then each answer gets its MAC and its Kind.
 func Search(ctx context.Context, pc net.PacketConn, o SearchOptions) ([]Discovered, error) {
 	targets := o.Targets
@@ -83,6 +89,7 @@ func Search(ctx context.Context, pc net.PacketConn, o SearchOptions) ([]Discover
 	if mac == nil {
 		mac = LookupMAC
 	}
+	late := cmp.Or(o.LateWait, lateWait)
 	packets := o.Packets
 	if packets == nil {
 		ch := make(chan Packet, 64)
@@ -123,15 +130,15 @@ func Search(ctx context.Context, pc net.PacketConn, o SearchOptions) ([]Discover
 		case <-ctx.Done():
 			return finish(found, mac), ctx.Err()
 		case <-timer.C:
-			// An answer asked shortly before the end gets lateWait for
-			// its N and c replies; the others are done.
+			// An answer asked shortly before the end gets late for its
+			// N and c replies; the others are done.
 			var last time.Time
 			for _, p := range found {
 				if !(p.net && p.cfg) && p.asked.After(last) {
 					last = p.asked
 				}
 			}
-			if more := time.Until(last.Add(lateWait)); more > 0 {
+			if more := time.Until(last.Add(late)); more > 0 {
 				timer.Reset(more)
 				continue
 			}

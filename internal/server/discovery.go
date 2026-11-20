@@ -385,7 +385,7 @@ func (s *Server) discoverOnce(ctx context.Context) ([]foundCube, error) {
 		go r.Serve(rctx, pc)
 	}
 	browsed := s.browseServers(ctx, wait)
-	answers, err := r.Discover(ctx, cubelan.SearchOptions{Targets: s.discoveryTargets(), Wait: wait, MAC: s.opts.LookupMAC})
+	answers, err := r.Discover(ctx, cubelan.SearchOptions{Targets: s.discoveryTargets(), Wait: wait, LateWait: s.opts.discoveryLate, MAC: s.opts.LookupMAC})
 	<-browsed
 	// Another program on this host searched meanwhile and got the Cubes'
 	// answers from then on: the run lists what it heard, and settles

@@ -76,7 +76,9 @@ func TestSearchMarksTheAnswers(t *testing.T) {
 				}
 				return ""
 			}
-			found := searchOn(t, SearchOptions{Targets: targets, Wait: 300 * time.Millisecond, MAC: mac})
+			// The proxy never answers N and c: the late wait is waited
+			// out, as long as the wait, in place of the search's second.
+			found := searchOn(t, SearchOptions{Targets: targets, Wait: 300 * time.Millisecond, LateWait: testkit.Scale(300 * time.Millisecond), MAC: mac})
 			byIP := map[string]Discovered{}
 			for _, d := range found {
 				byIP[d.IP.String()] = d

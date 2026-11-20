@@ -98,6 +98,10 @@ type Config struct {
 	// only port the Cubes answer to and the original software asks; for
 	// tests, with DiscoveryTargets.
 	DiscoveryListen string
+	// discoveryWait is how long a search waits for answers
+	// (server.Options.DiscoveryWait), for the tests, whose fake Cubes
+	// answer at once; 0 is server.DefaultDiscoveryWait.
+	discoveryWait time.Duration
 	// TLS is the certificate source of the listener; the zero value
 	// serves plain HTTP.
 	TLS TLS
@@ -320,7 +324,7 @@ func open(ctx context.Context, cfg Config, root *slog.Logger, src certs.Source, 
 		// The server present on the LAN looks for the integrations there.
 		find = findIntegrations
 	}
-	srv := server.New(server.Options{Cubes: su.cubes, Token: cfg.Token, PollInterval: poll, CubeHold: cfg.CubeHold, RefreshInterval: refresh, DiscoverInterval: discover, DiscoveryTargets: cfg.DiscoveryTargets, DiscoveryAddr: cfg.DiscoveryListen, Logger: root, Version: cfg.Version, Proxy: su.listeners, ShowHidden: cfg.ShowHidden,
+	srv := server.New(server.Options{Cubes: su.cubes, Token: cfg.Token, PollInterval: poll, CubeHold: cfg.CubeHold, RefreshInterval: refresh, DiscoverInterval: discover, DiscoveryTargets: cfg.DiscoveryTargets, DiscoveryAddr: cfg.DiscoveryListen, DiscoveryWait: cfg.discoveryWait, Logger: root, Version: cfg.Version, Proxy: su.listeners, ShowHidden: cfg.ShowHidden,
 		Store: st, Queue: queue, FileCubes: su.fileCubes, SettingsFile: cfg.SettingsFile, StaleAfter: staleAfter, StaleAfterWall: staleAfterWall, SettingsFixedBy: fixedBy, ProxyFixed: len(cfg.Proxies) > 0, Update: cfg.Update, TLS: src, HSTSDays: cfg.HSTSDays, TrustedProxies: cfg.TrustedProxies,
 		Restart: cfg.Restart, Reboot: cfg.Reboot, Install: cfg.Install, Deliverers: cfg.Deliverers, FindIntegrations: find, BrowseServers: browseServers,
 		Announce: server.AnnounceState{On: cfg.Announce.On && st != nil, FixedBy: cfg.Announce.FixedBy, Loopback: LoopbackListen(cfg.Listen)}})

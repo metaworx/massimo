@@ -25,7 +25,6 @@ var serialTests = map[string]string{
 	"TestGetSystemInterfaces":    "swaps hostInterfaces",
 	"TestProviderIssuerAtSaving": "swaps oidcClient (fakeDiscovery)",
 	"TestProvidersAPI":           "swaps oidcClient (fakeDiscovery)",
-	"TestRebootBlocked":          "swaps rebootStuck",
 	"TestWallReset":              "sets wallSilence to 0",
 
 	// A fixed port: a Cube added through the API as the only one gets

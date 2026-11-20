@@ -40,10 +40,18 @@ func freeUDP(t *testing.T, ip string) string {
 }
 
 // discovering is the start of the discovery's tests: the server's
-// options o, a run's wait 200 ms where o sets none.
+// options o, a run's wait 200 ms where o sets none, and the wait from
+// an answer for its N and c answers 500 ms, scaled, in place of the
+// search's second: a proxy, the server's own or a fake's, answers the
+// identify request alone, and a run waits that out for it; a fake
+// Cube's N and c come at once, but on a starved runner later than its
+// answer by more than a run's 200 ms.
 func discovering(o Options) startOpt {
 	if o.DiscoveryWait == 0 {
 		o.DiscoveryWait = 200 * time.Millisecond
+	}
+	if o.discoveryLate == 0 {
+		o.discoveryLate = testkit.Scale(500 * time.Millisecond)
 	}
 	return withOptions(o)
 }

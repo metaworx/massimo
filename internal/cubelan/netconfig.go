@@ -4,6 +4,7 @@
 package cubelan
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -39,8 +40,8 @@ const (
 	SetStatusRestarting byte = 2
 )
 
-// The waits around a write, variables so that tests can shorten them.
-var (
+// The waits of a read and around a write, where NetWaits leaves them 0.
+const (
 	// setReplyWait is how long SetNetConfig waits for the answer to C,
 	// and then to R.
 	setReplyWait = time.Second
@@ -56,6 +57,32 @@ var (
 	// askWait is how long one request waits for its answer.
 	askWait = time.Second
 )
+
+// NetWaits are the waits of QueryNetConfig, FindNetConfig and
+// SetNetConfig; a field left 0 takes its default, which is what the
+// command line does. A test against a fake Cube, which answers at once,
+// shortens them.
+type NetWaits struct {
+	// Reply is how long SetNetConfig waits for the answer to C, and then
+	// to R: a second.
+	Reply time.Duration
+	// Settle is the pause between the write and the first re-read: a
+	// second.
+	Settle time.Duration
+	// Reread is how long the re-read after a write keeps trying, 3 s;
+	// Restart is how long when the Cube restarts, 60 s.
+	Reread, Restart time.Duration
+	// Probe is how often N goes out while the re-read waits: 2.5 s.
+	Probe time.Duration
+	// Ask is how long one request waits for its answer: a second.
+	Ask time.Duration
+}
+
+// orDefault is w with each field left 0 at its default.
+func (w NetWaits) orDefault() NetWaits {
+	return NetWaits{Reply: cmp.Or(w.Reply, setReplyWait), Settle: cmp.Or(w.Settle, setSettle), Reread: cmp.Or(w.Reread, rereadWait),
+		Restart: cmp.Or(w.Restart, restartWait), Probe: cmp.Or(w.Probe, probeEvery), Ask: cmp.Or(w.Ask, askWait)}
+}
 
 // ErrNoReply says that the Cube did not answer.
 var ErrNoReply = errors.New("the cube did not answer")
@@ -248,16 +275,16 @@ func exchange(ctx context.Context, pc net.PacketConn, targets []*net.UDPAddr, re
 }
 
 // readState finds the Cube with serial through N at the targets, sent
-// again every probeEvery (or askWait, when within is shorter), and reads
-// c from the address it answered from, trying until within has passed
-// (and N at least once, c at least twice). A Cube that answers c but not
-// N is read at the first target.
-func readState(ctx context.Context, pc net.PacketConn, targets []*net.UDPAddr, serial string, within time.Duration) (NetState, error) {
+// again every w.Probe (or w.Ask, when within is shorter), and reads c
+// from the address it answered from, trying until within has passed (and
+// N at least once, c at least twice). A Cube that answers c but not N is
+// read at the first target. w has its defaults (NetWaits.orDefault).
+func readState(ctx context.Context, pc net.PacketConn, targets []*net.UDPAddr, serial string, within time.Duration, w NetWaits) (NetState, error) {
 	deadline := time.Now().Add(within)
 	st := NetState{Serial: serial, From: targets[0]}
-	probe := askWait
-	if within > probeEvery {
-		probe = probeEvery
+	probe := w.Ask
+	if within > w.Probe {
+		probe = w.Probe
 	}
 	for ctx.Err() == nil {
 		if r, ok := exchange(ctx, pc, targets, udpRequest(serial, udpNetConfig), serial, udpNetConfig, probe); ok {
@@ -274,7 +301,7 @@ func readState(ctx context.Context, pc net.PacketConn, targets []*net.UDPAddr, s
 		}
 	}
 	for try := 0; ; try++ {
-		if r, ok := exchange(ctx, pc, []*net.UDPAddr{st.From}, udpRequest(serial, udpGetConfig), serial, udpGetConfig, askWait); ok {
+		if r, ok := exchange(ctx, pc, []*net.UDPAddr{st.From}, udpRequest(serial, udpGetConfig), serial, udpGetConfig, w.Ask); ok {
 			cfg, err := parseNetConfig(r.data)
 			if err != nil {
 				return st, err
@@ -296,8 +323,9 @@ func readState(ctx context.Context, pc net.PacketConn, targets []*net.UDPAddr, s
 
 // QueryNetConfig asks the Cube at addr (host or host:port, port 23272 by
 // default) for its serial with I, for the addresses in use with N and
-// for its stored configuration with c.
-func QueryNetConfig(ctx context.Context, addr string) (NetState, error) {
+// for its stored configuration with c, each request waiting w.Ask.
+func QueryNetConfig(ctx context.Context, addr string, w NetWaits) (NetState, error) {
+	w = w.orDefault()
 	to, err := udpTarget(addr)
 	if err != nil {
 		return NetState{}, err
@@ -310,12 +338,12 @@ func QueryNetConfig(ctx context.Context, addr string) (NetState, error) {
 	var id reply
 	var ok bool
 	for try := 0; try < 2 && !ok; try++ {
-		id, ok = exchange(ctx, pc, []*net.UDPAddr{to}, udpRequest("", udpIdentify), "", udpIdentify, askWait)
+		id, ok = exchange(ctx, pc, []*net.UDPAddr{to}, udpRequest("", udpIdentify), "", udpIdentify, w.Ask)
 	}
 	if !ok {
 		return NetState{}, fmt.Errorf("identify %s: %w", to, ErrNoReply)
 	}
-	return readState(ctx, pc, []*net.UDPAddr{to}, id.serial, askWait)
+	return readState(ctx, pc, []*net.UDPAddr{to}, id.serial, w.Ask, w)
 }
 
 // FindNetConfig asks the Cube with the given serial for N and c through
@@ -323,8 +351,10 @@ func QueryNetConfig(ctx context.Context, addr string) (NetState, error) {
 // default); to the limited broadcast the requests also go to every
 // interface's broadcast and the multicast group. Only the Cube with that
 // serial answers, whatever its address, as long as its answer can reach
-// this host. The error wraps ErrNoReply when no c answer comes.
-func FindNetConfig(ctx context.Context, addr, serial string) (NetState, error) {
+// this host. Each request waits w.Ask. The error wraps ErrNoReply when no
+// c answer comes.
+func FindNetConfig(ctx context.Context, addr, serial string, w NetWaits) (NetState, error) {
+	w = w.orDefault()
 	to, err := udpTarget(addr)
 	if err != nil {
 		return NetState{}, err
@@ -338,7 +368,7 @@ func FindNetConfig(ctx context.Context, addr, serial string) (NetState, error) {
 	if to.IP.Equal(net.IPv4bcast) {
 		targets = append(targets, DiscoveryTargets()...)
 	}
-	return readState(ctx, pc, targets, serial, askWait)
+	return readState(ctx, pc, targets, serial, w.Ask, w)
 }
 
 // SetResult is what SetNetConfig learned during and after the write.
@@ -366,9 +396,11 @@ func (r SetResult) Restarting() bool {
 // means the Cube restarts by itself, so no R follows. It then re-reads,
 // allowing for the restart: N at addr, at the new address of a static
 // write and, after a DHCP write or to a broadcast address, as a
-// broadcast too, and c from the address that answered. The error wraps
-// ErrNoReply when the re-read got no answer; the C was sent all the same.
-func SetNetConfig(ctx context.Context, addr, serial string, cfg NetConfig) (SetResult, error) {
+// broadcast too, and c from the address that answered; w says how long
+// each step waits. The error wraps ErrNoReply when the re-read got no
+// answer; the C was sent all the same.
+func SetNetConfig(ctx context.Context, addr, serial string, cfg NetConfig, w NetWaits) (SetResult, error) {
+	w = w.orDefault()
 	frame, err := NetConfigFrame(serial, cfg)
 	if err != nil {
 		return SetResult{}, err
@@ -390,7 +422,7 @@ func SetNetConfig(ctx context.Context, addr, serial string, cfg NetConfig) (SetR
 	// R goes to where the Cube answered C from: a static write answers
 	// from the new address.
 	rebootTo := []*net.UDPAddr{to}
-	if r, ok := exchange(ctx, pc, []*net.UDPAddr{to}, frame, serial, udpSetConfig, setReplyWait); ok && len(r.data) > 0 {
+	if r, ok := exchange(ctx, pc, []*net.UDPAddr{to}, frame, serial, udpSetConfig, w.Reply); ok && len(r.data) > 0 {
 		res.Status = r.data[0]
 		if r.from != nil {
 			rebootTo = []*net.UDPAddr{r.from}
@@ -401,14 +433,14 @@ func SetNetConfig(ctx context.Context, addr, serial string, cfg NetConfig) (SetR
 	}
 	if res.Status == SetStatusOK {
 		res.RebootSent = true
-		if r, ok := exchange(ctx, pc, rebootTo, RebootFrame(serial), serial, udpReboot, setReplyWait); ok && len(r.data) > 0 {
+		if r, ok := exchange(ctx, pc, rebootTo, RebootFrame(serial), serial, udpReboot, w.Reply); ok && len(r.data) > 0 {
 			res.RebootStatus = r.data[0]
 		}
 	}
 	select {
 	case <-ctx.Done():
 		return res, fmt.Errorf("network configuration of %s: %w", serial, ctx.Err())
-	case <-time.After(setSettle):
+	case <-time.After(w.Settle):
 	}
 	// After a DHCP write the lease may differ from the old address, so N
 	// goes out as a broadcast too. A loopback target is a fake Cube, with
@@ -418,10 +450,10 @@ func SetNetConfig(ctx context.Context, addr, serial string, cfg NetConfig) (SetR
 	}
 	// A restart, announced (status 2, R) or likely (any DHCP write,
 	// also an unanswered broadcast one), gets the long wait.
-	within := rereadWait
+	within := w.Reread
 	if res.Restarting() || res.RebootSent || cfg.DHCP {
-		within = restartWait
+		within = w.Restart
 	}
-	res.Now, err = readState(ctx, pc, targets, serial, within)
+	res.Now, err = readState(ctx, pc, targets, serial, within, w)
 	return res, err
 }

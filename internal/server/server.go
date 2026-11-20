@@ -310,6 +310,15 @@ type Options struct {
 	// confirmWithin is how long a write's devices have to show it, for
 	// the tests; zero for defaultConfirmWithin (confirm.go).
 	confirmWithin time.Duration
+	// discoveryLate is how long, from an answer, a discovery run waits
+	// for its N and c answers where DiscoveryWait ends sooner
+	// (cubelan.SearchOptions.LateWait), for the tests, whose proxies never
+	// send them; zero for the search's second.
+	discoveryLate time.Duration
+	// rebootStuck is how long the server still runs after its reboot was
+	// taken before it counts the reboot as failed, for the tests; zero
+	// for defaultRebootStuck (reboot_api.go).
+	rebootStuck time.Duration
 	// TLS, when set, is the certificate source of a server that
 	// terminates TLS itself (internal/serve wraps the listener with
 	// certs.Config): /healthz then reports the certificate as "tls", and
