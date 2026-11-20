@@ -5,8 +5,8 @@
 // call its parts (ui/src/header/, MassimoParts.header, AP UiParts Block
 // 6), and what stays plain: the chosen Cube's radio budget, the server's
 // clock and the time of its last answer, a Cube's link's sign and word for
-// the plain regions, the version in ☰ (and beside the logo while signed
-// out) and the certificate's text, and the server's state, which follows
+// the plain regions, the version in ☰ (and in the sign-in card) and the
+// certificate's text, and the server's state, which follows
 // its version and its updates. The parts draw the pile (the chosen Cube's
 // age, the server's sign, every Cube's problems, Refresh now), the Cube
 // choice and the certificate's line, built once and updated in place,
@@ -184,7 +184,9 @@ async function checkVersion() {
     state.version = v;
     const parts = splitVersion(v);
     $("version-short").textContent = parts.short;
-    $("version-out").textContent = parts.short; // beside the logo while signed out
+    // signed out, in the sign-in card, at its foot and first in its ☰
+    $("login-version").textContent = parts.short;
+    $("login-menu-version").textContent = parts.short;
     renderVersionTitle();
     renderServerSign();
     return;

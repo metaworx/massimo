@@ -531,11 +531,17 @@ def test_server_page_keeps_the_login(new_context, case, watch, guard):
     page = server_page(new_context, guard, watch, {"status": {"can": True, "user": "", "ask": "start", "plain": False}, "keep": [False, True]})
     page.locator("#login-dialog[open]").wait_for()
     page.locator("#login-keep-row").wait_for(state="visible")
-    assert page.locator("#login-fingerprint").is_hidden(), "nothing kept: no Login by fingerprint"
+    assert page.locator("#login-way-fp").is_hidden(), "nothing kept: no Login by fingerprint"
     assert page.locator("#login-servers").is_visible(), "Select server, the app having its servers"
     named_buttons(page, "the sign-in in the app")
     page.locator("#login-servers").click()
     assert wait_until(page, "window.__fakeBridge.calls.some((c) => c[0] === 'connect')", 3), "Select server calls the app"
+    # and last in the card's ☰ (AP MobileApp, Block 13: F13)
+    page.locator("#login-menu summary").click()
+    last = page.locator("#login-menu .menu-items > :last-child")
+    assert last.get_attribute("id") == "login-menu-servers" and last.is_visible(), "Select server, last in the card's ☰"
+    last.click()
+    assert wait_until(page, "window.__fakeBridge.calls.filter((c) => c[0] === 'connect').length === 2", 3), "the card's ☰ calls the app"
 
     page.locator("#login-user").fill("operator")
     page.locator("#login-password").fill("op-pass")
@@ -552,24 +558,36 @@ def test_server_page_keeps_the_login(new_context, case, watch, guard):
     assert len(calls(page, "login.keep")) == 2, "Try again asks again"
     assert not page.evaluate("document.getElementById('login-dialog').open"), "and the page is signed in"
 
-    # Signed in: the Cube choice ends with Select server.
+    # Signed in: the Cube choice ends with Select server, and the main ☰
+    # has it just before Sign out.
     page.locator("#cube-menu summary").click()
     entry = page.locator("#cube-menu .menu-items button[data-value='__servers']")
     entry.wait_for(state="visible")
     entry.click()
-    assert wait_until(page, "window.__fakeBridge.calls.filter((c) => c[0] === 'connect').length === 2", 3), "the Cube choice's Select server"
+    assert wait_until(page, "window.__fakeBridge.calls.filter((c) => c[0] === 'connect').length === 3", 3), "the Cube choice's Select server"
+    page.locator("#nav-menu summary").click()
+    servers = page.locator("#menu-servers")
+    servers.wait_for(state="visible")
+    assert page.evaluate("document.getElementById('menu-servers').nextElementSibling.id") == "menu-logout", "just before Sign out"
+    servers.click()
+    assert wait_until(page, "window.__fakeBridge.calls.filter((c) => c[0] === 'connect').length === 4", 3), "the main ☰'s Select server"
 
 
 def test_server_page_login_by_fingerprint(new_context, case, watch, guard):
-    """Where a key is kept, the sign-in form offers Login by fingerprint
-    with the user's name, which signs the page in with the session the
-    app made; a dismissed prompt leaves the form; over plain HTTP outside
-    the home network the form says why it offers the password alone."""
+    """Where a key is kept, the sign-in's row starts with the fingerprint,
+    named with the user's name, the name's form staying the one chosen;
+    it signs the page in at once with the session the app made (AP
+    MobileApp, D49); a dismissed prompt leaves the form; over plain HTTP
+    outside the home network the form says why it offers the password
+    alone."""
     page = server_page(new_context, guard, watch, {"status": {"can": True, "user": "operator", "ask": "start", "plain": False}, "fingerprint": TOKEN})
     page.locator("#login-dialog[open]").wait_for()
-    fingerprint = page.locator("#login-fingerprint")
+    fingerprint = page.locator("#login-way-fp")
     fingerprint.wait_for(state="visible")
-    assert "operator" in page.locator("#login-fingerprint-user").inner_text()
+    assert "operator" in fingerprint.get_attribute("aria-label"), "named with the user's name"
+    assert page.evaluate("document.querySelector('#login-ways .login-way').id") == "login-way-fp", "first in the row"
+    assert page.locator("#login-ways .login-way[data-way='name']").get_attribute("aria-pressed") == "true", "Name stays chosen"
+    assert page.locator("#login-form").is_visible()
     assert page.locator("#login-keep-row").is_hidden(), "a key kept: no switch"
     fingerprint.click()
     page.wait_for_selector(".room", timeout=10000)
@@ -580,11 +598,32 @@ def test_server_page_login_by_fingerprint(new_context, case, watch, guard):
     plain = server_page(new_context, guard, watch, {"status": {"can": True, "user": "operator", "ask": "start", "plain": True}})
     plain.locator("#login-dialog[open]").wait_for()
     plain.locator("#login-fp-plain").wait_for(state="visible")
-    assert plain.locator("#login-fingerprint").is_hidden() and plain.locator("#login-keep-row").is_hidden(), "plain HTTP: neither"
+    assert plain.locator("#login-way-fp").is_hidden() and plain.locator("#login-keep-row").is_hidden(), "plain HTTP: neither"
 
     dismissed = server_page(new_context, guard, watch, {"status": {"can": True, "user": "operator", "ask": "start", "plain": False}, "fingerprint": None})
-    dismissed.locator("#login-fingerprint").wait_for(state="visible")
-    dismissed.locator("#login-fingerprint").click()
+    dismissed.locator("#login-way-fp").wait_for(state="visible")
+    dismissed.locator("#login-way-fp").click()
     assert wait_until(dismissed, "window.__fakeBridge.calls.some((c) => c[0] === 'login.fingerprint')", 3)
-    assert wait_until(dismissed, "!document.getElementById('login-fingerprint').classList.contains('busy')", 3)
+    assert wait_until(dismissed, "!document.getElementById('login-way-fp').classList.contains('busy')", 3)
     assert dismissed.evaluate("document.getElementById('login-dialog').open"), "a dismissed prompt leaves the form"
+
+
+def test_server_page_first_owner_keeps_the_login(new_context, case, watch, guard):
+    """In the app, the first owner's form offers the login by fingerprint
+    as the sign-in does (AP MobileApp, D42-A): its switch where the phone
+    can and nothing is kept, none over plain HTTP. /api/v1/me is stubbed
+    as an open server without users once the page is in."""
+    for plain in (False, True):
+        page = server_page(new_context, guard, watch, {"status": {"can": True, "user": "", "ask": "start", "plain": plain}}, token=TOKEN)
+        page.wait_for_selector(".room", timeout=10000)
+        page.route("**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body='{"mode": "open", "setup": true}'))
+        page.evaluate("loadMe()")
+        assert wait_until(page, "!document.getElementById('setup').classList.contains('hidden')", 5), "the first owner's form shows"
+        if plain:
+            page.wait_for_timeout(300)
+            assert page.locator("#setup-keep-row").is_hidden(), "plain HTTP: no switch"
+        else:
+            page.locator("#setup-keep-row").wait_for(state="visible")
+            assert not page.locator("#setup-keep").is_checked(), "off at first"
+            named_buttons(page, "the first owner's form in the app")
+        page.unroute("**/api/v1/me")

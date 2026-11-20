@@ -126,6 +126,7 @@ function applyCaps() {
   body.classList.toggle("no-system", !hasSettingsPage());
   body.classList.toggle("no-maint", !hasSystem());
   $("setup").classList.toggle("hidden", !(me && me.setup));
+  if (me && me.setup) renderSetupKeep();
   renderOpenBanner();
   renderMe();
   markSettingsPages(); // pages.js
@@ -365,10 +366,11 @@ function appConnect() {
 }
 
 // renderAppLogin draws the sign-in card's part of the app as
-// login.status() answers: "Login by fingerprint" where a key is kept,
-// the switch that keeps one where the phone can and none is kept, the
-// notice where the address takes no key (plain HTTP outside the home
-// network), and "Select server". Nothing of it in a browser.
+// login.status() answers: the fingerprint first among the ways to sign
+// in where a key is kept, the switch that keeps one where the phone can
+// and none is kept, the notice where the address takes no key (plain
+// HTTP outside the home network), and "Select server" at the card's foot
+// and last in its ☰. Nothing of it in a browser.
 async function renderAppLogin() {
   const login = appLogin();
   let st = null;
@@ -380,17 +382,48 @@ async function renderAppLogin() {
     }
   }
   const kept = !!(st && st.user && !st.plain);
-  $("login-fingerprint").classList.toggle("hidden", !kept);
-  const who = $("login-fingerprint-user");
-  who.textContent = kept ? t("login.fingerprintAs", { name: st.user }) : "";
-  who.classList.toggle("hidden", !kept);
+  const fp = $("login-way-fp");
+  fp.classList.toggle("hidden", !kept);
+  if (kept) {
+    const label = t("connect.loginAs", { name: st.user });
+    fp.setAttribute("aria-label", label);
+    fp.title = label;
+  }
   const plain = !!(st && st.can && st.plain);
   $("login-fp-plain").classList.toggle("hidden", !plain);
-  $("login-app").classList.toggle("hidden", !kept && !plain);
   const offer = !!(st && st.can && !st.plain && !st.user);
   $("login-keep-row").classList.toggle("hidden", !offer);
   if (!offer) $("login-keep").checked = false;
-  $("login-servers-row").classList.toggle("hidden", !appConnect());
+  const servers = !appConnect();
+  $("login-servers-row").classList.toggle("hidden", servers);
+  $("login-menu-servers").classList.toggle("hidden", servers);
+  $("login-menu-servers-sep").classList.toggle("hidden", servers);
+}
+
+// renderSetupKeep offers, on the first owner's form in the app, to keep
+// the login by fingerprint, as the sign-in does where the phone can and
+// the address takes a key (login.status).
+async function renderSetupKeep() {
+  const login = appLogin();
+  let st = null;
+  if (login) {
+    try {
+      st = await login.status();
+    } catch (e) {
+      st = null;
+    }
+  }
+  const offer = !!(st && st.can && !st.plain && !st.user);
+  $("setup-keep-row").classList.toggle("hidden", !offer);
+  if (!offer) $("setup-keep").checked = false;
+}
+
+// chooseWay shows the form of a way to sign in, name or key, and marks
+// its button pressed (the row of the card, partials/login.html).
+function chooseWay(way) {
+  for (const b of document.querySelectorAll("#login-ways .login-way[data-way]")) b.setAttribute("aria-pressed", String(b.dataset.way === way));
+  $("login-form").classList.toggle("hidden", way !== "name");
+  $("login-key-form").classList.toggle("hidden", way !== "key");
 }
 
 // keepLogin keeps the login by fingerprint after a sign-in with the
@@ -413,7 +446,7 @@ async function keepLogin() {
     }
     $("login-keep-failed-text").textContent = said;
     form.classList.add("hidden");
-    $("login-app").classList.add("hidden");
+    $("login-ways").classList.add("hidden");
     failed.classList.remove("hidden");
     retry.focus();
     const again = await new Promise((resolve) => {
@@ -428,12 +461,13 @@ async function keepLogin() {
   }
   failed.classList.add("hidden");
   form.classList.remove("hidden");
+  $("login-ways").classList.remove("hidden");
 }
 
 // askLogin opens the sign-in dialog and resolves true once a session or
 // a key is in, false when the dialog was dismissed. While it is open the
-// page is signed out: the body's class signed-out hides all of it but
-// the name, the version and the dialog.
+// page is signed out: the body's class signed-out hides all of it but the
+// dialog, which holds the logo and the version.
 function askLogin() {
   if (loginPromise) return loginPromise;
   notSentNow = false; // app.js: only the writes this sign-in answers
@@ -449,7 +483,10 @@ function askLogin() {
     $("login-password").value = "";
     $("login-token").value = "";
     $("login-keep").checked = false;
-    $("login-token").closest("details").open = sawOpen;
+    $("login-ways").classList.remove("hidden");
+    // the API key's form where the server was seen open, its owner of
+    // MASSIMO_API_TOKEN having no password
+    chooseWay(sawOpen ? "key" : "name");
     showResult(error, "", false);
     // a provider's refusal under the providers' buttons
     showResult($("login-providers-error"), "", false);
@@ -461,7 +498,7 @@ function askLogin() {
     renderLoginProviders();
     renderAppLogin();
     const submit = form.querySelector("button[type=submit]");
-    const fingerprint = $("login-fingerprint");
+    const fingerprint = $("login-way-fp");
     const done = (ok) => {
       form.onsubmit = null;
       keyForm.onsubmit = null;
@@ -852,7 +889,17 @@ async function createOwner(ev) {
       return signIn(name, password);
     });
     setToken(session.token);
-    showResult(msg, t("setup.done", { name }), true);
+    // the login by fingerprint kept for the new owner, where asked for; not
+    // kept, the owner is in all the same and may keep it at a sign-in
+    let kept = true;
+    if ($("setup-keep").checked && !$("setup-keep-row").classList.contains("hidden")) {
+      try {
+        kept = await appLogin().keep();
+      } catch (e) {
+        kept = false;
+      }
+    }
+    showResult(msg, t("setup.done", { name }) + (kept ? "" : " " + t("setup.notKept")), true);
     afterLogin();
   } catch (e) {
     const worded = wordNameError(e, name); // users.js
@@ -878,10 +925,23 @@ function initLogin() {
     if (document.visibilityState === "hidden") flushPreferences();
   });
   $("logout-btn").addEventListener("click", logout);
-  $("login-servers").addEventListener("click", () => {
+  // the ways to sign in: the name's form or the key's, the one chosen in focus
+  for (const b of document.querySelectorAll("#login-ways .login-way[data-way]")) {
+    b.addEventListener("click", () => {
+      chooseWay(b.dataset.way);
+      $(b.dataset.way === "key" ? "login-token" : "login-user").focus();
+    });
+  }
+  // in the app, back to its servers: at the card's foot, last in the
+  // card's ☰, and in the main ☰ before Sign out
+  const toServers = () => {
     const go = appConnect();
     if (go) go().catch(() => {});
-  });
+  };
+  $("login-servers").addEventListener("click", toServers);
+  $("login-menu-servers").addEventListener("click", toServers);
+  $("menu-servers").addEventListener("click", toServers);
+  $("menu-servers").classList.toggle("hidden", !appConnect());
   $("menu-logout").addEventListener("click", logout);
   $("setup-form").addEventListener("submit", createOwner);
   checkOwnerName = watchName($("setup-user"), $("setup-name-msg"), () => []);

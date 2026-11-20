@@ -4,7 +4,7 @@
 token, as the operator run.sh creates (password op-pass). A page error
 fails the test (the guard); the console is not watched, since the
 page's first requests without a token are refused on purpose."""
-from conftest import URL
+from conftest import URL, api_call
 from helpers import named_buttons, open_personal_page, show_view, sign_out, wait_until
 
 
@@ -66,12 +66,18 @@ def test_sign_in_and_out(new_context, case, watch, guard):
     page.locator("#logout-btn").click()
     assert wait_until(page, "document.getElementById('login-dialog').open", 5), "Sign out brings the dialog back"
     assert page.evaluate("localStorage.getItem('massimo.token')") is None, "the token is forgotten"
-    # Signed out, the page shows its name, its version and the sign-in,
-    # and holds nothing of the session.
+    # Signed out, the page shows the sign-in's card alone, with the logo
+    # and the version, and holds nothing of the session (AP MobileApp,
+    # D44-A: no header).
     assert page.evaluate("state.rooms.length === 0 && state.cubes.length === 0 && !state.pollTimer"), "the Cube's data is forgotten"
     assert page.locator(".room").count() == 0, "no room tile is drawn"
-    assert page.locator(".brand h1").is_visible() and page.locator("#version-out").is_visible(), "the name and the version show"
-    assert page.locator("#version-out").inner_text() == page.locator("#version-short").inner_text(), "the version ☰ holds"
+    assert page.locator("header.top").is_hidden(), "no header while signed out"
+    assert page.locator("#login-dialog > .brand-big").is_visible(), "the card's logo"
+    version = page.locator("#version-short").text_content()
+    assert version and page.locator("#login-version").inner_text() == version, "the version at the card's foot, as ☰ holds it"
+    page.locator("#login-menu summary").click()
+    assert page.locator("#login-menu-version").inner_text() == version, "and first in the card's ☰"
+    page.locator("#login-menu summary").click()
     for sel in ("#cube-menu", ".top-line > .nav", ".pile", "main"):
         assert not page.locator(sel).first.is_visible(), f"{sel} is hidden while signed out"
     page.locator("#login-user").fill("operator")
@@ -116,6 +122,67 @@ def test_sign_in_starts_the_page_once(new_context, case, watch, guard):
     assert (len(tickets), len(mes)) == (2, 2), f"one start after the sign-in after Log out: {len(tickets)} ticket(s), {len(mes)} /me"
     sign_out(page)
     assert wait_until(page, "document.getElementById('login-dialog').open", 5), "signed out at the end"
+
+
+def test_sign_in_ways(new_context, case, watch, guard):
+    """The card's row "Sign in with: Name | API key" (AP MobileApp,
+    D45-A): Name chosen at first, the API key's form in its place once
+    chosen, its field in focus, and Name back; no fingerprint outside the
+    app."""
+    ctx = new_context()
+    page = ctx.new_page()
+    guard.page = page
+    page.set_default_timeout(5000)
+    page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+    page.goto(URL)
+    assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the sign-in dialog opens"
+    name = page.locator("#login-ways .login-way[data-way='name']")
+    key = page.locator("#login-ways .login-way[data-way='key']")
+    assert name.get_attribute("aria-pressed") == "true" and key.get_attribute("aria-pressed") == "false", "Name is chosen at first"
+    assert page.locator("#login-form").is_visible() and page.locator("#login-key-form").is_hidden()
+    assert page.locator("#login-way-fp").is_hidden(), "no fingerprint in a browser"
+    key.click()
+    assert key.get_attribute("aria-pressed") == "true" and name.get_attribute("aria-pressed") == "false"
+    assert page.locator("#login-key-form").is_visible() and page.locator("#login-form").is_hidden(), "the API key's form in its place"
+    assert page.evaluate("document.activeElement.id") == "login-token", "its field in focus"
+    named_buttons(page, "the API key's form")
+    name.click()
+    assert page.locator("#login-form").is_visible() and page.locator("#login-key-form").is_hidden(), "Name back"
+    assert page.evaluate("document.activeElement.id") == "login-user"
+
+
+THIS_DEVICE = {"en": "this device", "de": "dieses Gerät"}
+
+
+def test_a_dead_session_is_dropped(new_context, case, watch, guard):
+    """My profile marks the session in use "this device"; revoked from
+    elsewhere, the page's first refused request drops it, so that its
+    polls and stream do not go on sending it until the address is locked
+    out (AP MobileApp, Block 13: F2, F7)."""
+    ctx = new_context()
+    page = ctx.new_page()
+    guard.page = page
+    page.set_default_timeout(5000)
+    page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+    page.goto(URL)
+    sign_in(page, "operator", "op-pass")
+    tid = page.evaluate("state.me.token.id")
+    open_personal_page(page)
+    row = page.locator("#profile-tokens .user-tokens li.token-current")
+    row.wait_for(timeout=5000)
+    assert row.get_attribute("data-id") == str(tid), "this device is the session in use"
+    assert THIS_DEVICE[case.lang] in row.inner_text(), "named so"
+    assert page.locator("#profile-tokens .user-tokens li.token-current").count() == 1, "once"
+    dead = "Bearer " + page.evaluate("state.token")
+    sent = []
+    page.on("request", lambda r: sent.append(r.url) if r.headers.get("authorization") == dead else None)
+    api_call("DELETE", "api/v1/users/operator/tokens/%d" % tid)
+    page.evaluate("() => { poll(false); }")  # not awaited: it waits for the sign-in
+    assert wait_until(page, "document.getElementById('login-dialog').open", 10), "the sign-in again"
+    assert page.evaluate("state.token") is None, "the dead session is dropped"
+    n = len(sent)
+    page.wait_for_timeout(3000)
+    assert len(sent) == n and n <= 3, f"no request sends it again: {n} at the refusal, {len(sent)} after"
 
 
 def test_sign_in_is_busy_until_answered(new_context, case, watch, guard):
