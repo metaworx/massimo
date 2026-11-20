@@ -5,26 +5,19 @@
  * @file internal/server/ui/src/cubes/Actions.tsx
  *
  * A Cube's actions in one row at the bottom of its panel: Pair a device,
- * with its progress under the row, and Repair… with its box, both plain
- * (pairing.js, repair.js) in elements the part leaves to them; Reboot the
+ * with its progress under the row (Pairing.tsx), and Repair… with its
+ * box, plain (repair.js) in an element the part leaves to it; Reboot the
  * Cube and Remove, each asking in its own place. Reboot's question names
  * the radiograms pending as the Cube says now (D126).
  */
 
 import type { Cube } from "../api";
 import { Island } from "../shared/island";
+import { cubePath } from "../shared/path";
 import { Question, useAsk } from "../shared/question";
+import { Pairing } from "./Pairing";
 import { rebootCube, removeCube } from "./send";
 import { cubeUI } from "./store";
-
-/**
- * Pairing is the Cube's pairing, plain (an Island): pairing.js fills the
- * element (redrawPairing), here once it is there and again at a change of
- * language, and at every change of its own.
- */
-function Pairing({ serial }: { serial: string }) {
-  return <Island cls="cube-pairing needs-pair" keys={[serial]} fill={() => redrawPairing(serial)} />;
-}
 
 /**
  * Repair is the Cube's Repair… and the box of its repairs, plain
@@ -39,7 +32,7 @@ function Repair({ c }: { c: Cube }) {
       const scope = repairScope(c.serial, "cube");
       const row = document.createElement("div");
       row.className = "actions cube-repair needs-repair";
-      row.append(repairButton(scope, "cube", "api/v1/cubes/" + encodeURIComponent(c.serial), { label }));
+      row.append(repairButton(scope, "cube", cubePath(c.serial), { label }));
       el.replaceChildren(row, repairSlot(scope));
     }} />
   );

@@ -68,10 +68,10 @@ export function Notice({ text, since, next, cls, id, role, hidden, children }: {
  * components.js), as an actionRunner's set gives it: the text, green where
  * it went well, red where not; hidden, in its place, while there is none.
  * cls is its class (tile-result, the small result line under a tile's or
- * a form's actions).
+ * a form's actions); role status has a screen reader told of each.
  */
-export function ResultLine({ res, cls }: { res: Outcome | null | undefined; cls: string }) {
-  return <p class={cls + (res ? (res.ok ? " ok" : " bad") : " hidden")}>{res?.text}</p>;
+export function ResultLine({ res, cls, role }: { res: Outcome | null | undefined; cls: string; role?: "status" }) {
+  return <p class={cls + (res ? (res.ok ? " ok" : " bad") : " hidden")} role={role}>{res?.text}</p>;
 }
 
 /**

@@ -847,8 +847,9 @@ body.scrolled .nav .top-btn { display: inline-flex; }
 .cubes-msg { margin: 4px 0 0; overflow-wrap: anywhere; }
 .cubes-msg.ok { color: var(--ok); }
 .cubes-msg.bad { color: var(--bad); }
-/* pairing in a Cube's panel (pairing.js), and the form that puts a device
-   into a room, there and under Devices without a room (ui/src/rooms/Unlisted.tsx) */
+/* pairing in a Cube's panel (ui/src/cubes/Pairing.tsx), and the form that
+   puts a device into a room (ui/src/shared/put.tsx), there and under
+   Devices without a room (ui/src/rooms/Unlisted.tsx) */
 .cube-pairing { margin: 0 0 12px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
 .no-cubes .cube-pairing { border-bottom: none; padding-bottom: 0; }
 .pairing-form, .pairing-running { margin-top: 2px; }
@@ -1545,6 +1546,9 @@ massimo-week-program { display: contents; }
 /* a name longer than the Cube keeps (markNameBytes): the box red, the
    limit in amber after the label, before the box on its own line */
 .field input.name-bytes[aria-invalid="true"] { border-color: var(--bad); outline-color: var(--bad); }
+/* a value a part's field refuses (ui/src/shared/field.tsx, its limit):
+   the box after the limit's line red, as markRange's */
+.field .field-limit + input[aria-invalid="true"] { border-color: var(--bad); outline-color: var(--bad); }
 .field.wide > .field-control { flex: 1 1 100%; margin-left: 0; min-width: 0; width: 100%; }
 .field-hint { flex-basis: 100%; margin: 0; }
 /* the window's and the radio's drawing as chosen, beside its choice

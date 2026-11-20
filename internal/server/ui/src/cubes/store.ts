@@ -15,6 +15,8 @@ import { signal } from "@preact/signals";
 import type { Device } from "../api";
 import { counter } from "../shared/counter";
 import { live, liveMap } from "../shared/live";
+import { cubePath } from "../shared/path";
+import { loadCubeRooms, loadPairing } from "./flow";
 
 /** The Cubes' load counter: bumped at every load of the list and every redraw asked for (renderCubes, cubesPolled); every Cubes part uses it. */
 export const load = counter();
@@ -48,7 +50,7 @@ export function deviceOf(rf: string): Device | undefined {
 export async function loadDevices(serial: string): Promise<void> {
   let list: Device[] = [];
   try {
-    list = (await api<Device[]>("GET", "api/v1/cubes/" + encodeURIComponent(serial) + "/devices?devices=real")) || [];
+    list = (await api<Device[]>("GET", cubePath(serial) + "/devices?devices=real")) || [];
   } catch {
     list = [];
   }
@@ -58,7 +60,7 @@ export async function loadDevices(serial: string): Promise<void> {
 /**
  * panelLoads are what a panel loads when it is opened or shown: its
  * devices where not yet loaded, its pairing, and the rooms its pairing
- * offers (pairing.js).
+ * offers (flow.ts).
  */
 export function panelLoads(serial: string): void {
   if (!devices.value[serial]) loadDevices(serial);

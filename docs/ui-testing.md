@@ -1,4 +1,4 @@
-# Testing the web UI (v1.5.0)
+# Testing the web UI (v1.6.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -655,6 +655,10 @@ a device with a low battery, a line of the settings file that differs, an
 address found elsewhere, a proxy that does not listen, and a Cube and a
 Massimo proxy found (`CUBES_STUB`, `FOUND_STUB`): a region whose fixture
 lacks what it shows can be given it so, with GETs alone.
+The pairing's second view does so for a pairing that runs (AP UiParts, Block 9):
+`GET …/pairing` answers it as running for ten minutes more,
+with a device that joined (`JOINED_STUB`), whose form holds a room chosen,
+since a pairing starts only by a POST.
 
 ### Taking a region off the list
 
@@ -713,6 +717,11 @@ The suite's helpers for it are in `tools/ui-test/helpers.py`
   so the hold fails at its end where the timer is no longer the one it cleared.
   What a poll itself draws the test counts for one poll of its own (`poll(false)`),
   once every request it started has been answered.
+- **The same element** (`mark`, `replaced`, `frames` of `helpers.py`):
+  a test that holds that data takes nothing from the user marks the elements
+  of its selectors, lets the data come, waits two frames and a task,
+  and asks which selectors no longer find the element it marked
+  (`test_pairing_updates.py`).
 - **What the reads do not keep yet:**
   a device's state applied in the page (`updateDevice`, a dispatched `state` event)
   lasts until the rooms are loaded again.

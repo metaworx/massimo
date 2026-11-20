@@ -243,6 +243,18 @@ hence `failed_checks_forgotten`.
   in the House panel a room unticked and the focus on its checkbox stay
   through a reload of the rooms.
   Seventeen of them failed on the page before the move.
+- `test_pairing_updates.py`, a Cube's pairing as a part (AP UiParts, Block 9),
+  `GET …/pairing` answered as running with a device that joined:
+  the joined device's form, its name and room, the countdown and Stop
+  stay the elements they were, with what is typed and the focus,
+  through the countdown, a pairing event, another device that joins
+  and a reload of the Cubes;
+  on Cube settings the time typed and its focus stay through a pairing event and a reload.
+  Both failed on the page before the move.
+  After a sign-out, and for another user signed in after an expired session,
+  the joined device's form holds nothing typed, no request of the pairing goes
+  while the sign-in is asked, and the Cube's rooms are asked for again
+  before the form offers any.
 - `test_stream.py`:
   the event stream opens with tickets only, never with the token,
   and after a refused stream (the test hands out a used ticket first,

@@ -5173,12 +5173,14 @@ components:
     NewDevice:
       type: object
       description: A device that joined during pairing, from the Cube's N line
+      required: [type, rf_address, serial]
       properties:
         type: {$ref: "#/components/schemas/DeviceType"}
         rf_address: {type: string}
         serial: {type: string}
     PairingState:
       type: object
+      required: [active, until, paired]
       properties:
         active: {type: boolean}
         started: {type: string, format: date-time}

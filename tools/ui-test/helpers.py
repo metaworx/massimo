@@ -659,3 +659,40 @@ def show_view(page, view):
     else:
         page.locator(VIEW_BUTTON[view]).click()
     page.locator(VIEW_SECTION[view]).wait_for(state="visible")
+
+# --- the same element ----------------------------------------------------
+
+def mark(page, selectors):
+    """Marks the element of each selector, so that a later look tells
+    whether it is still the same element (replaced)."""
+    page.evaluate("(ss) => ss.forEach((s) => { document.querySelector(s).__mark = s; })", selectors)
+
+
+def replaced(page, selectors):
+    """The selectors whose element is not the one mark marked, or is gone."""
+    return page.evaluate("(ss) => ss.filter((s) => { const e = document.querySelector(s); return !e || e.__mark !== s; })", selectors)
+
+
+def frames(page):
+    """Two frames and a task: a part drawn again after a change has been drawn."""
+    page.evaluate("() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(done, 0))))")
+
+
+# --- a page of its own ------------------------------------------------------
+
+def owner_page(new_context, guard, watch, url, token):
+    """A page of its own with the owner's key token at url, the tiles
+    shown and the stream open, as the fixture page has it: for a test
+    that signs out or meets a 401 (test_pairing_updates.py,
+    test_repair_updates.py)."""
+    ctx = new_context()
+    if token:
+        ctx.add_init_script(f"localStorage.setItem('massimo.token', {token!r})")
+    page = ctx.new_page()
+    guard.page = page
+    page.set_default_timeout(5000)
+    page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+    page.goto(url)
+    page.wait_for_selector(".room", timeout=10000)
+    assert wait_until(page, "state.eventsOpen", 10), "the stream is open"
+    return page

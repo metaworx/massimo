@@ -12,6 +12,7 @@
  */
 
 import { actionRunner } from "../shared/action";
+import { cubePath } from "../shared/path";
 import { load } from "./store";
 
 /** The Cubes' runner: its message under the list, or under Cube settings' panel while that page is shown. */
@@ -25,11 +26,6 @@ const runner = actionRunner({
 
 /** msg shows text in the Cubes' message line; no text hides it. */
 export const msg = runner.say;
-
-/** cubePath is a Cube's path in the API. */
-function cubePath(serial: string): string {
-  return "api/v1/cubes/" + encodeURIComponent(serial);
-}
 
 /** run sends a Cube's request with its message on success; the error names the Cube. */
 function run(serial: string, fn: () => Promise<unknown>, ok: string): Promise<boolean> {

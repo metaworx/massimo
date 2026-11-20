@@ -5,8 +5,9 @@
 // plain scripts and the parts call. The configuration itself, inline in
 // the tile, is a part since AP UiParts' Block 8 (ui/src/rooms/Config.tsx);
 // here stay how long a name may be and the name a device is offered,
-// which pairing.js and repair.js use, and the kit the week programme
-// editor (week-program.js) builds with. Uses the helpers of app.js,
+// which repair.js and the form that puts a device into a room
+// (ui/src/shared/put.tsx) use, and the kit the week programme editor
+// (week-program.js) builds with. Uses the helpers of app.js,
 // components.js and rooms.js.
 "use strict";
 
@@ -22,7 +23,7 @@ function byteLength(s) {
 // --- a device's default name --------------------------------------------
 
 // defaultDeviceName is the name a device is offered where it is put into
-// a room (pairing.js, D200-A) or listed there (repair.js, D185), as the
+// a room (ui/src/shared/put.tsx, D200-A) or listed there (repair.js, D185), as the
 // server's default (repair_api.go, defaultDeviceName) with the type's
 // word in the page's language: "<room name> <type> <n>", n the lowest
 // number from 1 that no name of the room's (taken) has in that form,
@@ -60,9 +61,10 @@ function freeNameNumber(prefix, taken) {
 }
 
 // roomDeviceNames are the names of the devices a Cube's list has in a
-// room, as the page holds them.
+// room, as the page holds them: the chosen Cube's, whose devices a
+// repair lists.
 function roomDeviceNames(serial, room) {
-  const r = cubeRooms(serial).find((x) => x.id === room); // pairing.js
+  const r = serial === state.serial ? state.rooms.find((x) => x.id === room) : null;
   return r ? (r.devices || []).map((d) => d.name || "") : [];
 }
 

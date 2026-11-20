@@ -1730,27 +1730,27 @@ export interface WallThermostatConfig {
 
 /** A device that joined during pairing, from the Cube's N line */
 export interface NewDevice {
-  type?: DeviceType;
-  rf_address?: string;
-  serial?: string;
+  type: DeviceType;
+  rf_address: string;
+  serial: string;
 }
 
 export interface PairingState {
-  active?: boolean;
+  active: boolean;
   /** @format date-time */
   started?: string;
   /**
    * When pairing ends at the latest
    * @format date-time
    */
-  until?: string;
+  until: string;
   /**
    * When the last pairing ended; absent while active or before the first
    * @format date-time
    */
   ended?: string;
   /** Devices that joined during the current or last pairing */
-  paired?: NewDevice[];
+  paired: NewDevice[];
 }
 
 export interface IntegrationRequest {

@@ -21,6 +21,7 @@
 
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import { Age, Notice, ResultLine } from "../shared/badge";
+import { hid } from "../shared/cls";
 import { DateTime, FormFooter, Stepper, Switch } from "../shared/field";
 import { Icon, IconButton } from "../shared/icon";
 import { Island } from "../shared/island";
@@ -32,11 +33,6 @@ import { closeConfig, openConfig } from "./configuration";
 import { DeviceList } from "./Devices";
 import { problemsLabel, roomEntries } from "./facts";
 import { load, tickOf } from "./store";
-
-/** hid is the class hidden, with its space, where off. */
-function hid(off: boolean): string {
-  return off ? " hidden" : "";
-}
 
 /** The arrow keys of More move between these: its buttons that are on, and the Hold switch where shown. */
 const MORE_ITEMS = ".menu-items button:not(:disabled), .menu-items .switch:not(.hidden) input";

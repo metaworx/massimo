@@ -13,7 +13,7 @@
  * plain/, a file per script.
  */
 
-import "./cubes";
+import { signedOut as cubesSignedOut } from "./cubes";
 import type { CubesPart } from "./cubes";
 import "./header";
 import type { HeaderPart } from "./header";
@@ -32,7 +32,11 @@ export interface MassimoParts {
   language(): void;
   /** The icons chosen for the window and the radio changed (theme.js redrawSigns): every sign draws them again. */
   icons(): void;
-  /** A sign-out, or another user's sign-in after a 401 (login.js forgetSession): every form's drafts and marks forgotten (shared/forms.ts). */
+  /**
+   * A sign-out, or another user's sign-in after a 401 (login.js
+   * forgetSession): every form's drafts and marks forgotten
+   * (shared/forms.ts), and every Cube's pairing and rooms (cubes/).
+   */
   signedOut(): void;
   /** System settings → Cubes and Cube settings (cubes/). */
   cubes: CubesPart;
@@ -53,5 +57,8 @@ declare global {
 
 register("language", languageChanged);
 register("icons", iconsChanged);
-register("signedOut", () => forgetForms(""));
+register("signedOut", () => {
+  forgetForms("");
+  cubesSignedOut();
+});
 window.MassimoParts = parts as unknown as MassimoParts;

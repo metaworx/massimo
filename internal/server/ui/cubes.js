@@ -3,8 +3,8 @@
 
 // The Massimo web UI, System settings → Cubes and Cube settings: the
 // plain names of the region, which call its part (ui/src/cubes/,
-// MassimoParts.cubes, AP UiParts Block 5), and the Cubes card's badges
-// in its head. The part draws every served Cube in its panel, the found
+// MassimoParts.cubes, AP UiParts Blocks 5 and 9, the pairing with it),
+// and the Cubes card's badges in its head. The part draws every served Cube in its panel, the found
 // Cubes in one fold, and Cube settings the chosen Cube's panel alone; it
 // follows every load of the list in place, so that what is open, focused
 // or typed stays (docs/ui.md, "Cube settings").
@@ -36,6 +36,18 @@ function renderCubes() {
 // showFound).
 function showFoundFold() {
   MassimoParts.cubes.openFound();
+}
+
+// pairingEvent takes the shown Cube's pairing_started and pairing_ended
+// events (app.js): its pairing asks for the state (ui/src/cubes/flow.ts).
+function pairingEvent(serial) {
+  MassimoParts.cubes.pairingEvent(serial);
+}
+
+// pairingJoined takes a paired event of the shown Cube (app.js): the
+// device that joined is listed in its pairing at once.
+function pairingJoined(serial, dev) {
+  MassimoParts.cubes.pairingJoined(serial, dev);
 }
 
 // proxyFailing counts the Cube proxy listeners of cubes that do not listen.

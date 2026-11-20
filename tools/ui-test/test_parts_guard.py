@@ -45,6 +45,7 @@ of 1100-en and 390-de, on a worker of its own beside the other files.
 """
 import os
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 import pytest
@@ -343,6 +344,26 @@ def pairing_form(page):
     page.locator("#cube-page-body .cube-pairing .pairing-form").wait_for(state="visible")
 
 
+# A device that joins while the Cube pairs, as GET …/pairing gives one:
+# pairing starts only by a POST, a write to the fake Cube.
+JOINED_STUB = {"type": "radiator_thermostat", "rf_address": "0a0f02", "serial": "MEQ0000902"}
+
+
+def pairing_running(page):
+    """The chosen Cube pairing on Cube settings, GET …/pairing answered as
+    running for ten minutes more with JOINED_STUB at every load, its form
+    there with a room chosen; the name the guard types."""
+    until = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
+    reads_of(page).change("**/api/v1/cubes/*/pairing", lambda st: dict(st or {}, active=True, until=until, paired=[JOINED_STUB]))
+    cube_page(page)
+    page.evaluate("pairingEvent(state.serial)")
+    form = page.locator("#cube-page-body .cube-pairing .pair-device[data-rf='0a0f02'] form")
+    form.wait_for(state="visible")
+    assert wait_until(page, "document.querySelectorAll(\"#cube-page-body .pair-device select[name=room] option\").length > 1", 5), "the rooms offered"
+    form.locator("select[name=room]").select_option(index=1)
+    settle(page)
+
+
 def users(page):
     system(page)
     panel = page.locator(".user-panel[data-name='operator']")
@@ -458,7 +479,15 @@ REGIONS = (
         View("the chosen Cube's panel", cube_page),
         View("its problem list open", cube_page_problems),
     ), exclude=".cube-pairing"),
-    Region("pairing", ("#cube-page-body .cube-pairing",), (View("the pairing form on Cube settings", pairing_form),)),
+    Region("pairing", ("#cube-page-body .cube-pairing",), (
+        View("the pairing form on Cube settings", pairing_form),
+        # Passed on the page before the move as well: the plain pairing was
+        # drawn again by its own reads and events, none of SOURCES. From now
+        # on it guards that a running pairing, its countdown moving on in its
+        # line, keeps a joined device's form through the data; the pairing's
+        # own events are test_pairing_updates.py's.
+        View("a pairing running, a device joined with its room chosen", pairing_running),
+    )),
     Region("users", ("#sys-users-body",), (View("the operator's panel and the new user's form", users),)),
     Region("roles", ("#sys-roles-body",), (View("the operator role's panel and the new role's form", roles),)),
     Region("capabilities", ("#sys-caps-body",), (View("System settings", system),)),
