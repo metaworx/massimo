@@ -119,11 +119,6 @@ async function tileWrite(room, key, fn) {
   }
 }
 
-// roomRepairScope is the scope of a room's repairs (repair.js).
-function roomRepairScope(room) {
-  return repairScope(state.serial, "room", room.id);
-}
-
 // closeMenu closes the open menus of a tile: its ⋯, More and its
 // problems.
 function closeMenu(el) {

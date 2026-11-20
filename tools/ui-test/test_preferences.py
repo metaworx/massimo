@@ -150,7 +150,7 @@ def test_log_out_leaves_nothing_for_the_next_user(new_context, case, watch, guar
         assert page.evaluate("localStorage.getItem('massimo.schemes')") is None, "the operator's schemes are forgotten"
         assert json.loads(page.evaluate("localStorage.getItem('massimo.device')") or "{}") == {"clock": "browser"}, \
             "what is kept for this device stays"
-        page.locator("details.login-token summary").click()
+        page.locator("#login-ways .login-way[data-way='key']").click()
         page.locator("#login-token").fill(TOKEN)
         page.locator("#login-key-form button[type=submit]").click()
         page.wait_for_selector(".room", timeout=10000)

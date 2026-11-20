@@ -5,43 +5,33 @@
  * @file internal/server/ui/src/cubes/Actions.tsx
  *
  * A Cube's actions in one row at the bottom of its panel: Pair a device,
- * with its progress under the row, and Repair… with its box, both plain
- * (pairing.js, repair.js) in elements the part leaves to them; Reboot the
+ * with its progress under the row (Pairing.tsx), and Repair… with its
+ * box (the shared RepairBox); Reboot the
  * Cube and Remove, each asking in its own place. Reboot's question names
  * the radiograms pending as the Cube says now (D126).
  */
 
 import type { Cube } from "../api";
-import { Island } from "../shared/island";
+import { cubePath } from "../shared/path";
 import { Question, useAsk } from "../shared/question";
+import { RepairBox, RepairButton, repairScope } from "../shared/repair";
+import { Pairing } from "./Pairing";
 import { rebootCube, removeCube } from "./send";
 import { cubeUI } from "./store";
 
 /**
- * Pairing is the Cube's pairing, plain (an Island): pairing.js fills the
- * element (redrawPairing), here once it is there and again at a change of
- * language, and at every change of its own.
- */
-function Pairing({ serial }: { serial: string }) {
-  return <Island cls="cube-pairing needs-pair" keys={[serial]} fill={() => redrawPairing(serial)} />;
-}
-
-/**
- * Repair is the Cube's Repair… and the box of its repairs, plain
- * (repair.js, an Island), which redraws the box inside the element by
- * itself; the part fills it again only where the Cube, its name or the
- * language changed.
+ * Repair is the Cube's Repair… and the box of its repairs (the shared
+ * RepairBox) under it.
  */
 function Repair({ c }: { c: Cube }) {
-  const label = c.name || c.serial;
+  const scope = repairScope(c.serial, "cube");
   return (
-    <Island cls="cube-repair-area needs-repair" keys={[c.serial, label]} fill={(el) => {
-      const scope = repairScope(c.serial, "cube");
-      const row = document.createElement("div");
-      row.className = "actions cube-repair needs-repair";
-      row.append(repairButton(scope, "cube", "api/v1/cubes/" + encodeURIComponent(c.serial), { label }));
-      el.replaceChildren(row, repairSlot(scope));
-    }} />
+    <div class="cube-repair-area needs-repair">
+      <div class="actions cube-repair needs-repair">
+        <RepairButton scope={scope} kind="cube" path={cubePath(c.serial)} label={c.name || c.serial} />
+      </div>
+      <RepairBox scope={scope} />
+    </div>
   );
 }
 

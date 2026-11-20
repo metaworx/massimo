@@ -279,9 +279,22 @@ async function apiRequest(method, path, body, { auth = true, keepalive = false, 
     const err = new Error((data && data.error) || resp.status + " " + resp.statusText);
     err.status = resp.status;
     err.data = data;
+    err.sentWith = bearer || ""; // the token it carried, for dropToken
     throw err;
   }
   return data;
+}
+
+// dropToken forgets the page's token at a 401 that a request carrying it
+// met: the session has ended, so what the page sends until the sign-in
+// carries none, which the server does not count against the address,
+// where a dead token sent by each poll and stream ticket would lock the
+// address out within the minute. A 401 of a token the page no longer
+// holds, one a sign-in since replaced, forgets nothing. The app forgets
+// it too (setToken, login.js).
+function dropToken(sentWith) {
+  if (!sentWith || sentWith !== state.token) return;
+  setToken(null);
 }
 
 // sentAgain reports whether a request that met a 401 is sent again once
@@ -344,6 +357,7 @@ async function api(method, path, body, headers) {
     return await apiRequest(method, path, body, { headers });
   } catch (e) {
     if (e.status !== 401) throw e;
+    dropToken(e.sentWith);
     if (!sentAgain(method, path)) throw notSent();
     if (await askLogin()) return api(method, path, body, headers); // login.js
     throw new Error(t("api.badToken"));
@@ -355,10 +369,12 @@ async function api(method, path, body, headers) {
 // as api throws it, a write that met a 401 not sent again.
 async function apiRaw(method, path, body, contentType) {
   const headers = {};
-  if (state.token) headers.Authorization = "Bearer " + state.token;
+  const sentWith = state.token;
+  if (sentWith) headers.Authorization = "Bearer " + sentWith;
   if (body !== undefined) headers["Content-Type"] = contentType || "application/octet-stream";
   const resp = await fetch(path, { method, headers, body });
   if (resp.status === 401) {
+    dropToken(sentWith);
     if (!sentAgain(method, path)) throw notSent();
     if (await askLogin()) return apiRaw(method, path, body, contentType); // login.js
     throw new Error(t("api.badToken"));
@@ -902,7 +918,7 @@ async function connectEvents() {
   };
   on("hello", logged(() => loadCubes()));
   on("metadata", logged(() => loadRooms()));
-  // Pairing (pairing.js): a device that joined is among the devices
+  // Pairing (cubes.js, ui/src/cubes/flow.ts): a device that joined is among the devices
   // without a room once the server read its C line, which the reload
   // after its config event finds as well.
   on("pairing_started", logged(() => pairingEvent(serial)));

@@ -8,7 +8,7 @@
  * room: its type's icon before its name, its problems as icons that list
  * them, its badges in words, in expert mode its type, serial and radio
  * address; a thermostat's values, Lock and the device's Repair…, whose box
- * stays plain (repair.js) in an element the part leaves to it. The room's
+ * (the shared RepairBox) opens under the row. The room's
  * virtual wall thermostat, in expert mode, has its two settings under it,
  * a settings form kept by the room (shared/forms.ts), whose unsaved
  * changes its row's pill and the tile's show. Built once per device and
@@ -26,9 +26,9 @@ import { DeviceIds } from "../shared/device";
 import { FormFooter, Select, TextField, useDraft } from "../shared/field";
 import { hasChanges, useForm } from "../shared/forms";
 import { Icon } from "../shared/icon";
-import { Island } from "../shared/island";
 import { Problems } from "../shared/problems";
 import { busyProps, useBusy } from "../shared/question";
+import { RepairBox, RepairButton, repairScope } from "../shared/repair";
 import { deviceBadges, deviceItems, mismatchWords, problemsLabel, vwtItems } from "./facts";
 import { load, openSettings, vwtFormKey } from "./store";
 
@@ -208,6 +208,11 @@ function VirtualSettings({ v, room, serial, detail, error, saved }: {
   );
 }
 
+/** roomNames are the names of the devices of a room of the chosen Cube, as the page holds them: those a repair's listing leaves free. */
+function roomNames(id: number): string[] {
+  return (state.rooms.find((r) => r.id === id)?.devices || []).map((x) => x.name || "");
+}
+
 /**
  * DeviceRow is a device of a room's list or of the devices without a
  * room: ui is its room's tile's, absent for a device in no room; room
@@ -269,14 +274,15 @@ export function DeviceRow({ d, ui, room, actions, children }: {
       <div class="device-actions">
         {isThermostat(d) && !virtual && <Lock d={d} ui={ui} />}
         {!virtual && (
-          // The device's repairs (repair.js): its configuration for a
-          // thermostat, its room by radio or in the list.
-          <Island tag="span" cls="part-slot" keys={[scope, deviceName(d), isThermostat(d)]} fill={(el) => el.replaceChildren(
-            repairButton(scope, "device", devicePath(d), { label: deviceName(d), skip: isThermostat(d) ? [] : ["config"] }))} />
+          // The device's repairs: its configuration for a thermostat, its
+          // room by radio or in the list, under the name its room's
+          // devices leave free.
+          <RepairButton scope={scope} kind="device" path={devicePath(d)} label={deviceName(d)} skip={isThermostat(d) ? [] : ["config"]}
+            names={roomNames} />
         )}
         {actions}
       </div>
-      {!virtual && <Island cls="part-slot" keys={[scope]} fill={(el) => el.replaceChildren(repairSlot(scope))} />}
+      {!virtual && <RepairBox scope={scope} />}
       {virtual && room && <VirtualSettings v={d} room={room} serial={serial} detail={detail} error={error} saved={again} />}
       {children}
     </div>

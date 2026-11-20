@@ -6,7 +6,7 @@
  *
  * The globals of the plain script ui/tiles.js that the parts call: the
  * tile's actions that stay plain (the More menu's presets, the holiday
- * form, the device list, the menus closed, a room's repairs), a finding of
+ * form, the device list, the menus closed), a finding of
  * the Cube's lines in words, and the name of a radiogram that failed,
  * which the log names it by too.
  */
@@ -34,8 +34,6 @@ declare global {
   function toggleDevices(room: PageRoom, el: HTMLElement | null): void;
   /** Closes the open menus of a tile. */
   function closeMenu(el: HTMLElement | null): void;
-  /** The scope of a room's repairs (repair.js). */
-  function roomRepairScope(room: PageRoom): string;
 }
 
 export {};
