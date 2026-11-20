@@ -532,16 +532,40 @@ Every room has a tile:
     and the week programme as the last **Send** of the Week programme tab left it.
     It is a command, as the House tile's panel is, and no settings form:
     what is chosen stays while the configuration is open and when it closes,
-    and a copy that went through clears the rooms chosen,
+    marks nothing unsaved, and a copy that went through clears the rooms chosen,
     what is copied staying as it was set.
   - **Send** is off while nothing differs from what the Cube has,
     or on the Copy tab while no room is ticked.
     While one of the configuration's writes runs, its **Send** turns
     and every other **Send** of the configuration is off.
   - A field that shows what is stored keeps what is typed,
-    from one tab to another while the configuration is open;
     where the stored value changed meanwhile, as another client renames the room,
     it says so under the field, with **Take theirs**.
+  - Room, Temperatures and Week programme are settings forms, each of its own,
+    and on the Devices tab the radiator settings and each device:
+    what is typed stays until it is sent, reset or cancelled,
+    from one tab to another and when the configuration closes;
+    opened again, the configuration shows the tab it was on, with what was typed,
+    and the week programme's edits, its days marked changed.
+    It is forgotten as the virtual thermostat's settings are,
+    a device's form also when the device has left the room.
+    **Send** and **Reset** say how a form stands, as in Cube settings:
+    off and plain while nothing is changed, in the accent colour once something is,
+    with the warning mark once the focus has left the form,
+    its tab or the configuration was closed or a minute has passed since the last change,
+    a key typed or a change of the week programme making it changed again,
+    with the cross after a write that failed, the Cube discarded or a device did not take,
+    the form then still changed, and the check after one that went through;
+    **Cancel** resets the form and closes the configuration.
+    The week programme keeps its own **Reset day** and **Reset all**.
+    While a form is unsaved, or its write failed,
+    the room's entry in the tile's problem list,
+    and the Cube's problem lists, in the header and in its panel's head,
+    show the disk, "Living room, Temperatures: not saved",
+    "Living room, Devices: Radiator: not saved" for a device;
+    a click on it, from any page, chooses the Cube where another is chosen,
+    shows the rooms, opens the configuration on the form's tab
+    and puts the focus into the form.
 - Each setting has a **?** button that explains it, with the factory values
   from the eQ-3 manuals; an explanation shown stays shown when its tab is drawn again.
 
@@ -1851,13 +1875,7 @@ a failed save's error with its unsaved form's item (its tooltip),
 which `actionRunner`'s `run` does not hand back:
 it says only whether the request was taken,
 and the error is in the message line;
-a Cancel of `useForm` (Reset and the form's close) and the "unsaved" form of a
-section without a pill (AP UnsavedMarks, Blocks 4 and 5);
-a room's own entry in the tile's problem list, where a configuration tab lists its
-form, which today goes through the virtual wall thermostat's entry, and one list of
-the room's forms that does not name the virtual thermostat twice, and a tab's open
-by `openConfig(room, el, tab)` (`rooms/configuration.ts`),
-where the virtual thermostat's open closes the configuration (AP UnsavedMarks, Block 4);
+the "unsaved" form of a section without a pill (AP UnsavedMarks, Block 5);
 the page's modal dialog: `FormsDialog` is the list of forms with a title,
 and a later modal takes its shell out of it
 (its opening by a property, the focus, its closing);
@@ -1955,8 +1973,7 @@ The configuration (AP UiParts Block 8) is a part of the tile, open while `roomUI
 `config` says so: `configuration.ts` keeps per room of its Cube, live,
 the tab shown and the Copy tab's choice, kept across a close, the configuration
 and the week programme as loaded with the programme's tag, which a Send of the programme
-makes the one it sent, the result line, the write under way
-and the drafts of its fields while it is open,
+makes the one it sent, the result line and the write under way,
 and sends what each tab sends, as `config.js` sent it;
 its tabs are `Tabs`, its fields `TextField`s, `NumberField`s, `Select`s and `Switch`es
 with their drafts and their help, the Copy tab's rooms and settings `Choices`,
@@ -1965,6 +1982,22 @@ the result line a `ResultLine`,
 followed by Load the current programme where the programme changed elsewhere;
 the week programme editor stays the element it is (`week-program.js`), made once
 in an `Island`, its two resets in another.
+Each tab but Copy, a command, is a `useForm` (`useConfigForm` of `configuration.ts`)
+of the key `cfgFormKey(serial, id, form)` of `store.ts`,
+`<room>:cfg:<form>` under the room's `roomFormKey` beside the virtual thermostat's `:vwt`,
+the form `room`, `temps` or `program`,
+and on the Devices tab `valves` and `device:<radio address>`;
+a write the Cube discarded or a device did not take leaves the stored values as they were,
+so the form stays changed and failed;
+its Cancel resets the form and closes (`cancelOf`), and the programme's draft is the
+programme kept in its form's place, a later load taking its place only where
+nothing of it differs or the user loaded it again.
+The room's own entry in the tile's problem list lists their `unsavedItems`
+(`cfgFormKey(serial, id)`, `facts.ts`), so the virtual thermostat's are listed
+once, under its own entry;
+a click opens the tab from anywhere (`openForm`), by `openRoom` of `store.ts`,
+which `openSettings` uses too and which keeps the request until the Cube's rooms
+have loaded; `loaded` forgets a device's form when the room no longer has the device.
 A room's repairs and a device's Repair… stay plain too (`repair.js`), each an `Island`,
 and so does the form that puts a device without a room into one
 (`pairDeviceForm`, Block 9),

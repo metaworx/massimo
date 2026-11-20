@@ -11,26 +11,31 @@
  * programme, the editor <massimo-week-program> (week-program.js), which
  * stays the element it is in a place the part leaves to it, its resets
  * beside Cancel and Send; Copy, this room's stored settings to other
- * rooms, a command, as the House panel is. Built once per room and updated in place, with the focus in it
+ * rooms. Built once per room and updated in place, with the focus in it
  * or not, so that what is typed, a click and the focus stay when data
  * comes in; a field that shows stored data keeps a draft with its
- * "changed meanwhile" notice. What it keeps and sends is
- * configuration.ts.
+ * "changed meanwhile" notice. Each tab but Copy is a settings form of its own
+ * (useConfigForm), which keeps its edit when the tab or the
+ * configuration closes, and whose Save says its state, with Reset beside
+ * it and Cancel, which resets and closes; the week programme keeps its own
+ * resets. The Copy tab is a command, as the House panel is, and no
+ * settings form. What it keeps and sends is configuration.ts.
  */
 
 import { useRef, useState } from "preact/hooks";
+import type { Draft } from "../shared/field";
 import { ResultLine } from "../shared/badge";
 import { Choices } from "../shared/choices";
-import { FormFooter, TextField, numberNorm, useDraft, type Draft } from "../shared/field";
+import { FormFooter, TextField, numberNorm, useDraft } from "../shared/field";
 import { Island } from "../shared/island";
 import { Tabs } from "../shared/tabs";
 import { ConfigDevices, NumberRows, type NumberRow } from "./ConfigDevices";
 import {
+  cancelOf,
   changedFields,
   closeConfig,
   configOf,
   configWrite,
-  placeOf,
   reloadProgram,
   sending,
   sendCopy,
@@ -40,8 +45,10 @@ import {
   sourceName,
   stored,
   TEMP_FIELDS,
+  useConfigForm,
   type ConfigField,
   type ConfigState,
+  type Programme,
 } from "./configuration";
 import { load, tickOf } from "./store";
 
@@ -54,20 +61,21 @@ const trim = (v: string) => v.trim();
 function RoomTab({ room, cs }: { room: PageRoom; cs: ConfigState }) {
   load.useLoad();
   void tickOf(room.id).n;
-  void cs.ver;
-  const name = useDraft(room.name, trim, placeOf<string>(cs, "room", "name"));
+  const form = useConfigForm(room, "room", "room", { key: "cfg.form.room", args: { room: room.name } });
+  const name = useDraft(room.name, trim, form.place<string>("name"));
   const changed = name.value.trim() !== room.name;
+  form.track(changed, [name]);
   const s = sending(cs, "room");
   const submit = (ev: Event) => {
     ev.preventDefault();
-    if (cs.sending) return;
-    void configWrite(cs, "room", () => sendRoomName(room, cs, name.value));
+    if (cs.sending || !changed) return;
+    form.save(() => configWrite(cs, "room", () => sendRoomName(room, cs, name.value)));
   };
   return (
-    <form class="cfg-form" onSubmit={submit}>
+    <form {...form.props} class="cfg-form" onSubmit={submit}>
       <TextField label={t("cfg.roomName")} id={"cfg-" + room.id + "-name"} name="name" help="roomName" maxLength={NAME_BYTES} required draft={name} />
       <p class="muted small">{t("cfg.nameHint", { n: NAME_BYTES })}</p>
-      <FormFooter cancel={() => closeConfig(room)} submit={t("action.send")} busy={s.busy} off={!changed || s.other} />
+      <FormFooter cancel={cancelOf(form, room)} reset={form.reset} look={form.look} submit={t("action.send")} busy={s.busy} off={!changed || s.other} />
     </form>
   );
 }
@@ -91,66 +99,102 @@ function tempRows(): NumberRow[] {
  */
 function TempsTab({ room, cs }: { room: PageRoom; cs: ConfigState }) {
   load.useLoad();
-  void cs.ver;
   void cs.cfg;
+  const form = useConfigForm(room, "temps", "temps", { key: "cfg.form.temps", args: { room: room.name } });
   const rows = tempRows();
   const drafts: Partial<Record<ConfigField, Draft<string>>> = {};
   // one draft per field, in the same order at every drawing
-  drafts.comfort_temp = useDraft(stored(cs, "comfort_temp"), numberNorm, placeOf(cs, "temps", "comfort_temp"));
-  drafts.eco_temp = useDraft(stored(cs, "eco_temp"), numberNorm, placeOf(cs, "temps", "eco_temp"));
-  drafts.window_open_temp = useDraft(stored(cs, "window_open_temp"), numberNorm, placeOf(cs, "temps", "window_open_temp"));
-  drafts.window_open_minutes = useDraft(stored(cs, "window_open_minutes"), numberNorm, placeOf(cs, "temps", "window_open_minutes"));
-  drafts.max_setpoint = useDraft(stored(cs, "max_setpoint"), numberNorm, placeOf(cs, "temps", "max_setpoint"));
-  drafts.min_setpoint = useDraft(stored(cs, "min_setpoint"), numberNorm, placeOf(cs, "temps", "min_setpoint"));
+  drafts.comfort_temp = useDraft(stored(cs, "comfort_temp"), numberNorm, form.place("comfort_temp"));
+  drafts.eco_temp = useDraft(stored(cs, "eco_temp"), numberNorm, form.place("eco_temp"));
+  drafts.window_open_temp = useDraft(stored(cs, "window_open_temp"), numberNorm, form.place("window_open_temp"));
+  drafts.window_open_minutes = useDraft(stored(cs, "window_open_minutes"), numberNorm, form.place("window_open_minutes"));
+  drafts.max_setpoint = useDraft(stored(cs, "max_setpoint"), numberNorm, form.place("max_setpoint"));
+  drafts.min_setpoint = useDraft(stored(cs, "min_setpoint"), numberNorm, form.place("min_setpoint"));
   const body = changedFields(cs, TEMP_FIELDS, drafts);
+  const changed = Object.keys(body).length > 0;
+  form.track(changed, Object.values(drafts));
   const s = sending(cs, "temps");
   const src = cs.cfg?.source;
   const submit = (ev: Event) => {
     ev.preventDefault();
-    if (cs.sending) return;
-    void configWrite(cs, "temps", () => sendRoomConfig(room, cs, body, t("cfg.tab.temps")));
+    if (cs.sending || !changed) return;
+    form.save(() => configWrite(cs, "temps", () => sendRoomConfig(room, cs, body, t("cfg.tab.temps"))));
   };
   return (
-    <form class="cfg-form" onSubmit={submit}>
+    <form {...form.props} class="cfg-form" onSubmit={submit}>
       <NumberRows room={room} rows={rows} drafts={drafts} />
       <p class="muted small">{src ? t("cfg.valuesFrom", { device: sourceName(cs.cfg, src) }) : t("cfg.noThermostat")}</p>
-      <FormFooter cancel={() => closeConfig(room)} submit={t("action.send")} busy={s.busy} off={Object.keys(body).length === 0 || s.other} />
+      <FormFooter cancel={cancelOf(form, room)} reset={form.reset} look={form.look} submit={t("action.send")} busy={s.busy} off={!changed || s.other} />
     </form>
   );
 }
 
 /**
+ * kept is the programme the tab edits, kept in its form's place: the one
+ * loaded the first time, and a programme loaded later where nothing of
+ * the kept one differs from what it was loaded as, or where the user
+ * loaded it again (replace); otherwise the edits stay, with the tag they
+ * were loaded with, which a write then names.
+ */
+function kept(slot: { base: Programme | null; value: Programme | null; stored: Programme | null }, loaded: Programme | null): Programme | null {
+  if (slot.stored !== loaded) {
+    const edited = slot.value;
+    if (loaded && (loaded.replace || !edited || MassimoWeekProgram.dirtyDays(edited.model).length === 0)) {
+      slot.value = loaded;
+      slot.base = loaded;
+    }
+    slot.stored = loaded;
+  }
+  return slot.value;
+}
+
+/**
  * ProgramTab is the week programme: the editor <massimo-week-program>
- * on the room's model, made once in an element the part leaves to it and
- * given the model again where a reload replaced it, its two resets
- * beside Cancel and Send; Send is on while a day differs from the
+ * on the programme kept (kept), made once in an element the part leaves
+ * to it and given the model again where another replaced it, its two
+ * resets beside Cancel and Send; Send is on while a day differs from the
  * programme loaded, and from a key typed in the editor until its change
- * says whether it does.
+ * says whether it does. Its form's Cancel puts every day back as loaded.
  */
 function ProgramTab({ room, cs }: { room: PageRoom; cs: ConfigState }) {
   load.useLoad();
-  void cs.ver;
-  const prog = cs.program;
-  const p = prog?.model || null;
+  const form = useConfigForm(room, "program", "program", { key: "cfg.form.program", args: { room: room.name } });
   const [typed, setTyped] = useState(false);
   const [, redraw] = useState(0);
   const editor = useRef<MassimoWeekProgram | null>(null);
+  const at = form.place<Programme | null>("program");
+  const prog = kept(at.slot(cs.program), cs.program);
+  const p = prog?.model || null;
   const storedOn = sourceName(cs.cfg, p?.source);
   const dirty = p ? MassimoWeekProgram.dirtyDays(p).length > 0 : false;
+  const changed = dirty || typed;
+  form.track(changed, [{
+    take() {
+      if (!p) return;
+      p.days = MassimoWeekProgram.copyDays(p.orig);
+      p.copyTo = new Set();
+      MassimoWeekProgram.selectDay(p, p.day);
+      editor.current?.render(); // the days put back, no longer marked changed
+    },
+  }]);
   const s = sending(cs, "program");
   const submit = (ev: Event) => {
     ev.preventDefault();
-    if (cs.sending || !prog) return;
-    void configWrite(cs, "program", () => sendProgram(room, cs, prog)).then(() => {
+    if (cs.sending || !prog || !changed) return;
+    form.save(() => configWrite(cs, "program", () => sendProgram(room, cs, prog)).then((ok) => {
       editor.current?.render(); // the days taken are no longer marked changed
       redraw((n) => n + 1);
-    });
+      return ok;
+    }));
   };
   return (
-    <form class="cfg-form" onSubmit={submit} onInput={() => setTyped(true)} onChange={() => {
+    <form {...form.props} class="cfg-form" onSubmit={submit} onInput={() => {
+      setTyped(true);
+      at.changed(); // the user's edit: the form's minute starts again, an unsaved form is changed again
+    }} onChange={() => {
       // a change in the editor: what differs is known again
       setTyped(false);
-      redraw((n) => n + 1);
+      at.changed();
     }}>
       <Island cls="prog-slot" keys={[p, storedOn]} fill={(el) => {
         let ed = editor.current;
@@ -164,7 +208,7 @@ function ProgramTab({ room, cs }: { room: PageRoom; cs: ConfigState }) {
         if (ed.parentElement !== el) el.replaceChildren(ed); // connected, it draws itself
         else ed.render();
       }} />
-      <FormFooter cancel={() => closeConfig(room)} submit={t("action.send")} busy={s.busy} off={!(dirty || typed) || s.other}
+      <FormFooter cancel={cancelOf(form, room)} look={form.look} submit={t("action.send")} busy={s.busy} off={!changed || s.other}
         extra={<Island tag="span" cls="prog-resets" keys={[p]} fill={(el) => el.replaceChildren(...(editor.current?.resetControls() || []))} />} />
     </form>
   );

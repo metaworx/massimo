@@ -7,7 +7,8 @@
  * What the rooms' parts show of a room and its devices beside their
  * fields, which no other region reads: a mode's badge, the problems of a
  * tile's head and of a device's row with the label that names them, the
- * unsaved settings of a room's virtual wall thermostat among them, the
+ * unsaved settings of a room's virtual wall thermostat and of its
+ * configuration's forms among them, the
  * room's notices among them and their count for the tile's line, and a
  * device's badges in words. A room's facts (roomThermostat, roomModes,
  * staleText, …) and the texts of a write not confirmed (confirmItem and
@@ -20,7 +21,7 @@ import type { Device, Mismatch } from "../api";
 import { deviceEntry, deviceProblems, WINDOW_TONE, windowState } from "../model/device";
 import { unsavedItems } from "../shared/forms";
 import { entryItems, kindsLabel, type Entry, type Item } from "../shared/problems";
-import { vwtFormKey } from "./store";
+import { cfgFormKey, vwtFormKey } from "./store";
 
 /** The kinds of problems a tile's head and a device's row name, in their order there; a holiday is listed with its end. */
 const KINDS = ["radio", "battery", "window", "unconfirmed", "mixed", "unsaved", "notready", "stale", "mismatch"];
@@ -90,7 +91,9 @@ function notReadyItem(text: string, at?: string): Item {
 /**
  * roomOwnItems are the room's own notices as items: its commands
  * discarded until every device has reported, its values old where no
- * device names which, and the findings that name no device of the room.
+ * device names which, and the findings that name no device of the room;
+ * then the forms of its configuration that are unsaved or whose save
+ * failed (unsavedItems), each the disk that opens its tab.
  */
 function roomOwnItems(room: PageRoom): Item[] {
   const items: Item[] = [];
@@ -98,6 +101,7 @@ function roomOwnItems(room: PageRoom): Item[] {
   if (room.stale && !room.devices.some((d) => d.stale)) items.push(staleItem(t("room.stale")));
   const own = new Set(room.devices.map((d) => d.rf_address));
   for (const m of room.mismatches || []) if (!m.device || !own.has(m.device)) items.push(mismatchItem(m, true));
+  items.push(...unsavedItems(cfgFormKey(state.roomsOf || "", room.id)));
   return items;
 }
 
@@ -112,7 +116,8 @@ export function roomNotices(entries: Entry[]): number {
 
 /**
  * roomEntries are what a tile's head lists of the room: first the room
- * itself with its own notices (roomOwnItems); then per device its
+ * itself with its own notices and its configuration's unsaved forms
+ * (roomOwnItems); then per device its
  * problems with an open window, a write it has not shown by its deadline,
  * its values not seen for long, not reported while the room waits for
  * it, the room's findings that name it, and the thermostats' modes where

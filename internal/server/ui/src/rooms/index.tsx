@@ -27,7 +27,7 @@ import { mounter, register } from "../shared/region";
 import { closeHouse, House } from "./House";
 import { Tile } from "./Tile";
 import { UNLISTED, Unlisted } from "./Unlisted";
-import { changed, house, load, newUI, planWindows, roomOf, takeOpening, tickOf, vwtFormKey } from "./store";
+import { cfgFormKey, changed, house, load, newUI, planWindows, roomOf, takeOpening, tickOf, vwtFormKey } from "./store";
 
 /** Rooms is a tile per room, kept by its Cube and its id for as long as the room is there. */
 function Rooms() {
@@ -53,13 +53,21 @@ function resultOf(id: number): (res: Outcome | null) => void {
   return set;
 }
 
-/** Per Cube, the rooms its last load gave, by id, each with whether it had its virtual wall thermostat. */
-const loaded = new Map<string, Map<number, boolean>>();
+/** What a load of a Cube's rooms gave of a room: whether it had its virtual wall thermostat, and its devices by their radio addresses. */
+interface Loaded {
+  vwt: boolean;
+  devices: Set<string>;
+}
+
+/** Per Cube, the rooms its last load gave, by id. */
+const loaded = new Map<string, Map<number, Loaded>>();
 
 /**
  * forgetGone forgets the forms of the rooms the last load of the Cube's
- * rooms no longer gives, and the settings of a virtual thermostat it no
- * longer gives: deleted or hidden, by this page or another client. It
+ * rooms no longer gives, the settings of a virtual thermostat it no
+ * longer gives, and the form of a device in a room's configuration that
+ * the room no longer has: deleted, hidden, moved or removed, by this page
+ * or another client. It
  * runs at loaded alone, which loadRooms calls after a load that went
  * through, with the rooms of the Cube state.roomsOf names; a load that
  * fails throws before it. It forgets only where that Cube is connected
@@ -71,10 +79,15 @@ const loaded = new Map<string, Map<number, boolean>>();
 function forgetGone(): void {
   const serial = state.roomsOf;
   if (!serial || !state.cubes.find((c) => c.serial === serial)?.connected) return;
-  const now = new Map(state.rooms.map((r) => [r.id, !!r.vwt]));
-  for (const [id, vwt] of loaded.get(serial) || []) {
-    if (!now.has(id)) forgetForms(roomFormKey(serial, id));
-    else if (vwt && !now.get(id)) forgetForms(vwtFormKey(serial, id));
+  const now = new Map(state.rooms.map((r): [number, Loaded] => [r.id, { vwt: !!r.vwt, devices: new Set(r.devices.map((d) => d.rf_address)) }]));
+  for (const [id, was] of loaded.get(serial) || []) {
+    const is = now.get(id);
+    if (!is) {
+      forgetForms(roomFormKey(serial, id));
+      continue;
+    }
+    if (was.vwt && !is.vwt) forgetForms(vwtFormKey(serial, id));
+    for (const rf of was.devices) if (!is.devices.has(rf)) forgetForms(cfgFormKey(serial, id, "device:" + rf));
   }
   loaded.set(serial, now);
 }

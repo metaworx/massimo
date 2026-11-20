@@ -6,10 +6,12 @@
  *
  * What a room's configuration keeps and sends (Config.tsx): per room of
  * its Cube, live, the tab shown, the room's configuration and week
- * programme as loaded with the programme's tag, the result line, the
- * write under way, the Copy tab's choice, kept across a close, and the
- * drafts of its fields while it is open; its
- * opening, which loads both, and its closing; and the writes of its
+ * programme as loaded with the programme's tag, the result line and the
+ * write under way, the tab and the Copy tab's choice kept across a close;
+ * its opening, which loads both, and its closing, which keeps every
+ * form's edit (each tab but Copy, a command, a form of its own,
+ * shared/forms.ts, by cfgFormKey); a tab's form opened from
+ * anywhere with the focus in it; and the writes of its
  * tabs, line for line as config.js sent them: the room's name, its
  * temperatures and radiator settings, a device's name, room, offset and
  * display, a device removed from the Cube, the week programme with its
@@ -19,9 +21,9 @@
 
 import type { Budget, Device, DeviceResult, ProgramWithTag, RoomConfig } from "../api";
 import type { Outcome } from "../shared/action";
-import type { Place } from "../shared/forms";
+import { focusForm, useForm, type Form, type FormName } from "../shared/forms";
 import { liveMap } from "../shared/live";
-import { roomOf } from "./store";
+import { cfgFormKey, openRoom, roomOf } from "./store";
 
 /** The common fields of a room's configuration on the Temperatures tab, as GET and PUT /rooms/{id}/config have them, in the order they are sent. */
 export const TEMP_FIELDS = ["comfort_temp", "eco_temp", "window_open_temp", "window_open_minutes", "max_setpoint", "min_setpoint"] as const;
@@ -52,16 +54,9 @@ function programmeOf(prog: ProgramWithTag | null, replace?: boolean): Programme 
   return { model: MassimoWeekProgram.model(prog), etag: (prog && prog.etag) || "", replace };
 }
 
-/** A slot of a draft (forms.ts Slot), kept by the open configuration. */
-interface Slot {
-  base: unknown;
-  value: unknown;
-  stored: unknown;
-}
-
 /** What a room's configuration keeps, live. */
 export interface ConfigState {
-  /** The tab shown: room, temps, devices, program or copy. */
+  /** The tab shown, room, temps, devices, program or copy, kept across a close. */
   tab: string;
   /** Its loads are under way. */
   loading: boolean;
@@ -78,9 +73,6 @@ export interface ConfigState {
   copyWhat: string[];
   /** The key of the write under way, null while none runs. */
   sending: string | null;
-  /** The drafts of the open configuration's fields, by form and field, and how often they changed. */
-  slots: Map<string, Slot>;
-  ver: number;
   /** Counts the loads, so that an answer to an earlier one is dropped. */
   seq: number;
 }
@@ -96,8 +88,6 @@ const configs = liveMap<ConfigState>(() => ({
   copyRooms: [],
   copyWhat: ["temps", "radiator"],
   sending: null,
-  slots: new Map(),
-  ver: 0,
   seq: 0,
 }));
 
@@ -106,40 +96,14 @@ export function configOf(id: number): ConfigState {
   return configs.of((state.roomsOf || "") + ":" + id);
 }
 
-/**
- * placeOf is where a field of a form of the open configuration keeps its
- * draft (useDraft), by the form's key and the field: kept while the
- * configuration is open, from one tab to another, and dropped when it
- * opens again.
- */
-export function placeOf<T>(cs: ConfigState, form: string, field: string): Place<T> {
-  const key = form + "\n" + field;
-  return {
-    slot(stored) {
-      let s = cs.slots.get(key);
-      if (!s) {
-        s = { base: stored, value: stored, stored };
-        cs.slots.set(key, s);
-      }
-      return s as { base: T; value: T; stored: T };
-    },
-    known: () => cs.slots.get(key)?.stored as T | undefined,
-    changed: () => {
-      cs.ver++;
-    },
-    redraw: () => {
-      cs.ver++;
-    },
-  };
-}
-
 /** The tab a configuration opens on where none is asked for: the Room tab is a rename, which the role may not do, so the temperatures come first then. */
 function firstTab(): string {
   return hasCap("rename") ? "room" : "temps";
 }
 
 /**
- * openConfig opens the room's configuration on tab, else on its first,
+ * openConfig opens the room's configuration on tab, else on the tab it
+ * was on when it closed, else on its first,
  * the device list closed (one of the two at a time) and the tile's menus
  * (el) closed, and loads the room's configuration and its week programme.
  */
@@ -148,12 +112,11 @@ export async function openConfig(room: PageRoom, el: HTMLElement | null, tab?: s
   const ui = roomUI(room);
   ui.open = false;
   const cs = configOf(room.id);
-  cs.tab = tab || firstTab();
+  cs.tab = tab || (cs.tab && (cs.tab !== "room" || hasCap("rename")) ? cs.tab : firstTab());
   cs.loading = true;
   cs.error = "";
   cs.result = null;
   cs.sending = null;
-  cs.slots = new Map();
   const seq = ++cs.seq;
   ui.config = true;
   try {
@@ -172,9 +135,49 @@ export async function openConfig(room: PageRoom, el: HTMLElement | null, tab?: s
   }
 }
 
-/** closeConfig closes the room's configuration. */
+/** closeConfig closes the room's configuration; what is typed in its tabs stays, each in its form. */
 export function closeConfig(room: PageRoom): void {
   roomUI(room).config = false;
+}
+
+/**
+ * openForm shows a form of a room's configuration and puts the focus into
+ * it, from any page (openRoom): the configuration opened on tab, or shown
+ * on it where it is open, and the focus put into the form of key
+ * (focusForm) once it is drawn.
+ */
+export function openForm(serial: string, id: number, tab: string, key: string): void {
+  openRoom(serial, id, (room) => {
+    if (roomUI(room).config) configOf(room.id).tab = tab;
+    else void openConfig(room, null, tab);
+    focusForm(key);
+  });
+}
+
+/**
+ * useConfigForm is a form of the room's configuration (useForm) by its
+ * key, cfgFormKey of form, on tab, named name in a problem list's item,
+ * whose click opens it from anywhere (openForm).
+ */
+export function useConfigForm(room: PageRoom, form: string, tab: string, name: FormName): Form {
+  const serial = state.roomsOf || "";
+  const key = cfgFormKey(serial, room.id, form);
+  return useForm({ key, name, open: () => openForm(serial, room.id, tab, key) });
+}
+
+/** cancelOf is a form's Cancel: its changes reset, the configuration closed. */
+export function cancelOf(form: Form, room: PageRoom): () => void {
+  return () => {
+    form.reset();
+    closeConfig(room);
+  };
+}
+
+/** saving runs fn, a form's write, as the form's save (useForm), and resolves to whether it was taken, for a question that waits for it. */
+export function saving(form: Form, fn: () => Promise<boolean>): Promise<boolean> {
+  let done = Promise.resolve(false);
+  form.save(() => (done = fn()));
+  return done;
 }
 
 /** say sets the result line under the tab. */
