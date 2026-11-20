@@ -8,15 +8,15 @@
  * panel in #house-slot, a tile per room of the chosen Cube in #rooms, with
  * its device list, and the devices without a room in #unlisted-devices,
  * each built once per room or device and updated in place. The plain code
- * calls MassimoParts.rooms (rooms.js renderRooms, rerenderRoom,
+ * calls MassimoParts.rooms (rooms.js renderRooms,
  * updateDevice, showTileResult, roomUI and roomsLoaded, house.js houseOpen and
  * closeHouse);
  * the tile's actions stay plain and set the tile's live state, which the
  * tile follows. A room's forms are forgotten once a load no longer gives
  * the room, or the virtual thermostat whose settings they hold, and the
  * settings asked to be opened from elsewhere are opened once their
- * Cube's rooms have loaded. The
- * configuration (config.js), the repairs (repair.js) and
+ * Cube's rooms have loaded. A tile's configuration is a part of the tile
+ * (Config.tsx); the repairs (repair.js) and
  * the form that puts a device into a room (pairing.js) stay plain inside.
  */
 
@@ -81,14 +81,14 @@ function forgetGone(): void {
 
 /** The functions the plain code calls, MassimoParts.rooms. */
 const rooms = register("rooms", {
-  /** render draws the rooms as the page has them now (renderRooms): every tile follows in place, its configuration filled again unless the focus is in it. */
+  /** render draws the rooms as the page has them now (renderRooms): every tile follows in place, its configuration with it. */
   render(): void {
     for (const m of mounts) m();
     load.bump();
     for (const r of state.rooms) changed(r.id);
     planWindows();
   },
-  /** data takes a state event of a device of the room (updateDevice): its tile follows, its configuration is filled again once the focus is not in it. */
+  /** data takes a state event of a device of the room (updateDevice): its tile follows, its configuration with it. */
   data(id: number): void {
     changed(id);
     planWindows();
@@ -106,11 +106,6 @@ const rooms = register("rooms", {
   loaded(): void {
     forgetGone();
     takeOpening();
-  },
-  /** room draws the room's tile again and fills its configuration again at once, as the configuration asks for (rerenderRoom). */
-  room(id: number): void {
-    changed(id, true);
-    planWindows();
   },
   /**
    * result shows how an action went on the room's tile (showTileResult), a

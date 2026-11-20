@@ -578,7 +578,7 @@ def test_mismatch_marks(page, case):
       r.mismatches = [moved, programme];
       d.mismatches = [moved, programme];
       roomUI(r).open = true;
-      rerenderRoom(r);
+      MassimoParts.rooms.data(r.id);
       return { room: r.name, other: other.name, device: deviceName(d) };
     }""")
     tile = page.locator(".room", has=page.locator(".room-name", has_text=names["room"])).first
@@ -606,6 +606,6 @@ def test_mismatch_marks(page, case):
       delete r.mismatches;
       for (const d of r.devices) delete d.mismatches;
       roomUI(r).open = false;
-      rerenderRoom(r);
+      MassimoParts.rooms.data(r.id);
     }""")
     assert tile.locator(".tile-notices").is_hidden(), "the line gone with the findings"

@@ -14,6 +14,7 @@
 
 import { useEffect, useLayoutEffect, useRef } from "preact/hooks";
 import { ResultLine } from "../shared/badge";
+import { Choices } from "../shared/choices";
 import { DateTime, FormFooter, Stepper } from "../shared/field";
 import { useBusy } from "../shared/question";
 import { house, load } from "./store";
@@ -121,7 +122,6 @@ export function House() {
   const sending = useBusy();
   const panel = useRef<HTMLFormElement>(null);
   const rooms = state.rooms.filter((r) => roomThermostat(r));
-  const all = rooms.every((r) => ticked(r.id));
   const any = rooms.some((r) => ticked(r.id));
   const res = house.result;
   useLayoutEffect(() => {
@@ -139,9 +139,6 @@ export function House() {
     document.addEventListener("click", outside);
     return () => document.removeEventListener("click", outside);
   }, []);
-  const tick = (id: number, on: boolean) => {
-    house.ticks = { ...house.ticks, [id]: on };
-  };
   return (
     <>
       <div class="house-modes">
@@ -174,19 +171,11 @@ export function House() {
         </div>
         <div class="panel-row rooms-row">
           <span class="muted">{t("house.rooms")}</span>
-          <div id="house-rooms" class="checks">
-            <label class="check">
-              <input type="checkbox" id="house-all" checked={all} onChange={(ev) => {
-                const on = ev.currentTarget.checked;
-                house.ticks = Object.fromEntries(rooms.map((r) => [r.id, on]));
-              }} /> {t("house.allRooms")}
-            </label>
-            {rooms.map((r) => (
-              <label key={(state.roomsOf || "") + ":" + r.id} class="check">
-                <input type="checkbox" data-room={String(r.id)} checked={ticked(r.id)} onChange={(ev) => tick(r.id, ev.currentTarget.checked)} /> {r.name}
-              </label>
-            ))}
-          </div>
+          <Choices look="check" id="house-rooms" label={t("house.rooms")} all={{ all: t("house.allRooms") }}
+            options={rooms.map((r) => [String(r.id), r.name])} chosen={rooms.filter((r) => ticked(r.id)).map((r) => String(r.id))}
+            set={(chosen) => {
+              house.ticks = Object.fromEntries(rooms.map((r) => [r.id, chosen.includes(String(r.id))]));
+            }} />
         </div>
         <FormFooter cancel={closeHouse} submit={t("action.send")} busy={sending.busy} off={!any} />
         <ResultLine res={res} cls="tile-result" />

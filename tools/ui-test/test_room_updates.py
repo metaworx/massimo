@@ -6,7 +6,10 @@ the fresh look's probe and the spike's four more, each a test, and the
 House panel's two. Before the tiles were parts, a state event built the
 tile again and a reload of the rooms every tile and the House panel's
 checkboxes, and sixteen of the twenty cases lost what the user had, and
-one of the House panel's.
+one of the House panel's. The configuration's three cases of the probe
+are with them, and since it is a part (Block 8) its tabs are checked to
+be the elements they were once the focus has left them, and to say a
+value stored meanwhile.
 
 Data comes the way the page gets it: a state event is updateDevice with
 a device of the room as it is, what every state event of the stream
@@ -45,6 +48,13 @@ def rooms_loaded(page):
     """The rooms loaded again, as a metadata event loads them."""
     page.evaluate("loadRooms()")
     page.wait_for_timeout(400)
+
+
+def settled(page):
+    """A frame and a task of the page awaited: what the focus leaving set
+    off at setTimeout(0), as the plain configuration's fill put off was,
+    has run by then."""
+    page.evaluate("new Promise((done) => requestAnimationFrame(() => setTimeout(done)))")
 
 
 def active(page):
@@ -274,7 +284,7 @@ def test_config_name_stays_while_focused(page, case):
     state_event(page, rid)
     value = page.evaluate("(s) => document.querySelector(s).value", tile + " .config-area input[type=text]")
     focus = active(page)
-    page.evaluate("(rid) => closeConfig(state.rooms.find((x) => x.id === rid))", rid)
+    page.locator(tile + " .config-tabs .close").click()
     assert value == "Typed name" and focus.startswith("input"), f"the name {value!r}, the focus {focus}"
 
 
@@ -285,9 +295,9 @@ def test_config_name_stays_once_left(page, case):
     config_name(page, tile)
     state_event(page, rid)
     page.locator(tile + " .room-name-btn").focus()
-    page.wait_for_timeout(200)
+    settled(page)
     value = page.evaluate("(s) => { const i = document.querySelector(s); return i ? i.value : null; }", tile + " .config-area input[type=text]")
-    page.evaluate("(rid) => closeConfig(state.rooms.find((x) => x.id === rid))", rid)
+    page.locator(tile + " .config-tabs .close").click()
     assert value == "Typed name", f"the name {value!r}"
 
 
@@ -335,8 +345,115 @@ def test_click_on_plus_from_the_configuration(page, case, refused):
     name.click()
     state_event(page, rid)
     took = pressed(page, rid, tile, lambda: None)
-    page.evaluate("(rid) => closeConfig(state.rooms.find((x) => x.id === rid))", rid)
+    page.locator(tile + " .config-tabs .close").click()
     assert took, "the click stepped the setpoint"
+
+
+# The configuration's own cases (AP UiParts, Block 8): before it was a
+# part, a state event or a reload filled it again at once where the focus
+# was elsewhere, and once the focus had left it where it was in it, every
+# element then a new one; a value stored meanwhile was not said.
+
+CONFIG_TABS = ("room", "temps", "devices", "program", "copy")
+
+
+def open_config(page, tile, tab):
+    """The tile's configuration open on tab, its form drawn."""
+    if page.locator(tile + " .config-body").count() == 0:
+        page.locator(tile + " .tile-cog").click()
+    page.locator(tile + " .config-tabs [role=tab][data-tab=%s]" % tab).click()
+    page.locator(tile + " .config-body form").first.wait_for()
+
+
+def mark_config(page, tile):
+    """Every button, field and select the configuration shows, marked."""
+    return page.evaluate("""(s) => {
+      const all = [...document.querySelectorAll(s + " .config-area button, " + s + " .config-area input, " + s + " .config-area select")];
+      all.forEach((el) => { el.__mark = true; });
+      return all.length;
+    }""", tile)
+
+
+def unmarked(page, tile):
+    """The configuration's buttons, fields and selects not marked, and the marked ones gone from the page."""
+    return page.evaluate("""(s) => {
+      const now = [...document.querySelectorAll(s + " .config-area button, " + s + " .config-area input, " + s + " .config-area select")];
+      return now.filter((el) => !el.__mark).map((el) => el.outerHTML.slice(0, 80));
+    }""", tile)
+
+
+@pytest.mark.parametrize("tab", CONFIG_TABS)
+def test_config_is_the_same_once_the_focus_left(page, case, tab):
+    """Each tab of the configuration is the elements it was, and its first
+    field holds what is typed (the Copy tab has none, and the week
+    programme's focus is on a day), after a state event, a reload of the
+    rooms and the focus leaving it; the tab stays shown."""
+    held(page)
+    rid, tile = first_room(page)
+    open_config(page, tile, tab)
+    # the week programme draws itself again at its own change, which the
+    # focus leaving a typed field makes: a day's button holds the focus there
+    field = page.locator(tile + " .config-body form input:is([type=text], [type=number])").first
+    typed = None
+    if tab != "program" and field.count():
+        field.click()
+        field.press("Control+a")
+        typed = "7" if field.get_attribute("type") == "number" else "Typed"
+        page.keyboard.type(typed)
+    else:
+        page.locator(tile + " .config-body form button").first.focus()
+    n = mark_config(page, tile)
+    assert n > 0, "the tab shows buttons and fields"
+    state_event(page, rid)
+    rooms_loaded(page)
+    page.locator(tile + " .room-name-btn").focus()
+    settled(page)
+    fresh = unmarked(page, tile)
+    value = field.input_value() if typed is not None else None
+    selected = page.locator(tile + " .config-tabs [role=tab][aria-selected=true]").get_attribute("data-tab")
+    page.locator(tile + " .config-tabs .close").click()
+    assert not fresh, f"the {tab} tab built again: {fresh[:3]}"
+    assert value == typed, f"what is typed: {value!r}"
+    assert selected == tab, f"the tab shown: {selected}"
+
+
+def test_config_says_a_name_stored_meanwhile(page, case, reads):
+    """A room name typed in the configuration stays when the rooms load with
+    another name stored meanwhile, which the field then says, with Take
+    theirs; the device's name the head of its form shows follows a state
+    event while the focus is in its form."""
+    held(page)
+    rid, tile = first_room(page)
+    open_config(page, tile, "room")
+    name = page.locator(tile + " .config-body form input[type=text]").first
+    name.fill("Typed name")
+    reads.change("**/api/v1/cubes/*/rooms?devices=all",
+                 lambda rooms: [dict(r, name="Renamed elsewhere") if r.get("id") == rid else r for r in rooms])
+    try:
+        rooms_loaded(page)
+        notice = page.locator(tile + " .config-body .field-meanwhile")
+        assert wait_until(page, "!!document.querySelector(%r)" % (tile + " .config-body .field-meanwhile"), 5), "the field says the name stored meanwhile"
+        assert "Renamed elsewhere" in notice.inner_text(), notice.inner_text()
+        assert name.input_value() == "Typed name", "what is typed stays"
+        notice.locator(".take-theirs").click()
+        assert name.input_value() == "Renamed elsewhere", "Take theirs takes the name stored"
+    finally:
+        reads.clear("**/api/v1/cubes/*/rooms?devices=all")
+    open_config(page, tile, "devices")
+    field = page.locator(tile + " .config-body .cfg-device input[type=text]").first
+    field.click()
+    page.evaluate("""(rid) => {
+      const r = state.rooms.find((x) => x.id === rid);
+      const d = JSON.parse(JSON.stringify(r.devices[0]));
+      d.name = "Named by an event";
+      updateDevice(d);
+    }""", rid)
+    head = page.locator(tile + " .config-body .cfg-device .device-main .device-name").first
+    assert wait_until(page, "document.querySelector(%r).textContent === 'Named by an event'" % (tile + " .config-body .cfg-device .device-main .device-name"), 3), \
+        "the form's head follows, the focus in the form: " + head.inner_text()
+    assert page.evaluate("document.activeElement === document.querySelector(%r)" % (tile + " .config-body .cfg-device input[type=text]")), \
+        "the focus stays in the name"
+    page.locator(tile + " .config-tabs .close").click()
 
 
 def test_tile_is_the_same_element(page, case):
@@ -374,10 +491,10 @@ def test_house_room_unticked_stays(page, case):
     of the rooms."""
     held(page)
     open_house(page)
-    box = page.locator("#house-rooms input[data-room]").first
+    box = page.locator("#house-rooms .check:not(.check-all) input").first
     box.uncheck()
     rooms_loaded(page)
-    checked = page.locator("#house-rooms input[data-room]").first.is_checked()
+    checked = page.locator("#house-rooms .check:not(.check-all) input").first.is_checked()
     page.locator("#house-panel .form-cancel").click()
     assert not checked, "the room is still unticked"
 
@@ -387,8 +504,8 @@ def test_house_focus_stays(page, case):
     reload of the rooms."""
     held(page)
     open_house(page)
-    page.locator("#house-rooms input[data-room]").first.focus()
+    page.locator("#house-rooms .check:not(.check-all) input").first.focus()
     rooms_loaded(page)
-    focus = page.evaluate("document.activeElement === document.querySelector('#house-rooms input[data-room]')")
+    focus = page.evaluate("document.activeElement === document.querySelector('#house-rooms .check:not(.check-all) input')")
     page.locator("#house-panel .form-cancel").click()
     assert focus, f"the focus on the room's checkbox: {active(page)}"

@@ -14,8 +14,8 @@
  * room and updated in place, so that an open menu, the focus, a click and
  * what is typed stay when data comes in. The tile's actions are the plain
  * ones (rooms.js, tiles.js), which set the tile's live state (roomUI); the
- * repairs (repair.js) and the configuration (config.js) stay plain, each
- * in an element the part leaves to it.
+ * repairs (repair.js) stay plain, in an element the part leaves to them;
+ * the configuration is a part of its own (Config.tsx).
  */
 
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
@@ -26,6 +26,8 @@ import { Island } from "../shared/island";
 import { Dropdown, MenuItem } from "../shared/menu";
 import { Problems, type Entry } from "../shared/problems";
 import { busyProps, Question } from "../shared/question";
+import { Config } from "./Config";
+import { closeConfig, openConfig } from "./configuration";
 import { DeviceList } from "./Devices";
 import { problemsLabel, roomEntries, roomNotices } from "./facts";
 import { load, tickOf } from "./store";
@@ -203,23 +205,6 @@ function DeleteQuestion({ room, ui, tile }: { room: PageRoom; ui: RoomUI; tile: 
   );
 }
 
-/**
- * Config is the room's configuration, plain (config.js renderConfig, an
- * Island): filled once it is there, again where the room's configuration
- * counter or its state in the tile (opened, closed) changed, and at a
- * change of language; emptied while closed, since renderConfig only hides
- * it.
- */
-function Config({ room, ui, cfg }: { room: PageRoom; ui: RoomUI; cfg: number }) {
-  return (
-    <Island cls="config-area hidden" keys={[cfg, ui.config]} fill={(area) => {
-      const now = state.rooms.find((r) => r.id === room.id) || room;
-      if (area.parentElement) renderConfig(area.parentElement, now);
-      if (!roomUI(now).config) area.replaceChildren();
-    }} />
-  );
-}
-
 /** Tile is a room's tile. */
 export function Tile({ room }: { room: PageRoom }) {
   load.useLoad();
@@ -237,26 +222,14 @@ export function Tile({ room }: { room: PageRoom }) {
   const src = roomActualDevice(room);
   const entries = roomEntries(room);
   const res = ui.result;
-  const cfgOpen = !!ui.config?.open;
+  const cfgOpen = ui.config;
   const off = !!ui.sending;
   const auto = pressed(mode, modes, "auto");
   const manual = pressed(mode, modes, "manual");
   // a write of the tile turns its button and keeps the others off (tileWrite)
   const write = (cls: string, key: string) => busyProps(cls, ui.sending === key, off);
   return (
-    <article ref={ref} class="tile room" data-id={String(room.id)} onFocusOut={(ev) => {
-      // A state event that came while the configuration had the focus fills
-      // it again once the focus has left it; a tick later, since focusout
-      // comes before the focus is anywhere else.
-      if (!(ev.target as Element).closest(".config-area")) return;
-      setTimeout(() => {
-        const r = state.rooms.find((x) => x.id === room.id);
-        if (r && roomUI(r).deferred && !configFocused(r)) {
-          roomUI(r).deferred = false;
-          tickOf(r.id).cfg++;
-        }
-      }, 0);
-    }}>
+    <article ref={ref} class="tile room" data-id={String(room.id)}>
       <header class="tile-head">
         <button type="button" class="room-name-btn" onClick={() => toggleDevices(room, tile())}><h2 class="room-name">{room.name}</h2></button>
         <span class="room-problems"><Problems entries={entries} label={problemsLabel(entries.flatMap((e) => e.items || []))} /></span>
@@ -315,7 +288,7 @@ export function Tile({ room }: { room: PageRoom }) {
       <Island cls="repair-area" keys={[roomRepairScope(room)]} fill={(el) => el.replaceChildren(repairSlot(roomRepairScope(room)))} />
       <ResultLine res={res} cls="tile-result" />
       <div class={"devices" + hid(!ui.open)}>{ui.open && <DeviceList room={room} ui={ui} />}</div>
-      <Config room={room} ui={ui} cfg={tick.cfg} />
+      <Config room={room} ui={ui} />
     </article>
   );
 }

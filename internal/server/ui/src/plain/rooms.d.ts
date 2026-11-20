@@ -18,9 +18,9 @@ declare global {
    * What a room's tile keeps (rooms.js roomUI), a live object whose
    * properties the plain actions set and the tile follows: its device list
    * open, a stepper value waiting to be sent and its timer, the holiday
-   * form and the deletion's question shown, the configuration (config.js),
-   * a state event waiting for the focus to leave the configuration, the
-   * write running, the Hold switch, and the result line.
+   * form and the deletion's question shown, the configuration open
+   * (rooms/Config.tsx, which keeps the rest itself), the write running,
+   * the Hold switch, and the result line.
    */
   interface RoomUI {
     open: boolean;
@@ -28,8 +28,7 @@ declare global {
     timer: number | null;
     vacation: boolean;
     confirm: boolean;
-    config: { open: boolean } | null;
-    deferred: boolean;
+    config: boolean;
     sending: string | null;
     hold: boolean;
     result: { text: string; ok: boolean } | null;
@@ -70,6 +69,12 @@ declare global {
   function typeName(type: string): string;
   /** The mark of a write a device has not shown by its deadline, as an item; null for none. */
   function confirmItem(d: Device): Item | null;
+  /** The values of a write a device has not shown by its deadline, in words, "eco, Monday's program". */
+  function confirmFieldsText(d: Device): string;
+  /** The result line of a write that went through: ok, discarded, the radio's budget. */
+  function resultText(label: string, res: unknown): string;
+  /** The result line of a write that failed, with the devices without a state where the server names them. */
+  function errorText(label: string, e: Error): string;
   /** Says how an action went on the room's tile, or on the page's message line where the tile is gone. */
   function showTileResult(roomId: number, text: string, ok?: boolean): void;
   /** Steps the stepper's value waiting to be sent by delta, and sends it two seconds after the last step. */
@@ -86,8 +91,6 @@ declare global {
   function lockDevice(d: Device, locked: boolean, btn: HTMLElement | null): Promise<unknown>;
   /** Deletes a room that has no devices, and loads the rooms again. */
   function deleteRoom(room: PageRoom): Promise<void>;
-  /** Whether the focus is in a room tile's configuration. */
-  function configFocused(room: PageRoom): boolean;
 }
 
 export {};

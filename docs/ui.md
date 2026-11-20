@@ -485,11 +485,13 @@ Every room has a tile:
   - **Room**:
     the name.
   - **Temperatures**:
-    comfort, eco, open window and its duration, maximum and minimum.
-    For radiator thermostats also Boost, descaling,
-    maximum valve and valve offset.
+    comfort, eco, open window and its duration, maximum and minimum,
+    and which thermostat the values come from.
   - **Devices**:
-    name, room, temperature offset,
+    for a room with radiator thermostats first their settings,
+    Boost and its valve, descaling, maximum valve and valve offset,
+    with a **Send** of their own;
+    then per device its name, room, temperature offset,
     and for a wall thermostat whether its display shows the measured temperature.
     A device that has not shown a write by its deadline says which values first,
     "Not confirmed by the device: eco, Monday's program".
@@ -526,15 +528,27 @@ Every room has a tile:
   - **Copy**:
     copies this room's stored settings (temperatures, week programme,
     radiator settings) to other rooms.
-    It copies what is stored, not changes that haven't been sent yet.
+    It copies what is stored, not changes that haven't been sent yet,
+    and the week programme as the last **Send** of the Week programme tab left it.
+    It is a command, as the House tile's panel is, and no settings form:
+    what is chosen stays while the configuration is open and when it closes,
+    and a copy that went through clears the rooms chosen,
+    what is copied staying as it was set.
   - **Send** is off while nothing differs from what the Cube has,
     or on the Copy tab while no room is ticked.
+    While one of the configuration's writes runs, its **Send** turns
+    and every other **Send** of the configuration is off.
+  - A field that shows what is stored keeps what is typed,
+    from one tab to another while the configuration is open;
+    where the stored value changed meanwhile, as another client renames the room,
+    it says so under the field, with **Take theirs**.
 - Each setting has a **?** button that explains it, with the factory values
-  from the eQ-3 manuals.
+  from the eQ-3 manuals; an explanation shown stays shown when its tab is drawn again.
 
 The **House** tile sets several rooms at once: ECO, AUTO,
 COMFORT or MANU with a temperature, permanently or until a date and time;
-its **Send** is off while no room is ticked.
+its **Send** is off while no room is ticked,
+the rooms a choice of checkboxes with **All rooms** first.
 What its panel holds stays when the rooms load again and when it closes:
 the rooms ticked, the mode, the end typed.
 
@@ -557,8 +571,9 @@ A tile is drawn once and follows the data in place:
 a menu open, the focus, a click under way, a text selected, the result line,
 the holiday form and what is typed in it stay
 when a device reports or the rooms are loaded again.
-The configuration is drawn again at such a time, but not while the focus is in it:
-then once the focus has left it.
+So does the configuration, with the focus in it or not:
+its tab, what is typed, an explanation shown, the week programme's edits
+and a click on its buttons.
 
 ### Repairs
 
@@ -1565,9 +1580,11 @@ come from `components.js`; the scripts never use `innerHTML`.
 The week programme editor is an element of its own, `<massimo-week-program>`
 (`week-program.js`), so that a Home Assistant card can use the same editor:
 it holds the editor's behaviour, works on a model the page keeps,
-builds its controls with a kit the page gives it (`components.js`, `t()`),
+builds its controls with a kit the page gives it (`components.js`, `t()`,
+`weekKit` of `config.js`),
 and tells the page of every edit with a `change` event;
-the programme tab puts it in a form with Cancel, Send and the two resets.
+the programme tab, a part (`ui/src/rooms/Config.tsx`), makes it once in an element
+it leaves to it and puts its two resets beside Cancel and Send.
 A plain panel that opens, a user's or a role's, is a `detailsPanel`:
 its head the name, the serial, login or key, and the badges,
 its body the form cloned from the feature's template.
@@ -1655,7 +1672,8 @@ a script for each region of the page, in the order the page loads them:
   and a finding of the Cube's lines in words;
   `unlisted.js`, a device removed from the Cube;
   `house.js`, the House tile's plain names, which call its part;
-- `week-program.js` and `config.js`, a room's configuration;
+- `week-program.js`, the week programme editor; `config.js`, how long a name may be,
+  the name a device is offered, and the editor's kit;
 - `log.js`, the log and its sign for unseen problems;
   `pages.js`, the pages, the main menu, the address and the scroll;
 - `update.js`, Software update; `maintenance.js`, the Maintenance card;
@@ -1822,16 +1840,13 @@ These builders of `components.js` and `app.js` have no part yet, since no region
 that has moved uses them: `markRange`, `kvList`,
 `countList` and `sectionBadges`.
 Known gaps, for the blocks that meet them:
-a `ResultLine` with something after its text (`config.js`'s Load the current programme);
 the conversion of a `DateTime`'s value to the API's time, which stays with its users
 (`apiUntil` of `rooms.js`), and which the block that moves the users' expiry fields
 (`users-panel.html`, `users.js`, `app.js`'s `localDateTimeValue`) brings to the part;
 a device row's head (icon, name, type, identifiers), which `pairing.js` draws a twin of,
 taken into `model/` by the block that moves the pairing, since no region imports another;
-choosing rooms by checkboxes with All, as the House panel does,
-where `Choices` has switches with All and None;
 a room's write's outcome in words, built in three places
-(`House.tsx` `houseRequests`, `rooms.js` `resultText`, `config.js`'s copy);
+(`House.tsx` `houseRequests`, `rooms.js` `resultText`, `configuration.ts` `sendCopy`);
 a failed save's error with its unsaved form's item (its tooltip),
 which `actionRunner`'s `run` does not hand back:
 it says only whether the request was taken,
@@ -1841,8 +1856,8 @@ section without a pill (AP UnsavedMarks, Blocks 4 and 5);
 a room's own entry in the tile's problem list, where a configuration tab lists its
 form, which today goes through the virtual wall thermostat's entry, and one list of
 the room's forms that does not name the virtual thermostat twice, and a tab's open
-by `openConfig(room, el, tab)` (`config.js`), where the virtual thermostat's open
-closes the configuration (AP UnsavedMarks, Block 4);
+by `openConfig(room, el, tab)` (`rooms/configuration.ts`),
+where the virtual thermostat's open closes the configuration (AP UnsavedMarks, Block 4);
 the page's modal dialog: `FormsDialog` is the list of forms with a title,
 and a later modal takes its shell out of it
 (its opening by a property, the focus, its closing);
@@ -1904,14 +1919,14 @@ The rooms (`ui/src/rooms/`) are the third:
 `index.tsx` draws the House tile's modes and panel in `#house-slot`,
 a tile per room of the chosen Cube in `#rooms`,
 kept by the Cube and the room's id, and the devices without a room in `#unlisted-devices`,
-and registers `render`, `data`, `unlisted`, `room`, `result`, `ui`, `loaded`,
+and registers `render`, `data`, `unlisted`, `result`, `ui`, `loaded`,
 `houseOpen` and `closeHouse`,
 which `rooms.js` calls as `renderRooms`, `updateDevice` (`data` for a room's device,
-`unlisted` for one in no room), `rerenderRoom`, `showTileResult`, `roomUI`
+`unlisted` for one in no room), `showTileResult`, `roomUI`
 and `roomsLoaded`,
 and `house.js` by their own names;
 `store.ts` holds its counter, a counter per room that a state event of one of its
-devices raises and one per room's configuration, what a tile keeps (`newUI`,
+devices raises, what a tile keeps (`newUI`,
 the live object `roomUI` gives the plain actions, which set it as before)
 and what the House tile's panel keeps (`house`: the mode, the duration,
 the temperature and the end typed, the rooms unticked, the last result),
@@ -1922,8 +1937,11 @@ and the timer of an open window's next state by the clock;
 the room's notices among them and their count for the tile's line,
 a device's badges in words);
 `Tile.tsx` the tile, `Devices.tsx` a device's row and a tile's device list,
+`Config.tsx` a tile's configuration with its tabs, `ConfigDevices.tsx` its Devices tab,
+`configuration.ts` what the configuration keeps and sends,
 `House.tsx` the House tile, its temperature a `Stepper`, its end a `DateTime`,
 its mode and its duration a choice of radio buttons side by side of its own (`Segments`),
+its rooms a `Choices` of checkboxes with All,
 its Send and Cancel a `FormFooter`;
 `Unlisted.tsx` the devices without a room, each row a device's row with
 Put into a room… and Remove from the Cube;
@@ -1933,11 +1951,20 @@ and the House tile's section, with its title, is shown and hidden by `rooms.js` 
 The tile's actions stay plain (`rooms.js`, `tiles.js`) and set `roomUI`,
 which the tile follows: a write running turns its button and keeps the others off,
 a stepper value waiting to be sent shows with Save and Cancel.
-The configuration stays plain inside the tile (`config.js`, AP UiParts Block 8),
-an `Island` that `renderConfig` fills: again where the configuration asks for it
-(`rerenderRoom`), where it opens or closes, and at a data event,
-but while the focus is in it,
-where the fill waits until the focus has left it (`configFocused`).
+The configuration (AP UiParts Block 8) is a part of the tile, open while `roomUI`'s
+`config` says so: `configuration.ts` keeps per room of its Cube, live,
+the tab shown and the Copy tab's choice, kept across a close, the configuration
+and the week programme as loaded with the programme's tag, which a Send of the programme
+makes the one it sent, the result line, the write under way
+and the drafts of its fields while it is open,
+and sends what each tab sends, as `config.js` sent it;
+its tabs are `Tabs`, its fields `TextField`s, `NumberField`s, `Select`s and `Switch`es
+with their drafts and their help, the Copy tab's rooms and settings `Choices`,
+a move and a removal `Question`s, each footer a `FormFooter`,
+the result line a `ResultLine`,
+followed by Load the current programme where the programme changed elsewhere;
+the week programme editor stays the element it is (`week-program.js`), made once
+in an `Island`, its two resets in another.
 A room's repairs and a device's Repair… stay plain too (`repair.js`), each an `Island`,
 and so does the form that puts a device without a room into one
 (`pairDeviceForm`, Block 9),
