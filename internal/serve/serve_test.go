@@ -24,9 +24,11 @@ import (
 )
 
 // TestMain keeps the look for servers beside each discovery run off the
-// network: it finds none.
+// network: it finds none. It unsets every MASSIMO_CUBE_* variable before
+// the tests run, which the parallel ones rely on (noCubeEnv).
 func TestMain(m *testing.M) {
 	browseServers = func(context.Context, time.Duration, ...net.IP) ([]announce.Found, error) { return nil, nil }
+	unsetCubeEnv()
 	os.Exit(m.Run())
 }
 
@@ -133,7 +135,8 @@ func TestOpenRunsAgainstFakeCube(t *testing.T) {
 // With Config.Addr the instance serves that one Cube without a store,
 // and writes nothing into the data directory.
 func TestOpenWithoutStore(t *testing.T) {
-	clearCubeEnv(t)
+	t.Parallel()
+	noCubeEnv(t)
 	data := t.TempDir()
 	inst, err := Open(context.Background(), Config{Listen: "127.0.0.1:0", Addr: startFakeCube(t), DataDir: data, Proxies: []string{"off"},
 		RefreshInterval: &never, DiscoverInterval: &never, Logger: quietLog()})
@@ -162,7 +165,8 @@ func TestOpenWithoutStore(t *testing.T) {
 // An instance that is not run is released by Close: the listener and
 // the store; a second Close does nothing.
 func TestCloseWithoutRun(t *testing.T) {
-	clearCubeEnv(t)
+	t.Parallel()
+	noCubeEnv(t)
 	data := t.TempDir()
 	inst, err := Open(context.Background(), Config{Listen: "127.0.0.1:0", DataDir: data, Logger: quietLog()})
 	if err != nil {
@@ -188,7 +192,8 @@ func TestCloseWithoutRun(t *testing.T) {
 // default. The stale threshold too, and the duty cycle's hold, which has
 // no flag.
 func TestOpenIntervals(t *testing.T) {
-	clearCubeEnv(t)
+	t.Parallel()
+	noCubeEnv(t)
 	data := t.TempDir()
 	st := testStore(t, data)
 	ctx := context.Background()
@@ -231,6 +236,7 @@ func TestOpenIntervals(t *testing.T) {
 // Home Assistant finds one installation, and one without a valid id.
 func fakeAnnounce(t *testing.T, err error) (got chan announce.Service, stopped chan struct{}) {
 	t.Helper()
+	testkit.Swapping(t)
 	got, stopped = make(chan announce.Service, 1), make(chan struct{})
 	oldBrowse := browseHomeAssistant
 	browseHomeAssistant = func(context.Context, time.Duration, ...net.IP) ([]announce.HomeAssistant, error) {
@@ -361,9 +367,11 @@ func postDiscover(t *testing.T, base string) (int, []string) {
 // Config.DiscoveryListen is the discovery socket's address: held by
 // another socket, a search answers 503 however free UDP 23272 is; once
 // it is free, the search finds the fake Cube that DiscoveryTargets asks,
-// which answers to that address.
+// which answers to that address within the search's wait: 200 ms,
+// scaled, the deadline for its answer.
 func TestOpenDiscoveryListen(t *testing.T) {
-	clearCubeEnv(t)
+	t.Parallel()
+	noCubeEnv(t)
 	held, err := net.ListenPacket("udp4", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -376,7 +384,7 @@ func TestOpenDiscoveryListen(t *testing.T) {
 	defer responder.Close()
 	inst, err := Open(context.Background(), Config{Listen: "127.0.0.1:0", Addr: startFakeCube(t), DataDir: t.TempDir(), Proxies: []string{"off"},
 		RefreshInterval: &never, DiscoverInterval: &never, DiscoveryTargets: []string{responder.Addr()}, DiscoveryListen: held.LocalAddr().String(),
-		Logger: quietLog()})
+		discoveryWait: testkit.Scale(200 * time.Millisecond), Logger: quietLog()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -398,6 +406,7 @@ func TestOpenDiscoveryListen(t *testing.T) {
 // MASSIMO_ANNOUNCE did: on, off, or auto by the listener's address; a
 // value that is none of them is auto, with a line in the log.
 func TestAnnounceSetting(t *testing.T) {
+	t.Parallel()
 	st := testStore(t, t.TempDir())
 	ctx := context.Background()
 	logger, logs := testkit.LogWatch(nil)
@@ -454,7 +463,8 @@ func TestRunAnnouncesBySetting(t *testing.T) {
 // for Home Assistant on the LAN, and its found answer gives the loopback
 // as the reason (AP LookReason).
 func TestOpenNotLookingOnTheLoopback(t *testing.T) {
-	clearCubeEnv(t)
+	t.Parallel()
+	noCubeEnv(t)
 	inst, err := Open(context.Background(), Config{Listen: "127.0.0.1:0", DataDir: t.TempDir(), Proxies: []string{"off"}, DiscoverInterval: &never,
 		Announce: Announce{Auto: true}, Logger: quietLog()})
 	if err != nil {

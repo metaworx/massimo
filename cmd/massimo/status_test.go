@@ -13,6 +13,7 @@ import (
 )
 
 func TestStatusFromSnapshot(t *testing.T) {
+	t.Parallel()
 	lines, err := fakecube.LoadGreeting("../../internal/protocol/cube/testdata/cube-fw0113-greeting.txt")
 	if err != nil {
 		t.Fatal(err)
@@ -41,6 +42,7 @@ func TestStatusFromSnapshot(t *testing.T) {
 // A room's line carries its temperature: the wall thermostat's, else the
 // radiator thermostats' median.
 func TestStatusRoomTemperature(t *testing.T) {
+	t.Parallel()
 	lines, err := fakecube.RoomsFixture()
 	if err != nil {
 		t.Fatal(err)

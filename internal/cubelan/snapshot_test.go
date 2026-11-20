@@ -13,6 +13,7 @@ import (
 // A snapshot built from a greeting's lines holds what a connection
 // holds, and gives the same lines back.
 func TestSnapshotOf(t *testing.T) {
+	t.Parallel()
 	greeting, err := fakecube.LoadGreeting(fixture)
 	if err != nil {
 		t.Fatal(err)

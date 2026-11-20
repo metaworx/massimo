@@ -13,8 +13,9 @@ import (
 // MASSIMO_API_TOKEN creates the owner at the first start, is added to
 // an owner's keys when it changes, and is revoked when it goes.
 func TestBootstrap(t *testing.T) {
+	t.Parallel()
 	log, logged := testkit.LogWatch(nil)
-	s, err := Open(t.TempDir(), Options{Logger: log})
+	s, err := Open(copied(t), Options{Logger: log})
 	if err != nil {
 		t.Fatal(err)
 	}

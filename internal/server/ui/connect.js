@@ -5,12 +5,14 @@
 // servers the app keeps, each probed at its LAN and its remote address
 // and opened in the app by a tap; the servers discovery finds and an
 // address typed, probed before they are added; the fingerprint sheet of
-// a self-signed certificate; a server's settings; the server on the
-// phone where the app has it built in. Everything goes through the
-// app's bridge, window.massimo, whose calls answer with promises and
-// whose events arrive as "massimo" events on window; a browser has no
-// bridge and sees a line saying that the page is the app's. Loaded
-// after i18n.js and components.js, without app.js.
+// a self-signed certificate; a server's settings with its login by
+// fingerprint, and the row's button that opens it signed in; the server
+// on the phone where the app has it built in; what an action came to, in
+// the page's toast. Everything goes through the app's bridge,
+// window.massimo, whose calls answer with promises and whose events
+// arrive as "massimo" events on window; a browser has no bridge and sees
+// a line saying that the page is the app's. Loaded after i18n.js and
+// components.js, without app.js.
 "use strict";
 
 const $ = (id) => document.getElementById(id);
@@ -24,15 +26,18 @@ const DEFAULT_PORT = 8099;
 
 const conn = {
   bridge: null, // window.massimo
-  servers: [], // as the app keeps them: {id, name, node, lan, remote, fp, biometric, push}
+  servers: [], // as the app keeps them: {id, name, node, lan, remote, fp, login, ask, push}
   probes: {}, // by server id: {state, url, fingerprint, error}, the state probing, lan, remote, cert or offline
   probeSeq: {}, // by server id: the latest probe, whose answer alone counts
   seen: {}, // by node: the URL discovery found it at
+  heard: {}, // by node: the name discovery heard for it, "" for none
   found: [], // the servers discovery found that are not in the list: {name, url, node}
   searching: false,
   searchError: "",
   open: null, // the id of the server whose settings are open
   panel: null, // their form
+  forgetRow: null, // the row of Forget all stored credentials, held while its question takes its place
+  toastServer: null, // the id of the server the toast says does not answer (say)
 };
 
 // theBridge is the app's bridge on this page, null in a browser.
@@ -43,6 +48,16 @@ function theBridge() {
 
 function serverById(id) {
   return conn.servers.find((s) => s.id === id) || null;
+}
+
+// say shows what an action on the list or the add form came to in the
+// page's toast (showToast of components.js), a newer outcome in the
+// place of the one shown, a failure with the toast's red edge. server is
+// the id of the server the toast says does not answer, whose probe takes
+// it back once the server answers (probeServer).
+function say(text, { bad = false, server = null } = {}) {
+  conn.toastServer = server;
+  showToast(text, { tone: bad ? "bad" : "" });
 }
 
 // --- addresses ----------------------------------------------------------
@@ -129,7 +144,7 @@ async function loadServers() {
     conn.servers = (await conn.bridge.servers()) || [];
   } catch (e) {
     conn.servers = [];
-    showResult($("servers-msg"), t("connect.loadFailed", { error: e.message }), false);
+    say(t("connect.loadFailed", { error: e.message }), { bad: true });
   }
 }
 
@@ -156,7 +171,8 @@ function probeState(s, results) {
 
 // probeServer probes a server at its two addresses with its pinned
 // fingerprint, and keeps what it found; a later probe of the same
-// server wins over one still running.
+// server wins over one still running. A server that answers takes back
+// the toast that said it does not.
 async function probeServer(s) {
   if (!s) return;
   const seq = (conn.probeSeq[s.id] || 0) + 1;
@@ -171,7 +187,12 @@ async function probeServer(s) {
     results = [{ ok: false, error: e.message }];
   }
   if (conn.probeSeq[s.id] !== seq) return;
-  conn.probes[s.id] = probeState(s, results);
+  const p = probeState(s, results);
+  conn.probes[s.id] = p;
+  if ((p.state === "lan" || p.state === "remote") && conn.toastServer === s.id) {
+    conn.toastServer = null;
+    hideToast();
+  }
   renderServers();
   maybeMoveLan(serverById(s.id));
 }
@@ -209,13 +230,20 @@ function stateBadge(state) {
   }
 }
 
+// ASKS are the choices of when the fingerprint is asked (docs/app.md,
+// "The login by fingerprint"), "start" the app's default.
+const ASKS = ["return", "start", "logout"];
+
 // serverRow is a server's row, wired by its id: a tap opens the server,
-// a long press (the context menu) and the cog its settings.
+// the fingerprint, where a login is kept, opens it signed in, a long
+// press (the context menu) and the cog its settings.
 function serverRow(id) {
   const li = fromTemplate("tpl-server");
   li.dataset.id = id;
   const open = li.querySelector(".server-open");
   open.addEventListener("click", () => openServer(id));
+  const login = li.querySelector(".server-login");
+  login.addEventListener("click", () => whileBusy(login, () => openServer(id, { login: true })));
   open.addEventListener("contextmenu", (ev) => {
     ev.preventDefault();
     toggleSettings(id);
@@ -224,16 +252,30 @@ function serverRow(id) {
   return li;
 }
 
+// showWhere writes a row's address, or leaves it out where it is the
+// row's name already, as for a server named by its address.
+function showWhere(el, where, name) {
+  el.textContent = where === name ? "" : where;
+  el.classList.toggle("hidden", where === name);
+}
+
 // fillRow writes a server's name, address and state into its row, and
 // its settings under it while they are open.
 function fillRow(li, s) {
   const p = conn.probes[s.id] || { state: "probing" };
-  li.querySelector(".server-name").textContent = s.name || hostOf(s.lan || s.remote);
-  li.querySelector(".server-where").textContent = hostOf(p.url || s.lan || s.remote);
+  const name = s.name || hostOf(s.lan || s.remote);
+  li.querySelector(".server-name").textContent = name;
+  showWhere(li.querySelector(".server-where"), hostOf(p.url || s.lan || s.remote), name);
   const badges = li.querySelector(".server-badges");
   clear(badges);
   badges.appendChild(stateBadge(p.state));
   if (p.url && plainOutside(p.url)) badges.appendChild(badgeEl(t("connect.state.plain"), "warn"));
+  const login = li.querySelector(".server-login");
+  login.classList.toggle("hidden", !s.login);
+  if (s.login) {
+    login.setAttribute("aria-label", t("connect.loginAs", { name: s.login }));
+    login.title = t("connect.loginAs", { name: s.login });
+  }
   const cog = li.querySelector(".server-cog");
   cog.setAttribute("aria-expanded", String(conn.open === s.id));
   if (conn.open === s.id && conn.panel && conn.panel.parentNode !== li) li.appendChild(conn.panel);
@@ -260,22 +302,29 @@ function renderServers() {
   }
   for (const li of rows.values()) li.remove();
   $("servers-empty").classList.toggle("hidden", conn.servers.length > 0);
+  if (conn.forgetRow) conn.forgetRow.classList.toggle("hidden", !conn.servers.some((s) => s.login));
 }
 
-// openServer opens a server in the app at the address its probe found;
+// openServer opens a server in the app at the address its probe found,
+// with opts {login: true} signed in by fingerprint first (docs/app.md);
 // a certificate that is not the one trusted asks first, and a server
-// that did not answer is probed again.
-async function openServer(id) {
+// that did not answer is probed again, and said not to answer until a
+// probe finds it. A kept login the server refused is gone from the list
+// afterwards.
+async function openServer(id, opts) {
   const s = serverById(id);
   const p = conn.probes[id] || {};
-  const msg = $("servers-msg");
   if (!s || p.state === "probing") return;
-  showResult(msg, "", false);
   if (p.state === "lan" || p.state === "remote") {
     try {
-      await conn.bridge.open(s.id, p.url);
+      if (opts) await conn.bridge.open(s.id, p.url, opts);
+      else await conn.bridge.open(s.id, p.url);
     } catch (e) {
-      showResult(msg, t("connect.openFailed", { name: s.name, error: e.message }), false);
+      say(t("connect.openFailed", { name: s.name, error: e.message }), { bad: true });
+      if (opts && opts.login) {
+        await loadServers();
+        renderServers();
+      }
     }
     return;
   }
@@ -284,7 +333,7 @@ async function openServer(id) {
     try {
       await conn.bridge.trust(s.id, p.fingerprint);
     } catch (e) {
-      showResult(msg, t("connect.saveFailed", { error: e.message }), false);
+      say(t("connect.saveFailed", { error: e.message }), { bad: true });
       return;
     }
     await loadServers();
@@ -292,8 +341,8 @@ async function openServer(id) {
   }
   await probeServer(serverById(id));
   const q = conn.probes[id] || {};
-  if (q.state === "lan" || q.state === "remote" || (q.state === "cert" && p.state !== "cert")) return openServer(id);
-  showResult(msg, t("connect.unreachable", { name: s.name }) + (q.error ? " " + q.error : ""), false);
+  if (q.state === "lan" || q.state === "remote" || (q.state === "cert" && p.state !== "cert")) return openServer(id, opts);
+  say(t("connect.unreachable", { name: s.name }) + (q.error ? " " + q.error : ""), { bad: true, server: id });
 }
 
 // --- a server's settings ----------------------------------------------
@@ -319,8 +368,8 @@ function addressInput(value) {
 }
 
 // settingsPanel is a server's settings: its name, its two addresses,
-// the fingerprint or PIN before its token, notifications where the app
-// has push, and Remove.
+// when the fingerprint is asked, the login by fingerprint kept with its
+// user and Turn off, notifications where the app has push, and Remove.
 function settingsPanel(s) {
   const name = document.createElement("input");
   name.type = "text";
@@ -328,11 +377,18 @@ function settingsPanel(s) {
   name.value = s.name || "";
   const lan = addressInput(s.lan);
   const remote = addressInput(s.remote);
-  const bio = switchEl(t("connect.biometric"), s.biometric, null, "biometric");
+  const ask = document.createElement("select");
+  ask.name = "ask";
+  for (const a of ASKS) {
+    const o = textEl("option", t("connect.ask." + a));
+    o.value = a;
+    ask.appendChild(o);
+  }
+  ask.value = ASKS.includes(s.ask) ? s.ask : "start";
   const push = conn.bridge.push ? switchEl(t("connect.push"), s.push, null, "push") : null;
   const msg = textEl("p", "", "small cubes-msg server-msg hidden");
   msg.setAttribute("role", "status");
-  const form = formEl(() => saveSettings(s.id, form, { name, lan, remote, bio, push, msg }), "panel server-panel");
+  const form = formEl(() => saveSettings(s.id, form, { name, lan, remote, ask, push, msg }), "panel server-panel");
   const remove = button(t("connect.remove"), "server-remove", () => {
     confirmInPlace(form.querySelector(".actions"), t("connect.removeQuestion", { name: s.name }), { yes: t("connect.remove") },
       () => removeServer(s.id, msg), ".server-remove");
@@ -341,8 +397,14 @@ function settingsPanel(s) {
     fieldRow(t("connect.name"), name, { wide: true }),
     fieldRow(t("connect.lan"), lan, { wide: true, hint: t("connect.lanHint") }),
     fieldRow(t("connect.remote"), remote, { wide: true, hint: t("connect.remoteHint") }),
-    fieldRow("", bio, { hint: t("connect.biometricHint") }),
+    fieldRow(t("connect.ask"), ask, { wide: true, hint: t("connect.askHint") }),
   );
+  if (s.login) {
+    const off = button(t("connect.loginOff"), "server-login-off", () => turnOff(s.id, off, msg));
+    const kept = textEl("p", t("connect.loginKept", { name: s.login }), "server-login-kept");
+    kept.append(" ", off);
+    form.append(kept);
+  }
   if (push) form.append(fieldRow("", push));
   form.append(msg, formFooter({ submit: t("action.save"), cancel: () => toggleSettings(null), extra: [remove] }));
   return form;
@@ -361,7 +423,7 @@ async function saveSettings(id, form, f) {
     name,
     lan,
     remote,
-    biometric: f.bio.querySelector("input").checked,
+    ask: ASKS.includes(f.ask.value) ? f.ask.value : "start",
     push: f.push ? f.push.querySelector("input").checked : !!s.push,
   });
   try {
@@ -371,12 +433,63 @@ async function saveSettings(id, form, f) {
   }
   conn.open = null;
   conn.panel = null;
-  showResult($("servers-msg"), t("connect.saved", { name }), true);
+  say(t("connect.saved", { name }));
   probeServer(serverById(id));
 }
 
-// removeServer forgets a server, its certificate and its token; an
-// error is said in its settings, which stay open.
+// turnOff turns a server's login by fingerprint off (forget, which asks
+// for the fingerprint once and revokes the key at the address the probe
+// chose); the open settings lose its line and keep what is typed in
+// them, and the toast says whether the server revoked the key.
+async function turnOff(id, btn, msg) {
+  const s = serverById(id);
+  const p = conn.probes[id] || {};
+  const url = p.state === "lan" || p.state === "remote" ? p.url : "";
+  let res;
+  try {
+    res = await whileBusy(btn, () => conn.bridge.forget(id, url));
+  } catch (e) {
+    showResult(msg, t("connect.loginOffFailed", { error: e.message }), false);
+    return;
+  }
+  await loadServers();
+  dropLoginLine();
+  renderServers();
+  const name = s ? s.name : "";
+  say(res && res.revoked ? t("connect.loginOffDone", { name }) : t("connect.loginOffLocal", { name }));
+}
+
+// dropLoginLine takes the line of a kept login out of the open settings
+// once the app forgot it, so that what is typed in them stays.
+function dropLoginLine() {
+  const s = conn.open && serverById(conn.open);
+  const line = conn.panel && conn.panel.querySelector(".server-login-kept");
+  if (line && !(s && s.login)) line.remove();
+}
+
+// forgetAll forgets every kept login, once the user confirmed it in
+// place of the button; the keys stay at their servers.
+function forgetAll() {
+  const row = conn.forgetRow;
+  const box = confirmInPlace(row, t("connect.forgetAllQuestion"), { yes: t("connect.forgetAll") }, async () => {
+    try {
+      await conn.bridge.forgetAll();
+    } catch (e) {
+      box.replaceWith(row);
+      say(t("connect.loginOffFailed", { error: e.message }), { bad: true });
+      return;
+    }
+    box.replaceWith(row);
+    await loadServers();
+    dropLoginLine();
+    renderServers();
+    say(t("connect.forgotAll"));
+  }, "#forget-all");
+}
+
+// removeServer forgets a server, its certificate, its session and its
+// kept login, and says so in the toast; an error is said in its
+// settings, which stay open.
 async function removeServer(id, msg) {
   const s = serverById(id);
   try {
@@ -390,7 +503,7 @@ async function removeServer(id, msg) {
   conn.open = null;
   conn.panel = null;
   renderServers();
-  showResult($("servers-msg"), t("connect.removed", { name: s ? s.name : "" }), true);
+  say(t("connect.removed", { name: s ? s.name : "" }));
   $("add-address").focus();
 }
 
@@ -441,28 +554,28 @@ function askTrust({ url, old, fresh }) {
 
 // addServer probes the addresses of a server to add and adds it at the
 // first that answers, after the fingerprint sheet where its certificate
-// is not one the phone trusts; what happened goes to msg. A server
+// is not one the phone trusts; what happened goes to the toast. A server
 // already in the list by its node gets the address instead. It resolves
 // whether the server is in the list now.
-async function addServer(urls, { name, node }, msg) {
+async function addServer(urls, { name, node }) {
   let results;
   try {
     results = (await conn.bridge.probe(urls, "")) || [];
   } catch (e) {
-    showResult(msg, t("connect.noAnswer", { address: hostOf(urls[0]) }) + " " + e.message, false);
+    say(t("connect.noAnswer", { address: hostOf(urls[0]) }) + " " + e.message, { bad: true });
     return false;
   }
   const r = results.find((x) => x && (x.ok || (x.trusted === false && x.fingerprint)));
   if (!r) {
     const failed = results.find((x) => x && x.error);
-    showResult(msg, t("connect.noAnswer", { address: hostOf(urls[0]) }) + (failed ? " " + failed.error : ""), false);
+    say(t("connect.noAnswer", { address: hostOf(urls[0]) }) + (failed ? " " + failed.error : ""), { bad: true });
     return false;
   }
   let answer = r;
   let fp = "";
   if (!r.ok) {
     if (!(await askTrust({ url: r.url, old: "", fresh: r.fingerprint }))) {
-      showResult(msg, t("connect.notTrusted"), false);
+      say(t("connect.notTrusted"), { bad: true });
       return false;
     }
     fp = r.fingerprint;
@@ -472,37 +585,44 @@ async function addServer(urls, { name, node }, msg) {
       answer = { ok: false, error: e.message };
     }
     if (!answer || !answer.ok) {
-      showResult(msg, t("connect.noAnswer", { address: hostOf(r.url) }) + (answer && answer.error ? " " + answer.error : ""), false);
+      say(t("connect.noAnswer", { address: hostOf(r.url) }) + (answer && answer.error ? " " + answer.error : ""), { bad: true });
       return false;
     }
   }
-  return saveNew({ name, url: answer.url || r.url, node: answer.node || node || "", fp }, msg);
+  return saveNew({ name, url: answer.url || r.url, node: answer.node || node || "", fp });
 }
 
-async function saveNew({ name, url, node, fp }, msg) {
+// saveNew keeps a server that answered: a new one named as discovery
+// heard its node where it did, else by its address, until discovery
+// hears it (takeHeardName); one in the list by its node takes the
+// address.
+async function saveNew({ name, url, node, fp }) {
   const where = isPrivateHost(new URL(url).hostname) ? "lan" : "remote";
   const known = node ? conn.servers.find((s) => s.node === node) : null;
+  const heard = node ? conn.heard[node] : "";
   let saved;
   try {
     if (known) {
       saved = await conn.bridge.save(Object.assign({}, known, { [where]: url }));
     } else {
-      saved = await conn.bridge.save({ name: name || hostOf(url), node, lan: where === "lan" ? url : "", remote: where === "remote" ? url : "", fp: "", biometric: false, push: false });
+      saved = await conn.bridge.save({ name: name || heard || hostOf(url), node, lan: where === "lan" ? url : "", remote: where === "remote" ? url : "", fp: "", ask: "start", push: false });
     }
     if (fp && fp !== saved.fp) await conn.bridge.trust(saved.id, fp);
   } catch (e) {
-    showResult(msg, t("connect.saveFailed", { error: e.message }), false);
+    say(t("connect.saveFailed", { error: e.message }), { bad: true });
     return false;
   }
   await loadServers();
   conn.found = conn.found.filter((f) => !(node && f.node === node) && f.url !== url);
   renderFound();
   renderServers();
-  showResult(msg, known ? t("connect.known", { name: saved.name }) : t("connect.added", { name: saved.name }), true);
+  say(known ? t("connect.known", { name: saved.name }) : t("connect.added", { name: saved.name }));
   probeServer(serverById(saved.id));
   return true;
 }
 
+// addAddress adds the server at the address typed; one that is not an
+// address is said under the field, where it is typed.
 async function addAddress() {
   const input = $("add-address");
   const msg = $("add-msg");
@@ -513,7 +633,7 @@ async function addAddress() {
     return;
   }
   showResult(msg, "", false);
-  if (await whileBusy($("add-form").querySelector("button[type=submit]"), () => addServer(urls, {}, msg))) {
+  if (await whileBusy($("add-form").querySelector("button[type=submit]"), () => addServer(urls, {}))) {
     input.value = "";
     warnPlain();
   }
@@ -544,19 +664,45 @@ async function search() {
   renderFound();
 }
 
-// onFound takes a server discovery found: a saved one by its node is
-// noted for its LAN address (maybeMoveLan), any other is offered.
+// namedByAddress reports whether a server is still named by one of its
+// addresses, as the page names a server added by its address (saveNew)
+// or saved without a name (saveSettings): not by a name the user gave.
+function namedByAddress(s) {
+  return [s.lan, s.remote].some((u) => u && s.name === hostOf(u));
+}
+
+// takeHeardName names a saved server by the name discovery heard for its
+// node while it is still named by its address; a name the user gave it
+// stays. It resolves the server as it stands.
+async function takeHeardName(s, name) {
+  if (!name || name === s.name || !namedByAddress(s)) return s;
+  try {
+    keepServer(await conn.bridge.save(Object.assign({}, s, { name })));
+  } catch (e) {
+    return s; // named again at the next search
+  }
+  renderServers();
+  return serverById(s.id) || s;
+}
+
+// onFound takes a server discovery found: a saved one by its node takes
+// the name heard where it is named by its address (takeHeardName), then
+// is noted for its LAN address (maybeMoveLan); any other is offered.
 function onFound(svc) {
   const url = svc && serviceURL(svc);
   if (!url) return;
   const node = String(svc.node || "");
+  const name = String(svc.name || "");
   const saved = node ? conn.servers.find((s) => s.node === node) : null;
-  if (node) conn.seen[node] = url;
+  if (node) {
+    conn.seen[node] = url;
+    conn.heard[node] = name;
+  }
   if (saved) {
-    maybeMoveLan(saved);
+    takeHeardName(saved, name).then(maybeMoveLan);
     return;
   }
-  const f = { name: String(svc.name || "") || hostOf(url), url, node };
+  const f = { name: name || hostOf(url), url, node };
   const i = conn.found.findIndex((x) => (node && x.node === node) || x.url === url);
   if (i >= 0) conn.found[i] = f;
   else conn.found.push(f);
@@ -567,7 +713,7 @@ function foundRow(f) {
   const li = fromTemplate("tpl-found");
   li.dataset.url = f.url;
   const add = li.querySelector(".found-add");
-  add.addEventListener("click", () => whileBusy(add, () => addServer([f.url], { name: f.name, node: f.node }, $("add-msg"))));
+  add.addEventListener("click", () => whileBusy(add, () => addServer([f.url], { name: f.name, node: f.node })));
   return li;
 }
 
@@ -584,7 +730,7 @@ function renderFound() {
       list.appendChild(li);
     }
     li.querySelector(".found-name").textContent = f.name;
-    li.querySelector(".found-where").textContent = hostOf(f.url);
+    showWhere(li.querySelector(".found-where"), hostOf(f.url), f.name);
   }
   for (const li of rows.values()) li.remove();
   let state = "";
@@ -663,6 +809,8 @@ async function init() {
   $("add-address").addEventListener("input", warnPlain);
   $("probe-btn").addEventListener("click", (ev) => whileBusy(ev.currentTarget, probeAll));
   $("search-btn").addEventListener("click", search);
+  conn.forgetRow = $("forget-all-row");
+  $("forget-all").addEventListener("click", forgetAll);
   await loadServers();
   renderServers();
   probeAll();

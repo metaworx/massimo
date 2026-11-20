@@ -274,6 +274,17 @@ func oldBackup(t *testing.T, s *Store, cubeID int64, reason, format string, at t
 // raiseVersion is 0024's number.
 const raiseVersion = 24
 
+// undoneFromNewest is what a downgrade to 23 undoes: every version from
+// the newest down to the raise, newest first, the additive ones after it
+// included (0025).
+func undoneFromNewest() []int {
+	var out []int
+	for v := SchemaVersion(); v >= raiseVersion; v-- {
+		out = append(out, v)
+	}
+	return out
+}
+
 // D14-A: each release's store, migrated to the newest version and
 // downgraded for its own release, equals the same store migrated only as
 // far as that downgrade stops, in sqlite_master and in every row, but
@@ -281,6 +292,7 @@ const raiseVersion = 24
 // they run once and the file is copied, so that the times the SQL of
 // earlier migrations writes (strftime('now'), 0021) are the same too.
 func TestReleasedStoresDownAgain(t *testing.T) {
+	t.Parallel()
 	dumps, err := filepath.Glob(filepath.Join("testdata", "releases", "v*.sql"))
 	if err != nil || len(dumps) < 6 {
 		t.Fatalf("the releases' dumps: %v, %v", dumps, err)
@@ -417,6 +429,7 @@ func v23Store(t *testing.T, dir string, clock func() time.Time) (integ string, u
 // down part makes the file of version 23 again, but for losses0024; of
 // those, the time and the user of the Cube's option (L7) differ here.
 func TestRaiseOfAFilledStore(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	clock := fixedClock()
 	before := t.TempDir()
@@ -427,7 +440,7 @@ func TestRaiseOfAFilledStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v, mr := s.SchemaVersion(); v != raiseVersion || mr != raiseVersion {
+	if v, mr := s.SchemaVersion(); v != SchemaVersion() || mr != raiseVersion {
 		t.Fatalf("schema %d min_reader %d", v, mr)
 	}
 	if _, err := os.Stat(Path(dir) + ".before-24"); err != nil {
@@ -555,6 +568,7 @@ func TestRaiseOfAFilledStore(t *testing.T) {
 // <serial>~<id> with everything of it (D15-C); the file is that of schema
 // 23 to the byte, and every foreign key holds.
 func TestRaiseDownLosses(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	clock := fixedClock()
 	dir := t.TempDir()
@@ -613,7 +627,7 @@ func TestRaiseDownLosses(t *testing.T) {
 	s.Close()
 
 	d, err := Downgrade(dir, 23, Options{Logger: quiet(), Now: clock})
-	if err != nil || d.To != 23 || !slices.Equal(d.Undone, []int{raiseVersion}) {
+	if err != nil || d.To != 23 || !slices.Equal(d.Undone, undoneFromNewest()) {
 		t.Fatalf("downgrade %+v %v", d, err)
 	}
 	if got, want := fileSchema(t, rawDB(t, dir)), schemaAt(t, 23); fmt.Sprint(got) != fmt.Sprint(want) {
@@ -671,8 +685,8 @@ func TestRaiseDownLosses(t *testing.T) {
 	if n := count(`SELECT count(*) FROM integrations WHERE key = 'request-01a1e000-0000-7000-8000-000000000002'`); n != 1 {
 		t.Errorf("the waiting request's key")
 	}
-	s = open(t, dir)
-	if v, _ := s.SchemaVersion(); v != raiseVersion {
+	s = openFresh(t, dir)
+	if v, _ := s.SchemaVersion(); v != SchemaVersion() {
 		t.Fatalf("migrated again to %d", v)
 	}
 }
@@ -682,6 +696,7 @@ func TestRaiseDownLosses(t *testing.T) {
 // cubes.serial alone, the log byte for byte; 0024 takes the suffix off
 // again, and both rows have the plain serial and all their rows.
 func TestRaiseDownKeepsBothRowsOfASerial(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	clock := fixedClock()
 	dir := t.TempDir()
@@ -805,7 +820,7 @@ func TestRaiseDownKeepsBothRowsOfASerial(t *testing.T) {
 	if got := logRows(); !slices.Equal(got, wantLog) {
 		t.Errorf("the log up again:\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(wantLog, "\n"))
 	}
-	s = open(t, dir)
+	s = openFresh(t, dir)
 	if removed, err := s.RemovedCubes(ctx, "KEQ0000001"); err != nil || len(removed) != 1 || removed[0].ID != old.ID {
 		t.Fatalf("the removed row up again: %+v %v", removed, err)
 	}
@@ -826,8 +841,9 @@ func schemaAt(t *testing.T, version int) map[string]string {
 // A new file taken up and down again has the schema of version 23, and
 // a binary for 23 refuses the raised file, naming the downgrade.
 func TestRaiseRefusedAndDownAgain(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
-	s := open(t, dir)
+	s := openFresh(t, dir)
 	s.Close()
 	_, err := Open(dir, Options{Logger: quiet(), migrations: migrationsUpTo(t, 23), readerVersion: 23})
 	if !errors.Is(err, ErrRefused) || !strings.Contains(err.Error(), "massimo store downgrade -to 23") {
@@ -853,6 +869,7 @@ func TestRaiseRefusedAndDownAgain(t *testing.T) {
 // MASSIMO_STORE_RAISE_ROWS rows (none: skipped), a tenth of them with a
 // user, as the NOTE of Block 3 records them for 500 000.
 func TestRaiseTimes(t *testing.T) {
+	t.Parallel()
 	n, _ := strconv.Atoi(os.Getenv("MASSIMO_STORE_RAISE_ROWS"))
 	if n <= 0 {
 		t.Skip("MASSIMO_STORE_RAISE_ROWS not set")

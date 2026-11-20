@@ -73,6 +73,7 @@ func call(t *testing.T, ts *httptest.Server, method, token string) (int, map[str
 }
 
 func TestUpdateEndpoints(t *testing.T) {
+	t.Parallel()
 	req := filepath.Join(t.TempDir(), "update-request")
 	f := &fakeFinder{tag: "v0.1.0-alpha.10"}
 	ts, status := updateServer(t, "secret", req, f)
@@ -116,6 +117,7 @@ func TestUpdateEndpoints(t *testing.T) {
 }
 
 func TestUpdateNeedsTokenAndHelper(t *testing.T) {
+	t.Parallel()
 	req := filepath.Join(t.TempDir(), "update-request")
 	// No token: the API is open, but updates are not.
 	ts, _ := updateServer(t, "", req, &fakeFinder{tag: "v0.1.0-alpha.10"})
@@ -147,6 +149,7 @@ func TestUpdateNeedsTokenAndHelper(t *testing.T) {
 // Where the server starts the helper itself (Windows): once per accepted
 // request; a failed start removes the request, a running one is a 409.
 func TestUpdateStartsHelper(t *testing.T) {
+	t.Parallel()
 	req := filepath.Join(t.TempDir(), "update-request")
 	var starts int
 	var startErr error
@@ -191,6 +194,7 @@ func TestUpdateStartsHelper(t *testing.T) {
 // still says what is out, names the manager as the reason, and starts
 // nothing.
 func TestUpdateManaged(t *testing.T) {
+	t.Parallel()
 	req := filepath.Join(t.TempDir(), "update-request")
 	f := &fakeFinder{tag: "v0.1.0-alpha.10"}
 	ts, _ := updateServerWith(t, "secret", UpdateOptions{Request: req, Finder: f, Managed: "managed by apt: sudo apt install massimo"})
@@ -210,6 +214,7 @@ func TestUpdateManaged(t *testing.T) {
 // helper is on, the button asks it as on a hand install, and the API
 // names apt; with the helper off, the reason is that.
 func TestUpdateThroughApt(t *testing.T) {
+	t.Parallel()
 	req := filepath.Join(t.TempDir(), "update-request")
 	off := ""
 	ts, _ := updateServerWith(t, "secret", UpdateOptions{Request: req, Finder: &fakeFinder{tag: "v0.1.0-alpha.10"}, Manager: "apt", Helper: func() string { return off }})
@@ -241,13 +246,14 @@ func TestUpdateThroughApt(t *testing.T) {
 // the command is acknowledged with the answer, and a retry with its
 // Idempotency-Key gets the 202 again instead of "still running".
 func TestUpdateCommandIsAcknowledged(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	opts := storeOptions(t, t.TempDir(), "secret")
 	opts.Update = UpdateOptions{Version: "v0.1.0-alpha.9", Channel: "alpha", Request: filepath.Join(dir, "update-request"), Status: filepath.Join(dir, "status.json"),
 		Finder: &fakeFinder{tag: "v0.1.0-alpha.10"}}
 	r := startServer(t, withOptions(opts))
 	ts, s := r.ts, r.s
-	stores[ts] = s.opts.Store
+	keepStore(t, ts, s.opts.Store)
 	headers := map[string]string{"Idempotency-Key": "update-1"}
 	if resp, text := callWith(t, ts, "POST", "/api/v1/update", "secret", "{}", headers); resp.StatusCode != 202 {
 		t.Fatalf("update: %d %s", resp.StatusCode, text)
@@ -270,6 +276,7 @@ func TestUpdateCommandIsAcknowledged(t *testing.T) {
 // Both used to write update-request.tmp together, and the second rename
 // could answer 500.
 func TestUpdatePostsOneAtATime(t *testing.T) {
+	t.Parallel()
 	req := filepath.Join(t.TempDir(), "update-request")
 	var active, overlaps, starts atomic.Int32
 	start := func() error {
@@ -310,6 +317,7 @@ func TestUpdatePostsOneAtATime(t *testing.T) {
 // update.channel, else the build's flavour; an update to a release of
 // another flavour stores the channel first, so that the box stays on it.
 func TestUpdateChannelFromTheStore(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	f := &fakeFinder{tag: "v0.2.0-beta.2"}
 	opts := storeOptions(t, t.TempDir(), "secret")
@@ -387,6 +395,7 @@ func TestUpdateChannelFromTheStore(t *testing.T) {
 // read at each check; a stored channel is the one the next update asks
 // the helper to switch apt to, and nothing is stored for it.
 func TestUpdateChannelFromAptSuite(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	f := &fakeFinder{tag: "v0.2.0-beta.2"}
 	suite := "alpha"

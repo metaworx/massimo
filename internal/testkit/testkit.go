@@ -6,9 +6,13 @@
 // does not happen before a given end, and a watch of what comes - log
 // records, a stream's events, a channel's values - that waits for the
 // next one of a kind (Watch), a clock the test moves on in place of
-// waiting for the real one (Clock), and a port the test holds while it
-// hands its listener on (Listen, ListenPacket). Its subpackage cubewatch
-// watches the lines a fake Cube receives.
+// waiting for the real one (Clock), a port the test holds while it
+// hands its listener on (Listen, ListenPacket), the rule of parallel
+// tests, which a package's guard holds its tests to (ParallelOrListed,
+// Swapping), and a file made once per test binary, of which each test
+// writes a copy (FileTemplate, WriteNew). Of its subpackages, cubewatch
+// watches the lines a fake Cube receives, and storekit opens a copy of a
+// store the migrations made once per test binary.
 //
 // Every wait is scaled by MASSIMO_TEST_SCALE, a positive number, 1 where
 // it is not set: make race sets 2 and make test-armv6 4, so that a slow

@@ -87,6 +87,59 @@ What does not take the scale:
   such as a poll interval or a backup window:
   the product's own clock is not the test's wait.
 
+**A product timer a test waits out** - a wait for an answer that never comes,
+a window that runs to its end - is shortened through an option:
+a field of the product's options or of the call's, 0 for the product's default,
+which only the test sets.
+A new one is never a package variable the test swaps,
+which keeps the test off the parallel ones ("Parallel tests");
+the tests that still swap one,
+such as `TestWallReset` its `wallSilence` and `cmd/massimo`'s apt tests `healthEvery`,
+are on their package's `serialTests`.
+The network configuration's reads and writes take `cubelan.NetWaits`,
+which `massimo netconfig` leaves 0.
+Its tests against the fake Cube give the calls it answers deadlines of half a second,
+scaled, and 5 s for a restart;
+the calls it leaves unanswered get short waits of their own (`silentWaits`),
+not scaled, since those are waited out in full.
+The search's wait for the N and c answers of an answer is
+`cubelan.SearchOptions.LateWait`, the server's `Options.discoveryLate`:
+a second from the answer, which outlasts a test's run of 200 ms
+wherever a proxy answers the identify request alone;
+500 ms, scaled, in the runs of `discovering`.
+Of such an option, a deadline for an answer that comes takes the scale,
+since a slow runner would fail it, as `NetWaits.Ask` does;
+a window waited out where nothing answers, as `NetWaits.Reread`,
+and a pace the product keeps, as `NetWaits.Settle`, do not.
+Where the length is what the test checks,
+such as the second a late Cube gets (`TestSearchWaitsForALateAnswer`),
+the test keeps the product's.
+
+A test that waits longer than it needs to shows in CI:
+the jobs Vet and test, Race and Test (armv6, QEMU)
+name their 20 slowest tests and their 10 slowest packages in the run's summary
+(`GUIDELINES/project/CI.md`, section 3).
+
+## The race detector
+
+`-race` turns on `checkptr` too, which checks, as the code runs,
+each conversion of an `unsafe.Pointer` to a typed pointer and its arithmetic.
+`modernc.org/sqlite` is SQLite's C translated to Go and made of such steps:
+under `-race`, checking them was half the time of opening a fresh store,
+which the migrations make and most tests now copy ("The store's template").
+So `make race` turns `checkptr` off for the packages under `modernc.org` alone
+(`RACEGCFLAGS` in the `Makefile`),
+and the store-heavy tests take about half as long.
+The race detector stays on in every package, SQLite's included,
+and `checkptr` in Massimo's own packages and in every other dependency.
+SQLite's pointer steps are its own project's to test.
+Go gives a package the last `-gcflags` whose pattern matches it, not their sum,
+so a `-gcflags=all=…` in `TESTFLAGS` checks SQLite's steps again,
+as `make race RACEGCFLAGS=` does alone.
+A `-gcflags` in `GOFLAGS` comes before the `Makefile`'s,
+so under `make race` a `-gcflags=all=…` there no longer reaches SQLite's packages:
+put it in `TESTFLAGS`.
+
 ## The watcher
 
 `Eventually` waits for a state: a count, a flag, an answer of the API.
@@ -262,7 +315,7 @@ The options:
 |--------|--------------|
 | `withOptions(o)` | the server's options; the start sets their Cubes, and a gap of 1 ms where `o.Queue` sets none |
 | `editOptions(f)` | changes them, after `withOptions` whatever the order |
-| `stored()`, `onStore(st)` | a store, new or one given, whose row of KEQ0000100 is the Cube, added where it has none; `seedStore(f)` writes to it before the server starts |
+| `stored()`, `onStore(st)` | a store, a copy of the template ("The store's template") or one given, whose row of KEQ0000100 is the Cube, added where it has none; `seedStore(f)` writes to it before the server starts |
 | `withGreeting(g)`, `changeGreeting(f)`, `rooms()` | another greeting, a change to it, the rooms fixture (`fakecube.RoomsFixture`) with the commands applied |
 | `withFake(f)`, `withCube(f)` | a change to the fake before it starts, to the Cube's configuration |
 | `withCubes(cfg…)`, `alsoCube(cfg)` | other Cubes in place of the fake's, for a Cube that is late, held or found; one beside it; the start waits for neither |
@@ -280,6 +333,156 @@ The recorded greeting is read once for every test:
 `recorded(t)` returns a copy of it, the test's to change.
 One test runs the server by hand, since it tests `Run`'s start and end:
 `TestNothingStartsAfterRun`.
+
+## Parallel tests
+
+The tests of `internal/server`, `internal/store`, `cmd/massimo`,
+`internal/cubelan` with its fake Cube, and `internal/serve` run in parallel:
+every test calls `t.Parallel()` as its first statement,
+but those on its package's `serialTests` in `parallel_test.go`,
+each with its reason.
+Go runs the listed tests first, one after the other,
+and the parallel ones once the listed ones have ended,
+as many at a time as `-parallel` says (by default as many as there are CPUs).
+The other packages' tests still run one after the other.
+
+A test goes on the list where it:
+
+- **swaps a package variable** (`lookupCNAME`, `argonKey`, `pruneChunk`)
+  or calls `t.Setenv`, which panics in a parallel test;
+- **changes what the whole process shares**:
+  its environment, its working directory (`t.Chdir`),
+  a signal sent to it (`TestCatchSighup`),
+  or what it counts for all its goroutines,
+  such as the allocations of `runtime.MemStats`;
+- **binds a fixed port**,
+  such as a Cube added through the API as the only one,
+  whose proxy listens on the Cube's port, :62910;
+- **checks a time as the product's**,
+  such as "the observer's calls return within 500 ms",
+  which the tests beside it would stretch.
+
+`cmd/massimo` keeps its options in package variables,
+such as the selected Cube of `-sn`, the log level and the update's hooks,
+and reads its settings from the environment;
+`internal/serve` reads the settings file's Cubes from the environment.
+A test of either that sets them stays on the list,
+until the product takes them as arguments.
+
+A swap goes through `testkit.Swapping(t)`, called before it,
+in the test or in the helper that makes the swap, as `fakeDiscovery` does.
+It sets an environment variable through `t.Setenv`,
+so a swap in a parallel test panics at once instead of racing with the tests beside it.
+
+`TestParallelOrListed` in each of the packages calls
+`testkit.ParallelOrListed(t, ".", serialTests)`,
+which reads the package's test files, those of every system,
+and fails where a test neither calls `t.Parallel()` first nor is on the list,
+where a listed test calls it,
+where the list names a test that is not there or gives no reason,
+and where `Parallel()` is called outside a test's own body and a subtest's
+function literal, such as in a helper.
+The kit's own test holds the guard to each of these.
+
+A subtest calls `t.Parallel()` where it builds its own server,
+as those of `TestUnconfirmedRoomCommandNotResent` do;
+one that goes on from what the subtest before it left does not.
+The guard does not check which subtests call it.
+
+What the parallel tests share:
+
+- **the recorded greeting**, read once;
+  `recorded(t)` returns the test's own copy;
+- **a helper's state across tests**,
+  such as `serverStore`'s map of each test's store, which is a `sync.Map`;
+- **the environment as `TestMain` left it**:
+  `internal/serve`'s unsets every `MASSIMO_CUBE_*` variable before the tests run,
+  its parallel tests fail where one is set (`noCubeEnv`),
+  and `clearCubeEnv` makes the plain forms the serial test's,
+  so that what a settings file it loads sets is undone at its end;
+- **massimo built once** (`builtBinary` in `cmd/massimo`),
+  which the tests that run `massimo serve` as a process start side by side,
+  each with a data directory of its own and the API at port 0;
+- **the store's template**, made once per test binary and only read;
+  each test writes a copy of its own ("The store's template");
+- **SQLite's allocator**,
+  since `modernc.org/libc` takes one lock for every `malloc` and `free` of the process:
+  the tests that open a fresh store wait for each other while its migrations run,
+  which is why most tests open a copy of the template instead.
+  The store's tests still take no less time on more than four cores:
+  under `make race` their time is that of the migrations' own tests,
+  which migrate released stores and take up to 50 seconds each.
+
+On a busy machine, a step that a quiet one always wins can come second:
+
+- **a wait for the Cube client to see a fake that closed** is `awayWait`,
+  the kit's wait and the client's reply timeout,
+  since a poll the close cut off waits that out first;
+- **a C line set with the fake's `SetConfig`** is not in its greeting,
+  so a reconnect brings the old one back:
+  `takeConfig` sets both, as the Cube's greeting carries what its devices took.
+
+## The store's template
+
+A store the migrations make costs about a tenth of a second,
+and under `make race` most of a second,
+much of it under the one lock of SQLite's allocator ("Parallel tests"):
+sixteen opened side by side take as long as sixteen one after the other.
+The migrations therefore run once per test binary, into a template,
+and a test that opens a store itself opens a copy of it,
+which costs a few milliseconds, 25 under `make race`,
+unless it needs a fresh store (below).
+
+`storekit.Open(t, dir)` (`internal/testkit/storekit`) opens the store of `dir`,
+of a new temporary directory where `dir` is `""`,
+and closes it at the test's end;
+where `dir` has no `massimo.db`, its file is first a copy of the template,
+and a file already there is opened as it is, as a restart's is.
+`internal/server`'s `testStore` and the start's `stored()`,
+`internal/serve`'s `testStore`,
+and the tests of `cmd/massimo` that open a store for a server they build
+open their stores through it.
+
+- **The template** is a store that `store.Open` makes in a temporary directory,
+  at the version `test`, the first time a test asks for it:
+  it is closed, its file read, and the directory removed at once.
+  The close brings the WAL into the file;
+  a `-wal` or `-shm` left behind, which would hold what a copy lacks,
+  or a file below the binary's schema version, which every copy would migrate,
+  fails each test that asks for the template.
+- **A copy** is the template's bytes, mode 0600.
+  `store.Open` finds nothing to migrate,
+  and makes `node.key` and `opaque.key` as it does for a fresh store.
+  What the file holds is the template's in every copy of the binary:
+  `node.id` and `tenant.id`, the seeded rows and their times;
+  and `Created()` reports false.
+- **A test opens a fresh store** where a copy is not what it checks:
+  a migration's own test, an upgrade, a raise or a downgrade,
+  and a test of what the migrations make of an empty file,
+  such as the schema (`TestStoreSQL`, `TestSyncColumns`),
+  the seeded roles and the node's identity.
+  A test that needs two distinct node identities,
+  such as a test of two nodes' sync,
+  opens fresh stores too: copies share `node.id` and `tenant.id`.
+- **Where the product opens the store itself**,
+  as `serve.Open`, a `massimo serve` process and `massimo user` do,
+  it makes its store on the empty data directory, as at a first start,
+  and the test copies nothing into it.
+
+The half of the template that needs no store is the kit's,
+as `testkit` holds the watch that `cubewatch` builds on ("The watcher"):
+`testkit.FileTemplate(name, build, check)` makes the file `name` once per test binary
+in a temporary directory, refuses a `-wal` or `-shm` beside it,
+takes its bytes, runs `check` on it, and removes the directory;
+`testkit.WriteNew(path, b)` writes a copy, mode 0600,
+where no file is at `path` yet.
+`storekit` builds on them with `store.Open` and a read-only open,
+and so do `internal/store`'s own tests (`template_test.go`),
+which cannot import `storekit`, since it imports the store:
+`open(t, dir)` opens a copy where `dir` has no store yet,
+`copied(t)` is a temporary directory that holds one,
+for a test that opens it with options of its own, such as a clock or a log,
+and `openFresh(t, dir)` runs the migrations.
 
 ## Ports
 
@@ -301,6 +504,10 @@ such as another package's tests under `make race`.
   as macOS has 127.0.0.1 alone of the loopback's 127.0.0.0/8,
   and fails on any other error, such as a port another program holds,
   which a skip would turn into a green run with the test not run.
+  CI's jobs Vet and test, Race and Test (armv6, QEMU)
+  name every test that skipped, with its reason, in the run's summary
+  (`GUIDELINES/project/CI.md`, section 3);
+  the Windows and macOS jobs do not report their skips.
 - **The server's proxies** listen through `heldPorts` (`ports_test.go`)
   and the start's `listenOn(ports)`, over the hook `Options.proxyListen`.
   `ports.hold(t)` is an address whose listener goes to the first listen at it.

@@ -13,6 +13,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/env"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // clearCubeEnv unsets every MASSIMO_CUBE_* variable for the test, and
@@ -20,6 +21,7 @@ import (
 // checkout's.
 func clearCubeEnv(t *testing.T) {
 	t.Helper()
+	testkit.Swapping(t)
 	for _, kv := range os.Environ() {
 		if k, _, _ := strings.Cut(kv, "="); strings.HasPrefix(k, env.Prefix) {
 			t.Setenv(k, "")

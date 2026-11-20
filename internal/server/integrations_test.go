@@ -16,6 +16,7 @@ import (
 // The role integration in the store is the ceiling the server knows; no
 // regular user is given it, through the API or by a change of role.
 func TestIntegrationRoleIsTheCeiling(t *testing.T) {
+	t.Parallel()
 	rg := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
 	ts, s := rg.ts, rg.s
 	r, ok, err := s.opts.Store.Role(t.Context(), store.RoleIntegration)
@@ -48,6 +49,7 @@ func TestIntegrationRoleIsTheCeiling(t *testing.T) {
 // maximum, and the integration collects its key with its code; revoked,
 // the key is refused.
 func TestIntegrationRegistrationRoutes(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
 	ts, s := r.ts, r.s
 	body := `{"kind":"homeassistant","name":"Casa Leone","instance_id":"0123456789ABCDEF0123456789abcdef","url":"http://ha:8123","version":"2026.11.1"}`
@@ -142,6 +144,7 @@ func decodeInto(t *testing.T, text string, v any) {
 // (the chain's third link), and the users list shows the links; unlinked,
 // the integration's user acts as itself again.
 func TestIntegrationLinking(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, storedRooms(), quiet())
 	ts, st := r.ts, r.st
 	ctx := t.Context()
@@ -229,6 +232,7 @@ func TestIntegrationLinking(t *testing.T) {
 // their id, and an integration whose id was seen is marked; the switch
 // for the requests is a setting.
 func TestFoundIntegrations(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, storedRooms(), quiet())
 	ts, s, st := r.ts, r.s, r.st
 	owner := userToken(t, st, "boss", store.RoleOwner)
@@ -272,6 +276,7 @@ func TestFoundIntegrations(t *testing.T) {
 // announces at the next start waits for the restart, then the setting
 // off, then auto on the loopback.
 func TestFoundIntegrationsWhyNot(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, storedRooms(), quiet())
 	ts, s, st := r.ts, r.s, r.st
 	owner := userToken(t, st, "boss", store.RoleOwner)

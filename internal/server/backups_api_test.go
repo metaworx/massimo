@@ -112,6 +112,7 @@ func TestBackupAutomatic(t *testing.T) {
 // Deleting the newest backup makes the one before it the reference: the
 // configuration differs from it, so changed and due appear.
 func TestBackupDeleteNewest(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, stored(), withOptions(Options{BackupMinute: 20 * time.Millisecond}))
 	ts, s, st := r.ts, r.s, r.st
 	ctx := context.Background()
@@ -159,6 +160,7 @@ func TestBackupDeleteNewest(t *testing.T) {
 // Deleting all of a Cube's backups leaves it without one, so it gets one
 // at once.
 func TestBackupDeleteAll(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, stored(), withOptions(Options{BackupMinute: 20 * time.Millisecond}))
 	ts, st := r.ts, r.st
 	ctx := context.Background()
@@ -184,6 +186,7 @@ func TestBackupDeleteAll(t *testing.T) {
 // With backups.keep_newest 0 a prune can remove a Cube's only backup,
 // and the Cube then gets one at once, as after a delete.
 func TestBackupPruneNewest(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, stored(), withOptions(Options{BackupMinute: 20 * time.Millisecond}))
 	ts, s, st := r.ts, r.s, r.st
 	ctx := context.Background()
@@ -215,6 +218,7 @@ func TestBackupPruneNewest(t *testing.T) {
 // other format, deleted; a bad request, an unknown id and a Cube without
 // a row in the store are refused.
 func TestBackupsAPI(t *testing.T) {
+	t.Parallel()
 	ts := startServer(t, stored()).ts
 	if code, l := historyOf(t, ts.URL); code != 200 || l.Backups == nil || len(l.Backups) != 0 {
 		t.Fatalf("empty: %d %+v", code, l)
@@ -276,6 +280,7 @@ func TestBackupsAPI(t *testing.T) {
 // sent; a stored backup is restored by its id, without an upload; after
 // a restore the Cube is as the file says, so no automatic backup follows.
 func TestRestoreKeepsBackups(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, stored(), withOptions(Options{BackupMinute: 20 * time.Millisecond}))
 	ts, st := r.ts, r.st
 	ctx := context.Background()
@@ -334,6 +339,7 @@ func TestRestoreKeepsBackups(t *testing.T) {
 // file, not with the before_restore backup of the state before it, which
 // took an automatic backup of the state just restored (AP RestoreRace).
 func TestRestoreDoneAfterItsReference(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, stored())
 	ts, s := r.ts, r.s
 	rt := s.cubes["keq0000100"]
@@ -362,6 +368,7 @@ func TestRestoreDoneAfterItsReference(t *testing.T) {
 
 // The five settings in the API, auto_min never above auto_max.
 func TestBackupSettingsAPI(t *testing.T) {
+	t.Parallel()
 	ts := startServer(t, stored()).ts
 	var all map[string]settingView
 	getJSON(t, ts, "", "/api/v1/settings", &all)
@@ -398,6 +405,7 @@ func TestBackupSettingsAPI(t *testing.T) {
 // setting and a programme against an edited copy; an unknown id or a
 // missing against are refused.
 func TestBackupDiff(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, stored())
 	ts, s, st := r.ts, r.s, r.st
 	code, out := do(t, ts, "POST", backupsBase, "")

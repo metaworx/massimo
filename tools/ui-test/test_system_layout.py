@@ -139,8 +139,7 @@ def test_cube_panel_columns(page, case):
 
 def test_header_and_page_bar_stay(page, case):
     """Scrolled, the header and System settings' row stay at the top, the
-    header compacted (its row as it was, the M kept on a phone, the Cube
-    choice under it); the sections menu
+    header compacted (its row as it was, its fold too); the sections menu
     marks the card in view and brings the one chosen under the row."""
     show_view(page, "system")
     assert wait_until(page, "document.querySelectorAll('.role-panel').length >= 6", 5), "the roles are listed"
@@ -154,16 +153,12 @@ def test_header_and_page_bar_stay(page, case):
         topBottom: document.querySelector('.top').getBoundingClientRect().bottom,
         bar: document.querySelector('#system .page-bar').getBoundingClientRect().top,
         brand: getComputedStyle(document.querySelector('.top-line > .brand')).display,
-        cube: document.querySelector('.top-line > .cube').getBoundingClientRect().top,
+        cube: document.querySelector('.top-line .cube').getBoundingClientRect().top,
         nav: document.querySelector('.top-line > .nav').getBoundingClientRect().bottom,
-        age: getComputedStyle(document.querySelector('.pile-age')).display,
     })""")
     assert abs(geo["top"]) <= 1, f"the header at the top ({geo})"
     assert abs(geo["bar"] - geo["topBottom"]) <= 2, f"the page's row under it ({geo})"
     assert geo["brand"] != "none", f"the logo stays ({geo})"
-    if case.width < 600:
-        assert geo["cube"] >= geo["nav"] - 1, f"on a phone the Cube choice under the first row ({geo})"
-    assert geo["age"] != "none", f"the time of the last update stays ({geo})"
     menu = page.locator("#system .sec-menu")
     menu.locator("summary").click()
     current = menu.locator(".toc-link[aria-current='true']")

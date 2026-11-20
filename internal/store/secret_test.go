@@ -20,6 +20,7 @@ import (
 // that does not write the secret again keeps it as kept; a store opened
 // read-only opens them.
 func TestSealedSecrets(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	ctx := context.Background()
 	s := open(t, dir)
@@ -104,6 +105,7 @@ func TestSealedSecrets(t *testing.T) {
 // again with the derived key, the file then retired; one whose
 // secret.key is another's stays lost, and the file stays.
 func TestLegacySecretKey(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	legacy := func(t *testing.T, dir string, s *Store, key, plain string) []byte {
 		t.Helper()
@@ -168,6 +170,7 @@ func make32() []byte {
 // as a sealed box, opened by SecretSetting; a plain one sealed at the
 // next open; a box moved to another setting does not open.
 func TestSealedSettings(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	ctx := context.Background()
 	s := open(t, dir)

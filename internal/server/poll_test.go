@@ -15,6 +15,7 @@ import (
 // A state change the Cube reports in the answer to a later l: poll is a
 // state event in the log, after the connected event.
 func TestPolledStateChangesReachTheLog(t *testing.T) {
+	t.Parallel()
 	// The start has the greeting through the pump: a pump still at the
 	// greeting when the list changes reads the new state for the
 	// greeting's line, and the change has none of its own.

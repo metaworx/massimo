@@ -101,6 +101,7 @@ func (r *driftRig) resetDrift() {
 // that day, also after a restart, which reads the day's re-send from the
 // log; a day later it is.
 func TestUnconfirmedRoomCommandResent(t *testing.T) {
+	t.Parallel()
 	r := startDrift(t, nil, resendOptions(400*time.Millisecond, 0))
 	r.fc.SetDeaf(0x0a0205, true)
 	r.flag(0x0a0205)
@@ -174,6 +175,7 @@ func TestUnconfirmedRoomCommandResent(t *testing.T) {
 // Info says so and settles the Warn. The room checks send nothing to
 // the room for the rest of the day.
 func TestUnconfirmedRoomCommandResentBehindTheHold(t *testing.T) {
+	t.Parallel()
 	r := startDrift(t, nil, resendOptions(400*time.Millisecond, 1500*time.Millisecond))
 	r.fc.SetDeaf(0x0a0205, true)
 	r.fc.SetFreeSlots(2) // the write's answer: 2 free, so that its re-send waits
@@ -223,6 +225,7 @@ func TestUnconfirmedRoomCommandResentBehindTheHold(t *testing.T) {
 // (D199-A): a member that has not taken it yet differs, and nothing is
 // reported or sent.
 func TestRoomChecksWaitForAPendingWrite(t *testing.T) {
+	t.Parallel()
 	r := startDrift(t, nil)
 	r.fc.SetDeaf(0x0a0205, true)
 	r.setRoom2("22")
@@ -246,6 +249,7 @@ func TestRoomChecksWaitForAPendingWrite(t *testing.T) {
 // A room the room checks sent its state once more today is not sent an
 // unconfirmed write again (D199-A).
 func TestRoomChecksResendTakesTheDay(t *testing.T) {
+	t.Parallel()
 	r := startDrift(t, nil, resendOptions(400*time.Millisecond, 0))
 	r.set(0x0a0205, "manual", 18)
 	r.disagreeAndResend()
@@ -269,7 +273,9 @@ func TestRoomChecksResendTakesTheDay(t *testing.T) {
 // command of Massimo's to the room waits, a boost, and a LAN proxy
 // client's write, which is only reported.
 func TestUnconfirmedRoomCommandNotResent(t *testing.T) {
+	t.Parallel()
 	t.Run("superseded", func(t *testing.T) {
+		t.Parallel()
 		r := startDrift(t, nil, resendOptions(400*time.Millisecond, 0))
 		r.fc.SetDeaf(0x0a0205, true)
 		sent := r.lines.Mark()
@@ -286,6 +292,7 @@ func TestUnconfirmedRoomCommandNotResent(t *testing.T) {
 		}
 	})
 	t.Run("superseded behind the hold", func(t *testing.T) {
+		t.Parallel()
 		r := startDrift(t, nil, resendOptions(400*time.Millisecond, 800*time.Millisecond))
 		r.fc.SetDeaf(0x0a0205, true)
 		r.fc.SetFreeSlots(2)
@@ -315,6 +322,7 @@ func TestUnconfirmedRoomCommandNotResent(t *testing.T) {
 		}
 	})
 	t.Run("busy", func(t *testing.T) {
+		t.Parallel()
 		r := startDrift(t, nil, resendOptions(400*time.Millisecond, 2*time.Second))
 		r.fc.SetDeaf(0x0a0205, true)
 		r.fc.SetFreeSlots(2)
@@ -327,6 +335,7 @@ func TestUnconfirmedRoomCommandNotResent(t *testing.T) {
 		other.Wait(context.Background())
 	})
 	t.Run("boost", func(t *testing.T) {
+		t.Parallel()
 		r := startDrift(t, nil, resendOptions(400*time.Millisecond, 0))
 		r.fc.SetDeaf(0x0a0205, true)
 		if code, out := do(t, r.ts, "PUT", room2, `{"mode":"boost"}`); code != 200 {
@@ -337,6 +346,7 @@ func TestUnconfirmedRoomCommandNotResent(t *testing.T) {
 		}
 	})
 	t.Run("proxy", func(t *testing.T) {
+		t.Parallel()
 		r := startDrift(t, nil, resendOptions(300*time.Millisecond, 0))
 		r.fc.SetDeaf(0x0a0205, true)
 		m, err := cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a0204, RoomID: 2, Room: true}, 21.5, cube.ModeManual, cube.Until{})
@@ -377,6 +387,7 @@ func setpointLine2(t *testing.T) cube.Message {
 // A setpoint asked for supersedes by its room: a room's, a device's by
 // its room or its C line's; a device without a room none.
 func TestSetpointAsked(t *testing.T) {
+	t.Parallel()
 	r := startDrift(t, nil)
 	at := time.Now()
 	if r.rt.confirms.askedSince(2, at) || r.rt.confirms.askedSince(1, at) {

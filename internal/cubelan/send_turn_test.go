@@ -63,6 +63,7 @@ func startTurnClient(t *testing.T, opts Options) (*fakecube.Server, *testkit.Wat
 // not written until the first is answered, and then answered itself
 // (AP SendTurn).
 func TestSendWaitsForTheCommandInFlight(t *testing.T) {
+	t.Parallel()
 	srv, lines, c, ctx := startTurnClient(t, Options{ReplyTimeout: 5 * time.Second})
 
 	srv.SetSilent(true)
@@ -130,6 +131,7 @@ func TestWaitingSendEndsWithItsContext(t *testing.T) {
 // A Send waiting its turn ends with ErrNotConnected when the connection
 // drops, as the one in flight does.
 func TestWaitingSendEndsWhenTheConnectionDrops(t *testing.T) {
+	t.Parallel()
 	srv, lines, c, ctx := startTurnClient(t, Options{ReplyTimeout: 5 * time.Second, Backoff: time.Minute})
 
 	srv.SetSilent(true)
@@ -156,6 +158,7 @@ func TestWaitingSendEndsWhenTheConnectionDrops(t *testing.T) {
 // and counts no miss: polls go on once the command is answered, on the
 // same connection.
 func TestPollSkipsABusyLine(t *testing.T) {
+	t.Parallel()
 	logger, logs := testkit.LogWatch(slog.LevelDebug)
 	srv, lines, c, ctx := startTurnClient(t, Options{PollInterval: 50 * time.Millisecond, ReplyTimeout: 2 * time.Second, Logger: logger})
 

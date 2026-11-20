@@ -7,7 +7,8 @@
  * The globals of the plain script ui/app.js that the parts call: the
  * page's state, the API, the reload, the loads and the poll, the Cube
  * chosen, the ages of values and the times, a Cube's link and clock, a
- * device's path, detail and name, a temperature, the explanations shown.
+ * device's path, detail and name, a temperature, the app's bridge, the
+ * explanations shown.
  */
 
 import type { Cube, Device, DeviceDetail, FoundCube, Room } from "../api";
@@ -48,6 +49,8 @@ declare global {
   function timeOf(iso: string | undefined): Date | null;
   /** The element of the page with the id. */
   function $(id: string): HTMLElement | null;
+  /** The Massimo app's bridge on the page it opened (docs/app.md), null in a browser; connect, from version 2, shows the app's servers. */
+  function appBridge(): { connect?: () => Promise<null> } | null;
   /** A request to the API with the page's token, headers added to its own; the answer's JSON, or an error with the server's message (and its status). */
   function api<T = unknown>(method: string, path: string, body?: unknown, headers?: Record<string, string>): Promise<T>;
   /** Loads the Cubes, the rooms and the log's alerts again. */

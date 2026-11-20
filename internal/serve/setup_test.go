@@ -25,37 +25,61 @@ import (
 	"go.metaworx.ch/massimo/internal/server"
 	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit"
+	"go.metaworx.ch/massimo/internal/testkit/storekit"
 )
 
 // clearCubeEnv unsets every MASSIMO_CUBE_* variable for the test, and
 // points the settings file and the data directory away from the
-// checkout's.
+// checkout's. The plain forms are the test's whether set or not, so
+// that what a settings file the test loads sets in the process
+// (env.LoadFile) is undone at its end, before the parallel tests read
+// the environment (noCubeEnv). A test that calls it is serial.
 func clearCubeEnv(t *testing.T) {
 	t.Helper()
+	names := []string{env.Address, env.Name, env.Proxy, env.ProxySerial, env.SN, env.Ignore}
 	for _, kv := range os.Environ() {
 		if k, _, _ := strings.Cut(kv, "="); strings.HasPrefix(k, env.Prefix) {
-			t.Setenv(k, "")
-			os.Unsetenv(k)
+			names = append(names, k)
 		}
+	}
+	for _, k := range names {
+		t.Setenv(k, "")
+		os.Unsetenv(k)
 	}
 	t.Setenv(env.FileVar, os.DevNull)
 	t.Setenv(env.DataVar, t.TempDir())
 }
 
+// unsetCubeEnv unsets every MASSIMO_CUBE_* variable of the process, as
+// TestMain does before the tests run.
+func unsetCubeEnv() {
+	for _, kv := range os.Environ() {
+		if k, _, _ := strings.Cut(kv, "="); strings.HasPrefix(k, env.Prefix) {
+			os.Unsetenv(k)
+		}
+	}
+}
+
+// noCubeEnv fails the test where a MASSIMO_CUBE_* variable is set: a
+// parallel test serves no Cube from the environment, and reads it as
+// TestMain left it, since every serial test restored what it set
+// (clearCubeEnv).
+func noCubeEnv(t *testing.T) {
+	t.Helper()
+	for _, kv := range os.Environ() {
+		if k, _, _ := strings.Cut(kv, "="); strings.HasPrefix(k, env.Prefix) {
+			t.Fatalf("%s is set: a serial test left it", k)
+		}
+	}
+}
+
 func quietLog() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
 
-// testStore opens a store in a temporary directory.
+// testStore opens a store in a temporary directory, or in dir: a copy of
+// the migrated template where dir has no store yet (storekit.Open).
 func testStore(t *testing.T, dir string) *store.Store {
 	t.Helper()
-	if dir == "" {
-		dir = t.TempDir()
-	}
-	st, err := store.Open(dir, store.Options{Version: "test", Logger: quietLog()})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { st.Close() })
-	return st
+	return storekit.Open(t, dir)
 }
 
 // greetingFile is the fake Cube's recorded greeting.
@@ -336,7 +360,8 @@ func TestServeRemovedCubeStaysRemoved(t *testing.T) {
 // Without any Cube configured serve starts anyway, with a warning: the
 // web UI can add one.
 func TestServeStartsWithoutCubes(t *testing.T) {
-	clearCubeEnv(t)
+	t.Parallel()
+	noCubeEnv(t)
 	logger, logs := testkit.LogWatch(nil)
 	su, err := setupCubes(context.Background(), testStore(t, ""), Config{}, logger)
 	if err != nil || len(su.cubes) != 0 || len(su.listeners) != 0 {
@@ -347,7 +372,8 @@ func TestServeStartsWithoutCubes(t *testing.T) {
 
 // serve -addr runs without the store: no massimo.db, no node.key.
 func TestServeAddrOpensNoStore(t *testing.T) {
-	clearCubeEnv(t)
+	t.Parallel()
+	noCubeEnv(t)
 	dir := t.TempDir()
 	st, err := openStore(Config{Addr: "10.0.0.9", DataDir: dir}, quietLog())
 	if err != nil || st != nil {

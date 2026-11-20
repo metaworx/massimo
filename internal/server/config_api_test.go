@@ -45,6 +45,7 @@ func radioBytes(lines []cube.Message) [][]byte {
 }
 
 func TestConfigEndpoints(t *testing.T) {
+	t.Parallel()
 	rg := startServer(t)
 	fc, ts, s := rg.fc, rg.ts, rg.s
 	received := cubewatch.Lines(fc)
@@ -308,6 +309,7 @@ func roomTemps(t *testing.T, rf cube.RFAddress, offset float64) string {
 // 0x11 to the room's three thermostats, 0x12, and the five days that
 // differ followed by 0x11 again.
 func TestAddCopiesTheRoomsSettings(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, withGreeting(copyGreeting(t)))
 	fc, ts, s := r.fc, r.ts, r.s
 	const base = "/api/v1/cubes/KEQ0000100"
@@ -353,6 +355,7 @@ func TestAddCopiesTheRoomsSettings(t *testing.T) {
 // "copy": false puts the device into the room as before: the links, the
 // group, the metadata and the re-read, nothing of the room's settings.
 func TestAddWithoutCopy(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, withGreeting(copyGreeting(t)))
 	fc, ts := r.fc, r.ts
 	received := cubewatch.Lines(fc)
@@ -376,6 +379,7 @@ func TestAddWithoutCopy(t *testing.T) {
 // there to shorten it. A name given is taken as it is. The copy cube's
 // room 1 is "Wohnzimmer".
 func TestAddWithoutANameTakesTheDefault(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		name  string
 		body  string
@@ -432,6 +436,7 @@ func TestAddWithoutANameTakesTheDefault(t *testing.T) {
 // A shutter contact has no settings: it is linked and listed, nothing
 // is copied.
 func TestAddContactCopiesNothing(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, withGreeting(copyGreeting(t)))
 	fc, ts := r.fc, r.ts
 	received := cubewatch.Lines(fc)
@@ -452,6 +457,7 @@ func TestAddContactCopiesNothing(t *testing.T) {
 // three thermostats, then 0x12, every day of room 1's programme (none is
 // 0a010d's) and 0x11 again.
 func TestMoveCopiesTheNewRoomsSettings(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, withGreeting(copyGreeting(t)))
 	fc, ts := r.fc, r.ts
 	received := cubewatch.Lines(fc)
@@ -494,6 +500,7 @@ func TestMoveCopiesTheNewRoomsSettings(t *testing.T) {
 // A discarded 0x11 ends the copy: the answer is the error, which says
 // the device is in the room, and nothing after it is sent.
 func TestCopyStopsAtADiscard(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, withGreeting(copyGreeting(t)), withFake(func(fc *fakecube.Server) {
 		fc.DiscardIf = func(m cube.Message) bool {
 			rc, err := cube.ParseRadioCommand(m.Data)
@@ -577,6 +584,7 @@ func listedRF(t *testing.T, ts *httptest.Server, rf string) (device, inRoom bool
 // the force flag, then the metadata without it; it is gone from the
 // devices, the rooms and the counts, and the metadata event came.
 func TestRemoveListedDevice(t *testing.T) {
+	t.Parallel()
 	// The start has the greeting through the pump: its metadata is what
 	// the removal's metadata line is measured against.
 	r := startServer(t, withGreeting(copyGreeting(t)))
@@ -622,6 +630,7 @@ func TestRemoveListedDevice(t *testing.T) {
 
 // A device in no room by the metadata and by its C line gets t: alone.
 func TestRemoveUnlistedDevice(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, withGreeting(copyGreeting(t)))
 	fc, ts := r.fc, r.ts
 	events := len(logKinds(t, ts, 0))
@@ -641,6 +650,7 @@ func TestRemoveUnlistedDevice(t *testing.T) {
 // paired long ago, is unlinked from room 1's members before t:, by one
 // 0x21 to the room's master; no metadata is written for it.
 func TestRemoveDeviceInARoomByItsConfig(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, withGreeting(copyGreeting(t)), withFake(func(fc *fakecube.Server) { withConfigRoom(t, fc.Greeting, copyContact, 1) }))
 	fc, ts := r.fc, r.ts
 	received := cubewatch.Lines(fc)
@@ -680,6 +690,7 @@ func withErrorFlag(t *testing.T, greeting []cube.Message, rf cube.RFAddress, fai
 // sends its one 0x21 to the room's master, which names the wall
 // thermostat leaving.
 func TestRemoveResetsFlaggedMembers(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, withGreeting(copyGreeting(t)), withFake(func(fc *fakecube.Server) { withErrorFlag(t, fc.Greeting, 0x0a010a, cube.RFRemoveLink) }))
 	fc, ts := r.fc, r.ts
 	received := cubewatch.Lines(fc)
@@ -698,6 +709,7 @@ func TestRemoveResetsFlaggedMembers(t *testing.T) {
 // into room 1 by its C line, and 0a010a, the room's master, which the
 // command names; the wall thermostat, unflagged, is left alone.
 func TestRoomSetpointResetsFlaggedMembers(t *testing.T) {
+	t.Parallel()
 	rg := startServer(t, withGreeting(copyGreeting(t)), withFake(func(fc *fakecube.Server) {
 		withConfigRoom(t, fc.Greeting, 0x0a0109, 1)
 		withErrorFlag(t, fc.Greeting, 0x0a0109, 0x03)
@@ -722,6 +734,7 @@ func TestRoomSetpointResetsFlaggedMembers(t *testing.T) {
 // A step's result gives each line's answer, and the line the Cube
 // discarded: here the removal's 0x21.
 func TestStepNamesTheDiscardedLine(t *testing.T) {
+	t.Parallel()
 	discard := func(m cube.Message) bool {
 		rc, err := cube.ParseRadioCommand(m.Data)
 		return m.Type == 's' && err == nil && rc.Command == cube.RFRemoveLink
@@ -729,7 +742,7 @@ func TestStepNamesTheDiscardedLine(t *testing.T) {
 	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")), withGreeting(copyGreeting(t)),
 		withFake(func(fc *fakecube.Server) { fc.DiscardIf = discard }))
 	ts := r.ts
-	stores[ts] = r.st
+	keepStore(t, ts, r.st)
 	if code, text := callAPI(t, ts, "DELETE", "/api/v1/cubes/KEQ0000100/devices/0a010a", "secret", ""); code != 502 {
 		t.Fatalf("remove with the 0x21 discarded: %d %s", code, text)
 	}
@@ -758,6 +771,7 @@ func TestStepNamesTheDiscardedLine(t *testing.T) {
 // A hidden device is not found, the Cube itself and a bad address are
 // refused, and nothing reaches the Cube.
 func TestRemoveRefused(t *testing.T) {
+	t.Parallel()
 	r := startServer(t)
 	fc, ts, s := r.fc, r.ts, r.s
 	s.cubes["keq0000100"].setConfig(func(c *CubeConfig) { c.Hidden = []cube.RFAddress{0x0a010d} })
@@ -775,6 +789,7 @@ func TestRemoveRefused(t *testing.T) {
 // copy follows, the answer says the mode was not set, and no error
 // reset is sent for it.
 func TestCopyAfterADiscardedMode(t *testing.T) {
+	t.Parallel()
 	rg := startServer(t, withGreeting(copyGreeting(t)), withFake(func(fc *fakecube.Server) {
 		fc.DiscardIf = func(m cube.Message) bool {
 			rc, err := cube.ParseRadioCommand(m.Data)
@@ -795,6 +810,7 @@ func TestCopyAfterADiscardedMode(t *testing.T) {
 // A hidden device in the room is neither linked with the new device nor
 // given the room's temperatures, nor taken for the room's reference.
 func TestCopyKeepsAwayFromHiddenDevices(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, withGreeting(copyGreeting(t)))
 	fc, ts, s := r.fc, r.ts, r.s
 	s.cubes["keq0000100"].setConfig(func(c *CubeConfig) { c.Hidden = []cube.RFAddress{copyWall} })
@@ -820,6 +836,7 @@ func TestCopyKeepsAwayFromHiddenDevices(t *testing.T) {
 // the room and given its own copy, the second request reading the
 // metadata the first one wrote.
 func TestConcurrentAddsIntoOneRoom(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, withGreeting(copyGreeting(t)))
 	fc, ts, s := r.fc, r.ts, r.s
 	answers := make(chan map[string]any, 2)
@@ -858,6 +875,7 @@ func TestConcurrentAddsIntoOneRoom(t *testing.T) {
 // unlinked, and a device whose C line names room 255 is not unlinked
 // at all.
 func TestRemoveLeavesHiddenDevicesAlone(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, withGreeting(copyGreeting(t)), withFake(func(fc *fakecube.Server) { withConfigRoom(t, fc.Greeting, copyContact, cube.HiddenRoom) }))
 	fc, ts, s := r.fc, r.ts, r.s
 	s.cubes["keq0000100"].setConfig(func(c *CubeConfig) { c.Hidden = []cube.RFAddress{copyWall} })
@@ -877,6 +895,7 @@ func TestRemoveLeavesHiddenDevicesAlone(t *testing.T) {
 // A device only the metadata lists, without a C line, loses its entry;
 // nothing is sent by radio.
 func TestRemoveListedOnly(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, withGreeting(copyGreeting(t)), withFake(func(fc *fakecube.Server) {
 		kept := fc.Greeting[:0]
 		for _, g := range fc.Greeting {
@@ -901,6 +920,7 @@ func TestRemoveListedOnly(t *testing.T) {
 // A device the Cube keeps after t:, as one that never answers: the
 // Cube's next device list does not bring it back, the next greeting does.
 func TestRemovedDeviceTheCubeKeeps(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, withGreeting(copyGreeting(t)), withFake(func(fc *fakecube.Server) { fc.Keep = map[cube.RFAddress]bool{0x0a010a: true} }))
 	ts, s := r.ts, r.s
 	if code, out := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0000100/devices/0a010a", ""); code != 200 {
@@ -922,6 +942,7 @@ func TestRemovedDeviceTheCubeKeeps(t *testing.T) {
 // A removal and an add at once: each reads the metadata the other wrote,
 // so the added device is listed and the removed one is not.
 func TestRemoveAndAddAtOnce(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, withGreeting(copyGreeting(t)))
 	ts, s := r.ts, r.s
 	codes := make(chan int, 2)
@@ -986,6 +1007,7 @@ func withRoomMaster(t *testing.T, greeting []cube.Message, room uint8, rf cube.R
 // addressing"); a room without a thermostat is refused and nothing is
 // sent. Room 1 holds 0a010a and the wall thermostat, room 6 0a010d.
 func TestRoomCommandAddress(t *testing.T) {
+	t.Parallel()
 	auto := func(rf cube.RFAddress) string {
 		m, err := cube.CmdSetTemperature(cube.Target{RFAddress: rf, RoomID: 1, Room: true}, 0, cube.ModeAuto, cube.Until{})
 		if err != nil {

@@ -20,6 +20,7 @@ import (
 // software takes the next line it reads for the reply to its command, so
 // an unasked L line makes every later reply one line late ("S: expected").
 func TestProxySendsNothingUnasked(t *testing.T) {
+	t.Parallel()
 	greeting, err := fakecube.RoomsFixture()
 	if err != nil {
 		t.Fatal(err)

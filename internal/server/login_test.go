@@ -17,6 +17,7 @@ import (
 // A login answers a session that works until it is logged out; wrong
 // pairs, disabled users and API keys are refused where they should be.
 func TestLogin(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
 	ts, s := r.ts, r.s
 	st := s.opts.Store
@@ -103,6 +104,7 @@ func TestLogin(t *testing.T) {
 
 // Failed logins count against the user name as well as the address.
 func TestLoginLockout(t *testing.T) {
+	t.Parallel()
 	opts := storeOptions(t, t.TempDir(), "secret")
 	opts.AuthFailures = 3
 	r := startServer(t, withOptions(opts))
@@ -137,6 +139,7 @@ func TestLoginLockout(t *testing.T) {
 // 429 with Retry-After and counts as no failure; once it is done the
 // next goes through. A full set of addresses signing in is 503.
 func TestLoginOneAtATime(t *testing.T) {
+	t.Parallel()
 	opts := storeOptions(t, t.TempDir(), "secret")
 	opts.AuthFailures = 2
 	rg := startServer(t, withOptions(opts))
@@ -179,6 +182,7 @@ func TestLoginOneAtATime(t *testing.T) {
 // GET /api/v1/me in every mode, and the login's answers outside users
 // mode.
 func TestMeModes(t *testing.T) {
+	t.Parallel()
 	read := func(ts string) meView {
 		var me meView
 		json.Unmarshal([]byte(ts), &me)

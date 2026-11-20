@@ -10,6 +10,7 @@ import (
 )
 
 func TestReorderFlags(t *testing.T) {
+	t.Parallel()
 	fs := flag.NewFlagSet("t", flag.ContinueOnError)
 	fs.String("addr", "", "")
 	fs.String("login", "", "")

@@ -27,19 +27,10 @@ import (
 
 func quiet() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
 
-func open(t *testing.T, dir string) *Store {
-	t.Helper()
-	s, err := Open(dir, Options{Version: "test", Logger: quiet()})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
-	return s
-}
-
 // An empty directory gets massimo.db at the latest version, mode 0600,
 // in WAL mode with foreign keys on.
 func TestOpenMigratesAnEmptyFile(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	log, logged := testkit.LogWatch(nil)
 	s, err := Open(dir, Options{Version: "v9.9.9", Logger: log})
@@ -106,7 +97,8 @@ func TestOpenMigratesAnEmptyFile(t *testing.T) {
 // The owned and replicated tables carry the columns the notes of
 // docs/store.md section 5 add.
 func TestSyncColumns(t *testing.T) {
-	s := open(t, t.TempDir())
+	t.Parallel()
+	s := openFresh(t, t.TempDir())
 	cols := func(table string) map[string]bool {
 		rows, err := s.db.Query(`SELECT name FROM pragma_table_info(?)`, table)
 		if err != nil {
@@ -155,7 +147,8 @@ func TestSyncColumns(t *testing.T) {
 // manager and the role integration fixed at the ceiling by 0021; repair
 // for both by 0022); owner has every capability by code and no rows.
 func TestSeededRoles(t *testing.T) {
-	s := open(t, t.TempDir())
+	t.Parallel()
+	s := openFresh(t, t.TempDir())
 	want := map[string][]string{
 		"owner":       nil,
 		"manager":     {"backup", "configure", "discover", "guests", "integrations", "lock", "pair", "passwords", "preferences", "read", "rename", "repair", "restart", "restore", "setpoint", "structure"},
@@ -199,8 +192,9 @@ func TestSeededRoles(t *testing.T) {
 // node.id and tenant.id are UUIDv7; the key file is made once, 0600,
 // and read back on the next open.
 func TestNodeIdentity(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
-	s := open(t, dir)
+	s := openFresh(t, dir)
 	id := s.NodeID()
 	tenant, err := s.TenantID()
 	if err != nil {
@@ -231,7 +225,7 @@ func TestNodeIdentity(t *testing.T) {
 	key1, _ := os.ReadFile(KeyPath(dir))
 	s.Close()
 
-	s2 := open(t, dir)
+	s2 := openFresh(t, dir)
 	key2, _ := os.ReadFile(KeyPath(dir))
 	if s2.NodeID() != id || !bytes.Equal(s2.NodePublicKey(), pub) || !bytes.Equal(key1, key2) {
 		t.Fatal("identity changed on the second open")
@@ -240,6 +234,7 @@ func TestNodeIdentity(t *testing.T) {
 
 // A file with tables but without schema_version is not the store's.
 func TestRefusesAStrangersFile(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	db, err := sql.Open("sqlite", Path(dir))
 	if err != nil {
@@ -272,6 +267,7 @@ func testMigrations(t *testing.T, extra map[string]string) fstest.MapFS {
 // older version opens the newer file; one that raises it is refused by
 // that binary with the copy named, and the copy is made before it.
 func TestMinReader(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	additive := testMigrations(t, map[string]string{"0002_note.sql": "-- min_reader: 1\nALTER TABLE cubes ADD COLUMN note2 TEXT NOT NULL DEFAULT '';\n"})
 	s, err := Open(dir, Options{Logger: quiet(), migrations: additive})
@@ -346,6 +342,7 @@ func mustRead(t *testing.T, p string) []byte {
 
 // Broken migration sets are refused before anything is applied.
 func TestMigrationSetChecked(t *testing.T) {
+	t.Parallel()
 	for name, files := range map[string]map[string]string{
 		"gap":          {"0003_x.sql": "-- min_reader: 1\nSELECT 1;"},
 		"no min":       {"0002_x.sql": "SELECT 1;"},
@@ -361,6 +358,7 @@ func TestMigrationSetChecked(t *testing.T) {
 // Settings round-trip as JSON; a write bumps the version, a delete
 // leaves a tombstone.
 func TestSettings(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	ctx := context.Background()
 	if _, ok, err := s.SettingDuration(ctx, StaleAfterKey); ok || err != nil {
@@ -405,6 +403,7 @@ func TestSettings(t *testing.T) {
 
 // A consistent copy opens as a store of its own.
 func TestBackupAndInfo(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	s := open(t, dir)
 	ctx := context.Background()
@@ -443,6 +442,7 @@ func TestBackupAndInfo(t *testing.T) {
 // complete. A read-only store skips the checkpoint, so the cancelled
 // context fails the VACUUM INTO itself.
 func TestBackupWholeOrAbsent(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	s := open(t, dir)
 	s.Close()
@@ -495,7 +495,8 @@ func copyAlone(t *testing.T, dir string) *Store {
 // does not run: the file alone then holds what was written. It used to
 // stay as it was created, its rows only in the WAL.
 func TestCloseCheckpointsBesideAnotherConnection(t *testing.T) {
-	dir := t.TempDir()
+	t.Parallel()
+	dir := copied(t)
 	s, err := Open(dir, Options{Version: "test", Logger: quiet()})
 	if err != nil {
 		t.Fatal(err)
@@ -522,6 +523,7 @@ func TestCloseCheckpointsBesideAnotherConnection(t *testing.T) {
 // as a reload of the running server may ask; a store opened read-only
 // checkpoints nothing.
 func TestCheckpoint(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	s := open(t, dir)
 	ctx := context.Background()
@@ -555,6 +557,7 @@ func TestCheckpoint(t *testing.T) {
 // by the next binary, additively: min_reader stays 1, and the columns
 // and the table of 0002 are there.
 func TestMigratesAVersionOneFile(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	s1, err := Open(dir, Options{Version: "v0.7.0-alpha.1", Logger: quiet(), readerVersion: 1})
 	if err != nil {
@@ -564,7 +567,7 @@ func TestMigratesAVersionOneFile(t *testing.T) {
 		t.Fatalf("version %d after the first open", v)
 	}
 	s1.Close()
-	s := open(t, dir)
+	s := openFresh(t, dir)
 	if v, mr := s.SchemaVersion(); v != SchemaVersion() || v < 2 || mr != binaryMinReader(t) {
 		t.Fatalf("schema %d min_reader %d", v, mr)
 	}

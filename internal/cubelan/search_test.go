@@ -45,6 +45,7 @@ func udpAddr(t *testing.T, s string) *net.UDPAddr {
 // nothing, a proxy's with a MAC that is not eQ-3's, and a Cube's with
 // eQ-3's.
 func TestSearchMarksTheAnswers(t *testing.T) {
+	t.Parallel()
 	cubeAt, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000000", 0x0a0107)
 	if err != nil {
 		t.Fatal(err)
@@ -75,7 +76,9 @@ func TestSearchMarksTheAnswers(t *testing.T) {
 				}
 				return ""
 			}
-			found := searchOn(t, SearchOptions{Targets: targets, Wait: 300 * time.Millisecond, MAC: mac})
+			// The proxy never answers N and c: the late wait is waited
+			// out, as long as the wait, in place of the search's second.
+			found := searchOn(t, SearchOptions{Targets: targets, Wait: 300 * time.Millisecond, LateWait: testkit.Scale(300 * time.Millisecond), MAC: mac})
 			byIP := map[string]Discovered{}
 			for _, d := range found {
 				byIP[d.IP.String()] = d
@@ -101,6 +104,7 @@ func TestSearchMarksTheAnswers(t *testing.T) {
 // A search fed the datagrams another reader takes from the socket, as
 // serve's responder does, finds what one reading the socket finds.
 func TestSearchFromAFeed(t *testing.T) {
+	t.Parallel()
 	fake, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000000", 0x0a0107)
 	if err != nil {
 		t.Fatal(err)
@@ -135,6 +139,7 @@ func TestSearchFromAFeed(t *testing.T) {
 // A Cube that answers just before the wait ends, and its N and c only
 // after it, still has them: the search waits a second more.
 func TestSearchWaitsForALateAnswer(t *testing.T) {
+	t.Parallel()
 	cube, err := net.ListenPacket("udp4", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)

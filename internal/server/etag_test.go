@@ -57,6 +57,7 @@ func putProgram(t *testing.T, url, ifMatch, body string) (int, map[string]any) {
 // one with the current tag goes, a write still on its way counts, and a
 // member's own write changes the room's tag.
 func TestProgramTag(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, storedRooms(), withFake(func(fc *fakecube.Server) { fc.ApplyAfter = 600 * time.Millisecond }), fastFollowUps(), quiet())
 	fc, ts := r.fc, r.ts
 	base := ts.URL + "/api/v1/cubes/KEQ0000100/"
@@ -125,6 +126,7 @@ func TestProgramTag(t *testing.T) {
 // what changed and the new tag, and of its room's virtual wall
 // thermostat.
 func TestProgramConfigEvents(t *testing.T) {
+	t.Parallel()
 	// The start has the greeting through the pump: its configurations
 	// are what the write's config events are measured against.
 	ts := startServer(t, storedRooms(), fastFollowUps(), quiet()).ts

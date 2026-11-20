@@ -15,6 +15,7 @@ import (
 // values as last_known, marked out of date, with its last seen (AP
 // LegacyLogs v1.0, Block 13).
 func TestOutOfDateDevice(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, storedRooms())
 	fc, ts := r.fc, r.ts
 	const wall = 0x0a0201

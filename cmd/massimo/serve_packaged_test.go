@@ -17,6 +17,7 @@ import (
 // source and its suite as the channel, and while the helper is on; brew
 // keeps its reason.
 func TestPackagedUpdate(t *testing.T) {
+	t.Parallel()
 	apt := install.Manager{Name: "apt", Command: "sudo apt update && sudo apt install massimo"}
 	env := func(vars map[string]string) func(string) string { return func(k string) string { return vars[k] } }
 	root := t.TempDir()

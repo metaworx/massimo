@@ -4,18 +4,23 @@ name: CI
 # branch), never both; and a release tag. Formatting, vet, the tests, a
 # cross build of every release binary, actionlint on the workflows, the
 # types of the web UI's parts, govulncheck, the Debian package in a container, and the Windows
-# service on a Windows runner. A pull
-# request runs the web UI's suite only when it changes the UI, the suite
-# or this file, and on two of its four cases, and the mDNS test against
+# service and the macOS LaunchDaemon on their runners (platforms.yml). A pull
+# request runs the web UI's suite only when it changes the UI, the
+# server's own Go files but for its tests, the OpenAPI file, the suite or
+# this file, and then on all four of its cases, a job each, with the
+# screenshot set in a job of its own, and the mDNS test against
 # avahi only when it changes the announcement, discovery, the test or
-# this file, and the Android app's job only when it changes the app, the
+# this file, the Windows and macOS jobs only when they change their
+# platform's code or the announcement, and the Android app's job only
+# when it changes the app, the
 # web UI's files it bundles, its scripts or the release's workflows; a
 # push to main or of a tag runs all of it, but for a push
 # to main of a release commit, which its tag's run tests (What to test).
 # A push builds the release beside the tests (build.yml), and once every
 # test job has passed ("All tests passed") calls release.yml, which signs
 # and publishes a tag as its release, and a push to main as the devel
-# build. The nightly build is nightly.yml's. A push to a release branch
+# build. The nightly build is nightly.yml's, and Retry (retry.yml) runs
+# a macOS or Windows job no runner took again in a tag's run. A push to a release branch
 # (release/alpha) runs nothing: the release moved it to a commit this
 # workflow had tested.
 on:
@@ -40,6 +45,12 @@ permissions:
 env:
   GO_VERSION: '1.26'
   GOVULNCHECK_VERSION: v1.9.0
+  # The jobs that a pull request and a push to main count as not run where
+  # no runner took them (AP TestSpeed, D5-A, D16-A), by the names the API
+  # gives them, with their caller's id among All tests passed's needs:
+  # All tests passed's report, and Code result, which takes such a job for
+  # no verdict on the code. retry.yml names the same jobs.
+  UNRUN_JOBS: '{"Platforms / macOS LaunchDaemon": "platforms", "Platforms / Windows service": "platforms"}'
 
 jobs:
   # What the run tests, the one job every test job waits for
@@ -60,12 +71,17 @@ jobs:
   # always tested whole, and fingerprint.sh's exit 2, an unknown commit
   # included, counts as code. tested is true where the Tested status on
   # the commit tested before holds this code's fingerprint: what passed
-  # for it is skipped, and Fuzz, the UI tests and LAN run where they did
-  # not pass yet (All tests passed writes the status). ui and lan, for the
+  # for it is skipped, and Fuzz, the UI tests, LAN, the Android app, macOS
+  # and Windows run where they did not pass yet (All tests passed writes
+  # the status). ui and lan, for the
   # UI test and LAN jobs, are true for
   # a push; for a pull request, ui is true when it touches the web UI, its
-  # bundler (tools/uibundle), the vendored Preact, its suite or this file,
-  # lan when it touches the announcement, discovery,
+  # bundler (tools/uibundle), the vendored Preact, the server's own Go
+  # files but for its tests (internal/server/*_test.go, which the binary
+  # under test does not hold: AP TestSpeed, D9-A), the OpenAPI file of
+  # the API the page reads (with code only: a site document alone answers
+  # code=false), its suite or this file, lan
+  # when it touches the announcement, discovery,
   # the shared port, the proxy, the server's own files (not ui/:
   # discovery's runs are decided there), the Go module, the LAN test or
   # this file. A push whose record says lan=unneeded, its pull request's
@@ -76,7 +92,23 @@ jobs:
   # index.html, partials/, src/, parts.js and vendor/, as BundleUi in
   # app/android/app/build.gradle.kts leaves them out), the app's scripts
   # under packaging/, or this file, build.yml or release.yml; app=unneeded
-  # is carried as lan's is (AP MobileApp, D17-A). The run
+  # is carried as lan's is (AP MobileApp, D17-A). macos and windows, for
+  # the macOS LaunchDaemon and Windows service jobs, are true for a push
+  # and a tag; for a pull request when it touches the announcement (one
+  # list, which lan reads too: AP TestSpeed, D3-A) or the job's own paths:
+  # the installer, the update, internal/safefile, the command line's
+  # install, update, service, restart and reboot files and its files for
+  # the platform, the server's update route, packaging/embed.go and the
+  # settings template, the Go module, this file or the UI bundle's action
+  # and bundler, which run on the platform's runner, and the Go files
+  # built for the platform but not for Linux; for macOS also the
+  # LaunchDaemons' plists and the Homebrew formula, for Windows also
+  # discovery (internal/cubelan, the server's discovery, runtime and update
+  # files its unit tests run, the proxy's responder, massimo discover). The
+  # record carries them as
+  # mac= and win=, unneeded as lan's (D1-A, D2-A): GitHub takes 140
+  # characters for a status's description, which the record fills at its
+  # longest. The run
   # checks out the pull request's merge commit, whose first parent is the
   # base branch. The
   # list is taken before it is matched, so that grep -q ending the pipe
@@ -87,6 +119,7 @@ jobs:
   changes:
     name: What to test
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # statuses: the Tested status of the commit tested before; actions:
     # the runs Code result's check reads.
     permissions:
@@ -102,10 +135,14 @@ jobs:
       ui: ${{ steps.what.outputs.ui }}
       lan: ${{ steps.what.outputs.lan }}
       app: ${{ steps.what.outputs.app }}
+      macos: ${{ steps.what.outputs.macos }}
+      windows: ${{ steps.what.outputs.windows }}
       ui_done: ${{ steps.what.outputs.ui_done }}
       lan_done: ${{ steps.what.outputs.lan_done }}
       app_done: ${{ steps.what.outputs.app_done }}
       fuzz_done: ${{ steps.what.outputs.fuzz_done }}
+      macos_done: ${{ steps.what.outputs.macos_done }}
+      windows_done: ${{ steps.what.outputs.windows_done }}
     steps:
       # A pull request's merge commit, its parents and its head's parent;
       # a push's whole history, for the range from the commit main was at
@@ -123,11 +160,12 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          suite=true code=true site=false tested=false fp="" ui=true lan=true app=true
+          suite=true code=true site=false tested=false fp="" ui=true lan=true app=true macos=true windows=true
           # Each reason the answers have, for the log and the summary.
           why=()
           say() { echo "$1"; why+=("$1"); }
-          ui_done=false lan_done=false app_done=false fuzz_done=false
+          ui_done=false lan_done=false app_done=false fuzz_done=false macos_done=false windows_done=false
+          macos_missed=false windows_missed=false
           fpsh=GUIDELINES/shared/tools/fingerprint.sh
           base="" prev=""
           case "${GITHUB_EVENT_NAME}:${GITHUB_REF}" in
@@ -206,19 +244,54 @@ jobs:
                 app=true) app_done=true ;;
                 app=unneeded) [ "$GITHUB_EVENT_NAME" = pull_request ] || app=false ;;
                 fuzz=true) fuzz_done=true ;;
+                mac=true) macos_done=true ;;
+                mac=unneeded) [ "$GITHUB_EVENT_NAME" = pull_request ] || macos=false ;;
+                win=true) windows_done=true ;;
+                win=unneeded) [ "$GITHUB_EVENT_NAME" = pull_request ] || windows=false ;;
+                # No runner took it on its pull request (D5-A): it runs here.
+                mac=false) macos_missed=true ;;
+                win=false) windows_missed=true ;;
                 esac
               done
             fi
           fi
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
             changed="$(git diff --name-only HEAD^1 HEAD)"
-            grep -qE '^(internal/server/ui/|tools/ui-test/|tools/uibundle/|third_party/preact/|\.github/workflows/ci\.yml$)' <<<"$changed" || ui=false
-            grep -qE '^(internal/announce/|internal/serve/|internal/sharedport/|internal/proxy/|internal/server/[^/]+$|internal/cubelan/|cmd/massimo/(discover|serve)\.go$|go\.(mod|sum)$|tools/lan-test/|\.github/workflows/ci\.yml$)' <<<"$changed" || lan=false
+            # The announcement, which the LAN, macOS and Windows jobs each
+            # test beside another mDNS (AP TestSpeed, D3-A): the announcer,
+            # the shared port, serve's setup and flags, and the Go module,
+            # whose golang.org/x/net it sends with.
+            announce='internal/announce/|internal/sharedport/|internal/serve/|cmd/massimo/serve\.go$|go\.(mod|sum)$'
+            # The UI tests' paths, the server's own Go files but its tests
+            # (D9-A), which the binary under test does not hold.
+            uifiles="$(grep -vE '^internal/server/[^/]+_test\.go$' <<<"$changed" | grep -E '^(internal/server/ui/|internal/server/[^/]+\.go$|docs/api-v1-openapi\.yaml$|tools/ui-test/|tools/uibundle/|third_party/preact/|\.github/workflows/ci\.yml$)' || true)"
+            [ -n "$uifiles" ] || ui=false
+            grep -qE "^(${announce}|internal/proxy/|internal/server/[^/]+$|internal/cubelan/|cmd/massimo/discover\.go$|tools/lan-test/|\.github/workflows/ci\.yml$)" <<<"$changed" || lan=false
+            # Each platform's own paths (D1-A, D2-A): what its unit tests and
+            # its install, update and removal on the runner run, the Go files
+            # built for the platform that Linux leaves out (_darwin or
+            # _windows, and _other, as TestCIGatesHoldPlatformFiles checks),
+            # and what sets the job up there (this file, the jobs' own
+            # platforms.yml, the UI bundle's action and its bundler). A Go
+            # file named for another system is not
+            # built there and does not count (notmac, notwin): _unix by its
+            # build tag, not by Go's file names, which that test checks too.
+            notmac='_(windows|linux)[^/]*\.go$' notwin='_(darwin|linux|unix)[^/]*\.go$'
+            macfiles="$(grep -vE "$notmac" <<<"$changed" | grep -E "^(${announce}|internal/(install|update|safefile)/|internal/server/update_api[^/]*\.go$|cmd/massimo/(install|update|service|serve_brew|serve_packaged|restart|reboot)[^/]*\.go$|(cmd|internal)/.*_(darwin|other)[^/]*\.go$|packaging/(launchd|homebrew)/|packaging/(embed\.go|env\.template)$|\.github/workflows/(ci|platforms)\.yml$|\.github/actions/|tools/uibundle/)" || true)"
+            [ -n "$macfiles" ] || macos=false
+            winfiles="$(grep -vE "$notwin" <<<"$changed" | grep -E "^(${announce}|internal/(install|update|safefile|cubelan)/|internal/server/(discovery|hostnets|runtimes|update_api|update_history)[^/]*\.go$|internal/proxy/proxy\.go$|cmd/massimo/(install|update|service|restart|reboot|discover)[^/]*\.go$|(cmd|internal)/.*_(windows|other)[^/]*\.go$|packaging/(embed\.go|env\.template)$|\.github/workflows/(ci|platforms)\.yml$|\.github/actions/|tools/uibundle/)" || true)"
+            [ -n "$winfiles" ] || windows=false
             appfiles="$(grep -E '^(app/|packaging/app-[a-z-]+\.sh$|\.github/workflows/(ci|build|release)\.yml$)' <<<"$changed" || true)"
             bundled="$(grep -E '^internal/server/ui/' <<<"$changed" | grep -vE '^internal/server/ui/(index\.html$|partials/|src/|parts\.js$|vendor/)' || true)"
             [ -n "${appfiles}${bundled}" ] || app=false
           fi
-          echo "suite=${suite} code=${code} site=${site} tested=${tested} fp=${fp} ui=${ui} lan=${lan} app=${app} ui_done=${ui_done} lan_done=${lan_done} app_done=${app_done} fuzz_done=${fuzz_done}"
+          if [ "$macos_missed" = true ] && [ "$macos" = true ]; then
+            say "macOS LaunchDaemon did not run for this code before: it runs now."
+          fi
+          if [ "$windows_missed" = true ] && [ "$windows" = true ]; then
+            say "Windows service did not run for this code before: it runs now."
+          fi
+          echo "suite=${suite} code=${code} site=${site} tested=${tested} fp=${fp} ui=${ui} lan=${lan} app=${app} macos=${macos} windows=${windows} ui_done=${ui_done} lan_done=${lan_done} app_done=${app_done} fuzz_done=${fuzz_done} macos_done=${macos_done} windows_done=${windows_done}"
           # The answers as a table in the run's summary, with the reasons.
           {
             echo "### What to test"
@@ -250,10 +323,14 @@ jobs:
             job_row ui "$ui" "$ui_done" "UI test"
             job_row lan "$lan" "$lan_done" "LAN against avahi"
             job_row app "$app" "$app_done" "Android app"
+            job_row macos "$macos" "$macos_done" "macOS LaunchDaemon"
+            job_row windows "$windows" "$windows_done" "Windows service"
             row ui_done "$ui_done" "the UI tests passed for this code before" "-"
             row lan_done "$lan_done" "LAN passed for this code before" "-"
             row app_done "$app_done" "Android app passed for this code before" "-"
             row fuzz_done "$fuzz_done" "Fuzz passed for this code before" "-"
+            row macos_done "$macos_done" "macOS LaunchDaemon passed for this code before" "-"
+            row windows_done "$windows_done" "Windows service passed for this code before" "-"
           } >>"$GITHUB_STEP_SUMMARY"
           {
             echo "suite=${suite}"
@@ -264,26 +341,57 @@ jobs:
             echo "ui=${ui}"
             echo "lan=${lan}"
             echo "app=${app}"
+            echo "macos=${macos}"
+            echo "windows=${windows}"
             echo "ui_done=${ui_done}"
             echo "lan_done=${lan_done}"
             echo "app_done=${app_done}"
             echo "fuzz_done=${fuzz_done}"
+            echo "macos_done=${macos_done}"
+            echo "windows_done=${windows_done}"
           } >> "$GITHUB_OUTPUT"
 
+  # Each job's time limit (timeout-minutes) is about three times its
+  # longest run among the 57 runs before 2026-11-18, ten minutes at least,
+  # and above the Go tests' own -timeout, so that a hung test fails with
+  # its goroutines in the log rather than the job being cut off
+  # (GUIDELINES/project/CI.md, section 2).
   test:
     name: Vet and test
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # git describe needs the tags
 
+      # setup-go's own cache off: the first job of a run to end saves it
+      # for all, and that was a light one's, 13 MB, so that every job
+      # compiled from scratch. The job's own cache instead (AP TestSpeed,
+      # D10-A; packaging/go-cache.sh): restored by every run, saved by a
+      # push to main, a new one each week and with each new Go or go.sum.
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
+          cache: false
+
+      - name: The Go cache's key
+        id: gocache
+        run: packaging/go-cache.sh key vet
+
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: gocache-restore
+        with:
+          path: ${{ steps.gocache.outputs.path }}
+          key: ${{ steps.gocache.outputs.key }}
+          restore-keys: ${{ steps.gocache.outputs.restore-keys }}
+
+      - name: Keep the restored cache from Go's trim
+        if: steps.gocache.outputs.save != 'true' || steps.gocache-restore.outputs.cache-hit == 'true'
+        run: packaging/go-cache.sh hold
 
       - uses: ./.github/actions/ui-bundle
 
@@ -302,8 +410,43 @@ jobs:
           GOOS=windows go vet ./...
           GOOS=darwin go vet ./...
 
+      # As -json, which packaging/go-test-report.sh turns back into go
+      # test's own log while the tests run, and then names the tests that
+      # skipped, and why, and the slowest tests and packages, in the
+      # summary (GUIDELINES/project/CI.md, section 3); pipefail keeps go
+      # test's exit status as the step's. -count=1: go test neither takes
+      # a result from the restored cache nor leaves one in what main
+      # saves; it would take a package's pass where it sees no change,
+      # blind to what a test reads through another program, such as
+      # packaging/'s scripts and tools/identifiers' git ls-files.
       - name: go test
-        run: go test ./...
+        run: |
+          set -o pipefail
+          go test -count=1 -json ./... | packaging/go-test-report.sh "go test"
+
+      # The three tests that need root, which skip above, once more as
+      # root, by name (AP TestSpeed, D14-A): a file replaced as root keeps
+      # its owner (internal/safefile), the kept binary runs as the
+      # store's owner (internal/update), and the store's rollback leaves
+      # nothing of root's in the data directory (cmd/massimo). sudo keeps
+      # the runner's PATH, with setup-go's Go, and the job's caches, so
+      # that nothing is built again. Each must pass: a name that no longer
+      # matches would run nothing, and the step would pass.
+      - name: go test, as root
+        env:
+          ROOT_TESTS: TestOwnerKeptAsRoot TestRunsAsTheStoresOwner TestRollbackStoreRunsAsTheStoresOwner
+        run: |
+          set -o pipefail
+          events="${RUNNER_TEMP}/root-tests.json"
+          sudo -E env "PATH=${PATH}" "GOCACHE=$(go env GOCACHE)" "GOMODCACHE=$(go env GOMODCACHE)" MASSIMO_ENV_FILE=/dev/null \
+            go test -count=1 -json -run "^($(tr ' ' '|' <<<"$ROOT_TESTS"))\$" ./internal/safefile ./internal/update ./cmd/massimo |
+            tee "$events" | packaging/go-test-report.sh "go test, as root"
+          for name in $ROOT_TESTS; do
+            if ! jq -e --arg t "$name" 'select(.Test == $t and .Action == "pass")' "$events" >/dev/null; then
+              echo "::error::${name} did not pass as root"
+              exit 1
+            fi
+          done
 
       # The store's benchmarks once each, with -short, to see that they
       # still run (docs/store.md section 5, "Measuring on a box"); no
@@ -314,6 +457,14 @@ jobs:
       - name: Cross build
         run: make cross
 
+      # Once every step passed: a week's key is saved once, and a run
+      # that stopped early would leave the week a cache of what it got to.
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: steps.gocache.outputs.save == 'true' && steps.gocache-restore.outputs.cache-hit != 'true'
+        with:
+          path: ${{ steps.gocache.outputs.path }}
+          key: ${{ steps.gocache.outputs.key }}
+
   # The workflows by actionlint, their run: scripts by the runner's
   # shellcheck (make actionlint, GUIDELINES/project/CI.md, section 2): the
   # tool is pinned in tools/actionlint/go.mod, a module of its own, whose
@@ -323,6 +474,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -345,6 +497,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -353,41 +506,90 @@ jobs:
 
   # The race detector (make race, GUIDELINES/project/CI.md, section 2) on
   # the packages whose goroutines meet, beside Vet and test rather than in
-  # it, so that neither waits for the other.
+  # it, so that neither waits for the other; the tests' -json for the
+  # summary of the skipped and the slowest tests, as in Vet and test.
   race:
     name: Race
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # The job's own Go cache, setup-go's off, as in Vet and test: its
+      # -race build is its own.
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
+          cache: false
+
+      - name: The Go cache's key
+        id: gocache
+        run: packaging/go-cache.sh key race
+
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: gocache-restore
+        with:
+          path: ${{ steps.gocache.outputs.path }}
+          key: ${{ steps.gocache.outputs.key }}
+          restore-keys: ${{ steps.gocache.outputs.restore-keys }}
+
+      - name: Keep the restored cache from Go's trim
+        if: steps.gocache.outputs.save != 'true' || steps.gocache-restore.outputs.cache-hit == 'true'
+        run: packaging/go-cache.sh hold
 
       - uses: ./.github/actions/ui-bundle
 
       - name: make race
-        run: make race
+        run: |
+          set -o pipefail
+          make race TESTFLAGS=-json | packaging/go-test-report.sh "make race"
+
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: steps.gocache.outputs.save == 'true' && steps.gocache-restore.outputs.cache-hit != 'true'
+        with:
+          path: ${{ steps.gocache.outputs.path }}
+          key: ${{ steps.gocache.outputs.key }}
 
   # Every package's tests on 32-bit ARM (make test-armv6,
   # GUIDELINES/project/CI.md, section 2): the armv6 binary the armhf
   # package ships, run with -short by Ubuntu's qemu-user as the Raspberry
-  # Pi 1's core, beside Vet and test; make cross only builds it.
+  # Pi 1's core, beside Vet and test; make cross only builds it. The
+  # tests' -json for the summary of the skipped and the slowest tests, as
+  # in Vet and test.
   armv6:
     name: Test (armv6, QEMU)
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # The job's own Go cache, setup-go's off, as in Vet and test: its
+      # 32-bit ARM build is its own.
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
+          cache: false
+
+      - name: The Go cache's key
+        id: gocache
+        run: packaging/go-cache.sh key armv6
+
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: gocache-restore
+        with:
+          path: ${{ steps.gocache.outputs.path }}
+          key: ${{ steps.gocache.outputs.key }}
+          restore-keys: ${{ steps.gocache.outputs.restore-keys }}
+
+      - name: Keep the restored cache from Go's trim
+        if: steps.gocache.outputs.save != 'true' || steps.gocache-restore.outputs.cache-hit == 'true'
+        run: packaging/go-cache.sh hold
 
       - uses: ./.github/actions/ui-bundle
 
@@ -397,7 +599,15 @@ jobs:
           sudo apt-get install -y -qq --no-install-recommends qemu-user
 
       - name: make test-armv6
-        run: make test-armv6
+        run: |
+          set -o pipefail
+          make test-armv6 TESTFLAGS=-json | packaging/go-test-report.sh "make test-armv6"
+
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: steps.gocache.outputs.save == 'true' && steps.gocache-restore.outputs.cache-hit != 'true'
+        with:
+          path: ${{ steps.gocache.outputs.path }}
+          key: ${{ steps.gocache.outputs.key }}
 
   # The fuzz targets (make fuzz, GUIDELINES/project/CI.md, section 2), on
   # a push to main only, 10 s a target: a pull request runs their seeds
@@ -408,6 +618,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && github.event_name == 'push' && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.fuzz_done != 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -429,46 +640,50 @@ jobs:
           path: internal/**/testdata/fuzz/
           if-no-files-found: ignore
 
-  # The web UI in Chromium against the fake Cube: the pytest suite, a
-  # job per width with both languages (UI_TEST_CASES), and in the
-  # 1100 px one after its suite the screenshot set, uploaded as the
-  # artifact ui-screenshots (tools/ui-test/README.md). Nothing is
+  # The web UI in Chromium against the fake Cube (tools/ui-test/README.md):
+  # the pytest suite, a job per case (UI_TEST_CASES) on a runner of its
+  # own, and the screenshot set in a job of its own beside them, uploaded
+  # as the artifact ui-screenshots (AP TestSpeed, D7-A). Nothing is
   # compared with the committed set: a job fails when a test fails or a
-  # shot cannot be taken, not when a picture changed; a failed test's
-  # screenshot and video, and the trace of its run once more, kept in
-  # tools/ui-test/results/, are uploaded as ui-test-results-<width>.
-  # The jobs keep the id screenshots, which All tests passed needs and
-  # reads as one, passed where both passed. They
+  # shot cannot be taken, not when a picture changed. A failed test's
+  # screenshot, and the video and the trace of its run once more (the
+  # first pass records neither, D8-A), kept in tools/ui-test/results/,
+  # are uploaded as ui-test-results-<case>. The five jobs keep the id
+  # screenshots, which All tests passed needs and reads as one, passed
+  # where all five passed. They
   # run in Microsoft's Playwright image, which holds the browsers and
   # their system libraries, so that nothing goes
   # through apt (which took up to 11 minutes on the runner). The image's
   # version and the pip pin below move together (GUIDELINES/project/CI.md,
   # section 3). The image has no make: the steps run what the make
   # targets run. The slideshow is built and committed with the set, not
-  # here. It runs for every push to main and for a pull request whose
+  # here. They run for every push to main and for a pull request whose
   # What to test answered ui=true; skipped by this condition, the
-  # required check counts as passed.
+  # required check counts as passed. Until the jobs have runs of their
+  # own, their limits are about three times what they are estimated to
+  # take from the two-case jobs' longest run, 15.4 minutes: a case about
+  # half of it, 30, and the set, its minute and the job's set-up, 15.
   screenshots:
-    name: UI test (${{ matrix.label }})
+    name: UI test (${{ matrix.case }})
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.ui != 'false' && needs.changes.outputs.ui_done != 'true' }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - width: 1100
-            cases: 1100-en,1100-de
-            label: 1100 px, screenshots
-            shots: true
-          - width: 390
-            cases: 390-en,390-de
-            label: 390 px
-            shots: false
+        # The suite's four cases, as conftest.py names them, and the
+        # screenshot set.
+        case: [ 1100-en, 1100-de, 390-en, 390-de, screenshots ]
     runs-on: ubuntu-latest
+    timeout-minutes: ${{ matrix.case == 'screenshots' && 15 || 30 }}
     container:
       image: mcr.microsoft.com/playwright/python:v1.64.1-noble
     env:
       UI_TEST_PYTHON: python
+      # UI_TEST_REQUIRED: a missing Playwright, pytest,
+      # pytest-playwright or pytest-xdist fails the job instead of
+      # skipping the suite or running it in one process, and the set's
+      # job instead of uploading the committed set.
+      UI_TEST_REQUIRED: 1
       # The checkout belongs to another user than the container's root,
       # so git refuses it and go build cannot stamp the version from it;
       # the binary under test needs none.
@@ -486,23 +701,22 @@ jobs:
       - name: Playwright
         run: pip install "playwright==1.64.1" -r tools/ui-test/requirements.txt
 
-      # UI_TEST_REQUIRED: a missing Playwright, pytest,
-      # pytest-playwright or pytest-xdist fails the job instead of
-      # skipping the suite or running it in one process. run.sh runs the
-      # job's two cases in four workers, one per CPU of the runner, each
-      # against a server set of its own, on a push and a pull request.
+      # run.sh runs the job's case in four workers, one per CPU of the
+      # runner, each against a server set of its own, on a push and a
+      # pull request; the log names the 20 slowest phases of the tests
+      # (--durations=20).
       - name: Smoke test
+        if: ${{ matrix.case != 'screenshots' }}
         run: tools/ui-test/run.sh
         env:
-          UI_TEST_REQUIRED: 1
-          UI_TEST_CASES: ${{ matrix.cases }}
+          UI_TEST_CASES: ${{ matrix.case }}
 
       - name: Screenshots
-        if: ${{ matrix.shots }}
+        if: ${{ matrix.case == 'screenshots' }}
         run: tools/ui-test/run.sh screenshots
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: ${{ !cancelled() && matrix.shots }}
+        if: ${{ !cancelled() && matrix.case == 'screenshots' }}
         with:
           name: ui-screenshots
           path: |
@@ -510,9 +724,9 @@ jobs:
           if-no-files-found: error
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: failure()
+        if: ${{ failure() && matrix.case != 'screenshots' }}
         with:
-          name: ui-test-results-${{ matrix.width }}
+          name: ui-test-results-${{ matrix.case }}
           path: tools/ui-test/results/
           if-no-files-found: ignore
 
@@ -534,6 +748,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.lan != 'false' && needs.changes.outputs.lan_done != 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -648,6 +863,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -683,6 +899,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -727,602 +944,27 @@ jobs:
           path: dist/*.deb
           if-no-files-found: error
 
-  # The Windows service for real: install from a settings file, the
-  # service answering on /healthz against a fake Cube, an update through
-  # the service manager (to the newest alpha release, or rolled back when
-  # that one cannot run as a service), and removal.
-  windows:
-    name: Windows service
+  # The Windows service and the macOS LaunchDaemon for real, on their
+  # runners (platforms.yml, which nightly.yml calls too: AP TestSpeed,
+  # D15-B), as "Platforms / Windows service" and "Platforms / macOS
+  # LaunchDaemon". Each runs for every push to main and every tag, and for
+  # a pull request whose What to test answered windows=true or
+  # macos=true, its own paths or the announcement's among its changes (AP
+  # TestSpeed, D1-A, D2-A); not where it passed for the same code
+  # (win=true, mac=true), nor for the merge of a pull request that found
+  # it not needed (unneeded), as LAN. Skipped, the check counts as passed.
+  # On a pull request and a push to main, a job cancelled before a runner
+  # took it counts as not run (D5-A, D16-A): the record says false for it,
+  # the merge's push runs it again, and the nightly build runs it before
+  # it ships the code; on a tag Retry (retry.yml) runs it again.
+  platforms:
+    name: Platforms
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          check-latest: true
-
-      - uses: ./.github/actions/ui-bundle
-
-      # Discovery's tests as well: Windows binds UDP ports otherwise than
-      # Linux, a wildcard beside an address's own port (CI.md, section 3).
-      - name: Unit tests
-        shell: bash
-        run: |
-          go test ./internal/update/... ./internal/install/... ./cmd/... ./internal/cubelan/... ./internal/safefile/...
-          go test -run 'Update|Discovery|Search|FailedRun|FoundCube|RemovedCubeIsListedAsFound|FollowsItsAddress' ./internal/server/
-
-      # The service against the fake Cube, with the update from the web
-      # UI's request (docs/update-windows.md, section 6): the server
-      # starts the helper itself, which must outlive the service it stops.
-      # The shell functions are shared by the steps below.
-      - name: Install and run the service
-        shell: bash
-        # Without a token GitHub allows 60 API requests an hour per
-        # address, which the shared runners use up; with it the release
-        # files come through the API too, not from github.com's download
-        # pages, which held requests without one on 2026-11-08. It goes
-        # into the settings, so that the server's release check and the
-        # helper it starts have it.
-        env:
-          MASSIMO_GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          cat > ci-lib.sh <<'EOF'
-          health=http://127.0.0.1:18099/healthz
-          api=http://127.0.0.1:18099/api/v1/update
-          bin="C:/Program Files/Massimo/massimo.exe"
-          data=C:/ProgramData/Massimo
-          up() { for _ in $(seq 30); do curl -fsS "$health" && echo && return; sleep 2; done; return 1; }
-          # As the web UI does it: POST, a second POST in the same moment
-          # must be refused, then the helper's states until the last one,
-          # left in $st. Both POSTs go out of one curl, the second on the
-          # first's connection the moment the first is answered: in stage 2
-          # the helper stops the service faster than a second curl process
-          # starts (GUIDELINES/project/CI.md, "Runner Constraints").
-          post_update() {
-            rm -f "$data/update-status.json" post.json second.json
-            local codes code second
-            # One code per line; curl on Windows writes \r\n for the \n.
-            codes="$(curl -sS -o post.json -w '%{http_code}\n' -X POST -H 'Authorization: Bearer ci' "$api" \
-              --next -sS -o second.json -w '%{http_code}\n' -X POST -H 'Authorization: Bearer ci' "$api" | tr -d '\r' || true)"
-            code="${codes%%$'\n'*}"
-            second="${codes#*$'\n'}"
-            cat post.json 2>/dev/null || true; echo
-            if [ "$code" != 202 ]; then
-              echo "::error::POST /api/v1/update answered $code"
-              curl -sS -H 'Authorization: Bearer ci' "$api" || true
-              return 1
-            fi
-            cat second.json 2>/dev/null || true; echo
-            if [ "$second" != 409 ]; then echo "::error::the second POST answered $second, want 409"; return 1; fi
-            st=""
-            for _ in $(seq 90); do
-              st="$(cat "$data/update-status.json" 2>/dev/null || true)"
-              echo "$st" | grep -E '"state": "(done|rolled-back|failed|up-to-date)"' >/dev/null && break
-              sleep 2
-            done
-            echo "$st"
-            echo "--- update.log"; cat "$data/update.log" || true
-            up
-          }
-          EOF
-          . ./ci-lib.sh
-          go build -ldflags "-X main.version=v0.0.0-ci.1 -X main.flavour=alpha" -o massimo.exe ./cmd/massimo
-          ./massimo.exe fakecube -greeting internal/protocol/cube/testdata/cube-fw0113-greeting.txt -listen 127.0.0.1:62999 > fakecube.log 2>&1 &
-          # The fake Cube reports the fixture's serial.
-          printf 'MASSIMO_CUBE_KEQ0000100_ADDRESS=127.0.0.1:62999\nMASSIMO_API_TOKEN=ci\nMASSIMO_GITHUB_TOKEN=%s\n' "$MASSIMO_GITHUB_TOKEN" > ci.env
-
-          ./massimo.exe install -settings ci.env -listen 127.0.0.1:18099
-          sc.exe query massimo
-          sc.exe qc massimo | tee qc.txt
-          grep -q -- '-update-request C:\\ProgramData\\Massimo\\update-request -update-status C:\\ProgramData\\Massimo\\update-status.json' qc.txt
-          up
-          curl -fsS "$health" | grep 'v0.0.0-ci.1' >/dev/null
-
-          # Installing again keeps the address and restarts the service.
-          ./massimo.exe install
-          up
-          curl -fsS -H 'Authorization: Bearer ci' "$api"; echo
-
-      # Stage 1: the newest alpha on GitHub, as on a real PC. It either
-      # installs (the helper outlived the service, the new server came up
-      # on the same port), or rolls back when that release cannot run as a
-      # service.
-      - name: Update from the API against the alpha channel
-        shell: bash
-        run: |
-          set -euo pipefail
-          . ./ci-lib.sh
-          post_update
-          now="$(curl -fsS "$health")"
-          if echo "$st" | grep '"state": "done"' >/dev/null; then
-            echo "$now" | grep -v 'v0.0.0-ci.1' >/dev/null
-            test -f "$bin.prev"
-            # Back by hand, with the binary that is installed.
-            "$bin" update -rollback -restart massimo
-            up
-            curl -fsS "$health" | grep 'v0.0.0-ci.1' >/dev/null
-          else
-            echo "$st" | grep '"state": "rolled-back"' >/dev/null
-            echo "$now" | grep 'v0.0.0-ci.1' >/dev/null
-            test -f "$bin.failed"
-          fi
-          test ! -e "$data/update-request"
-          # The release and the rollback each start a binary of another log
-          # format, which rotates serve.log: the line is in one of the two.
-          grep -qs 'update helper started' "$data/serve.log" "$data/serve.log.1"
-          test "$(tasklist //FI "IMAGENAME eq massimo.exe" //NH | grep -c '^massimo.exe')" -le 2 # the service and the fake Cube
-
-      # The update by hand from an administrator prompt, with the real key
-      # and the real API.
-      - name: Update by hand against the alpha channel
-        shell: bash
-        env:
-          MASSIMO_GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          . ./ci-lib.sh
-          status=0
-          "$bin" update -yes -restart massimo -health "$health" -health-timeout 90s || status=$?
-          up
-          now="$(curl -fsS "$health")"
-          echo "update exit $status, server: $now"
-          if [ "$status" = 0 ]; then
-            echo "$now" | grep -v 'v0.0.0-ci.1' >/dev/null
-          else
-            echo "$now" | grep 'v0.0.0-ci.1' >/dev/null   # rolled back
-            test -f "$bin.failed"
-          fi
-
-      # Stage 2: releases served here and signed with a test key compiled
-      # into the binaries built in this step (MASSIMO_UPDATE_API), so that
-      # both outcomes run every time: v0.0.0-ci.2 comes up, v0.0.0-ci.3
-      # passes the smoke test but cannot be a service and is rolled back
-      # through the API. Nothing built here is published.
-      - name: Update and roll back from the API with a stubbed release
-        shell: bash
-        run: |
-          set -euo pipefail
-          . ./ci-lib.sh
-          mkdir -p ci-tools/sign ci-tools/standin ci-stub/repos/metaworx/massimo
-          cat > ci-tools/sign/main.go <<'EOF'
-          // The CI job's test key: "key <seed> <public.pem>" makes one,
-          // "sign <seed> <file>" prints the file's signature in base64.
-          package main
-
-          import (
-          	"crypto/ed25519"
-          	"crypto/x509"
-          	"encoding/base64"
-          	"encoding/pem"
-          	"fmt"
-          	"os"
-          )
-
-          func main() {
-          	if err := run(os.Args[1:]); err != nil {
-          		fmt.Fprintln(os.Stderr, err)
-          		os.Exit(1)
-          	}
-          }
-
-          func run(a []string) error {
-          	switch {
-          	case len(a) == 3 && a[0] == "key":
-          		pub, priv, err := ed25519.GenerateKey(nil)
-          		if err != nil {
-          			return err
-          		}
-          		der, err := x509.MarshalPKIXPublicKey(pub)
-          		if err != nil {
-          			return err
-          		}
-          		if err := os.WriteFile(a[1], priv.Seed(), 0o600); err != nil {
-          			return err
-          		}
-          		return os.WriteFile(a[2], pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der}), 0o644)
-          	case len(a) == 3 && a[0] == "sign":
-          		seed, err := os.ReadFile(a[1])
-          		if err != nil {
-          			return err
-          		}
-          		msg, err := os.ReadFile(a[2])
-          		if err != nil {
-          			return err
-          		}
-          		fmt.Println(base64.StdEncoding.EncodeToString(ed25519.Sign(ed25519.NewKeyFromSeed(seed), msg)))
-          		return nil
-          	}
-          	return fmt.Errorf("usage: sign key <seed> <public.pem> | sign sign <seed> <file>")
-          }
-          EOF
-          cat > ci-tools/standin/main.go <<'EOF'
-          // A release that passes the smoke test and cannot run as a service.
-          package main
-
-          import (
-          	"fmt"
-          	"os"
-          )
-
-          func main() {
-          	if len(os.Args) > 1 && os.Args[1] == "version" {
-          		fmt.Println("massimo v0.0.0-ci.3 (ci)")
-          		return
-          	}
-          	os.Exit(1)
-          }
-          EOF
-          (cd ci-tools/sign && go mod init citools/sign && go build -o ../sign.exe .)
-          (cd ci-tools/standin && go mod init citools/standin && go build -o standin.exe .)
-          ci-tools/sign.exe key ci-tools/ci-key internal/update/release-key.pem
-
-          # On the channel ci, which the stub's tags name, as release.yml's
-          # do theirs (internal/update, hintedChannel).
-          asset=massimo-windows-amd64.exe
-          go build -ldflags "-X main.version=v0.0.0-ci.1 -X main.flavour=ci" -o ci1.exe ./cmd/massimo
-          mkdir -p ci-stub/dl/v0.0.0-ci.2 ci-stub/dl/v0.0.0-ci.3
-          go build -ldflags "-X main.version=v0.0.0-ci.2 -X main.flavour=ci" -o "ci-stub/dl/v0.0.0-ci.2/$asset" ./cmd/massimo
-          cp ci-tools/standin/standin.exe "ci-stub/dl/v0.0.0-ci.3/$asset"
-          for tag in v0.0.0-ci.2 v0.0.0-ci.3; do
-            d="ci-stub/dl/$tag"
-            go run ./internal/update/mkmanifest -tag "$tag" -commit ci -flavour ci -dir "$d" "$asset" > "$d/massimo-release.json"
-            ci-tools/sign.exe sign ci-tools/ci-key "$d/massimo-release.json" > "$d/massimo-release.json.sig"
-          done
-          # The release list in GitHub's shape, one release at a time.
-          list() {
-            local u="http://127.0.0.1:8123/dl/$1"
-            printf '[{"tag_name":"%s","html_url":"%s","draft":false,"prerelease":true,"assets":[{"name":"%s","browser_download_url":"%s/%s"},{"name":"massimo-release.json","browser_download_url":"%s/massimo-release.json"},{"name":"massimo-release.json.sig","browser_download_url":"%s/massimo-release.json.sig"}]}]\n' \
-              "$1" "$u" "$asset" "$u" "$asset" "$u" "$u" > ci-stub/repos/metaworx/massimo/releases
-          }
-          list v0.0.0-ci.2
-          python -m http.server 8123 --bind 127.0.0.1 --directory ci-stub > stub.log 2>&1 &
-          for _ in $(seq 30); do curl -fsS -o /dev/null http://127.0.0.1:8123/repos/metaworx/massimo/releases && break; sleep 1; done
-
-          # The test-key binary as the service, its settings pointing at the
-          # stub (the server's check and, through it, the helper).
-          printf 'MASSIMO_UPDATE_API=http://127.0.0.1:8123\n' >> "$data/env"
-          ./ci1.exe install
-          up
-          curl -fsS "$health" | grep 'v0.0.0-ci.1' >/dev/null
-          # A failure kept from earlier goes with the next successful update.
-          echo stale > "$bin.failed"
-
-          post_update
-          echo "$st" | grep '"state": "done"' >/dev/null
-          curl -fsS "$health" | grep 'v0.0.0-ci.2' >/dev/null
-          test -f "$bin.prev"
-          test ! -e "$bin.failed"
-
-          list v0.0.0-ci.3
-          start=$(date +%s)
-          post_update
-          echo "rolled back after $(( $(date +%s) - start )) s"
-          echo "$st" | grep '"state": "rolled-back"' >/dev/null
-          curl -fsS "$health" | grep 'v0.0.0-ci.2' >/dev/null
-          cmp "$bin.failed" "ci-stub/dl/v0.0.0-ci.3/$asset"
-          powershell -NoProfile -Command "Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Service Control Manager'} -MaxEvents 20 | Where-Object { \$_.Id -in 7000,7009,7031,7034 } | Format-List TimeCreated,Id,Message" | tee events.txt
-          grep -Eq 'Id +: (7000|7009|7034)' events.txt
-
-      - name: Remove the service
-        shell: bash
-        run: |
-          set -euo pipefail
-          ./massimo.exe install -remove -purge
-          if sc.exe query massimo; then echo "::error::service still there"; exit 1; fi
-          test ! -e "C:/Program Files/Massimo"
-          test ! -e "C:/ProgramData/Massimo" # the settings, the logs, update.log, update-status.json and update-request
-
-      # The announcement beside Windows' own mDNS (the DNS client service
-      # holds UDP 5353): a second serve on every address, with a store of
-      # its own, announces itself without a warning, and massimo discover
-      # finds it by multicast. Windows has no dns-sd of its own, so the
-      # browser is ours; tools/lan-test/README.md for avahi.
-      - name: mDNS beside Windows' mDNS
-        shell: bash
-        run: |
-          set -euo pipefail
-          go build -o mdns.exe ./cmd/massimo
-          : > mdns.env
-          mkdir -p mdns-data
-          ./mdns.exe fakecube -greeting internal/protocol/cube/testdata/cube-fw0113-greeting.txt -listen 127.0.0.1:62998 > mdns-fakecube.log 2>&1 &
-          MASSIMO_CUBE_KEQ0000100_ADDRESS=127.0.0.1:62998 ./mdns.exe -env mdns.env -data mdns-data serve -listen 0.0.0.0:18097 -announce -proxy off -discover-interval 0 > mdns-serve.log 2>&1 &
-          serve=$!
-          for _ in $(seq 30); do grep -q 'msg="announced on the LAN"' mdns-serve.log && break; sleep 1; done
-          cat mdns-serve.log
-          grep -q 'msg="announced on the LAN"' mdns-serve.log
-          if grep -q 'not announced' mdns-serve.log; then echo "::error::serve did not announce itself beside Windows' mDNS"; exit 1; fi
-          if grep -q 'cube proxy listening' mdns-serve.log; then echo "::error::serve's flags after -announce were not read"; exit 1; fi
-          node="$(sed -n 's/.*msg="api listening".* node=\([0-9a-f-]*\).*/\1/p' mdns-serve.log | head -n1)"
-          ./mdns.exe -env mdns.env discover -json -wait 4s > mdns-discover.json
-          cat mdns-discover.json
-          grep -q "\"node\": *\"$node\"" mdns-discover.json
-          kill "$serve"
-
-      - name: Logs
-        if: always()
-        shell: bash
-        run: |
-          cat fakecube.log stub.log || true
-          for f in service.log serve.log update.log update-status.json; do
-            echo "--- $f"; cat "C:/ProgramData/Massimo/$f" 2>/dev/null || true
-          done
-
-      # What the service manager saw, and the service's command line run by
-      # hand for a few seconds, to tell a failing serve from a failing
-      # answer to the manager.
-      - name: Diagnose the service
-        if: failure()
-        shell: pwsh
-        run: |
-          sc.exe queryex massimo
-          sc.exe qc massimo
-          Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Service Control Manager'} -MaxEvents 15 -ErrorAction SilentlyContinue | Format-List TimeCreated, Id, Message
-          $p = Start-Process -FilePath 'C:\Program Files\Massimo\massimo.exe' -ArgumentList '-env','C:\ProgramData\Massimo\env','serve','-listen','127.0.0.1:18098','-log','C:\ProgramData\Massimo\by-hand.log' -RedirectStandardError by-hand.err -PassThru -NoNewWindow
-          Start-Sleep -Seconds 5
-          if (!$p.HasExited) { Stop-Process -Id $p.Id; "still running after 5 s" } else { "exited with $($p.ExitCode)" }
-          Get-Content by-hand.err -ErrorAction SilentlyContinue
-
-  macos:
-    name: macOS LaunchDaemon
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true' }}
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          check-latest: true
-
-      - uses: ./.github/actions/ui-bundle
-
-      - name: Unit tests
-        run: go test ./internal/update/... ./internal/install/... ./cmd/... ./internal/safefile/...
-
-      # install on the template's settings, as a new Mac gets it
-      # (packaging/launchd/template-test.sh): left for its owner with the
-      # message, whose owner line, run as printed from a directory the
-      # service user cannot enter, creates the owner; install again
-      # restarting a loaded job and leaving a booted-out one; the web UI's
-      # way; and a removal that leaves nothing, which the install below
-      # needs.
-      - name: Install on the template's settings
-        run: |
-          go build -o massimo ./cmd/massimo
-          bash packaging/launchd/template-test.sh ./massimo
-
-      # The whole path as on a Mac: install against the fake Cube with a
-      # self-signed certificate (so the health check and the API go over
-      # https://, which the helper must accept on the loopback), the
-      # update from the web UI's request through the root helper, a
-      # rollback, and a removal that leaves nothing behind. Until a
-      # release on the alpha channel knows -tls, the update installs a
-      # server that serves plain HTTP, the helper's https:// check fails
-      # and the job takes its rollback branch (GUIDELINES/project/CI.md).
-      - name: Install, run, update and remove the LaunchDaemons
-        # Without a token GitHub allows 60 API requests an hour per address,
-        # which the shared macOS runners use up (the release check then gets
-        # 403); with it the release files come through the API too, not from
-        # github.com's download pages, which held requests without one on
-        # 2026-11-08.
-        env:
-          MASSIMO_GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          go build -ldflags "-X main.version=v0.0.0-ci.1 -X main.flavour=alpha" -o massimo ./cmd/massimo
-          ./massimo fakecube -greeting internal/protocol/cube/testdata/cube-fw0113-greeting.txt -listen 127.0.0.1:62999 > fakecube.log 2>&1 &
-          # The fake Cube reports the fixture's serial.
-          printf 'MASSIMO_CUBE_KEQ0000100_ADDRESS=127.0.0.1:62999\nMASSIMO_API_TOKEN=ci\nMASSIMO_GITHUB_TOKEN=%s\n' "$MASSIMO_GITHUB_TOKEN" > ci.env
-          health=https://127.0.0.1:18099/healthz
-          up() { for _ in $(seq 30); do curl -fsSk "$health" && return; sleep 2; done; return 1; }
-
-          sudo ./massimo install -settings ci.env -listen 127.0.0.1:18099 -tls self-signed
-          sudo launchctl print system/ch.metaworx.massimo | grep -E 'state|pid' | sed -n 1,3p
-          up
-          curl -fsSk "$health" | grep 'v0.0.0-ci.1' >/dev/null
-          curl -fsSk "$health" | grep -E '"self_signed": ?true' >/dev/null
-          curl -fsSkI "$health" | grep -i 'strict-transport-security: max-age=31536000' >/dev/null
-          test "$(sudo stat -f %Su:%Lp /var/lib/massimo/tls/self-signed.key)" = _massimo:600
-          sudo grep -q 'MASSIMO_TLS=self-signed' /etc/massimo/env
-          sudo grep -q '<string>https://127.0.0.1:18099/healthz</string>' /Library/LaunchDaemons/ch.metaworx.massimo-update.plist
-          sudo -u _massimo ./massimo -data /var/lib/massimo -env /etc/massimo/env tls show | grep 'SHA256:' >/dev/null
-          test "$(sudo stat -f %Su:%Lp /etc/massimo/env)" = _massimo:600
-          if cat /etc/massimo/env 2>/dev/null; then echo "::error::settings readable"; exit 1; fi
-          dscl . -read /Users/_massimo IsHidden UserShell
-
-          # Installing again keeps the address and restarts the service.
-          sudo ./massimo install
-          up
-
-          # The helper reads no settings: the token goes into its own
-          # environment (launchctl setenv is barred by SIP).
-          helper=/Library/LaunchDaemons/ch.metaworx.massimo-update.plist
-          sudo /usr/libexec/PlistBuddy -c "Add :EnvironmentVariables:MASSIMO_GITHUB_TOKEN string $MASSIMO_GITHUB_TOKEN" "$helper"
-          sudo launchctl bootout system/ch.metaworx.massimo-update
-          for _ in $(seq 50); do sudo launchctl print system/ch.metaworx.massimo-update >/dev/null 2>&1 || break; sleep 0.2; done
-          sudo launchctl bootstrap system "$helper"
-
-          # As the web UI does it: the server writes the request, launchd
-          # starts the helper, which installs the newest alpha or rolls
-          # back.
-          code="$(curl -sSk -o post.json -w '%{http_code}' -X POST -H 'Authorization: Bearer ci' https://127.0.0.1:18099/api/v1/update)"
-          cat post.json
-          if [ "$code" != 202 ]; then
-            echo "::error::POST /api/v1/update answered $code"
-            curl -sSk -H 'Authorization: Bearer ci' https://127.0.0.1:18099/api/v1/update
-            exit 1
-          fi
-          for _ in $(seq 90); do
-            st="$(cat /var/lib/massimo-update/status.json 2>/dev/null || true)"
-            echo "$st" | grep -E '"state": "(done|rolled-back|failed)"' >/dev/null && break
-            sleep 2
-          done
-          echo "$st"
-          up
-          now="$(curl -fsSk "$health")"
-          if echo "$st" | grep '"state": "done"' >/dev/null; then
-            echo "$now" | grep -v 'v0.0.0-ci.1' >/dev/null
-            # Back by hand, with the binary that knows launchd.
-            sudo ./massimo update -rollback -binary /usr/local/bin/massimo -restart ch.metaworx.massimo
-            sleep 3; up
-            curl -fsSk "$health" | grep 'v0.0.0-ci.1' >/dev/null
-          else
-            echo "$st" | grep '"state": "rolled-back"' >/dev/null
-            echo "$now" | grep 'v0.0.0-ci.1' >/dev/null
-            test -f /usr/local/bin/massimo.failed
-          fi
-
-          sudo ./massimo install -remove -purge
-          if sudo launchctl print system/ch.metaworx.massimo >/dev/null 2>&1; then echo "::error::still loaded"; exit 1; fi
-          for p in /usr/local/bin/massimo /etc/massimo /var/lib/massimo /var/log/massimo \
-                   /Library/LaunchDaemons/ch.metaworx.massimo.plist /Library/LaunchDaemons/ch.metaworx.massimo-update.plist; do
-            if [ -e "$p" ]; then echo "::error::$p left"; exit 1; fi
-          done
-          if dscl . -read /Users/_massimo >/dev/null 2>&1; then echo "::error::user left"; exit 1; fi
-
-      # The Homebrew formula (packaging/README.md, "Homebrew"), rendered
-      # for a tarball of this checkout into a tap made on the runner
-      # (Homebrew loads formulae from taps only, and trusts a tap on
-      # request), built from source as a user installs it, tested, and
-      # the marker checked: brew owns that binary, and update and install
-      # say so. Then a newer version of the formula in the tap, and the
-      # update helper's command as the server starts it, but without
-      # -restart and -health (brew services does not run here): brew
-      # builds and links the newer version. The tarball is served from a
-      # local port, since a formula wants a URL.
-      # Developer mode, which brew test turns on anyway, from the start:
-      # a deprecation in the formula, or a conflicts_with brew cannot
-      # resolve, then fails the install rather than warning in the log.
-      - name: Homebrew formula from this checkout
-        env:
-          HOMEBREW_NO_AUTO_UPDATE: 1
-          HOMEBREW_NO_INSTALL_CLEANUP: 1
-          HOMEBREW_NO_ENV_HINTS: 1
-          HOMEBREW_DEVELOPER: 1
-        run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/src"
-          git archive --format=tar.gz --prefix=massimo/ -o "$RUNNER_TEMP/src/massimo.tar.gz" HEAD
-          sha="$(shasum -a 256 "$RUNNER_TEMP/src/massimo.tar.gz" | cut -d' ' -f1)"
-          python3 -m http.server 8321 --bind 127.0.0.1 --directory "$RUNNER_TEMP/src" > "$RUNNER_TEMP/http.log" 2>&1 &
-          for _ in $(seq 20); do curl -fsS -o /dev/null http://127.0.0.1:8321/massimo.tar.gz 2>/dev/null && break; sleep 1; done
-          tap="$(brew --repository)/Library/Taps/local/homebrew-massimo"
-          mkdir -p "$tap/Formula"
-          packaging/homebrew/render.sh --tag v0.0.0-ci.1 --url http://127.0.0.1:8321/massimo.tar.gz --sha256 "$sha" --out "$tap/Formula/massimo-ci.rb"
-          brew trust local/massimo || brew trust --tap local/massimo
-          brew install --build-from-source local/massimo/massimo-ci
-          brew test local/massimo/massimo-ci
-          prefix="$(brew --prefix massimo-ci)"
-          test "$(head -n 1 "$prefix/share/massimo/packaged")" = brew
-          test -f "$(brew --prefix)/etc/massimo/env"
-          if "$prefix/bin/massimo" update 2>err.txt; then echo "::error::update did not refuse under brew"; exit 1; fi
-          grep -q 'managed by brew' err.txt
-          if "$prefix/bin/massimo" install -dry-run 2>err.txt; then echo "::error::install did not refuse under brew"; exit 1; fi
-          grep -q 'Homebrew' err.txt
-          packaging/homebrew/render.sh --tag v0.0.0-ci.2 --url http://127.0.0.1:8321/massimo.tar.gz --sha256 "$sha" --out "$tap/Formula/massimo-ci.rb"
-          echo alpha > "$RUNNER_TEMP/update-request"
-          "$prefix/bin/massimo" update -request "$RUNNER_TEMP/update-request" -status "$RUNNER_TEMP/update-status.json"
-          cat "$RUNNER_TEMP/update-status.json"
-          test "$(basename "$(readlink "$(brew --prefix)/opt/massimo-ci")")" = 0.0.0-ci.2
-          grep -q '"state": "done"' "$RUNNER_TEMP/update-status.json"
-          "$(brew --prefix)/opt/massimo-ci/bin/massimo" version | grep 'v0.0.0-ci.2' >/dev/null
-          brew uninstall --force massimo-ci
-          rm -rf "$tap"
-
-      # The announcement beside Apple's mDNSResponder, which holds UDP 5353
-      # on every Mac: a second serve, on every address and with a store of
-      # its own, runs as a launchd daemon in the system domain, as massimo
-      # install runs the service, and dns-sd must find and resolve it
-      # through mDNSResponder (-Z lists the PTR, SRV and TXT records);
-      # tools/lan-test/README.md for avahi. A daemon, because macOS's local
-      # network privacy refuses the runner's own processes every multicast
-      # send ("no route to host"), and spares launchd daemons; for the same
-      # reason massimo discover, a runner's process, is not asked here.
-      # dns-sd only talks to mDNSResponder, and is read through a
-      # pseudo-terminal of Python's, so that what it printed is kept when it
-      # is stopped. -announce is a switch: written alone, as "-announce on"
-      # would end the flags at "on".
-      - name: mDNS beside mDNSResponder
-        run: |
-          set -uo pipefail
-          go build -o massimo-mdns ./cmd/massimo || exit 1
-          d="$(mktemp -d)"
-          ./massimo-mdns fakecube -greeting internal/protocol/cube/testdata/cube-fw0113-greeting.txt -listen 127.0.0.1:62998 > mdns-fakecube.log 2>&1 &
-          label=ch.metaworx.massimo.mdns-ci
-          plist="/Library/LaunchDaemons/$label.plist"
-          log="$PWD/mdns-serve.log"
-          cat > "$RUNNER_TEMP/$label.plist" <<EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0"><dict>
-            <key>Label</key><string>$label</string>
-            <key>ProgramArguments</key><array>
-              <string>$PWD/massimo-mdns</string><string>-data</string><string>$d</string><string>serve</string>
-              <string>-listen</string><string>0.0.0.0:18097</string><string>-announce</string>
-              <string>-proxy</string><string>off</string><string>-discover-interval</string><string>0</string>
-              <string>-log-level</string><string>debug</string>
-            </array>
-            <key>EnvironmentVariables</key><dict>
-              <key>MASSIMO_ENV_FILE</key><string>/dev/null</string>
-              <key>MASSIMO_CUBE_KEQ0000100_ADDRESS</key><string>127.0.0.1:62998</string>
-            </dict>
-            <key>StandardOutPath</key><string>$log</string>
-            <key>StandardErrorPath</key><string>$log</string>
-            <key>RunAtLoad</key><true/>
-          </dict></plist>
-          EOF
-          sudo install -o root -g wheel -m 644 "$RUNNER_TEMP/$label.plist" "$plist"
-          sudo launchctl bootstrap system "$plist"
-          trap 'sudo launchctl bootout "system/$label" 2>/dev/null || true; sudo rm -f "$plist"' EXIT
-          for _ in $(seq 30); do grep -q 'msg="announced on the LAN"' "$log" 2>/dev/null && break; sleep 1; done
-          sleep 3
-          ok=0
-          if ! grep -q 'msg="announced on the LAN"' "$log" || grep -q 'not announced' "$log"; then echo "::error::the daemon did not announce itself beside mDNSResponder"; ok=1; fi
-          if grep -q 'mdns: not sent' "$log"; then echo "::error::the daemon's announcements were not sent: local network privacy refuses a launchd daemon too"; ok=1; fi
-          if grep -q 'cube proxy listening' "$log"; then echo "::error::serve's flags after -announce were not read"; ok=1; fi
-          node="$(sed -n 's/.*msg="api listening".* node=\([0-9a-f-]*\).*/\1/p' "$log" | head -n1)"
-          # dns-sd for six seconds in a pseudo-terminal, what it printed on stdout
-          pty_run() {
-            python3 -I - "$@" <<'PY'
-          import os, pty, select, signal, sys, time
-          pid, fd = pty.fork()
-          if pid == 0:
-              os.execvp(sys.argv[1], sys.argv[1:])
-          out, end = b"", time.time() + 6
-          while time.time() < end:
-              if select.select([fd], [], [], 0.2)[0]:
-                  try:
-                      data = os.read(fd, 4096)
-                  except OSError:
-                      break
-                  if not data:
-                      break
-                  out += data
-          os.kill(pid, signal.SIGTERM)
-          sys.stdout.write(out.decode(errors="replace"))
-          PY
-          }
-          echo "--- dns-sd: the service types mDNSResponder sees"
-          pty_run dns-sd -B _services._dns-sd._udp local. | tee mdns-types.txt
-          echo "--- dns-sd: _massimo._tcp"
-          pty_run dns-sd -Z _massimo._tcp local. | tee mdns-zone.txt
-          echo "--- the daemon's log"; grep -vE 'device state|schema migrated|greeting: ' "$log"
-          if ! grep -q 'SRV.* 18097 ' mdns-zone.txt || ! grep -q "node=$node" mdns-zone.txt; then echo "::error::dns-sd does not resolve the server through mDNSResponder"; ok=1; fi
-          exit "$ok"
-
-      - name: Logs
-        if: always()
-        run: |
-          cat fakecube.log || true
-          for f in /var/log/massimo/serve.log /var/log/massimo-update.log; do
-            echo "--- $f"; sudo cat "$f" 2>/dev/null || true
-          done
-          sudo launchctl print system/ch.metaworx.massimo 2>/dev/null || true
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && (needs.changes.outputs.windows != 'false' && needs.changes.outputs.windows_done != 'true' || needs.changes.outputs.macos != 'false' && needs.changes.outputs.macos_done != 'true') }}
+    uses: ./.github/workflows/platforms.yml
+    with:
+      windows: ${{ needs.changes.outputs.windows != 'false' && needs.changes.outputs.windows_done != 'true' }}
+      macos: ${{ needs.changes.outputs.macos != 'false' && needs.changes.outputs.macos_done != 'true' }}
 
   # The guidelines' own checks (GUIDELINES/project/CI.md, "Guideline
   # Gates"): the generated documents are current, the declared languages
@@ -1335,6 +977,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -1347,10 +990,14 @@ jobs:
       # The check for serials, MACs and radio addresses (tools/identifiers)
       # reads the project's documents and changelog too, which a change to
       # documents alone does not run Vet and test for (What to test).
+      # setup-go's cache off: the job builds one small package and ends
+      # early, and so saved setup-go's cache for every job, 13 MB of it
+      # (AP TestSpeed, D10-A).
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
+          cache: false
       - name: Identifiers
         run: MASSIMO_ENV_FILE=/dev/null go test ./tools/identifiers
       # HEAD..HEAD, an empty range, reads no commit message: a push to main,
@@ -1381,6 +1028,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && (needs.changes.outputs.site == 'true' || needs.changes.outputs.code != 'false' && needs.changes.outputs.tested != 'true') }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -1419,60 +1067,91 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: packaging/code-result.sh
 
-  # One job that stands for all of the above: it fails unless none of
-  # them failed or was cancelled (a pull request skips some). The release
-  # waits for it, and the nightly build looks for it among a commit's runs
-  # (release.yml).
   # The release's build (build.yml), beside the test jobs, so that its
   # files are ready when they have passed: for a push of main or of a
   # tag, unless What to test answered suite=false. It holds no secret,
   # and nothing is signed until All tests passed; a build whose tests fail
-  # is thrown away with the run. actions: What to release reads runs for
-  # the nightly build; id-token and attestations: the build's provenance.
+  # is thrown away with the run. id-token and attestations: the build's
+  # provenance.
   build:
     name: Build
     needs: changes
     if: ${{ !cancelled() && github.event_name == 'push' && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' }}
     permissions:
       contents: read
-      actions: read
       id-token: write
       attestations: write
     uses: ./.github/workflows/build.yml
 
-  # One check for the whole suite, which the release waits for. It counts
+  # One check for the whole suite, which the release waits for, and which
+  # the nightly build looks for among a commit's runs
+  # (packaging/nightly-pick.sh). It fails unless none of the jobs above
+  # failed or was cancelled (a pull request skips some). It counts
   # What to test with the others, so that a gate that failed fails it,
   # although every job ran; for a release commit pushed to main,
   # which What to test leaves untested, it is skipped, and so is Release.
   # Once it has passed, it writes the Tested status (GUIDELINES/project/CI.md,
   # section 2) on the commit the run tested, a pull request's head or the
   # commit pushed to main: the fingerprint of the code that ran and whether
-  # the UI tests, LAN, Fuzz and the Android app passed for it, in this run
-  # or the one it carries on; LAN and the Android app are unneeded where
-  # What to test answered lan=false or app=false and they did not pass.
-  # What to test reads it to skip what passed. Not for a run
+  # the UI tests, LAN, Fuzz, the Android app, macOS and Windows passed for
+  # it, in this run or the one it carries on; LAN, the Android app, macOS
+  # and Windows are unneeded where What to test answered false for them
+  # and they did not pass (packaging/tested-record.sh). A macOS or Windows
+  # job that no runner took on a pull request or a push to main counts as
+  # not run (AP TestSpeed, D5-A, D16-A): it fails nothing, the record says
+  # false for it, the merge's push runs it, and the nightly build runs it
+  # before it ships the code; on a tag it fails, and Retry (retry.yml)
+  # runs it again. What to test reads the record to skip what passed. Not for a run
   # that tested documents alone, nor for a tag; a fork's pull request has
   # a read-only token, and the step's failure fails nothing.
   tests:
     name: All tests passed
-    needs: [ changes, test, actionlint, ui-types, race, armv6, fuzz, screenshots, lan, android, govulncheck, deb, windows, macos, guidelines, site, code-result ]
+    needs: [ changes, test, actionlint, ui-types, race, armv6, fuzz, screenshots, lan, android, govulncheck, deb, platforms, guidelines, site, code-result ]
     if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # contents: the report's script; actions: the run's jobs;
+    # pull-requests: the report and the re-run's comment; statuses: the
+    # Tested status.
     permissions:
+      contents: read
       actions: read
       pull-requests: write
       statuses: write
     steps:
-      # Which job did not pass, and how (GUIDELINES/project/CI.md, section
-      # 2): every job of the run in the summary, an error annotation for
-      # each that did not pass, and on a pull request one comment, written
-      # at its first failure and edited by every run after it. The names
-      # come from the run's jobs, which also tell a job no runner took; not
-      # this job's, nor those of the workflows it calls, which are not
-      # among its needs. The verdict is the next step's, from needs; this
-      # one fails nothing.
-      - name: Report each job's result
+      # The report's and the record's scripts alone: this job builds
+      # nothing. A checkout that fails leaves the report and the record
+      # undone, and the verdict to the step after.
+      # Each step that calls GitHub has a time limit of its own, within
+      # the job's: continue-on-error lets the job go on after a step that
+      # failed, and the job's limit would cut the verdict off with a hung one.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         continue-on-error: true
+        timeout-minutes: 2
+        with:
+          sparse-checkout: |
+            packaging/ci-report.sh
+            packaging/tested-record.sh
+          sparse-checkout-cone-mode: false
+
+      # Which job did not pass, and how, and which passed only on a re-run
+      # (packaging/ci-report.sh; GUIDELINES/project/CI.md, section 2): every
+      # job of the run in the summary, an error annotation for each that did
+      # not pass and a warning for each that passed only on a re-run, which
+      # counts (AP TestInfrastructure, D10-A); on a pull request the report,
+      # one comment written at its first failure and edited by every run
+      # after it, and a comment of its own where this attempt's re-run made
+      # a job pass, which notifies the author. The names come from the run's
+      # jobs, every attempt's from the second on; not this job's, nor those
+      # of the workflows it calls, which are not among its needs (CALLED;
+      # Platforms' are). On a pull request and a push to main it names, as
+      # its output unrun, the callers' ids of the jobs of UNRUN_JOBS that no
+      # runner took (AP TestSpeed, D5-A, D16-A). The
+      # verdict is the next step's, from needs; this one fails nothing.
+      - name: Report each job's result
+        id: report
+        continue-on-error: true
+        timeout-minutes: 3
         env:
           GH_TOKEN: ${{ github.token }}
           NEEDS: ${{ toJSON(needs) }}
@@ -1480,82 +1159,43 @@ jobs:
           SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           SELF: All tests passed
           CALLED: '^(Build|Release|Deploy site)( / |$)'
-        run: |
-          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          verdict=$(jq -r 'if all(.[]; .result == "success" or .result == "skipped") then "passed" else "failed" end' <<<"$NEEDS")
-          jobs=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?filter=latest&per_page=100" --jq '.jobs[]' |
-            jq -s --arg self "$SELF" --arg called "$CALLED" '
-              map(select(.name != $self and (.name | test($called) | not)) | {name, result: (
-                if .status != "completed" then .status | gsub("_"; " ")
-                elif .conclusion == "cancelled" and (.runner_name // "") == "" and (.steps | length) == 0
-                  then "cancelled before a runner took it"
-                elif .conclusion == "success" then "passed"
-                elif .conclusion == "failure" then "failed"
-                else .conclusion | gsub("_"; " ") end)})') || jobs='[]'
-          if [ "$jobs" = '[]' ] || { [ "$verdict" = failed ] && jq -e 'all(.[]; .result == "passed" or .result == "skipped")' <<<"$jobs" >/dev/null; }; then
-            # The API told nothing, or not what failed: the needs' ids.
-            jobs=$(jq 'to_entries | map({name: .key, result: (.value.result | if . == "success" then "passed" elif . == "failure" then "failed" else . end)})' <<<"$NEEDS")
-          fi
-          jobs=$(jq 'sort_by((.result == "passed" or .result == "skipped"), (.name | ascii_downcase))' <<<"$jobs")
-          bad=$(jq '[.[] | select(.result != "passed" and .result != "skipped")]' <<<"$jobs")
-          n=$(jq length <<<"$bad")
-          if [ "$verdict" = passed ]; then
-            head="Every test job passed or was skipped"
-          else
-            head="$n test job(s) did not pass"
-          fi
-          {
-            echo "### ${head}"
-            echo
-            echo "| Job | Result |"
-            echo "|-----|--------|"
-            jq -r '.[] | "| \(.name) | \(.result) |"' <<<"$jobs"
-          } >>"$GITHUB_STEP_SUMMARY"
-          jq -r '.[] | "::error::\(.name): \(.result)"' <<<"$bad"
-          [ -n "$PR" ] || exit 0
-          marker='<!-- ci-report -->'
-          {
-            echo "$marker"
-            echo "**${head}** on ${SHA:0:7}, [run ${GITHUB_RUN_ID} attempt ${GITHUB_RUN_ATTEMPT}](${run_url})."
-            if [ "$n" -gt 0 ]; then
-              echo
-              echo "| Job | Result |"
-              echo "|-----|--------|"
-              jq -r '.[] | "| \(.name) | \(.result) |"' <<<"$bad"
-            fi
-          } >comment.md
-          id=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" \
-            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- ci-report -->"))) | .id' | tail -n 1) || id=''
-          if [ -n "$id" ]; then
-            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${id}" -F body=@comment.md >/dev/null ||
-              echo "::warning::the pull request's comment was not updated (a read-only token?)"
-          elif [ "$verdict" = failed ]; then
-            gh api -X POST "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" -F body=@comment.md >/dev/null ||
-              echo "::warning::no comment on the pull request (a read-only token?)"
-          fi
+        run: packaging/ci-report.sh
 
+      # Every job passed or was skipped, but for a macOS or Windows job no
+      # runner took on a pull request or a push to main, which counts as
+      # not run (D5-A, D16-A): the API gives such a job cancelled with no
+      # runner and no step, and its caller, Platforms, is then abandoned,
+      # cancelled or failed among the needs (a called workflow's result is
+      # that of its jobs together), which the report's output unrun lets
+      # through where every job of the call passed, was skipped or was
+      # not taken. A job cancelled once it had a runner fails, and so does
+      # every such caller where the report did not run or could not tell,
+      # and every one on a tag.
       - name: Every test job passed or was skipped
         env:
           RESULTS: ${{ join(needs.*.result, ' ') }}
+          NEEDS: ${{ toJSON(needs) }}
+          UNRUN: ${{ (github.event_name == 'pull_request' || github.ref == 'refs/heads/main') && steps.report.outputs.unrun || '' }}
         run: |
           echo "results: ${RESULTS}"
-          for r in $RESULTS; do
-            case "$r" in success|skipped) ;; *) exit 1 ;; esac
-          done
+          [ -z "$UNRUN" ] || echo "not run, as no runner took them: ${UNRUN}"
+          jq -e --arg unrun "$UNRUN" '($unrun | split(" ")) as $unrun
+            | all(to_entries[]; .value.result == "success" or .value.result == "skipped"
+              or ((.value.result | IN("cancelled", "abandoned", "failure")) and (.key | IN($unrun[]))))' <<<"$NEEDS" >/dev/null
 
+      # The record's words from the needs, What to test's answers and
+      # Platforms' outputs (packaging/tested-record.sh).
       - name: Write the Tested status
         if: needs.changes.outputs.fp != '' && (github.event_name == 'pull_request' || github.ref == 'refs/heads/main')
         continue-on-error: true
+        timeout-minutes: 2
         env:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           FP: ${{ needs.changes.outputs.fp }}
-          UI: ${{ needs.changes.outputs.ui_done == 'true' || needs.screenshots.result == 'success' }}
-          LAN: ${{ needs.changes.outputs.lan_done == 'true' || needs.lan.result == 'success' || needs.changes.outputs.lan == 'false' && 'unneeded' }}
-          FUZZ: ${{ needs.changes.outputs.fuzz_done == 'true' || needs.fuzz.result == 'success' }}
-          APP: ${{ needs.changes.outputs.app_done == 'true' || needs.android.result == 'success' || needs.changes.outputs.app == 'false' && 'unneeded' }}
+          NEEDS: ${{ toJSON(needs) }}
         run: |
-          desc="${FP} ui=${UI} lan=${LAN} fuzz=${FUZZ} app=${APP}"
+          desc="$(packaging/tested-record.sh)"
           gh api -X POST "repos/${GITHUB_REPOSITORY}/statuses/${SHA}" \
             -f state=success -f context=Tested -f description="$desc" \
             -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >/dev/null

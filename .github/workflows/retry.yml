@@ -1,0 +1,75 @@
+name: Retry
+
+# A macOS or Windows job that no runner took, run again (AP TestSpeed,
+# D16-A, D15-B; GUIDELINES/project/CI.md, section 2): in a tag's run of
+# ci.yml, whose release needs both jobs, and in a nightly run, whose
+# build waits for them, once the run has ended, at most twice, about 20
+# minutes after the attempt that missed a runner; where no runner came by
+# then, the tag's release fails, or the night is skipped
+# (packaging/ci-retry.sh). A run cannot re-run itself while it runs, so
+# this workflow follows the run's end (workflow_run), from main's copy of
+# this file and the script, whatever the run checked out. A pull request
+# and a push to main count such a job as not run instead (D5-A, D16-A),
+# and are left alone.
+#
+# It acts on the run's first attempt alone, and makes both re-runs from
+# that one job, whatever GitHub does with the attempts it starts: one job
+# per run, two re-runs at most. It reads the run's jobs and asks for the
+# re-run with actions: write, its only permission beside reading the
+# script; it holds no secret, checks out no code of the run, and passes
+# the event's values to the script through env alone. As a pull request
+# can add a workflow of any name, or change one, the condition takes a run
+# of this repository whose head is this repository's too, by the
+# workflow's path and its event: ci.yml's push of a tag, nightly.yml's
+# schedule or start by hand on main; the script reads the same from the
+# run before each re-run, checks that the tag is a version tag at the
+# run's commit and no branch's name, and refuses any other run.
+on:
+  workflow_run:
+    workflows: [ CI, Nightly ]
+    types: [ completed ]
+
+permissions: {}
+
+jobs:
+  retry:
+    name: Run again a job no runner took
+    if: >-
+      ${{ github.event.workflow_run.run_attempt == 1 && github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.repository.full_name == github.repository &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      (github.event.workflow_run.path == '.github/workflows/nightly.yml' && github.event.workflow_run.head_branch == 'main' &&
+      (github.event.workflow_run.event == 'schedule' || github.event.workflow_run.event == 'workflow_dispatch') ||
+      github.event.workflow_run.path == '.github/workflows/ci.yml' && github.event.workflow_run.event == 'push' &&
+      startsWith(github.event.workflow_run.head_branch, 'v')) }}
+    runs-on: ubuntu-latest
+    # Two waits of 20 minutes and two attempts of at most an hour each
+    # (RETRY_DEADLINE: each attempt's wait for a runner, a quarter of an
+    # hour before GitHub gives up, and the jobs' own runs), 160 minutes, so
+    # that the script's own error comes before this limit.
+    timeout-minutes: 180
+    concurrency:
+      group: retry-${{ github.event.workflow_run.id }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: packaging/ci-retry.sh
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      # The names are the API's: the caller's job Platforms in ci.yml and
+      # nightly.yml, then platforms.yml's job (ci.yml's UNRUN_JOBS). The
+      # script takes the verdict job, which fails for them, from the run's
+      # workflow: ci.yml's All tests passed, nightly.yml's Platforms passed.
+      - name: Run the jobs no runner took again
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          RETRY_JOBS: '["Platforms / macOS LaunchDaemon", "Platforms / Windows service"]'
+        run: packaging/ci-retry.sh

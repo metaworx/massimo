@@ -90,8 +90,8 @@ export function Dropdown({ id, cls, summaryId, summaryCls, label, title, summary
  * icon (an element such as a sign; with blank and no icon an empty place
  * of an icon's width, so that the labels line up), its label with icons
  * after it on its line where given, and under it in grey a second line
- * wherever sub is given, empty too (one that fills once loaded), of the
- * classes menu-item-sub and subCls; cls is the button's class, value its
+ * wherever sub is given, a text or elements, empty too (one that fills
+ * once loaded), of the classes menu-item-sub and subCls; cls is the button's class, value its
  * data-value, current marks it aria-current, busy makes it turn while the
  * request it sent runs (busyProps); keepOpen leaves its menu open after
  * a click on it (data-keep-open, which dropdown of components.js reads),
@@ -102,7 +102,7 @@ export function MenuItem({ icon, blank, label, icons, sub, subCls, cls, value, c
   blank?: boolean;
   label: string;
   icons?: ComponentChildren;
-  sub?: string;
+  sub?: ComponentChildren;
   subCls?: string;
   cls?: string;
   value?: string;

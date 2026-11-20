@@ -193,14 +193,21 @@ def test_save_is_off_until_a_change_and_turns(page, case):
 
 
 def test_cube_choice_menu(page, case):
-    """The Cube choice is a menu of the page: closed the chosen Cube's
-    network sign and name, its tooltip the serial, address and link; open
-    a sign, the name and under it the serial and address per Cube, the chosen
+    """The Cube choice is a menu of the page: closed the cube in the
+    link's colour and the chosen Cube's name, no sign, its tooltip the
+    serial, address and link, its name for a screen reader the link too;
+    open the cube, the name, the sign after it and under it the serial and
+    address per Cube, the chosen
     one marked and focused, the arrow keys moving between the entries;
     choosing the Cube shown closes it and keeps it."""
     summary = page.locator("#cube-choice")
-    assert summary.locator(".conn-sign.tone-ok").count() == 1, "the chosen Cube connected, a green network sign"
-    assert summary.locator(".conn-sign").get_attribute("aria-label"), "the sign named for a screen reader"
+    assert summary.locator(".picker-icon .cube-icon.tone-ok").count() == 1, "the chosen Cube connected: the cube before the name, green"
+    assert summary.locator(".conn-sign").count() == 0, "no network sign in the closed choice"
+    link = page.evaluate("linkWord(state.cubes.find((c) => c.serial === 'KEQ0000100'))")
+    assert link in (summary.get_attribute("aria-label") or ""), "the link named for a screen reader"
+    green = page.evaluate("getComputedStyle(document.querySelector('#cube-choice .cube-icon')).color")
+    assert green == page.evaluate("(() => { const p = document.createElement('i'); p.style.color = 'var(--ok)'; document.body.appendChild(p);"
+                                  " const c = getComputedStyle(p).color; p.remove(); return c; })()"), f"in the link's colour: {green}"
     title = summary.get_attribute("title") or ""
     assert "KEQ0000100" in title and "127.0.0.1" in title, f"the tooltip has the serial and the address ({title!r})"
     summary.click()
@@ -212,9 +219,8 @@ def test_cube_choice_menu(page, case):
     page.keyboard.press("ArrowDown")
     assert page.evaluate("document.activeElement.closest('#cube-menu') !== null && document.activeElement.tagName === 'BUTTON'"), \
         "ArrowDown moves within the list"
-    if case.width >= 600:
-        widths = page.evaluate("[document.querySelector('#cube-menu .menu-items').offsetWidth, document.querySelector('#cube-choice').offsetWidth]")
-        assert widths[0] >= widths[1], f"the list at least as wide as the closed choice ({widths})"
+    widths = page.evaluate("[document.querySelector('#cube-menu .menu-items').offsetWidth, document.querySelector('#cube-choice').offsetWidth]")
+    assert widths[0] >= widths[1], f"the list at least as wide as the closed choice ({widths})"
     item.click()
     assert page.locator("#cube-menu").get_attribute("open") is None, "a choice closes the menu"
     assert page.evaluate("state.serial") == "KEQ0000100", "the Cube stays chosen"
@@ -232,7 +238,10 @@ def test_cube_facts(page, case, reads):
     host, port = cube["address"].rsplit(":", 1)
     panel = page.locator(PANEL)
     head = panel.locator(":scope > summary")
-    assert head.locator(".mono").inner_text() == "KEQ0000100 · " + host, "the serial and the host, without the port"
+    # the head's own serial: the pill's list beside it has the serials of
+    # the devices with a problem, the window contact's once its window has
+    # been open five minutes into the run (docs/ui-testing.md, section 9)
+    assert head.locator(".cube-head-who > .mono").inner_text() == "KEQ0000100 · " + host, "the serial and the host, without the port"
     stats = head.locator(".cube-head-stats").inner_text()
     assert stats.startswith(DUTY[case.lang] + " ") and stats.count(" · ") == 2, f"duty cycle, free slots and pending in the head ({stats!r})"
     head.click()
@@ -505,15 +514,16 @@ def test_cube_reboot(page, case, reads):
 
 
 def test_cube_head_pill_top_right(page, case, reads):
-    """A Cube's head with a long name: its sign, name, serial and radio
+    """A Cube's head with a long name: the cube, its name, serial and radio
     budget wrap at the left, its pill stays top-right on the first line,
-    the green check where nothing is wrong, and the source badge takes a
-    line of its own under them."""
+    led by the green sign where nothing is wrong, and the source badge
+    takes a line of its own under them."""
     reads.cube("KEQ0000100", name="A Cube with a name long enough to wrap its head on a phone", problems=[])
     try:
         show_view(page, "system")
         page.evaluate("loadCubes()")
-        assert wait_until(page, "!!document.querySelector(\"%s > summary .cube-pill .ok-pill\")" % PANEL, 5), "the green check"
+        assert wait_until(page, "!!document.querySelector(\"%s > summary .cube-pill .problems-sum .conn-sign.tone-ok\")" % PANEL, 5), \
+            "the green sign leads the pill"
         b = page.evaluate("""(sel) => {
           const s = document.querySelector(sel + " > summary");
           const r = (q) => s.querySelector(q).getBoundingClientRect().toJSON();
@@ -530,10 +540,12 @@ def test_cube_head_pill_top_right(page, case, reads):
 
 
 def test_cube_panel_pill(page, case, reads):
-    """A closed Cube's head: its network sign before the name, one pill
-    with every problem, the neutral source badge, no "connected" badge; a
-    click on the pill opens its list and leaves the panel closed; the open
-    panel shows the Cube's own badges as its top line."""
+    """A closed Cube's head: the cube before the name, one pill led by its
+    network sign, in the green check's place where nothing else is wrong,
+    its list the link in words first, with every problem; the neutral
+    source badge, no "connected" badge; a click on the pill opens its list
+    and leaves the panel closed; the open panel shows the Cube's own badges
+    as its top line (AP GlobalMenu, D190-A, D196-A, D197-A)."""
     def clean(cubes):
         # nothing wrong: the fake's window, open since the server started,
         # counts as a problem once it has been open five minutes
@@ -544,8 +556,13 @@ def test_cube_panel_pill(page, case, reads):
     head = page.locator(PANEL).locator(":scope > summary")
     reads.change(CUBES, clean)
     page.evaluate("loadCubes()")
-    assert wait_until(page, "!document.querySelector(\"%s > summary .cube-pill .problems\")" % PANEL, 5), "nothing wrong: no problem pill"
-    assert head.locator(".cube-pill .ok-pill").count() == 1, "the green check in its place"
+    sum_sel = ".cube-pill .problems-sum"
+    assert wait_until(page, "(() => { const s = document.querySelector(\"%s > summary %s\");"
+                      " return !!s && s.querySelectorAll('svg').length === 1 && !!s.querySelector('.conn-sign.tone-ok'); })()" % (PANEL, sum_sel), 5), \
+        "nothing wrong: the pill the green sign alone, no check"
+    assert head.locator(".cube-pill .ok-check").count() == 0, "no check beside the sign"
+    assert head.locator(".cube-pill .problems-list > .cube-link .problem-name").text_content() == page.evaluate(
+        "linkWord(state.cubes.find((c) => c.serial === 'KEQ0000100'))"), "the list's first row the link in words"
     assert head.locator(".panel-badges .flag").count() == 1, "connected: the source badge alone, no connected badge"
     reads.clear(CUBES)
     reads.cube("KEQ0000100", connected=False, link={"state": "stale", "since": "2026-11-13T21:41:24+01:00"},
@@ -553,11 +570,12 @@ def test_cube_panel_pill(page, case, reads):
                           "serial": "MEQ0000101", "reported": True, "state": {"error": False, "battery_low": True, "link_error": False}}])
     try:
         page.evaluate("loadCubes()")
-        assert wait_until(page, "!!document.querySelector(\"%s > summary .cube-pill .problems\")" % PANEL, 5), "the pill"
-        uses = head.locator(".conn-sign use").evaluate_all("(us) => us.map((u) => u.getAttribute('href'))")
+        assert wait_until(page, "!!document.querySelector(\"%s > summary .cube-pill .problems-sum .conn-sign.tone-bad\")" % PANEL, 5), \
+            "the pill led by the red sign"
+        uses = head.locator(".cube-pill .problems-sum .conn-sign use").evaluate_all("(us) => us.map((u) => u.getAttribute('href'))")
         assert uses == ["#icon-net-base", "#mark-net-x"], f"the network sign with its cross ({uses})"
-        box = (head.locator(".conn-sign").bounding_box(), head.locator(".panel-name, .mono").first.bounding_box())
-        assert box[0]["x"] < box[1]["x"], "the sign before the name"
+        box = (head.locator(".cube-head-who .cube-icon").bounding_box(), head.locator(".panel-name, .mono").first.bounding_box())
+        assert box[0]["x"] < box[1]["x"], "the cube before the name"
         head.locator(".cube-pill .problems-sum").click()
         assert head.locator(".cube-pill details").get_attribute("open") is not None, "the pill's list open"
         assert page.locator(PANEL).get_attribute("open") is None, "the panel still closed"

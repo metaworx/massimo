@@ -45,6 +45,7 @@ func refused(addr string) bool {
 // A SingleClient fake refuses a second client while one is connected,
 // and takes the next once that one has left.
 func TestSingleClientRefusesASecond(t *testing.T) {
+	t.Parallel()
 	srv, addr := startSingle(t, 0)
 	first := dial(t, addr)
 	if !refused(addr) {
@@ -60,6 +61,7 @@ func TestSingleClientRefusesASecond(t *testing.T) {
 // A client that leaves while the fake is silent leaves a dead session:
 // the fake refuses every client until HoldDead has passed.
 func TestADeadSessionIsHeldUntilHoldDead(t *testing.T) {
+	t.Parallel()
 	srv, addr := startSingle(t, 300*time.Millisecond)
 	first := dial(t, addr)
 	srv.SetSilent(true)
@@ -76,6 +78,7 @@ func TestADeadSessionIsHeldUntilHoldDead(t *testing.T) {
 // Release and Restart, the fake's answer to an R, forget a dead session
 // at once; Restart also ends the connections.
 func TestReleaseAndRestartFreeTheCube(t *testing.T) {
+	t.Parallel()
 	srv, addr := startSingle(t, time.Hour)
 	for _, free := range []func(){srv.Release, srv.Restart} {
 		c := dial(t, addr)
@@ -105,6 +108,7 @@ func TestReleaseAndRestartFreeTheCube(t *testing.T) {
 
 // The discovery responder's R restarts the TCP fake it is joined to.
 func TestAnRRestartsTheJoinedFake(t *testing.T) {
+	t.Parallel()
 	srv, addr := startSingle(t, time.Hour)
 	d, err := StartDiscovery("127.0.0.1:0", "KEQ0000100", 0x0a0b0c)
 	if err != nil {

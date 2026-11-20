@@ -68,9 +68,9 @@ function noteServerClock(resp) {
   if (Math.abs(skew - serverSkew) > 1500) serverSkew = skew;
 }
 
-// renderUpdated draws the chosen Cube's age above the header's pile
-// (ui/src/header/Pile.tsx), which counts on by itself; the time itself is
-// in the pile's list, under Refresh now.
+// renderUpdated draws again how long ago the chosen Cube was read, in the
+// pile's list under Refresh now and in expert mode's radio budget line
+// (ui/src/header/Times.tsx), which count on by the header's clock.
 function renderUpdated() {
   MassimoParts.header.render();
 }
@@ -109,6 +109,7 @@ function cubeSignEl(c) {
 // following the data.
 function renderCubeSelect() {
   MassimoParts.header.render();
+  MassimoParts.rooms.cubes(); // the House tile's name, the Cube's
 }
 
 // --- version ----------------------------------------------------------
@@ -138,10 +139,14 @@ function splitVersion(v) {
 // renderTLS takes /healthz's tls: the line under the header
 // (ui/src/header/Tls.tsx), and while the certificate is self-signed the
 // sign-in dialog's line asking to compare its fingerprint before signing
-// in.
+// in. In the app (appBridge, app.js) neither asks for the comparison:
+// the app pinned the fingerprint the user compared when the server was
+// added, and refuses a certificate with another; the warnings of a
+// certificate near its end stay (docs/app.md).
 function renderTLS(tls) {
-  $("login-tls").classList.toggle("hidden", !(tls && tls.self_signed));
-  MassimoParts.header.tls(tls || null);
+  const pinned = !!appBridge();
+  $("login-tls").classList.toggle("hidden", pinned || !(tls && tls.self_signed));
+  MassimoParts.header.tls(tls || null, pinned);
 }
 
 // certText is the certificate the server serves, as GET /api/v1/system

@@ -43,6 +43,7 @@ func testPair(t *testing.T, dir string) (certPath, keyPath, fingerprint string) 
 
 // hstsDays takes a number of days, 0 or more; "" is a year.
 func TestHSTSDays(t *testing.T) {
+	t.Parallel()
 	for v, want := range map[string]int{"": 365, "0": 0, "30": 30} {
 		if n, err := hstsDays(v); err != nil || n != want {
 			t.Errorf("hsts %q: %d %v", v, n, err)
@@ -56,6 +57,7 @@ func TestHSTSDays(t *testing.T) {
 }
 
 func TestServeTLSVariablesAreKnown(t *testing.T) {
+	t.Parallel()
 	for _, k := range []string{tlsVar, tlsCertVar, tlsKeyVar, tlsNamesVar, hstsVar, acmeEmailVar, acmeDirectoryVar, tlsHTTPVar, acmeDNSHookVar, trustedProxiesVar} {
 		if !env.Known(k) {
 			t.Errorf("%s unknown to massimo config", k)

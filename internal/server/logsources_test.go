@@ -19,6 +19,7 @@ import (
 // A Cube's log holds the server's events, kept once with no Cube; source=
 // keeps one source, and every event says its own.
 func TestLogSourceFilter(t *testing.T) {
+	t.Parallel()
 	// The Cube's own events too: its connect is logged as the greeting's
 	// last, after the devices' states, once the pump has handled them,
 	// as it has once the start returns; a line still to come would make
@@ -60,6 +61,7 @@ func TestLogSourceFilter(t *testing.T) {
 // level= keeps that level and above, info by default: the H line is at
 // debug, a lost connection at warn.
 func TestLogLevelFilter(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, stored())
 	ts, s := r.ts, r.s
 	testkit.Eventually(t, "the greeting's hello", func() bool {
@@ -99,6 +101,7 @@ func TestLogLevelFilter(t *testing.T) {
 // page names them as the users table does now; a name the store does not
 // know has none.
 func TestLogUserFilter(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, stored())
 	ts, s, st := r.ts, r.s, r.st
 	ctx := context.Background()
@@ -137,6 +140,7 @@ func TestLogUserFilter(t *testing.T) {
 // A Cube found on the LAN is an event of the server's: kept once, with no
 // Cube, and in the configured Cube's log.
 func TestFoundCubeStoredOnce(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, stored())
 	ts, s, st := r.ts, r.s, r.st
 	s.cubeFound(foundCube{Serial: "KEQ0000009", Address: "192.0.2.9", LastSeen: time.Now()})

@@ -1,4 +1,4 @@
-# Testing the web UI (v1.4.0)
+# Testing the web UI (v1.5.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -564,6 +564,11 @@ It knows nothing of a part, so a region drawn anew fails it without a test
 of its own.
 It runs in two of the suite's four cases, 1100 px in English and 390 px
 in German: each width and each language once.
+In the other two its tests are deselected as the suite is collected,
+by the mark `cases` that `GUARD_CASES` gives the file (`conftest.py`),
+so that none loads a page only to be skipped:
+the 28 skips of 1100-de took 42 s of the guard's worker, under load,
+before the mark (AP TestSpeed, D9-A).
 
 ### What it checks
 
@@ -773,6 +778,13 @@ the server's and the test's, in order,
   the four cases' among them (`test_log.py`).
 - **The server sets** keep the server's 10 s poll of the fake Cube,
   which brings no line of its own (the fake Cube's states do not change).
+  What changes is their age:
+  the window contact's window, open from the start (`greeting.txt`),
+  counts as open long five minutes after its set started,
+  and as open too long after ten (`window_warn_after`, `window_alert_after`),
+  so from then on the Cube's problems list MEQ0000001, its panel's pill too.
+  A test that reads a Cube's problems from the server holds whether they list it or not;
+  one that needs none tells `reads`.
   They take no automatic backup during the run:
   a Cube without a backup gets one a minute after the start,
   whatever `backups.auto_min` and `backups.auto_max` say (`internal/server/backups.go`),

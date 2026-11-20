@@ -20,6 +20,7 @@ import (
 // state at once (TestProxyPairing). The window was narrow and showed
 // under the race detector only, so the test tries it many times.
 func TestPairedBeforeRelayed(t *testing.T) {
+	t.Parallel()
 	c := New(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	line := fakecube.NewDeviceLine(cube.NewDevice{Type: cube.DeviceRadiatorThermostat, RFAddress: 0x0a0b0c, Serial: "TEQ0000001"})
 	for i := 0; i < 2000; i++ {
@@ -46,6 +47,7 @@ func TestPairedBeforeRelayed(t *testing.T) {
 // client may ask at once. It failed once in CI's armv6 job under QEMU
 // (TestProxyPairing, "pairing still active").
 func TestEndedBeforeRelayed(t *testing.T) {
+	t.Parallel()
 	c := New(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	for i := 0; i < 2000; i++ {
 		if err := c.StartInclusion(time.Minute); err != nil {
@@ -83,6 +85,7 @@ func TestEndedBeforeRelayed(t *testing.T) {
 }
 
 func TestInclusionDeliversNewDevices(t *testing.T) {
+	t.Parallel()
 	greeting, err := fakecube.LoadGreeting(fixture)
 	if err != nil {
 		t.Fatal(err)
@@ -147,6 +150,7 @@ func TestInclusionDeliversNewDevices(t *testing.T) {
 }
 
 func TestInclusionEndsOnItsOwn(t *testing.T) {
+	t.Parallel()
 	_, addr := startFake(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

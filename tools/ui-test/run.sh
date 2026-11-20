@@ -9,11 +9,17 @@
 # in one worker (--dist loadfile); UI_TEST_WORKERS=1 runs it in one
 # process against one set. The arguments after "smoke" go to pytest, as
 # do those in PYTEST_ADDOPTS (PYTEST_ADDOPTS='-k cubes' make ui-test).
-# Of a failed test it keeps the screenshot and the video under
-# tools/ui-test/results/. The first pass records no trace, whose DOM
-# snapshots make every step slower; when tests fail, they run once more
-# with it, the trace of one that fails again under results/retry/, and
-# the run fails either way.
+# Of a failed test it keeps the screenshot under tools/ui-test/results/.
+# The first pass records no trace, whose DOM snapshots make every step
+# slower, and no video, which lengthens every test's tear-down (AP
+# TestSpeed, D8-A); when tests fail, they run once more with both, the
+# screenshot, the video and the trace of one that fails again under
+# results/retry/, and the run fails either way. The first pass ends
+# with its 20 slowest phases, each a test's set-up, call or tear-down
+# (--durations=20, before PYTEST_ADDOPTS, which can ask for more), so
+# that a run shows where its time went (AP TestSpeed, Block 3); the
+# retry, whose few tests carry the video and the trace, lists none of
+# its own.
 # `run.sh screenshots` (make ui-screenshots) starts one set and runs
 # screenshots.py instead, which takes the screenshot set into
 # docs/screenshots/.
@@ -248,13 +254,14 @@ fi
 export UI_TEST_URL="http://127.0.0.1:$api_port/" UI_TEST_DOWN_URL="http://127.0.0.1:$down_port/" UI_TEST_TOKEN="$token" \
 	UI_TEST_SERVE_LOG="$work/set0/serve.log"
 rc=0
-"$py" -m pytest --output "$here/results" "$@" || rc=$?
+PYTEST_ADDOPTS="--durations=20 ${PYTEST_ADDOPTS:-}" "$py" -m pytest --output "$here/results" "$@" || rc=$?
 # Only failed tests (exit 1) run again: not an interrupted or empty run.
 [ $rc -eq 1 ] || exit $rc
-echo "ui-test: tests failed; they run once more, with the trace (tools/ui-test/results/retry/)" >&2
-if "$py" -m pytest --last-failed --last-failed-no-failures none --tracing retain-on-failure --output "$here/results/retry" "$@"; then
+echo "ui-test: tests failed; they run once more, with the video and the trace (tools/ui-test/results/retry/)" >&2
+if "$py" -m pytest --last-failed --last-failed-no-failures none --video retain-on-failure --tracing retain-on-failure \
+	--output "$here/results/retry" "$@"; then
 	echo "ui-test: the failed tests passed the second time, and the run fails all the same: they are flaky" >&2
 else
-	echo "ui-test: tests failed again; their traces are in tools/ui-test/results/retry/" >&2
+	echo "ui-test: tests failed again; their videos and traces are in tools/ui-test/results/retry/" >&2
 fi
 exit 1

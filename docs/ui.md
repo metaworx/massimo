@@ -29,6 +29,17 @@ the account not known, no e-mail sent, the e-mail not verified,
 or the account in none of the groups the provider admits.
 The app shows no such button yet:
 the providers refuse a sign-in inside an app's page.
+In the app the card has the login by fingerprint instead (docs/app.md,
+"The login by fingerprint"):
+**Enable login by fingerprint**, a switch under the password where the phone
+has a fingerprint and keeps no login for the server, which after the sign-in
+asks for the fingerprint and keeps an API key of the user's own behind it,
+or says that nothing was kept, with **Try again** and **Sign in without it**;
+**Login by fingerprint**, with the user's name, above the form where a login
+is kept, which signs in with a new session from the key;
+a line instead of both where the page is open over plain HTTP outside the
+home network, where the app sends no key;
+and **Select server** at the card's foot, back to the app's servers.
 While it asks, the page shows its name, its version and the sign-in,
 nothing else, as it does from its first moment until the server has said who is in,
 so that no button shows before the sign-in:
@@ -107,18 +118,21 @@ waits while there are any.
 
 ## Header
 
-The header's row reads, from the left:
-Massimo's logo, the M as tall as the page buttons;
-the pile, how long ago the chosen Cube was heard from above a pill
-that starts with the server's sign and shows every Cube's problems;
-the Cube choice with the server's connection to the Cube as a plug;
-then, at the right, the house, **Rooms**, and **☰**, the menu of every other page.
+The header's row has Massimo's logo at the left, the M as tall as the page buttons;
+at the right, the pile, a pill that starts with the server's sign and shows
+every Cube's problems;
+the Cube choice, the cube in the colour of the server's link to it
+and the chosen Cube's name;
+then the house, **Rooms**, and **☰**, the menu of every other page,
+the Cube choice as near to them as they are to each other.
 They all end on one line, the logo's baseline and the buttons' lower edge.
-On a screen narrower than 600 px the Cube choice takes the second row to itself,
-and the logo is the mark alone, the M with the clock in its V.
-Where the logo, the pile and the page buttons do not fit the first row,
-the pile takes a line of its own under them, the age at its right.
-Under 331 px the logo goes.
+Where the row is short, it folds step by step, as far as it must:
+first the logo becomes its M, the M with the clock in its V;
+then the Cube choice becomes a button with the cube alone,
+whose tooltip names the chosen Cube and which opens the same list;
+then the pile goes to a row of its own under them, at the left.
+The M stays at every width.
+The row is measured as if ↑ were there, so that scrolling never changes how it folds.
 
 The logo lies over the word "Massimo", which a screen reader reads:
 the word shows until the drawing has come (`ui/brand/brand.svg`,
@@ -133,27 +147,33 @@ The header stays at the top while the page scrolls.
 Scrolled, it keeps its rows as they are, the logo too,
 and the lines under them go until the page is back
 at its top, expert mode's line of the Cube's radio budget apart.
-The compacted header has **↑**, back to the top:
-right of the Cube choice from 600 px, left of ☰ below.
+The compacted header has **↑**, back to the top, first of the page buttons: ↑ ⌂ ☰.
 
 - **Cube**:
   a menu that chooses the Cube when the server has several.
-  Closed it shows the chosen Cube's name (its serial where it has none)
-  and how the server stands with it, as the network's sign:
-  green while connected, a triangle while its lost connection is held open
-  or it reboots, a cross while it holds the server's old connection,
-  another client has it, or it is gone (see Signs, under How the page is built);
-  its tooltip adds the serial, the address and the link in words.
-  Open, each Cube has its sign, its name with an icon after it for each
-  kind of problem it has (the radio, a battery, a window open too long, a
-  device's link and, for one who may change the settings, the cog, and the
-  disk while the Cube's settings or the settings of one of its rooms' virtual
-  wall thermostats are unsaved or a save of them failed), each in
-  its worst colour, and under it its serial and address,
+  Closed it shows the cube in the colour of how the server stands with the Cube,
+  then the chosen Cube's name (its serial where it has none):
+  green while connected, amber while its lost connection is held open
+  or it reboots, red while it holds the server's old connection,
+  another client has it, or it is gone;
+  its tooltip adds the serial, the address and the link in words,
+  and the pile shows the link's sign with its mark where it is not connected
+  (see Signs, under How the page is built).
+  Open, each Cube has the cube, its name, its sign after it, always,
+  then an icon for each kind of problem it has (the radio, a battery,
+  a window open too long, a device's link and, for one who may change the settings,
+  the cog, and the disk while the Cube's settings or the settings of one of its
+  rooms' virtual wall thermostats are unsaved or a save of them failed),
+  each in its worst colour, and under it its serial and address,
   the list as wide as they need; the arrow keys move between them.
+  Wherever a Cube is named with its sign, the cube is before its name,
+  in the text's colour, and the sign after it;
+  a blue cube is the sign of the Cubes found and not served.
   Open, it stays open when data comes in, the focus where it was,
   and shows what came: a Cube's new name, a problem, a Cube found.
-  The last entry, **Search for new Cubes…**,
+  In the app the list ends with **Select server**, which shows the app's
+  servers (docs/app.md).
+  The search's entry, **Search for new Cubes…**,
   asks the server to look for Cubes on the LAN (about two seconds;
   the server also looks every 30 minutes by itself),
   and reads **Searching…** meanwhile.
@@ -173,25 +193,27 @@ right of the Cube choice from 600 px, left of ☰ below.
   for others the choice's entries cannot be chosen.
   A Cube the server finds by itself appears without reloading the page,
   and in the log.
-- **The pile**, between the logo and the Cube choice:
-  how long ago the chosen Cube was heard from, centred above a pill
-  that starts with the server's sign (below), then
+- **The pile**, before the Cube choice:
+  a pill that starts with the server's sign (below), then
   a green check where nothing is wrong on any Cube; where something is,
   an icon per kind (a Cube's link, the radio, a battery, a window
   open too long, the settings).
   The pill opens a list, whatever is wrong or not.
   Its first item is **Refresh now**, which asks the server for the current state now,
   turns while it asks and leaves the list open;
-  under it, a line each, the times in the browser's time zone:
-  when the chosen Cube was read (the last message the server took from it),
-  when the server last answered the page, and the time now,
-  which moves on each second while the list is open.
+  under it, a row each, a label and its time, the times right-aligned:
+  **Cube read**, how long ago the chosen Cube was read
+  (the last message the server took from it, measured on the server's clock),
+  **Server replied**, how long ago the server last answered the page,
+  each "14 sec ago" in the page's language with its time of day as its tooltip,
+  and **Current time** in the browser's time zone; they move on each second.
   While the server's sign offers something to do,
   that is the list's second item: **Software update** with the version,
   or the reload for the server's new version.
   Then the list says that nothing is wrong,
   or it lists every Cube with a problem as a heading,
-  its own sign and its link's badge, and under it its devices with a problem
+  the cube before its name and its sign after it, its link's badge,
+  and under it its devices with a problem
   as "Room › Device" with their badges;
   for one who may change the settings, **Settings**:
   a Cube proxy that does not listen, a settings file that differs,
@@ -205,17 +227,16 @@ right of the Cube choice from 600 px, left of ☰ below.
   for a proxy the Cube it serves, and the Massimo server serving it,
   its name a link to the address its announcement on the network gives.
   A window open briefly is not listed: it is a state, not a problem.
-  Its list, as every menu of the page, opens inside the window,
-  no higher than the room below it, and scrolls in itself, not the page.
+  Its list is as wide as its entries need, up to the page's width,
+  and, as every menu of the page, opens inside the window,
+  no higher than the room below it, and scrolls in itself, not the page;
+  open, it stays inside the window as its pill moves,
+  when the pill grows with the problems that come or the row folds.
   An open list stays open when data comes in, and follows it:
   a problem that comes is listed, one that goes leaves the list,
   until nothing is left to list and the list says so, the green check in the pill.
-- **How long ago the chosen Cube was heard from**, above the pill:
-  "8 sec" since the server last took a message from the Cube,
-  measured on the server's clock,
-  counting on by itself, each second under a minute, then each minute, each hour;
-  the time itself is under Refresh now.
-- **The version** is ☰'s first row, short and small; its tooltip is the whole version,
+- **The version** is ☰'s first row, short and small, after Massimo's icon,
+  a rule under it; its tooltip is the whole version,
   "(server version)", and a click copies it.
   Signed out, when there is no ☰, it stands beside the logo.
   The Cube's clock is in the Cube's facts, under System settings → **Cubes**:
@@ -264,8 +285,7 @@ right of the Cube choice from 600 px, left of ☰ below.
   a page opened for the first time starts at its top.
 - **↑**, round and filled in the accent's blue at the bottom right,
   shows on every page once it is a screen down,
-  and another ↑ in the compacted header, right of the Cube choice from 600 px,
-  left of ☰ below;
+  and another ↑ in the compacted header, first of the page buttons;
   each takes the page back to its top,
   the focus on the page's sections menu where it has one.
 - **The server's sign**, first in the pile's pill,
@@ -277,10 +297,12 @@ right of the Cube choice from 600 px, left of ☰ below.
   (the list's second item reloads the page);
   the open plug, blinking, the pill filled red, after a poll without an answer:
   the page's other signs are greyed, their state not known,
-  the age is that of the last update, and the page tries again at every poll.
+  Cube read says how long ago the last update came,
+  and the page tries again at every poll.
   After an update the page reloads by itself only when nothing is open:
   no setting being edited, no panel and none of the settings pages.
 - In expert mode a line under the first shows the chosen Cube's name,
+  how long ago it was read and the server replied, as under Refresh now,
   its duty cycle, free slots and radiograms pending,
   and the commands queued while there are any.
   The server's facts are in ☰ → **System info**,
@@ -293,6 +315,8 @@ right of the Cube choice from 600 px, left of ☰ below.
   The page shows no fingerprint itself:
   it comes over the very connection in question,
   and a man in the middle would pass the server's along, or rewrite it.
+  In the apps neither line asks for the comparison:
+  the app pinned the fingerprint when the server was added (`docs/app.md`).
 - A certificate that ends within two weeks, or one the server could not
   get from Let's Encrypt yet, is a warning in the same line.
   The duty cycle and the free memory slots limit how many radio commands the
@@ -370,12 +394,11 @@ Every room has a tile:
   An icon goes as soon as its problem does.
   The room's virtual wall thermostat is not listed:
   its flags are the wall thermostat's.
-- **One line under the tile's head** while the room has notices,
-  which its icons list:
-  "Room commands are discarded until every device has reported" while that holds,
-  as that is why a change does nothing; otherwise how many of them its list holds,
-  "2 notices", a device not seen for long, not reported or with a finding each.
-  **Show** opens the list of the tile's icons.
+- **One line under the tile's head** while the room's commands are refused:
+  "Room commands are discarded until every device has reported",
+  as that is why a change does nothing;
+  **Show** opens the list of the tile's icons, which names the devices that have not.
+  The tile's other notices are in that list alone.
 - **Values may be old**:
   a thermostat of the room has not been heard from for more than 24 hours,
   and its entry says how long, "Not seen for 30 hours".
@@ -569,7 +592,8 @@ Every room has a tile:
 - Each setting has a **?** button that explains it, with the factory values
   from the eQ-3 manuals; an explanation shown stays shown when its tab is drawn again.
 
-The **House** tile sets several rooms at once: ECO, AUTO,
+The **House** tile, named after the chosen Cube with the cube before its name
+("All rooms of …" its tooltip), sets several rooms at once: ECO, AUTO,
 COMFORT or MANU with a temperature, permanently or until a date and time;
 its **Send** is off while no room is ticked,
 the rooms a choice of checkboxes with **All rooms** first.
@@ -869,6 +893,8 @@ as the settings' ⓘ do:
 - **Sessions and keys**: the own sessions and API keys,
   each with where and when it was last used and **Revoke**,
   which signs another browser out without an administrator;
+  a session made from a key, as the app's login by fingerprint makes one,
+  names the key by its label, and revoking the key ends it;
   **Create key** shows the new key once.
 - **Linked accounts**, where a sign-in provider is enabled or an account is linked:
   the own accounts at the providers, each with its e-mail or user ID,
@@ -1177,13 +1203,16 @@ the browser keeps which cards are folded.
   (red "not connected" for a cross, amber "connection held" or "rebooting"
   for a triangle), the proxies that do not listen,
   the Cubes found at another address and those found and not served.
-  Each is in a panel whose head shows the Cube's sign, the name,
+  Each is in a panel whose head shows the cube, the Cube's name,
   the serial and the address without the port,
   the duty cycle, the free slots and the radiograms pending,
-  a pill with every problem of the Cube (its link, its proxy, its settings file
+  a pill with every problem of the Cube (its proxy, its settings file
   and its devices with theirs, as the header's), top-right whatever wraps,
-  a green check where nothing is wrong, whose click opens its list
-  and not the panel, and under them where its settings come from,
+  led by the Cube's network sign,
+  which stands for the green check where nothing else is wrong;
+  a click on it opens its list and not the panel,
+  the Cube's link in words its first row, "connected" too,
+  and under them where its settings come from,
   all of it following every poll in place, whether the panel is open or not,
   so that an open problem list stays open, and opens with a click:
   its own badges as its top line (its link where it is not connected,
@@ -1433,8 +1462,9 @@ the browser keeps which cards are folded.
 - **Capabilities for every role** (with `capabilities`):
   a switch per capability, which switches it off for every role but the owner.
 - **Backup and restore** (with `backup`):
-  a fold per Cube, its sign, name and serial and how many backups the server
-  keeps of it in its head, a single Cube's open; the card's head counts them all.
+  a fold per Cube, the cube, its name and serial, its sign,
+  and how many backups the server keeps of it in its head, a single Cube's open;
+  the card's head counts them all.
   In each, and on Cube settings for the chosen Cube,
   **Download backup** saves the Cube as it is now, as YAML or JSON (**Format**).
   The server keeps the Cube's backups in its store,
@@ -1749,7 +1779,9 @@ it imports from itself, the shared parts, Preact and the API's types alone
 What one region alone reads stays in the region, anything with state too,
 and what is not about the API's data is a shared part.
 `cube.tsx` holds the Cube chosen in the header (`chosenCube`),
-a Cube's address split into host and port (`hostPort`), its network sign (`CubeSign`)
+a Cube's address split into host and port (`hostPort`),
+the cube before its name (`CubeIcon`),
+its network sign (`CubeSign`), its link's row in its own pill's list (`CubeLink`)
 and its problems as an entry of `Problems` (`cubeEntry`, `cubeSettingItems`)
 with the label naming their kinds and the Cubes found (`problemsLabelOf`);
 `found.tsx` what a Cube or a Massimo proxy found is and who serves it (`foundWhat`);
@@ -1771,7 +1803,7 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `Island` | `island.tsx` | a plain piece inside a part: an element the part draws empty and plain code fills, again where a key or the language changed | `tag` (div, p, span), `cls`, `keys`, `fill(el)` |
 | `Fold`, `FoldHead` | `fold.tsx` | a details that opens and closes (`detailsPanel`), the toggle of its making not passed on; a panel's head | `cls`, `open`, `onToggle(open)`, `summary`, `summaryProps`, `data`, the body as children; `before`, `name`, `mono`, `badges` |
 | `Dropdown` | `menu.tsx` | a menu that drops down (`dropdown`), with `arrows` its arrow keys (`menuArrows`) and with `focusCurrent` the focus on its current item when it opens (among `arrows`' items, else its list's buttons that are on); a click on any button of its list closes it, as `dropdown()` of `components.js` does for every menu of the page, but on one marked `data-keep-open` (`MenuItem`'s `keepOpen`) | `id`, `cls`, `summaryId`, `summaryCls`, `label` (without it the summary is named by its text), `title` (where the tooltip is not the label), `summary`, `listCls`, `arrows` (a selector of its items), `focusCurrent`, `busy` (the summary turning while a request sent from its list runs), `onClick`, `onOpen` (told each time it opens), `onClose` (told each time it closes), the items as children |
-| `MenuItem` | `menu.tsx` | a menu's button, its icon, label, the icons after it and a grey second line (`menuItem`) | `icon`, `blank`, `label`, `icons`, `sub` (the second line, there whenever given, empty too), `subCls` (its class), `cls`, `value` (its `data-value`), `current`, `disabled`, `busy`, `keepOpen` (a click on it leaves the menu open, for an item whose result shows in the list), `onClick` |
+| `MenuItem` | `menu.tsx` | a menu's button, its icon, label, the icons after it and a grey second line (`menuItem`) | `icon`, `blank`, `label`, `icons`, `sub` (the second line, a text or elements, there whenever given, empty too), `subCls` (its class), `cls`, `value` (its `data-value`), `current`, `disabled`, `busy`, `keepOpen` (a click on it leaves the menu open, for an item whose result shows in the list), `onClick` |
 | `Picker` | `menu.tsx` | a menu that chooses one item, its summary the chosen one (`pickerMenu`) | `id`, `cls`, `summaryId`, `summaryCls`, `entries` (an item `{ value, label, sub, icon, icons, disabled }`, `{ group }` or `{ separator: true }`), `value`, `onPick(value)`, `shown` (`{ icon, label, title, aria }`) |
 | `actionRunner`, `fader` | `action.ts` | a request, a reload, and its outcome (`Outcome`, `{ text, ok }`) in the region's message line (`showResult`) or in a part's state that a `ResultLine` draws, a success fading where a fade is given; `fader` is that fade alone, for a result set by other means | `where()`, `set(res)`, `fade` (ms), `reload()`; gives `run(fn, ok, fail)`, `say(text, ok)`; `set`, `ms` |
 | `Icon` | `icon.tsx` | a symbol of the page (`iconEl`) | `symbol`, `cls`, `mark` (the symbol is a mark, which blinks where the style makes it) |
@@ -1784,7 +1816,7 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `Age` | `badge.tsx` | how old a value is, filled by `fillAge` (`ageEl`) | `at`, `stale`, `plain` |
 | `Since` | `badge.tsx` | from when a badge's state holds, after its text (a problem list's item) | `at` |
 | `ResultLine` | `badge.tsx` | the line that says how an action went, green or red, hidden while there is none (`showResult`), as an `actionRunner`'s `set` gives it | `res` (an `Outcome` or null), `cls` |
-| `Problems` | `problems.tsx` | the problem list, entries under entries (`problemsEl`), an item with an action a button | `entries`, `label`, `ok` (the green check's label where nothing is wrong), `always` (the list there where nothing is wrong too; where `ok` is given, its summary the green check and `ok` a line of its list), `lead` (drawn first in the summary, a sign of the place's own state), `head` (drawn first in the list, items that act on the place), `onClick`, `onOpen`, `onClose` (as `Dropdown`'s) |
+| `Problems` | `problems.tsx` | the problem list, entries under entries (`problemsEl`), an item with an action a button | `entries`, `label`, `ok` (the green check's label where nothing is wrong), `always` (the list there where nothing is wrong too; where `ok` is given, its summary the green check and `ok` a line of its list), `lead` (drawn first in the summary, a sign of the place's own state), `head` (drawn first in the list, items that act on the place or a row of its own state), `onClick`, `onOpen`, `onClose` (as `Dropdown`'s); an entry's `tail` is drawn after its name (a sign of its state where its icon says what it is) |
 | `KindIcons`, `problemKinds`, `kindsLabel` | `problems.tsx` | the kinds' icons of entries without the list (`kindIcons`); the kinds themselves, to know whether there are any; the label naming the kinds among items in an order of kinds, "" for none | `entries`, `skip`; `entries`, `skip`; `items`, `kinds` |
 | `OkPill` | `problems.tsx` | the green check in a list's place (`okPill`) | `label` |
 | `HelpButton`, `HelpText` | `help.tsx` | a setting's help (`helpParts`): the question mark that shows and hides its explanation, `help.<key>` of the texts, shown by its key wherever it is drawn again, in the page's one set of keys shown (`helpOpen` of `app.js`), the parts drawn again by a signal of their own, so a key is drawn by one side only; `Field` and `Switch` draw both from their `help` | `help` (the key), `id` (the explanation's, which the button controls), `label` (the setting's name); `help`, `id` |
@@ -1917,18 +1949,24 @@ and the devices loaded for the hide choice;
 so in the panel head's pill and in the header's entry of the Cube),
 and `index.tsx` forgets a Cube's form when the list no longer gives the Cube.
 The header (`ui/src/header/`) is the second:
-`index.tsx` draws the pile in `#header-pile` (`Pile.tsx`: the chosen Cube's age,
-`Updated.tsx`, above every Cube's problems, `CubeProblems.tsx`,
-led by the server's sign, `ServerSign.tsx`, with Refresh now and the times),
-the Cube choice in `#header-cube`, the certificate's line in `#tls-slot`
+`index.tsx` draws the pile in `#header-pile` (`Pile.tsx`: every Cube's problems,
+`CubeProblems.tsx`, led by the server's sign, `ServerSign.tsx`,
+with Refresh now and the reads' times, `Times.tsx`),
+the Cube choice in `#header-cube`, the reads' times of expert mode's line
+in `#header-times`, the certificate's line in `#tls-slot`
 and the home notice inside `#home-notice`, and registers `render` and `tls`,
 which `header.js` calls as `renderCubeSelect`, `renderUpdated`, `renderServerSign`
 and `renderTLS`, and `home.js` as `renderHomeNotice`;
 `store.ts` holds its counter, the search under way and the certificate,
-`send.ts` the search.
+`send.ts` the search,
+and `clock.ts` the header's one clock, a signal that moves on each second,
+which every time the header shows reads,
+and `fmtAgo`, how long ago in the page's language;
+`fold.ts` measures the row and folds it where it is short (`data-fold` on `.top-line`),
+and after each measure places an open list of the row in the window again (`placeMenus` of `components.js`).
 The choice is a `Picker`, the problems a `Problems` with `lead`, `always` and `head`,
-Refresh now a `MenuItem` with `keepOpen`, the certificate's line a `Notice`.
-The pile measures in an effect whether it needs a line of its own (`data-line`).
+Refresh now a `MenuItem` with `keepOpen` and its times as `sub`,
+the certificate's line a `Notice`.
 The logo, the version (in ☰, and beside the logo while signed out) and ↑ stay plain,
 around the parts' places and not in them,
 and the home notice's place is shown and hidden by the plain code (and by `pages.js`),
@@ -1952,8 +1990,7 @@ across its close too,
 and the timer of an open window's next state by the clock;
 `facts.ts` what the rooms alone read of a room and its devices
 (a mode's badge, the problems of a tile's head and of a device's row with their label,
-the room's notices among them and their count for the tile's line,
-a device's badges in words);
+the room's notices among them, a device's badges in words);
 `Tile.tsx` the tile, `Devices.tsx` a device's row and a tile's device list,
 `Config.tsx` a tile's configuration with its tabs, `ConfigDevices.tsx` its Devices tab,
 `configuration.ts` what the configuration keeps and sends,
@@ -1965,7 +2002,7 @@ its Send and Cancel a `FormFooter`;
 Put into a room… and Remove from the Cube;
 the section of the devices without a room is shown and hidden by `rooms.js`,
 its message line, `#unlisted-msg` of the partial, an `actionRunner`'s, a success fading,
-and the House tile's section, with its title, is shown and hidden by `rooms.js` too.
+and the House tile's section is shown and hidden by `rooms.js` too, its title the part's.
 The tile's actions stay plain (`rooms.js`, `tiles.js`) and set `roomUI`,
 which the tile follows: a write running turns its button and keeps the others off,
 a stepper value waiting to be sent shows with Save and Cancel.
@@ -2005,7 +2042,7 @@ its typing kept across a fill by the object it is given.
 The menus are `Dropdown`s, their items `MenuItem`s, the problems a `Problems`,
 the info and the cog `IconButton`s, the holiday form's temperature a `Stepper`
 and its end a `DateTime`,
-the deletion's question a `Question`, the line of its notices a `Notice`,
+the deletion's question a `Question`, the line of a refused room a `Notice`,
 the result lines `ResultLine`s,
 a device's badges `Badge`s with their `Age`, its identifiers a `DeviceIds`,
 the virtual thermostat's two settings a `Select` and a `TextField` with their drafts (`useDraft`),

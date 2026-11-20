@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
-"""The header: its order at full width and ☰ on a narrow screen, the log
-button's symbol, its baseline, the personal page 👤 opens, the page
-shown in the address, each page's own scroll position, and expert mode's
-line of the chosen Cube's radio budget."""
+"""The header: its order, its fold where it is short, the log button's
+symbol, its baseline, the pile's list and the reads' times, the personal
+page 👤 opens, the page shown in the address, each page's own scroll
+position, and expert mode's line of the chosen Cube's radio budget."""
 import json
 
 from helpers import (CUBES, VIEWER, assert_busy, css_hidden, held_poll, hold, open_personal_page, scroll_settled, scroll_width, show_view,
@@ -181,38 +181,91 @@ def active(page, selector):
     return page.locator(selector).evaluate("(e) => e.classList.contains('active')")
 
 
-def test_header_order_and_the_narrow_header(page, case):
-    """The header's row: the logo, the pile (the age above every Cube's
-    problems, the server's sign first), the Cube choice with the network
-    sign of its link, then 🏠 and ☰ alone at the right. Below 600 px the
-    logo, the pile, 🏠 and ☰ on the first row and the Cube choice alone
-    under them, as wide as the row."""
+def test_header_order(page, case):
+    """The header's row: the logo at the left (its M where the row is
+    short); at the right the pile (every Cube's problems, the server's
+    sign first), the Cube choice, its cube in its link's colour, then 🏠
+    and ☰ alone, all on one lower edge, the Cube choice as near to 🏠 as
+    the pages are to each other (AP GlobalMenu, D199-A to D201-A)."""
     order = ["h1", ".pile", "#cube-choice", "#view-tiles", "#nav-menu > summary"]
     b = {sel: box(page, sel) for sel in order}
-    assert page.locator("#cube-choice .picker-icon .conn-sign use[href='#icon-net']").count() == 1, "the link, a network sign in the Cube choice"
+    row = box(page, ".top-line")
+    assert page.locator("#cube-choice .picker-icon .cube-icon.tone-ok use[href='#icon-cube3d']").count() == 1, \
+        "the cube before the Cube's name, green while connected"
+    assert page.locator("#cube-choice .conn-sign").count() == 0, "no network sign in the closed choice"
     shown = page.locator(".nav > *").evaluate_all("(es) => es.filter((e) => e.offsetParent).map((e) => e.id)")
     assert shown == ["view-tiles", "nav-menu"], f"🏠 and ☰ alone in the header: {shown}"
-    first = ["h1", ".pile", "#view-tiles", "#nav-menu > summary"]
-    if case.width >= 600:
-        first = order
-    xs = [b[sel]["x"] for sel in first]
-    assert xs == sorted(xs), f"left to right in this order: {first}: {b}"
+    assert abs(b["h1"]["x"] - row["x"]) <= 1, f"the logo at the left: {b['h1']} vs {row}"
+    menu = b["#nav-menu > summary"]
+    assert abs(menu["x"] + menu["width"] - (row["x"] + row["width"])) <= 1, f"☰ at the right: {b}"
+    xs = [b[sel]["x"] for sel in order]
+    assert xs == sorted(xs), f"left to right in this order: {order}: {b}"
     bottom = b["#view-tiles"]["y"] + b["#view-tiles"]["height"]
-    assert all(abs(b[sel]["y"] + b[sel]["height"] - bottom) <= 1 for sel in first if sel != "h1"), f"on the first row's lower edge: {b}"
-    if case.width >= 600:
-        return
-    c = b["#cube-choice"]
-    assert c["y"] >= bottom, "the Cube choice under them"
-    row = box(page, ".top-line")
-    assert abs(c["x"] - row["x"]) <= 1 and abs(c["width"] - row["width"]) <= 1, f"as wide as the row: {c} vs {row}"
+    assert all(abs(b[sel]["y"] + b[sel]["height"] - bottom) <= 1 for sel in order[1:]), f"on one lower edge: {b}"
+    assert b[".pile"]["x"] - (b["h1"]["x"] + b["h1"]["width"]) > 16, f"the pile away from the logo, at the right: {b}"
+    pages = box(page, "#nav-menu > summary")["x"] - (b["#view-tiles"]["x"] + b["#view-tiles"]["width"])
+    choice = b["#view-tiles"]["x"] - (b["#cube-choice"]["x"] + b["#cube-choice"]["width"])
+    assert abs(choice - pages) <= 1, f"the Cube choice as near to 🏠 as the pages to each other: {choice} vs {pages}"
 
 
-# The drawing shown in the header's brand, the logo or (under 600 px) the
-# small mark: its box.
+# The header's fold at the window's width, the row's height and whether
+# anything sticks out of the window.
+FOLD = """() => ({fold: document.querySelector('.top-line').dataset.fold || '',
+  wide: document.querySelector('header.top').scrollWidth, row: document.querySelector('.top-line').clientWidth})"""
+STEPS = ["", "logo", "logo cube", "logo cube pile"]
+
+
+def test_header_folds_step_by_step(page, case):
+    """Where the row is short it folds, step by step, the first that fits:
+    the logo becomes the M, then the Cube choice a cube button, then the
+    pile goes to the next row, at the left; the M always there; compacted
+    the same, ↑ among the pages; nothing outside the window. The cube
+    button names the chosen Cube in its tooltip and opens the list."""
+    size = page.viewport_size
+    try:
+        last = 0
+        for w in (1100, 900, 700, 600, 500, 450, 400, 390, 360, 340, 320):
+            page.set_viewport_size({"width": w, "height": size["height"]})
+            folds = []
+            for scrolled in (False, True):
+                page.evaluate(f"document.body.classList.toggle('scrolled', {str(scrolled).lower()})")
+                assert wait_until(page, "document.querySelector('.top-line').dataset.fold !== 'measure'", 2), "measured"
+                page.wait_for_timeout(100)
+                f = page.evaluate(FOLD)
+                assert f["wide"] <= f["row"] + 1, f"at {w} px, compacted {scrolled}: nothing outside the window: {f}"
+                assert page.locator(".top-line > .brand").is_visible(), f"at {w} px the logo or its M always there"
+                folds.append(f["fold"])
+            assert folds[0] == folds[1], f"at {w} px the same fold compacted: {folds}"
+            step = STEPS.index(folds[0])
+            assert step >= last, f"at {w} px the steps in their order: {folds[0]!r} after {STEPS[last]!r}"
+            last = step
+            logo, mark = page.locator(".top .brand-name .brand-logo"), page.locator(".top .brand-name .brand-mark")
+            assert (mark if step else logo).is_visible() and (logo if step else mark).is_hidden(), f"at {w} px the logo or the M"
+            label = page.locator("#cube-choice .picker-label")
+            assert label.is_hidden() == (step >= 2), f"at {w} px the Cube choice a cube button: {step >= 2}"
+            assert page.locator("#cube-choice .cube-icon").is_visible(), f"at {w} px the cube always"
+            pile, home = box(page, ".pile"), box(page, "#view-tiles")
+            on_next = pile["y"] >= home["y"] + home["height"] - 1
+            assert on_next == (step == 3), f"at {w} px the pile on the next row: {step == 3}"
+            if step == 3:
+                assert abs(box(page, "#cube-problems .problems-sum")["x"] - box(page, ".top-line")["x"]) <= 1, "at the left"
+        assert last == 3, "every step at 320 px"
+        page.evaluate("document.body.classList.remove('scrolled')")
+        name = page.evaluate("(() => { const c = state.cubes.find((x) => x.serial === state.serial); return c.name || c.serial; })()")
+        assert page.locator("#cube-choice").get_attribute("title").startswith(name), "the cube button's tooltip names the chosen Cube"
+        page.locator("#cube-choice").click()
+        page.locator("#cube-menu .menu-items").wait_for(state="visible")
+        page.keyboard.press("Escape")
+    finally:
+        page.evaluate("document.body.classList.remove('scrolled')")
+        page.set_viewport_size(size)
+
+
+# The drawing shown in the header's brand, the logo or the M: its box.
 BRAND_BOX = """() => {
   const svg = [...document.querySelectorAll('.top .brand-name svg')].find((e) => e.getBoundingClientRect().width > 0);
   const b = svg.getBoundingClientRect();
-  return {top: b.top, bottom: b.bottom, height: b.height};
+  return {top: b.top, bottom: b.bottom, height: b.height, width: b.width};
 }"""
 
 VERSION_TITLE = {"en": "{v} (server version) · click to copy", "de": "{v} (Server-Version) · Klick kopiert"}
@@ -223,8 +276,8 @@ BUILD = "v0.15.0-alpha.1-293-gd36148f"
 
 def test_version_in_the_menu(page, case, reads):
     """The server's version is ☰'s first row, before the log, small and
-    grey, whole for a build's long one; its tooltip is the whole version.
-    It is not in the header's row. The server runs the build for the page
+    grey, after Massimo's icon, a rule under it, whole for a build's long
+    one; its tooltip is the whole version. It is not in the header's row. The server runs the build for the page
     from its load on: its reads of /healthz, its poll's among them, answer
     the build's version (helpers.Reads), so that the page never takes the
     server for one that runs another; the page closes with it."""
@@ -241,72 +294,26 @@ def test_version_in_the_menu(page, case, reads):
     assert v.bounding_box()["y"] < page.locator("#menu-log").bounding_box()["y"], "above the log"
     assert v.evaluate("(e) => e.scrollWidth <= e.clientWidth + 1"), "whole"
     assert v.get_attribute("title") == VERSION_TITLE[case.lang].format(v=BUILD), "the tooltip is the whole version"
+    icon = first.locator(".menu-brand .brand-mark")
+    assert wait_until(page, "!!document.querySelector('#nav-menu .menu-brand .brand-mark')", 5), "Massimo's icon drawn"
+    assert icon.is_visible() and first.locator(".menu-brand .brand-logo").is_hidden(), "the icon, not the logo"
+    assert icon.bounding_box()["x"] + icon.bounding_box()["width"] <= v.bounding_box()["x"], "before the version"
+    assert first.evaluate("(e) => e.nextElementSibling.tagName") == "HR", "a rule under the row"
     assert page.locator("#version-out").is_hidden(), "none beside the logo while signed in"
     page.keyboard.press("Escape")
 
 
-def test_pile_on_a_line_of_its_own(page, case):
-    """Where the logo, the pile and the pages do not fit one row (here a
-    window 230 px wide, compacted, ↑ among the pages), the pile takes a
-    line of its own under them, the age at the pill's right; back on the
-    first row when they fit again; all inside the window."""
-    size = page.viewport_size
-    try:
-        page.set_viewport_size({"width": 230, "height": size["height"]})
-        assert wait_until(page, "!document.querySelector('.pile').dataset.line", 3), "230 px whole: the pile fits beside the pages"
-        page.evaluate("document.body.classList.add('scrolled')")
-        assert wait_until(page, "document.querySelector('.pile').dataset.line === 'own'", 3), "compacted: a line of its own"
-        pill, age, nav = box(page, "#cube-problems .problems-sum"), box(page, ".pile-age"), box(page, ".nav")
-        assert pill["y"] >= nav["y"] + nav["height"] - 1, f"under the pages: {pill} vs {nav}"
-        assert age["x"] >= pill["x"] + pill["width"], f"the age at the pill's right: {age} vs {pill}"
-        assert abs((age["y"] + age["height"] / 2) - (pill["y"] + pill["height"] / 2)) <= 3, f"level with it: {age} vs {pill}"
-        assert box(page, "#cube-choice")["y"] >= pill["y"] + pill["height"], "the Cube choice under it"
-        assert page.evaluate("document.querySelector('header.top').scrollWidth") <= 230, "the header inside the window"
-        page.evaluate("document.body.classList.remove('scrolled')")
-        assert wait_until(page, "!document.querySelector('.pile').dataset.line", 3), "on the first row again"
-    finally:
-        page.evaluate("document.body.classList.remove('scrolled')")
-        page.set_viewport_size(size)
-
-
-def test_logo_by_width(page, case):
-    """The logo stays, compacted too, down to 331 px (the M alone under
-    600 px); under 331 px it goes, the pile first in the row."""
-    size = page.viewport_size
-    try:
-        for w, shown in ((390, True), (331, True), (330, False), (300, False)):
-            page.set_viewport_size({"width": w, "height": size["height"]})
-            for scrolled in (False, True):
-                page.evaluate(f"document.body.classList.toggle('scrolled', {str(scrolled).lower()})")
-                page.wait_for_timeout(50)
-                assert page.locator(".top-line > .brand").is_visible() == shown, f"at {w} px, compacted {scrolled}: the logo {shown}"
-            if not shown:
-                assert abs(box(page, ".pile")["x"] - box(page, ".top-line")["x"]) <= 1, f"at {w} px the pile first"
-    finally:
-        page.evaluate("document.body.classList.remove('scrolled')")
-        page.set_viewport_size(size)
-
-
 def test_header_on_one_baseline(page, case):
-    """The row stands on one line: the logo's drawing (the small mark under
-    600 px) with its bottom edge, the letters' baseline, the pill of the
-    pile, the Cube choice beside it at full width and the page buttons end
-    there; the M is as tall as the page buttons. The age stands centred
-    above the pill, its digits of one width."""
+    """The row stands on one line: the logo's drawing (the M where the row
+    is short) with its bottom edge, the letters' baseline, the pill of the
+    pile, the Cube choice and the page buttons end there; the M is as tall
+    as the page buttons."""
     brand = page.evaluate(BRAND_BOX)
     button = box(page, "#view-tiles")
     assert abs(brand["height"] - button["height"]) <= 1, f"the M as tall as the page buttons: {brand} vs {button}"
     bottom = button["y"] + button["height"]
-    ends = {"logo": brand["bottom"], "pill": edge(page, "#cube-problems .problems-sum")}
-    if case.width >= 600:
-        ends["cube"] = edge(page, "#cube-choice")
+    ends = {"logo": brand["bottom"], "pill": edge(page, "#cube-problems .problems-sum"), "cube": edge(page, "#cube-choice")}
     assert all(abs(y - bottom) <= 1 for y in ends.values()), f"on the buttons' lower edge {bottom}: {ends}"
-    pill, age = box(page, "#cube-problems .problems-sum"), box(page, ".pile-age")
-    assert wait_until(page, "document.querySelector('.pile-age').textContent !== ''", 5), "the age has come"
-    age = box(page, ".pile-age")
-    assert age["y"] + age["height"] <= pill["y"] + 1, f"the age above the pill: {age} vs {pill}"
-    assert abs((age["x"] + age["width"] / 2) - (pill["x"] + pill["width"] / 2)) <= 1, f"centred over it: {age} vs {pill}"
-    assert "tabular-nums" in page.locator(".pile-age").evaluate("(e) => getComputedStyle(e).fontVariantNumeric"), "digits of one width"
 
 
 def test_cube_clock_in_its_facts(page, case):
@@ -346,8 +353,8 @@ QUEUED = {"en": "Queued", "de": "Warteschlange"}
 
 def test_expert_line_of_the_cube(page, case, reads):
     """In expert mode a line under the header's first: the chosen Cube's
-    name, duty cycle, free slots and pending, queued only while commands
-    wait; it stays when the header compacts, on every page, and is gone
+    name, how long ago it was read and the server replied, duty cycle,
+    free slots and pending, queued only while commands wait; it stays when the header compacts, on every page, and is gone
     outside expert mode."""
     line = page.locator("#cube-stats")
     assert line.is_hidden(), "no line outside expert mode"
@@ -355,6 +362,11 @@ def test_expert_line_of_the_cube(page, case, reads):
     assert line.is_visible(), "the line in expert mode"
     name = page.evaluate("(() => { const c = state.cubes.find((x) => x.serial === state.serial); return c.name || c.serial; })()")
     assert page.locator("#stats-cube").inner_text() == name, "the chosen Cube's name first"
+    times = page.locator("#cube-stats .read-time")
+    assert times.count() == 2, "how long ago the Cube was read and the server replied"
+    labels = [times.nth(i).locator("span").first.inner_text() for i in range(2)]
+    assert labels == page.evaluate("[t('header.cubeRead'), t('header.serverReplied')]"), f"named so: {labels}"
+    assert box(page, "#stats-cube")["x"] < times.first.bounding_box()["x"], "after the Cube's name"
     text = line.inner_text()
     assert DUTY[case.lang] in text and "%" in text, f"the duty cycle ({text!r})"
     assert page.locator("#stat-queued").is_hidden(), "queued only while commands wait"
@@ -383,13 +395,13 @@ def test_no_buttons_before_the_session_is_known(page, case, watch):
     hold(page, "**/api/v1/me", "GET", held, sent)
     page.reload()
     assert wait_held(page, held), "the page asks who is in"
-    for part in (".top-line > .nav", ".top-line > .cube"):
+    for part in (".top-line > .nav", ".top-line .cube"):
         assert page.locator(part).is_hidden(), f"{part} hidden before the answer"
     assert page.locator(".top .brand-name").is_visible(), "the name shows"
     held[0].continue_()
     page.unroute("**/api/v1/me")
     assert wait_until(page, "!document.body.classList.contains('signed-out')", 5), "shown once the server has answered"
-    assert page.locator(".top-line > .nav").is_visible() and page.locator(".top-line > .cube").is_visible(), "the buttons once signed in"
+    assert page.locator(".top-line > .nav").is_visible() and page.locator(".top-line .cube").is_visible(), "the buttons once signed in"
     watch.expected.append(("/api/v1/me", 500))
     page.route("**/api/v1/me", lambda route: route.fulfill(status=500, content_type="application/json", body='{"error":"test"}'))
     page.reload()
@@ -472,45 +484,62 @@ def test_versions_copy(page, case):
 
 
 AGES = ((5, 5, "second"), (125, 2, "minute"), (3 * 3600 + 5, 3, "hour"), (3 * 86400, 3, "day"))
-SET_AGE = """async ([ago, skew]) => {
+# The chosen Cube read ago seconds before now on a server's clock skew ms
+# ahead: what the list says of it, its tooltip, and what it should say.
+SET_READ = """async ([ago, skew]) => {
   serverSkew = skew;
   const c = state.cubes.find((x) => x.serial === state.serial);
-  c.updated = new Date(Date.now() - ago * 1000).toISOString();
+  c.updated = new Date(Date.now() + skew - ago * 1000).toISOString();
   renderUpdated();
-  await new Promise((done) => setTimeout(done)); // the part draws the age after the call
-  const time = fmtTimeOfDay(new Date(Date.parse(c.updated) - skew)); // on the browser's clock, as the age
-  return [document.querySelector('.pile-age').textContent, t('header.cubeRead', {time})];
+  await new Promise((done) => setTimeout(done)); // the part draws after the call
+  const v = document.querySelector('#cube-problems .read-times > :nth-child(2)');
+  return [v.textContent, v.title, fmtTimeOfDay(new Date(Date.parse(c.updated) - skew))];
 }"""
+# How long ago, in the page's language, as the header says it.
+AGO = "([n, unit]) => new Intl.RelativeTimeFormat(i18n.lang, {numeric: 'always', style: 'short'}).format(-n, unit)"
+# The values of the list's times and of the expert line's, as they show.
+TIMES = """() => [
+  [...document.querySelectorAll('#cube-problems .read-times > :nth-child(even)')].map((e) => e.textContent),
+  [...document.querySelectorAll('#cube-stats .read-time > span:last-child')].map((e) => e.textContent),
+]"""
 
 
-def test_updated_is_the_cubes_age(page, case):
-    """Above the pile how long ago the chosen Cube was heard from (its
-    updated), on the server's clock: seconds under a minute, then minutes,
-    hours, days; it counts on by itself; the pile's Refresh now says the
-    time itself. The server's clock is taken from its answers. The poll is
-    held meanwhile, so that it does not bring the Cube's own time back."""
+def test_reads_times_ago(page, case):
+    """How long ago the chosen Cube was read (its updated, on the server's
+    clock) and the server last replied, relative in the page's language:
+    seconds under a minute, then minutes, hours, days; the time of day the
+    tooltip; counting on by one clock, the list's and the expert line's the
+    same. The server's clock is taken from its answers. The page's poll is
+    held meanwhile (held_poll), so that it does not bring the Cube's own
+    time back."""
     assert wait_until(page, "Math.abs(serverSkew) < 3000", 5), "the server's clock from its answers: this machine's"
+    assert page.locator(".pile-age").count() == 0, "no age above the pile"
+    page.evaluate("() => { state.settings.expert = true; applySettings(); }")  # before the hold: applySettings starts the poll
+    page.locator("#cube-problems .problems-sum").click()  # open, the list's times move on
     try:
         with held_poll(page):
             for ago, n, unit in AGES:
-                text, line = page.evaluate(SET_AGE, [ago, 0])
-                assert text == page.evaluate(f"fmtUnit({n}, '{unit}')"), f"{ago} s ago: {text!r}"
-                times = page.locator("#cube-problems .refresh-times").evaluate("(e) => e.textContent")
-                assert times.split("\n")[0] == line, f"Refresh now says the time, with its date where not today's: {times!r} vs {line!r}"
-            text, _ = page.evaluate(SET_AGE, [0, 60000])
-            assert text == page.evaluate("fmtUnit(1, 'minute')"), f"on the server's clock, a minute ahead: {text!r}"
-            page.evaluate(SET_AGE, [3, 0])
-            assert wait_until(page, "document.querySelector('.pile-age').textContent === fmtUnit(5, 'second')", 4), "it counts on"
+                text, title, clock = page.evaluate(SET_READ, [ago, 0])
+                assert text == page.evaluate(AGO, [n, unit]), f"{ago} s ago: {text!r}"
+                assert title == clock, f"its time of day the tooltip: {title!r} vs {clock!r}"
+            text, _, _ = page.evaluate(SET_READ, [90, 60000])
+            assert text == page.evaluate(AGO, [1, "minute"]), f"on the server's clock, a minute ahead: {text!r}"
+            page.evaluate(SET_READ, [3, 0])
+            want = page.evaluate(AGO, [5, "second"])
+            assert wait_until(page, "document.querySelector('#cube-problems .read-times > :nth-child(2)').textContent === %r" % want, 4), \
+                "it counts on"
+            listed, expert = page.evaluate(TIMES)
+            assert expert == listed[:2], f"the expert line's times are the list's: {expert} vs {listed}"
     finally:
-        page.evaluate("poll(true)")  # the Cube's own time back
+        page.keyboard.press("Escape")
+        page.evaluate("() => { state.settings.expert = false; applySettings(); poll(true); }")  # the Cube's own time back
 
 
-# The list's times as they are drawn closed, and again after a timer of
-# the page's own that is due after any tick the list's clock would make
-# (an interval of a second, set before): a tick still running shows.
+# The list's times as they are drawn, and again after a timer of the
+# page's own due after any tick the header's clock would make: a list
+# whose times still move shows it.
 TIMES_STILL = """async () => {
-  const text = () => document.querySelector('#cube-problems .refresh-times').textContent;
-  await new Promise((done) => setTimeout(done)); // the list's close handled: its clock stopped, or not
+  const text = () => document.querySelector('#cube-problems .read-times').textContent;
   await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
   const still = text();
   await new Promise((done) => setTimeout(done, 1100));
@@ -523,30 +552,29 @@ ROOMS_READ = "/rooms?devices=all"
 
 
 def test_refresh_now_keeps_the_list_open(page, case):
-    """The pile's list starts with Refresh now, under it when the chosen
-    Cube was read, when the server last answered and the time now, a line
-    each, the time now moving on while the list is open. A click polls,
-    the rooms too, and leaves the list open, which then shows the server's
-    answer, and turns while it waits for the server; closed, the times
-    stand still. The page's poll is held meanwhile (held_poll): the
-    click's poll is then the only one, and the times move by the list's
-    own clock alone, whatever the poll's period (docs/ui-testing.md,
-    section 9)."""
+    """The pile's list starts with Refresh now, under it three rows of a
+    label and its time: Cube read, Server replied, Current time, the times
+    right-aligned under each other, the current time moving on while the
+    list is open. A click polls, the rooms too, turns while it waits for
+    the server and leaves the list open, which then shows the server's
+    answer; closed, the times stand still. The page's poll is held
+    meanwhile (held_poll): the click's poll is then the only one."""
     with held_poll(page):
         page.locator("#cube-problems .problems-sum").click()
         first = page.locator("#cube-problems .problems-list > *").first
         first.wait_for(state="visible")
         assert "refresh-now" in (first.get_attribute("class") or ""), "Refresh now first"
         assert first.locator(".menu-item-label").inner_text() == page.evaluate("t('header.refreshTitle')"), "named so"
-        times = page.locator("#cube-problems .refresh-times")
-        lines = times.evaluate("(e) => e.textContent").split("\n")
-        words = page.evaluate("['header.cubeRead', 'header.serverReplied', 'header.timeNow'].map((k) => t(k, {time: ''}).trim())")
-        assert len(lines) == 3 and all(line.startswith(w) for line, w in zip(lines, words)), f"three times: {lines}"
-        tall = times.evaluate("(e) => e.getBoundingClientRect().height / parseFloat(getComputedStyle(e).lineHeight || '16')")
-        assert tall >= 2.5, f"a line each: {tall} lines tall"
-        now = lines[2]
-        assert wait_until(page, f"document.querySelector('#cube-problems .refresh-times').textContent.split('\\n')[2] !== {now!r}", 3), \
-            "the time now moves on"
+        cells = first.locator(".read-times > span")
+        labels = [cells.nth(i).inner_text() for i in (0, 2, 4)]
+        assert labels == page.evaluate("['header.cubeRead', 'header.serverReplied', 'header.timeNow'].map((k) => t(k))"), f"the labels: {labels}"
+        rights = [cells.nth(i).bounding_box() for i in (1, 3, 5)]
+        assert max(b["x"] + b["width"] for b in rights) - min(b["x"] + b["width"] for b in rights) <= 1, f"the times right-aligned: {rights}"
+        ys = [b["y"] for b in rights]
+        assert ys == sorted(ys) and ys[1] - ys[0] > 8, f"a row each: {ys}"
+        now = cells.nth(5).inner_text()
+        assert wait_until(page, "document.querySelector('#cube-problems .read-times > :nth-child(6)').textContent !== %r" % now, 3), \
+            "the current time moves on"
         replied = page.evaluate("state.repliedAt")
         rooms_read = []
         page.on("request", lambda r: rooms_read.append(r.url) if r.method == "GET" and ROOMS_READ in r.url else None)
@@ -566,9 +594,8 @@ def test_refresh_now_keeps_the_list_open(page, case):
                 route.continue_()
             page.unroute(CUBES)
         assert rooms_read, "the click's poll reads the rooms too, as the page's own poll does not while the stream is open"
-        assert wait_until(page, "document.querySelector('#cube-problems .refresh-times').textContent.split('\\n')[1] "
-                                "=== t('header.serverReplied', {time: fmtTimeOfDay(new Date(state.repliedAt))})", 3), \
-            f"the list shows the server's answer: {times.evaluate('(e) => e.textContent')!r}"
+        assert wait_until(page, "document.querySelector('#cube-problems .read-times > :nth-child(4)').title "
+                                "=== fmtTimeOfDay(new Date(state.repliedAt))", 3), "the list shows the server's answer"
         assert page.evaluate("document.querySelector('#cube-problems details').open"), "and leaves the list open"
         page.keyboard.press("Escape")
         assert wait_until(page, "!document.querySelector('#cube-problems details').open", 3), "Escape closes it"
@@ -576,11 +603,31 @@ def test_refresh_now_keeps_the_list_open(page, case):
         assert later == still, f"closed, the times stand still: {still!r}, then {later!r}"
 
 
+def test_pile_list_as_wide_as_its_content(page, case):
+    """The pile's list is as wide as its entries need, up to the page's
+    width (the body's, less its gutters), under the pill, inside the
+    window, once placed: components.js placeMenu sets its height's cap
+    as it places it, as test_menu_fit.py waits for it. Before, the list
+    is where the style sheet puts it, right-aligned to the pill, which
+    at 390 px is out of the window."""
+    page.locator("#cube-problems .problems-sum").click()
+    sel = "#cube-problems .problems-list"
+    lst = page.locator(sel)
+    lst.wait_for(state="visible")
+    assert wait_until(page, "document.querySelector(%r).style.maxHeight !== ''" % sel, 3), "the list placed"
+    widest = page.evaluate("Math.min(document.body.clientWidth, 1100) - 32")
+    b = lst.bounding_box()
+    assert b["width"] <= widest + 1, f"up to the page's width: {b['width']} vs {widest}"
+    assert lst.evaluate("(e) => e.scrollWidth <= e.clientWidth + 1"), "its entries inside it"
+    assert b["x"] >= 0 and b["x"] + b["width"] <= case.width, f"inside the window: {b}"
+    page.keyboard.press("Escape")
+
+
 def test_cube_choice_list_shows_problems(page, case, reads):
-    """Open, the Cube choice's list shows each Cube's problems as icons
-    after its name, its worst tone each, its link left out (the Cube's own
-    sign shows it): here its settings file differing, the cog, for the
-    owner. The problems are in the page's reads of the Cubes
+    """Open, the Cube choice's list shows after each Cube's name its link's
+    sign, first and always, then its problems as icons, its worst tone
+    each, its link not again: here its settings file differing, the cog,
+    for the owner (AP GlobalMenu, D190-A). The problems are in the page's reads of the Cubes
     (helpers.Reads)."""
     reads.cube("KEQ0000100", file_differs=["MASSIMO_CUBE_KEQ0000100_NAME"], connected=False)
     try:
@@ -591,8 +638,15 @@ def test_cube_choice_list_shows_problems(page, case, reads):
         icons = item.locator(".menu-item-icons > svg")
         hrefs = icons.evaluate_all("(es) => es.map((e) => [...e.querySelectorAll('use')].map((u) => u.getAttribute('href')).join(' '))")
         assert any("cog" in h for h in hrefs), f"the settings' cog after the name: {hrefs}"
-        assert not any("#icon-net" in h for h in hrefs), f"not its link, which its sign shows: {hrefs}"
-        name, line = item.locator(".menu-item-label").bounding_box(), icons.first.bounding_box()
+        assert "#icon-net" in hrefs[0], f"its link's sign first after the name: {hrefs}"
+        assert sum("#icon-net" in h for h in hrefs) == 1, f"its link once, its sign: {hrefs}"
+        # Both boxes at once, once the list is placed: placeMenu
+        # (components.js) moves it into the window on the frame after it
+        # opens, and two reads apart could straddle the move.
+        name, line = item.evaluate("""(e) => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => {
+            const box = (el) => { const b = el.getBoundingClientRect(); return {x: b.x, y: b.y, width: b.width, height: b.height}; };
+            done([box(e.querySelector('.menu-item-label')), box(e.querySelector('.menu-item-icons > svg'))]);
+        })))""")
         assert line["x"] >= name["x"] + name["width"] and abs((line["y"] + line["height"] / 2) - (name["y"] + name["height"] / 2)) <= 6, \
             f"after the name, on its line: {name} {line}"
         page.keyboard.press("Escape")

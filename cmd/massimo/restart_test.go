@@ -33,6 +33,7 @@ func envOf(m map[string]string) func(string) string {
 // Who starts the server again: the service manager that runs it, found
 // by its traces, or whatever -restart exit trusts; nobody in a terminal.
 func TestRestartBy(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		name, mode string
 		p          processInfo
@@ -69,6 +70,7 @@ func TestRestartBy(t *testing.T) {
 // How the server was installed: the package manager that owns the binary
 // first, else the service manager that started it, else other.
 func TestInstallKind(t *testing.T) {
+	t.Parallel()
 	systemd := processInfo{goos: "linux", getenv: envOf(map[string]string{"INVOCATION_ID": "0123abcd", "SYSTEMD_EXEC_PID": "4242"}), pid: 4242, ppid: 1}
 	for _, c := range []struct {
 		name     string
@@ -94,6 +96,7 @@ func TestInstallKind(t *testing.T) {
 // A restart ends serve's context and turns its end into errRestart, which
 // exits 75; a Windows helper is started instead of ending anything.
 func TestRestarter(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	r := &restarter{by: bySystemd, cancel: cancel}
 	if err := r.result(nil); err != nil {
@@ -131,6 +134,7 @@ func TestRestarter(t *testing.T) {
 // The installed unit restarts on the exit status of a restart and does
 // not count it as a failure.
 func TestUnitRestartsOnExitRestart(t *testing.T) {
+	t.Parallel()
 	b, err := packaging.Files.ReadFile("systemd/massimo.service")
 	if err != nil {
 		t.Fatal(err)
@@ -146,18 +150,15 @@ func TestUnitRestartsOnExitRestart(t *testing.T) {
 // answers 202, stops, closes its store with the request's audit row in
 // it, and exits with exitRestart for its service manager.
 func TestServeRestartsThroughTheAPI(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("a Windows service restarts through massimo restart")
 	}
 	if testing.Short() {
 		t.Skip("builds the binary")
 	}
-	bin := filepath.Join(t.TempDir(), "massimo")
-	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
-		t.Fatalf("go build: %v\n%s", err, out)
-	}
 	data := t.TempDir()
-	cmd := exec.Command(bin, "-data", data, "serve", "-listen", "127.0.0.1:0", "-discover-interval", "0")
+	cmd := exec.Command(builtBinary(t), "-data", data, "serve", "-listen", "127.0.0.1:0", "-discover-interval", "0")
 	for _, kv := range os.Environ() {
 		if !strings.HasPrefix(kv, "MASSIMO_") && !strings.HasPrefix(kv, "INVOCATION_ID=") {
 			cmd.Env = append(cmd.Env, kv)

@@ -20,6 +20,7 @@ import (
 
 // Where a proxy serves a request, in each of the common headers' forms.
 func TestForwardedTarget(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		name    string
 		headers map[string]string
@@ -65,6 +66,7 @@ func TestForwardedTarget(t *testing.T) {
 // certificate, the one the handshake refuses too, and whether it is valid
 // for the host, a name or an address, against the roots given.
 func TestReadProxyCert(t *testing.T) {
+	t.Parallel()
 	ts := httptest.NewTLSServer(http.NotFoundHandler())
 	defer ts.Close()
 	addr := ts.Listener.Addr().String()
@@ -105,6 +107,7 @@ func TestReadProxyCert(t *testing.T) {
 // address at once, its certificate once the check in the background has
 // read it; through no trusted proxy, nothing of the headers.
 func TestSystemBehindAProxy(t *testing.T) {
+	t.Parallel()
 	proxy := httptest.NewTLSServer(http.NotFoundHandler())
 	defer proxy.Close()
 	_, port, _ := net.SplitHostPort(proxy.Listener.Addr().String())
@@ -154,6 +157,7 @@ func TestSystemBehindAProxy(t *testing.T) {
 // an anonymous request, an untrusted peer or a request without a scheme
 // changes nothing.
 func TestProxiedURL(t *testing.T) {
+	t.Parallel()
 	trusted, _ := ParseTrustedProxies("127.0.0.1,::1")
 	r := startServer(t, stored(), withOptions(Options{TrustedProxies: trusted}))
 	ts, s, st := r.ts, r.s, r.st

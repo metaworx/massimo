@@ -17,6 +17,7 @@ import (
 )
 
 func TestUDPIdentifyReply(t *testing.T) {
+	t.Parallel()
 	// Captured on the wire from a Cube with firmware 1.1.3, the serial and
 	// the radio address replaced by placeholders.
 	pkt := []byte("eQ3MaxApKEQ0000100>I\x00\x0a\x01\x07\x01\x13")
@@ -42,6 +43,7 @@ func TestUDPIdentifyReply(t *testing.T) {
 }
 
 func TestConfigRequestAndReply(t *testing.T) {
+	t.Parallel()
 	if req := udpRequest("KEQ0000000", udpGetConfig); string(req) != "eQ3Max*\x00KEQ0000000c" {
 		t.Fatalf("request %q", req)
 	}
@@ -75,6 +77,7 @@ func TestConfigRequestAndReply(t *testing.T) {
 // A serial that answers from two addresses, a Cube and the massimo
 // proxy that serves it, is listed twice, once per address.
 func TestDiscoverKeepsEveryAnswerOfASerial(t *testing.T) {
+	t.Parallel()
 	first, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000000", 0x0a0107)
 	if err != nil {
 		t.Fatal(err)
@@ -106,6 +109,7 @@ func TestDiscoverKeepsEveryAnswerOfASerial(t *testing.T) {
 
 // eQ-3's prefix in either spelling and case; another card's is not.
 func TestIsEQ3MAC(t *testing.T) {
+	t.Parallel()
 	for mac, want := range map[string]bool{"00:1a:22:01:02:03": true, "00-1A-22-01-02-03": true, "02:00:00:01:02:03": false, "": false} {
 		if got := IsEQ3MAC(mac); got != want {
 			t.Errorf("%q: %v", mac, got)

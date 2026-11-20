@@ -108,7 +108,6 @@ def test_server_gone(page, case, watch):
         assert "grayscale" not in page.evaluate("getComputedStyle(document.querySelector('#cube-problems .server-icon')).filter"), \
             "the plug itself in colour"
         assert "grayscale" in page.evaluate("getComputedStyle(document.querySelector('main .problems-sum')).filter"), "the other signs greyed"
-        assert page.locator(".pile-age").inner_text().strip(), "the Cube's age still shown"
     finally:
         page.unroute("**/healthz")
     page.evaluate("checkVersion()")

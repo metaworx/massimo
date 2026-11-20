@@ -23,6 +23,7 @@ import (
 // log's pending events and closes the store; the process used to end at
 // once.
 func TestServiceStopWaitsForServe(t *testing.T) {
+	testkit.Swapping(t)
 	logPath := tempServiceLog(t)
 	defer func(old *serviceRun) { theService = old }(theService)
 	theService = newServiceRun()
@@ -106,6 +107,7 @@ func tempServiceLog(t *testing.T) string {
 // A serve that ends without a stop ends the process at once, so the
 // manager's recovery actions restart the service.
 func TestServiceEndWithoutStop(t *testing.T) {
+	testkit.Swapping(t)
 	tempServiceLog(t)
 	defer func(old *serviceRun) { theService = old }(theService)
 	theService = newServiceRun()

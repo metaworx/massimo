@@ -23,6 +23,7 @@ import (
 )
 
 func TestHelperEnv(t *testing.T) {
+	t.Parallel()
 	got := helperEnv([]string{"Path=C:\\Windows", "MASSIMO_API_TOKEN=x", "massimo_cube_KEQ0000000_KEY=y", "MASSIMO_GITHUB_TOKEN=t", "MASSIMO_UPDATE_API=http://127.0.0.1:1", "MASSIMO_ENV_FILE=C:\\ProgramData\\Massimo\\env", "SystemRoot=C:\\Windows"})
 	want := []string{"Path=C:\\Windows", "MASSIMO_GITHUB_TOKEN=t", "MASSIMO_UPDATE_API=http://127.0.0.1:1", "SystemRoot=C:\\Windows", "MASSIMO_ENV_FILE=" + noEnvFile}
 	if !slices.Equal(got, want) {
@@ -31,6 +32,7 @@ func TestHelperEnv(t *testing.T) {
 }
 
 func TestJobDecision(t *testing.T) {
+	t.Parallel()
 	if f, b := jobDecision(0); f != 0 || b != "" {
 		t.Fatal("a plain job")
 	}
@@ -51,6 +53,7 @@ func TestJobDecision(t *testing.T) {
 
 // The starter runs a process and refuses a second start until it exits.
 func TestHelperStarterGuard(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	h := &helperStarter{
 		log:     slog.New(slog.NewTextHandler(io.Discard, nil)),

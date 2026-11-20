@@ -6,10 +6,12 @@ package server
 import (
 	"encoding/base64"
 	"net"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
@@ -33,7 +35,27 @@ func withEco(t *testing.T, greeting []cube.Message, rf cube.RFAddress, eco float
 	return cube.Message{}
 }
 
+// takeConfig gives fc the C line changed, as the device took it: the
+// fake answers c: with it, and greets a later connection with greeting,
+// the one it started with, with changed in place of the device's line,
+// as the Cube's greeting carries what its devices took. A greeting that
+// still had the old line would undo it at the follow-up's budget
+// reconnect.
+func takeConfig(t *testing.T, fc *fakecube.Server, greeting []cube.Message, changed cube.Message) {
+	t.Helper()
+	rf, _, _ := strings.Cut(changed.Data, ",")
+	g := slices.Clone(greeting)
+	for i, m := range g {
+		if m.Type == 'C' && strings.HasPrefix(m.Data, rf+",") {
+			g[i] = changed
+		}
+	}
+	fc.SetGreeting(g)
+	fc.SetConfig(changed)
+}
+
 func TestFollowUpAfterAWrite(t *testing.T) {
+	t.Parallel()
 	// The start has the greeting through the pump: its configuration is
 	// what the new one's config line is measured against.
 	r := startServer(t, withOptions(Options{RefreshInterval: time.Hour,
@@ -58,7 +80,7 @@ func TestFollowUpAfterAWrite(t *testing.T) {
 		t.Fatalf("eco right after the write %v", e)
 	}
 	lines := cubewatch.Lines(fc)
-	fc.SetConfig(withEco(t, recorded(t), 0x0a010a, 17))
+	takeConfig(t, fc, recorded(t), withEco(t, recorded(t), 0x0a010a, 17))
 	testkit.Eventually(t, "the new eco temperature", func() bool { return eco() == float64(17) })
 	// The re-read that brought the new line has its answer: any c: for
 	// 0a010a from now on is one more.
@@ -83,6 +105,7 @@ func TestFollowUpAfterAWrite(t *testing.T) {
 }
 
 func TestFollowUpGivesUpAndRespectsTheRefreshSwitch(t *testing.T) {
+	t.Parallel()
 	// No RefreshInterval: no reconnects for the budget.
 	r := startServer(t, withLog(nil), withOptions(Options{FollowUpDelays: []time.Duration{20 * time.Millisecond, 20 * time.Millisecond}, FollowUpReconnectGap: time.Millisecond}))
 	fc, ts, rt, lines, logs := r.fc, r.ts, r.rt, r.lines, r.log
@@ -147,6 +170,7 @@ func proxyWrite(t *testing.T, conn net.Conn, r *cube.Reader, data string) {
 // it shows what was written, then the budget reconnect; a setpoint gets
 // the budget reconnect only.
 func TestFollowUpAfterAProxyClientsWrite(t *testing.T) {
+	t.Parallel()
 	ports := &heldPorts{}
 	proxyAddr := ports.hold(t)
 	rg := startServer(t, withLog(nil), withOptions(Options{RefreshInterval: time.Hour,
@@ -175,7 +199,7 @@ func TestFollowUpAfterAProxyClientsWrite(t *testing.T) {
 	proxyWrite(t, conn, r, m.Data)
 	received.Await(t, 0, "a re-read", lineIs("c:0a010a"))
 	took := logs.Mark()
-	fc.SetConfig(changed)
+	takeConfig(t, fc, recorded(t), changed)
 	logs.Await(t, took, "the device's new configuration", testkit.Msg("device configuration taken over by the device"))
 	_, d := do(t, ts, "GET", "/api/v1/cubes/KEQ0000100/devices/0a010a", "")
 	if th, _ := d["thermostat"].(map[string]any); th["eco_temp"] != float64(17) {

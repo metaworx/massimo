@@ -938,7 +938,10 @@ so the firmware cannot be analysed from the software alone.
 What the days at the Cube taught beyond the protocol lines,
 kept here because they cost time to learn.
 
-- A Cube with a client drops a second client's SYNs silently:
+- A Cube with a client refuses a second client's SYNs
+  with a reset that has sequence number 0 and no ACK,
+  which Linux ignores in SYN-SENT (2026-11-13, firmware 1.1.3, tcpdump on a Pi
+  while `serve` held the Cube):
   a direct test connection times out and looks like a dead Cube.
   Test through the proxy.
 - A Cube that moved networks or booted during an unstable network can answer

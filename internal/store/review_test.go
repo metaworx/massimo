@@ -17,6 +17,7 @@ import (
 // version, updated_at and origin stay; an unchanged answer writes at most
 // last_seen, once per run.
 func TestDiscoveryKeepsProvenance(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	ctx := context.Background()
 	t0 := time.Date(2026, 11, 6, 8, 0, 0, 0, time.UTC)
@@ -64,6 +65,7 @@ func tombstone(t *testing.T, s *Store, serial string) {
 // unless it names the removed row to restore, which keeps its
 // identifier.
 func TestTombstonedCubeComesBack(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	ctx := context.Background()
 	first, err := s.AddCube(ctx, Cube{Serial: "KEQ0000001", Configured: true, Name: "Old"})
@@ -100,6 +102,7 @@ func TestTombstonedCubeComesBack(t *testing.T) {
 // starting; a failed migration removes its copy; a file that has moved
 // on is not copied again.
 func TestCopyBeforeLeftovers(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	// The file starts at version 1, as a box updated from v0.7.0-alpha.1 has it.
 	s, err := Open(dir, Options{Logger: quiet(), migrations: testMigrations(t, nil), readerVersion: 1})

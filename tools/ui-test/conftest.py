@@ -11,7 +11,10 @@ names, before this module or a test file reads them.
 Every test runs four times, at 1100 and 390 px wide and in English and
 German, the language from the browser context's locale (`case`, with the
 ids 1100-en, 390-en, 1100-de and 390-de); UI_TEST_CASES, comma-separated
-ids, runs only those cases, as each of CI's jobs does. Each run gets a
+ids, runs only those cases, as CI's jobs do, a case each. A test marked
+cases (ids) runs in those cases alone: in the others it is deselected as
+the suite is collected, before a fixture loads a page for it
+(test_parts_guard.py). Each run gets a
 browser context of its own from pytest-playwright, with the token in
 localStorage before the page loads, and `page` is the page loaded with
 its room tiles and its event stream open. The four cases share the one server of a worker,
@@ -48,10 +51,10 @@ The guard (autouse) fails a test on any console error, page error or a
 horizontal scroll left at its end; the refused stream of a used_ticket
 test and a stubbed 503 of the discovery are expected.
 
-pytest-playwright keeps the screenshot and the video of a failed test
-(pytest.ini) under the directory run.sh names with --output,
-tools/ui-test/results/, and the trace of a failed test that run.sh runs
-once more under results/retry/.
+pytest-playwright keeps the screenshot of a failed test (pytest.ini)
+under the directory run.sh names with --output, tools/ui-test/results/,
+and the screenshot, the video and the trace of a failed test that run.sh
+runs once more under results/retry/.
 """
 import json
 import os
@@ -104,6 +107,11 @@ class Watch:
 CASES = {"1100-en": (1100, "en"), "390-en": (390, "en"), "1100-de": (1100, "de"), "390-de": (390, "de")}
 
 
+def case_id(p):
+    """A case's id, such as 1100-en, from its (width, language)."""
+    return f"{p[0]}-{p[1]}"
+
+
 def chosen_cases():
     """The cases UI_TEST_CASES names, comma-separated ids such as
     1100-en,1100-de, in CASES's order; all four where it names none.
@@ -115,9 +123,50 @@ def chosen_cases():
     return [p for n, p in CASES.items() if not names or n in names]
 
 
-@pytest.fixture(params=chosen_cases(), ids=lambda p: f"{p[0]}-{p[1]}")
+@pytest.fixture(params=chosen_cases(), ids=case_id)
 def case(request):
     return Case(*request.param)
+
+
+# The message of a mark cases that names no case, kept with its test.
+BAD_CASES = pytest.StashKey[str]()
+
+
+def pytest_collection_modifyitems(config, items):
+    """A test marked cases runs only in the cases the mark names, ids
+    such as 1100-en: in the others it is deselected here, as the suite is
+    collected, rather than skipped by a fixture after the autouse guard
+    has loaded its page (AP TestSpeed, D9-A): one process's summary counts
+    it as deselected, xdist's leaves it out of the items. An id that is not
+    a case fails the marked test in every case (pytest_runtest_setup), so
+    that a typo does not deselect a test everywhere: an error raised here
+    would reach no one under xdist, whose workers' collection then
+    differs, and the run ends in an internal error without its cause."""
+    kept, dropped = [], []
+    for item in items:
+        mark = item.get_closest_marker("cases")
+        params = getattr(getattr(item, "callspec", None), "params", {})
+        if mark is None or "case" not in params:
+            kept.append(item)
+            continue
+        unknown = [n for n in mark.args if n not in CASES]
+        if unknown or not mark.args:
+            item.stash[BAD_CASES] = (f"the mark cases names {', '.join(unknown) or 'no case'}; "
+                                     f"the cases are {', '.join(CASES)}")
+            kept.append(item)
+            continue
+        (kept if case_id(params["case"]) in mark.args else dropped).append(item)
+    if dropped:
+        config.hook.pytest_deselected(items=dropped)
+        items[:] = kept
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_runtest_setup(item):
+    """A test whose mark cases names no case fails, before its fixtures
+    load a page, with what the mark names."""
+    if BAD_CASES in item.stash:
+        pytest.fail(item.stash[BAD_CASES], pytrace=False)
 
 
 @pytest.fixture
@@ -271,7 +320,7 @@ def guard(request, case, watch):
 def pytest_runtest_call(item):
     """The guard's checks run as part of the test, so that a console
     error fails the test itself, and pytest-playwright keeps its
-    screenshot, its video and, on run.sh's retry, its trace. A test that
+    screenshot and, on run.sh's retry, its video and its trace. A test that
     fails on its own first carries the guard's problems in its report,
     often the cause (a route handler's error, a request that failed)."""
     guard = item.funcargs.get("guard")

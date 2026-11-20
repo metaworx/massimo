@@ -146,6 +146,7 @@ func setpointLine(t *testing.T, master cube.RFAddress, room uint8, temp float64,
 // more, one room command; agreeing again, the report is cleared. A
 // second disagreement the same day is reported, and nothing is sent.
 func TestDisagreeResendsMassimosSetpoint(t *testing.T) {
+	t.Parallel()
 	r := startDrift(t, nil)
 	if code, out := do(t, r.ts, "PUT", "/api/v1/cubes/KEQ0000100/rooms/2/setpoint", `{"mode":"manual","temp":21}`); code != 200 {
 		t.Fatalf("room setpoint: %d %v", code, out)
@@ -232,6 +233,79 @@ func TestDisagreeResendsMassimosSetpoint(t *testing.T) {
 	}
 }
 
+// A disagreement not yet reported starts again while a write to the
+// room confirms (AP TestInfrastructure, D19-A): roomChecks leaves a room
+// out while a member has not shown a write to it (roomConfirmation), and
+// pause drops what the checks had counted of a disagreement not yet
+// reported, so that its ten minutes start at the first check after every
+// member showed the write.
+// Here a member differs before a room setpoint of Massimo's and does not
+// take it; the members differ for eleven minutes while the write
+// confirms, and nothing is reported. Once the write is confirmed they
+// still differ, and the Warn and the re-send of Massimo's setpoint come
+// ten and twenty minutes after that check, as in
+// TestDisagreeResendsMassimosSetpoint.
+func TestDisagreeStartsAgainOnceTheWriteConfirms(t *testing.T) {
+	t.Parallel()
+	r := startDrift(t, nil)
+	r.set(0x0a0205, "manual", 18)
+	r.check() // the disagreement begins
+
+	r.fc.SetDeaf(0x0a0205, true) // 0a0205 does not take the write
+	r.setRoom2("21")
+	r.waitSetting(0x0a0204, "manual", 21)
+	r.waitSetting(0x0a0206, "manual", 21)
+	r.rt.pumpSync(t)
+	if c := r.rt.roomConfirmation(2); c == nil || c.State != confirmPending || !slices.Equal(c.Devices, []string{"0a0205"}) {
+		t.Fatalf("the room's confirmation: %+v", c)
+	}
+	sent := r.lines.Mark()
+	r.check()
+	r.clock.add(6 * time.Minute)
+	r.check()
+	r.clock.add(5 * time.Minute)
+	r.check()
+	if got := r.outcomes("disagree"); len(got) != 0 {
+		t.Fatalf("reported while the write confirms, eleven minutes after the disagreement began: %v", got)
+	}
+
+	// 0a0206 is set to 18 by hand, and 0a0205 takes the write at last:
+	// the members still differ, the write is confirmed.
+	r.set(0x0a0206, "manual", 18)
+	r.fc.SetDeaf(0x0a0205, false)
+	r.set(0x0a0205, "manual", 21)
+	r.confirmed(2)
+	r.check() // the disagreement starts again
+	r.clock.add(9 * time.Minute)
+	r.check()
+	if got := r.outcomes("disagree"); len(got) != 0 {
+		t.Fatalf("reported nine minutes after the write was confirmed: %v", got)
+	}
+	r.clock.add(2 * time.Minute)
+	r.check()
+	evs := r.events("disagree")
+	if len(evs) != 1 || evs[0].Level != "warn" || summaryText(&evs[0], "outcome") != "differ" || summaryText(&evs[0], "room") != "2" ||
+		summaryText(&evs[0], "minutes") != "11" || summaryText(&evs[0], "differs") != "[setpoint]" ||
+		!strings.Contains(summaryText(&evs[0], "members"), "rf:0a0206 setpoint:18") {
+		t.Fatalf("the report: %+v", evs)
+	}
+	r.clock.add(9 * time.Minute)
+	r.check()
+	if got := r.radioSince(sent); len(got) != 0 {
+		t.Fatalf("sent before the second check: %v", got)
+	}
+	r.clock.add(2 * time.Minute)
+	r.check()
+	r.wantResend(sent, 0x0a0204, 2, 21, cube.ModeManual, fromMassimo)
+	r.waitSetting(0x0a0206, "manual", 21)
+	r.confirmed(2)
+	r.clock.add(time.Minute)
+	r.check()
+	if got := r.outcomes("disagree"); !slices.Equal(got, []string{"differ", "resent", "agree"}) {
+		t.Fatalf("outcomes %v", got)
+	}
+}
+
 // alertKinds are the kinds of the log's unsettled warnings and errors.
 func alertKinds(t *testing.T, ts *httptest.Server) []string {
 	t.Helper()
@@ -276,7 +350,9 @@ func (r *driftRig) wantResend(sent testkit.Cursor, master cube.RFAddress, room u
 // the room's thermostats show is sent once more, before the wall
 // thermostat's (D188); in a room without a wall thermostat too.
 func TestDisagreeResendsTheMajoritys(t *testing.T) {
+	t.Parallel()
 	t.Run("over the wall thermostat's", func(t *testing.T) {
+		t.Parallel()
 		r := startDrift(t, nil)
 		r.set(0x0a0201, "manual", 19)
 		r.set(0x0a0202, "manual", 22)
@@ -286,6 +362,7 @@ func TestDisagreeResendsTheMajoritys(t *testing.T) {
 		r.wantResend(sent, 0x0a0201, 1, 22, cube.ModeManual, "majority")
 	})
 	t.Run("without a wall thermostat", func(t *testing.T) {
+		t.Parallel()
 		r := startDrift(t, nil)
 		r.set(0x0a0204, "manual", 18)
 		r.set(0x0a0205, "manual", 23)
@@ -300,6 +377,7 @@ func TestDisagreeResendsTheMajoritys(t *testing.T) {
 // room's wall thermostat's state is sent once more; without that too,
 // nothing, the report alone.
 func TestDisagreeResendsTheWallThermostats(t *testing.T) {
+	t.Parallel()
 	r := startDrift(t, nil)
 	r.set(0x0a0201, "manual", 19)
 	r.set(0x0a0202, "manual", 20)
@@ -326,6 +404,7 @@ func TestDisagreeResendsTheWallThermostats(t *testing.T) {
 // auto on the programme, which takes its value now (D188). The fixture's
 // programme: 21 °C from 18:20, 17 °C from 20:15.
 func TestDisagreeResendsMassimosAuto(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		name string
 		hhmm string  // the Cube's clock at the start, "" for 19:51
@@ -335,6 +414,7 @@ func TestDisagreeResendsMassimosAuto(t *testing.T) {
 		{"past a switch point", "", 0},        // 19:51, the re-send at 20:23
 	} {
 		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
 			r := startDrift(t, func(lines []cube.Message) []cube.Message {
 				if c.hhmm == "" {
 					return lines
@@ -397,6 +477,7 @@ func withDeviceIn(t *testing.T, lines []cube.Message, rf cube.RFAddress, room ui
 // structure change of Massimo's concerns it. A window closed again
 // starts the ten minutes anew.
 func TestDisagreeLeavesOut(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		name  string
 		apart func(r *driftRig)
@@ -426,6 +507,7 @@ func TestDisagreeLeavesOut(t *testing.T) {
 		}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
 			r := startDrift(t, func(lines []cube.Message) []cube.Message { return withDeviceIn(t, lines, 0x0a0207, 2) })
 			for _, rf := range []cube.RFAddress{0x0a0204, 0x0a0205, 0x0a0206} {
 				r.set(rf, "manual", 21)
@@ -493,6 +575,7 @@ func withCubeTime(t *testing.T, lines []cube.Message, hhmm string) []cube.Messag
 // cleared. The Cube's clock starts at 18:30, the programme at 21 °C
 // from 18:20 to 20:15 and at 12 °C before.
 func TestDriftReported(t *testing.T) {
+	t.Parallel()
 	r := startDrift(t, func(lines []cube.Message) []cube.Message {
 		withErrorFlag(t, lines, 0x0a0206, byte(cube.RadiogramTimeInformation))
 		return withCubeTime(t, lines, "121e")
@@ -557,6 +640,7 @@ func TestDriftReported(t *testing.T) {
 // temperature before it follows for five minutes; then the one member
 // left behind is reported, the others having followed.
 func TestDriftAfterASwitchPoint(t *testing.T) {
+	t.Parallel()
 	r := startDrift(t, nil)
 	for _, rf := range []cube.RFAddress{0x0a0204, 0x0a0205, 0x0a0206} {
 		r.set(rf, "auto", 21)
@@ -591,6 +675,7 @@ func TestDriftAfterASwitchPoint(t *testing.T) {
 // the room's odd one only while every other follows; a command to a
 // room is found by its room, its target or a line to a member.
 func TestRoomCheckRules(t *testing.T) {
+	t.Parallel()
 	sp := func(v float64) *float64 { return &v }
 	member := func(rf cube.RFAddress, mode cube.Mode, set float64, judged, follows bool) roomMember {
 		st := cube.DeviceState{RFAddress: rf, Valid: true, Mode: mode, Setpoint: sp(set)}

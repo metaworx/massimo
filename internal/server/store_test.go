@@ -4,32 +4,25 @@
 package server
 
 import (
-	"io"
-	"log/slog"
 	"testing"
 	"time"
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit/storekit"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
-// testStore opens a store in a temporary directory, or in dir.
+// testStore opens a store in a temporary directory, or in dir: a copy of
+// the migrated template where dir has no store yet (storekit.Open).
 func testStore(t *testing.T, dir string) *store.Store {
 	t.Helper()
-	if dir == "" {
-		dir = t.TempDir()
-	}
-	st, err := store.Open(dir, store.Options{Version: "test", Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { st.Close() })
-	return st
+	return storekit.Open(t, dir)
 }
 
 // The stale threshold is the server's, not the process's.
 func TestStaleAfterPerServer(t *testing.T) {
+	t.Parallel()
 	a := New(Options{StaleAfter: 36 * time.Hour})
 	b := New(Options{})
 	if a.StaleAfter() != 36*time.Hour || b.StaleAfter() != view.StaleAfter {
@@ -45,6 +38,7 @@ func TestStaleAfterPerServer(t *testing.T) {
 // server it is listed again once a run has heard it, not before, and
 // not announced a second time.
 func TestFoundCubeSurvivesRestart(t *testing.T) {
+	t.Parallel()
 	other, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000000", 0x0a0b0c)
 	if err != nil {
 		t.Fatal(err)

@@ -18,6 +18,7 @@ import (
 )
 
 func TestAuthLimiter(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	clock := testkit.NewClock(time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC))
 	l := newAuthLimiter(3, time.Minute, 5*time.Minute, clock.Now)
@@ -51,6 +52,7 @@ func TestAuthLimiter(t *testing.T) {
 }
 
 func TestTicketStore(t *testing.T) {
+	t.Parallel()
 	clock := testkit.NewClock(time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC))
 	s := newTicketStore(clock.Now)
 	id, exp, err := s.issue("keq0000100", nil)
@@ -115,6 +117,7 @@ func ticketFor(t *testing.T, ts *httptest.Server, token, sn string) string {
 }
 
 func TestEventStreamTicket(t *testing.T) {
+	t.Parallel()
 	ts := startServer(t, withOptions(Options{Token: "secret"})).ts
 	events := ts.URL + "/api/v1/cubes/KEQ0000100/events"
 	if r := send(t, "POST", ts.URL+"/api/v1/cubes/KEQ0000100/events/ticket", ""); r.StatusCode != 401 {
@@ -142,6 +145,7 @@ func TestEventStreamTicket(t *testing.T) {
 }
 
 func TestFailedTokensLockTheAddressOut(t *testing.T) {
+	t.Parallel()
 	ts := startServer(t, withOptions(Options{Token: "secret", AuthFailures: 3})).ts
 	cubes := ts.URL + "/api/v1/cubes"
 	// A success in between forgets the failures.
@@ -180,6 +184,7 @@ func TestFailedTokensLockTheAddressOut(t *testing.T) {
 // is refused, but does not count toward the lockout. An empty Bearer
 // header is offered, and counts.
 func TestRequestsWithoutTokenAreNotCounted(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	opts := storeOptions(t, dir, "secret")
 	opts.AuthFailures = 3
@@ -226,6 +231,7 @@ func TestRequestsWithoutTokenAreNotCounted(t *testing.T) {
 }
 
 func TestClientIP(t *testing.T) {
+	t.Parallel()
 	proxies, err := ParseTrustedProxies("127.0.0.1, 10.0.0.0/8 ::1")
 	if err != nil || len(proxies) != 3 || proxies[1].String() != "10.0.0.0/8" || proxies[0].String() != "127.0.0.1/32" {
 		t.Fatalf("parse: %v %v", proxies, err)
@@ -290,6 +296,7 @@ func TestClientIP(t *testing.T) {
 // read-only store makes a write show as an error in the log). Failures
 // still go with a success, also those from before a restart.
 func TestStoreLimiterWritesOnlyAfterFailures(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
 	st := testStore(t, dir)

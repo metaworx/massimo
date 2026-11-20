@@ -52,6 +52,7 @@ func TestConcurrentAddCube(t *testing.T) {
 // A proxy address whose port is taken starts nothing: it is not listed
 // as listening, and the server goes on.
 func TestProxyPortInUse(t *testing.T) {
+	t.Parallel()
 	ports := &heldPorts{}
 	ts := startServer(t, stored(), listenOn(ports)).ts
 	taken, err := net.Listen("tcp", "127.0.0.1:0")
@@ -72,6 +73,7 @@ func TestProxyPortInUse(t *testing.T) {
 
 // Once Run's context is done, nothing new starts.
 func TestNothingStartsAfterRun(t *testing.T) {
+	t.Parallel()
 	s := New(Options{})
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -91,6 +93,7 @@ func TestNothingStartsAfterRun(t *testing.T) {
 // A Cube served by its address alone learns its serial when it connects,
 // while a handler reads the serial (go test -race).
 func TestSerialLearnedWhileRead(t *testing.T) {
+	t.Parallel()
 	// The Cube comes up only once the handlers read: its port is held,
 	// and the client's first dial waits for the greeting.
 	held, err := net.Listen("tcp", "127.0.0.1:0")
@@ -142,6 +145,7 @@ func TestSerialLearnedWhileRead(t *testing.T) {
 // not take that runtime's place: it stops, as register refuses a second
 // runtime for a serial, and the one added keeps the serial.
 func TestLearnedSerialServedAlready(t *testing.T) {
+	t.Parallel()
 	// The Cube comes up only once the serial was added: its port is
 	// held, and the client's first dial waits for the greeting.
 	held, err := net.Listen("tcp", "127.0.0.1:0")

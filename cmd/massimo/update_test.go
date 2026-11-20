@@ -6,8 +6,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
-	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -19,10 +17,13 @@ import (
 
 	"go.metaworx.ch/massimo/internal/env"
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
+	"go.metaworx.ch/massimo/internal/testkit/storekit"
 	"go.metaworx.ch/massimo/internal/update"
 )
 
 func TestHealthClient(t *testing.T) {
+	t.Parallel()
 	if healthClient("http://127.0.0.1:8099/healthz").Transport != nil {
 		t.Fatal("plain http given a transport of its own")
 	}
@@ -40,6 +41,7 @@ func TestHealthClient(t *testing.T) {
 // TestWaitHealthyOverTLS checks the helper's health check against a
 // server with a certificate nothing trusts, on the loopback.
 func TestWaitHealthyOverTLS(t *testing.T) {
+	t.Parallel()
 	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"ok":true,"version":"massimo v1.2.3 (go)"}`)
 	}))
@@ -55,6 +57,7 @@ func TestWaitHealthyOverTLS(t *testing.T) {
 // TestUpdateVariablesAreKnown keeps massimo config from flagging the
 // variables massimo update reads as typos.
 func TestUpdateVariablesAreKnown(t *testing.T) {
+	t.Parallel()
 	for _, k := range []string{update.TokenVar, "MASSIMO_UPDATE_CHANNEL"} {
 		if !env.Known(k) {
 			t.Errorf("%s unknown to massimo config", k)
@@ -66,6 +69,7 @@ func TestUpdateVariablesAreKnown(t *testing.T) {
 // on it: the stand-in scripts of internal/update cannot show how the real
 // binary starts (it loads its .env before every command).
 func TestSmokeRunsRealBinary(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("builds the binary")
 	}
@@ -106,6 +110,7 @@ func ownAddress(t *testing.T) string {
 // verification, as the loopback is: the certificate may be self-signed,
 // or for a name rather than the address.
 func TestWaitHealthyOnOwnAddress(t *testing.T) {
+	t.Parallel()
 	ip := ownAddress(t)
 	if ip == "" {
 		t.Skip("no address but the loopback")
@@ -129,6 +134,7 @@ func TestWaitHealthyOnOwnAddress(t *testing.T) {
 // The box's own addresses are those its interfaces have when the check
 // starts; another address, and a name, stay verified.
 func TestHealthClientOwnAddresses(t *testing.T) {
+	testkit.Swapping(t)
 	was := interfaceAddrs
 	defer func() { interfaceAddrs = was }()
 	interfaceAddrs = func() ([]net.Addr, error) {
@@ -152,6 +158,7 @@ func TestHealthClientOwnAddresses(t *testing.T) {
 // the store's update.channel, else the build's flavour; the helper, which
 // reads nothing the server's user can write, skips the store.
 func TestUpdateChannelSources(t *testing.T) {
+	testkit.Swapping(t)
 	data := t.TempDir()
 	t.Setenv(env.DataVar, data)
 	t.Setenv("MASSIMO_UPDATE_CHANNEL", "")
@@ -162,10 +169,7 @@ func TestUpdateChannelSources(t *testing.T) {
 	if c, from := updateChannel(true); c != "beta" || from != fromFlavour {
 		t.Fatalf("no store: %s from %s", c, from)
 	}
-	st, err := store.Open(data, store.Options{Version: "test", Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
-	if err != nil {
-		t.Fatal(err)
-	}
+	st := storekit.Open(t, data)
 	if err := st.SetSetting(context.Background(), store.UpdateChannelKey, "alpha"); err != nil {
 		t.Fatal(err)
 	}

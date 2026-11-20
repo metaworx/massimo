@@ -18,6 +18,7 @@ import (
 // user finds the rows made with its rights and by it; and the keys of
 // before stay, undocumented.
 func TestIntegrationNamesShown(t *testing.T) {
+	t.Parallel()
 	rg := startServer(t, storedRooms(), quiet())
 	ts, st := rg.ts, rg.st
 	ctx := t.Context()
@@ -143,6 +144,7 @@ func TestIntegrationNamesShown(t *testing.T) {
 // The server's own lines name an integration's user by its chain, any
 // other user by its login name.
 func TestChainName(t *testing.T) {
+	t.Parallel()
 	plain := event{By: &eventUser{Name: "anna"}, RealUser: &eventUser{Name: "anna", Display: "Anna"}}
 	through := event{By: &eventUser{Name: "anna"}, RealUser: &eventUser{Name: "x:y", Integration: "x", Display: "Home › Anna, as anna"}}
 	if got := chainName(plain); got != "anna" {

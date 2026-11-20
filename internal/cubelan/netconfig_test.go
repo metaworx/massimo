@@ -11,9 +11,11 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 func TestNetConfigFrame(t *testing.T) {
+	t.Parallel()
 	cfg := NetConfig{
 		IP:      net.ParseIP("192.168.1.50"),
 		Gateway: net.ParseIP("192.168.1.1"),
@@ -87,6 +89,7 @@ func TestNetConfigFrame(t *testing.T) {
 }
 
 func TestNetAddrsFromN(t *testing.T) {
+	t.Parallel()
 	a, ok := parseNetAddrs([]byte{192, 168, 1, 118, 192, 168, 1, 1, 255, 255, 255, 0, 192, 168, 1, 1, 0, 0, 0, 0})
 	if !ok || a.IP.String() != "192.168.1.118" || a.Gateway.String() != "192.168.1.1" || a.Netmask.String() != "255.255.255.0" || len(a.DNS) != 1 {
 		t.Fatalf("%+v", a)
@@ -100,27 +103,58 @@ func TestNetAddrsFromN(t *testing.T) {
 	}
 }
 
-// shortWaits shortens the waits of a write and of the fake's restart.
-// The fake listens on the loopback, so the write sends no broadcast.
-func shortWaits(t *testing.T, fake *fakecube.DiscoveryResponder) {
-	t.Helper()
-	a, b, c, d, e, f := setReplyWait, setSettle, rereadWait, restartWait, askWait, probeEvery
-	t.Cleanup(func() { setReplyWait, setSettle, rereadWait, restartWait, askWait, probeEvery = a, b, c, d, e, f })
-	setReplyWait, setSettle, rereadWait, restartWait, askWait, probeEvery = 300*time.Millisecond, 10*time.Millisecond, time.Second, 3*time.Second, 200*time.Millisecond, 250*time.Millisecond
-	fake.SetRestartDelay(100 * time.Millisecond)
+// A NetWaits left 0 is the product's waits, which massimo netconfig
+// uses; a field that is set is kept, and the others take their
+// defaults.
+func TestNetWaitsDefaults(t *testing.T) {
+	t.Parallel()
+	want := NetWaits{Reply: time.Second, Settle: time.Second, Reread: 3 * time.Second, Restart: time.Minute, Probe: 2500 * time.Millisecond, Ask: time.Second}
+	if got := (NetWaits{}).orDefault(); got != want {
+		t.Fatalf("the zero waits: %+v, want %+v", got, want)
+	}
+	fields := reflect.TypeOf(NetWaits{}).NumField()
+	for i := range fields {
+		var one NetWaits
+		reflect.ValueOf(&one).Elem().Field(i).SetInt(int64(7 * time.Millisecond))
+		exp := want
+		reflect.ValueOf(&exp).Elem().Field(i).SetInt(int64(7 * time.Millisecond))
+		if got := one.orDefault(); got != exp {
+			t.Errorf("%s set: %+v, want %+v", reflect.TypeOf(one).Field(i).Name, got, exp)
+		}
+	}
+}
+
+// answeredWaits are the waits of a read and a write against a fake on
+// the loopback, which answers at once and sends no broadcast: the waits
+// for an answer are deadlines a passing test does not wait out, and take
+// the scale; the settle, the probe's pace and the re-read, which is
+// waited out only where nothing answers, do not.
+func answeredWaits() NetWaits {
+	return NetWaits{Reply: testkit.Scale(500 * time.Millisecond), Settle: 10 * time.Millisecond, Reread: 300 * time.Millisecond,
+		Restart: testkit.Scale(5 * time.Second), Probe: 100 * time.Millisecond, Ask: testkit.Scale(500 * time.Millisecond)}
+}
+
+// silentWaits are the waits of a call that the fake leaves unanswered,
+// each waited out in full: short, and not scaled, since no answer is to
+// come within them.
+func silentWaits() NetWaits {
+	return NetWaits{Reply: 100 * time.Millisecond, Settle: 10 * time.Millisecond, Reread: 300 * time.Millisecond,
+		Restart: 300 * time.Millisecond, Probe: 100 * time.Millisecond, Ask: 100 * time.Millisecond}
 }
 
 func TestNetConfigRoundTrip(t *testing.T) {
+	t.Parallel()
 	fake, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000000", 0x0a0b0c)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer fake.Close()
-	shortWaits(t, fake)
+	fake.SetRestartDelay(100 * time.Millisecond)
+	waits := answeredWaits()
 	ctx := context.Background()
 
 	// A factory Cube: c gives the stored fallback, N the lease.
-	st, err := QueryNetConfig(ctx, fake.Addr())
+	st, err := QueryNetConfig(ctx, fake.Addr(), waits)
 	if err != nil || st.Serial != "KEQ0000000" || !st.Stored.DHCP || !st.Stored.Encryption ||
 		st.Stored.IP.String() != "192.168.0.222" || st.Stored.Netmask.String() != "255.255.0.0" {
 		t.Fatalf("first read: %+v %v", st, err)
@@ -138,7 +172,7 @@ func TestNetConfigRoundTrip(t *testing.T) {
 		DNS:        []net.IP{net.ParseIP("127.0.0.53").To4()},
 		Encryption: true,
 	}
-	res, err := SetNetConfig(ctx, fake.Addr(), st.Serial, static)
+	res, err := SetNetConfig(ctx, fake.Addr(), st.Serial, static, waits)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,11 +187,12 @@ func TestNetConfigRoundTrip(t *testing.T) {
 	}
 
 	// A DHCP write: status 2, the Cube restarts by itself, no R. The
-	// restart outlasts several N probes, which keep going until it ends.
-	fake.SetRestartDelay(time.Second)
+	// restart outlasts several N probes, which keep going until it ends,
+	// and the re-read of a write without one.
+	fake.SetRestartDelay(waits.Reread + 2*waits.Probe)
 	dhcp := static
 	dhcp.DHCP = true
-	if res, err = SetNetConfig(ctx, fake.Addr(), st.Serial, dhcp); err != nil {
+	if res, err = SetNetConfig(ctx, fake.Addr(), st.Serial, dhcp, waits); err != nil {
 		t.Fatal(err)
 	}
 	if res.Status != SetStatusRestarting || res.RebootSent || !reflect.DeepEqual(res.Now.Stored, dhcp) {
@@ -171,7 +206,7 @@ func TestNetConfigRoundTrip(t *testing.T) {
 	}
 
 	// A write for another serial changes nothing and gets no answer.
-	res, err = SetNetConfig(ctx, fake.Addr(), "KEQ0000001", static)
+	res, err = SetNetConfig(ctx, fake.Addr(), "KEQ0000001", static, silentWaits())
 	if err == nil || res.Status != 0 || res.RebootSent {
 		t.Fatalf("write to another cube: %+v %v", res, err)
 	}

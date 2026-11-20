@@ -13,6 +13,7 @@ import (
 // room left out is marked deleted, and a room that takes its number
 // later gets a uid of its own; the settings change per room.
 func TestRoomsSync(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	ctx := context.Background()
 	c, err := s.AddCube(ctx, Cube{Serial: "KEQ0000001", Configured: true})

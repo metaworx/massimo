@@ -14,9 +14,10 @@ import (
 // its row, which then belongs to whoever subscribed last; each user
 // lists and removes only their own.
 func TestPushSubscriptions(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	clock := time.Date(2026, 11, 9, 6, 0, 0, 0, time.UTC)
-	s, err := Open(t.TempDir(), Options{Logger: quiet(), Now: func() time.Time { return clock }})
+	s, err := Open(copied(t), Options{Logger: quiet(), Now: func() time.Time { return clock }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,9 +72,10 @@ func TestPushSubscriptions(t *testing.T) {
 // revoked (which removes it) or has expired, nor one whose user was
 // disabled or removed (which removes it).
 func TestPushSubscriptionsThatMayBeSentTo(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	clock := time.Date(2026, 11, 9, 6, 0, 0, 0, time.UTC)
-	s, err := Open(t.TempDir(), Options{Logger: quiet(), Now: func() time.Time { return clock }})
+	s, err := Open(copied(t), Options{Logger: quiet(), Now: func() time.Time { return clock }})
 	if err != nil {
 		t.Fatal(err)
 	}

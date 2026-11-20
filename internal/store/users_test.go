@@ -16,6 +16,7 @@ import (
 // A password hashes to a PHC string that verifies, and nothing else
 // does.
 func TestPasswordHash(t *testing.T) {
+	t.Parallel()
 	h, err := HashPassword("correct horse")
 	if err != nil || !strings.HasPrefix(h, "$argon2id$v=19$m=19456,t=2,p=1$") {
 		t.Fatalf("%q %v", h, err)
@@ -34,6 +35,7 @@ func TestPasswordHash(t *testing.T) {
 // removed to a tombstone that keeps its identifier and is taken over
 // when the name comes back.
 func TestUsers(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	ctx := context.Background()
 	anna, err := s.AddUser(ctx, User{Name: " Anna ", DisplayName: "Anna", Role: RoleOperator}, "secret", 0)
@@ -149,6 +151,7 @@ func TestUsers(t *testing.T) {
 // one and an unknown or removed user are refused; no password leaves
 // none.
 func TestRenameUser(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	ctx := context.Background()
 	anna, err := s.AddUserOpaque(ctx, User{Name: "anna", Role: RoleOperator, DisplayName: "Anna"}, "pw", 0)
@@ -199,6 +202,7 @@ func TestRenameUser(t *testing.T) {
 
 // The last enabled owner cannot be disabled, demoted or removed.
 func TestLastOwner(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	ctx := context.Background()
 	o1, _ := s.AddUser(ctx, User{Name: "o1", Role: RoleOwner}, "", 0)
@@ -233,6 +237,7 @@ func TestLastOwner(t *testing.T) {
 
 // A guest's end date is kept and compared.
 func TestGuestEndDate(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	ctx := context.Background()
 	end := time.Date(2026, 12, 24, 18, 0, 0, 0, time.UTC)
@@ -253,6 +258,7 @@ func TestGuestEndDate(t *testing.T) {
 // cannot be given one, and while the only other owner has one, the last
 // cannot be demoted, disabled or removed.
 func TestLastOwnerWithEndDate(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	ctx := context.Background()
 	s.AddUser(ctx, User{Name: "o1", Role: RoleOwner}, "", 0)
@@ -297,6 +303,7 @@ func opaqueSignsIn(t *testing.T, s *Store, name, password string) bool {
 // live ones (AP UserCli v1.0, Block 2); 0024 takes the suffixes off
 // again, a name being unique among the users not removed from then on.
 func TestMigration15(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	dir := t.TempDir()
 	s14 := openAt(t, dir, 14)
@@ -340,7 +347,7 @@ func TestMigration15(t *testing.T) {
 		}
 	}
 	s15.Close()
-	s := open(t, dir)
+	s := openFresh(t, dir)
 	got, _ = names(s)
 	want = map[string]string{"u1": "anna", "u2": "bob", "u3": "bob-del-20261103-2359", "u4": "carl"}
 	for k, v := range want {

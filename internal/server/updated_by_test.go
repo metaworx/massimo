@@ -14,6 +14,7 @@ import (
 // A Cube's and a setting's change through the API name the user who
 // made it in updated_by (AP StoreRaise v1.2, Block 2).
 func TestAPIChangesSayWhoMadeThem(t *testing.T) {
+	t.Parallel()
 	opts := storeOptions(t, t.TempDir(), "secret")
 	ts := startServer(t, withOptions(opts)).ts
 	token := userToken(t, opts.Store, "anna", store.RoleOwner)

@@ -15,6 +15,7 @@ import (
 // does not accept it, then R to the Cube's discovery port, its answer,
 // the restart and the connection after it.
 func TestRebootACube(t *testing.T) {
+	t.Parallel()
 	at, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000100", 0x0a0107)
 	if err != nil {
 		t.Fatal(err)
@@ -61,6 +62,7 @@ func TestRebootACube(t *testing.T) {
 
 // While the reboot is waited for, the link says rebooting.
 func TestARebootingCubeIsListedAsRebooting(t *testing.T) {
+	t.Parallel()
 	at, err := fakecube.StartDiscovery("127.0.0.1:0", "KEQ0000100", 0x0a0107)
 	if err != nil {
 		t.Fatal(err)

@@ -23,6 +23,7 @@ func haRequest(instance string) IntegrationRequest {
 // A request waits, is approved with its maximum, and its key is collected
 // with its code: again while unused, never after its first use.
 func TestIntegrationRegistration(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	ctx := context.Background()
 	req, err := s.AddIntegrationRequest(ctx, haRequest(instanceA), "K7Q2PX")
@@ -101,6 +102,7 @@ func TestIntegrationRegistration(t *testing.T) {
 // Refused and too many requests; a second integration of the same name
 // gets users of its own, named by its uuid.
 func TestIntegrationRequestsBounded(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	ctx := context.Background()
 	r, _ := s.AddIntegrationRequest(ctx, haRequest(instanceA), "AAAAAA")
@@ -139,6 +141,7 @@ func TestIntegrationRequestsBounded(t *testing.T) {
 // call updates the name and the level, and the display name of its user
 // while that is the name reported before (the copy rule).
 func TestIntegrationUsers(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	ctx := context.Background()
 	req, _ := s.AddIntegrationRequest(ctx, haRequest(instanceA), "AAAAAA")
@@ -186,6 +189,7 @@ func TestIntegrationUsers(t *testing.T) {
 // the integration takes it, and its own user's display name follows while
 // it is the name reported before.
 func TestIntegrationReportedName(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	ctx := context.Background()
 	req, _ := s.AddIntegrationRequest(ctx, haRequest(instanceA), "AAAAAA")
@@ -219,6 +223,7 @@ func TestIntegrationReportedName(t *testing.T) {
 // An integration's users link to Massimo users, two to the same one, and
 // unlink; the system user and a link to an integration's user are refused.
 func TestLinkIntegrationUser(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	ctx := context.Background()
 	req, _ := s.AddIntegrationRequest(ctx, haRequest(instanceA), "AAAAAA")

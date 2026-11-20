@@ -5,9 +5,10 @@
  * @file internal/server/ui/src/rooms/Tile.tsx
  *
  * A room's tile: its head with the room's name, its problems and its ⋯
- * menu; one line of its notices (a room not ready, devices not seen for
- * long, the Cube's lines that differ from its room list), which its
- * problems list (rooms/facts.ts roomEntries); the measured and
+ * menu, whose problems list its notices too (a room not ready, devices
+ * not seen for long, the Cube's lines that differ from its room list;
+ * rooms/facts.ts roomEntries); one line while the room's commands are
+ * refused; the measured and
  * the set temperature with the stepper; the modes with More; the info and
  * the cog; the holiday form, the deletion's question, the room's repairs,
  * the result line, the device list and the configuration. Built once per
@@ -24,12 +25,12 @@ import { DateTime, FormFooter, Stepper, Switch } from "../shared/field";
 import { Icon, IconButton } from "../shared/icon";
 import { Island } from "../shared/island";
 import { Dropdown, MenuItem } from "../shared/menu";
-import { Problems, type Entry } from "../shared/problems";
+import { Problems } from "../shared/problems";
 import { busyProps, Question } from "../shared/question";
 import { Config } from "./Config";
 import { closeConfig, openConfig } from "./configuration";
 import { DeviceList } from "./Devices";
-import { problemsLabel, roomEntries, roomNotices } from "./facts";
+import { problemsLabel, roomEntries } from "./facts";
 import { load, tickOf } from "./store";
 
 /** hid is the class hidden, with its space, where off. */
@@ -41,13 +42,13 @@ function hid(off: boolean): string {
 const MORE_ITEMS = ".menu-items button:not(:disabled), .menu-items .switch:not(.hidden) input";
 
 /**
- * NoticeLine is the tile's one line of its notices, which its pill lists
- * (entries, roomEntries): while the room is not ready that its commands
- * are discarded until every device has reported, as that is why a change
- * does nothing; otherwise how many there are. Show opens the pill's list.
+ * NotReadyLine is the tile's one line while the room's commands are
+ * refused, until every device has reported (room.ready), as that is why a
+ * change does nothing; its Show opens the pill, which lists the devices
+ * that have not reported (roomEntries). The tile's other notices are the
+ * pill's entries alone.
  */
-function NoticeLine({ room, entries, tile }: { room: PageRoom; entries: Entry[]; tile: () => HTMLElement | null }) {
-  const n = roomNotices(entries);
+function NotReadyLine({ room, tile }: { room: PageRoom; tile: () => HTMLElement | null }) {
   const open = () => {
     // After the click, which the page's close of an open menu on a click
     // outside it (components.js) sees first, as every other listener does.
@@ -59,9 +60,9 @@ function NoticeLine({ room, entries, tile }: { room: PageRoom; entries: Entry[];
     });
   };
   return (
-    <Notice cls="tile-notices" hidden={!n} text={!n ? undefined : room.ready ? tn("room.notices", n) : t("room.notReady")}>
-      {n > 0 && " "}
-      {n > 0 && <button type="button" class="tile-notices-show" onClick={open}>{t("action.show")}</button>}
+    <Notice cls="tile-notices" hidden={room.ready} text={room.ready ? undefined : t("room.notReady")}>
+      {!room.ready && " "}
+      {!room.ready && <button type="button" class="tile-notices-show" onClick={open}>{t("action.show")}</button>}
     </Notice>
   );
 }
@@ -235,7 +236,7 @@ export function Tile({ room }: { room: PageRoom }) {
         <span class="room-problems"><Problems entries={entries} label={problemsLabel(entries.flatMap((e) => e.items || []))} /></span>
         <RoomMenu room={room} ui={ui} tile={tile} />
       </header>
-      <NoticeLine room={room} entries={entries} tile={tile} />
+      <NotReadyLine room={room} tile={tile} />
       <div class={"setpoint-row" + hid(!th)}>
         <div class="temp-block">
           <span class="temp-tag"><Icon symbol="icon-is" cls="ti" /><span class="temp-label">{t("room.is")}</span></span>

@@ -26,6 +26,7 @@ import (
 // backup its file in backup_data. TestReleasedStoresDownAgain takes
 // each down again (raise_test.go).
 func TestMigratesReleasedStores(t *testing.T) {
+	t.Parallel()
 	dumps, err := filepath.Glob(filepath.Join("testdata", "releases", "v*.sql"))
 	if err != nil || len(dumps) < 6 {
 		t.Fatalf("the releases' dumps: %v, %v", dumps, err)
@@ -39,7 +40,7 @@ func TestMigratesReleasedStores(t *testing.T) {
 			if version > SchemaVersion() {
 				t.Fatalf("the dump is at schema %d, this binary's is %d", version, SchemaVersion())
 			}
-			s := open(t, dir)
+			s := openFresh(t, dir)
 			ctx := context.Background()
 			if v, _ := s.SchemaVersion(); v != SchemaVersion() {
 				t.Fatalf("schema %d after the migration, want %d", v, SchemaVersion())

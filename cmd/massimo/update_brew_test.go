@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/install"
+	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/update"
 )
 
@@ -59,6 +60,7 @@ func (b *brewBox) run(t *testing.T) func(context.Context, string, ...string) ([]
 // brewHelper sets up a box brew owns massimo on, run as a user.
 func brewHelper(t *testing.T, b *brewBox) (request, status string) {
 	t.Helper()
+	testkit.Swapping(t)
 	if runtime.GOOS == "windows" {
 		t.Skip("Homebrew does not run on Windows")
 	}
@@ -131,6 +133,7 @@ func TestBrewUpdateRespectsNoAutoUpdate(t *testing.T) {
 // TestBrewUpdateFailures: brew's error line reaches the status; root and
 // a server on the old version are refused or reported.
 func TestBrewUpdateFailures(t *testing.T) {
+	testkit.Swapping(t)
 	b := &brewBox{before: "0.12.0-alpha.1", after: "0.13.0-alpha.1", upgradeErr: errors.New("exit status 1")}
 	req, status := brewHelper(t, b)
 	err := runUpdate([]string{"-request", req, "-status", status})
@@ -162,6 +165,7 @@ func TestBrewUpdateFailures(t *testing.T) {
 // TestBrewKegOf: the keg is read with filepath, so on Windows, where the
 // test runs too, the prefix comes back with its separators.
 func TestBrewKegOf(t *testing.T) {
+	t.Parallel()
 	k, err := brewKegOf("/opt/homebrew/Cellar/massimo-alpha/0.13.0-alpha.1/bin/massimo")
 	if err != nil || k.prefix != filepath.FromSlash("/opt/homebrew") || k.formula != "massimo-alpha" || k.version != "0.13.0-alpha.1" {
 		t.Fatalf("%+v, %v", k, err)
@@ -172,6 +176,7 @@ func TestBrewKegOf(t *testing.T) {
 }
 
 func TestHomebrewJob(t *testing.T) {
+	t.Parallel()
 	for label, want := range map[string]bool{
 		"homebrew.mxcl.massimo": true, "homebrew.mxcl.massimo-alpha": true,
 		"homebrew.mxcl.massimoX": false, "ch.metaworx.massimo": false, "": false,
@@ -185,6 +190,7 @@ func TestHomebrewJob(t *testing.T) {
 // TestBrewHelperPlan: only brew services' job of a user, with brew
 // beside the keg, starts the helper.
 func TestBrewHelperPlan(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("Homebrew does not run on Windows")
 	}

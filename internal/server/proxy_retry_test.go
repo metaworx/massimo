@@ -34,6 +34,7 @@ func cubeListening(t *testing.T, s *Server) []string {
 // A proxy address whose port is taken is tried again, and listens once
 // the port is free; the failure is logged once at Error, not per try.
 func TestProxyRetriedUntilThePortIsFree(t *testing.T) {
+	t.Parallel()
 	log, logs := testkit.LogWatch(nil)
 	ports := &heldPorts{}
 	r := startServer(t, stored(), withOptions(Options{proxyRetry: quickRetry, Logger: log}), listenOn(ports))
@@ -72,6 +73,7 @@ func TestProxyRetriedUntilThePortIsFree(t *testing.T) {
 // A proxy address the host does not carry yet is tried again until the
 // host has it; a new error is logged at Error again.
 func TestProxyRetriedUntilTheAddressIsThere(t *testing.T) {
+	t.Parallel()
 	var mu sync.Mutex
 	failWith := errors.New("listen tcp 192.0.2.10:62910: bind: cannot assign requested address")
 	ports := &heldPorts{}
@@ -126,6 +128,7 @@ func TestProxyRetriedUntilTheAddressIsThere(t *testing.T) {
 // A slot that is trying stops with a new proxy address and with the
 // Cube's removal: nothing listens on its address afterwards.
 func TestProxyRetryStops(t *testing.T) {
+	t.Parallel()
 	ports := &heldPorts{}
 	r := startServer(t, stored(), withOptions(Options{proxyRetry: quickRetry}), listenOn(ports))
 	ts, s := r.ts, r.s
@@ -166,6 +169,7 @@ func TestProxyRetryStops(t *testing.T) {
 
 // A listener of -proxy (Options.Proxy) is tried again as well.
 func TestProxyFlagListenerRetried(t *testing.T) {
+	t.Parallel()
 	ports := &heldPorts{}
 	addr, free := ports.taken(t)
 	s := startServer(t, withOptions(Options{proxyRetry: quickRetry, ProxyFixed: true, Proxy: []ProxyListener{{Serial: "KEQ0000100", Addr: addr}}}), listenOn(ports)).s
@@ -180,6 +184,7 @@ func TestProxyFlagListenerRetried(t *testing.T) {
 // proxy_failing, from the PUT's answer on, and System Info's
 // cube_proxies; both clear once it listens.
 func TestProxyFailingInTheAPI(t *testing.T) {
+	t.Parallel()
 	ports := &heldPorts{}
 	r := startServer(t, stored(), withOptions(Options{proxyRetry: quickRetry}), listenOn(ports))
 	ts, s := r.ts, r.s
@@ -221,6 +226,7 @@ func TestProxyFailingInTheAPI(t *testing.T) {
 // Cube's proxy serial where one is set, and none for a listener that
 // answers no discovery.
 func TestProxyDiscoverySerialInSystem(t *testing.T) {
+	t.Parallel()
 	ports := &heldPorts{}
 	answering, silent := ports.hold(t), ports.hold(t)
 	ts := startServer(t, withOptions(Options{ProxyFixed: true, DiscoveryAddr: "127.0.0.1:0", Proxy: []ProxyListener{

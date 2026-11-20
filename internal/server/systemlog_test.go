@@ -48,6 +48,7 @@ func systemRows(t *testing.T, st *store.Store, kind string) []map[string]any {
 // The start says the version, and the one before when it changed; the
 // stop says why, written before the store closes.
 func TestServerStartAndStopLogged(t *testing.T) {
+	t.Parallel()
 	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
 	first := startServer(t, stored(), withOptions(Options{Version: "v1.0.0", Logger: discard}))
 	first.stop()
@@ -74,6 +75,7 @@ func TestServerStartAndStopLogged(t *testing.T) {
 // The settings file read again names the variables, never their values;
 // read through the API, it says who asked.
 func TestSettingsReadNamesOnly(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, stored())
 	ts, s, st := r.ts, r.s, r.st
 	token := userToken(t, st, "anna", store.RoleOwner)
@@ -101,6 +103,7 @@ func TestSettingsReadNamesOnly(t *testing.T) {
 // the old file's name and the files kept and deleted; a failed step at
 // warn with its error.
 func TestLogRotatedLine(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, stored())
 	ts, s, st := r.ts, r.s, r.st
 	token := userToken(t, st, "anna", store.RoleOwner)
@@ -132,6 +135,7 @@ func TestLogRotatedLine(t *testing.T) {
 // An update's outcome the helper reported is logged once, at the first
 // start after it, a failure at warn.
 func TestUpdateResultLoggedOnce(t *testing.T) {
+	t.Parallel()
 	status := filepath.Join(t.TempDir(), "status.json")
 	if err := update.WriteStatus(status, update.Status{State: "failed", From: "v1.0.0", To: "v1.1.0", Message: "checksum", Time: time.Now().Add(-time.Minute)}); err != nil {
 		t.Fatal(err)
@@ -150,6 +154,7 @@ func TestUpdateResultLoggedOnce(t *testing.T) {
 // A backup by hand says its reason and who took it; a deletion says
 // which and who; both are the Cube's lines of the system.
 func TestBackupsLogged(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, stored())
 	ts, st := r.ts, r.st
 	token := userToken(t, st, "anna", store.RoleOwner)
@@ -180,6 +185,7 @@ func TestBackupsLogged(t *testing.T) {
 // A Cube that follows discovery and answers from a new address says so
 // in its own log, from where to where.
 func TestAddressChangedLogged(t *testing.T) {
+	t.Parallel()
 	// The Cube is lost at the new address and searched for: on the
 	// loopback, not the LAN.
 	r := startServer(t, stored(), withOptions(Options{DiscoveryAddr: "127.0.0.1:0", DiscoveryTargets: []string{testkit.ListenPacket(t).LocalAddr().String()}}))
@@ -203,6 +209,7 @@ func TestAddressChangedLogged(t *testing.T) {
 // A found Cube that no longer answers is a line of the server's, in the
 // configured Cube's log.
 func TestCubeGoneLogged(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, stored())
 	ts, s := r.ts, r.s
 	s.cubeGone(foundCube{Serial: "KEQ0000009", Address: "192.0.2.9"})

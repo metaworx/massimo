@@ -10,16 +10,45 @@ import (
 	"testing"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
-// runNetconfigTest runs the command with the given arguments and stdin.
+// netconfigWaits are the waits of netconfig's reads and writes against
+// a fake on the loopback, which answers at once: the waits for an answer
+// are deadlines a passing test does not wait out, and take the scale;
+// the settle, the probe's pace and the re-read, which is waited out
+// only where nothing answers, do not.
+func netconfigWaits() cubelan.NetWaits {
+	return cubelan.NetWaits{Reply: testkit.Scale(500 * time.Millisecond), Settle: 10 * time.Millisecond, Reread: 300 * time.Millisecond,
+		Restart: testkit.Scale(5 * time.Second), Probe: 100 * time.Millisecond, Ask: testkit.Scale(500 * time.Millisecond)}
+}
+
+// silentWaits are the waits of a call that the fake leaves unanswered,
+// each waited out in full: short, and not scaled, since no answer is to
+// come within them.
+func silentWaits() cubelan.NetWaits {
+	return cubelan.NetWaits{Reply: 100 * time.Millisecond, Settle: 10 * time.Millisecond, Reread: 300 * time.Millisecond,
+		Restart: 300 * time.Millisecond, Probe: 100 * time.Millisecond, Ask: 100 * time.Millisecond}
+}
+
+// runNetconfigTest runs the command with the given arguments and stdin,
+// and netconfigWaits.
 func runNetconfigTest(t *testing.T, stdin string, args ...string) (string, string, error) {
 	t.Helper()
+	return runNetconfigWith(t, netconfigWaits(), stdin, args...)
+}
+
+// runNetconfigWith is runNetconfigTest with the waits given, such as
+// silentWaits for a fake that does not answer.
+func runNetconfigWith(t *testing.T, waits cubelan.NetWaits, stdin string, args ...string) (string, string, error) {
+	t.Helper()
+	testkit.Swapping(t)
 	selectedSN, snExplicit = "", false
 	t.Cleanup(func() { selectedSN, snExplicit = "", false })
 	var out, errw bytes.Buffer
-	err := netconfig(context.Background(), args, &out, &errw, strings.NewReader(stdin))
+	err := netconfig(context.Background(), args, waits, &out, &errw, strings.NewReader(stdin))
 	return out.String(), errw.String(), err
 }
 
@@ -60,17 +89,17 @@ func TestNetconfigBroadcastRecovery(t *testing.T) {
 	// No answer: zeros, encryption off unless -encryption, and it says
 	// that the stored fallback is lost.
 	fake.SetSilent(true)
-	out, _, err = runNetconfigTest(t, "", "-sn", "KEQ0000000", "-broadcast", "-addr", fake.Addr(), "-dhcp", "-dry-run")
+	out, _, err = runNetconfigWith(t, silentWaits(), "", "-sn", "KEQ0000000", "-broadcast", "-addr", fake.Addr(), "-dhcp", "-dry-run")
 	frame = "frame    65 51 33 4d 61 78 2a 00 4b 45 51 30 30 30 30 30 30 30 43 " +
 		"00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00\n"
 	if err != nil || !strings.Contains(out, frame) || !strings.Contains(out, "the stored fallback addresses are lost and the factory values are not restored") {
 		t.Fatalf("silent:\n%v\n%s", err, out)
 	}
-	out, _, err = runNetconfigTest(t, "", "-sn", "KEQ0000000", "-broadcast", "-addr", fake.Addr(), "-dhcp", "-encryption", "-dry-run")
+	out, _, err = runNetconfigWith(t, silentWaits(), "", "-sn", "KEQ0000000", "-broadcast", "-addr", fake.Addr(), "-dhcp", "-encryption", "-dry-run")
 	if err != nil || !strings.Contains(out, " 01 01\n") {
 		t.Fatalf("silent with -encryption: %v\n%s", err, out)
 	}
-	_, errOut, _ = runNetconfigTest(t, "n\n", "-sn", "KEQ0000000", "-broadcast", "-addr", fake.Addr(), "-dhcp")
+	_, errOut, _ = runNetconfigWith(t, silentWaits(), "n\n", "-sn", "KEQ0000000", "-broadcast", "-addr", fake.Addr(), "-dhcp")
 	if !strings.Contains(errOut, "fallback addresses are lost and the factory values are not restored") {
 		t.Fatalf("silent warning:\n%s", errOut)
 	}

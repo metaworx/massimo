@@ -15,6 +15,7 @@ package server
 // from the box itself, as the restart does.
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"io"
@@ -29,10 +30,11 @@ const (
 	MaxRebootDelay     = time.Hour
 )
 
-// rebootStuck is how long a server still runs after its reboot was taken
-// before it counts the reboot as failed: the system stops the server
-// within seconds of a reboot that started. A variable for the tests.
-var rebootStuck = 2 * time.Minute
+// defaultRebootStuck is how long a server still runs after its reboot
+// was taken before it counts the reboot as failed: the system stops the
+// server within seconds of a reboot that started. Options.rebootStuck
+// shortens it for the tests.
+const defaultRebootStuck = 2 * time.Minute
 
 // RebootOptions say whether and how the server reboots the computer it
 // runs on; cmd/massimo finds them.
@@ -235,9 +237,10 @@ func (s *Server) rebootNow(gen uint64) {
 	}
 	// The helper took it; a server still here later did not go down
 	// with the computer, and the next reboot may be asked for.
-	time.AfterFunc(rebootStuck, func() {
-		if p.failed(gen, "the computer has not rebooted within "+rebootStuck.String()+"; the reboot helper's log says why") {
-			s.log.Error("the computer has not rebooted", "after", rebootStuck.String())
+	stuck := cmp.Or(s.opts.rebootStuck, defaultRebootStuck)
+	time.AfterFunc(stuck, func() {
+		if p.failed(gen, "the computer has not rebooted within "+stuck.String()+"; the reboot helper's log says why") {
+			s.log.Error("the computer has not rebooted", "after", stuck.String())
 		}
 	})
 }

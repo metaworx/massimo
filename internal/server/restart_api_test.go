@@ -45,12 +45,13 @@ func decodeRestart(t *testing.T, text string) restartView {
 // acknowledged command, its retry is replayed, a second one is refused
 // while the first is under way, and the Cube is sent nothing.
 func TestRestartRoutes(t *testing.T) {
+	t.Parallel()
 	c := &restartCounter{}
 	opts := storeOptions(t, t.TempDir(), "secret")
 	opts.Restart = RestartOptions{By: "systemd", Restart: c.restart}
 	r := startServer(t, withOptions(opts))
 	fc, ts, s := r.fc, r.ts, r.s
-	stores[ts] = s.opts.Store
+	keepStore(t, ts, s.opts.Store)
 	st := s.opts.Store
 	manager := userToken(t, st, "manager1", store.RoleManager)
 	operator := userToken(t, st, "operator1", store.RoleOperator)
@@ -109,6 +110,7 @@ func TestRestartRoutes(t *testing.T) {
 // update runs, and when the restart cannot be started, the API says why
 // and restarts nothing.
 func TestRestartBlocked(t *testing.T) {
+	t.Parallel()
 	opts := storeOptions(t, t.TempDir(), "secret")
 	ts := startServer(t, withOptions(opts)).ts
 	path := "/api/v1/restart"
@@ -157,6 +159,7 @@ func TestRestartBlocked(t *testing.T) {
 // site's page is refused before that; through a proxy it does not
 // trust, the open server answers nothing at all.
 func TestRestartOpenServer(t *testing.T) {
+	t.Parallel()
 	c := &restartCounter{}
 	opts := storeOptions(t, t.TempDir(), "")
 	opts.Restart = RestartOptions{By: "exit", Restart: c.restart}
@@ -205,6 +208,7 @@ func TestRestartOpenServer(t *testing.T) {
 // A request from the box itself has a loopback peer and no forwarding
 // header.
 func TestFromTheBox(t *testing.T) {
+	t.Parallel()
 	for addr, want := range map[string]bool{"127.0.0.1:5000": true, "[::1]:5000": true, "[::ffff:127.0.0.1]:5000": true, "127.0.0.53:5000": true,
 		"192.168.1.20:5000": false, "10.0.0.1:5000": false, "[fe80::1]:5000": false, "nonsense": false} {
 		r := httptest.NewRequest("GET", "/", nil)
@@ -228,10 +232,11 @@ func TestFromTheBox(t *testing.T) {
 // no command, and the Cube is sent nothing; without restart it is
 // refused, and a server without a reloader says it reads no file.
 func TestReloadRoute(t *testing.T) {
+	t.Parallel()
 	opts := storeOptions(t, t.TempDir(), "secret")
 	r := startServer(t, withOptions(opts))
 	fc, ts, s := r.fc, r.ts, r.s
-	stores[ts] = s.opts.Store
+	keepStore(t, ts, s.opts.Store)
 	st := s.opts.Store
 	manager := userToken(t, st, "manager1", store.RoleManager)
 	operator := userToken(t, st, "operator1", store.RoleOperator)

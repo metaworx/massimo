@@ -23,6 +23,13 @@ import { windowState } from "../model/device";
 /** The rooms' load counter: bumped at every drawing of the rooms (renderRooms); every rooms part uses it. */
 export const load = counter();
 
+/**
+ * The Cubes' load counter, bumped at every load of the Cubes' list
+ * (renderCubeSelect of header.js): the House tile's name, the Cube's,
+ * follows a rename that the poll brings without a load of the rooms.
+ */
+export const cubesLoad = counter();
+
 /** Per room, by its id: n, raised when a device of the room changed (a state event), which its tile and its configuration read. */
 export const ticks = liveMap(() => ({ n: 0 }));
 

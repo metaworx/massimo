@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // fakeIdP is an OpenID Connect provider for the tests: its discovery
@@ -208,6 +209,7 @@ func signedInAs(t *testing.T, ts *httptest.Server, run oidcRun) string {
 // from its address; a refusal names its reason and counts against the
 // address.
 func TestOIDCSignIn(t *testing.T) {
+	t.Parallel()
 	f := newFakeIdP(t)
 	opts := storeOptions(t, t.TempDir(), "secret")
 	opts.TrustedProxies = []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")}
@@ -321,6 +323,7 @@ func TestOIDCSignIn(t *testing.T) {
 // a name from preferred_username, else the e-mail. A provider that names
 // client_secret_post alone gets the secret in the form.
 func TestOIDCAutoCreate(t *testing.T) {
+	t.Parallel()
 	f := newFakeIdP(t)
 	f.methods = []string{"client_secret_post"}
 	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
@@ -374,6 +377,7 @@ func TestOIDCAutoCreate(t *testing.T) {
 
 // newUserName makes a login name of what a provider says.
 func TestNewUserName(t *testing.T) {
+	t.Parallel()
 	for in, want := range map[string]string{
 		"Carl Example": "carl-example", "  anna.b ": "anna.b", "__x__": "x", "Ünïcode": "n-code", "---": "",
 		strings.Repeat("a", 70): strings.Repeat("a", 60),
@@ -390,6 +394,7 @@ func TestNewUserName(t *testing.T) {
 // fails leaves the id_token's claims alone. A user id assigned signs in
 // at once.
 func TestOIDCUserinfo(t *testing.T) {
+	t.Parallel()
 	f := newFakeIdP(t)
 	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
 	ts, s := r.ts, r.s
@@ -445,6 +450,7 @@ func TestOIDCUserinfo(t *testing.T) {
 // "" for an issuer not reached.
 func fakeDiscovery(t *testing.T, says map[string]string) {
 	t.Helper()
+	testkit.Swapping(t)
 	old := oidcClient
 	oidcClient = &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
 		asked := strings.TrimSuffix(r.URL.Scheme+"://"+r.URL.Host+strings.TrimSuffix(r.URL.Path, "/.well-known/openid-configuration"), "/")
@@ -472,6 +478,7 @@ func (f roundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f
 // account; the last way a user signs in is not the user's to remove; a
 // manager changes a link no sign-in used.
 func TestOIDCLink(t *testing.T) {
+	t.Parallel()
 	f := newFakeIdP(t)
 	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
 	ts, s := r.ts, r.s
@@ -614,6 +621,7 @@ func TestOIDCLink(t *testing.T) {
 // or one string; another claim, from the userinfo too; none named admits
 // any.
 func TestOIDCGroups(t *testing.T) {
+	t.Parallel()
 	f := newFakeIdP(t)
 	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
 	ts, s := r.ts, r.s
@@ -667,6 +675,7 @@ func TestOIDCGroups(t *testing.T) {
 // address, for ten minutes: another user or address finds nothing and
 // leaves it; a peek leaves it, a take ends it; too old, it is gone.
 func TestOIDCPendingLink(t *testing.T) {
+	t.Parallel()
 	var o oidcFlows
 	now := time.Now()
 	code := o.hold(&oidcPendingLink{userID: 7, ip: "192.0.2.1", expires: now.Add(oidcStartTTL)}, now)

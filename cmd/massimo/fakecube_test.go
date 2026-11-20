@@ -14,6 +14,7 @@ import (
 // -pair names a copy of a device of the greeting, joining after two
 // seconds unless a delay is given; anything else is refused.
 func TestParsePair(t *testing.T) {
+	t.Parallel()
 	greeting, err := fakecube.LoadGreeting("../../internal/protocol/cube/testdata/cube-fw0113-greeting.txt")
 	if err != nil {
 		t.Fatal(err)

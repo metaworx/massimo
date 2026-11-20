@@ -10,12 +10,14 @@ import (
 	"testing"
 
 	"go.metaworx.ch/massimo/internal/install"
+	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/update"
 )
 
 // TestUpdateRefusesPackaged: a binary a package manager owns is left to
 // it, before any network, and the status file says so for the UI.
 func TestUpdateRefusesPackaged(t *testing.T) {
+	testkit.Swapping(t)
 	old := packaged
 	packaged = func() (install.Manager, bool) {
 		return install.Manager{Name: "apt", Command: "sudo apt install massimo"}, true
@@ -39,6 +41,7 @@ func TestUpdateRefusesPackaged(t *testing.T) {
 // does not show the previous run's result for a request that went
 // nowhere.
 func TestHelperFailuresReachTheStatus(t *testing.T) {
+	testkit.Swapping(t)
 	oldVersion := version
 	t.Cleanup(func() { version = oldVersion })
 	t.Setenv("MASSIMO_UPDATE_CHANNEL", "")

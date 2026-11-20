@@ -20,6 +20,7 @@ import (
 // without its body; a bad one is refused; a deleted one is a tombstone
 // the list, the lookup and the body leave out.
 func TestBackupsStored(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	ctx := context.Background()
 	a, _ := s.AddCube(ctx, Cube{Serial: "KEQ0000001", Configured: true})
@@ -88,6 +89,7 @@ func TestBackupsStored(t *testing.T) {
 // backups.keep_days_auto and any other past backups.keep_days_manual,
 // tombstones too; 0 days keeps a reason's.
 func TestBackupsPruned(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	ctx := context.Background()
 	a, _ := s.AddCube(ctx, Cube{Serial: "KEQ0000001", Configured: true})
@@ -155,6 +157,7 @@ func TestBackupsPruned(t *testing.T) {
 
 // The settings' defaults, and what the store holds in their place.
 func TestBackupSettings(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	ctx := context.Background()
 	got, err := s.BackupSettings(ctx)
@@ -172,6 +175,7 @@ func TestBackupSettings(t *testing.T) {
 // Migration 0005 copies a backup of the old reasons connect and daily as
 // auto, and the table refuses them afterwards.
 func TestBackupsMigration(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	before := fstest.MapFS{}
 	entries, err := fs.ReadDir(embedded, "migrations")
@@ -197,7 +201,7 @@ func TestBackupsMigration(t *testing.T) {
 		}
 	}
 	old.Close()
-	s := open(t, dir)
+	s := openFresh(t, dir)
 	rows, err := s.db.Query(`SELECT reason FROM backups ORDER BY taken_at`)
 	if err != nil {
 		t.Fatal(err)
@@ -222,6 +226,7 @@ func TestBackupsMigration(t *testing.T) {
 // prune removed the newest backup past backups.keep_newest, nor after it
 // purged the tombstone of a deleted newest one.
 func TestBackupIDsNotReused(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	now := time.Now().UTC().Truncate(time.Second)
 	day := 24 * time.Hour
@@ -269,6 +274,7 @@ func TestBackupIDsNotReused(t *testing.T) {
 // columns, tombstones too, and starts sqlite_sequence at the highest id,
 // so that a tombstone purged after it leaves its id unused.
 func TestBackupsAutoincrementMigration(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	before := fstest.MapFS{}
 	entries, err := fs.ReadDir(embedded, "migrations")
@@ -318,7 +324,7 @@ func TestBackupsAutoincrementMigration(t *testing.T) {
 	want := rows(old, `length(body) FROM backups`)
 	old.Close()
 
-	s := open(t, dir)
+	s := openFresh(t, dir)
 	if got := rows(s, `coalesce((SELECT length(d.data) FROM backup_data d WHERE d.id = backups.id), 0) FROM backups`); fmt.Sprint(got) != fmt.Sprint(want) ||
 		len(got) != 2 || got[1].Deleted == "" {
 		t.Fatalf("copied %+v, want %+v", got, want)

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/testkit"
 )
 
@@ -107,6 +108,7 @@ func keepsItsPort(t *testing.T, addr string) {
 // A paused fake drops its client, refuses the next and keeps its port;
 // resumed, it greets again on the same address, a second time too.
 func TestPauseAndResume(t *testing.T) {
+	t.Parallel()
 	srv, addr := startFake(t)
 	first := dial(t, addr)
 	for round := range 2 {
@@ -132,10 +134,36 @@ func TestPauseAndResume(t *testing.T) {
 	}
 }
 
+// A SingleClient fake greets a client that dials the moment it resumes:
+// the client the pause dropped no longer holds the slot, whether or not
+// its connection's goroutine has seen the close yet. Each round's client
+// is the one the next round's pause drops.
+func TestSingleClientServedRightAfterResume(t *testing.T) {
+	t.Parallel()
+	srv, addr := startSingle(t, 0)
+	dial(t, addr)
+	for round := range 10 {
+		srv.Pause()
+		if err := srv.Resume(); err != nil {
+			t.Fatalf("round %d: %v", round, err)
+		}
+		conn, err := net.DialTimeout("tcp", addr, testkit.Scale(time.Second))
+		if err != nil {
+			t.Fatalf("round %d: the dial right after Resume: %v", round, err)
+		}
+		t.Cleanup(func() { conn.Close() })
+		conn.SetReadDeadline(time.Now().Add(testkit.Scale(5 * time.Second)))
+		if m, err := cube.NewReader(conn).Read(); err != nil || m.Type != 'H' {
+			t.Fatalf("round %d: the client right after Resume read %v, %v; want the greeting", round, m, err)
+		}
+	}
+}
+
 // A fake paused before it serves starts paused, and greets once
 // resumed; a paused fake closes without an error, and a Resume after
 // the Close does nothing.
 func TestPausedFromTheStart(t *testing.T) {
+	t.Parallel()
 	g, err := LoadGreeting(fixture)
 	if err != nil {
 		t.Fatal(err)
@@ -168,6 +196,7 @@ type wrapped struct{ net.Listener }
 // resumed, it greets again. A SingleClient one refuses a second client
 // by a close then.
 func TestPauseKeepingTheListener(t *testing.T) {
+	t.Parallel()
 	for _, single := range []bool{false, true} {
 		t.Run(map[bool]string{false: "any clients", true: "single client"}[single], func(t *testing.T) {
 			g, err := LoadGreeting(fixture)
@@ -201,6 +230,7 @@ func TestPauseKeepingTheListener(t *testing.T) {
 // it refuses while paused as any paused fake does, and once resumed as
 // it did before the pause, until the session is released.
 func TestPauseKeepsADeadSession(t *testing.T) {
+	t.Parallel()
 	srv, addr := startSingle(t, time.Hour)
 	first := dial(t, addr)
 	srv.SetSilent(true)

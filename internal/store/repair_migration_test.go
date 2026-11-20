@@ -14,6 +14,7 @@ import (
 // gains it, a role of the owner's and integration-v0 included (AP
 // RadioHealth v1.2, Block 10, D166-A).
 func TestMigration22(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	dir := t.TempDir()
 	s21 := openAt(t, dir, 21)
@@ -30,7 +31,7 @@ func TestMigration22(t *testing.T) {
 		}
 	}
 	s21.Close()
-	s := open(t, dir)
+	s := openFresh(t, dir)
 	for key, want := range map[string]bool{RoleManager: true, RoleIntegration: true, RoleOperator: false, RoleGuest: false, RoleViewer: false, "house": false} {
 		r, ok, err := s.Role(ctx, key)
 		if err != nil || !ok {

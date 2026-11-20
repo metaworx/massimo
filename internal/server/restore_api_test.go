@@ -109,6 +109,7 @@ func plan(t *testing.T, ts *httptest.Server, query string, f *backup.File) map[s
 var noReads = cubewatch.Except('l', 'f')
 
 func TestRestorePlan(t *testing.T) {
+	t.Parallel()
 	r := startServer(t)
 	fc, ts := r.fc, r.ts
 	received := cubewatch.Lines(fc)
@@ -209,6 +210,7 @@ func TestRestorePlan(t *testing.T) {
 }
 
 func TestRestoreRunSendsThePlan(t *testing.T) {
+	t.Parallel()
 	r := startServer(t)
 	fc, ts, s := r.fc, r.ts, r.s
 	rt := s.cubes["keq0000100"]
@@ -286,6 +288,7 @@ func TestRestoreRunSendsThePlan(t *testing.T) {
 }
 
 func TestRestoreFailsWhenTheCubeDiscards(t *testing.T) {
+	t.Parallel()
 	ts := startServer(t, withFake(func(fc *fakecube.Server) { fc.Discard = true })).ts
 	f := backupWithEco(backupOf(t, ts), 17)
 	hash := plan(t, ts, "", f)["plan"].(string)
@@ -315,6 +318,7 @@ func TestRestoreFailsWhenTheCubeDiscards(t *testing.T) {
 }
 
 func TestRestoreRefusals(t *testing.T) {
+	t.Parallel()
 	// The queue pauses half a second between commands, so a restore of
 	// two steps runs long enough for a second one to be refused.
 	r := startServer(t, withOptions(Options{Queue: engine.Options{Gap: 500 * time.Millisecond}}))
@@ -374,13 +378,14 @@ func TestRestoreRefusals(t *testing.T) {
 
 	// A Cube that is gone.
 	fc.Close()
-	testkit.Eventually(t, "the disconnect", func() bool { return !rt.client.Connected() })
+	testkit.Eventually(t, "the disconnect", func() bool { return !rt.client.Connected() }, awayWait)
 	if code, _ := postBackup(t, ts, restoreBase+"/plan", "application/json", marshal(t, f)); code != 503 {
 		t.Fatalf("plan without the cube: %d, want 503", code)
 	}
 }
 
 func TestRestoreRefusesHighDutyCycle(t *testing.T) {
+	t.Parallel()
 	// The greeting's H line reports a duty cycle of 85 %.
 	greeting := recorded(t)
 	greeting[0].Data = strings.Replace(greeting[0].Data, ",00,32,", ",55,32,", 1)

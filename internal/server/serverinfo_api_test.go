@@ -16,6 +16,7 @@ import (
 // alone; a secret's value never leaves the server, whatever the view
 // handed to it holds.
 func TestStoreAndConfigViews(t *testing.T) {
+	t.Parallel()
 	opts := storeOptions(t, t.TempDir(), "secret")
 	r := startServer(t, withOptions(opts))
 	ts, s := r.ts, r.s

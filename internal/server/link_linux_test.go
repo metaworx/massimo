@@ -19,6 +19,7 @@ import (
 // Linux's), is listed with link busy: discovery's answer is what tells
 // it from a Cube that is off.
 func TestABusyCubeIsListedAsBusy(t *testing.T) {
+	t.Parallel()
 	// The fake is the test's own, at 127.0.0.2 and held by another
 	// client before the server starts: the start waits for no Cube.
 	fc := &fakecube.Server{Greeting: recorded(t), SingleClient: true}

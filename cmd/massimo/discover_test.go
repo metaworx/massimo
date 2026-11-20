@@ -17,6 +17,7 @@ import (
 // address. The real Cube and the proxy that answers with its serial are
 // both listed.
 func TestMarkProxies(t *testing.T) {
+	t.Parallel()
 	cube := cubelan.Discovered{Serial: "KEQ0000000", IP: net.ParseIP("192.0.2.20"), MAC: "00:1a:22:01:02:03", Kind: cubelan.KindCube}
 	byKind := cubelan.Discovered{Serial: "KEQ0000000", IP: net.ParseIP("192.0.2.30"), MAC: "02:00:00:01:02:03", Kind: cubelan.KindProxy}
 	byAddress := cubelan.Discovered{Serial: "KEQ0000001", IP: net.ParseIP("192.0.2.40"), Kind: cubelan.KindUnknown}
@@ -40,6 +41,7 @@ func TestMarkProxies(t *testing.T) {
 
 // The announcement's default: off on a loopback address, on otherwise.
 func TestLoopbackListen(t *testing.T) {
+	t.Parallel()
 	for listen, want := range map[string]bool{"127.0.0.1:8099": true, "[::1]:8099": true, "localhost:8099": true, ":8099": false, "0.0.0.0:8099": false, "192.0.2.5:80": false, "box.example.net:8099": false} {
 		if got := loopbackListen(listen); got != want {
 			t.Errorf("%s: %v", listen, got)

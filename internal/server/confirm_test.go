@@ -91,6 +91,7 @@ func openWrites(rt *runtime) int {
 // A room command its members take is pending, then done once every
 // member shows it, with no line.
 func TestRoomCommandConfirmed(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, confirming(3*time.Second, 100*time.Millisecond))
 	ts, rt := r.ts, r.rt
 	code, out := do(t, ts, "PUT", confirmBase+"/rooms/2/setpoint", `{"mode":"manual","temp":22}`)
@@ -109,6 +110,7 @@ func TestRoomCommandConfirmed(t *testing.T) {
 // either (resend.go), the room and the device say so until it shows it,
 // which a line at info says.
 func TestRoomCommandNotConfirmed(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, confirming(600*time.Millisecond, 0))
 	fc, ts := r.fc, r.ts
 	fc.SetDeaf(0x0a0205, true)
@@ -170,6 +172,7 @@ func TestRoomCommandNotConfirmed(t *testing.T) {
 // A newer setpoint of a room replaces the one before it: one warning, for
 // the newer, at its deadline.
 func TestNewerWriteReplaces(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, confirming(600*time.Millisecond, 0))
 	fc, ts, rt := r.fc, r.ts, r.rt
 	fc.SetDeaf(0x0a0205, true)
@@ -194,6 +197,7 @@ func TestNewerWriteReplaces(t *testing.T) {
 // A setpoint a client of the LAN proxy sent to a room is confirmed by
 // the room's thermostats as the API's are: here none takes it.
 func TestProxyWriteConfirmed(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, confirming(300*time.Millisecond, 0))
 	ts, rt := r.ts, r.rt
 	m, err := cube.CmdSetTemperature(cube.Target{RFAddress: 0x0a0204, RoomID: 2, Room: true}, 21.5, cube.ModeManual, cube.Until{})
@@ -218,6 +222,7 @@ func TestProxyWriteConfirmed(t *testing.T) {
 // A key lock and a display mode are confirmed by the L entry, and the
 // display write is no C line's to follow.
 func TestLockAndDisplayConfirmed(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, confirming(3*time.Second, 100*time.Millisecond))
 	ts, rt := r.ts, r.rt
 	if code, out := do(t, ts, "PUT", confirmBase+"/devices/0a0204/lock", `{"locked":true}`); code != 200 || out["confirmation"] != "pending" {
@@ -244,6 +249,7 @@ func TestLockAndDisplayConfirmed(t *testing.T) {
 // What a 0x40 write is confirmed by: the mode always, the setpoint in
 // manual and vacation, a vacation's end.
 func TestSetpointWant(t *testing.T) {
+	t.Parallel()
 	end := cube.Until{Year: 2026, Month: 11, Day: 20, Minutes: 600}
 	for _, tc := range []struct {
 		st   cube.SetTemperature
@@ -277,6 +283,7 @@ var shortFollow = []time.Duration{50 * time.Millisecond, 50 * time.Millisecond, 
 // A configuration write the C line shows at once, as the writer re-reads
 // it, is confirmed in the answer.
 func TestConfigWriteShownAtOnce(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, confirming(time.Minute, 0, shortFollow...))
 	ts, rt := r.ts, r.rt
 	if code, out := do(t, ts, "PUT", confirmBase+"/devices/0a0206/config", `{"eco_temp":16}`); code != 200 || out["confirmation"] != "confirmed" {
@@ -289,6 +296,7 @@ func TestConfigWriteShownAtOnce(t *testing.T) {
 
 // A configuration write the C line shows is pending, then done.
 func TestConfigWriteConfirmed(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, confirming(time.Minute, 150*time.Millisecond, shortFollow...))
 	ts, rt := r.ts, r.rt
 	code, out := do(t, ts, "PUT", confirmBase+"/devices/0a0204/config", `{"eco_temp":16.5,"boost_minutes":10}`)
@@ -304,6 +312,7 @@ func TestConfigWriteConfirmed(t *testing.T) {
 // A configuration write the device does not take is not confirmed after
 // the follow-up's last re-read, the fields that differ named.
 func TestConfigWriteNotConfirmed(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, confirming(time.Minute, 0, shortFollow...))
 	fc, ts := r.fc, r.ts
 	fc.SetDeaf(0x0a0205, true)
@@ -329,6 +338,7 @@ func TestConfigWriteNotConfirmed(t *testing.T) {
 // A room's week programme is confirmed by each thermostat's C line: the
 // one that does not take the day is named with it.
 func TestProgramDayNotConfirmed(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, confirming(time.Minute, 0, shortFollow...))
 	fc, ts, rt := r.fc, r.ts, r.rt
 	fc.SetDeaf(0x0a0205, true)
@@ -351,6 +361,7 @@ func TestProgramDayNotConfirmed(t *testing.T) {
 // A LAN proxy client's 0x11 to a room is compared with each thermostat's
 // C line: here none takes it.
 func TestProxyConfigWriteConfirmed(t *testing.T) {
+	t.Parallel()
 	r := startServer(t, confirming(time.Minute, 0, shortFollow...))
 	ts, rt := r.ts, r.rt
 	m, err := cube.CmdSetTemperatures(cube.Target{RFAddress: 0x0a0204, RoomID: 2, Room: true},
@@ -375,6 +386,7 @@ func TestProxyConfigWriteConfirmed(t *testing.T) {
 // What a C line shows of each field, and a newer write's field replaces
 // an older one's.
 func TestMissingConfig(t *testing.T) {
+	t.Parallel()
 	day := cube.DayProgram{{Temp: 17, Until: 420}, {Temp: 21, Until: 1230}, {Temp: 17, Until: 1440}}
 	var week cube.WeekProgram
 	week[cube.Monday] = day

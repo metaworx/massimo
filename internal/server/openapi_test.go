@@ -57,6 +57,7 @@ func registeredRoutes(t *testing.T) []route {
 // docs/api-v1-openapi.yaml with the same capability as x-capability,
 // and the other way round, so the three cannot drift apart.
 func TestOpenAPICoversRoutes(t *testing.T) {
+	t.Parallel()
 	registered := map[string]string{}
 	for _, r := range registeredRoutes(t) {
 		registered[r.method+" "+r.path] = r.capability

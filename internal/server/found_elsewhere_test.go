@@ -51,6 +51,7 @@ func elsewhereOf(out map[string]any) map[string]any {
 // has found_elsewhere, with the configured port; the log warns once and
 // says so at Debug for the runs that repeat it.
 func TestAFixedCubeFoundElsewhere(t *testing.T) {
+	t.Parallel()
 	ts, addr, logs := storedElsewhere(t)
 	for range 3 {
 		if code, out := postDiscovery(t, ts); code != 200 {
@@ -77,6 +78,7 @@ func TestAFixedCubeFoundElsewhere(t *testing.T) {
 // Taking the found address, or following discovery, clears
 // found_elsewhere at once, and the next run does not warn again.
 func TestFoundElsewhereClears(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name string
 		body func(found string) string
@@ -85,6 +87,7 @@ func TestFoundElsewhereClears(t *testing.T) {
 		{"follow discovery", func(string) string { return `{"follow_discovery":true}` }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			ts, _, logs := storedElsewhere(t)
 			if code, out := postDiscovery(t, ts); code != 200 {
 				t.Fatalf("discover %d %v", code, out)

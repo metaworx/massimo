@@ -14,6 +14,7 @@ import (
 // reports anew leaves it (AP StoreRaise v1.2, Block 4). A Namer shows
 // its users by the chain, a linked one with the user it acts as.
 func TestIntegrationDisplayName(t *testing.T) {
+	t.Parallel()
 	s := open(t, t.TempDir())
 	ctx := context.Background()
 	req, _ := s.AddIntegrationRequest(ctx, haRequest(instanceA), "AAAAAA")

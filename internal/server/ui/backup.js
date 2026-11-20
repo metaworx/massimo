@@ -414,13 +414,15 @@ function renderCubeBackup() {
   refreshBackups(serial);
 }
 
-// backupFold is a Cube's fold in System settings: its network sign, its
-// name and serial, the count kept, and its box; a single Cube's open.
+// backupFold is a Cube's fold in System settings: the cube, its name and
+// serial, its network sign after them, the count kept, and its box; a
+// single Cube's open.
 function backupFold(c) {
   const d = detailsPanel({ name: c.name || undefined, mono: c.serial, open: state.cubes.length === 1, cls: "backup-fold" }, backupBox(c.serial, "sys"));
   d.dataset.serial = c.serial;
   const sum = d.querySelector("summary");
-  sum.prepend(cubeSignEl(c)); // header.js
+  sum.prepend(iconEl("icon-cube3d", "ni cube-icon")); // components.js
+  sum.appendChild(cubeSignEl(c)); // header.js
   sum.appendChild(elem("span", "panel-badges"));
   return d;
 }

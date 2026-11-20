@@ -16,6 +16,7 @@ import (
 // holds another session (docs/cube-protocol.md, 2026-11-13), and a dial
 // that waits while the slot frees connects within its timeout.
 func TestSingleClientDialTimesOutOnLinux(t *testing.T) {
+	t.Parallel()
 	_, addr := startSingle(t, 0)
 	first := dial(t, addr)
 	start := time.Now()
