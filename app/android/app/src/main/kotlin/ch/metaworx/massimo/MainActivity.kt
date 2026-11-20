@@ -6,6 +6,7 @@ package ch.metaworx.massimo
 import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.net.ConnectivityManager
@@ -18,6 +19,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -39,9 +41,10 @@ import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import androidx.fragment.app.FragmentActivity
 import androidx.webkit.ScriptHandler
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewCompat
@@ -55,15 +58,20 @@ import java.util.concurrent.Executors
 /**
  * MainActivity is the shell: one WebView that shows the connect page from
  * the app's own copy of the web UI, then the page of the server the user
- * chose, with the bridge (docs/app.md) in both. A server whose login by
- * fingerprint is asked at each return has its page covered while the app
- * is hidden, until the prompt is passed, and kept out of Recents' pictures.
+ * chose, with the bridge (docs/app.md) in both; at its start the server
+ * marked "Open at start" in place of the list, where it answers (D43-A). A
+ * server whose login by fingerprint is asked at each return has its page
+ * covered while the app is hidden, until the prompt is passed, and kept out
+ * of Recents' pictures. An AppCompat activity, so that the app's appearance
+ * (App settings, D53-A) is AppCompat's night mode, which the theme's
+ * android:isLightTheme hands on to the WebView's prefers-color-scheme.
  */
-class MainActivity : FragmentActivity() {
+class MainActivity : AppCompatActivity() {
     private val main = Handler(Looper.getMainLooper())
     private val io: ExecutorService = Executors.newCachedThreadPool()
     private lateinit var web: WebView
     private lateinit var bridge: Bridge
+    private lateinit var prober: Prober
     private lateinit var discovery: Discovery
     private lateinit var back: OnBackPressedCallback
     private lateinit var biometric: Biometric
@@ -92,6 +100,14 @@ class MainActivity : FragmentActivity() {
             .build()
     }
 
+    // The app's appearance before AppCompat sets the activity's
+    // configuration up from it, so that the theme, the first frame and the
+    // WebView have it; a mode that is the one set already changes nothing.
+    override fun attachBaseContext(newBase: Context) {
+        AppCompatDelegate.setDefaultNightMode(AppSettings.nightMode(AppSettings(File(newBase.filesDir, SETTINGS)).get().appearance))
+        super.attachBaseContext(newBase)
+    }
+
     // The features the bridge needs are checked first; nothing of
     // WebViewCompat runs without them.
     @SuppressLint("RequiresFeature")
@@ -116,6 +132,12 @@ class MainActivity : FragmentActivity() {
         val tokens = TokenStore(File(filesDir, "tokens.json"), KeystoreSealer())
         // Version 1's switch kept a session behind a prompt the app asks no more.
         servers.takeLegacy().forEach { tokens.remove(it) }
+        val settings = AppSettings(File(filesDir, SETTINGS))
+        val log = Logger { Log.w(LOG_TAG, it) }
+        val keeper = SessionKeeper(tokens)
+        val logins = LoginStore(File(filesDir, "logins.json"))
+        val api = ServerApi(agent)
+        prober = Prober(agent, texts)
         bridge = Bridge(
             host = object : Bridge.Host {
                 override fun open(url: String) = openServer(url)
@@ -123,16 +145,23 @@ class MainActivity : FragmentActivity() {
                 override fun connectPage() = web.loadUrl(Origins.CONNECT_URL)
 
                 override fun privacy() = this@MainActivity.privacy()
+
+                // Another night mode makes AppCompat create the activity
+                // anew, the WebView's state and the page's address kept.
+                override fun appearance(appearance: String) = AppCompatDelegate.setDefaultNightMode(AppSettings.nightMode(appearance))
             },
             servers = servers,
-            sessions = SessionKeeper(tokens),
-            logins = LoginStore(File(filesDir, "logins.json")),
+            keeper = keeper,
+            sessions = Sessions(keeper, logins, api, prober::probe, log),
+            logins = logins,
             keys = LoginKey(),
-            api = ServerApi(agent),
-            prober = Prober(agent, texts),
+            api = api,
+            prober = prober,
             discovery = discovery,
             biometric = biometric,
+            settings = settings,
             texts = texts,
+            log = log,
             keyLabel = getString(R.string.login_key_label, Build.MODEL),
             io = io,
             main = main,
@@ -155,7 +184,29 @@ class MainActivity : FragmentActivity() {
         bridge.opened = if (id != null && origin != null && url != null) Bridge.Opened(id, origin, url) else null
         channel(bridge.opened?.origin)
         if (savedInstanceState == null || web.restoreState(savedInstanceState) == null) {
-            web.loadUrl(Origins.CONNECT_URL)
+            val first = if (savedInstanceState == null) servers.atStart() else null
+            if (first == null) web.loadUrl(Origins.CONNECT_URL) else openAtStart(first)
+        }
+    }
+
+    // openAtStart opens the server marked "Open at start" at the address
+    // it answers at, the LAN one first (Addresses.pick), in place of the
+    // list; the list where it answers at neither, as a changed certificate
+    // does not. The window shows the app's background while it asks.
+    private fun openAtStart(s: Server) {
+        val fp = s.fp.ifEmpty { null }
+        io.execute {
+            val url = Addresses.pick(s, { u -> prober.probe(listOf(u), fp).first() })
+            main.post {
+                if (isFinishing || isDestroyed) return@post
+                val origin = url?.let(Origins::of)
+                if (url == null || origin == null) {
+                    web.loadUrl(Origins.CONNECT_URL)
+                    return@post
+                }
+                bridge.opened = Bridge.Opened(s.id, origin, url)
+                openServer(url)
+            }
         }
     }
 
@@ -435,6 +486,8 @@ class MainActivity : FragmentActivity() {
     }
 
     private companion object {
+        const val LOG_TAG = "Massimo"
+        const val SETTINGS = "settings.json"
         const val CHANNEL = "massimoChannel"
         const val KEY_ID = "massimo.opened.id"
         const val KEY_ORIGIN = "massimo.opened.origin"

@@ -140,6 +140,62 @@ class ServerStoreTest {
     }
 
     @Test
+    fun oneServerAtMostOpensAtStart() {
+        val st = ServerStore(file())
+        assertNull("an empty list opens the list", st.atStart())
+        val a = st.save(input("name" to "Home", "lan" to "http://192.168.1.20:8099/"))
+        assertTrue("the first server added opens at start (D43-A)", a.start)
+        val b = st.save(input("name" to "Cabin", "lan" to "http://192.168.1.21:8099/", "start" to false))
+        assertFalse(b.start)
+        assertEquals(a.id, st.atStart()?.id)
+        // Turning it on at one turns it off at the other.
+        st.save(input("id" to b.id, "name" to "Cabin", "lan" to "http://192.168.1.21:8099/", "start" to true))
+        assertEquals(listOf(false, true), st.list().map { it.start })
+        assertEquals(b.id, ServerStore(file()).atStart()?.id)
+        // A save without it turns it off: the page sends the whole server.
+        st.save(input("id" to b.id, "name" to "Cabin", "lan" to "http://192.168.1.21:8099/"))
+        assertNull(st.atStart())
+        // A file with two marked keeps the first.
+        file().writeText(
+            "[{\"id\":\"a\",\"lan\":\"http://192.168.1.20/\",\"start\":true},{\"id\":\"b\",\"lan\":\"http://192.168.1.21/\",\"start\":true}]",
+        )
+        assertEquals(listOf(true, false), ServerStore(file()).list().map { it.start })
+    }
+
+    @Test
+    fun trustNotesWhen() {
+        var now = "2026-11-20T12:00:00Z"
+        val st = ServerStore(file()) { now }
+        val a = st.save(input("lan" to "https://192.168.1.20:8443/"))
+        assertEquals("", a.trustedAt)
+        st.trust(a.id, Fingerprint.of(byteArrayOf(1)))
+        assertEquals("2026-11-20T12:00:00Z", st.get(a.id)?.trustedAt)
+        now = "2026-11-21T08:30:00Z"
+        st.trust(a.id, Fingerprint.of(byteArrayOf(2)))
+        assertEquals("a new certificate trusted, a new time", "2026-11-21T08:30:00Z", st.get(a.id)?.trustedAt)
+        // kept across a save, which the page cannot change it by, and a start
+        st.save(input("id" to a.id, "lan" to "https://192.168.1.20:8443/", "trusted_at" to "never"))
+        assertEquals("2026-11-21T08:30:00Z", ServerStore(file()).get(a.id)?.trustedAt)
+        assertTrue(Regex("""^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$""").matches(ServerStore.nowUtc()))
+    }
+
+    @Test
+    fun thePageSeesTheSessionTheFileDoesNot() {
+        val st = ServerStore(file())
+        val a = st.save(input("name" to "Home", "lan" to "http://192.168.1.20:8099/"))
+        val page = a.toJson("anna", "bob")
+        assertEquals("anna", page.getString("login"))
+        assertEquals("bob", page.getString("session"))
+        assertEquals(true, page.get("start"))
+        assertEquals("", page.getString("trusted_at"))
+        assertTrue("no session checked is null", a.toJson().isNull("session"))
+        val kept = file().readText()
+        assertFalse(kept.contains("session"))
+        assertFalse(kept.contains("login"))
+        assertTrue(kept.contains("\"start\":true"))
+    }
+
+    @Test
     fun versionOnesSwitchIsTakenOnce() {
         // A file of version 1, one server with "Ask for my fingerprint or PIN" on.
         file().writeText(

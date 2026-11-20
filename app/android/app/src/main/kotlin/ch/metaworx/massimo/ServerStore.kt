@@ -10,10 +10,14 @@ import java.io.File
 import java.io.IOException
 import java.net.URI
 import java.security.SecureRandom
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 
 /**
  * A server the app keeps (docs/app.md, "A server"); [ask] is when the
- * fingerprint is asked once a login is kept, one of [ASKS].
+ * fingerprint is asked once a login is kept, one of [ASKS]; [start] marks
+ * the one server the app opens at its start; [trustedAt] is when its
+ * pinned fingerprint was trusted (RFC 3339), "" for none.
  */
 data class Server(
     val id: String,
@@ -24,9 +28,15 @@ data class Server(
     val fp: String,
     val ask: String,
     val push: Boolean,
+    val start: Boolean = false,
+    val trustedAt: String = "",
 ) {
-    /** toJson is the server as the connect page sees it, with the user whose login is kept, [login], or "". */
-    fun toJson(login: String = ""): JSONObject = JSONObject()
+    /**
+     * toJson is the server as the connect page sees it, with the user whose
+     * login is kept, [login], or "", and the user of the session the app
+     * holds and checked, [session], or null (contract version 3).
+     */
+    fun toJson(login: String = "", session: String? = null): JSONObject = JSONObject()
         .put("id", id)
         .put("name", name)
         .put("node", node)
@@ -36,6 +46,15 @@ data class Server(
         .put("login", login)
         .put("ask", ask)
         .put("push", push)
+        .put("start", start)
+        .put("session", session ?: JSONObject.NULL)
+        .put("trusted_at", trustedAt)
+
+    /** fileJson is the server as the store keeps it: what the page sees, but the login and the session, which are kept elsewhere. */
+    fun fileJson(): JSONObject = toJson().apply {
+        remove("login")
+        remove("session")
+    }
 
     /** has reports whether [url] is one of the server's two addresses. */
     fun has(url: String): Boolean = url.isNotEmpty() && (url == lan || url == remote)
@@ -52,23 +71,33 @@ data class Server(
 /**
  * ServerStore keeps the servers, in their order, as a JSON array in one
  * file of the app's own; every change is written at once, through a file
- * beside it renamed over it.
+ * beside it renamed over it. One server at most opens at the app's start
+ * (D43-A), the first one added until the user chooses; [now] is the time a
+ * fingerprint is trusted at.
  */
-class ServerStore(private val file: File) {
+class ServerStore(private val file: File, private val now: () -> String = { nowUtc() }) {
     // The servers that had version 1's switch "Ask for my fingerprint or
     // PIN" on, found by load: their session is forgotten once (takeLegacy).
     private val legacy = mutableSetOf<String>()
     private val servers: MutableList<Server> = load()
 
+    /** list is the servers, in their order. */
     @Synchronized
     fun list(): List<Server> = servers.toList()
 
+    /** get is the server kept under [id], or null. */
     @Synchronized
     fun get(id: String): Server? = servers.firstOrNull { it.id == id }
 
+    /** atStart is the server the app opens at its start, or null for the list. */
+    @Synchronized
+    fun atStart(): Server? = servers.firstOrNull { it.start }
+
     /**
      * save adds [input] where it has no `id`, giving it one, or replaces the
-     * server with its `id`, in place. `fp` is kept as [trust] set it.
+     * server with its `id`, in place. `fp` and `trusted_at` are kept as
+     * [trust] set them. `start` true turns it off at every other server; the
+     * first server added opens at start whatever it says.
      */
     @Synchronized
     fun save(input: JSONObject): Server {
@@ -88,7 +117,10 @@ class ServerStore(private val file: File) {
             fp = old?.fp ?: "",
             ask = str(input, "ask").takeIf { it in Server.ASKS } ?: old?.ask ?: Server.ASK_START,
             push = input.opt("push") == true,
+            start = input.opt("start") == true || (old == null && servers.isEmpty()),
+            trustedAt = old?.trustedAt ?: "",
         )
+        if (s.start) servers.replaceAll { if (it.start && it.id != s.id) it.copy(start = false) else it }
         val at = servers.indexOfFirst { it.id == s.id }
         if (at >= 0) servers[at] = s else servers.add(s)
         write()
@@ -101,13 +133,13 @@ class ServerStore(private val file: File) {
         if (servers.removeAll { it.id == id }) write()
     }
 
-    /** trust pins [fp] for the server, in the server's form. */
+    /** trust pins [fp] for the server, in the server's form, and notes when (`trusted_at`). */
     @Synchronized
     fun trust(id: String, fp: String) {
         val canonical = Fingerprint.canonical(fp) ?: throw BridgeException(R.string.err_bad_fp)
         val at = servers.indexOfFirst { it.id == id }
         if (at < 0) throw BridgeException(R.string.err_no_server)
-        servers[at] = servers[at].copy(fp = canonical)
+        servers[at] = servers[at].copy(fp = canonical, trustedAt = now())
         write()
     }
 
@@ -142,8 +174,10 @@ class ServerStore(private val file: File) {
                     fp = str(o, "fp"),
                     ask = str(o, "ask").takeIf { it in Server.ASKS } ?: Server.ASK_START,
                     push = o.opt("push") == true,
+                    start = o.opt("start") == true,
+                    trustedAt = str(o, "trusted_at"),
                 )
-            }.filter { it.id.isNotEmpty() }.toMutableList()
+            }.filter { it.id.isNotEmpty() }.let(::oneAtStart).toMutableList()
         } catch (e: JSONException) {
             // A file the app cannot read is kept for a look, not lost.
             file.renameTo(File(file.path + ".bad"))
@@ -155,7 +189,7 @@ class ServerStore(private val file: File) {
 
     private fun write() {
         val a = JSONArray()
-        servers.forEach { a.put(it.toJson()) }
+        servers.forEach { a.put(it.fileJson()) }
         val tmp = File(file.path + ".new")
         tmp.writeText(a.toString())
         if (!tmp.renameTo(file)) throw IOException("cannot replace ${file.name}")
@@ -164,6 +198,15 @@ class ServerStore(private val file: File) {
     companion object {
         private const val MAX_TEXT = 200
         private val random = SecureRandom()
+
+        /** nowUtc is the time now as `trusted_at` writes it: RFC 3339 in UTC, to the second. */
+        fun nowUtc(): String = Instant.now().truncatedTo(ChronoUnit.SECONDS).toString()
+
+        // oneAtStart keeps the first server marked to open at start, and no other.
+        private fun oneAtStart(list: List<Server>): List<Server> {
+            val first = list.indexOfFirst { it.start }
+            return list.mapIndexed { i, s -> if (s.start && i != first) s.copy(start = false) else s }
+        }
 
         /** str is the string at [key], or "" where there is none or it is not a string. */
         fun str(o: JSONObject, key: String): String = o.opt(key) as? String ?: ""

@@ -2,11 +2,15 @@
 // Copyright (C) 2026 The Massimo Authors
 
 // The Massimo apps' connect page (connect.html, docs/app.md): the
-// servers the app keeps, each probed at its LAN and its remote address
-// and opened in the app by a tap; the servers discovery finds and an
-// address typed, probed before they are added; the fingerprint sheet of
-// a self-signed certificate; a server's settings with its login by
-// fingerprint, and the row's button that opens it signed in; the server
+// servers the app keeps, each probed at its LAN and its remote address,
+// marked where the app holds a session, and opened in the app by a tap;
+// the list's ☰ (Add server…, Sign out of all, Forget all stored
+// credentials, App settings…); the servers discovery finds and an address
+// typed, probed before they are added, in a card shown while the list is
+// empty or from the ☰; the fingerprint sheet of a self-signed
+// certificate; a server's settings with Open at start, its session, its
+// certificate and its login by fingerprint, and the row's button that
+// opens it signed in; the app's own settings, its appearance; the server
 // on the phone where the app has it built in; what an action came to, in
 // the page's toast. Everything goes through the app's bridge,
 // window.massimo, whose calls answer with promises and whose events
@@ -24,19 +28,29 @@ const SEARCH_MS = 5000;
 // (README.md, "Server").
 const DEFAULT_PORT = 8099;
 
+// APPEARANCES are the app's appearances (docs/app.md, `settings`), as
+// the system's the default.
+const APPEARANCES = ["system", "light", "dark"];
+
+// APP_HASH is the page's address's fragment while App settings are open,
+// so that the page the app loads again once it took a new appearance
+// opens them again.
+const APP_HASH = "#app-settings";
+
 const conn = {
   bridge: null, // window.massimo
-  servers: [], // as the app keeps them: {id, name, node, lan, remote, fp, login, ask, push}
-  probes: {}, // by server id: {state, url, fingerprint, error}, the state probing, lan, remote, cert or offline
+  servers: [], // as the app keeps them: {id, name, node, lan, remote, fp, login, ask, push, start, session, trusted_at}
+  probes: {}, // by server id: {state, url, fingerprint, cert, error}, the state probing, lan, remote, cert or offline
   probeSeq: {}, // by server id: the latest probe, whose answer alone counts
   seen: {}, // by node: the URL discovery found it at
   heard: {}, // by node: the name discovery heard for it, "" for none
   found: [], // the servers discovery found that are not in the list: {name, url, node}
   searching: false,
   searchError: "",
+  adding: false, // the Add card chosen from the ☰, shown with a list that is not empty
+  app: { appearance: "system" }, // the app's settings, as settings() said
   open: null, // the id of the server whose settings are open
   panel: null, // their form
-  forgetRow: null, // the row of Forget all stored credentials, held while its question takes its place
   toastServer: null, // the id of the server the toast says does not answer (say)
 };
 
@@ -48,6 +62,12 @@ function theBridge() {
 
 function serverById(id) {
   return conn.servers.find((s) => s.id === id) || null;
+}
+
+// can reports whether the app's bridge has a call of contract version 3
+// or later (docs/app.md): the page tests for what it uses.
+function can(name) {
+  return !!conn.bridge && typeof conn.bridge[name] === "function";
 }
 
 // say shows what an action on the list or the add form came to in the
@@ -156,12 +176,28 @@ function keepServer(saved) {
   return saved;
 }
 
+// certOf is what a probe result tells of the certificate at its address
+// (docs/app.md, "A probe result"), null for plain HTTP.
+function certOf(r) {
+  if (!r || !r.fingerprint) return null;
+  return {
+    fingerprint: r.fingerprint,
+    self_signed: !!r.self_signed,
+    subject: String(r.subject || ""),
+    issuer: String(r.issuer || ""),
+    names: Array.isArray(r.names) ? r.names.map(String) : [],
+    not_before: String(r.not_before || ""),
+    not_after: String(r.not_after || ""),
+  };
+}
+
 // probeState reads a server's probe: the first address that answered
-// with the server's node, the LAN one first; else a certificate that is
-// not the one trusted, with its fingerprint; else nothing.
+// with the server's node, the LAN one first, with its certificate; else
+// a certificate that is not the one trusted, with its fingerprint; else
+// nothing.
 function probeState(s, results) {
   for (const r of results) {
-    if (r && r.ok && (!s.node || r.node === s.node)) return { state: r.url === s.lan ? "lan" : "remote", url: r.url };
+    if (r && r.ok && (!s.node || r.node === s.node)) return { state: r.url === s.lan ? "lan" : "remote", url: r.url, cert: certOf(r) };
   }
   const cert = results.find((r) => r && r.trusted === false && r.fingerprint);
   if (cert) return { state: "cert", url: cert.url, fingerprint: cert.fingerprint };
@@ -172,7 +208,8 @@ function probeState(s, results) {
 // probeServer probes a server at its two addresses with its pinned
 // fingerprint, and keeps what it found; a later probe of the same
 // server wins over one still running. A server that answers takes back
-// the toast that said it does not.
+// the toast that said it does not, and has the session the app holds
+// for it checked there (checkSession).
 async function probeServer(s) {
   if (!s) return;
   const seq = (conn.probeSeq[s.id] || 0) + 1;
@@ -189,12 +226,33 @@ async function probeServer(s) {
   if (conn.probeSeq[s.id] !== seq) return;
   const p = probeState(s, results);
   conn.probes[s.id] = p;
-  if ((p.state === "lan" || p.state === "remote") && conn.toastServer === s.id) {
+  const answers = p.state === "lan" || p.state === "remote";
+  if (answers && conn.toastServer === s.id) {
     conn.toastServer = null;
     hideToast();
   }
   renderServers();
+  if (answers) checkSession(s.id, p.url, seq);
   maybeMoveLan(serverById(s.id));
+}
+
+// checkSession asks the app who the session it holds for a server is,
+// checked at the address its probe found (session, docs/app.md): the
+// row's badge and the settings' line follow; a session the server
+// refused the app has forgotten. A call that fails leaves what the app
+// said before; a newer probe's check alone counts.
+async function checkSession(id, url, seq) {
+  if (!can("session")) return;
+  let user;
+  try {
+    user = (await conn.bridge.session(id, url)) || null;
+  } catch (e) {
+    return;
+  }
+  const s = serverById(id);
+  if (!s || conn.probeSeq[id] !== seq || (s.session || null) === user) return;
+  s.session = user;
+  renderServers();
 }
 
 function probeAll() {
@@ -259,8 +317,8 @@ function showWhere(el, where, name) {
   el.classList.toggle("hidden", where === name);
 }
 
-// fillRow writes a server's name, address and state into its row, and
-// its settings under it while they are open.
+// fillRow writes a server's name, address, state and session into its
+// row, and its settings under it while they are open.
 function fillRow(li, s) {
   const p = conn.probes[s.id] || { state: "probing" };
   const name = s.name || hostOf(s.lan || s.remote);
@@ -270,6 +328,7 @@ function fillRow(li, s) {
   clear(badges);
   badges.appendChild(stateBadge(p.state));
   if (p.url && plainOutside(p.url)) badges.appendChild(badgeEl(t("connect.state.plain"), "warn"));
+  if (s.session) badges.appendChild(badgeEl(t("connect.signedIn", { name: s.session }), "fill-ok session-badge"));
   const login = li.querySelector(".server-login");
   login.classList.toggle("hidden", !s.login);
   if (s.login) {
@@ -279,14 +338,27 @@ function fillRow(li, s) {
   const cog = li.querySelector(".server-cog");
   cog.setAttribute("aria-expanded", String(conn.open === s.id));
   if (conn.open === s.id && conn.panel && conn.panel.parentNode !== li) li.appendChild(conn.panel);
+  if (conn.open === s.id && conn.panel) fillFacts(conn.panel, s);
   if (conn.open !== s.id) {
     const panel = li.querySelector(".server-panel");
     if (panel) panel.remove();
   }
 }
 
+// renderMenu shows the ☰'s entries that do something: Sign out of all
+// where there is a server, Forget all stored credentials where a login
+// is kept, App settings where the app has them.
+function renderMenu() {
+  const any = conn.servers.length > 0;
+  $("menu-sign-out-all").classList.toggle("hidden", !(any && can("signOutAll")));
+  $("menu-forget-all").classList.toggle("hidden", !conn.servers.some((s) => s.login));
+  $("menu-app").classList.toggle("hidden", !can("settings"));
+  $("menu-app-sep").classList.toggle("hidden", !can("settings"));
+}
+
 // renderServers brings the list up to date row by row, so that a probe
-// that answers keeps the focus and what is typed in the settings.
+// that answers keeps the focus and what is typed in the settings; then
+// the ☰ and the Add card.
 function renderServers() {
   const list = $("server-list");
   const rows = new Map([...list.children].map((li) => [li.dataset.id, li]));
@@ -302,7 +374,8 @@ function renderServers() {
   }
   for (const li of rows.values()) li.remove();
   $("servers-empty").classList.toggle("hidden", conn.servers.length > 0);
-  if (conn.forgetRow) conn.forgetRow.classList.toggle("hidden", !conn.servers.some((s) => s.login));
+  renderMenu();
+  renderAdd();
 }
 
 // openServer opens a server in the app at the address its probe found,
@@ -348,12 +421,14 @@ async function openServer(id, opts) {
 // --- a server's settings ----------------------------------------------
 
 // toggleSettings opens a server's settings under its row, closing any
-// other, or closes them.
+// other, or closes them. The open settings take the focus themselves,
+// not their name's field, so that a phone's keyboard stays closed until
+// a field is touched.
 function toggleSettings(id) {
   conn.open = conn.open === id ? null : id;
   conn.panel = conn.open ? settingsPanel(serverById(conn.open)) : null;
   renderServers();
-  if (conn.panel) conn.panel.querySelector("input").focus();
+  if (conn.panel) conn.panel.focus();
 }
 
 function addressInput(value) {
@@ -368,8 +443,10 @@ function addressInput(value) {
 }
 
 // settingsPanel is a server's settings: its name, its two addresses,
-// when the fingerprint is asked, the login by fingerprint kept with its
-// user and Turn off, notifications where the app has push, and Remove.
+// Open at start, when the fingerprint is asked, its session with Sign
+// out and its certificate (fillFacts), the login by fingerprint kept
+// with its user and Turn off, notifications where the app has push, and
+// Remove. The panel itself takes the focus (toggleSettings).
 function settingsPanel(s) {
   const name = document.createElement("input");
   name.type = "text";
@@ -377,6 +454,7 @@ function settingsPanel(s) {
   name.value = s.name || "";
   const lan = addressInput(s.lan);
   const remote = addressInput(s.remote);
+  const start = switchEl(t("connect.start"), !!s.start, null, "start");
   const ask = document.createElement("select");
   ask.name = "ask";
   for (const a of ASKS) {
@@ -388,17 +466,23 @@ function settingsPanel(s) {
   const push = conn.bridge.push ? switchEl(t("connect.push"), s.push, null, "push") : null;
   const msg = textEl("p", "", "small cubes-msg server-msg hidden");
   msg.setAttribute("role", "status");
-  const form = formEl(() => saveSettings(s.id, form, { name, lan, remote, ask, push, msg }), "panel server-panel");
+  const form = formEl(() => saveSettings(s.id, form, { name, lan, remote, start, ask, push, msg }), "panel server-panel");
+  form.tabIndex = -1;
+  form.setAttribute("aria-label", t("connect.settingsOf", { name: s.name }));
   const remove = button(t("connect.remove"), "server-remove", () => {
     confirmInPlace(form.querySelector(".actions"), t("connect.removeQuestion", { name: s.name }), { yes: t("connect.remove") },
       () => removeServer(s.id, msg), ".server-remove");
   });
+  const facts = elem("div", "server-facts");
   form.append(
     fieldRow(t("connect.name"), name, { wide: true }),
     fieldRow(t("connect.lan"), lan, { wide: true, hint: t("connect.lanHint") }),
     fieldRow(t("connect.remote"), remote, { wide: true, hint: t("connect.remoteHint") }),
+    fieldRow("", start, { hint: t("connect.startHint") }),
     fieldRow(t("connect.ask"), ask, { wide: true, hint: t("connect.askHint") }),
+    facts,
   );
+  fillFacts(form, s);
   if (s.login) {
     const off = button(t("connect.loginOff"), "server-login-off", () => turnOff(s.id, off, msg));
     const kept = textEl("p", t("connect.loginKept", { name: s.login }), "server-login-kept");
@@ -423,11 +507,16 @@ async function saveSettings(id, form, f) {
     name,
     lan,
     remote,
+    start: f.start.querySelector("input").checked,
     ask: ASKS.includes(f.ask.value) ? f.ask.value : "start",
     push: f.push ? f.push.querySelector("input").checked : !!s.push,
   });
   try {
-    await whileBusy(form.querySelector("button[type=submit]"), async () => keepServer(await conn.bridge.save(want)));
+    await whileBusy(form.querySelector("button[type=submit]"), async () => {
+      keepServer(await conn.bridge.save(want));
+      // Open at start on here is off at every other server
+      if (want.start && !s.start) await loadServers();
+    });
   } catch (e) {
     return showResult(f.msg, t("connect.saveFailed", { error: e.message }), false);
   }
@@ -437,10 +526,120 @@ async function saveSettings(id, form, f) {
   probeServer(serverById(id));
 }
 
-// turnOff turns a server's login by fingerprint off (forget, which asks
-// for the fingerprint once and revokes the key at the address the probe
-// chose); the open settings lose its line and keep what is typed in
-// them, and the toast says whether the server revoked the key.
+// fillFacts writes what a server's open settings say of it as it stands,
+// under its choices: the session the app holds there, with Sign out, and
+// the certificate the probe found at the address in use, with
+// Certificate…; drawn again only where it changed, so that a probe that
+// answers keeps the focus.
+function fillFacts(form, s) {
+  const box = form.querySelector(".server-facts");
+  if (!box) return;
+  const p = conn.probes[s.id] || {};
+  const cert = (p.state === "lan" || p.state === "remote") && p.cert && p.cert.not_after ? p.cert : null;
+  const key = JSON.stringify([s.session || "", cert && cert.fingerprint, cert && cert.not_after, cert && p.url]);
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  clear(box);
+  if (s.session) {
+    const out = button(t("connect.signOut"), "server-sign-out", () => signOut(s.id, out, form.querySelector(".server-msg")));
+    box.appendChild(elem("p", "server-fact server-session", t("connect.sessionLine", { name: s.session }), " ", out));
+  }
+  if (cert) {
+    const line = t("connect.certLine", { name: commonName(cert.subject) || hostOf(p.url), until: fmtDay(cert.not_after) });
+    const show = button(t("connect.certButton"), "server-cert-open", () => showCert(s.id));
+    box.appendChild(elem("p", "server-fact server-cert", line, " ", show));
+  }
+  box.classList.toggle("hidden", !box.firstChild);
+}
+
+// signOut signs the app out of a server, at the address the probe chose
+// (signOut, docs/app.md, the session ended there and forgotten in the
+// app); the open settings lose the session's line and keep what is typed
+// in them, and the toast says whether the server ended it.
+async function signOut(id, btn, msg) {
+  const s = serverById(id);
+  const p = conn.probes[id] || {};
+  const url = p.state === "lan" || p.state === "remote" ? p.url : "";
+  let res;
+  try {
+    res = await whileBusy(btn, () => conn.bridge.signOut(id, url));
+  } catch (e) {
+    showResult(msg, t("connect.signOutFailed", { error: e.message }), false);
+    return;
+  }
+  const name = s ? s.name : "";
+  if (s) s.session = null;
+  renderServers();
+  say(res && res.ended ? t("connect.signedOut", { name }) : t("connect.signedOutLocal", { name }));
+}
+
+// signOutAll signs the app out of every server (signOutAll), from the ☰.
+async function signOutAll() {
+  try {
+    await conn.bridge.signOutAll();
+  } catch (e) {
+    say(t("connect.signOutFailed", { error: e.message }), { bad: true });
+    return;
+  }
+  for (const s of conn.servers) s.session = null;
+  await loadServers();
+  renderServers();
+  say(t("connect.signedOutAll"));
+}
+
+// commonName is the common name (CN) of a distinguished name as the app
+// writes it (RFC 4514, "CN=massimo,O=Massimo"), "" for none.
+function commonName(dn) {
+  const m = /(?:^|,)\s*CN=((?:\\.|[^,\\])*)/i.exec(dn || "");
+  return m ? m[1].replace(/\\(.)/g, "$1").trim() : "";
+}
+
+// fmtDay is a time the app gives (RFC 3339) as a day in the page's
+// language; fmtWhen the same with the time of day. Anything else stays
+// as it is.
+function fmtDay(iso) {
+  const d = new Date(iso);
+  return isNaN(d) ? String(iso || "") : new Intl.DateTimeFormat(i18n.lang, { dateStyle: "medium" }).format(d);
+}
+
+function fmtWhen(iso) {
+  const d = new Date(iso);
+  return isNaN(d) ? String(iso || "") : new Intl.DateTimeFormat(i18n.lang, { dateStyle: "medium", timeStyle: "short" }).format(d);
+}
+
+// showCert shows a server's certificate as its probe found it at the
+// address in use: its subject, issuer, names, validity and fingerprint,
+// and since when it is trusted: since the user compared its fingerprint
+// (trust), or by the phone, a certificate authority having signed it.
+function showCert(id) {
+  const s = serverById(id);
+  const p = conn.probes[id] || {};
+  const c = p.cert;
+  if (!s || !c) return;
+  const none = "—";
+  $("cert-address").textContent = hostOf(p.url);
+  $("cert-subject").textContent = c.subject || none;
+  $("cert-issuer").textContent = c.self_signed ? t("connect.cert.selfSigned") : c.issuer || none;
+  $("cert-names").textContent = c.names.length ? c.names.join(", ") : none;
+  $("cert-from").textContent = c.not_before ? fmtWhen(c.not_before) : none;
+  $("cert-until").textContent = c.not_after ? fmtWhen(c.not_after) : none;
+  showFingerprint($("cert-fp"), c.fingerprint);
+  let trusted = t("connect.cert.trustedSystem");
+  if (s.fp && s.fp.toUpperCase() === c.fingerprint.toUpperCase()) {
+    trusted = s.trusted_at ? t("connect.cert.trustedSince", { when: fmtWhen(s.trusted_at) }) : t("connect.cert.trustedPinned");
+  }
+  $("cert-trusted").textContent = trusted;
+  const dlg = $("cert-dialog");
+  dlg.showModal();
+  $("cert-close").focus();
+}
+
+// turnOff turns a server's login by fingerprint off (forget, which
+// revokes the key at the address the probe chose, with the session the
+// app holds there or with the key itself after the fingerprint, and
+// signs the app out there); the open settings lose its line and the
+// session's and keep what is typed in them, and the toast says whether
+// the server revoked the key.
 async function turnOff(id, btn, msg) {
   const s = serverById(id);
   const p = conn.probes[id] || {};
@@ -467,29 +666,62 @@ function dropLoginLine() {
   if (line && !(s && s.login)) line.remove();
 }
 
-// forgetAll forgets every kept login, once the user confirmed it in
-// place of the button; the keys stay at their servers.
+// menuButton is the summary of the Servers card's ☰, where the focus
+// goes back to once what it opened is done.
+function menuButton() {
+  return $("servers-menu").querySelector("summary");
+}
+
+// askInCard asks in the Servers card, under the list, what an entry of
+// the ☰ asks before it acts: No and Escape take the question back, Yes
+// runs onYes (which returns its promise, see confirmBox) and then takes
+// it back; the focus goes back to the ☰ either way. The toast of an
+// earlier action goes, so that it covers no part of the question on a
+// phone.
+function askInCard(text, yes, onYes) {
+  conn.toastServer = null;
+  hideToast();
+  const spot = $("servers-ask");
+  const done = () => {
+    clear(spot);
+    spot.classList.add("hidden");
+    menuButton().focus();
+  };
+  const box = confirmBox(text, { yes }, async () => {
+    try {
+      await onYes();
+    } finally {
+      done();
+    }
+  }, done);
+  clear(spot);
+  spot.appendChild(box);
+  spot.classList.remove("hidden");
+  box.focusFirst();
+  box.scrollIntoView({ block: "nearest" });
+}
+
+// forgetAll forgets every kept login, from the ☰, once the user
+// confirmed it in the card; the keys stay at their servers.
 function forgetAll() {
-  const row = conn.forgetRow;
-  const box = confirmInPlace(row, t("connect.forgetAllQuestion"), { yes: t("connect.forgetAll") }, async () => {
+  askInCard(t("connect.forgetAllQuestion"), t("connect.forgetAll"), async () => {
     try {
       await conn.bridge.forgetAll();
     } catch (e) {
-      box.replaceWith(row);
       say(t("connect.loginOffFailed", { error: e.message }), { bad: true });
       return;
     }
-    box.replaceWith(row);
     await loadServers();
     dropLoginLine();
     renderServers();
     say(t("connect.forgotAll"));
-  }, "#forget-all");
+  });
 }
 
 // removeServer forgets a server, its certificate, its session and its
 // kept login, and says so in the toast; an error is said in its
-// settings, which stay open.
+// settings, which stay open. The focus goes to the Add card where the
+// list is empty now, else to the ☰.
 async function removeServer(id, msg) {
   const s = serverById(id);
   try {
@@ -504,7 +736,122 @@ async function removeServer(id, msg) {
   conn.panel = null;
   renderServers();
   say(t("connect.removed", { name: s ? s.name : "" }));
-  $("add-address").focus();
+  if (conn.servers.length) menuButton().focus();
+  else $("add").focus();
+}
+
+// --- the Add card and App settings --------------------------------------
+
+// renderAdd shows the Add card while the list is empty, or once the ☰
+// chose it, with × where the list is not empty.
+function renderAdd() {
+  const empty = conn.servers.length === 0;
+  $("add").classList.toggle("hidden", !(empty || conn.adding));
+  $("add-close").classList.toggle("hidden", empty);
+}
+
+// openAdd shows the Add card from the ☰ and starts its search; the card
+// takes the focus, not its address field, so that a phone's keyboard
+// stays closed until the field is touched.
+function openAdd() {
+  conn.adding = true;
+  renderAdd();
+  const card = $("add");
+  card.focus({ preventScroll: true });
+  card.scrollIntoView({ block: "nearest" });
+  search();
+}
+
+// closeAdd hides the Add card where the list is not empty: its ×, and a
+// server added. With refocus the focus goes back to the ☰.
+function closeAdd(refocus) {
+  conn.adding = false;
+  showResult($("add-msg"), "", false);
+  renderAdd();
+  if (refocus && conn.servers.length) menuButton().focus();
+}
+
+// applyAppearance gives the page the app's appearance, as theme.js gives
+// the web UI its mode: data-theme on <html>, and the browser's own
+// controls with it; the app gives the same to every server's page set to
+// "as the system", through the phone's mode it sets for itself.
+function applyAppearance(a) {
+  const root = document.documentElement;
+  if (a === "light" || a === "dark") {
+    root.dataset.theme = a;
+    root.style.colorScheme = a;
+  } else {
+    root.removeAttribute("data-theme");
+    root.style.colorScheme = "";
+  }
+}
+
+// openApp shows App settings, from the ☰, and notes them in the page's
+// address: the app loads the page again when it takes another
+// appearance, and the page opens them again (initApp).
+function openApp() {
+  const card = $("app-card");
+  card.classList.remove("hidden");
+  history.replaceState(null, "", location.pathname + location.search + APP_HASH);
+  card.focus({ preventScroll: true });
+  card.scrollIntoView({ block: "nearest" });
+}
+
+function closeApp() {
+  $("app-card").classList.add("hidden");
+  showResult($("app-msg"), "", false);
+  history.replaceState(null, "", location.pathname + location.search);
+  menuButton().focus();
+}
+
+// saveAppearance keeps the appearance chosen (saveSettings) and gives it
+// to the page; one the app refused is said in the card, the choice as
+// it was.
+async function saveAppearance() {
+  const sel = $("app-appearance");
+  const want = Object.assign({}, conn.app, { appearance: sel.value });
+  let saved;
+  try {
+    saved = await whileBusy(sel, () => conn.bridge.saveSettings(want));
+  } catch (e) {
+    sel.value = conn.app.appearance;
+    showResult($("app-msg"), t("connect.saveFailed", { error: e.message }), false);
+    return;
+  }
+  conn.app = Object.assign({ appearance: "system" }, saved || want);
+  applyAppearance(conn.app.appearance);
+  showResult($("app-msg"), "", true);
+}
+
+// initApp reads the app's settings where it has them and gives the page
+// its appearance; App settings open again where the address says they
+// were open when the app loaded the page anew.
+async function initApp() {
+  if (!can("settings")) return;
+  try {
+    conn.app = Object.assign({ appearance: "system" }, (await conn.bridge.settings()) || {});
+  } catch (e) {
+    conn.app = { appearance: "system" };
+  }
+  if (!APPEARANCES.includes(conn.app.appearance)) conn.app.appearance = "system";
+  $("app-appearance").value = conn.app.appearance;
+  applyAppearance(conn.app.appearance);
+  if (location.hash === APP_HASH) openApp();
+}
+
+// initMenu makes the Servers card's ☰ a dropdown of the page (dropdown,
+// components.js) and wires its entries.
+function initMenu() {
+  const menu = $("servers-menu");
+  dropdown(menu);
+  menuArrows(menu, ".menu-items button:not(.hidden)");
+  $("menu-add").addEventListener("click", openAdd);
+  $("menu-sign-out-all").addEventListener("click", signOutAll);
+  $("menu-forget-all").addEventListener("click", forgetAll);
+  $("menu-app").addEventListener("click", openApp);
+  $("add-close").addEventListener("click", () => closeAdd(true));
+  $("app-close").addEventListener("click", closeApp);
+  $("app-appearance").addEventListener("change", saveAppearance);
 }
 
 // --- adding a server --------------------------------------------------
@@ -594,8 +941,9 @@ async function addServer(urls, { name, node }) {
 
 // saveNew keeps a server that answered: a new one named as discovery
 // heard its node where it did, else by its address, until discovery
-// hears it (takeHeardName); one in the list by its node takes the
-// address.
+// hears it (takeHeardName), opened at start where it is the first; one
+// in the list by its node takes the address. The Add card closes, and
+// the server's row takes the focus.
 async function saveNew({ name, url, node, fp }) {
   const where = isPrivateHost(new URL(url).hostname) ? "lan" : "remote";
   const known = node ? conn.servers.find((s) => s.node === node) : null;
@@ -605,7 +953,7 @@ async function saveNew({ name, url, node, fp }) {
     if (known) {
       saved = await conn.bridge.save(Object.assign({}, known, { [where]: url }));
     } else {
-      saved = await conn.bridge.save({ name: name || heard || hostOf(url), node, lan: where === "lan" ? url : "", remote: where === "remote" ? url : "", fp: "", ask: "start", push: false });
+      saved = await conn.bridge.save({ name: name || heard || hostOf(url), node, lan: where === "lan" ? url : "", remote: where === "remote" ? url : "", fp: "", ask: "start", push: false, start: conn.servers.length === 0 });
     }
     if (fp && fp !== saved.fp) await conn.bridge.trust(saved.id, fp);
   } catch (e) {
@@ -615,8 +963,11 @@ async function saveNew({ name, url, node, fp }) {
   await loadServers();
   conn.found = conn.found.filter((f) => !(node && f.node === node) && f.url !== url);
   renderFound();
+  closeAdd(false);
   renderServers();
   say(known ? t("connect.known", { name: saved.name }) : t("connect.added", { name: saved.name }));
+  const open = document.querySelector(`.server-row[data-id="${CSS.escape(saved.id)}"] .server-open`);
+  if (open) open.focus();
   probeServer(serverById(saved.id));
   return true;
 }
@@ -800,7 +1151,6 @@ async function init() {
     return;
   }
   $("servers").classList.remove("hidden");
-  $("add").classList.remove("hidden");
   window.addEventListener("massimo", onBridgeEvent);
   $("add-form").addEventListener("submit", (ev) => {
     ev.preventDefault();
@@ -809,12 +1159,15 @@ async function init() {
   $("add-address").addEventListener("input", warnPlain);
   $("probe-btn").addEventListener("click", (ev) => whileBusy(ev.currentTarget, probeAll));
   $("search-btn").addEventListener("click", search);
-  conn.forgetRow = $("forget-all-row");
-  $("forget-all").addEventListener("click", forgetAll);
+  $("cert-close").addEventListener("click", () => $("cert-dialog").close());
+  initMenu();
   await loadServers();
   renderServers();
   probeAll();
+  // at the start for the saved servers too: a LAN address that changed,
+  // and the names discovery hears (onFound)
   search();
+  initApp();
   initCore();
 }
 

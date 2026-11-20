@@ -1,9 +1,59 @@
 # User manual
 
 How to use Massimo, for the people who live with it rather than run it.
-This first chapter covers the app's login by fingerprint; more chapters follow.
+The first chapters cover the app: its list of servers,
+and its login by fingerprint; more chapters follow.
 The web UI's pages are described in [ui.md](ui.md),
 and how the apps work inside in [app.md](app.md).
+
+## The list of servers in the app
+
+The Massimo app opens on its list of servers,
+or straight on the server you chose to open at start.
+Each server in the list says whether the app reaches it
+(on the LAN, remote, not reachable, or a changed certificate)
+and, in green, who you are signed in as there.
+Touch a server to open it; ⚙, or a long press, opens its settings.
+
+### The list's menu
+
+**☰**, at the top of the list, holds:
+
+- **Add server…**, which shows the card to add one:
+  the servers the app finds on your network, and a field for an address.
+  The card closes once a server is added, or with **×**.
+  While the list is empty, the card is always there.
+- **Sign out of all**, which signs the app out of every server.
+- **Forget all stored credentials**, where a server keeps a login by
+  fingerprint; it asks first, under the list.
+- **App settings…**, below.
+
+### A server's settings
+
+Opening a server's settings does not open the keyboard;
+touch a field to change it.
+
+- **Open at start**: the app opens this server when it starts,
+  in place of the list.
+  One server at most has it, and the first server you add has it
+  until you choose another.
+  **Select server** takes you back to the list.
+  When the server does not answer, the app shows the list.
+- **Signed in as …** and **Sign out**, where the app is signed in there:
+  Sign out ends that session on the server and on the phone.
+- **Certificate**, for a server reached over `https://`:
+  its name and how long it is valid.
+  **Certificate…** shows it in full: who it is for and who issued it,
+  its names, its validity, its SHA-256 fingerprint,
+  and since when the app trusts it:
+  since you compared its fingerprint when you added the server,
+  or because a certificate authority the phone knows signed it.
+
+### App settings
+
+**Appearance**: as the phone, light or dark.
+It sets the list, and every server's page whose own appearance
+(My settings) is "as the system".
 
 ## The login by fingerprint in the app
 
@@ -25,7 +75,8 @@ The switch shows only where the phone has a fingerprint enrolled.
 
 ### Signing in
 
-The sign-in form shows **Login by fingerprint** with your name.
+The sign-in form's row **Sign in with** starts with the fingerprint,
+**Login by fingerprint** for your name.
 Touch it and then the sensor.
 On the list of servers, the fingerprint button beside a server
 signs you in straight away, without the form.
@@ -70,10 +121,12 @@ At home, on the local network, plain `http://` works as usual.
 ### Turning it off
 
 - **Turn off**, in the server's settings on the app's list of servers,
-  asks for your fingerprint once, removes the key at the server
-  and forgets it on the phone.
+  removes the key at the server, signs you out there
+  and forgets the key on the phone.
+  Where the app is signed in to that server it needs nothing more;
+  where it is not, it asks for your fingerprint once.
 - **Remove** of a server forgets everything the app kept for it.
-- **Forget all stored credentials**, under the list of servers,
+- **Forget all stored credentials**, in the list's ☰,
   forgets the keys of every server at once, without asking for the fingerprint.
 
 When only the phone forgot a key, the server still lists it.
@@ -84,6 +137,7 @@ Do the same if you lose the phone.
 
 ### Moving between servers
 
-**Select server**, at the foot of the sign-in form
-and at the end of the Cube choice in the header, takes you back to the app's list
-of servers. You stay signed in where you were.
+**Select server**, at the foot of the sign-in form and last in its ☰,
+at the end of the Cube choice in the header, and in the ☰ just before Sign out,
+takes you back to the app's list of servers.
+You stay signed in where you were; the list shows where.

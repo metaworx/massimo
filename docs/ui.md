@@ -1628,12 +1628,30 @@ The server's sign, when it says an update is out, opens it at Software update.
 ## In the apps
 
 The apps for Android and iOS (docs/app.md) open on a page of their own,
-`ui/connect.html`: the servers the app keeps, each with what it found
-when it last looked (on the LAN, remote, not reachable, a changed certificate),
+`ui/connect.html`, or on the server marked **Open at start**:
+the servers the app keeps, each with what it found
+when it last looked (on the LAN, remote, not reachable, a changed certificate)
+and, as a green badge, the user the app is signed in as there,
+checked at each look,
 a tap opening the server, ⚙ or a long press its settings;
-the servers on the network and an address typed, to add one;
+the Servers card's ☰, with **Add server…**, **Sign out of all**,
+**Forget all stored credentials** where a login is kept (asked first, under
+the list) and **App settings…**;
+the card that adds a server, shown while the list is empty or from the ☰,
+with × and closed once a server is added:
+the servers on the network, searched for as it opens, and an address typed;
 and the fingerprint of a self-signed certificate, compared with the
 server's log or `massimo tls show` before it is trusted.
+A server's settings take the focus themselves, not a field,
+so that a phone's keyboard stays closed:
+the name and the addresses, **Open at start** (one server at most),
+when the fingerprint is asked, the session with **Sign out**,
+the certificate's subject and end with **Certificate…**,
+a dialog with its issuer, names, validity, fingerprint and since when it
+is trusted, and the login by fingerprint with **Turn off**,
+which revokes its key and signs out.
+**App settings** hold the **Appearance**, as the phone, light or dark,
+for that page and for every server's page set to "as the system".
 A browser that opens that page sees a line saying it is the app's.
 A server's page in the app is this page,
 except that the app keeps its session in place of the browser,

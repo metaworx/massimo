@@ -1,8 +1,9 @@
 <!doctype html>
 <!-- The apps' connect page (docs/app.md): the servers the app keeps,
-     discovery, adding one by its address, the fingerprint of a
-     self-signed certificate, a server's settings with its login by
-     fingerprint, and the server on the
+     with their ☰; discovery, adding one by its address, the fingerprint
+     of a self-signed certificate, a server's settings with its session,
+     its certificate and its login by fingerprint, the app's own settings,
+     and the server on the
      phone, through the app's bridge window.massimo (connect.js). The
      server serves it at ui/connect.html, the app its own copy of ui/;
      <base> makes its URLs resolve as the page at / resolves them, and
@@ -23,6 +24,12 @@
 <body class="connect">
 <svg xmlns="http://www.w3.org/2000/svg" class="icon-defs" aria-hidden="true" focusable="false">
   <symbol id="icon-cog" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+  <!-- the Servers card's ☰ and its items, as the web UI's (index.html); icon-plus Massimo's own -->
+  <symbol id="icon-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="icon-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="icon-signout" viewBox="0 0 24 24"><path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4"/><path d="M15 8l4 4-4 4"/><path d="M19 12H9"/></symbol>
+  <symbol id="icon-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l8-8"/><path d="M16 7l2 2"/><path d="M14 9l2 2"/></symbol>
+  <symbol id="icon-sliders" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
   <symbol id="icon-fingerprint" viewBox="0 0 24 24"><path d="M4 15.5V11A8 8 0 0 1 7.07 4.70"/><path d="M10.34 3.17A8 8 0 0 1 16.93 4.70"/><path d="M19.19 7.49A8 8 0 0 1 20 11v2"/><path d="M7.8 19.5V11a4.2 4.2 0 0 1 8.4 0v4"/><path d="M12 11v4.5a12 12 0 0 0 .9 4.5"/></symbol>
 </svg>
 
@@ -37,16 +44,32 @@
     <header class="tile-head">
       <h2 id="servers-h" data-i18n="connect.servers">Servers</h2>
       <button type="button" id="probe-btn" class="icon-btn refresh-btn" aria-label="check again" title="Check every server again" data-i18n-attr="aria-label:connect.probeAgain title:connect.probeAgainTitle">↻</button>
+      <!-- the list's ☰ (connect.js initMenu): Add server…, Sign out of all,
+           Forget all stored credentials where a login is kept, App settings… -->
+      <details id="servers-menu" class="menu nav-menu servers-menu">
+        <summary class="nav-btn" aria-label="Servers menu" title="Servers menu" data-i18n-attr="aria-label:connect.menu title:connect.menu"><svg class="ni" aria-hidden="true"><use href="#icon-menu"/></svg></summary>
+        <div class="menu-items">
+          <button type="button" id="menu-add"><svg class="ni" aria-hidden="true"><use href="#icon-plus"/></svg><span data-i18n="connect.menuAdd">Add server…</span></button>
+          <button type="button" id="menu-sign-out-all" class="hidden"><svg class="ni" aria-hidden="true"><use href="#icon-signout"/></svg><span data-i18n="connect.signOutAll">Sign out of all</span></button>
+          <button type="button" id="menu-forget-all" class="hidden"><svg class="ni" aria-hidden="true"><use href="#icon-key"/></svg><span data-i18n="connect.forgetAll">Forget all stored credentials</span></button>
+          <hr id="menu-app-sep" class="menu-sep hidden">
+          <button type="button" id="menu-app" class="hidden"><svg class="ni" aria-hidden="true"><use href="#icon-sliders"/></svg><span data-i18n="connect.menuApp">App settings…</span></button>
+        </div>
+      </details>
     </header>
     <div class="section-body">
       <ul id="server-list" class="server-list"></ul>
       <p id="servers-empty" class="muted hidden" data-i18n="connect.none">No server yet: add one below.</p>
-      <div id="forget-all-row" class="actions hidden"><span class="actions-right"><button type="button" id="forget-all" data-i18n="connect.forgetAll">Forget all stored credentials</button></span></div>
+      <!-- what the ☰ asks before it acts, Forget all stored credentials (connect.js askInCard) -->
+      <div id="servers-ask" class="servers-ask hidden"></div>
     </div>
   </section>
 
-  <section id="add" class="tile section-card hidden" aria-labelledby="add-h">
-    <header class="tile-head"><h2 id="add-h" data-i18n="connect.add">Add a server</h2></header>
+  <!-- shown while the list is empty, or from the ☰ until a server is
+       added or × closes it; it takes the focus, not its address field,
+       so that a phone's keyboard stays closed (connect.js openAdd) -->
+  <section id="add" class="tile section-card hidden" aria-labelledby="add-h" tabindex="-1">
+    <header class="tile-head"><h2 id="add-h" data-i18n="connect.add">Add a server</h2><button type="button" id="add-close" class="icon-btn card-close hidden" aria-label="close" title="Close" data-i18n-attr="aria-label:action.close title:action.close">×</button></header>
     <div class="section-body">
       <h3 class="connect-sub" data-i18n="connect.found">On this network</h3>
       <ul id="found-list" class="found-servers"></ul>
@@ -61,6 +84,25 @@
         <p id="add-msg" class="small cubes-msg hidden" role="status"></p>
         <div class="actions"><span class="actions-right"><button type="submit" class="primary" data-i18n="connect.addButton">Add</button></span></div>
       </form>
+    </div>
+  </section>
+
+  <!-- the app's own settings, from the ☰ (connect.js openApp): the
+       appearance of the list and of every server's page set to "as the
+       system" -->
+  <section id="app-card" class="tile section-card hidden" aria-labelledby="app-h" tabindex="-1">
+    <header class="tile-head"><h2 id="app-h" data-i18n="connect.app">App settings</h2><button type="button" id="app-close" class="icon-btn card-close" aria-label="close" title="Close" data-i18n-attr="aria-label:action.close title:action.close">×</button></header>
+    <div class="section-body">
+      <div class="field wide">
+        <label for="app-appearance" data-i18n="appearance.title">Appearance</label>
+        <select id="app-appearance" class="field-control">
+          <option value="system" data-i18n="appearance.modeSystem">as the system</option>
+          <option value="light" data-i18n="appearance.modeLight">light</option>
+          <option value="dark" data-i18n="appearance.modeDark">dark</option>
+        </select>
+        <p class="muted small field-hint" data-i18n="connect.appearanceHint">For this list and for every server's page whose appearance is “as the system”.</p>
+      </div>
+      <p id="app-msg" class="small cubes-msg hidden" role="status"></p>
     </div>
   </section>
 
@@ -85,9 +127,25 @@
   <div class="actions"><button type="button" id="fp-cancel" data-i18n="action.cancel">Cancel</button><button type="button" id="fp-trust" class="primary" data-i18n="connect.trust">Trust</button></div>
 </dialog>
 
+<!-- A server's certificate, from Certificate… in its settings (connect.js
+     showCert): what the probe read of it, and since when it is trusted. -->
+<dialog id="cert-dialog" aria-labelledby="cert-title">
+  <h3 id="cert-title" data-i18n="connect.certTitle">The server's certificate</h3>
+  <p id="cert-address" class="muted small mono"></p>
+  <div class="fp-row"><span class="muted small" data-i18n="connect.cert.subject">Subject</span><span id="cert-subject" class="mono cert-value"></span></div>
+  <div class="fp-row"><span class="muted small" data-i18n="connect.cert.issuer">Issuer</span><span id="cert-issuer" class="mono cert-value"></span></div>
+  <div class="fp-row"><span class="muted small" data-i18n="connect.cert.names">Names</span><span id="cert-names" class="mono cert-value"></span></div>
+  <div class="fp-row"><span class="muted small" data-i18n="connect.cert.from">Valid from</span><span id="cert-from"></span></div>
+  <div class="fp-row"><span class="muted small" data-i18n="connect.cert.until">Valid until</span><span id="cert-until"></span></div>
+  <div class="fp-row"><span class="muted small" data-i18n="connect.cert.fingerprint">SHA-256 fingerprint</span><span id="cert-fp" class="mono tls-fp"></span></div>
+  <div class="fp-row"><span class="muted small" data-i18n="connect.cert.trusted">Trusted</span><span id="cert-trusted"></span></div>
+  <div class="actions"><button type="button" id="cert-close" class="primary" data-i18n="action.close">Close</button></div>
+</dialog>
+
 <!-- A saved server in the list: a tap opens it, the fingerprint (where a
      login is kept) opens it signed in, a long press or the cog its
-     settings (connect.js serverRow). -->
+     settings (connect.js serverRow); its badges say what the probe found
+     and who the app is signed in as there. -->
 <template id="tpl-server">
   <li class="server-row">
     <button type="button" class="server-open"><span class="server-name"></span><span class="server-where mono muted small"></span><span class="server-badges"></span></button>

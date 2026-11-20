@@ -15,12 +15,16 @@ import javax.crypto.Cipher
  * user's name, the server's node and pinned fingerprint as they were when it
  * was kept, in clear, and the API key sealed by the server's [LoginKey] with
  * its [iv]. The four are bound into the seal, so that it opens for nothing else.
+ * [keyId] is the key's row at the server, in clear beside it, so that Turn
+ * off revokes it with the session the app holds, without the prompt; 0 for
+ * a login kept before contract version 3.
  */
-data class KeptLogin(val user: String, val node: String, val fp: String, val iv: ByteArray, val sealed: ByteArray) {
+data class KeptLogin(val user: String, val node: String, val fp: String, val iv: ByteArray, val sealed: ByteArray, val keyId: Long = 0) {
     override fun equals(other: Any?): Boolean =
-        other is KeptLogin && user == other.user && node == other.node && fp == other.fp && iv.contentEquals(other.iv) && sealed.contentEquals(other.sealed)
+        other is KeptLogin && user == other.user && node == other.node && fp == other.fp && keyId == other.keyId &&
+            iv.contentEquals(other.iv) && sealed.contentEquals(other.sealed)
 
-    override fun hashCode(): Int = listOf(user, node, fp, iv.contentHashCode(), sealed.contentHashCode()).hashCode()
+    override fun hashCode(): Int = listOf(user, node, fp, keyId, iv.contentHashCode(), sealed.contentHashCode()).hashCode()
 }
 
 /** The key a login keeps, opened: its secret, and its row at the server, which a Turn off revokes. */
@@ -45,6 +49,7 @@ class LoginStore(private val file: File) {
                 fp = ServerStore.str(o, "fp"),
                 iv = Base64.getDecoder().decode(ServerStore.str(o, "iv")),
                 sealed = Base64.getDecoder().decode(ServerStore.str(o, "sealed")),
+                keyId = o.optLong("key_id"),
             ).takeIf { it.user.isNotEmpty() && it.iv.isNotEmpty() && it.sealed.isNotEmpty() }
         } catch (e: IllegalArgumentException) {
             null
@@ -66,7 +71,8 @@ class LoginStore(private val file: File) {
                 .put("node", login.node)
                 .put("fp", login.fp)
                 .put("iv", enc.encodeToString(login.iv))
-                .put("sealed", enc.encodeToString(login.sealed)),
+                .put("sealed", enc.encodeToString(login.sealed))
+                .put("key_id", login.keyId),
         )
         write(all)
     }
@@ -112,7 +118,7 @@ class LoginStore(private val file: File) {
             cipher.updateAAD(aad(id, node, fp, user))
             val plain = JSONObject().put("key", secret.key).put("id", secret.id).toString().toByteArray(Charsets.UTF_8)
             val sealed = cipher.doFinal(plain)
-            return KeptLogin(user, node, fp, cipher.iv, sealed)
+            return KeptLogin(user, node, fp, cipher.iv, sealed, secret.id)
         }
 
         /**
