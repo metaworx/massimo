@@ -1,19 +1,20 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
-"""The repairs (repair.js): a room's from its ⋯ menu, a device's from its
-row, the Cube's from its panel. Their routes are stubbed, a GET with a
-preview or a refusal, a POST with a run, so that nothing reaches the fake
-Cube; the routes have their Go tests (internal/server/repair_api_test.go)."""
+"""The repairs (ui/src/shared/repair.tsx): a room's from its ⋯ menu, a
+device's from its row, the Cube's from its panel. Their routes are
+stubbed, a GET with a preview or a refusal, a POST with a run, so that
+nothing reaches the fake Cube; the routes have their Go tests
+(internal/server/repair_api_test.go)."""
 import json
 from urllib.parse import parse_qs, urlparse
 
-from helpers import named_buttons, scroll_width, show_view, wait_until
+from helpers import REPAIR_BUDGET, RepairStub, named_buttons, scroll_width, show_view, wait_until
 
 PANEL = ".cube-panel[data-serial='KEQ0000100']"
 
 RELINK = {"action": "relink", "plan": "plan-relink", "radiograms": 9, "duty_cost_pct": 11.25, "slots": 12, "held_slots": 3,
           "resets": 0, "wakeups": 2, "metadata": False, "notes": [],
-          "budget": {"duty_cycle_pct": 3, "free_memory_slots": 50, "updated_at": "2026-11-15T10:00:00Z"},
+          "budget": REPAIR_BUDGET,
           "steps": [{"what": "link", "device": "0a0101", "room": 1, "lines": ["s:AAAA", "s:BBBB"]},
                     {"what": "link", "device": "0a0102", "room": 1, "lines": ["s:CCCC"]}]}
 RESETS = {"action": "reset", "plan": "plan-reset", "radiograms": 0, "duty_cost_pct": 0, "slots": 0, "held_slots": 0, "resets": 2,
@@ -25,47 +26,16 @@ LIST = dict(RESETS, action="list", plan="plan-list", resets=0, metadata=True, st
 NONE = "no device of room 1 has a communication error"
 
 
-class RepairStub:
-    """The repairs' routes: GET answers previews[repair], a preview or
-    the text of one with nothing to do; a POST is kept with its query and
-    answers a run whose steps the Cube accepted."""
-
-    def __init__(self, page, previews):
-        self.page, self.previews, self.runs = page, previews, []
-        page.route("**/repair/**", self.handle)
-
-    def handle(self, route):
-        url = urlparse(route.request.url)
-        repair = url.path.rsplit("/", 1)[1]
-        query = parse_qs(url.query)
-        if route.request.method == "POST":
-            self.runs.append((url.path, query))
-            body = {"ok": True, "action": repair, "steps": [{"what": "x", "lines": 3, "accepted": 3}], "budget": RELINK["budget"]}
-            if repair in ("relink", "unlink-relink"):
-                body["confirmation"] = "pending"
-            if repair == "reset":
-                body["still_flagged"] = []
-            route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
-            return
-        answer = self.previews.get(repair, "nothing to repair")
-        if repair == "list" and "room_name" not in query and self.previews.get("list-name"):
-            answer = dict(nothing(repair, "room 7 is not in the list"), details={"code": "room_name_needed", "room": 7})
-        elif not isinstance(answer, dict):
-            answer = nothing(repair, answer)
-        route.fulfill(status=200, content_type="application/json", body=json.dumps(answer))
-
-    def close(self):
-        self.page.unroute("**/repair/**")
-
-
-def nothing(repair, why):
-    """The preview of a repair with nothing to send, and why."""
-    return {"action": repair, "plan": "", "steps": [], "radiograms": 0, "duty_cost_pct": 0, "slots": 0, "held_slots": 0, "resets": 0,
-            "wakeups": 0, "metadata": False, "notes": [], "budget": RELINK["budget"], "nothing": why}
+# What a preview costs, in the page's language, as the box says it: its
+# radiograms with their duty cycle, slots and wakeups, else a list write,
+# else its resets.
+COST_JS = """(p) => p.radiograms > 0
+  ? t('repair.costRadio', {radiograms: p.radiograms, duty: fmtNum(p.duty_cost_pct, 1), slots: p.slots, held: p.held_slots, wakeups: p.wakeups})
+  : p.metadata ? t('repair.costMetadata') : t('repair.costResets', {n: p.resets})"""
 
 
 def cost(page, p):
-    return page.evaluate("repairCost(%s)" % json.dumps(p))
+    return page.evaluate(COST_JS, p)
 
 
 def test_room_repairs(page, case):
@@ -141,12 +111,12 @@ def test_device_repairs(page, case):
         stub.close()
 
 
-def test_listing_names_the_device(page, case):
+def test_listing_names_the_device(page, case, reads):
     """A listing of a device the Cube's list lacks offers its name (D185):
     the room's, the type in the page's language and the lowest free
-    number, reads the preview with it and runs with it; a name changed
-    reads the preview again, one too long is marked on its field and not
-    read (D201)."""
+    number, whatever the case of the names the room's devices have, reads
+    the preview with it and runs with it; a name changed reads the preview
+    again, one too long is marked on its field and not read (D201)."""
     unlisted = dict(LIST, details={"from": 0, "to": 1, "listed": False, "new_room": False, "name": "Bath radiator thermostat 1",
                                    "room_name": "Bath", "type": "radiator_thermostat"})
     stub = RepairStub(page, {"config": "the 2 other thermostats of room 1 share no temperatures by a majority",
@@ -160,13 +130,11 @@ def test_listing_names_the_device(page, case):
     page.on("request", seen)
     try:
         word = page.evaluate("t('type.radiator_thermostat')")
-        assert page.evaluate("freeNameNumber('Bath ' + %s, ['bath ' + %s + ' 1', 'Bath ' + %s + ' 3', 'Bath ' + %s + ' x'])"
-                             % (json.dumps(word), json.dumps(word.upper()), json.dumps(word), json.dumps(word))) == 2, "the lowest free n"
-        assert page.evaluate("defaultDeviceName('Attic over the garage', 'radiator thermostat', [])") == \
-            "Attic over the garage radiator thermostat 1", "a name too long for the Cube offered as it is (D201)"
-        assert page.evaluate("defaultDeviceName('', 'wall thermostat', ['wall thermostat 1'])") == "wall thermostat 2", "without a room's name"
-        want = page.evaluate("defaultDeviceName('Bath', %s, roomDeviceNames(state.serial, 1))" % json.dumps(word))
-        assert want.startswith("Bath " + word + " "), want
+        # Room 1's devices named, as far as it has them, "bath <TYPE> 1",
+        # "Bath <type> 3" and "Bath <type> x" (GET …/rooms answered so):
+        # the lowest free number is 2, whatever the case.
+        rename_room_devices(page, reads, 1, ["bath " + word.upper() + " 1", "Bath " + word + " 3", "Bath " + word + " x"])
+        want = "Bath " + word + " 2"
         tile = page.locator(".room").first
         tile.locator(".room-name-btn").click()
         device = tile.locator(".device").first
@@ -179,15 +147,15 @@ def test_listing_names_the_device(page, case):
         assert listing.locator(".repair-device-name-form label").inner_text() == page.evaluate("t('repair.deviceName')"), "the name asked for"
         assert wait_until(page, "document.querySelector('.repair-item[data-repair=list] .repair-cost') !== null", 5), "the preview shown"
         assert names and names[-1] == [want], f"the preview read with the name offered: {names}"
-        reads = len(names)
+        asked = len(names)
         field.fill("x" * 33)
         hint = listing.locator(".repair-name-long")
-        assert hint.is_visible() and hint.inner_text() == page.evaluate("t('cfg.nameLong', {n: 32})"), "a name too long marked as it is typed"
+        assert hint.is_visible() and hint.inner_text() == page.evaluate("t('name.long', {n: 32})"), "a name too long marked as it is typed"
         assert field.get_attribute("aria-invalid") == "true" and field.get_attribute("aria-describedby") == hint.get_attribute("id"), \
             "the field marked, the limit its description"
         listing.locator(".repair-device-name-form button[type=submit]").click()
         page.wait_for_timeout(300)
-        assert field.evaluate("(el) => el === document.activeElement") and len(names) == reads, "and not read: back to the field"
+        assert field.evaluate("(el) => el === document.activeElement") and len(names) == asked, "and not read: back to the field"
         field.fill("Sofa side")
         assert hint.is_hidden() and field.get_attribute("aria-invalid") is None, "a name that fits clears the mark"
         listing.locator(".repair-device-name-form button[type=submit]").click()
@@ -203,6 +171,99 @@ def test_listing_names_the_device(page, case):
         assert stub.runs and stub.runs[0][1] == {"name": ["Sofa side"], "plan": ["plan-list"]}, f"with the name and the plan: {stub.runs}"
     finally:
         page.remove_listener("request", seen)
+        stub.close()
+
+
+def rename_room_devices(page, reads, room, names):
+    """The room's real devices named names, in their order, as far as it
+    has them (GET …/rooms answered so), and the rooms loaded again."""
+    def named(rooms):
+        for r in rooms or []:
+            if r.get("id") == room:
+                for d, name in zip([d for d in r.get("devices") or [] if not d.get("virtual")], names):
+                    d["name"] = name
+        return rooms
+
+    reads.change("**/api/v1/cubes/*/rooms?devices=all", named)
+    page.evaluate("loadRooms()")
+    assert wait_until(page, "state.rooms.find((r) => r.id === %d).devices.some((d) => d.name === %s)" % (room, json.dumps(names[0])), 5), \
+        "the room's devices renamed"
+
+
+def open_device_listing(page):
+    """The first tile's device list open, its first device's repairs open:
+    their listing's item."""
+    tile = page.locator(".room").first
+    tile.locator(".room-name-btn").click()
+    device = tile.locator(".device").first
+    device.wait_for(state="visible")
+    device.locator(".repair-open").click()
+    return page.locator(".device .repair-box .repair-item[data-repair=list]").first
+
+
+def test_listing_without_a_room_name(page, case, reads):
+    """A listing into a room whose name the Cube's list does not give
+    offers the type alone with the lowest free number: "wall thermostat
+    2" where the room has a "wall thermostat 1"."""
+    word = page.evaluate("t('type.wall_thermostat')")
+    rename_room_devices(page, reads, 1, [word + " 1"])
+    unlisted = dict(LIST, details={"from": 0, "to": 1, "listed": False, "new_room": False, "name": "wall thermostat 2", "room_name": "",
+                                   "type": "wall_thermostat"})
+    stub = RepairStub(page, {"place": "the Cube's list does not list device 0a0101: list it instead", "list": unlisted})
+    try:
+        field = open_device_listing(page).locator("input[name=name]")
+        field.wait_for(state="visible")
+        assert field.input_value() == word + " 2", "the type alone, the lowest free number"
+        assert not stub.runs, "nothing run"
+    finally:
+        stub.close()
+
+
+def test_a_question_goes_with_its_preview(page, case):
+    """A question never outlives the preview it asked about: a question
+    open in a room's box is gone once another repair of the box has run
+    and the previews are read again; a listing's question is gone once a
+    name is given, and the run after a new Yes sends the new preview's
+    plan."""
+    master = dict(RELINK, action="master", plan="plan-master")
+    stub = RepairStub(page, {"reset": NONE, "master": master, "relink": RELINK})
+    try:
+        tile = page.locator(".room").first
+        tile.locator(".tile-head .menu > summary").click()
+        tile.locator(".menu-repair").click()
+        relink = tile.locator(".repair-item[data-repair=relink]")
+        relink.locator(".repair-run").click()
+        assert relink.locator(".confirm-box").is_visible(), "the re-link asks"
+        other = tile.locator(".repair-item[data-repair=master]")
+        other.locator(".repair-run").click()
+        other.locator(".confirm-yes").click()
+        assert wait_until(page, "document.querySelector('.repair-item[data-repair=master] .repair-result.ok') !== null", 5), "the master ran"
+        assert wait_until(page, "!!document.querySelector('.repair-item[data-repair=relink] .repair-run')", 5), "the re-link read again"
+        assert relink.locator(".confirm-box").count() == 0, "its question gone with its preview"
+        assert len(stub.runs) == 1, f"one run: {stub.runs}"
+        tile.locator(".repair-close").click()
+    finally:
+        stub.close()
+
+    def listing(query):
+        name = (query.get("name") or ["offered"])[0]
+        return dict(LIST, plan="plan-" + name, details={"from": 0, "to": 1, "listed": False, "new_room": False, "name": name,
+                                                         "room_name": "Bath", "type": "radiator_thermostat"})
+
+    stub = RepairStub(page, {"place": "the Cube's list does not list device 0a0101: list it instead", "list": listing})
+    try:
+        item = open_device_listing(page)
+        item.locator(".repair-run").click()
+        assert item.locator(".confirm-box").is_visible(), "the listing asks"
+        item.locator("input[name=name]").fill("Sofa side")
+        item.locator(".repair-device-name-form button[type=submit]").click()
+        assert wait_until(page, "!!document.querySelector('.repair-item[data-repair=list] .repair-run')", 5), "the preview read with the name"
+        assert item.locator(".confirm-box").count() == 0, "its question gone with its preview"
+        item.locator(".repair-run").click()
+        item.locator(".confirm-yes").click()
+        assert wait_until(page, "document.querySelector('.repair-item[data-repair=list] .repair-result.ok') !== null", 5), "the listing ran"
+        assert [q.get("plan") for _, q in stub.runs] == [["plan-Sofa side"]], f"the new preview's plan: {stub.runs}"
+    finally:
         stub.close()
 
 
@@ -307,7 +368,7 @@ def test_unlink_relink_warns_and_asks_twice(page, case):
         item.locator(".repair-run").wait_for(state="visible")
         item.locator(".repair-run").click()
         warning = item.locator(".repair-warning")
-        want = page.evaluate("t('repair.unlinkRelinkWarning', {cost: repairCost(%s)})" % json.dumps(UNLINK))
+        want = page.evaluate("(c) => t('repair.unlinkRelinkWarning', {cost: c})", cost(page, UNLINK))
         assert warning.locator(".repair-warning-text").inner_text() == want, "the warning names the cost and the risk"
         assert scroll_width(page) <= case.width, "no horizontal scroll with the warning"
         named_buttons(page, "the warning")

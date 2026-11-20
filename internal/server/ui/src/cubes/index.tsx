@@ -8,10 +8,10 @@
  * served Cubes each in its panel and the fold of those found, and Cube
  * settings, the chosen Cube's panel alone, open. A panel is drawn in one
  * place at a time, as its ids are its serial's. The plain code calls
- * MassimoParts.cubes (cubes.js renderCubes and cubesPolled, home.js
- * showFound); the panels follow every load of the Cubes' list in place,
- * and the settings typed for a Cube that is no longer served, and for
- * its rooms, are forgotten.
+ * MassimoParts.cubes (cubes.js renderCubes, cubesPolled, pairingEvent and
+ * pairingJoined, home.js showFound); the panels follow every load of the
+ * Cubes' list in place, and the settings typed for a Cube that is no
+ * longer served, and for its rooms, are forgotten.
  */
 
 import { useEffect } from "preact/hooks";
@@ -19,6 +19,7 @@ import type { Cube } from "../api";
 import { chosenCube, cubeFormKey, roomFormKey } from "../model/cube";
 import { forgetForms } from "../shared/forms";
 import { mounter, register } from "../shared/region";
+import { forgetPairing, loadCubeRooms, loadPairing, pairingEvent, pairingJoined } from "./flow";
 import { msg } from "./send";
 import { Found } from "./Found";
 import { Panel } from "./Panel";
@@ -102,7 +103,21 @@ const cubes = register("cubes", {
   openFound(): void {
     folds.found = true;
   },
+  /** pairingEvent takes the shown Cube's pairing_started and pairing_ended (cubes.js pairingEvent): its pairing state is asked for. */
+  pairingEvent,
+  /** pairingJoined takes a paired event of the shown Cube (cubes.js pairingJoined): the device is listed at once. */
+  pairingJoined,
 });
+
+/**
+ * signedOut forgets what the Cubes' parts kept of the user who was signed
+ * in (MassimoParts.signedOut, index.ts): every Cube's pairing and rooms;
+ * the panels are drawn again from nothing.
+ */
+export function signedOut(): void {
+  forgetPairing();
+  load.bump();
+}
 
 /** MassimoParts.cubes, as index.ts declares it. */
 export type CubesPart = typeof cubes;

@@ -1,4 +1,4 @@
-# Testing the web UI (v1.5.0)
+# Testing the web UI (v1.7.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -655,6 +655,17 @@ a device with a low battery, a line of the settings file that differs, an
 address found elsewhere, a proxy that does not listen, and a Cube and a
 Massimo proxy found (`CUBES_STUB`, `FOUND_STUB`): a region whose fixture
 lacks what it shows can be given it so, with GETs alone.
+The pairing's second view does so for a pairing that runs (AP UiParts, Block 9):
+`GET …/pairing` answers it as running for ten minutes more,
+with a device that joined (`JOINED_STUB`), whose form holds a room chosen,
+since a pairing starts only by a POST.
+The repairs' views, a room's box under its tile, a device's under its row
+and the Cube's in its panel, each with a question open,
+answer every `GET …/repair/…` with a preview that has something to send (`REPAIR_STUB`,
+by `RepairStub`),
+a listing's as of a device the Cube's list lacks,
+so that the device's box asks for its name;
+a run is a POST, which the guard refuses.
 
 ### Taking a region off the list
 
@@ -713,6 +724,17 @@ The suite's helpers for it are in `tools/ui-test/helpers.py`
   so the hold fails at its end where the timer is no longer the one it cleared.
   What a poll itself draws the test counts for one poll of its own (`poll(false)`),
   once every request it started has been answered.
+- **The same element** (`mark`, `replaced`, `frames` of `helpers.py`):
+  a test that holds that data takes nothing from the user marks the elements
+  of its selectors, lets the data come, waits two frames and a task,
+  and asks which selectors no longer find the element it marked
+  (`test_pairing_updates.py`, `test_repair_updates.py`).
+- **The repairs' routes** (`RepairStub` of `helpers.py`, by `safe_route`):
+  a test's previews by repair, or a function of the query,
+  and with `runs` the runs kept and answered;
+  the guard's without, so that a run meets its refusal.
+  `state_events` sends a state event per device as the server does,
+  the script the guard's round sends too (`STATE_EVENTS_JS`).
 - **What the reads do not keep yet:**
   a device's state applied in the page (`updateDevice`, a dispatched `state` event)
   lasts until the rooms are loaded again.

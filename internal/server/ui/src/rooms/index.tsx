@@ -16,8 +16,8 @@
  * the room, or the virtual thermostat whose settings they hold, and the
  * settings asked to be opened from elsewhere are opened once their
  * Cube's rooms have loaded. A tile's configuration is a part of the tile
- * (Config.tsx); the repairs (repair.js) and
- * the form that puts a device into a room (pairing.js) stay plain inside.
+ * (Config.tsx); its repairs are the shared RepairBox, and the form that
+ * puts a device into a room the shared PutForm.
  */
 
 import { roomFormKey } from "../model/cube";

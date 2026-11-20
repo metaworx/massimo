@@ -7,17 +7,17 @@
  * The devices without a room, at the end of Rooms: a device just paired,
  * or one the original software paired through the proxy and never put
  * into a room, each its device's row with Put into a room… and Remove from
- * the Cube (capability structure). The form that puts it into a room stays
- * plain (pairing.js pairDeviceForm, AP UiParts Block 9) in an element the
- * part leaves to it; Remove from the Cube asks in the row. Built once per
- * device and updated in place, so that the form keeps what is typed and
- * the focus when data comes in.
+ * the Cube (capability structure). The form that puts it into a room is
+ * the shared PutForm, as the pairing has it, over the chosen Cube's rooms;
+ * Remove from the Cube asks in the row. Built once per device and updated
+ * in place, so that the form keeps what is typed and the focus when data
+ * comes in.
  */
 
 import { useRef, useState } from "preact/hooks";
 import type { Device } from "../api";
 import { actionRunner } from "../shared/action";
-import { Island } from "../shared/island";
+import { newPut, PutForm } from "../shared/put";
 import { Question, useAsk } from "../shared/question";
 import { DeviceRow } from "./Devices";
 import { load, tickOf } from "./store";
@@ -33,32 +33,25 @@ const said = actionRunner({ where: () => ($("unlisted")?.classList.contains("hid
 export const UNLISTED = -1;
 
 /**
- * Put is the form that puts the device into a room, plain (pairDeviceForm,
- * an Island), filled when it opens, again where the chosen Cube's rooms or
- * the language changed; what is typed is kept across a fill (e). The focus
- * goes to its first field when it opens.
+ * Put is the form that puts the device into a room (the shared PutForm)
+ * over the chosen Cube's rooms, the focus in its first field when it
+ * opens; what is typed is kept while it is open. Its outcome is said
+ * under the devices without a room, the row being gone after it, and so
+ * is a refusal where the device went into its room all the same (a copy
+ * that stopped).
  */
 function Put({ d, done, cancel }: { d: Device; done: () => void; cancel: () => void }) {
-  const e = useRef<Record<string, unknown>>({});
-  const focus = useRef(true);
-  const rooms = state.rooms.map((r) => r.id + ":" + r.name).join("|");
+  const [put] = useState(newPut);
   return (
-    <Island cls="part-slot" keys={[d.rf_address, state.serial, rooms]} fill={(el) => {
-      const edit = e.current as { result?: { text: string; ok: boolean } };
-      el.replaceChildren(pairDeviceForm(state.serial || "", d, e.current, {
-        onDone: () => {
-          done();
-          if (edit.result) said.say(edit.result.text, true);
-        },
-        onFail: () => {
-          // A copy that stopped put the device into its room all the same.
-          if (!state.unlisted.some((x) => x.rf_address === d.rf_address) && edit.result) said.say(edit.result.text, false);
-        },
-        onCancel: cancel,
-      }));
-      if (focus.current) el.querySelector<HTMLElement>("form select, form input")?.focus();
-      focus.current = false;
-    }} />
+    <PutForm id={"pair-" + (state.serial || "") + "-" + d.rf_address} serial={state.serial || ""} dev={d} rooms={state.rooms} put={put} reload={loadRooms}
+      focus onCancel={cancel}
+      onDone={() => {
+        done();
+        if (put.result) said.say(put.result.text, true);
+      }}
+      onFail={() => {
+        if (!state.unlisted.some((x) => x.rf_address === d.rf_address) && put.result) said.say(put.result.text, false);
+      }} />
   );
 }
 

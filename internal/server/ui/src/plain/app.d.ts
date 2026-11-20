@@ -40,6 +40,8 @@ declare global {
     newVersion: boolean;
     /** When the server last answered a request of the page (Date.now()), 0 before. */
     repliedAt: number;
+    /** The event stream is open: the server reports the chosen Cube's changes as they come. */
+    eventsOpen: boolean;
     /** The person's settings, as far as a part reads them. */
     settings: { poll: number; expert: boolean };
   };

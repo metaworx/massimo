@@ -11,7 +11,10 @@
  * row of actions. A field that shows stored data keeps a draft (rule 1 of
  * AP UiParts): untouched it follows the stored value, changed it keeps
  * what is typed and says under it that the stored value changed
- * meanwhile, with Take theirs; the field draws that notice itself.
+ * meanwhile, with Take theirs; the field draws that notice itself. A
+ * free field, which shows no stored data (a time, a name offered), takes
+ * its value and its set instead. A field's limit says what it takes
+ * while a value is refused (markRange).
  */
 
 import type { ComponentChildren, Ref } from "preact";
@@ -97,6 +100,34 @@ export function Meanwhile<T>({ draft, show }: { draft: Draft<T>; show?: (v: T) =
   );
 }
 
+/**
+ * A field's limit (markRange of components.js): text says what the
+ * field takes ("only 1 to 255", "longer than 32 bytes"), shown in amber
+ * before the box while over says that the value is refused, the box then
+ * outlined in red and the limit its description; cls is the line's class
+ * beside the fixed field-limit.
+ */
+export interface Limit {
+  text: string;
+  over: boolean;
+  cls?: string;
+}
+
+/** limitAria are the attributes of a control whose id is id while its limit is broken, refused and described by the limit: TextField's and NumberField's. */
+function limitAria(id: string | undefined, limit: Limit | undefined) {
+  if (!limit?.over || id === undefined) return {};
+  return { "aria-invalid": "true" as const, "aria-describedby": id + "-limit" };
+}
+
+/** LimitLine is the line of a field's limit, of the id id + "-limit", hidden in its place while the value is in it. */
+function LimitLine({ id, limit }: { id: string; limit: Limit }) {
+  return (
+    <span id={id + "-limit"} class={"small warn-text field-limit" + (limit.cls ? " " + limit.cls : "") + (limit.over ? "" : " hidden")} role="status">
+      {limit.text}
+    </span>
+  );
+}
+
 /** The properties a field row has beside its control. */
 interface Row {
   /** The label. */
@@ -113,6 +144,8 @@ interface Row {
   help?: string;
   /** Classes the row adds to field (a capability's needs-…). */
   cls?: string;
+  /** The field's limit, its line before the control (limitAria gives the control its attributes). */
+  limit?: Limit;
 }
 
 /**
@@ -121,12 +154,15 @@ interface Row {
  * class field-control; a unit follows it, the two then the row's
  * .field-control; help is the key of the setting's help, its button
  * after the label and its explanation under the control (helpParts);
- * hint is a grey line under the row; cls adds classes to the row. With a
- * draft the row is followed by its "changed meanwhile" notice (show
- * names the value).
+ * hint is a grey line under the row; cls adds classes to the row; limit
+ * is the line of what the field takes, just before the control, in the
+ * unit's line where there is one, else on a line of its own above the
+ * box. With a draft the row is followed by its "changed meanwhile"
+ * notice (show names the value).
  */
-export function Field<T>({ label, id, wide, unit, hint, help, cls, draft, show, children }: Row & { draft?: Draft<T>; show?: (v: T) => string; children: ComponentChildren }) {
+export function Field<T>({ label, id, wide, unit, hint, help, cls, limit, draft, show, children }: Row & { draft?: Draft<T>; show?: (v: T) => string; children: ComponentChildren }) {
   const helpId = useId();
+  const line = limit && <LimitLine id={id} limit={limit} />;
   return (
     <>
       <div class={"field" + (wide ? " wide" : "") + (cls ? " " + cls : "")}>
@@ -134,10 +170,11 @@ export function Field<T>({ label, id, wide, unit, hint, help, cls, draft, show, 
         {help && <HelpButton help={help} id={helpId} label={label} />}
         {unit ? (
           <span class="inline field-control">
+            {line}
             {children}
             <span class="muted">{unit}</span>
           </span>
-        ) : children}
+        ) : <>{line}{children}</>}
         {help && <HelpText help={help} id={helpId} />}
         {hint && <p class="muted small field-hint">{hint}</p>}
       </div>
@@ -147,13 +184,21 @@ export function Field<T>({ label, id, wide, unit, hint, help, cls, draft, show, 
 }
 
 /**
- * TextField is a row with a text input that shows a stored text, as its
- * draft: name, placeholder, maxLength and pattern (what a valid value
- * looks like), type (text by default; a password is no stored text),
- * required and disabled (off) are the input's; the row is wide unless
- * wide is false.
+ * A field's value: from a draft of a stored value, with its "changed
+ * meanwhile" notice, or for a free field, which shows no stored data,
+ * its value and set, told of every change (a part's own state).
  */
-export function TextField({ label, id, wide = true, unit, hint, help, cls, name, placeholder, type, maxLength, pattern, required, disabled, draft, show }: Row & {
+type Value<T> = { draft: Draft<T>; value?: undefined; set?: undefined } | { draft?: undefined; value: T; set: (v: T) => void };
+
+/**
+ * TextField is a row with a text input that shows a stored text, as its
+ * draft, or a free text by value and set: name, placeholder, maxLength
+ * and pattern (what a valid value looks like), type (text by default; a
+ * password is no stored text), required and disabled (off) are the
+ * input's, inputRef gives it the focus; limit marks a value refused (a
+ * name too long), and the row is wide unless wide is false.
+ */
+export function TextField({ label, id, wide = true, unit, hint, help, cls, limit, name, placeholder, type, maxLength, pattern, required, disabled, draft, value, set, show, inputRef }: Row & Value<string> & {
   name: string;
   disabled?: boolean;
   placeholder?: string;
@@ -161,45 +206,48 @@ export function TextField({ label, id, wide = true, unit, hint, help, cls, name,
   maxLength?: number;
   pattern?: string;
   required?: boolean;
-  draft: Draft<string>;
   show?: (v: string) => string;
+  inputRef?: Ref<HTMLInputElement>;
 }) {
   return (
-    <Field label={label} id={id} wide={wide} unit={unit} hint={hint} help={help} cls={cls} draft={draft} show={show}>
-      <input id={id} type={(type || "text") as "text"} name={name} class={unit ? undefined : "field-control"} autocomplete="off" spellcheck={false}
-        placeholder={placeholder} maxLength={maxLength} pattern={pattern} required={required} disabled={disabled} value={draft.value}
-        onInput={(ev) => draft.set(ev.currentTarget.value)} />
+    <Field label={label} id={id} wide={wide} unit={unit} hint={hint} help={help} cls={cls} limit={limit} draft={draft} show={show}>
+      <input ref={inputRef} id={id} type={(type || "text") as "text"} name={name} class={unit ? undefined : "field-control"} autocomplete="off" spellcheck={false}
+        placeholder={placeholder} maxLength={maxLength} pattern={pattern} required={required} disabled={disabled} value={draft ? draft.value : value}
+        {...limitAria(id, limit)} onInput={(ev) => (draft ? draft.set(ev.currentTarget.value) : set(ev.currentTarget.value))} />
     </Field>
   );
 }
 
 /**
  * NumberField is a number input that shows a stored number, as its
- * draft of the input's text ("" for none; compare with numberNorm): min,
- * max and step are the input's, name, disabled and aria (its name for a
- * screen reader where no label names it) too. It draws its row with its
- * "changed meanwhile" notice, or with row false the input alone, inside
- * a row of the caller's (a field with two controls), whose notice the
- * caller then draws (Meanwhile).
+ * draft of the input's text ("" for none; compare with numberNorm), or a
+ * free number by value and set: min, max and step are the input's, name,
+ * disabled and aria (its name for a screen reader where no label names
+ * it) too, inputRef gives it the focus; limit marks a value refused (one
+ * out of range). It draws its row with its "changed meanwhile" notice,
+ * or with row false the input alone, inside a row of the caller's (a
+ * field with two controls), whose notice the caller then draws
+ * (Meanwhile).
  */
-export function NumberField({ label, id, wide, unit, hint, help, cls, name, min, max, step, aria, disabled, draft, show, row = true }: Partial<Row> & {
+export function NumberField({ label, id, wide, unit, hint, help, cls, limit, name, min, max, step, aria, disabled, draft, value, set, show, row = true, inputRef }: Partial<Row> & Value<string> & {
   name?: string;
   min: number;
   max: number;
   step: number;
   aria?: string;
   disabled?: boolean;
-  draft: Draft<string>;
   show?: (v: string) => string;
   row?: boolean;
+  inputRef?: Ref<HTMLInputElement>;
 }) {
   const input = (
-    <input id={id} type="number" name={name} class={!row || unit ? undefined : "field-control"} min={String(min)} max={String(max)} step={String(step)}
-      aria-label={aria} disabled={disabled} value={draft.value} onInput={(ev) => draft.set(ev.currentTarget.value)} />
+    <input ref={inputRef} id={id} type="number" name={name} class={!row || unit ? undefined : "field-control"} min={String(min)} max={String(max)}
+      step={String(step)} aria-label={aria} disabled={disabled} value={draft ? draft.value : value} {...limitAria(id, limit)}
+      onInput={(ev) => (draft ? draft.set(ev.currentTarget.value) : set(ev.currentTarget.value))} />
   );
   if (!row || label === undefined || id === undefined) return input;
   return (
-    <Field label={label} id={id} wide={wide} unit={unit} hint={hint} help={help} cls={cls} draft={draft} show={show}>
+    <Field label={label} id={id} wide={wide} unit={unit} hint={hint} help={help} cls={cls} limit={limit} draft={draft} show={show}>
       {input}
     </Field>
   );
@@ -283,11 +331,11 @@ export function DateTime({ value, set, id, cls, step, required, disabled, inputR
  * meanwhile" notice follows it; onChange gets its state. It draws its own
  * .field row unless row is false (a switch inside another row, or an item
  * of a menu), with help, the key of the setting's help, its button after
- * the switch and its explanation under it; cls adds classes to the
- * switch; id, name, disabled and title are the checkbox's; children
- * follow the label.
+ * the switch and its explanation under it, and rowCls, classes the row
+ * adds (a capability's needs-…); cls adds classes to the switch; id,
+ * name, disabled and title are the checkbox's; children follow the label.
  */
-export function Switch({ name, label, checked, onChange, draft, show, row = true, help, cls, id, disabled, title, children }: {
+export function Switch({ name, label, checked, onChange, draft, show, row = true, help, rowCls, cls, id, disabled, title, children }: {
   name?: string;
   label: string;
   checked?: boolean;
@@ -296,6 +344,7 @@ export function Switch({ name, label, checked, onChange, draft, show, row = true
   show?: (v: boolean) => string;
   row?: boolean;
   help?: string;
+  rowCls?: string;
   cls?: string;
   id?: string;
   disabled?: boolean;
@@ -317,7 +366,7 @@ export function Switch({ name, label, checked, onChange, draft, show, row = true
   if (!row) return <>{sw}{children}</>;
   return (
     <>
-      <div class="field">
+      <div class={rowCls ? "field " + rowCls : "field"}>
         {sw}
         {help && <HelpButton help={help} id={helpId} label={label} />}
         {children}

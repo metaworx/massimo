@@ -666,8 +666,8 @@ export interface RestoreStepResult {
 export interface RepairPlan {
   action?: "reset" | "master" | "relink" | "unlink_relink" | "config" | "move" | "list";
   /** SHA-256 over the action and the lines; the run takes it */
-  plan?: string;
-  steps?: {
+  plan: string;
+  steps: {
     what?: string;
     /** The device the command addresses */
     device?: string;
@@ -686,24 +686,24 @@ export interface RepairPlan {
     lines?: string[];
   }[];
   /** The s: lines */
-  radiograms?: number;
+  radiograms: number;
   /** About what they cost of the hourly radio budget, 1.25 % each */
-  duty_cost_pct?: number;
+  duty_cost_pct: number;
   /**
    * The memory slots they take, one each and a room radiogram one per member of
    * the room
    */
-  slots?: number;
+  slots: number;
   /**
    * Those held until the members' next wakeup, about ten minutes, a room
    * radiogram's but its addressee's
    */
-  held_slots?: number;
+  held_slots: number;
   /** The r: lines, those the queue sends before each command included; free */
-  resets?: number;
-  wakeups?: number;
+  resets: number;
+  wakeups: number;
   /** A metadata write, no radio */
-  metadata?: boolean;
+  metadata: boolean;
   budget?: Budget;
   /** Why a run would be refused now; absent where it fits the budget */
   refused?: string;
@@ -713,7 +713,7 @@ export interface RepairPlan {
    * room_name_needed and room
    */
   nothing?: string;
-  notes?: string[];
+  notes: string[];
   /** Not yet run on hardware */
   untested?: boolean;
   /**
@@ -1730,27 +1730,27 @@ export interface WallThermostatConfig {
 
 /** A device that joined during pairing, from the Cube's N line */
 export interface NewDevice {
-  type?: DeviceType;
-  rf_address?: string;
-  serial?: string;
+  type: DeviceType;
+  rf_address: string;
+  serial: string;
 }
 
 export interface PairingState {
-  active?: boolean;
+  active: boolean;
   /** @format date-time */
   started?: string;
   /**
    * When pairing ends at the latest
    * @format date-time
    */
-  until?: string;
+  until: string;
   /**
    * When the last pairing ended; absent while active or before the first
    * @format date-time
    */
   ended?: string;
   /** Devices that joined during the current or last pairing */
-  paired?: NewDevice[];
+  paired: NewDevice[];
 }
 
 export interface IntegrationRequest {

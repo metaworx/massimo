@@ -661,7 +661,17 @@ and the box says how many lines the Cube accepted,
 that the devices take radiograms at their next wakeup and the log says when
 it is done (its **device change** line),
 or for resets whether the Cube's device list still shows the error.
-**Close** closes the box; it stays open while the tile is drawn again.
+**Close** closes the box.
+A box follows the data in place: while the tile, the device's row or the panel
+follows a device's report, a reload of the rooms or a poll,
+a rename of the device or the Cube among them,
+it stays open, and a name typed in it, a question open and the focus stay.
+A question never outlives the preview it asked about:
+where a repair's preview is read again,
+after a run in the same box or a name given,
+its question is gone and **Run…** asks again.
+At a sign-out, and when another user signs in after an expired session,
+every box is closed and forgotten with what it held.
 
 - In a room: **Reset the communication errors** of its devices, free;
   **Name the room's master**, where the Cube's list names no thermostat of
@@ -1112,8 +1122,15 @@ and what is typed stays, each field with the "changed meanwhile" of System setti
 Reboot's question names the radiograms pending as the Cube says now,
 and a line of the settings file that comes to differ while the panel is shown
 gets its notice with **Take the file's value**.
-Pair a device and Repair… keep their own drawing inside the panel
-until their own move to parts.
+The pairing is part of the panel and follows in place too:
+the countdown counts down in its line, a device that joins is added under it,
+and the time typed and a joined device's name and room stay, with the focus,
+through the countdown, a pairing event, a device that joins and a poll;
+what a joined device's form holds stays while the panel moves
+between System settings and Cube settings,
+and is forgotten at a sign-out, as the Cubes' rooms are,
+and when another user signs in after an expired session.
+So does Repair… with its box (Rooms, Repairs).
 What is typed in a Cube's settings stays until it is saved or reset:
 when the panel closes, from System settings to Cube settings and back,
 and when another Cube is chosen, each Cube's with its Cube;
@@ -1762,16 +1779,14 @@ a script for each region of the page, in the order the page loads them:
   and a finding of the Cube's lines in words;
   `unlisted.js`, a device removed from the Cube;
   `house.js`, the House tile's plain names, which call its part;
-- `week-program.js`, the week programme editor; `config.js`, how long a name may be,
-  the name a device is offered, and the editor's kit;
+- `week-program.js`, the week programme editor; `config.js`, the editor's kit;
 - `log.js`, the log and its sign for unseen problems;
   `pages.js`, the pages, the main menu, the address and the scroll;
 - `update.js`, Software update; `maintenance.js`, the Maintenance card;
   `system-info.js`, System info;
 - `cubes.js`, the plain names of System settings → Cubes and Cube settings,
-  which call their part (`ui/src/cubes/`), and the Cubes card's badges;
-  `repair.js`, the repairs of a room,
-  a device and a Cube; `pairing.js`, the pairing;
+  the pairing's among them, which call their part (`ui/src/cubes/`),
+  and the Cubes card's badges;
 - `login.js`, `users.js`, `providers.js`, `integrations.js`,
   `backup.js` and `roles.js`, the sign-in and the cards of System settings;
 - `theme.js`, the mode and the colour schemes, applied as the script loads;
@@ -1814,6 +1829,15 @@ it imports from itself, the shared parts, Preact and the API's types alone
 (`TestModelKnowsNoRegion`).
 What one region alone reads stays in the region, anything with state too,
 and what is not about the API's data is a shared part.
+A part with state that two regions draw is a shared part too (UiParts D193),
+since `model/` holds no state and no region imports another:
+the form that puts a device into a room (`put.tsx`) and the repairs (`repair.tsx`),
+with how long a name may be and the name a device is offered (`name.ts`),
+which they read.
+Such a part knows the API's data and sends its own requests,
+and still knows no region:
+it imports none, its texts are keys of its own (`put.…`, `repair.…`, `name.…`),
+and it reads no id or class of a region's markup it does not draw itself.
 `cube.tsx` holds the Cube chosen in the header (`chosenCube`),
 a Cube's address split into host and port (`hostPort`),
 the cube before its name (`CubeIcon`),
@@ -1851,17 +1875,17 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `Notice` | `badge.tsx` | a lasting warning with since when (`noticeEl`) | `text`, `since`, `next`, `cls`, `id`, `role`, `hidden` (the class `hidden`, the line kept in its place), children after |
 | `Age` | `badge.tsx` | how old a value is, filled by `fillAge` (`ageEl`) | `at`, `stale`, `plain` |
 | `Since` | `badge.tsx` | from when a badge's state holds, after its text (a problem list's item) | `at` |
-| `ResultLine` | `badge.tsx` | the line that says how an action went, green or red, hidden while there is none (`showResult`), as an `actionRunner`'s `set` gives it | `res` (an `Outcome` or null), `cls` |
+| `ResultLine` | `badge.tsx` | the line that says how an action went, green or red, hidden while there is none (`showResult`), as an `actionRunner`'s `set` gives it | `res` (an `Outcome` or null), `cls`, `role` (`status`, a screen reader told of each) |
 | `Problems` | `problems.tsx` | the problem list, entries under entries (`problemsEl`), an item with an action a button | `entries`, `label`, `ok` (the green check's label where nothing is wrong), `always` (the list there where nothing is wrong too; where `ok` is given, its summary the green check and `ok` a line of its list), `lead` (drawn first in the summary, a sign of the place's own state), `head` (drawn first in the list, items that act on the place or a row of its own state), `onClick`, `onOpen`, `onClose` (as `Dropdown`'s); an entry's `tail` is drawn after its name (a sign of its state where its icon says what it is) |
 | `KindIcons`, `problemKinds`, `kindsLabel` | `problems.tsx` | the kinds' icons of entries without the list (`kindIcons`); the kinds themselves, to know whether there are any; the label naming the kinds among items in an order of kinds, "" for none | `entries`, `skip`; `entries`, `skip`; `items`, `kinds` |
 | `OkPill` | `problems.tsx` | the green check in a list's place (`okPill`) | `label` |
 | `HelpButton`, `HelpText` | `help.tsx` | a setting's help (`helpParts`): the question mark that shows and hides its explanation, `help.<key>` of the texts, shown by its key wherever it is drawn again, in the page's one set of keys shown (`helpOpen` of `app.js`), the parts drawn again by a signal of their own, so a key is drawn by one side only; `Field` and `Switch` draw both from their `help` | `help` (the key), `id` (the explanation's, which the button controls), `label` (the setting's name); `help`, `id` |
-| `Field` | `field.tsx` | a label and its control, `.field` or `.field.wide` (`fieldRow`) | `label`, `id`, `wide`, `unit`, `hint`, `help` (the key of the setting's help: its button after the label, its explanation under the control), `cls` (classes the row adds, a capability's `needs-…`), `draft`, `show`, the control as children |
-| `TextField` | `field.tsx` | a row with a text input that shows a stored text, from its draft | `label`, `id`, `name`, `draft`, `show`, `wide` (on by default), `unit`, `hint`, `help`, `cls`, `placeholder`, `type`, `maxLength`, `pattern`, `required`, `disabled` |
-| `NumberField`, `numberNorm` | `field.tsx` | a number input that shows a stored number (`numberInput`), its draft the input's text, "" for none; with `row={false}` the input alone, in a row of the caller's, which draws its notice (`Meanwhile`); how such a draft compares, as a number | `label`, `id`, `name`, `min`, `max`, `step`, `draft`, `show`, `aria` (its name where no label names it), `disabled`, `row`, and a row's `wide`, `unit`, `hint`, `help`, `cls`; `v` |
+| `Field` | `field.tsx` | a label and its control, `.field` or `.field.wide` (`fieldRow`); with `limit`, what the field takes, said in amber just before the control while a value is refused, the box outlined in red and the limit its description (`markRange`) (`TextField` and `NumberField` mark their input for it; a control of the caller's inside a `Field` with a limit has no marking of its own yet) | `label`, `id`, `wide`, `unit`, `hint`, `help` (the key of the setting's help: its button after the label, its explanation under the control), `cls` (classes the row adds, a capability's `needs-…`), `limit` (`{ text, over, cls }`: the text, whether the value is refused, the line's class beside `field-limit`; in the unit's line where there is one, else on a line of its own above the box), `draft`, `show`, the control as children |
+| `TextField` | `field.tsx` | a row with a text input that shows a stored text, from its draft, or a free text (a name offered) by `value` and `set` | `label`, `id`, `name`, `draft` and `show`, or `value` and `set`; `wide` (on by default), `unit`, `hint`, `help`, `cls`, `limit`, `placeholder`, `type`, `maxLength`, `pattern`, `required`, `disabled`, `inputRef` |
+| `NumberField`, `numberNorm` | `field.tsx` | a number input that shows a stored number (`numberInput`), its draft the input's text, "" for none, or a free number (a time) by `value` and `set`; with `row={false}` the input alone, in a row of the caller's, which draws its notice (`Meanwhile`); how such a draft compares, as a number | `label`, `id`, `name`, `min`, `max`, `step`, `draft` and `show`, or `value` and `set`; `aria` (its name where no label names it), `disabled`, `inputRef`, `row`, and a row's `wide`, `unit`, `hint`, `help`, `cls`, `limit`; `v` |
 | `Select` | `field.tsx` | a row with a select (`selectInput`), its options as `fillOptions` takes them; with `row={false}` the select alone, in a row of the caller's, which draws its notice | `label`, `id`, `name`, `options` (`[value, label, disabled]` or `{ group, options }`), `value` and `onChange`, or `draft` and `show`; `row`, `wide`, `unit`, `hint`, `help`, `cls`, `disabled` |
 | `DateTime` | `field.tsx` | a date and time field (`datetime-local`), its value as the input takes it | `value`, `set`, `id`, `cls`, `step`, `required`, `disabled`, `inputRef` |
-| `Switch` | `field.tsx` | a checkbox drawn as a switch (`switchEl`), in its own row with its help where asked (`fieldRow` without a label) | `name`, `label`, `checked` and `onChange`, or `draft` and `show`; `row`, `help`, `cls` (the switch's classes), `id`, `disabled`, `title`, children after the label |
+| `Switch` | `field.tsx` | a checkbox drawn as a switch (`switchEl`), in its own row with its help where asked (`fieldRow` without a label) | `name`, `label`, `checked` and `onChange`, or `draft` and `show`; `row`, `help`, `rowCls` (classes its own row adds, a capability's `needs-…`), `cls` (the switch's classes), `id`, `disabled`, `title`, children after the label |
 | `Choices` | `choices.tsx` | a choice of several among a list: a group of switches under its heading, All and None as buttons where asked (the configuration's Copy tab), or of checkboxes, All a checkbox first (`look` `check`, the House panel); its next users, the capabilities of a role (`roles.js` `capGrid`) and of an integration (`integrations.js` `capsBox`), add a legend, an option fixed on and a badge or a title per option | `title`, `label` (the group's name for a screen reader), `id`, `options` (`[value, label, disabled]`), `chosen`, `set(chosen)`, `all` (`{ all, none }`, their labels, `none` left out for All alone), `empty` (said where there is no option), `look` (`switch`, the default, or `check`) |
 | `Tabs` | `tabs.tsx` | a row of tabs: a tab list of buttons, each with its key in `data-tab`, the one shown active and selected, and what follows the list (a close button) | `cls` (the row's class), `listCls`, `label` (the list's name), `tabs` (`{ key, label, cls }`), `current`, `onPick(key)`, children after the list |
 | `Stepper` | `field.tsx` | a number field between − and + (`stepper`), the step within its range; its buttons are named for a temperature, half a degree less and more, and the first user of another unit adds their names | `value`, `set`, `min`, `max`, `step`, `id` and `cls` of the field, `hidden` (the whole kept in its place unseen), children after the + (a unit) |
@@ -1878,6 +1902,11 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `Copy`, `CopyIcon` | `copy.tsx` | a text that copies itself, a copy icon (`copyEl`, `copyIcon`) | `text`, `value` (what it copies, where it is not the text), `label`, `icon`, `cls`; `get`, `label` |
 | `Link` | `link.tsx` | a link in a tab of its own, the text alone for a url that is not http(s) (`linkEl`) | `url`, `text`, `cls` |
 | `DeviceIds` | `device.tsx` | a device's serial and radio address (`deviceIds`) | `serial`, `rf`, `always` |
+| `cubePath` | `path.ts` | a Cube's path in the API, which every part's request about a Cube starts from; `base()` of `app.js` and `backup.js`'s own are its next users, with their blocks | `serial` |
+| `hid` | `cls.ts` | the class `hidden`, with its space, for an element kept in its place and hidden | `off` |
+| `PutForm`, `newPut` | `put.tsx` | the form that puts a device in no room into one (with `structure`), wherever such a device is shown, a device that joined while its Cube pairs or one of the devices without a room: its name (with `rename`), offered for the room chosen until one is typed (D200-A) and marked where it is too long for the Cube (D201), the room, for a thermostat the copy of the room's settings (with `configure`), on by default, then `PUT …/devices/{rf}` and its outcome; what the caller keeps of it, live; the room chosen is pinned at its first drawing, the first of the rooms, and moves only where it is gone; a part with state that two regions draw, its texts its own (`put.…`, `help.putCopy`, and `name.long` for the name's limit) | `id` (its fields' ids' beginning), `serial`, `dev`, `rooms`, `put` (what `newPut` makes: the name typed, the room and the copy, the request under way, the outcome, done), `reload` (what follows the request, before `onDone` or `onFail`), `onDone`, `onFail`, `onCancel` (its Cancel, of the class `form-cancel`, none without), `focus` (its first field takes the focus when it comes) |
+| `RepairButton`, `RepairBox`, `toggleRepair`, `repairScope`, `forgetRepairs` | `repair.tsx` | the repairs of a Cube, a room or a device (with `repair`), wherever it is shown (Rooms, Repairs): the button that opens and closes the box of a scope, and the box while it is open, each repair with its preview (`GET`, which sends nothing), its cost, its lines in expert mode, a name it asks for, and Run… that asks in its place before it sends (`POST` with the preview's plan), "unlink all and re-link" warning first and asking twice; a box's state kept by its scope, live, across its being drawn again, a question gone wherever its preview is read again, nothing read for a box closed meanwhile; the box opened from elsewhere (a tile's ⋯); a box's scope; every box forgotten at a sign-out and for another user after a 401 (`MassimoParts.signedOut`); a part with state that two regions draw, its texts its own (`repair.…`, and `name.long` for the name's limit) | `scope`, `kind` (`cube`, `room`, `device`), `path` (the API path its routes hang off), `label` (what it repairs, in its accessible name), `skip` (the repairs it leaves out), `names(room)` (the names of a room's devices, for the name a listing offers); `scope`; `scope`, `kind`, `path`, `{ skip, names }`; `serial`, `kind`, `id`; – |
+| `NAME_BYTES`, `byteLength`, `nameFits`, `defaultDeviceName` | `name.ts` | a name as the Cube keeps it, at most 32 bytes of UTF-8; the name a device is offered in a room, "<room> <type> <n>" with the lowest free number whatever the case (D185, D200-A), as the server's default; the text of the limit, `name.long`, is the shared parts' | –; `s`; `s`; `room`, `word`, `taken` |
 
 What the table cannot say:
 
@@ -1929,14 +1958,23 @@ What the table cannot say:
   so that its drafts start from them and nothing typed meanwhile is lost.
 
 These builders of `components.js` and `app.js` have no part yet, since no region
-that has moved uses them: `markRange`, `kvList`,
+that has moved uses them: `kvList`,
 `countList` and `sectionBadges`.
 Known gaps, for the blocks that meet them:
+a device's type and identifiers, drawn twice:
+in a device row's line of expert mode (`rooms/Devices.tsx`, `.device-sub`,
+grey, with when it was last seen and a virtual thermostat's sources)
+and in a joined device's head (`cubes/Pairing.tsx`,
+the type bold, the serial always),
+each `typeName` and the shared `DeviceIds`, so what is left to make one piece
+is the two spans' markup, which differs in its classes and what follows;
+a Cube's rooms read by a part of their own beside the page's,
+the pairing's `cubeRooms` (`cubes/flow.ts`), the log's `logState.cubeRooms` and
+`fetchRooms` of `app.js`: one store of them for the log's block, and signals of
+the data with Block 15;
 the conversion of a `DateTime`'s value to the API's time, which stays with its users
 (`apiUntil` of `rooms.js`), and which the block that moves the users' expiry fields
 (`users-panel.html`, `users.js`, `app.js`'s `localDateTimeValue`) brings to the part;
-a device row's head (icon, name, type, identifiers), which `pairing.js` draws a twin of,
-taken into `model/` by the block that moves the pairing, since no region imports another;
 a room's write's outcome in words, built in three places
 (`House.tsx` `houseRequests`, `rooms.js` `resultText`, `configuration.ts` `sendCopy`);
 a failed save's error with its unsaved form's item (its tooltip),
@@ -1975,11 +2013,32 @@ A region that moves calls these, in this order:
 The Cubes (`ui/src/cubes/`) are the first such region:
 `index.tsx` mounts System settings' list in `#cubes-list` and Cube settings' panel
 in `#cube-page-body`, a panel in one place at a time,
-and registers `render`, `polled` and `openFound`,
-which `cubes.js` calls as `renderCubes`, `cubesPolled` and `showFoundFold`;
+and registers `render`, `polled`, `openFound`,
+`pairingEvent` and `pairingJoined`,
+which `cubes.js` calls as `renderCubes`, `cubesPolled`, `showFoundFold`,
+`pairingEvent` and `pairingJoined`;
 `store.ts` holds its counter, each panel's `open` by serial, the folds
 and the devices loaded for the hide choice;
 `send.ts` holds its requests, run by its action runner;
+`flow.ts` a Cube's pairing (AP UiParts Block 9), live by its serial:
+the form shown, the time typed, the server's state, the devices that joined,
+the last outcome, Start's or Stop's request under way,
+the seconds left, which its timer moves on every second,
+asking for the state every third second where the stream does not report it,
+and what each joined device's form keeps, made where the device is listed;
+the Cube's rooms its forms offer, read from `GET …/rooms` for every Cube,
+the shown one too;
+and what it sends, as `pairing.js` sent it;
+at a sign-out,
+and for another user's sign-in after a 401 (`MassimoParts.signedOut`,
+by `forgetSession` of `login.js`),
+`index.tsx` forgets them all, the countdowns stopped;
+`Pairing.tsx` draws it in the panel's `.cube-pairing`, its time a `NumberField`
+with its `limit`, Start and Cancel a `FormFooter`,
+the outcome a `ResultLine`, each joined device its type, a `DeviceIds`
+and the shared `PutForm`;
+`Actions.tsx` the row of a Cube's actions, Repair… with its box
+the shared `RepairButton` and `RepairBox`;
 `Form.tsx` a Cube's settings as a `useForm` of the key `cubeFormKey(serial)`
 (`model/cube.tsx`, which lists its `unsavedItems` in `cubeEntry`,
 so in the panel head's pill and in the header's entry of the Cube),
@@ -2071,10 +2130,11 @@ once, under its own entry;
 a click opens the tab from anywhere (`openForm`), by `openRoom` of `store.ts`,
 which `openSettings` uses too and which keeps the request until the Cube's rooms
 have loaded; `loaded` forgets a device's form when the room no longer has the device.
-A room's repairs and a device's Repair… stay plain too (`repair.js`), each an `Island`,
-and so does the form that puts a device without a room into one
-(`pairDeviceForm`, Block 9),
-its typing kept across a fill by the object it is given.
+A room's repairs and a device's Repair… are the shared `RepairButton` and `RepairBox`,
+the room's opened from ⋯ by `toggleRepair`, a device's box under its row,
+its listing offering the name its room's devices leave free;
+the form that puts a device without a room into one is the shared `PutForm`,
+over the chosen Cube's rooms, what it holds kept while it is open.
 The menus are `Dropdown`s, their items `MenuItem`s, the problems a `Problems`,
 the info and the cog `IconButton`s, the holiday form's temperature a `Stepper`
 and its end a `DateTime`,
