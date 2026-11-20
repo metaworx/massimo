@@ -16,6 +16,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"slices"
 	"testing"
 	"time"
 
@@ -73,8 +74,10 @@ func TestServiceStopClosesTheStore(t *testing.T) {
 		}
 		return json.NewDecoder(resp.Body).Decode(out)
 	}
-	// Up once the Cube has its row and its first event is in the store,
-	// which its id shows.
+	// Up once the Cube has its row and its connect is in the store, which
+	// every Cube's log shows: with a store it reads the store alone, after
+	// the writer wrote what is pending. A Cube's own log would show the
+	// lines it keeps in memory before it has its row, with ids too.
 	var sn string
 	for deadline := time.Now().Add(testkit.Scale(15 * time.Second)); ; time.Sleep(50 * time.Millisecond) {
 		select {
@@ -83,7 +86,7 @@ func TestServiceStopClosesTheStore(t *testing.T) {
 		default:
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("serve did not store the fake Cube's first event")
+			t.Fatal("serve did not store the fake Cube's connect")
 		}
 		var cubes []struct {
 			Serial string `json:"serial"`
@@ -91,10 +94,11 @@ func TestServiceStopClosesTheStore(t *testing.T) {
 		if get("/api/v1/cubes", &cubes) != nil || len(cubes) != 1 || cubes[0].Serial == "" {
 			continue
 		}
-		var events []struct {
-			ID int64 `json:"id"`
+		type line struct {
+			CubeSerial string `json:"cube_serial"`
 		}
-		if get("/api/v1/cubes/"+cubes[0].Serial+"/log", &events) == nil && len(events) > 0 && events[0].ID != 0 {
+		var events []line
+		if get("/api/v1/log?kind=connected", &events) == nil && slices.ContainsFunc(events, func(e line) bool { return e.CubeSerial == cubes[0].Serial }) {
 			sn = cubes[0].Serial
 			break
 		}

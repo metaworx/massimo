@@ -33,7 +33,7 @@ paths:
                   node_id: {type: string, format: uuid, description: "The box's node.id from its store, the same across restarts"}
                   features:
                     type: object
-                    description: "What this server can do, by name, each its version MAJOR.MINOR: event_ids, idempotency, commands, vwt, program_etag, boost, proxy_virtual; without a store idempotency, commands and proxy_virtual are left out. A name never changes meaning."
+                    description: "What this server can do, by name, each its version MAJOR.MINOR: event_ids, idempotency, commands, vwt, program_etag, boost, proxy_virtual, integration, log_after; without a store idempotency, commands, proxy_virtual and integration are left out. A name never changes meaning."
                     additionalProperties: {type: string, pattern: "^[0-9]+\\.[0-9]+$", example: "1.0"}
                   tls: {$ref: "#/components/schemas/CertStatus"}
   /api/v1/login:
@@ -3012,14 +3012,20 @@ paths:
         (30 by default, 0 for ever), each with its id, the server's own
         among every Cube's; without parameters the newest 200 at info
         and above. A client pages back with before set
-        to the id of the oldest event it has, until a page is empty. A
-        state event's stored copy leaves out state.received. A Cube
-        without a row in the store keeps its last 500 events in memory,
-        without ids.
+        to the id of the oldest event it has, until a page is empty, and
+        follows the log with after set to the id of the newest it has
+        (the feature log_after; an older server ignores after): each
+        event once, in the order the log kept them. A cursor older than
+        the oldest event kept starts at the oldest kept. A state event's
+        stored copy leaves out state.received. A Cube without a row in
+        the store keeps its last 500 events in memory, each with an id of
+        the server's counter, which starts at the server's start in
+        microseconds.
       parameters:
         - {$ref: "#/components/parameters/sn"}
+        - {name: after, in: query, description: "An event's id for the page after it: the first limit events after that one, oldest first; 0 for the log's start. With every other parameter, before and since as further bounds", schema: {type: integer, minimum: 0, example: 4711}}
         - {name: before, in: query, description: "An event's id for the page before it, or an RFC 3339 time for the events before that time", schema: {type: string, example: "4711"}}
-        - {name: since, in: query, description: "An RFC 3339 time for the events at or after it, not after a before time", schema: {type: string, format: date-time, example: "2026-11-06T20:00:00Z"}}
+        - {name: since, in: query, description: "An RFC 3339 time for the events at or after it, not after a before time: the start of a range, not a cursor (after is)", schema: {type: string, format: date-time, example: "2026-11-06T20:00:00Z"}}
         - {name: limit, in: query, schema: {type: integer, default: 200, minimum: 1, maximum: 1000}}
         - {name: kind, in: query, description: "Only events of this kind: state, config, connected, …", schema: {type: string, example: state}}
         - {name: source, in: query, description: "Only events of this source: a device's, the Cube's own, the server's own jobs, a change of the configuration, the queue's (a command's steps, its holds), the server's sign-ins, the LAN proxy's", schema: {type: string, enum: [device, cube, system, config, queue, server, proxy]}}
@@ -3037,7 +3043,7 @@ paths:
                 items:
                   type: object
                   properties:
-                    id: {type: integer, description: The event's place in the log; absent for a Cube without a row in the store}
+                    id: {type: integer, description: "The event's place in the log, the cursor of before and after: its row in the store, or for a Cube without a row a number of the server's counter"}
                     kind: {type: string}
                     device: {type: string, description: The device's radio address}
                     serial: {type: string, description: "The device's serial number, also before it has a state and after it is gone; the Cube's for its own configuration"}
@@ -3072,6 +3078,7 @@ paths:
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
+        "409": {$ref: "#/components/responses/LogCursorBeyond"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "404": {$ref: "#/components/responses/NotFound"}
   /api/v1/log:
@@ -3082,14 +3089,16 @@ paths:
         Every Cube's log at once, as GET /api/v1/cubes/{sn}/log gives one
         Cube's: the same parameters and events, each Cube's event with the
         Cube's serial number in cube_serial, the server's own once and
-        without it. Pages go back by id across the Cubes. A radio address
-        as device names the device of that address on every Cube; a serial
-        number names one device. A Cube without a row in the store yet
-        adds nothing; without a store, the Cubes' last 500 events each,
-        merged by time, without ids.
+        without it. Pages go back by id across the Cubes, and forward with
+        after. A radio address as device names the device of that address
+        on every Cube; a serial number names one device. A Cube without a
+        row in the store yet adds nothing; without a store, the Cubes'
+        last 500 events each, merged by id, which they take from the
+        server's one counter.
       parameters:
+        - {name: after, in: query, description: "An event's id for the page after it: the first limit events after that one, oldest first; 0 for the log's start. With every other parameter, before and since as further bounds", schema: {type: integer, minimum: 0, example: 4711}}
         - {name: before, in: query, description: "An event's id for the page before it, or an RFC 3339 time for the events before that time", schema: {type: string, example: "4711"}}
-        - {name: since, in: query, description: "An RFC 3339 time for the events at or after it, not after a before time", schema: {type: string, format: date-time, example: "2026-11-06T20:00:00Z"}}
+        - {name: since, in: query, description: "An RFC 3339 time for the events at or after it, not after a before time: the start of a range, not a cursor", schema: {type: string, format: date-time, example: "2026-11-06T20:00:00Z"}}
         - {name: limit, in: query, schema: {type: integer, default: 200, minimum: 1, maximum: 1000}}
         - {name: kind, in: query, description: "Only events of this kind: state, config, connected, …", schema: {type: string, example: state}}
         - {name: source, in: query, description: "Only events of this source", schema: {type: string, enum: [device, cube, system, config, queue, server, proxy]}}
@@ -3108,7 +3117,7 @@ paths:
                   type: object
                   additionalProperties: true
                   properties:
-                    id: {type: integer, description: The event's place in the log; absent without a store}
+                    id: {type: integer, description: "The event's place in the log, the cursor of before and after: its row in the store, or without a store a number of the server's counter"}
                     cube_serial: {type: string, description: "The serial number of the Cube whose event it is; absent for the server's own", example: KEQ0000100}
                     kind: {type: string}
                     device: {type: string, description: The device's radio address on its Cube}
@@ -3119,6 +3128,7 @@ paths:
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
+        "409": {$ref: "#/components/responses/LogCursorBeyond"}
         "429": {$ref: "#/components/responses/LockedOut"}
   /api/v1/log/alerts:
     get:
@@ -3950,6 +3960,17 @@ components:
               confirmation: {type: string, enum: [pending, confirmed], description: "A setpoint, a key lock or a display mode: pending until the devices' states show it (the devices' and the room's confirmation, the log's unconfirmed line after five minutes); a configuration or a week programme until their configurations show it (the line after the last re-read, about six minutes). Confirmed where each shows it already. Absent for other writes"}
     BadRequest:
       description: Bad input
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+    LogCursorBeyond:
+      description: >-
+        The cursor after is beyond the log's newest event, one the log
+        never gave out: a store restored from an older copy or emptied by
+        the prune, a restart without a store on a clock set back, the
+        cursor of a Cube's events kept in memory once the Cube has its row.
+        The error says to reload the log: the client reads it again
+        without after.
       content:
         application/json:
           schema: {$ref: "#/components/schemas/Error"}

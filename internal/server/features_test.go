@@ -33,12 +33,12 @@ func TestHealthzFeatures(t *testing.T) {
 	t.Parallel()
 	ts := startServer(t, storedRooms()).ts // with a store
 	with := featuresAt(t, ts)
-	for _, name := range []string{"event_ids", "idempotency", "commands", "vwt", "program_etag", "boost", "proxy_virtual", "integration"} {
+	for _, name := range []string{"event_ids", "idempotency", "commands", "vwt", "program_etag", "boost", "proxy_virtual", "integration", "log_after"} {
 		if with[name] != "1.0" {
 			t.Errorf("with a store: %s = %q, want 1.0", name, with[name])
 		}
 	}
-	if len(with) != 8 {
+	if len(with) != 9 {
 		t.Errorf("with a store: %v", with)
 	}
 
@@ -49,7 +49,7 @@ func TestHealthzFeatures(t *testing.T) {
 			t.Errorf("without a store: %s listed", name)
 		}
 	}
-	if without["vwt"] != "1.0" || without["event_ids"] != "1.0" {
+	if without["vwt"] != "1.0" || without["event_ids"] != "1.0" || without["log_after"] != "1.0" {
 		t.Errorf("without a store: %v", without)
 	}
 	// What the map leaves out answers as such: no commands without a store.

@@ -352,6 +352,9 @@ type Server struct {
 	log     *slog.Logger
 	stopWhy atomic.Value // string: why the server will stop (noteStop)
 	started time.Time    // when the server was created, for /healthz
+	// ring is the lock and the ids of the runtimes' rings, the log of a
+	// Cube without a row in the store (log.go).
+	ring logRing
 	// notify runs the notification rules (push_api.go), nil without a
 	// store; vapidMu makes the VAPID key once; webPush delivers what the
 	// rules decide, and pushSlots bound the deliveries under way.
@@ -504,8 +507,11 @@ type runtime struct {
 	epoch  string
 	seq    uint64
 	replay []published
-	logMu  sync.Mutex
-	events []event // the last logSize events, for GET …/log
+	// ring is the server's (Server.ring), under whose lock events is
+	// changed and read; events is the last logSize events, for GET …/log
+	// of a Cube without a row in the store, each with its id.
+	ring   *logRing
+	events []event
 
 	// bk is the Cube's configuration against its newest backup, for the
 	// automatic backup (backups.go).
@@ -600,8 +606,9 @@ type event struct {
 	// which only that user's streams get (push_api.go).
 	Notification *notify.Notification `json:"notification,omitempty"`
 	Time         time.Time            `json:"time"`
-	// ID is the event's row in the store, for GET …/log's paging; the
-	// stream's events and the ring's have none.
+	// ID is the event's place in the log, for GET …/log's paging: its
+	// row in the store, or its number in the ring (logRing); the
+	// stream's events have none.
 	ID int64 `json:"id,omitempty"`
 	// By is who started what the event says, as the users table names
 	// them now; absent for the Cube, the server's own jobs and a server
@@ -693,14 +700,23 @@ func (ev *event) settle() {
 const logSize = 500
 
 // remember keeps an event for the log: in the store for a Cube with a
-// row there, else in the runtime's ring. It never waits for the store.
+// row there, else in the runtime's ring, with the ring's next id. It
+// never waits for the store.
 func (rt *runtime) remember(ev event) {
 	if id := rt.storeID.Load(); id != 0 && rt.store != nil {
 		rt.store.AddEvent(storedEvent(id, ev))
 		return
 	}
-	rt.logMu.Lock()
-	defer rt.logMu.Unlock()
+	rt.ring.mu.Lock()
+	defer rt.ring.mu.Unlock()
+	rt.keepLocked(ev)
+}
+
+// keepLocked puts an event into the runtime's ring with the ring's next
+// id, the oldest leaving it past logSize; under rt.ring.mu, the id and
+// the append together (logRing).
+func (rt *runtime) keepLocked(ev event) {
+	ev.ID = rt.ring.take()
 	rt.events = append(rt.events, ev)
 	if len(rt.events) > logSize {
 		rt.events = rt.events[len(rt.events)-logSize:]
@@ -730,7 +746,8 @@ func (rt *runtime) sendUser(userID int64, ev event) {
 // logServer keeps an event of the server's, no Cube's: once in the
 // store, with no Cube (cube_id NULL), which every Cube's log shows, and
 // on every Cube's stream; a Cube without a row in the store keeps it in
-// its ring, its log being the ring's.
+// its ring, its log being the ring's, with an id of each ring's own,
+// taken under one hold of the lock.
 func (s *Server) logServer(ev event) {
 	ev.settle()
 	ev.server = true
@@ -739,10 +756,15 @@ func (s *Server) logServer(ev event) {
 	if st := s.opts.Store; st != nil {
 		st.AddEvent(storedEvent(0, ev))
 	}
-	for _, rt := range s.runtimes() {
+	rts := s.runtimes()
+	s.ring.mu.Lock()
+	for _, rt := range rts {
 		if rt.storeID.Load() == 0 || rt.store == nil {
-			rt.remember(ev)
+			rt.keepLocked(ev)
 		}
+	}
+	s.ring.mu.Unlock()
+	for _, rt := range rts {
 		rt.send(ev)
 	}
 }
@@ -763,16 +785,6 @@ func nameUsers(ctx context.Context, n *store.Namer, ev *event) {
 	if e := ev.EffectiveUser; e != nil {
 		ev.By = &eventUser{Name: e.Name, DisplayName: e.DisplayName}
 	}
-}
-
-// recent returns the last n events, oldest first.
-func (rt *runtime) recent(n int) []event {
-	rt.logMu.Lock()
-	defer rt.logMu.Unlock()
-	if n <= 0 || n > len(rt.events) {
-		n = len(rt.events)
-	}
-	return append([]event(nil), rt.events[len(rt.events)-n:]...)
 }
 
 // partLog is the logger of a part the server starts: its source, and the
@@ -798,6 +810,7 @@ func New(opts Options) *Server {
 	s := &Server{opts: opts, log: opts.Logger.With("source", "server"), started: time.Now(), cubes: map[string]*runtime{}, token: opts.Token,
 		limiter: newLimiter(opts, opts.Logger.With("source", "server")), authLockout: opts.AuthLockout, tickets: newTicketStore(nil),
 		found: map[string]*foundCube{}, discWake: make(chan struct{}, 1)}
+	s.ring.next = s.started.UnixMicro()
 	if s.authLockout <= 0 {
 		s.authLockout = DefaultAuthLockout
 	}
