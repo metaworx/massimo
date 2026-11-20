@@ -543,6 +543,15 @@ def backups_cube(page):
     page.locator("#cube-backup-body .backup-take").wait_for(state="visible")
 
 
+def backups_question(page):
+    """Cube settings, a kept backup's Delete asking in its row (run.sh took one by hand)."""
+    backups_cube(page)
+    row = page.locator("#cube-backup-body .backup-row").first
+    row.wait_for(timeout=10000)
+    row.locator(".backup-actions button").last.click()
+    row.locator(".confirm-box").wait_for()
+
+
 def log(page):
     show_view(page, "log")
     page.locator("#log-lines .log-line").first.wait_for()
@@ -687,6 +696,11 @@ REGIONS = (
     Region("backups", ("#sys-backup-body", "#cube-backup-body"), (
         View("System settings, the Cube's fold open", backups_system),
         View("Cube settings", backups_cube),
+        # Passed on the page before the move as well: none of SOURCES draws
+        # a Cube's backups again. From now on it guards that the question stays through the data;
+        # the list's own reads (an action in another panel, the list read
+        # again, the page shown again) are test_admin_updates.py's.
+        View("Cube settings, a backup's Delete asking", backups_question),
     )),
     Region("log", ("#logview",), (View("the log", log),)),
     Region("software-update", ("#sys-software-body",), (View("Maintenance", maint),)),

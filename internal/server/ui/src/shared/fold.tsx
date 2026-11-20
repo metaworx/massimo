@@ -46,16 +46,24 @@ export function Fold({ cls, open, onToggle, summary, summaryProps, data, childre
 
 /**
  * FoldHead is a panel's summary as detailsPanel draws it: before (a sign,
- * a count), the name, a monospaced part (a serial) and the badges, each
- * left out where not given.
+ * a count), the name, a monospaced part (a serial), after (a sign of the
+ * thing's state after its serial) and the badges, each left out where not
+ * given.
  */
-export function FoldHead({ before, name, mono, badges }: { before?: ComponentChildren; name?: string; mono?: string; badges?: ComponentChildren[] }) {
+export function FoldHead({ before, name, mono, after, badges }: {
+  before?: ComponentChildren;
+  name?: string;
+  mono?: string;
+  after?: ComponentChildren;
+  badges?: ComponentChildren[];
+}) {
   const shown = (badges || []).filter(Boolean);
   return (
     <>
       {before}
       {name && <span class="panel-name">{name}</span>}
       {mono && <span class="mono">{mono}</span>}
+      {after}
       {shown.length > 0 && <span class="panel-badges">{shown}</span>}
     </>
   );

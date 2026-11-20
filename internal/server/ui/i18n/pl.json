@@ -1799,6 +1799,7 @@
   "restore.send.many": "Wyślij {n} poleceń",
   "restore.send.other": "Wyślij {n} polecenia",
   "restore.running": "Wysyłanie: {done} z {n} kroków.",
+  "restore.unseen": "Połączenie z serwerem zostało przerwane podczas przywracania: dziennik mówi, jak się zakończyło.",
   "restore.done": "Przywracanie zakończone: wysłano {sent} z {n} kroków.",
   "restore.failedAt": "Przywracanie przerwane po {sent} z {n} kroków: {error}",
   "restore.refused": "Nie wysłano: {error}",

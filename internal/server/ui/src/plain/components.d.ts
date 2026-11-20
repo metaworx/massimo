@@ -50,6 +50,8 @@ declare global {
   function sectionBadges(card: HTMLElement | null, badges: Element[]): void;
   /** A small label (.flag) of a kind (ok, warn, bad, mode), a warning or a failure led by its mark: for a plain place a part fills. */
   function badgeEl(text: string, kind: string): HTMLElement;
+  /** Saves a blob as a file of the name given. */
+  function downloadBlob(name: string, blob: Blob): void;
   /** Brings a section card into view, unfolded. */
   function showCard(card: HTMLElement | null, instant?: boolean): void;
 }

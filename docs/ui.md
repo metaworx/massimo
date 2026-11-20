@@ -1536,6 +1536,15 @@ settings forms and have none of it.
   the notes and what the radio commands cost of the hourly budget,
   and sends nothing until **Send N commands**;
   then each step is marked as the Cube took it, and the end is said.
+  A Cube's boxes on both pages show the same restore,
+  and a fold open, a deletion asking, the format chosen and a restore shown
+  stay while the lists are read again;
+  while a restore runs, its Cube's **Restore…** and **Restore from file…** are off
+  in both places, so that it stays in sight, and a stored backup's plan closes
+  once the list no longer has the backup;
+  where the page's connection to the server was cut so long that the server
+  answers a resync, a restore still running is shown as one whose end the page
+  did not see, the log saying how it ended, and the buttons are back.
   A Cube that is not in the server's store (a run with `-addr`) has no list;
   its download and the restore from a file work as before.
 
@@ -1696,9 +1705,6 @@ it leaves to it and puts its two resets beside Cancel and Send.
 A plain panel that opens is a `detailsPanel`:
 its head the name, the serial, login or key, and the badges,
 its body the form cloned from the feature's template.
-Backup and restore is a box per Cube (`backupBox` in `backup.js`),
-built once per Cube and page and kept while its page is shown again,
-what a Cube has kept by its serial (`backupOf`), so that both pages show the same.
 A long page is a grid of section cards (`section.section-card`,
 its heading's `button.section-fold` folding it):
 `sectionCards` makes them fold and keeps the fold in the browser,
@@ -1710,7 +1716,8 @@ as ☰'s pages are `MENU_VIEWS`; `markSettingsPages` shows the title for one pag
 `fitPageTabs` gives the page shown's button the longest name's width,
 and `backToTop` wires the two ↑, the floating one and the compacted header's;
 `showToast` shows the page's one toast at its foot (a notification, the search's outcome),
-a Cube's link is its network sign (`cubeSignEl`, `LINK_SIGN`), for the plain regions;
+a Cube's link is its network sign (`cubeSignEl`, `LINK_SIGN`), which no plain region calls
+any more since Backup and restore is a part, and which waits for Block 15 (D181-A);
 a device's serial and radio address are a `deviceIds`;
 a list of facts is a `kvList`, of counts a `countList`;
 an action with what it does and its button is an `.action-row`;
@@ -1793,7 +1800,7 @@ a script for each region of the page, in the order the page loads them:
   which the first owner's form shares; `profile.js`, My profile;
   `providers.js`, the enabled sign-in providers and the plain name of
   Sign-in providers; `linked.js`, My profile's linked accounts;
-  `backup.js`, Backup and restore;
+  `backup.js`, the plain names of Backup and restore (`ui/src/backups/`);
   `roles.js`, the plain name of Roles and Capabilities (`ui/src/admin/`);
   Integrations has none, a part alone (`ui/src/integrations/`);
 - `theme.js`, the mode and the colour schemes, applied as the script loads;
@@ -1872,7 +1879,7 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `lang`, `useLang`, `tParts`, `joinParts` | `lang.ts` | the page's language as a signal, raised by `applyLanguage` (`MassimoParts.language`); a text with parts in it (`tNodes`); parts joined with " · ", the empty ones left out | `key`, `texts`, `parts`; `parts`, `lead` (" · " before the first too) |
 | `useIcons` | `look.ts` | the icons chosen for the window and the radio as a signal, raised by `redrawSigns` (`MassimoParts.icons`); `Sign` reads it | – |
 | `Island` | `island.tsx` | a plain piece inside a part: an element the part draws empty and plain code fills, again where a key or the language changed | `tag` (div, p, span), `cls`, `keys`, `fill(el)` |
-| `Fold`, `FoldHead` | `fold.tsx` | a details that opens and closes (`detailsPanel`), the toggle of its making not passed on; a panel's head | `cls`, `open`, `onToggle(open)`, `summary`, `summaryProps`, `data`, the body as children; `before`, `name`, `mono`, `badges` |
+| `Fold`, `FoldHead` | `fold.tsx` | a details that opens and closes (`detailsPanel`), the toggle of its making not passed on; a panel's head | `cls`, `open`, `onToggle(open)`, `summary`, `summaryProps`, `data`, the body as children; `before`, `name`, `mono`, `after` (after the monospaced part, a sign of the thing's state), `badges` |
 | `Dropdown` | `menu.tsx` | a menu that drops down (`dropdown`), with `arrows` its arrow keys (`menuArrows`) and with `focusCurrent` the focus on its current item when it opens (among `arrows`' items, else its list's buttons that are on); a click on any button of its list closes it, as `dropdown()` of `components.js` does for every menu of the page, but on one marked `data-keep-open` (`MenuItem`'s `keepOpen`) | `id`, `cls`, `summaryId`, `summaryCls`, `label` (without it the summary is named by its text), `title` (where the tooltip is not the label), `summary`, `listCls`, `arrows` (a selector of its items), `focusCurrent`, `busy` (the summary turning while a request sent from its list runs), `onClick`, `onOpen` (told each time it opens), `onClose` (told each time it closes), the items as children |
 | `MenuItem` | `menu.tsx` | a menu's button, its icon, label, the icons after it and a grey second line (`menuItem`) | `icon`, `blank`, `label`, `icons`, `sub` (the second line, a text or elements, there whenever given, empty too), `subCls` (its class), `cls`, `value` (its `data-value`), `current`, `disabled`, `busy`, `keepOpen` (a click on it leaves the menu open, for an item whose result shows in the list), `onClick` |
 | `Picker` | `menu.tsx` | a menu that chooses one item, its summary the chosen one (`pickerMenu`) | `id`, `cls`, `summaryId`, `summaryCls`, `entries` (an item `{ value, label, sub, icon, icons, disabled }`, `{ group }` or `{ separator: true }`), `value`, `onPick(value)`, `shown` (`{ icon, label, title, aria }`) |
@@ -1914,14 +1921,15 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `useAsk` | `question.tsx` | a row that asks in its own place, the focus back on its button (`confirmInPlace`) | gives `asking`, `ask`, `done`, `ref` |
 | `useBusy`, `busyProps` | `question.tsx` | a button's request under way: busy, off, `aria-busy` (`whileBusy`, `setBusy`) | `run(fn)`; `busyProps(cls, busy, off)` |
 | `useSetAtOnce` | `question.tsx` | a setting saved at once, a switch without a Save: the user's choice shown while its request runs, the control on so that the focus stays on it, a change meanwhile sending nothing and drawn back, then what is stored, the old value where it was refused (the password sign-in, a capability for every role, whether integrations may ask, an integration's Enabled) | `stored`; gives `value`, `busy`, `set(v, fn)` |
-| `BusyButton` | `question.tsx` | a button that sends a request and turns until its answer (`useBusy`, `busyProps`), a click meanwhile sending nothing | `id`, `cls`, `label`, `run`, `aria` (its name where the text is not enough) |
+| `BusyButton` | `question.tsx` | a button that sends a request and turns until its answer (`useBusy`, `busyProps`), a click meanwhile sending nothing | `id`, `cls`, `label`, `run`, `aria` (its name where the text is not enough), `off` (kept off: a request that may not be sent now) |
 | `session`, `stillSession`, `newSession` | `session.ts` | the session's number, raised by `MassimoParts.signedOut` before anything is forgotten: a store takes it before an await and drops the answer, its message and its next timer where it changed; `actionRunner`'s `bound` does so for a runner | –; `n`; – |
+| `FileButton` | `file.tsx` | a button that opens the browser's choice of a file of the types it accepts (`filePicker`), the same file again too | `cls`, `label`, `accept`, `off`, `onFile(file)` |
 | `Adder` | `adder.tsx` | the end of a list that adds an item: the new item's form in its place while shown, the button that shows it hidden meanwhile, the focus in the form's first field when it comes and back on the button when it goes (Users, Roles, Sign-in providers) | `id` (the button's), `formId` (the form's place), `label`, `shown`, `set(shown)`, the form as children |
 | `KvList` | `kv.tsx` | a list of facts, a name and its value each (`kvList`), every fact given; the caller leaves out those it does not show | `facts` (`[name, value, mono]`) |
 | `Copy`, `CopyIcon` | `copy.tsx` | a text that copies itself, a copy icon (`copyEl`, `copyIcon`) | `text`, `value` (what it copies, where it is not the text), `label`, `icon`, `cls`; `get`, `label` |
 | `Link` | `link.tsx` | a link in a tab of its own, the text alone for a url that is not http(s) (`linkEl`) | `url`, `text`, `cls` |
 | `DeviceIds` | `device.tsx` | a device's serial and radio address (`deviceIds`) | `serial`, `rf`, `always` |
-| `cubePath` | `path.ts` | a Cube's path in the API, which every part's request about a Cube starts from; `base()` of `app.js` and `backup.js`'s own are its next users, with their blocks | `serial` |
+| `cubePath` | `path.ts` | a Cube's path in the API, which every part's request about a Cube starts from, Backup and restore's too; `base()` of `app.js` is its next user, with its block | `serial` |
 | `hid` | `cls.ts` | the class `hidden`, with its space, for an element kept in its place and hidden | `off` |
 | `PutForm`, `newPut` | `put.tsx` | the form that puts a device in no room into one (with `structure`), wherever such a device is shown, a device that joined while its Cube pairs or one of the devices without a room: its name (with `rename`), offered for the room chosen until one is typed (D200-A) and marked where it is too long for the Cube (D201), the room, for a thermostat the copy of the room's settings (with `configure`), on by default, then `PUT …/devices/{rf}` and its outcome; what the caller keeps of it, live; the room chosen is pinned at its first drawing, the first of the rooms, and moves only where it is gone; a part with state that two regions draw, its texts its own (`put.…`, `help.putCopy`, and `name.long` for the name's limit) | `id` (its fields' ids' beginning), `serial`, `dev`, `rooms`, `put` (what `newPut` makes: the name typed, the room and the copy, the request under way, the outcome, done), `reload` (what follows the request, before `onDone` or `onFail`), `onDone`, `onFail`, `onCancel` (its Cancel, of the class `form-cancel`, none without), `focus` (its first field takes the focus when it comes) |
 | `RepairButton`, `RepairBox`, `toggleRepair`, `repairScope`, `forgetRepairs` | `repair.tsx` | the repairs of a Cube, a room or a device (with `repair`), wherever it is shown (Rooms, Repairs): the button that opens and closes the box of a scope, and the box while it is open, each repair with its preview (`GET`, which sends nothing), its cost, its lines in expert mode, a name it asks for, and Run… that asks in its place before it sends (`POST` with the preview's plan), "unlink all and re-link" warning first and asking twice; a box's state kept by its scope, live, across its being drawn again, a question gone wherever its preview is read again, nothing read for a box closed meanwhile; the box opened from elsewhere (a tile's ⋯); a box's scope; every box forgotten at a sign-out and for another user after a 401 (`MassimoParts.signedOut`); a part with state that two regions draw, its texts its own (`repair.…`, and `name.long` for the name's limit) | `scope`, `kind` (`cube`, `room`, `device`), `path` (the API path its routes hang off), `label` (what it repairs, in its accessible name), `skip` (the repairs it leaves out), `names(room)` (the names of a room's devices, for the name a listing offers); `scope`; `scope`, `kind`, `path`, `{ skip, names }`; `serial`, `kind`, `id`; – |
@@ -2007,6 +2015,8 @@ what they take from `admin/` comes in as parameters there: the send functions
 report through the users' runner (its message line, the reload by `loadUsers`
 and `reads`), and `Identities.tsx` reads `enabled`, `identityUI` and `userUI`
 of `admin/store.ts`;
+`FileButton` for the Appearance card's import (`appearance.js`, Block 13), which
+needs an id and a name for its input that follows the language;
 a room's write's outcome in words, built in three places
 (`House.tsx` `houseRequests`, `rooms.js` `resultText`, `configuration.ts` `sendCopy`);
 a failed save's error with its unsaved form's item (its tooltip),
@@ -2240,6 +2250,18 @@ integration's a `Choices` under a legend, of the class `integration-caps`,
 an integration's name and its maximum each a `useForm` of the key
 `integrations:<uuid>:name` and `:max`, Acts as a `Select` with its draft beside Link,
 Refuse and Revoke a `useAsk` with a `Question`.
+Backup and restore (`ui/src/backups/`) draws System settings' folds into `#backups-cubes`
+and Cube settings' box into `#cube-backup-body`, a box per Cube and place,
+and registers `render`, `cubeChanged`, `restoreEvent` and `resynced`, which `backup.js`
+calls as `renderBackups`, `backupCubeChanged`, `restoreEvent` and `restoreResynced`;
+`store.ts` keeps what a Cube has by its serial, live, so that its boxes on both pages
+show the same: its list, whether the server keeps it, the comparisons, the restore
+shown and the one sent, a running one shown as unseen at a resync
+(`app.js`'s resync handler calls `restoreResynced`);
+each box's message line and format by its place and serial;
+each fold open, a single Cube's at first; and what it reads and sends, as `backup.js`
+did; `Backups.tsx` the box, a fold a `Fold` whose `FoldHead` has the Cube's sign
+`after` its serial, a deletion a `useAsk` with a `Question` in its row.
 Leaving the page (`ui/src/leaving/`) is a region of its own,
 a dialog without a place in any page's region:
 the page's chrome stays plain until AP UiParts' Block 14, and no region imports another,

@@ -20,8 +20,20 @@ NOTHING = {"en": "The Cube already holds this backup: nothing to send.",
            "de": "Der Cube enthält diese Sicherung bereits: nichts zu senden."}
 
 
-def manual(page):
-    return page.evaluate(f"backupOf('{SERIAL}').list.filter((b) => b.reason === 'manual').length")
+def kept(serial=SERIAL):
+    """The Cube's backups the server keeps, newest first, as the page lists them."""
+    return (api_call("GET", f"api/v1/cubes/{serial}/backups") or {}).get("backups") or []
+
+
+def manual():
+    return len([b for b in kept() if b["reason"] == "manual"])
+
+
+def rows(page, n):
+    """The box's list loaded (something in it: its rows, or that there is none) and showing n rows."""
+    return wait_until(page, f"document.querySelector('{BOX} .backups-list').children.length > 0"
+                            f" && document.querySelectorAll('{BOX} .backups-list .backup-row').length === {n}", 10)
+
 
 
 def test_backup_box_on_cube_settings(page, case):
@@ -29,22 +41,21 @@ def test_backup_box_on_cube_settings(page, case):
     box = page.locator(BOX)
     box.scroll_into_view_if_needed()
     assert box.get_attribute("data-serial") == SERIAL, "the chosen Cube's box"
-    assert wait_until(page, f"backupOf('{SERIAL}').loaded && backupOf('{SERIAL}').history"
-                      f" && document.querySelector('{BOX} .backups-list').children.length > 0", 10), "the list loaded"
+    assert rows(page, len(kept())), "the list loaded"
     named_buttons(page, "the backup box")
-    kept = page.evaluate(f"tn('backup.badge.kept', backupOf('{SERIAL}').list.length)")
-    assert page.locator("#cube-backup .section-badges").inner_text() == kept, "the count in the card's head"
+    count = page.evaluate("(n) => tn('backup.badge.kept', n)", len(kept()))
+    assert page.locator("#cube-backup .section-badges").inner_text() == count, "the count in the card's head"
 
     with page.expect_download() as now:
         box.locator(".backup-download").click()
     assert now.value.suggested_filename.endswith(".yaml"), now.value.suggested_filename
 
-    before = manual(page)
+    before = manual()
     box.locator(".backup-take").click()
-    assert wait_until(page, f"backupOf('{SERIAL}').list.filter((b) => b.reason === 'manual').length === {before + 1}", 10), \
-        "the backup in the list"
-    taken = page.evaluate(f"backupOf('{SERIAL}').list.find((b) => b.reason === 'manual').id")
-    index = page.evaluate(f"backupOf('{SERIAL}').list.findIndex((b) => b.id === {taken})")
+    shown = f"[...document.querySelectorAll('{BOX} .backup-reason')].filter((e) => e.textContent === {REASON_MANUAL[case.lang]!r}).length"
+    assert wait_until(page, f"{shown} === {before + 1}", 10) and manual() == before + 1 and rows(page, len(kept())), "the backup in the list"
+    taken = next(b["id"] for b in kept() if b["reason"] == "manual")
+    index = next(i for i, b in enumerate(kept()) if b["id"] == taken)
     row = box.locator(".backups-list .backup-row").nth(index)
     assert row.locator(".backup-reason").inner_text() == REASON_MANUAL[case.lang], "its reason"
 
@@ -60,15 +71,15 @@ def test_backup_box_on_cube_settings(page, case):
     plan.locator(".restore-actions button").last.click()
     assert wait_until(page, f"!document.querySelector('{BOX} .restore-box .restore-plan')", 5), "the plan closed"
 
-    if page.evaluate(f"backupOf('{SERIAL}').list.length > {index + 1}"):
+    if len(kept()) > index + 1:
         row.locator(".backup-actions button").nth(2).click()
-        assert wait_until(page, f"!!backupOf('{SERIAL}').diff[{taken}]", 10), "the comparison"
         row = box.locator(".backups-list .backup-row").nth(index)
-        assert row.locator(".backup-diff").is_visible(), "the comparison shown"
+        row.locator(".backup-diff").wait_for(state="visible", timeout=10000)
 
     row.locator(".backup-actions button").last.click()
+    left = len(kept()) - 1
     row.locator(".confirm-yes").click()
-    assert wait_until(page, f"!backupOf('{SERIAL}').list.some((b) => b.id === {taken})", 10), "the backup deleted"
+    assert rows(page, left) and not any(b["id"] == taken for b in kept()), "the backup deleted"
     show_view(page, "tiles")
 
 
@@ -88,10 +99,9 @@ def test_backup_folds_in_system_settings(page, case):
     order = head.evaluate("(s) => [...s.children].map((e) => e.classList.contains('cube-icon') ? 'cube' : e.classList.contains('conn-sign') ? 'sign' : "
                           "e.classList.contains('mono') ? 'serial' : '').filter(Boolean)")
     assert order == ["cube", "serial", "sign"], f"the cube before the serial, the sign after it: {order}"
-    assert wait_until(page, f"backupOf('{SERIAL}').loaded", 10), "its list loaded"
-    kept = page.evaluate(f"tn('backup.badge.kept', backupOf('{SERIAL}').list.length)")
-    assert wait_until(page, f"document.querySelector('#backups-cubes > .backup-fold .panel-badges').textContent === {kept!r}", 5), \
-        "its count in its head"
+    count = page.evaluate("(n) => tn('backup.badge.kept', n)", len(kept()))
+    assert wait_until(page, f"document.querySelector('#backups-cubes > .backup-fold .panel-badges')?.textContent === {count!r}", 10), \
+        "its list loaded, its count in its head"
     assert first.locator(".backup-box").get_attribute("data-serial") == SERIAL, "its box"
     first.evaluate("(d) => { d.dataset.kept = 'yes'; }")
     api_call("POST", "api/v1/cubes", {"serial": SECOND, "address": "127.0.0.1:9", "name": "Second"})
@@ -107,9 +117,11 @@ def test_backup_folds_in_system_settings(page, case):
         assert second.get_attribute("data-serial") == SECOND and second.get_attribute("open") is None, "the second closed"
         second.locator(":scope > summary").click()
         assert second.locator(".backup-box").get_attribute("data-serial") == SECOND, "its own box"
-        assert wait_until(page, f"backupOf('{SECOND}').loaded", 10), "its list asked for"
-        total = page.evaluate(f"tn('backup.badge.kept', backupOf('{SERIAL}').list.length + backupOf('{SECOND}').list.length)")
-        assert page.locator("#sys-backup > .section-head .section-badges").inner_text() == total, "the card counts them all"
+        assert wait_until(page, f"document.querySelector(\"#backups-cubes > .backup-fold[data-serial='{SECOND}'] .backups-list\").children.length > 0", 10), \
+            "its list asked for"
+        total = page.evaluate("(n) => tn('backup.badge.kept', n)", len(kept()) + len(kept(SECOND)))
+        assert wait_until(page, f"document.querySelector('#sys-backup > .section-head .section-badges').innerText === {total!r}", 5), \
+            "the card counts them all"
     finally:
         api_call("DELETE", "api/v1/cubes/" + SECOND)
         page.evaluate("loadCubes()")
@@ -124,7 +136,7 @@ def test_back_up_now_turns_until_answered(page, case):
     click's would have come before it."""
     show_view(page, "cube")
     take = BOX + " .backup-take"
-    assert wait_until(page, f"backupOf('{SERIAL}').loaded && !document.querySelector('{take}').classList.contains('hidden')", 10), \
+    assert wait_until(page, f"!!document.querySelector('{BOX} .backups-list').children.length && !document.querySelector('{take}').classList.contains('hidden')", 10), \
         "the server keeps backups"
     held, sent, came = [], [], []
     hold(page, "**/backups", "POST", held, sent)
@@ -135,7 +147,7 @@ def test_back_up_now_turns_until_answered(page, case):
         assert_busy(page, take, "Back up now")
         mark = len(came)
         page.locator(take).click(force=True)
-        page.evaluate(f"api('GET', cubeRoute('{SERIAL}') + '/backups')")  # the read after the click, through the route
+        page.evaluate(f"api('GET', 'api/v1/cubes/{SERIAL}/backups')")  # the read after the click, through the route
         assert "GET" in came[mark:], f"the read after the click came: {came}"
         assert came.count("POST") == 1, f"one POST for two clicks: {came}"
         for route in held:

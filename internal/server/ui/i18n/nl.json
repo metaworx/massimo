@@ -1743,6 +1743,7 @@
   "restore.send.one": "{n} commando verzenden",
   "restore.send.other": "{n} commando's verzenden",
   "restore.running": "Verzenden: {done} van {n} stappen.",
+  "restore.unseen": "De verbinding met de server werd onderbroken terwijl het herstel liep: het log zegt hoe het eindigde.",
   "restore.done": "Herstel klaar: {sent} van {n} stappen verzonden.",
   "restore.failedAt": "Herstel gestopt na {sent} van {n} stappen: {error}",
   "restore.refused": "Niet verzonden: {error}",

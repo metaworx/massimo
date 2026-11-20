@@ -1742,6 +1742,7 @@
   "restore.send.one": "{n} Befehl senden",
   "restore.send.other": "{n} Befehle senden",
   "restore.running": "Wird gesendet: {done} von {n} Schritten.",
+  "restore.unseen": "Die Verbindung zum Server war unterbrochen, während die Wiederherstellung lief: Das Log sagt, wie sie endete.",
   "restore.done": "Zurückgespielt: {sent} von {n} Schritten gesendet.",
   "restore.failedAt": "Zurückspielen nach {sent} von {n} Schritten abgebrochen: {error}",
   "restore.refused": "Nicht gesendet: {error}",

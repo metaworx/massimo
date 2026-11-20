@@ -65,7 +65,7 @@ var uiPartials = []struct {
 	{"logview", []string{"log-view.html"}},
 	{"login", []string{"login.html"}},
 	{"toast", []string{"toast.html"}},
-	{"templates", []string{"scheme.html", "log.html", "users-panel.html", "backups-panel.html"}},
+	{"templates", []string{"scheme.html", "log.html", "users-panel.html"}},
 }
 
 // uiPage assembles the page: index.html, the skeleton, with each marker

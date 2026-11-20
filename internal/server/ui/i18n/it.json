@@ -1744,6 +1744,7 @@
   "restore.send.one": "Invia {n} comando",
   "restore.send.other": "Invia {n} comandi",
   "restore.running": "Invio: {done} di {n} passi.",
+  "restore.unseen": "La connessione al server si è interrotta durante il ripristino: il log dice come è terminato.",
   "restore.done": "Ripristino completato: {sent} di {n} passi inviati.",
   "restore.failedAt": "Ripristino interrotto dopo {sent} di {n} passi: {error}",
   "restore.refused": "Non inviato: {error}",

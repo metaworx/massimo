@@ -4059,6 +4059,7 @@ components:
   schemas:
     StoredBackup:
       type: object
+      required: [id, taken_at, reason, format, size, sha256]
       properties:
         id: {type: integer}
         taken_at: {type: string, format: date-time}
@@ -4071,6 +4072,7 @@ components:
         note: {type: string}
     BackupList:
       type: object
+      required: [backups]
       properties:
         backups:
           type: array
@@ -4507,6 +4509,7 @@ components:
     RestoreStep:
       type: object
       description: One command of a restore plan
+      required: [what, radio]
       properties:
         what: {type: string, description: The step as massimo restore prints it}
         radio: {type: boolean, description: "Sends radio commands, which cost budget; false for a Cube command (names, NTP, time zone)"}
@@ -4572,6 +4575,7 @@ components:
         still_flagged: {type: array, items: {type: string}, description: "The devices reset whose flag the device list read after the resets still shows"}
     RestorePlan:
       type: object
+      required: [plan, radio_commands, duty_cost_pct, budget]
       properties:
         plan: {type: string, description: SHA-256 over the step list (texts and command lines); POST …/restore takes it}
         steps:

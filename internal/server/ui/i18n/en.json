@@ -1742,6 +1742,7 @@
   "restore.send.one": "Send {n} command",
   "restore.send.other": "Send {n} commands",
   "restore.running": "Sending: {done} of {n} steps.",
+  "restore.unseen": "The connection to the server was interrupted while the restore ran: the log says how it ended.",
   "restore.done": "Restore done: {sent} of {n} steps sent.",
   "restore.failedAt": "Restore stopped after {sent} of {n} steps: {error}",
   "restore.refused": "Not sent: {error}",

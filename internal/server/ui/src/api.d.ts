@@ -11,23 +11,23 @@
  */
 
 export interface StoredBackup {
-  id?: number;
+  id: number;
   /** @format date-time */
-  taken_at?: string;
-  reason?: "auto" | "manual" | "before_restore" | "upload";
-  format?: "json" | "yaml";
+  taken_at: string;
+  reason: "auto" | "manual" | "before_restore" | "upload";
+  format: "json" | "yaml";
   /** The software that wrote the file */
   tool?: string;
   /** Bytes of the file */
-  size?: number;
-  sha256?: string;
+  size: number;
+  sha256: string;
   /** Who asked; absent for the server's own */
   user?: string;
   note?: string;
 }
 
 export interface BackupList {
-  backups?: StoredBackup[];
+  backups: StoredBackup[];
   /**
    * When the configuration last changed against the newest backup; absent when
    * it did not
@@ -653,12 +653,12 @@ export interface Me {
 /** One command of a restore plan */
 export interface RestoreStep {
   /** The step as massimo restore prints it */
-  what?: string;
+  what: string;
   /**
    * Sends radio commands, which cost budget; false for a Cube command (names,
    * NTP, time zone)
    */
-  radio?: boolean;
+  radio: boolean;
   /** The device the command addresses, when it has one */
   device?: string;
   /** The room woken up before the command, when there is one */
@@ -769,7 +769,7 @@ export interface RestorePlan {
    * SHA-256 over the step list (texts and command lines); POST …/restore
    * takes it
    */
-  plan?: string;
+  plan: string;
   /**
    * The commands in the order they would be sent; empty when the Cube matches
    * the backup
@@ -781,13 +781,13 @@ export interface RestorePlan {
    */
   notes?: string[];
   /** Radiograms of all steps */
-  radio_commands?: number;
+  radio_commands: number;
   /**
    * About what the radio commands will cost of the hourly radio budget, 1.25 %
    * each
    */
-  duty_cost_pct?: number;
-  budget?: Budget;
+  duty_cost_pct: number;
+  budget: Budget;
 }
 
 /** The last restore of a Cube; only state for none */

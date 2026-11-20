@@ -1744,6 +1744,7 @@
   "restore.send.one": "Envoyer {n} commande",
   "restore.send.other": "Envoyer {n} commandes",
   "restore.running": "Envoi : {done} sur {n} étapes.",
+  "restore.unseen": "La connexion au serveur a été interrompue pendant la restauration : le journal indique comment elle s'est terminée.",
   "restore.done": "Restauration terminée : {sent} sur {n} étapes envoyées.",
   "restore.failedAt": "Restauration arrêtée après {sent} sur {n} étapes : {error}",
   "restore.refused": "Non envoyé : {error}",

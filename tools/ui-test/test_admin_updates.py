@@ -387,6 +387,87 @@ def test_an_integrations_drafts_stay_and_a_request_keeps_its_choice(page, case):
     show_view(page, "tiles")
 
 
+SERIAL = "KEQ0000100"
+CUBE_BOX = "#cube-backup .backup-box"
+
+
+def take_backup():
+    """A backup taken by hand for the test; its id."""
+    return api_call("POST", f"api/v1/cubes/{SERIAL}/backups", {})["id"]
+
+
+def drop_backup(bid):
+    undo(f"the backup {bid}", lambda: api_call("DELETE", f"api/v1/cubes/{SERIAL}/backups/{bid}"))
+
+
+def first_row(page, where):
+    """The box's first row once its list is shown; a manual backup taken last is the newest."""
+    row = page.locator(f"{where} .backups-list .backup-row").first
+    row.wait_for(timeout=10000)
+    return row
+
+
+def test_a_backup_box_keeps_its_question(page, case):
+    """On Cube settings a backup's Delete asking and the format chosen: the
+    list read again, as Cube settings shown again reads it, keeps the
+    question, the row's buttons and the choice the elements they were
+    (backup.js drew the list again and dropped the question). A restore's
+    plan asked for there shows in System settings' fold of the same Cube
+    as well, as backup.js had it too, and Cancel takes it away in both.
+    Nothing is deleted or restored."""
+    bid = take_backup()
+    try:
+        show_view(page, "cube")
+        row = first_row(page, CUBE_BOX)
+        page.locator(CUBE_BOX + " .backup-bar select").select_option("json")
+        row.locator(".backup-actions button").last.click()
+        row.locator(".confirm-box").wait_for()
+        sels = [CUBE_BOX + " .backup-row .confirm-no", CUBE_BOX + " .backup-row .backup-actions button", CUBE_BOX + " .backup-bar select"]
+        mark(page, sels)
+        show_view(page, "tiles")
+        show_view(page, "cube")
+        first_row(page, CUBE_BOX)
+        frames(page)
+        assert replaced(page, sels) == [], f"the same elements: {replaced(page, sels)}"
+        assert page.locator(CUBE_BOX + " .backup-bar select").input_value() == "json", "the format kept"
+        row.locator(".confirm-no").click()
+        assert row.locator(".confirm-box").count() == 0, "No takes the question back"
+        row.locator(".backup-actions button").nth(1).click()
+        page.locator(CUBE_BOX + " .restore-plan").wait_for(timeout=10000)
+        show_view(page, "system")
+        fold = page.locator(f"#backups-cubes > .backup-fold[data-serial='{SERIAL}']")
+        if not fold.evaluate("(d) => d.open"):
+            fold.locator("> summary").click()
+        fold.locator(".restore-plan").wait_for(timeout=5000)
+        fold.locator(".restore-actions button").first.click()
+        assert wait_until(page, "!document.querySelector('.restore-plan')", 5), "Cancel takes the plan away in both"
+    finally:
+        drop_backup(bid)
+    show_view(page, "tiles")
+
+
+def test_sign_out_forgets_the_backups(new_context, case, watch, guard):
+    """A restore's plan shown on Cube settings and a box's message: Sign
+    out, and the operator signed in finds no plan and no list of the
+    owner's."""
+    page = owner_page(new_context, guard, watch, URL, TOKEN)
+    bid = take_backup()
+    try:
+        show_view(page, "cube")
+        row = first_row(page, CUBE_BOX)
+        row.locator(".backup-actions button").nth(1).click()
+        page.locator(CUBE_BOX + " .restore-plan").wait_for(timeout=10000)
+        sign_out(page)
+        sign_in(page, "operator", "op-pass")
+        frames(page)
+        assert page.locator(".restore-plan").count() == 0, "no plan"
+        assert page.locator(".backup-row").count() == 0, "no list"
+    finally:
+        drop_backup(bid)
+
+
+# --- the rework after the second reading -----------------------------------
+
 def out(page):
     """Sign out, through the leaving dialog where a form has changes."""
     sign_out(page)
@@ -865,6 +946,23 @@ def test_another_user_after_a_401_finds_no_integrations(new_context, case, watch
     integrations_gone(page)
 
 
+def test_another_user_after_a_401_finds_no_backups(new_context, case, watch, guard):
+    """B2: a restore's plan shown, the session taken as expired: the
+    operator signed in finds no plan and no list."""
+    page = owner_page(new_context, guard, watch, URL, TOKEN)
+    bid = take_backup()
+    try:
+        show_view(page, "cube")
+        first_row(page, CUBE_BOX).locator(".backup-actions button").nth(1).click()
+        page.locator(CUBE_BOX + " .restore-plan").wait_for(timeout=10000)
+        expire(page)
+        sign_in(page, "operator", "op-pass")
+        frames(page)
+        assert page.locator(".restore-plan").count() == 0 and page.locator(".backup-row").count() == 0, "no plan, no list"
+    finally:
+        drop_backup(bid)
+
+
 def across(page, how):
     """The session ended as how says: a sign-out, or expired with another user's sign-in."""
     if how == "sign-out":
@@ -897,3 +995,105 @@ def test_a_late_list_of_integrations_reaches_nothing_of_the_next_user(new_contex
         assert page.locator(".integration-request, .integration-panel").count() == 0, "no integration of the first"
     finally:
         page.unroute("**/api/v1/integrations")
+
+
+@pytest.mark.parametrize("how", ["sign-out", "expired"])
+def test_a_late_plan_reaches_nothing_of_the_next_user(new_context, case, watch, guard, how):
+    """B3: a restore's plan asked for and held while the session ends; let
+    go once the operator is in, it shows nothing."""
+    page = owner_page(new_context, guard, watch, URL, TOKEN)
+    bid = take_backup()
+    plans = []
+    try:
+        show_view(page, "cube")
+        hold(page, "**/restore/plan*", "POST", plans, [])
+        first_row(page, CUBE_BOX).locator(".backup-actions button").nth(1).click()
+        assert wait_held(page, plans), "the plan asked for"
+        across(page, how)
+        with page.expect_response(lambda r: "/restore/plan" in r.url):
+            for r in plans:
+                r.continue_()
+        frames(page)
+        assert page.locator(".restore-plan").count() == 0, "no plan"
+    finally:
+        page.unroute("**/restore/plan*")
+        drop_backup(bid)
+
+
+PLAN = {"plan": "rw-plan", "steps": [{"what": "set the name", "radio": False}], "notes": [], "radio_commands": 0, "duty_cost_pct": 0,
+        "budget": {"duty_cycle_pct": 3, "free_memory_slots": 50, "updated_at": "2026-11-15T10:00:00Z"}}
+
+
+def test_a_running_restore_stays_in_sight(page, case):
+    """B5: a restore sent and running (its steps come on the stream): its
+    Cube's Restore… and Restore from file… are off in both places, so no
+    plan replaces it; once it is done they are on again. The plan and the
+    restore are stubbed: nothing is restored."""
+    bid = take_backup()
+    safe_route(page, "**/restore/plan*", lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps(PLAN)))
+    safe_route(page, f"**/cubes/{SERIAL}/restore?*", lambda r: r.fulfill(status=202, content_type="application/json", body='{"id":"rw-run"}'))
+    try:
+        show_view(page, "cube")
+        first_row(page, CUBE_BOX).locator(".backup-actions button").nth(1).click()
+        page.locator(CUBE_BOX + " .restore-plan .restore-actions button.primary").click()
+        page.evaluate("(s) => restoreEvent({kind: 'restore_step', cube: s, restore: {id: 'rw-run', step: 1, ok: true}})", SERIAL)
+        frames(page)
+        assert page.locator(CUBE_BOX + " .restore-file").is_disabled(), "Restore from file… off"
+        assert first_row(page, CUBE_BOX).locator(".backup-actions button").nth(1).is_disabled(), "Restore… off"
+        show_view(page, "system")
+        fold = page.locator(f"#backups-cubes > .backup-fold[data-serial='{SERIAL}']")
+        if not fold.evaluate("(d) => d.open"):
+            fold.locator("> summary").click()
+        assert fold.locator(".restore-file").is_disabled(), "off in System settings too"
+        page.evaluate("(s) => restoreEvent({kind: 'restore_done', cube: s, restore: {id: 'rw-run', ok: true, state: 'done', sent: 1}})", SERIAL)
+        assert wait_until(page, f"!document.querySelector(\"#backups-cubes > .backup-fold[data-serial='{SERIAL}'] .restore-file\").disabled", 5), "on again"
+        fold.locator(".restore-actions button").first.click()
+    finally:
+        page.unroute("**/restore/plan*")
+        page.unroute(f"**/cubes/{SERIAL}/restore?*")
+        drop_backup(bid)
+    show_view(page, "tiles")
+
+
+def test_a_restore_unseen_at_a_resync(page, case):
+    """C11: a restore sent and running, its end lost: a resync of the stream
+    (dispatched on the page's stream as the server sends one) shows it as
+    one whose end the page did not see, and its Restore buttons are back.
+    The plan and the restore are stubbed: nothing is restored."""
+    bid = take_backup()
+    safe_route(page, "**/restore/plan*", lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps(PLAN)))
+    safe_route(page, f"**/cubes/{SERIAL}/restore?*", lambda r: r.fulfill(status=202, content_type="application/json", body='{"id":"rw-lost"}'))
+    try:
+        show_view(page, "cube")
+        first_row(page, CUBE_BOX).locator(".backup-actions button").nth(1).click()
+        page.locator(CUBE_BOX + " .restore-plan .restore-actions button.primary").click()
+        page.evaluate("(s) => restoreEvent({kind: 'restore_step', cube: s, restore: {id: 'rw-lost', step: 1, ok: true}})", SERIAL)
+        assert wait_until(page, f"document.querySelector('{CUBE_BOX} .restore-file').disabled", 5), "running: Restore from file… off"
+        page.evaluate("() => state.events.dispatchEvent(new MessageEvent('resync', { data: '{}' }))")
+        want = page.evaluate("t('restore.unseen')")
+        assert wait_until(page, f"document.querySelector('{CUBE_BOX} .restore-result')?.textContent === {json.dumps(want)}", 5), "its end not seen, said"
+        assert page.locator(CUBE_BOX + " .restore-file").is_enabled(), "Restore from file… back"
+        assert first_row(page, CUBE_BOX).locator(".backup-actions button").nth(1).is_enabled(), "Restore… back"
+        page.locator(CUBE_BOX + " .restore-actions button").first.click()
+    finally:
+        page.unroute("**/restore/plan*")
+        page.unroute(f"**/cubes/{SERIAL}/restore?*")
+        drop_backup(bid)
+    show_view(page, "tiles")
+
+
+def test_a_plan_goes_with_its_backup(page, case):
+    """B6: a stored backup's plan shown, the backup deleted elsewhere: the
+    next load of the list closes the plan."""
+    bid = take_backup()
+    try:
+        show_view(page, "cube")
+        first_row(page, CUBE_BOX).locator(".backup-actions button").nth(1).click()
+        page.locator(CUBE_BOX + " .restore-plan").wait_for(timeout=10000)
+        api_call("DELETE", f"api/v1/cubes/{SERIAL}/backups/{bid}")
+        show_view(page, "tiles")
+        show_view(page, "cube")
+        assert wait_until(page, "!document.querySelector('.restore-plan')", 10), "the plan closed"
+    finally:
+        drop_backup(bid)
+    show_view(page, "tiles")

@@ -15,6 +15,8 @@
 
 import { signedOut as adminSignedOut } from "./admin";
 import type { ProvidersPart, RolesPart, UsersPart } from "./admin";
+import { signedOut as backupsSignedOut } from "./backups";
+import type { BackupsPart } from "./backups";
 import "./chrome";
 import type { ChromePart } from "./chrome";
 import { signedOut as cubesSignedOut } from "./cubes";
@@ -45,9 +47,12 @@ export interface MassimoParts {
    * (shared/forms.ts), every box of repairs (shared/repair.tsx), and
    * every Cube's pairing and rooms (cubes/), and System settings' lists
    * with what is typed in their new items' forms (admin/) and the
-   * integrations with the readings of an approval (integrations/).
+   * integrations with the readings of an approval (integrations/), and
+   * every Cube's backups with a restore shown (backups/).
    */
   signedOut(): void;
+  /** Backup and restore: Cube settings' box and System settings' fold per Cube (backups/). */
+  backups: BackupsPart;
   /** Where the page's chrome says that settings are unsaved: a section's pill, ☰'s mark joined with the log's, a menu item's disk (chrome/). */
   chrome: ChromePart;
   /** System settings → Cubes and Cube settings (cubes/). */
@@ -82,5 +87,6 @@ register("signedOut", () => {
   cubesSignedOut();
   adminSignedOut();
   integrationsSignedOut();
+  backupsSignedOut();
 });
 window.MassimoParts = parts as unknown as MassimoParts;

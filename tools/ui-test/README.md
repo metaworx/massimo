@@ -285,9 +285,13 @@ hence `failed_checks_forgotten`.
   an approval is followed across pages and not while its card is folded;
   "Integrations may ask" keeps the focus; the integrations are forgotten at a sign-out
   and for another user after a 401, and a list that answers late shows nothing;
+  a running restore stays in sight, a plan goes with its backup, a plan that answers
+  late shows nothing, and the backups are forgotten for another user after a 401;
+  a backup's Delete asking and the format chosen stay, and a restore shown on
+  Cube settings shows in System settings' fold;
   after a sign-out, and for another user signed in after an expired session,
-  nothing typed, no list and no key made is left.
-  The users, roles, providers and integrations it makes it removes.
+  nothing typed, no list, no key made and no restore shown is left.
+  The users, roles, providers, integrations and backups it makes it removes.
   The server takes ten registration requests of integrations per address in
   ten minutes: each case makes two real ones, `test_integrations.py`'s register
   and link and this file's approval test, and the other integrations tests
