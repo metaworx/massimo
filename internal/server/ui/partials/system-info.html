@@ -1,28 +1,4 @@
-<!-- System info, the page's card: the server's version, start, clock and certificate (or its proxy's), how it was installed, the computer it runs on, its full name, the interfaces it listens on and the Cube proxies' listeners (copyable), the address the server sees the browser at, then the store and the settings in effect (with settings), from GET /api/v1/system, system-info.js. -->
+<!-- System info, the page's card: the server's version, start, clock and certificate (or its proxy's), how it was installed, the computer it runs on, its full name, the interfaces it listens on and the Cube proxies' listeners (copyable), the address the server sees the browser at, then the store and the settings in effect (with settings), from GET /api/v1/system; a part (ui/src/sysinfo/) drawn into its body. -->
 <section id="sys-info" class="tile system-info" aria-label="System info" data-i18n-attr="aria-label:nav.infoTitle">
-  <div id="sys-info-body" class="section-body">
-    <table class="info-table">
-      <tbody>
-        <tr><th scope="row" data-i18n="budget.server">Server</th><td id="info-version">–</td></tr>
-        <tr><th scope="row" data-i18n="budget.built">Built with</th><td id="info-built">–</td></tr>
-        <tr><th scope="row" data-i18n="budget.started">Server started</th><td id="info-started">–</td></tr>
-        <tr><th scope="row" data-i18n="sysinfo.now">Server time</th><td id="info-now">–</td></tr>
-        <tr><th scope="row" data-i18n="budget.certificate">Certificate</th><td id="info-tls">–</td></tr>
-        <tr><th scope="row" data-i18n="sysinfo.install">Installation</th><td id="info-install">–</td></tr>
-        <tr><th scope="row" data-i18n="sysinfo.system">System</th><td id="info-system">–</td></tr>
-        <tr><th scope="row" data-i18n="sysinfo.host">Host name</th><td id="info-host" class="mono">–</td></tr>
-        <tr><th scope="row" data-i18n="sysinfo.addresses">IP addresses</th><td id="info-addrs">–</td></tr>
-        <tr><th scope="row" data-i18n="sysinfo.proxies">Cube proxies</th><td id="info-proxies">–</td></tr>
-        <tr><th scope="row" data-i18n="sysinfo.client">Your address</th><td id="info-client" class="mono">–</td></tr>
-      </tbody>
-    </table>
-    <details id="store-info" class="sys-sub needs-settings">
-      <summary><span data-i18n="maint.store">Store</span><span id="store-info-sum" class="muted"></span></summary>
-      <div id="store-info-body"></div>
-    </details>
-    <details id="config-info" class="sys-sub needs-settings">
-      <summary><span data-i18n="maint.config">Settings in effect</span><span id="config-info-sum" class="muted"></span></summary>
-      <div id="config-info-body"></div>
-    </details>
-  </div>
+  <div id="sys-info-body" class="section-body"></div>
 </section>

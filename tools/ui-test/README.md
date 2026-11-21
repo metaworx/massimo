@@ -298,6 +298,46 @@ hence `failed_checks_forgotten`.
   answer their reads with stubs; the four cases of a worker make eight, so a
   local run of all four cases repeated within ten minutes meets the limit
   (429) until the ten minutes have passed or the servers are started anew.
+- `test_maint_updates.py`, Maintenance and System info as parts (AP UiParts, Block 12),
+  `GET /api/v1/update` stubbed, nothing installed, restarted or rebooted:
+  Software update keeps a line selected, Update's question and its buttons
+  through the header's check and Maintenance shown again;
+  a newer release takes the question back; the channel stays on and keeps
+  the focus while it saves; a sign-out, and another user signed in after an
+  expired session, end the reading while the helper works and take the
+  question back, and a reading that answers late starts nothing;
+  while Maintenance is shown, a resync of the stream shows the newer release,
+  Rooms shown reading nothing, a burst of events reads once and once after it,
+  a burst left by its page makes no second read, an update asked for elsewhere
+  is followed with its grace and takes the question back, a refused request
+  leaves the reading its buttons, an old update event starts no reading,
+  the helper's reading takes no event's read, the
+  channel's own change event reads nothing behind its back, a question taken
+  back leaves a focus elsewhere where it was, the next user is followed again,
+  and a read asked for before the session ended is not made;
+  an interval stays on and keeps the focus while it saves;
+  the delay typed and the restart's question stay the elements they were
+  through Maintenance shown again; the restart's question goes where the
+  restart is no longer offered, the reboot's where a reboot waits; the session's
+  end ends the following of a restart, a /healthz that answers late saying
+  nothing, and forgets the delay typed and the questions;
+  a setting set elsewhere shows while Maintenance is shown, Rooms reading
+  nothing; a resync reads the restart's row once, nothing for Rooms, nothing
+  while this page follows its restart; an interval's own change event reads
+  nothing behind its back; another setting changed during the own PUT is read
+  after it;
+  the settings file read again shows what waits with nothing read;
+  a reboot event keeps this page's wait, which follows at its time; an event
+  keeps the restart's question and the delay, and takes the reboot's back
+  where a reboot waits;
+  System info keeps a text selected through a certificate's reading
+  and a copy's "Copied", its folds and its copy icons through the page shown
+  again; the session's end forgets its facts and the settings in effect, and a
+  reading that answers late shows nothing; a resync reads the facts and the
+  settings in effect once while it is shown, nothing for Rooms; a Cube changed
+  reads the facts; a resync that finds the certificate being read reads it
+  anew, also after the readings gave up; the session's end between two
+  readings reads no more.
 - `test_stream.py`:
   the event stream opens with tickets only, never with the token,
   and after a refused stream (the test hands out a used ticket first,

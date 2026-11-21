@@ -901,6 +901,7 @@ async function connectEvents() {
   on("resync", () => {
     burst();
     restoreResynced(); // backup.js: a restore's end the stream lost
+    serverEvent({ kind: "resync" }); // update.js: the parts that follow the server read again what they show
     Promise.resolve(refresh()).catch(() => {});
   });
   on("state", (ev) => {
@@ -959,11 +960,12 @@ async function connectEvents() {
   // streams get: a toast, not a line of the log (notify.js).
   on("notification", (ev) => notifyToast(JSON.parse(ev.data).notification));
   // The log's other kinds (log.js LOG_KINDS): the server's own lines, a
-  // Cube's address and its leaving the LAN, the changes, for the log
-  // alone.
+  // Cube's address and its leaving the LAN, the changes, for the log, and
+  // for the parts that follow the server while their page is shown
+  // (update.js serverEvent).
   const handled = new Set(["state", "hello", "metadata", "pairing_started", "pairing_ended", "paired", "device_forgotten",
     "connected", "disconnected", "slots", "mismatch", "config", "cube_found", "restore_step", "restore_done", "unconfirmed"]);
-  for (const kind of LOG_KINDS) if (!handled.has(kind)) on(kind, logged(() => {}));
+  for (const kind of LOG_KINDS) if (!handled.has(kind)) on(kind, logged(serverEvent));
   es.onerror = () => {
     if (gen !== eventsGen) return;
     es.close();
@@ -1027,8 +1029,6 @@ function applyLanguage() {
   fillLogSelects();
   renderLog();
   renderLogSign(); // log.js
-  if (updState.info) renderUpdate(updState.info);
-  if (infoState.store || infoState.config) renderServerInfo();
   if (isShown("me")) renderNotify(); // notify.js
   tellWorkerLanguage();
 }

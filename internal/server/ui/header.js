@@ -151,7 +151,7 @@ function renderTLS(tls) {
 }
 
 // certText is the certificate the server serves, as GET /api/v1/system
-// has it, for System Info (system-info.js): its source, names and expiry.
+// has it, for System Info (ui/src/sysinfo/): its source, names and expiry.
 function certText(tls) {
   if (!tls) return "–";
   const until = Date.parse(tls.not_after || "");

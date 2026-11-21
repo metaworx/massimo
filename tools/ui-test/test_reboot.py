@@ -60,7 +60,7 @@ def test_reboot_not_offered(page):
         show_view(page, "maint")
         want = page.evaluate("t('reboot.unavailable', {reason: %s})" % json.dumps(MISSING))
         assert wait_until(page, "document.getElementById('reboot-text').textContent === %s" % json.dumps(want), 5), "the reason"
-        assert page.locator("#reboot-btn").is_hidden() and page.locator("#reboot-delay-row").is_hidden(), "no delay, no button"
+        assert page.locator("#reboot-btn").is_hidden() and page.locator(".reboot-delay").is_hidden(), "no delay, no button"
         assert page.locator("#reboot-cancel").is_hidden(), "nothing to take back"
     finally:
         stub.close()
@@ -78,6 +78,7 @@ def test_reboot_asks_with_its_delay(page):
         assert reboot_text(page) == page.evaluate("t('maint.rebootText')"), "what a reboot does"
         delay = page.locator("#reboot-delay")
         assert delay.input_value() == "60", "60 s to begin with"
+        assert delay.get_attribute("inputmode") == "numeric", "a phone offers its number keys"
         for value, want in (("60", "tn('reboot.confirm', 60)"), ("0", "t('reboot.confirmNow')")):
             delay.fill(value)
             btn.click()
@@ -113,8 +114,11 @@ def test_reboot_waits_and_is_taken_back(page):
         at = stub.answer["at"]
         want = page.evaluate("t('reboot.waiting', {time: fmtInstant(new Date(Date.parse(%s)))})" % json.dumps(at))
         assert reboot_text(page) == want, "when it comes"
-        assert page.locator("#reboot-btn").is_hidden() and page.locator("#reboot-delay-row").is_hidden(), "no second reboot"
-        assert not page.evaluate("rebootState.following"), "not yet followed"
+        assert page.locator("#reboot-btn").is_hidden() and page.locator(".reboot-delay").is_hidden(), "no second reboot"
+        # not yet followed: the line says the wait, above, and Take the reboot
+        # back is in sight; a following wrongly begun would ask its first
+        # /healthz only 2 s later, so the line carries the test
+        assert cancel.is_visible(), "Take the reboot back in sight"
         cancel.click()
         page.locator("#reboot-btn").wait_for(state="visible")
         assert stub.requests[-1] == ("DELETE", None), f"taken back: {stub.requests}"
@@ -145,11 +149,12 @@ def test_reboot_follows_the_computer_back(page):
         page.locator("#reboot-delay").fill("0")
         page.locator("#reboot-btn").click()
         page.locator(".reboot .confirm-yes").click()
-        assert wait_until(page, "rebootState.following", 5), "the page follows the reboot"
-        assert reboot_text(page) == page.evaluate("t('reboot.rebooting')"), "it says the computer reboots"
+        rebooting = page.evaluate("t('reboot.rebooting')")
+        assert wait_until(page, "document.getElementById('reboot-text').textContent === %s" % json.dumps(rebooting), 5), \
+            "the page follows the reboot, and says the computer reboots"
         back = page.evaluate("t('reboot.back', {time: fmtInstant(new Date(Date.parse('2099-01-02T03:04:05Z')))})")
-        assert wait_until(page, "!rebootState.following", 20), "the page sees the computer back"
-        assert reboot_text(page) == back, "it says the computer is back"
+        assert wait_until(page, "document.getElementById('reboot-text').textContent === %s" % json.dumps(back), 20), \
+            "the page sees the computer back, and says so"
         assert stub.requests == [("POST", {"delay": 0})], f"one request: {stub.requests}"
     finally:
         page.unroute("**/healthz")
@@ -166,12 +171,14 @@ def test_reboot_that_failed(page):
         page.locator("#reboot-delay").fill("0")
         page.locator("#reboot-btn").click()
         page.locator(".reboot .confirm-yes").click()
-        assert wait_until(page, "rebootState.following", 5), "the page follows the reboot"
+        rebooting = page.evaluate("t('reboot.rebooting')")
+        assert wait_until(page, "document.getElementById('reboot-text').textContent === %s" % json.dumps(rebooting), 5), \
+            "the page follows the reboot"
         error = "the reboot helper did not take the request within 30s"
         stub.answer = dict(AVAILABLE, error=error)
         want = page.evaluate("t('maint.rebootText') + ' ' + t('reboot.lastFailed', {error: %s})" % json.dumps(error))
-        assert wait_until(page, "!rebootState.following", 10), "the page stops following"
-        assert reboot_text(page) == want, "it says why"
+        assert wait_until(page, "document.getElementById('reboot-text').textContent === %s" % json.dumps(want), 10), \
+            "the page stops following, and says why"
         assert page.locator("#reboot-btn").is_visible(), "and offers the reboot again"
     finally:
         stub.close()

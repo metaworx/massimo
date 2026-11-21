@@ -55,6 +55,10 @@ declare global {
   function $(id: string): HTMLElement | null;
   /** The Massimo app's bridge on the page it opened (docs/app.md), null in a browser; connect, from version 2, shows the app's servers. */
   function appBridge(): { connect?: () => Promise<null> } | null;
+  /** A request to the API, without the page's token where auth is false (/healthz, always open); the answer's JSON, or an error with the server's message. */
+  function apiRequest<T = unknown>(method: string, path: string, body?: unknown, opts?: { auth?: boolean }): Promise<T>;
+  /** Opens the chosen Cube's event stream again. */
+  function connectEvents(): Promise<void>;
   /** A request to the API with the page's token, headers added to its own; the answer's JSON, or an error with the server's message (and its status). */
   function api<T = unknown>(method: string, path: string, body?: unknown, headers?: Record<string, string>): Promise<T>;
   /** Loads the Cubes, the rooms and the log's alerts again. */

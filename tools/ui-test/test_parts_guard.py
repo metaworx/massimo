@@ -10,7 +10,10 @@ regions not yet rewritten as parts that fail the guard today, each with
 what it loses; the block that moves a region takes its line off.
 
 For a region off the list, in each of its views and around each data
-source of SOURCES, applied with the data as it was (GUARD_JS, round):
+source of SOURCES and of its own (Region.sources: the page shown again,
+or the stream's server events of the kinds named, each dispatched on the
+page's stream, whose reads the guard waits for until their requests have
+answered), applied with the data as it was (GUARD_JS, round):
 
 1. identity: every element a user can hold (a button, a field, a
    summary, a link, a details, anything with a tabindex) shown in the
@@ -75,14 +78,16 @@ class View:
 class Region:
     """A region of the page: the CSS selectors of its containers, the
     elements inside them that belong to another region (exclude), its
-    views, and, where the fake Cube's fixture cannot show it, why
-    (gap)."""
+    views, where the fake Cube's fixture cannot show it, why (gap), and
+    the data sources of its own beside SOURCES (sources), by their
+    names in GUARD_JS's run."""
 
     name: str
     containers: tuple
     views: tuple = ()
     exclude: str = ""
     gap: str = ""
+    sources: tuple = ()
 
 
 # --- how the regions are shown ------------------------------------------
@@ -564,6 +569,43 @@ def maint(page):
     settle(page, 500)
 
 
+# The test server runs in a terminal and offers no update, no restart and
+# no reboot: the views of Software update and Maintenance answer their
+# reads with one constant answer each, so that the data stay as they
+# were; the other methods go on to Writes, which refuses them.
+UPDATE_STUB = {"current": "v0.0.0-test", "flavour": "alpha", "channel": "alpha", "latest": "v0.0.1-test", "available": True, "can_update": True,
+               "checked_at": "2026-11-15T10:00:00Z", "helper": {"state": "up-to-date", "time": "2026-11-15T10:00:00Z"},
+               "history": [{"at": "2026-11-14T18:00:00Z", "by": {"name": "anna"}, "from": "v0.0.0", "to": "v0.0.1-test"}]}
+RESTART_STUB = {"available": True, "by": "systemd", "pending": ["MASSIMO_LISTEN"], "file": "/etc/massimo/env", "read_at": "2026-11-15T10:00:00Z"}
+REBOOT_STUB = {"available": True, "by": "systemd"}
+
+
+def constant(page, pattern, body):
+    """Every GET of pattern answered with body; the other methods go on to Writes."""
+    page.route(pattern, lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
+               if route.request.method == "GET" else route.fallback())
+
+
+def software_question(page):
+    """Maintenance with an update offered and Update asking in the section; the channel's choice above it."""
+    constant(page, "**/api/v1/update*", UPDATE_STUB)
+    show_view(page, "maint")
+    page.locator("#update-btn").click()
+    page.locator(".update .confirm-box").wait_for()
+    page.locator("#update-channel").wait_for(state="visible")
+
+
+def maint_question(page):
+    """Maintenance with the restart and the reboot offered, the restart
+    asking in its row; the guard types a delay into the reboot's."""
+    constant(page, "**/api/v1/restart", RESTART_STUB)
+    constant(page, "**/api/v1/reboot", REBOOT_STUB)
+    show_view(page, "maint")
+    page.locator("#restart-btn").click()
+    page.locator(".restart .confirm-box").wait_for()
+    page.locator("#reboot-delay").wait_for(state="visible")
+
+
 def info(page):
     show_view(page, "info")
     page.locator("#store-info-sum").click()
@@ -703,9 +745,28 @@ REGIONS = (
         View("Cube settings, a backup's Delete asking", backups_question),
     )),
     Region("log", ("#logview",), (View("the log", log),)),
-    Region("software-update", ("#sys-software-body",), (View("Maintenance", maint),)),
-    Region("maintenance", ("#sys-maint-body",), (View("Maintenance", maint),)),
-    Region("system-info", ("#sys-info-body",), (View("System info, its folds open", info),)),
+    # Software update's and Maintenance's views pass on the page before
+    # the move too (AP UiParts, Block 12): update.js and maintenance.js
+    # filled their elements in place but for the options of a select and
+    # the last updates' lines, which nobody holds; what they lost is in
+    # test_maint_updates.py (a line selected, a select's focus while it
+    # saved, a question about a release gone). System info's fails there:
+    # system-info.js made the copy icons and the link anew at each read.
+    # The stream's events (UiParts D198) are a source of the regions that
+    # follow the server while shown, a forward guard: the plain page read
+    # nothing for them, so that their views passed there too;
+    # test_maint_updates.py shows the reads they now make, one per burst,
+    # for the page shown alone. An update event starts the reading of the
+    # helper (C3), a flow, and is left out here.
+    Region("software-update", ("#sys-software-body",), (
+        View("Maintenance", maint),
+        View("Update asking, the channel's choice above it", software_question, "#update-channel"),
+    ), sources=("loadUpdate(false)", "the page shown again: maint", "the stream's events: resync change")),
+    Region("maintenance", ("#sys-maint-body",), (
+        View("Maintenance", maint),
+        View("the restart asking, a delay typed for the reboot", maint_question),
+    ), sources=("the page shown again: maint", "the stream's events: resync change reboot reboot_cancelled settings_read")),
+    Region("system-info", ("#sys-info-body",), (View("System info, its folds open", info),), sources=("the page shown again: info", "the stream's events: resync settings_read change.cube")),
     Region("my-settings", ("#prefs-sec > .dev-head", "#prefs-sec > .dev-row", "#prefs-sec > p"), (View("My settings", personal("prefs")),)),
     Region("appearance", ("#prefs-sec .appearance",), (
         View("My settings", personal("prefs")),
@@ -861,8 +922,44 @@ GUARD_JS = r"""() => {
     return typed;
   }
   const stateEvents = """ + STATE_EVENTS_JS + r""";
+  // the page's requests in flight, so that a source that only starts
+  // its reads (the page shown again) is waited for until they answered
+  let inflight = 0;
+  const realFetch = window.fetch;
+  window.fetch = function (...args) {
+    inflight++;
+    return realFetch.apply(this, args).finally(() => { inflight--; });
+  };
+  // settled says whether they did within 5 s; a round that did not fails with that as its reason
+  async function settled() {
+    for (let quiet = 0, n = 0; n < 100; n++) {
+      await new Promise((done) => setTimeout(done, 50));
+      quiet = inflight ? 0 : quiet + 1;
+      if (quiet >= 2) return true;
+    }
+    return false;
+  }
   async function run(source) {
+    if (source.startsWith("the page shown again: ")) {
+      // what showing the page again does: the viewshown event its loaders take (pages.js showView)
+      document.dispatchEvent(new CustomEvent("viewshown", { detail: source.slice("the page shown again: ".length) }));
+      return settled();
+    }
+    if (source.startsWith("the stream's events: ")) {
+      // what the server sends when what the region shows changed; a change sets every setting the regions show
+      const set = { "update.channel": null, announce: null, poll_interval: null, refresh_interval: null, discover_interval: null, duty_wait: null };
+      // change.cube is a change of a Cube, whose proxy System info lists
+      const summary = { change: { action: "settings.update", set }, "change.cube": { action: "cube.update", target: "cube:KEQ0000100" },
+        settings_read: { why: "SIGHUP", changed: [], at_next_start: [] } };
+      for (const name of source.slice("the stream's events: ".length).split(" ")) {
+        const kind = name.split(".")[0];
+        state.events.dispatchEvent(new MessageEvent(kind, { data: JSON.stringify({ kind, source: "system", time: new Date().toISOString(),
+          summary: summary[name] || {} }) }));
+      }
+      return settled();
+    }
     switch (source) {
+      case "loadUpdate(false)": return loadUpdate(false);
       case "poll(false)": return poll(false);
       case "loadCubes()": return loadCubes();
       case "loadRooms()": return loadRooms();
@@ -917,8 +1014,9 @@ GUARD_JS = r"""() => {
         pick.el.focus();
         if (document.activeElement === pick.el) focused = { el: pick.el, path: pick.path };
       }
-      await run(source);
+      const ran = await run(source);
       await frames();
+      if (ran === false) out.push({ check: "settled", path: "the page's requests", detail: "still under way after 5 s: the round would check a page that still reads" });
       check(out, "", marked, open, typed, focused);
       const active = document.activeElement;
       if (active && active !== document.body && marked.some((m) => m.el === active)) {
@@ -975,7 +1073,7 @@ def guard_view(page, writes, region, view):
     check and the element, and what was held, per source."""
     args = {"roots": list(region.containers), "exclude": region.exclude, "focus": view.focus}
     lines, held = [], []
-    for source in SOURCES:
+    for source in SOURCES + region.sources:
         page.evaluate(GUARD_JS)
         writes.rounds = True
         try:
@@ -1021,7 +1119,7 @@ def test_guard(page, case, region):
     if not checked:
         pytest.skip(f"{region.name}: on the list, not moved yet: {NOT_MOVED[region.name]} "
                     f"(shown, elements to hold: {'; '.join(counts)}; requests other than GET: 0{let})")
-    print(f"{region.name}: checked, {len(SOURCES)} data sources in {len(region.views)} view(s); requests other than GET: 0{let}")
+    print(f"{region.name}: checked, {len(SOURCES) + len(region.sources)} data sources in {len(region.views)} view(s); requests other than GET: 0{let}")
     assert not failures, f"{region.name}: {len(failures)} failure(s) of the guard:\n" + "\n".join(failures) + \
         "\nwhat was held:\n" + "\n".join(held)
 
