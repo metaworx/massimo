@@ -160,12 +160,6 @@ function certText(tls) {
   return parts.filter(Boolean).join(" · ") || "–";
 }
 
-// renderVersionTitle names the server's whole version in the tooltip of
-// the short one, ☰'s first row.
-function renderVersionTitle() {
-  copyLabel($("version-short"), state.version ? t("header.versionTitle", { version: state.version }) + " · " + t("copy.hint") : ""); // components.js
-}
-
 // checkVersion compares the server's version with the one the page was
 // loaded with; a newer server reloads the page when nothing is open,
 // otherwise the pile's list offers the reload.
@@ -184,11 +178,10 @@ async function checkVersion() {
   if (state.version === null) {
     state.version = v;
     const parts = splitVersion(v);
-    $("version-short").textContent = parts.short;
+    MassimoParts.chrome.version(v); // ☰'s first row (ui/src/chrome/Menu.tsx)
     // signed out, in the sign-in card, at its foot and first in its ☰
     $("login-version").textContent = parts.short;
     $("login-menu-version").textContent = parts.short;
-    renderVersionTitle();
     renderServerSign();
     return;
   }

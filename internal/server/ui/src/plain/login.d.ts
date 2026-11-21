@@ -18,8 +18,10 @@ declare global {
   function hasCap(c: string): boolean;
   /** Whether the one signed in may read the users: with users, guests or passwords. */
   function canManageUsers(): boolean;
-  /** Whether the page is signed in as a user, who has My profile; an open server and the server's token have none. */
-  function hasProfile(): boolean;
+  /** Whether the one signed in may open System settings: one of its cards' capabilities, without those only Maintenance's cards use. */
+  function hasSettingsPage(): boolean;
+  /** Whether the one signed in may open Maintenance: one of System settings' capabilities, or update, restart or reboot. */
+  function hasSystem(): boolean;
   /** A link of the own account come back from a provider (oidcReturn), for My profile to show or say why there is none; null for none, set back to null once taken. */
   let oidcLinked: { confirm?: string; error?: string } | null;
   /** Whether a user's login name is the one signed in. */
@@ -28,6 +30,8 @@ declare global {
   function roleLabel(key: string, name?: string): string;
   /** The keys of the six default roles, for a role choice that cannot read the roles. */
   const DEFAULT_ROLES: string[];
+  /** In the app, the way back to its servers (Select server); null in a browser. */
+  function appConnect(): (() => Promise<unknown>) | null;
   /** Signs out as Sign out does: the page's dialog first where settings are unsaved, then a session ends and the page forgets who was in. */
   function logout(): Promise<void>;
   /** Reads who the page is signed in as again and applies it. */

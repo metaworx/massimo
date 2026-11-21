@@ -14,6 +14,7 @@
 import { mounter } from "../shared/region";
 import { SysInfo } from "./SysInfo";
 import { forgetSysinfo, shown } from "./store";
+import { onView } from "../shared/pages";
 
 export { serverEvent } from "./store";
 

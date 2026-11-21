@@ -23,6 +23,7 @@ import { loadRoles, rolesMsg } from "./sendRoles";
 import { forgetAdmin, load, reads, said } from "./store";
 import { UsersCard } from "./Users";
 import { loadPasswordLogin, loadUsers, usersMsg } from "./sendUsers";
+import { onView } from "../shared/pages";
 
 const mountUsers = mounter("sys-users-body", () => <UsersCard />);
 

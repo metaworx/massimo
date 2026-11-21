@@ -1468,20 +1468,15 @@ function setLogAlerts(list) {
   if (before !== [...logAlerts.levels].join() && isShown("log")) renderLog();
 }
 
-// renderLogSign draws ☰'s log entry: the log plain, or with the
-// triangle or the cross of the worst unseen problem, the count in its
-// name; ☰ carries the mark, the worse of it and the unsaved settings',
-// the count in its name too (ui/src/chrome/, MassimoParts.chrome.log);
-// and Mark all as seen while there is one.
+// renderLogSign hands ☰ the log's unseen problems: its Log entry shows
+// the triangle or the cross of the worst, the count in its name, and ☰
+// the mark, the worse of it and the unsaved settings', the count in its
+// name too (ui/src/chrome/, MassimoParts.chrome.log); and Mark all as
+// seen while there is one.
 function renderLogSign() {
   const tone = logAlerts.level === "error" ? "bad" : logAlerts.level ? "warn" : "";
   const n = logAlerts.list.length;
-  const entry = $("menu-log");
-  const old = entry.querySelector("svg");
-  if (old) old.replaceWith(signEl("log", tone, "", "log-sign"));
-  if (n) entry.setAttribute("aria-label", t("nav.logAlerts", { count: n }));
-  else entry.removeAttribute("aria-label");
-  MassimoParts.chrome.log(n, tone);
+  MassimoParts.chrome.log(n, tone); // ui/src/chrome/Menu.tsx draws them
   $("log-seen-all").classList.toggle("hidden", !n);
 }
 

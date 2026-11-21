@@ -66,8 +66,8 @@ let markDrawn = false;
 
 /**
  * markKey sets the API key My profile marks, by its id, as the page's
- * address names it (#profile?key=<id>, MassimoParts.profile.mark from
- * pages.js readProfileHash), or none with null: its row is tinted
+ * address names it (#profile?key=<id>, read by the pages' store,
+ * index.tsx), or none with null: its row is tinted
  * (shared/tokens.tsx) and brought into view the first time the keys are
  * drawn after it (firstDrawn), and stays tinted as they are drawn again
  * after a change there, until another page is shown, or this one anew

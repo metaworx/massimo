@@ -23,6 +23,7 @@ import { burstReader } from "../shared/burst";
 import { counter } from "../shared/counter";
 import { live } from "../shared/live";
 import { session, stillSession } from "../shared/session";
+import { isShown } from "../shared/pages";
 
 /** The page's load counter: every part of it uses it. */
 export const load = counter();

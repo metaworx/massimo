@@ -8,28 +8,29 @@
  * card's body, #profile-sec, as parts.js loads, and updated in place:
  * the user signed in is read each time the personal page is shown, as
  * profile.js read it, and after each change made here. Who is in comes
- * through MassimoParts.me (shared/me.ts); the plain code calls
- * MassimoParts.profile.mark alone: pages.js readProfileHash, with the
- * API key the page's address names, #profile?key=<id>, which is marked
- * (store.ts markKey), from init on, parts.js loaded by then.
+ * through MassimoParts.me (shared/me.ts). The card's address,
+ * #profile?key=<id>, may name an API key, which is marked (store.ts
+ * markKey): the pages' store hands this part what follows the "?" as it
+ * reads the address, before the page is shown (shared/pages.ts
+ * readCardAddress). No plain script calls it.
  */
 
-import { mounter, register } from "../shared/region";
+import { me, profileOf } from "../shared/me";
+import { mounter } from "../shared/region";
 import { ProfileCard } from "./Profile";
 import { loadProfile, profileMsg } from "./send";
 import { forgetProfile, markKey, pageShown } from "./store";
+import { onView, readCardAddress } from "../shared/pages";
 
 const mount = mounter("profile-sec", () => <ProfileCard />);
 mount();
 
-/** The functions the plain code calls, MassimoParts.profile. */
-const parts = register("profile", {
-  /** mark sets the API key My profile marks, by its id, or none with null (pages.js readProfileHash, before the page is shown). */
-  mark: markKey,
+// the key the card's address names, #profile?key=<id>, a whole number of at
+// most 15 digits, marked; another address, or an id that is none, marks none
+readCardAddress("profile", (q) => {
+  const id = q?.get("key") || "";
+  markKey(/^[1-9][0-9]{0,14}$/.test(id) ? Number(id) : null);
 });
-
-/** MassimoParts.profile, as index.ts declares it. */
-export type ProfilePart = typeof parts;
 
 /** signedOut forgets what My profile kept of the user who was signed in (MassimoParts.signedOut, index.ts). */
 export const signedOut = forgetProfile;
@@ -37,7 +38,7 @@ export const signedOut = forgetProfile;
 // the personal page shown: the message line empty, the user read again with its sessions, keys and identities
 onView("me", () => {
   profileMsg("");
-  if (hasProfile()) loadProfile();
+  if (profileOf(me.peek())) loadProfile();
 });
 // a page shown once the keys were drawn with the mark, My profile again among them, marks none
 document.addEventListener("viewshown", pageShown);

@@ -21,6 +21,7 @@ import { hid } from "../shared/cls";
 import { Select } from "../shared/field";
 import { BusyButton, busyProps, Question, useAsk, useSetAtOnce } from "../shared/question";
 import { ask, data, load, loadUpdate, question, runUpdate, setChannel, UPDATE_FLAVOURS } from "./store";
+import { cardBadges } from "../shared/card";
 
 /** stateText is a helper state's text, as the helper reports it where the page has none. */
 function stateText(state: string): string {
@@ -134,7 +135,7 @@ export function Software() {
   const badgeKind = u && u.available ? "warn" : "ok";
   // the card's badge, also while it is folded: up to date, or what is out
   useEffect(() => {
-    sectionBadges($("sys-software"), badgeText ? [badgeEl(badgeText, badgeKind)] : []);
+    cardBadges("sys-software", badgeText ? [{ text: badgeText, kind: badgeKind }] : []);
   }, [badgeText, badgeKind]);
   const failed = data.failed;
   const said = data.said;

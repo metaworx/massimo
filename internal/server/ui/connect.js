@@ -541,7 +541,7 @@ async function saveSettings(id, form, f) {
 }
 
 // MAX_KEY_ID is the largest id a key left may have: 15 digits, as My
-// profile's address takes it (pages.js readProfileHash).
+// profile's address takes it (ui/src/profile/index.tsx).
 const MAX_KEY_ID = 999999999999999;
 
 // keysLeft are the keys of the phone's that Turn off or Forget all could

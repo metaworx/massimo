@@ -7,8 +7,7 @@
  * The globals of the plain script ui/components.js that the parts call:
  * the signs' drawings, the blink of a mark, a menu that drops down with
  * its arrow keys, the clipboard, the result line of an action, a button
- * busy while it sends, the page's toast, and a section card or a row
- * brought into view.
+ * busy while it sends and the page's toast.
  * The builders of elements stay out: a part draws its own.
  */
 
@@ -46,16 +45,8 @@ declare global {
   function whileBusy<T>(btn: HTMLElement | null, fn: () => Promise<T>): Promise<T | undefined>;
   /** Shows a message in the page's toast for ms milliseconds, with an action's button where given. */
   function showToast(text: string, opts?: { title?: string; ms?: number; tone?: string; action?: { label: string; run: () => void } | null }): void;
-  /** Shows what a section card holds in its head: its badges, the ones before replaced (sectionBadges). */
-  function sectionBadges(card: HTMLElement | null, badges: Element[]): void;
-  /** A small label (.flag) of a kind (ok, warn, bad, mode), a warning or a failure led by its mark: for a plain place a part fills. */
-  function badgeEl(text: string, kind: string): HTMLElement;
   /** Saves a blob as a file of the name given. */
   function downloadBlob(name: string, blob: Blob): void;
-  /** Brings a section card into view, unfolded. */
-  function showCard(card: HTMLElement | null, instant?: boolean): void;
-  /** Brings el into view again whenever the page's content changes size, for ms or until the user scrolls: a card at the top ("start"), a row in the middle ("center"). */
-  function keepInView(el: Element, ms: number, block?: ScrollLogicalPosition): void;
 }
 
 export {};

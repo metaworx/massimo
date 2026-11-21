@@ -93,7 +93,7 @@ data class Server(
         const val ASK_LOGOUT = "logout"
         val ASKS = setOf(ASK_RETURN, ASK_START, ASK_LOGOUT)
 
-        // My profile's fragment that marks a key (pages.js readProfileHash).
+        // My profile's fragment that marks a key (ui/src/profile/index.tsx).
         private val PROFILE_KEY = Regex("""profile\?key=[1-9][0-9]{0,14}""")
     }
 }

@@ -30,7 +30,6 @@ import type { NotifyPart } from "./notify";
 import { signedOut as prefsSignedOut } from "./prefs";
 import type { PrefsPart } from "./prefs";
 import { signedOut as profileSignedOut } from "./profile";
-import type { ProfilePart } from "./profile";
 import "./rooms";
 import type { RoomsPart } from "./rooms";
 import { signedOut as integrationsSignedOut } from "./integrations";
@@ -43,6 +42,7 @@ import type { SoftwarePart } from "./software";
 import { forgetForms } from "./shared/forms";
 import { languageChanged } from "./shared/lang";
 import { meChanged } from "./shared/me";
+import { pagesPart } from "./shared/pages";
 import { iconsChanged } from "./shared/look";
 import { parts, register } from "./shared/region";
 import { forgetRepairs } from "./shared/repair";
@@ -81,6 +81,8 @@ export interface MassimoParts {
    * again what it says has changed while their page is shown.
    */
   serverEvent(ev: ServerEvent): void;
+  /** The pages of the main area: which is shown, its address, who may open it (shared/pages.ts; pages.js calls it). */
+  pages: typeof pagesPart;
   /** Backup and restore: Cube settings' box and System settings' fold per Cube (backups/). */
   backups: BackupsPart;
   /** Where the page's chrome says that settings are unsaved: a section's pill, ☰'s mark joined with the log's, a menu item's disk (chrome/). */
@@ -95,8 +97,6 @@ export interface MassimoParts {
   notify: NotifyPart;
   /** My settings: their rows and the Appearance card with the scheme editor, drawn again where the settings were applied (prefs/). */
   prefs: PrefsPart;
-  /** My profile: the API key its address marks (profile/). */
-  profile: ProfilePart;
   /** The rooms: a tile per room with its device list (rooms/). */
   rooms: RoomsPart;
   /** System settings → Sign-in providers (admin/). */
@@ -119,6 +119,7 @@ declare global {
 register("language", languageChanged);
 register("icons", iconsChanged);
 register("me", meChanged);
+register("pages", pagesPart);
 register("serverEvent", (ev: ServerEvent) => {
   softwareEvent(ev);
   maintenanceEvent(ev);

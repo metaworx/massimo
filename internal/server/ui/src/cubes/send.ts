@@ -14,6 +14,7 @@
 import { actionRunner } from "../shared/action";
 import { cubePath } from "../shared/path";
 import { load } from "./store";
+import { isShown } from "../shared/pages";
 
 /** The Cubes' runner: its message under the list, or under Cube settings' panel while that page is shown. */
 const runner = actionRunner({

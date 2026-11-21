@@ -28,16 +28,18 @@ import { focusForm, useForm } from "../shared/forms";
 import { useHelp } from "../shared/help";
 import { Identities } from "../shared/identities";
 import { useLang } from "../shared/lang";
-import { me } from "../shared/me";
+import { me, profileOf } from "../shared/me";
 import { BusyButton } from "../shared/question";
 import { Tokens } from "../shared/tokens";
 import { cancelLink, changePassword, confirmLink, passwordMsg, profileMsg, run, saveName, startLink } from "./send";
 import { type Confirm, firstDrawn, NAME_FORM, PASSWORD_FORM, profile, said } from "./store";
+import { keepInView, showCard } from "../shared/card";
+import { isShown, showView } from "../shared/pages";
 
 /** openForm shows a form of My profile and puts the focus into it, from any page: the personal page shown, its card unfolded. */
 function openForm(key: string): void {
   if (!isShown("me")) showView("me");
-  showCard($("profile")); // a folded card unfolded, its form in sight
+  showCard("profile"); // a folded card unfolded, its form in sight
   if (key === PASSWORD_FORM) profile.passwordOpen = true;
   focusForm(key);
 }
@@ -46,7 +48,7 @@ function openForm(key: string): void {
  * keysDrawn is told of every read of the own keys drawn, with the row
  * marked (store.ts markKey): the first since the mark was set brings it
  * into the middle of the window, and keeps it there while the page
- * settles, in place of its card (keepInView, components.js).
+ * settles, in place of its card (shared/card.ts keepInView).
  */
 function keysDrawn(row: HTMLElement | null): void {
   if (!firstDrawn() || !row) return;
@@ -207,7 +209,7 @@ function Mine({ who }: { who: User }) {
 export function ProfileCard() {
   useLang();
   const m = me.value;
-  const who = m && m.mode === "users" && m.user ? m.user : null;
+  const who = profileOf(m) ? m?.user || null : null;
   return (
     <div class="profile" aria-live="polite">
       {who && <Mine key={who.name} who={who} />}

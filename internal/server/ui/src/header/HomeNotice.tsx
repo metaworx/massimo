@@ -17,6 +17,7 @@ import type { Cube } from "../api";
 import { chosenCube, hostPort } from "../model/cube";
 import { Island } from "../shared/island";
 import { load } from "./store";
+import { showView } from "../shared/pages";
 
 /** detailOf is what the notice says of a Cube that is not connected, in one paragraph. */
 function detailOf(cube: Cube): string {
