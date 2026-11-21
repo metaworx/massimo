@@ -801,6 +801,15 @@ A device's state line says what changed ("window opened", "set 18.0 → 21.0",
 "mode: manual", "reports again"), whoever changed it, also at the device;
 its first line since the server started shows the whole state.
 A view scrolled down keeps its place when a new line comes in on top.
+A new line, the lines drawn again (the rooms came, another language),
+the log loaded again and its problems read again leave what the user holds
+where it was: a command's detail open, the focus on a line's button,
+a selection of text in a line, an open choice and what is typed in the search;
+a line that came live keeps its place on the page when a load brings the same event.
+A view scrolled down also stays where it is when the lines are drawn again,
+which put it back at the top before.
+After a line's **Mark seen** the focus goes to the next problem's Mark seen below it,
+else to the one above, and after the last to the search.
 The choice of how far back, beside the kind and the device,
 shows the **last 20 events** (the default), the **last 10 minutes**,
 the **last hour**, **today**, **this week** (from Monday), **this month**
@@ -828,6 +837,23 @@ the oldest line, where an event of that same millisecond can be missed.
 A page that cannot load says so in the log, whatever is chosen;
 an answer that comes after **Clear**, another choice or another Cube is dropped,
 and another Cube in the header starts the log over with every device.
+A sign-out, and another user's sign-in after an expired session,
+forget the log of whoever was in but its choices, which are its address:
+its lines, the search typed, the users of the who choice, the commands' details,
+every Cube's rooms and the problems not yet seen;
+the who choice is also asked again where another user comes in without a sign-out,
+by a key pasted or as the first owner made on an open server;
+an answer still on its way lands nowhere,
+and the same user signed in again finds the log as it was.
+A Cube's log shown reads on from its newest line when the stream starts over
+(a `resync`: after the server's restart, or a gap the server no longer holds),
+as every Cube's poll does, so that the lines the stream missed come in on top
+without a reload, the lines, the place and what is open kept;
+where it holds no line of the server's log, as after a load that failed
+while the server was down, or one that found none, it loads again;
+a resync that comes while a page or Older of the user's is on its way
+waits for it to end, and where the server's log ends before the newest line,
+or past ten pages, the log loads again.
 
 A warning or an error of any Cube's log, or of the server's,
 stays a problem until a later line settles it
@@ -1869,8 +1895,7 @@ and the scripts, with marker comments.
 At start the server replaces each marker, such as `<!-- partials: prefs -->`,
 with its partials: the header, the home notice, the first owner's form,
 the panels of the settings pages, the Cube page, the House tile,
-the devices without a room, the log, the sign-in dialog, the toast,
-and at the end `<!-- partials: templates -->` with the templates,
+the devices without a room, the log's section, the sign-in dialog and the toast,
 from the files in `ui/partials/` in the order `uiPartials` in
 `internal/server/ui.go` lists them, and serves the result at `/`;
 System settings' cards fill three markers,
@@ -1878,8 +1903,9 @@ before, in and after the cards that flow in two columns,
 and Maintenance's two cards one, `maint`.
 A partial is a file per feature,
 and its first line names the script that uses it.
-What a script builds again and again, a log line, a scheme row,
-is a `<template>` there, which the script clones with `fromTemplate`,
+No partial holds a `<template>` any more since the log is a part:
+what a plain script builds again and again is a `<template>` of its own page
+(the connect page's), which the script clones with `fromTemplate`,
 fills with `textContent` and wires with `addEventListener`.
 The shared pieces (buttons, the `.field` rows, forms, confirmations in the page)
 come from `components.js`; the scripts never use `innerHTML`.
@@ -1989,9 +2015,10 @@ a script for each region of the page, in the order the page loads them:
   `unlisted.js`, a device removed from the Cube;
   `house.js`, the House tile's plain names, which call its part;
 - `week-program.js`, the week programme editor; `config.js`, the editor's kit;
-- `log.js`, the log and its sign for unseen problems;
-  `pages.js`, the plain names of the pages' store (`ui/src/shared/pages.ts`)
-  and the log's choices in the address;
+- `log.js`, the plain names of the log, which call its part (`ui/src/log/`),
+  for `app.js`' stream, poll, loads and language, `tiles.js` and the UI tests,
+  and the page globals `logState`, `logAlerts` and `LOG_KINDS`, the part's own;
+  `pages.js`, the plain names of the pages' store (`ui/src/shared/pages.ts`);
 - `update.js`, the plain names of Software update,
   which call its part (`ui/src/software/`),
   for the header's check and the server's sign;
@@ -2072,7 +2099,9 @@ its network sign (`CubeSign`), its link's row in its own pill's list (`CubeLink`
 and its problems as an entry of `Problems` (`cubeEntry`, `cubeSettingItems`)
 with the label naming their kinds and the Cubes found (`problemsLabelOf`);
 `found.tsx` what a Cube or a Massimo proxy found is and who serves it (`foundWhat`);
-`device.ts` a device's type as its icon (`deviceIcon`), an open window's state
+`device.ts` a device by its radio address as the page names it (`rfLabel`,
+the log's structure lines and a finding's device in `tiles.js`),
+a device's type as its icon (`deviceIcon`), an open window's state
 by the page's clock (`windowState`, `WINDOW_TONE`) and what is wrong with a device
 as items of `Problems` (`deviceProblems`),
 and a device as an entry of `Problems` (`deviceEntry`),
@@ -2109,9 +2138,9 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `useHelp` | `help.tsx` | a setting's or a group's help as a pair, the button and its explanation of an id of their own (`help-<key>-…`), which a field's row, a switch and a group of My profile draw where each belongs | `help` (the key), `label` (the name the button is named after); gives `button`, `text` |
 | `HelpButton`, `HelpText` | `help.tsx` | a setting's help (`helpParts`): the question mark that shows and hides its explanation, `help.<key>` of the texts, shown by its key wherever it is drawn again, in the page's one set of keys shown (`helpOpen` of `app.js`), the parts drawn again by a signal of their own, so a key is drawn by one side only; `Field` and `Switch` draw both from their `help` | `help` (the key), `id` (the explanation's, which the button controls), `label` (the setting's name); `help`, `id` |
 | `Field` | `field.tsx` | a label and its control, `.field` or `.field.wide` (`fieldRow`); with `limit`, what the field takes, said in amber just before the control while a value is refused, the box outlined in red and the limit its description (`markRange`) (`TextField` and `NumberField` mark their input for it; a control of the caller's inside a `Field` with a limit has no marking of its own yet) | `label`, `id`, `wide`, `unit`, `hint`, `hintId` (the hint's id, which a `Select` names as its description), `help` (the key of the setting's help: its button after the label, its explanation under the control), `cls` (classes the row adds, a capability's `needs-…`), `labelCls` (the label's class, `action-title` for a row's title in bold: Maintenance's settings; `Select` passes it on), `limit` (`{ text, over, cls }`: the text, whether the value is refused, the line's class beside `field-limit`; in the unit's line where there is one, else on a line of its own above the box), `draft`, `show`, the control as children |
-| `TextField` | `field.tsx` | a row with a text input that shows a stored text, from its draft, or a free text (a name offered) by `value` and `set` | `label`, `id`, `name`, `draft` and `show`, or `value` and `set`; `wide` (on by default), `unit`, `hint`, `help`, `cls`, `limit`, `placeholder`, `type` (`password` too, by `value` and `set` alone, never a draft), `autocomplete`, `inputCls` (the input's class, `mono` for a key), `maxLength`, `pattern`, `required`, `disabled`, `inputRef` |
+| `TextField` | `field.tsx` | a row with a text input that shows a stored text, from its draft, or a free text (a name offered) by `value` and `set`; with `row={false}` the input alone, standing in a tile's head (the log's search), as plain as written: `aria` its name for a screen reader, no name, `autocomplete` or `spellcheck` of its own | `label`, `id`, `name`, `draft` and `show`, or `value` and `set`; `wide` (on by default), `unit`, `hint`, `help`, `cls`, `limit`, `placeholder`, `type` (`password` too, by `value` and `set` alone, never a draft; `search`), `autocomplete`, `inputCls` (the input's class, `mono` for a key), `maxLength`, `pattern`, `required`, `disabled`, `inputRef`, `row`, `aria` |
 | `NumberField`, `numberNorm` | `field.tsx` | a number input that shows a stored number (`numberInput`), its draft the input's text, "" for none, or a free number (a time) by `value` and `set`; with `row={false}` the input alone, in a row of the caller's, which draws its notice (`Meanwhile`); how such a draft compares, as a number | `label`, `id`, `name`, `min`, `max`, `step`, `draft` and `show`, or `value` and `set`; `aria` (its name where no label names it), `disabled`, `inputMode` (the keyboard a phone offers: `numeric` for the reboot's delay), `inputRef`, `onChange` (told of the value as the field is left changed: My settings' poll, saved then), `row`, and a row's `wide`, `unit`, `hint`, `help`, `cls`, `limit`; `v` |
-| `Select` | `field.tsx` | a row with a select (`selectInput`), its options as `fillOptions` takes them; with `row={false}` the select alone, in a row of the caller's, which draws its notice | `label`, `id`, `name`, `options` (`[value, label, disabled]` or `{ group, options }`), `value` and `onChange`, or `draft` and `show`; `row`, `wide`, `unit`, `hint`, `hintId` (the hint's id, which the select names as its description: the update channel's note, which changes with the choice), `help`, `cls`, `disabled`, `before` (between the label with its help and the select: a drawing's preview), `after` (after the select in its row: the language's note of a machine translation) |
+| `Select` | `field.tsx` | a row with a select (`selectInput`), its options as `fillOptions` takes them, each kept while it is the same; with `row={false}` the select alone, in a row of the caller's, which draws its notice, or standing in a tile's head (the log's choices) | `label`, `id`, `name`, `options` (`[value, label, disabled]` or `{ group, options }`), `value` and `onChange`, or `draft` and `show`; `row`, `wide`, `unit`, `hint`, `hintId` (the hint's id, which the select names as its description: the update channel's note, which changes with the choice), `help`, `cls`, `disabled`, `before` (between the label with its help and the select: a drawing's preview), `after` (after the select in its row: the language's note of a machine translation); without a row `aria` (its name for a screen reader) and `selectCls` (its own class, `hidden` for a choice left out) |
 | `DateTime` | `field.tsx` | a date and time field (`datetime-local`), its value as the input takes it | `value`, `set`, `id`, `cls`, `step`, `required`, `disabled`, `inputRef` |
 | `localOf`, `isoOf` | `time.ts` | a `DateTime`'s value and the API's time as each other, for a field that shows a stored end and sends it (a user's end); the draft compares the field's minute, all it holds | `iso`; `local` |
 | `fmtWhen` | `time.ts` | an API time as date and time in the page's language, the hour of 24 (a backup's time, a device's in Notifications) | `iso` |
@@ -2141,7 +2170,7 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `cardBadges`, `badgesOf`, `BadgeSpec` | `card.ts` | what a section card's head shows at a glance, also while it is folded: a region gives a card's badges by its id from its drawing's effect, `[]` for none, and the page's chrome draws them (`ui/src/chrome/Cards.tsx`) | `id`, `list` of `{ text, kind }` |
 | `showCard`, `wireCards`, `keepInView` | `card.ts` | a section card brought into view, unfolded, the focus on its heading's button, kept there for two seconds where its page has just been opened (`instant`); the cards' folds wired once, each kept in this browser (`massimo.fold.<card id>`), set on the skeleton at once; an element kept in view while the page's content changes size, for `ms` or until the user scrolls, a card at the top, a row in the middle (`block` `"center"`: My profile's marked key), keeping another ending the last | `id`, `instant`; `el`, `ms`, `block` |
 | `Brand` | `brand.tsx` | Massimo's logo and small mark from the sprite (`brandMarks` of `components.js`, which draws them over the skeleton's `data-brand`), of which the place's style shows one, hidden from screen readers: ☰'s first row | |
-| `page`, `isShown`, `showView`, `onView`, `mayShow` | `pages.ts` | the page of the main area shown, a signal: a drawing that reads `page.value` follows it, `isShown` asks at that moment and follows nothing (a handler, a reader, a timer), so that no request is sent again at a change of page; showing a page puts it into the address, as a new entry of the history or in place of the current one, and brings each page back at the scroll it was left at; `onView` runs at each showing, on the `viewshown` event; `mayShow` says who may open which, reading who is in; a page with an address of its own (the log's, `pages.js`) hands it over with `ownAddress`, a card's region what the card's address holds after its `?` with `readCardAddress` (My profile's key to mark), told of every address read, null for another, before the page is shown; `pages.js` keeps the plain names, and `currentView` | `view`, `address`, `card`; `card`, `read(q)` |
+| `page`, `isShown`, `showView`, `onView`, `mayShow` | `pages.ts` | the page of the main area shown, a signal: a drawing that reads `page.value` follows it, `isShown` asks at that moment and follows nothing (a handler, a reader, a timer), so that no request is sent again at a change of page; showing a page puts it into the address, as a new entry of the history or in place of the current one, and brings each page back at the scroll it was left at; `onView` runs at each showing, on the `viewshown` event; `mayShow` says who may open which, reading who is in; a page with an address of its own (the log's, `ui/src/log/index.tsx`) hands it over with `ownAddress`, a card's region what the card's address holds after its `?` with `readCardAddress` (My profile's key to mark), told of every address read, null for another, before the page is shown; `pages.js` keeps the plain names, and `currentView` | `view`, `address`, `card`; `card`, `read(q)` |
 | `userPath`, `Run`, `loadTokens`, `revokeToken`, `revokeOwn`, `createKey`, `loadIdentities`, `addIdentity`, `changeIdentity`, `removeIdentity` | `account.ts` | what a user's sessions, keys and identities read and send (`…/users/{name}/tokens`, `…/identities`), for System settings → Users and My profile alike; a change through the caller's runner (`Run`), which reloads what it shows and says how it went in its own line; Revoke of the token in use signs out | `name`, `rest`; `run`, `name`, and what each sends |
 | `Tokens` | `tokens.tsx` | a user's sessions and keys (a user's panel, My profile): each with Revoke, "this device" and "its key" by `own`, Create key and the key just made, shown once by the read that follows and kept in the part's own state alone; read when its place opens and again at each change of the caller's counter while open; an answer after a sign-out dropped; the API key the caller names tinted (`token-marked`), and the caller told of each read drawn with that row (My profile's key of its address) | `u`, `off`, `open`, `reads` (the caller's counter), `run`, `say` (the caller's message line), `labelId` (the new key's field's id), `help` (the group's ⓘ after Create key, My profile's), `marked` (the id of the API key marked), `drawn(row)` (told of each read drawn, with the row marked or null) |
 | `Identities`, `Changes` | `identities.tsx` | a user's identities at the sign-in providers (a user's panel, My profile): each with what the provider said and Remove; with `changes`, Change of one no sign-in used, a settings form kept by its key, the forms of identities gone or made unchangeable forgotten, and all of them where the box goes off; with `assign`, Assign; `after` what follows the list once read (My profile's Link buttons); `quiet` draws nothing while the list is empty and the caller offers nothing after it (`offer`: My profile's Link buttons, none in the app, where the rows are still named from every provider) | `u`, `off`, `open`, `reads`, `providers` (the enabled ones), `run`, `say`, `title`, `none`, `cls`, `changes` (`key(id)`, `under`, `ui(key)`, `forget(key)`, `show(key)`: the caller's forms and how one is brought into sight), `assign`, `after(list)`, `quiet`, `offer` |
@@ -2440,6 +2469,41 @@ a load that went through forgets the forms of the users, roles and providers it 
 longer gives;
 at a sign-out, and for another user after a 401 (`MassimoParts.signedOut`),
 every list, panel, new item's form and message is forgotten.
+The log (`ui/src/log/`, AP UiParts Block 11) is drawn once into its section,
+`section#logview`, the skeleton's alone, at `initLog`, and updated in place;
+`index.tsx` hands the pages' store the log's address of its own (`ownAddress`:
+`address.ts`' `logHash` and `readLogHash`, the address unchanged to the character)
+and registers `log`, which the plain names of `log.js` call;
+`state.ts` holds `logState`, a `live` object with the fields `log.js` had,
+which the page global of that name is, the lines the API's events as plain objects;
+`lines.ts` a line made of an event (`logLine`), its type `LogEvent` the file's own,
+since the API file has no schema of a log line (only `LogCursorBeyond`),
+a summary's fields read by name as each kind has them;
+`text.ts` the line's words, line for line as `log.js` had them;
+`store.ts` the reads (the first page, the poll under All Cubes with `after=` and its 409,
+Older with its question, a command's detail, the users, every Cube's rooms),
+the stream's live lines, the matching, the choices' changes,
+`view` (the lines drawn, newest first, followed in place: a new line on top,
+the oldest out, worked out again only where `log.js` drew every line again)
+and the scroll of the lines' box: the first line in view, among those that stay,
+put back where it stood as lines come in on top, the scroll kept at a full draw;
+`choices.ts` the choices' options and the device chosen put right against the devices;
+`alerts.ts` the unseen problems, `logAlerts`, and ☰'s sign;
+`blocks.ts` the lines in blocks of about 200, cut over the lines' own order
+(not over what the filter shows) and kept by the lines' keys,
+so that a new line draws its block alone, not every line,
+and a line keeps its block, and so its element, through any filter or load;
+`index.tsx`' `signedOut`, which `MassimoParts.signedOut` calls, forgets the log
+of whoever was in but its choices (UiParts D209),
+and its `serverEvent`, which `MassimoParts.serverEvent` calls,
+has a Cube's log shown read on from its newest line at the stream's `resync`,
+once the page's own load or Older has ended (UiParts D208);
+`Log.tsx` and `Line.tsx` the parts, with the markup, classes and ids of the partial
+and the template they replace, a line's alert and its command's detail read by the line
+itself. A line keeps its key while it is the same event:
+its id with its Cube's serial, a live line its count,
+which a page loaded afterwards takes on for the same event, by its time, kind and device,
+as the load decides which live lines it holds already.
 The page's chrome says where they are unsaved (`ui/src/chrome/`, AP UnsavedMarks
 Block 5), a region of its own drawn once as `parts.js` loads:
 a section's pill in its `span.section-pill` beside the badges (`Cards.tsx`),
@@ -2448,8 +2512,8 @@ the text key in `data-title`;
 a ☰ entry's disk after its name (`Menu.tsx`, the forms of each page in `chrome/pages.ts`:
 System settings' `users roles providers integrations`; Cube settings' `cube`;
 Personal settings' `profile scheme`);
-☰'s mark at its corner, the worse of the log's, which `renderLogSign` of `log.js`
-hands it as `MassimoParts.chrome.log(count, tone)`,
+☰'s mark at its corner, the worse of the log's, which the log's part
+(`ui/src/log/alerts.ts`) hands it as `MassimoParts.chrome.log(count, tone)`,
 and the forms' of every entry (`unsavedTone`), with ☰'s name and tooltip.
 ☰ and the header's page buttons are the chrome's too (AP UiParts Block 14,
 `ui/src/chrome/Menu.tsx`), drawn into the header's `nav#nav`:

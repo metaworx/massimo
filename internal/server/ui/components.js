@@ -188,7 +188,7 @@ function iconEl(symbol, cls) {
 // mark, a triangle (warn) or a cross (bad). The radio and the window are
 // drawn as the person chooses (ICON_CHOICES); the network (a Cube's
 // link) carries the mark on top, in place of its upper node; the cog
-// (the settings), the log (its unseen problems, log.js renderLogSign) and
+// (the settings), the log (its unseen problems, ui/src/log/alerts.ts) and
 // the disk (a form's unsaved changes, ui/src/shared/forms.ts) at the
 // bottom right. A battery has no mark: it is amber or nothing.
 const SIGNS = {

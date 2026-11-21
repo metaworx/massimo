@@ -25,6 +25,8 @@ import "./header";
 import type { HeaderPart } from "./header";
 import "./leaving";
 import type { LeavingPart } from "./leaving";
+import { serverEvent as logEvent, signedOut as logSignedOut } from "./log";
+import type { LogPart } from "./log";
 import { signedOut as notifySignedOut } from "./notify";
 import type { NotifyPart } from "./notify";
 import { signedOut as prefsSignedOut } from "./prefs";
@@ -72,13 +74,15 @@ export interface MassimoParts {
    * link shown and its messages (profile/), the passwords typed there
    * going with its part, and the scheme editor with its draft (prefs/),
    * and the notifications' rules, devices, the name typed and a save
-   * still waiting (notify/).
+   * still waiting (notify/), and the log's lines, the filter typed, its
+   * users, the commands' details and every Cube's rooms (log/).
    */
   signedOut(): void;
   /**
    * A server's event of the stream (update.js serverEvent, from app.js
    * connectEvents): Software update, Maintenance and System info read
-   * again what it says has changed while their page is shown.
+   * again what it says has changed while their page is shown, and a
+   * Cube's log shown loads again at a resync (log/).
    */
   serverEvent(ev: ServerEvent): void;
   /** The pages of the main area: which is shown, its address, who may open it (shared/pages.ts; pages.js calls it). */
@@ -93,6 +97,8 @@ export interface MassimoParts {
   header: HeaderPart;
   /** Leaving the page, and signing out, while a settings form has changes not saved: the dialog that lists them (leaving/). */
   leaving: LeavingPart;
+  /** The log: its lines, its choices, its address and its unseen problems (log/; log.js calls it). */
+  log: LogPart;
   /** 👤 → Notifications: the rules, this browser and the devices (notify/). */
   notify: NotifyPart;
   /** My settings: their rows and the Appearance card with the scheme editor, drawn again where the settings were applied (prefs/). */
@@ -121,6 +127,7 @@ register("icons", iconsChanged);
 register("me", meChanged);
 register("pages", pagesPart);
 register("serverEvent", (ev: ServerEvent) => {
+  logEvent(ev);
   softwareEvent(ev);
   maintenanceEvent(ev);
   sysinfoEvent(ev);
@@ -140,5 +147,6 @@ register("signedOut", () => {
   profileSignedOut();
   prefsSignedOut();
   notifySignedOut();
+  logSignedOut();
 });
 window.MassimoParts = parts as unknown as MassimoParts;
