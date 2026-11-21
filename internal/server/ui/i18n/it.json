@@ -1293,6 +1293,7 @@
   "integrations.nameHint": "I suoi utenti appaiono sotto questo nome: Nome › utente.",
   "integrations.saveName": "Salva il nome",
   "integrations.nameSaved": "Integrazione rinominata {name}",
+  "integrations.nameFormName": "Integrazione {name}, il nome",
   "integrations.reportedName": "Nome in Home Assistant",
   "integrations.uuid": "Id",
   "integrations.keyIssued": "Chiave rilasciata",
@@ -1301,6 +1302,7 @@
   "integrations.enabledOn": "{name} attivata.",
   "integrations.enabledOff": "{name} disattivata: le sue chiamate sono rifiutate.",
   "integrations.saveMax": "Salva il massimo",
+  "integrations.maxFormName": "Integrazione {name}, il massimo",
   "integrations.saved": "{name} salvata.",
   "integrations.users": "I suoi utenti",
   "integrations.usersNone": "Nessun utente ha ancora agito tramite essa.",
@@ -1404,6 +1406,7 @@
   "providers.added": "Provider {name} aggiunto.",
 
   "providers.failed": "{name}: non eseguito: {error}",
+  "providers.formName": "Provider di accesso {name}",
 
   "providers.off": "disattivato",
 
@@ -1491,6 +1494,8 @@
   "users.removed": "{name} rimosso.",
   "users.failed": "{name}: {error}",
   "users.unchanged": "Niente è cambiato.",
+  "users.formName": "Utente {name}",
+  "users.noEnd": "nessuna fine",
   "users.tokens": "Sessioni e chiavi",
   "users.tokensNone": "Nessuna.",
 
@@ -1529,6 +1534,7 @@
   "users.identityChangeLabel": "Modifica {email} presso {provider}",
 
   "users.identityChanged": "Identità modificata.",
+  "users.identityFormName": "Utente {name}, identità {account}",
 
   "users.identityGroups": "gruppi: {groups}",
 
@@ -1618,6 +1624,7 @@
   "roles.disabledNow": "{role} disattivato: i suoi utenti restano connessi e viene loro rifiutato tutto.",
   "roles.enabledNow": "{role} attivato.",
   "roles.failed": "{role}: {error}",
+  "roles.formName": "Ruolo {name}",
   "roles.capsTitle": "Capacità per tutti i ruoli",
   "roles.capsShort": "Capacità",
   "roles.badge.allOn": "tutte attive",
@@ -1739,6 +1746,7 @@
   "restore.send.one": "Invia {n} comando",
   "restore.send.other": "Invia {n} comandi",
   "restore.running": "Invio: {done} di {n} passi.",
+  "restore.unseen": "La connessione al server si è interrotta durante il ripristino: il log dice come è terminato.",
   "restore.done": "Ripristino completato: {sent} di {n} passi inviati.",
   "restore.failedAt": "Ripristino interrotto dopo {sent} di {n} passi: {error}",
   "restore.refused": "Non inviato: {error}",

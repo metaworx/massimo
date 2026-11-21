@@ -1407,8 +1407,9 @@ function setLogAlerts(list) {
 
 // renderLogSign draws ☰'s log entry: the log plain, or with the
 // triangle or the cross of the worst unseen problem, the count in its
-// name; ☰ carries the mark, the count in its name too; and Mark all as
-// seen while there is one.
+// name; ☰ carries the mark, the worse of it and the unsaved settings',
+// the count in its name too (ui/src/chrome/, MassimoParts.chrome.log);
+// and Mark all as seen while there is one.
 function renderLogSign() {
   const tone = logAlerts.level === "error" ? "bad" : logAlerts.level ? "warn" : "";
   const n = logAlerts.list.length;
@@ -1417,12 +1418,7 @@ function renderLogSign() {
   if (old) old.replaceWith(signEl("log", tone, "", "log-sign"));
   if (n) entry.setAttribute("aria-label", t("nav.logAlerts", { count: n }));
   else entry.removeAttribute("aria-label");
-  const menu = $("nav-menu").querySelector("summary");
-  menu.setAttribute("aria-label", n ? t("nav.more") + ", " + t("nav.logAlerts", { count: n }) : t("nav.more"));
-  menu.title = n ? t("nav.moreTitle") + " · " + t("nav.logAlerts", { count: n }) : t("nav.moreTitle");
-  const mark = menu.querySelector(".mark-sign");
-  if (mark) mark.remove();
-  if (tone) menu.appendChild(markEl(tone, "log-sign-menu"));
+  MassimoParts.chrome.log(n, tone);
   $("log-seen-all").classList.toggle("hidden", !n);
 }
 

@@ -44,7 +44,7 @@ def test_log_sign_by_level(page):
         page.evaluate("loadLogAlerts()")
         s = sign(page, "#menu-log")
         assert "tone-" not in s["cls"] and s["uses"] == ["#icon-log"], f"no problem: the plain log ({s})"
-        assert page.locator("#nav-menu > summary > .mark-sign").count() == 0, "no mark on ☰"
+        assert page.locator("#nav-menu > summary .mark-sign").count() == 0, "no mark on ☰"
         alerts.append({"id": 900001, "kind": "disconnected", "level": "warn", "cube_serial": "KEQ0000100", "time": "2026-11-14T20:00:00Z"})
         page.evaluate("loadLogAlerts()")
         s = sign(page, "#menu-log")
@@ -52,8 +52,8 @@ def test_log_sign_by_level(page):
         count = page.evaluate("t('nav.logAlerts', {count: 1})")
         assert page.locator("#menu-log").get_attribute("aria-label") == count, "the count named"
         assert count in (page.locator("#nav-menu > summary").get_attribute("aria-label") or ""), "in ☰'s name too"
-        assert "tone-warn" in (page.locator("#nav-menu > summary > .mark-sign").get_attribute("class") or ""), "☰ with the amber mark"
-        mark = page.locator("#nav-menu > summary > .mark-sign")
+        assert "tone-warn" in (page.locator("#nav-menu > summary .mark-sign").get_attribute("class") or ""), "☰ with the amber mark"
+        mark = page.locator("#nav-menu > summary .mark-sign")
         disc = mark.evaluate("(e) => [getComputedStyle(e).backgroundColor, getComputedStyle(e).borderRadius]")
         card = page.evaluate("""() => { const p = document.createElement('div'); p.style.background = 'var(--card)';
           document.body.appendChild(p); const c = getComputedStyle(p).backgroundColor; p.remove(); return c; }""")

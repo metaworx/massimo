@@ -90,7 +90,7 @@ function readLogHash(hash) {
 }
 
 // readProfileHash takes the key My profile marks from its address,
-// #profile?key=<id> (users.js markProfileKey; docs/ui.md, "My profile"),
+// #profile?key=<id> (profile.js markProfileKey; docs/ui.md, "My profile"),
 // as the app opens it for a key of the phone's it could not revoke;
 // another address, or an id that is not a whole number, marks none.
 function readProfileHash(hash) {

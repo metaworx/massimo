@@ -1330,6 +1330,7 @@
   "integrations.nameHint": "Jej użytkownicy są pokazywani pod tą nazwą: Nazwa › użytkownik.",
   "integrations.saveName": "Zapisz nazwę",
   "integrations.nameSaved": "Zmieniono nazwę integracji na {name}",
+  "integrations.nameFormName": "Integracja {name}, nazwa",
   "integrations.reportedName": "Nazwa w Home Assistant",
   "integrations.uuid": "Id",
   "integrations.keyIssued": "Klucz wydany",
@@ -1338,6 +1339,7 @@
   "integrations.enabledOn": "{name} włączona.",
   "integrations.enabledOff": "{name} wyłączona: jej wywołania są odrzucane.",
   "integrations.saveMax": "Zapisz maksimum",
+  "integrations.maxFormName": "Integracja {name}, maksimum",
   "integrations.saved": "{name} zapisana.",
   "integrations.users": "Jej użytkownicy",
   "integrations.usersNone": "Żaden użytkownik jeszcze przez nią nie działał.",
@@ -1445,6 +1447,7 @@
   "providers.added": "Dodano dostawcę {name}.",
 
   "providers.failed": "{name}: nie wykonano: {error}",
+  "providers.formName": "Dostawca logowania {name}",
 
   "providers.off": "wyłączony",
 
@@ -1536,6 +1539,8 @@
   "users.removed": "{name} usunięty.",
   "users.failed": "{name}: {error}",
   "users.unchanged": "Nic się nie zmieniło.",
+  "users.formName": "Użytkownik {name}",
+  "users.noEnd": "bez końca",
   "users.tokens": "Sesje i klucze",
   "users.tokensNone": "Brak.",
 
@@ -1574,6 +1579,7 @@
   "users.identityChangeLabel": "Zmień {email} u {provider}",
 
   "users.identityChanged": "Tożsamość zmieniona.",
+  "users.identityFormName": "Użytkownik {name}, tożsamość {account}",
 
   "users.identityGroups": "grupy: {groups}",
 
@@ -1667,6 +1673,7 @@
   "roles.disabledNow": "{role} wyłączona: jej użytkownicy pozostają zalogowani i odmawia się im wszystkiego.",
   "roles.enabledNow": "{role} włączona.",
   "roles.failed": "{role}: {error}",
+  "roles.formName": "Rola {name}",
   "roles.capsTitle": "Uprawnienia dla wszystkich ról",
   "roles.capsShort": "Uprawnienia",
   "roles.badge.allOn": "wszystkie włączone",
@@ -1794,6 +1801,7 @@
   "restore.send.many": "Wyślij {n} poleceń",
   "restore.send.other": "Wyślij {n} polecenia",
   "restore.running": "Wysyłanie: {done} z {n} kroków.",
+  "restore.unseen": "Połączenie z serwerem zostało przerwane podczas przywracania: dziennik mówi, jak się zakończyło.",
   "restore.done": "Przywracanie zakończone: wysłano {sent} z {n} kroków.",
   "restore.failedAt": "Przywracanie przerwane po {sent} z {n} kroków: {error}",
   "restore.refused": "Nie wysłano: {error}",

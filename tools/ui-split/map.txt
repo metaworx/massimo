@@ -593,3 +593,65 @@ appearance.js exportScheme
 appearance.js importSchemeFile
 theme.js      > loadCustomSchemes();
 theme.js      > applyTheme(readSetting("theme"), readSetting("scheme"));
+
+[users.js] users.js profile.js
+about profile.js: The Massimo web UI, My profile: the display name with Save, the own sessions and API keys with Revoke and a new key shown once, the help of its groups, and the run of a change made there; System settings → Users uses the same sessions and keys until it is a part.
+users.js   usersMsg
+users.js   usersAdmin
+users.js   mayManage
+users.js   mayPassword
+users.js   loadUsers
+users.js   roleOptions
+users.js   USER_NAME
+users.js   NAME_CHECK_MS
+users.js   nameProblem
+users.js   watchName
+users.js   wordNameError
+users.js   localDateTimeOf
+users.js   isoOf
+users.js   sameMinute
+users.js   userBadges
+users.js   removeUser
+users.js   userPanel
+users.js   newUserForm
+users.js   > // --- the password sign-in (auth.password_login) ------------------------
+users.js   loadPasswordLogin
+users.js   renderPasswordLoginHint
+users.js   setPasswordLogin
+users.js   renderUsers
+users.js   initUsers
+users.js   > document.addEventListener("DOMContentLoaded", initUsers);
+profile.js usersUI
+profile.js profileMsg
+profile.js sayFor
+profile.js userAction
+profile.js tokenRow
+profile.js fillTokens
+profile.js wireNewKey
+profile.js renderProfile
+profile.js addProfileHelp
+profile.js initProfile
+profile.js > document.addEventListener("DOMContentLoaded", initProfile);
+
+[providers.js] providers.js linked.js
+about linked.js: The Massimo web UI, My profile's linked accounts: the own identities at the sign-in providers, what each provider said of them, Remove, Link per enabled provider, and a link come back shown before it is stored; System settings → Users uses the same rows until it is a part.
+providers.js providersUI
+providers.js ADMIN_CAPS
+providers.js providersMsg
+providers.js loadLoginProviders
+providers.js loadProviders
+providers.js autoRoleOptions
+providers.js providerAction
+providers.js providerForm
+providers.js renderProviders
+providers.js fillIdentities
+providers.js wireIdentities
+providers.js initProviders
+providers.js > document.addEventListener("DOMContentLoaded", initProviders);
+linked.js    > // --- the own identities' rows ------------------------------------------
+linked.js    identityDetails
+linked.js    identityRow
+linked.js    > // --- My profile: the own linked accounts --------------------------------
+linked.js    renderProfileIdentities
+linked.js    renderLinkConfirm
+linked.js    startLink

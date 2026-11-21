@@ -93,8 +93,9 @@ function linkWord(c) {
 }
 
 // cubeSignEl is a Cube's network sign, named for a screen reader by its
-// link (components.js signEl), for the plain regions (backup.js); the
-// parts draw it with the shared Sign.
+// link (components.js signEl). Nothing calls it since Backup and restore
+// became a part (AP UiParts, Block 10), which draws the shared CubeSign;
+// it goes with the builders nobody calls (Block 15, D181-A).
 function cubeSignEl(c) {
   const svg = signEl("net", linkSign(c), "conn-sign", "cube:" + c.serial);
   svg.removeAttribute("aria-hidden");

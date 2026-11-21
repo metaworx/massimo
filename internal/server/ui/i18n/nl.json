@@ -1292,6 +1292,7 @@
   "integrations.nameHint": "Haar gebruikers verschijnen onder deze naam: Naam › gebruiker.",
   "integrations.saveName": "Naam opslaan",
   "integrations.nameSaved": "Integratie hernoemd tot {name}",
+  "integrations.nameFormName": "Integratie {name}, de naam",
   "integrations.reportedName": "Naam in Home Assistant",
   "integrations.uuid": "Id",
   "integrations.keyIssued": "Sleutel uitgegeven",
@@ -1300,6 +1301,7 @@
   "integrations.enabledOn": "{name} ingeschakeld.",
   "integrations.enabledOff": "{name} uitgeschakeld: haar aanroepen worden geweigerd.",
   "integrations.saveMax": "Maximum opslaan",
+  "integrations.maxFormName": "Integratie {name}, het maximum",
   "integrations.saved": "{name} opgeslagen.",
   "integrations.users": "Haar gebruikers",
   "integrations.usersNone": "Nog geen gebruiker heeft via haar gehandeld.",
@@ -1403,6 +1405,7 @@
   "providers.added": "Provider {name} toegevoegd.",
 
   "providers.failed": "{name}: niet uitgevoerd: {error}",
+  "providers.formName": "Aanmeldprovider {name}",
 
   "providers.off": "uitgeschakeld",
 
@@ -1490,6 +1493,8 @@
   "users.removed": "{name} verwijderd.",
   "users.failed": "{name}: {error}",
   "users.unchanged": "Niets gewijzigd.",
+  "users.formName": "Gebruiker {name}",
+  "users.noEnd": "geen einde",
   "users.tokens": "Sessies en sleutels",
   "users.tokensNone": "Geen.",
 
@@ -1528,6 +1533,7 @@
   "users.identityChangeLabel": "{email} bij {provider} wijzigen",
 
   "users.identityChanged": "Identiteit gewijzigd.",
+  "users.identityFormName": "Gebruiker {name}, identiteit {account}",
 
   "users.identityGroups": "groepen: {groups}",
 
@@ -1617,6 +1623,7 @@
   "roles.disabledNow": "{role} uitgeschakeld: de gebruikers blijven aangemeld en worden alles geweigerd.",
   "roles.enabledNow": "{role} ingeschakeld.",
   "roles.failed": "{role}: {error}",
+  "roles.formName": "Rol {name}",
   "roles.capsTitle": "Bevoegdheden voor alle rollen",
   "roles.capsShort": "Bevoegdheden",
   "roles.badge.allOn": "alle aan",
@@ -1738,6 +1745,7 @@
   "restore.send.one": "{n} commando verzenden",
   "restore.send.other": "{n} commando's verzenden",
   "restore.running": "Verzenden: {done} van {n} stappen.",
+  "restore.unseen": "De verbinding met de server werd onderbroken terwijl het herstel liep: het log zegt hoe het eindigde.",
   "restore.done": "Herstel klaar: {sent} van {n} stappen verzonden.",
   "restore.failedAt": "Herstel gestopt na {sent} van {n} stappen: {error}",
   "restore.refused": "Niet verzonden: {error}",

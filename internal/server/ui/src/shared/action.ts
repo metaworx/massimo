@@ -12,6 +12,8 @@
  * the button that asked turns meanwhile with useBusy (question.tsx).
  */
 
+import { session, stillSession } from "./session";
+
 /** An action's outcome: its text, and whether it went well. */
 export interface Outcome {
   text: string;
@@ -54,13 +56,16 @@ export function fader(set: (res: Outcome | null) => void, ms?: number): (res: Ou
  * message line at the time of saying (a region shown in two places has
  * two), and to set, a part's state that a ResultLine draws; fade is how
  * long a success stays, in ms, where it goes again; reload is what
- * follows a request taken.
+ * follows a request taken; bound drops the reload and the outcome of a
+ * request that answers after a sign-out (shared/session.ts), and the run
+ * then resolves false.
  */
-export function actionRunner({ where, set, fade, reload }: {
+export function actionRunner({ where, set, fade, reload, bound }: {
   where?: () => HTMLElement | null;
   set?: (res: Outcome | null) => void;
   fade?: number;
   reload?: () => Promise<unknown>;
+  bound?: boolean;
 }): ActionRunner {
   const show = fader((res) => {
     const el = where ? where() : null;
@@ -71,13 +76,16 @@ export function actionRunner({ where, set, fade, reload }: {
   return {
     say,
     async run(fn, ok, fail) {
+      const n = session();
+      // bound: an answer that comes after a sign-out reloads and says nothing
+      const still = () => !bound || stillSession(n);
       try {
         await fn();
-        if (reload) await reload();
-        say(ok, true);
-        return true;
+        if (reload && still()) await reload();
+        if (still()) say(ok, true);
+        return still();
       } catch (e) {
-        say(fail((e as Error).message), false);
+        if (still()) say(fail((e as Error).message), false);
         return false;
       }
     },

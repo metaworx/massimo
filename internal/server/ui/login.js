@@ -129,6 +129,7 @@ function applyCaps() {
   if (me && me.setup) renderSetupKeep();
   renderOpenBanner();
   renderMe();
+  MassimoParts.users.me(me && me.token ? me.token : null); // a user's sessions say "this device" (ui/src/admin/)
   markSettingsPages(); // pages.js
   if (!mayShow(currentView)) showView("tiles", "replace"); // pages.js: a page the user signed in now may not open
 }

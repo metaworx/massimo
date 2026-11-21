@@ -1024,6 +1024,8 @@ nor links (`#oidc-link-error=group`); any where empty.
 `client_secret` left out stays and `""` clears it.
 The answers never hold the secret:
 `has_secret` says whether there is one,
+`secret_lost` that one is set and sealed and the key of `opaque.key` no longer opens it,
+so that it is to be entered again,
 and `callback` is the redirect URI's path under the page's address,
 `api/v1/login/oidc/callback`, to register at the provider.
 `DELETE` removes a provider and every identity at it.

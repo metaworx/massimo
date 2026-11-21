@@ -49,7 +49,7 @@ def test_register_and_link(page, case):
         panel.wait_for()
         assert req["code"] in panel.inner_text(), "the request shows its code"
         assert panel.locator("summary .mono").inner_text() == req["code"], "the code in the panel's head"
-        panel.locator("input[name='cubes.reboot']").uncheck(force=True)
+        panel.get_by_role("checkbox", name=page.evaluate("t('cap.cubes.reboot')"), exact=True).uncheck(force=True)
         named_buttons(page, "System settings → Integrations, a request")
         panel.locator(".approve-integration").click()
         approved = page.locator(f".integration-panel[data-uuid='{uuid}']")
@@ -116,7 +116,7 @@ def _rename(page, case, uuid, subject):
     if not page.locator(sel).evaluate("d => d.open"):
         page.locator(f"{sel} > summary").click()
     field = page.locator(f"#integration-name-{uuid}")
-    save = page.locator(f"{sel} .save-name")
+    save = page.locator(f"{sel} form.integration-name button[type=submit]")
     assert field.input_value() == reported and save.is_disabled(), "the name as stored, Save off"
     field.fill(named)
     assert save.is_enabled(), "Save on once the name differs"

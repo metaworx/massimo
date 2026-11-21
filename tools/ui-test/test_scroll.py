@@ -13,9 +13,11 @@ The header is let settle first (quiet_header): one that shrinks while the
 page is a few pixels down, a notice of a radiogram pending that goes,
 has the browser's scroll anchoring keep the content where it was by
 scrolling up, which a step would read as going back. A notice that stays
-moves nothing: with the fake Cube one radiogram counts as pending for good
-once any test has sent a command, the fake answering every command with
-49 of its 50 slots free and a Cube saying its slots only then."""
+moves nothing: with the fake Cube one radiogram counts as pending once any
+test has sent a command, the fake answering every command with 49 of its
+50 slots free and a Cube saying its slots only then; it goes when the
+server reconnects for the budget, two minutes after the last write, and
+the greeting says all 50 free, at a moment no test chooses."""
 import pytest
 from helpers import scroll_settled, wait_until
 from test_send import first_tile, open_tab
@@ -219,14 +221,21 @@ def test_a_jump_down_stays_where_it_went(page, case):
     until the page came to rest, and 1 px. The anchoring moves the page by
     as much as the one node it holds went down, and that node is among
     them, so a correct page does not fail; a page that goes forward with
-    nothing grown above it does."""
+    nothing grown above it does. The jumps end where the page ends as it
+    is at each one, read at the top: the header's notice of a radiogram
+    pending goes when the server's reconnect for the budget, two minutes
+    after a write of an earlier test, finds the fake Cube's slots free,
+    and the page is then 63 px shorter at 1100 px; a bound read once
+    took the jumps past its end, which the browser cut to it (500 → 488
+    on a CI runner, 2026-11-20)."""
     tile, _ = first_tile(page)
     open_tab(tile, "program")
-    end = page.evaluate("Math.min(1000, document.documentElement.scrollHeight - innerHeight)")
     moved = []
-    for want in range(150, end + 1, 25):
+    for want in range(150, 1001, 25):
         page.evaluate("window.scrollTo(0, 0)")
         assert wait_until(page, "!document.body.classList.contains('scrolled')", 3), "the header whole at the top"
+        if want > page.evaluate("document.documentElement.scrollHeight - innerHeight"):
+            break
         kept = page.evaluate(JUMP, want)
         assert kept, f"nodes in view after the jump to {want}"
         assert wait_until(page, "document.body.classList.contains('scrolled')", 3), "the header compacted"

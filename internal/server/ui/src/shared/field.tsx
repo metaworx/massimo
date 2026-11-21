@@ -196,13 +196,19 @@ type Value<T> = { draft: Draft<T>; value?: undefined; set?: undefined } | { draf
  * and pattern (what a valid value looks like), type (text by default; a
  * password is no stored text), required and disabled (off) are the
  * input's, inputRef gives it the focus; limit marks a value refused (a
- * name too long), and the row is wide unless wide is false.
+ * name too long), and the row is wide unless wide is false. A password
+ * (type password, autocomplete new-password or current-password) is no
+ * stored text: it is a free field by value and set, never a draft, so
+ * that it is kept by its form's part alone; inputCls is the input's class
+ * beside field-control (mono for a key).
  */
-export function TextField({ label, id, wide = true, unit, hint, help, cls, limit, name, placeholder, type, maxLength, pattern, required, disabled, draft, value, set, show, inputRef }: Row & Value<string> & {
+export function TextField({ label, id, wide = true, unit, hint, help, cls, limit, name, placeholder, type, autocomplete, inputCls, maxLength, pattern, required, disabled, draft, value, set, show, inputRef }: Row & Value<string> & {
   name: string;
   disabled?: boolean;
   placeholder?: string;
-  type?: "text" | "email" | "url" | "search";
+  type?: "text" | "email" | "url" | "search" | "password";
+  autocomplete?: string;
+  inputCls?: string;
   maxLength?: number;
   pattern?: string;
   required?: boolean;
@@ -211,7 +217,8 @@ export function TextField({ label, id, wide = true, unit, hint, help, cls, limit
 }) {
   return (
     <Field label={label} id={id} wide={wide} unit={unit} hint={hint} help={help} cls={cls} limit={limit} draft={draft} show={show}>
-      <input ref={inputRef} id={id} type={(type || "text") as "text"} name={name} class={unit ? undefined : "field-control"} autocomplete="off" spellcheck={false}
+      <input ref={inputRef} id={id} type={(type || "text") as "text"} name={name} class={[unit ? "" : "field-control", inputCls || ""].filter(Boolean).join(" ") || undefined}
+        autocomplete={autocomplete || "off"} spellcheck={false}
         placeholder={placeholder} maxLength={maxLength} pattern={pattern} required={required} disabled={disabled} value={draft ? draft.value : value}
         {...limitAria(id, limit)} onInput={(ev) => (draft ? draft.set(ev.currentTarget.value) : set(ev.currentTarget.value))} />
     </Field>
@@ -333,9 +340,11 @@ export function DateTime({ value, set, id, cls, step, required, disabled, inputR
  * of a menu), with help, the key of the setting's help, its button after
  * the switch and its explanation under it, and rowCls, classes the row
  * adds (a capability's needs-…); cls adds classes to the switch; id,
- * name, disabled and title are the checkbox's; children follow the label.
+ * name, disabled and title are the checkbox's; badge is drawn inside the
+ * switch after its label (a capability's state), children follow the
+ * switch.
  */
-export function Switch({ name, label, checked, onChange, draft, show, row = true, help, rowCls, cls, id, disabled, title, children }: {
+export function Switch({ name, label, checked, onChange, draft, show, row = true, help, rowCls, cls, id, disabled, title, badge, children }: {
   name?: string;
   label: string;
   checked?: boolean;
@@ -349,6 +358,7 @@ export function Switch({ name, label, checked, onChange, draft, show, row = true
   id?: string;
   disabled?: boolean;
   title?: string;
+  badge?: ComponentChildren;
   children?: ComponentChildren;
 }) {
   const helpId = useId();
@@ -361,6 +371,7 @@ export function Switch({ name, label, checked, onChange, draft, show, row = true
       }} />
       <span class="slider" aria-hidden="true" />
       <span class="switch-label">{label}</span>
+      {badge}
     </label>
   );
   if (!row) return <>{sw}{children}</>;
