@@ -19,13 +19,16 @@ import type { Device } from "../api";
 import { actionRunner } from "../shared/action";
 import { newPut, PutForm } from "../shared/put";
 import { Question, useAsk } from "../shared/question";
+import { session, stillSession } from "../shared/session";
 import { DeviceRow } from "./Devices";
 import { load, tickOf } from "./store";
 
 /**
  * said says under the devices without a room how the last action went,
  * the device's row being gone after it, or on the page's message line
- * when the section went with its last device; a success fades.
+ * when the section went with its last device; a success fades. It only
+ * says, never runs: the removal's answer and the put form's after a
+ * sign-out are dropped where they come (below, and shared/put.tsx).
  */
 const said = actionRunner({ where: () => ($("unlisted")?.classList.contains("hidden") ? $("message") : $("unlisted-msg")), fade: RESULT_FADE_MS });
 
@@ -83,9 +86,10 @@ function UnlistedRow({ d }: { d: Device }) {
       {ask.asking && (
         <Question text={t("device.removeConfirm", { device: label })} yes={t("device.remove")} no={t("action.keep")} onNo={() => ask.done()}
           onYes={async () => {
+            const n = session();
             const res = await removeFromCube(d);
             ask.done(false);
-            said.say(res.text, res.ok);
+            if (stillSession(n)) said.say(res.text, res.ok); // an answer after a sign-out says nothing
           }} />
       )}
     </DeviceRow>

@@ -2638,6 +2638,18 @@ then forgets the settings that followed the user, the lines saying a write was n
 the House's panel, the stream and the Cubes' data, shows the tiles, and only then awaits the
 signed-out language's table (UiParts D211): nothing of the user who left is drawn, shown,
 read or answered while it loads.
+Every region drops an answer that comes after a sign-out:
+it takes the session's number (`shared/session.ts`) before its request
+and writes, says, reloads and sends nothing after it where the number has changed,
+also no second request of its own after the first one's answer (a device's settings and its name,
+a copy's programme after its settings, a setpoint after the read of a preset),
+as Blocks 10 to 13 built it and as the regions moved before them do since (UiParts D212):
+the Cubes' pairing and rooms, a Cube's devices and the Cubes' actions,
+a room's configuration, a device's detail and the virtual thermostat's settings,
+the devices without a room, the House panel's writes (which stop at the next room),
+the repairs, the form that puts a device into a room and the header's search for Cubes.
+Only the plain `removeFromCube` of `unlisted.js` still reads the rooms after a removal's late answer,
+a read under the next user's own key, plain code that Block 15 moves.
 Who is in (`shared/me.ts`) draws the rest:
 the first owner's form into `#setup-slot`, shown while who is in says `setup`,
 its form drawn only then, so that what is typed in it goes with it,

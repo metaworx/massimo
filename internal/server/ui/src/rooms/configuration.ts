@@ -24,6 +24,7 @@ import type { Outcome } from "../shared/action";
 import { focusForm, useForm, type Form, type FormName } from "../shared/forms";
 import { liveMap } from "../shared/live";
 import { byteLength, NAME_BYTES } from "../shared/name";
+import { session, stillSession } from "../shared/session";
 import { cfgFormKey, openRoom, roomOf } from "./store";
 
 /** The common fields of a room's configuration on the Temperatures tab, as GET and PUT /rooms/{id}/config have them, in the order they are sent. */
@@ -119,17 +120,18 @@ export async function openConfig(room: PageRoom, el: HTMLElement | null, tab?: s
   cs.result = null;
   cs.sending = null;
   const seq = ++cs.seq;
+  const n = session();
   ui.config = true;
   try {
     const [cfg, prog] = await Promise.all([
       api<RoomConfig>("GET", base() + "/rooms/" + room.id + "/config"),
       api<ProgramWithTag>("GET", base() + "/rooms/" + room.id + "/program").catch(() => null),
     ]);
-    if (seq !== cs.seq) return;
+    if (seq !== cs.seq || !stillSession(n)) return; // a later opening's, or an answer after a sign-out
     cs.cfg = cfg;
     cs.program = programmeOf(prog); // its tag sent back with the write (docs/api-v1.md, "The programme's tag")
   } catch (e) {
-    if (seq !== cs.seq) return;
+    if (seq !== cs.seq || !stillSession(n)) return;
     cs.error = (e as Error).message;
   } finally {
     if (seq === cs.seq) cs.loading = false;
@@ -283,12 +285,15 @@ export async function sendRoomName(room: PageRoom, cs: ConfigState, typed: strin
     return true;
   }
   say(cs, t("cfg.renaming"), true);
+  const n = session();
   try {
     await api("PUT", base() + "/rooms/" + room.id, { name });
+    if (!stillSession(n)) return false; // an answer after a sign-out says nothing
     say(cs, t("cfg.renamed", { name }), true);
     await loadRooms();
     return true;
   } catch (e) {
+    if (!stillSession(n)) return false;
     say(cs, t("cfg.renameFailed", { error: (e as Error).message }), false);
     return false;
   }
@@ -309,14 +314,17 @@ export async function sendRoomConfig(room: PageRoom, cs: ConfigState, body: Reco
     return true;
   }
   say(cs, t("result.waiting", { label }), true);
+  const n = session();
   let ok = false;
   try {
     const res = await api<Answer | null>("PUT", base() + "/rooms/" + room.id + "/config", body);
+    if (!stillSession(n)) return false; // an answer after a sign-out says nothing
     ok = !!(res && res.ok);
     say(cs, deviceResults(label, res), ok);
     if (ok && cs.cfg) cs.cfg = { ...cs.cfg, ...body };
     state.details = {};
   } catch (e) {
+    if (!stillSession(n)) return false;
     say(cs, errorText(label, e as Error), false);
   }
   loadCubes().catch(() => {});
@@ -350,11 +358,13 @@ export async function sendDevice(room: PageRoom, cs: ConfigState, d: Device, cha
     return true;
   }
   say(cs, t("result.waiting", { label }), true);
+  const n = session();
   const lines: string[] = [];
   let ok = true;
   try {
     if (Object.keys(cfg).length) {
       const res = await api<Answer | null>("PUT", devicePath(d) + "/config", cfg);
+      if (!stillSession(n)) return false; // an answer after a sign-out: nothing written of it, and no second request
       lines.push(resultText(t("cfg.devSettings", { name: label }), res));
       if (res && res.discarded) ok = false;
       else if (cs.cfg) {
@@ -373,9 +383,11 @@ export async function sendDevice(room: PageRoom, cs: ConfigState, d: Device, cha
     lines.push(errorText(label, e as Error));
     ok = false;
   }
+  if (!stillSession(n)) return false; // an answer after a sign-out says nothing and reloads nothing
   say(cs, lines.join("\n"), ok);
   if (Object.keys(meta).length) {
     await loadRooms();
+    if (!stillSession(n)) return false;
     const again = roomOf(room.id);
     if (again && roomUI(again).config) cs.tab = "devices";
   }
@@ -391,7 +403,9 @@ export async function sendDevice(room: PageRoom, cs: ConfigState, d: Device, cha
  */
 export async function removeDevice(room: PageRoom, cs: ConfigState, d: Device): Promise<boolean> {
   say(cs, t("device.removing", { device: deviceName(d) }), true);
+  const n = session();
   const res = await removeFromCube(d);
+  if (!stillSession(n)) return false; // an answer after a sign-out says nothing
   const again = roomOf(room.id);
   if (!again || !roomUI(again).config) {
     showTileResult(room.id, res.text, res.ok);
@@ -435,10 +449,12 @@ export async function sendProgram(room: PageRoom, cs: ConfigState, edited: Progr
   }
   const label = t("prog.label", { days: Object.keys(body).map(dayShort).join(", ") });
   say(cs, t("result.waiting", { label }), true);
+  const n = session();
   let ok = false;
   try {
     const tag = edited.etag;
     const res = await api<Answer | null>("PUT", base() + "/rooms/" + room.id + "/program", body, tag ? { "If-Match": '"' + tag + '"' } : undefined);
+    if (!stillSession(n)) return false; // an answer after a sign-out says nothing
     ok = !(res && res.discarded);
     if (ok) for (const d of Object.keys(body)) p.orig[d] = W.copyPoints(body[d]);
     if (res && res.etag) edited.etag = res.etag;
@@ -451,6 +467,7 @@ export async function sendProgram(room: PageRoom, cs: ConfigState, edited: Progr
     say(cs, resultText(label, res), ok);
     state.details = {};
   } catch (e) {
+    if (!stillSession(n)) return false;
     if ((e as { status?: number }).status === 412) {
       // Changed elsewhere since it was loaded, or a write still on its
       // way: nothing was sent; the edits stay until the reload.
@@ -465,11 +482,14 @@ export async function sendProgram(room: PageRoom, cs: ConfigState, edited: Progr
 
 /** reloadProgram loads the room's programme as it is now, with its tag, in place of the one edited. */
 export async function reloadProgram(room: PageRoom, cs: ConfigState): Promise<void> {
+  const n = session();
   try {
     const prog = await api<ProgramWithTag>("GET", base() + "/rooms/" + room.id + "/program");
+    if (!stillSession(n)) return; // an answer after a sign-out: nothing of it for the next user
     cs.program = programmeOf(prog, true);
     say(cs, t("prog.reloaded"), true);
   } catch (e) {
+    if (!stillSession(n)) return;
     say(cs, (e as Error).message, false);
   }
 }
@@ -508,9 +528,11 @@ export async function sendCopy(cs: ConfigState, k: CopyChoice): Promise<boolean>
   const body: Record<string, unknown> = {};
   for (const f of fields) if (cfg[f] !== undefined && cfg[f] !== null) body[f] = cfg[f];
   const days = program ? MassimoWeekProgram.copyDays(program.model.orig) : null;
+  const n = session();
   const lines: string[] = [];
   let allOk = true;
   for (const id of ids) {
+    if (!stillSession(n)) return false; // signed out meanwhile: the next rooms are not written, nothing is said
     const target = state.rooms.find((r) => r.id === id);
     const name = target ? target.name : String(id);
     say(cs, lines.concat([t("copy.sending", { room: name })]).join("\n"), allOk);
@@ -518,6 +540,7 @@ export async function sendCopy(cs: ConfigState, k: CopyChoice): Promise<boolean>
     try {
       if (Object.keys(body).length) {
         const res = await api<Answer | null>("PUT", base() + "/rooms/" + id + "/config", body);
+        if (!stillSession(n)) return false; // an answer after a sign-out: no programme's write after it
         parts.push(t(res && res.ok ? "copy.settingsOk" : "copy.settingsPartial"));
         if (!(res && res.ok)) allOk = false;
       }
@@ -532,6 +555,7 @@ export async function sendCopy(cs: ConfigState, k: CopyChoice): Promise<boolean>
       allOk = false;
     }
   }
+  if (!stillSession(n)) return false;
   state.details = {};
   say(cs, lines.join("\n"), allOk);
   loadCubes().catch(() => {});

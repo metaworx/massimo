@@ -16,6 +16,7 @@ import type { Device } from "../api";
 import { counter } from "../shared/counter";
 import { live, liveMap } from "../shared/live";
 import { cubePath } from "../shared/path";
+import { session, stillSession } from "../shared/session";
 import { loadCubeRooms, loadPairing } from "./flow";
 
 /** The Cubes' load counter: bumped at every load of the list and every redraw asked for (renderCubes, cubesPolled); every Cubes part uses it. */
@@ -48,12 +49,14 @@ export function deviceOf(rf: string): Device | undefined {
 
 /** loadDevices reads a Cube's visible devices for the hide choice; none on an error. */
 export async function loadDevices(serial: string): Promise<void> {
+  const n = session();
   let list: Device[] = [];
   try {
     list = (await api<Device[]>("GET", cubePath(serial) + "/devices?devices=real")) || [];
   } catch {
     list = [];
   }
+  if (!stillSession(n)) return; // an answer after a sign-out: nothing of it for the next user
   devices.value = { ...devices.value, [serial]: list };
 }
 

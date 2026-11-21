@@ -18,6 +18,7 @@ import { isShown } from "../shared/pages";
 
 /** The Cubes' runner: its message under the list, or under Cube settings' panel while that page is shown. */
 const runner = actionRunner({
+  bound: true, // an answer after a sign-out reloads nothing and says nothing
   where: () => $(isShown("cube") ? "cube-page-msg" : "cubes-msg"),
   reload: async () => {
     await refresh();

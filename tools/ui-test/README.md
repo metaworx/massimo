@@ -392,6 +392,12 @@ hence `failed_checks_forgotten`.
   alone, never at the closing; the fingerprint's button keeps the user's
   name at a change of language, and stays the same element, turning, while
   the system's prompt is open and the status and the language change.
+- `test_sign_out_late.py`, an answer that comes after a sign-out (AP
+  UiParts, Block 14, D212): the search for Cubes, the House's writes to
+  every room and in Eco, a pairing's Start, Cube settings' Save, a device
+  removed and one put into a room, and a room's copy to others, each held,
+  the session ended by a sign-out or as expired, the operator signed in,
+  then answered: nothing of it is drawn, said, sent or started.
 - `test_stream.py`:
   the event stream opens with tickets only, never with the token,
   and after a refused stream (the test hands out a used ticket first,
