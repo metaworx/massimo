@@ -52,20 +52,20 @@ export interface Preference {
 }
 
 export interface PushSubscription {
-  id?: number;
-  endpoint?: string;
-  label?: string;
+  id: number;
+  endpoint: string;
+  label: string;
   /** @format date-time */
-  created_at?: string;
+  created_at: string;
   /**
    * The last message the push service took; absent before the first
    * @format date-time
    */
   last_ok_at?: string;
   /** Failed deliveries since then */
-  failures?: number;
+  failures: number;
   /** Made with the caller's session or key */
-  current?: boolean;
+  current: boolean;
 }
 
 /**
@@ -401,18 +401,18 @@ export interface Identity {
 
 export interface PendingLink {
   /** The provider's key */
-  provider?: string;
-  provider_name?: string;
+  provider: string;
+  provider_name: string;
   /** The user id at the provider */
-  subject?: string;
-  email?: string;
-  name?: string;
-  username?: string;
+  subject: string;
+  email: string;
+  name: string;
+  username: string;
   groups?: string[];
   /** The user's identities at the provider the link replaces */
   replaces?: Identity[];
   /** @format date-time */
-  expires_at?: string;
+  expires_at: string;
 }
 
 /** The provider and either email or subject. */
@@ -882,19 +882,122 @@ export interface ReloadResult {
   read_at: string;
 }
 
+/** What System info shows, GET /api/v1/system */
+export interface SystemInfo {
+  /** The build version with the Go details, as /healthz has it */
+  version: string;
+  /**
+   * When the server process started.
+   * @format date-time
+   */
+  started_at: string;
+  tls?: CertStatus;
+  /**
+   * The package manager that owns the binary (apt, brew), else what runs
+   * the server: windows-service, systemd or launchd; other for a
+   * terminal, a container or a supervisor massimo does not know.
+   */
+  install: string;
+  /** The operating system, as Go names it: linux, darwin, windows. */
+  os: string;
+  /** The distribution's name from /etc/os-release; absent elsewhere. */
+  os_name?: string;
+  /** The processor, as Go names it: amd64, arm64, arm. */
+  arch: string;
+  hostname?: string;
+  /** The caller's address as the server sees it. */
+  client_ip: string;
+  /**
+   * The server's clock with its offset.
+   * @format date-time
+   */
+  now: string;
+  /**
+   * The server's zone: TZ, else what /etc/localtime links to, else its
+   * abbreviation.
+   */
+  time_zone?: string;
+  /** The host's full name as hostname -f gives it. */
+  fqdn?: string;
+  /** The interfaces the API or a Cube proxy listens on. */
+  interfaces: {
+    name: string;
+    mac?: string;
+    addresses: {
+      ip: string;
+      /** The API listens on this address. */
+      api?: boolean;
+    }[];
+  }[];
+  /** The port the API listens on. */
+  api_port?: number;
+  /** The Cubes' proxy listeners, listening or not. */
+  cube_proxies: {
+    serial?: string;
+    /**
+     * The serial it answers discovery with: the Cube's proxy serial where set,
+     * else the Cube's; absent where it answers no discovery.
+     */
+    discovery_serial?: string;
+    addr: string;
+    listening: boolean;
+    /** The last try's error; absent while it listens. */
+    error?: string;
+    /**
+     * The first failure; absent while it listens.
+     * @format date-time
+     */
+    since?: string;
+    /**
+     * When it is tried again; absent while it listens.
+     * @format date-time
+     */
+    next_try?: string;
+    /** The tries so far; absent while it listens. */
+    tries?: number;
+  }[];
+  /** The trusted proxy the request came through; absent otherwise. */
+  proxy?: {
+    /** Absent where no header says. */
+    proto?: "https" | "http";
+    host: string;
+    /** Absent where neither a scheme nor a port is said. */
+    port?: number;
+    /**
+     * The proxy's certificate as the last check read it; for https, absent
+     * before the first.
+     */
+    certificate?: {
+      source?: "proxy";
+      names?: string[];
+      /** @format date-time */
+      not_after?: string;
+      fingerprint?: string;
+      self_signed?: boolean;
+      issuer?: string;
+      /** Valid for the host against the system's roots. */
+      trusted: boolean;
+      /** @format date-time */
+      checked_at: string;
+      /** Why the last check failed. */
+      error?: string;
+    };
+  };
+}
+
 export interface StoreInfo {
   /** The store's file */
-  file?: string;
+  file: string;
   /** The file's schema version */
-  schema?: number;
+  schema: number;
   /** The oldest schema version that still reads it */
-  min_reader?: number;
+  min_reader: number;
   /** The schema version this server is built for */
-  binary?: number;
-  node?: string;
-  tenant?: string;
+  binary: number;
+  node: string;
+  tenant: string;
   /** Rows per table */
-  rows?: Record<string, number>;
+  rows: Record<string, number>;
 }
 
 /** A proxy listener that does not listen, and is tried again */
@@ -932,22 +1035,22 @@ export interface FoundElsewhere {
 }
 
 export interface ConfigView {
-  version?: string;
+  version: string;
   /** The settings file */
-  file?: string;
-  file_found?: boolean;
-  data_dir?: string;
-  listen?: string;
-  tls?: "off" | "files" | "self-signed" | "acme";
+  file: string;
+  file_found: boolean;
+  data_dir: string;
+  listen: string;
+  tls: "off" | "files" | "self-signed" | "acme";
   /** The level and where it came from */
-  log_level?: string;
-  variables?: {
-    name?: string;
+  log_level: string;
+  variables: {
+    name: string;
     /** Absent for a secret */
     value?: string;
     secret?: boolean;
     /** Where the value came from, the environment or the settings file */
-    source?: string;
+    source: string;
     /** A name Massimo does not know, perhaps a typo */
     unknown?: boolean;
   }[];
@@ -955,7 +1058,7 @@ export interface ConfigView {
 
 export interface UpdateInfo {
   /** The running version */
-  current?: string;
+  current: string;
   /**
    * What the running build was released as: devel, nightly, alpha, beta, rc or
    * stable; absent for a build without the Makefile
@@ -966,7 +1069,7 @@ export interface UpdateInfo {
    * update.channel, else the apt source's suite where apt owns the binary, else
    * the flavour
    */
-  channel?: string;
+  channel: string;
   /**
    * The suite of the apt source, where apt owns the binary; where it differs
    * from channel, the next update switches the source to the channel's suite
@@ -984,12 +1087,12 @@ export interface UpdateInfo {
   latest?: string;
   release_url?: string;
   /** latest is newer than current */
-  available?: boolean;
+  available: boolean;
   /** @format date-time */
-  checked_at?: string;
+  checked_at: string;
   check_error?: string;
   /** POST would start an update */
-  can_update?: boolean;
+  can_update: boolean;
   /**
    * Why an update cannot be started from the API (a package manager owning the
    * binary without a helper of its own, no token, no helper, a development
@@ -998,7 +1101,7 @@ export interface UpdateInfo {
   blocked?: string;
   helper?: UpdateStatus;
   /** The last ten updates, newest first; empty without a store */
-  history?: UpdateEntry[];
+  history: UpdateEntry[];
 }
 
 /**
@@ -1037,13 +1140,13 @@ export interface UpdateEntry {
 
 /** The update helper's last run */
 export interface UpdateStatus {
-  state?: "checking" | "installing" | "restarting" | "done" | "up-to-date" | "failed" | "rolled-back";
+  state: "checking" | "installing" | "restarting" | "done" | "up-to-date" | "failed" | "rolled-back";
   from?: string;
   to?: string;
   channel?: string;
   message?: string;
   /** @format date-time */
-  time?: string;
+  time: string;
 }
 
 export interface Error {
@@ -1355,10 +1458,10 @@ export interface CubeChange {
 
 export interface Setting {
   /** The store's value, or the default; durations as 30m, 24h, 0 for off */
-  value?: string;
+  value: string;
   default?: string;
   /** The store holds a value */
-  set?: boolean;
+  set: boolean;
   /** What this run uses; a serve flag wins for one run */
   in_effect?: string;
   applies?: "now" | "restart";

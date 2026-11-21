@@ -75,12 +75,13 @@ def test_restart_follows_the_server_back(page):
     btn.wait_for(state="visible")
     btn.click()
     page.locator(".restart .confirm-yes").click()
-    assert wait_until(page, "restartState.following", 5), "the page follows the restart"
     restarting = page.evaluate("t('restart.restarting')")
-    assert page.locator("#restart-text").inner_text() == restarting, "it says the server restarts"
+    assert wait_until(page, "document.getElementById('restart-text').textContent === %s" % json.dumps(restarting), 5), \
+        "the page follows the restart, and says the server restarts"
+    assert page.locator("#restart-btn").is_disabled(), "no second restart meanwhile"
     back = page.evaluate("t('restart.back', {time: fmtInstant(new Date(Date.parse('2099-01-02T03:04:05Z')))})")
-    assert wait_until(page, "!restartState.following", 15), "the page sees the server back"
-    assert page.locator("#restart-text").inner_text() == back, "it says the server is back"
+    assert wait_until(page, "document.getElementById('restart-text').textContent === %s" % json.dumps(back), 15), \
+        "the page sees the server back, and says so"
     assert len(posts) == 1 and calls["after"] >= 2 and not btn.is_disabled(), "one request, the button usable again"
     page.unroute("**/healthz")
     page.unroute("**/api/v1/restart")

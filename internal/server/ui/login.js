@@ -5,10 +5,12 @@
 // /api/v1/me), the sign-in dialog in place of the token prompt (a name
 // and a password, signed in by OPAQUE so that the password stays in the
 // browser, or an API key pasted, and in the app the login by
-// fingerprint), Log out, hiding what the role may not do, the own
-// password, and the form that creates the first owner on a server
-// without users. Loaded after app.js; api() calls askLogin on a 401, and
-// sends only a read again once it is in.
+// fingerprint), Log out, hiding what the role may not do, the proof of
+// the own password and a password registered by OPAQUE (which My
+// profile, ui/src/profile/, sets the own password with), and the form
+// that creates the first owner on a server without users. Loaded after
+// app.js; api() calls askLogin on a 401, and sends only a read again
+// once it is in.
 "use strict";
 
 // CAPABILITIES are the server's, in its order (docs/api-v1.md,
@@ -129,7 +131,7 @@ function applyCaps() {
   if (me && me.setup) renderSetupKeep();
   renderOpenBanner();
   renderMe();
-  MassimoParts.users.me(me && me.token ? me.token : null); // a user's sessions say "this device" (ui/src/admin/)
+  MassimoParts.me(me); // a user's sessions say "this device", and My profile is drawn for whoever is in (ui/src/shared/me.ts)
   markSettingsPages(); // pages.js
   if (!mayShow(currentView)) showView("tiles", "replace"); // pages.js: a page the user signed in now may not open
 }
@@ -186,14 +188,6 @@ function renderMe() {
   $("menu-me").title = who ? t("nav.userNamed", { name: who }) : "";
   $("profile").classList.toggle("hidden", !hasProfile());
   pageBar($("me")); // components.js: the sections menu without My profile where it is hidden
-  // the own password: Change password, or for a user with keys only Set
-  // a password, without the current one it has not
-  const named = !!(me && me.mode === "users" && me.user);
-  const hasPw = named && me.user.has_password;
-  $("me-password").classList.toggle("hidden", !named);
-  $("me-password-title").textContent = t(hasPw ? "me.changePassword" : "me.setPassword");
-  $("me-password-hint").classList.toggle("hidden", !named || hasPw);
-  document.querySelector("#me-password-form .me-current-field").classList.toggle("hidden", !hasPw);
 }
 
 // --- the sign-in through a provider (docs/api-v1.md, "Sign-in through OpenID Connect")
@@ -210,8 +204,9 @@ function pageBase() {
 let oidcError = null;
 
 // oidcLinked is a link of the user's own account come back, for My
-// profile (renderProfile, users.js): {confirm} its code, to show it
-// before it is stored, or {error}; null for none.
+// profile (loadProfile, ui/src/profile/send.ts), which sets it back to
+// null once taken: {confirm} its code, to show it before it is stored,
+// or {error}; null for none.
 let oidcLinked = null;
 
 // oidcReturn reads the fragment a provider's sign-in comes back with,
@@ -734,6 +729,7 @@ async function logout() {
   for (const key of takeScheduled()) {
     await apiRequest("PUT", "api/v1/me/preferences/" + key, preferenceBody(key)).catch(() => {});
   }
+  await sendNotifySave(); // notify.js: a notification rule changed in the last second, the same way (D205)
   if (me && me.mode === "users" && me.token && me.token.kind === "session") {
     try {
       await apiRequest("POST", "api/v1/logout");
@@ -844,35 +840,6 @@ async function loadPreferences() {
   await applyStoredSettings();
 }
 
-// --- the own password -------------------------------------------------
-
-async function changeOwnPassword(ev) {
-  ev.preventDefault();
-  const msg = $("me-password-msg");
-  const submit = $("me-password-form").querySelector("button[type=submit]");
-  if (isBusy(submit)) return;
-  const current = $("me-current").value;
-  const password = $("me-new").value;
-  if (password !== $("me-again").value) return showResult(msg, t("setup.mismatch"), false);
-  if (!password) return showResult(msg, t("login.missing"), false);
-  try {
-    const me = state.me.user;
-    const first = !me.has_password; // a user with keys only: no current one
-    await whileBusy(submit, async () => {
-      const body = first ? {} : await currentPassword(me, current);
-      Object.assign(body, await registerPassword(me.name, password));
-      return api("PUT", "api/v1/users/" + encodeURIComponent(me.name), body);
-    });
-    showResult(msg, t(first ? "me.passwordSet" : "me.passwordChanged"), true);
-    $("me-current").value = "";
-    $("me-new").value = "";
-    $("me-again").value = "";
-    loadMe();
-  } catch (e) {
-    showResult(msg, t("users.failed", { name: state.me.user.name, error: e.message }), false);
-  }
-}
-
 // --- the first owner --------------------------------------------------
 
 // createOwner handles the form of a server without users: the owner is
@@ -955,7 +922,6 @@ function initLogin() {
   $("menu-logout").addEventListener("click", logout);
   $("setup-form").addEventListener("submit", createOwner);
   checkOwnerName = watchName($("setup-user"), $("setup-name-msg"), () => []);
-  $("me-password-form").addEventListener("submit", changeOwnPassword);
 }
 
 document.addEventListener("DOMContentLoaded", initLogin);

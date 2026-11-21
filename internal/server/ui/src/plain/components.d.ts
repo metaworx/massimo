@@ -7,8 +7,8 @@
  * The globals of the plain script ui/components.js that the parts call:
  * the signs' drawings, the blink of a mark, a menu that drops down with
  * its arrow keys, the clipboard, the result line of an action, a button
- * busy while it sends, the page's toast and a section card brought into
- * view.
+ * busy while it sends, the page's toast, and a section card or a row
+ * brought into view.
  * The builders of elements stay out: a part draws its own.
  */
 
@@ -54,6 +54,8 @@ declare global {
   function downloadBlob(name: string, blob: Blob): void;
   /** Brings a section card into view, unfolded. */
   function showCard(card: HTMLElement | null, instant?: boolean): void;
+  /** Brings el into view again whenever the page's content changes size, for ms or until the user scrolls: a card at the top ("start"), a row in the middle ("center"). */
+  function keepInView(el: Element, ms: number, block?: ScrollLogicalPosition): void;
 }
 
 export {};

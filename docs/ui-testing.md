@@ -1,4 +1,4 @@
-# Testing the web UI (v1.10.0)
+# Testing the web UI (v1.17.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -591,6 +591,14 @@ In each view, around each data source applied with the data as it was
 (`poll(false)`, `loadCubes()`, `loadRooms()`, `refresh()`,
 a `state` event per device on the page's `EventSource` as the server sends it,
 `loadLogAlerts()`, `refreshAges()` and the log's `pollLog()`),
+and around the region's own (`Region.sources`):
+the header's check for an update, `loadUpdate(false)`,
+the page shown again, the `viewshown` event its loaders take,
+and the stream's server events of the kinds a region follows,
+dispatched on the page's stream, a forward guard for the three regions
+(the plain page read nothing for these events),
+after each of which the guard waits until the page's requests have answered,
+and a round whose requests had not answered within 5 s fails with that as its reason,
 with the timer's own poll stopped:
 
 1. **Identity:** every element a user can hold that the region shows
@@ -680,6 +688,32 @@ state event or a reload of the Cubes and the rooms leaves them as they were,
 and a comment beside each says so;
 the reads of their own (an action in another panel, the list read again,
 the page shown again) are `test_admin_updates.py`'s.
+Software update (AP UiParts, Block 12) is checked with Update asking in the section
+and the channel's choice above it, the focus on it,
+`GET /api/v1/update` answered with an update offered (`UPDATE_STUB`),
+around the header's check and Maintenance shown again as well;
+it passed on the page before the move too, as its comment says,
+since `update.js` filled it in place but for a select's options and the last updates' lines,
+which nobody holds: what it lost is `test_maint_updates.py`'s.
+Maintenance is checked with the restart asking in its row and a delay typed for the reboot,
+`GET /api/v1/restart` and `GET /api/v1/reboot` answered as on a box with a service manager
+(`RESTART_STUB`, `REBOOT_STUB`), around Maintenance shown again as well;
+it passed on the page before the move too: `maintenance.js` lost the focus of a setting
+while it saved, which `test_maint_updates.py` shows.
+System info is checked with its folds open around the page shown again as well,
+which failed on the page before the move:
+`system-info.js` made the version's and the proxies' copy icons and the proxy's link anew
+at each read.
+My profile (AP UiParts, Block 13) is checked around the personal page shown again as well,
+which failed on the page before the move:
+`profile.js` made the display name's form and the sessions and keys anew at each show.
+My settings are checked around the settings applied again as well, as when the user's
+arrive from the server at a sign-in (`applyStoredSettings()`),
+which failed on the page before the move: `applySettings` set the poll typed back;
+the Appearance card too, with the scheme editor open,
+which failed as well: `applyAppearance` made the editor anew.
+Notifications are checked around the personal page shown again,
+which failed on the page before the move: `notify.js` made the rules and the devices anew.
 
 ### Taking a region off the list
 

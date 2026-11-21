@@ -23,7 +23,7 @@ import json
 import pytest
 
 from conftest import TOKEN, URL, api_call, clear_preferences
-from helpers import open_personal_page, show_view, wait_until
+from helpers import frames, open_personal_page, show_view, wait_until
 from test_login import sign_in
 
 NOT_SENT = {"en": "not sent, since you were signed out: do it again once signed in",
@@ -332,9 +332,14 @@ def test_another_user_gets_nothing_of_the_first(new_context, case, watch, guard)
     page.evaluate("setSetting('poll', 37)")
     wait_count(page, prefs.sent, 1, "the settings push meets the 401")
     page.evaluate("""() => {
-      for (const [id, v] of [["me-current", "op-pass"], ["me-new", "not-set-1"], ["me-again", "not-set-1"]]) document.getElementById(id).value = v;
-      document.getElementById("me-password-form").requestSubmit();
+      for (const [id, v] of [["me-current", "op-pass"], ["me-new", "not-set-1"], ["me-again", "not-set-1"]]) {
+        const el = document.getElementById(id);
+        el.value = v;
+        el.dispatchEvent(new Event("input", { bubbles: true })); // typed, as a key does: the form's part takes it
+      }
     }""")
+    frames(page)  # the form drawn with what is typed, as before a click
+    page.evaluate("() => { document.getElementById('me-password-form').requestSubmit(); }")
     said = "(id) => document.getElementById(id).textContent.includes(%s)" % json.dumps(NOT_SENT[case.lang])
     for where in ("message", "me-password-msg"):
         for _ in range(50):

@@ -776,14 +776,18 @@ def frames(page):
 
 # --- a page of its own ------------------------------------------------------
 
-def owner_page(new_context, guard, watch, url, token):
+def owner_page(new_context, guard, watch, url, token, clock=False):
     """A page of its own with the owner's key token at url, the tiles
     shown and the stream open, as the fixture page has it: for a test
     that signs out or meets a 401 (test_pairing_updates.py,
-    test_repair_updates.py)."""
+    test_repair_updates.py); with clock, under Playwright's clock, its
+    time flowing as the real one (page.clock.run_for moves it on), as the
+    mark clock gives the fixture page."""
     ctx = new_context()
     if token:
         ctx.add_init_script(f"localStorage.setItem('massimo.token', {token!r})")
+    if clock:
+        ctx.clock.install()
     page = ctx.new_page()
     guard.page = page
     page.set_default_timeout(5000)

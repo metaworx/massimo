@@ -15,7 +15,7 @@
 // which a server will later store per user, so the format is fixed. The
 // Settings page's Appearance card, the editor with a contrast hint
 // (WCAG ratio) for the pairs that must stay readable, Export and Import,
-// is appearance.js. Loaded after app.js (readStored, store, state, the DOM helpers); the
+// is a part (ui/src/prefs/), which appearance.js calls. Loaded after app.js (readStored, store, state, the DOM helpers); the
 // stored choice is applied as soon as this file runs, before the page
 // is drawn, so a scheme does not flash the default first.
 "use strict";
@@ -317,8 +317,6 @@ function applyBlink() {
   const root = document.documentElement;
   root.classList.toggle("blink-on", m === "on");
   root.classList.toggle("blink-first", m === "first");
-  const sel = $("blink-select");
-  if (sel) sel.value = state.settings.blink;
 }
 
 // chooseBlink is the setting's choice, kept as the other settings are.
@@ -327,30 +325,16 @@ function chooseBlink(mode) {
   applyBlink();
 }
 
-// ICON_SELECTS are the choices of the window's and the radio's drawing
-// (components.js ICON_CHOICES), each its setting's select and preview.
-const ICON_SELECTS = { iconWindow: ["icon-window-select", "icon-window-preview"], iconRadio: ["icon-radio-select", "icon-radio-preview"] };
-
 // iconsDrawn is the drawings the page was last drawn with, so that a
 // change of them draws again what shows them, from the settings page or
 // from the user's settings arriving or changing elsewhere.
 let iconsDrawn = null;
 
-// applyIcons shows the drawings chosen, each select's value and beside
-// it the drawing as the page shows it: the window closed, open, and with
-// a warning's and a failure's marks; the radio with them. Where the
-// choice changed since the page was drawn, the rooms, the Cubes and the
-// header's problems are drawn again.
+// applyIcons draws again what shows the window and the radio where the
+// choice changed since the page was drawn: the rooms, the Cubes and the
+// header's problems. The Appearance card draws its choices and their
+// previews itself (ui/src/prefs/).
 function applyIcons() {
-  for (const [key, [sel, preview]] of Object.entries(ICON_SELECTS)) {
-    const select = $(sel);
-    if (select) select.value = state.settings[key];
-    const box = $(preview);
-    if (!box) continue;
-    const kind = key === "iconWindow" ? "window" : "radio";
-    const signs = kind === "window" ? [iconEl(iconChoice(kind).type, "ni"), signEl(kind, "")] : [];
-    box.replaceChildren(...signs, signEl(kind, "warn"), signEl(kind, "bad")); // components.js
-  }
   const now = state.settings.iconWindow + "/" + state.settings.iconRadio;
   if (iconsDrawn !== null && iconsDrawn !== now) redrawSigns();
   iconsDrawn = now;

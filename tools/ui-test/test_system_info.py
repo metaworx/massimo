@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
-"""System info, the page of ⚙ (system-info.js loadSystemInfo), from GET
+"""System info, the page of ☰ (ui/src/sysinfo/), from GET
 /api/v1/system: the server's version and what it was built with, its
 start and clock, the certificate (or a proxy's), how it was installed,
 the computer, its full name and the interfaces it listens on, and the
@@ -9,6 +9,8 @@ answers, in a terminal without TLS on the loopback, then stubbed boxes."""
 import json
 import re
 import time
+
+import pytest
 
 from helpers import scroll_width, show_view, wait_until
 
@@ -151,11 +153,22 @@ PENDING = {"en": "being read…", "de": "wird gelesen…"}
 UNREAD = {"en": "could not be read", "de": "konnte nicht gelesen werden"}
 
 
+def run_reads(page, asked, n, seconds=5):
+    """The page's clock moved on, one reading's pace (2 s) at a time,
+    until asked has n entries."""
+    end = time.time() + seconds
+    while len(asked) < n and time.time() < end:
+        page.clock.run_for(2000)
+        page.wait_for_timeout(50)
+    return len(asked) >= n
+
+
+@pytest.mark.clock
 def test_proxy_certificate_followed(page, case):
     """A proxy's certificate the server has not read yet: "being read…",
-    asked for again until it is read, then shown; one that stays unread,
-    "could not be read" after the last try. The address the proxy serves
-    is a link to a new window and copies by its icon."""
+    asked for again every 2 s until it is read, then shown; one that stays
+    unread, "could not be read" after the last of 15 tries. The address
+    the proxy serves is a link to a new window and copies by its icon."""
     page.context.grant_permissions(["clipboard-read", "clipboard-write"], origin=page.evaluate("location.origin"))
     box = dict(BOX, now=time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime()), time_zone="UTC", interfaces=[],
                proxy={"proto": "https", "host": "massimo.example.net", "port": 443})
@@ -169,13 +182,14 @@ def test_proxy_certificate_followed(page, case):
         body = dict(box, proxy=dict(box["proxy"], certificate=read)) if len(asked) >= 3 else box
         route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
     page.route("**/api/v1/system", answer)
-    page.evaluate("certRetry.every = 150")
     try:
         show_view(page, "info")
         assert wait_until(page, "document.getElementById('info-tls').textContent.includes(%r)" % PENDING[case.lang], 5), \
             "being read… first"
+        assert run_reads(page, asked, 3), f"asked for again ({len(asked)})"
         assert wait_until(page, "document.getElementById('info-tls').textContent.includes('Example CA')", 5), \
             "asked for again until read, then shown"
+        page.clock.run_for(4000)
         assert len(asked) == 3, f"no more asking once read ({len(asked)})"
         link = page.locator("#info-tls a")
         assert link.get_attribute("href") == "https://massimo.example.net" and link.get_attribute("target") == "_blank", \
@@ -186,13 +200,15 @@ def test_proxy_certificate_followed(page, case):
             "and copies by its icon"
         show_view(page, "tiles")
         page.unroute("**/api/v1/system")
-        page.route("**/api/v1/system", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(box)))
-        page.evaluate("certRetry.every = 20")
+        asked.clear()
+        page.route("**/api/v1/system", lambda route: (asked.append(1), route.fulfill(status=200, content_type="application/json", body=json.dumps(box))))
         show_view(page, "info")
+        assert run_reads(page, asked, 16, 20), f"the first read and 15 tries ({len(asked)})"
         assert wait_until(page, "document.getElementById('info-tls').textContent.includes(%r)" % UNREAD[case.lang], 5), \
             "could not be read after the last try"
+        page.clock.run_for(4000)
+        assert len(asked) == 16, f"no more asking after the last try ({len(asked)})"
     finally:
-        page.evaluate("certRetry.every = 2000")
         page.unroute("**/api/v1/system")
         show_view(page, "tiles")
 

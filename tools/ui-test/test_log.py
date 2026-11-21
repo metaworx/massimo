@@ -3,8 +3,10 @@
 """The log: it opens, newest first, a state event with changes shows what
 changed, the kind and the device chosen narrow it, Clear sets them back,
 the range limits it by count or by time, the address holds the range,
-the kind and the device, Older pages back, and an answer that comes late
-or fails leaves the log as it should be."""
+the kind and the device, Older pages back, under All Cubes a poll reads
+on after the newest line's id, a log the server no longer has loads
+again, and an answer that comes late or fails leaves the log as it
+should be."""
 import json
 import re
 import time
@@ -257,15 +259,82 @@ def every_cubes_log(url):
     return urlparse(url).path.endswith("/api/v1/log")
 
 
+def log_page(lines, url):
+    """The status and the page a stubbed log of lines, oldest first,
+    answers a request with, as the server does: after an id, the first
+    limit lines after it, and 409 for an id beyond the newest line; before
+    an id, the last limit lines before it; else the newest limit."""
+    q = parse_qs(urlparse(url).query)
+    limit = int(q.get("limit", ["200"])[0])
+    if "after" in q:
+        after = int(q["after"][0])
+        if after > max((ln["id"] for ln in lines), default=0):
+            return 409, {"error": f"after {after} is beyond the log's newest line: reload the log"}
+        return 200, [ln for ln in lines if ln["id"] > after][:limit]
+    if "before" in q:
+        before = int(q["before"][0])
+        return 200, [ln for ln in lines if ln["id"] < before][-limit:]
+    return 200, lines[-limit:]
+
+
+def old_log_page(lines, url):
+    """The status and the page a stubbed log answers a request with as a
+    server before after= (AP LogCursor v1.0, Block 1) does: after= is a
+    parameter it does not know, and ignores; since a time, before an id,
+    the newest limit."""
+    q = parse_qs(urlparse(url).query)
+    limit = int(q.get("limit", ["200"])[0])
+    page = lines
+    if "since" in q:
+        since = datetime.fromisoformat(q["since"][0].replace("Z", "+00:00"))
+        page = [ln for ln in page if datetime.fromisoformat(ln["time"].replace("Z", "+00:00")) >= since]
+    if "before" in q:
+        page = [ln for ln in page if ln["id"] < int(q["before"][0])]
+    return 200, page[-limit:]
+
+
+def answer_log(route, lines, asked, page_of=log_page):
+    """Answers a request for the log from the stubbed lines (page_of, the
+    server's log_page by default), its URL noted in asked."""
+    asked.append(route.request.url)
+    status, body = page_of(lines, route.request.url)
+    route.fulfill(status=status, content_type="application/json", body=json.dumps(body))
+
+
+def open_every_cubes_log(page, query, ready):
+    """Opens the log under All Cubes by its address (#log?query), one
+    Cube being enough, until it is loaded and ready (an expression) holds,
+    and holds the log's own poll: its timer cleared, and logPollSet
+    starts no other while it is set, so that the test's polls are the
+    only ones."""
+    page.evaluate("(h) => { location.hash = h; }", "#log?" + query)
+    assert wait_until(page, "logState.cubes === 'all' && !logState.loading && " + ready, 5), "every Cube's log, the test's lines"
+    page.evaluate("clearInterval(logState.pollTimer)")
+
+
+# POLL_ENDS runs a poll of the log and says whether it ended within 3 s.
+POLL_ENDS = "Promise.race([pollLog().then(() => 'ended'), new Promise((r) => setTimeout(() => r('still polling'), 3000))])"
+
+# HOLD_LOG has the page's api() hold every read of the log, after= too,
+# until the test answers it from window.logAnswers; the log button's
+# question (log/alerts) and everything else go through.
+HOLD_LOG = """() => {
+  window.logAnswers = [];
+  const real = api;
+  window.api = (method, path, body) => !path.includes("/log") || path.includes("/log/alerts") ? real(method, path, body)
+    : new Promise((resolve, reject) => window.logAnswers.push({ path, resolve, reject }));
+}"""
+
+
 def test_log_of_every_cube(page, case):
     """With a second Cube the log shows its Cubes choice, and not before.
     All Cubes reads GET /api/v1/log and is in the address; a line names
     its Cube first, a Cube's own line the Cube alone, the server's own no
-    Cube; the stream adds no line there, a poll does, since the newest
-    line; the device choice groups the devices by Cube; Clear sets the
-    choice back (AP LogCubes v1.0, Block 3). The second Cube never
-    connects; the lines are the test's own, so that what they name is
-    certain."""
+    Cube; the stream adds no line there, a poll does, after the newest
+    line's id (AP LogCursor v1.0, D6-A); the device choice groups the
+    devices by Cube; Clear sets the choice back (AP LogCubes v1.0,
+    Block 3). The second Cube never connects; the lines are the test's
+    own, so that what they name is certain."""
     show_view(page, "log")
     choice = page.locator("#log-cubes")
     assert choice.is_hidden(), "no Cubes choice with one Cube"
@@ -291,12 +360,7 @@ def test_log_of_every_cube(page, case):
             {"id": 900003, "kind": "config", "device": d["rf_address"], "serial": d["serial"], "source": "device", "cube_serial": head["sn"], "time": iso(-1)},
         ]
         asked = []
-
-        def answer_log(route):
-            asked.append(route.request.url)
-            route.fulfill(status=200, content_type="application/json", body=json.dumps(lines))
-
-        page.route(every_cubes_log, answer_log)
+        page.route(every_cubes_log, lambda route: answer_log(route, lines, asked))
         page.evaluate("loadLog()")
         assert wait_until(page, "logState.lines.some((l) => l.id === 900003)", 5), "the lines of the test"
         dev = page.locator("#log-lines .log-line.kind-config").first.locator(".log-device")
@@ -316,8 +380,8 @@ def test_log_of_every_cube(page, case):
         # pollLog asks again until a poll brings it: one of the timer's may be on its way
         assert wait_until(page, "(pollLog(), logState.lines.some((l) => l.id === 900004))", 5), "the poll's new line"
         assert page.evaluate("logState.lines.filter((l) => l.id >= 900001).length") == 4, "each line once"
-        since = parse_qs(urlparse(asked[0]).query).get("since", [""])[0]
-        assert since == lines[2]["time"], f"asked since the newest line ({since!r})"
+        q = parse_qs(urlparse(asked[0]).query)
+        assert q.get("after") == ["900003"] and "since" not in q, f"asked after the newest line's id ({q})"
         new = page.locator("#log-lines .log-line.kind-config").first.locator(".log-device")
         assert new.inner_text() == "Second › MEQ0000999", f"the other Cube's device ({new.inner_text()!r})"
         page.unroute(every_cubes_log)
@@ -329,6 +393,139 @@ def test_log_of_every_cube(page, case):
         page.evaluate("loadCubes()")
     assert wait_until(page, "document.getElementById('log-cubes').classList.contains('hidden')", 5), "no choice with one Cube again"
     assert scroll_width(page) <= case.width, "no horizontal scroll"
+    show_view(page, "tiles")
+
+
+def test_log_of_every_cube_loads_again_after_409(page, case, watch):
+    """Under All Cubes a 409 to the poll's after=, a cursor beyond the
+    server's newest line (a store restored from an older copy, a server
+    without a store restarted with its clock set back), loads the log
+    again, once: each line once, none missing; a burst longer than a page
+    comes in one poll, page after page, and the last 20 are the newest 20
+    (AP LogCursor v1.0, D6-A). The log's answers are stubbed (log_page),
+    and its own poll is held (open_every_cubes_log)."""
+    now = time.time()
+    first = [{"id": 900000 + i, "kind": "hello", "time": iso(now - 100 + i)} for i in (1, 2, 3)]
+    lines = list(first)
+    asked = []
+    show_view(page, "log")
+    page.route(every_cubes_log, lambda route: answer_log(route, lines, asked))
+    try:
+        open_every_cubes_log(page, "cubes=all", "logState.lines.some((l) => l.id === 900003)")
+        # The server's log starts over: the three lines with ids of its own, and one more.
+        lines[:] = [dict(ln, id=11 + i) for i, ln in enumerate(first)] + [{"id": 14, "kind": "hello", "time": iso(now - 50)}]
+        watch.expected.append(("after=900003", 409))
+        asked.clear()
+        page.evaluate("pollLog()")
+        assert wait_until(page, "!logState.loading && logState.lines.some((l) => l.id === 14)", 5), "the log loaded again"
+        page.evaluate("pollLog()")  # the end: a read after the reload, through the same route
+        after = [parse_qs(urlparse(u).query).get("after") for u in asked]
+        assert after == [["900003"], None, ["14"]], f"the poll after its newest id, the log again once, the next poll: {after}"
+        ids = page.evaluate("logState.lines.map((l) => l.id)")
+        assert ids == [11, 12, 13, 14], f"each line once, none missing: {ids}"
+        assert page.locator("#log-lines .log-line").count() == 4, "and the view shows them"
+        lines.extend({"id": 14 + i, "kind": "hello", "time": iso(now - 40 + i // 10)} for i in range(1, 251))
+        asked.clear()
+        ids = page.evaluate("pollLog().then(() => logState.lines.map((l) => l.id))")
+        after = [parse_qs(urlparse(u).query).get("after") for u in asked]
+        assert after == [["14"], ["214"]], f"one poll, a page after the other: {after}"
+        assert ids == list(range(245, 265)), f"the newest 20 after a burst of 250: {ids}"
+        assert page.locator("#log-lines .log-line").count() == 20, "and the view shows them"
+    finally:
+        page.unroute(every_cubes_log)
+    show_view(page, "tiles")
+
+
+def test_log_of_every_cube_loads_again_after_a_long_pause(page, case):
+    """A poll reads on at most LOG_POLL_PAGES (10) full pages: a backlog of
+    more, as after a laptop's sleep with the log open, loads the log
+    again, its newest page drawn once, in place of a walk through every
+    line since (AP LogCursor v1.0, Block 3). With all events, where the
+    walk would draw 2000 lines one by one; the answers are stubbed."""
+    now = time.time()
+    lines = [{"id": i, "kind": "hello", "time": iso(now - 9000 + i)} for i in range(1, 21)]
+    asked = []
+    show_view(page, "log")
+    page.route(every_cubes_log, lambda route: answer_log(route, lines, asked))
+    try:
+        open_every_cubes_log(page, "cubes=all&range=all", "logState.lines.some((l) => l.id === 20)")
+        lines.extend({"id": 20 + i, "kind": "hello", "time": iso(now - 8000 + i)} for i in range(1, 2501))
+        asked.clear()
+        assert page.evaluate(POLL_ENDS) == "ended", "the poll ends"
+        assert wait_until(page, "!logState.loading && logState.lines.some((l) => l.id === 2520)", 5), "the log loaded again"
+        after = [parse_qs(urlparse(u).query).get("after", [""])[0] for u in asked]
+        assert after == [str(20 + 200 * n) for n in range(10)] + [""], f"ten pages, then the log again: {after}"
+        ids = page.evaluate("logState.lines.map((l) => l.id)")
+        assert ids == list(range(2321, 2521)), f"the newest page: {ids[:3]}…{ids[-3:]} ({len(ids)})"
+        assert page.locator("#log-lines .log-line").count() == 200, "and the view shows it"
+    finally:
+        page.unroute(every_cubes_log)
+    show_view(page, "tiles")
+
+
+def test_log_of_every_cube_on_an_older_server(page, case):
+    """A server before after= ignores it and answers its newest page: the
+    poll keeps the lines after its cursor alone, and ends where a full
+    page brings nothing after the cursor, two requests here, the last 20
+    the newest 20. The answers are those of such a server, stubbed
+    (old_log_page)."""
+    now = time.time()
+    lines = [{"id": i, "kind": "hello", "time": iso(now - 3000 + i)} for i in range(1, 301)]
+    asked = []
+    show_view(page, "log")
+    page.route(every_cubes_log, lambda route: answer_log(route, lines, asked, old_log_page))
+    try:
+        open_every_cubes_log(page, "cubes=all", "logState.lines.some((l) => l.id === 300)")
+        lines.extend({"id": 300 + i, "kind": "hello", "time": iso(now - 100 + i)} for i in range(1, 6))
+        asked.clear()
+        assert page.evaluate(POLL_ENDS) == "ended", f"the poll ends ({len(asked)} requests)"
+        after = [parse_qs(urlparse(u).query).get("after") for u in asked]
+        assert after == [["300"], ["305"]], f"two requests, the second after the first's last: {after}"
+        ids = page.evaluate("logState.lines.map((l) => l.id)")
+        assert ids == list(range(286, 306)), f"the newest 20: {ids}"
+    finally:
+        page.unroute(every_cubes_log)
+    show_view(page, "tiles")
+
+
+def test_log_of_every_cube_on_an_older_server_in_a_range(page, case):
+    """Under a time range, the last hour, the newest page of a server
+    that ignores after= reaches back before the hour: the poll adds none
+    of those lines, which the range's check would never take out, only
+    the new ones after its cursor. The answers are those of such a
+    server, stubbed (old_log_page): 290 lines of two hours ago, 10 of the
+    last ten minutes, then two new ones."""
+    now = time.time()
+    lines = [{"id": i, "kind": "hello", "time": iso(now - 7500 + i)} for i in range(1, 291)]
+    lines += [{"id": 290 + i, "kind": "hello", "time": iso(now - 600 + i)} for i in range(1, 11)]
+    show_view(page, "log")
+    page.route(every_cubes_log, lambda route: answer_log(route, lines, [], old_log_page))
+    try:
+        open_every_cubes_log(page, "cubes=all&range=1h", "logState.range === '1h' && logState.lines.length === 10")
+        lines.extend({"id": 300 + i, "kind": "hello", "time": iso(now - 5 + i)} for i in range(1, 3))
+        assert page.evaluate(POLL_ENDS) == "ended", "the poll ends"
+        ids = page.evaluate("logState.lines.map((l) => l.id)")
+        assert ids == list(range(291, 303)), f"the hour's lines and the two new ones, none from before the hour: {ids[:3]}…({len(ids)})"
+    finally:
+        page.unroute(every_cubes_log)
+    show_view(page, "tiles")
+
+
+def test_log_of_every_cube_polls_one_at_a_time(page, case):
+    """While a poll is on its way, another, as the timer's, asks nothing;
+    the page's api() holds the log's reads (HOLD_LOG)."""
+    now = time.time()
+    lines = [{"id": 900000 + i, "kind": "hello", "time": iso(now - 100 + i)} for i in (1, 2, 3)]
+    show_view(page, "log")
+    page.route(every_cubes_log, lambda route: answer_log(route, lines, []))
+    try:
+        open_every_cubes_log(page, "cubes=all", "logState.lines.some((l) => l.id === 900003)")
+    finally:
+        page.unroute(every_cubes_log)
+    page.evaluate(HOLD_LOG)
+    assert page.evaluate("() => { pollLog(); pollLog(); return window.logAnswers.length; }") == 1, "one poll on its way, the second asks nothing"
+    page.evaluate("window.logAnswers.shift().resolve([])")
+    assert wait_until(page, "!logState.polling", 5), "the poll ended"
     show_view(page, "tiles")
 
 
@@ -699,6 +896,83 @@ def test_log_older(page, case):
     show_view(page, "tiles")
 
 
+# RING is where the ids of the lines a server keeps in memory start: its
+# start in microseconds, far above a store's ids.
+RING = 1_763_000_000_000_000
+
+
+def test_log_older_after_the_log_moved(page, case, watch):
+    """Older first asks whether the server still has the newest line the
+    log shows, after= its id; a 409 loads the log again in place of the
+    page before the oldest line (AP LogCursor v1.0, Block 3). That is a
+    Cube served for this run, whose lines the server kept in memory, that
+    has gained its row in the store: its log is then the store's, whose
+    ids are far below, and the page before the oldest line would be the
+    store's newest, under the lines as if older, a live line in it a
+    second time. The server's answers are stubbed (log_page), and the
+    server's own lines are kept out of the log (isolate_log)."""
+    now = time.time()
+    lines = [{"id": RING + i, "kind": "hello", "time": stamp(now, i)} for i in range(1, 201)]
+    asked = []
+    show_view(page, "log")
+    isolate_log(page)
+    page.route(LOG_ROUTE, lambda route: answer_log(route, lines, asked))
+    try:
+        all_events(page)
+        assert wait_until(page, "logState.lines.filter((l) => l.id > %d).length === 200" % RING, 5), "the page the server kept in memory"
+        rf = page.evaluate("state.rooms[0].devices[0].rf_address")
+        at = iso(now)
+        page.evaluate("""([rf, at]) => state.events.dispatchEvent(new MessageEvent("config", { data: JSON.stringify({
+          kind: "config", device: rf, time: at }) }))""", [rf, at])
+        assert wait_until(page, "logState.lines.some((l) => l.kind === 'config' && !l.id)", 5), "the live line"
+        # The Cube gains its row: its log is the store's, the live line in it with an id of the store's.
+        lines[:] = [{"id": 7, "kind": "hello", "time": iso(now - 1)}, {"id": 8, "kind": "config", "device": rf, "time": at}]
+        watch.expected.append((f"after={RING + 200}", 409))
+        asked.clear()
+        page.locator("#log-older").click()
+        assert wait_until(page, "!logState.loading && logState.lines.some((l) => l.id === 8)", 5), "the store's log"
+        q = [parse_qs(urlparse(u).query) for u in asked]
+        assert q[0].get("after") == [str(RING + 200)] and not any("before" in x or "after" in x for x in q[1:]), \
+            f"the newest line's id asked, then the log again, no page before the oldest: {q}"
+        ids = page.evaluate("logState.lines.map((l) => l.id)")
+        assert ids == [7, 8], f"the store's lines, once each, none of the memory's: {ids}"
+        assert page.locator("#log-lines .log-line").count() == 2, "and the view shows them"
+        assert wait_until(page, "document.getElementById('log-older').disabled", 5), "nothing older"
+    finally:
+        page.unroute(LOG_ROUTE)
+    show_view(page, "tiles")
+
+
+def test_log_older_question_after_another_choice(page, case):
+    """Another choice made while Older's question (after=, logGone) is on
+    its way loads the log for it; a 409 to the question that comes after
+    loads it no second time, and Older asks for no page: the choice's
+    page is the log. The page's api() holds the log's reads (HOLD_LOG),
+    and only the events the test sends reach the log (isolate_log)."""
+    now = time.time()
+    show_view(page, "log")
+    all_events(page)
+    isolate_log(page)
+    page.evaluate(HOLD_LOG)
+    page.evaluate("() => { loadLog(); }")  # not awaited: the test answers it
+    assert wait_until(page, "window.logAnswers.length === 1", 5), "the log's page held"
+    page.evaluate("(evs) => window.logAnswers.shift().resolve(evs)",
+                  [{"id": i, "kind": "hello", "time": stamp(now, i)} for i in range(201, 401)])
+    assert wait_until(page, "!logState.loading && logState.more", 5), "a full page, Older offered"
+    page.locator("#log-older").click()
+    assert wait_until(page, "window.logAnswers.length === 1", 5), "Older's question held"
+    assert "after=400" in page.evaluate("window.logAnswers[0].path"), "Older asks after the newest line"
+    page.locator("#log-kind").select_option("hello")
+    assert wait_until(page, "window.logAnswers.length === 2", 5), "the choice's page held"
+    page.evaluate("() => { const e = new Error('beyond'); e.status = 409; window.logAnswers.shift().reject(e); }")
+    page.evaluate("(evs) => window.logAnswers.shift().resolve(evs)", [{"id": 5, "kind": "hello", "time": stamp(now, 5)}])
+    # A reload by the question would have taken the choice's page's place: the log would still be loading.
+    assert wait_until(page, "!logState.loading && logState.lines.map((l) => l.id).join() === '5'", 5), \
+        f"the choice's page, and no reload after it: {page.evaluate('window.logAnswers.map((a) => a.path)')}"
+    assert page.evaluate("window.logAnswers.length") == 0, "nothing more asked"
+    show_view(page, "tiles")
+
+
 def test_log_answers(page, case):
     """What comes back late or fails leaves the log as it should be: an
     Older answer after Clear is dropped, a Cube switch takes the device
@@ -706,10 +980,11 @@ def test_log_answers(page, case):
     event comes past 2000 lines, and the error line shows with a kind
     chosen. The page's api() holds the log's requests, which the test
     answers in its own time; the log button's question (log/alerts) goes
-    through. Only the events the test sends reach the log (isolate_log):
-    a line of the test server's own, such as a backup's or a device's
-    state from the fake Cube's 10 s poll, would push one of the 2000
-    counted out."""
+    through, and Older's question whether the log is still there
+    (after=, logGone) is answered at once, as a log that is. Only the
+    events the test sends reach the log (isolate_log): a line of the test
+    server's own, such as a backup's or a device's state from the fake
+    Cube's 10 s poll, would push one of the 2000 counted out."""
     now = time.time()
     show_view(page, "log")
     all_events(page)
@@ -717,9 +992,9 @@ def test_log_answers(page, case):
     page.evaluate("""() => {
       window.logAnswers = [];
       const real = api;
-      window.api = (method, path, body) => path.includes("/log") && !path.includes("/log/alerts")
-        ? new Promise((resolve, reject) => window.logAnswers.push({ path, resolve, reject }))
-        : real(method, path, body);
+      window.api = (method, path, body) => !path.includes("/log") || path.includes("/log/alerts") ? real(method, path, body)
+        : path.includes("&after=") ? Promise.resolve([])
+        : new Promise((resolve, reject) => window.logAnswers.push({ path, resolve, reject }));
     }""")
 
     def held(n=1):

@@ -100,15 +100,15 @@ func (c *slotsCube) slotsAlerts(t *testing.T) []string {
 	return out
 }
 
-// waitSlotsEvents waits until the Cube's log has n slots events and
-// returns them.
+// waitSlotsEvents waits until the Cube's log has n slots events, at
+// any level, and no more, and returns them.
 func (c *slotsCube) waitSlotsEvents(t *testing.T, n int) []event {
 	t.Helper()
-	var evs []event
-	testkit.Eventually(t, fmt.Sprintf("%d slots events", n), func() bool {
-		evs = c.events(t, "slots")
-		return len(evs) == n
-	})
+	isSlots := func(e event) bool { return e.Kind == "slots" }
+	evs, next := logAfterN(t, logStart(c.ts), fmt.Sprintf("%d slots events", n), n, isSlots)
+	if more := logLines(t, next, isSlots); len(more) != 0 {
+		t.Fatalf("%d slots events, want %d: %+v", n+len(more), n, append(evs, more...))
+	}
 	return evs
 }
 

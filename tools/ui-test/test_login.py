@@ -5,8 +5,8 @@ token, as the operator run.sh creates (password op-pass). A page error
 fails the test (the guard); the console is not watched, since the
 page's first requests without a token are refused on purpose."""
 from conftest import TOKEN, URL, api_call
-from helpers import (assert_login_card_centred, assert_login_row, named_buttons, open_personal_page, scroll_settled, show_view, sign_out,
-                     wait_until)
+from helpers import (assert_login_card_centred, assert_login_row, frames, named_buttons, open_personal_page, scroll_settled, show_view,
+                     sign_out, wait_until)
 
 
 def test_sign_in_and_out(new_context, case, watch, guard):
@@ -342,11 +342,13 @@ def test_profile_marks_a_key(new_context, case, watch, guard):
             assert colours[0] not in ("rgba(0, 0, 0, 0)", "transparent") and colours[1] != "none", f"tinted and outlined: {colours}"
 
         def redrawn_unmarked(change, what):
-            """change draws My profile's keys again; then none is marked."""
-            at.evaluate("() => { document.querySelector('#profile-tokens .user-tokens').dataset.old = '1'; }")
-            change()
-            assert wait_until(at, """(() => { const ul = document.querySelector('#profile-tokens .user-tokens');
-                return !!ul && !ul.dataset.old && !!ul.querySelector('li[data-id]'); })()""", 5), f"the keys drawn again: {what}"
+            """change reads My profile's keys again, which its part draws in
+            place (AP UiParts, Block 13); then none is marked."""
+            with at.expect_response(lambda r: r.request.method == "GET" and r.url.endswith("/api/v1/users/operator/tokens"), timeout=5000) as read:
+                change()
+            read.value.finished()
+            frames(at)
+            assert at.locator(f"#profile-tokens li[data-id='{last}']").count() == 1, f"the keys drawn again: {what}"
             assert at.locator("#profile-tokens li.token-marked").count() == 0, f"nothing marked: {what}"
 
         # without the mark, the last key's row starts below the first screen

@@ -90,14 +90,16 @@ function readLogHash(hash) {
 }
 
 // readProfileHash takes the key My profile marks from its address,
-// #profile?key=<id> (profile.js markProfileKey; docs/ui.md, "My profile"),
-// as the app opens it for a key of the phone's it could not revoke;
-// another address, or an id that is not a whole number, marks none.
+// #profile?key=<id> (MassimoParts.profile.mark, ui/src/profile/store.ts
+// markKey; docs/ui.md, "My profile"), as the app opens it for a key of
+// the phone's it could not revoke; another address, or an id that is not
+// a whole number, marks none. It runs from init on, parts.js loaded by
+// then (the last of the page's scripts, before DOMContentLoaded).
 function readProfileHash(hash) {
   const i = hash.indexOf("?");
   const page = i < 0 ? hash : hash.slice(0, i);
   const id = new URLSearchParams(i < 0 ? "" : hash.slice(i + 1)).get("key") || "";
-  markProfileKey(page === "#profile" && /^[1-9][0-9]{0,14}$/.test(id) ? Number(id) : null);
+  MassimoParts.profile.mark(page === "#profile" && /^[1-9][0-9]{0,14}$/.test(id) ? Number(id) : null);
 }
 
 // setAddress puts a page's hash into the address: as a new entry of the

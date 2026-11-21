@@ -38,6 +38,12 @@ const LOG_COUNT = 20;
 // where the stream, which is the header's Cube's, brings none (D9-A).
 const LOG_POLL_MS = 10000;
 
+// LOG_POLL_PAGES is how many full pages a poll reads on before it loads
+// the log again instead (pollLog): a backlog of more, as after a laptop's
+// sleep with the log open, is drawn as the log's newest page, once, in
+// place of a walk through every line since.
+const LOG_POLL_PAGES = LOG_MAX_LINES / LOG_PAGE;
+
 const logState = {
   open: false,
   range: LOG_COUNT_RANGE, // one of LOG_RANGES
@@ -930,8 +936,8 @@ function renderOlder() {
 }
 
 // logCursor is where the next older page starts: the oldest line's id,
-// else its time as the server sent it (a Cube without a row in the
-// store, whose log has no ids).
+// else its time as the server sent it (a live line of the stream, which
+// has no id; every line of the server's log has one, its memory's too).
 function logCursor() {
   const first = logState.lines[0];
   if (!first) return null;
@@ -945,14 +951,15 @@ function logURL() {
 }
 
 // logQuery is the query of a page: the size (LOG_COUNT for the count,
-// else LOG_PAGE), the start of a time range, or the time given (a poll's,
-// as the server sent it), the kind and the device chosen, and where it
+// else LOG_PAGE), the start of a time range, or the line's id given (a
+// poll's, after which the page reads forward: LOG_PAGE whatever the
+// range, and no time), the kind and the device chosen, and where it
 // starts.
-function logQuery(before, since) {
-  let q = "?limit=" + (logState.range === LOG_COUNT_RANGE ? LOG_COUNT : LOG_PAGE);
+function logQuery(before, after) {
+  let q = "?limit=" + (logState.range === LOG_COUNT_RANGE && !after ? LOG_COUNT : LOG_PAGE);
   const start = logRangeStart(logState.range);
-  const from = since || (start ? start.toISOString() : "");
-  if (from) q += "&since=" + encodeURIComponent(from);
+  if (after) q += "&after=" + after;
+  else if (start) q += "&since=" + encodeURIComponent(start.toISOString());
   if (logState.kind) q += "&kind=" + encodeURIComponent(logState.kind);
   if (logState.source) q += "&source=" + logState.source;
   if (logState.device) q += "&device=" + encodeURIComponent(logState.device);
@@ -1053,12 +1060,16 @@ async function loadLog() {
 
 // loadOlder puts the page before the oldest line under the lines, the
 // view staying where it was; an answer that comes after a Clear, another
-// choice or a Cube switch is dropped.
+// choice or a Cube switch is dropped. Where the log the lines came from
+// is gone (logGone), it loads the log again instead.
 async function loadOlder() {
   if (logState.loading || !logState.more || logState.cursor === null || !state.serial) return;
   const gen = logState.gen;
   logState.loading = true;
   renderOlder();
+  const gone = await logGone();
+  if (gen !== logState.gen) return;
+  if (gone) return loadLog();
   const box = $("log-lines");
   const top = box.scrollTop;
   let evs = null;
@@ -1086,35 +1097,87 @@ async function loadOlder() {
 }
 
 // logSameLine reports whether two lines are one event: by its id, else
-// (a log without a store) by its time, kind, device and Cube.
+// (a line without one, as the error line) by its time, kind, device and
+// Cube.
 function logSameLine(a, b) {
   if (a.id || b.id) return a.id === b.id;
   return a.at === b.at && a.kind === b.kind && a.device === b.device && a.cubeSerial === b.cubeSerial;
 }
 
+// logNewestID is the id of the newest line the view holds of the
+// server's log, 0 for none: a live line of the stream has no id.
+function logNewestID() {
+  let newest = 0;
+  for (const l of logState.lines) if (l.id > newest) newest = l.id;
+  return newest;
+}
+
+// logGone reports whether the log the lines came from is no longer the
+// server's: the server answers 409 to the newest line's id as after=,
+// a line its log never gave out (AP LogCursor v1.0, D3-A). That is a
+// Cube served for this run that has gained its row in the store, whose
+// log is then the store's, its ids far below those of the lines it kept
+// in memory, so that a page before the oldest line would be the store's
+// newest, shown under the lines as if older; a store restored from an
+// older copy or emptied by the prune; a server without a store
+// restarted with its clock set back. A line the prune removed while
+// newer ones stay gives no sign (D4-A). A question that fails says
+// nothing is gone.
+async function logGone() {
+  const newest = logNewestID();
+  if (!newest) return false;
+  try {
+    await api("GET", logURL() + "?limit=1&after=" + newest);
+    return false;
+  } catch (e) {
+    return e.status === 409;
+  }
+}
+
 // pollLog asks, under All Cubes while the log is shown, for the lines
-// since the newest one (D9-A); those the log does not hold yet come in on
-// top as a live line does. None is asked while a page or a poll is on
-// its way, and an answer that comes after a new page, another choice or
-// Clear is dropped; one that fails leaves it to the next poll.
+// after the newest one by its id (AP LogCubes v1.0, D9-A; AP LogCursor
+// v1.0, D6-A), page after page while a page is full, so that each comes
+// once, a burst longer than a page too; a log without a line of the
+// server's asks for its newest page, as loadLog does. A line at or
+// below the cursor is dropped: a server before after= answers its
+// newest page, which may reach back before a time range. The lines the
+// log does not hold yet come in on top as a live line does, once the
+// pages are in. Past LOG_POLL_PAGES full pages, and at a 409, a line the
+// server's log never gave out (logGone), it loads the log again
+// instead. None is asked while a page or a poll is on its way, and an
+// answer that comes after a new page, another choice or Clear is
+// dropped; one that fails otherwise leaves the rest to the next poll.
 async function pollLog() {
   if (!logState.open || logState.cubes !== "all" || logState.loading || logState.polling) return;
   const gen = logState.gen;
-  let newest = null;
-  for (let i = logState.lines.length - 1; i >= 0 && !newest; i--) if (logState.lines[i].at) newest = logState.lines[i];
+  const current = () => gen === logState.gen && logState.open && logState.cubes === "all";
+  let after = logNewestID();
+  let reload = false;
+  const got = [];
   logState.polling = true;
-  let evs = null;
   try {
-    evs = (await api("GET", "api/v1/log" + logQuery(null, newest ? newest.at : ""))) || [];
+    for (let pages = 1; ; pages++) {
+      const evs = (await api("GET", "api/v1/log" + logQuery(null, after))) || [];
+      if (!current()) break;
+      for (const ev of evs) {
+        const line = logLine(ev);
+        if (after ? line.id > after : !logState.lines.some((l) => logSameLine(l, line))) got.push(line);
+      }
+      const last = evs.length ? evs[evs.length - 1].id || 0 : 0;
+      if (!after || evs.length < LOG_PAGE || last <= after) break;
+      if (pages === LOG_POLL_PAGES) {
+        reload = true;
+        break;
+      }
+      after = last;
+    }
   } catch (e) {
-    evs = null;
+    reload = e.status === 409;
   }
   logState.polling = false;
-  if (!evs || gen !== logState.gen || logState.cubes !== "all") return;
-  for (const ev of evs) {
-    const line = logLine(ev);
-    if (!logState.lines.some((l) => logSameLine(l, line))) addLogLine(line);
-  }
+  if (!current()) return;
+  if (reload) loadLog();
+  else for (const line of got) addLogLine(line);
 }
 
 // logPollSet runs pollLog every LOG_POLL_MS while the log is shown under

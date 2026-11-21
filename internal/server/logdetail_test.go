@@ -11,13 +11,12 @@ package server
 import (
 	"context"
 	"encoding/base64"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 
 	"go.metaworx.ch/massimo/internal/protocol/cube"
-	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/view"
 )
 
@@ -152,14 +151,13 @@ func greetingWithRoomName(t *testing.T, greeting []cube.Message, id uint8, name 
 	return out
 }
 
-// newLines reads the log at a level and returns the lines after the n
-// it had.
-func newLines(t *testing.T, s string, all []event, n int) []event {
+// firstConnected checks that the log has the start's connected line
+// alone: the start has it through the pump and in the store.
+func firstConnected(t *testing.T, ts *httptest.Server) {
 	t.Helper()
-	if len(all) < n {
-		t.Fatalf("%s: %d lines, fewer than the %d before", s, len(all), n)
+	if _, evs := logOf(t, ts, "?kind=connected"); len(evs) != 1 {
+		t.Fatalf("the first connected after the start: %+v", evs)
 	}
-	return all[n:]
 }
 
 // A reconnect after a loss is one connected line at info, its summary
@@ -169,19 +167,11 @@ func TestReconnectAtInfoIsOneLine(t *testing.T) {
 	t.Parallel()
 	r := startServer(t, stored())
 	fc, ts := r.fc, r.ts
-	testkit.Eventually(t, "the first connected", func() bool {
-		_, evs := logOf(t, ts, "?kind=connected")
-		return len(evs) == 1
-	})
-	_, before := logOf(t, ts, "?limit=1000")
-	_, beforeDebug := logOf(t, ts, "?limit=1000&level=debug")
+	firstConnected(t, ts)
+	m := logMark(t, ts)
 	fc.Drop()
-	testkit.Eventually(t, "the second connected", func() bool {
-		_, evs := logOf(t, ts, "?kind=connected")
-		return len(evs) == 2
-	})
-	_, all := logOf(t, ts, "?limit=1000")
-	lines := newLines(t, "info", all, len(before))
+	logAfter(t, m, "the second connected", logLine("connected", ""))
+	lines := logLines(t, m, atInfo)
 	var kinds []string
 	for _, e := range lines {
 		kinds = append(kinds, e.Kind)
@@ -196,9 +186,8 @@ func TestReconnectAtInfoIsOneLine(t *testing.T) {
 	if lines[0].Level != "warn" || c.Level != "info" {
 		t.Fatalf("levels %s and %s", lines[0].Level, c.Level)
 	}
-	_, allDebug := logOf(t, ts, "?limit=1000&level=debug")
 	greeting := map[string]int{}
-	for _, e := range newLines(t, "debug", allDebug, len(beforeDebug)) {
+	for _, e := range logLines(t, m, nil) {
 		if e.Level == "debug" {
 			greeting[e.Kind]++
 			if e.Summary == nil {
@@ -217,19 +206,12 @@ func TestChangedWhileDisconnected(t *testing.T) {
 	t.Parallel()
 	r := startServer(t, stored())
 	fc, ts := r.fc, r.ts
-	testkit.Eventually(t, "the first connected", func() bool {
-		_, evs := logOf(t, ts, "?kind=connected")
-		return len(evs) == 1
-	})
+	firstConnected(t, ts)
 	greeting := recorded(t)
+	mark := logMark(t, ts)
 	fc.SetGreeting(greetingWithRoomName(t, greeting, 6, "Renamed elsewhere"))
 	fc.Drop()
-	var meta []event
-	testkit.Eventually(t, "the change after the reconnect", func() bool {
-		_, meta = logOf(t, ts, "?kind=metadata")
-		return len(meta) == 1
-	})
-	m := meta[0]
+	m, _ := logAfter(t, mark, "the change after the reconnect", logLine("metadata", ""))
 	if !m.Missed || m.Level != "info" || len(m.ListChanges) != 1 || m.ListChanges[0].What != "room_renamed" || m.ListChanges[0].Name != "Renamed elsewhere" || m.ListChanges[0].Room != 6 {
 		t.Fatalf("the metadata line: %+v", m)
 	}
@@ -246,10 +228,7 @@ func TestChangedWhileServerDown(t *testing.T) {
 	r := startServer(t, stored())
 	fc, ts, s, st := r.fc, r.ts, r.s, r.st
 	rt := s.cubes["keq0000100"]
-	testkit.Eventually(t, "the first connected", func() bool {
-		_, evs := logOf(t, ts, "?kind=connected")
-		return len(evs) == 1
-	})
+	firstConnected(t, ts)
 	if _, _, err := s.takeBackup(context.Background(), rt, "manual", 0, ""); err != nil {
 		t.Fatal(err)
 	}
@@ -259,19 +238,13 @@ func TestChangedWhileServerDown(t *testing.T) {
 	row, _, _ := st.Cube(context.Background(), "KEQ0000100")
 	r.stop() // down while the Cube changes
 	r2 := startServer(t, again(r))
-	s2, rt2 := r2.s, r2.rt
-	ctx := context.Background()
-	var m event
-	if !testkit.Within(5*time.Second, func() bool {
-		evs, err := s2.storedLog(ctx, st, map[int64]string{row.ID: ""}, logQuery{kind: "metadata", limit: 10, minLevel: 0})
-		if err != nil || len(evs) != 1 {
-			return false
-		}
-		m = evs[0]
-		return true
-	}) {
-		t.Fatalf("no metadata line after the restart; connected %v", rt2.client.Connected())
+	// The line follows the first connected, in the pump's turn, which the
+	// start has passed.
+	evs, err := r2.s.storedLog(context.Background(), st, map[int64]string{row.ID: ""}, logQuery{kind: "metadata", limit: 10, minLevel: 0})
+	if err != nil || len(evs) != 1 {
+		t.Fatalf("the metadata lines after the restart: %+v, %v", evs, err)
 	}
+	m := evs[0]
 	if !m.Missed || len(m.ListChanges) != 1 || m.ListChanges[0].Name != "Renamed while down" {
 		t.Fatalf("the line after the restart: %+v", m)
 	}
@@ -284,16 +257,13 @@ func TestSameConfigAtDebug(t *testing.T) {
 	r := startServer(t, stored())
 	fc, ts, s := r.fc, r.ts, r.s
 	rt := s.cubes["keq0000100"]
-	testkit.Eventually(t, "the first connected", func() bool {
-		_, evs := logOf(t, ts, "?kind=connected")
-		return len(evs) == 1
-	})
+	firstConnected(t, ts)
 	ctx := context.Background()
+	m := logMark(t, ts)
 	rt.writer().Reread(ctx, 0x0a010d)
-	testkit.Eventually(t, "the re-read at debug", func() bool {
-		_, evs := logOf(t, ts, "?kind=config&device=0a010d&level=debug")
-		return len(evs) >= 2 && evs[len(evs)-1].Level == "debug" && !evs[len(evs)-1].Missed
-	})
+	if ev, _ := logAfter(t, m, "the re-read", func(e event) bool { return e.Kind == "config" && e.Device == "0a010d" }); ev.Level != "debug" || ev.Missed {
+		t.Fatalf("the re-read: %+v", ev)
+	}
 	if _, evs := logOf(t, ts, "?kind=config&device=0a010d"); len(evs) != 0 {
 		t.Fatalf("an unchanged C line at info: %+v", evs)
 	}
@@ -309,9 +279,13 @@ func TestSameConfigAtDebug(t *testing.T) {
 	}
 	raw[0x12] = 44 // comfort 22.0
 	fc.SetConfig(cube.Message{Type: 'C', Data: rf + "," + base64.StdEncoding.EncodeToString(raw)})
+	m = logMark(t, ts)
 	rt.writer().Reread(ctx, 0x0a010d)
-	testkit.Eventually(t, "the change at info", func() bool {
-		_, evs := logOf(t, ts, "?kind=config&device=0a010d")
-		return len(evs) == 1 && evs[0].Changes["comfort_temp"].To == 22.0
-	})
+	ev, next := logAfter(t, m, "the change", func(e event) bool { return e.Kind == "config" && e.Device == "0a010d" })
+	if ev.Level != "info" || ev.Changes["comfort_temp"].To != 22.0 {
+		t.Fatalf("the change: %+v", ev)
+	}
+	if more := logLines(t, next, logLine("config", "0a010d")); len(more) != 0 {
+		t.Fatalf("the change at info again: %+v", more)
+	}
 }

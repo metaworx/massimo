@@ -5,10 +5,12 @@
  * @file internal/server/ui/src/plain/header.d.ts
  *
  * The globals of the plain script ui/header.js that the parts call: a
- * Cube's radio budget, and its link's sign and word.
+ * Cube's radio budget, and its link's sign and word; the server's sign
+ * drawn again, the version checked, a version split
+ * and a certificate in words.
  */
 
-import type { Cube } from "../api";
+import type { CertStatus, Cube } from "../api";
 
 declare global {
   /** A Cube's radio budget as the page shows it, "–" while unknown. */
@@ -17,6 +19,14 @@ declare global {
   function linkSign(c: Cube): string;
   /** A Cube's link in a few words, as its badge says it. */
   function linkWord(c: Cube): string;
+  /** A version split into the short one and what it was built with ("massimo v0.1.0 (go1.26, linux/amd64)"). */
+  function splitVersion(v: string): { short: string; rest: string };
+  /** The server's certificate in a few words: its source, names and expiry, "–" for none. */
+  function certText(tls: CertStatus | undefined): string;
+  /** Compares the server's version with the page's: a newer server reloads the page when nothing is open, else the pile offers the reload. */
+  function checkVersion(): Promise<void>;
+  /** Draws the server's sign again from the server's state (a part of the header). */
+  function renderServerSign(): void;
 }
 
 export {};

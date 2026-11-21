@@ -1882,8 +1882,9 @@ massimo-week-program { display: contents; }
 #login-dialog > .brand-big { margin-bottom: 26px; }
 .login-keep-failed .actions { margin-top: 8px; }
 .user-tokens li .revoke-token { margin-left: auto; }
-/* the key My profile was opened with (#profile?key=<id>, profile.js
-   markProfileKey): tinted and outlined in the accent, in either theme */
+/* the key My profile was opened with (#profile?key=<id>, ui/src/profile/
+   store.ts markKey, shared/tokens.tsx): tinted and outlined in the
+   accent, in either theme */
 .user-tokens li.token-marked {
   margin: 0 -6px;
   padding: 4px 6px;

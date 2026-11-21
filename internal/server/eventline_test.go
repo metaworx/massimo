@@ -78,22 +78,24 @@ func TestEventLinesMatchTheRows(t *testing.T) {
 	s, st := rg.s, rg.st
 	s.logServer(systemEvent("backups_pruned", 0, map[string]any{"removed": 2}))
 	ctx := context.Background()
-	var rows []store.Event
-	testkit.Eventually(t, "the connect burst in the store", func() bool {
-		st.FlushEvents(ctx)
-		var err error
-		rows, err = st.Events(ctx, store.EventQuery{CubeID: 1, Server: true})
-		if err != nil {
-			t.Fatal(err)
+	// The connect burst, which the start has through the pump, and the
+	// line just kept, once the writer has written them.
+	if err := st.FlushEvents(ctx); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := st.Events(ctx, store.EventQuery{CubeID: 1, Server: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	states := 0
+	for _, r := range rows {
+		if r.Kind == "state" {
+			states++
 		}
-		states := 0
-		for _, r := range rows {
-			if r.Kind == "state" {
-				states++
-			}
-		}
-		return states >= 6
-	})
+	}
+	if states < 6 {
+		t.Fatalf("the connect burst in the store: %d state rows", states)
+	}
 	// A line of its own for each row: the lines of the last rows may come
 	// after the rows.
 	type key struct{ kind, source, device, level string }

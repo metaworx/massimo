@@ -158,10 +158,11 @@ function badgeState(kind) {
 
 // noticeEl is a lasting warning (.notice) of a text, for a state the
 // server keeps trying to leave, such as a Cube proxy that does not listen
-// (system-info.js; ui/src/shared/badge.tsx Notice for a part): since, an API time, adds from when it holds;
+// (ui/src/shared/badge.tsx Notice for a part): since, an API time, adds from when it holds;
 // next, an API time, when the server tries again, as its tooltip. Times,
 // not ages: a try comes every few seconds, and refreshAges runs once a
-// minute.
+// minute. Nothing calls it since System info is a part (AP UiParts,
+// Block 12); it goes with the builders nobody calls (Block 15).
 function noticeEl(text, { since, next } = {}) {
   const p = textEl("p", text, "notice");
   const from = Date.parse(since || "");
@@ -461,7 +462,8 @@ function foundCountEl(n) {
 
 // linkEl is a link to url that opens in a tab of its own, its text text;
 // a url that is not http(s), as one from the network may be, gives the
-// text alone.
+// text alone. Nothing calls it since System info is a part
+// (ui/src/shared/link.tsx Link); it goes with Block 15.
 function linkEl(url, text, cls) {
   if (!/^https?:\/\//i.test(url || "")) return textEl("span", text, cls);
   const a = textEl("a", text, cls);
@@ -655,6 +657,10 @@ function showResult(el, text, ok) {
 // app.js).
 const failedLines = new Set();
 
+// markRange's last caller, the notifications' card, is a part since AP
+// UiParts Block 13 (ui/src/shared/field.tsx Limit); nothing calls it now,
+// and it goes with the builders nobody calls (Block 15).
+
 // markRange marks a number field by what its required, min, max and step
 // allow, or by ok where the caller judges the value itself (the
 // notifications' threshold takes any number in its range, not only its
@@ -732,6 +738,10 @@ function fromTemplate(id) {
   return document.getElementById(id).content.firstElementChild.cloneNode(true);
 }
 
+// fragmentFromTemplate's last caller, the scheme editor, is a part since
+// AP UiParts Block 13 (ui/src/prefs/Editor.tsx); nothing calls it now, and
+// it goes with the builders nobody calls (Block 15).
+
 // fragmentFromTemplate clones the whole content of a <template> of the
 // page, for a frame of several elements that goes into a container of
 // the page as it is.
@@ -772,6 +782,10 @@ function downloadBlob(name, blob) {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+// filePicker's last caller, the Appearance card's Import…, is a part since
+// AP UiParts Block 13 (ui/src/shared/file.tsx FileButton); nothing calls it
+// now, and it goes with the builders nobody calls (Block 15).
 
 // filePicker is a hidden file input taking the types of accept; a file
 // chosen goes to onFile, and the input is emptied so that the same file
@@ -859,8 +873,8 @@ let stopKeeping = null;
 // content changes size, for ms or until the user scrolls by hand: a card
 // at the top (block "start"), a row in the middle ("center", clear of
 // the header). Keeping another element ends the keeping of the last, so
-// that a row inside a card just shown (My profile's marked key, users.js
-// fillTokens) takes over from its card.
+// that a row inside a card just shown (My profile's marked key,
+// ui/src/profile/Profile.tsx keysDrawn) takes over from its card.
 function keepInView(el, ms, block = "start") {
   if (stopKeeping) stopKeeping();
   const by = ["wheel", "touchstart", "keydown", "pointerdown"];
@@ -1149,7 +1163,8 @@ function deviceIds(serial, rf, { rf: show } = {}) {
 
 // kvList is a list of facts, a name and its value each ([name, value,
 // mono]), the values in a column of their own; mono sets a value in the
-// monospaced font (a path, an identifier).
+// monospaced font (a path, an identifier). Nothing calls it since System
+// info is a part (ui/src/shared/kv.tsx KvList); it goes with Block 15.
 function kvList(pairs) {
   const dl = elem("dl", "kv");
   for (const [name, value, mono] of pairs) dl.append(textEl("dt", name), textEl("dd", value, mono ? "mono" : ""));
@@ -1158,6 +1173,8 @@ function kvList(pairs) {
 
 // countList is a list of counts by name ({name: n}), in columns as many
 // as there is room for, the names in grey and the numbers right-aligned.
+// Nothing calls it since System info is a part (ui/src/shared/kv.tsx
+// CountList); it goes with Block 15.
 function countList(counts) {
   const ul = elem("ul", "kv-rows");
   for (const name of Object.keys(counts).sort()) ul.appendChild(elem("li", "", textEl("span", name), textEl("span", fmtNum(counts[name], 0))));

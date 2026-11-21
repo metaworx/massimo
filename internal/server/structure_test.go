@@ -4,13 +4,11 @@
 package server
 
 import (
-	"net/http/httptest"
 	"testing"
 	"time"
 
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
-	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // structured is the start of the structure changes' tests:
@@ -28,21 +26,10 @@ func structured() startOpt {
 }
 
 // structureEvent waits for the structure event of device in the Cube's
-// log and returns it.
-func structureEvent(t *testing.T, ts *httptest.Server, device string) event {
+// log after the mark, and returns it.
+func structureEvent(t *testing.T, m logCursor, device string) event {
 	t.Helper()
-	var found event
-	testkit.Eventually(t, "the structure event of "+device, func() bool {
-		var evs []event
-		getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log?limit=500", &evs)
-		for _, e := range evs {
-			if e.Kind == "structure" && e.Device == device {
-				found = e
-				return true
-			}
-		}
-		return false
-	})
+	found, _ := logAfter(t, m, "the structure event of "+device, func(e event) bool { return logLine("structure", "")(e) && e.Device == device })
 	return found
 }
 
@@ -52,11 +39,12 @@ func structureEvent(t *testing.T, ts *httptest.Server, device string) event {
 func TestStructureDone(t *testing.T) {
 	t.Parallel()
 	ts := startServer(t, structured()).ts
+	m := logMark(t, ts)
 	code, out := do(t, ts, "DELETE", "/api/v1/cubes/KEQ0000100/devices/0a010a", "")
 	if code != 200 || out["confirmation"] != "pending" {
 		t.Fatalf("remove: %d %v", code, out)
 	}
-	ev := structureEvent(t, ts, "0a010a")
+	ev := structureEvent(t, m, "0a010a")
 	if ev.Level != "info" || ev.Summary["outcome"] != "done" || ev.Summary["action"] != "remove" ||
 		ev.Summary["before"] != float64(50) || ev.Summary["free_slots"] != float64(50) {
 		t.Fatalf("event %+v", ev)
@@ -70,12 +58,13 @@ func TestStructureRoomsOfARoomRepair(t *testing.T) {
 	t.Parallel()
 	ts := startServer(t, structured(), withFake(func(fc *fakecube.Server) { withContactInRoom1(t, fc.Greeting) })).ts
 	const path = "/api/v1/cubes/KEQ0000100/rooms/1/repair/relink"
+	m := logMark(t, ts)
 	if _, p, body := previewOf(t, ts, path); p.Plan == "" {
 		t.Fatalf("preview: %s", body)
 	} else if code, out := do(t, ts, "POST", path+"?plan="+p.Plan, ""); code != 200 || out["ok"] != true {
 		t.Fatalf("run: %d %v", code, out)
 	}
-	ev := structureEvent(t, ts, "")
+	ev := structureEvent(t, m, "")
 	rooms, ok := ev.Summary["rooms"].([]any)
 	if ev.Summary["action"] != "relink" || !ok || len(rooms) != 1 || rooms[0] != float64(1) {
 		t.Fatalf("event %+v", ev)
@@ -93,11 +82,12 @@ func TestStructureNotConfirmed(t *testing.T) {
 	flagged := copyGreeting(t)
 	withErrorFlag(t, flagged, 0x0a010a, cube.RFAddLinkPartner)
 	fc.SetGreeting(flagged)
+	m := logMark(t, ts)
 	code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/0a010d", `{"room_id":1,"copy":false}`)
 	if code != 200 || out["confirmation"] != "pending" {
 		t.Fatalf("move: %d %v", code, out)
 	}
-	ev := structureEvent(t, ts, "0a010d")
+	ev := structureEvent(t, m, "0a010d")
 	flags, _ := ev.Summary["flagged"].([]any)
 	if ev.Level != "warn" || ev.Summary["outcome"] != "not_confirmed" || ev.Summary["action"] != "move" || ev.Summary["held"] != float64(3) ||
 		len(flags) != 1 || flags[0] != "0a010a" {

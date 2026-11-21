@@ -12,6 +12,8 @@
 import type { LoginProvider } from "../api";
 
 declare global {
+  /** The enabled sign-in providers as loadLoginProviders last read them, for the sign-in and My profile. */
+  const providersUI: { login: LoginProvider[] };
   /** Reads the enabled sign-in providers (GET /api/v1/login/providers), keeps them for the sign-in and My profile, and returns them; none where the server answers none. */
   function loadLoginProviders(): Promise<LoginProvider[]>;
 }

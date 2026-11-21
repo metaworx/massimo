@@ -3,7 +3,7 @@
 
 // The Massimo web UI, the OpenID Connect providers (docs/api-v1.md,
 // "Providers" and "Identities"): the enabled ones, which the sign-in
-// (login.js), My profile's linked accounts (linked.js) and a user's
+// (login.js), My profile's linked accounts (ui/src/profile/) and a user's
 // identities read, and the plain name of System settings → Sign-in
 // providers, which calls its part (ui/src/admin/, MassimoParts.providers).
 "use strict";

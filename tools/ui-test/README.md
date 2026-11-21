@@ -298,6 +298,75 @@ hence `failed_checks_forgotten`.
   answer their reads with stubs; the four cases of a worker make eight, so a
   local run of all four cases repeated within ten minutes meets the limit
   (429) until the ten minutes have passed or the servers are started anew.
+- `test_maint_updates.py`, Maintenance and System info as parts (AP UiParts, Block 12),
+  `GET /api/v1/update` stubbed, nothing installed, restarted or rebooted:
+  Software update keeps a line selected, Update's question and its buttons
+  through the header's check and Maintenance shown again;
+  a newer release takes the question back; the channel stays on and keeps
+  the focus while it saves; a sign-out, and another user signed in after an
+  expired session, end the reading while the helper works and take the
+  question back, and a reading that answers late starts nothing;
+  while Maintenance is shown, a resync of the stream shows the newer release,
+  Rooms shown reading nothing, a burst of events reads once and once after it,
+  a burst left by its page makes no second read, an update asked for elsewhere
+  is followed with its grace and takes the question back, a refused request
+  leaves the reading its buttons, an old update event starts no reading,
+  the helper's reading takes no event's read, the
+  channel's own change event reads nothing behind its back, a question taken
+  back leaves a focus elsewhere where it was, the next user is followed again,
+  and a read asked for before the session ended is not made;
+  an interval stays on and keeps the focus while it saves;
+  the delay typed and the restart's question stay the elements they were
+  through Maintenance shown again; the restart's question goes where the
+  restart is no longer offered, the reboot's where a reboot waits; the session's
+  end ends the following of a restart, a /healthz that answers late saying
+  nothing, and forgets the delay typed and the questions;
+  a setting set elsewhere shows while Maintenance is shown, Rooms reading
+  nothing; a resync reads the restart's row once, nothing for Rooms, nothing
+  while this page follows its restart; an interval's own change event reads
+  nothing behind its back; another setting changed during the own PUT is read
+  after it;
+  the settings file read again shows what waits with nothing read;
+  a reboot event keeps this page's wait, which follows at its time; an event
+  keeps the restart's question and the delay, and takes the reboot's back
+  where a reboot waits;
+  System info keeps a text selected through a certificate's reading
+  and a copy's "Copied", its folds and its copy icons through the page shown
+  again; the session's end forgets its facts and the settings in effect, and a
+  reading that answers late shows nothing; a resync reads the facts and the
+  settings in effect once while it is shown, nothing for Rooms; a Cube changed
+  reads the facts; a resync that finds the certificate being read reads it
+  anew, also after the readings gave up; the session's end between two
+  readings reads no more.
+- `test_personal_updates.py`, Personal settings as parts (AP UiParts, Block 13,
+  with AP UnsavedMarks, Block 5):
+  My profile's display name and a new password typed stay the elements they
+  were with what is typed through the personal page shown again, nothing sent;
+  the display name left unsaved shows the card's pill, which unfolds the card
+  with the focus in the form, ☰'s mark and its Personal settings' disk, and
+  Reset clears them; a password typed marks its form changed and Reset empties
+  it; after a sign-out, and for another user signed in after an expired
+  session, nothing typed is left, and a read of the user that answers late
+  draws nothing; in the app (fake_bridge.js) a linked account is named by its
+  provider's name, and a current password filled in alone is no change;
+  My settings' poll being typed stays, the element it was with the focus,
+  when the user's settings arrive, and is saved as it is left;
+  the scheme editor's name and a hex value half typed stay with the focus
+  when the settings arrive, and Close drops the draft; a colour changed and
+  left shows My settings' pill, which brings the editor back into sight from
+  a folded card, ☰'s mark and Personal settings' disk, and Reset clears them;
+  after a sign-out, and for another user after a 401, no scheme is being
+  edited; Save as and Enter in the name save only a change (D204), and
+  another scheme chosen or an import drops the draft;
+  a notification's delay refused on its field stays, the element it was with
+  its mark and the focus, and the name of this device typed too, through the
+  personal page shown again, nothing sent; after a sign-out, and for another
+  user after a 401, the name typed is gone, and a read of the devices that
+  answers late draws nothing; a rule changed just before Sign out is sent
+  once, under the owner's token, and nothing for the operator after it
+  (D205), and one changed before another user's sign-in after a 401 is not
+  sent; a read that finds a change waiting keeps it and sends it; the rules
+  are off until the first read has answered.
 - `test_stream.py`:
   the event stream opens with tickets only, never with the token,
   and after a refused stream (the test hands out a used ticket first,
@@ -395,7 +464,17 @@ hence `failed_checks_forgotten`.
   nothing older after a page shorter than 200 (with all events);
   with the server's answers stubbed, Older, under the lines, puts a page
   at the bottom, the view staying where it was,
-  until a short page ends the paging;
+  until a short page ends the paging,
+  and where the server answers 409 to the newest line's id,
+  it loads the log again, no line twice and none of the log before,
+  also not after another choice took its place;
+  under All Cubes a poll asks after the newest line's id,
+  a 409 to it loads the log again once, each line once and none missing,
+  a burst of 250 comes in one poll, the newest 20 shown,
+  a backlog of more than ten pages loads the log again,
+  on a server that ignores `after=` the poll ends,
+  and adds no line from before the range,
+  and a second poll asks nothing while one is on its way;
   with the page's `api()` holding the log's requests until the test answers
   them, an Older answer after Clear is dropped,
   a Cube switch takes the device chosen back to all,

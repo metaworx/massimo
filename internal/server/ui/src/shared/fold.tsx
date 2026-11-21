@@ -20,9 +20,10 @@ import type { ComponentChildren, HTMLAttributes } from "preact";
  * open and close; summary is what its summary shows (FoldHead for a
  * panel's name, serial and badges), summaryProps its summary's attributes
  * (a tabIndex, a click handler), the rest the fold's body; data are its
- * data- attributes.
+ * data- attributes, id its element's (a fold the page names).
  */
-export function Fold({ cls, open, onToggle, summary, summaryProps, data, children }: {
+export function Fold({ id, cls, open, onToggle, summary, summaryProps, data, children }: {
+  id?: string;
   cls: string;
   open: boolean;
   onToggle?: (open: boolean) => void;
@@ -34,7 +35,7 @@ export function Fold({ cls, open, onToggle, summary, summaryProps, data, childre
   const attrs: Record<string, string> = {};
   for (const [k, v] of Object.entries(data || {})) attrs["data-" + k] = v;
   return (
-    <details class={cls} open={open} {...attrs} onToggle={(ev) => {
+    <details id={id} class={cls} open={open} {...attrs} onToggle={(ev) => {
       const now = ev.currentTarget.open;
       if (now !== open && onToggle) onToggle(now);
     }}>

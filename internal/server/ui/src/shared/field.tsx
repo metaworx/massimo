@@ -18,10 +18,10 @@
  */
 
 import type { ComponentChildren, Ref } from "preact";
-import { useId, useRef, useState } from "preact/hooks";
+import { useRef, useState } from "preact/hooks";
 import { Notice } from "./badge";
 import type { FormLook, Place } from "./forms";
-import { HelpButton, HelpText } from "./help";
+import { useHelp } from "./help";
 import { Icon, Mark } from "./icon";
 import { busyProps } from "./question";
 
@@ -140,10 +140,14 @@ interface Row {
   unit?: string;
   /** A grey line under the row. */
   hint?: string;
+  /** The hint's id, which the control names as its description (a note that changes with the choice: the update channel's). */
+  hintId?: string;
   /** The key of the setting's help (help.<key> of the texts): its button after the label, its explanation under the control. */
   help?: string;
   /** Classes the row adds to field (a capability's needs-…). */
   cls?: string;
+  /** The label's class: action-title for a row's title in bold (Maintenance's settings). */
+  labelCls?: string;
   /** The field's limit, its line before the control (limitAria gives the control its attributes). */
   limit?: Limit;
 }
@@ -154,20 +158,21 @@ interface Row {
  * class field-control; a unit follows it, the two then the row's
  * .field-control; help is the key of the setting's help, its button
  * after the label and its explanation under the control (helpParts);
- * hint is a grey line under the row; cls adds classes to the row; limit
+ * hint is a grey line under the row, hintId its id; cls adds classes to the row,
+ * labelCls to its label (action-title, a row's title in bold); limit
  * is the line of what the field takes, just before the control, in the
  * unit's line where there is one, else on a line of its own above the
  * box. With a draft the row is followed by its "changed meanwhile"
  * notice (show names the value).
  */
-export function Field<T>({ label, id, wide, unit, hint, help, cls, limit, draft, show, children }: Row & { draft?: Draft<T>; show?: (v: T) => string; children: ComponentChildren }) {
-  const helpId = useId();
+export function Field<T>({ label, id, wide, unit, hint, hintId, help, cls, labelCls, limit, draft, show, children }: Row & { draft?: Draft<T>; show?: (v: T) => string; children: ComponentChildren }) {
+  const h = useHelp(help || "", label);
   const line = limit && <LimitLine id={id} limit={limit} />;
   return (
     <>
       <div class={"field" + (wide ? " wide" : "") + (cls ? " " + cls : "")}>
-        <label for={id}>{label}</label>
-        {help && <HelpButton help={help} id={helpId} label={label} />}
+        <label for={id} class={labelCls}>{label}</label>
+        {help && h.button}
         {unit ? (
           <span class="inline field-control">
             {line}
@@ -175,8 +180,8 @@ export function Field<T>({ label, id, wide, unit, hint, help, cls, limit, draft,
             <span class="muted">{unit}</span>
           </span>
         ) : <>{line}{children}</>}
-        {help && <HelpText help={help} id={helpId} />}
-        {hint && <p class="muted small field-hint">{hint}</p>}
+        {help && h.text}
+        {hint && <p id={hintId} class="muted small field-hint">{hint}</p>}
       </div>
       {draft && <Meanwhile draft={draft} show={show} />}
     </>
@@ -230,14 +235,19 @@ export function TextField({ label, id, wide = true, unit, hint, help, cls, limit
  * draft of the input's text ("" for none; compare with numberNorm), or a
  * free number by value and set: min, max and step are the input's, name,
  * disabled and aria (its name for a screen reader where no label names
- * it) too, inputRef gives it the focus; limit marks a value refused (one
- * out of range). It draws its row with its "changed meanwhile" notice,
+ * it) too, inputMode the keyboard a phone offers (numeric, for a whole
+ * number: the reboot's delay), inputRef gives it the focus; limit marks
+ * a value refused (one
+ * out of range); onChange is told of the value as the field is left
+ * changed (the change event: My settings' poll, saved then). It draws its row with its "changed meanwhile" notice,
  * or with row false the input alone, inside a row of the caller's (a
  * field with two controls), whose notice the caller then draws
  * (Meanwhile).
  */
-export function NumberField({ label, id, wide, unit, hint, help, cls, limit, name, min, max, step, aria, disabled, draft, value, set, show, row = true, inputRef }: Partial<Row> & Value<string> & {
+export function NumberField({ label, id, wide, unit, hint, help, cls, limit, name, min, max, step, aria, disabled, draft, value, set, show, row = true, inputRef, inputMode, onChange }: Partial<Row> & Value<string> & {
   name?: string;
+  onChange?: (v: string) => void;
+  inputMode?: "numeric" | "decimal";
   min: number;
   max: number;
   step: number;
@@ -249,8 +259,9 @@ export function NumberField({ label, id, wide, unit, hint, help, cls, limit, nam
 }) {
   const input = (
     <input ref={inputRef} id={id} type="number" name={name} class={!row || unit ? undefined : "field-control"} min={String(min)} max={String(max)}
-      step={String(step)} aria-label={aria} disabled={disabled} value={draft ? draft.value : value} {...limitAria(id, limit)}
-      onInput={(ev) => (draft ? draft.set(ev.currentTarget.value) : set(ev.currentTarget.value))} />
+      step={String(step)} inputMode={inputMode} aria-label={aria} disabled={disabled} value={draft ? draft.value : value} {...limitAria(id, limit)}
+      onInput={(ev) => (draft ? draft.set(ev.currentTarget.value) : set(ev.currentTarget.value))}
+      onChange={onChange && ((ev) => onChange(ev.currentTarget.value))} />
   );
   if (!row || label === undefined || id === undefined) return input;
   return (
@@ -277,11 +288,17 @@ export type SelectOption = [value: string, label: string, disabled?: boolean] | 
  * options as fillOptions takes them, the value chosen from a draft of a
  * stored value (with its "changed meanwhile" notice) or from value and
  * onChange; name and disabled (off) are the select's, the row narrow
- * unless wide; inputRef gives it the focus. With row false it is the
- * select alone, inside a row of the caller's (a field with two controls),
- * whose notice the caller draws.
+ * unless wide; inputRef gives it the focus; hintId names the hint as its
+ * description; before stands between the label with its help and the
+ * select (a drawing's preview: the Appearance card's icons), after
+ * follows the select in its row (the language's note of a machine
+ * translation). With row false it is the select alone,
+ * inside a row of the caller's (a field with two controls), whose notice
+ * the caller draws.
  */
-export function Select({ label, id, wide, unit, hint, help, cls, name, options, value, onChange, disabled, draft, show, row = true, inputRef }: Partial<Row> & {
+export function Select({ label, id, wide, unit, hint, hintId, help, cls, labelCls, name, options, value, onChange, disabled, draft, show, row = true, inputRef, before, after }: Partial<Row> & {
+  before?: ComponentChildren;
+  after?: ComponentChildren;
   name?: string;
   disabled?: boolean;
   options: SelectOption[];
@@ -294,7 +311,7 @@ export function Select({ label, id, wide, unit, hint, help, cls, name, options, 
 }) {
   const opt = ([v, l, off]: [string, string, boolean?]) => <option key={v} value={v} disabled={off}>{l}</option>;
   const select = (
-    <select ref={inputRef} id={id} name={name} class={!row || unit ? undefined : "field-control"} disabled={disabled} value={draft ? draft.value : value} onChange={(ev) => {
+    <select ref={inputRef} id={id} name={name} class={!row || unit ? undefined : "field-control"} disabled={disabled} aria-describedby={hint ? hintId : undefined} value={draft ? draft.value : value} onChange={(ev) => {
       const v = ev.currentTarget.value;
       if (draft) draft.set(v);
       if (onChange) onChange(v);
@@ -304,8 +321,10 @@ export function Select({ label, id, wide, unit, hint, help, cls, name, options, 
   );
   if (!row || label === undefined || id === undefined) return select;
   return (
-    <Field label={label} id={id} wide={wide} unit={unit} hint={hint} help={help} cls={cls} draft={draft} show={show}>
+    <Field label={label} id={id} wide={wide} unit={unit} hint={hint} hintId={hintId} help={help} cls={cls} labelCls={labelCls} draft={draft} show={show}>
+      {before}
       {select}
+      {after}
     </Field>
   );
 }
@@ -340,11 +359,13 @@ export function DateTime({ value, set, id, cls, step, required, disabled, inputR
  * of a menu), with help, the key of the setting's help, its button after
  * the switch and its explanation under it, and rowCls, classes the row
  * adds (a capability's needs-…); cls adds classes to the switch; id,
- * name, disabled and title are the checkbox's; badge is drawn inside the
- * switch after its label (a capability's state), children follow the
- * switch.
+ * name, disabled and title are the checkbox's; aria names it where its
+ * label is empty, which draws no text (a switch in a column headed for
+ * it: My settings' "only on this device"), data are the checkbox's data-
+ * attributes; badge is drawn inside the switch after its label (a
+ * capability's state), children follow the switch.
  */
-export function Switch({ name, label, checked, onChange, draft, show, row = true, help, rowCls, cls, id, disabled, title, badge, children }: {
+export function Switch({ name, label, checked, onChange, draft, show, row = true, help, rowCls, cls, id, disabled, title, aria, data, badge, children }: {
   name?: string;
   label: string;
   checked?: boolean;
@@ -358,19 +379,23 @@ export function Switch({ name, label, checked, onChange, draft, show, row = true
   id?: string;
   disabled?: boolean;
   title?: string;
+  aria?: string;
+  data?: Record<string, string>;
   badge?: ComponentChildren;
   children?: ComponentChildren;
 }) {
-  const helpId = useId();
+  const h = useHelp(help || "", label);
+  const attrs: Record<string, string> = {};
+  for (const [k, v] of Object.entries(data || {})) attrs["data-" + k] = v;
   const sw = (
     <label class={cls ? "switch " + cls : "switch"} title={title}>
-      <input id={id} type="checkbox" name={name} disabled={disabled} checked={draft ? draft.value : !!checked} onChange={(ev) => {
+      <input id={id} type="checkbox" name={name} disabled={disabled} aria-label={aria} {...attrs} checked={draft ? draft.value : !!checked} onChange={(ev) => {
         const on = ev.currentTarget.checked;
         if (draft) draft.set(on);
         if (onChange) onChange(on);
       }} />
       <span class="slider" aria-hidden="true" />
-      <span class="switch-label">{label}</span>
+      {label && <span class="switch-label">{label}</span>}
       {badge}
     </label>
   );
@@ -379,9 +404,9 @@ export function Switch({ name, label, checked, onChange, draft, show, row = true
     <>
       <div class={rowCls ? "field " + rowCls : "field"}>
         {sw}
-        {help && <HelpButton help={help} id={helpId} label={label} />}
+        {help && h.button}
         {children}
-        {help && <HelpText help={help} id={helpId} />}
+        {help && h.text}
       </div>
       {draft && <Meanwhile draft={draft} show={show} />}
     </>
@@ -404,6 +429,34 @@ function LookSign({ look }: { look?: FormLook }) {
 }
 
 /**
+ * SaveButton is a form's Save by its state (useForm's look), as
+ * FormFooter draws it: clean, plain and off; changed, primary; unsaved,
+ * primary with the warning mark before its text; saving, busy; failed,
+ * with the cross; saved, plain and off with the check; without look,
+ * primary. label is its text, busy and off as FormFooter's; type is
+ * submit unless given, onClick runs where it is a button (the scheme
+ * editor's Save as, inline with the name it saves under).
+ */
+export function SaveButton({ label, look, busy, off, type, onClick }: {
+  label: string;
+  look?: FormLook;
+  busy?: boolean;
+  off?: boolean;
+  type?: "submit" | "button";
+  onClick?: () => void;
+}) {
+  const clean = look === "clean" || look === "saved";
+  const turning = !!busy || look === "saving";
+  const title = look && LOOK_TITLE[look];
+  return (
+    <button type={type || "submit"} {...busyProps(clean ? "" : "primary", turning, off || clean)} title={title ? t(title) : undefined} onClick={onClick}>
+      <LookSign look={look} />
+      {label}
+    </button>
+  );
+}
+
+/**
  * FormFooter is a form's row of actions (formFooter of components.js):
  * extra at its left end (resets, Remove), then at its right Reset, where
  * reset is given (off while the form is clean), Cancel, where cancel is
@@ -414,9 +467,10 @@ function LookSign({ look }: { look?: FormLook }) {
  * forms.ts), Save shows it: clean, plain and off; changed, primary;
  * unsaved, primary with the warning mark before its text; saving, busy;
  * failed, with the cross; saved, plain and off with the check. Without
- * look it is primary, as it always was.
+ * look it is primary, as it always was. after follows the submit button
+ * (My profile's ⓘ behind a group's last button).
  */
-export function FormFooter({ submit, busy, off, cancel, cancelLabel, reset, look, extra }: {
+export function FormFooter({ submit, busy, off, cancel, cancelLabel, reset, look, extra, after }: {
   submit?: string;
   busy?: boolean;
   off?: boolean;
@@ -425,22 +479,18 @@ export function FormFooter({ submit, busy, off, cancel, cancelLabel, reset, look
   reset?: () => void;
   look?: FormLook;
   extra?: ComponentChildren;
+  after?: ComponentChildren;
 }) {
   const clean = look === "clean" || look === "saved";
   const turning = !!busy || look === "saving";
-  const title = look && LOOK_TITLE[look];
   return (
     <div class="actions">
       {extra && <span class="actions-left">{extra}</span>}
       <span class="actions-right">
         {reset && <button type="button" class="form-reset" disabled={clean || turning} onClick={reset}>{t("action.reset")}</button>}
         {cancel && <button type="button" class="form-cancel" onClick={cancel}>{cancelLabel || t("action.cancel")}</button>}
-        {submit && (
-          <button type="submit" {...busyProps(clean ? "" : "primary", turning, off || clean)} title={title ? t(title) : undefined}>
-            <LookSign look={look} />
-            {submit}
-          </button>
-        )}
+        {submit && <SaveButton label={submit} look={look} busy={busy} off={off} />}
+        {after}
       </span>
     </div>
   );

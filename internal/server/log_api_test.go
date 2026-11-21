@@ -50,18 +50,19 @@ func TestLogFromStore(t *testing.T) {
 	t.Parallel()
 	r := startServer(t, stored(), withOptions(Options{PollInterval: 50 * time.Millisecond}))
 	fc, ts := r.fc, r.ts
-	var all []event
-	testkit.Eventually(t, "the connect burst in the log", func() bool {
-		_, all = logOf(t, ts, "?limit=1000")
-		connected, states := false, 0
-		for _, e := range all {
-			connected = connected || e.Kind == "connected"
-			if e.Kind == "state" {
-				states++
-			}
+	// The connect burst, which the start has through the pump and in the
+	// store.
+	_, all := logOf(t, ts, "?limit=1000")
+	connected, burst := false, 0
+	for _, e := range all {
+		connected = connected || e.Kind == "connected"
+		if e.Kind == "state" {
+			burst++
 		}
-		return connected && states >= 6
-	})
+	}
+	if !connected || burst < 6 {
+		t.Fatalf("the connect burst in the log: connected %v, %d state lines", connected, burst)
+	}
 	for i, e := range all {
 		if e.ID == 0 || i > 0 && e.ID <= all[i-1].ID {
 			t.Fatalf("event %d: id %d after %d", i, e.ID, all[max(i-1, 0)].ID)
@@ -145,12 +146,12 @@ func TestLogFromStore(t *testing.T) {
 	l := greeting[len(greeting)-1]
 	raw, _ := base64.StdEncoding.DecodeString(l.Data)
 	copy(raw, []byte{0x0b, 0x0a, 0x01, 0x0d, 0x09, 0x12, 0x01, 30, 42, 0, 0, 0})
+	m := logMark(t, ts)
 	fc.SetDeviceList(cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(raw)})
 	raw[7] = 55
 	fc.SetDeviceList(cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(raw)})
-	testkit.Eventually(t, "the change in the log", func() bool {
-		_, page := logOf(t, ts, "?kind=state&device=0a010d&limit=1")
-		return len(page) == 1 && page[0].Changes["valve_pct"].To == 55.0
+	logAfter(t, m, "the change in the log", func(e event) bool {
+		return logLine("state", "0a010d")(e) && e.Changes["valve_pct"].To == 55.0
 	})
 	// The device view has its received times; the stored copy not.
 	var dev map[string]any
@@ -181,10 +182,9 @@ func TestLogSurvivesRestart(t *testing.T) {
 	discard := withOptions(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	r := startServer(t, stored(), discard)
 	ts := r.ts
-	testkit.Eventually(t, "the first run's connected", func() bool {
-		_, page := logOf(t, ts, "?kind=connected")
-		return len(page) == 1
-	})
+	if _, page := logOf(t, ts, "?kind=connected"); len(page) != 1 {
+		t.Fatalf("the first run's connected after its start: %+v", page)
+	}
 	r.stop()
 	// The first run's rows, its stop's included, as the log shows them:
 	// the server's and the Cube's, from info up.
@@ -194,10 +194,9 @@ func TestLogSurvivesRestart(t *testing.T) {
 		t.Fatalf("the first run's rows: %d, %v", len(first), err)
 	}
 	ts = startServer(t, again(r), discard).ts
-	testkit.Eventually(t, "the second run's connected", func() bool {
-		_, page := logOf(t, ts, "?kind=connected")
-		return len(page) == 2 && page[0].ID < page[1].ID && !page[0].Time.After(page[1].Time)
-	})
+	if _, page := logOf(t, ts, "?kind=connected"); len(page) != 2 || page[0].ID >= page[1].ID || page[0].Time.After(page[1].Time) {
+		t.Fatalf("the two runs' connected after the second start: %+v", page)
+	}
 	_, all := logOf(t, ts, "?limit=1000")
 	kept := map[int64]string{}
 	for _, e := range all {
@@ -245,11 +244,11 @@ func TestLogWithoutStore(t *testing.T) {
 	t.Parallel()
 	r := startServer(t)
 	ts := r.ts
-	var all []event
-	testkit.Eventually(t, "the connect burst in the ring", func() bool {
-		_, all = logOf(t, ts, "?limit=1000")
-		return len(all) >= 6
-	})
+	// The connect burst, which the start has through the pump.
+	_, all := logOf(t, ts, "?limit=1000")
+	if len(all) < 6 {
+		t.Fatalf("the connect burst in the ring: %d lines", len(all))
+	}
 	for i, e := range all {
 		if e.ID < r.s.started.UnixMicro() || i > 0 && e.ID <= all[i-1].ID {
 			t.Fatalf("a ring event's id at %d: %v, the server started at %d µs", i, ids(all), r.s.started.UnixMicro())
@@ -369,6 +368,7 @@ func TestLogByCommandAndVisibility(t *testing.T) {
 func TestSetpointLinesByCommand(t *testing.T) {
 	t.Parallel()
 	ts := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret"))).ts
+	m := logMarkAs(t, ts, "secret")
 	if code, text := callAPI(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/rooms/6/setpoint", "secret", `{"mode":"auto"}`); code != 200 {
 		t.Fatalf("setpoint: %d %s", code, text)
 	}
@@ -378,23 +378,25 @@ func TestSetpointLinesByCommand(t *testing.T) {
 	}
 	id := strconv.FormatInt(rows[0].CommandID, 10)
 	want := []string{"command:queued:debug", "command:sent:debug", "command:acknowledged:info", "change::info"}
+	// A device's new state, where the room's command reached one, is left
+	// out.
+	logAfterN(t, m, "the setpoint's lines", len(want), func(e event) bool { return e.Command == rows[0].CommandID && e.Kind != "state" })
+	var evs []event
+	getJSON(t, ts, "secret", "/api/v1/cubes/KEQ0000100/log?level=debug&command="+id, &evs)
 	var got []string
-	testkit.Eventually(t, "the setpoint's lines", func() bool {
-		var evs []event
-		getJSON(t, ts, "secret", "/api/v1/cubes/KEQ0000100/log?level=debug&command="+id, &evs)
-		got = got[:0]
-		for _, e := range evs {
-			if e.Kind == "state" {
-				continue // a device's new state, where the room's command reached one
-			}
-			state, _ := e.Summary["state"].(string)
-			got = append(got, e.Kind+":"+state+":"+e.Level)
-			if e.Command != rows[0].CommandID {
-				t.Fatalf("a line of another command: %+v", e)
-			}
+	for _, e := range evs {
+		if e.Kind == "state" {
+			continue
 		}
-		return len(got) == len(want)
-	})
+		state, _ := e.Summary["state"].(string)
+		got = append(got, e.Kind+":"+state+":"+e.Level)
+		if e.Command != rows[0].CommandID {
+			t.Fatalf("a line of another command: %+v", e)
+		}
+	}
+	if len(got) != len(want) {
+		t.Fatalf("the setpoint's lines %v, want %v", got, want)
+	}
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("the setpoint's lines %v, want %v", got, want)
@@ -409,6 +411,7 @@ func TestSignInLinesForAuditorsAlone(t *testing.T) {
 	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
 	ts, s := r.ts, r.s
 	viewer := userToken(t, s.opts.Store, "anna", store.RoleViewer)
+	m := logMarkAs(t, ts, "secret")
 	s.logSignIn("login", "anna", 0, "192.0.2.1")
 	s.logSignIn("login_failed", "bob", 0, "192.0.2.2")
 	s.logLockout("192.0.2.2", "logins")
@@ -422,8 +425,8 @@ func TestSignInLinesForAuditorsAlone(t *testing.T) {
 		}
 		return seen
 	}
-	testkit.Eventually(t, "the owner's sign-in lines", func() bool { return len(kinds("secret")) == 3 })
-	if seen := kinds("secret"); seen["login"] != "info" || seen["login_failed"] != "warn" || seen["locked_out"] != "warn" {
+	logAfterN(t, m, "the owner's sign-in lines", 3, func(e event) bool { return e.Source == "server" && atInfo(e) })
+	if seen := kinds("secret"); len(seen) != 3 || seen["login"] != "info" || seen["login_failed"] != "warn" || seen["locked_out"] != "warn" {
 		t.Errorf("the owner's lines: %v", seen)
 	}
 	if seen := kinds(viewer); len(seen) != 0 {
@@ -463,6 +466,7 @@ func TestProxyClientsCommandInTheLog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	sent := logMark(t, ts)
 	// The S reply, past the L lines the proxy pushes as the polls come.
 	conn.Write([]byte(m.Wire()))
 	for {
@@ -477,17 +481,10 @@ func TestProxyClientsCommandInTheLog(t *testing.T) {
 			t.Fatalf("%s answered %v", m, reply)
 		}
 	}
-	var id int64
-	testkit.Eventually(t, "the proxy client's command acknowledged", func() bool {
-		var evs []event
-		getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log?source=queue", &evs)
-		for _, e := range evs {
-			if e.Kind == "command" && e.Summary["state"] == store.StateAcknowledged {
-				id = e.Command
-			}
-		}
-		return id != 0
+	acked, _ := logAfter(t, sent, "the proxy client's command acknowledged", func(e event) bool {
+		return e.Source == "queue" && logLine("command", "")(e) && e.Summary["state"] == store.StateAcknowledged
 	})
+	id := acked.Command
 	c, ok, err := st.Command(t.Context(), id)
 	if err != nil || !ok || c.Action != "proxy.radio" || c.Target != "device:0a010d" || c.UserID != 0 || len(c.Steps) != 1 || !strings.Contains(string(c.Request), `"remote":"127.0.0.1:`) {
 		t.Fatalf("the proxy client's command: %+v %v %v", c, ok, err)
@@ -501,17 +498,18 @@ func TestProxyClientsCommandInTheLog(t *testing.T) {
 	greeting := recorded(t)
 	raw, _ := base64.StdEncoding.DecodeString(greeting[len(greeting)-1].Data)
 	copy(raw, []byte{0x0b, 0x0a, 0x01, 0x0d, 0x09, 0x12, 0x01, 30, 42, 0, 0, 0})
+	listed := logMark(t, ts)
 	fc.SetDeviceList(cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(raw)})
-	testkit.Eventually(t, "the state line of the command", func() bool {
-		var evs []event
-		getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log?level=debug&command="+strconv.FormatInt(id, 10), &evs)
-		kinds := map[string]bool{}
-		for _, e := range evs {
-			kinds[e.Kind] = true
-		}
-		return kinds["command"] && kinds["state"]
-	})
+	logAfter(t, listed, "the state line of the command", func(e event) bool { return e.Kind == "state" && e.Command == id })
 	var evs []event
+	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log?level=debug&command="+strconv.FormatInt(id, 10), &evs)
+	kinds := map[string]bool{}
+	for _, e := range evs {
+		kinds[e.Kind] = true
+	}
+	if !kinds["command"] || !kinds["state"] {
+		t.Fatalf("the command's lines: %+v", evs)
+	}
 	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log?source=proxy", &evs)
 	if len(evs) == 0 || evs[0].Kind != "proxy_connected" || !strings.HasPrefix(fmt.Sprint(evs[0].Summary["remote"]), "127.0.0.1:") {
 		t.Fatalf("the proxy's lines: %+v", evs)
@@ -550,10 +548,11 @@ func TestLogOfEveryCube(t *testing.T) {
 	t.Parallel()
 	r := startServer(t, stored(), alsoCube(secondCube))
 	ts, s, st, second := r.ts, r.s, r.st, rowID(t, r.st, "KEQ0000200")
-	testkit.Eventually(t, "the fake Cube's burst in the store", func() bool {
-		_, own := logOf(t, ts, "?kind=state")
-		return len(own) >= 6
-	})
+	// The fake Cube's burst, which the start has through the pump and in
+	// the store.
+	if _, own := logOf(t, ts, "?kind=state"); len(own) < 6 {
+		t.Fatalf("the fake Cube's burst in the store: %d state lines", len(own))
+	}
 	at := time.Now().UTC()
 	data, _ := json.Marshal(event{Kind: "state", Device: "0a0909", Serial: "MEQ0000909", Time: at})
 	st.AddEvent(store.Event{CubeID: second, Time: at, Kind: "state", Source: "device", Device: "0a0909", Serial: "MEQ0000909", Data: data})
@@ -624,10 +623,10 @@ func TestLogOfEveryCubeWithoutStore(t *testing.T) {
 	t.Parallel()
 	r := startServer(t, alsoCube(secondCube))
 	ts, s := r.ts, r.s
-	testkit.Eventually(t, "the fake Cube's burst in its ring", func() bool {
-		_, own := logOf(t, ts, "?kind=state")
-		return len(own) >= 6
-	})
+	// The fake Cube's burst, which the start has through the pump.
+	if _, own := logOf(t, ts, "?kind=state"); len(own) < 6 {
+		t.Fatalf("the fake Cube's burst in its ring: %d state lines", len(own))
+	}
 	late := systemEvent("settings_read", 0, nil)
 	late.Time = late.Time.Add(-time.Hour)
 	s.logServer(late)

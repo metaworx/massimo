@@ -3416,76 +3416,7 @@ paths:
           description: The server and its computer
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  version: {type: string, description: "The build version with the Go details, as /healthz has it"}
-                  started_at: {type: string, format: date-time, description: When the server process started.}
-                  tls: {$ref: "#/components/schemas/CertStatus"}
-                  install:
-                    type: string
-                    description: |
-                      The package manager that owns the binary (apt, brew), else what runs
-                      the server: windows-service, systemd or launchd; other for a
-                      terminal, a container or a supervisor massimo does not know.
-                  os: {type: string, description: "The operating system, as Go names it: linux, darwin, windows."}
-                  os_name: {type: string, description: The distribution's name from /etc/os-release; absent elsewhere.}
-                  arch: {type: string, description: "The processor, as Go names it: amd64, arm64, arm."}
-                  hostname: {type: string}
-                  client_ip: {type: string, description: The caller's address as the server sees it.}
-                  now: {type: string, format: date-time, description: The server's clock with its offset.}
-                  time_zone: {type: string, description: "The server's zone: TZ, else what /etc/localtime links to, else its abbreviation."}
-                  fqdn: {type: string, description: The host's full name as hostname -f gives it.}
-                  interfaces:
-                    type: array
-                    description: The interfaces the API or a Cube proxy listens on.
-                    items:
-                      type: object
-                      properties:
-                        name: {type: string}
-                        mac: {type: string}
-                        addresses:
-                          type: array
-                          items:
-                            type: object
-                            properties:
-                              ip: {type: string}
-                              api: {type: boolean, description: The API listens on this address.}
-                  api_port: {type: integer, description: The port the API listens on.}
-                  cube_proxies:
-                    type: array
-                    description: The Cubes' proxy listeners, listening or not.
-                    items:
-                      type: object
-                      properties:
-                        serial: {type: string}
-                        discovery_serial: {type: string, description: "The serial it answers discovery with: the Cube's proxy serial where set, else the Cube's; absent where it answers no discovery."}
-                        addr: {type: string}
-                        listening: {type: boolean}
-                        error: {type: string, description: The last try's error; absent while it listens.}
-                        since: {type: string, format: date-time, description: The first failure; absent while it listens.}
-                        next_try: {type: string, format: date-time, description: When it is tried again; absent while it listens.}
-                        tries: {type: integer, description: The tries so far; absent while it listens.}
-                  proxy:
-                    type: object
-                    description: The trusted proxy the request came through; absent otherwise.
-                    properties:
-                      proto: {type: string, enum: [https, http], description: Absent where no header says.}
-                      host: {type: string}
-                      port: {type: integer, description: Absent where neither a scheme nor a port is said.}
-                      certificate:
-                        type: object
-                        description: The proxy's certificate as the last check read it; for https, absent before the first.
-                        properties:
-                          source: {type: string, enum: [proxy]}
-                          names: {type: array, items: {type: string}}
-                          not_after: {type: string, format: date-time}
-                          fingerprint: {type: string}
-                          self_signed: {type: boolean}
-                          issuer: {type: string}
-                          trusted: {type: boolean, description: Valid for the host against the system's roots.}
-                          checked_at: {type: string, format: date-time}
-                          error: {type: string, description: Why the last check failed.}
+              schema: {$ref: "#/components/schemas/SystemInfo"}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
         "429": {$ref: "#/components/responses/LockedOut"}
@@ -4109,6 +4040,7 @@ components:
         version: {type: integer, description: Counts the writes of the key; a later write wins}
     PushSubscription:
       type: object
+      required: [id, endpoint, label, created_at, failures, current]
       properties:
         id: {type: integer}
         endpoint: {type: string}
@@ -4337,6 +4269,7 @@ components:
         last_used_at: {type: string, format: date-time}
     PendingLink:
       type: object
+      required: [provider, provider_name, subject, email, name, username, expires_at]
       properties:
         provider: {type: string, description: The provider's key}
         provider_name: {type: string}
@@ -4675,8 +4608,86 @@ components:
           items: {type: string}
           description: The variables that differ from the start and apply only at the next one
         read_at: {type: string, format: date-time}
+    SystemInfo:
+      type: object
+      description: What System info shows, GET /api/v1/system
+      required: [version, started_at, install, os, arch, client_ip, now, interfaces, cube_proxies]
+      properties:
+        version: {type: string, description: "The build version with the Go details, as /healthz has it"}
+        started_at: {type: string, format: date-time, description: When the server process started.}
+        tls: {$ref: "#/components/schemas/CertStatus"}
+        install:
+          type: string
+          description: |
+            The package manager that owns the binary (apt, brew), else what runs
+            the server: windows-service, systemd or launchd; other for a
+            terminal, a container or a supervisor massimo does not know.
+        os: {type: string, description: "The operating system, as Go names it: linux, darwin, windows."}
+        os_name: {type: string, description: The distribution's name from /etc/os-release; absent elsewhere.}
+        arch: {type: string, description: "The processor, as Go names it: amd64, arm64, arm."}
+        hostname: {type: string}
+        client_ip: {type: string, description: The caller's address as the server sees it.}
+        now: {type: string, format: date-time, description: The server's clock with its offset.}
+        time_zone: {type: string, description: "The server's zone: TZ, else what /etc/localtime links to, else its abbreviation."}
+        fqdn: {type: string, description: The host's full name as hostname -f gives it.}
+        interfaces:
+          type: array
+          description: The interfaces the API or a Cube proxy listens on.
+          items:
+            type: object
+            required: [name, addresses]
+            properties:
+              name: {type: string}
+              mac: {type: string}
+              addresses:
+                type: array
+                items:
+                  type: object
+                  required: [ip]
+                  properties:
+                    ip: {type: string}
+                    api: {type: boolean, description: The API listens on this address.}
+        api_port: {type: integer, description: The port the API listens on.}
+        cube_proxies:
+          type: array
+          description: The Cubes' proxy listeners, listening or not.
+          items:
+            type: object
+            required: [addr, listening]
+            properties:
+              serial: {type: string}
+              discovery_serial: {type: string, description: "The serial it answers discovery with: the Cube's proxy serial where set, else the Cube's; absent where it answers no discovery."}
+              addr: {type: string}
+              listening: {type: boolean}
+              error: {type: string, description: The last try's error; absent while it listens.}
+              since: {type: string, format: date-time, description: The first failure; absent while it listens.}
+              next_try: {type: string, format: date-time, description: When it is tried again; absent while it listens.}
+              tries: {type: integer, description: The tries so far; absent while it listens.}
+        proxy:
+          type: object
+          description: The trusted proxy the request came through; absent otherwise.
+          required: [host]
+          properties:
+            proto: {type: string, enum: [https, http], description: Absent where no header says.}
+            host: {type: string}
+            port: {type: integer, description: Absent where neither a scheme nor a port is said.}
+            certificate:
+              type: object
+              description: The proxy's certificate as the last check read it; for https, absent before the first.
+              required: [trusted, checked_at]
+              properties:
+                source: {type: string, enum: [proxy]}
+                names: {type: array, items: {type: string}}
+                not_after: {type: string, format: date-time}
+                fingerprint: {type: string}
+                self_signed: {type: boolean}
+                issuer: {type: string}
+                trusted: {type: boolean, description: Valid for the host against the system's roots.}
+                checked_at: {type: string, format: date-time}
+                error: {type: string, description: Why the last check failed.}
     StoreInfo:
       type: object
+      required: [file, schema, min_reader, binary, node, tenant, rows]
       properties:
         file: {type: string, description: The store's file}
         schema: {type: integer, description: The file's schema version}
@@ -4708,6 +4719,7 @@ components:
         since: {type: string, format: date-time, description: The run that first found it there}
     ConfigView:
       type: object
+      required: [version, file, file_found, data_dir, listen, tls, log_level, variables]
       properties:
         version: {type: string}
         file: {type: string, description: The settings file}
@@ -4720,6 +4732,7 @@ components:
           type: array
           items:
             type: object
+            required: [name, source]
             properties:
               name: {type: string}
               value: {type: string, description: Absent for a secret}
@@ -4728,6 +4741,7 @@ components:
               unknown: {type: boolean, description: "A name Massimo does not know, perhaps a typo"}
     UpdateInfo:
       type: object
+      required: [current, channel, available, checked_at, can_update, history]
       properties:
         current: {type: string, description: The running version}
         flavour: {type: string, description: "What the running build was released as: devel, nightly, alpha, beta, rc or stable; absent for a build without the Makefile"}
@@ -4767,6 +4781,7 @@ components:
     UpdateStatus:
       type: object
       description: The update helper's last run
+      required: [state, time]
       properties:
         state: {type: string, enum: [checking, installing, restarting, done, up-to-date, failed, rolled-back]}
         from: {type: string}
@@ -4948,6 +4963,7 @@ components:
           items: {type: string, example: 0abc12}
     Setting:
       type: object
+      required: [value, set]
       properties:
         value: {type: string, description: "The store's value, or the default; durations as 30m, 24h, 0 for off"}
         default: {type: string}
