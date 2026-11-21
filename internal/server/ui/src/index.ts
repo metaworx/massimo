@@ -25,7 +25,7 @@ import "./header";
 import type { HeaderPart } from "./header";
 import "./leaving";
 import type { LeavingPart } from "./leaving";
-import "./prefs";
+import { signedOut as prefsSignedOut } from "./prefs";
 import type { PrefsPart } from "./prefs";
 import { signedOut as profileSignedOut } from "./profile";
 import "./rooms";
@@ -70,7 +70,7 @@ export interface MassimoParts {
    * (maintenance/), and System info with its readings and its clock
    * (sysinfo/), and who was in (shared/me.ts) with My profile's user, its
    * link shown and its messages (profile/), the passwords typed there
-   * going with its part.
+   * going with its part, and the scheme editor with its draft (prefs/).
    */
   signedOut(): void;
   /**
@@ -89,7 +89,7 @@ export interface MassimoParts {
   header: HeaderPart;
   /** Leaving the page, and signing out, while a settings form has changes not saved: the dialog that lists them (leaving/). */
   leaving: LeavingPart;
-  /** My settings: their rows, drawn again where the settings were applied (prefs/). */
+  /** My settings: their rows and the Appearance card with the scheme editor, drawn again where the settings were applied (prefs/). */
   prefs: PrefsPart;
   /** The rooms: a tile per room with its device list (rooms/). */
   rooms: RoomsPart;
@@ -132,5 +132,6 @@ register("signedOut", () => {
   sysinfoSignedOut();
   meChanged(null); // My profile's parts go, with what is typed in them
   profileSignedOut();
+  prefsSignedOut();
 });
 window.MassimoParts = parts as unknown as MassimoParts;

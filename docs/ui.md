@@ -1024,8 +1024,14 @@ without the switches.
   The browser's own colour picker (the popup with R, G, B fields in Chromium)
   cannot be changed by the page, so the hex field is the place to paste a value.
   **Save as** keeps the edited scheme in this browser under the name given,
-  **Reset** goes back to the scheme the editor started from,
+  off while nothing differs from the scheme the editor started from,
+  as Enter in the name is,
+  **Reset** goes back to that scheme, its colours and its name,
   **Delete** removes one of your own.
+  What is edited stays when your settings arrive from the server;
+  left with changes, My settings' head shows the disk, which opens the editor,
+  and ☰ and its Personal settings carry the mark;
+  Close, choosing another scheme, an import and a sign-out drop the edit.
   **Export** downloads the chosen scheme (or the one being edited) as a JSON file,
   `{"format": "massimo-scheme/1", "name": …, "light": {…}, "dark": {…}}` with
   the token names of style.css without `--`;
@@ -1948,7 +1954,8 @@ a script for each region of the page, in the order the page loads them:
   `roles.js`, the plain name of Roles and Capabilities (`ui/src/admin/`);
   Integrations has none, a part alone (`ui/src/integrations/`);
 - `theme.js`, the mode and the colour schemes, applied as the script loads;
-  `appearance.js`, the Appearance card, the editor, export and import;
+  `appearance.js`, the plain name of the Appearance card, which applies the appearance
+  and calls its part (`ui/src/prefs/`), and the system's changes it follows;
 - `notifytext.js` and `notify.js`, the notifications.
 
 A script's top-level code runs as it loads, and the `DOMContentLoaded`
@@ -2047,7 +2054,7 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `Field` | `field.tsx` | a label and its control, `.field` or `.field.wide` (`fieldRow`); with `limit`, what the field takes, said in amber just before the control while a value is refused, the box outlined in red and the limit its description (`markRange`) (`TextField` and `NumberField` mark their input for it; a control of the caller's inside a `Field` with a limit has no marking of its own yet) | `label`, `id`, `wide`, `unit`, `hint`, `hintId` (the hint's id, which a `Select` names as its description), `help` (the key of the setting's help: its button after the label, its explanation under the control), `cls` (classes the row adds, a capability's `needs-…`), `labelCls` (the label's class, `action-title` for a row's title in bold: Maintenance's settings; `Select` passes it on), `limit` (`{ text, over, cls }`: the text, whether the value is refused, the line's class beside `field-limit`; in the unit's line where there is one, else on a line of its own above the box), `draft`, `show`, the control as children |
 | `TextField` | `field.tsx` | a row with a text input that shows a stored text, from its draft, or a free text (a name offered) by `value` and `set` | `label`, `id`, `name`, `draft` and `show`, or `value` and `set`; `wide` (on by default), `unit`, `hint`, `help`, `cls`, `limit`, `placeholder`, `type` (`password` too, by `value` and `set` alone, never a draft), `autocomplete`, `inputCls` (the input's class, `mono` for a key), `maxLength`, `pattern`, `required`, `disabled`, `inputRef` |
 | `NumberField`, `numberNorm` | `field.tsx` | a number input that shows a stored number (`numberInput`), its draft the input's text, "" for none, or a free number (a time) by `value` and `set`; with `row={false}` the input alone, in a row of the caller's, which draws its notice (`Meanwhile`); how such a draft compares, as a number | `label`, `id`, `name`, `min`, `max`, `step`, `draft` and `show`, or `value` and `set`; `aria` (its name where no label names it), `disabled`, `inputMode` (the keyboard a phone offers: `numeric` for the reboot's delay), `inputRef`, `onChange` (told of the value as the field is left changed: My settings' poll, saved then), `row`, and a row's `wide`, `unit`, `hint`, `help`, `cls`, `limit`; `v` |
-| `Select` | `field.tsx` | a row with a select (`selectInput`), its options as `fillOptions` takes them; with `row={false}` the select alone, in a row of the caller's, which draws its notice | `label`, `id`, `name`, `options` (`[value, label, disabled]` or `{ group, options }`), `value` and `onChange`, or `draft` and `show`; `row`, `wide`, `unit`, `hint`, `hintId` (the hint's id, which the select names as its description: the update channel's note, which changes with the choice), `help`, `cls`, `disabled`, `after` (after the select in its row: the language's note of a machine translation) |
+| `Select` | `field.tsx` | a row with a select (`selectInput`), its options as `fillOptions` takes them; with `row={false}` the select alone, in a row of the caller's, which draws its notice | `label`, `id`, `name`, `options` (`[value, label, disabled]` or `{ group, options }`), `value` and `onChange`, or `draft` and `show`; `row`, `wide`, `unit`, `hint`, `hintId` (the hint's id, which the select names as its description: the update channel's note, which changes with the choice), `help`, `cls`, `disabled`, `before` (between the label with its help and the select: a drawing's preview), `after` (after the select in its row: the language's note of a machine translation) |
 | `DateTime` | `field.tsx` | a date and time field (`datetime-local`), its value as the input takes it | `value`, `set`, `id`, `cls`, `step`, `required`, `disabled`, `inputRef` |
 | `localOf`, `isoOf` | `time.ts` | a `DateTime`'s value and the API's time as each other, for a field that shows a stored end and sends it (a user's end); the draft compares the field's minute, all it holds | `iso`; `local` |
 | `fmtWhen` | `time.ts` | an API time as date and time in the page's language, the hour of 24 (a backup's time); the plain page has it as `MassimoParts.fmtWhen`, through `fmtWhen` of `backup.js`, for the notifications' card (`notify.js`) until Block 13 | `iso` |
@@ -2057,6 +2064,7 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `Tabs` | `tabs.tsx` | a row of tabs: a tab list of buttons, each with its key in `data-tab`, the one shown active and selected, and what follows the list (a close button) | `cls` (the row's class), `listCls`, `label` (the list's name), `tabs` (`{ key, label, cls }`), `current`, `onPick(key)`, children after the list |
 | `Stepper` | `field.tsx` | a number field between − and + (`stepper`), the step within its range; its buttons are named for a temperature, half a degree less and more, and the first user of another unit adds their names | `value`, `set`, `min`, `max`, `step`, `id` and `cls` of the field, `hidden` (the whole kept in its place unseen), children after the + (a unit) |
 | `useDraft`, `Meanwhile` | `field.tsx` | a field that shows stored data keeps a draft: untouched it follows, changed it says "changed meanwhile" with Take theirs (D59-A); with a place, a form's (`useForm`), the draft is kept there | `stored`, `norm`, `place`; gives `value`, `stored`, `set`, `changed`, `meanwhile`, `take`; `draft`, `show` |
+| `SaveButton` | `field.tsx` | a form's Save by its state, as `FormFooter` draws it, for a Save that stands elsewhere (the scheme editor's Save as, inline with the name) | `label`, `look`, `busy`, `off`, `type` (submit unless given), `onClick` |
 | `FormFooter` | `field.tsx` | a form's row of actions (`formFooter`, `sendWhenChanged`); with `look`, Save shows the form's state | `submit`, `busy`, `off`, `cancel` (its button of the class `form-cancel`, as the plain footer's), `cancelLabel`, `reset` (Reset, of the class `form-reset`, one fixed class per footer button as Cancel's `form-cancel`, off while clean), `look` (a `FormLook` of `useForm`), `extra`, `after` (after the submit button: My profile's ⓘ) |
 | `useForm` | `forms.ts` | a settings form that keeps its changes until they are saved or reset, kept by a key the region chooses beyond the part, and its state: clean, changed, unsaved (the focus left it, it was taken away, or a minute passed since the last change), saving, failed, saved | `key`, `name` (a text key and its arguments, naming it in the problem list), `open` (shows it and calls `focusForm`); gives `look`, `props` (the form element's), `place(field)` (for `useDraft`; its `known()` the stored value its draft holds, undefined before it has one), `track(changed, drafts)` (after the fields, at each drawing), `save(fn)`, `reset()` |
 | `hasChanges` | `forms.ts` | whether a form, or one under it, has changes not saved: changed, saving, unsaved or failed (a row shown while it holds such a form, otherwise for expert mode alone) | `key` |
@@ -2075,7 +2083,7 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `userPath`, `Run`, `loadTokens`, `revokeToken`, `revokeOwn`, `createKey`, `loadIdentities`, `addIdentity`, `changeIdentity`, `removeIdentity` | `account.ts` | what a user's sessions, keys and identities read and send (`…/users/{name}/tokens`, `…/identities`), for System settings → Users and My profile alike; a change through the caller's runner (`Run`), which reloads what it shows and says how it went in its own line; Revoke of the token in use signs out | `name`, `rest`; `run`, `name`, and what each sends |
 | `Tokens` | `tokens.tsx` | a user's sessions and keys (a user's panel, My profile): each with Revoke, "this device" and "its key" by `own`, Create key and the key just made, shown once by the read that follows and kept in the part's own state alone; read when its place opens and again at each change of the caller's counter while open; an answer after a sign-out dropped | `u`, `off`, `open`, `reads` (the caller's counter), `run`, `say` (the caller's message line), `labelId` (the new key's field's id), `help` (the group's ⓘ after Create key, My profile's) |
 | `Identities`, `Changes` | `identities.tsx` | a user's identities at the sign-in providers (a user's panel, My profile): each with what the provider said and Remove; with `changes`, Change of one no sign-in used, a settings form kept by its key, the forms of identities gone or made unchangeable forgotten, and all of them where the box goes off; with `assign`, Assign; `after` what follows the list once read (My profile's Link buttons); `quiet` draws nothing while the list is empty and the caller offers nothing after it (`offer`: My profile's Link buttons, none in the app, where the rows are still named from every provider) | `u`, `off`, `open`, `reads`, `providers` (the enabled ones), `run`, `say`, `title`, `none`, `cls`, `changes` (`key(id)`, `under`, `ui(key)`, `forget(key)`, `show(key)`: the caller's forms and how one is brought into sight), `assign`, `after(list)`, `quiet`, `offer` |
-| `FileButton` | `file.tsx` | a button that opens the browser's choice of a file of the types it accepts (`filePicker`), the same file again too | `cls`, `label`, `accept`, `off`, `onFile(file)` |
+| `FileButton` | `file.tsx` | a button that opens the browser's choice of a file of the types it accepts (`filePicker`), the same file again too | `id` (the button's), `cls`, `label`, `accept`, `off`, `inputId` and `inputLabel` (the input's id and its name in the page's language: the Appearance card's Import…), `onFile(file)` |
 | `Adder` | `adder.tsx` | the end of a list that adds an item: the new item's form in its place while shown, the button that shows it hidden meanwhile, the focus in the form's first field when it comes and back on the button when it goes (Users, Roles, Sign-in providers) | `id` (the button's), `formId` (the form's place), `label`, `shown`, `set(shown)`, the form as children |
 | `KvList`, `CountList` | `kv.tsx` | a list of facts, a name and its value each (`kvList`), every fact given, the caller leaving out those it does not show; a list of counts by name, sorted, in columns (`countList`) | `facts` (`[name, value, mono]`); `counts` |
 | `Copy`, `CopyIcon`, `CopyPair` | `copy.tsx` | a text that copies itself, a copy icon (`copyEl`, `copyIcon`); something with its copy icon after it, a text or a link (an address served: an integration's, System info's) | `text`, `value` (what it copies, where it is not the text), `label` (named "Copy …"), `name` (its whole name in its place: the server's version), `icon`, `cls`; `get`, `label`; `get`, `label`, what it follows as children |
@@ -2378,7 +2386,7 @@ the forms it shows the beginnings of their keys in `data-forms`, its entry's nam
 the text key in `data-title`;
 a menu item's disk in its `span.menu-item-mark` with its `data-forms`
 (System settings': `users roles providers integrations`; Cube settings': `cube`;
-Personal settings': `profile`);
+Personal settings': `profile scheme`);
 ☰'s mark in `#nav-menu-mark`, the worse of the log's, which `renderLogSign` of `log.js`
 hands it as `MassimoParts.chrome.log(count, tone)`,
 and the forms' of every menu item (`unsavedTone`), with ☰'s name and tooltip.
@@ -2394,6 +2402,23 @@ before, and `store.ts` holds the counter that draws them again;
 is left, a poll being typed kept as a draft through the settings applied again
 (without the "changed meanwhile" notice, which the plain field had not: leaving
 the field for Take theirs would save it).
+The Appearance card is drawn into `#appearance` the same way, `appearance.js`
+keeping `applyAppearance`, which `app.js` and `theme.js` call, as a call of it,
+and the system's changes it follows: `Appearance.tsx` its rows, its buttons,
+their line and the editor while it is open, and beside the window's and the
+radio's choice their drawing as the page shows it (`Icon`, `Sign`), drawn again
+by the icons' signal; `theme.js` applies the choices to the page and writes into
+none of it;
+`scheme.ts` the editor's state beside `theme.js`' `themeState.draft` and `base`,
+which the page applies as the draft changes, and what Save as, Delete, Export
+and Import do, as `appearance.js` did;
+`Editor.tsx` the editor, a `useForm` of the key `scheme`, its changes the
+draft's colours and the name typed against the scheme it started from, Save as a
+`SaveButton` beside the name, off while the editor holds no change, Enter in the
+name saving only where it would (UiParts D204), Reset putting both back,
+a hex field's text typed
+or refused kept by the field; closing the editor drops the draft and forgets its
+form, and so does a sign-out.
 My profile (`ui/src/profile/`, AP UiParts Block 13) is a part alone, drawn into
 `#profile-sec` as `parts.js` loads, for the user `MassimoParts.me` names
 (`shared/me.ts`, which `applyCaps` of `login.js` calls at every read of who is

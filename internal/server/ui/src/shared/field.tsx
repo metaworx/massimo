@@ -289,12 +289,15 @@ export type SelectOption = [value: string, label: string, disabled?: boolean] | 
  * stored value (with its "changed meanwhile" notice) or from value and
  * onChange; name and disabled (off) are the select's, the row narrow
  * unless wide; inputRef gives it the focus; hintId names the hint as its
- * description; after follows the select in its row (the language's note
- * of a machine translation). With row false it is the select alone,
+ * description; before stands between the label with its help and the
+ * select (a drawing's preview: the Appearance card's icons), after
+ * follows the select in its row (the language's note of a machine
+ * translation). With row false it is the select alone,
  * inside a row of the caller's (a field with two controls), whose notice
  * the caller draws.
  */
-export function Select({ label, id, wide, unit, hint, hintId, help, cls, labelCls, name, options, value, onChange, disabled, draft, show, row = true, inputRef, after }: Partial<Row> & {
+export function Select({ label, id, wide, unit, hint, hintId, help, cls, labelCls, name, options, value, onChange, disabled, draft, show, row = true, inputRef, before, after }: Partial<Row> & {
+  before?: ComponentChildren;
   after?: ComponentChildren;
   name?: string;
   disabled?: boolean;
@@ -319,6 +322,7 @@ export function Select({ label, id, wide, unit, hint, hintId, help, cls, labelCl
   if (!row || label === undefined || id === undefined) return select;
   return (
     <Field label={label} id={id} wide={wide} unit={unit} hint={hint} hintId={hintId} help={help} cls={cls} labelCls={labelCls} draft={draft} show={show}>
+      {before}
       {select}
       {after}
     </Field>
@@ -425,6 +429,34 @@ function LookSign({ look }: { look?: FormLook }) {
 }
 
 /**
+ * SaveButton is a form's Save by its state (useForm's look), as
+ * FormFooter draws it: clean, plain and off; changed, primary; unsaved,
+ * primary with the warning mark before its text; saving, busy; failed,
+ * with the cross; saved, plain and off with the check; without look,
+ * primary. label is its text, busy and off as FormFooter's; type is
+ * submit unless given, onClick runs where it is a button (the scheme
+ * editor's Save as, inline with the name it saves under).
+ */
+export function SaveButton({ label, look, busy, off, type, onClick }: {
+  label: string;
+  look?: FormLook;
+  busy?: boolean;
+  off?: boolean;
+  type?: "submit" | "button";
+  onClick?: () => void;
+}) {
+  const clean = look === "clean" || look === "saved";
+  const turning = !!busy || look === "saving";
+  const title = look && LOOK_TITLE[look];
+  return (
+    <button type={type || "submit"} {...busyProps(clean ? "" : "primary", turning, off || clean)} title={title ? t(title) : undefined} onClick={onClick}>
+      <LookSign look={look} />
+      {label}
+    </button>
+  );
+}
+
+/**
  * FormFooter is a form's row of actions (formFooter of components.js):
  * extra at its left end (resets, Remove), then at its right Reset, where
  * reset is given (off while the form is clean), Cancel, where cancel is
@@ -451,19 +483,13 @@ export function FormFooter({ submit, busy, off, cancel, cancelLabel, reset, look
 }) {
   const clean = look === "clean" || look === "saved";
   const turning = !!busy || look === "saving";
-  const title = look && LOOK_TITLE[look];
   return (
     <div class="actions">
       {extra && <span class="actions-left">{extra}</span>}
       <span class="actions-right">
         {reset && <button type="button" class="form-reset" disabled={clean || turning} onClick={reset}>{t("action.reset")}</button>}
         {cancel && <button type="button" class="form-cancel" onClick={cancel}>{cancelLabel || t("action.cancel")}</button>}
-        {submit && (
-          <button type="submit" {...busyProps(clean ? "" : "primary", turning, off || clean)} title={title ? t(title) : undefined}>
-            <LookSign look={look} />
-            {submit}
-          </button>
-        )}
+        {submit && <SaveButton label={submit} look={look} busy={busy} off={off} />}
         {after}
       </span>
     </div>

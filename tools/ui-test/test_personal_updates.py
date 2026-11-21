@@ -265,3 +265,151 @@ def test_a_poll_being_typed_stays_when_the_settings_arrive(page, case):
     finally:
         page.evaluate("(v) => { setSetting('poll', v); applySettings(); }", was)
     show_view(page, "tiles")
+
+
+# --- the Appearance card and the scheme editor ---------------------------
+
+def open_editor(page):
+    """My settings shown, the scheme editor open on the chosen scheme."""
+    show_view(page, "prefs")
+    if page.locator("#scheme-customise").get_attribute("aria-expanded") != "true":
+        page.locator("#scheme-customise").click()
+    page.locator("#scheme-name").wait_for(state="visible")
+
+
+def test_the_scheme_editor_keeps_an_edit_when_the_settings_arrive(page, case):
+    """In the scheme editor a name typed and a hex value half typed, the
+    focus in it; the user's settings arrive, as at a sign-in
+    (loadPreferences applies them again): the editor's fields are the
+    elements they were, with what is typed and the focus; Close drops
+    the draft."""
+    open_editor(page)
+    page.locator("#scheme-name").fill("Typed scheme name")
+    hexf = page.locator("#scheme-light-line-hex")
+    hexf.fill("#12")  # not a colour yet: judged when the field is left
+    sels = ["#scheme-name", "#scheme-light-line-hex", "#scheme-light-bg", "#scheme-delete"]
+    mark(page, sels)
+    page.evaluate("() => applyStoredSettings()")
+    frames(page)
+    assert replaced(page, sels) == [], f"the same elements: {replaced(page, sels)}"
+    assert page.locator("#scheme-name").input_value() == "Typed scheme name", "the name typed kept"
+    assert hexf.input_value() == "#12", "the hex half typed kept"
+    assert page.evaluate("document.activeElement.id") == "scheme-light-line-hex", "the focus where it was"
+    page.locator("#scheme-name").focus()  # the hex left: refused, its line shown, before Close is aimed at
+    assert wait_until(page, "document.getElementById('scheme-light-line-hex').getAttribute('aria-invalid') === 'true'", 5), "#12 refused once left"
+    page.locator("#scheme-editor .scheme-close").click()
+    assert page.locator("#scheme-editor").is_hidden() and not page.evaluate("!!themeState.draft"), "Close drops the draft"
+    assert not page.evaluate("MassimoParts.leaving.changes()"), "and its form"
+    show_view(page, "tiles")
+
+
+def test_the_scheme_editor_says_unsaved(page, case):
+    """A colour changed in the editor and the editor left: My settings'
+    pill shows the disk naming it, ☰ the mark and its Personal settings
+    the disk; the pill's item, from a folded card, brings the editor into
+    sight with the focus in it; Reset puts the colour back and clears them."""
+    open_editor(page)
+    was = page.locator("#scheme-light-bg").input_value()
+    page.locator("#scheme-light-bg").fill("#112233")
+    page.locator("#prefs .section-fold").focus()  # out of the editor: left
+    assert wait_until(page, "!!document.querySelector('#prefs .section-pill .problems')", 5), "the card's pill"
+    assert menu_mark(page) == "tone-warn", "☰ amber"
+    page.locator("#prefs .section-fold").click()
+    assert wait_until(page, "document.getElementById('prefs').classList.contains('folded')", 5), "the card folded"
+    show_view(page, "tiles")
+    open_main_menu(page)
+    assert page.locator("#menu-me .menu-unsaved.tone-warn").count() == 1, "Personal settings with the disk"
+    page.locator("#menu-me").click()
+    pill = page.locator("#prefs .section-pill .problems")
+    pill.locator("summary").click()
+    want = page.evaluate("t('form.unsavedItem', {form: t('appearance.editorTitle')})")
+    action = pill.locator(".problem-action")
+    assert action.inner_text().strip() == want, f"the item names the editor: {action.inner_text()!r}"
+    action.click()
+    assert wait_until(page, "!document.getElementById('prefs').classList.contains('folded')", 5), "the card unfolded"
+    assert wait_until(page, "!!document.activeElement && !!document.activeElement.closest('#scheme-editor')", 5), "the focus in the editor"
+    assert page.locator("#scheme-light-bg").input_value() == "#112233", "the colour kept"
+    page.locator("#scheme-editor .scheme-reset").click()
+    assert page.locator("#scheme-light-bg").input_value() == was, "Reset puts it back"
+    assert wait_until(page, "!document.querySelector('#menu-me .menu-unsaved')", 5), "no disk"
+    assert menu_mark(page) == "", "nothing on ☰"
+    page.locator("#scheme-editor .scheme-close").click()
+    show_view(page, "tiles")
+
+
+def drop_scheme(page, name):
+    """The user's scheme of name gone from the browser, the default chosen."""
+    page.evaluate("(n) => { themeState.custom = themeState.custom.filter((c) => c.name !== n); storeCustomSchemes(); chooseScheme('massimo'); }", name)
+
+
+def test_save_as_and_enter_save_only_a_change(page, case):
+    """The editor opened on the chosen scheme holds no change: Save as is
+    off and Enter in the name saves nothing (D204). A colour changed and a
+    name typed: Enter saves as Save as does, the scheme the user's own and
+    chosen, Save as with its check, and nothing left unsaved."""
+    name = f"Saved by Enter {case.width}-{case.lang}"
+    open_editor(page)
+    save = page.locator("#scheme-editor .scheme-name button")
+    assert save.is_disabled(), "Save as off while nothing differs"
+    page.locator("#scheme-name").press("Enter")
+    frames(page)
+    assert page.locator("#scheme-msg").is_hidden() and not page.evaluate("themeState.custom.some((c) => c.name.startsWith('Saved by Enter'))"), \
+        "Enter saved nothing"
+    page.locator("#scheme-light-bg").fill("#112233")
+    page.locator("#scheme-name").fill(name)
+    assert save.is_enabled(), "Save as on with a change"
+    try:
+        page.locator("#scheme-name").press("Enter")
+        assert wait_until(page, "state.settings.scheme === %s" % json.dumps("custom:" + name), 5), "saved and chosen"
+        assert page.evaluate("(n) => themeState.custom.some((c) => c.name === n && c.light.bg === '#112233')", name), "the user's own, with its colour"
+        assert save.locator(".ok-check").count() == 1 and save.is_disabled(), "Save as with its check, off"
+        assert not page.evaluate("MassimoParts.leaving.changes()"), "nothing left to lose"
+        assert page.locator("#prefs .section-pill .problems").count() == 0, "no disk on the card"
+    finally:
+        page.locator("#scheme-editor .scheme-close").click()
+        drop_scheme(page, name)
+    show_view(page, "tiles")
+
+
+def test_another_scheme_or_an_import_drops_the_draft(page, case, tmp_path):
+    """A colour changed in the editor: choosing another scheme closes the
+    editor and drops the draft and its form; so does an import, which
+    chooses the scheme imported."""
+    open_editor(page)
+    page.locator("#scheme-light-bg").fill("#112233")
+    assert wait_until(page, "MassimoParts.leaving.changes()", 5), "a change"
+    page.locator("#scheme-select").select_option("contrast")
+    assert page.locator("#scheme-editor").is_hidden() and not page.evaluate("!!themeState.draft"), "another scheme: the editor closed, the draft gone"
+    assert not page.evaluate("MassimoParts.leaving.changes()"), "and its form"
+    open_editor(page)
+    page.locator("#scheme-light-bg").fill("#223344")
+    assert wait_until(page, "MassimoParts.leaving.changes()", 5), "a change again"
+    name = f"Imported {case.width}-{case.lang}"
+    doc = page.evaluate("(n) => Object.assign(schemeDoc(schemeById('massimo')), { name: n })", name)
+    f = tmp_path / "scheme.json"
+    f.write_text(json.dumps(doc))
+    try:
+        page.locator("#scheme-file").set_input_files(str(f))
+        assert wait_until(page, "state.settings.scheme === %s" % json.dumps("custom:" + name), 5), "the import chosen"
+        assert page.locator("#scheme-editor").is_hidden() and not page.evaluate("!!themeState.draft"), "an import: the editor closed, the draft gone"
+        assert not page.evaluate("MassimoParts.leaving.changes()"), "and its form"
+    finally:
+        drop_scheme(page, name)
+    show_view(page, "tiles")
+
+
+@pytest.mark.parametrize("how", ["sign-out", "expired"])
+def test_the_next_user_finds_no_scheme_being_edited(new_context, case, watch, guard, how):
+    """The owner's scheme editor open with a colour changed, which the page
+    shows; the session ends, and the operator signed in finds the editor
+    closed, the page in its own colours and nothing left to lose."""
+    page = owner_page(new_context, guard, watch, URL, TOKEN)
+    open_editor(page)
+    page.locator("#scheme-light-bg").fill("#112233")
+    across(page, how)
+    frames(page)
+    assert not page.evaluate("!!themeState.draft"), "no draft left"
+    assert page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()") != "#112233", "the page not in the draft's colours"
+    show_view(page, "prefs")
+    assert page.locator("#scheme-editor").is_hidden(), "the editor closed"
+    assert not page.evaluate("MassimoParts.leaving.changes()"), "nothing left to lose"

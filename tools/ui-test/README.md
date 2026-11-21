@@ -350,7 +350,14 @@ hence `failed_checks_forgotten`.
   draws nothing; in the app (fake_bridge.js) a linked account is named by its
   provider's name, and a current password filled in alone is no change;
   My settings' poll being typed stays, the element it was with the focus,
-  when the user's settings arrive, and is saved as it is left.
+  when the user's settings arrive, and is saved as it is left;
+  the scheme editor's name and a hex value half typed stay with the focus
+  when the settings arrive, and Close drops the draft; a colour changed and
+  left shows My settings' pill, which brings the editor back into sight from
+  a folded card, ☰'s mark and Personal settings' disk, and Reset clears them;
+  after a sign-out, and for another user after a 401, no scheme is being
+  edited; Save as and Enter in the name save only a change (D204), and
+  another scheme chosen or an import drops the draft.
 - `test_stream.py`:
   the event stream opens with tickets only, never with the token,
   and after a refused stream (the test hands out a used ticket first,

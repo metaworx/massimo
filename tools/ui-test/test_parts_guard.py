@@ -773,7 +773,7 @@ REGIONS = (
     Region("appearance", ("#prefs-sec .appearance",), (
         View("My settings", personal("prefs")),
         View("the scheme editor open", scheme_editor),
-    )),
+    ), sources=("applyStoredSettings()",)),
     Region("notifications", ("#notify-sec",), (View("Notifications", personal("notify")),)),
     Region("my-profile", ("#profile-sec",), (View("My profile", profile),), sources=("the page shown again: me",)),
     Region("page-chrome", ("#system .page-bar", "#system .section-head"), (View("System settings, its sections menu open", sections_menu),)),
