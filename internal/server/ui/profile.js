@@ -48,7 +48,9 @@ function userAction(fn, okText, name, btn, where) {
 
 // tokenRow is one session or key of a user, from its template, with
 // Revoke; a session made from a key names it by its label, from labels,
-// the list's keys by id (POST /api/v1/login/key).
+// the list's keys by id (POST /api/v1/login/key). The token the page is
+// signed in with says "this device", and the key it was made from "its
+// key"; Revoke on "this device" signs out (logout, login.js).
 function tokenRow(u, tk, where, labels) {
   const li = fromTemplate("tpl-token-row");
   li.dataset.id = String(tk.id);
@@ -57,6 +59,13 @@ function tokenRow(u, tk, where, labels) {
   const fromKey = li.querySelector(".token-key");
   fromKey.textContent = tk.key_id ? t("users.fromKey", { label: (labels && labels.get(tk.key_id)) || "#" + tk.key_id }) : "";
   fromKey.classList.toggle("hidden", !tk.key_id);
+  const mine = state.me && state.me.token && isSelf(u.name) ? state.me.token : null;
+  const current = !!mine && mine.id === tk.id;
+  const itsKey = !!mine && !!mine.key_id && mine.key_id === tk.id;
+  if (current || itsKey) {
+    li.querySelector(".token-kind").after(badgeEl(t(current ? "users.thisDevice" : "users.itsKey"), "ok"));
+    li.classList.add(current ? "token-current" : "token-its-key");
+  }
   const used = li.querySelector(".token-used");
   if (tk.last_used_at) {
     used.textContent = t("users.lastUsed", { from: tk.last_used_from || "?" }) + " ";
@@ -68,6 +77,12 @@ function tokenRow(u, tk, where, labels) {
   const revoke = li.querySelector(".revoke-token");
   revoke.setAttribute("aria-label", t("users.revokeLabel", { label: tk.label || t("users.kind." + tk.kind) }));
   revoke.addEventListener("click", () => {
+    if (current) {
+      // the token in use: a session ends as Sign out ends it; a key in use
+      // is revoked first, then the page forgets it as Sign out does
+      if (tk.kind === "session") return logout();
+      return whileBusy(revoke, () => api("DELETE", "api/v1/users/" + encodeURIComponent(u.name) + "/tokens/" + tk.id)).then(logout, () => {});
+    }
     userAction(() => api("DELETE", "api/v1/users/" + encodeURIComponent(u.name) + "/tokens/" + tk.id), t("users.revoked", { id: tk.id }), u.name, revoke, where);
   });
   return li;

@@ -16,7 +16,7 @@
  */
 
 import { signal } from "@preact/signals";
-import type { Capability, LoginProvider, Provider, Role, User } from "../api";
+import type { Capability, LoginProvider, Provider, Role, Token, User } from "../api";
 import type { Outcome } from "../shared/action";
 import { counter } from "../shared/counter";
 import { live, liveMap } from "../shared/live";
@@ -35,6 +35,14 @@ export const providers = live({ list: [] as Provider[], loaded: false });
 
 /** The enabled sign-in providers (GET /api/v1/login/providers), for a user's identities. */
 export const enabled = signal<LoginProvider[]>([]);
+
+/**
+ * The token the page is signed in with (state.me.token), as login.js
+ * applyCaps hands it over at every read of who is in, null for none: a
+ * user's sessions say which is "this device" and which key it was made
+ * from.
+ */
+export const own = signal<Token | null>(null);
 
 /** Whether the server takes the password sign-in (the setting auth.password_login), null before it is read. */
 export const passwordLogin = signal<boolean | null>(null);

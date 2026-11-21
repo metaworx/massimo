@@ -238,7 +238,8 @@ func unsettled(lines, settling []event, now time.Time) []logAlert {
 // logAlerts are the log's unsettled warnings and errors, of every Cube
 // with a row in the store and of the server, audit's lines for an
 // auditor only, and the devices' flags set now, newest first. A Cube
-// without a row keeps its lines in its ring, which has no ids to mark.
+// without a row keeps its lines in its ring, which the alerts leave out:
+// a mark is kept in the store, by the store's ids.
 func (s *Server) logAlerts(ctx context.Context, st *store.Store, audit bool) ([]logAlert, error) {
 	cubes := map[int64]string{}
 	rts := map[int64]*runtime{}

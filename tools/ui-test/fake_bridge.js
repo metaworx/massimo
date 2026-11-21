@@ -12,11 +12,20 @@
 //            "server" for a server's page's, token, setToken, login.*
 //            and connect
 //   servers  the servers the app keeps, as {id, name, node, lan, …,
-//            login, ask}
+//            login, ask, start, session, trusted_at}
 //   answers  by URL, how /healthz answers there: {node, version,
-//            fingerprint, self_signed}; a self-signed certificate is
+//            fingerprint, self_signed, subject, issuer, names,
+//            not_before, not_after}; a self-signed certificate is
 //            trusted only with its fingerprint given; no answer is a
-//            refused connection
+//            refused connection; an HTTPS answer without the
+//            certificate's details names the host in them
+//   sessions by server id, what session(id, url) finds of the session
+//            the app holds (contract version 3): a user's name, null for
+//            one the server refused (forgotten), or "error:<message>";
+//            without an entry the server's session stands
+//   settings the app's settings settings() answers, {appearance}
+//            ("system" by default); saveSettings keeps what it is given,
+//            or rejects with saveSettingsError where that is set
 //   found    the services a search finds, sent as found events
 //   core     the server on the phone's status, for a bridge with core
 //   push     true for a bridge with push
@@ -30,12 +39,22 @@
 //   openLogin for kind "connect", what open(id, url, {login: true})
 //            does: true (the default), false, or "error:<message>"
 //
+// The connect page's bridge is version 3: save keeps start at one server
+// at most and turns it on for the first one added, as the adapters do;
+// trust notes trusted_at; forget (Turn off) and signOut end the server's
+// session; signOut answers {ended} true where it was given an address.
 // Every call is recorded in window.__fakeBridge.calls as [name, args…],
-// and the servers and the token as they stand in window.__fakeBridge.
+// and the servers, the settings and the token as they stand in
+// window.__fakeBridge.
 (() => {
   const cfg = window.__fakeBridgeConfig || {};
   const copy = (v) => (v === undefined ? null : JSON.parse(JSON.stringify(v)));
-  const rec = { calls: [], servers: copy(cfg.servers || []), token: cfg.token === undefined ? null : cfg.token };
+  const rec = {
+    calls: [],
+    servers: copy(cfg.servers || []),
+    settings: copy(cfg.settings || { appearance: "system" }),
+    token: cfg.token === undefined ? null : cfg.token,
+  };
   window.__fakeBridge = rec;
   const call = (name, ...args) => rec.calls.push([name, ...copy(args)]);
   const later = (v, ms) => new Promise((resolve) => setTimeout(() => resolve(copy(v)), ms || 0));
@@ -87,30 +106,47 @@
     const a = (cfg.answers || {})[url];
     if (!a) return { url, ok: false, error: "connection refused" };
     if (!url.startsWith("https:")) return { url, ok: true, node: a.node || "", version: a.version || "" };
-    const r = { url, fingerprint: a.fingerprint || "", self_signed: !!a.self_signed };
+    const host = new URL(url).hostname;
+    const r = {
+      url,
+      fingerprint: a.fingerprint || "",
+      self_signed: !!a.self_signed,
+      subject: a.subject || "CN=" + host,
+      issuer: a.issuer || (a.self_signed ? "CN=" + host : "CN=Test CA,O=Massimo Test"),
+      names: copy(a.names || [host]),
+      not_before: a.not_before || "2026-11-01T00:00:00Z",
+      not_after: a.not_after || "2027-11-01T00:00:00Z",
+    };
     if (a.self_signed && a.fingerprint !== fp) return Object.assign(r, { ok: false, trusted: false });
     return Object.assign(r, { ok: true, node: a.node || "", version: a.version || "" });
   };
+  const server = (id) => rec.servers.find((x) => x.id === id);
   let seq = 0;
   window.massimo = {
-    version: 2,
+    version: 3,
     servers() {
       call("servers");
       return later(rec.servers);
     },
-    save(server) {
-      call("save", server);
-      const s = copy(server);
-      const old = rec.servers.find((x) => x.id === s.id);
+    save(input) {
+      call("save", input);
+      const s = copy(input);
+      const old = server(s.id);
+      s.start = s.start === true || (!old && rec.servers.length === 0);
+      if (s.start) for (const x of rec.servers) x.start = false;
       if (old) {
         s.fp = old.fp;
         s.login = old.login || "";
+        s.session = old.session || null;
+        s.trusted_at = old.trusted_at || "";
         Object.assign(old, s);
         return later(old);
       }
       s.id = "new" + ++seq;
       s.fp = "";
       s.login = "";
+      s.session = null;
+      s.trusted_at = "";
       rec.servers.push(s);
       return later(s);
     },
@@ -135,6 +171,7 @@
       const s = rec.servers.find((x) => x.id === id);
       if (!s) return Promise.reject(new Error("no such server"));
       s.fp = fp;
+      s.trusted_at = cfg.trustedAt || "2026-11-20T12:00:00Z";
       return later(null);
     },
     open(id, url, opts) {
@@ -150,14 +187,46 @@
     },
     forget(id, url) {
       call("forget", id, url);
-      const s = rec.servers.find((x) => x.id === id);
-      if (s) s.login = "";
+      const s = server(id);
+      if (s) {
+        s.login = "";
+        s.session = null; // Turn off signs out too
+      }
       return later({ revoked: !!url }, 30);
     },
     forgetAll() {
       call("forgetAll");
       for (const s of rec.servers) s.login = "";
       return later(null);
+    },
+    session(id, url) {
+      call("session", id, url);
+      const s = server(id);
+      const found = cfg.sessions && id in cfg.sessions ? cfg.sessions[id] : s ? s.session || null : null;
+      if (s && typeof found !== "string") s.session = null; // refused: forgotten
+      if (s && typeof found === "string" && !found.startsWith("error:")) s.session = found;
+      return answerOf(found, 20);
+    },
+    signOut(id, url) {
+      call("signOut", id, url);
+      const s = server(id);
+      if (s) s.session = null;
+      return later({ ended: !!url }, 30);
+    },
+    signOutAll() {
+      call("signOutAll");
+      for (const s of rec.servers) s.session = null;
+      return later(null, 30);
+    },
+    settings() {
+      call("settings");
+      return later(rec.settings);
+    },
+    saveSettings(input) {
+      call("saveSettings", input);
+      if (cfg.saveSettingsError) return answerOf("error:" + cfg.saveSettingsError, 20);
+      rec.settings = { appearance: input.appearance };
+      return later(rec.settings, 20);
     },
   };
   if (cfg.push) window.massimo.push = {};

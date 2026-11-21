@@ -16,7 +16,10 @@ object Origins {
     const val APP_HOST = "appassets.androidplatform.net"
     const val CONNECT_URL = "$APP/ui/connect.html"
 
-    private val connectCalls = setOf("hello", "servers", "save", "remove", "discover", "probe", "trust", "open", "forget", "forgetAll")
+    private val connectCalls = setOf(
+        "hello", "servers", "save", "remove", "discover", "probe", "trust", "open", "forget", "forgetAll",
+        "session", "signOut", "signOutAll", "settings", "saveSettings",
+    )
     private val serverCalls = setOf("hello", "token", "setToken", "login.status", "login.keep", "login.fingerprint", "connect")
 
     private val ipv4 = Regex("""^(\d+)\.(\d+)\.\d+\.\d+$""")

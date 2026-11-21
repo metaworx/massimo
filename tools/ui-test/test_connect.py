@@ -4,14 +4,17 @@
 bridge of fake_bridge.js in place of an app's adapter, put into the page
 by add_init_script as conftest.py puts the token: the server list and
 what each probe found, a tap that opens a server, adding by address and
-from discovery, the names a server is shown by, the toast saying what an
+from discovery in the Add card, shown for an empty list or from the
+list's ☰, the names a server is shown by, the toast saying what an
 action came to, the fingerprint sheet of a self-signed certificate and
-of a changed one, a server's settings with when the fingerprint is
-asked, the login by fingerprint from the row, Turn off and Forget all,
-the card of the server on the phone; a browser without the bridge; and
-the server's page taking its token from the bridge and handing it back,
-its login by fingerprint and "Select server" (docs/app.md, contract
-version 2).
+of a changed one, a server's settings with Open at start and when the
+fingerprint is asked, the panel taking the focus, the login by
+fingerprint from the row, Turn off and Forget all, the sessions the app
+holds with Sign out and Sign out of all, a server's certificate, App
+settings with the appearance, the card of the server on the phone; a
+browser without the bridge; and the server's page taking its token from
+the bridge and handing it back, its login by fingerprint and "Select
+server" (docs/app.md, contract version 3).
 axe-core (axe-playwright-python) finds no violation on the connect page
 in each of its states the tests open.
 
@@ -50,8 +53,9 @@ FP_TITLE = {"en": "Check the certificate", "de": "Zertifikat prüfen"}
 FP_CHANGED = {"en": "The certificate has changed", "de": "Das Zertifikat hat sich geändert"}
 
 
-def server(sid, name, node, lan="", remote="", fp="", login="", ask="start"):
-    return {"id": sid, "name": name, "node": node, "lan": lan, "remote": remote, "fp": fp, "login": login, "ask": ask, "push": False}
+def server(sid, name, node, lan="", remote="", fp="", login="", ask="start", start=False, session=None, trusted_at=""):
+    return {"id": sid, "name": name, "node": node, "lan": lan, "remote": remote, "fp": fp, "login": login, "ask": ask, "push": False,
+            "start": start, "session": session, "trusted_at": trusted_at}
 
 
 def open_connect(new_context, guard, watch, config=None):
@@ -113,6 +117,25 @@ def assert_axe(page, where):
     assert results.violations_count == 0, f"axe on {where}:\n{results.generate_report()}"
 
 
+def menu_entry(page, entry):
+    """Opens the Servers card's ☰ and gives its entry of that id, shown."""
+    page.locator("#servers-menu > summary").click()
+    item = page.locator(f"#servers-menu #{entry}")
+    item.wait_for(state="visible")
+    return item
+
+
+def open_add(page):
+    """Shows the Add card from the ☰ (Add server…)."""
+    menu_entry(page, "menu-add").click()
+    page.locator("#add").wait_for(state="visible")
+
+
+def discovers(page):
+    """How many searches the page asked for."""
+    return len(calls(page, "discover"))
+
+
 def test_connect_without_bridge(new_context, case, watch, guard):
     """A browser without the app's bridge sees a line saying the page is
     the app's, in its language, with a link to the web UI at the
@@ -123,7 +146,7 @@ def test_connect_without_bridge(new_context, case, watch, guard):
     assert wait_until(page, f"document.getElementById('no-bridge').textContent.includes({NO_BRIDGE[case.lang]!r})", 5), \
         "the line is in the page's language"
     assert page.locator("#no-bridge a").evaluate("(a) => a.href") == URL, "the link opens the web UI at the server's root"
-    for section in ("#servers", "#add", "#core-card"):
+    for section in ("#servers", "#add", "#app-card", "#core-card"):
         assert not page.locator(section).is_visible(), f"{section} is the app's only"
     assert_axe(page, "the page without the bridge")
 
@@ -151,6 +174,7 @@ def test_connect_list_and_open(new_context, case, watch, guard):
     probes = calls(page, "probe")
     assert ["probe", [HOME_LAN, HOME_REMOTE], ""] in probes, f"both addresses probed, the LAN one first: {probes}"
     assert not page.locator("#core-card").is_visible(), "no server on the phone without core"
+    assert page.locator("#add").is_hidden(), "a list that is not empty has no Add card until the ☰ asks"
     named_buttons(page, "the connect page")
     assert_axe(page, "the server list")
 
@@ -196,9 +220,12 @@ def test_connect_add_by_address(new_context, case, watch, guard):
     assert ["probe", ["https://192.168.1.20:8099/", lan], ""] in calls(page, "probe"), "HTTPS is tried first"
     saved = calls(page, "save")[-1][1]
     assert saved["lan"] == lan and saved["remote"] == "" and saved["node"] == NODE2, f"added as a LAN server: {saved}"
+    assert saved["start"] is True, "the first server added opens at start (AP MobileApp, D43-A)"
     assert address.input_value() == "", "the address is cleared"
     wait_state(page, "192.168.1.20:8099", STATE[case.lang]["lan"])
     assert not page.locator("#servers-empty").is_visible()
+    assert page.locator("#add").is_hidden(), "the Add card closes once a server is added"
+    assert page.evaluate("document.activeElement.classList.contains('server-open')"), "and the new server's row takes the focus"
 
 
 def test_connect_fingerprint_sheet(new_context, case, watch, guard):
@@ -229,6 +256,7 @@ def test_connect_fingerprint_sheet(new_context, case, watch, guard):
     assert ["probe", [HOME_REMOTE], FP1] in calls(page, "probe"), "probed again with the fingerprint trusted"
     sid = page.evaluate("window.__fakeBridge.servers[0].id")
     assert calls(page, "trust") == [["trust", sid, FP1]], "the fingerprint is pinned"
+    assert page.locator("#add").is_hidden(), "the Add card closes once the server is added"
     assert calls(page, "save")[-1][1]["remote"] == HOME_REMOTE, "a public name is the remote address"
     wait_state(page, "home.example.net", STATE[case.lang]["remote"])
 
@@ -249,11 +277,14 @@ def test_connect_fingerprint_sheet(new_context, case, watch, guard):
 
 def test_connect_settings(new_context, case, watch, guard):
     """A server's settings open under its row from the cog and from a
-    long press (the context menu): when the fingerprint is asked is
-    saved, the notification switch is there where the app has push, a
-    server without a kept login offers no Turn off, and Remove asks in
-    place and forgets the server."""
-    config = {"servers": [server("s1", "Home", NODE1, lan=HOME_LAN)], "answers": {HOME_LAN: {"node": NODE1}}, "push": True}
+    long press (the context menu), the panel taking the focus and not
+    its name's field, which would open a phone's keyboard (AP MobileApp,
+    F17): when the fingerprint is asked is saved, Open at start is on at
+    one server at most (D43-A), the notification switch is there where
+    the app has push, a server without a kept login offers no Turn off,
+    and Remove asks in place and forgets the server."""
+    config = {"servers": [server("s1", "Home", NODE1, lan=HOME_LAN), server("s2", "Cabin", NODE2, lan=CABIN_LAN, start=True)],
+              "answers": {HOME_LAN: {"node": NODE1}, CABIN_LAN: {"node": NODE2}}, "push": True}
     page = open_connect(new_context, guard, watch, config)
     wait_state(page, "Home", STATE[case.lang]["lan"])
     home = row(page, "Home")
@@ -261,32 +292,45 @@ def test_connect_settings(new_context, case, watch, guard):
     panel = home.locator(".server-panel")
     panel.wait_for(state="visible")
     assert home.locator(".server-cog").get_attribute("aria-expanded") == "true"
+    assert page.evaluate("document.activeElement.classList.contains('server-panel')"), "the panel takes the focus, not a field"
     home.locator(".server-cog").click()
     panel.wait_for(state="detached")
     home.locator(".server-cog").click()
     panel.wait_for(state="visible")
+    assert page.evaluate("document.activeElement.tagName") == "FORM", "the panel takes the focus again"
     assert panel.locator("input[name=push]").count() == 1, "the notification switch, the app having push"
     assert panel.locator("input").first.input_value() == "Home"
+    assert not panel.locator("input[name=start]").is_checked(), "Open at start is another server's"
     named_buttons(page, "a server's settings")
     assert_axe(page, "a server's settings")
 
     assert panel.locator("select[name=ask]").input_value() == "start", "when the app starts, until the user chooses"
     assert panel.locator(".server-login-off").count() == 0 and home.locator(".server-login").is_hidden(), "no kept login, no Turn off"
     panel.locator("select[name=ask]").select_option("return")
+    panel.locator("label.switch", has=page.locator("input[name=start]")).locator(".slider").click()
     panel.locator("button[type=submit]").click()
     panel.wait_for(state="detached")
     saved = calls(page, "save")[-1][1]
     assert saved["ask"] == "return" and saved["id"] == "s1" and saved["lan"] == HOME_LAN and "biometric" not in saved, f"the choice is saved: {saved}"
+    assert saved["start"] is True, f"Open at start is saved: {saved}"
+    assert page.evaluate("window.__fakeBridge.servers.map((s) => s.start)") == [True, False], "and is off at the other server"
     wait_toast(page, "Home")
+    row(page, "Cabin").locator(".server-cog").click()
+    cabin_panel = row(page, "Cabin").locator(".server-panel")
+    cabin_panel.wait_for(state="visible")
+    assert not cabin_panel.locator("input[name=start]").is_checked(), "the list read again: Cabin no longer opens at start"
+    row(page, "Cabin").locator(".server-cog").click()
+    cabin_panel.wait_for(state="detached")
 
     home.locator(".server-cog").click()
     assert panel.locator("select[name=ask]").input_value() == "return", "and shown as saved"
+    assert panel.locator("input[name=start]").is_checked()
     panel.locator(".server-remove").click()
     page.locator(".confirm-box .confirm-yes").click()
     home.wait_for(state="detached")
     assert calls(page, "remove") == [["remove", "s1"]]
-    assert page.locator("#servers-empty").is_visible()
     wait_toast(page, "Home")
+    assert page.evaluate("document.activeElement.closest('#servers-menu') !== null"), "the focus goes to the ☰"
 
 
 def test_connect_discovery(new_context, case, watch, guard):
@@ -302,8 +346,13 @@ def test_connect_discovery(new_context, case, watch, guard):
                   {"name": "massimo-box", "host": "192.168.1.30", "port": 8099, "node": NODE3, "version": "v0.0.0-test", "tls": False, "fp": ""}],
     }
     page = open_connect(new_context, guard, watch, config)
-    assert wait_until(page, "window.__fakeBridge.calls.some((c) => c[0] === 'discover')", 3), "the page searches at its start"
+    assert wait_until(page, "window.__fakeBridge.calls.some((c) => c[0] === 'discover')", 3), "the page searches at its start, for the list too"
     assert calls(page, "discover") == [["discover", 5000]]
+    assert page.locator("#add").is_hidden(), "the Add card waits for the ☰"
+    wait_state(page, "Home", STATE[case.lang]["lan"])
+    assert wait_until(page, "!document.getElementById('search-btn').disabled", 3), "the first search ends"
+    open_add(page)
+    assert wait_until(page, "window.__fakeBridge.calls.filter((c) => c[0] === 'discover').length === 2", 3), "the Add card searches as it opens"
     box = page.locator(".found-server", has_text="massimo-box")
     box.wait_for()
     assert page.locator(".found-server").count() == 1, "a saved server is not offered again"
@@ -316,10 +365,14 @@ def test_connect_discovery(new_context, case, watch, guard):
     box.wait_for(state="detached")
     saved = calls(page, "save")[-1][1]
     assert saved["name"] == "massimo-box" and saved["lan"] == found and saved["node"] == NODE3, f"added from the search: {saved}"
+    assert saved["start"] is False, "only the first server opens at start"
     wait_state(page, "massimo-box", STATE[case.lang]["lan"])
+    assert page.locator("#add").is_hidden(), "the Add card closes once a server is added"
     assert wait_until(page, "!document.getElementById('search-btn').disabled", 3), "the search ends"
+    open_add(page)
+    assert wait_until(page, "!document.getElementById('search-btn').disabled", 3), "its search ends"
     page.locator("#search-btn").click()
-    assert wait_until(page, "window.__fakeBridge.calls.filter((c) => c[0] === 'discover').length === 2", 3), "Search again"
+    assert wait_until(page, "window.__fakeBridge.calls.filter((c) => c[0] === 'discover').length === 4", 3), "Search again"
 
 
 def service(name, host, node):
@@ -353,6 +406,8 @@ def test_connect_names(new_context, case, watch, guard):
     by_address.wait_for()
     assert by_address.locator(".server-where").is_hidden(), "a server named by its address shows it once"
 
+    open_add(page)  # closed once the first was added, and searching again
+    assert wait_until(page, "!document.getElementById('search-btn').disabled", 3), "the Add card's search ends"
     address.fill("192.168.1.30:8099")
     submit.click()
     wait_toast(page, "Attic")
@@ -362,7 +417,7 @@ def test_connect_names(new_context, case, watch, guard):
     assert page.locator(".found-server", has_text="Attic").count() == 0, "and it is no longer offered"
 
     page.evaluate(f"window.__fakeBridgeConfig.found = [{json.dumps(service('Cellar', '192.168.1.20', NODE2))}]")
-    page.locator("#search-btn").click()
+    open_add(page)  # its search hears the name
     cellar_row = row(page, "Cellar")
     cellar_row.wait_for()
     assert cellar_row.locator(".server-where").inner_text() == "192.168.1.20:8099"
@@ -374,8 +429,9 @@ def test_connect_names(new_context, case, watch, guard):
     panel.locator("input").first.fill("Basement")
     panel.locator("button[type=submit]").click()
     panel.wait_for(state="detached")
+    searched = discovers(page)
     page.locator("#search-btn").click()
-    assert wait_until(page, "window.__fakeBridge.calls.filter((c) => c[0] === 'discover').length === 3", 3), "Search again"
+    assert wait_until(page, f"window.__fakeBridge.calls.filter((c) => c[0] === 'discover').length === {searched + 1}", 3), "Search again"
     assert wait_until(page, "!document.getElementById('search-btn').disabled", 3), "the third search ends"
     assert row(page, "Basement").count() == 1 and row(page, "Cellar").count() == 0, "a name the user gave stays"
     assert page.evaluate(f"window.__fakeBridge.servers.find((s) => s.node === {NODE2!r}).name") == "Basement"
@@ -463,7 +519,6 @@ def test_connect_login_by_fingerprint(new_context, case, watch, guard):
     button = home.locator(".server-login")
     assert button.is_visible() and "anna" in (button.get_attribute("aria-label") or ""), "the row's fingerprint names the user"
     assert office.locator(".server-login").is_hidden(), "a server without a kept login has none"
-    assert page.locator("#forget-all").is_visible(), "Forget all where a login is kept"
     named_buttons(page, "the list with kept logins")
     assert_axe(page, "the list with kept logins")
 
@@ -483,15 +538,27 @@ def test_connect_login_by_fingerprint(new_context, case, watch, guard):
     assert wait_until(page, "!document.querySelector(\".server-row[data-id='s1'] .server-login-kept\")", 3), "the settings drawn again without it"
     assert home.locator(".server-login").is_hidden(), "and the row without its fingerprint"
 
-    # Forget all: asked in place, then every login forgotten.
+    # Forget all, from the ☰ where a login is kept: asked in the card
+    # under the list, then every login forgotten.
     assert cabin.locator(".server-login").is_visible()
-    page.locator("#forget-all").click()
-    page.locator(".confirm-box .confirm-yes").click()
+    menu_entry(page, "menu-forget-all").click()
+    ask = page.locator("#servers-ask .confirm-box")
+    ask.wait_for(state="visible")
+    assert page.evaluate("document.activeElement.classList.contains('confirm-no')"), "the question takes the focus"
+    named_buttons(page, "Forget all's question")
+    assert_axe(page, "Forget all's question")
+    ask.locator(".confirm-no").click()
+    ask.wait_for(state="detached")
+    assert calls(page, "forgetAll") == [], "No forgets nothing"
+    menu_entry(page, "menu-forget-all").click()
+    page.locator("#servers-ask .confirm-yes").click()
     assert wait_until(page, "window.__fakeBridge.calls.some((c) => c[0] === 'forgetAll')", 3)
-    # the question stands in the row's place until the app answered
-    assert wait_until(page, "!!document.getElementById('forget-all-row') && document.getElementById('forget-all-row').classList.contains('hidden')", 3), \
-        "no login left, no Forget all"
+    ask.wait_for(state="detached")
     assert cabin.locator(".server-login").is_hidden()
+    page.locator("#servers-menu > summary").click()
+    page.locator("#menu-add").wait_for(state="visible")
+    assert page.locator("#menu-forget-all").is_hidden(), "no login left, no Forget all"
+    page.keyboard.press("Escape")
 
 
 def test_connect_login_refused(new_context, case, watch, guard):
@@ -504,6 +571,192 @@ def test_connect_login_refused(new_context, case, watch, guard):
     row(page, "Home").locator(".server-login").click()
     wait_toast(page, "no longer takes", bad=True)
     assert wait_until(page, "document.querySelector(\".server-row[data-id='s1'] .server-login\").classList.contains('hidden')", 3)
+
+
+SIGNED_OUT_ALL = {"en": "Signed out of every server", "de": "Bei jedem Server abgemeldet"}
+CERT_SELF = {"en": "the certificate itself (self-signed)", "de": "das Zertifikat selbst (selbst signiert)"}
+
+
+def test_connect_menu_and_add_card(new_context, case, watch, guard):
+    """The Servers card's ☰ (AP MobileApp, F21, F22): Add server…, Sign
+    out of all and App settings…, Forget all stored credentials only where
+    a login is kept. Add server… shows the Add card, which takes the focus
+    and not its address field, searches as it opens, and closes with ×;
+    the last server removed leaves the card shown without ×."""
+    config = {"servers": [server("s1", "Home", NODE1, lan=HOME_LAN)], "answers": {HOME_LAN: {"node": NODE1}}}
+    page = open_connect(new_context, guard, watch, config)
+    wait_state(page, "Home", STATE[case.lang]["lan"])
+    assert page.locator("#add").is_hidden()
+    menu_entry(page, "menu-add")
+    for entry in ("menu-sign-out-all", "menu-app"):
+        assert page.locator(f"#{entry}").is_visible(), f"{entry} in the ☰"
+    assert page.locator("#menu-forget-all").is_hidden(), "no login kept, no Forget all"
+    named_buttons(page, "the list's ☰")
+    assert_axe(page, "the list's ☰")
+    page.keyboard.press("Escape")
+    assert wait_until(page, "!document.getElementById('servers-menu').open", 3), "Escape closes the ☰"
+    assert wait_until(page, "!document.getElementById('search-btn').disabled", 3), "the start's search ends"
+    before = discovers(page)
+    open_add(page)
+    assert page.evaluate("document.activeElement.id") == "add", "the card takes the focus, not its address field"
+    assert wait_until(page, f"window.__fakeBridge.calls.filter((c) => c[0] === 'discover').length === {before + 1}", 3), "and searches"
+    close = page.locator("#add-close")
+    assert close.is_visible(), "× where the list is not empty"
+    named_buttons(page, "the Add card from the ☰")
+    assert_axe(page, "the Add card from the ☰")
+    close.click()
+    page.locator("#add").wait_for(state="hidden")
+    assert page.evaluate("document.activeElement.closest('#servers-menu') !== null"), "the focus back on the ☰"
+
+    home = row(page, "Home")
+    home.locator(".server-cog").click()
+    home.locator(".server-remove").click()
+    page.locator(".confirm-box .confirm-yes").click()
+    page.locator("#add").wait_for(state="visible")
+    assert page.locator("#add-close").is_hidden(), "an empty list keeps the Add card"
+    assert page.locator("#servers-empty").is_visible()
+    assert page.evaluate("document.activeElement.id") == "add", "which takes the focus"
+    page.locator("#servers-menu > summary").click()
+    page.locator("#menu-add").wait_for(state="visible")
+    assert page.locator("#menu-sign-out-all").is_hidden(), "no server, no Sign out of all"
+
+
+def test_connect_sessions(new_context, case, watch, guard):
+    """The list marks a server where the app holds a session with its
+    user, checked at each probe at the address found (session, AP
+    MobileApp, D46-A); one the server refused loses its mark, one not
+    checked keeps what the app said. Sign out in a server's settings ends
+    it there and keeps what is typed; Sign out of all, in the ☰, ends
+    every one."""
+    config = {
+        "servers": [server("s1", "Home", NODE1, lan=HOME_LAN, session="anna"), server("s2", "Cabin", NODE2, lan=CABIN_LAN, session="bob"),
+                    server("s3", "Office", NODE3, remote=OFFICE_REMOTE, session="carla")],
+        "answers": {HOME_LAN: {"node": NODE1}, CABIN_LAN: {"node": NODE2}},
+        "sessions": {"s2": None},
+    }
+    page = open_connect(new_context, guard, watch, config)
+    st = STATE[case.lang]
+    wait_state(page, "Home", st["lan"])
+    wait_state(page, "Cabin", st["lan"])
+    wait_state(page, "Office", st["offline"])
+    assert wait_until(page, "window.__fakeBridge.calls.filter((c) => c[0] === 'session').length === 2", 3), "both answering servers checked"
+    assert sorted(calls(page, "session")) == [["session", "s1", HOME_LAN], ["session", "s2", CABIN_LAN]], "at the address the probe found"
+    assert wait_until(page, "!document.querySelector(\".server-row[data-id='s2'] .session-badge\")", 3), "a session the server refused loses its mark"
+    assert "anna" in row(page, "Home").locator(".session-badge").inner_text(), "the user is named"
+    assert "carla" in row(page, "Office").locator(".session-badge").inner_text(), "one not checked keeps what the app said"
+    named_buttons(page, "the sessions")
+    assert_axe(page, "the sessions")
+
+    home = row(page, "Home")
+    home.locator(".server-cog").click()
+    panel = home.locator(".server-panel")
+    line = panel.locator(".server-session")
+    line.wait_for()
+    assert "anna" in line.inner_text()
+    named_buttons(page, "a server's session")
+    assert_axe(page, "a server's session")
+    panel.locator("input").first.fill("Home sweet")
+    line.locator(".server-sign-out").click()
+    wait_toast(page, "Home")
+    assert calls(page, "signOut") == [["signOut", "s1", HOME_LAN]], "signed out where the probe found it"
+    line.wait_for(state="detached")
+    assert home.locator(".session-badge").count() == 0, "and the mark is gone"
+    assert panel.locator("input").first.input_value() == "Home sweet", "the settings keep what is typed"
+    home.locator(".server-cog").click()
+    panel.wait_for(state="detached")
+
+    menu_entry(page, "menu-sign-out-all").click()
+    assert wait_until(page, "window.__fakeBridge.calls.some((c) => c[0] === 'signOutAll')", 3)
+    wait_toast(page, SIGNED_OUT_ALL[case.lang])
+    assert wait_until(page, "!document.querySelector('.session-badge')", 3), "no mark left"
+
+
+def test_connect_certificate(new_context, case, watch, guard):
+    """A server reached over HTTPS shows its certificate in its settings:
+    a line with its subject's name and the end of its validity, and
+    Certificate…, a dialog with the subject, the issuer, the names, the
+    validity, the fingerprint and since when it is trusted (AP MobileApp,
+    D51-B); a server over plain HTTP has no such line."""
+    lan = "https://192.168.1.10:8443/"
+    config = {
+        "servers": [server("s1", "Home", NODE1, lan=lan, fp=FP1, trusted_at="2026-11-20T08:30:00Z"), server("s2", "Cabin", NODE2, lan=CABIN_LAN)],
+        "answers": {lan: {"node": NODE1, "fingerprint": FP1, "self_signed": True, "subject": "CN=massimo.local", "names": ["massimo.local", "192.168.1.10"],
+                          "not_before": "2026-11-01T12:00:00Z", "not_after": "2027-11-01T12:00:00Z"},
+                    CABIN_LAN: {"node": NODE2}},
+    }
+    page = open_connect(new_context, guard, watch, config)
+    wait_state(page, "Home", STATE[case.lang]["lan"])
+    wait_state(page, "Cabin", STATE[case.lang]["lan"])
+    cabin = row(page, "Cabin")
+    cabin.locator(".server-cog").click()
+    cabin.locator(".server-panel").wait_for(state="visible")
+    assert cabin.locator(".server-cert").count() == 0, "plain HTTP: no certificate"
+    cabin.locator(".server-cog").click()
+
+    home = row(page, "Home")
+    home.locator(".server-cog").click()
+    line = home.locator(".server-panel .server-cert")
+    line.wait_for()
+    assert "massimo.local" in line.inner_text() and "2027" in line.inner_text(), f"its subject's name and its end: {line.inner_text()!r}"
+    named_buttons(page, "a server's certificate line")
+    line.locator(".server-cert-open").click()
+    dlg = page.locator("#cert-dialog")
+    dlg.wait_for(state="visible")
+    assert page.locator("#cert-subject").inner_text() == "CN=massimo.local"
+    assert page.locator("#cert-issuer").inner_text() == CERT_SELF[case.lang]
+    assert page.locator("#cert-names").inner_text() == "massimo.local, 192.168.1.10"
+    assert "2026" in page.locator("#cert-from").inner_text() and "2027" in page.locator("#cert-until").inner_text()
+    assert page.locator("#cert-fp").inner_text() == FP1
+    assert "2026" in page.locator("#cert-trusted").inner_text(), "since when it is trusted"
+    assert page.evaluate("document.activeElement.id") == "cert-close"
+    named_buttons(page, "the certificate's dialog")
+    assert_axe(page, "the certificate's dialog")
+    page.locator("#cert-close").click()
+    dlg.wait_for(state="hidden")
+    line.locator(".server-cert-open").click()
+    dlg.wait_for(state="visible")
+    page.keyboard.press("Escape")
+    dlg.wait_for(state="hidden")
+
+
+def test_connect_app_settings(new_context, case, watch, guard):
+    """App settings, from the ☰ (AP MobileApp, D53-A): the appearance the
+    app keeps, as the system at first; another is saved in the app and
+    given to the page at once; the page loaded again with the card open,
+    as the app does once it took another appearance, opens it again; ×
+    closes it; an appearance the app refused is said in the card."""
+    config = {"servers": [server("s1", "Home", NODE1, lan=HOME_LAN)], "answers": {HOME_LAN: {"node": NODE1}}}
+    page = open_connect(new_context, guard, watch, config)
+    assert wait_until(page, "window.__fakeBridge.calls.some((c) => c[0] === 'settings')", 3), "the page reads the app's settings"
+    assert page.evaluate("document.documentElement.getAttribute('data-theme')") is None, "as the system"
+    menu_entry(page, "menu-app").click()
+    card = page.locator("#app-card")
+    card.wait_for(state="visible")
+    assert page.evaluate("document.activeElement.id") == "app-card"
+    select = page.locator("#app-appearance")
+    assert select.input_value() == "system"
+    named_buttons(page, "App settings")
+    assert_axe(page, "App settings")
+    select.select_option("dark")
+    assert wait_until(page, "window.__fakeBridge.calls.some((c) => c[0] === 'saveSettings')", 3)
+    assert calls(page, "saveSettings") == [["saveSettings", {"appearance": "dark"}]]
+    assert wait_until(page, "document.documentElement.getAttribute('data-theme') === 'dark'", 3), "the page takes it at once"
+    assert_axe(page, "App settings in the dark")
+    assert page.evaluate("location.hash") == "#app-settings"
+
+    page.reload()
+    page.locator("#servers").wait_for(state="visible")
+    card.wait_for(state="visible")
+    assert wait_until(page, "document.getElementById('app-appearance').value === 'system'", 3), "as the app said after the load"
+    page.evaluate("window.__fakeBridgeConfig.saveSettingsError = 'the phone said no'")
+    select.select_option("light")
+    page.locator("#app-msg.bad").wait_for()
+    assert "the phone said no" in page.locator("#app-msg").inner_text()
+    assert select.input_value() == "system", "the choice as it was"
+    page.locator("#app-close").click()
+    card.wait_for(state="hidden")
+    assert page.evaluate("location.hash") == ""
+    assert page.evaluate("document.activeElement.closest('#servers-menu') !== null"), "the focus back on the ☰"
 
 
 def server_page(new_context, guard, watch, login, token=None):
@@ -531,11 +784,17 @@ def test_server_page_keeps_the_login(new_context, case, watch, guard):
     page = server_page(new_context, guard, watch, {"status": {"can": True, "user": "", "ask": "start", "plain": False}, "keep": [False, True]})
     page.locator("#login-dialog[open]").wait_for()
     page.locator("#login-keep-row").wait_for(state="visible")
-    assert page.locator("#login-fingerprint").is_hidden(), "nothing kept: no Login by fingerprint"
+    assert page.locator("#login-way-fp").is_hidden(), "nothing kept: no Login by fingerprint"
     assert page.locator("#login-servers").is_visible(), "Select server, the app having its servers"
     named_buttons(page, "the sign-in in the app")
     page.locator("#login-servers").click()
     assert wait_until(page, "window.__fakeBridge.calls.some((c) => c[0] === 'connect')", 3), "Select server calls the app"
+    # and last in the card's ☰ (AP MobileApp, Block 13: F13)
+    page.locator("#login-menu summary").click()
+    last = page.locator("#login-menu .menu-items > :last-child")
+    assert last.get_attribute("id") == "login-menu-servers" and last.is_visible(), "Select server, last in the card's ☰"
+    last.click()
+    assert wait_until(page, "window.__fakeBridge.calls.filter((c) => c[0] === 'connect').length === 2", 3), "the card's ☰ calls the app"
 
     page.locator("#login-user").fill("operator")
     page.locator("#login-password").fill("op-pass")
@@ -552,24 +811,36 @@ def test_server_page_keeps_the_login(new_context, case, watch, guard):
     assert len(calls(page, "login.keep")) == 2, "Try again asks again"
     assert not page.evaluate("document.getElementById('login-dialog').open"), "and the page is signed in"
 
-    # Signed in: the Cube choice ends with Select server.
+    # Signed in: the Cube choice ends with Select server, and the main ☰
+    # has it just before Sign out.
     page.locator("#cube-menu summary").click()
     entry = page.locator("#cube-menu .menu-items button[data-value='__servers']")
     entry.wait_for(state="visible")
     entry.click()
-    assert wait_until(page, "window.__fakeBridge.calls.filter((c) => c[0] === 'connect').length === 2", 3), "the Cube choice's Select server"
+    assert wait_until(page, "window.__fakeBridge.calls.filter((c) => c[0] === 'connect').length === 3", 3), "the Cube choice's Select server"
+    page.locator("#nav-menu summary").click()
+    servers = page.locator("#menu-servers")
+    servers.wait_for(state="visible")
+    assert page.evaluate("document.getElementById('menu-servers').nextElementSibling.id") == "menu-logout", "just before Sign out"
+    servers.click()
+    assert wait_until(page, "window.__fakeBridge.calls.filter((c) => c[0] === 'connect').length === 4", 3), "the main ☰'s Select server"
 
 
 def test_server_page_login_by_fingerprint(new_context, case, watch, guard):
-    """Where a key is kept, the sign-in form offers Login by fingerprint
-    with the user's name, which signs the page in with the session the
-    app made; a dismissed prompt leaves the form; over plain HTTP outside
-    the home network the form says why it offers the password alone."""
+    """Where a key is kept, the sign-in's row starts with the fingerprint,
+    named with the user's name, the name's form staying the one chosen;
+    it signs the page in at once with the session the app made (AP
+    MobileApp, D49); a dismissed prompt leaves the form; over plain HTTP
+    outside the home network the form says why it offers the password
+    alone."""
     page = server_page(new_context, guard, watch, {"status": {"can": True, "user": "operator", "ask": "start", "plain": False}, "fingerprint": TOKEN})
     page.locator("#login-dialog[open]").wait_for()
-    fingerprint = page.locator("#login-fingerprint")
+    fingerprint = page.locator("#login-way-fp")
     fingerprint.wait_for(state="visible")
-    assert "operator" in page.locator("#login-fingerprint-user").inner_text()
+    assert "operator" in fingerprint.get_attribute("aria-label"), "named with the user's name"
+    assert page.evaluate("document.querySelector('#login-ways .login-way').id") == "login-way-fp", "first in the row"
+    assert page.locator("#login-ways .login-way[data-way='name']").get_attribute("aria-pressed") == "true", "Name stays chosen"
+    assert page.locator("#login-form").is_visible()
     assert page.locator("#login-keep-row").is_hidden(), "a key kept: no switch"
     fingerprint.click()
     page.wait_for_selector(".room", timeout=10000)
@@ -580,11 +851,32 @@ def test_server_page_login_by_fingerprint(new_context, case, watch, guard):
     plain = server_page(new_context, guard, watch, {"status": {"can": True, "user": "operator", "ask": "start", "plain": True}})
     plain.locator("#login-dialog[open]").wait_for()
     plain.locator("#login-fp-plain").wait_for(state="visible")
-    assert plain.locator("#login-fingerprint").is_hidden() and plain.locator("#login-keep-row").is_hidden(), "plain HTTP: neither"
+    assert plain.locator("#login-way-fp").is_hidden() and plain.locator("#login-keep-row").is_hidden(), "plain HTTP: neither"
 
     dismissed = server_page(new_context, guard, watch, {"status": {"can": True, "user": "operator", "ask": "start", "plain": False}, "fingerprint": None})
-    dismissed.locator("#login-fingerprint").wait_for(state="visible")
-    dismissed.locator("#login-fingerprint").click()
+    dismissed.locator("#login-way-fp").wait_for(state="visible")
+    dismissed.locator("#login-way-fp").click()
     assert wait_until(dismissed, "window.__fakeBridge.calls.some((c) => c[0] === 'login.fingerprint')", 3)
-    assert wait_until(dismissed, "!document.getElementById('login-fingerprint').classList.contains('busy')", 3)
+    assert wait_until(dismissed, "!document.getElementById('login-way-fp').classList.contains('busy')", 3)
     assert dismissed.evaluate("document.getElementById('login-dialog').open"), "a dismissed prompt leaves the form"
+
+
+def test_server_page_first_owner_keeps_the_login(new_context, case, watch, guard):
+    """In the app, the first owner's form offers the login by fingerprint
+    as the sign-in does (AP MobileApp, D42-A): its switch where the phone
+    can and nothing is kept, none over plain HTTP. /api/v1/me is stubbed
+    as an open server without users once the page is in."""
+    for plain in (False, True):
+        page = server_page(new_context, guard, watch, {"status": {"can": True, "user": "", "ask": "start", "plain": plain}}, token=TOKEN)
+        page.wait_for_selector(".room", timeout=10000)
+        page.route("**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body='{"mode": "open", "setup": true}'))
+        page.evaluate("loadMe()")
+        assert wait_until(page, "!document.getElementById('setup').classList.contains('hidden')", 5), "the first owner's form shows"
+        if plain:
+            page.wait_for_timeout(300)
+            assert page.locator("#setup-keep-row").is_hidden(), "plain HTTP: no switch"
+        else:
+            page.locator("#setup-keep-row").wait_for(state="visible")
+            assert not page.locator("#setup-keep").is_checked(), "off at first"
+            named_buttons(page, "the first owner's form in the app")
+        page.unroute("**/api/v1/me")

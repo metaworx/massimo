@@ -15,12 +15,13 @@
  * since they read each other's data.
  */
 
+import type { Token } from "../api";
 import { mounter, register } from "../shared/region";
 import { ProvidersCard } from "./Providers";
 import { CapsCard, RolesCard } from "./Roles";
 import { loadProviders, providersMsg } from "./sendProviders";
 import { loadRoles, rolesMsg } from "./sendRoles";
-import { forgetAdmin, load, reads, said } from "./store";
+import { forgetAdmin, load, own, reads, said } from "./store";
 import { UsersCard } from "./Users";
 import { loadPasswordLogin, loadUsers, usersMsg } from "./sendUsers";
 
@@ -33,6 +34,10 @@ const users = register("users", {
     mountUsers();
     await loadUsers();
     reads.value++;
+  },
+  /** me takes the token the page is signed in with, null for none (login.js applyCaps): the user's own sessions draw again. */
+  me(token: Token | null): void {
+    own.value = token;
   },
   /** render draws the users again (users.js renderUsers). */
   render(): void {

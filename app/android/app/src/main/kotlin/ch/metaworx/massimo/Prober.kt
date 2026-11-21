@@ -5,6 +5,7 @@ package ch.metaworx.massimo
 
 import android.annotation.SuppressLint
 import android.net.http.X509TrustManagerExtensions
+import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
@@ -14,7 +15,10 @@ import java.net.SocketTimeoutException
 import java.net.URL
 import java.security.KeyStore
 import java.security.cert.CertificateException
+import java.security.cert.CertificateParsingException
 import java.security.cert.X509Certificate
+import java.time.temporal.ChronoUnit
+import java.util.Date
 import java.util.concurrent.Callable
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
@@ -26,9 +30,58 @@ import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLSession
 import javax.net.ssl.TrustManagerFactory
 import javax.net.ssl.X509TrustManager
+import javax.security.auth.x500.X500Principal
 
-/** What the probe saw of a server's certificate (docs/app.md, "A probe result"). */
-data class Tls(val fingerprint: String, val selfSigned: Boolean, val trusted: Boolean)
+/**
+ * What the probe saw of a server's certificate (docs/app.md, "A probe
+ * result"): its fingerprint, whether it is its own issuer, whether it was
+ * trusted, and what it says of itself ([cert], contract version 3).
+ */
+data class Tls(val fingerprint: String, val selfSigned: Boolean, val trusted: Boolean, val cert: CertDetails? = null)
+
+/**
+ * CertDetails is what a certificate says of itself, as the connect page
+ * shows it in a server's settings (docs/app.md, "A probe result"): its
+ * subject's and its issuer's distinguished names (RFC 4514), the DNS names
+ * and IP addresses it is for, and its validity in RFC 3339, to the second.
+ */
+data class CertDetails(val subject: String, val issuer: String, val names: List<String>, val notBefore: String, val notAfter: String) {
+    /** put writes the details into a probe result's [o]. */
+    fun put(o: JSONObject): JSONObject = o
+        .put("subject", subject)
+        .put("issuer", issuer)
+        .put("names", JSONArray(names))
+        .put("not_before", notBefore)
+        .put("not_after", notAfter)
+
+    companion object {
+        private const val SAN_DNS = 2
+        private const val SAN_IP = 7
+
+        /** of reads the details of [c]. */
+        fun of(c: X509Certificate): CertDetails = CertDetails(
+            subject = c.subjectX500Principal.getName(X500Principal.RFC2253),
+            issuer = c.issuerX500Principal.getName(X500Principal.RFC2253),
+            names = names(c),
+            notBefore = utc(c.notBefore),
+            notAfter = utc(c.notAfter),
+        )
+
+        // names are the subject alternative names that are a DNS name or
+        // an IP address, in the certificate's order; none where it cannot
+        // be read.
+        private fun names(c: X509Certificate): List<String> = try {
+            c.subjectAlternativeNames.orEmpty().mapNotNull { e ->
+                val kind = e.getOrNull(0) as? Int
+                if (kind == SAN_DNS || kind == SAN_IP) e.getOrNull(1) as? String else null
+            }
+        } catch (e: CertificateParsingException) {
+            emptyList()
+        }
+
+        private fun utc(d: Date): String = d.toInstant().truncatedTo(ChronoUnit.SECONDS).toString()
+    }
+}
 
 /** ProbeResult is one address's answer to `GET <url>healthz`. */
 data class ProbeResult(
@@ -39,10 +92,12 @@ data class ProbeResult(
     val tls: Tls? = null,
     val error: String? = null,
 ) {
+    /** toJson is the result as the connect page reads it (docs/app.md, "A probe result"). */
     fun toJson(): JSONObject {
         val o = JSONObject().put("url", url).put("ok", ok).put("node", node).put("version", version)
         if (tls != null) {
             o.put("fingerprint", tls.fingerprint).put("self_signed", tls.selfSigned).put("trusted", tls.trusted)
+            tls.cert?.put(o)
         }
         if (!ok && error != null && tls?.trusted != false) o.put("error", error)
         return o
@@ -181,6 +236,7 @@ internal class PinningTrustManager(
 ) : X509TrustManager {
     @Volatile private var fingerprint: String? = null
     @Volatile private var selfSigned = false
+    @Volatile private var details: CertDetails? = null
     @Volatile private var pinned = false
     @Volatile private var refused = false
 
@@ -189,6 +245,7 @@ internal class PinningTrustManager(
         val fp = Fingerprint.of(leaf.encoded)
         fingerprint = fp
         selfSigned = isSelfSigned(leaf)
+        details = CertDetails.of(leaf)
         if (accept != null && Fingerprint.same(fp, accept)) {
             pinned = true
             return
@@ -215,7 +272,8 @@ internal class PinningTrustManager(
 
     override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
 
-    fun seen(): Tls? = fingerprint?.let { Tls(it, selfSigned, !refused) }
+    /** seen is what the handshake showed of the server's certificate, null before one did. */
+    fun seen(): Tls? = fingerprint?.let { Tls(it, selfSigned, !refused, details) }
 
     private fun isSelfSigned(c: X509Certificate): Boolean {
         if (c.subjectX500Principal != c.issuerX500Principal) return false

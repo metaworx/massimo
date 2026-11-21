@@ -6,7 +6,8 @@
  *
  * A user's sessions and API keys in its panel of System settings → Users,
  * as users.js drew them: each with its kind, label, the key a session was
- * made from, when and from where it was last used, and Revoke; the label
+ * made from, when and from where it was last used, and Revoke, the token
+ * the page is signed in with "this device" and its key "its key"; the label
  * of a new key with Create key, and the key just made, shown once. The
  * list is read when the panel opens and after every change of the users
  * while it is open; the key just made is shown by the read that follows
@@ -17,25 +18,35 @@
 
 import { useEffect, useRef, useState } from "preact/hooks";
 import type { Token, User } from "../api";
-import { Age } from "../shared/badge";
+import { Age, Badge } from "../shared/badge";
 import { hid } from "../shared/cls";
 import { TextField } from "../shared/field";
 import { BusyButton } from "../shared/question";
-import { load, reads } from "./store";
-import { createKey, loadTokens, revokeToken, usersMsg } from "./sendUsers";
+import { load, own, reads } from "./store";
+import { createKey, loadTokens, revokeOwn, revokeToken, usersMsg } from "./sendUsers";
 
-/** TokenRow is one session or key, with Revoke; labels names a session's key by the list's labels. */
+/**
+ * TokenRow is one session or key, with Revoke; labels names a session's
+ * key by the list's labels. Of one's own user, the token the page is
+ * signed in with (own) says "this device", the key it was made from "its
+ * key"; Revoke on "this device" signs out.
+ */
 function TokenRow({ u, tk, labels }: { u: User; tk: Token; labels: Map<number, string> }) {
   const kind = t("users.kind." + tk.kind);
+  const mine = isSelf(u.name) ? own.value : null;
+  const current = !!mine && mine.id === tk.id;
+  const itsKey = !!mine && !!mine.key_id && mine.key_id === tk.id;
+  const cls = current ? "token-current" : itsKey ? "token-its-key" : undefined;
   return (
-    <li data-id={String(tk.id)}>
+    <li data-id={String(tk.id)} class={cls}>
       <span class="flag mode token-kind">{kind}</span>
+      {(current || itsKey) && <Badge kind="ok" text={t(current ? "users.thisDevice" : "users.itsKey")} />}
       <span class="token-label">{tk.label || ""}</span>
       <span class={"muted small token-key" + hid(!tk.key_id)}>{tk.key_id ? t("users.fromKey", { label: labels.get(tk.key_id) || "#" + tk.key_id }) : ""}</span>
       <span class="muted small token-used">
         {tk.last_used_at ? <>{t("users.lastUsed", { from: tk.last_used_from || "?" }) + " "}<Age at={tk.last_used_at} plain /></> : t("users.neverUsed")}
       </span>
-      <BusyButton cls="revoke-token" label={t("users.revoke")} aria={t("users.revokeLabel", { label: tk.label || kind })} run={() => revokeToken(u.name, tk)} />
+      <BusyButton cls="revoke-token" label={t("users.revoke")} aria={t("users.revokeLabel", { label: tk.label || kind })} run={() => (current ? revokeOwn(u.name, tk) : revokeToken(u.name, tk))} />
     </li>
   );
 }

@@ -61,6 +61,21 @@ class LoginStoreTest {
         assertEquals(listOf("s1"), st.ids())
         assertEquals(secret, LoginStore.open(keys.decrypter(LoginKey.alias("s1"), again.iv), again, "s1"))
         assertFalse(st.get("s1").toString().contains(secret.key))
+        // The key's row in clear beside it, for Turn off with a session (contract version 3).
+        assertEquals(7L, again.keyId)
+        assertTrue(File(tmp.root, "logins.json").readText().contains("\"key_id\":7"))
+    }
+
+    @Test
+    fun aLoginKeptBeforeVersionThreeHasNoKeyId() {
+        val keys = JvmKeys()
+        val kept = LoginStore.seal(keys.encrypter(LoginKey.alias("s1")), secret, "s1", "", "", "anna")
+        val st = LoginStore(File(tmp.root, "logins.json"))
+        st.put("s1", kept.copy(keyId = 0))
+        val file = File(tmp.root, "logins.json")
+        file.writeText(file.readText().replace(",\"key_id\":0", "").replace("\"key_id\":0,", ""))
+        assertFalse(file.readText().contains("key_id"))
+        assertEquals(0L, st.get("s1")!!.keyId)
     }
 
     @Test

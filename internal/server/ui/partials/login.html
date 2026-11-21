@@ -1,7 +1,10 @@
 <!-- The sign-in dialog, login.js. -->
 <dialog id="login-dialog">
-  <!-- the sign-in, a card in the signed-out page (login.js askLogin); the
-       password form holds the one password field, the API key a form of its own -->
+  <!-- the sign-in, the signed-out page's one card, without the header
+       (login.js askLogin): the logo; the title with ☰, which holds the
+       server's version, the language, the mode and in the app Select server;
+       the providers' buttons; the ways to sign in, a form for each (the
+       password form holds the one password field); the version at its foot -->
   <div class="brand-name brand-big" data-brand><span class="brand-word"><span class="brand-initial">M</span><span class="brand-rest">assimo</span></span></div>
   <div class="login-head">
     <h3 data-i18n="login.title">Sign in</h3>
@@ -9,6 +12,8 @@
     <details id="login-menu" class="menu nav-menu login-menu">
       <summary class="nav-btn" aria-label="Language and appearance" title="Language and appearance" data-i18n-attr="aria-label:login.menu title:login.menu"><svg class="ni" aria-hidden="true"><use href="#icon-menu"/></svg></summary>
       <div class="menu-items">
+        <p class="menu-version"><span class="menu-brand" data-brand aria-hidden="true"></span><span id="login-menu-version" class="mono small"></span></p>
+        <hr class="menu-sep">
         <div class="field wide">
           <label for="login-lang" data-i18n="settings.language">Language</label>
           <select id="login-lang" class="field-control"></select>
@@ -21,6 +26,8 @@
             <option value="dark" data-i18n="appearance.modeDark">dark</option>
           </select>
         </div>
+        <hr id="login-menu-servers-sep" class="menu-sep hidden">
+        <button type="button" id="login-menu-servers" class="hidden"><svg class="ni" aria-hidden="true"><use href="#icon-servers"/></svg><span data-i18n="app.selectServer">Select server</span></button>
       </div>
     </details>
   </div>
@@ -28,14 +35,18 @@
     <div id="login-provider-buttons" class="login-provider-buttons"></div>
     <p id="login-providers-error" class="small hidden" role="alert"></p>
   </div>
-  <!-- the login by fingerprint where the page runs in the app (docs/app.md,
-       "The login by fingerprint"): the button where a key is kept, the
-       notice where the address takes none (login.js renderAppLogin) -->
-  <div id="login-app" class="login-app hidden">
-    <button type="button" id="login-fingerprint" class="primary login-fingerprint hidden"><svg class="ni" aria-hidden="true"><use href="#icon-fingerprint"/></svg> <span data-i18n="login.fingerprint">Login by fingerprint</span></button>
-    <p id="login-fingerprint-user" class="muted small hidden"></p>
-    <p id="login-fp-plain" class="notice small hidden" role="note" data-i18n="login.fingerprintPlain">Not encrypted here: the login by fingerprint is used only over HTTPS or on the home network. Sign in with your password.</p>
+  <!-- how to sign in (login.js chooseWay): in the app, where a login by
+       fingerprint is kept, its button first, which signs in at once
+       (docs/app.md, "The login by fingerprint"); then the name and password,
+       chosen at first, and an API key, each a form of its own -->
+  <div id="login-ways" class="login-ways" role="group" aria-labelledby="login-ways-label">
+    <span id="login-ways-label" class="muted small" data-i18n="login.ways">Sign in with</span>
+    <button type="button" id="login-way-fp" class="login-way login-way-fp hidden" aria-label="Login by fingerprint" title="Login by fingerprint" data-i18n-attr="aria-label:login.fingerprint title:login.fingerprint"><svg class="ni" aria-hidden="true"><use href="#icon-fingerprint"/></svg></button>
+    <button type="button" class="login-way" data-way="name" aria-pressed="true" data-i18n="login.wayName">Name</button>
+    <button type="button" class="login-way" data-way="key" aria-pressed="false" data-i18n="login.token">API key</button>
   </div>
+  <!-- in the app, where the address takes no kept key -->
+  <p id="login-fp-plain" class="notice small hidden" role="note" data-i18n="login.fingerprintPlain">Not encrypted here: the login by fingerprint is used only over HTTPS or on the home network. Sign in with your password.</p>
   <form id="login-form" method="post">
     <p class="muted" data-i18n="login.text">This server asks who you are.</p>
     <p id="login-tls" class="notice small hidden" role="note" data-i18n="header.selfSigned">Self-signed certificate: before signing in, compare the SHA-256 fingerprint in your browser's certificate details with the one massimo tls show prints on the server.</p>
@@ -50,13 +61,12 @@
     <p id="login-keep-failed-text" class="small" role="alert"></p>
     <div class="actions"><button type="button" id="login-keep-skip" data-i18n="login.keepSkip">Sign in without it</button><button type="button" id="login-keep-retry" class="primary" data-i18n="login.keepRetry">Try again</button></div>
   </div>
-  <details class="login-token">
-    <summary data-i18n="login.tokenInstead">Or an API key</summary>
-    <form id="login-key-form">
-      <label><span data-i18n="login.token">API key</span> <input type="password" id="login-token" name="api-key" autocomplete="off"></label>
-      <div class="actions"><button type="submit" data-i18n="login.submit">Sign in</button></div>
-    </form>
-  </details>
+  <form id="login-key-form" class="hidden">
+    <label><span data-i18n="login.token">API key</span> <input type="password" id="login-token" name="api-key" autocomplete="off"></label>
+    <div class="actions"><button type="submit" class="primary" data-i18n="login.submit">Sign in</button></div>
+  </form>
   <!-- in the app: back to the connect page's servers -->
   <p id="login-servers-row" class="login-servers hidden"><button type="button" id="login-servers" data-i18n="app.selectServer">Select server</button></p>
+  <!-- the server's version, which the header shows while signed in (header.js) -->
+  <p id="login-version" class="login-version mono small muted"></p>
 </dialog>

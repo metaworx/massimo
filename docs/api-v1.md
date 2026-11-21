@@ -371,6 +371,7 @@ without a store (`serve -addr`) the features that need one are left out.
 | `boost` | `{"mode": "boost"}` on the setpoint routes | no | the release after 0.15.0-alpha.1 |
 | `proxy_virtual` | the Cube option `proxy_virtual` | yes | the release after 0.15.0-alpha.1 |
 | `integration` | registered integrations (`/api/v1/integrations`) acting for their users (`X-MassimoHA-On-Behalf-Of`), `integration` and `acts_for` in `/api/v1/me` | yes | the release after 0.15.0-alpha.1 |
+| `log_after` | `after=<id>` on the log's routes, the forward cursor; an `id` on every line of the log kept in memory; `409` for a cursor beyond the newest line | no | the release after 0.16.0-alpha.1 |
 
 What a key may do is not here but in `GET /api/v1/me`.
 `node_id` is the box's identifier from its store (`node.id`,
@@ -3213,7 +3214,7 @@ The log's **device change** names a re-link `relink`, "unlink all and re-link"
 `unlink_relink`, a re-sent configuration `config` and a placement `move`;
 one of a room has no device and names its `rooms`.
 
-### GET /api/v1/cubes/{sn}/log?before=&since=&limit=&kind=&source=&level=&device=&user=&command=
+### GET /api/v1/cubes/{sn}/log?after=&before=&since=&limit=&kind=&source=&level=&device=&user=&command=
 
 A page of the Cube's events, oldest first,
 the same objects the event stream sends (`kind`, `device`, `state`, `error`,
@@ -3236,10 +3237,19 @@ Each event carries `id`, its place in the log, which the stream's events do not.
 Without parameters the answer is the newest 200 events; `limit` takes 1 to 1000,
 `before` an event's `id` for the page before it (`?before=4711`),
 or an RFC 3339 time for the events before that time;
+`after` an event's `id` for the page after it (`?after=4711`),
+the first `limit` events after that one, oldest first,
+and `0` for the log's start;
 `since` an RFC 3339 time for the events at or after it
 (`?since=2026-11-06T20:00:00Z`, not after a `before` time),
 so that a view of the last hour or of today is one request,
 with `before` as the cursor within it;
+`since` is the start of a range, not a cursor:
+its page is the newest `limit` events since the time,
+a client that asks again since the newest time it has
+gets that millisecond's events again,
+and an event stamped before that time but kept after the client's last read
+in no page at all;
 `kind` keeps one kind (`state`, `config`, `connected`,
 …) and `device` one device, by its serial number or its radio address,
 also one the Cube no longer has.
@@ -3274,14 +3284,36 @@ the bootstrap token is a key of the first owner, whom it names, as the audit doe
 A client pages back with `before` set to the `id` of the oldest event it has,
 until a page is empty: the events of a burst share a millisecond,
 so a time does not page them without gaps or repeats.
+A client follows the log with `after` set to the `id` of the newest event it has,
+on a server with the feature `log_after` (`GET /healthz`;
+an older server ignores `after` and answers the newest page):
+each event comes once, in the order the log kept them,
+also where a burst brings more than a page;
+a full page means more may follow,
+and an empty one leaves the cursor where it was.
+`after` goes with every other parameter, `before` and `since` included,
+as further bounds: `?after=4711&before=4800` is the events between the two.
+A cursor beyond the log's newest event, one the log never gave out,
+answers `409` with an error saying to reload the log;
+the client then reads it again without `after`.
+That is a store restored from an older copy or emptied by the prune;
+a server without a store that restarted with its clock set back,
+which answers `409` to a cursor from before the restart until the client reloads;
+and the cursor of a Cube's events kept in memory once the Cube has its row (below).
+A cursor older than what the log keeps,
+by `log.keep_days` or the 500 kept in memory,
+gets no sign: the page starts at the oldest event kept.
 The stored copy of a `state` event leaves out `state.received`,
 the per-value times the tiles' ages read (`GET …/devices/{rf}` has them);
 the event's own `time` is the log's.
 A Cube served for this run only, without a row in the store (`serve -addr`,
 or `-sn` before discovery noted it), keeps its last 500 events in memory,
-without `id`, as before the store;
-`before` then takes a time, and an `id` answers an empty page;
-`since` works there as in the store.
+as before the store.
+Each of them has an `id` too, from a counter of the server's
+that starts at the server's start in microseconds,
+far above the store's ids,
+so that the ids grow across a restart and `after` reads the new run from its start;
+`before`, `after` and `since` work there as in the store.
 Such a Cube that gains its row while it runs, as discovery notes it,
 answers from the store from then on,
 and the events it kept in memory leave the log.
@@ -3289,9 +3321,15 @@ A device hidden later keeps its events in the log until `log.keep_days` removes 
 A page before a time first looks up the newest event before it,
 which reads the Cube's times up to there: an `id` is the quicker cursor.
 A page since a time looks up the oldest event at or after it the same way.
-`400` for a bad `before`, `limit`, `source`, `level`, `device` or `command`.
+`400` for a bad `after`, `before`, `limit`, `source`,
+`level`, `device` or `command`;
+`409` for an `after` beyond the newest event:
 
-### GET /api/v1/log?before=&since=&limit=&kind=&source=&level=&device=&user=&command=
+```json
+{"error": "after 4711 is beyond the log's newest line: reload the log"}
+```
+
+### GET /api/v1/log?after=&before=&since=&limit=&kind=&source=&level=&device=&user=&command=
 
 Every Cube's log at once, for a server with more than one Cube:
 the same parameters and the same events as a Cube's log,
@@ -3306,12 +3344,17 @@ and the server's own once, without it (`read`, as a Cube's log):
 ]
 ```
 
-Pages go back by `id` across the Cubes, as in a Cube's log.
+Pages go back by `id` across the Cubes, and forward with `after`,
+as in a Cube's log, `409` included.
 A serial number as `device` names one device;
 a radio address names the device of that address on every Cube,
 since each Cube gives out its own.
 A Cube without a row in the store yet adds nothing.
-Without a store, each Cube's last 500 events, merged by time, without `id`.
+Without a store, each Cube's last 500 events, merged by `id`,
+which every Cube's events take from the server's one counter,
+in the order the server kept them;
+the server's own events are kept by each Cube with an `id` of its own,
+and come once, with the first Cube's.
 A Cube's own log does not carry `cube_serial`.
 
 ### GET /api/v1/log/alerts?after=

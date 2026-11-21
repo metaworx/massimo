@@ -177,6 +177,17 @@ export function revokeToken(name: string, tk: Token): Promise<boolean> {
 }
 
 /**
+ * revokeOwn revokes the token the page is signed in with, as Sign out
+ * ends it: a session by Sign out itself (logout, login.js); a key is
+ * revoked first, then the page forgets it as Sign out does, and a
+ * refusal leaves it signed in, saying nothing, as users.js did.
+ */
+export function revokeOwn(name: string, tk: Token): Promise<unknown> {
+  if (tk.kind === "session") return logout();
+  return api("DELETE", userPath(name, "/tokens/" + tk.id)).then(logout, () => {});
+}
+
+/**
  * createKey makes an API key for a user (POST): the key, which the server
  * shows once, goes to shown alone, before the list is read again; it is
  * kept nowhere else.

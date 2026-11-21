@@ -641,6 +641,25 @@ Notes on the tables:
   under 2 ms at 90,000 events of one Cube (`TestEventsPageQuery`);
   with the server's events it is two such walks, the Cube's and the server's,
   each limited to the page and merged by id, since one query for both would sort.
+  A page after a cursor (`after=<id>`, AP LogCursor) walks the same index
+  forward from the cursor, `id > ? ORDER BY id ASC`,
+  since every index carries the rowid after its columns:
+  the first rows after it, oldest first, without a sort or a new index.
+  A page's walks are statements of their own,
+  between which the writer can commit:
+  a server's row committed after the Cube's walk would come in the server's,
+  and a Cube's row below it would stay behind the page's last id for good.
+  So every walk of a page forward, or of more than one walk,
+  stops at the newest id read before them,
+  once the page has written what is pending (`Events`):
+  `+id <= ?`, a filter that leaves each walk its index.
+  The ids are given out in the order of the commits,
+  so a row at or below that id is committed and in every walk that matches it:
+  a client that pages on from the last id misses none.
+  `log.id` has no `AUTOINCREMENT` (AP LogCursor, D10-A):
+  a store restored from an older copy, or emptied by the prune,
+  gives ids out again; a cursor beyond `max(id)` is answered `409`,
+  one that such a reuse has already passed goes unnoticed.
   A page before a time looks up the newest id before it first.
   The level is no column of an index, its "and above" being a range that would
   give up the id order: a page reads past the rows below it.
@@ -1801,6 +1820,11 @@ Implemented on 2026-11-06 (AP StoreLog v1.0), with its review's fixes (v1.1).
   The ring of 500 stays only for a Cube without a row in the store (`serve -addr`,
   a `-sn` Cube before discovery noted it);
   once it gains its row, the log is the store's, without the ring's events.
+  Since AP LogCursor, `after=<id>` pages forward on both log routes,
+  `409` for a cursor beyond the newest id (`ErrBeyondNewest`),
+  and the ring's events carry ids too,
+  from one counter of the server's, started at its start in microseconds,
+  taken with the append under one lock (`logRing`, `internal/server/log.go`).
   A device hidden later keeps its events until the prune.
 - Settings: `log.keep_days` in `/api/v1/settings` (30, 0 keeps everything,
   at most 3650), applied at once; Settings → Server waits for its own plan.

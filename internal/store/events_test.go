@@ -6,6 +6,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"slices"
@@ -246,6 +247,227 @@ func TestEventsPaged(t *testing.T) {
 	}
 }
 
+// Paging forward from a cursor (AP LogCursor) returns every event once,
+// oldest first, each page the oldest after its cursor and the cursor
+// itself not again: one Cube's, and every Cube's with the server's,
+// through a burst many pages long; with a kind, inside a window before
+// an id, and since a time, the same events as a page back. The newest id
+// is the log's newest row, the audit's too, 0 for an empty log.
+func TestEventsForward(t *testing.T) {
+	t.Parallel()
+	s, a, b := eventsStore(t, t.TempDir())
+	ctx := context.Background()
+	if id, err := s.NewestEventID(ctx); err != nil || id != 0 {
+		t.Fatalf("an empty log's newest id: %d, %v", id, err)
+	}
+	if page, err := s.Events(ctx, EventQuery{CubeID: a.ID, Server: true, Forward: true}); err != nil || len(page) != 0 {
+		t.Fatalf("an empty log forward: %v, %v", page, err)
+	}
+	if page, err := s.Events(ctx, EventQuery{CubeID: a.ID, Server: true, Forward: true, AfterID: 5}); !errors.Is(err, ErrBeyondNewest) {
+		t.Fatalf("an empty log after 5: %v, %v, want ErrBeyondNewest", page, err)
+	}
+	t0 := time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC)
+	for i := 0; i < 600; i++ {
+		kind := "state"
+		if i%4 == 0 {
+			kind = "config"
+		}
+		s.AddEvent(ev([]int64{a.ID, b.ID, 0}[i%3], t0.Add(time.Duration(i/5)*time.Minute), kind, "0abc01", i))
+	}
+	flush(t, s)
+	// back is a page newest first, turned round: what a walk forward is
+	// to read.
+	back := func(q EventQuery) []int64 {
+		t.Helper()
+		q.Limit = MaxEventsPage
+		page, err := s.Events(ctx, q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids := eventIDs(page)
+		slices.Reverse(ids)
+		return ids
+	}
+	// forward walks pages of 7 from q's cursor until one is empty.
+	forward := func(q EventQuery) []int64 {
+		t.Helper()
+		q.Forward, q.Limit = true, 7
+		read := []int64{}
+		for {
+			page, err := s.Events(ctx, q)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(page) == 0 {
+				return read
+			}
+			for i, e := range page {
+				if e.ID <= q.AfterID || i > 0 && e.ID <= page[i-1].ID {
+					t.Fatalf("the page after %d: %v", q.AfterID, eventIDs(page))
+				}
+			}
+			read = append(read, eventIDs(page)...)
+			q.AfterID = page[len(page)-1].ID
+		}
+	}
+	every := EventQuery{CubeIDs: []int64{a.ID, b.ID}, Server: true}
+	if got, want := forward(every), back(every); len(want) != 600 || !slices.Equal(got, want) {
+		t.Fatalf("every Cube's forward: %d of %d events, %v", len(got), len(want), got)
+	}
+	one := EventQuery{CubeID: a.ID}
+	want := back(one)
+	if got := forward(one); len(want) != 200 || !slices.Equal(got, want) {
+		t.Fatalf("cube a forward: %d of %d events, %v", len(got), len(want), got)
+	}
+	for _, q := range []EventQuery{
+		{CubeID: a.ID, Kind: "config"},
+		{CubeID: a.ID, AfterID: want[10], BeforeID: want[50]},
+		{CubeID: a.ID, Server: true, Kind: "state", AfterID: want[10], BeforeID: want[150]},
+		{CubeID: a.ID, Since: t0.Add(20 * time.Minute)},
+		{CubeID: a.ID, Since: t0.Add(20 * time.Minute), Before: t0.Add(40 * time.Minute)},
+	} {
+		w := back(q)
+		if got := forward(q); len(w) == 0 || !slices.Equal(got, w) {
+			t.Fatalf("%+v forward: %v, want %v", q, got, w)
+		}
+	}
+	if got := forward(EventQuery{CubeID: a.ID, AfterID: want[len(want)-1]}); len(got) != 0 {
+		t.Fatalf("after cube a's newest: %v", got)
+	}
+	// A cursor beyond the newest row: one the log never gave out.
+	if page, err := s.Events(ctx, EventQuery{CubeID: a.ID, Forward: true, AfterID: 601}); !errors.Is(err, ErrBeyondNewest) {
+		t.Fatalf("after 601 of 600 rows: %d rows, %v", len(page), err)
+	}
+	// The newest row of the audit's counts, as the table holds it: a page
+	// of an auditor's would stop below it otherwise.
+	s.AddEvent(Event{CubeID: b.ID, Time: t0, Kind: "login", Visibility: VisibilityAudit, Data: json.RawMessage(`{"kind":"login"}`)})
+	flush(t, s)
+	var top int64
+	if err := s.db.QueryRowContext(ctx, `SELECT max(id) FROM log`).Scan(&top); err != nil {
+		t.Fatal(err)
+	}
+	all := back(EventQuery{CubeIDs: []int64{a.ID, b.ID}, Server: true, Audit: true})
+	if id, err := s.NewestEventID(ctx); err != nil || id != top || all[len(all)-1] != top || id <= want[len(want)-1] {
+		t.Fatalf("the newest id %d, %v; the table's newest row %d, an auditor's page's %d", id, err, top, all[len(all)-1])
+	}
+}
+
+// A page is a walk of the Cube's rows and one of the server's, two
+// statements, between which a write can commit: every walk stops at the
+// newest row read before them, so that a page forward leaves no row out
+// below its last. One Cube's rows and the server's, written one of each
+// a transaction while a reader pages forward, are read each once.
+func TestEventsForwardWhileWriting(t *testing.T) {
+	t.Parallel()
+	s, a, _ := eventsStore(t, t.TempDir())
+	ctx := context.Background()
+	const n = 1000
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := range n {
+			if err := s.writeEvents(ctx, []Event{ev(a.ID, time.Now(), "state", "0abc01", i), ev(0, time.Now(), "settings_read", "", i)}); err != nil {
+				t.Error(err)
+				return
+			}
+		}
+	}()
+	// The reader pages until the writer has ended and a page comes back
+	// empty; the writer's end bounds it, not a wait of its own, which a
+	// loaded machine outran. It never returns before the writer, which
+	// would write into a store the test's end closes.
+	read := []int64{}
+	var after int64
+	var bad []int64
+	for over := false; bad == nil; {
+		select {
+		case <-done:
+			over = true // and the page below comes after the last write
+		default:
+		}
+		page, err := s.Events(ctx, EventQuery{CubeID: a.ID, Server: true, Forward: true, AfterID: after, Limit: 50})
+		if err != nil {
+			t.Error(err)
+			break
+		}
+		for i, e := range page {
+			if e.ID <= after || i > 0 && e.ID <= page[i-1].ID {
+				bad = eventIDs(page)
+				break
+			}
+		}
+		read = append(read, eventIDs(page)...)
+		if len(page) > 0 {
+			after = page[len(page)-1].ID
+		} else if over {
+			break
+		}
+	}
+	<-done
+	if bad != nil {
+		t.Fatalf("a page after %d: %v", after, bad)
+	}
+	if t.Failed() {
+		return
+	}
+	if len(read) != 2*n || read[0] != 1 || read[len(read)-1] != 2*n {
+		missed := []int64{}
+		for id := int64(1); id <= 2*n && len(missed) < 10; id++ {
+			if _, found := slices.BinarySearch(read, id); !found {
+				missed = append(missed, id)
+			}
+		}
+		t.Fatalf("read %d of %d rows, the first missed %v", len(read), 2*n, missed)
+	}
+}
+
+// A page back, newest first, while the writer commits one Cube row and
+// one server row a transaction: every row is the Cube's or the server's,
+// so a page holds every id between its lowest and its highest. The one
+// newest id bounding all of the page's walks ensures it; a client's
+// first cursor forward is the top of such a page, and a hole below it
+// would never be read.
+func TestEventsBackWhileWriting(t *testing.T) {
+	t.Parallel()
+	s, a, _ := eventsStore(t, t.TempDir())
+	ctx := context.Background()
+	const n = 1000
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := range n {
+			if err := s.writeEvents(ctx, []Event{ev(a.ID, time.Now(), "state", "0abc01", i), ev(0, time.Now(), "settings_read", "", i)}); err != nil {
+				t.Error(err)
+				return
+			}
+		}
+	}()
+	var hole []int64
+	pages := 0
+	for over := false; !over && hole == nil; pages++ {
+		select {
+		case <-done:
+			over = true // and the page below comes after the last write
+		default:
+		}
+		page, err := s.Events(ctx, EventQuery{CubeID: a.ID, Server: true, Limit: 50})
+		if err != nil {
+			t.Error(err)
+			break
+		}
+		for i := 1; i < len(page); i++ {
+			if page[i].ID != page[i-1].ID-1 {
+				hole = eventIDs(page)
+				break
+			}
+		}
+	}
+	<-done // the writer ends before the test does, which closes the store
+	if hole != nil {
+		t.Fatalf("page %d back has a hole: %v", pages, hole)
+	}
+}
+
 // The prune removes the events older than the retention, per Cube and
 // in chunks; 0 keeps everything; a second prune finds nothing more.
 func TestEventsPruned(t *testing.T) {
@@ -341,7 +563,8 @@ func fill(t testing.TB, s *Store, cube int64, n int, start time.Time, step time.
 // A page reads one index of migration 0004 in id order, whatever its
 // terms, instead of sorting every one of the Cube's rows (the review of
 // 2026-11-06: 1.3 s a page at 90,000 events); each page holds what its
-// terms ask, newest first, and a page by time is the events before it.
+// terms ask, newest first, and a page by time is the events before it;
+// forward from a cursor the same, oldest first, the oldest after it.
 // A page of warnings or errors with no other term reads the index of
 // those rows, migration 0011's, rather than every row of the Cube (11 s
 // at 90,000 events on a Raspberry Pi 1, docs/store.md section 5).
@@ -423,20 +646,52 @@ func TestEventsPageQuery(t *testing.T) {
 		{"since and kind", EventQuery{CubeID: a.ID, Kind: "connected", Since: mid}},
 		{"since and before", EventQuery{CubeID: a.ID, Since: start.Add(24 * time.Hour), Before: mid}},
 		{"the other Cube", EventQuery{CubeID: b.ID}},
+		// Forward from a cursor, oldest first (AP LogCursor).
+		{"forward", EventQuery{CubeID: a.ID, Forward: true, AfterID: int64(n / 2)}},
+		{"forward from the start", EventQuery{CubeID: a.ID, Forward: true}},
+		{"forward, a kind", EventQuery{CubeID: a.ID, Forward: true, AfterID: int64(n / 2), Kind: "connected"}},
+		{"forward, a serial", EventQuery{CubeID: a.ID, Forward: true, AfterID: int64(n / 2), Serial: "MEQ0000007"}},
+		{"forward, a source", EventQuery{CubeID: a.ID, Forward: true, AfterID: int64(n / 2), Source: "cube"}},
+		{"forward, warnings", EventQuery{CubeID: a.ID, Forward: true, AfterID: int64(n / 2), MinLevel: &warn}},
+		{"forward, with the server's", EventQuery{CubeID: a.ID, Server: true, Forward: true, AfterID: int64(n / 2)}},
+		{"forward, with the server's warnings", EventQuery{CubeID: a.ID, Server: true, Forward: true, AfterID: int64(n / 2), MinLevel: &warn}},
+		{"forward, a user", EventQuery{CubeID: a.ID, Forward: true, AfterID: int64(n / 2), UserID: anna.ID}},
+		{"forward, a command", EventQuery{CubeID: a.ID, Forward: true, AfterID: int64(n / 2), CommandID: cmd.ID}},
+		{"forward and before", EventQuery{CubeID: a.ID, Forward: true, AfterID: int64(n / 4), BeforeID: int64(n / 2)}},
+		{"forward since", EventQuery{CubeID: a.ID, Forward: true, Since: mid}},
+		{"forward, the other Cube", EventQuery{CubeID: b.ID, Forward: true, AfterID: int64(n + n/18)}},
+		// The forward shapes a log route sends, the server's walk and a
+		// level with each.
+		{"forward by time", EventQuery{CubeID: a.ID, Server: true, Forward: true, AfterID: int64(n / 4), Before: mid, MinLevel: &info}},
+		{"forward since and before", EventQuery{CubeID: a.ID, Server: true, Forward: true, Since: start.Add(24 * time.Hour), Before: mid, MinLevel: &info}},
+		{"forward since and kind", EventQuery{CubeID: a.ID, Server: true, Forward: true, Since: mid, Kind: "connected", MinLevel: &info}},
+		{"forward, warnings of a kind", EventQuery{CubeID: a.ID, Server: true, Forward: true, AfterID: int64(n / 2), Kind: "connected", MinLevel: &warn}},
+		{"forward, errors", EventQuery{CubeID: a.ID, Server: true, Forward: true, MinLevel: &errs}},
+		{"forward, a device", EventQuery{CubeID: a.ID, Server: true, Forward: true, AfterID: int64(n / 2), Device: "0abc07", MinLevel: &info}},
+		{"forward, a user with the server's", EventQuery{CubeID: a.ID, Server: true, Forward: true, AfterID: int64(n / 2), UserID: anna.ID, MinLevel: &info}},
+		{"forward, a command, with the server's and the audit's", EventQuery{CubeID: a.ID, Server: true, Forward: true, AfterID: int64(n / 2), CommandID: cmd.ID, Audit: true, MinLevel: &info}},
+		{"forward, every Cube", EventQuery{CubeIDs: []int64{a.ID, b.ID}, Server: true, Forward: true, AfterID: int64(n / 2), MinLevel: &info}},
 	}
 	// The shapes each walk of which reads migration 0011's index.
 	warnIndex := map[string]bool{"warnings": true, "errors": true, "warnings and id": true,
-		"warnings by time": true, "warnings, with the server's": true, "the server's warnings": true}
+		"warnings by time": true, "warnings, with the server's": true, "the server's warnings": true,
+		"forward, warnings": true, "forward, with the server's warnings": true, "forward, errors": true}
+	// The shapes each walk of which reads the index of its term, also with
+	// the page's bound, which is a filter and no range of the walk.
+	termIndex := map[string]string{"forward, a kind": "log_cube_kind", "forward, a source": "log_cube_source",
+		"forward, a serial": "log_cube_serial", "with the server's, a source": "log_cube_source", "forward, warnings of a kind": "log_cube_kind"}
+	// Each walk as Events sends it: bounded by the newest row where the
+	// page goes forward or has more than one walk.
+	newest, err := s.NewestEventID(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, sh := range shapes {
-		walks := []int64{sh.q.CubeID}
-		if sh.q.Server && sh.q.CubeID != 0 {
-			walks = append(walks, 0)
-		}
-		queries := []EventQuery{sh.q}
-		if sh.q.UserID != 0 {
-			byReal := sh.q
-			byReal.byReal = true
-			queries = append(queries, byReal)
+		walks, queries, bounded := pageWalks(sh.q)
+		if bounded {
+			for i := range queries {
+				queries[i] = pageBound(queries[i], newest)
+			}
 		}
 		var plan []string
 		for _, cube := range walks {
@@ -467,6 +722,9 @@ func TestEventsPageQuery(t *testing.T) {
 		if warnIndex[sh.name] && strings.Count(joined, "USING INDEX log_cube_warn (") != len(walks) {
 			t.Errorf("%s: not every walk reads log_cube_warn: %s", sh.name, joined)
 		}
+		if ix := termIndex[sh.name]; ix != "" && strings.Count(joined, "USING INDEX "+ix+" (") != len(walks) {
+			t.Errorf("%s: not every walk reads %s: %s", sh.name, ix, joined)
+		}
 		q := sh.q
 		q.Limit = 200
 		began := time.Now()
@@ -476,11 +734,12 @@ func TestEventsPageQuery(t *testing.T) {
 			t.Fatalf("%s: %d events, %v", sh.name, len(page), err)
 		}
 		for i, e := range page {
-			if e.CubeID != q.CubeID && !(q.Server && e.CubeID == 0) || (q.Kind != "" && e.Kind != q.Kind) || (q.Serial != "" && e.Serial != q.Serial) ||
+			if !slices.Contains(walks, e.CubeID) || (q.Kind != "" && e.Kind != q.Kind) || (q.Serial != "" && e.Serial != q.Serial) ||
+				(q.Device != "" && e.Device != q.Device) || (q.CommandID != 0 && e.CommandID != q.CommandID) ||
 				(q.Source != "" && e.Source != q.Source) || (q.UserID != 0 && e.EffectiveUserID != q.UserID && e.RealUserID != q.UserID) || (q.MinLevel != nil && e.Level < *q.MinLevel) ||
 				(q.BeforeID > 0 && e.ID >= q.BeforeID) || (!q.Before.IsZero() && !e.Time.Before(q.Before)) ||
-				(!q.Since.IsZero() && e.Time.Before(q.Since)) ||
-				(i > 0 && e.ID >= page[i-1].ID) {
+				(!q.Since.IsZero() && e.Time.Before(q.Since)) || (q.AfterID > 0 && e.ID <= q.AfterID) ||
+				(i > 0 && !q.Forward && e.ID >= page[i-1].ID) || (i > 0 && q.Forward && e.ID <= page[i-1].ID) {
 				t.Fatalf("%s: event %d: %+v", sh.name, i, e)
 			}
 		}
@@ -505,6 +764,35 @@ func TestEventsPageQuery(t *testing.T) {
 			t.Fatalf("the page before %v: %+v, event %d is %d", mid, page, i, id)
 		}
 	}
+	// A page forward is the oldest rows after its cursor, not the newest.
+	after := int64(n / 2)
+	fwd, err := s.Events(ctx, EventQuery{CubeID: a.ID, Server: true, Forward: true, AfterID: after, Limit: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	next, err := s.db.QueryContext(ctx, `SELECT id FROM log WHERE (cube_id = ? OR cube_id IS NULL) AND id > ? AND visibility = 'read' ORDER BY id LIMIT 5`, a.ID, after)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer next.Close()
+	want := []int64{}
+	for next.Next() {
+		var id int64
+		next.Scan(&id)
+		want = append(want, id)
+	}
+	if got := eventIDs(fwd); !slices.Equal(got, want) {
+		t.Fatalf("the page after %d: %v, want %v", after, got, want)
+	}
+}
+
+// eventIDs are the ids of a page, in its order.
+func eventIDs(page []Event) []int64 {
+	out := []int64{}
+	for _, e := range page {
+		out = append(out, e.ID)
+	}
+	return out
 }
 
 // A prune hands over between its chunks: a flush during it is answered,

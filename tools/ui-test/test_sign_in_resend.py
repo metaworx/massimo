@@ -96,7 +96,7 @@ def back(page, seen, before):
 def sign_in_key(page):
     """The dialog's sign-in with the owner's key, as the page fixture's."""
     assert wait_until(page, DIALOG_OPEN, 5), "the sign-in asked for"
-    page.evaluate("document.getElementById('login-token').closest('details').open = true")
+    page.locator("#login-ways .login-way[data-way='key']").click()
     page.locator("#login-token").fill(TOKEN)
     page.locator("#login-key-form button[type=submit]").click()
 
@@ -396,8 +396,10 @@ def test_delete_not_sent_again(page, case, watch):
 
 def test_two_tiles_one_sign_in(page, case, watch):
     """Two setpoints on two tiles meet the 401 of one sign-in: each fails
-    at once and says so on its tile, and neither is sent again."""
-    watch.expected.append(("/setpoint", 401))
+    at once and says so on its tile, and neither is sent again. The 401
+    drops the page's token (AP MobileApp, F7), so that its reads until the
+    sign-in go without one and are refused too."""
+    watch.expected.extend([("/setpoint", 401), ("/api/v1/cubes", 401)])
     seen = tickets(page)
     writes = Refusal(page, "**/api/v1/cubes/*/rooms/*/setpoint", "PUT", armed=2, answer=ok)
     tiles = page.locator(THERMOSTAT_ROOM)

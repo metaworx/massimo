@@ -1,0 +1,3 @@
+- A server's settings in the app show its certificate, and Certificate…
+  its subject, issuer, names, validity, fingerprint and since when it is
+  trusted (docs/app.md).

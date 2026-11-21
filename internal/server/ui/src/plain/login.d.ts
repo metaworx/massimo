@@ -6,8 +6,8 @@
  *
  * The globals of the plain script ui/login.js that the parts call: the
  * capabilities of the one signed in, who it is, the roles' names, who is
- * read again, a password registered by OPAQUE and the current one proved,
- * and the page's address.
+ * read again, the sign-out, a password registered by OPAQUE and the
+ * current one proved, and the page's address.
  */
 
 import type { User } from "../api";
@@ -23,6 +23,8 @@ declare global {
   function roleLabel(key: string, name?: string): string;
   /** The keys of the six default roles, for a role choice that cannot read the roles. */
   const DEFAULT_ROLES: string[];
+  /** Signs out as Sign out does: the page's dialog first where settings are unsaved, then a session ends and the page forgets who was in. */
+  function logout(): Promise<void>;
   /** Reads who the page is signed in as again and applies it. */
   function loadMe(): Promise<void>;
   /** A password of version 2 made in the browser for a name: the fields that set it, for POST /api/v1/users or PUT …/users/{name}. */

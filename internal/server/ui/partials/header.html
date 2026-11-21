@@ -9,9 +9,6 @@
     <div class="brand">
       <!-- the word, under Massimo's logo once its sprite has come (components.js brandMarks) -->
       <h1 class="brand-name" data-brand><span class="brand-word"><span class="brand-initial">M</span><span class="brand-rest">assimo</span></span></h1>
-      <!-- the version while signed out, when ☰ that holds it is not there
-           (header.js checkVersion) -->
-      <span id="version-out" class="version-out muted mono small"></span>
     </div>
     <!-- the pile (ui/src/header/Pile.tsx): every Cube's problems,
          span#cube-problems, led by the server's sign; its list Refresh now
@@ -29,7 +26,8 @@
       <button type="button" id="view-tiles" class="icon-btn nav-btn active" aria-current="page" aria-label="rooms" title="Rooms" data-i18n-attr="aria-label:nav.rooms title:nav.roomsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-house"/></svg></button>
       <!-- ☰, every page but Rooms, at every width, each for the roles that
            may open it (pages.js mayShow, MENU_VIEWS): the log; the settings
-           pages; the personal page and Sign out (login.js renderMe). It
+           pages; the personal page, in the app Select server (login.js
+           initLogin), and Sign out (login.js renderMe). It
            carries the log's mark, the worse of it and the unsaved settings'
            (ui/src/chrome/, in #nav-menu-mark), and an item the disk where
            a page it leads to has settings unsaved (.menu-item-mark, its
@@ -49,6 +47,7 @@
           <button type="button" id="menu-info" class="needs-read"><svg class="ni" aria-hidden="true"><use href="#icon-info"/></svg><span data-i18n="nav.infoTitle">System info</span></button>
           <hr class="menu-sep">
           <button type="button" id="menu-me"><svg class="ni" aria-hidden="true"><use href="#icon-user"/></svg><span data-i18n="nav.userTitle">Personal settings</span></button>
+          <button type="button" id="menu-servers" class="hidden"><svg class="ni" aria-hidden="true"><use href="#icon-servers"/></svg><span data-i18n="app.selectServer">Select server</span></button>
           <button type="button" id="menu-logout" class="hidden"><svg class="ni" aria-hidden="true"><use id="menu-logout-icon" href="#icon-signout"/></svg><span id="menu-logout-label" data-i18n="me.signOut">Sign out</span></button>
         </div>
       </details>

@@ -1097,3 +1097,48 @@ def test_a_plan_goes_with_its_backup(page, case):
     finally:
         drop_backup(bid)
     show_view(page, "tiles")
+
+
+@pytest.mark.parametrize("how", ["session", "key"])
+def test_own_panel_says_this_device_and_revoke_signs_out(new_context, case, watch, guard, how):
+    """Main's "this device" (AP MobileApp, Block 13) in the part: one's own
+    panel in System settings → Users marks the token the page is signed
+    in with "this device", and, for a session made from a key, that key
+    "its key"; Revoke on this device signs out: a session as Sign out
+    ends it, a key revoked first (DELETE), then forgotten."""
+    name = "selfkeys"
+    undo(f"the user {name}", lambda: api_call("DELETE", "api/v1/users/" + name))
+    api_call("POST", "api/v1/users", {"name": name, "role": "owner", "password": "admin-pass-1"})
+    try:
+        made = api_call("POST", f"api/v1/users/{name}/tokens", {"label": "phone"})
+        key = made["token"]
+        token = key if how == "key" else api_call("POST", "api/v1/login/key", {"label": "ui-test"}, token=key)["token"]
+        page = owner_page(new_context, guard, watch, URL, token)
+        mine = page.evaluate("state.me.token")
+        panel = open_panel(page, f".user-panel[data-name='{name}']")
+        row = panel.locator(".user-tokens li.token-current")
+        row.wait_for(timeout=5000)
+        assert row.get_attribute("data-id") == str(mine["id"]), "this device is the token in use"
+        assert page.evaluate("t('users.thisDevice')") in row.inner_text(), "named so"
+        assert panel.locator(".user-tokens li.token-current").count() == 1, "once"
+        its = panel.locator(".user-tokens li.token-its-key")
+        if how == "session":
+            assert its.count() == 1 and its.get_attribute("data-id") == str(mine["key_id"]), "the key it was made from"
+            assert page.evaluate("t('users.itsKey')") in its.inner_text(), "named so"
+        else:
+            assert its.count() == 0, "a key is no key's"
+        deletes, logouts = [], []
+        page.on("request", lambda r: deletes.append(r.url) if r.method == "DELETE" and "/tokens/" in r.url else None)
+        page.on("request", lambda r: logouts.append(r.url) if r.method == "POST" and r.url.endswith("/api/v1/logout") else None)
+        row.locator(".revoke-token").click()
+        assert wait_until(page, "document.getElementById('login-dialog').open", 10), "signed out"
+        assert page.evaluate("state.token") is None, "the token forgotten"
+        left = [tk["id"] for tk in api_call("GET", f"api/v1/users/{name}/tokens") or []]
+        assert mine["id"] not in left, "the token in use is gone"
+        if how == "session":
+            assert (len(deletes), len(logouts)) == (0, 1), f"Sign out's request alone: {deletes}, {logouts}"
+            assert mine["key_id"] in left, "its key stays"
+        else:
+            assert (len(deletes), len(logouts)) == (1, 0), f"the key revoked, no session to end: {deletes}, {logouts}"
+    finally:
+        remove_user(name)
