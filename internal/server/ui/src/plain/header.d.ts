@@ -5,7 +5,8 @@
  * @file internal/server/ui/src/plain/header.d.ts
  *
  * The globals of the plain script ui/header.js that the parts call: a
- * Cube's radio budget, and its link's sign and word.
+ * Cube's radio budget, and its link's sign and word; the server's sign
+ * drawn again.
  */
 
 import type { Cube } from "../api";
@@ -17,6 +18,8 @@ declare global {
   function linkSign(c: Cube): string;
   /** A Cube's link in a few words, as its badge says it. */
   function linkWord(c: Cube): string;
+  /** Draws the server's sign again from the server's state (a part of the header). */
+  function renderServerSign(): void;
 }
 
 export {};

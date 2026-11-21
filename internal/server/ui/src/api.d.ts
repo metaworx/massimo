@@ -955,7 +955,7 @@ export interface ConfigView {
 
 export interface UpdateInfo {
   /** The running version */
-  current?: string;
+  current: string;
   /**
    * What the running build was released as: devel, nightly, alpha, beta, rc or
    * stable; absent for a build without the Makefile
@@ -966,7 +966,7 @@ export interface UpdateInfo {
    * update.channel, else the apt source's suite where apt owns the binary, else
    * the flavour
    */
-  channel?: string;
+  channel: string;
   /**
    * The suite of the apt source, where apt owns the binary; where it differs
    * from channel, the next update switches the source to the channel's suite
@@ -984,12 +984,12 @@ export interface UpdateInfo {
   latest?: string;
   release_url?: string;
   /** latest is newer than current */
-  available?: boolean;
+  available: boolean;
   /** @format date-time */
-  checked_at?: string;
+  checked_at: string;
   check_error?: string;
   /** POST would start an update */
-  can_update?: boolean;
+  can_update: boolean;
   /**
    * Why an update cannot be started from the API (a package manager owning the
    * binary without a helper of its own, no token, no helper, a development
@@ -998,7 +998,7 @@ export interface UpdateInfo {
   blocked?: string;
   helper?: UpdateStatus;
   /** The last ten updates, newest first; empty without a store */
-  history?: UpdateEntry[];
+  history: UpdateEntry[];
 }
 
 /**
@@ -1037,13 +1037,13 @@ export interface UpdateEntry {
 
 /** The update helper's last run */
 export interface UpdateStatus {
-  state?: "checking" | "installing" | "restarting" | "done" | "up-to-date" | "failed" | "rolled-back";
+  state: "checking" | "installing" | "restarting" | "done" | "up-to-date" | "failed" | "rolled-back";
   from?: string;
   to?: string;
   channel?: string;
   message?: string;
   /** @format date-time */
-  time?: string;
+  time: string;
 }
 
 export interface Error {
@@ -1355,10 +1355,10 @@ export interface CubeChange {
 
 export interface Setting {
   /** The store's value, or the default; durations as 30m, 24h, 0 for off */
-  value?: string;
+  value: string;
   default?: string;
   /** The store holds a value */
-  set?: boolean;
+  set: boolean;
   /** What this run uses; a serve flag wins for one run */
   in_effect?: string;
   applies?: "now" | "restart";

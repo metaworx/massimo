@@ -28,6 +28,9 @@ import type { LeavingPart } from "./leaving";
 import "./rooms";
 import type { RoomsPart } from "./rooms";
 import { signedOut as integrationsSignedOut } from "./integrations";
+import { serverEvent as softwareEvent, signedOut as softwareSignedOut } from "./software";
+import type { ServerEvent } from "./model/event";
+import type { SoftwarePart } from "./software";
 import { forgetForms } from "./shared/forms";
 import { languageChanged } from "./shared/lang";
 import { iconsChanged } from "./shared/look";
@@ -48,9 +51,17 @@ export interface MassimoParts {
    * every Cube's pairing and rooms (cubes/), and System settings' lists
    * with what is typed in their new items' forms (admin/) and the
    * integrations with the readings of an approval (integrations/), and
-   * every Cube's backups with a restore shown (backups/).
+   * every Cube's backups with a restore shown (backups/), and Software
+   * update's reading while the helper works, its question and the
+   * channel's setting (software/).
    */
   signedOut(): void;
+  /**
+   * A server's event of the stream (update.js serverEvent, from app.js
+   * connectEvents): Software update reads again what it says has
+   * changed while Maintenance is shown.
+   */
+  serverEvent(ev: ServerEvent): void;
   /** Backup and restore: Cube settings' box and System settings' fold per Cube (backups/). */
   backups: BackupsPart;
   /** Where the page's chrome says that settings are unsaved: a section's pill, ☰'s mark joined with the log's, a menu item's disk (chrome/). */
@@ -67,6 +78,8 @@ export interface MassimoParts {
   providers: ProvidersPart;
   /** System settings → Roles and Capabilities for every role (admin/). */
   roles: RolesPart;
+  /** Maintenance → Software update (software/). */
+  software: SoftwarePart;
   /** System settings → Users: the password sign-in and a panel per user (admin/). */
   users: UsersPart;
 }
@@ -80,6 +93,9 @@ declare global {
 
 register("language", languageChanged);
 register("icons", iconsChanged);
+register("serverEvent", (ev: ServerEvent) => {
+  softwareEvent(ev);
+});
 register("signedOut", () => {
   newSession(); // first: an answer still on its way for the user who was is dropped
   forgetForms("");
@@ -88,5 +104,6 @@ register("signedOut", () => {
   adminSignedOut();
   integrationsSignedOut();
   backupsSignedOut();
+  softwareSignedOut();
 });
 window.MassimoParts = parts as unknown as MassimoParts;

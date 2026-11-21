@@ -298,6 +298,23 @@ hence `failed_checks_forgotten`.
   answer their reads with stubs; the four cases of a worker make eight, so a
   local run of all four cases repeated within ten minutes meets the limit
   (429) until the ten minutes have passed or the servers are started anew.
+- `test_maint_updates.py`, Maintenance and System info as parts (AP UiParts, Block 12),
+  `GET /api/v1/update` stubbed, nothing installed, restarted or rebooted:
+  Software update keeps a line selected, Update's question and its buttons
+  through the header's check and Maintenance shown again;
+  a newer release takes the question back; the channel stays on and keeps
+  the focus while it saves; a sign-out, and another user signed in after an
+  expired session, end the reading while the helper works and take the
+  question back, and a reading that answers late starts nothing;
+  while Maintenance is shown, a resync of the stream shows the newer release,
+  Rooms shown reading nothing, a burst of events reads once and once after it,
+  a burst left by its page makes no second read, an update asked for elsewhere
+  is followed with its grace and takes the question back, a refused request
+  leaves the reading its buttons, an old update event starts no reading,
+  the helper's reading takes no event's read, the
+  channel's own change event reads nothing behind its back, a question taken
+  back leaves a focus elsewhere where it was, the next user is followed again,
+  and a read asked for before the session ended is not made.
 - `test_stream.py`:
   the event stream opens with tickets only, never with the token,
   and after a refused stream (the test hands out a used ticket first,

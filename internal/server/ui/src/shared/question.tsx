@@ -12,6 +12,7 @@
  * button that asked once it goes.
  */
 
+import type { Ref } from "preact";
 import { useEffect, useId, useRef, useState } from "preact/hooks";
 
 /**
@@ -91,9 +92,18 @@ export function busyProps(cls: string, busy: boolean, off?: boolean) {
 /**
  * Question asks whether to go on: text, then No and Yes (their labels),
  * Yes the primary; Yes runs onYes, which returns the request's promise,
- * No and Escape run onNo. The focus goes to No when it comes.
+ * No and Escape run onNo. The focus goes to No when it comes. boxRef,
+ * where given, holds the box (useAsk's box), which tells whether the
+ * focus is in it as it goes.
  */
-export function Question({ text, yes, no, onYes, onNo }: { text: string; yes: string; no: string; onYes: () => Promise<unknown>; onNo: () => void }) {
+export function Question({ text, yes, no, onYes, onNo, boxRef }: {
+  text: string;
+  yes: string;
+  no: string;
+  onYes: () => Promise<unknown>;
+  onNo: () => void;
+  boxRef?: Ref<HTMLDivElement>;
+}) {
   const id = useId();
   const noRef = useRef<HTMLButtonElement>(null);
   const sending = useBusy();
@@ -102,6 +112,7 @@ export function Question({ text, yes, no, onYes, onNo }: { text: string; yes: st
   }, []);
   return (
     <div
+      ref={boxRef}
       class="panel confirm-box"
       role="group"
       aria-labelledby={id}
@@ -125,24 +136,58 @@ export function Question({ text, yes, no, onYes, onNo }: { text: string; yes: st
  * useAsk is a row of actions that asks in its own place: asking while
  * the question is shown; ask shows it, done takes it back and puts the
  * focus on the element ref holds, the button that asked, once the row is
- * drawn again.
+ * drawn again. held, where given, keeps whether it asks beyond the part,
+ * a store's live state, so that the store takes the question back where
+ * what it asked about changed, and at a sign-out (a part drawn once for
+ * the page's life); without it the part keeps it. Where the caller hands
+ * box to its Question, a question the store takes back while the focus
+ * is in its box gives the focus back the same way, judged as the drawing
+ * that takes it away begins; done(false) gives it back to nothing, as
+ * before. Where the button cannot take it (hidden or off), the element
+ * row holds takes it (a row of the caller's, which holds it with
+ * tabindex -1 until it leaves).
  */
-export function useAsk<E extends HTMLElement>() {
-  const [asking, setAsking] = useState(false);
+export function useAsk<E extends HTMLElement>(held?: { asking: boolean }) {
+  const [own, setOwn] = useState(false);
+  const asking = held ? held.asking : own;
+  const setAsking = (v: boolean) => {
+    if (held) held.asking = v;
+    else setOwn(v);
+  };
   const back = useRef(false);
   const ref = useRef<E>(null);
+  const row = useRef<HTMLElement>(null);
+  const box = useRef<HTMLDivElement>(null);
+  const quiet = useRef(false);
+  const inside = useRef(false);
+  // the drawing that takes the question away begins with its box still in the page: whether the focus is in it
+  if (!asking && box.current && box.current.isConnected && box.current.contains(document.activeElement)) inside.current = true;
   useEffect(() => {
-    if (!asking && back.current) {
+    const lost = inside.current && !quiet.current;
+    inside.current = false;
+    quiet.current = false;
+    if (!asking && (back.current || lost)) {
       back.current = false;
-      ref.current?.focus();
+      const b = ref.current as (E & { disabled?: boolean }) | null;
+      const r = row.current;
+      if (b && !b.disabled && b.offsetParent) b.focus();
+      else if (r) {
+        // the row takes the focus for as long as it holds it, and no click on its text after
+        r.tabIndex = -1;
+        r.addEventListener("blur", () => r.removeAttribute("tabindex"), { once: true });
+        r.focus();
+      }
     }
   }, [asking]);
   return {
     asking,
     ref,
+    row,
+    box,
     ask: () => setAsking(true),
     done: (focus = true) => {
       back.current = focus;
+      quiet.current = !focus;
       setAsking(false);
     },
   };

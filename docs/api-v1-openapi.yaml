@@ -4728,6 +4728,7 @@ components:
               unknown: {type: boolean, description: "A name Massimo does not know, perhaps a typo"}
     UpdateInfo:
       type: object
+      required: [current, channel, available, checked_at, can_update, history]
       properties:
         current: {type: string, description: The running version}
         flavour: {type: string, description: "What the running build was released as: devel, nightly, alpha, beta, rc or stable; absent for a build without the Makefile"}
@@ -4767,6 +4768,7 @@ components:
     UpdateStatus:
       type: object
       description: The update helper's last run
+      required: [state, time]
       properties:
         state: {type: string, enum: [checking, installing, restarting, done, up-to-date, failed, rolled-back]}
         from: {type: string}
@@ -4948,6 +4950,7 @@ components:
           items: {type: string, example: 0abc12}
     Setting:
       type: object
+      required: [value, set]
       properties:
         value: {type: string, description: "The store's value, or the default; durations as 30m, 24h, 0 for off"}
         default: {type: string}

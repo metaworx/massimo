@@ -117,11 +117,11 @@ def test_channel_is_chosen(page):
     assert wait_until(page, "document.getElementById('update-text').textContent.includes('beta')", 5), \
         "the release check follows beta"
     assert puts == [{"update.channel": "beta"}], "beta is stored"
-    assert sel.input_value() == "beta" and sel.is_enabled(), "beta stays chosen"
+    assert wait_until(page, "document.getElementById('update-channel').value === 'beta'", 5) and sel.is_enabled(), "beta stays chosen"
     sel.select_option("")
     assert wait_until(page, "!document.getElementById('update-text').textContent.includes('beta')", 5), \
         "the release check is back on the build's flavour"
-    assert puts[-1] == {"update.channel": None}, "the build's flavour is stored as null"
+    assert puts == [{"update.channel": "beta"}, {"update.channel": None}], f"the build's flavour is stored as null ({puts})"
     unroute_channel(page)
 
 

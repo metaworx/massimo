@@ -61,7 +61,7 @@ def test_server_connected_and_update(page, case):
         assert page.evaluate("isShown('maint')"), "it opens Software update"
     finally:
         page.unroute("**/api/v1/update*")
-        page.evaluate("updState.info = null; renderServerSign()")
+        page.evaluate("loadUpdate(false)")  # the server's own answer again, which draws the sign
         show_view(page, "tiles")
 
 

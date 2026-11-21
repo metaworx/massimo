@@ -140,6 +140,8 @@ interface Row {
   unit?: string;
   /** A grey line under the row. */
   hint?: string;
+  /** The hint's id, which the control names as its description (a note that changes with the choice: the update channel's). */
+  hintId?: string;
   /** The key of the setting's help (help.<key> of the texts): its button after the label, its explanation under the control. */
   help?: string;
   /** Classes the row adds to field (a capability's needs-…). */
@@ -154,13 +156,13 @@ interface Row {
  * class field-control; a unit follows it, the two then the row's
  * .field-control; help is the key of the setting's help, its button
  * after the label and its explanation under the control (helpParts);
- * hint is a grey line under the row; cls adds classes to the row; limit
+ * hint is a grey line under the row, hintId its id; cls adds classes to the row; limit
  * is the line of what the field takes, just before the control, in the
  * unit's line where there is one, else on a line of its own above the
  * box. With a draft the row is followed by its "changed meanwhile"
  * notice (show names the value).
  */
-export function Field<T>({ label, id, wide, unit, hint, help, cls, limit, draft, show, children }: Row & { draft?: Draft<T>; show?: (v: T) => string; children: ComponentChildren }) {
+export function Field<T>({ label, id, wide, unit, hint, hintId, help, cls, limit, draft, show, children }: Row & { draft?: Draft<T>; show?: (v: T) => string; children: ComponentChildren }) {
   const helpId = useId();
   const line = limit && <LimitLine id={id} limit={limit} />;
   return (
@@ -176,7 +178,7 @@ export function Field<T>({ label, id, wide, unit, hint, help, cls, limit, draft,
           </span>
         ) : <>{line}{children}</>}
         {help && <HelpText help={help} id={helpId} />}
-        {hint && <p class="muted small field-hint">{hint}</p>}
+        {hint && <p id={hintId} class="muted small field-hint">{hint}</p>}
       </div>
       {draft && <Meanwhile draft={draft} show={show} />}
     </>
@@ -277,11 +279,11 @@ export type SelectOption = [value: string, label: string, disabled?: boolean] | 
  * options as fillOptions takes them, the value chosen from a draft of a
  * stored value (with its "changed meanwhile" notice) or from value and
  * onChange; name and disabled (off) are the select's, the row narrow
- * unless wide; inputRef gives it the focus. With row false it is the
- * select alone, inside a row of the caller's (a field with two controls),
- * whose notice the caller draws.
+ * unless wide; inputRef gives it the focus; hintId names the hint as its
+ * description. With row false it is the select alone, inside a row of the
+ * caller's (a field with two controls), whose notice the caller draws.
  */
-export function Select({ label, id, wide, unit, hint, help, cls, name, options, value, onChange, disabled, draft, show, row = true, inputRef }: Partial<Row> & {
+export function Select({ label, id, wide, unit, hint, hintId, help, cls, name, options, value, onChange, disabled, draft, show, row = true, inputRef }: Partial<Row> & {
   name?: string;
   disabled?: boolean;
   options: SelectOption[];
@@ -294,7 +296,7 @@ export function Select({ label, id, wide, unit, hint, help, cls, name, options, 
 }) {
   const opt = ([v, l, off]: [string, string, boolean?]) => <option key={v} value={v} disabled={off}>{l}</option>;
   const select = (
-    <select ref={inputRef} id={id} name={name} class={!row || unit ? undefined : "field-control"} disabled={disabled} value={draft ? draft.value : value} onChange={(ev) => {
+    <select ref={inputRef} id={id} name={name} class={!row || unit ? undefined : "field-control"} disabled={disabled} aria-describedby={hint ? hintId : undefined} value={draft ? draft.value : value} onChange={(ev) => {
       const v = ev.currentTarget.value;
       if (draft) draft.set(v);
       if (onChange) onChange(v);
@@ -304,7 +306,7 @@ export function Select({ label, id, wide, unit, hint, help, cls, name, options, 
   );
   if (!row || label === undefined || id === undefined) return select;
   return (
-    <Field label={label} id={id} wide={wide} unit={unit} hint={hint} help={help} cls={cls} draft={draft} show={show}>
+    <Field label={label} id={id} wide={wide} unit={unit} hint={hint} hintId={hintId} help={help} cls={cls} draft={draft} show={show}>
       {select}
     </Field>
   );
