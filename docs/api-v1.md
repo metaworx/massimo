@@ -643,6 +643,11 @@ On a server without users, `POST /api/v1/users` creates the first owner:
 open to a caller on the local network (loopback, a private range, link-local),
 `role` `owner` (absent, or that) and a password or a record required,
 `403` from anywhere else; `massimo user add` on the box is the other way.
+The first owner is created once:
+where two requests come at the same moment,
+the server counts the users again as it writes the owner,
+and the second is `409` with `the first owner exists already: sign in`;
+its registration (below) kept nothing, so nothing is left of it.
 From then on the server is in users mode (Authentication).
 
 `GET /api/v1/users/{name}` is one user.

@@ -162,3 +162,57 @@ func TestDropKeepOpen(t *testing.T) {
 		t.Fatalf("again: %v %v", dropped, err)
 	}
 }
+
+// The first owner is added once: a second is ErrHasUsers, and so is one
+// that many goroutines try at once, of which one wins; the setting goes
+// with the one that wins (AP FirstOwner, D15).
+func TestAddFirstOwnerOnce(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	s := open(t, t.TempDir())
+	keptOpen(t, s)
+	root, err := s.AddFirstOwner(ctx, User{Name: "root", Role: RoleViewer}, "correct horse")
+	if err != nil || root.Role != RoleOwner || !root.HasPassword || s.KeepOpen(ctx) {
+		t.Fatalf("the first: %+v %v", root, err)
+	}
+	if _, err := s.AddFirstOwner(ctx, User{Name: "anna"}, ""); !errors.Is(err, ErrHasUsers) {
+		t.Fatalf("a second: %v", err)
+	}
+	record, err := s.opaqueRecordFor(ctx, "anna", "correct horse")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AddFirstOpaqueOwner(ctx, User{Name: "anna"}, record, OpaqueKSF); !errors.Is(err, ErrHasUsers) {
+		t.Fatalf("a second by OPAQUE: %v", err)
+	}
+	if n, _ := s.CountUsers(ctx); n != 1 {
+		t.Fatalf("%d users", n)
+	}
+
+	for round := range 20 {
+		s := open(t, t.TempDir())
+		const tries = 8
+		errs := make(chan error, tries)
+		start := make(chan struct{})
+		for i := range tries {
+			go func() {
+				<-start
+				_, err := s.AddFirstOwner(ctx, User{Name: "owner" + string(rune('a'+i))}, "")
+				errs <- err
+			}()
+		}
+		close(start)
+		won := 0
+		for range tries {
+			switch err := <-errs; {
+			case err == nil:
+				won++
+			case !errors.Is(err, ErrHasUsers):
+				t.Fatalf("round %d: %v", round, err)
+			}
+		}
+		if n, _ := s.CountUsers(ctx); won != 1 || n != 1 {
+			t.Fatalf("round %d: %d won, %d users", round, won, n)
+		}
+	}
+}

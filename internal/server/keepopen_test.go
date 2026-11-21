@@ -5,8 +5,10 @@ package server
 
 import (
 	"encoding/json"
+	"io"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"go.metaworx.ch/massimo/internal/store"
@@ -182,4 +184,135 @@ func TestKeepOpenWithoutAStore(t *testing.T) {
 	if code, me, text := meFrom(t, tok, "192.168.1.20:5000", "secret"); code != 200 || me.Mode != "token" || me.KeptOpen || strings.Contains(text, "kept_open") {
 		t.Fatalf("/me with a token: %d %s", code, text)
 	}
+}
+
+// recordFrom runs a registration for a name through the route as a
+// caller on the local network, and returns the record to send.
+func recordFrom(t *testing.T, s *Server, name, password string) string {
+	t.Helper()
+	c := opaqueClient(t)
+	req, err := c.RegistrationInit([]byte(password))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := sendFrom(s, "POST", "/api/v1/users/"+name+"/register", "192.168.1.20:5000", "", `{"request":"`+opaqueB64.EncodeToString(req.Serialize())+`"}`)
+	if rec.Code != 200 {
+		t.Fatalf("register %s: %d %s", name, rec.Code, rec.Body.String())
+	}
+	var out struct{ Response string }
+	json.Unmarshal(rec.Body.Bytes(), &out)
+	b, _ := opaqueB64.DecodeString(out.Response)
+	resp, err := c.Deserialize.RegistrationResponse(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record, _, err := c.RegistrationFinalize(resp, nil, nil, opaqueOptions(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return opaqueB64.EncodeToString(record.Serialize())
+}
+
+// startedReading is a request body that says when the handler first
+// reads it, and hands out what its pipe is given.
+type startedReading struct {
+	*io.PipeReader
+	once  sync.Once
+	began chan struct{}
+}
+
+func (b *startedReading) Read(p []byte) (int, error) {
+	b.once.Do(func() { close(b.began) })
+	return b.PipeReader.Read(p)
+}
+
+// A first owner whose request passed the check of the mode while the
+// server was open, and is held there until another one has been
+// created, is 409, by a password and by OPAQUE alike: the store counts
+// the users again as it writes (D15). The handler reads the body after
+// authorize, so a body that blocks holds it there; a 401 would say that
+// the mode was read after the first owner.
+func TestFirstOwnerHeldIsRefused(t *testing.T) {
+	t.Parallel()
+	for _, opaque := range []bool{false, true} {
+		s := New(storeOptions(t, t.TempDir(), ""))
+		first, second := `{"name":"anna","password":"p"}`, `{"name":"bob","password":"p"}`
+		if opaque {
+			first = `{"name":"anna","record":"` + recordFrom(t, s, "anna", "p") + `","ksf":"` + store.OpaqueKSF + `"}`
+			second = `{"name":"bob","record":"` + recordFrom(t, s, "bob", "p") + `","ksf":"` + store.OpaqueKSF + `"}`
+		}
+		pr, pw := io.Pipe()
+		body := &startedReading{PipeReader: pr, began: make(chan struct{})}
+		r := httptest.NewRequest("POST", "/api/v1/users", body)
+		r.RemoteAddr = "192.168.1.20:5000"
+		r.Header.Set("Content-Type", "application/json")
+		held := httptest.NewRecorder()
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			s.Handler().ServeHTTP(held, r)
+		}()
+		select {
+		case <-body.began:
+		case <-done:
+			t.Fatalf("opaque %v: answered before reading its body: %d %s", opaque, held.Code, held.Body.String())
+		}
+		if rec := sendFrom(s, "POST", "/api/v1/users", "192.168.1.20:5000", "", first); rec.Code != 201 {
+			t.Fatalf("opaque %v: the first: %d %s", opaque, rec.Code, rec.Body.String())
+		}
+		io.WriteString(pw, second)
+		pw.Close()
+		<-done
+		if held.Code != 409 || errorOf(held.Body.String()) != "the first owner exists already: sign in" {
+			t.Fatalf("opaque %v: the held one: %d %s", opaque, held.Code, held.Body.String())
+		}
+		if n, _ := s.opts.Store.CountUsers(t.Context()); n != 1 {
+			t.Fatalf("opaque %v: %d users", opaque, n)
+		}
+	}
+}
+
+// Two first owners at once, by password and by OPAQUE, round after
+// round: never two owners (D15). A round in which the second came after
+// the first one's commit is 201 and 401 and raced nothing; the test above
+// holds the race without the timing. A registration keeps nothing, so a
+// refused one leaves nothing behind.
+func TestFirstOwnerOnce(t *testing.T) {
+	t.Parallel()
+	raced := 0
+	for round := range 12 {
+		s := New(storeOptions(t, t.TempDir(), ""))
+		bodies := []string{`{"name":"anna","password":"p"}`, `{"name":"bob","password":"p"}`}
+		if round%2 == 1 {
+			bodies = []string{
+				`{"name":"anna","record":"` + recordFrom(t, s, "anna", "p") + `","ksf":"` + store.OpaqueKSF + `"}`,
+				`{"name":"bob","record":"` + recordFrom(t, s, "bob", "p") + `","ksf":"` + store.OpaqueKSF + `"}`,
+			}
+		}
+		recs := make(chan *httptest.ResponseRecorder, len(bodies))
+		start := make(chan struct{})
+		for _, body := range bodies {
+			go func() {
+				<-start
+				recs <- sendFrom(s, "POST", "/api/v1/users", "192.168.1.20:5000", "", body)
+			}()
+		}
+		close(start)
+		codes := map[int]int{}
+		for range bodies {
+			rec := <-recs
+			codes[rec.Code]++
+			if rec.Code == 409 && errorOf(rec.Body.String()) != "the first owner exists already: sign in" {
+				t.Errorf("round %d: %s", round, rec.Body.String())
+			}
+		}
+		// A request that came after the first one's commit finds users
+		// and no token: 401, and no race.
+		n, _ := s.opts.Store.CountUsers(t.Context())
+		if codes[201] != 1 || codes[409]+codes[401] != 1 || n != 1 {
+			t.Fatalf("round %d: %v, %d users", round, codes, n)
+		}
+		raced += codes[409]
+	}
+	t.Logf("%d of 12 rounds raced", raced)
 }

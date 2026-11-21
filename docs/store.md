@@ -1282,7 +1282,11 @@ the roles and their sets are rows (section 5), seeded by the first migration.
   the API stays open as today (acceptable on the default localhost listener,
   docs/api-v1.md says so already),
   and Settings shows "No users yet" with a form that creates the first owner
-  with a password; the form works only while there are no users.
+  with a password; the form works only while there are no users,
+  and makes one owner: the store counts the users again in the transaction
+  that writes it, which holds the database's one write lock from its start
+  (`_txlock=immediate`), so of two at the same moment the second is refused
+  (AP FirstOwner, D15).
   `massimo user add` does the same from the command line (open decision 4 on
   whether the form should exist).
   The setting `auth.keep_open` (false by default) keeps such a server open

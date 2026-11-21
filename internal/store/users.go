@@ -232,7 +232,59 @@ func (s *Store) AddUser(ctx context.Context, u User, password string, by int64) 
 			return User{}, err
 		}
 	}
-	return s.addUser(ctx, u, credential{hash: hash}, by)
+	return s.addUser(ctx, u, credential{hash: hash}, by, false)
+}
+
+// AddFirstOwner adds the first owner, as AddUser does with the role
+// owner and nobody as its creator, only while the server has no users:
+// ErrHasUsers where it has one, also one that another request added
+// since its caller looked, since the count is read again in the
+// transaction that writes the user (AP FirstOwner, D15).
+func (s *Store) AddFirstOwner(ctx context.Context, u User, password string) (User, error) {
+	u.Role = RoleOwner
+	u, err := s.newUser(u)
+	if err != nil {
+		return User{}, err
+	}
+	if err := s.noUsers(ctx, s.db); err != nil {
+		return User{}, err // before the cost of a hash
+	}
+	hash := ""
+	if password != "" {
+		if err := s.addable(ctx, u); err != nil {
+			return User{}, err
+		}
+		if hash, err = s.hashPassword(ctx, password); err != nil {
+			return User{}, err
+		}
+	}
+	return s.addUser(ctx, u, credential{hash: hash}, 0, true)
+}
+
+// AddFirstOpaqueOwner adds the first owner as AddFirstOwner does, with
+// a password of version 2, as AddOpaqueUser takes it.
+func (s *Store) AddFirstOpaqueOwner(ctx context.Context, u User, record []byte, ksf string) (User, error) {
+	u.Role = RoleOwner
+	u, err := s.newUser(u)
+	if err != nil {
+		return User{}, err
+	}
+	if err := s.checkRecord(record, ksf); err != nil {
+		return User{}, err
+	}
+	return s.addUser(ctx, u, credential{record: record, ksf: ksf}, 0, true)
+}
+
+// noUsers reports ErrHasUsers where a user that is not removed exists.
+func (s *Store) noUsers(ctx context.Context, q queryer) error {
+	var n int
+	if err := q.QueryRowContext(ctx, `SELECT count(*) FROM users WHERE deleted_at IS NULL`).Scan(&n); err != nil {
+		return fmt.Errorf("store: users: %w", err)
+	}
+	if n > 0 {
+		return fmt.Errorf("%w: the first owner exists already", ErrHasUsers)
+	}
+	return nil
 }
 
 // addable answers what a user add would refuse, before the cost of a
@@ -273,7 +325,7 @@ func (s *Store) AddUserOpaque(ctx context.Context, u User, password string, by i
 	if err != nil {
 		return User{}, err
 	}
-	return s.addUser(ctx, u, credential{record: record, ksf: OpaqueKSF}, by)
+	return s.addUser(ctx, u, credential{record: record, ksf: OpaqueKSF}, by, false)
 }
 
 // SetPasswordOpaque sets a user's password of version 2, registered here
@@ -307,17 +359,26 @@ func (s *Store) AddOpaqueUser(ctx context.Context, u User, record []byte, ksf st
 	if err := s.checkRecord(record, ksf); err != nil {
 		return User{}, err
 	}
-	return s.addUser(ctx, u, credential{record: record, ksf: ksf}, by)
+	return s.addUser(ctx, u, credential{record: record, ksf: ksf}, by, false)
 }
 
 // addUser writes a user that newUser checked, with its credential, and
-// removes the setting KeepOpenKey in the same transaction.
-func (s *Store) addUser(ctx context.Context, u User, c credential, by int64) (User, error) {
+// removes the setting KeepOpenKey in the same transaction; first, only
+// while the server has no users (AddFirstOwner). The transaction begins
+// IMMEDIATE (the store's _txlock), so it holds the database's one write
+// lock from its start: a second one waits for the first to commit, and
+// its count then sees the first one's user.
+func (s *Store) addUser(ctx context.Context, u User, c credential, by int64, first bool) (User, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return User{}, fmt.Errorf("store: add user %s: %w", u.Name, err)
 	}
 	defer tx.Rollback()
+	if first {
+		if err := s.noUsers(ctx, tx); err != nil {
+			return User{}, err
+		}
+	}
 	role, err := s.roleID(ctx, tx, u.Role)
 	if err != nil {
 		return User{}, err

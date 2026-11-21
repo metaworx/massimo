@@ -658,7 +658,8 @@ paths:
         With users, any role; with guests alone, the role guest. On a
         server without users, the first owner: open to a caller on the
         local network (loopback, a private range, link-local), the role
-        owner and a password required, refused from anywhere else.
+        owner and a password required, refused from anywhere else, and
+        created once: a second request at the same moment is 409.
       parameters: [{$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
@@ -675,7 +676,7 @@ paths:
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
         "409":
-          description: The name exists
+          description: The name exists, or the first owner exists already
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
