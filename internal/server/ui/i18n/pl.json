@@ -1492,6 +1492,8 @@
   "setup.mismatch": "Hasła się różnią.",
   "setup.done": "Właściciel {name} utworzony i zalogowany.",
   "setup.failed": "Nie utworzono: {error}",
+  "setup.skip": "Pomiń na razie",
+  "setup.exists": "Właściciel już istnieje: zaloguj się.",
   "users.title": "Użytkownicy",
   "users.add": "Dodaj użytkownika",
   "users.none": "Brak użytkowników.",

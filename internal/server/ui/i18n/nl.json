@@ -1450,6 +1450,8 @@
   "setup.mismatch": "De wachtwoorden verschillen.",
   "setup.done": "Eigenaar {name} aangemaakt en aangemeld.",
   "setup.failed": "Niet aangemaakt: {error}",
+  "setup.skip": "Voorlopig overslaan",
+  "setup.exists": "De eigenaar bestaat nu: meld je aan.",
   "users.title": "Gebruikers",
   "users.add": "Gebruiker toevoegen",
   "users.none": "Geen gebruikers.",

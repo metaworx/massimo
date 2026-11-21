@@ -711,15 +711,17 @@ def personal_sections(page):
 
 
 def first_owner(page):
-    """The first owner's form, GET /api/v1/me stubbed as an open server
-    without users for a caller on the local network for the rest of the
-    test (the region's own source, loadMe(), reads the stub again); Rooms
-    shown, where the form is, the focus moved onto Again by the view."""
+    """The first owner's form in the sign-in card (AP FirstOwner), GET
+    /api/v1/me stubbed as an open server without users for a caller on
+    the local network for the rest of the test, which opens the card on
+    the running page (the region's own source, loadMe(), reads the stub
+    again and hands out the same opening); the focus moved onto Again by
+    the view."""
     body = json.dumps({"mode": "open", "user": None, "role": None, "capabilities": [], "setup": True})
     safe_route(page, "**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body=body))
     on_rooms(page)
-    page.evaluate("loadMe()")
-    page.locator("#setup-form").wait_for(state="visible")
+    page.evaluate("() => { loadMe(); }")
+    page.locator("#login-dialog[open] #setup-form").wait_for(state="visible")
     settle(page)
 
 
@@ -926,11 +928,14 @@ REGIONS = (
         View("the Users card opened again, the focus on its fold", users_fold(False), "#sys-users .section-fold"),
         View("the personal page's sections menu open, the focus on an item", personal_sections, "#me .sec-menu .toc-link[data-target='prefs']"),
     ), sources=("loadMe()",)),
-    # The first owner's form is a part (AP UiParts, Block 14), drawn from
-    # who is in: who is in read again (loadMe) is its source; the view
+    # The first owner's form is a part (AP UiParts, Block 14), in the
+    # sign-in card since AP FirstOwner, opened from who is in: who is in
+    # read again (loadMe, the same opening), the page's language drawn
+    # again and the app's status read again are its sources; the view
     # passed on the page before the move as well, where nothing drew the
     # plain form again.
-    Region("first-owner", ("#setup",), (View("the first owner's form, the focus in Again", first_owner, "#setup-again"),), sources=("loadMe()",)),
+    Region("first-owner", ("#setup",), (View("the first owner's form in the card, the focus in Again", first_owner, "#setup-again"),),
+           sources=("loadMe()", "applyLanguage()", "MassimoParts.signIn.readApp()")),
     # The sign-in's card is a part (AP UiParts, Block 14), shown here as a
     # 401 opens it on a page signed in: its sources are a second askLogin
     # (another request's 401, which hands out the same opening), the
@@ -1137,6 +1142,7 @@ GUARD_JS = r"""() => {
       case "askLogin()": askLogin(); return settled(); // the opening it hands out is the one open
       case "renderLoginProviders()": return renderLoginProviders();
       case "applyLanguage()": applyLanguage(); return settled();
+      case "MassimoParts.signIn.readApp()": return MassimoParts.signIn.readApp().then(settled); // the app's status read again, as at an opening
     }
     throw new Error("the guard knows no data source " + source);
   }

@@ -355,16 +355,18 @@ def test_new_user_name_checked_while_typed(page, case, watch):
 
 
 def test_first_owner_name_checked(page, case):
-    """The first owner's form checks its name the same way; with a bad
-    name, Create the owner sends nothing; in a browser it has no Cancel,
-    which is the app's (test_connect.py). /api/v1/me is stubbed as an
-    open server without users, and put back."""
+    """The first owner's form, in the sign-in card (AP FirstOwner), checks
+    its name the same way; with a bad name, Create the owner sends
+    nothing; in a browser it has no Cancel, which is the app's
+    (test_connect.py). /api/v1/me is stubbed as an open server without
+    users, which opens the card, and put back; Skip for now closes it."""
     posts = []
     page.on("request", lambda r: posts.append(r.url) if r.method == "POST" and r.url.endswith("/api/v1/users") else None)
     page.route("**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body='{"mode": "open", "setup": true}'))
     try:
         page.evaluate("loadMe()")
-        assert wait_until(page, "!document.getElementById('setup').classList.contains('hidden')", 5), "the first owner's form shows"
+        assert wait_until(page, "document.getElementById('login-dialog').open && "
+                                "!document.getElementById('setup').classList.contains('hidden')", 5), "the first owner's form shows in the card"
         assert page.locator("#setup-cancel").is_hidden(), "no Cancel in a browser"
         name = page.locator("#setup-user")
         name.fill("test manager")
@@ -377,10 +379,11 @@ def test_first_owner_name_checked(page, case):
         assert not posts, f"Create the owner with a bad name sends nothing: {posts}"
         name.fill("owner")
         assert name_msg(page, "#setup-name-msg") is None, "a good name clears the message"
+        page.locator("#setup-skip").click()
     finally:
         page.unroute("**/api/v1/me")
         page.evaluate("loadMe()")
-    assert wait_until(page, "document.getElementById('setup').classList.contains('hidden')", 5), "the form goes again"
+    assert wait_until(page, "!document.getElementById('login-dialog').open", 5), "the card goes again"
 
 
 def test_manager_sets_passwords_but_not_the_owners(new_context, case, watch, guard):

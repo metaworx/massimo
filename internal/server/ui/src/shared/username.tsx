@@ -75,26 +75,30 @@ export function useNameCheck(taken: () => string[]): NameCheck {
   };
 }
 
+/** The name's value: the form's own value and set, or neither, the field not controlled and read through inputRef. */
+type NameValue =
+  | { value: string; set: (v: string) => void; inputRef?: Ref<HTMLInputElement> }
+  | { value?: undefined; set?: undefined; inputRef: Ref<HTMLInputElement> };
+
 /**
  * UserNameField is a new user's name as a field row: the input of id,
  * the line msgId under it that says what is wrong (the input marked
  * invalid and described by it), checked by nc as it is typed and left;
- * value and set are the form's own; name, autocomplete and placeholder
+ * value and set are the form's own, or neither, the field not controlled
+ * (the sign-in card's first owner's form, UiParts D210), its caller
+ * reading it through inputRef; name, autocomplete and placeholder
  * are the input's (the first owner's form names it not, as its plain
  * markup did, so that a password manager pairs that form as before),
  * inputRef gives it the focus.
  */
-export function UserNameField({ label, id, msgId, value, set, nc, name, autocomplete, placeholder, inputRef }: {
+export function UserNameField({ label, id, msgId, value, set, nc, name, autocomplete, placeholder, inputRef }: NameValue & {
   label: string;
   id: string;
   msgId: string;
-  value: string;
-  set: (v: string) => void;
   nc: NameCheck;
   name?: string;
   autocomplete: string;
   placeholder?: string;
-  inputRef?: Ref<HTMLInputElement>;
 }) {
   return (
     <Field label={label} id={id} wide>
@@ -102,10 +106,10 @@ export function UserNameField({ label, id, msgId, value, set, nc, name, autocomp
         maxLength={64} required placeholder={placeholder} value={value} aria-invalid={nc.problem ? "true" : undefined} aria-describedby={msgId}
         onInput={(ev) => {
           const v = ev.currentTarget.value;
-          set(v);
+          set?.(v);
           nc.typed(v);
         }}
-        onBlur={() => nc.check(value)} />
+        onBlur={(ev) => nc.check(ev.currentTarget.value)} />
       <ResultLine id={msgId} cls="small cubes-msg field-hint" role="status" res={nc.problem ? { text: nc.problem, ok: false } : null} />
     </Field>
   );

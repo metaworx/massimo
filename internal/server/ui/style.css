@@ -1788,8 +1788,11 @@ massimo-week-program { display: contents; }
 
 /* the sign-in dialog, the first-owner form, System settings → Users and Roles */
 #login-error.bad { color: var(--bad); }
-.setup { margin-bottom: 16px; }
-.setup-form { padding: 0 14px 12px; display: flex; flex-direction: column; gap: 8px; }
+/* the first owner's form in the sign-in card (ui/src/signin/Owner.tsx), at
+   its own height (AP FirstOwner, D23), Skip for now in a row under it */
+.setup-form { display: flex; flex-direction: column; gap: 8px; }
+.setup-form > p { margin: 0; }
+.login-owner-more { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
 #me-line { margin: 8px 0 4px; }
 #me-password { margin-bottom: 8px; }
 #me-password summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; }

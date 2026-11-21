@@ -49,20 +49,24 @@ declare global {
   } | null;
   /** In the app, the way back to its servers (Select server); null in a browser. */
   function appConnect(): (() => Promise<unknown>) | null;
-  /** A sign-in askLogin opened, which the sign-in's card hands back to finishSignIn: who was in, the pushes held, its end. */
+  /** A sign-in askLogin opened, which the sign-in's card hands back to finishSignIn: who was in, the pushes held, its end; whether it opened on the first owner's form, and its dismissal (Skip for now). */
   interface SignInAsk {
     readonly was: string;
+    readonly owner: boolean;
+    /** Whether it has ended already: its card closed or opened anew. */
+    readonly closed: boolean;
+    dismiss(): void;
   }
-  /** Goes on after a sign-in of the card: settleSignIn, the card closed and askLogin answered, the page started where no start waits for it. */
-  function finishSignIn(ask: SignInAsk): Promise<void>;
+  /** Opens the sign-in's card, or with "owner" the first owner's form in it, and answers whether one is in; while it is open, a refusal turns the first owner's form to the sign-in and the same promise is handed out. */
+  function askLogin(on?: "owner"): Promise<boolean>;
+  /** Goes on after a sign-in of the card: settleSignIn, the card closed and askLogin answered, the page started where no start waits for it; nothing for an ask closed already, and it reports whether it ended the ask. */
+  function finishSignIn(ask: SignInAsk): Promise<boolean>;
   /** Starts a sign-in through a provider and opens its page; its refusal is thrown. */
   function startProvider(key: string): Promise<void>;
   /** Keeps the page's token, or forgets it with null: in the browser's storage, or in the app's. */
   function setToken(token: string | null): void;
   /** Signs in by OPAQUE, without a token and without the dialog: the session, its token among it; the answer's error is thrown. */
   function signIn(user: string, password: string): Promise<{ token: string }>;
-  /** Reads who is in again and starts the poll, the stream and the data, for a sign-in that no start waited for (the first owner). */
-  function afterLogin(): void;
   /** Signs out as Sign out does: the page's dialog first where settings are unsaved, then a session ends and the page forgets who was in. */
   function logout(): Promise<void>;
   /** Reads who the page is signed in as again and applies it. */

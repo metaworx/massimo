@@ -1451,6 +1451,8 @@
   "setup.mismatch": "Les mots de passe diffèrent.",
   "setup.done": "Propriétaire {name} créé et connecté.",
   "setup.failed": "Non créé : {error}",
+  "setup.skip": "Ignorer pour l'instant",
+  "setup.exists": "Le propriétaire existe maintenant : connectez-vous.",
   "users.title": "Utilisateurs",
   "users.add": "Ajouter un utilisateur",
   "users.none": "Aucun utilisateur.",

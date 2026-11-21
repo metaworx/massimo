@@ -1449,6 +1449,8 @@
   "setup.mismatch": "The passwords differ.",
   "setup.done": "Owner {name} created and signed in.",
   "setup.failed": "Not created: {error}",
+  "setup.skip": "Skip for now",
+  "setup.exists": "The owner exists now: sign in.",
   "users.title": "Users",
   "users.add": "Add a user",
   "users.none": "No users.",
