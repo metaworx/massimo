@@ -16,6 +16,7 @@
 import { Icon } from "../shared/icon";
 import { MenuItem } from "../shared/menu";
 import { showCard } from "../shared/card";
+import { showView } from "../shared/pages";
 
 /** The icon of each state of the server's sign. */
 const SERVER_ICON: Record<string, string> = { up: "icon-plug-on", info: "icon-info", new: "mark-warn", down: "icon-plug-off" };

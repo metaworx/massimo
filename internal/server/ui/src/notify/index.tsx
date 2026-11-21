@@ -19,6 +19,7 @@ import { mounter, register } from "../shared/region";
 import { NotifyCard } from "./Notify";
 import { dropSave, loadNotify, saveRules, sendNow, takeSave } from "./send";
 import { forgetNotify, notify, say } from "./store";
+import { onView } from "../shared/pages";
 
 const mount = mounter("notify-sec", () => <NotifyCard />);
 mount();

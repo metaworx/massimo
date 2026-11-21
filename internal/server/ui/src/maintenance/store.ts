@@ -24,6 +24,7 @@ import { burstReader } from "../shared/burst";
 import { counter } from "../shared/counter";
 import { live } from "../shared/live";
 import { session, stillSession } from "../shared/session";
+import { isShown } from "../shared/pages";
 
 /** A text said in the page's language at its drawing. */
 export type Say = () => string;

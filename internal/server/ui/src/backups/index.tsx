@@ -19,6 +19,7 @@ import { mounter, register } from "../shared/region";
 import { CubeBackup, keptText, SystemBackups } from "./Backups";
 import { type RestoreEvent, boxUI, forgetBackups, load, of, refreshBackups, restoreEvent, resynced } from "./store";
 import { cardBadges } from "../shared/card";
+import { isShown, onView } from "../shared/pages";
 
 /** The badges of System settings' card: every Cube's backups kept, once one list has come. */
 function systemCount(): string {

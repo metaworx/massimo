@@ -35,6 +35,7 @@ import {
   msgIn, requestUI, requestsOn, run, said, setRequests, shown, watchApproval,
 } from "./store";
 import { type BadgeSpec, cardBadges, showCard } from "../shared/card";
+import { isShown, mayShow, showView } from "../shared/pages";
 
 /** capOptions are the capabilities of the ceiling as a choice of switches. */
 function capOptions(): [string, string][] {

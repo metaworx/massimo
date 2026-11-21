@@ -5,7 +5,8 @@
  * @file internal/server/ui/src/chrome/index.tsx
  *
  * The page's chrome (AP UiParts, Block 14), a region of its own, drawn
- * once into its places as parts.js loads: the section cards' badges and
+ * once into its places as parts.js loads, which first hands the pages'
+ * store the page's pages (pages.ts, shared/pages.ts): the section cards' badges and
  * pills, their folds wired (Cards.tsx, shared/card.ts); the header kept
  * at the top and compacted as the page scrolls, and back to top
  * (scroll.ts, ToTop.tsx); and where it says
@@ -28,8 +29,10 @@ import { type BadgeSpec, cardBadges, showCard, wireCards } from "../shared/card"
 import { unsavedTone } from "../shared/forms";
 import { Mark, Sign } from "../shared/icon";
 import { useLang } from "../shared/lang";
+import { definePages } from "../shared/pages";
 import { register } from "../shared/region";
 import { drawCards, keysOf } from "./Cards";
+import { CARD_ADDRESSES, PAGE_VIEWS } from "./pages";
 import { stickyHeader, toTop } from "./scroll";
 import { ToTop } from "./ToTop";
 
@@ -77,6 +80,7 @@ function ItemMark({ keys }: { keys: string[] }) {
 // drawn once into the places the page has for them; the cards' folds
 // wired; the header kept at the top, and the compacted header's ↑, which
 // is the page's skeleton until the page buttons are parts
+definePages(PAGE_VIEWS, CARD_ADDRESSES);
 wireCards();
 drawCards();
 stickyHeader();

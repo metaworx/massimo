@@ -15,6 +15,7 @@
 import { mounter } from "../shared/region";
 import { Maintenance } from "./Maintenance";
 import { forgetMaintenance, loadReboot, loadRestart, loadSettings, quiet } from "./store";
+import { onView } from "../shared/pages";
 
 export { serverEvent } from "./store";
 

@@ -30,6 +30,7 @@ import { BusyButton, Question, busyProps, useAsk, useBusy, useSetAtOnce } from "
 import { createRole, disableRole, removeRole, rolesMsg, saveRole, setCapability } from "./sendRoles";
 import { adding, load, roleFormKey, roleUI, roles, said } from "./store";
 import { cardBadges, showCard } from "../shared/card";
+import { isShown, showView } from "../shared/pages";
 
 /** openRole shows a role's settings and puts the focus into them, from any page: System settings shown, the role's panel open. */
 function openRole(key: string): void {

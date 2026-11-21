@@ -29,6 +29,7 @@ import { Question, busyProps, useAsk, useBusy } from "../shared/question";
 import { addProvider, autoRoleOptions, removeProvider, saveProvider } from "./sendProviders";
 import { adding, load, providerFormKey, providers, providerUI, said } from "./store";
 import { cardBadges, showCard } from "../shared/card";
+import { isShown, showView } from "../shared/pages";
 
 /** openProvider shows a provider's settings and puts the focus into them, from any page: System settings shown, its panel open. */
 function openProvider(key: string): void {

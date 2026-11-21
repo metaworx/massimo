@@ -30,6 +30,7 @@ import { Tokens } from "../shared/tokens";
 import { adding, enabled, identityFormKey, identityUI, load, passwordLogin, reads, said, userFormKey, userUI, users } from "./store";
 import { createUser, mayManage, mayPassword, removeUser, roleOptions, run, saveUser, setPasswordLogin, usersAdmin, usersMsg } from "./sendUsers";
 import { cardBadges, showCard } from "../shared/card";
+import { isShown, showView } from "../shared/pages";
 
 /** userName is how a user is shown: its chain (AP StoreRaise v1.2), its display name, else its login name. */
 function userName(u: User): string {

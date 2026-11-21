@@ -58,7 +58,9 @@ function hasSettingsPage() {
 }
 
 // hasProfile reports whether the page is signed in as a user, who has My
-// profile; an open server and the server's token have none.
+// profile; an open server and the server's token have none: for the plain
+// code (renderMe), as profileOf of ui/src/shared/me.ts, the rule's home,
+// says it for the parts.
 function hasProfile() {
   const me = state.me;
   return !!(me && me.mode === "users" && me.user);

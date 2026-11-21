@@ -18,8 +18,10 @@ declare global {
   function hasCap(c: string): boolean;
   /** Whether the one signed in may read the users: with users, guests or passwords. */
   function canManageUsers(): boolean;
-  /** Whether the page is signed in as a user, who has My profile; an open server and the server's token have none. */
-  function hasProfile(): boolean;
+  /** Whether the one signed in may open System settings: one of its cards' capabilities, without those only Maintenance's cards use. */
+  function hasSettingsPage(): boolean;
+  /** Whether the one signed in may open Maintenance: one of System settings' capabilities, or update, restart or reboot. */
+  function hasSystem(): boolean;
   /** A link of the own account come back from a provider (oidcReturn), for My profile to show or say why there is none; null for none, set back to null once taken. */
   let oidcLinked: { confirm?: string; error?: string } | null;
   /** Whether a user's login name is the one signed in. */

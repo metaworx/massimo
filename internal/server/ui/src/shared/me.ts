@@ -10,7 +10,8 @@
  * token the page is signed in with beside it. A user's sessions say by
  * it which is "this device" and which key it was made from (System
  * settings → Users and My profile alike), and My profile and the
- * notifications' card are drawn for whoever it names.
+ * notifications' card are drawn for whoever it names; whether it has My
+ * profile (profileOf).
  */
 
 import { computed, signal } from "@preact/signals";
@@ -25,4 +26,14 @@ export const own = computed<Token | null>(() => me.value?.token || null);
 /** meChanged takes who is in, as applyCaps of login.js read it, or null at a sign-out. */
 export function meChanged(m: Me | null): void {
   me.value = m;
+}
+
+/**
+ * profileOf says whether who is in has My profile: a user signed in; an
+ * open server and the server's token have none. The rule's one home: the
+ * parts ask it (me.peek() where they must not follow it), and the plain
+ * hasProfile of login.js says the same for the plain code that still asks.
+ */
+export function profileOf(m: Me | null): boolean {
+  return !!(m && m.mode === "users" && m.user);
 }

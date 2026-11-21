@@ -1939,7 +1939,8 @@ a script for each region of the page, in the order the page loads them:
   `house.js`, the House tile's plain names, which call its part;
 - `week-program.js`, the week programme editor; `config.js`, the editor's kit;
 - `log.js`, the log and its sign for unseen problems;
-  `pages.js`, the pages, the main menu, the address and the scroll;
+  `pages.js`, the plain names of the pages' store (`ui/src/shared/pages.ts`),
+  the log's choices in the address, and the settings pages' rows;
 - `update.js`, the plain names of Software update,
   which call its part (`ui/src/software/`),
   for the header's check and the server's sign;
@@ -2087,6 +2088,7 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `me`, `own`, `meChanged` | `me.ts` | who the page is signed in as, `state.me` as `applyCaps` of `login.js` hands it over at every read of it (`MassimoParts.me`), null from a sign-out on; the token it is signed in with, by which a user's sessions say "this device" and "its key" | `m` |
 | `cardBadges`, `badgesOf`, `BadgeSpec` | `card.ts` | what a section card's head shows at a glance, also while it is folded: a region gives a card's badges by its id from its drawing's effect, `[]` for none, and the page's chrome draws them (`ui/src/chrome/Cards.tsx`) | `id`, `list` of `{ text, kind }` |
 | `showCard`, `wireCards` | `card.ts` | a section card brought into view, unfolded, the focus on its heading's button, kept there for two seconds where its page has just been opened (`instant`); the cards' folds wired once, each kept in this browser (`massimo.fold.<card id>`), set on the skeleton at once | `id`, `instant` |
+| `page`, `isShown`, `showView`, `onView`, `mayShow` | `pages.ts` | the page of the main area shown, a signal: a drawing that reads `page.value` follows it, `isShown` asks at that moment and follows nothing (a handler, a reader, a timer), so that no request is sent again at a change of page; showing a page puts it into the address, as a new entry of the history or in place of the current one, and brings each page back at the scroll it was left at; `onView` runs at each showing, on the `viewshown` event; `mayShow` says who may open which, reading who is in; a page with an address of its own (the log's, `pages.js`) hands it over with `ownAddress`; `pages.js` keeps the plain names, and `currentView` | `view`, `address`, `card` |
 | `userPath`, `Run`, `loadTokens`, `revokeToken`, `revokeOwn`, `createKey`, `loadIdentities`, `addIdentity`, `changeIdentity`, `removeIdentity` | `account.ts` | what a user's sessions, keys and identities read and send (`…/users/{name}/tokens`, `…/identities`), for System settings → Users and My profile alike; a change through the caller's runner (`Run`), which reloads what it shows and says how it went in its own line; Revoke of the token in use signs out | `name`, `rest`; `run`, `name`, and what each sends |
 | `Tokens` | `tokens.tsx` | a user's sessions and keys (a user's panel, My profile): each with Revoke, "this device" and "its key" by `own`, Create key and the key just made, shown once by the read that follows and kept in the part's own state alone; read when its place opens and again at each change of the caller's counter while open; an answer after a sign-out dropped | `u`, `off`, `open`, `reads` (the caller's counter), `run`, `say` (the caller's message line), `labelId` (the new key's field's id), `help` (the group's ⓘ after Create key, My profile's) |
 | `Identities`, `Changes` | `identities.tsx` | a user's identities at the sign-in providers (a user's panel, My profile): each with what the provider said and Remove; with `changes`, Change of one no sign-in used, a settings form kept by its key, the forms of identities gone or made unchangeable forgotten, and all of them where the box goes off; with `assign`, Assign; `after` what follows the list once read (My profile's Link buttons); `quiet` draws nothing while the list is empty and the caller offers nothing after it (`offer`: My profile's Link buttons, none in the app, where the rows are still named from every provider) | `u`, `off`, `open`, `reads`, `providers` (the enabled ones), `run`, `say`, `title`, `none`, `cls`, `changes` (`key(id)`, `under`, `ui(key)`, `forget(key)`, `show(key)`: the caller's forms and how one is brought into sight), `assign`, `after(list)`, `quiet`, `offer` |
@@ -2256,7 +2258,7 @@ Refresh now a `MenuItem` with `keepOpen` and its times as `sub`,
 the certificate's line a `Notice`.
 The logo and the version (in ☰, and in the sign-in card) stay plain,
 around the parts' places and not in them; ↑ is the page's chrome's (`ui/src/chrome/`),
-and the home notice's place is shown and hidden by the plain code (and by `pages.js`),
+and the home notice's place is shown and hidden by the plain code (and by the pages' store, `ui/src/shared/pages.ts`),
 the part drawing inside it.
 The rooms (`ui/src/rooms/`) are the third:
 `index.tsx` draws the House tile's modes and panel in `#house-slot`,
@@ -2529,7 +2531,7 @@ which calls `forgetSession`, the page's part of `logout`,
 and with it `MassimoParts.signedOut`)
 where the user who signs in is not the one who was,
 by `/me`'s user or mode, before the reads that waited for it are sent again.
-Moving inside the page (`pages.js`, the Cube choice) unloads nothing,
+Moving inside the page (the pages' store, the Cube choice) unloads nothing,
 so nothing asks there.
 A part's place among plain siblings is an element of the class `part-slot`,
 which takes no box of its own (`display: contents`),

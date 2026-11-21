@@ -27,12 +27,13 @@ import { focusForm, useForm } from "../shared/forms";
 import { useHelp } from "../shared/help";
 import { Identities } from "../shared/identities";
 import { useLang } from "../shared/lang";
-import { me } from "../shared/me";
+import { me, profileOf } from "../shared/me";
 import { BusyButton } from "../shared/question";
 import { Tokens } from "../shared/tokens";
 import { cancelLink, changePassword, confirmLink, passwordMsg, profileMsg, run, saveName, startLink } from "./send";
 import { type Confirm, NAME_FORM, PASSWORD_FORM, profile, said } from "./store";
 import { showCard } from "../shared/card";
+import { isShown, showView } from "../shared/pages";
 
 /** openForm shows a form of My profile and puts the focus into it, from any page: the personal page shown, its card unfolded. */
 function openForm(key: string): void {
@@ -194,7 +195,7 @@ function Mine({ who }: { who: User }) {
 export function ProfileCard() {
   useLang();
   const m = me.value;
-  const who = m && m.mode === "users" && m.user ? m.user : null;
+  const who = profileOf(m) ? m?.user || null : null;
   return (
     <div class="profile" aria-live="polite">
       {who && <Mine key={who.name} who={who} />}

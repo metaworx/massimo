@@ -23,6 +23,7 @@ import { busyProps, useBusy } from "../shared/question";
 import { msg, saveCube } from "./send";
 import { cubeUI, deviceOf, devices, load } from "./store";
 import { valueText } from "./util";
+import { isShown, showView } from "../shared/pages";
 
 /** Differs is a line of the settings file that says something else than the store, with Take the file's value. */
 function Differs({ c, d }: { c: Cube; d: FileDifference }) {
