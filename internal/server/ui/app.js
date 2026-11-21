@@ -1011,7 +1011,6 @@ function applyLanguage() {
   applyAppearance();
   renderCubeSelect();
   renderMe();
-  renderVersionTitle();
   renderServerSign();
   renderDeviceSwitches();
   renderUsers();

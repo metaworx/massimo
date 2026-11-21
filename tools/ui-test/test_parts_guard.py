@@ -297,6 +297,12 @@ def main_menu(page):
     open_main_menu(page)
 
 
+def main_menu_item(page):
+    """☰ open, the focus moved onto System settings' entry."""
+    main_menu(page)
+    page.locator("#menu-system").focus()
+
+
 def home_notice(page):
     """The second server of run.sh, whose Cube is not connected: the
     only one that shows the notice."""
@@ -668,7 +674,14 @@ REGIONS = (
         View("every Cube's problem list open", header_problems),
         View("the pile's list open after Refresh now", pile_refreshed),
     )),
-    Region("main-menu", ("header.top nav.nav",), (View("☰ open", main_menu),)),
+    # ☰ and the page buttons are parts (AP UiParts, Block 14), drawn from
+    # who is in as well: who is in read again (loadMe) is a source of
+    # theirs; both views passed on the page before the move, where nothing
+    # drew ☰ again.
+    Region("main-menu", ("header.top nav.nav",), (
+        View("☰ open", main_menu),
+        View("☰ open, the focus on an entry", main_menu_item, "#menu-system"),
+    ), sources=("loadMe()",)),
     Region("home-notice", ("#home-notice",), (View("on the second server, its Cube not connected", home_notice),)),
     Region("rooms", ("#rooms",), (
         View("a tile's ⋯ menu open", rooms_menu),
@@ -992,6 +1005,7 @@ GUARD_JS = r"""() => {
       case "refreshAges()": return refreshAges();
       case "pollLog()": return pollLog();
       case "applyStoredSettings()": return applyStoredSettings();
+      case "loadMe()": return loadMe();
     }
     throw new Error("the guard knows no data source " + source);
   }

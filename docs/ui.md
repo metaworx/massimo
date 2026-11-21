@@ -275,6 +275,8 @@ The compacted header has **↑**, back to the top, first of the page buttons: �
   ☰ carries an amber triangle or a red cross at its corner,
   on a disc of the card's colour, so that it shows on the highlighted ☰ too,
   and the sheet of its Log entry turns amber or red, both named with the count.
+  Open, it stays open when data comes in and when who is in is read again,
+  the focus where it was.
 - The settings pages, Cube settings, System settings, Maintenance and System info,
   each have a row kept under the header, and in it, in the title's place,
   a button for each of them the role may open, with its icon and its name,
@@ -2039,10 +2041,10 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `Island` | `island.tsx` | a plain piece inside a part: an element the part draws empty and plain code fills, again where a key or the language changed | `tag` (div, p, span), `cls`, `keys`, `fill(el)` |
 | `Fold`, `FoldHead` | `fold.tsx` | a details that opens and closes (`detailsPanel`), the toggle of its making not passed on; a panel's head | `id` (the plain markup's id, which a region keeps: System info's two folds), `cls`, `open`, `onToggle(open)`, `summary`, `summaryProps`, `data`, the body as children; `before`, `name`, `mono`, `after` (after the monospaced part, a sign of the thing's state), `badges` |
 | `Dropdown` | `menu.tsx` | a menu that drops down (`dropdown`), with `arrows` its arrow keys (`menuArrows`) and with `focusCurrent` the focus on its current item when it opens (among `arrows`' items, else its list's buttons that are on); a click on any button of its list closes it, as `dropdown()` of `components.js` does for every menu of the page, but on one marked `data-keep-open` (`MenuItem`'s `keepOpen`) | `id`, `cls`, `summaryId`, `summaryCls`, `label` (without it the summary is named by its text), `title` (where the tooltip is not the label), `summary`, `listCls`, `arrows` (a selector of its items), `focusCurrent`, `busy` (the summary turning while a request sent from its list runs), `onClick`, `onOpen` (told each time it opens), `onClose` (told each time it closes), the items as children |
-| `MenuItem` | `menu.tsx` | a menu's button, its icon, label, the icons after it and a grey second line (`menuItem`) | `icon`, `blank`, `label`, `icons`, `sub` (the second line, a text or elements, there whenever given, empty too), `subCls` (its class), `cls`, `value` (its `data-value`), `current`, `disabled`, `busy`, `keepOpen` (a click on it leaves the menu open, for an item whose result shows in the list), `onClick` |
+| `MenuItem` | `menu.tsx` | a menu's button, its icon, label, the icons after it and a grey second line (`menuItem`) | `icon`, `blank`, `label`, `icons`, `sub` (the second line, a text or elements, there whenever given, empty too), `subCls` (its class), `cls`, `value` (its `data-value`), `current`, `disabled`, `busy`, `keepOpen` (a click on it leaves the menu open, for an item whose result shows in the list), `onClick`; `current` "page" for the entry of the page shown (☰'s), `id`, `title`, `aria` (its name for a screen reader), `labelId` and `after` (a mark at its end) where the page names them |
 | `Picker` | `menu.tsx` | a menu that chooses one item, its summary the chosen one (`pickerMenu`) | `id`, `cls`, `summaryId`, `summaryCls`, `entries` (an item `{ value, label, sub, icon, icons, disabled }`, `{ group }` or `{ separator: true }`), `value`, `onPick(value)`, `shown` (`{ icon, label, title, aria }`) |
 | `actionRunner`, `fader` | `action.ts` | a request, a reload, and its outcome (`Outcome`, `{ text, ok }`) in the region's message line (`showResult`) or in a part's state that a `ResultLine` draws, a success fading where a fade is given; `fader` is that fade alone, for a result set by other means | `where()`, `set(res)`, `fade` (ms), `reload()`, `bound` (an answer after a sign-out reloads and says nothing, `session.ts`); gives `run(fn, ok, fail)`, `say(text, ok)`; `set`, `ms` |
-| `Icon` | `icon.tsx` | a symbol of the page (`iconEl`) | `symbol`, `cls`, `mark` (the symbol is a mark, which blinks where the style makes it) |
+| `Icon` | `icon.tsx` | a symbol of the page (`iconEl`) | `symbol`, `cls`, `mark` (the symbol is a mark, which blinks where the style makes it), `useId` (its `use` element's id, where the page names it) |
 | `Sign` | `icon.tsx` | a kind of `SIGNS` in a state, its mark blinking (`signEl`) | `kind`, `state` ("", ok, warn, bad, open), `cls`, `blink` (the mark's key), `label` (named for a screen reader, else hidden) |
 | `Mark` | `icon.tsx` | a mark alone (`markEl`) | `state` (warn, bad), `blink` |
 | `CountIcon` | `icon.tsx` | an icon with a number in its corner (`foundCountEl`) | `symbol`, `n`, `cls` |
@@ -2088,6 +2090,7 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `me`, `own`, `meChanged` | `me.ts` | who the page is signed in as, `state.me` as `applyCaps` of `login.js` hands it over at every read of it (`MassimoParts.me`), null from a sign-out on; the token it is signed in with, by which a user's sessions say "this device" and "its key" | `m` |
 | `cardBadges`, `badgesOf`, `BadgeSpec` | `card.ts` | what a section card's head shows at a glance, also while it is folded: a region gives a card's badges by its id from its drawing's effect, `[]` for none, and the page's chrome draws them (`ui/src/chrome/Cards.tsx`) | `id`, `list` of `{ text, kind }` |
 | `showCard`, `wireCards` | `card.ts` | a section card brought into view, unfolded, the focus on its heading's button, kept there for two seconds where its page has just been opened (`instant`); the cards' folds wired once, each kept in this browser (`massimo.fold.<card id>`), set on the skeleton at once | `id`, `instant` |
+| `Brand` | `brand.tsx` | Massimo's logo and small mark from the sprite (`brandMarks` of `components.js`, which draws them over the skeleton's `data-brand`), of which the place's style shows one, hidden from screen readers: ☰'s first row | |
 | `page`, `isShown`, `showView`, `onView`, `mayShow` | `pages.ts` | the page of the main area shown, a signal: a drawing that reads `page.value` follows it, `isShown` asks at that moment and follows nothing (a handler, a reader, a timer), so that no request is sent again at a change of page; showing a page puts it into the address, as a new entry of the history or in place of the current one, and brings each page back at the scroll it was left at; `onView` runs at each showing, on the `viewshown` event; `mayShow` says who may open which, reading who is in; a page with an address of its own (the log's, `pages.js`) hands it over with `ownAddress`; `pages.js` keeps the plain names, and `currentView` | `view`, `address`, `card` |
 | `userPath`, `Run`, `loadTokens`, `revokeToken`, `revokeOwn`, `createKey`, `loadIdentities`, `addIdentity`, `changeIdentity`, `removeIdentity` | `account.ts` | what a user's sessions, keys and identities read and send (`…/users/{name}/tokens`, `…/identities`), for System settings → Users and My profile alike; a change through the caller's runner (`Run`), which reloads what it shows and says how it went in its own line; Revoke of the token in use signs out | `name`, `rest`; `run`, `name`, and what each sends |
 | `Tokens` | `tokens.tsx` | a user's sessions and keys (a user's panel, My profile): each with Revoke, "this device" and "its key" by `own`, Create key and the key just made, shown once by the read that follows and kept in the part's own state alone; read when its place opens and again at each change of the caller's counter while open; an answer after a sign-out dropped | `u`, `off`, `open`, `reads` (the caller's counter), `run`, `say` (the caller's message line), `labelId` (the new key's field's id), `help` (the group's ⓘ after Create key, My profile's) |
@@ -2095,7 +2098,7 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `FileButton` | `file.tsx` | a button that opens the browser's choice of a file of the types it accepts (`filePicker`), the same file again too | `id` (the button's), `cls`, `label`, `accept`, `off`, `inputId` and `inputLabel` (the input's id and its name in the page's language: the Appearance card's Import…), `onFile(file)` |
 | `Adder` | `adder.tsx` | the end of a list that adds an item: the new item's form in its place while shown, the button that shows it hidden meanwhile, the focus in the form's first field when it comes and back on the button when it goes (Users, Roles, Sign-in providers) | `id` (the button's), `formId` (the form's place), `label`, `shown`, `set(shown)`, the form as children |
 | `KvList`, `CountList` | `kv.tsx` | a list of facts, a name and its value each (`kvList`), every fact given, the caller leaving out those it does not show; a list of counts by name, sorted, in columns (`countList`) | `facts` (`[name, value, mono]`); `counts` |
-| `Copy`, `CopyIcon`, `CopyPair` | `copy.tsx` | a text that copies itself, a copy icon (`copyEl`, `copyIcon`); something with its copy icon after it, a text or a link (an address served: an integration's, System info's) | `text`, `value` (what it copies, where it is not the text), `label` (named "Copy …"), `name` (its whole name in its place: the server's version), `icon`, `cls`; `get`, `label`; `get`, `label`, what it follows as children |
+| `Copy`, `CopyIcon`, `CopyPair` | `copy.tsx` | a text that copies itself, a copy icon (`copyEl`, `copyIcon`); something with its copy icon after it, a text or a link (an address served: an integration's, System info's) | `text`, `value` (what it copies, where it is not the text), `label` (named "Copy …"), `name` (its whole name in its place: the server's version), `icon`, `cls`, `id`; `get`, `label`; `get`, `label`, what it follows as children |
 | `Link` | `link.tsx` | a link in a tab of its own, the text alone for a url that is not http(s) (`linkEl`) | `url`, `text`, `cls` |
 | `DeviceIds` | `device.tsx` | a device's serial and radio address (`deviceIds`) | `serial`, `rf`, `always` |
 | `cubePath` | `path.ts` | a Cube's path in the API, which every part's request about a Cube starts from, Backup and restore's too; `base()` of `app.js` is its next user, with its block | `serial` |
@@ -2256,8 +2259,9 @@ and after each measure places an open list of the row in the window again (`plac
 The choice is a `Picker`, the problems a `Problems` with `lead`, `always` and `head`,
 Refresh now a `MenuItem` with `keepOpen` and its times as `sub`,
 the certificate's line a `Notice`.
-The logo and the version (in ☰, and in the sign-in card) stay plain,
-around the parts' places and not in them; ↑ is the page's chrome's (`ui/src/chrome/`),
+The logo and the sign-in card's version stay plain,
+around the parts' places and not in them;
+☰ with its version, and ↑, are the page's chrome's (`ui/src/chrome/`),
 and the home notice's place is shown and hidden by the plain code (and by the pages' store, `ui/src/shared/pages.ts`),
 the part drawing inside it.
 The rooms (`ui/src/rooms/`) are the third:
@@ -2386,17 +2390,24 @@ longer gives;
 at a sign-out, and for another user after a 401 (`MassimoParts.signedOut`),
 every list, panel, new item's form and message is forgotten.
 The page's chrome says where they are unsaved (`ui/src/chrome/`, AP UnsavedMarks
-Block 5), a region of its own drawn once as `parts.js` loads,
-since the chrome is plain until Block 14 and the log's mark until Block 11:
+Block 5), a region of its own drawn once as `parts.js` loads:
 a section's pill in its `span.section-pill` beside the badges (`Cards.tsx`),
 the forms it shows the beginnings of their keys in `data-forms`, its entry's name
 the text key in `data-title`;
-a menu item's disk in its `span.menu-item-mark` with its `data-forms`
-(System settings': `users roles providers integrations`; Cube settings': `cube`;
-Personal settings': `profile scheme`);
-☰'s mark in `#nav-menu-mark`, the worse of the log's, which `renderLogSign` of `log.js`
+a ☰ entry's disk after its name (`Menu.tsx`, the forms of each page in `chrome/pages.ts`:
+System settings' `users roles providers integrations`; Cube settings' `cube`;
+Personal settings' `profile scheme`);
+☰'s mark at its corner, the worse of the log's, which `renderLogSign` of `log.js`
 hands it as `MassimoParts.chrome.log(count, tone)`,
-and the forms' of every menu item (`unsavedTone`), with ☰'s name and tooltip.
+and the forms' of every entry (`unsavedTone`), with ☰'s name and tooltip.
+☰ and the header's page buttons are the chrome's too (AP UiParts Block 14,
+`ui/src/chrome/Menu.tsx`), drawn into the header's `nav#nav`:
+↑, Rooms and ☰, its first row Massimo's mark (the shared `Brand`) and the server's
+version, which `header.js` hands it as `MassimoParts.chrome.version(v)`,
+and its entries from the pages' store (`ui/src/shared/pages.ts`) and who is in
+(`ui/src/shared/me.ts`), worded by `chrome/me.ts` as the personal page's row words it:
+Sign out or Forget key, and whose Personal settings they are;
+in the app Select server, by `appConnect` of `login.js`, and Sign out by its `logout`.
 My settings (`ui/src/prefs/`, AP UiParts Block 13) draws their rows into
 `#prefs-rows` as `parts.js` loads, before `init` applies the settings, and
 registers `prefs` (`render`), which `prefs.js` calls as `renderDeviceSwitches`

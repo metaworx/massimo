@@ -113,9 +113,8 @@ function fitSettingsPages() {
   for (const p of SETTINGS_PAGES) fitPageTabs($(p.section));
 }
 
-// initPages wires the pages and the main menu: the header's Rooms
-// button, the menu's items, which it marks at every page shown, each
-// settings page's switch, back and forward, and the log's address of its own, which the store reads and
+// initPages wires the pages: each settings page's switch, back and
+// forward, and the log's address of its own, which the store reads and
 // writes and tells when the log is shown (ui/src/shared/pages.ts).
 function initPages() {
   MassimoParts.pages.ownAddress("log", {
@@ -134,28 +133,8 @@ function initPages() {
       logLoadUsers();
     },
   });
-  $("view-tiles").addEventListener("click", () => showView("tiles"));
-  for (const [view, id] of Object.entries(MENU_ENTRIES)) $(id).addEventListener("click", () => showView(view));
-  dropdown($("nav-menu"));
-  document.addEventListener("viewshown", () => markButtons(currentView));
   for (const p of SETTINGS_PAGES) pageSwitch($(p.section), p.view, SETTINGS_PAGES, (v) => showView(v)); // components.js
   for (const p of SETTINGS_PAGES) MassimoParts.pages.onView(p.view, fitSettingsPages);
   // back and forward, and a page named in the address bar
   window.addEventListener("popstate", () => showAddress());
-}
-
-// MENU_ENTRIES are the ids of ☰'s entries, by their pages.
-const MENU_ENTRIES = { log: "menu-log", cube: "menu-cube", system: "menu-system", maint: "menu-maint", info: "menu-info", me: "menu-me" };
-
-// markButtons marks the page shown's button current, Rooms filled while
-// it is shown and ☰ while one of its pages is; at every page shown.
-function markButtons(view) {
-  const mark = (el, on) => {
-    if (on) el.setAttribute("aria-current", "page");
-    else el.removeAttribute("aria-current");
-  };
-  $("view-tiles").classList.toggle("active", view === "tiles");
-  mark($("view-tiles"), view === "tiles");
-  for (const [name, id] of Object.entries(MENU_ENTRIES)) mark($(id), view === name);
-  $("nav-menu").querySelector("summary").classList.toggle("active", view in MENU_ENTRIES);
 }

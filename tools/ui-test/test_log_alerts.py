@@ -26,6 +26,10 @@ def alerts_route(page, alerts):
     return asked
 
 
+# ☰'s Log entry's sign in a tone, as wait_until takes it
+SIGN_TONE = "document.querySelector('#menu-log svg').getAttribute('class').includes('tone-%s')"
+
+
 def sign(page, selector):
     """The classes and the symbols of a button's icon."""
     return page.evaluate("""(sel) => {
@@ -47,6 +51,8 @@ def test_log_sign_by_level(page):
         assert page.locator("#nav-menu > summary .mark-sign").count() == 0, "no mark on ☰"
         alerts.append({"id": 900001, "kind": "disconnected", "level": "warn", "cube_serial": "KEQ0000100", "time": "2026-11-14T20:00:00Z"})
         page.evaluate("loadLogAlerts()")
+        # ☰ is a part (AP UiParts, Block 14), drawn after the alerts are read: waited for by what changed
+        assert wait_until(page, SIGN_TONE % "warn", 3), "the entry turns amber"
         s = sign(page, "#menu-log")
         assert "tone-warn" in s["cls"] and s["uses"] == ["#icon-log-small", "#mark-corner-warn"], f"a warning: amber, the triangle ({s})"
         count = page.evaluate("t('nav.logAlerts', {count: 1})")
@@ -60,6 +66,7 @@ def test_log_sign_by_level(page):
         assert disc == [card, "50%"], f"the mark on a disc of the card's colour, readable on the filled ☰: {disc}, card {card}"
         alerts.append({"id": 900002, "kind": "restart", "level": "error", "time": "2026-11-14T20:01:00Z"})
         page.evaluate("loadLogAlerts()")
+        assert wait_until(page, SIGN_TONE % "bad", 3), "the entry turns red"
         s = sign(page, "#menu-log")
         assert "tone-bad" in s["cls"] and s["uses"] == ["#icon-log-small", "#mark-corner-x"], f"an error: red, the cross ({s})"
     finally:
@@ -102,12 +109,13 @@ def test_log_marks(page):
             error_row.locator(".log-mark").click()
             assert json.loads(page.evaluate("localStorage.getItem('massimo.log.seen')"))["lines"] == [older], "the browser keeps the mark"
         assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.log-alert').length === 1", 5), "the error's line marked"
-        assert "tone-warn" in sign(page, "#menu-log")["cls"], "the entry amber"
+        assert wait_until(page, SIGN_TONE % "warn", 3), "the entry amber"
         page.evaluate("loadLogAlerts()")
         assert page.locator("#log-lines .log-line.log-alert").count() == 1, "marked, it stays marked"
 
         page.locator("#log-seen-all").click()
         assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.log-alert').length === 0", 5), "every line marked"
+        assert wait_until(page, "!document.querySelector('#menu-log svg').getAttribute('class').includes('tone-')", 3), "the entry plain again"
         s = sign(page, "#menu-log")
         assert "tone-" not in s["cls"] and page.locator("#log-seen-all").is_hidden(), "the entry plain, Mark all gone"
         assert page.evaluate("logAlerts.seen") == {"all": newer, "lines": []}, "all up to the newest, the line it covers gone"

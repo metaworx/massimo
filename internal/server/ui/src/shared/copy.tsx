@@ -56,13 +56,13 @@ export function CopyPair({ get, label, children }: { get: () => string; label: s
  * copies in place of the text shown; label names what it copies, the
  * text itself without one, as "Copy …"; name, where given, is its whole
  * name in place of that (the server's version, which copies more than it
- * shows).
+ * shows); id is its element's, where the page names it.
  */
-export function Copy({ text, value, label, name, icon, cls }: { text: string; value?: string; label?: string; name?: string; icon?: boolean; cls?: string }) {
+export function Copy({ id, text, value, label, name, icon, cls }: { id?: string; text: string; value?: string; label?: string; name?: string; icon?: boolean; cls?: string }) {
   const named = name || t("copy.what", { what: label || text });
   const get = () => (value === undefined ? text : value);
   const span = (
-    <span class={(cls || "mono") + " copyable"} role="button" tabIndex={0} aria-label={named} title={named} {...copyHandlers(get)}>
+    <span id={id} class={(cls || "mono") + " copyable"} role="button" tabIndex={0} aria-label={named} title={named} {...copyHandlers(get)}>
       {text}
     </span>
   );

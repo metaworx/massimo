@@ -5,100 +5,49 @@
  * @file internal/server/ui/src/chrome/index.tsx
  *
  * The page's chrome (AP UiParts, Block 14), a region of its own, drawn
- * once into its places as parts.js loads, which first hands the pages'
- * store the page's pages (pages.ts, shared/pages.ts): the section cards' badges and
+ * once into its places as parts.js loads: the header's page buttons with
+ * ☰ (Menu.tsx), into the header's nav; the section cards' badges and
  * pills, their folds wired (Cards.tsx, shared/card.ts); the header kept
  * at the top and compacted as the page scrolls, and back to top
- * (scroll.ts, ToTop.tsx); and where it says
- * that settings are unsaved (AP UnsavedMarks, Block 5, UiParts.D188): on
- * ☰ the worse of the log's mark and the unsaved sign, and on a menu item
- * the disk where a page it leads to holds a form unsaved or failed. The
- * menu is plain until a later step of Block 14 and the log's mark is
- * plain until Block 11: they have places of their own here, part-slots
- * the plain code leaves alone, each saying by data-forms which forms it
- * shows, the beginnings of their keys (shared/forms.ts). The log tells
- * its count and tone through MassimoParts.chrome.log (log.js
- * renderLogSign). No region may import another: it knows the forms
- * through shared/forms.ts alone.
+ * (scroll.ts, ToTop.tsx). The pages it shows are the store of
+ * shared/pages.ts, which it first hands the page's pages (pages.ts). The log tells its count and tone through
+ * MassimoParts.chrome.log (log.js renderLogSign, plain until Block 11),
+ * header.js the server's version. No region may import another: it knows
+ * the forms through shared/forms.ts alone.
  */
 
-import { signal } from "@preact/signals";
 import { render } from "preact";
-import { useLayoutEffect, useRef } from "preact/hooks";
 import { type BadgeSpec, cardBadges, showCard, wireCards } from "../shared/card";
-import { unsavedTone } from "../shared/forms";
-import { Mark, Sign } from "../shared/icon";
-import { useLang } from "../shared/lang";
 import { definePages } from "../shared/pages";
 import { register } from "../shared/region";
-import { drawCards, keysOf } from "./Cards";
+import { drawCards } from "./Cards";
+import { Nav } from "./Menu";
 import { CARD_ADDRESSES, PAGE_VIEWS } from "./pages";
-import { stickyHeader, toTop } from "./scroll";
+import { stickyHeader } from "./scroll";
+import { logSign, version } from "./store";
 import { ToTop } from "./ToTop";
 
-/** The log's unseen problems as ☰ shows them: their count and the tone of the worst, "" for none (log.js renderLogSign). */
-const logSign = signal<{ count: number; tone: "" | "warn" | "bad" }>({ count: 0, tone: "" });
-
-/** worse is the worse of two tones: bad over warn over none. */
-function worse(a: "" | "warn" | "bad", b: "" | "warn" | "bad"): "" | "warn" | "bad" {
-  return a === "bad" || b === "bad" ? "bad" : a || b;
-}
-
-/**
- * MenuMark is ☰'s mark, in its summary: the worse of the log's tone and
- * the forms' of keys, the pages ☰ leads to, as a triangle or a cross; and
- * the summary's name and tooltip, which add the log's count and that
- * settings are unsaved.
- */
-function MenuMark({ keys }: { keys: string[] }) {
-  useLang();
-  const ref = useRef<HTMLSpanElement>(null);
-  const log = logSign.value;
-  const forms = unsavedTone(keys);
-  const tone = worse(log.tone, forms);
-  const extra = [log.count ? t("nav.logAlerts", { count: log.count }) : "", forms ? t("problem.unsaved") : ""].filter(Boolean);
-  const label = [t("nav.more"), ...extra].join(", ");
-  const title = [t("nav.moreTitle"), ...extra].join(" · ");
-  // the summary is the menu's, plain until AP UiParts' Block 14: its name and tooltip set from here, its content left alone
-  useLayoutEffect(() => {
-    const sum = ref.current?.closest("summary");
-    if (!sum) return;
-    sum.setAttribute("aria-label", label);
-    sum.title = title;
-  }, [label, title]);
-  return <span ref={ref} class="menu-mark">{tone && <Mark state={tone} blink="log-sign-menu" />}</span>;
-}
-
-/** ItemMark is a menu item's disk, amber while a form of keys is unsaved, red where a save failed; nothing else. */
-function ItemMark({ keys }: { keys: string[] }) {
-  useLang();
-  const tone = unsavedTone(keys);
-  if (!tone) return null;
-  return <Sign kind="disk" state={tone} cls="menu-unsaved" label={t("problem.unsaved")} />;
-}
-
-// drawn once into the places the page has for them; the cards' folds
-// wired; the header kept at the top, and the compacted header's ↑, which
-// is the page's skeleton until the page buttons are parts
+// the pages handed to their store first; drawn once into the places the
+// page has for them; the cards' folds wired; the header kept at the top
 definePages(PAGE_VIEWS, CARD_ADDRESSES);
+const nav = document.getElementById("nav");
+if (nav) render(<Nav />, nav);
 wireCards();
 drawCards();
 stickyHeader();
-document.getElementById("top-btn")?.addEventListener("click", toTop);
 const toTopSlot = document.getElementById("to-top-slot");
 if (toTopSlot) render(<ToTop />, toTopSlot);
-const menu = document.getElementById("nav-menu");
-const items = menu ? [...menu.querySelectorAll(".menu-item-mark[data-forms]")] : [];
-for (const el of items) render(<ItemMark keys={keysOf(el)} />, el);
-const mark = document.getElementById("nav-menu-mark");
-if (mark) render(<MenuMark keys={items.flatMap(keysOf)} />, mark);
 
 /** The functions the plain code calls, MassimoParts.chrome. */
 const chrome = register("chrome", {
-  /** log takes the log's unseen problems, their count and the worst one's tone, for ☰'s mark and name (log.js renderLogSign). */
+  /** log takes the log's unseen problems, their count and the worst one's tone, for ☰'s mark and name and its Log entry (log.js renderLogSign). */
   log(count: number, tone: "" | "warn" | "bad"): void {
     const was = logSign.peek();
     if (was.count !== count || was.tone !== tone) logSign.value = { count, tone };
+  },
+  /** version takes the server's whole version, ☰'s first row (header.js checkVersion). */
+  version(v: string): void {
+    version.value = v;
   },
   /** badges shows a card's badges in its head, by the card's id (cubes.js renderCubesBadges; a part calls cardBadges of shared/card.ts). */
   badges(id: string, list: BadgeSpec[]): void {

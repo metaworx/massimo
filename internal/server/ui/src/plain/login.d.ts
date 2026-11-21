@@ -30,6 +30,8 @@ declare global {
   function roleLabel(key: string, name?: string): string;
   /** The keys of the six default roles, for a role choice that cannot read the roles. */
   const DEFAULT_ROLES: string[];
+  /** In the app, the way back to its servers (Select server); null in a browser. */
+  function appConnect(): (() => Promise<unknown>) | null;
   /** Signs out as Sign out does: the page's dialog first where settings are unsaved, then a session ends and the page forgets who was in. */
   function logout(): Promise<void>;
   /** Reads who the page is signed in as again and applies it. */

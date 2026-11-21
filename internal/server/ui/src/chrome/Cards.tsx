@@ -24,7 +24,7 @@ import { useLang } from "../shared/lang";
 import { kindsLabel, Problems } from "../shared/problems";
 
 /** keysOf are the beginnings of the forms' keys a place names in data-forms, space-separated. */
-export function keysOf(el: Element): string[] {
+function keysOf(el: Element): string[] {
   return (el.getAttribute("data-forms") || "").split(/\s+/).filter(Boolean);
 }
 

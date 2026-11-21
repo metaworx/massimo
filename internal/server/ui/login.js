@@ -152,8 +152,8 @@ function renderOpenBanner() {
 // out does: a session ends, an API key or the token is only forgotten
 // (Forget key, with a key's icon), and an open server or one without
 // authentication has nothing to end and no profile, so the page has My
-// settings and Notifications alone. ☰'s Personal settings names the user
-// in its tooltip, and ☰'s Sign out follows the page's button.
+// settings and Notifications alone. ☰'s Personal settings and Sign out
+// are the chrome's, in the same words (ui/src/chrome/me.ts).
 function renderMe() {
   const me = state.me;
   const line = $("me-line");
@@ -179,15 +179,10 @@ function renderMe() {
   line.textContent = text;
   line.classList.toggle("hidden", !text);
   const keyOnly = !!me && ((me.token && me.token.kind === "api") || me.mode === "token"); // Forget key
-  // the page's button and ☰'s entry alike
-  for (const [id, labelId, iconId] of [["logout-btn", "logout-label", "logout-icon"], ["menu-logout", "menu-logout-label", "menu-logout-icon"]]) {
-    $(labelId).textContent = label || t("me.signOut");
-    $(iconId).setAttribute("href", keyOnly ? "#icon-key" : "#icon-signout");
-    $(id).classList.toggle("hidden", !label);
-  }
-  // ☰'s Personal settings names who is signed in, in its tooltip
-  const who = me && me.user ? (me.user.display_name && me.user.display_name !== me.user.name ? me.user.display_name + " (" + me.user.name + ")" : me.user.name) : "";
-  $("menu-me").title = who ? t("nav.userNamed", { name: who }) : "";
+  // the page's button; ☰'s Sign out and Personal settings' tooltip are the chrome's (ui/src/chrome/me.ts)
+  $("logout-label").textContent = label || t("me.signOut");
+  $("logout-icon").setAttribute("href", keyOnly ? "#icon-key" : "#icon-signout");
+  btn.classList.toggle("hidden", !label);
   $("profile").classList.toggle("hidden", !hasProfile());
   pageBar($("me")); // components.js: the sections menu without My profile where it is hidden
 }
@@ -902,17 +897,14 @@ function initLogin() {
       $(b.dataset.way === "key" ? "login-token" : "login-user").focus();
     });
   }
-  // in the app, back to its servers: at the card's foot, last in the
-  // card's ☰, and in the main ☰ before Sign out
+  // in the app, back to its servers: at the card's foot and last in the
+  // card's ☰ (the main ☰'s is the chrome's, ui/src/chrome/Menu.tsx)
   const toServers = () => {
     const go = appConnect();
     if (go) go().catch(() => {});
   };
   $("login-servers").addEventListener("click", toServers);
   $("login-menu-servers").addEventListener("click", toServers);
-  $("menu-servers").addEventListener("click", toServers);
-  $("menu-servers").classList.toggle("hidden", !appConnect());
-  $("menu-logout").addEventListener("click", logout);
   $("setup-form").addEventListener("submit", createOwner);
   checkOwnerName = watchName($("setup-user"), $("setup-name-msg"), () => []);
 }

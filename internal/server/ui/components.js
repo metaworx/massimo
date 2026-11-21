@@ -935,7 +935,10 @@ function pageBar(page) {
 
 // BRAND_PARTS are the parts of Massimo's mark in the sprite
 // (ui/brand/brand.svg, make ui-brand, tools/brand/README.md), each with
-// the class that colours it (ui/brand/brand.css): the cover first.
+// the class that colours it (ui/brand/brand.css): the cover first. The
+// parts draw the mark with a copy of their own (ui/src/shared/brand.tsx):
+// brandMarks draws it over the skeleton's data-brand, which connect.html
+// has too, and the connect page loads no parts.js.
 const BRAND_PARTS = [
   ["cover", "brand-cover"],
   ["back", "brand-back"],

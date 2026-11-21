@@ -92,21 +92,30 @@ export function Dropdown({ id, cls, summaryId, summaryCls, label, title, summary
  * after it on its line where given, and under it in grey a second line
  * wherever sub is given, a text or elements, empty too (one that fills
  * once loaded), of the classes menu-item-sub and subCls; cls is the button's class, value its
- * data-value, current marks it aria-current, busy makes it turn while the
- * request it sent runs (busyProps); keepOpen leaves its menu open after
- * a click on it (data-keep-open, which dropdown of components.js reads),
- * for an item whose result shows in the list itself.
+ * data-value, current marks it aria-current ("page" for the entry of
+ * the page shown, as ☰'s), busy makes it turn while the request it sent
+ * runs (busyProps); keepOpen leaves its menu open after a click on it
+ * (data-keep-open, which dropdown of components.js reads), for an item
+ * whose result shows in the list itself. id, title and aria are the
+ * button's id, tooltip and name for a screen reader where the page names
+ * them (☰'s entries), labelId the label's id, and after what follows the
+ * label on its line, a mark at the item's end.
  */
-export function MenuItem({ icon, blank, label, icons, sub, subCls, cls, value, current, disabled, busy, keepOpen, onClick }: {
+export function MenuItem({ id, icon, blank, label, labelId, icons, after, sub, subCls, cls, title, aria, value, current, disabled, busy, keepOpen, onClick }: {
+  id?: string;
   icon?: ComponentChildren;
   blank?: boolean;
   label: string;
+  labelId?: string;
   icons?: ComponentChildren;
+  after?: ComponentChildren;
   sub?: ComponentChildren;
   subCls?: string;
   cls?: string;
+  title?: string;
+  aria?: string;
   value?: string;
-  current?: boolean;
+  current?: boolean | "page";
   disabled?: boolean;
   busy?: boolean;
   keepOpen?: boolean;
@@ -114,16 +123,18 @@ export function MenuItem({ icon, blank, label, icons, sub, subCls, cls, value, c
 }) {
   const name = icons ? (
     <span class="menu-item-line">
-      <span class="menu-item-label">{label}</span>
+      <span id={labelId} class="menu-item-label">{label}</span>
       <span class="menu-item-icons">{icons}</span>
     </span>
-  ) : <span class="menu-item-label">{label}</span>;
+  ) : <span id={labelId} class="menu-item-label">{label}</span>;
   const b = busyProps(cls || "", !!busy, disabled);
   return (
-    <button type="button" class={b.class || undefined} data-value={value} disabled={b.disabled} aria-busy={b["aria-busy"]}
-      aria-current={current ? "true" : undefined} data-keep-open={keepOpen ? "" : undefined} onClick={onClick}>
+    <button type="button" id={id} class={b.class || undefined} title={title || undefined} aria-label={aria || undefined} data-value={value} disabled={b.disabled}
+      aria-busy={b["aria-busy"]} aria-current={current === "page" ? "page" : current ? "true" : undefined} data-keep-open={keepOpen ? "" : undefined}
+      onClick={onClick}>
       {icon || (blank && <span class="menu-icon-none" />)}
       {sub !== undefined ? <span class="menu-item-text">{name}<span class={subCls ? "menu-item-sub " + subCls : "menu-item-sub"}>{sub}</span></span> : name}
+      {after}
     </button>
   );
 }
