@@ -5,8 +5,10 @@
 so the test server never restarts."""
 import json
 
+import pytest
+
 from conftest import TOKEN, api_call
-from helpers import show_view, wait_until
+from helpers import show_view, wait_held, wait_until
 
 AVAILABLE = '{"available": true, "by": "systemd"}'
 BLOCKED = '{"available": false, "blocked": "no service manager would start this server again"}'
@@ -87,19 +89,43 @@ def test_restart_follows_the_server_back(page):
     page.unroute("**/api/v1/restart")
 
 
+@pytest.mark.clock
 def test_restart_lists_what_waits(page):
     """The settings of the settings file that wait for the next start are
-    listed under the restart, by name, and counted in the card's badge."""
-    posts = []
-    stub_restart(page, '{"available": true, "by": "systemd", "pending": ["MASSIMO_LISTEN", "MASSIMO_TLS"]}', posts)
-    show_view(page, "maint")
-    page.locator("#restart-btn").wait_for(state="visible")
-    want = page.evaluate("t('restart.pending', {names: 'MASSIMO_LISTEN, MASSIMO_TLS'})")
-    assert wait_until(page, f"document.getElementById('restart-pending').textContent === {json.dumps(want)}", 5), \
-        "what applies at the next restart"
-    badge = page.evaluate("tn('maint.badge.pending', 2)")
-    assert page.locator("#sys-maint .section-badges").inner_text() == badge, "counted in the card's badge"
-    page.unroute("**/api/v1/restart")
+    listed under the restart, by name, and counted in the card's badge,
+    which the card's head shows in the same turn as the list. The
+    restart's read is held until the rest of Maintenance is drawn, so
+    that its answer is the last thing drawn, and the clock is paused, so
+    that no frame of the page's comes between the list and the read of
+    the head: a badge given a frame later, as it was, is not there yet
+    (CI, 2026-11-21, read the head empty)."""
+    answer = '{"available": true, "by": "systemd", "pending": ["MASSIMO_LISTEN", "MASSIMO_TLS"]}'
+    held, let_go = [], []
+
+    def restart(route):
+        """The first GET held until the test lets it go, the others answered."""
+        if held or route.request.method != "GET":
+            route.fulfill(status=200, content_type="application/json", body=answer)
+        else:
+            held.append(route)
+    page.route("**/api/v1/restart", restart)
+    page.clock.pause_at(page.evaluate("Date.now()") + 1000)
+    try:
+        show_view(page, "maint")
+        assert wait_held(page, held), "Maintenance reads the restart"
+        assert wait_until(page, "document.getElementById('interval-poll-text').textContent.length > 0", 5), "the rest of it drawn"
+        let_go.append(1)
+        held[0].fulfill(status=200, content_type="application/json", body=answer)
+        want = page.evaluate("t('restart.pending', {names: 'MASSIMO_LISTEN, MASSIMO_TLS'})")
+        assert wait_until(page, f"document.getElementById('restart-pending').textContent === {json.dumps(want)}", 5), \
+            "what applies at the next restart"
+        badge = page.evaluate("tn('maint.badge.pending', 2)")
+        assert page.locator("#sys-maint .section-badges").inner_text() == badge, "counted in the card's badge, in the same turn"
+    finally:
+        if held and not let_go:
+            held[0].fulfill(status=200, content_type="application/json", body=answer)
+        page.clock.resume()
+        page.unroute("**/api/v1/restart")
 
 
 def test_reload_settings(page):

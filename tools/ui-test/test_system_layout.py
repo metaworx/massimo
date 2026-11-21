@@ -4,7 +4,7 @@
 their order, the sections menu and no row of
 section buttons, folding kept in the browser, back to top, the columns
 where there is room, and a Cube's panel in two columns."""
-from helpers import named_buttons, scroll_settled, scroll_width, show_view, wait_until
+from helpers import ApiReads, named_buttons, scroll_settled, scroll_width, show_view, wait_until
 
 CARDS = ["sys-cubes", "sys-users", "sys-providers", "sys-integrations", "sys-roles", "sys-caps", "sys-backup"]
 MAINT_CARDS = ["sys-software", "sys-maint"]  # Maintenance's page (AP GlobalMenu, Block 4)
@@ -141,8 +141,13 @@ def test_header_and_page_bar_stay(page, case):
     """Scrolled, the header and System settings' row stay at the top, the
     header compacted (its row as it was, its fold too); the sections menu
     marks the card in view and brings the one chosen under the row."""
+    reads = ApiReads(page)
     show_view(page, "system")
     assert wait_until(page, "document.querySelectorAll('.role-panel').length >= 6", 5), "the roles are listed"
+    # every card's data in before the height is taken: Integrations' line
+    # on why the server does not look on the LAN comes with its own answer
+    # (api/v1/integrations/found), which may come after the roles
+    assert reads.answered(), f"every read of System settings answered: {[r.url for r in reads.open]}"
     tall = page.evaluate("document.documentElement.scrollHeight")
     page.evaluate("document.getElementById('sys-backup').scrollIntoView({block: 'start'})")
     assert wait_until(page, "document.body.classList.contains('scrolled')", 3), "the page counts as scrolled"

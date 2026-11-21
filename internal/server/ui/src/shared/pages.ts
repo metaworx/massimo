@@ -16,7 +16,9 @@
  * the personal page at a card by the card's own (#profile, #prefs,
  * #notify, the addresses of the pages they were), and a page with an
  * address of its own (the log's choices, ui/src/log/) through what it
- * hands over (ownAddress), so that a reload or a link opens it again as
+ * hands over (ownAddress), a card's with what its address holds after
+ * the "?" through what its region hands over (readCardAddress, My
+ * profile's key to mark), so that a reload or a link opens it again as
  * chosen and the browser's back and forward move between the pages. Each
  * page comes back at the scroll it was left at. The pages are the page's
  * skeleton, shown and hidden here by the ids the page's chrome hands over
@@ -86,6 +88,27 @@ export function ownAddress(view: string, a: OwnAddress): void {
   owned[view] = a;
 }
 
+/** What the cards with addresses read of an address after its "?", by the card's id. */
+const cardReads: Record<string, (q: URLSearchParams | null) => void> = {};
+
+/**
+ * readCardAddress hands over how a card with an address of its own reads
+ * what follows the address's "?" (My profile's key to mark,
+ * profile/index.tsx): at every address the store reads (showAddress),
+ * before the page is shown, with what follows the "?" where the address
+ * names the card, null where it names another place; the address is then
+ * written again as the card's alone.
+ */
+export function readCardAddress(card: string, read: (q: URLSearchParams | null) => void): void {
+  cardReads[card] = read;
+}
+
+/** queryOf is what an address holds after its "?", nothing where it has none. */
+function queryOf(hash: string): URLSearchParams {
+  const i = hash.indexOf("?");
+  return new URLSearchParams(i < 0 ? "" : hash.slice(i + 1));
+}
+
 /** isShown reports whether a page is the one shown, at this moment: a drawing that follows the page reads page.value. */
 export function isShown(view: string): boolean {
   return page.peek() === view;
@@ -113,13 +136,17 @@ export function setAddress(hash: string, how?: string): void {
 
 /**
  * showAddress shows the page the address names, a page with an address
- * of its own with the choices it holds, at the start and on back and
- * forward; the address is written again in place, a value dropped.
+ * of its own with the choices it holds, a card with what its address
+ * holds after the "?" (readCardAddress), each card told of every address,
+ * at the start and on back and forward; the address is written again in
+ * place, a value dropped, and a card's after its "?".
  */
 export function showAddress(): void {
   const view = viewOfHash(location.hash);
   if (owned[view]) owned[view].read(location.hash);
-  showView(view, "replace", cardOf(location.hash)?.card);
+  const c = cardOf(location.hash);
+  for (const [card, read] of Object.entries(cardReads)) read(c && c.card === card ? queryOf(location.hash) : null);
+  showView(view, "replace", c?.card);
 }
 
 /**

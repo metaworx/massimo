@@ -15,7 +15,7 @@
  */
 
 import type { Ref } from "preact";
-import { useEffect } from "preact/hooks";
+import { useLayoutEffect } from "preact/hooks";
 import type { Setting, UpdateEntry, UpdateInfo, UpdateStatus } from "../api";
 import { hid } from "../shared/cls";
 import { Select } from "../shared/field";
@@ -134,7 +134,7 @@ export function Software() {
   const badgeText = !known ? "" : u.available ? t("update.badge.available", { version: u.latest || "" }) : t("update.badge.upToDate");
   const badgeKind = u && u.available ? "warn" : "ok";
   // the card's badge, also while it is folded: up to date, or what is out
-  useEffect(() => {
+  useLayoutEffect(() => {
     cardBadges("sys-software", badgeText ? [{ text: badgeText, kind: badgeKind }] : []);
   }, [badgeText, badgeKind]);
   const failed = data.failed;

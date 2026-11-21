@@ -16,7 +16,7 @@
  * runs. The owner has every capability and cannot be changed.
  */
 
-import { useEffect, useState } from "preact/hooks";
+import { useLayoutEffect, useState } from "preact/hooks";
 import type { Role } from "../api";
 import { capLabel } from "../model/cap";
 import { Adder } from "../shared/adder";
@@ -165,7 +165,7 @@ export function RolesCard() {
   const list = roles.list || [];
   const count = roles.loaded ? tn("roles.badge.count", list.length) : "";
   // the card's head counts them, in the page's language, once they are read; nothing once forgotten
-  useEffect(() => {
+  useLayoutEffect(() => {
     cardBadges("sys-roles", count ? [{ text: count, kind: "mode" }] : []);
   }, [count]);
   return (
@@ -202,7 +202,7 @@ export function CapsCard() {
   const off = caps.filter((c) => c.disabled).length;
   const badge = !roles.loaded ? "" : off ? tn("roles.badge.off", off) : t("roles.badge.allOn");
   // the card's head says how many are off, in the page's language, once they are read; nothing once forgotten
-  useEffect(() => {
+  useLayoutEffect(() => {
     cardBadges("sys-caps", badge ? [{ text: badge, kind: off ? "warn" : "ok" }] : []);
   }, [badge, off]);
   return (

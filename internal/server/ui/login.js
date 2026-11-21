@@ -312,8 +312,8 @@ function appConnect() {
 // login.status() answers: the fingerprint first among the ways to sign
 // in where a key is kept, the switch that keeps one where the phone can
 // and none is kept, the notice where the address takes no key (plain
-// HTTP outside the home network), and "Select server" at the card's foot
-// and last in its ☰. Nothing of it in a browser.
+// HTTP outside the home network), and "Select server…" last in its ☰.
+// Nothing of it in a browser; the forms' Cancel is initLogin's.
 async function renderAppLogin() {
   const login = appLogin();
   let st = null;
@@ -338,7 +338,6 @@ async function renderAppLogin() {
   $("login-keep-row").classList.toggle("hidden", !offer);
   if (!offer) $("login-keep").checked = false;
   const servers = !appConnect();
-  $("login-servers-row").classList.toggle("hidden", servers);
   $("login-menu-servers").classList.toggle("hidden", servers);
   $("login-menu-servers-sep").classList.toggle("hidden", servers);
 }
@@ -361,11 +360,17 @@ async function renderSetupKeep() {
   if (!offer) $("setup-keep").checked = false;
 }
 
-// chooseWay shows the form of a way to sign in, name or key, and marks
-// its button pressed (the row of the card, partials/login.html).
+// wayField is the id of the first field of a way's form, password or
+// key, which takes the focus when the form is shown.
+function wayField(way) {
+  return way === "key" ? "login-token" : "login-user";
+}
+
+// chooseWay shows the form of a way to sign in, password or key, and
+// marks its button pressed (the row of the card, partials/login.html).
 function chooseWay(way) {
   for (const b of document.querySelectorAll("#login-ways .login-way[data-way]")) b.setAttribute("aria-pressed", String(b.dataset.way === way));
-  $("login-form").classList.toggle("hidden", way !== "name");
+  $("login-form").classList.toggle("hidden", way !== "password");
   $("login-key-form").classList.toggle("hidden", way !== "key");
 }
 
@@ -410,7 +415,8 @@ async function keepLogin() {
 // askLogin opens the sign-in dialog and resolves true once a session or
 // a key is in, false when the dialog was dismissed. While it is open the
 // page is signed out: the body's class signed-out hides all of it but the
-// dialog, which holds the logo and the version.
+// dialog, which holds the logo and the version, centred in the window
+// (style.css).
 function askLogin() {
   if (loginPromise) return loginPromise;
   notSentNow = false; // app.js: only the writes this sign-in answers
@@ -429,7 +435,8 @@ function askLogin() {
     $("login-ways").classList.remove("hidden");
     // the API key's form where the server was seen open, its owner of
     // MASSIMO_API_TOKEN having no password
-    chooseWay(sawOpen ? "key" : "name");
+    const way = sawOpen ? "key" : "password";
+    chooseWay(way);
     showResult(error, "", false);
     // a provider's refusal under the providers' buttons
     showResult($("login-providers-error"), "", false);
@@ -512,7 +519,7 @@ function askLogin() {
     // rest of the document inert, where a password manager draws its
     // choices, which then take no click.
     dlg.show();
-    $("login-user").focus();
+    $(wayField(way)).focus(); // the field of the form shown
   });
   return loginPromise;
 }
@@ -839,21 +846,26 @@ function initLogin() {
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") flushPreferences();
   });
-  // the ways to sign in: the name's form or the key's, the one chosen in focus
+  // the ways to sign in: the password's form or the key's, the one chosen in focus
   for (const b of document.querySelectorAll("#login-ways .login-way[data-way]")) {
     b.addEventListener("click", () => {
       chooseWay(b.dataset.way);
-      $(b.dataset.way === "key" ? "login-token" : "login-user").focus();
+      $(wayField(b.dataset.way)).focus();
     });
   }
-  // in the app, back to its servers: at the card's foot and last in the
-  // card's ☰ (the main ☰'s is the chrome's, ui/src/chrome/Menu.tsx)
+  // in the app, back to its servers: last in the card's ☰, and as Cancel
+  // beside each form's button that signs in, the first owner's too (AP
+  // MobileApp, D54-C); none in a browser (the main ☰'s is the chrome's,
+  // ui/src/chrome/Menu.tsx)
   const toServers = () => {
     const go = appConnect();
     if (go) go().catch(() => {});
   };
-  $("login-servers").addEventListener("click", toServers);
   $("login-menu-servers").addEventListener("click", toServers);
+  for (const id of ["login-cancel", "login-key-cancel", "setup-cancel"]) {
+    $(id).addEventListener("click", toServers);
+    $(id).classList.toggle("hidden", !appConnect());
+  }
   $("setup-form").addEventListener("submit", createOwner);
   checkOwnerName = watchName($("setup-user"), $("setup-name-msg"), () => []);
 }

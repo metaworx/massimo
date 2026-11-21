@@ -16,7 +16,7 @@
  * Save.
  */
 
-import { useEffect, useState } from "preact/hooks";
+import { useLayoutEffect, useState } from "preact/hooks";
 import type { Provider } from "../api";
 import { Adder } from "../shared/adder";
 import { Badge, ResultLine } from "../shared/badge";
@@ -205,7 +205,7 @@ export function ProvidersCard() {
   const callback = pageBase() + "api/v1/login/oidc/callback";
   const count = providers.loaded && list.length ? String(list.length) : "";
   // the card's head counts them, once they are read; nothing for none or once forgotten
-  useEffect(() => {
+  useLayoutEffect(() => {
     cardBadges("sys-providers", count ? [{ text: count, kind: "mode" }] : []);
   }, [count]);
   return (

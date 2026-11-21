@@ -275,6 +275,9 @@ hence `failed_checks_forgotten`.
   focus in the form, ☰ the mark and its System settings the disk, red after a failed
   save and the worse of it and the log's warning; Reset clears them;
   a user gone from the server forgets its form;
+  a new user's, role's and provider's form takes the focus in its first field as it
+  is drawn, and what is typed at once in a later field stays there, under the paused
+  clock;
   a capability refused for every role shows as stored;
   a Cube settings draft marks ☰ and its Cube settings (D24);
   a pill's item unfolds a folded card and puts the focus in the form;
@@ -438,12 +441,21 @@ hence `failed_checks_forgotten`.
   a user's Remove asks in the panel, Keep gives the focus back to Remove,
   and a double click on Yes sends one DELETE and says it worked.
 - `test_login.py`, in a fresh browser context without the stored token:
-  the sign-in dialog opens, refuses a wrong password, signs in as the operator,
+  the sign-in dialog opens in the middle of the window, its title centred,
+  refuses a wrong password, signs in as the operator,
   who sees the tiles but neither Users, Roles nor Cubes,
   and is named in the 👤 menu, whose Sign out brings the dialog back and
   forgets the token;
   a sign-in at the page's start, and again after Sign out,
-  starts the page once: one stream ticket and one read of `/me` each.
+  starts the page once: one stream ticket and one read of `/me` each;
+  the row "Password | API key" with the card's ☰ at its end is on one line,
+  each button's text on one line,
+  its group named "Sign in with" for a screen reader alone;
+  a browser has no Cancel;
+  My profile opened at `#profile?key=<id>` (`test_profile_marks_a_key`)
+  marks that key and scrolls a row below the first screen into view,
+  marks nothing for an id that is not one of the user's keys,
+  and nothing once the address or the page shown changes.
 - `test_preferences.py`, the settings that follow the user:
   the poll and the scheme set in one browser reach the server and a fresh
   browser with the same token,
@@ -567,9 +579,20 @@ hence `failed_checks_forgotten`.
   save the biometric switch and Remove asks in place;
   discovery offers a server not in the list and moves a saved one's LAN address;
   the card of the server on the phone starts and stops it;
+  Turn off, Forget all and Remove say what they revoked, their toasts naming
+  the keys that stay valid, left or on the phone alone;
+  Remove turns a kept login off first;
+  a key left shows in its server's settings with Show in My profile,
+  which opens `<address>#profile?key=<id>`,
+  Remove warns of it, and a session found there takes its line away;
   a browser without the bridge sees the line saying the page is the app's;
   and the server's page in the app takes its token from the bridge,
-  keeps none in the browser, and hands a sign-in and a sign-out to the bridge.
+  keeps none in the browser, and hands a sign-in and a sign-out to the bridge;
+  its sign-in card has Cancel left of each Sign in and of Create the owner,
+  and "Select server…" last in its ☰, each calling `connect()`;
+  with a login kept, the row with the fingerprint is on one line at 390 px
+  in all six languages, the card centred,
+  and the fingerprint's spinner turns inside its button in the icon's place.
   axe-core (`axe-playwright-python`) finds no violation on the connect page
   in each state the tests open.
 - `test_notifications.py`, 👤 → Notifications:

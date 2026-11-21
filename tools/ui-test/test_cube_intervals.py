@@ -39,12 +39,12 @@ def test_poll_interval_choice(page, case):
         assert stored.get("in_effect") == "10s", "in effect only at the next start"
         assert page.locator("#interval-poll-text").inner_text() != before, "the line says the change waits for the restart"
         assert wait_until(page, "document.querySelector('#sys-maint .section-badges').textContent.length > 0", 5), "counted in the card's head"
-        assert badges(page) != head, "the head counts one more"
+        assert wait_until(page, "document.querySelector('#sys-maint .section-badges').innerText !== %r" % head, 5), "the head counts one more"
         sel.select_option("10")
         # the line drawn from the PUT's answer: the save has answered
         assert wait_until(page, "document.querySelector('#interval-poll-text').textContent === %r" % before, 5), "the line as at first"
         assert setting("poll_interval").get("set") is False, "the default stored as none"
-        assert badges(page) == head, "the head as at first"
+        assert wait_until(page, "document.querySelector('#sys-maint .section-badges').innerText === %r" % head, 5), "the head as at first"
         named_buttons(page, "Maintenance")
         assert scroll_width(page) <= case.width, "no horizontal scroll on Maintenance"
     finally:

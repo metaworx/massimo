@@ -14,7 +14,7 @@
  * backups kept.
  */
 
-import { useEffect } from "preact/hooks";
+import { useLayoutEffect } from "preact/hooks";
 import { mounter, register } from "../shared/region";
 import { CubeBackup, keptText, SystemBackups } from "./Backups";
 import { type RestoreEvent, boxUI, forgetBackups, load, of, refreshBackups, restoreEvent, resynced } from "./store";
@@ -32,7 +32,7 @@ function System() {
   load.useLoad();
   const count = systemCount();
   // the card's head counts every Cube's backups
-  useEffect(() => {
+  useLayoutEffect(() => {
     cardBadges("sys-backup", count ? [{ text: count, kind: "mode" }] : []);
   }, [count]);
   return <SystemBackups />;
@@ -43,7 +43,7 @@ function Page() {
   load.useLoad();
   const count = state.serial ? keptText(state.serial) : "";
   // the card's head counts the chosen Cube's backups
-  useEffect(() => {
+  useLayoutEffect(() => {
     cardBadges("cube-backup", count ? [{ text: count, kind: "mode" }] : []);
   }, [count]);
   return <CubeBackup />;

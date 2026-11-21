@@ -11,22 +11,26 @@ import org.json.JSONObject
 import java.io.IOException
 import java.security.GeneralSecurityException
 import java.util.concurrent.Executor
+import java.util.concurrent.RejectedExecutionException
 import javax.crypto.Cipher
 
 /**
  * Bridge is the native side of `window.massimo` (docs/app.md, contract
- * version 3): it takes the messages of the page's script (res/raw/bridge.js),
+ * version 4): it takes the messages of the page's script (res/raw/bridge.js),
  * checks who sent each by its origin, and answers it. The connect page gets
  * the calls of the server list, the sessions the app holds and the app's
  * settings; a server's page only its own session, its login by fingerprint
  * and the way back to the list. The login's key never reaches a page: the
- * bridge makes and holds it and hands a page the session alone.
+ * bridge makes and holds it and hands a page the session alone. Turn off
+ * and Forget all are the [Revoker]'s, and the keys they leave valid are
+ * [left]'s.
  */
 class Bridge(
     private val host: Host,
     private val servers: ServerStore,
     private val keeper: SessionKeeper,
     private val sessions: Sessions,
+    private val left: KeysLeft,
     private val logins: LoginStore,
     private val keys: KeySource,
     private val api: ServerApi,
@@ -68,6 +72,8 @@ class Bridge(
 
     // The connect page's channel, for the events.
     private var connect: Reply? = null
+
+    private val revoker = Revoker(servers, logins, sessions, left, prober::probe, io, ::forgetLogin)
 
     /** server is the server kept under [id]. */
     fun server(id: String): Server? = servers.get(id)
@@ -124,15 +130,7 @@ class Bridge(
             "hello" -> answer.ok(null)
             "servers" -> background(answer) { JSONArray().apply { servers.list().forEach { put(json(it)) } } }
             "save" -> save(args.optJSONObject(0) ?: throw bad(), answer)
-            "remove" -> {
-                val id = string(args, 0)
-                background(answer) {
-                    servers.remove(id)
-                    sessions.forget(id)
-                    forgetLogin(id)
-                    null
-                }
-            }
+            "remove" -> remove(string(args, 0), args.opt(1) as? String ?: "", answer)
             "session" -> {
                 val s = servers.get(string(args, 0)) ?: throw BridgeException(R.string.err_no_server)
                 val url = string(args, 1)
@@ -177,9 +175,11 @@ class Bridge(
                 background(answer) {
                     val old = servers.get(id)
                     servers.trust(id, fp)
-                    // A login kept for the old certificate opens for nothing else.
-                    if (old != null && !Fingerprint.same(old.fp, fp) && logins.get(id) != null) {
-                        forgetLogin(id)
+                    // A login kept for the old certificate opens for nothing
+                    // else; its key, the same server's, is left to revoke.
+                    val kept = logins.get(id)
+                    if (old != null && !Fingerprint.same(old.fp, fp) && kept != null) {
+                        forgetLeavingKey(old, kept)
                         keeper.move(id, false)
                     }
                     null
@@ -187,20 +187,14 @@ class Bridge(
             }
             "open" -> open(args, answer)
             "forget" -> forget(string(args, 0), args.opt(1) as? String ?: "", answer)
-            "forgetAll" -> background(answer) {
-                for (id in logins.ids()) {
-                    forgetLogin(id)
-                    keeper.move(id, false)
-                }
-                main.post { host.privacy() }
-                null
-            }
+            "forgetAll" -> forgetAll(answer)
             "token" -> {
                 val id = (now ?: throw bad()).id
                 background(answer) { servers.get(id)?.let { sessions.held(it) } }
             }
             "setToken" -> {
-                val id = (now ?: throw bad()).id
+                val o = now ?: throw bad()
+                val id = o.id
                 val token = when (val t = args.opt(0)) {
                     is String -> t.ifEmpty { null }
                     null, JSONObject.NULL -> null
@@ -208,10 +202,22 @@ class Bridge(
                 }
                 if (token != null && token.length > MAX_TOKEN) throw bad()
                 // null forgets it: Sign out, Forget key, and the dead session
-                // the page drops at the server's first 401
-                background(answer) {
-                    servers.get(id)?.let { sessions.put(it, token) }
-                    null
+                // the page drops at the server's first 401. A new session
+                // revokes the keys left there for its user, and gives a login
+                // kept without its key's id that id, once the page has its
+                // answer (Sessions.check).
+                io.execute {
+                    try {
+                        servers.get(id)?.let { sessions.put(it, token) }
+                        answer.ok(null)
+                    } catch (e: Exception) {
+                        answer.fail(e)
+                        return@execute
+                    }
+                    val s = servers.get(id)
+                    if (token != null && s != null && (s.unrevoked.isNotEmpty() || logins.get(id)?.keyId == 0L)) {
+                        runCatching { sessions.check(s, o.url) }
+                    }
                 }
             }
             "login.status" -> {
@@ -255,24 +261,25 @@ class Bridge(
         }
     }
 
-    // open loads a server's address; with {login: true} it logs in by
-    // fingerprint first, and resolves false without opening where the
-    // prompt was dismissed.
+    // open loads a server's address, or My profile's there with a key
+    // marked (`#profile?key=<id>`, contract version 4); with {login: true}
+    // it logs in by fingerprint first, and resolves false without opening
+    // where the prompt was dismissed.
     private fun open(args: JSONArray, answer: Answer) {
         val s = servers.get(string(args, 0)) ?: throw BridgeException(R.string.err_no_server)
         val url = string(args, 1)
-        if (!s.has(url)) throw BridgeException(R.string.err_open_url)
-        val origin = Origins.of(url) ?: throw BridgeException(R.string.err_open_url)
+        val base = s.opening(url) ?: throw BridgeException(R.string.err_open_url)
+        val origin = Origins.of(base) ?: throw BridgeException(R.string.err_open_url)
         val go = {
             answer.ok(true)
-            opened = Opened(s.id, origin, url)
+            opened = Opened(s.id, origin, base)
             host.open(url)
         }
         if (args.optJSONObject(2)?.opt("login") != true) {
             go()
             return
         }
-        fingerprint(s, url, answer) { session -> if (session == null) answer.ok(false) else go() }
+        fingerprint(s, base, answer) { session -> if (session == null) answer.ok(false) else go() }
     }
 
     // fingerprint asks for the fingerprint, opens the server's kept key,
@@ -283,14 +290,14 @@ class Bridge(
     private fun fingerprint(s: Server, url: String, answer: Answer, then: (String?) -> Unit) {
         if (Origins.plainOutside(url)) throw BridgeException(R.string.err_plain)
         val kept = logins.get(s.id) ?: throw BridgeException(R.string.err_no_login)
-        if (!matches(s, kept)) {
-            forgetLogin(s.id)
+        if (!Revoker.matches(s, kept)) {
+            forgetLeavingKey(s, kept)
             throw BridgeException(R.string.err_login_changed)
         }
         val cipher = try {
             keys.decrypter(LoginKey.alias(s.id), kept.iv)
         } catch (e: KeyInvalidated) {
-            forgetLogin(s.id)
+            forgetLeavingKey(s, kept)
             throw BridgeException(R.string.err_key_invalidated)
         }
         biometric.withKey(texts.get(R.string.login_title, s.name), cipher) { c ->
@@ -308,10 +315,10 @@ class Bridge(
                     forgetLogin(s.id)
                     answer.fail(BridgeException(R.string.err_key_refused))
                 } catch (e: GeneralSecurityException) {
-                    forgetLogin(s.id)
+                    forgetLeavingKey(s, kept)
                     answer.fail(BridgeException(R.string.err_key_invalidated))
                 } catch (e: JSONException) {
-                    forgetLogin(s.id)
+                    forgetLeavingKey(s, kept)
                     answer.fail(BridgeException(R.string.err_key_invalidated))
                 } catch (e: IOException) {
                     answer.fail(BridgeException(R.string.err_server, reason(e)))
@@ -378,73 +385,125 @@ class Bridge(
         }
     }
 
-    // forget turns a server's login off (Turn off, AP MobileApp F6): the
-    // key revoked at url with the session the app holds there, without the
-    // prompt, else with the key itself after the prompt once; then the
-    // session signed out and the login forgotten, the prompt or the server
-    // failing or not; the answer says whether the server revoked the key.
+    // forget turns a server's login off (Turn off, AP MobileApp F6), at
+    // url, the address the probe chose: the key revoked with the session the
+    // app holds there, without the prompt, else with the key itself after
+    // the prompt once; then the session signed out and the login forgotten,
+    // the prompt or the server failing or not, a key not revoked left
+    // (Revoker); the answer says whether the server revoked the key.
     private fun forget(id: String, url: String, answer: Answer) {
-        val s = servers.get(id)
-        val kept = logins.get(id)
-        val done = { revoked: Boolean ->
-            io.execute {
-                forgetLogin(id)
-                // Turn off signs out too, the key's session or another
-                if (s != null) sessions.signOut(s, url) else sessions.forget(id)
-                main.post { host.privacy() }
-                answer.ok(JSONObject().put("revoked", revoked))
-            }
-        }
-        if (s == null || kept == null || url.isEmpty() || !s.has(url) || !matches(s, kept)) {
-            done(false)
-            return
-        }
         io.execute {
-            when (runCatching { sessions.revokeWithSession(s, url, kept) }.getOrDefault(Sessions.Revoke.FAILED)) {
-                Sessions.Revoke.REVOKED -> done(true)
-                Sessions.Revoke.FAILED -> done(false)
-                Sessions.Revoke.BY_KEY -> main.post { forgetByKey(s, url, kept, done) }
-            }
-        }
-    }
-
-    // forgetByKey revokes a kept login's key with the key itself, after the
-    // prompt, where no session of the app's can; never over plain HTTP
-    // outside the private ranges. Any refusal of the Keystore forgets the
-    // login all the same.
-    private fun forgetByKey(s: Server, url: String, kept: KeptLogin, done: (Boolean) -> Unit) {
-        if (Origins.plainOutside(url)) {
-            done(false)
-            return
-        }
-        val cipher = try {
-            keys.decrypter(LoginKey.alias(s.id), kept.iv)
-        } catch (e: Exception) {
-            log.warn("turn off: the kept key of ${s.id} does not open (${e.javaClass.simpleName}); forgotten on the phone alone")
-            done(false)
-            return
-        }
-        biometric.withKey(texts.get(R.string.login_off_title, s.name), cipher) { c ->
-            if (c == null) {
-                done(false)
-                return@withKey
-            }
-            io.execute {
-                val revoked = try {
-                    sessions.revokeWithKey(s, url, kept.user, LoginStore.open(c, kept, s.id))
-                } catch (e: Exception) {
-                    log.warn("turn off: the kept key of ${s.id} does not open (${e.javaClass.simpleName}); forgotten on the phone alone")
-                    false
+            try {
+                revoker.turnOff(id, url, byKey) { off ->
+                    main.post { host.privacy() }
+                    answer.ok(JSONObject().put("revoked", off.outcome == Revoker.Outcome.REVOKED).put("left", off.outcome == Revoker.Outcome.LEFT))
                 }
-                done(revoked)
+            } catch (e: Exception) {
+                answer.fail(e)
             }
         }
     }
 
-    // matches reports whether a kept login is still the server's: its node
-    // and its pinned fingerprint as they were when it was kept.
-    private fun matches(s: Server, kept: KeptLogin): Boolean =
-        kept.node == s.node && (Fingerprint.same(kept.fp, s.fp) || (kept.fp.isEmpty() && s.fp.isEmpty()))
+    // remove forgets a server: a kept login is turned off first, at url or
+    // the address that answers, as forget turns it off (AP MobileApp, Block
+    // 14), then the server, its certificate, its session and its login go.
+    // The answer says whether the login's key was revoked (revoked), the
+    // ids of the phone's keys still valid there (keys: its unrevoked, the
+    // login's among them where it could not be revoked), and whether the
+    // login's key went without its id being known (local).
+    private fun remove(id: String, url: String, answer: Answer) {
+        io.execute {
+            val drop = { off: Revoker.Off? ->
+                try {
+                    val keys = servers.get(id)?.unrevoked?.map { it.id } ?: emptyList()
+                    servers.remove(id)
+                    sessions.forget(id)
+                    forgetLogin(id)
+                    main.post { host.privacy() }
+                    answer.ok(
+                        JSONObject()
+                            .put("revoked", off?.outcome == Revoker.Outcome.REVOKED)
+                            .put("keys", JSONArray(keys))
+                            .put("local", off?.outcome == Revoker.Outcome.LOCAL),
+                    )
+                } catch (e: Exception) {
+                    answer.fail(e)
+                }
+            }
+            try {
+                if (logins.get(id) == null) drop(null) else revoker.turnOff(id, url, byKey) { drop(it) }
+            } catch (e: Exception) {
+                answer.fail(e)
+            }
+        }
+    }
+
+    // forgetAll turns every kept login off as forget does, one server after
+    // the other (AP MobileApp, D56-A); the answer names the servers whose
+    // key was revoked and those that keep one (contract version 4).
+    private fun forgetAll(answer: Answer) {
+        io.execute {
+            try {
+                revoker.forgetAll(byKey) { done ->
+                    main.post { host.privacy() }
+                    answer.ok(JSONObject().put("revoked", JSONArray(done.revoked)).put("left", JSONArray(done.left)).put("local", JSONArray(done.local)))
+                }
+            } catch (e: Exception) {
+                answer.fail(e)
+            }
+        }
+    }
+
+    // byKey opens a kept login's key after the prompt for Turn off, Remove
+    // and Forget all, the prompt on the main thread and the rest on io; a
+    // key the Keystore does not open is said in the log and counts as not
+    // opened. Where io takes nothing more, the activity having gone, the
+    // answer is dropped.
+    private val byKey = Revoker.ByKey { s, kept, then ->
+        main.post {
+            val cipher = try {
+                keys.decrypter(LoginKey.alias(s.id), kept.iv)
+            } catch (e: Exception) {
+                log.warn("turn off: the kept key of ${s.id} does not open (${e.javaClass.simpleName}); forgotten on the phone alone")
+                onIo { then(null) }
+                return@post
+            }
+            biometric.withKey(texts.get(R.string.login_off_title, s.name), cipher) { c ->
+                onIo {
+                    if (c == null) {
+                        then(null)
+                        return@onIo
+                    }
+                    val secret = try {
+                        LoginStore.open(c, kept, s.id)
+                    } catch (e: Exception) {
+                        log.warn("turn off: the kept key of ${s.id} does not open (${e.javaClass.simpleName}); forgotten on the phone alone")
+                        null
+                    }
+                    then(secret)
+                }
+            }
+        }
+    }
+
+    // onIo runs [work] on io, and nothing where io takes nothing more.
+    private fun onIo(work: () -> Unit) {
+        try {
+            io.execute(work)
+        } catch (e: RejectedExecutionException) {
+            // the activity went: its pages wait for nothing
+        }
+    }
+
+    // forgetLeavingKey forgets the login kept for [s] whose key stays valid
+    // at the server (the phone no longer opens it, or the certificate was
+    // trusted anew), the key left by its id to revoke with the next session
+    // there (D57-A); not for a server whose node changed, whose key is
+    // another server's.
+    private fun forgetLeavingKey(s: Server, kept: KeptLogin) {
+        if (kept.node == s.node) runCatching { left.add(s.id, kept.user, kept.keyId) }
+        forgetLogin(s.id)
+    }
 
     // forgetLogin forgets the server's kept login and its Keystore key.
     private fun forgetLogin(id: String) {

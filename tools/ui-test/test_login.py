@@ -4,12 +4,14 @@
 token, as the operator run.sh creates (password op-pass). A page error
 fails the test (the guard); the console is not watched, since the
 page's first requests without a token are refused on purpose."""
-from conftest import URL, api_call
-from helpers import named_buttons, open_personal_page, show_view, sign_out, wait_until
+from conftest import TOKEN, URL, api_call
+from helpers import (assert_login_card_centred, assert_login_row, frames, named_buttons, open_personal_page, scroll_settled, show_view,
+                     sign_out, wait_until)
 
 
 def test_sign_in_and_out(new_context, case, watch, guard):
-    """The sign-in dialog opens without a token and refuses a wrong
+    """The sign-in dialog opens without a token, in the middle of the
+    window, its title centred, and refuses a wrong
     password, and two submits send one sign-in; the operator signs in,
     sees the tiles and no System settings →
     Users, Roles or Cubes; the 👤 menu names the operator, and Sign out
@@ -33,6 +35,7 @@ def test_sign_in_and_out(new_context, case, watch, guard):
     box = page.locator("#login-dialog").bounding_box()
     vw = page.viewport_size["width"]
     assert box["x"] >= 0 and box["x"] + box["width"] <= vw, "the card fits the page's width"
+    assert_login_card_centred(page, "the sign-in card")
     page.locator("#login-user").fill("operator")
     page.locator("#login-password").fill("wrong")
     page.locator("#login-form button[type=submit]").click()
@@ -78,6 +81,7 @@ def test_sign_in_and_out(new_context, case, watch, guard):
     page.locator("#login-menu summary").click()
     assert page.locator("#login-menu-version").inner_text() == version, "and first in the card's ☰"
     page.locator("#login-menu summary").click()
+    assert_login_card_centred(page, "the card after Sign out")
     for sel in ("#cube-menu", ".top-line > .nav", ".pile", "main"):
         assert not page.locator(sel).first.is_visible(), f"{sel} is hidden while signed out"
     page.locator("#login-user").fill("operator")
@@ -124,11 +128,18 @@ def test_sign_in_starts_the_page_once(new_context, case, watch, guard):
     assert wait_until(page, "document.getElementById('login-dialog').open", 5), "signed out at the end"
 
 
+SIGN_IN_WITH = {"en": "Sign in with", "de": "Anmelden mit"}
+PASSWORD = {"en": "Password", "de": "Passwort"}
+
+
 def test_sign_in_ways(new_context, case, watch, guard):
-    """The card's row "Sign in with: Name | API key" (AP MobileApp,
-    D45-A): Name chosen at first, the API key's form in its place once
-    chosen, its field in focus, and Name back; no fingerprint outside the
-    app."""
+    """The card's row "Password | API key ☰" (AP MobileApp, D45-A, D55-A,
+    Block 14): on one line, the card's ☰ at its end, the group named
+    "Sign in with" for a screen reader and no such label in view;
+    Password chosen at first, the API key's form in its place once
+    chosen, its field in focus, and Password back; opened on the API
+    key's form, the focus in its field; no fingerprint and no Cancel
+    outside the app."""
     ctx = new_context()
     page = ctx.new_page()
     guard.page = page
@@ -136,19 +147,37 @@ def test_sign_in_ways(new_context, case, watch, guard):
     page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
     page.goto(URL)
     assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the sign-in dialog opens"
-    name = page.locator("#login-ways .login-way[data-way='name']")
+    password = page.locator("#login-ways .login-way[data-way='password']")
     key = page.locator("#login-ways .login-way[data-way='key']")
-    assert name.get_attribute("aria-pressed") == "true" and key.get_attribute("aria-pressed") == "false", "Name is chosen at first"
+    assert password.inner_text() == PASSWORD[case.lang], "Password, not Name"
+    assert page.locator("#login-ways").get_attribute("role") == "group"
+    assert page.locator("#login-ways").get_attribute("aria-label") == SIGN_IN_WITH[case.lang], "the group named for a screen reader"
+    assert page.get_by_text(SIGN_IN_WITH[case.lang], exact=True).count() == 0, "no label Sign in with in view"
+    assert_login_row(page, "the sign-in in a browser")
+    assert password.get_attribute("aria-pressed") == "true" and key.get_attribute("aria-pressed") == "false", "Password is chosen at first"
     assert page.locator("#login-form").is_visible() and page.locator("#login-key-form").is_hidden()
     assert page.locator("#login-way-fp").is_hidden(), "no fingerprint in a browser"
+    assert page.locator("#login-cancel").is_hidden(), "no Cancel in a browser"
     key.click()
-    assert key.get_attribute("aria-pressed") == "true" and name.get_attribute("aria-pressed") == "false"
+    assert key.get_attribute("aria-pressed") == "true" and password.get_attribute("aria-pressed") == "false"
     assert page.locator("#login-key-form").is_visible() and page.locator("#login-form").is_hidden(), "the API key's form in its place"
     assert page.evaluate("document.activeElement.id") == "login-token", "its field in focus"
+    assert page.locator("#login-key-cancel").is_hidden(), "nor on the API key's form"
     named_buttons(page, "the API key's form")
-    name.click()
-    assert page.locator("#login-form").is_visible() and page.locator("#login-key-form").is_hidden(), "Name back"
+    password.click()
+    assert page.locator("#login-form").is_visible() and page.locator("#login-key-form").is_hidden(), "Password back"
     assert page.evaluate("document.activeElement.id") == "login-user"
+    # The card opened on the API key's form, as where the server was seen
+    # open, puts the focus into its field: in with the key, then out.
+    key.click()
+    page.locator("#login-token").fill(TOKEN)
+    page.locator("#login-key-form button[type=submit]").click()
+    page.wait_for_selector(".room", timeout=10000)
+    page.evaluate("() => { sawOpen = true; }")
+    sign_out(page)
+    assert wait_until(page, "document.getElementById('login-dialog').open", 5), "Forget key brings the card back"
+    assert page.locator("#login-key-form").is_visible() and page.locator("#login-form").is_hidden(), "on the API key's form"
+    assert wait_until(page, "document.activeElement && document.activeElement.id === 'login-token'", 3), "its field in focus"
 
 
 THIS_DEVICE = {"en": "this device", "de": "dieses Gerät"}
@@ -245,7 +274,7 @@ def test_sign_in_menu(new_context, case, watch, guard):
     named_buttons(page, "the sign-in's menu")
     other = "de" if case.lang == "en" else "en"
     page.locator("#login-lang").select_option(other)
-    assert wait_until(page, f"document.querySelector('.login-head h3').textContent === {TITLE[other]!r}", 5), "the card speaks the language chosen"
+    assert wait_until(page, f"document.getElementById('login-title').textContent === {TITLE[other]!r}", 5), "the card speaks the language chosen"
     assert page.evaluate("[document.getElementById('lang-select').value, localStorage.getItem('massimo.lang')]") == [other, other], \
         "My settings' language is the one chosen"
     page.locator("#login-mode").select_option("dark")
@@ -256,3 +285,105 @@ def test_sign_in_menu(new_context, case, watch, guard):
     page.keyboard.press("Escape")
     assert menu.get_attribute("open") is None, "Escape closes the menu"
     ctx.close()
+
+
+def test_profile_marks_a_key(new_context, case, watch, guard):
+    """My profile opened at #profile?key=<id>, as the app opens it for a
+    key of the phone's it could not revoke (AP MobileApp, D57-A): that
+    key's row marked, it alone, and brought from below the first screen
+    into the middle of the window, the key dropped from the address; a
+    key named by a change of the address in the page that runs is marked
+    too. Back and forward to the entries, whose addresses name no key any
+    more, a change to an address that names none, and Personal settings
+    opened again from ☰ mark nothing; nor does an id of no API key of the
+    user's, or one that is no id (the guard: no page error). The operator
+    gets keys enough for the list to run past the window, listed in the
+    order made, removed at the end."""
+    ctx = new_context()
+    page = ctx.new_page()
+    guard.page = page
+    page.set_default_timeout(5000)
+    page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+    page.goto(URL)
+    sign_in(page, "operator", "op-pass")
+    ids = []
+    try:
+        for i in range(24):
+            ids.append(api_call("POST", "api/v1/users/operator/tokens", {"label": f"marked test {i}"})["id"])
+        mine = page.evaluate("state.me.token.id")
+        last = ids[-1]
+        at = ctx.new_page()
+        guard.page = at
+        at.set_default_timeout(5000)
+        at.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+
+        def opened(address):
+            """A fresh load of the page at the address, My profile's keys drawn."""
+            at.goto("about:blank")
+            at.goto(URL + address)
+            at.locator(f"#profile-tokens li[data-id='{last}']").wait_for(timeout=5000)
+
+        def marked(tid):
+            """The key's row alone marked, tinted and outlined, the key gone
+            from the address, and the row in the middle of the window once
+            the scroll rests, unless the page can scroll no further."""
+            assert wait_until(at, f"!!document.querySelector(\"#profile-tokens li.token-marked[data-id='{tid}']\")", 5), f"the key {tid} is marked"
+            assert at.locator("#profile-tokens li.token-marked").count() == 1, "it alone"
+            assert at.evaluate("location.hash") == "#profile", "the key dropped from the address"
+            assert scroll_settled(at), "the scroll comes to rest"
+            m = at.evaluate("""(id) => {
+              const r = document.querySelector(`#profile-tokens li[data-id='${id}']`).getBoundingClientRect();
+              return {mid: (r.top + r.bottom) / 2, height: r.height, vh: innerHeight, y: scrollY,
+                      max: document.documentElement.scrollHeight - innerHeight};
+            }""", tid)
+            assert abs(m["mid"] - m["vh"] / 2) <= m["height"] or m["y"] >= m["max"] - 1, f"the row brought into the middle of the window: {m}"
+            row = at.locator(f"#profile-tokens li[data-id='{tid}']")
+            colours = row.evaluate("(e) => [getComputedStyle(e).backgroundColor, getComputedStyle(e).boxShadow]")
+            assert colours[0] not in ("rgba(0, 0, 0, 0)", "transparent") and colours[1] != "none", f"tinted and outlined: {colours}"
+
+        def redrawn_unmarked(change, what):
+            """change reads My profile's keys again, which its part draws in
+            place (AP UiParts, Block 13); then none is marked."""
+            with at.expect_response(lambda r: r.request.method == "GET" and r.url.endswith("/api/v1/users/operator/tokens"), timeout=5000) as read:
+                change()
+            read.value.finished()
+            frames(at)
+            assert at.locator(f"#profile-tokens li[data-id='{last}']").count() == 1, f"the keys drawn again: {what}"
+            assert at.locator("#profile-tokens li.token-marked").count() == 0, f"nothing marked: {what}"
+
+        # without the mark, the last key's row starts below the first screen
+        opened("#profile")
+        assert scroll_settled(at), "the scroll comes to rest"
+        assert at.evaluate(f"""(() => {{ const r = document.querySelector("#profile-tokens li[data-id='{last}']");
+            return r.getBoundingClientRect().top + scrollY > innerHeight; }})()"""), "the last key's row below the first screen"
+        assert at.locator("#profile-tokens li.token-marked").count() == 0, "and not marked"
+        # opened at its address, as the app opens it
+        opened(f"#profile?key={last}")
+        marked(last)
+        # another key named in the page that runs
+        at.evaluate(f"() => {{ location.hash = '#profile?key={ids[1]}'; }}")
+        marked(ids[1])
+        # back and forward: the entries read #profile now
+        redrawn_unmarked(lambda: at.go_back(), "back")
+        redrawn_unmarked(lambda: at.go_forward(), "forward")
+        # an address that names no key
+        at.evaluate(f"() => {{ location.hash = '#profile?key={ids[2]}'; }}")
+        marked(ids[2])
+        redrawn_unmarked(lambda: at.evaluate("() => { location.hash = '#profile?key=abc'; }"), "key=abc")
+        # Personal settings opened again from ☰, after another page
+        at.evaluate(f"() => {{ location.hash = '#profile?key={ids[3]}'; }}")
+        marked(ids[3])
+        show_view(at, "tiles")
+        redrawn_unmarked(lambda: open_personal_page(at), "Personal settings from ☰")
+        # no key: not a number, not the user's, a session's, nothing
+        for bad in ("abc", "0", "-3", "1e3", "", "99999999", str(mine)):
+            opened(f"#profile?key={bad}")
+            at.wait_for_timeout(300)
+            assert at.locator("#profile-tokens li.token-marked").count() == 0, f"key={bad!r} marks nothing"
+        at.close()
+        guard.page = page
+    finally:
+        for tid in ids:
+            api_call("DELETE", "api/v1/users/operator/tokens/%d" % tid)
+    sign_out(page)
+    assert wait_until(page, "document.getElementById('login-dialog').open", 5), "signed out at the end"

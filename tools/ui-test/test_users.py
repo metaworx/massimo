@@ -356,7 +356,8 @@ def test_new_user_name_checked_while_typed(page, case, watch):
 
 def test_first_owner_name_checked(page, case):
     """The first owner's form checks its name the same way; with a bad
-    name, Create the owner sends nothing. /api/v1/me is stubbed as an
+    name, Create the owner sends nothing; in a browser it has no Cancel,
+    which is the app's (test_connect.py). /api/v1/me is stubbed as an
     open server without users, and put back."""
     posts = []
     page.on("request", lambda r: posts.append(r.url) if r.method == "POST" and r.url.endswith("/api/v1/users") else None)
@@ -364,6 +365,7 @@ def test_first_owner_name_checked(page, case):
     try:
         page.evaluate("loadMe()")
         assert wait_until(page, "!document.getElementById('setup').classList.contains('hidden')", 5), "the first owner's form shows"
+        assert page.locator("#setup-cancel").is_hidden(), "no Cancel in a browser"
         name = page.locator("#setup-user")
         name.fill("test manager")
         name.press("Tab")

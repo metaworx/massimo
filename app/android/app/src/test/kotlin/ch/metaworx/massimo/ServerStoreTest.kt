@@ -213,4 +213,52 @@ class ServerStoreTest {
         assertEquals("start", json.getString("ask"))
         assertFalse(json.has("biometric"))
     }
+
+    @Test
+    fun keysLeftAreKeptUntilRevoked() {
+        val st = ServerStore(file())
+        val a = st.save(input("name" to "Home", "lan" to "http://192.168.1.20:8099/"))
+        assertTrue(a.unrevoked.isEmpty())
+        assertEquals("[]", a.toJson().getJSONArray("unrevoked").toString())
+        assertTrue(st.leave(a.id, "anna", 42))
+        assertTrue("noted already, once", st.leave(a.id, "anna", 42))
+        assertTrue(st.leave(a.id, "bob", 7))
+        assertFalse("no id", st.leave(a.id, "anna", 0))
+        assertFalse("no user", st.leave(a.id, "", 9))
+        assertFalse("no server", st.leave("gone", "anna", 5))
+        assertEquals(listOf(KeyLeft("anna", 42), KeyLeft("bob", 7)), st.get(a.id)!!.unrevoked)
+        val page = st.get(a.id)!!.toJson()
+        val shown = page.getJSONArray("unrevoked")
+        assertEquals(listOf("anna" to 42L, "bob" to 7L), (0 until shown.length()).map { shown.getJSONObject(it).let { k -> k.getString("user") to k.getLong("id") } })
+        // kept across a start and by a save from the page, which cannot set them
+        assertEquals(listOf(KeyLeft("anna", 42), KeyLeft("bob", 7)), ServerStore(file()).get(a.id)!!.unrevoked)
+        val saved = st.save(input("id" to a.id, "name" to "House", "lan" to "http://192.168.1.20:8099/", "unrevoked" to org.json.JSONArray()))
+        assertEquals(2, saved.unrevoked.size)
+        st.revoked(a.id, listOf(KeyLeft("anna", 42), KeyLeft("anna", 99)))
+        assertEquals(listOf(KeyLeft("bob", 7)), ServerStore(file()).get(a.id)!!.unrevoked)
+        // another node: those keys are another server's
+        val moved = st.save(input("id" to a.id, "name" to "House", "node" to "node-b", "lan" to "http://192.168.1.20:8099/"))
+        assertTrue(moved.unrevoked.isEmpty())
+        // a file's key that is no key is left out
+        file().writeText("""[{"id":"a","name":"Home","lan":"http://192.168.1.20/","unrevoked":[{"user":"anna","id":3},{"user":"","id":4},{"id":5},"x"]}]""")
+        assertEquals(listOf(KeyLeft("anna", 3)), ServerStore(file()).get("a")!!.unrevoked)
+    }
+
+    @Test
+    fun openTakesAnAddressAndMyProfilesKey() {
+        val s = Server("a", "Home", "node-a", "http://192.168.1.20:8099/", "https://home.example.net/", "", Server.ASK_START, false)
+        assertEquals("http://192.168.1.20:8099/", s.opening("http://192.168.1.20:8099/"))
+        assertEquals("https://home.example.net/", s.opening("https://home.example.net/#profile?key=42"))
+        for (bad in listOf(
+            "https://home.example.net/#profile?key=0",
+            "https://home.example.net/#profile?key=abc",
+            "https://home.example.net/#profile?key=42&x=1",
+            "https://home.example.net/#system",
+            "https://home.example.net/x#profile?key=42",
+            "https://other.example.net/#profile?key=42",
+            "",
+        )) {
+            assertNull(bad, s.opening(bad))
+        }
+    }
 }

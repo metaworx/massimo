@@ -15,7 +15,7 @@
  * key just made are a part's own state alone, never in the forms' store.
  */
 
-import { useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { User } from "../api";
 import { Adder } from "../shared/adder";
 import { Badge, ResultLine } from "../shared/badge";
@@ -284,7 +284,7 @@ export function UsersCard() {
   const list = users.list;
   const count = users.loaded ? tn("roles.users", list.length) : "";
   // the card's head counts them, in the page's language, once they are read; nothing once forgotten
-  useEffect(() => {
+  useLayoutEffect(() => {
     cardBadges("sys-users", count ? [{ text: count, kind: "mode" }] : []);
   }, [count]);
   return (
