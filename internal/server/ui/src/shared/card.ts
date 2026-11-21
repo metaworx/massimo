@@ -13,8 +13,10 @@
  * sets from its drawing's effect (cardBadges) and the page's chrome draws
  * into the head (chrome/Cards.tsx), also while it is folded. Its fold is
  * kept in this browser (massimo.fold.<card id>) and set on the skeleton
- * at once, so that a card shown is open before it is scrolled to. The
- * caller names the card by its id; this file knows no region's.
+ * at once, so that a card shown is open before it is scrolled to. A card
+ * shown, or a row in one, is kept in view while the page settles
+ * (keepInView). The caller names the card by its id; this file knows no
+ * region's.
  */
 
 import { type Signal, signal } from "@preact/signals";
@@ -101,15 +103,34 @@ export function showCard(id: string, instant?: boolean): void {
   if (instant) keepCardInView(card, 2000);
 }
 
-/** keepCardInView brings a card to the top again whenever its page's cards change size, for ms or until the user scrolls by hand. */
+/** keepCardInView brings a card to the top again whenever the page's content changes size, for ms or until the user scrolls by hand (keepInView). */
 function keepCardInView(card: HTMLElement, ms: number): void {
+  keepInView(card, ms, "start");
+}
+
+/** stopKeeping ends the keeping of keepInView that runs, null for none. */
+let stopKeeping: (() => void) | null = null;
+
+/**
+ * keepInView brings an element into view again whenever the page's
+ * content changes size, for ms or until the user scrolls by hand: a card
+ * at the top (block "start"), a row in the middle ("center", clear of
+ * the header). Keeping another element ends the keeping of the last, so
+ * that a row inside a card just shown (My profile's marked key) takes
+ * over from its card.
+ */
+export function keepInView(el: Element, ms: number, block: ScrollLogicalPosition = "start"): void {
+  if (stopKeeping) stopKeeping();
   const by = ["wheel", "touchstart", "keydown", "pointerdown"];
-  const ro = new ResizeObserver(() => card.scrollIntoView({ block: "start" }));
+  const ro = new ResizeObserver(() => el.scrollIntoView({ block }));
   const stop = () => {
     ro.disconnect();
     for (const ev of by) removeEventListener(ev, stop);
+    if (stopKeeping === stop) stopKeeping = null;
   };
-  if (card.parentElement) ro.observe(card.parentElement);
+  stopKeeping = stop;
+  const main = document.querySelector("main");
+  if (main) ro.observe(main);
   for (const ev of by) addEventListener(ev, stop, { passive: true });
   setTimeout(stop, ms);
 }

@@ -15,7 +15,7 @@ from helpers import VIEWER, css_hidden, open_main_menu, show_view, wait_until
 from test_login import sign_in
 
 ORDER = ["#menu-log", "hr", "#menu-cube", "#menu-system", "#menu-maint", "#menu-info", "hr", "#menu-me", "#menu-servers", "#menu-logout"]
-# in the app alone: Select server, back to the app's servers (test_connect.py)
+# in the app alone: Select server…, back to the app's servers (test_connect.py)
 APP_ONLY = {"#menu-servers"}
 PAGES = {"log": ("#logview", "#log", "#menu-log"), "cube": ("#cube-page", "#cube", "#menu-cube"),
          "system": ("#system", "#system", "#menu-system"), "maint": ("#maint-page", "#maintenance", "#menu-maint"),

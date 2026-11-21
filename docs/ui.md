@@ -6,17 +6,21 @@ on the address its `-listen` names.
 The page works on a phone as well as on a desktop,
 and follows the system's light or dark mode.
 
-The page asks who you are on a card in the page, not over it,
-its row **Sign in with: Name | API key** choosing the form:
+The page asks who you are on a card in the middle of the window,
+not over the page, its title centred under the logo,
+its row **Password | API key** choosing the form,
+on one line at a phone's width in every language:
 a name and a password, chosen at first,
 or an API key pasted into a form of its own,
 which is chosen from the start once the page has seen the server ask for no key
-(the owner made from `MASSIMO_API_TOKEN` has no password).
+(the owner made from `MASSIMO_API_TOKEN` has no password),
+the field of the form shown in focus.
+A screen reader names the row's group "Sign in with"; no label shows it.
 The password form holds the one password field, its fields named,
 so that a password manager such as KeePassXC fills it.
 The page keeps the session in the browser for 30 days from its last use;
 **Sign out** in ☰, or on the personal settings, ends it.
-The card's ☰ shows the version first,
+The card's ☰, at the end of that row, shows the version first,
 then sets the language and the appearance (light, dark, as the system)
 before anyone signs in, the same settings as My settings,
 kept in this browser.
@@ -39,15 +43,22 @@ server, which after the sign-in asks for the fingerprint and keeps an API key
 of the user's own behind it,
 or says that nothing was kept, with **Try again** and **Sign in without it**;
 the same switch on the form that creates the first owner;
-the fingerprint first in the row **Sign in with** where a login is kept,
+the fingerprint first in the row where a login is kept,
 named with the user's name, which signs in at once with a new session from
-the key, Name staying the form chosen;
+the key, the password staying the form chosen,
+its spinner in the icon's place while it runs;
 a line instead of both where the page is open over plain HTTP outside the
 home network, where the app sends no key;
-and **Select server**, back to the app's servers,
-at the card's foot and last in the card's ☰.
+**Select server…**, back to the app's servers, last in the card's ☰;
+and **Cancel** left of each **Sign in**, the password's and the key's,
+and of the first owner's **Create the owner**, which goes back there too:
+with **Open at start** the card is the app's first page,
+where the back gesture closes the app.
+A browser has no Cancel.
 While it asks, the page shows the card alone, with the logo and,
-at its foot, the version, and no header;
+at its foot, the version, and no header,
+the card as far from the window's top as from its bottom
+(a card taller than the window starts at the top and the page scrolls);
 from its first moment until the server has said who is in,
 the header's logo and name alone,
 so that no button shows before the sign-in:
@@ -183,7 +194,7 @@ The compacted header has **↑**, back to the top, first of the page buttons: �
   a blue cube is the sign of the Cubes found and not served.
   Open, it stays open when data comes in, the focus where it was,
   and shows what came: a Cube's new name, a problem, a Cube found.
-  In the app the list ends with **Select server**, which shows the app's
+  In the app the list ends with **Select server…**, which shows the app's
   servers (docs/app.md).
   The search's entry, **Search for new Cubes…**,
   asks the server to look for Cubes on the LAN (about two seconds;
@@ -266,7 +277,7 @@ The compacted header has **↑**, back to the top, first of the page buttons: �
   **Maintenance**, for those and a role with `update`, `restart` or `reboot`,
   and **System info**, for every role with `read`;
   **Personal settings**, its tooltip naming whose they are, by display name and login,
-  in the app **Select server**, back to the app's servers;
+  in the app **Select server…**, back to the app's servers;
   and **Sign out** (Forget key for an API key or the token, none on an open server),
   in the accent and bold, as the personal page's button.
   It is highlighted while one of its pages is shown, as a page button is,
@@ -290,7 +301,8 @@ The compacted header has **↑**, back to the top, first of the page buttons: �
   A role that may open one of them alone sees its title there, and no button.
 - The page shown is in the address, Rooms without one:
   `#log`, `#me` (Personal settings, or at a card `#profile`, `#prefs` and
-  `#notify`), `#cube` (Cube settings), `#system` (System settings),
+  `#notify`; `#profile?key=<id>` marks a key, see My profile),
+  `#cube` (Cube settings), `#system` (System settings),
   `#maintenance` (Maintenance) and `#info` (System info),
   so that a reload opens it again, the browser's back and forward move between
   the pages, and an address can be kept as a bookmark.
@@ -948,6 +960,14 @@ as the settings' ⓘ do:
   the key that session was made from **its key**,
   and Revoke on this device signs out, as **Sign out** does;
   **Create key** shows the new key once.
+  Opened at `#profile?key=<id>`, the page marks that API key's row,
+  tinted and outlined in the accent, and brings it into view:
+  the app opens a server's page there, as `<server address>#profile?key=<id>`,
+  for a key of the phone's it could not revoke,
+  the page asking for a sign-in first where it has no session.
+  The address then reads `#profile`, so that a reload marks nothing,
+  and the mark goes once a page is shown again, My profile among them;
+  an id that is no number, or no API key of the user's, marks nothing.
 - **Linked accounts**, where a sign-in provider is enabled or an account is linked:
   the own accounts at the providers, each with its e-mail or user ID,
   what the provider said of it at the last sign-in (name, user name, groups)
@@ -1808,8 +1828,11 @@ and, as a green badge, the user the app is signed in as there,
 checked at each look,
 a tap opening the server, ⚙ or a long press its settings;
 the Servers card's ☰, with **Add server…**, **Sign out of all**,
-**Forget all stored credentials** where a login is kept (asked first, under
-the list) and **App settings…**;
+**Forget all stored credentials** where a login is kept,
+asked first, under the list,
+which revokes each login's key at its server and signs out there,
+as **Turn off** does, its message naming the servers that keep a key,
+and **App settings…**;
 the card that adds a server, shown while the list is empty or from the ☰,
 with × and closed once a server is added:
 the servers on the network, searched for as it opens, and an address typed;
@@ -1821,8 +1844,11 @@ the name and the addresses, **Open at start** (one server at most),
 when the fingerprint is asked, the session with **Sign out**,
 the certificate's subject and end with **Certificate…**,
 a dialog with its issuer, names, validity, fingerprint and since when it
-is trusted, and the login by fingerprint with **Turn off**,
-which revokes its key and signs out.
+is trusted, the login by fingerprint with **Turn off**,
+which revokes its key and signs out,
+a line for each key of the phone's still valid there with **Show in My profile**,
+which opens the server's page at My profile with the key marked,
+and **Remove**, which turns a kept login off first.
 **App settings** hold the **Appearance**, as the phone, light or dark,
 for that page and for every server's page set to "as the system".
 A browser that opens that page sees a line saying it is the app's.
@@ -2113,11 +2139,11 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `me`, `own`, `meChanged` | `me.ts` | who the page is signed in as, `state.me` as `applyCaps` of `login.js` hands it over at every read of it (`MassimoParts.me`), null from a sign-out on; the token it is signed in with, by which a user's sessions say "this device" and "its key" | `m` |
 | `whoOf`, `Who` | `me.ts` | who is in in the page's words, for the personal page's row, ☰'s Sign out and Personal settings' tooltip and the question before a sign-out alike: the row's line, Sign out or Forget key (none on an open server) with its icon, the name for the tooltip, and whether My profile is there | `me` |
 | `cardBadges`, `badgesOf`, `BadgeSpec` | `card.ts` | what a section card's head shows at a glance, also while it is folded: a region gives a card's badges by its id from its drawing's effect, `[]` for none, and the page's chrome draws them (`ui/src/chrome/Cards.tsx`) | `id`, `list` of `{ text, kind }` |
-| `showCard`, `wireCards` | `card.ts` | a section card brought into view, unfolded, the focus on its heading's button, kept there for two seconds where its page has just been opened (`instant`); the cards' folds wired once, each kept in this browser (`massimo.fold.<card id>`), set on the skeleton at once | `id`, `instant` |
+| `showCard`, `wireCards`, `keepInView` | `card.ts` | a section card brought into view, unfolded, the focus on its heading's button, kept there for two seconds where its page has just been opened (`instant`); the cards' folds wired once, each kept in this browser (`massimo.fold.<card id>`), set on the skeleton at once; an element kept in view while the page's content changes size, for `ms` or until the user scrolls, a card at the top, a row in the middle (`block` `"center"`: My profile's marked key), keeping another ending the last | `id`, `instant`; `el`, `ms`, `block` |
 | `Brand` | `brand.tsx` | Massimo's logo and small mark from the sprite (`brandMarks` of `components.js`, which draws them over the skeleton's `data-brand`), of which the place's style shows one, hidden from screen readers: ☰'s first row | |
-| `page`, `isShown`, `showView`, `onView`, `mayShow` | `pages.ts` | the page of the main area shown, a signal: a drawing that reads `page.value` follows it, `isShown` asks at that moment and follows nothing (a handler, a reader, a timer), so that no request is sent again at a change of page; showing a page puts it into the address, as a new entry of the history or in place of the current one, and brings each page back at the scroll it was left at; `onView` runs at each showing, on the `viewshown` event; `mayShow` says who may open which, reading who is in; a page with an address of its own (the log's, `pages.js`) hands it over with `ownAddress`; `pages.js` keeps the plain names, and `currentView` | `view`, `address`, `card` |
+| `page`, `isShown`, `showView`, `onView`, `mayShow` | `pages.ts` | the page of the main area shown, a signal: a drawing that reads `page.value` follows it, `isShown` asks at that moment and follows nothing (a handler, a reader, a timer), so that no request is sent again at a change of page; showing a page puts it into the address, as a new entry of the history or in place of the current one, and brings each page back at the scroll it was left at; `onView` runs at each showing, on the `viewshown` event; `mayShow` says who may open which, reading who is in; a page with an address of its own (the log's, `pages.js`) hands it over with `ownAddress`, a card's region what the card's address holds after its `?` with `readCardAddress` (My profile's key to mark), told of every address read, null for another, before the page is shown; `pages.js` keeps the plain names, and `currentView` | `view`, `address`, `card`; `card`, `read(q)` |
 | `userPath`, `Run`, `loadTokens`, `revokeToken`, `revokeOwn`, `createKey`, `loadIdentities`, `addIdentity`, `changeIdentity`, `removeIdentity` | `account.ts` | what a user's sessions, keys and identities read and send (`…/users/{name}/tokens`, `…/identities`), for System settings → Users and My profile alike; a change through the caller's runner (`Run`), which reloads what it shows and says how it went in its own line; Revoke of the token in use signs out | `name`, `rest`; `run`, `name`, and what each sends |
-| `Tokens` | `tokens.tsx` | a user's sessions and keys (a user's panel, My profile): each with Revoke, "this device" and "its key" by `own`, Create key and the key just made, shown once by the read that follows and kept in the part's own state alone; read when its place opens and again at each change of the caller's counter while open; an answer after a sign-out dropped | `u`, `off`, `open`, `reads` (the caller's counter), `run`, `say` (the caller's message line), `labelId` (the new key's field's id), `help` (the group's ⓘ after Create key, My profile's) |
+| `Tokens` | `tokens.tsx` | a user's sessions and keys (a user's panel, My profile): each with Revoke, "this device" and "its key" by `own`, Create key and the key just made, shown once by the read that follows and kept in the part's own state alone; read when its place opens and again at each change of the caller's counter while open; an answer after a sign-out dropped; the API key the caller names tinted (`token-marked`), and the caller told of each read drawn with that row (My profile's key of its address) | `u`, `off`, `open`, `reads` (the caller's counter), `run`, `say` (the caller's message line), `labelId` (the new key's field's id), `help` (the group's ⓘ after Create key, My profile's), `marked` (the id of the API key marked), `drawn(row)` (told of each read drawn, with the row marked or null) |
 | `Identities`, `Changes` | `identities.tsx` | a user's identities at the sign-in providers (a user's panel, My profile): each with what the provider said and Remove; with `changes`, Change of one no sign-in used, a settings form kept by its key, the forms of identities gone or made unchangeable forgotten, and all of them where the box goes off; with `assign`, Assign; `after` what follows the list once read (My profile's Link buttons); `quiet` draws nothing while the list is empty and the caller offers nothing after it (`offer`: My profile's Link buttons, none in the app, where the rows are still named from every provider) | `u`, `off`, `open`, `reads`, `providers` (the enabled ones), `run`, `say`, `title`, `none`, `cls`, `changes` (`key(id)`, `under`, `ui(key)`, `forget(key)`, `show(key)`: the caller's forms and how one is brought into sight), `assign`, `after(list)`, `quiet`, `offer` |
 | `FileButton` | `file.tsx` | a button that opens the browser's choice of a file of the types it accepts (`filePicker`), the same file again too | `id` (the button's), `cls`, `label`, `accept`, `off`, `inputId` and `inputLabel` (the input's id and its name in the page's language: the Appearance card's Import…), `onFile(file)` |
 | `Adder` | `adder.tsx` | the end of a list that adds an item: the new item's form in its place while shown, the button that shows it hidden meanwhile, the focus in the form's first field when it comes and back on the button when it goes (Users, Roles, Sign-in providers) | `id` (the button's), `formId` (the form's place), `label`, `shown`, `set(shown)`, the form as children |
@@ -2495,8 +2521,16 @@ user (`GET …/users/{name}`), the enabled providers where none are known yet,
 then its sessions and keys and its identities, and after every change made there
 the users again where the signed-in user may read them, then My profile;
 `store.ts` holds the user as that read gave it, the providers, `reads`, the link
-come back shown to confirm, Change password open and the two message lines'
-outcomes;
+come back shown to confirm, Change password open, the two message lines'
+outcomes and the API key marked, `marked`:
+the pages' store hands `index.tsx` what the card's address holds after its
+`?` as it reads an address, before the page is shown, null for another address
+(`readCardAddress` of `shared/pages.ts`), which sets the key
+`#profile?key=<id>` names, or none (`markKey`); the first drawing of the keys
+after it brings its row into the middle of the window and keeps it there for two
+seconds (`keysDrawn` of `Profile.tsx`, `keepInView` of `shared/card.ts`), and
+the next page shown after that, My profile again among them, takes it away
+(`viewshown`);
 `send.ts` what it reads and sends through its runner, the requests of
 `profile.js`, `linked.js` and `login.js`' `changeOwnPassword`, in the order: the
 user, the providers where none are known yet, then the sessions and keys and the
@@ -2514,7 +2548,7 @@ Another user signed in draws all of it from nothing:
 at a sign-out, and for another user after a 401, `MassimoParts.signedOut` sets
 who is in to null, which takes the parts and what is typed in them away, and
 forgets the user read, the link shown and the messages; an answer after it is
-dropped (`session.ts`).
+dropped (`session.ts`); the key marked stays, the page's address having named it.
 No plain script calls it.
 Integrations (`ui/src/integrations/`) is a part alone, drawn into `#sys-integrations-body`
 and read each time System settings is shown; no plain script calls it:

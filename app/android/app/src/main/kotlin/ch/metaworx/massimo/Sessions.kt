@@ -15,18 +15,22 @@ fun interface Logger {
 
 /**
  * Sessions checks, ends and forgets the sessions the app holds for its
- * servers (docs/app.md, contract version 3), where [keeper] keeps them, and
+ * servers (docs/app.md, contract version 4), where [keeper] keeps them, and
  * turns a kept login off at its server: the connect page's `session`,
- * `signOut` and `signOutAll`, and `forget`'s revoke. Each request goes to an
- * address of the server that answered with its node, over the probe's trust
- * ([ServerApi]); [probe] asks a server's addresses for that where the page
- * names none. A failure at a server is written to [log] without any secret.
+ * `signOut` and `signOutAll`, and the revokes of `forget` and `forgetAll`
+ * ([Revoker]). A check that finds the session's user also revokes the keys
+ * [left] there for that user, and gives a login kept before its key's id was
+ * the session's key. Each request goes to an address of the server that
+ * answered with its node, over the probe's trust ([ServerApi]); [probe] asks
+ * a server's addresses for that where the page names none. A failure at a
+ * server is written to [log] without any secret.
  */
 class Sessions(
     private val keeper: SessionKeeper,
     private val logins: LoginStore,
     private val api: ServerApi,
     private val probe: (List<String>, String?) -> List<ProbeResult>,
+    private val left: KeysLeft? = null,
     private val log: Logger,
 ) {
     // By server id: the user the last check found for the session held.
@@ -50,10 +54,15 @@ class Sessions(
     /** held is the session the app holds for [s], or null. */
     fun held(s: Server): String? = keeper.get(s.id, inMemory(s))
 
-    /** put keeps [token] for [s] (`setToken`), null forgetting it; what was checked of the one before holds no more. */
+    /**
+     * put keeps [token] for [s] (`setToken`), null forgetting it; what was
+     * checked of the one before holds no more. The token goes first, so that
+     * a check of the one before that answers meanwhile records nothing
+     * (check records only for the token still held).
+     */
     fun put(s: Server, token: String?) {
-        synchronized(checked) { checked.remove(s.id) }
         keeper.put(s.id, token, inMemory(s))
+        synchronized(checked) { checked.remove(s.id) }
     }
 
     /** user is the user the last check found for the session held for [s], null where none is held or none was checked. */
@@ -72,15 +81,22 @@ class Sessions(
      * check asks the server at [url], an address of [s]'s, whose the
      * session held for it is (`GET /api/v1/me`): the user's name; null where
      * none is held, or the server refused it, which forgets it. A server that
-     * cannot be asked leaves what the last check found.
+     * cannot be asked leaves what the last check found. With the user known,
+     * the keys left there for that user are revoked with the session
+     * ([KeysLeft]), and a login kept for that user without its key's id
+     * (kept before contract version 3) takes the id of the key the session
+     * was made from, so that Turn off revokes it with a session.
      */
     fun check(s: Server, url: String): String? {
         val token = held(s) ?: return null
         if (!s.has(url)) return user(s)
         return try {
-            val u = api.me(url, s.fp, token)
-            synchronized(checked) { checked[s.id] = u }
-            u
+            val me = api.whoami(url, s.fp, token)
+            // a session handed in meanwhile is not the one asked about
+            synchronized(checked) { if (held(s) == token) checked[s.id] = me.user }
+            learnKeyId(s, me)
+            left?.revoke(s, url, token, me)
+            me.user
         } catch (e: ServerApi.Refused) {
             // a dead session counts as nothing at the server once forgotten
             if (held(s) == token) forget(s.id)
@@ -91,6 +107,38 @@ class Sessions(
         } catch (e: IOException) {
             user(s)
         }
+    }
+
+    /**
+     * keyOf is the id of the key of [kept], the login kept for [s]: the one
+     * kept beside it, else, for a login kept before contract version 3, the
+     * key the session held for [s] was made from, asked at [url]
+     * (`GET /api/v1/me`) and kept with the login; 0 where neither says,
+     * the session forgotten where the server refused it (F28).
+     */
+    fun keyOf(s: Server, url: String, kept: KeptLogin): Long {
+        if (kept.keyId > 0) return kept.keyId
+        val token = held(s) ?: return 0
+        if (!s.has(url)) return 0
+        return try {
+            learnKeyId(s, api.whoami(url, s.fp, token), kept)
+        } catch (e: ServerApi.Refused) {
+            if (held(s) == token) forget(s.id)
+            0
+        } catch (e: IOException) {
+            0
+        }
+    }
+
+    // learnKeyId gives [kept], the login kept for [s] as read, the id of the
+    // key the session was made from, where it has none and is the session's
+    // user's, in one step of the store's that leaves a login kept or
+    // forgotten meanwhile as it is; it returns the login's key id, 0 for none.
+    private fun learnKeyId(s: Server, me: ServerApi.Me, kept: KeptLogin? = logins.get(s.id)): Long {
+        if (kept == null) return 0
+        if (kept.keyId > 0) return kept.keyId
+        if (me.keyId <= 0 || kept.user != me.user) return 0
+        return if (logins.setKeyId(s.id, kept, me.keyId)) me.keyId else 0
     }
 
     /**
@@ -142,7 +190,9 @@ class Sessions(
      * at [url] with the session the app holds for [s]
      * (`DELETE /api/v1/users/{name}/tokens/{id}`), then signs that session
      * out: Turn off without the prompt (AP MobileApp, F6). [Revoke.BY_KEY]
-     * where it cannot, the session forgotten where the server refused it.
+     * where it cannot, the session forgotten where the server refused it;
+     * [keyOf] gives a login kept without its key's id the session's key
+     * first.
      */
     fun revokeWithSession(s: Server, url: String, kept: KeptLogin): Revoke {
         val token = held(s) ?: return Revoke.BY_KEY

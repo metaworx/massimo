@@ -19,7 +19,8 @@
     </div>
     <!-- in the app where the phone can: keep the login by fingerprint, as the sign-in offers it (login.js renderSetupKeep) -->
     <label id="setup-keep-row" class="switch login-keep hidden"><input type="checkbox" id="setup-keep"><span class="slider" aria-hidden="true"></span><span class="switch-label" data-i18n="login.keepFingerprint">Enable login by fingerprint</span></label>
-    <div class="actions"><span class="actions-right"><button type="submit" class="primary" data-i18n="setup.create">Create the owner</button></span></div>
+    <!-- Cancel in the app alone, back to the app's servers as Select server… (login.js initLogin) -->
+    <div class="actions"><span class="actions-right"><button type="button" id="setup-cancel" class="form-cancel hidden" data-i18n="action.cancel">Cancel</button><button type="submit" class="primary" data-i18n="setup.create">Create the owner</button></span></div>
     <p id="setup-msg" class="small cubes-msg hidden" role="status"></p>
   </form>
 </section>

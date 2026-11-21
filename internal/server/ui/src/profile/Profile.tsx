@@ -9,8 +9,9 @@
  * key (shared/forms.ts) with Reset, Save by its state and the disk in the
  * card's pill where it is unsaved; Change password, or Set a password
  * for a user with keys only, its fields the form's own state alone, never
- * a draft; the own sessions and keys (shared/tokens.tsx); and the own
- * linked accounts (shared/identities.tsx) with Link per enabled provider
+ * a draft; the own sessions and keys (shared/tokens.tsx), the API key the
+ * page's address names marked and brought into view; and the own linked
+ * accounts (shared/identities.tsx) with Link per enabled provider
  * and a link come back shown before it is stored. Behind the last button
  * of each group an ⓘ explains its buttons. Another user signed in draws
  * all of it from nothing.
@@ -31,8 +32,8 @@ import { me, profileOf } from "../shared/me";
 import { BusyButton } from "../shared/question";
 import { Tokens } from "../shared/tokens";
 import { cancelLink, changePassword, confirmLink, passwordMsg, profileMsg, run, saveName, startLink } from "./send";
-import { type Confirm, NAME_FORM, PASSWORD_FORM, profile, said } from "./store";
-import { showCard } from "../shared/card";
+import { type Confirm, firstDrawn, NAME_FORM, PASSWORD_FORM, profile, said } from "./store";
+import { keepInView, showCard } from "../shared/card";
 import { isShown, showView } from "../shared/pages";
 
 /** openForm shows a form of My profile and puts the focus into it, from any page: the personal page shown, its card unfolded. */
@@ -41,6 +42,18 @@ function openForm(key: string): void {
   showCard("profile"); // a folded card unfolded, its form in sight
   if (key === PASSWORD_FORM) profile.passwordOpen = true;
   focusForm(key);
+}
+
+/**
+ * keysDrawn is told of every read of the own keys drawn, with the row
+ * marked (store.ts markKey): the first since the mark was set brings it
+ * into the middle of the window, and keeps it there while the page
+ * settles, in place of its card (shared/card.ts keepInView).
+ */
+function keysDrawn(row: HTMLElement | null): void {
+  if (!firstDrawn() || !row) return;
+  row.scrollIntoView({ block: "center" });
+  keepInView(row, 2000, "center");
 }
 
 /** NameForm is the display name, the name the personal page and the users list show, with Reset and Save, off while it is the one stored. */
@@ -162,7 +175,7 @@ function LinkButtons({ u, list, help }: { u: User; list: { provider: string; bou
   );
 }
 
-/** Mine is My profile of the user signed in, who: the display name once read, the password, the sessions and keys, the linked accounts. */
+/** Mine is My profile of the user signed in, who: the display name once read, the password, the sessions and keys with the one marked, the linked accounts. */
 function Mine({ who }: { who: User }) {
   useLang();
   const u = profile.user && profile.user.name === who.name ? profile.user : null;
@@ -173,7 +186,8 @@ function Mine({ who }: { who: User }) {
       <div id="profile-name">{u && <NameForm u={u} />}</div>
       <PasswordForm who={who} />
       <div id="profile-tokens">
-        {u && <Tokens u={u} off={false} open reads={profile.reads} run={run} say={profileMsg} labelId={"profile-key-label-" + u.name} help="profileTokens" />}
+        {u && <Tokens u={u} off={false} open reads={profile.reads} run={run} say={profileMsg} labelId={"profile-key-label-" + u.name} help="profileTokens"
+          marked={profile.marked} drawn={keysDrawn} />}
       </div>
       <div id="profile-identities">
         {u && c && <LinkConfirm key={c.code} u={u} c={c} />}

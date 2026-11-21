@@ -138,6 +138,7 @@ class MainActivity : AppCompatActivity() {
         val logins = LoginStore(File(filesDir, "logins.json"))
         val api = ServerApi(agent)
         prober = Prober(agent, texts)
+        val left = KeysLeft(servers, logins, api, log)
         bridge = Bridge(
             host = object : Bridge.Host {
                 override fun open(url: String) = openServer(url)
@@ -152,7 +153,8 @@ class MainActivity : AppCompatActivity() {
             },
             servers = servers,
             keeper = keeper,
-            sessions = Sessions(keeper, logins, api, prober::probe, log),
+            sessions = Sessions(keeper, logins, api, prober::probe, left, log),
+            left = left,
             logins = logins,
             keys = LoginKey(),
             api = api,
@@ -243,6 +245,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        if (::biometric.isInitialized) biometric.close()
         if (::web.isInitialized) web.destroy()
         io.shutdownNow()
         super.onDestroy()

@@ -25,7 +25,8 @@ Touch a server to open it; ⚙, or a long press, opens its settings.
   While the list is empty, the card is always there.
 - **Sign out of all**, which signs the app out of every server.
 - **Forget all stored credentials**, where a server keeps a login by
-  fingerprint; it asks first, under the list.
+  fingerprint; it asks first, under the list,
+  and turns every such login off (below).
 - **App settings…**, below.
 
 ### A server's settings
@@ -37,10 +38,16 @@ touch a field to change it.
   in place of the list.
   One server at most has it, and the first server you add has it
   until you choose another.
-  **Select server** takes you back to the list.
+  **Select server…** in its ☰, or **Cancel** on its sign-in form,
+  takes you back to the list.
   When the server does not answer, the app shows the list.
 - **Signed in as …** and **Sign out**, where the app is signed in there:
   Sign out ends that session on the server and on the phone.
+- **A key of this phone is still valid here**, where Turn off or Forget all
+  could not remove the phone's key at the server,
+  or the phone no longer opens its login, or a new certificate was trusted:
+  **Show in My profile** opens the server at My profile,
+  the key marked, to revoke it there.
 - **Certificate**, for a server reached over `https://`:
   its name and how long it is valid.
   **Certificate…** shows it in full: who it is for and who issued it,
@@ -75,8 +82,8 @@ The switch shows only where the phone has a fingerprint enrolled.
 
 ### Signing in
 
-The sign-in form's row **Sign in with** starts with the fingerprint,
-**Login by fingerprint** for your name.
+The sign-in form's row of the ways to sign in, **Password** and **API key**,
+starts with the fingerprint, **Login by fingerprint** for your name.
 Touch it and then the sensor.
 On the list of servers, the fingerprint button beside a server
 signs you in straight away, without the form.
@@ -125,19 +132,39 @@ At home, on the local network, plain `http://` works as usual.
   and forgets the key on the phone.
   Where the app is signed in to that server it needs nothing more;
   where it is not, it asks for your fingerprint once.
-- **Remove** of a server forgets everything the app kept for it.
 - **Forget all stored credentials**, in the list's ☰,
-  forgets the keys of every server at once, without asking for the fingerprint.
+  does the same for every server with a login by fingerprint,
+  one after the other:
+  it asks for your fingerprint once for each server the app is not signed in to.
+  Its message names the servers where a key stays valid.
+- **Remove** of a server turns its login by fingerprint off first,
+  as Turn off does, then forgets everything the app kept for it.
+  It says so before, and warns where a key of the phone is still valid there;
+  afterwards its message names any key that stays valid,
+  to revoke under My profile.
 
-When only the phone forgot a key, the server still lists it.
-To remove it there, open **My profile** → **Sessions and keys** in the web UI:
+When Turn off or Forget all cannot remove the key at the server (it does not answer,
+or you dismiss the fingerprint), the phone forgets the key all the same,
+and the server's settings say that a key of this phone is still valid there;
+so do they where the phone no longer opens its login,
+or where you trusted a new certificate for the server.
+Remove names such a key in its message instead,
+since the server is gone from the list.
+The next time the app signs in to that server as the same user,
+it removes the key there by itself.
+A login kept by an older version of the app does not know its key's number
+until it is used once; where such a key cannot be removed,
+the message says it is still listed at the server, under My profile.
+To remove it at once, use **Show in My profile**,
+or open **My profile** → **Sessions and keys** in the web UI:
 the key carries the phone's name and "login by fingerprint".
 **Revoke** removes it, and the phone's session with it.
 Do the same if you lose the phone.
 
 ### Moving between servers
 
-**Select server**, at the foot of the sign-in form and last in its ☰,
+**Select server…**, last in the sign-in form's ☰,
 at the end of the Cube choice in the header, and in the ☰ just before Sign out,
-takes you back to the app's list of servers.
+and **Cancel**, left of the sign-in form's **Sign in**,
+take you back to the app's list of servers.
 You stay signed in where you were; the list shows where.
