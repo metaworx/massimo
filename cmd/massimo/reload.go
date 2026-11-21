@@ -168,6 +168,10 @@ func (r *settingsReloader) reload(ctx context.Context, why string) (changed, pen
 			r.log.Error("api token from the settings file not applied", "error", err)
 		}
 	}
+	// The keep-open setting beside users, as a process of an older
+	// version or a store put in place by hand can leave it (AP
+	// FirstOwner, D12).
+	r.srv.DropKeepOpen(ctx)
 	if slices.Contains(changed, rebootVar) && !r.fixed[rebootVar] {
 		on, err := parseSwitch(rebootVar, os.Getenv(rebootVar))
 		if err != nil {

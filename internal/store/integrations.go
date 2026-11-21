@@ -315,9 +315,14 @@ func (s *Store) ApproveIntegration(ctx context.Context, uuid string, caps []stri
 			return Integration{}, fmt.Errorf("store: approve integration: %w", err)
 		}
 	}
+	dropped, err := s.dropKeepOpen(ctx, tx)
+	if err != nil {
+		return Integration{}, err
+	}
 	if err := tx.Commit(); err != nil {
 		return Integration{}, fmt.Errorf("store: approve integration: %w", err)
 	}
+	s.keepOpenDropped(dropped, "integration approved", "integration", req.UUID)
 	i, _, err := s.IntegrationByUUID(ctx, result)
 	return i, err
 }
@@ -532,7 +537,8 @@ func (s *Store) RevokeIntegration(ctx context.Context, uuid string, by int64) er
 
 // addUserTx adds a user without a password inside tx, for an integration
 // and its users: no sign-in, only what acts through the integration. Its
-// name is integrationName's, and u.IntegrationID its integration.
+// name is integrationName's, and u.IntegrationID its integration. The
+// caller removes the setting KeepOpenKey in tx (dropKeepOpen).
 func (s *Store) addUserTx(ctx context.Context, tx *sql.Tx, u User, by int64) (User, error) {
 	if err := s.writable(); err != nil {
 		return User{}, err
@@ -620,6 +626,7 @@ func (s *Store) IntegrationUser(ctx context.Context, i Integration, seen Integra
 		return IntegrationIdentity{}, fmt.Errorf("store: integration user: %w", err)
 	}
 	defer tx.Rollback()
+	made, madeName := false, "" // the setting KeepOpenKey removed with a user made here
 	now := s.nowText()
 	id, err := scanIntegrationIdentity(tx.QueryRowContext(ctx, `SELECT `+integrationIdentityColumns+` FROM user_identities
 		WHERE integration_id = ? AND subject = ? AND deleted_at IS NULL`, i.ID, seen.Subject))
@@ -637,6 +644,10 @@ func (s *Store) IntegrationUser(ctx context.Context, i Integration, seen Integra
 			newUUID(), own.ID, i.ID, seen.Subject, seen.Name, own.ID, seen.SystemGenerated, seen.Level, now, now, now, now, s.nodeID); err != nil {
 			return IntegrationIdentity{}, fmt.Errorf("store: integration user: %w", err)
 		}
+		if made, err = s.dropKeepOpen(ctx, tx); err != nil {
+			return IntegrationIdentity{}, err
+		}
+		madeName = own.Name
 	case err != nil:
 		return IntegrationIdentity{}, fmt.Errorf("store: integration user: %w", err)
 	default:
@@ -657,7 +668,11 @@ func (s *Store) IntegrationUser(ctx context.Context, i Integration, seen Integra
 	if err != nil {
 		return IntegrationIdentity{}, fmt.Errorf("store: integration user: %w", err)
 	}
-	return out, tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return IntegrationIdentity{}, fmt.Errorf("store: integration user: %w", err)
+	}
+	s.keepOpenDropped(made, "integration user added", "user", madeName)
+	return out, nil
 }
 
 // integrationUserTx makes the user of an integration's user's first call,

@@ -32,6 +32,7 @@ var serialTests = map[string]string{
 	"TestReloadWarnsOfARefusedLogSetting":   "unsets settings variables (unsetForTest) and reloads a settings file into the environment",
 	"TestRestartHelper":                     "sets ProgramData",
 	"TestSettingsReloader":                  "unsets settings variables (unsetForTest) and reloads a settings file into the environment",
+	"TestSettingsReloaderDropsKeepOpen":     "unsets settings variables (unsetForTest) and reloads a settings file into the environment",
 	"TestTLSCommand":                        "sets MASSIMO_DATA and the TLS variables",
 	"TestTLSShowIsConfigsView":              "sets MASSIMO_DATA and the TLS variables",
 	"TestHelpCreatesNoStore":                "changes the working directory (t.Chdir), swaps stdin and stdout (runUserWith)",

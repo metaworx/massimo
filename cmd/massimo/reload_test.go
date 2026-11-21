@@ -22,6 +22,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/env"
 	"go.metaworx.ch/massimo/internal/server"
+	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/testkit/storekit"
 )
@@ -269,6 +270,29 @@ func TestReloadWarnsOfARefusedLogSetting(t *testing.T) {
 	reload(fixed, "-log-level and -log-format given", env.LogLevel+"=deubg\n"+env.LogFormat+"=xml\n", "")
 	reload(fixed, "-log-file-format not given", env.LogLevel+"=deubg\n"+env.LogFormat+"=xml\n"+env.LogFileFormat+"=xml\n",
 		`the next start refuses: -log-file-format or MASSIMO_LOG_FILE_FORMAT: unknown log format "xml", want json or plain`)
+}
+
+// A reload removes the keep-open setting where the server has users
+// beside it, as a process of an older version, or a store put in place
+// by hand, can leave them (AP FirstOwner, D12).
+func TestSettingsReloaderDropsKeepOpen(t *testing.T) {
+	unsetForTest(t, tokenVar)
+	p := filepath.Join(t.TempDir(), "env")
+	os.WriteFile(p, nil, 0o600)
+	t.Cleanup(func() { os.WriteFile(p, nil, 0o600); env.ReloadFile(p) })
+	st := storekit.Open(t, "")
+	srv := server.New(server.Options{Store: st, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	r := newSettingsReloader(p, slog.New(slog.NewTextHandler(io.Discard, nil)), srv, settings(), nil)
+	if _, err := st.AddUser(t.Context(), store.User{Name: "anna", Role: store.RoleOwner}, "", 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetSetting(t.Context(), store.KeepOpenKey, true); err != nil {
+		t.Fatal(err)
+	}
+	r.reload(t.Context(), "test")
+	if st.KeepOpen(t.Context()) {
+		t.Fatal("kept open after the reload")
+	}
 }
 
 // startServe runs serve from the built massimo with the settings file and

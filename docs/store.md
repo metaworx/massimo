@@ -1295,9 +1295,29 @@ the roles and their sets are rows (section 5), seeded by the first migration.
   the API stays open as today (acceptable on the default localhost listener,
   docs/api-v1.md says so already),
   and Settings shows "No users yet" with a form that creates the first owner
-  with a password; the form works only while there are no users.
+  with a password; the form works only while there are no users,
+  and makes one owner: the store counts the users again in the transaction
+  that writes it, which holds the database's one write lock from its start
+  (`_txlock=immediate`), so of two at the same moment the second is refused
+  (AP FirstOwner, D15).
   `massimo user add` does the same from the command line (open decision 4 on
   whether the form should exist).
+  The setting `auth.keep_open` (false by default) keeps such a server open
+  on purpose: the web UI does not ask for the first owner
+  (AP FirstOwner, D11), and nothing changes about who is let in.
+  It counts only while there are no users:
+  every transaction of the store that makes a user removes it,
+  the API's first owner, `massimo user add`, the owner of `MASSIMO_API_TOKEN`,
+  a provider's user and an integration's among them,
+  and the server removes it at its start and at each reload of the settings
+  file where it finds users beside it,
+  which a process of an older version can leave;
+  each removal is an Info line, `keep-open setting removed`.
+  A server that loses all its users asks for the first owner again.
+  One window is left: where a process of an older version adds a user
+  while the setting is on, and every user is removed again before the next
+  start or reload, the setting is in effect again without anybody having
+  been asked; only a start or a reload closes it.
 - With users present, every `/api` request needs a valid token:
   the `Authorization: Bearer` header as today,
   with a session token or an API key.
