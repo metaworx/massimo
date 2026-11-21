@@ -1855,12 +1855,19 @@ its body the form cloned from the feature's template.
 A long page is a grid of section cards (`section.section-card`,
 its heading's `button.section-fold` folding it), the page's skeleton:
 the parts fold them and keep the fold in the browser,
-and draw what a card holds in its head (`ui/src/shared/card.ts`, `ui/src/chrome/`, below);
-`pageBar` fills the sections menu of its title's row kept at the top
+and draw what a card holds in its head
+(`ui/src/shared/card.ts`, `ui/src/chrome/`, below);
+a page's title's row kept at the top is the chrome's
+(`ui/src/chrome/Bar.tsx`, drawn into its `[data-bar]` place):
+its sections menu, an item per card
 (with a part without a fold marked `.page-section`, as Cube settings' panel),
-`pageSwitch` puts the settings pages in its title's place (`SETTINGS_PAGES` in `pages.js`,
-as ☰'s pages are `MENU_VIEWS`; `markSettingsPages` shows the title for one page alone),
-`fitPageTabs` gives the page shown's button the longest name's width,
+the settings pages in its title's place
+(`SETTINGS_PAGES` in `chrome/pages.ts`, ☰'s middle four;
+the title shown for one page alone),
+the page shown's button the longest name's width,
+System info's badges,
+and the personal page's who is in and Sign out (`whoOf` of `shared/me.ts`),
+which hides My profile from all but a user;
 and the two ↑, the floating one and the compacted header's, are the chrome's
 (`ui/src/chrome/ToTop.tsx`, `scroll.ts` `toTop`);
 `showToast` shows the page's one toast at its foot (a notification, the search's outcome),
@@ -1941,8 +1948,8 @@ a script for each region of the page, in the order the page loads them:
   `house.js`, the House tile's plain names, which call its part;
 - `week-program.js`, the week programme editor; `config.js`, the editor's kit;
 - `log.js`, the log and its sign for unseen problems;
-  `pages.js`, the plain names of the pages' store (`ui/src/shared/pages.ts`),
-  the log's choices in the address, and the settings pages' rows;
+  `pages.js`, the plain names of the pages' store (`ui/src/shared/pages.ts`)
+  and the log's choices in the address;
 - `update.js`, the plain names of Software update,
   which call its part (`ui/src/software/`),
   for the header's check and the server's sign;
@@ -2088,6 +2095,7 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `burstReader` | `burst.ts` | one read for a burst of the stream's events: a read in flight and at most one more after it, which reads what the events meanwhile asked for, none asked for in the session before (the parts that follow the server while shown) | `read(what)`, the reads by name; gives `ask(...what)` |
 | `session`, `stillSession`, `newSession` | `session.ts` | the session's number, raised by `MassimoParts.signedOut` before anything is forgotten: a store takes it before an await and drops the answer, its message and its next timer where it changed; `actionRunner`'s `bound` does so for a runner | –; `n`; – |
 | `me`, `own`, `meChanged` | `me.ts` | who the page is signed in as, `state.me` as `applyCaps` of `login.js` hands it over at every read of it (`MassimoParts.me`), null from a sign-out on; the token it is signed in with, by which a user's sessions say "this device" and "its key" | `m` |
+| `whoOf`, `Who` | `me.ts` | who is in in the page's words, for the personal page's row, ☰'s Sign out and Personal settings' tooltip and the question before a sign-out alike: the row's line, Sign out or Forget key (none on an open server) with its icon, the name for the tooltip, and whether My profile is there | `me` |
 | `cardBadges`, `badgesOf`, `BadgeSpec` | `card.ts` | what a section card's head shows at a glance, also while it is folded: a region gives a card's badges by its id from its drawing's effect, `[]` for none, and the page's chrome draws them (`ui/src/chrome/Cards.tsx`) | `id`, `list` of `{ text, kind }` |
 | `showCard`, `wireCards` | `card.ts` | a section card brought into view, unfolded, the focus on its heading's button, kept there for two seconds where its page has just been opened (`instant`); the cards' folds wired once, each kept in this browser (`massimo.fold.<card id>`), set on the skeleton at once | `id`, `instant` |
 | `Brand` | `brand.tsx` | Massimo's logo and small mark from the sprite (`brandMarks` of `components.js`, which draws them over the skeleton's `data-brand`), of which the place's style shows one, hidden from screen readers: ☰'s first row | |
@@ -2405,7 +2413,8 @@ and the forms' of every entry (`unsavedTone`), with ☰'s name and tooltip.
 ↑, Rooms and ☰, its first row Massimo's mark (the shared `Brand`) and the server's
 version, which `header.js` hands it as `MassimoParts.chrome.version(v)`,
 and its entries from the pages' store (`ui/src/shared/pages.ts`) and who is in
-(`ui/src/shared/me.ts`), worded by `chrome/me.ts` as the personal page's row words it:
+(`ui/src/shared/me.ts`), worded by its `whoOf`,
+as the personal page's row words it:
 Sign out or Forget key, and whose Personal settings they are;
 in the app Select server, by `appConnect` of `login.js`, and Sign out by its `logout`.
 My settings (`ui/src/prefs/`, AP UiParts Block 13) draws their rows into

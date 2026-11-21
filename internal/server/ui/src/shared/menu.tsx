@@ -99,10 +99,12 @@ export function Dropdown({ id, cls, summaryId, summaryCls, label, title, summary
  * whose result shows in the list itself. id, title and aria are the
  * button's id, tooltip and name for a screen reader where the page names
  * them (☰'s entries), labelId the label's id, and after what follows the
- * label on its line, a mark at the item's end.
+ * label on its line, a mark at the item's end; data are its data-
+ * attributes (the card a sections menu's item brings into view).
  */
-export function MenuItem({ id, icon, blank, label, labelId, icons, after, sub, subCls, cls, title, aria, value, current, disabled, busy, keepOpen, onClick }: {
+export function MenuItem({ id, data, icon, blank, label, labelId, icons, after, sub, subCls, cls, title, aria, value, current, disabled, busy, keepOpen, onClick }: {
   id?: string;
+  data?: Record<string, string>;
   icon?: ComponentChildren;
   blank?: boolean;
   label: string;
@@ -128,8 +130,10 @@ export function MenuItem({ id, icon, blank, label, labelId, icons, after, sub, s
     </span>
   ) : <span id={labelId} class="menu-item-label">{label}</span>;
   const b = busyProps(cls || "", !!busy, disabled);
+  const attrs: Record<string, string> = {};
+  for (const [k, v] of Object.entries(data || {})) attrs["data-" + k] = v;
   return (
-    <button type="button" id={id} class={b.class || undefined} title={title || undefined} aria-label={aria || undefined} data-value={value} disabled={b.disabled}
+    <button type="button" id={id} {...attrs} class={b.class || undefined} title={title || undefined} aria-label={aria || undefined} data-value={value} disabled={b.disabled}
       aria-busy={b["aria-busy"]} aria-current={current === "page" ? "page" : current ? "true" : undefined} data-keep-open={keepOpen ? "" : undefined}
       onClick={onClick}>
       {icon || (blank && <span class="menu-icon-none" />)}

@@ -6,13 +6,14 @@
  *
  * The page's chrome (AP UiParts, Block 14), a region of its own, drawn
  * once into its places as parts.js loads: the header's page buttons with
- * ☰ (Menu.tsx), into the header's nav; the section cards' badges and
+ * ☰ (Menu.tsx), into the header's nav; each page's row kept at the top
+ * (Bar.tsx), into its [data-bar] place; the section cards' badges and
  * pills, their folds wired (Cards.tsx, shared/card.ts); the header kept
  * at the top and compacted as the page scrolls, and back to top
  * (scroll.ts, ToTop.tsx). The pages it shows are the store of
- * shared/pages.ts, which it first hands the page's pages (pages.ts). The log tells its count and tone through
- * MassimoParts.chrome.log (log.js renderLogSign, plain until Block 11),
- * header.js the server's version. No region may import another: it knows
+ * shared/pages.ts, which it first hands the page's pages (pages.ts). The
+ * log tells its count and tone through MassimoParts.chrome.log (log.js
+ * renderLogSign, plain until Block 11), header.js the server's version. No region may import another: it knows
  * the forms through shared/forms.ts alone.
  */
 
@@ -20,6 +21,7 @@ import { render } from "preact";
 import { type BadgeSpec, cardBadges, showCard, wireCards } from "../shared/card";
 import { definePages } from "../shared/pages";
 import { register } from "../shared/region";
+import { drawBars } from "./Bar";
 import { drawCards } from "./Cards";
 import { Nav } from "./Menu";
 import { CARD_ADDRESSES, PAGE_VIEWS } from "./pages";
@@ -34,6 +36,7 @@ const nav = document.getElementById("nav");
 if (nav) render(<Nav />, nav);
 wireCards();
 drawCards();
+drawBars(); // after the cards: System info's badges are its row's
 stickyHeader();
 const toTopSlot = document.getElementById("to-top-slot");
 if (toTopSlot) render(<ToTop />, toTopSlot);

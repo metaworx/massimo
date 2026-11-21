@@ -4,21 +4,9 @@
 // The Massimo web UI, the pages: the plain names of the pages' store
 // (ui/src/shared/pages.ts, MassimoParts.pages), which shows a page, keeps
 // it in the address and each page's scroll, and says who may open which;
-// the log's choices in the address, the log's page plain until AP
-// UiParts' Block 11; and the settings pages' rows, plain until the
-// page's chrome draws them.
+// and the log's choices in the address, the log's page plain until AP
+// UiParts' Block 11.
 "use strict";
-
-// SETTINGS_PAGES are the settings pages, in ☰'s order, each with its
-// section, its icon, the key of its name and the class that hides it from
-// a role that may not open it (login.js, style.css); each page's row holds
-// them all in this order (components.js pageSwitch).
-const SETTINGS_PAGES = [
-  { view: "cube", section: "cube-page", icon: "icon-cube3d", key: "nav.cubeTitle", needs: "needs-cubes-or-pair" },
-  { view: "system", section: "system", icon: "icon-cog", key: "nav.settingsTitle", needs: "needs-system" },
-  { view: "maint", section: "maint-page", icon: "icon-tool", key: "nav.maintTitle", needs: "needs-maint" },
-  { view: "info", section: "info-page", icon: "icon-info", key: "nav.infoTitle", needs: "needs-read" },
-];
 
 // logHash is the log's address: its page, then All Cubes, the range, the
 // kind and the device chosen (by its S/N), in that order, each left out
@@ -96,25 +84,7 @@ function showView(view, address, card) {
 // currentView is the page shown, which login.js and the UI tests read.
 Object.defineProperty(window, "currentView", { get: () => MassimoParts.pages.shown() });
 
-// markSettingsPages shows each settings page's title in place of its
-// buttons (components.js pageSwitch) where the signed-in user may open
-// no other settings page (mayShow); login.js applyCaps calls it.
-function markSettingsPages() {
-  const single = SETTINGS_PAGES.filter((p) => mayShow(p.view)).length < 2;
-  for (const p of SETTINGS_PAGES) $(p.section).querySelector(".page-bar").classList.toggle("single-page", single);
-  fitSettingsPages();
-}
-
-// fitSettingsPages measures the names in the row of the settings page
-// shown, for the width of its page's button (components.js fitPageTabs);
-// a page shown, a change of language (app.js applyLanguage) and of the
-// signed-in user (markSettingsPages) call it.
-function fitSettingsPages() {
-  for (const p of SETTINGS_PAGES) fitPageTabs($(p.section));
-}
-
-// initPages wires the pages: each settings page's switch, back and
-// forward, and the log's address of its own, which the store reads and
+// initPages wires back and forward, and hands the store the log's address of its own, which the store reads and
 // writes and tells when the log is shown (ui/src/shared/pages.ts).
 function initPages() {
   MassimoParts.pages.ownAddress("log", {
@@ -133,8 +103,6 @@ function initPages() {
       logLoadUsers();
     },
   });
-  for (const p of SETTINGS_PAGES) pageSwitch($(p.section), p.view, SETTINGS_PAGES, (v) => showView(v)); // components.js
-  for (const p of SETTINGS_PAGES) MassimoParts.pages.onView(p.view, fitSettingsPages);
   // back and forward, and a page named in the address bar
   window.addEventListener("popstate", () => showAddress());
 }

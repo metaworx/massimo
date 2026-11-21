@@ -303,7 +303,7 @@ def snap(page, path, frame):
         h = page.evaluate("document.querySelector('header.top').getBoundingClientRect().bottom")
         return page.screenshot(clip={"x": 0, "y": 0, "width": page.viewport_size["width"], "height": math.ceil(h + PADDING)}, **opts)
     # The header and the page's row stay at the top of the window as it
-    # scrolls, and ↑ floats over it (ui/src/chrome/scroll.ts stickyHeader, components.js pageBar,
+    # scrolls, and ↑ floats over it (ui/src/chrome/scroll.ts stickyHeader, ui/src/chrome/Bar.tsx,
     # ui/src/chrome/ToTop.tsx): an element's shot is of the element alone. Through the
     # elements' style, since the page's CSP takes no style element.
     page.evaluate("""() => {

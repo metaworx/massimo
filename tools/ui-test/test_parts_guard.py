@@ -645,6 +645,15 @@ def sections_menu(page):
     page.locator("#system .sec-menu .menu-items").wait_for(state="visible")
 
 
+def personal_sections(page):
+    """The personal page's sections menu open, the focus on My settings'
+    item."""
+    personal("me")(page)
+    page.keyboard.press("Escape")
+    page.locator("#me .sec-menu > summary").click()
+    page.locator("#me .sec-menu .toc-link[data-target='prefs']").focus()
+
+
 def users_fold(folded):
     """System settings, the Users card folded (or opened again) by its
     button, the focus on it; the fold kept in the browser is taken back by
@@ -803,14 +812,18 @@ REGIONS = (
     ), sources=("applyStoredSettings()",)),
     Region("notifications", ("#notify-sec",), (View("Notifications", personal("notify")),), sources=("the page shown again: me",)),
     Region("my-profile", ("#profile-sec",), (View("My profile", profile),), sources=("the page shown again: me",)),
-    # The cards' folds are the skeleton's, their badges and pills parts
-    # (AP UiParts, Block 14): a card folded, the focus on its fold, passed
-    # on the page before the move as well, where nothing drew a head again.
-    Region("page-chrome", ("#system .page-bar", "#system .section-head"), (
+    # The pages' rows are parts (AP UiParts, Block 14), drawn from who is
+    # in as well, and the cards' folds are the skeleton's, their badges and
+    # pills parts: a card folded, the focus on its fold, passed on the page
+    # before the move as well, where nothing drew a head again; the personal
+    # page's sections menu failed there around who is in read again, which
+    # emptied it (pageBar).
+    Region("page-chrome", ("#system .page-bar", "#system .section-head", "#me .page-bar"), (
         View("System settings, its sections menu open", sections_menu),
         View("the Users card folded, the focus on its fold", users_fold(True), "#sys-users .section-fold"),
         View("the Users card opened again, the focus on its fold", users_fold(False), "#sys-users .section-fold"),
-    )),
+        View("the personal page's sections menu open, the focus on an item", personal_sections, "#me .sec-menu .toc-link[data-target='prefs']"),
+    ), sources=("loadMe()",)),
     Region("sign-in", ("#login-dialog",),
            gap="shown only to a page without a token, which loads no data while it is open: the poll and the stream start after the sign-in"),
 )

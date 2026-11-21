@@ -61,3 +61,6 @@ export const MENU_PAGES: MenuPage[] = [
   { view: "info", id: "menu-info", icon: "icon-info", key: "nav.infoTitle", needs: "needs-read", forms: [] },
   { view: "me", id: "menu-me", icon: "icon-user", key: "nav.userTitle", needs: "", forms: ["profile", "scheme"] },
 ];
+
+/** The settings pages, in ☰'s order: the four in the middle, which each settings page's row lists. */
+export const SETTINGS_PAGES: MenuPage[] = MENU_PAGES.slice(1, 5);

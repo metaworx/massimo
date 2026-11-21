@@ -1,4 +1,4 @@
-# Testing the web UI (v1.18.0)
+# Testing the web UI (v1.19.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -715,10 +715,13 @@ which failed as well: `applyAppearance` made the editor anew.
 Notifications are checked around the personal page shown again,
 which failed on the page before the move: `notify.js` made the rules and the devices anew.
 The page's chrome (AP UiParts, Block 14) is checked with ☰ open, the focus on an entry,
-around who is in read again as well (`loadMe()`), as at a sign-in,
-and with System settings' sections menu open and a card folded and opened again,
-the focus on its fold; each passed on the page before the move too,
-where nothing drew ☰ or a card's head again.
+and with the personal page's sections menu open, the focus on an item,
+each around who is in read again as well (`loadMe()`), as at a sign-in;
+the personal page's failed on the page before the move, where `pageBar` emptied the menu
+at every read of who is in.
+System settings' sections menu open,
+and a card folded and opened again, the focus on its fold,
+passed on the page before the move too, where nothing drew a card's head again.
 
 ### Taking a region off the list
 

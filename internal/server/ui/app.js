@@ -1002,15 +1002,9 @@ function applyLanguage() {
   if (I18N.en) applyI18n(document);
   MassimoParts.language(); // the parts draw their texts again (ui/src/shared/lang.ts)
   initHelpSlots();
-  pageBar($("system"));
-  pageBar($("maint-page"));
-  pageBar($("cube-page"));
-  pageBar($("me"));
-  fitSettingsPages(); // pages.js: the page shown's button as wide as the longest name
   renderLangSelect();
   applyAppearance();
   renderCubeSelect();
-  renderMe();
   renderServerSign();
   renderDeviceSwitches();
   renderUsers();
@@ -1039,9 +1033,6 @@ async function init() {
   if (I18N.en) applyI18n(document);
   renderLangSelect();
   initHelpSlots();
-  // System settings' row with its sections menu (the cards fold, the
-  // header compacts and back to top is drawn by the parts, ui/src/chrome/)
-  for (const page of [$("system"), $("maint-page"), $("cube-page"), $("me")]) pageBar(page);
   initSettings();
   applySettings();
   checkVersion();

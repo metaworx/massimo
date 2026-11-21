@@ -9,13 +9,15 @@ The pages shown are a signal (ui/src/shared/pages.ts): a part that read
 the page shown in a drawing or an effect would follow it and could read
 again at each change of page. The regions ask isShown, which follows
 nothing; the first test counts every read of each showing of every page
-against what the page before the store read."""
+against what the page before the store read. The rows (ui/src/chrome/
+Bar.tsx) keep their sections menu through who is in read again, and the
+row of the page shown alone gives the cards' scroll margin its height."""
 from collections import Counter
 
 import pytest
 
 from conftest import URL, api_call
-from helpers import hold, held_poll, open_personal_page, show_view, wait_held, wait_until
+from helpers import frames, hold, held_poll, open_personal_page, scroll_settled, show_view, wait_held, wait_until
 from test_login import sign_in
 from test_preferences import clear_user, operator_key
 
@@ -78,6 +80,71 @@ def test_pages_read_at_each_showing_what_they_read(page, case):
         page.remove_listener("request", note)
     for (view, want), (_, reads) in zip(READS, got):
         assert reads == want, f"{view}: read {reads}, the page before the store read {want}"
+
+
+def test_sections_menu_kept_through_who_is_in_and_the_language(page, case):
+    """The personal page's sections menu open, the focus on My settings'
+    item: who is in read again, as at every sign-in and change of the
+    user, and the language applied again keep the menu open, the item the
+    element it was, with the focus. The plain row emptied the menu and
+    filled it anew at both (pageBar), and the item had gone."""
+    show_view(page, "me")
+    menu = page.locator("#me .sec-menu")
+    menu.locator("summary").click()
+    item = menu.locator(".toc-link[data-target='prefs']")
+    item.focus()
+    page.evaluate("window.__shellItem = document.querySelector(\"#me .sec-menu .toc-link[data-target='prefs']\")")
+    for read in ("loadMe()", "applyLanguage()"):
+        page.evaluate(f"(async () => {{ await {read}; }})()")
+        frames(page)  # the row drawn again after the read
+        assert page.evaluate("window.__shellItem.isConnected"), f"the item the element it was after {read}"
+        assert page.evaluate("document.activeElement === window.__shellItem"), f"with the focus after {read}"
+        assert menu.get_attribute("open") is not None, f"the menu open after {read}"
+    page.keyboard.press("Escape")
+    show_view(page, "tiles")
+
+
+# Changes of page, each order of the rows on the page among them: from
+# the page whose row the page holds later to the one it holds earlier and
+# back, as the rows' observers report.
+CHANGES = (("info", "system"), ("system", "me"), ("me", "maint"), ("cube", "info"))
+SECTIONS = {"system": "#system", "me": "#me", "maint": "#maint-page", "info": "#info-page", "cube": "#cube-page"}
+
+
+def test_the_cards_come_to_rest_below_the_row_after_a_change_of_page(page, case):
+    """After each change of page, the cards' scroll margin (--bar-h) is the
+    height of the row of the page shown, and an item of its sections menu
+    brings a card with room below it to rest with its head below the row.
+    Every row wrote its
+    height there, a hidden one 0, in the order they were made, so that
+    after some changes the 0 of the page left came last and the card's
+    head went under the row: from Personal settings to Maintenance on
+    the page before Block 14, from System info to System settings on its
+    first tree."""
+    for before, after in CHANGES:
+        show_view(page, before)
+        show_view(page, after)
+        frames(page)  # the row of the page shown measured
+        bar = SECTIONS[after] + " .page-bar"
+        got = page.evaluate("(sel) => [getComputedStyle(document.documentElement).getPropertyValue('--bar-h').trim(),"
+                            " document.querySelector(sel).offsetHeight + 'px']", bar)
+        assert got[0] == got[1], f"{before} → {after}: --bar-h {got[0]}, the row {got[1]}"
+        menu = page.locator(SECTIONS[after] + " .sec-menu")
+        if not menu.count():
+            continue  # System info has no sections menu
+        # room below every card, so that the one chosen can come to the top
+        page.evaluate("(sel) => { const d = document.createElement('div'); d.className = 'test-spacer'; d.style.height = '3000px';"
+                      " document.querySelector(sel).appendChild(d); }", SECTIONS[after])
+        menu.locator("summary").click()
+        item = menu.locator(".toc-link:visible").nth(1)  # the second: the first is at the top already
+        target = item.get_attribute("data-target")
+        item.click()
+        assert scroll_settled(page), f"{before} → {after}: the menu's scroll comes to rest"
+        rest = page.evaluate("([sel, id]) => [document.getElementById(id).getBoundingClientRect().top,"
+                             " document.querySelector(sel).getBoundingClientRect().bottom]", [bar, target])
+        page.evaluate("document.querySelectorAll('.test-spacer').forEach((e) => e.remove()); window.scrollTo({top: 0, behavior: 'instant'})")
+        assert rest[0] >= rest[1] - 1, f"{before} → {after}: {target}'s head at {rest[0]}, under the row ending at {rest[1]}"
+    show_view(page, "tiles")
 
 
 @pytest.mark.cases("1100-de", "390-de")

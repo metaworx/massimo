@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
-"""System settings as section cards (ui/src/shared/card.ts, ui/src/chrome/,
-components.js pageBar): their order, the sections menu and no row of
+"""System settings as section cards (ui/src/shared/card.ts, ui/src/chrome/):
+their order, the sections menu and no row of
 section buttons, folding kept in the browser, back to top, the columns
 where there is room, and a Cube's panel in two columns."""
 from helpers import named_buttons, scroll_settled, scroll_width, show_view, wait_until
