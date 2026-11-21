@@ -385,7 +385,8 @@ hence `failed_checks_forgotten`.
   head to rest below the row.
 - `test_sign_in_updates.py`, the sign-in as parts (AP UiParts, Block 14):
   in the app, Create the owner turns until the app has answered whether it
-  kept the login, and a second submit meanwhile creates nothing; a name and
+  kept the login and the card has closed, and a second submit meanwhile
+  creates nothing; a name and
   a password typed, the focus, a refusal and the way chosen stay, the same
   elements, through a second 401, the providers read again, a change of
   language and who is in read again; the fields are emptied at an opening
@@ -473,6 +474,29 @@ hence `failed_checks_forgotten`.
   marks that key and scrolls a row below the first screen into view,
   marks nothing for an id that is not one of the user's keys,
   and nothing once the address or the page shown changes.
+- `test_first_owner.py`, the first owner in the sign-in card (AP FirstOwner),
+  `/api/v1/me` stubbed as an open server:
+  the card opens at the page's start with the first owner's form,
+  no way to sign in, no provider, ☰ there, the name in focus,
+  nothing of the page read behind it;
+  Skip for now shows the open page with its banner, and a reload asks again;
+  no card where the server is kept open, has no store, or has users;
+  Create the owner turns until the card has closed, Skip for now and Cancel
+  off meanwhile, a second submit creates nothing, one read of `/me` from the
+  click to the page, a toast says it, with the login not kept in the app;
+  a card closed while it turns starts the page once, and the late end leaves
+  a later sign-in open;
+  the passwords' mismatch first, the name checked 2 s after the last
+  keystroke under the paused clock;
+  a 401 or a 409 turns the card to the sign-in, nothing carried over,
+  no write said not sent after the sign-in;
+  a page left open learns of an owner made elsewhere from its stream's
+  ticket refused, with the card shown and after Skip, the password's way
+  chosen;
+  the card centred and no wider than the window, each button's text on one
+  line, in a browser and in the app, at 390 px in six languages; on a
+  phone of 640 px it starts at the top and scrolls; over plain HTTP in the
+  app no sign-in's notice; on a touch screen no field in focus.
 - `test_preferences.py`, the settings that follow the user:
   the poll and the scheme set in one browser reach the server and a fresh
   browser with the same token,

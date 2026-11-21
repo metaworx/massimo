@@ -1449,6 +1449,8 @@
   "setup.mismatch": "Die Passwörter stimmen nicht überein.",
   "setup.done": "Eigentümer {name} angelegt und angemeldet.",
   "setup.failed": "Nicht angelegt: {error}",
+  "setup.skip": "Vorerst überspringen",
+  "setup.exists": "Es gibt jetzt einen Eigentümer: melde dich an.",
   "users.title": "Benutzer",
   "users.add": "Benutzer hinzufügen",
   "users.none": "Keine Benutzer.",

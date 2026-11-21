@@ -12,8 +12,8 @@ its row **Password | API key** choosing the form,
 on one line at a phone's width in every language:
 a name and a password, chosen at first,
 or an API key pasted into a form of its own,
-which is chosen from the start once the page has seen the server ask for no key
-(the owner made from `MASSIMO_API_TOKEN` has no password),
+which is chosen from the start once the page has seen a server without a store
+ask for no key (its only way in is `MASSIMO_API_TOKEN`),
 the field of the form shown in focus.
 A screen reader names the row's group "Sign in with"; no label shows it.
 The password form holds the one password field, its fields named,
@@ -47,7 +47,7 @@ its right, where the phone has a fingerprint and keeps no login for the
 server, which after the sign-in asks for the fingerprint and keeps an API key
 of the user's own behind it,
 or says that nothing was kept, with **Try again** and **Sign in without it**;
-the same switch on the form that creates the first owner;
+the same switch on the card's form that creates the first owner;
 the fingerprint first in the row where a login is kept,
 named with the user's name, which signs in at once with a new session from
 the key, the password staying the form chosen,
@@ -77,8 +77,36 @@ A user whose password the server still hashes (`auth_version` 1) is signed in
 with the password after the OPAQUE attempt, while the server takes that,
 and the page registers the password by OPAQUE at once:
 it is the last time that password goes to the server.
-A server without users shows the form that creates the first owner to a
-browser on the local network; until then everything is open,
+A server without users asks whoever opens its page from the local network
+to create the owner, in the sign-in card,
+at each load of the page (AP FirstOwner):
+the card is titled that there are no users yet,
+and has the form that creates the first owner instead of the ways to sign in:
+its name, its password typed twice and, in the app, the switch and Cancel;
+its ☰ as at a sign-in, no provider.
+Its fields are emptied at an opening alone, never when the card closes,
+so that a password manager finds what was typed (FirstOwner D43);
+under the form, **Skip for now**, which shows the page as it is for this load,
+and the next load asks again.
+The page behind the card is hidden as at a sign-in.
+At the page's start and after a sign-out the start waits for the card:
+the Cubes, the rooms, the stream and the providers are read once it has closed,
+only the version and the update's state before;
+where a read of who is in opens it on a running page,
+the poll and the stream go on behind it.
+**Create the owner** turns until the owner is created,
+signed in and the card closed, Skip for now and Cancel off meanwhile,
+then a toast says so,
+and in the app that the login by fingerprint was not kept where it was not.
+Where the server has users after all,
+another device having made the owner meanwhile,
+the card becomes the sign-in's, the password's way chosen,
+with a line that says the owner exists now;
+a later sign-in on a server seen open with a store opens on the password's way too,
+on one without a store on the API key's (FirstOwner D42).
+A server kept open on purpose (the setting `auth.keep_open`) and a server
+without a store do not ask.
+Until the owner exists everything is open,
 and a warning under the header's rule says so and what closes it:
 the first owner, or `MASSIMO_API_TOKEN` in the server's settings file
 (`-token` for a server without a store).
@@ -168,8 +196,8 @@ made by `make ui-brand`, `tools/brand/README.md`), and stays where it never does
 The drawing has no margin: its bottom edge is the letters' baseline,
 which the pile and the buttons end on.
 Its colours follow the light or dark mode chosen, its letters the page's text.
-The sign-in, the form that creates the first owner and the apps' connect page
-show the logo too, the first two larger, above their titles.
+The sign-in card, with the form that creates the first owner in it,
+and the apps' connect page show the logo too, the card's larger, above its title.
 
 The header stays at the top while the page scrolls.
 Scrolled, it keeps its rows as they are, the logo too,
@@ -2038,8 +2066,8 @@ a script for each region of the page, in the order the page loads them:
   its card is a part (`ui/src/signin/`);
   `users.js`, the plain names of System settings → Users,
   which call its part (`ui/src/admin/`);
-  the first owner's form and the open server's warning have none,
-  parts alone (`ui/src/signin/`), as the sign-in's card;
+  the first owner's form, in the sign-in's card, and the open server's warning
+  have none, parts alone (`ui/src/signin/`), as the sign-in's card;
   `providers.js`, the enabled sign-in providers and the plain name of
   Sign-in providers; My profile has none, a part alone (`ui/src/profile/`);
   `backup.js`, the plain names of Backup and restore (`ui/src/backups/`);
@@ -2151,7 +2179,7 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `useHelp` | `help.tsx` | a setting's or a group's help as a pair, the button and its explanation of an id of their own (`help-<key>-…`), which a field's row, a switch and a group of My profile draw where each belongs | `help` (the key), `label` (the name the button is named after); gives `button`, `text` |
 | `HelpButton`, `HelpText` | `help.tsx` | a setting's help (`helpParts`): the question mark that shows and hides its explanation, `help.<key>` of the texts, shown by its key wherever it is drawn again, in the page's one set of keys shown (`helpOpen` of `app.js`), the parts drawn again by a signal of their own, so a key is drawn by one side only; `Field` and `Switch` draw both from their `help` | `help` (the key), `id` (the explanation's, which the button controls), `label` (the setting's name); `help`, `id` |
 | `Field` | `field.tsx` | a label and its control, `.field` or `.field.wide` (`fieldRow`); with `limit`, what the field takes, said in amber just before the control while a value is refused, the box outlined in red and the limit its description (`markRange`) (`TextField` and `NumberField` mark their input for it; a control of the caller's inside a `Field` with a limit has no marking of its own yet) | `label`, `id`, `wide`, `unit`, `hint`, `hintId` (the hint's id, which a `Select` names as its description), `help` (the key of the setting's help: its button after the label, its explanation under the control), `cls` (classes the row adds, a capability's `needs-…`), `labelCls` (the label's class, `action-title` for a row's title in bold: Maintenance's settings; `Select` passes it on), `limit` (`{ text, over, cls }`: the text, whether the value is refused, the line's class beside `field-limit`; in the unit's line where there is one, else on a line of its own above the box), `draft`, `show`, the control as children |
-| `TextField` | `field.tsx` | a row with a text input that shows a stored text, from its draft, or a free text (a name offered) by `value` and `set`; with `row={false}` the input alone, standing in a tile's head (the log's search), as plain as written: `aria` its name for a screen reader, no name, `autocomplete` or `spellcheck` of its own | `label`, `id`, `name`, `draft` and `show`, or `value` and `set`; `wide` (on by default), `unit`, `hint`, `help`, `cls`, `limit`, `placeholder`, `type` (`password` too, by `value` and `set` alone, never a draft; `search`), `autocomplete`, `inputCls` (the input's class, `mono` for a key), `maxLength`, `pattern`, `required`, `disabled`, `inputRef`, `row`, `aria` |
+| `TextField` | `field.tsx` | a row with a text input that shows a stored text, from its draft, or a free text (a name offered) by `value` and `set`, or, with neither, a field not controlled that its caller reads through `inputRef` (the sign-in card's, UiParts D210); with `row={false}` the input alone, standing in a tile's head (the log's search), as plain as written: `aria` its name for a screen reader, no name, `autocomplete` or `spellcheck` of its own | `label`, `id`, `name`, `draft` and `show`, or `value` and `set`, or `inputRef` alone; `wide` (on by default), `unit`, `hint`, `help`, `cls`, `limit`, `placeholder`, `type` (`password` too, by `value` and `set` or not controlled, never a draft; `search`), `autocomplete`, `inputCls` (the input's class, `mono` for a key), `maxLength`, `pattern`, `required`, `disabled`, `inputRef`, `row`, `aria` |
 | `NumberField`, `numberNorm` | `field.tsx` | a number input that shows a stored number (`numberInput`), its draft the input's text, "" for none, or a free number (a time) by `value` and `set`; with `row={false}` the input alone, in a row of the caller's, which draws its notice (`Meanwhile`); how such a draft compares, as a number | `label`, `id`, `name`, `min`, `max`, `step`, `draft` and `show`, or `value` and `set`; `aria` (its name where no label names it), `disabled`, `inputMode` (the keyboard a phone offers: `numeric` for the reboot's delay), `inputRef`, `onChange` (told of the value as the field is left changed: My settings' poll, saved then), `row`, and a row's `wide`, `unit`, `hint`, `help`, `cls`, `limit`; `v` |
 | `Select` | `field.tsx` | a row with a select (`selectInput`), its options as `fillOptions` takes them, each kept while it is the same; with `row={false}` the select alone, in a row of the caller's, which draws its notice, or standing in a tile's head (the log's choices) | `label`, `id`, `name`, `options` (`[value, label, disabled]` or `{ group, options }`), `value` and `onChange`, or `draft` and `show`; `row`, `wide`, `unit`, `hint`, `hintId` (the hint's id, which the select names as its description: the update channel's note, which changes with the choice), `help`, `cls`, `disabled`, `before` (between the label with its help and the select: a drawing's preview), `after` (after the select in its row: the language's note of a machine translation); without a row `aria` (its name for a screen reader) and `selectCls` (its own class, `hidden` for a choice left out) |
 | `DateTime` | `field.tsx` | a date and time field (`datetime-local`), its value as the input takes it | `value`, `set`, `id`, `cls`, `step`, `required`, `disabled`, `inputRef` |
@@ -2179,18 +2207,19 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `burstReader` | `burst.ts` | one read for a burst of the stream's events: a read in flight and at most one more after it, which reads what the events meanwhile asked for, none asked for in the session before (the parts that follow the server while shown) | `read(what)`, the reads by name; gives `ask(...what)` |
 | `session`, `stillSession`, `newSession` | `session.ts` | the session's number, raised by `MassimoParts.signedOut` before anything is forgotten: a store takes it before an await and drops the answer, its message and its next timer where it changed; `actionRunner`'s `bound` does so for a runner | –; `n`; – |
 | `me`, `own`, `meChanged` | `me.ts` | who the page is signed in as, `state.me` as `applyCaps` of `login.js` hands it over at every read of it (`MassimoParts.me`), null from a sign-out on; the token it is signed in with, by which a user's sessions say "this device" and "its key" | `m` |
+| `firstOwnerOf` | `me.ts` | whether the first owner can be created from here: an open server, which has a store, where who is in says `setup`; the sign-in card asks for the owner by it where the server is not kept open | `m` |
 | `whoOf`, `Who` | `me.ts` | who is in in the page's words, for the personal page's row, ☰'s Sign out and Personal settings' tooltip and the question before a sign-out alike: the row's line, Sign out or Forget key (none on an open server) with its icon, the name for the tooltip, and whether My profile is there | `me` |
 | `cardBadges`, `badgesOf`, `BadgeSpec` | `card.ts` | what a section card's head shows at a glance, also while it is folded: a region gives a card's badges by its id from its drawing's effect, `[]` for none, and the page's chrome draws them (`ui/src/chrome/Cards.tsx`) | `id`, `list` of `{ text, kind }` |
 | `showCard`, `wireCards`, `keepInView` | `card.ts` | a section card brought into view, unfolded, the focus on its heading's button, kept there for two seconds where its page has just been opened (`instant`); the cards' folds wired once, each kept in this browser (`massimo.fold.<card id>`), set on the skeleton at once; an element kept in view while the page's content changes size, for `ms` or until the user scrolls, a card at the top, a row in the middle (`block` `"center"`: My profile's marked key), keeping another ending the last | `id`, `instant`; `el`, `ms`, `block` |
-| `Brand`, `BrandName` | `brand.tsx` | Massimo's logo and small mark from the sprite (`brandMarks` of `components.js`, which draws them over the skeleton's `data-brand`), of which the place's style shows one, hidden from screen readers: ☰'s first row; `BrandName`, the big name under the logo, the first owner's form and the sign-in's card | |
+| `Brand`, `BrandName` | `brand.tsx` | Massimo's logo and small mark from the sprite (`brandMarks` of `components.js`, which draws them over the skeleton's `data-brand`), of which the place's style shows one, hidden from screen readers: ☰'s first row; `BrandName`, the big name under the logo, the sign-in's card | |
 | `page`, `isShown`, `showView`, `onView`, `mayShow` | `pages.ts` | the page of the main area shown, a signal: a drawing that reads `page.value` follows it, `isShown` asks at that moment and follows nothing (a handler, a reader, a timer), so that no request is sent again at a change of page; showing a page puts it into the address, as a new entry of the history or in place of the current one, and brings each page back at the scroll it was left at; `onView` runs at each showing, on the `viewshown` event; `mayShow` says who may open which, reading who is in; a page with an address of its own (the log's, `ui/src/log/index.tsx`) hands it over with `ownAddress`, a card's region what the card's address holds after its `?` with `readCardAddress` (My profile's key to mark), told of every address read, null for another, before the page is shown; `pages.js` keeps the plain names, and `currentView` | `view`, `address`, `card`; `card`, `read(q)` |
 | `userPath`, `Run`, `loadTokens`, `revokeToken`, `revokeOwn`, `createKey`, `loadIdentities`, `addIdentity`, `changeIdentity`, `removeIdentity` | `account.ts` | what a user's sessions, keys and identities read and send (`…/users/{name}/tokens`, `…/identities`), for System settings → Users and My profile alike; a change through the caller's runner (`Run`), which reloads what it shows and says how it went in its own line; Revoke of the token in use signs out | `name`, `rest`; `run`, `name`, and what each sends |
 | `Tokens` | `tokens.tsx` | a user's sessions and keys (a user's panel, My profile): each with Revoke, "this device" and "its key" by `own`, Create key and the key just made, shown once by the read that follows and kept in the part's own state alone; read when its place opens and again at each change of the caller's counter while open; an answer after a sign-out dropped; the API key the caller names tinted (`token-marked`), and the caller told of each read drawn with that row (My profile's key of its address) | `u`, `off`, `open`, `reads` (the caller's counter), `run`, `say` (the caller's message line), `labelId` (the new key's field's id), `help` (the group's ⓘ after Create key, My profile's), `marked` (the id of the API key marked), `drawn(row)` (told of each read drawn, with the row marked or null) |
 | `Identities`, `Changes` | `identities.tsx` | a user's identities at the sign-in providers (a user's panel, My profile): each with what the provider said and Remove; with `changes`, Change of one no sign-in used, a settings form kept by its key, the forms of identities gone or made unchangeable forgotten, and all of them where the box goes off; with `assign`, Assign; `after` what follows the list once read (My profile's Link buttons); `quiet` draws nothing while the list is empty and the caller offers nothing after it (`offer`: My profile's Link buttons, none in the app, where the rows are still named from every provider) | `u`, `off`, `open`, `reads`, `providers` (the enabled ones), `run`, `say`, `title`, `none`, `cls`, `changes` (`key(id)`, `under`, `ui(key)`, `forget(key)`, `show(key)`: the caller's forms and how one is brought into sight), `assign`, `after(list)`, `quiet`, `offer` |
 | `FileButton` | `file.tsx` | a button that opens the browser's choice of a file of the types it accepts (`filePicker`), the same file again too | `id` (the button's), `cls`, `label`, `accept`, `off`, `inputId` and `inputLabel` (the input's id and its name in the page's language: the Appearance card's Import…), `onFile(file)` |
 | `Adder` | `adder.tsx` | the end of a list that adds an item: the new item's form in its place while shown, the button that shows it hidden meanwhile, the focus in the form's first field when it comes, in the drawing's own turn, and back on the button when it goes (Users, Roles, Sign-in providers) | `id` (the button's), `formId` (the form's place), `label`, `shown`, `set(shown)`, the form as children |
-| `UserNameField`, `useNameCheck`, `wordNameError` | `username.tsx` | a new user's login name (Add a user, the first owner's form): checked 2 s after the last keystroke and when left, the store's rule and the names in use; a fixed name clears the line at once; the server's refusal worded alike | `label`, `id`, `msgId` (the line under it, which describes it), `value`, `set`, `nc` (`useNameCheck(taken)`: `problem`, `say`, `check(v)`, `typed(v)`), `name` (the input's, Add a user's alone), `autocomplete`, `placeholder`, `inputRef` |
-| `NewPassword`, `newPasswordProblem` | `password.tsx` | a new password typed twice (My profile's Change password, the first owner's form), free fields of the caller's own state, never a draft; the pair's one check, the mismatch first, then none typed | `ids` (the two inputs'), `names` (their name attributes, My profile's alone), `label` (the first's), `value`, `set`, `again`, `setAgain`, `required` |
+| `UserNameField`, `useNameCheck`, `wordNameError` | `username.tsx` | a new user's login name (Add a user, the first owner's form): checked 2 s after the last keystroke and when left, the store's rule and the names in use; a fixed name clears the line at once; the server's refusal worded alike | `label`, `id`, `msgId` (the line under it, which describes it), `value` and `set` (Add a user's), or neither, the field not controlled and read through `inputRef` (the first owner's, UiParts D210), `nc` (`useNameCheck(taken)`: `problem`, `say`, `check(v)`, `typed(v)`), `name` (the input's, Add a user's alone), `autocomplete`, `placeholder`, `inputRef` |
+| `NewPassword`, `newPasswordProblem` | `password.tsx` | a new password typed twice (My profile's Change password, the first owner's form), free fields of the caller's own state, never a draft, or fields not controlled, read through their refs (the first owner's, UiParts D210); the pair's one check, the mismatch first, then none typed | `ids` (the two inputs'), `names` (their name attributes, My profile's alone), `label` (the first's), `value`, `set`, `again`, `setAgain`, or instead `inputRefs` (the two inputs' refs), `required` |
 | `toServers` | `app.ts` | back to the app's servers where the page is in the app (`appConnect` of `login.js`): ☰'s Select server, the sign-in's ☰ and Cancels, the first owner's Cancel | |
 | `KvList`, `CountList` | `kv.tsx` | a list of facts, a name and its value each (`kvList`), every fact given, the caller leaving out those it does not show; a list of counts by name, sorted, in columns (`countList`) | `facts` (`[name, value, mono]`); `counts` |
 | `Copy`, `CopyIcon`, `CopyPair` | `copy.tsx` | a text that copies itself, a copy icon (`copyEl`, `copyIcon`); something with its copy icon after it, a text or a link (an address served: an integration's, System info's) | `text`, `value` (what it copies, where it is not the text), `label` (named "Copy …"), `name` (its whole name in its place: the server's version), `icon`, `cls`, `id`; `get`, `label`; `get`, `label`, what it follows as children |
@@ -2729,14 +2758,16 @@ the devices without a room, the House panel's writes (which stop at the next roo
 the repairs, the form that puts a device into a room and the header's search for Cubes.
 Only the plain `removeFromCube` of `unlisted.js` still reads the rooms after a removal's late answer,
 a read under the next user's own key, plain code that Block 15 moves.
-Who is in (`shared/me.ts`) draws the rest:
-the first owner's form into `#setup-slot`, shown while who is in says `setup`,
-its form drawn only then, so that what is typed in it goes with it,
-and the open server's warning into `#open-banner-slot`.
-The first owner's form reads the app's status of the login by fingerprint
-each time it is shown (`app.ts`), for its switch;
-its Create the owner turns until the app has answered whether it kept the login,
-so that a second tap while the system's prompt is open creates nothing (UiParts D213).
+Who is in (`shared/me.ts`) draws the open server's warning into `#open-banner-slot`.
+The first owner's form is the sign-in card's other state (`Owner.tsx`),
+which `loadMe` opens through `askLogin("owner")` (AP FirstOwner),
+drawn once with the card and only hidden,
+its fields not controlled as the card's;
+the app's status of the login by fingerprint is read at each opening (`app.ts`),
+for its switch;
+its Create the owner turns until the card has closed,
+through the app's keeping of the login and the read of who is in after it,
+so that a second tap creates nothing (UiParts D213).
 A part's place among plain siblings is an element of the class `part-slot`,
 which takes no box of its own (`display: contents`),
 so that the part's element is laid out as if it stood there itself.

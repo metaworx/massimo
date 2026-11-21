@@ -5,30 +5,37 @@
  * @file internal/server/ui/src/signin/store.ts
  *
  * What the sign-in's card is drawn from (AP UiParts, Block 14): the
- * opening askLogin of login.js asks for (open: the way chosen, a
- * provider's refusal, the sign-in it answers), the way chosen, the
- * form's line, the providers' buttons and their line, the self-signed
- * certificate's line, the login by fingerprint not kept with the choice
- * it waits for, and the focus asked for. No name, password or key typed
- * is kept here: the card's fields are not controlled (UiParts D210),
- * read at the submit and emptied at each opening.
+ * opening askLogin of login.js asks for (open: the way chosen, or the
+ * first owner's form, a provider's refusal, the sign-in it answers), the
+ * way chosen, the form's line, the providers' buttons and their line,
+ * the self-signed certificate's line, the login by fingerprint not kept
+ * with the choice it waits for, and the focus asked for; on a server
+ * without users whether the card asks for the first owner (asksOwner),
+ * Skip for now, which holds for the page's load (AP FirstOwner, D10),
+ * and the card turned to the sign-in where the server has users after
+ * all. No name, password or key typed is kept here: the card's fields
+ * are not controlled (UiParts D210), read at the submit and emptied at
+ * each opening.
  */
 
 import type { LoginProvider } from "../api";
 import { live } from "../shared/live";
 import type { Outcome } from "../shared/action";
+import { firstOwnerOf, me } from "../shared/me";
 
 /** A way to sign in, by the button's data-way: the name and the password, or an API key. */
 export type Way = "password" | "key";
 
-/** Where the focus is asked to go: the chosen way's first field, the password, Try again. */
-export type FocusOn = "way" | "password" | "retry";
+/** Where the focus is asked to go: the chosen way's first field, the password, Try again, the first owner's name. */
+export type FocusOn = "way" | "password" | "retry" | "owner";
 
-/** The card's state; opened counts the openings, focus the focus asked for. */
+/** The card's state; opened counts the openings, owner says the first owner's form is shown instead of the ways, focus the focus asked for. */
 export const card = live({
   opened: 0,
+  owner: false,
   way: "password" as Way,
   said: null as Outcome | null,
+  ownerSaid: null as Outcome | null,
   providers: [] as LoginProvider[],
   providersSaid: null as Outcome | null,
   selfSigned: false,
@@ -39,6 +46,9 @@ export const card = live({
 
 /** The sign-in the card answers, as askLogin handed it over; null while none is open. */
 let asking: SignInAsk | null = null;
+
+/** skipped is Skip for now taken in this load of the page: the card asks for the first owner no more until the next (AP FirstOwner, D10). */
+let skipped = false;
 
 /** The choice the login by fingerprint not kept waits for: true Try again, false Sign in without it, null dropped. */
 let choose: ((again: boolean | null) => void) | null = null;
@@ -58,19 +68,57 @@ function dropChoice(): void {
 }
 
 /**
- * open takes an opening of askLogin: the way chosen, a provider's
- * refusal to say (said, "" for none) and the sign-in it answers; the
- * card's lines cleared, a choice still waited for dropped, and the
- * fields emptied and the focus given with the drawing that follows.
+ * open takes an opening of askLogin: the way chosen, or "owner" for the
+ * first owner's form, a provider's refusal to say (said, "" for none) and
+ * the sign-in it answers; the card's lines cleared, a choice still waited
+ * for dropped, and the fields emptied and the focus given with the
+ * drawing that follows.
  */
-export function open(way: Way, said: string, ask: SignInAsk): void {
+export function open(on: Way | "owner", said: string, ask: SignInAsk): void {
   dropChoice();
   asking = ask;
-  card.way = way;
+  card.owner = on === "owner";
+  card.way = on === "owner" ? "password" : on;
   card.said = null;
+  card.ownerSaid = null;
   card.providersSaid = said ? { text: said, ok: false } : null;
   card.opened++;
+  askFocus(on === "owner" ? "owner" : "way");
+}
+
+/**
+ * asksOwner says whether the card asks for the first owner after a read
+ * of who is in (loadMe of login.js): an open server, which has a store
+ * (AP FirstOwner, D6), where who is in says the owner can be created from
+ * here, not kept open on purpose (auth.keep_open), and not skipped in
+ * this load (D10).
+ */
+export function asksOwner(): boolean {
+  const m = me.peek();
+  return !skipped && firstOwnerOf(m) && !m?.kept_open;
+}
+
+/**
+ * toSignIn turns the first owner's form into the sign-in, in the same
+ * opening, where a request was refused for lack of a session or the
+ * owner exists already: the server has users now. The password's way
+ * chosen and its first field given the focus, the reason said; the
+ * fields stay as the opening left them. It reports whether it turned.
+ */
+export function toSignIn(): boolean {
+  if (!card.owner) return false;
+  card.owner = false;
+  card.way = "password";
+  card.ownerSaid = null;
+  card.said = { text: t("setup.exists"), ok: false };
   askFocus("way");
+  return true;
+}
+
+/** skip takes Skip for now: the card closes, as a dismissal, and asks no more in this load (AP FirstOwner, D10). */
+export function skip(): void {
+  skipped = true;
+  if (asking) asking.dismiss();
 }
 
 /** closed takes the card's closing: a choice still waited for dropped. */
@@ -118,5 +166,6 @@ export function keepEnded(): void {
 export function forgetCard(): void {
   dropChoice();
   card.said = null;
+  card.ownerSaid = null;
   card.providersSaid = null;
 }

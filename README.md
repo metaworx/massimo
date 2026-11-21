@@ -192,7 +192,9 @@ directory it is started from (see [Cube variables](#cube-variables)).
 On the Cubes' LAN the server needs no settings to begin with:
 while there are no users,
 the web UI, `http://<the box>:8099/`,
-offers the local network a form for the first owner,
+asks whoever opens it from the local network to create the first owner,
+in its sign-in card at each load,
+where **Skip for now** shows the page without one until the next,
 and System settings → Cubes lists the Cubes the server finds,
 each added with **Add**.
 The settings take what discovery and the web UI cannot give:
@@ -201,7 +203,7 @@ on another subnet or behind a VPN (`massimo discover` lists the Cubes it hears,
 with serial and address),
 and a token that becomes the owner's key at the first start,
 which the API and the web UI then ask for,
-so that no form for the first owner is open on the LAN:
+so that the web UI asks nobody on the LAN for the first owner:
 
 ```
 MASSIMO_CUBE_KEQ0000000_ADDRESS=192.168.1.10
