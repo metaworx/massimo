@@ -18,6 +18,7 @@ import type { UpdateInfo } from "../api";
 import { mounter, register } from "../shared/region";
 import { Software } from "./Software";
 import { forgetSoftware, loadChannel, loadUpdate, updateLatest, updateOut } from "./store";
+import { onView } from "../shared/pages";
 
 export { serverEvent } from "./store";
 

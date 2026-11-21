@@ -15,6 +15,7 @@ import { mounter } from "../shared/region";
 import { IntegrationsCard } from "./Integrations";
 import { session } from "../shared/session";
 import { forgetIntegrations, loadRequestsSwitch, msgIn, refresh, said } from "./store";
+import { onView } from "../shared/pages";
 
 const mount = mounter("sys-integrations-body", () => <IntegrationsCard />);
 

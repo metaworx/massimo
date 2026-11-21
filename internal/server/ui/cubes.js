@@ -64,14 +64,15 @@ function proxyFailing(cubes) {
 function renderCubesBadges() {
   const count = (link) => state.cubes.filter((c) => linkState(c) === link).length; // app.js
   const lost = state.cubes.filter((c) => linkSign(c) === "bad").length; // header.js
-  const badges = [badgeEl(tn("cubes.badge.served", state.cubes.length), "mode")];
-  if (lost) badges.push(badgeEl(tn("cubes.badge.disconnected", lost), "bad"));
-  if (count("held")) badges.push(badgeEl(tn("cubes.badge.held", count("held")), "warn"));
-  if (count("rebooting")) badges.push(badgeEl(tn("cubes.badge.rebooting", count("rebooting")), "warn"));
+  const badge = (text, kind) => ({ text, kind });
+  const badges = [badge(tn("cubes.badge.served", state.cubes.length), "mode")];
+  if (lost) badges.push(badge(tn("cubes.badge.disconnected", lost), "bad"));
+  if (count("held")) badges.push(badge(tn("cubes.badge.held", count("held")), "warn"));
+  if (count("rebooting")) badges.push(badge(tn("cubes.badge.rebooting", count("rebooting")), "warn"));
   const failing = proxyFailing(state.cubes);
-  if (failing) badges.push(badgeEl(tn("proxy.badge.failing", failing), "warn"));
+  if (failing) badges.push(badge(tn("proxy.badge.failing", failing), "warn"));
   const elsewhere = state.cubes.filter((c) => c.found_elsewhere).length;
-  if (elsewhere) badges.push(badgeEl(tn("cubes.badge.elsewhere", elsewhere), "warn"));
-  if (state.found.length) badges.push(badgeEl(tn("cubes.badge.found", state.found.length), "warn"));
-  sectionBadges($("sys-cubes"), badges);
+  if (elsewhere) badges.push(badge(tn("cubes.badge.elsewhere", elsewhere), "warn"));
+  if (state.found.length) badges.push(badge(tn("cubes.badge.found", state.found.length), "warn"));
+  MassimoParts.chrome.badges("sys-cubes", badges); // ui/src/chrome/
 }

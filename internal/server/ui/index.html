@@ -131,22 +131,13 @@
 
   <!-- Personal settings, the page 👤 opens: its row kept at the top under
        the header, with who is signed in, Sign out (or Forget key, none on
-       an open server) and the sections menu (components.js pageBar), and
-       three section cards in a grid (sectionCards, backToTop): My
+       an open server) and the sections menu (ui/src/chrome/Bar.tsx), and
+       three section cards in a grid (ui/src/shared/card.ts, ui/src/chrome/): My
        profile, for a signed-in user only, My settings and Notifications,
        each with the icon the menu shows it with (data-icon). -->
   <section id="me" class="settings settings-page me-page hidden" aria-labelledby="me-title">
-    <div class="page-bar">
-      <div class="page-title">
-        <h2 id="me-title" data-i18n="nav.meTitle">Personal settings</h2>
-        <p id="me-line" class="me-line small"></p>
-      </div>
-      <button type="button" id="logout-btn" class="logout-btn"><svg class="ni" aria-hidden="true"><use id="logout-icon" href="#icon-signout"/></svg><span id="logout-label" data-i18n="me.signOut">Sign out</span></button>
-      <details class="menu sec-menu">
-        <summary aria-label="sections" title="Sections" data-i18n-attr="aria-label:page.sections title:page.sectionsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-list"/></svg></summary>
-        <div class="menu-items"></div>
-      </details>
-    </div>
+    <!-- its row kept at the top, a part (ui/src/chrome/Bar.tsx) -->
+    <div class="part-slot" data-bar="me"></div>
     <div class="section-grid">
       <section id="profile" class="tile section-card half profile-page" data-icon="icon-id" aria-labelledby="profile-title">
         <header class="tile-head section-head">
@@ -180,17 +171,12 @@
   </section>
 
   <!-- System settings: its row kept at the top under the header, with
-       the sections menu (components.js pageBar), and section cards in a
-       grid (sectionCards, backToTop), Users, Roles and Capabilities
+       the sections menu (ui/src/chrome/Bar.tsx), and section cards in a
+       grid (ui/src/shared/card.ts, ui/src/chrome/), Users, Roles and Capabilities
        flowing in two columns where there is room. -->
   <section id="system" class="settings settings-page hidden" aria-labelledby="system-title">
-    <div class="page-bar">
-      <h2 id="system-title" data-i18n="nav.settingsTitle">System settings</h2>
-      <details class="menu sec-menu">
-        <summary aria-label="sections" title="Sections" data-i18n-attr="aria-label:page.sections title:page.sectionsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-list"/></svg></summary>
-        <div class="menu-items"></div>
-      </details>
-    </div>
+    <!-- its row kept at the top, a part (ui/src/chrome/Bar.tsx) -->
+    <div class="part-slot" data-bar="system"></div>
     <div class="section-grid">
       <!-- partials: system -->
       <div class="section-flow">
@@ -203,16 +189,11 @@
   <!-- Maintenance, the page ☰ → Maintenance opens, for a role with one
        of System settings' capabilities or with update, restart or reboot
        (pages.js mayShow): its row kept at the top under the header, with the
-       sections menu (components.js pageBar), and two section cards,
+       sections menu (ui/src/chrome/Bar.tsx), and two section cards,
        Software update and Maintenance. -->
   <section id="maint-page" class="settings settings-page maint-page hidden" aria-labelledby="maint-title">
-    <div class="page-bar">
-      <h2 id="maint-title" data-i18n="nav.maintTitle">Maintenance</h2>
-      <details class="menu sec-menu">
-        <summary aria-label="sections" title="Sections" data-i18n-attr="aria-label:page.sections title:page.sectionsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-list"/></svg></summary>
-        <div class="menu-items"></div>
-      </details>
-    </div>
+    <!-- its row kept at the top, a part (ui/src/chrome/Bar.tsx) -->
+    <div class="part-slot" data-bar="maint"></div>
     <div class="section-grid">
       <!-- partials: maint -->
     </div>
@@ -223,10 +204,8 @@
        the badges of what is wrong (ui/src/sysinfo/), then the
        server's facts (system-info.html). -->
   <section id="info-page" class="settings settings-page info-page hidden" aria-labelledby="info-title">
-    <div class="page-bar">
-      <h2 id="info-title" data-i18n="nav.infoTitle">System info</h2>
-      <span class="section-badges"></span>
-    </div>
+    <!-- its row kept at the top, a part (ui/src/chrome/Bar.tsx) -->
+    <div class="part-slot" data-bar="info"></div>
     <!-- partials: info -->
   </section>
 
@@ -239,9 +218,9 @@
   <!-- partials: unlisted -->
 
   <!-- partials: logview -->
-  <!-- back to top, at the bottom right of every page a screen down
-       (components.js backToTop) -->
-  <button type="button" id="to-top" class="icon-btn to-top hidden" aria-label="back to top" title="Back to top" data-i18n-attr="aria-label:page.toTop title:page.toTopTitle"><svg class="ni" aria-hidden="true"><use href="#icon-up"/></svg></button>
+  <!-- back to top, button#to-top at the bottom right of every page a
+       screen down (ui/src/chrome/ToTop.tsx) -->
+  <div id="to-top-slot" class="part-slot"></div>
 </main>
 
 <!-- partials: login -->

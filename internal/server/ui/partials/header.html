@@ -1,4 +1,4 @@
-<!-- The header: Massimo's word with the version while signed out, and the radio budget (header.js); the pile, the server's sign, the reads' times, the Cube choice and every Cube's problems and the TLS notice, parts (ui/src/header/), each in its place here; the Rooms button and ☰ with the version (pages.js); back to top (components.js). -->
+<!-- The header: Massimo's word with the version while signed out, and the radio budget (header.js); the pile, the server's sign, the reads' times, the Cube choice and every Cube's problems and the TLS notice, parts (ui/src/header/), each in its place here; the Rooms button and ☰ with the version, and back to top (ui/src/chrome/). -->
 <header class="top">
   <!-- one row on its lower edge (style.css .top-line): the logo at the
        left; the pile, the Cube choice and the pages ↑ ⌂ ☰ at the right.
@@ -19,39 +19,11 @@
          chosen Cube's name and its network sign; the list each Cube with
          the cube, its name, its sign, its serial and address -->
     <div id="header-cube" class="cube"></div>
-    <nav class="nav" aria-label="pages" data-i18n-attr="aria-label:nav.pages">
-      <!-- back to top, first of the pages while the header is compacted
-           (components.js backToTop) -->
-      <button type="button" id="top-btn" class="icon-btn nav-btn top-btn" aria-label="back to top" title="Back to top" data-i18n-attr="aria-label:page.toTop title:page.toTopTitle"><svg class="ni" aria-hidden="true"><use href="#icon-up"/></svg></button>
-      <button type="button" id="view-tiles" class="icon-btn nav-btn active" aria-current="page" aria-label="rooms" title="Rooms" data-i18n-attr="aria-label:nav.rooms title:nav.roomsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-house"/></svg></button>
-      <!-- ☰, every page but Rooms, at every width, each for the roles that
-           may open it (pages.js mayShow, MENU_VIEWS): the log; the settings
-           pages; the personal page, in the app Select server (login.js
-           initLogin), and Sign out (login.js renderMe). It
-           carries the log's mark, the worse of it and the unsaved settings'
-           (ui/src/chrome/, in #nav-menu-mark), and an item the disk where
-           a page it leads to has settings unsaved (.menu-item-mark, its
-           data-forms the forms' keys). Its first row is
-           Massimo's icon and the server's version, which copies itself
-           (header.js), a rule under it. -->
-      <details id="nav-menu" class="menu nav-menu">
-        <summary class="nav-btn" aria-label="menu" title="Menu"><svg class="ni" aria-hidden="true"><use href="#icon-menu"/></svg><span id="nav-menu-mark" class="part-slot"></span></summary>
-        <div class="menu-items">
-          <p class="menu-version"><span class="menu-brand" data-brand aria-hidden="true"></span><span id="version-short" class="mono small"></span></p>
-          <hr class="menu-sep">
-          <button type="button" id="menu-log"><svg class="ni" aria-hidden="true"><use href="#icon-log"/></svg><span data-i18n="nav.logTitle">Log</span></button>
-          <hr class="menu-sep">
-          <button type="button" id="menu-cube" class="needs-cubes-or-pair"><svg class="ni" aria-hidden="true"><use href="#icon-cube3d"/></svg><span data-i18n="nav.cubeTitle">Cube settings</span><span class="menu-item-mark part-slot" data-forms="cube"></span></button>
-          <button type="button" id="menu-system" class="needs-system"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg><span data-i18n="nav.settingsTitle">System settings</span><span class="menu-item-mark part-slot" data-forms="users roles providers integrations"></span></button>
-          <button type="button" id="menu-maint" class="needs-maint"><svg class="ni" aria-hidden="true"><use href="#icon-tool"/></svg><span data-i18n="nav.maintTitle">Maintenance</span></button>
-          <button type="button" id="menu-info" class="needs-read"><svg class="ni" aria-hidden="true"><use href="#icon-info"/></svg><span data-i18n="nav.infoTitle">System info</span></button>
-          <hr class="menu-sep">
-          <button type="button" id="menu-me"><svg class="ni" aria-hidden="true"><use href="#icon-user"/></svg><span data-i18n="nav.userTitle">Personal settings</span><span class="menu-item-mark part-slot" data-forms="profile scheme"></span></button>
-          <button type="button" id="menu-servers" class="hidden"><svg class="ni" aria-hidden="true"><use href="#icon-servers"/></svg><span data-i18n="app.selectServer">Select server</span></button>
-          <button type="button" id="menu-logout" class="hidden"><svg class="ni" aria-hidden="true"><use id="menu-logout-icon" href="#icon-signout"/></svg><span id="menu-logout-label" data-i18n="me.signOut">Sign out</span></button>
-        </div>
-      </details>
-    </nav>
+    <!-- the pages: ↑ while the header is compacted, Rooms and ☰ with every
+         page but Rooms, its first row Massimo's icon and the server's
+         version, its entries each for the roles that may open it, a part
+         (ui/src/chrome/Menu.tsx) -->
+    <nav id="nav" class="nav" aria-label="pages" data-i18n-attr="aria-label:nav.pages"></nav>
   </div>
   <!-- the TLS notice, p#tls-notice (ui/src/header/Tls.tsx) -->
   <div id="tls-slot" class="part-slot"></div>

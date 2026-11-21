@@ -24,6 +24,7 @@ import { msg } from "./send";
 import { Found } from "./Found";
 import { Panel } from "./Panel";
 import { cubeUI, folds, load, loadDevices, panelLoads, place } from "./store";
+import { isShown, onView } from "../shared/pages";
 
 /** List is System settings → Cubes: a panel per served Cube, then the fold of those found; empty while Cube settings holds the panel. */
 function List() {

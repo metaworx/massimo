@@ -57,13 +57,6 @@ function hasSettingsPage() {
   return ["cubes", "pair", "backup", "roles", "capabilities", "auth", "integrations"].some(hasCap) || canManageUsers();
 }
 
-// hasProfile reports whether the page is signed in as a user, who has My
-// profile; an open server and the server's token have none.
-function hasProfile() {
-  const me = state.me;
-  return !!(me && me.mode === "users" && me.user);
-}
-
 // isSelf reports whether a user is the signed-in one.
 function isSelf(name) {
   return !!(state.me && state.me.user && state.me.user.name === name);
@@ -130,9 +123,7 @@ function applyCaps() {
   $("setup").classList.toggle("hidden", !(me && me.setup));
   if (me && me.setup) renderSetupKeep();
   renderOpenBanner();
-  renderMe();
-  MassimoParts.me(me); // a user's sessions say "this device", and My profile is drawn for whoever is in (ui/src/shared/me.ts)
-  markSettingsPages(); // pages.js
+  MassimoParts.me(me); // who is in: a user's sessions say "this device", My profile is drawn for whoever is in, and the page's chrome says who it is (ui/src/shared/me.ts)
   if (!mayShow(currentView)) showView("tiles", "replace"); // pages.js: a page the user signed in now may not open
 }
 
@@ -144,50 +135,6 @@ function renderOpenBanner() {
   const open = mode === "open" || mode === "none";
   $("open-banner").classList.toggle("hidden", !open);
   if (open) $("open-banner-text").textContent = t(mode === "open" ? "open.text" : "open.textNoStore");
-}
-
-// renderMe says on the personal page who is signed in, and what Sign
-// out does: a session ends, an API key or the token is only forgotten
-// (Forget key, with a key's icon), and an open server or one without
-// authentication has nothing to end and no profile, so the page has My
-// settings and Notifications alone. ☰'s Personal settings names the user
-// in its tooltip, and ☰'s Sign out follows the page's button.
-function renderMe() {
-  const me = state.me;
-  const line = $("me-line");
-  const btn = $("logout-btn");
-  let text = "";
-  let label = null;
-  if (me && me.mode === "users" && me.user) {
-    text = t("me.signedIn", { name: me.user.display_name || me.user.name, role: roleLabel(me.role.key, me.role.name) });
-    if (me.token && me.token.kind === "api") {
-      text = t("me.withKey", { name: me.user.name, label: me.token.label || "" });
-      label = t("me.forgetKey");
-    } else {
-      label = t("me.signOut");
-    }
-  } else if (me && me.mode === "open") {
-    text = t("me.open");
-  } else if (me && me.mode === "token") {
-    text = t("me.token");
-    label = t("me.forgetKey");
-  } else if (me) {
-    text = t("me.none");
-  }
-  line.textContent = text;
-  line.classList.toggle("hidden", !text);
-  const keyOnly = !!me && ((me.token && me.token.kind === "api") || me.mode === "token"); // Forget key
-  // the page's button and ☰'s entry alike
-  for (const [id, labelId, iconId] of [["logout-btn", "logout-label", "logout-icon"], ["menu-logout", "menu-logout-label", "menu-logout-icon"]]) {
-    $(labelId).textContent = label || t("me.signOut");
-    $(iconId).setAttribute("href", keyOnly ? "#icon-key" : "#icon-signout");
-    $(id).classList.toggle("hidden", !label);
-  }
-  // ☰'s Personal settings names who is signed in, in its tooltip
-  const who = me && me.user ? (me.user.display_name && me.user.display_name !== me.user.name ? me.user.display_name + " (" + me.user.name + ")" : me.user.name) : "";
-  $("menu-me").title = who ? t("nav.userNamed", { name: who }) : "";
-  $("profile").classList.toggle("hidden", !hasProfile());
-  pageBar($("me")); // components.js: the sections menu without My profile where it is hidden
 }
 
 // --- the sign-in through a provider (docs/api-v1.md, "Sign-in through OpenID Connect")
@@ -716,7 +663,7 @@ function notSentSaid() {
 // sign-in.
 async function logout() {
   // a settings form with changes not saved: the page's dialog lists them and asks first (ui/src/leaving/)
-  if (!(await MassimoParts.leaving.signOut($("logout-label").textContent))) return;
+  if (!(await MassimoParts.leaving.signOut())) return;
   const me = state.me;
   const synced = canSync();
   for (const key of takeScheduled()) {
@@ -892,7 +839,6 @@ function initLogin() {
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") flushPreferences();
   });
-  $("logout-btn").addEventListener("click", logout);
   // the ways to sign in: the name's form or the key's, the one chosen in focus
   for (const b of document.querySelectorAll("#login-ways .login-way[data-way]")) {
     b.addEventListener("click", () => {
@@ -900,17 +846,14 @@ function initLogin() {
       $(b.dataset.way === "key" ? "login-token" : "login-user").focus();
     });
   }
-  // in the app, back to its servers: at the card's foot, last in the
-  // card's ☰, and in the main ☰ before Sign out
+  // in the app, back to its servers: at the card's foot and last in the
+  // card's ☰ (the main ☰'s is the chrome's, ui/src/chrome/Menu.tsx)
   const toServers = () => {
     const go = appConnect();
     if (go) go().catch(() => {});
   };
   $("login-servers").addEventListener("click", toServers);
   $("login-menu-servers").addEventListener("click", toServers);
-  $("menu-servers").addEventListener("click", toServers);
-  $("menu-servers").classList.toggle("hidden", !appConnect());
-  $("menu-logout").addEventListener("click", logout);
   $("setup-form").addEventListener("submit", createOwner);
   checkOwnerName = watchName($("setup-user"), $("setup-name-msg"), () => []);
 }

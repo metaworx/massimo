@@ -297,6 +297,12 @@ def main_menu(page):
     open_main_menu(page)
 
 
+def main_menu_item(page):
+    """☰ open, the focus moved onto System settings' entry."""
+    main_menu(page)
+    page.locator("#menu-system").focus()
+
+
 def home_notice(page):
     """The second server of run.sh, whose Cube is not connected: the
     only one that shows the notice."""
@@ -639,6 +645,29 @@ def sections_menu(page):
     page.locator("#system .sec-menu .menu-items").wait_for(state="visible")
 
 
+def personal_sections(page):
+    """The personal page's sections menu open, the focus on My settings'
+    item."""
+    personal("me")(page)
+    page.keyboard.press("Escape")
+    page.locator("#me .sec-menu > summary").click()
+    page.locator("#me .sec-menu .toc-link[data-target='prefs']").focus()
+
+
+def users_fold(folded):
+    """System settings, the Users card folded (or opened again) by its
+    button, the focus on it; the fold kept in the browser is taken back by
+    the view that opens it again, the next of the region's."""
+    def show(page):
+        system(page)
+        page.keyboard.press("Escape")
+        fold = page.locator("#sys-users .section-fold")
+        if (fold.get_attribute("aria-expanded") == "true") == folded:
+            fold.click()
+        fold.focus()
+    return show
+
+
 # --- the regions ----------------------------------------------------------
 
 # Every region of the page, the header first, then Rooms, the settings
@@ -654,7 +683,14 @@ REGIONS = (
         View("every Cube's problem list open", header_problems),
         View("the pile's list open after Refresh now", pile_refreshed),
     )),
-    Region("main-menu", ("header.top nav.nav",), (View("☰ open", main_menu),)),
+    # ☰ and the page buttons are parts (AP UiParts, Block 14), drawn from
+    # who is in as well: who is in read again (loadMe) is a source of
+    # theirs; both views passed on the page before the move, where nothing
+    # drew ☰ again.
+    Region("main-menu", ("header.top nav.nav",), (
+        View("☰ open", main_menu),
+        View("☰ open, the focus on an entry", main_menu_item, "#menu-system"),
+    ), sources=("loadMe()",)),
     Region("home-notice", ("#home-notice",), (View("on the second server, its Cube not connected", home_notice),)),
     Region("rooms", ("#rooms",), (
         View("a tile's ⋯ menu open", rooms_menu),
@@ -776,7 +812,18 @@ REGIONS = (
     ), sources=("applyStoredSettings()",)),
     Region("notifications", ("#notify-sec",), (View("Notifications", personal("notify")),), sources=("the page shown again: me",)),
     Region("my-profile", ("#profile-sec",), (View("My profile", profile),), sources=("the page shown again: me",)),
-    Region("page-chrome", ("#system .page-bar", "#system .section-head"), (View("System settings, its sections menu open", sections_menu),)),
+    # The pages' rows are parts (AP UiParts, Block 14), drawn from who is
+    # in as well, and the cards' folds are the skeleton's, their badges and
+    # pills parts: a card folded, the focus on its fold, passed on the page
+    # before the move as well, where nothing drew a head again; the personal
+    # page's sections menu failed there around who is in read again, which
+    # emptied it (pageBar).
+    Region("page-chrome", ("#system .page-bar", "#system .section-head", "#me .page-bar"), (
+        View("System settings, its sections menu open", sections_menu),
+        View("the Users card folded, the focus on its fold", users_fold(True), "#sys-users .section-fold"),
+        View("the Users card opened again, the focus on its fold", users_fold(False), "#sys-users .section-fold"),
+        View("the personal page's sections menu open, the focus on an item", personal_sections, "#me .sec-menu .toc-link[data-target='prefs']"),
+    ), sources=("loadMe()",)),
     Region("sign-in", ("#login-dialog",),
            gap="shown only to a page without a token, which loads no data while it is open: the poll and the stream start after the sign-in"),
 )
@@ -971,6 +1018,7 @@ GUARD_JS = r"""() => {
       case "refreshAges()": return refreshAges();
       case "pollLog()": return pollLog();
       case "applyStoredSettings()": return applyStoredSettings();
+      case "loadMe()": return loadMe();
     }
     throw new Error("the guard knows no data source " + source);
   }

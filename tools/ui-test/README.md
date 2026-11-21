@@ -367,6 +367,17 @@ hence `failed_checks_forgotten`.
   (D205), and one changed before another user's sign-in after a 401 is not
   sent; a read that finds a change waiting keeps it and sends it; the rules
   are off until the first read has answered.
+- `test_shell_updates.py`, the page's chrome as parts (AP UiParts, Block 14):
+  every page with a row and Rooms, shown in turn twice with the poll held,
+  read under `/api/v1/` what the page before the pages' store read at each
+  showing, path for path, and nothing more at a change of page;
+  Personal settings shown while a sign-out waits for the signed-out
+  language's table reads nothing of My profile, and the page ends signed out;
+  the personal page's sections menu, an item in focus, stays the element it
+  was through who is in read again and the language applied again; after
+  changes of page in both orders of the rows, the cards' scroll margin is
+  the shown row's height and an item of the sections menu brings its card's
+  head to rest below the row.
 - `test_stream.py`:
   the event stream opens with tickets only, never with the token,
   and after a refused stream (the test hands out a used ticket first,

@@ -34,6 +34,8 @@ import {
   type FoundIntegration, INTEGRATION_CEILING, data, formKey, integrationPath, keyState, load, loadDetails, loadIntegrations, loadSeen, panelUI,
   msgIn, requestUI, requestsOn, run, said, setRequests, shown, watchApproval,
 } from "./store";
+import { type BadgeSpec, cardBadges, showCard } from "../shared/card";
+import { isShown, mayShow, showView } from "../shared/pages";
 
 /** capOptions are the capabilities of the ceiling as a choice of switches. */
 function capOptions(): [string, string][] {
@@ -355,7 +357,7 @@ function NotLooking() {
           <span class="actions-left">
             <button type="button" id="integrations-open-maint" onClick={() => {
               showView("maint");
-              showCard($("sys-maint"));
+              showCard("sys-maint");
             }}>
               {t("integrations.openMaintenance")}
             </button>
@@ -396,10 +398,10 @@ export function IntegrationsCard() {
   // the card's head counts the requests and the integrations, once they are read; nothing once forgotten
   // biome-ignore lint/correctness/useExhaustiveDependencies: counts is the badges' texts joined, which change with them; badges is a new list at every drawing.
   useEffect(() => {
-    const out = [];
-    if (badges?.[0]) out.push(badgeEl(badges[0], "warn"));
-    if (badges?.[1]) out.push(badgeEl(badges[1], "mode"));
-    sectionBadges($("sys-integrations"), out);
+    const out: BadgeSpec[] = [];
+    if (badges?.[0]) out.push({ text: badges[0], kind: "warn" });
+    if (badges?.[1]) out.push({ text: badges[1], kind: "mode" });
+    cardBadges("sys-integrations", out);
   }, [counts]);
   return (
     <>

@@ -71,6 +71,10 @@ declare global {
   function timeOf(iso: string | undefined): Date | null;
   /** The element of the page with the id. */
   function $(id: string): HTMLElement | null;
+  /** A value kept in this browser (localStorage), null where there is none or the storage is blocked. */
+  function readStored(key: string): string | null;
+  /** Keeps a value in this browser, null to forget it; where the storage is blocked it lives for this page only. */
+  function store(key: string, value: string | null): void;
   /** The Massimo app's bridge on the page it opened (docs/app.md), null in a browser; connect, from version 2, shows the app's servers. */
   function appBridge(): { connect?: () => Promise<null> } | null;
   /** A request to the API, without the page's token where auth is false (/healthz, always open); the answer's JSON, or an error with the server's message. */

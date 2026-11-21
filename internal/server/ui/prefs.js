@@ -19,8 +19,6 @@ function initSettings() {
   // My settings opens from the 👤 menu (showView); its rows and the
   // Appearance card are a part (ui/src/prefs/), which saves each as it
   // is changed.
-  // the version copies whole, as its tooltip names it (D94-A)
-  copyable($("version-short"), () => state.version, ""); // components.js
   initAppearance();
 }
 

@@ -19,6 +19,7 @@ import { counter } from "../shared/counter";
 import { focusForm } from "../shared/forms";
 import { live, liveMap } from "../shared/live";
 import { windowState } from "../model/device";
+import { isShown, showView } from "../shared/pages";
 
 /** The rooms' load counter: bumped at every drawing of the rooms (renderRooms); every rooms part uses it. */
 export const load = counter();

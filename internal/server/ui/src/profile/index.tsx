@@ -11,10 +11,12 @@
  * calls it: who is in comes through MassimoParts.me (shared/me.ts).
  */
 
+import { me, profileOf } from "../shared/me";
 import { mounter } from "../shared/region";
 import { ProfileCard } from "./Profile";
 import { loadProfile, profileMsg } from "./send";
 import { forgetProfile } from "./store";
+import { onView } from "../shared/pages";
 
 const mount = mounter("profile-sec", () => <ProfileCard />);
 mount();
@@ -25,5 +27,5 @@ export const signedOut = forgetProfile;
 // the personal page shown: the message line empty, the user read again with its sessions, keys and identities
 onView("me", () => {
   profileMsg("");
-  if (hasProfile()) loadProfile();
+  if (profileOf(me.peek())) loadProfile();
 });

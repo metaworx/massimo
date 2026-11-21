@@ -22,6 +22,7 @@ import { useEffect } from "preact/hooks";
 import { FormsDialog } from "../shared/dialog";
 import { changedItems, leaveForms } from "../shared/forms";
 import { useLang } from "../shared/lang";
+import { me, whoOf } from "../shared/me";
 import { mounter, register } from "../shared/region";
 
 /**
@@ -141,16 +142,16 @@ const leaving = register("leaving", {
   /**
    * signOut asks first where a form has changes not saved, which a
    * sign-out drops: it resolves true to sign out, false to stay, and at
-   * once true where no form has any; label names the button that signs
-   * out as the page's own does (Sign out, Forget key).
+   * once true where no form has any; its button to go is named as the
+   * page's Sign out is (Sign out, Forget key; whoOf of shared/me.ts).
    */
-  signOut(label: string): Promise<boolean> {
+  signOut(): Promise<boolean> {
     if (!mount() || !changedItems().length) return Promise.resolve(true);
     leaveForms();
     answer?.(false);
     return new Promise((resolve) => {
       answer = resolve;
-      asking.value = { go: label };
+      asking.value = { go: whoOf(me.peek()).signOut || t("me.signOut") };
     });
   },
   /** changes says whether a form has changes not saved, which a reload would drop (header.js somethingOpen). */

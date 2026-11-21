@@ -285,7 +285,6 @@ def test_version_in_the_menu(page, case, reads):
     page.reload()
     page.wait_for_selector(".room", timeout=10000)
     assert wait_until(page, "state.version === %r" % BUILD, 5), "the page loaded with the build's version"
-    page.evaluate("""(v) => { document.getElementById("version-short").textContent = v; renderVersionTitle(); }""", BUILD)
     page.locator("#nav-menu > summary").click()
     v = page.locator("#version-short")
     v.wait_for(state="visible")

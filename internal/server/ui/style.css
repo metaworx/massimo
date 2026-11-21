@@ -96,7 +96,7 @@ h3 { margin: 0 0 12px; }
 .tls-fp { word-break: break-all; }
 body:not(.expert) .expert-only { display: none !important; }
 
-/* header, kept at the top on every page (components.js stickyHeader):
+/* header, kept at the top on every page (ui/src/chrome/scroll.ts):
    once scrolled it drops the lines under its row, which keeps its pile
    and gains ↑ */
 .top {
@@ -401,7 +401,7 @@ button.copy-icon .ni { width: 16px; height: 16px; }
   line-height: 1.3;
   height: 36px;
 }
-/* Compacted (components.js stickyHeader): the TLS notice and the pending
+/* Compacted (ui/src/chrome/scroll.ts): the TLS notice and the pending
    line go; the row stays as it is, ↑ joining it. */
 body.scrolled .top { padding: 8px 0; }
 body.scrolled #tls-notice,
@@ -569,13 +569,13 @@ body.scrolled #pending { display: none !important; }
 }
 
 /* System settings: the page at full width, its parts section cards in a
-   grid (components.js sectionCards, backToTop); a card is
+   grid (ui/src/shared/card.ts, ui/src/chrome/); a card is
    as wide as the grid, a .half card shares a row where there is room;
    Users, Roles and Capabilities flow in two columns there, none split,
    the break where their heights put it. */
 .settings.settings-page { max-width: none; }
-/* the page's row kept at the top under the header (components.js
-   pageBar): the title and, at its right end, the sections menu */
+/* the page's row kept at the top under the header (ui/src/chrome/
+   Bar.tsx): the title and, at its right end, the sections menu */
 .page-bar {
   position: sticky;
   top: var(--top-h, 0px);
@@ -591,13 +591,12 @@ body.scrolled #pending { display: none !important; }
 body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8px -8px rgba(0, 0, 0, 0.25); }
 .page-bar h2 { font-size: 1.25rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .menu.sec-menu { margin-left: auto; }
-/* the settings pages (components.js pageSwitch) in the title's place, in
+/* the settings pages (ui/src/chrome/Bar.tsx) in the title's place, in
    one order on every page, so that each keeps its place, the page shown
    filled; each its icon and its name, below 900 px the icon alone but for
    the page shown, as wide on every page, whose name ends in "…" where the
    row is too narrow. The title stays for a screen reader, and shows in
-   their place where the role has one settings page alone (pages.js
-   markSettingsPages). */
+   their place where the role has one settings page alone (single-page). */
 .page-bar.has-switch:not(.single-page) > h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .page-bar.single-page > .page-switch { display: none; }
 .page-switch { display: flex; flex: 0 1 auto; min-width: 0; gap: 6px; }
@@ -622,7 +621,7 @@ body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8p
 .page-link-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 899px) {
   /* the sections menu's place kept on every page, and the page shown as
-     wide on every page: the longest name (components.js fitPageTabs) */
+     wide on every page: the longest name (ui/src/chrome/Bar.tsx Switch) */
   .page-switch { max-width: calc(100% - 48px); }
   .page-link.current { width: calc(var(--tab-name) + 46px); }
   .page-link:not(.current) { flex: none; width: 40px; padding: 0; justify-content: center; }
@@ -727,7 +726,7 @@ body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8p
 }
 .icon-btn.to-top:hover, .icon-btn.to-top:focus-visible { background: color-mix(in srgb, var(--accent) 85%, var(--fg)); }
 .top-btn { display: none; }
-/* ↑ first of the pages while the header is compacted (backToTop) */
+/* ↑ first of the pages while the header is compacted (ui/src/chrome/scroll.ts) */
 body.scrolled .nav .top-btn { display: inline-flex; }
 @media (prefers-reduced-motion: reduce) {
   .fold-i { transition: none; }

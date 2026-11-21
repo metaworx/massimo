@@ -20,12 +20,13 @@ import { useIcons } from "./look";
 /**
  * Icon is a small inline icon of a symbol of the page (iconEl); with mark,
  * the symbol is a mark (use.mark), which blinks where the page's style
- * makes it, as a sign's state that calls for a look.
+ * makes it, as a sign's state that calls for a look; useId is its use
+ * element's id, where the page names it.
  */
-export function Icon({ symbol, cls, mark }: { symbol: string; cls: string; mark?: boolean }) {
+export function Icon({ symbol, cls, mark, useId }: { symbol: string; cls: string; mark?: boolean; useId?: string }) {
   return (
     <svg class={cls} aria-hidden="true">
-      <use href={"#" + symbol} class={mark ? "mark" : undefined} />
+      <use id={useId} href={"#" + symbol} class={mark ? "mark" : undefined} />
     </svg>
   );
 }

@@ -42,6 +42,7 @@ import type { SoftwarePart } from "./software";
 import { forgetForms } from "./shared/forms";
 import { languageChanged } from "./shared/lang";
 import { meChanged } from "./shared/me";
+import { pagesPart } from "./shared/pages";
 import { iconsChanged } from "./shared/look";
 import { parts, register } from "./shared/region";
 import { forgetRepairs } from "./shared/repair";
@@ -80,6 +81,8 @@ export interface MassimoParts {
    * again what it says has changed while their page is shown.
    */
   serverEvent(ev: ServerEvent): void;
+  /** The pages of the main area: which is shown, its address, who may open it (shared/pages.ts; pages.js calls it). */
+  pages: typeof pagesPart;
   /** Backup and restore: Cube settings' box and System settings' fold per Cube (backups/). */
   backups: BackupsPart;
   /** Where the page's chrome says that settings are unsaved: a section's pill, ☰'s mark joined with the log's, a menu item's disk (chrome/). */
@@ -116,6 +119,7 @@ declare global {
 register("language", languageChanged);
 register("icons", iconsChanged);
 register("me", meChanged);
+register("pages", pagesPart);
 register("serverEvent", (ev: ServerEvent) => {
   softwareEvent(ev);
   maintenanceEvent(ev);
