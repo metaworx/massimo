@@ -1293,6 +1293,7 @@
   "integrations.nameHint": "Ses utilisateurs apparaissent sous ce nom : Nom › utilisateur.",
   "integrations.saveName": "Enregistrer le nom",
   "integrations.nameSaved": "Intégration renommée {name}",
+  "integrations.nameFormName": "Intégration {name}, son nom",
   "integrations.reportedName": "Nom dans Home Assistant",
   "integrations.uuid": "Id",
   "integrations.keyIssued": "Clé délivrée",
@@ -1301,6 +1302,7 @@
   "integrations.enabledOn": "{name} activée.",
   "integrations.enabledOff": "{name} désactivée : ses appels sont refusés.",
   "integrations.saveMax": "Enregistrer le maximum",
+  "integrations.maxFormName": "Intégration {name}, son maximum",
   "integrations.saved": "{name} enregistrée.",
   "integrations.users": "Ses utilisateurs",
   "integrations.usersNone": "Aucun utilisateur n'a encore agi par elle.",
@@ -1404,6 +1406,7 @@
   "providers.added": "Fournisseur {name} ajouté.",
 
   "providers.failed": "{name} : non effectué : {error}",
+  "providers.formName": "Fournisseur de connexion {name}",
 
   "providers.off": "désactivé",
 
@@ -1492,6 +1495,8 @@
   "users.removed": "{name} supprimé.",
   "users.failed": "{name} : {error}",
   "users.unchanged": "Rien n'a changé.",
+  "users.formName": "Utilisateur {name}",
+  "users.noEnd": "pas de fin",
   "users.tokens": "Sessions et clés",
   "users.tokensNone": "Aucune.",
 
@@ -1530,6 +1535,7 @@
   "users.identityChangeLabel": "Modifier {email} chez {provider}",
 
   "users.identityChanged": "Identité modifiée.",
+  "users.identityFormName": "Utilisateur {name}, identité {account}",
 
   "users.identityGroups": "groupes : {groups}",
 
@@ -1619,6 +1625,7 @@
   "roles.disabledNow": "{role} désactivé : ses utilisateurs restent connectés et tout leur est refusé.",
   "roles.enabledNow": "{role} activé.",
   "roles.failed": "{role} : {error}",
+  "roles.formName": "Rôle {name}",
   "roles.capsTitle": "Capacités pour tous les rôles",
   "roles.capsShort": "Capacités",
   "roles.badge.allOn": "toutes actives",
@@ -1740,6 +1747,7 @@
   "restore.send.one": "Envoyer {n} commande",
   "restore.send.other": "Envoyer {n} commandes",
   "restore.running": "Envoi : {done} sur {n} étapes.",
+  "restore.unseen": "La connexion au serveur a été interrompue pendant la restauration : le journal indique comment elle s'est terminée.",
   "restore.done": "Restauration terminée : {sent} sur {n} étapes envoyées.",
   "restore.failedAt": "Restauration arrêtée après {sent} sur {n} étapes : {error}",
   "restore.refused": "Non envoyé : {error}",

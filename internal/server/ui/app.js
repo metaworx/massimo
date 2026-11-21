@@ -900,6 +900,7 @@ async function connectEvents() {
   if (!resume) burst();
   on("resync", () => {
     burst();
+    restoreResynced(); // backup.js: a restore's end the stream lost
     Promise.resolve(refresh()).catch(() => {});
   });
   on("state", (ev) => {

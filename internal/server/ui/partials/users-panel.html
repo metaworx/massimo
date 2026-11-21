@@ -1,70 +1,4 @@
-<!-- A user's form in System settings → Users (detailsPanel puts its head around it), the form that adds one, a user's sessions and keys with a row each, and My profile's form, users.js. -->
-<template id="tpl-user-panel">
-  <form class="user-form">
-    <div class="field wide">
-      <label data-i18n="users.displayName">Display name</label>
-      <input type="text" name="display_name" class="field-control" autocomplete="off" spellcheck="false" maxlength="64">
-    </div>
-    <div class="field wide admin-only">
-      <label data-i18n="users.role">Role</label>
-      <select name="role" class="field-control"></select>
-    </div>
-    <div class="field admin-only">
-      <label class="switch">
-        <input type="checkbox" name="disabled">
-        <span class="slider" aria-hidden="true"></span>
-        <span class="switch-label" data-i18n="users.disabled">Disabled</span>
-      </label>
-    </div>
-    <div class="field wide admin-only">
-      <label data-i18n="users.expires">End (guests)</label>
-      <input type="datetime-local" name="expires" class="field-control" step="60">
-      <p class="muted small field-hint" data-i18n="users.expiresHint">Empty: no end. From then on the user is refused everything.</p>
-    </div>
-    <div class="field wide">
-      <label data-i18n="users.password">New password</label>
-      <input type="password" name="password" class="field-control" autocomplete="new-password" placeholder="empty: unchanged" data-i18n-attr="placeholder:users.passwordHint">
-    </div>
-    <div class="field wide field-current">
-      <label data-i18n="users.currentPassword">Current password</label>
-      <input type="password" name="current_password" class="field-control" autocomplete="current-password">
-    </div>
-    <div class="actions">
-      <span class="actions-left"><button type="button" class="remove-user" data-i18n="users.remove">Remove</button></span>
-      <span class="actions-right"><button type="submit" class="primary" data-i18n="action.save">Save</button></span>
-    </div>
-  </form>
-</template>
-
-<template id="tpl-user-new">
-  <form class="panel user-new">
-    <div class="field wide">
-      <label data-i18n="users.name">Name</label>
-      <input type="text" name="name" class="field-control" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="64" required placeholder="letters, digits, . _ - @" data-i18n-attr="placeholder:users.nameHint">
-      <p class="small cubes-msg field-hint name-msg hidden" role="status"></p>
-    </div>
-    <div class="field wide">
-      <label data-i18n="users.displayName">Display name</label>
-      <input type="text" name="display_name" class="field-control" autocomplete="off" maxlength="64">
-    </div>
-    <div class="field wide">
-      <label data-i18n="users.role">Role</label>
-      <select name="role" class="field-control"></select>
-    </div>
-    <div class="field wide">
-      <label data-i18n="login.password">Password</label>
-      <input type="password" name="password" class="field-control" autocomplete="new-password" placeholder="empty: a user with keys only" data-i18n-attr="placeholder:users.noPasswordHint">
-    </div>
-    <div class="field wide">
-      <label data-i18n="users.expires">End (guests)</label>
-      <input type="datetime-local" name="expires" class="field-control" step="60">
-    </div>
-    <div class="actions">
-      <span class="actions-right"><button type="button" class="cancel-user" data-i18n="action.cancel">Cancel</button><button type="submit" class="primary" data-i18n="users.create">Create</button></span>
-    </div>
-  </form>
-</template>
-
+<!-- My profile's sessions and keys with a row each, its linked accounts and a link come back, and its form, profile.js and linked.js; System settings → Users draws its own (ui/src/admin/). -->
 <template id="tpl-token-row">
   <li><span class="flag mode token-kind"></span><span class="token-label"></span><span class="muted small token-key hidden"></span><span class="muted small token-used"></span><button type="button" class="revoke-token" data-i18n="users.revoke">Revoke</button></li>
 </template>
@@ -85,39 +19,11 @@
   </div>
 </template>
 
-<template id="tpl-user-identities">
-  <div class="user-identities-box">
-    <span class="muted small" data-i18n="users.identities">Sign-in through providers</span>
-    <ul class="user-identities"></ul>
-    <div class="field wide">
-      <label data-i18n="users.identityProvider">Provider</label>
-      <select name="provider" class="field-control"></select>
-    </div>
-    <div class="field wide">
-      <label data-i18n="users.identityKind">Assign by</label>
-      <select name="kind" class="field-control">
-        <option value="email" data-i18n="users.identityByEmail">e-mail</option>
-        <option value="subject" data-i18n="users.identityBySubject">user ID</option>
-      </select>
-    </div>
-    <div class="field wide">
-      <label class="identity-value-label" data-i18n="users.identityEmail">E-mail at the provider</label>
-      <input type="email" name="account" class="field-control" autocomplete="off" spellcheck="false">
-    </div>
-    <div class="actions"><span class="actions-right"><button type="button" class="add-identity" data-i18n="users.identityAdd">Assign</button></span></div>
-  </div>
-</template>
-
 <template id="tpl-identity-row">
   <li>
     <span class="flag mode identity-provider"></span><span class="identity-email"></span><span class="muted small identity-state"></span>
-    <span class="identity-buttons"><button type="button" class="change-identity hidden" data-i18n="users.identityChange">Change</button><button type="button" class="remove-identity" data-i18n="users.identityRemove">Remove</button></span>
+    <span class="identity-buttons"><button type="button" class="remove-identity" data-i18n="users.identityRemove">Remove</button></span>
     <span class="muted small identity-details hidden"></span>
-    <form class="identity-change hidden">
-      <input type="text" name="account" class="field-control" autocomplete="off" spellcheck="false">
-      <button type="submit" class="primary" data-i18n="action.save">Save</button>
-      <button type="button" class="cancel-change" data-i18n="action.cancel">Cancel</button>
-    </form>
   </li>
 </template>
 

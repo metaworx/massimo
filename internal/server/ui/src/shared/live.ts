@@ -29,16 +29,19 @@ export function live<T extends object>(init: T): T {
 
 /**
  * liveMap keeps a live object per key, made by make the first time the
- * key is asked for; clear forgets them all (a sign-out, a change of whose
- * list it is).
+ * key is asked for; forget forgets one (what it was kept for is gone),
+ * clear forgets them all (a sign-out, a change of whose list it is).
  */
-export function liveMap<T extends object>(make: () => T): { of(key: string): T; clear(): void } {
+export function liveMap<T extends object>(make: () => T): { of(key: string): T; forget(key: string): void; clear(): void } {
   const all = new Map<string, T>();
   return {
     of(key) {
       let v = all.get(key);
       if (!v) all.set(key, (v = live(make())));
       return v;
+    },
+    forget(key) {
+      all.delete(key);
     },
     clear() {
       all.clear();

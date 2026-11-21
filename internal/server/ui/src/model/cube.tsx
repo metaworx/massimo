@@ -30,7 +30,7 @@ export function chosenCube(): Cube | undefined {
 /**
  * CubeSign is a Cube's network sign in its link's state, named for a
  * screen reader by its link, its mark blinking as the Cube's other signs
- * do (cubeSignEl of header.js, for the plain regions): after the Cube's
+ * do (cubeSignEl of header.js, which nothing calls now): after the Cube's
  * name, the first of its icons, or leading its pill (AP GlobalMenu,
  * D190-A).
  */

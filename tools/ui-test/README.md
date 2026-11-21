@@ -265,6 +265,39 @@ hence `failed_checks_forgotten`.
   a box with its question open is gone after a sign-out
   and for another user signed in after an expired session.
   Both failed on the page before the move.
+- `test_admin_updates.py`, System settings' lists as parts (AP UiParts, Block 10,
+  with AP UnsavedMarks, Block 5):
+  a user's, a role's, a provider's and an integration's fields typed and not saved,
+  and the new item's forms, stay the elements they were with what is typed
+  (and the focus, through a reload) through a save in another panel,
+  the list read again and System settings shown again;
+  the form left, the section's pill shows its disk, which opens the panel with the
+  focus in the form, ☰ the mark and its System settings the disk, red after a failed
+  save and the worse of it and the log's warning; Reset clears them;
+  a user gone from the server forgets its form;
+  a capability refused for every role shows as stored;
+  a Cube settings draft marks ☰ and its Cube settings (D24);
+  a pill's item unfolds a folded card and puts the focus in the form;
+  a user's, a role's and a provider's Remove asking stays and removes that item alone;
+  a key made is gone at the next read;
+  a capability's switch keeps the focus while it saves;
+  an identity's Change closes when saved and is forgotten with the identity;
+  an approval is followed across pages and not while its card is folded;
+  "Integrations may ask" keeps the focus; the integrations are forgotten at a sign-out
+  and for another user after a 401, and a list that answers late shows nothing;
+  a running restore stays in sight, a plan goes with its backup, a plan that answers
+  late shows nothing, and the backups are forgotten for another user after a 401;
+  a backup's Delete asking and the format chosen stay, and a restore shown on
+  Cube settings shows in System settings' fold;
+  after a sign-out, and for another user signed in after an expired session,
+  nothing typed, no list, no key made and no restore shown is left.
+  The users, roles, providers, integrations and backups it makes it removes.
+  The server takes ten registration requests of integrations per address in
+  ten minutes: each case makes two real ones, `test_integrations.py`'s register
+  and link and this file's approval test, and the other integrations tests
+  answer their reads with stubs; the four cases of a worker make eight, so a
+  local run of all four cases repeated within ten minutes meets the limit
+  (429) until the ten minutes have passed or the servers are started anew.
 - `test_stream.py`:
   the event stream opens with tickets only, never with the token,
   and after a refused stream (the test hands out a used ticket first,

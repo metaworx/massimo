@@ -13,6 +13,12 @@
  * plain/, a file per script.
  */
 
+import { signedOut as adminSignedOut } from "./admin";
+import type { ProvidersPart, RolesPart, UsersPart } from "./admin";
+import { signedOut as backupsSignedOut } from "./backups";
+import type { BackupsPart } from "./backups";
+import "./chrome";
+import type { ChromePart } from "./chrome";
 import { signedOut as cubesSignedOut } from "./cubes";
 import type { CubesPart } from "./cubes";
 import "./header";
@@ -21,14 +27,19 @@ import "./leaving";
 import type { LeavingPart } from "./leaving";
 import "./rooms";
 import type { RoomsPart } from "./rooms";
+import { signedOut as integrationsSignedOut } from "./integrations";
 import { forgetForms } from "./shared/forms";
 import { languageChanged } from "./shared/lang";
 import { iconsChanged } from "./shared/look";
 import { parts, register } from "./shared/region";
 import { forgetRepairs } from "./shared/repair";
+import { newSession } from "./shared/session";
+import { fmtWhen } from "./shared/time";
 
 /** The parts the plain code calls, by region. */
 export interface MassimoParts {
+  /** An API time as date and time (shared/time.ts), for the plain fmtWhen of backup.js, which notify.js calls until AP UiParts' Block 13. */
+  fmtWhen(iso: string): string;
   /** The page's language changed (app.js applyLanguage): every part draws its texts again. */
   language(): void;
   /** The icons chosen for the window and the radio changed (theme.js redrawSigns): every sign draws them again. */
@@ -37,9 +48,16 @@ export interface MassimoParts {
    * A sign-out, or another user's sign-in after a 401 (login.js
    * forgetSession): every form's drafts and marks forgotten
    * (shared/forms.ts), every box of repairs (shared/repair.tsx), and
-   * every Cube's pairing and rooms (cubes/).
+   * every Cube's pairing and rooms (cubes/), and System settings' lists
+   * with what is typed in their new items' forms (admin/) and the
+   * integrations with the readings of an approval (integrations/), and
+   * every Cube's backups with a restore shown (backups/).
    */
   signedOut(): void;
+  /** Backup and restore: Cube settings' box and System settings' fold per Cube (backups/). */
+  backups: BackupsPart;
+  /** Where the page's chrome says that settings are unsaved: a section's pill, ☰'s mark joined with the log's, a menu item's disk (chrome/). */
+  chrome: ChromePart;
   /** System settings → Cubes and Cube settings (cubes/). */
   cubes: CubesPart;
   /** The header: the Cube choice, the problems, the age, the server's sign, the certificate's line, the home notice (header/). */
@@ -48,6 +66,12 @@ export interface MassimoParts {
   leaving: LeavingPart;
   /** The rooms: a tile per room with its device list (rooms/). */
   rooms: RoomsPart;
+  /** System settings → Sign-in providers (admin/). */
+  providers: ProvidersPart;
+  /** System settings → Roles and Capabilities for every role (admin/). */
+  roles: RolesPart;
+  /** System settings → Users: the password sign-in and a panel per user (admin/). */
+  users: UsersPart;
 }
 
 declare global {
@@ -57,11 +81,16 @@ declare global {
   }
 }
 
+register("fmtWhen", fmtWhen);
 register("language", languageChanged);
 register("icons", iconsChanged);
 register("signedOut", () => {
+  newSession(); // first: an answer still on its way for the user who was is dropped
   forgetForms("");
   forgetRepairs();
   cubesSignedOut();
+  adminSignedOut();
+  integrationsSignedOut();
+  backupsSignedOut();
 });
 window.MassimoParts = parts as unknown as MassimoParts;

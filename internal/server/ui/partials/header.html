@@ -28,18 +28,21 @@
            may open it (pages.js mayShow, MENU_VIEWS): the log; the settings
            pages; the personal page, in the app Select server (login.js
            initLogin), and Sign out (login.js renderMe). It
-           carries the log's mark (log.js renderLogSign). Its first row is
+           carries the log's mark, the worse of it and the unsaved settings'
+           (ui/src/chrome/, in #nav-menu-mark), and an item the disk where
+           a page it leads to has settings unsaved (.menu-item-mark, its
+           data-forms the forms' keys). Its first row is
            Massimo's icon and the server's version, which copies itself
            (header.js), a rule under it. -->
       <details id="nav-menu" class="menu nav-menu">
-        <summary class="nav-btn" aria-label="menu" title="Menu"><svg class="ni" aria-hidden="true"><use href="#icon-menu"/></svg></summary>
+        <summary class="nav-btn" aria-label="menu" title="Menu"><svg class="ni" aria-hidden="true"><use href="#icon-menu"/></svg><span id="nav-menu-mark" class="part-slot"></span></summary>
         <div class="menu-items">
           <p class="menu-version"><span class="menu-brand" data-brand aria-hidden="true"></span><span id="version-short" class="mono small"></span></p>
           <hr class="menu-sep">
           <button type="button" id="menu-log"><svg class="ni" aria-hidden="true"><use href="#icon-log"/></svg><span data-i18n="nav.logTitle">Log</span></button>
           <hr class="menu-sep">
-          <button type="button" id="menu-cube" class="needs-cubes-or-pair"><svg class="ni" aria-hidden="true"><use href="#icon-cube3d"/></svg><span data-i18n="nav.cubeTitle">Cube settings</span></button>
-          <button type="button" id="menu-system" class="needs-system"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg><span data-i18n="nav.settingsTitle">System settings</span></button>
+          <button type="button" id="menu-cube" class="needs-cubes-or-pair"><svg class="ni" aria-hidden="true"><use href="#icon-cube3d"/></svg><span data-i18n="nav.cubeTitle">Cube settings</span><span class="menu-item-mark part-slot" data-forms="cube"></span></button>
+          <button type="button" id="menu-system" class="needs-system"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg><span data-i18n="nav.settingsTitle">System settings</span><span class="menu-item-mark part-slot" data-forms="users roles providers integrations"></span></button>
           <button type="button" id="menu-maint" class="needs-maint"><svg class="ni" aria-hidden="true"><use href="#icon-tool"/></svg><span data-i18n="nav.maintTitle">Maintenance</span></button>
           <button type="button" id="menu-info" class="needs-read"><svg class="ni" aria-hidden="true"><use href="#icon-info"/></svg><span data-i18n="nav.infoTitle">System info</span></button>
           <hr class="menu-sep">

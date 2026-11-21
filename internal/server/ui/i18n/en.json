@@ -1291,6 +1291,7 @@
   "integrations.nameHint": "Its users are shown under this name: Name › user.",
   "integrations.saveName": "Save the name",
   "integrations.nameSaved": "Integration renamed {name}",
+  "integrations.nameFormName": "Integration {name}, its name",
   "integrations.reportedName": "Name in Home Assistant",
   "integrations.uuid": "Id",
   "integrations.keyIssued": "Key issued",
@@ -1299,6 +1300,7 @@
   "integrations.enabledOn": "{name} enabled.",
   "integrations.enabledOff": "{name} disabled: its calls are refused.",
   "integrations.saveMax": "Save the maximum",
+  "integrations.maxFormName": "Integration {name}, its maximum",
   "integrations.saved": "{name} saved.",
   "integrations.users": "Its users",
   "integrations.usersNone": "No user has acted through it yet.",
@@ -1402,6 +1404,7 @@
   "providers.added": "Provider {name} added.",
 
   "providers.failed": "{name}: not done: {error}",
+  "providers.formName": "Sign-in provider {name}",
 
   "providers.off": "disabled",
 
@@ -1490,6 +1493,8 @@
   "users.removed": "{name} removed.",
   "users.failed": "{name}: {error}",
   "users.unchanged": "Nothing changed.",
+  "users.formName": "User {name}",
+  "users.noEnd": "no end",
   "users.tokens": "Sessions and keys",
   "users.tokensNone": "None.",
 
@@ -1528,6 +1533,7 @@
   "users.identityChangeLabel": "Change {email} at {provider}",
 
   "users.identityChanged": "Identity changed.",
+  "users.identityFormName": "User {name}, identity {account}",
 
   "users.identityGroups": "groups: {groups}",
 
@@ -1617,6 +1623,7 @@
   "roles.disabledNow": "{role} disabled: its users keep their login and are refused everything.",
   "roles.enabledNow": "{role} enabled.",
   "roles.failed": "{role}: {error}",
+  "roles.formName": "Role {name}",
   "roles.capsTitle": "Capabilities for every role",
   "roles.capsShort": "Capabilities",
   "roles.badge.allOn": "all on",
@@ -1738,6 +1745,7 @@
   "restore.send.one": "Send {n} command",
   "restore.send.other": "Send {n} commands",
   "restore.running": "Sending: {done} of {n} steps.",
+  "restore.unseen": "The connection to the server was interrupted while the restore ran: the log says how it ended.",
   "restore.done": "Restore done: {sent} of {n} steps sent.",
   "restore.failedAt": "Restore stopped after {sent} of {n} steps: {error}",
   "restore.refused": "Not sent: {error}",

@@ -370,12 +370,15 @@ def test_delete_not_sent_again(page, case, watch):
     box.scroll_into_view_if_needed()
     taken = api_call("POST", f"api/v1/cubes/{SERIAL}/backups", {})
     try:
-        page.evaluate(f"refreshBackups('{SERIAL}')")
+        show_view(page, "tiles")
+        show_view(page, "cube")  # the list read again
         bid = taken["id"]
-        assert wait_until(page, f"backupOf('{SERIAL}').list.some((b) => b.id === {bid})", 10), "the backup is listed"
+        listed = (api_call("GET", f"api/v1/cubes/{SERIAL}/backups") or {}).get("backups") or []
+        assert wait_until(page, f"document.querySelectorAll('#cube-backup .backups-list .backup-row').length === {len(listed)}", 10), \
+            "the backup is listed"
         watch.expected.append((f"/backups/{bid}", 401))
         refusal = Refusal(page, f"**/backups/{bid}", "DELETE")
-        index = page.evaluate(f"backupOf('{SERIAL}').list.findIndex((b) => b.id === {bid})")
+        index = next(i for i, b in enumerate(listed) if b["id"] == bid)
         row = box.locator(".backups-list .backup-row").nth(index)
         row.locator(".backup-actions button").last.click()
         row.locator(".confirm-yes").click()

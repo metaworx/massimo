@@ -1291,6 +1291,7 @@
   "integrations.nameHint": "Ihre Benutzer erscheinen unter diesem Namen: Name › Benutzer.",
   "integrations.saveName": "Namen speichern",
   "integrations.nameSaved": "Integration in {name} umbenannt",
+  "integrations.nameFormName": "Integration {name}, ihr Name",
   "integrations.reportedName": "Name in Home Assistant",
   "integrations.uuid": "Id",
   "integrations.keyIssued": "Schlüssel ausgegeben",
@@ -1299,6 +1300,7 @@
   "integrations.enabledOn": "{name} aktiviert.",
   "integrations.enabledOff": "{name} deaktiviert: Ihre Aufrufe werden abgelehnt.",
   "integrations.saveMax": "Maximum speichern",
+  "integrations.maxFormName": "Integration {name}, was sie höchstens darf",
   "integrations.saved": "{name} gespeichert.",
   "integrations.users": "Ihre Benutzer",
   "integrations.usersNone": "Noch kein Benutzer hat über sie gehandelt.",
@@ -1402,6 +1404,7 @@
   "providers.added": "Anmeldedienst {name} hinzugefügt.",
 
   "providers.failed": "{name}: nicht ausgeführt: {error}",
+  "providers.formName": "Anmeldedienst {name}",
 
   "providers.off": "deaktiviert",
 
@@ -1490,6 +1493,8 @@
   "users.removed": "{name} entfernt.",
   "users.failed": "{name}: {error}",
   "users.unchanged": "Nichts geändert.",
+  "users.formName": "Benutzer {name}",
+  "users.noEnd": "kein Ende",
   "users.tokens": "Sitzungen und Schlüssel",
   "users.tokensNone": "Keine.",
 
@@ -1528,6 +1533,7 @@
   "users.identityChangeLabel": "{email} bei {provider} ändern",
 
   "users.identityChanged": "Identität geändert.",
+  "users.identityFormName": "Benutzer {name}, Identität {account}",
 
   "users.identityGroups": "Gruppen: {groups}",
 
@@ -1617,6 +1623,7 @@
   "roles.disabledNow": "{role} gesperrt: ihre Benutzer bleiben angemeldet und bekommen alles verweigert.",
   "roles.enabledNow": "{role} freigegeben.",
   "roles.failed": "{role}: {error}",
+  "roles.formName": "Rolle {name}",
   "roles.capsTitle": "Fähigkeiten für alle Rollen",
   "roles.capsShort": "Fähigkeiten",
   "roles.badge.allOn": "alle an",
@@ -1738,6 +1745,7 @@
   "restore.send.one": "{n} Befehl senden",
   "restore.send.other": "{n} Befehle senden",
   "restore.running": "Wird gesendet: {done} von {n} Schritten.",
+  "restore.unseen": "Die Verbindung zum Server war unterbrochen, während die Wiederherstellung lief: Das Log sagt, wie sie endete.",
   "restore.done": "Zurückgespielt: {sent} von {n} Schritten gesendet.",
   "restore.failedAt": "Zurückspielen nach {sent} von {n} Schritten abgebrochen: {error}",
   "restore.refused": "Nicht gesendet: {error}",

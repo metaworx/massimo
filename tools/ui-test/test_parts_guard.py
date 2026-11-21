@@ -43,6 +43,7 @@ suite is collected (the mark cases, conftest.py), so that none loads a
 page only to be skipped (AP TestSpeed, D9-A). In CI that is in the jobs
 of 1100-en and 390-de, on a worker of its own beside the other files.
 """
+import json
 import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -50,7 +51,7 @@ from typing import Callable
 
 import pytest
 
-from helpers import STATE_EVENTS_JS, RepairStub, open_main_menu, reads_of, show_view, wait_until
+from helpers import STATE_EVENTS_JS, RepairStub, open_main_menu, reads_of, safe_route, show_view, wait_until
 
 # The cases the guard runs in (D176-D); in the others its tests are
 # deselected at collection (D9-A).
@@ -453,10 +454,12 @@ def pairing_running(page):
 def users(page):
     system(page)
     panel = page.locator(".user-panel[data-name='operator']")
-    panel.locator("summary").click()
+    if not panel.evaluate("(d) => d.open"):  # open already in a view before
+        panel.locator("summary").click()
     assert wait_until(page, "document.querySelectorAll(\".user-panel[data-name='operator'] .user-tokens li\").length >= 1", 5), \
         "the operator's tokens are listed"
-    page.locator("#user-add").click()
+    if page.locator("#user-add").is_visible():  # shown already in a view before
+        page.locator("#user-add").click()
     page.locator("#user-new input").first.wait_for(state="visible")
 
 
@@ -467,10 +470,67 @@ def roles(page):
     page.locator("#role-new input").first.wait_for(state="visible")
 
 
+def users_question(page):
+    """A user's Remove asking in its panel, the operator's."""
+    users(page)
+    page.locator(".user-panel[data-name='operator'] .remove-user").click()
+    page.locator(".user-panel[data-name='operator'] .confirm-box").wait_for()
+
+
 def providers(page):
     system(page)
-    page.locator("#provider-add").click()
+    if page.locator("#provider-add").is_visible():  # shown already in a view before
+        page.locator("#provider-add").click()
     page.locator("#provider-new input").first.wait_for(state="visible")
+
+
+# The fixture has no sign-in provider and no integration: the views of
+# their panels answer GET /api/v1/providers and the integrations' reads
+# with one constant answer each, so that the data stay as they were.
+PROVIDER_STUB = {"key": "guard", "name": "Guard", "issuer": "https://issuer.example.org", "client_id": "guard", "has_secret": True,
+                 "secret_lost": False, "scopes": "openid email profile", "auto_create": True, "auto_role": "viewer", "auto_domains": ["example.org"],
+                 "groups_claim": "", "allowed_groups": [], "enabled": False, "callback": "api/v1/login/oidc/callback",
+                 "created_at": "2026-11-15T10:00:00Z", "updated_at": "2026-11-15T10:00:00Z"}
+GUARD_IG = "01a1e000-0000-7000-8000-00000000a001"
+GUARD_REQ = "01a1e000-0000-7000-8000-00000000a002"
+IG_STUB = {"uuid": GUARD_IG, "kind": "homeassistant", "name": "Guard home", "reported_name": "Guard home", "state": "active",
+           "instance_id": "a1" * 16, "url": "http://192.0.2.30:8123", "version": "2026.11.1", "max_caps": ["read", "setpoint"],
+           "key_issued_at": "2026-11-15T10:00:00Z", "created_at": "2026-11-15T10:00:00Z", "seen": True}
+REQ_STUB = {"uuid": GUARD_REQ, "kind": "homeassistant", "name": "Guard request", "reported_name": "Guard request", "state": "pending",
+            "instance_id": "a2" * 16, "request_code": "GRD-123", "request_remote": "192.0.2.31", "created_at": "2026-11-15T10:00:00Z",
+            "request_expires": "2099-01-01T00:00:00Z"}
+IG_USER = {"id": "b" * 32, "name": "Guard user", "display": "Guard home › Guard user", "user": GUARD_IG + ":" + "b" * 32,
+           "own_user": GUARD_IG + ":" + "b" * 32, "linked": False, "last_level": "control", "last_used_at": "2026-11-15T10:00:00Z"}
+FOUND_IG = {"found": [{"kind": "homeassistant", "name": "Guard LAN", "instance_id": "a3" * 16, "address": "192.0.2.32"}], "looks": True}
+
+
+def provider_panel(page):
+    """A provider's panel open, its form with every field, the new provider's form beside it."""
+    reads_of(page).change("**/api/v1/providers", lambda body: [PROVIDER_STUB])
+    show_view(page, "tiles")
+    system(page)
+    page.locator(".provider-panel[data-key='guard'] > summary").click()
+    page.locator(".provider-panel[data-key='guard'] input[name=name]").wait_for(state="visible")
+    if page.locator("#provider-add").is_visible():
+        page.locator("#provider-add").click()
+    page.locator("#provider-new input").first.wait_for(state="visible")
+
+
+def integrations(page):
+    """A request waiting, an integration's panel open with a user and its
+    choice of whom it acts as, and an installation seen on the LAN with
+    Register's address asked for."""
+    reads_of(page).change("**/api/v1/integrations", lambda body: [REQ_STUB, IG_STUB])
+    safe_route(page, f"**/api/v1/integrations/{GUARD_IG}", lambda route: route.fulfill(
+        status=200, content_type="application/json", body=json.dumps(dict(IG_STUB, users=[IG_USER]))))
+    reads_of(page).change("**/api/v1/integrations/found*", lambda body: FOUND_IG)
+    show_view(page, "tiles")
+    system(page)
+    panel = page.locator(f".integration-panel[data-uuid='{GUARD_IG}']")
+    panel.locator("> summary").click()
+    panel.locator(".integration-user select").wait_for(state="visible")
+    page.locator("#integrations-found .register-integration").click()
+    page.locator("#integrations-found .register-address input").wait_for(state="visible")
 
 
 def backups_system(page):
@@ -481,6 +541,15 @@ def backups_system(page):
 def backups_cube(page):
     cube_page(page)
     page.locator("#cube-backup-body .backup-take").wait_for(state="visible")
+
+
+def backups_question(page):
+    """Cube settings, a kept backup's Delete asking in its row (run.sh took one by hand)."""
+    backups_cube(page)
+    row = page.locator("#cube-backup-body .backup-row").first
+    row.wait_for(timeout=10000)
+    row.locator(".backup-actions button").last.click()
+    row.locator(".confirm-box").wait_for()
 
 
 def log(page):
@@ -598,14 +667,40 @@ REGIONS = (
         # own events are test_pairing_updates.py's.
         View("a pairing running, a device joined with its room chosen", pairing_running),
     )),
-    Region("users", ("#sys-users-body",), (View("the operator's panel and the new user's form", users),)),
+    Region("users", ("#sys-users-body",), (
+        View("the operator's panel and the new user's form", users),
+        # Passed on the page before the move as well: none of SOURCES draws
+        # the users again. From now on it guards that the question stays through the data;
+        # the list's own reads (an action in another panel, the list read
+        # again, the page shown again) are test_admin_updates.py's.
+        View("the operator's Remove asking", users_question),
+    )),
     Region("roles", ("#sys-roles-body",), (View("the operator role's panel and the new role's form", roles),)),
     Region("capabilities", ("#sys-caps-body",), (View("System settings", system),)),
-    Region("providers", ("#sys-providers-body",), (View("the new provider's form", providers),)),
-    Region("integrations", ("#sys-integrations-body",), (View("System settings", system),)),
+    Region("providers", ("#sys-providers-body",), (
+        View("the new provider's form", providers),
+        # Passed on the page before the move as well: none of SOURCES draws
+        # the providers again. From now on it guards that a provider's panel with its form typed stays through the data;
+        # the list's own reads (an action in another panel, the list read
+        # again, the page shown again) are test_admin_updates.py's.
+        View("a provider's panel open and the new provider's form", provider_panel),
+    )),
+    Region("integrations", ("#sys-integrations-body",), (
+        View("System settings", system),
+        # Passed on the page before the move as well: none of SOURCES draws
+        # the integrations again. From now on it guards that a request, an integration's panel and Register's address stays through the data;
+        # the list's own reads (an action in another panel, the list read
+        # again, the page shown again) are test_admin_updates.py's.
+        View("a request, an integration's panel with a user, Register's address", integrations),
+    )),
     Region("backups", ("#sys-backup-body", "#cube-backup-body"), (
         View("System settings, the Cube's fold open", backups_system),
         View("Cube settings", backups_cube),
+        # Passed on the page before the move as well: none of SOURCES draws
+        # a Cube's backups again. From now on it guards that the question stays through the data;
+        # the list's own reads (an action in another panel, the list read
+        # again, the page shown again) are test_admin_updates.py's.
+        View("Cube settings, a backup's Delete asking", backups_question),
     )),
     Region("log", ("#logview",), (View("the log", log),)),
     Region("software-update", ("#sys-software-body",), (View("Maintenance", maint),)),
