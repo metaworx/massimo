@@ -137,6 +137,10 @@ declare global {
   function apiRaw(method: string, path: string, body?: unknown, contentType?: string): Promise<Response>;
   /** The default end of a temporary setting, tomorrow at six, as a datetime-local value. */
   function tomorrowMorning(): string;
+  /** The page's message line: a text, ok or a failure. */
+  function showMessage(text: string, ok: boolean): void;
+  /** A Cube's rooms, their virtual wall thermostats apart, and its devices without a room or unlisted. */
+  function fetchRooms(serial: string): Promise<{ rooms: PageRoom[]; unlisted: Device[] }>;
 }
 
 export {};

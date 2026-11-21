@@ -41,9 +41,8 @@ var uiFiles embed.FS
 // settings (its section cards in three markers: before, in and after the
 // cards that flow in two columns), the cards of Maintenance, System
 // info's card, the Cube page, the House tile, the devices without a
-// room, the log, the sign-in dialog, the toast, then the templates the
-// scripts clone, each named for what it holds and saying which script
-// uses it.
+// room, the log, the sign-in dialog and the toast, each named for what it
+// holds and saying which script or part uses it.
 var uiPartials = []struct {
 	marker string
 	files  []string
@@ -61,7 +60,6 @@ var uiPartials = []struct {
 	{"unlisted", []string{"unlisted.html"}},
 	{"logview", []string{"log-view.html"}},
 	{"toast", []string{"toast.html"}},
-	{"templates", []string{"log.html"}},
 }
 
 // uiPage assembles the page: index.html, the skeleton, with each marker

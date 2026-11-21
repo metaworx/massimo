@@ -205,9 +205,15 @@ type Value<T> = { draft: Draft<T>; value?: undefined; set?: undefined } | { draf
  * (type password, autocomplete new-password or current-password) is no
  * stored text: it is a free field by value and set, never a draft, so
  * that it is kept by its form's part alone; inputCls is the input's class
- * beside field-control (mono for a key).
+ * beside field-control (mono for a key). With row false it is the input
+ * alone, standing in a tile's head (the log's search), as plain as it is
+ * written: aria its name for a screen reader, as NumberField's and
+ * Select's, no name, autocomplete or spellcheck of its own.
  */
-export function TextField({ label, id, wide = true, unit, hint, help, cls, limit, name, placeholder, type, autocomplete, inputCls, maxLength, pattern, required, disabled, draft, value, set, show, inputRef }: Row & Value<string> & {
+export function TextField({ label, id, wide = true, unit, hint, help, cls, limit, name, placeholder, type, autocomplete, inputCls, maxLength, pattern, required, disabled, draft, value, set, show, inputRef, row = true, aria }: Omit<Row, "label"> & Value<string> & {
+  label?: string;
+  row?: boolean;
+  aria?: string;
   name?: string;
   disabled?: boolean;
   placeholder?: string;
@@ -220,12 +226,16 @@ export function TextField({ label, id, wide = true, unit, hint, help, cls, limit
   show?: (v: string) => string;
   inputRef?: Ref<HTMLInputElement>;
 }) {
+  const input = (
+    <input ref={inputRef} id={id} type={(type || "text") as "text"} name={name} class={[unit || !row ? "" : "field-control", inputCls || ""].filter(Boolean).join(" ") || undefined}
+      autocomplete={row ? autocomplete || "off" : autocomplete} spellcheck={row ? false : undefined} aria-label={aria}
+      placeholder={placeholder} maxLength={maxLength} pattern={pattern} required={required} disabled={disabled} value={draft ? draft.value : value}
+      {...limitAria(id, limit)} onInput={(ev) => (draft ? draft.set(ev.currentTarget.value) : set(ev.currentTarget.value))} />
+  );
+  if (!row) return input;
   return (
-    <Field label={label} id={id} wide={wide} unit={unit} hint={hint} help={help} cls={cls} limit={limit} draft={draft} show={show}>
-      <input ref={inputRef} id={id} type={(type || "text") as "text"} name={name} class={[unit ? "" : "field-control", inputCls || ""].filter(Boolean).join(" ") || undefined}
-        autocomplete={autocomplete || "off"} spellcheck={false}
-        placeholder={placeholder} maxLength={maxLength} pattern={pattern} required={required} disabled={disabled} value={draft ? draft.value : value}
-        {...limitAria(id, limit)} onInput={(ev) => (draft ? draft.set(ev.currentTarget.value) : set(ev.currentTarget.value))} />
+    <Field label={label || ""} id={id} wide={wide} unit={unit} hint={hint} help={help} cls={cls} limit={limit} draft={draft} show={show}>
+      {input}
     </Field>
   );
 }
@@ -294,9 +304,13 @@ export type SelectOption = [value: string, label: string, disabled?: boolean] | 
  * follows the select in its row (the language's note of a machine
  * translation). With row false it is the select alone,
  * inside a row of the caller's (a field with two controls), whose notice
- * the caller draws.
+ * the caller draws, or standing alone in a tile's head (the log's
+ * choices): aria is then its name for a screen reader, selectCls its own
+ * class (hidden, for a choice left out).
  */
-export function Select({ label, id, wide, unit, hint, hintId, help, cls, labelCls, name, options, value, onChange, disabled, draft, show, row = true, inputRef, before, after }: Partial<Row> & {
+export function Select({ label, id, wide, unit, hint, hintId, help, cls, labelCls, name, options, value, onChange, disabled, draft, show, row = true, inputRef, before, after, aria, selectCls }: Partial<Row> & {
+  aria?: string;
+  selectCls?: string;
   before?: ComponentChildren;
   after?: ComponentChildren;
   name?: string;
@@ -311,7 +325,8 @@ export function Select({ label, id, wide, unit, hint, hintId, help, cls, labelCl
 }) {
   const opt = ([v, l, off]: [string, string, boolean?]) => <option key={v} value={v} disabled={off}>{l}</option>;
   const select = (
-    <select ref={inputRef} id={id} name={name} class={!row || unit ? undefined : "field-control"} disabled={disabled} aria-describedby={hint ? hintId : undefined} value={draft ? draft.value : value} onChange={(ev) => {
+    <select ref={inputRef} id={id} name={name} class={!row ? selectCls : unit ? undefined : "field-control"} disabled={disabled} aria-label={aria} aria-describedby={hint ? hintId : undefined}
+      value={draft ? draft.value : value} onChange={(ev) => {
       const v = ev.currentTarget.value;
       if (draft) draft.set(v);
       if (onChange) onChange(v);

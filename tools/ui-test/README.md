@@ -532,6 +532,21 @@ hence `failed_checks_forgotten`.
   and an address typed in its place shows its choices;
   unknown values and a device the Cube does not have leave a plain `#log`,
   and the log is asked for every device.
+- `test_log_updates.py`, the log as a part (AP UiParts, Block 11),
+  its reads of the Cube answered by the test (`StubLog`):
+  a command's detail open with the focus on its button,
+  a selection of text in a line,
+  and the focus on a problem's Mark seen while another line's level changes
+  stay the elements they were, the detail open, through a new line,
+  every line drawn again, the rooms read again, the log loaded again
+  and its problems read again;
+  the search typed and a kind chosen stay through a new line, a load,
+  another page and back (a forward guard);
+  a choice's options stay the elements they were, with the focus,
+  through the rooms and the Cubes read again;
+  with a page of 200 lines a new line adds one element and removes none,
+  every line drawn again and a load of the same events add and remove none;
+  a line that came live keeps its element, with the focus, when a load brings it.
 - `test_pairing.py`, pairing and removal:
   in System settings → Cubes, Pair a device with 5 seconds,
   the fake Cube's device joins with its serial,

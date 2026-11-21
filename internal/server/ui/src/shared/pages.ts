@@ -15,7 +15,7 @@
  * change of page. The page shown is in the address, Rooms without one,
  * the personal page at a card by the card's own (#profile, #prefs,
  * #notify, the addresses of the pages they were), and a page with an
- * address of its own (the log's choices, pages.js) through what it
+ * address of its own (the log's choices, ui/src/log/) through what it
  * hands over (ownAddress), a card's with what its address holds after
  * the "?" through what its region hands over (readCardAddress, My
  * profile's key to mark), so that a reload or a link opens it again as
@@ -83,7 +83,7 @@ export interface OwnAddress {
 /** The pages with an address of their own, by their views. */
 const owned: Record<string, OwnAddress> = {};
 
-/** ownAddress hands over a page's address of its own (the log's, pages.js initPages). */
+/** ownAddress hands over a page's address of its own (the log's, ui/src/log/index.tsx). */
 export function ownAddress(view: string, a: OwnAddress): void {
   owned[view] = a;
 }

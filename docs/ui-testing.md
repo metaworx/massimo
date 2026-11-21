@@ -1,4 +1,4 @@
-# Testing the web UI (v1.19.0)
+# Testing the web UI (v1.20.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -727,6 +727,19 @@ at every read of who is in.
 System settings' sections menu open,
 and a card folded and opened again, the focus on its fold,
 passed on the page before the move too, where nothing drew a card's head again.
+The log (AP UiParts, Block 11) is two regions here:
+its section with its head, checked as it is and with the kind's choice in focus,
+which passed on the page before the move too, where nothing built the head again;
+and its lines, `#log-lines`, which no round types into
+(the search typed filters every line out),
+checked with the log's reads of the Cube answered with the log's lines of
+`helpers.py` (`StubLog`, which `test_log_updates.py` uses too),
+two of them problems not yet seen
+(`GET /api/v1/log/alerts` answered so) and a command's line with its detail:
+a problem's Mark seen in focus, and the command's detail open with the focus
+on its button; both failed on the page before the move,
+where `loadRooms()` and `refresh()` built every line again.
+Its stubs are taken away once its views are done (`Region.after`).
 
 ### Taking a region off the list
 

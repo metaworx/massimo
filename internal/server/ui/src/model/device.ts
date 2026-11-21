@@ -6,7 +6,8 @@
  *
  * A device as the parts read it beside its fields, for every region that
  * shows devices (the rooms with their tiles and device rows, and through a
- * Cube's problems the Cubes and the header): its type's icon, an open
+ * Cube's problems the Cubes and the header, and the log): its name by its
+ * radio address, its type's icon, an open
  * window's state by the page's clock, what is wrong with it as items of
  * the shared problem list, and the device as an entry of that list. The
  * age of a value is the plain received of rooms.js. Like all of ui/src/model/ (docs/ui.md, "How the
@@ -91,6 +92,22 @@ export function deviceProblems(d: Device, withWindow?: boolean): Item[] {
       at: received(d, "window_open"), stale: d.stale });
   }
   return out;
+}
+
+/**
+ * rfLabel names a device by its radio address as the page names it
+ * (deviceName of app.js), among the chosen Cube's rooms, the address
+ * where the page does not know it: a structure event's devices in the
+ * log, a finding's device (tiles.js mismatchArgs, through the plain name
+ * of log.js).
+ */
+export function rfLabel(rf: string): string {
+  for (const r of state.rooms || []) {
+    for (const d of r.devices || []) {
+      if (d.rf_address === rf) return deviceName(d);
+    }
+  }
+  return rf;
 }
 
 /**

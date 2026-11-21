@@ -55,7 +55,7 @@ from typing import Callable
 
 import pytest
 
-from helpers import STATE_EVENTS_JS, RepairStub, open_main_menu, reads_of, safe_route, show_view, wait_until
+from helpers import LOG_ALERT_A, LOG_ALERT_B, LOG_CMD, LOG_CMD_LINE, STATE_EVENTS_JS, RepairStub, StubLog, log_lines, open_main_menu, reads_of, safe_route, show_view, stub_log_command, wait_until
 
 # The cases the guard runs in (D176-D); in the others its tests are
 # deselected at collection (D9-A).
@@ -81,7 +81,8 @@ class Region:
     elements inside them that belong to another region (exclude), its
     views, where the fake Cube's fixture cannot show it, why (gap), and
     the data sources of its own beside SOURCES (sources), by their
-    names in GUARD_JS's run."""
+    names in GUARD_JS's run, and what is undone once its views are done
+    (after: a stub's routes)."""
 
     name: str
     containers: tuple
@@ -89,6 +90,7 @@ class Region:
     exclude: str = ""
     gap: str = ""
     sources: tuple = ()
+    after: Callable | None = None
 
 
 # --- how the regions are shown ------------------------------------------
@@ -565,8 +567,62 @@ def backups_question(page):
 
 
 def log(page):
+    """The log, the search empty again: a view's round types into it."""
     show_view(page, "log")
+    page.locator("#log-filter").fill("")
     page.locator("#log-lines .log-line").first.wait_for()
+    settle(page)
+
+
+def stub_log(page):
+    """The log's reads of the Cube answered with the log's lines of
+    helpers.py (StubLog), a command's line among them, its detail, and two
+    of them problems not yet seen, once per page, each route taken away
+    once the region's views are done (Region.after); the other methods go
+    on to Writes."""
+    if getattr(page, "_guard_log", False):
+        return
+    stub = StubLog(page, log_lines())
+    command = stub_log_command(page)
+    alerts = [{"id": LOG_ALERT_A, "kind": "hello", "level": "warn", "time": "2026-11-20T08:00:17Z"},
+              {"id": LOG_ALERT_B, "kind": "hello", "level": "error", "time": "2026-11-20T08:00:16Z"}]
+    problems = safe_route(page, "**/api/v1/log/alerts*", lambda r: r.fulfill(status=200, content_type="application/json",
+                                                                               body=json.dumps({"level": "error", "alerts": alerts})))
+
+    def off():
+        stub.off()
+        page.unroute(f"**/api/v1/commands/{LOG_CMD}", command)
+        page.unroute("**/api/v1/log/alerts*", problems)
+        page._guard_log = False
+
+    page._guard_log_off = off
+    page._guard_log = True
+
+
+def unstub_log(page):
+    """stub_log's routes taken away, once the region's views are done."""
+    off = getattr(page, "_guard_log_off", None)
+    if off and not page.is_closed():
+        off()
+        page.evaluate("loadLogAlerts()")  # ☰'s mark as the server has it again
+
+
+def log_stubbed(page):
+    """The log with the stubbed lines (stub_log), its problems read."""
+    stub_log(page)
+    show_view(page, "log")
+    page.evaluate("loadLog().then(() => loadLogAlerts())")
+    page.locator(f"#log-lines .log-line[data-id='{LOG_ALERT_A}'] .log-mark").wait_for()
+    settle(page)
+
+
+def log_command(page):
+    """The log with a command's detail open (stub_log)."""
+    log_stubbed(page)
+    btn = page.locator(f"#log-lines .log-line[data-id='{LOG_CMD_LINE}'] .log-cmd")
+    if btn.get_attribute("aria-expanded") != "true":
+        btn.click()
+    page.locator(f"#log-lines .log-line[data-id='{LOG_CMD_LINE}'] .log-cmd-head").wait_for()
     settle(page)
 
 
@@ -815,7 +871,19 @@ REGIONS = (
         # again, the page shown again) are test_admin_updates.py's.
         View("Cube settings, a backup's Delete asking", backups_question),
     )),
-    Region("log", ("#logview",), (View("the log", log),)),
+    # The log is a part (AP UiParts, Block 11). Its head passed on the
+    # plain page too, which never built it again. Its lines are a region
+    # of their own here, so that the round's typing into the search, which
+    # filters them all out, leaves them: their views fail on the plain
+    # page, where loadRooms and loadLogAlerts built every line again.
+    Region("log", ("#logview",), (
+        View("the log", log),
+        View("the kind's choice in focus", log, "#log-kind"),
+    )),
+    Region("log-lines", ("#log-lines",), (
+        View("a problem's Mark seen in focus", log_stubbed, f"#log-lines .log-line[data-id='{LOG_ALERT_A}'] .log-mark"),
+        View("a command's detail open, the focus on its button", log_command, f"#log-lines .log-line[data-id='{LOG_CMD_LINE}'] .log-cmd"),
+    ), after=unstub_log),
     # Software update's and Maintenance's views pass on the page before
     # the move too (AP UiParts, Block 12): update.js and maintenance.js
     # filled their elements in place but for the options of a select and
@@ -1205,16 +1273,20 @@ def test_guard(page, case, region):
     loaded(page)
     writes = Writes(page)
     failures, held, counts = [], [], []
-    for view in region.views:
-        view.show(page)
-        page.evaluate(GUARD_JS)
-        n = page.evaluate("(a) => window.__guard.count(a)", {"roots": list(region.containers), "exclude": region.exclude})
-        assert n > 0, f"{region.name} [{view.name}]: the region shows nothing a user can hold ({', '.join(region.containers)})"
-        counts.append(f"{view.name}: {n}")
-        if checked:
-            lines, h = guard_view(page, writes, region, view)
-            failures += lines
-            held += [f"[{view.name}] {x}" for x in h]
+    try:
+        for view in region.views:
+            view.show(page)
+            page.evaluate(GUARD_JS)
+            n = page.evaluate("(a) => window.__guard.count(a)", {"roots": list(region.containers), "exclude": region.exclude})
+            assert n > 0, f"{region.name} [{view.name}]: the region shows nothing a user can hold ({', '.join(region.containers)})"
+            counts.append(f"{view.name}: {n}")
+            if checked:
+                lines, h = guard_view(page, writes, region, view)
+                failures += lines
+                held += [f"[{view.name}] {x}" for x in h]
+    finally:
+        if region.after:
+            region.after(page)
     assert not writes.sent, f"{region.name}: the guard sent requests other than GET: {writes.sent}"
     let = f", let through as the page loaded: {'; '.join(writes.let)}" if writes.let else ""
     if not checked:

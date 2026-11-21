@@ -1223,25 +1223,40 @@ func TestUIDefaultSchemeMatchesCSS(t *testing.T) {
 	}
 }
 
-// TestLogKinds keeps the page's kinds of event (LOG_KINDS in log.js), the
-// server's (eventKinds) and the Cube driver's (cubelan.EventKind) one
-// list.
+// TestLogKinds keeps the page's kinds of event (LOG_KINDS of the log's
+// part, ui/src/log/kinds.ts), the server's (eventKinds) and the Cube
+// driver's (cubelan.EventKind) one list, each kind with its name in the
+// texts (log.kind.<kind> of en.json). The part's file is read from the
+// disk: the bundle is made from it, and it is not embedded.
 func TestLogKinds(t *testing.T) {
 	t.Parallel()
-	js, err := uiFiles.ReadFile("ui/log.js")
+	ts, err := os.ReadFile("ui/src/log/kinds.ts")
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := regexp.MustCompile(`(?s)const LOG_KINDS = \[(.*?)\];`).FindSubmatch(js)
+	m := regexp.MustCompile(`(?s)export const LOG_KINDS = \[(.*?)\];`).FindSubmatch(ts)
 	if m == nil {
-		t.Fatal("log.js: no LOG_KINDS")
+		t.Fatal("ui/src/log/kinds.ts: no LOG_KINDS")
 	}
 	var page []string
 	for _, k := range regexp.MustCompile(`"([a-z_]+)"`).FindAllSubmatch(m[1], -1) {
 		page = append(page, string(k[1]))
 	}
 	if strings.Join(page, " ") != strings.Join(eventKinds, " ") {
-		t.Fatalf("log.js LOG_KINDS %v, the server's eventKinds %v", page, eventKinds)
+		t.Fatalf("ui/src/log/kinds.ts LOG_KINDS %v, the server's eventKinds %v", page, eventKinds)
+	}
+	b, err := uiFiles.ReadFile("ui/i18n/en.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var en map[string]string
+	if err := json.Unmarshal(b, &en); err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range page {
+		if en["log.kind."+k] == "" {
+			t.Errorf("the kind %q has no text: no log.kind.%s in ui/i18n/en.json", k, k)
+		}
 	}
 	for k := cubelan.EventKind(0); k.String() != "unknown"; k++ {
 		if !slices.Contains(eventKinds, k.String()) {

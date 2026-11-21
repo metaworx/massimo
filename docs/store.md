@@ -1807,7 +1807,8 @@ Implemented on 2026-11-06 (AP StoreLog v1.0), with its review's fixes (v1.1).
   the paging query; the daily prune per Cube in chunks of 5000,
   answering a read and a stop between two chunks);
   `internal/server/log.go` (`remember` hands a Cube's event to the writer,
-  `GET …/log` reads the store), `log.js` (the log view pages with "Older",
+  `GET …/log` reads the store),
+  the log's part, `internal/server/ui/src/log/` (the log view pages with "Older",
   chooses a kind and a device).
   Migration 0004 (v1.1): the indexes a page walks in id order;
   the review found a page sorting every one of a Cube's rows,

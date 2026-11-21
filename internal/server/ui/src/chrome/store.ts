@@ -5,9 +5,9 @@
  * @file internal/server/ui/src/chrome/store.ts
  *
  * What the plain code hands the page's chrome (MassimoParts.chrome): the
- * log's unseen problems, which ☰ and its Log entry show (log.js
- * renderLogSign, plain until AP UiParts' Block 11); the server's version,
- * ☰'s first row, is shared/server.ts' (the sign-in's card reads it too).
+ * log's unseen problems, which ☰ and its Log entry show (the log's part,
+ * log/alerts.ts renderLogSign); the server's version, ☰'s first row, is
+ * shared/server.tsx's (the sign-in's card reads it too).
  */
 
 import { signal } from "@preact/signals";

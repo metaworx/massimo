@@ -12,8 +12,8 @@
  * at the top and compacted as the page scrolls, and back to top
  * (scroll.ts, ToTop.tsx). The pages it shows are the store of
  * shared/pages.ts, which it first hands the page's pages (pages.ts). The
- * log tells its count and tone through MassimoParts.chrome.log (log.js
- * renderLogSign, plain until Block 11), header.js the server's version. No region may import another: it knows
+ * log tells its count and tone through MassimoParts.chrome.log (the log's
+ * part, log/alerts.ts renderLogSign), header.js the server's version. No region may import another: it knows
  * the forms through shared/forms.ts alone.
  */
 
@@ -44,7 +44,7 @@ if (toTopSlot) render(<ToTop />, toTopSlot);
 
 /** The functions the plain code calls, MassimoParts.chrome. */
 const chrome = register("chrome", {
-  /** log takes the log's unseen problems, their count and the worst one's tone, for ☰'s mark and name and its Log entry (log.js renderLogSign). */
+  /** log takes the log's unseen problems, their count and the worst one's tone, for ☰'s mark and name and its Log entry (log/alerts.ts renderLogSign). */
   log(count: number, tone: "" | "warn" | "bad"): void {
     const was = logSign.peek();
     if (was.count !== count || was.tone !== tone) logSign.value = { count, tone };

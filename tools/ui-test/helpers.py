@@ -25,6 +25,7 @@ import sys
 import time
 import urllib.error
 import weakref
+from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlparse
 
 from playwright.sync_api import Error
@@ -885,3 +886,83 @@ STATE_EVENTS_JS = """() => {
 def state_events(page):
     """A state event per device, as STATE_EVENTS_JS sends them."""
     page.evaluate(STATE_EVENTS_JS)
+
+
+# --- the log's own lines (test_log_updates.py, the guard's log-lines) ----
+
+# The test's lines of the log, a command's line with its detail among
+# them, and the stub that answers the log's reads of the Cube with them.
+
+LOG_BASE = datetime(2026, 11, 20, 8, 0, tzinfo=timezone.utc)
+LOG_FIRST = 970000  # the test's ids, above the server's
+
+
+def log_event(n, kind="hello", **kw):
+    """The test's event n: a hello of the Cube unless told otherwise."""
+    e = {"id": LOG_FIRST + n, "kind": kind, "source": "cube", "level": "info", "time": (LOG_BASE + timedelta(seconds=n)).isoformat().replace("+00:00", "Z"),
+         "summary": {"firmware": "1.1.3", "duty_cycle_pct": n % 50, "free_memory_slots": 10}}
+    e.update(kw)
+    return e
+
+
+LOG_CMD = 77  # the command of the test's command line
+LOG_CMD_LINE = LOG_FIRST + 19
+LOG_TEXT_LINE = LOG_FIRST + 18
+LOG_ALERT_A, LOG_ALERT_B = LOG_FIRST + 17, LOG_FIRST + 16
+
+
+def log_lines(n=20):
+    """n lines, oldest first, the last ones a command's line and lines to hold."""
+    out = [log_event(i - n) for i in range(n - 4)]  # older than the four below
+    out += [log_event(16), log_event(17), log_event(18, summary={"firmware": "selected-firmware", "duty_cycle_pct": 1, "free_memory_slots": 2}),
+            log_event(19, "command", source="queue", command=LOG_CMD, summary={"state": "acknowledged"})]
+    return out
+
+
+class StubLog:
+    """Answers the log's reads of the Cube from lines (oldest first), as
+    the server pages them: the newest limit, before an id, after one; with
+    gone true, an after= with 409, a log that ends before that line; with
+    fail true, every read with 503, a server not up yet; with
+    whole true, the newest page with every line, whatever the limit (a log
+    at its 2000 lines in one load). off() takes the route away."""
+
+    PATTERN = "**/api/v1/cubes/*/log?*"
+
+    def __init__(self, page, lines, whole=False):
+        self.page, self.lines, self.whole, self.gone, self.fail = page, lines, whole, False, False
+        self.asked = []
+        self.routed = safe_route(page, self.PATTERN, self.answer)
+
+    def answer(self, route):
+        url = route.request.url
+        self.asked.append(url)
+        q = parse_qs(urlparse(url).query)
+        limit = int(q.get("limit", ["200"])[0])
+        if self.fail:
+            route.fulfill(status=503, content_type="application/json", body=json.dumps({"error": "the server is starting"}))
+            return
+        if "after" in q and self.gone:
+            route.fulfill(status=409, content_type="application/json", body=json.dumps({"error": "beyond the newest"}))
+            return
+        if "after" in q:
+            body = [x for x in self.lines if x["id"] > int(q["after"][0])][:limit]
+        else:
+            page = self.lines
+            if "before" in q:
+                page = [x for x in page if x["id"] < int(q["before"][0])]
+            body = page if self.whole else page[-limit:]
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
+
+    def off(self):
+        if not self.page.is_closed():
+            self.page.unroute(self.PATTERN, self.routed)
+
+
+LOG_CMD_DETAIL = {"id": "00000000-0000-0000-0000-000000000077", "action": "setpoint", "target": "room:1", "state": "acknowledged", "user": "owner",
+          "steps": [{"state": "acknowledged", "target": "room 1"}]}
+
+
+def stub_log_command(page):
+    """The test's command's detail, GET /api/v1/commands/77; the route as routed."""
+    return safe_route(page, f"**/api/v1/commands/{LOG_CMD}", lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps(LOG_CMD_DETAIL)))
