@@ -26,6 +26,7 @@ import { useLang } from "./lang";
 import { live } from "./live";
 import { byteLength, defaultDeviceName, NAME_BYTES } from "./name";
 import { cubePath } from "./path";
+import { session, stillSession } from "./session";
 
 /** What a form that puts a device into a room keeps: the name typed, the room and the copy chosen, its request under way, its outcome, and done once the device is in its room. */
 export interface Put {
@@ -112,18 +113,22 @@ export function PutForm({ id, serial, dev, rooms, put, reload, onDone, onFail, o
     }
     put.busy = true;
     put.result = { text: t("put.putting", { device: label, room: room.name }), ok: true };
+    const n = session();
     let res: Answer | null;
     try {
       res = await api<Answer | null>("PUT", cubePath(serial) + "/devices/" + encodeURIComponent(dev.serial || dev.rf_address), body);
     } catch (err) {
+      if (!stillSession(n)) return; // an answer after a sign-out says nothing and reloads nothing
       // A copy that stopped leaves the device in its room: the reload
       // shows where it is, and onFail says the error where it is seen.
       put.busy = false;
       put.result = { text: errorText(label, err as Error), ok: false };
       await reload().catch(() => {});
+      if (!stillSession(n)) return; // signed out during the reload: nothing said
       if (onFail) onFail();
       return;
     }
+    if (!stillSession(n)) return;
     let text = t("put.done", { device: label, room: room.name });
     if (res?.copied) {
       text += " " + t("put.copied", { days: res.copied.days ?? 0 });
@@ -135,6 +140,7 @@ export function PutForm({ id, serial, dev, rooms, put, reload, onDone, onFail, o
     put.done = true;
     put.busy = false;
     await reload().catch(() => {});
+    if (!stillSession(n)) return; // signed out during the reload: nothing said
     if (onDone) onDone();
   };
   return (

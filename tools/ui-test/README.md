@@ -376,11 +376,28 @@ hence `failed_checks_forgotten`.
   showing, path for path, and nothing more at a change of page;
   Personal settings shown while a sign-out waits for the signed-out
   language's table reads nothing of My profile, and the page ends signed out;
+  in that wait the rooms are gone, the stream closed, the poll stopped, the
+  personal row says nobody and the tiles are shown (D211);
   the personal page's sections menu, an item in focus, stays the element it
   was through who is in read again and the language applied again; after
   changes of page in both orders of the rows, the cards' scroll margin is
   the shown row's height and an item of the sections menu brings its card's
   head to rest below the row.
+- `test_sign_in_updates.py`, the sign-in as parts (AP UiParts, Block 14):
+  in the app, Create the owner turns until the app has answered whether it
+  kept the login, and a second submit meanwhile creates nothing; a name and
+  a password typed, the focus, a refusal and the way chosen stay, the same
+  elements, through a second 401, the providers read again, a change of
+  language and who is in read again; the fields are emptied at an opening
+  alone, never at the closing; the fingerprint's button keeps the user's
+  name at a change of language, and stays the same element, turning, while
+  the system's prompt is open and the status and the language change.
+- `test_sign_out_late.py`, an answer that comes after a sign-out (AP
+  UiParts, Block 14, D212): the search for Cubes, the House's writes to
+  every room and in Eco, a pairing's Start, Cube settings' Save, a device
+  removed and one put into a room, and a room's copy to others, each held,
+  the session ended by a sign-out or as expired, the operator signed in,
+  then answered: nothing of it is drawn, said, sent or started.
 - `test_stream.py`:
   the event stream opens with tickets only, never with the token,
   and after a refused stream (the test hands out a used ticket first,

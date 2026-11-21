@@ -149,11 +149,11 @@ def test_the_cards_come_to_rest_below_the_row_after_a_change_of_page(page, case)
 
 @pytest.mark.cases("1100-de", "390-de")
 def test_no_read_of_my_profile_while_signing_out(new_context, case, watch, guard):
-    """A sign-out forgets the plain state.me first, then waits for the
-    signed-out language where it differs from the user's, and only then
-    clears who is in for the parts: Personal settings shown in that wait
-    reads nothing of My profile, which the parts would have read with no
-    name and no token (GET api/v1/users/), and the page ends signed out.
+    """A sign-out clears who is in for the plain code and the parts in one
+    turn, then waits for the signed-out language where it differs from
+    the user's (UiParts D211): Personal settings shown in that wait reads
+    nothing of My profile, which the parts would read with no name and no
+    token (GET api/v1/users/), and the page ends signed out.
     The operator's language is French on a page loaded in German, which
     therefore has not loaded German's table: its file is held through the
     wait. A forward guard on the page before the pages' store, whose
@@ -247,3 +247,50 @@ def test_the_chrome_follows_english_on_a_german_page(page, case):
             page.evaluate("document.querySelector('#menu-system .menu-item-label').textContent")
     finally:
         page.evaluate("() => { setSetting('lang', 'auto'); changeLanguage('auto').then(applyLanguage); }")
+
+
+@pytest.mark.cases("1100-de", "390-de")
+def test_a_sign_out_forgets_before_the_language(new_context, case, watch, guard):
+    """A sign-out forgets everything of the user who leaves before it waits
+    for the signed-out language's table (UiParts D211): in that wait the
+    rooms are no longer drawn, the stream is closed, the poll stopped,
+    the personal row says nobody and the page shows the tiles; the page
+    ends signed out. The operator's language is French on a page loaded
+    in German, whose table is held through the wait, as in the test
+    above, with System info shown when Sign out is chosen. Fails on
+    the page before, which drew the rooms, kept the stream and the poll,
+    named the operator and showed System info until the table had
+    come."""
+    op, op_id = operator_key()
+    try:
+        clear_user(op)
+        ctx = new_context()  # German, the case's locale
+        page = ctx.new_page()
+        guard.page = page
+        page.set_default_timeout(5000)
+        page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+        page.goto(URL)
+        sign_in(page, "operator", "op-pass")
+        page.evaluate("setSetting('lang', 'fr')")
+        page.reload()  # the operator's French alone loaded, German not
+        page.wait_for_selector(".room", timeout=10000)
+        assert wait_until(page, "i18n.lang === 'fr' && !I18N.de && state.eventsOpen", 5), "the page in French, German not loaded, the stream open"
+        held, sent = [], []
+        hold(page, "**/ui/i18n/de.json", "GET", held, sent)
+        try:
+            show_view(page, "info")
+            page.locator("#nav-menu > summary").click()
+            page.locator("#menu-logout").click()
+            assert wait_held(page, held), "the sign-out waits for German's table"
+            frames(page)
+            got = page.evaluate("""() => ({ rooms: document.querySelectorAll('#rooms .room').length, events: !!state.events,
+              poll: !!state.pollTimer, signedOut: !document.getElementById('me-line') || !document.getElementById('me-line').textContent,
+              tiles: isShown('tiles') })""")
+            assert got == {"rooms": 0, "events": False, "poll": False, "signedOut": True, "tiles": True}, f"in the wait, nothing of the user who left: {got}"
+            held[0].continue_()
+        finally:
+            page.unroute("**/ui/i18n/de.json")
+        assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the page ends signed out, the sign-in asked for"
+    finally:
+        clear_user(op)
+        api_call("DELETE", "api/v1/users/operator/tokens/%d" % op_id)

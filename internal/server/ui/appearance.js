@@ -10,10 +10,9 @@
 
 // applyAppearance draws the appearance settings from state.settings and
 // applies them; applySettings and a change of language call it, and
-// theme.js' choices of the mode and the scheme. The sign-in's choice of
-// the mode is plain with the sign-in.
+// theme.js' choices of the mode and the scheme; the sign-in card's
+// choice of the mode is drawn by the same part (ui/src/shared/mode.tsx).
 function applyAppearance() {
-  $("login-mode").value = state.settings.theme; // the sign-in's menu
   MassimoParts.prefs.render();
   reapplyTheme();
   applyBlink();

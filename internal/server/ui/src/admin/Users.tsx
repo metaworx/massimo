@@ -15,7 +15,7 @@
  * key just made are a part's own state alone, never in the forms' store.
  */
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
+import { useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { User } from "../api";
 import { Adder } from "../shared/adder";
 import { Badge, ResultLine } from "../shared/badge";
@@ -27,6 +27,7 @@ import { Question, busyProps, useAsk, useBusy, useSetAtOnce } from "../shared/qu
 import { isoOf, localOf } from "../shared/time";
 import { type Changes, Identities } from "../shared/identities";
 import { Tokens } from "../shared/tokens";
+import { UserNameField, useNameCheck } from "../shared/username";
 import { adding, enabled, identityFormKey, identityUI, load, passwordLogin, reads, said, userFormKey, userUI, users } from "./store";
 import { createUser, mayManage, mayPassword, removeUser, roleOptions, run, saveUser, setPasswordLogin, usersAdmin, usersMsg } from "./sendUsers";
 import { cardBadges, showCard } from "../shared/card";
@@ -200,21 +201,12 @@ function NewUser() {
   const [role, setRole] = useState(usersAdmin() === "guests" ? "guest" : "viewer");
   const [password, setPassword] = useState("");
   const [expires, setExpires] = useState("");
-  const [problem, setProblem] = useState("");
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const nameRef = useRef<HTMLInputElement>(null);
   const create = useBusy();
-  useEffect(() => () => clearTimeout(timer.current), []);
-  const taken = () => users.list.map((u) => u.name);
-  const check = (v: string = name) => {
-    clearTimeout(timer.current);
-    const p = nameProblem(v, taken());
-    setProblem(p);
-    return !p;
-  };
+  const nc = useNameCheck(() => users.list.map((u) => u.name));
   const submit = (ev: Event) => {
     ev.preventDefault();
-    if (!check()) {
+    if (!nc.check(name)) {
       nameRef.current?.focus();
       return;
     }
@@ -222,26 +214,14 @@ function NewUser() {
     if (display.trim()) body.display_name = display.trim();
     const end = isoOf(expires);
     if (end) body.expires_at = end;
-    create.run(() => createUser(body, password, setProblem)).then((ok) => {
+    create.run(() => createUser(body, password, nc.say)).then((ok) => {
       if (ok) adding.user = false;
     });
   };
-  const msgId = "user-new-name-msg";
   return (
     <form class="panel user-new" onSubmit={submit}>
-      <Field label={t("users.name")} id="user-new-name" wide>
-        <input ref={nameRef} id="user-new-name" type="text" name="name" class="field-control" autocomplete="off" autocapitalize="none" spellcheck={false}
-          maxLength={64} required placeholder={t("users.nameHint")} value={name} aria-invalid={problem ? "true" : undefined} aria-describedby={msgId}
-          onInput={(ev) => {
-            const v = ev.currentTarget.value;
-            setName(v);
-            clearTimeout(timer.current);
-            if (!nameProblem(v, taken())) setProblem("");
-            else timer.current = setTimeout(() => check(v), NAME_CHECK_MS);
-          }}
-          onBlur={() => check()} />
-        <ResultLine id={msgId} cls="small cubes-msg field-hint name-msg" role="status" res={problem ? { text: problem, ok: false } : null} />
-      </Field>
+      <UserNameField label={t("users.name")} id="user-new-name" msgId="user-new-name-msg" value={name} set={setName} nc={nc} name="name" autocomplete="off"
+        placeholder={t("users.nameHint")} inputRef={nameRef} />
       <TextField label={t("users.displayName")} id="user-new-display_name" name="display_name" maxLength={64} value={display} set={setDisplay} />
       <Select label={t("users.role")} id="user-new-role" name="role" wide options={roleOptions()} value={role} onChange={setRole} />
       <TextField label={t("login.password")} id="user-new-password" name="password" type="password" autocomplete="new-password" placeholder={t("users.noPasswordHint")}

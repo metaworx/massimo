@@ -20,6 +20,7 @@ import type { NewDevice, PairingState, Room } from "../api";
 import type { Outcome } from "../shared/action";
 import { liveMap } from "../shared/live";
 import { cubePath } from "../shared/path";
+import { session, stillSession } from "../shared/session";
 import { newPut, type Put } from "../shared/put";
 
 /** A Cube's pairing as its part draws it. */
@@ -74,12 +75,14 @@ export const cubeRooms = signal<Record<string, Room[]>>({});
 
 /** loadCubeRooms reads the rooms a device of the Cube can be put into, its devices with them for the name offered; none on an error. */
 export async function loadCubeRooms(serial: string): Promise<void> {
+  const n = session();
   let list: Room[] = [];
   try {
     list = (await api<Room[] | null>("GET", cubePath(serial) + "/rooms?devices=real")) || [];
   } catch {
     list = [];
   }
+  if (!stillSession(n)) return; // an answer after a sign-out: nothing of it for the next user
   cubeRooms.value = { ...cubeRooms.value, [serial]: list };
 }
 
@@ -113,11 +116,14 @@ function apply(serial: string, st: PairingState | null): void {
  */
 export async function loadPairing(serial: string): Promise<void> {
   const f = flowOf(serial);
+  const sn = session();
   try {
     const st = await api<PairingState>("GET", cubePath(serial) + "/pairing");
+    if (!stillSession(sn)) return; // an answer after a sign-out starts no countdown
     failures.set(serial, 0);
     apply(serial, st);
   } catch (e) {
+    if (!stillSession(sn)) return;
     const n = (failures.get(serial) || 0) + 1;
     failures.set(serial, n);
     if (f.active && n >= 3) {
@@ -151,13 +157,16 @@ export function startPairing(serial: string): Promise<void> {
   const f = flowOf(serial);
   const seconds = Number(f.seconds);
   return write(serial, "start", async () => {
+    const n = session();
     let st: PairingState;
     try {
       st = await api<PairingState>("POST", cubePath(serial) + "/pairing", { seconds });
     } catch (e) {
+      if (!stillSession(n)) return;
       f.msg = { text: t("pairing.failed", { error: (e as Error).message }), ok: false };
       return;
     }
+    if (!stillSession(n)) return; // an answer after a sign-out starts no countdown
     f.msg = null;
     f.puts = {};
     f.active = false;
@@ -169,10 +178,12 @@ export function startPairing(serial: string): Promise<void> {
 /** stopPairing sends Stop: DELETE …/pairing. */
 export function stopPairing(serial: string): Promise<void> {
   return write(serial, "stop", async () => {
+    const n = session();
     try {
-      apply(serial, await api<PairingState>("DELETE", cubePath(serial) + "/pairing"));
+      const st = await api<PairingState>("DELETE", cubePath(serial) + "/pairing");
+      if (stillSession(n)) apply(serial, st);
     } catch (e) {
-      flowOf(serial).msg = { text: t("pairing.failed", { error: (e as Error).message }), ok: false };
+      if (stillSession(n)) flowOf(serial).msg = { text: t("pairing.failed", { error: (e as Error).message }), ok: false };
     }
   });
 }

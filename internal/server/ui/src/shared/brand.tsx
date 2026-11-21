@@ -9,7 +9,8 @@
  * small mark from the sprite (ui/brand/brand.svg, make ui-brand,
  * tools/brand/README.md), each part with the class that colours it
  * (ui/brand/brand.css), the cover first; the page's style shows one of
- * the two. The drawings are hidden from screen readers. A copy of
+ * the two, and the big name the sign-in's card and the first owner's
+ * form open with (BrandName). The drawings are hidden from screen readers. A copy of
  * BRAND_PARTS and brandMarks of components.js, which stay for the
  * skeleton's marks, the connect page's among them: connect.html loads no
  * parts.js.
@@ -40,5 +41,21 @@ export function Brand() {
       <Drawing cls="brand-logo" prefix="logo" parts={[...PARTS, ["letters", "brand-letters"], ["dot", "brand-hands"]]} />
       <Drawing cls="brand-mark" prefix="mark" parts={PARTS} />
     </>
+  );
+}
+
+/**
+ * BrandName is Massimo's big name, the word under the logo once its
+ * sprite has come, marked data-brand as the skeleton's (brandMarks of
+ * components.js passes over it, drawn already, and the page's style and
+ * its test find every mark by it): the sign-in's card and the first
+ * owner's form.
+ */
+export function BrandName() {
+  return (
+    <div class="brand-name brand-big" data-brand>
+      <span class="brand-word"><span class="brand-initial">M</span><span class="brand-rest">assimo</span></span>
+      <Brand />
+    </div>
   );
 }

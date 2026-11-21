@@ -6,14 +6,11 @@
  *
  * What the plain code hands the page's chrome (MassimoParts.chrome): the
  * log's unseen problems, which ☰ and its Log entry show (the log's part,
- * log/alerts.ts renderLogSign), and the server's
- * version, ☰'s first row (header.js checkVersion).
+ * log/alerts.ts renderLogSign); the server's version, ☰'s first row, is
+ * shared/server.tsx's (the sign-in's card reads it too).
  */
 
 import { signal } from "@preact/signals";
 
 /** The log's unseen problems: their count and the tone of the worst, "" for none. */
 export const logSign = signal<{ count: number; tone: "" | "warn" | "bad" }>({ count: 0, tone: "" });
-
-/** The server's whole version, as /healthz gave it when the page loaded; "" until then. */
-export const version = signal("");

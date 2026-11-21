@@ -19,6 +19,7 @@ import { ResultLine } from "../shared/badge";
 import { Choices } from "../shared/choices";
 import { DateTime, FormFooter, Stepper } from "../shared/field";
 import { useBusy } from "../shared/question";
+import { session, stillSession } from "../shared/session";
 import { cubesLoad, house, load } from "./store";
 
 /** The modes of the House tile, by their value, with their button's id and their text. */
@@ -88,15 +89,18 @@ async function houseRequests(): Promise<void> {
     return;
   }
   house.result = { text: t("house.sending"), ok: true };
+  const n = session();
   const results: string[] = [];
   let failed = false;
   for (const room of rooms) {
+    if (!stillSession(n)) return; // signed out meanwhile: the next rooms are not written, nothing is said
     const th = roomThermostat(room);
     if (!th) continue;
     try {
       let temp: number | undefined = manualTemp;
       if (mode === "eco" || mode === "comfort") {
         temp = (await presetTemps(th))[mode];
+        if (!stillSession(n)) return; // a read answered after a sign-out, sent again for whoever signed in: no setpoint after it
         if (temp === undefined) throw new Error(t(mode === "eco" ? "house.noEco" : "house.noComfort"));
       }
       let body: Record<string, unknown> = { mode: "auto" };
@@ -109,6 +113,7 @@ async function houseRequests(): Promise<void> {
       results.push(t("house.roomError", { room: room.name, error: (e as Error).message }));
       failed = true;
     }
+    if (!stillSession(n)) return;
     house.result = { text: results.join("\n"), ok: true };
   }
   house.result = { text: results.join("\n"), ok: !failed };

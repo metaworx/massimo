@@ -29,6 +29,7 @@ import { Icon } from "../shared/icon";
 import { Problems } from "../shared/problems";
 import { busyProps, useBusy } from "../shared/question";
 import { RepairBox, RepairButton, repairScope } from "../shared/repair";
+import { session, stillSession } from "../shared/session";
 import { deviceBadges, deviceItems, mismatchWords, problemsLabel, vwtItems } from "./facts";
 import { load, openSettings, vwtFormKey } from "./store";
 
@@ -52,20 +53,26 @@ function useDetail(d: Device, want: boolean): {
   useEffect(() => {
     if (!want) return;
     let gone = false;
+    const n = session(); // an answer after a sign-out is dropped as one for a row gone
     deviceDetail(d).then((x) => {
-      if (gone) return;
+      if (gone || !stillSession(n)) return;
       setDetail(x);
       setError("");
     }, (e: Error) => {
-      if (!gone) setError(e.message);
+      if (!gone && stillSession(n)) setError(e.message);
     });
     return () => {
       gone = true;
     };
   });
-  const again = (sent: DeviceDetail["settings"]) => deviceDetail(d).then(setDetail, () => {
-    setDetail((x) => (x ? { ...x, settings: { ...x.settings, ...sent } } : x));
-  });
+  const again = (sent: DeviceDetail["settings"]) => {
+    const n = session();
+    return deviceDetail(d).then((x) => {
+      if (stillSession(n)) setDetail(x);
+    }, () => {
+      if (stillSession(n)) setDetail((x) => (x ? { ...x, settings: { ...x.settings, ...sent } } : x));
+    });
+  };
   return { detail, error, again };
 }
 
@@ -184,13 +191,15 @@ function VirtualSettings({ v, room, serial, detail, error, saved }: {
   const changed = method.changed || addr.changed;
   if (ready) form.track(changed, [method, addr]); // before, the form keeps what it said last
   const id = (f: string) => "vwt-" + v.rf_address + "-" + f;
-  const runner = actionRunner({ set: setResult });
+  const runner = actionRunner({ set: setResult, bound: true }); // an answer after a sign-out says nothing
   const submit = (ev: Event) => {
     ev.preventDefault();
     if (!ready || !changed) return;
     const sent = { temp_method: method.value as "median" | "mean", rf_address: rfNorm(addr.value) };
     form.save(() => runner.run(async () => {
+      const n = session();
       await api("PUT", devicePath(v) + "/config", sent);
+      if (!stillSession(n)) return; // an answer after a sign-out: no detail read after it
       state.details = {};
       await saved(sent); // its detail asked for again, before the drafts take it
     }, t("vwt.saved"), (e) => e));

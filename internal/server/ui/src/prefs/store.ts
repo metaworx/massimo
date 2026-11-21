@@ -10,7 +10,7 @@
  * a change of language) and after each change made here.
  */
 
-import { counter } from "../shared/counter";
+import { applied } from "../shared/settings";
 
-/** My settings' load counter: bumped where the settings were applied or changed; every part of them uses it. */
-export const load = counter();
+/** My settings' load counter, the page's settings applied (shared/settings.ts, which the sign-in's card reads too): bumped where the settings were applied or changed; every part of them uses it. */
+export const load = applied;

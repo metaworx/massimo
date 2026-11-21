@@ -49,7 +49,6 @@ var uiPartials = []struct {
 }{
 	{"header", []string{"header.html"}},
 	{"home", []string{"home.html"}},
-	{"setup", []string{"setup.html"}},
 	{"prefs", []string{"prefs.html", "appearance.html", "page.html"}},
 	{"system", []string{"cubes.html"}},
 	{"system-flow", []string{"users.html", "providers.html", "integrations.html", "roles.html", "capabilities.html"}},
@@ -60,7 +59,6 @@ var uiPartials = []struct {
 	{"house", []string{"house-tile.html"}},
 	{"unlisted", []string{"unlisted.html"}},
 	{"logview", []string{"log-view.html"}},
-	{"login", []string{"login.html"}},
 	{"toast", []string{"toast.html"}},
 }
 

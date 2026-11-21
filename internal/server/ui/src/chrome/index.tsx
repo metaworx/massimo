@@ -26,7 +26,8 @@ import { drawCards } from "./Cards";
 import { Nav } from "./Menu";
 import { CARD_ADDRESSES, PAGE_VIEWS } from "./pages";
 import { stickyHeader } from "./scroll";
-import { logSign, version } from "./store";
+import { version } from "../shared/server";
+import { logSign } from "./store";
 import { ToTop } from "./ToTop";
 
 // the pages handed to their store first; drawn once into the places the

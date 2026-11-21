@@ -9,6 +9,7 @@
  */
 
 import type { Discovery } from "../api";
+import { session, stillSession } from "../shared/session";
 import { discovery } from "./store";
 
 /**
@@ -22,13 +23,17 @@ import { discovery } from "./store";
 export async function discoverCubes(): Promise<void> {
   if (discovery.running) return;
   discovery.running = true;
+  const sn = session();
   try {
     const res = await api<Discovery | null>("POST", "api/v1/cubes/discover");
+    if (!stillSession(sn)) return; // an answer after a sign-out reloads nothing and says nothing
     await loadCubes();
+    if (!stillSession(sn)) return;
     const n = ((res && res.found) || []).filter((c) => !isConfigured(c)).length;
     const show = n && hasCap("cubes") ? { label: t("discover.show"), run: showFound } : null;
     showToast(n ? tn("discover.found", n) : t("discover.none"), { ms: 8000, action: show });
   } catch (e) {
+    if (!stillSession(sn)) return;
     showToast(t("discover.failed", { error: (e as Error).message }), { ms: 15000, tone: "bad" });
   } finally {
     discovery.running = false;

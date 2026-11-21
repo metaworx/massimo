@@ -24,6 +24,11 @@ The card's ☰, at the end of that row, shows the version first,
 then sets the language and the appearance (light, dark, as the system)
 before anyone signs in, the same settings as My settings,
 kept in this browser.
+On a touch screen the card puts no field in focus by itself,
+at its opening or when the way is switched: the keyboard comes when a field is tapped;
+on a desktop the chosen way's first field takes the focus.
+The two ways' forms take one height, so that the card stays where it is
+when the way is switched (UiParts D224).
 Above the form, a button per enabled OpenID Connect provider,
 **Sign in with Nextcloud** for example
 (docs/api-v1.md, "Sign-in through OpenID Connect"),
@@ -1893,9 +1898,9 @@ and the parts are the one thing that is built (below).
 `index.html` is the skeleton: the head, the icons, the sections of the page
 and the scripts, with marker comments.
 At start the server replaces each marker, such as `<!-- partials: prefs -->`,
-with its partials: the header, the home notice, the first owner's form,
+with its partials: the header, the home notice,
 the panels of the settings pages, the Cube page, the House tile,
-the devices without a room, the log's section, the sign-in dialog and the toast,
+the devices without a room, the log's section and the toast,
 from the files in `ui/partials/` in the order `uiPartials` in
 `internal/server/ui.go` lists them, and serves the result at `/`;
 System settings' cards fill three markers,
@@ -2003,11 +2008,10 @@ a script for each region of the page, in the order the page loads them:
   the event stream, the language and `init`;
 - `header.js`, the plain names of the header, which call its parts (`ui/src/header/`),
   and what stays plain there: the radio budget, the server's clock and its last answer,
-  the version in ☰ and in the sign-in card, the server's state;
+  the version, which it hands the parts (☰, the sign-in's card), the server's state;
   `home.js`, the home notice's place shown or hidden, the Cubes a `cube_found` event adds
   and the way to them;
-  `prefs.js`, the plain names of My settings, which call their part (`ui/src/prefs/`),
-  the sign-in's language choice and the copy of the version in ☰;
+  `prefs.js`, the plain names of My settings, which call their part (`ui/src/prefs/`);
 - `rooms.js`, a room's facts, the plain names of the rooms' drawing,
   which call their parts (`ui/src/rooms/`), a device's state event
   and the actions behind a tile; `tiles.js`, the tile's actions that stay plain
@@ -2027,9 +2031,15 @@ a script for each region of the page, in the order the page loads them:
 - `cubes.js`, the plain names of System settings → Cubes and Cube settings,
   the pairing's among them, which call their part (`ui/src/cubes/`),
   and the Cubes card's badges;
-- `login.js`, the sign-in; `users.js`, the plain names of System settings → Users,
-  which call its part (`ui/src/admin/`), and the check of a new user's name,
-  which the first owner's form shares;
+- `login.js`, the sign-in: who is in, the session,
+  the sign-in by OPAQUE and through a provider,
+  `askLogin` with what follows a sign-in (`finishSignIn`),
+  the settings that follow the user;
+  its card is a part (`ui/src/signin/`);
+  `users.js`, the plain names of System settings → Users,
+  which call its part (`ui/src/admin/`);
+  the first owner's form and the open server's warning have none,
+  parts alone (`ui/src/signin/`), as the sign-in's card;
   `providers.js`, the enabled sign-in providers and the plain name of
   Sign-in providers; My profile has none, a part alone (`ui/src/profile/`);
   `backup.js`, the plain names of Backup and restore (`ui/src/backups/`);
@@ -2114,7 +2124,10 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `counter` | `counter.ts` | a region's load counter: "draw the region again" while its data stay plain objects | gives `bump()`, after a load, and `useLoad()`, in every part of the region, which reads the counter, the language and the icons chosen |
 | `register`, `mounter` | `region.ts` | a region's functions as `MassimoParts.<name>`; its root drawn once into the page's container | `name`, `fns`; `id`, `root` |
 | `live`, `liveMap` | `live.ts` | objects whose properties are signals, for what a region keeps per place; the plain code reads and writes them as before | `init`; `make`, then `of(key)`, `forget(key)` (what it was kept for is gone), `clear()` |
-| `lang`, `useLang`, `tParts`, `joinParts` | `lang.ts` | the page's language as a signal, raised by `applyLanguage` (`MassimoParts.language`); a text with parts in it (`tNodes`); parts joined with " · ", the empty ones left out | `key`, `texts`, `parts`; `parts`, `lead` (" · " before the first too) |
+| `lang`, `useLang`, `tParts`, `joinParts`, `languageOptions` | `lang.ts` | the page's language as a signal, raised by `applyLanguage` (`MassimoParts.language`); a text with parts in it (`tNodes`); parts joined with " · ", the empty ones left out; the choices of the language, from the browser first (My settings, the sign-in's ☰) | `key`, `texts`, `parts`; `parts`, `lead` (" · " before the first too) |
+| `applied` | `settings.ts` | the page's settings applied, a counter: My settings' `load`, raised by `MassimoParts.prefs.render`, read where the settings are shown (My settings, the sign-in's ☰) | |
+| `ModeSelect` | `mode.tsx` | the mode's choice, light, dark or as the system, `state.settings.theme`, a choice to `chooseMode` (Appearance, the sign-in's ☰) | `id`, `label`, `help`, `wide` |
+| `version`, `VersionRow` | `server.tsx` | the server's version as `/healthz` gave it when the page loaded (`MassimoParts.chrome.version`), the sign-in card's foot reading it; a ☰'s first row, Massimo's mark and the short version, ☰'s copying the whole, the sign-in card's as text | `id` (the version's element), `copy` |
 | `useIcons` | `look.ts` | the icons chosen for the window and the radio as a signal, raised by `redrawSigns` (`MassimoParts.icons`); `Sign` reads it | – |
 | `Island` | `island.tsx` | a plain piece inside a part: an element the part draws empty and plain code fills, again where a key or the language changed | `tag` (div, p, span), `cls`, `keys`, `fill(el)` |
 | `Fold`, `FoldHead` | `fold.tsx` | a details that opens and closes (`detailsPanel`), the toggle of its making not passed on; a panel's head | `id` (the plain markup's id, which a region keeps: System info's two folds), `cls`, `open`, `onToggle(open)`, `summary`, `summaryProps`, `data`, the body as children; `before`, `name`, `mono`, `after` (after the monospaced part, a sign of the thing's state), `badges` |
@@ -2131,7 +2144,7 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `Notice` | `badge.tsx` | a lasting warning with since when (`noticeEl`) | `text`, `since`, `next`, `cls`, `id`, `role`, `hidden` (the class `hidden`, the line kept in its place), children after |
 | `Age` | `badge.tsx` | how old a value is, filled by `fillAge` (`ageEl`) | `at`, `stale`, `plain` |
 | `Since` | `badge.tsx` | from when a badge's state holds, after its text (a problem list's item) | `at` |
-| `ResultLine` | `badge.tsx` | the line that says how an action went, green or red, hidden while there is none (`showResult`), as an `actionRunner`'s `set` gives it | `res` (an `Outcome` or null), `cls`, `role` (`status`, a screen reader told of each), `id` (a section's message line the page names, a field's message it describes) |
+| `ResultLine` | `badge.tsx` | the line that says how an action went, green or red, hidden while there is none (`showResult`), as an `actionRunner`'s `set` gives it | `res` (an `Outcome` or null), `cls`, `role` (`status`, a screen reader told of each; `alert`, at once: the sign-in's lines), `id` (a section's message line the page names, a field's message it describes) |
 | `Problems` | `problems.tsx` | the problem list, entries under entries (`problemsEl`), an item with an action a button | `entries`, `label`, `ok` (the green check's label where nothing is wrong), `always` (the list there where nothing is wrong too; where `ok` is given, its summary the green check and `ok` a line of its list), `lead` (drawn first in the summary, a sign of the place's own state), `head` (drawn first in the list, items that act on the place or a row of its own state), `onClick`, `onOpen`, `onClose` (as `Dropdown`'s); an entry's `tail` is drawn after its name (a sign of its state where its icon says what it is) |
 | `KindIcons`, `problemKinds`, `kindsLabel` | `problems.tsx` | the kinds' icons of entries without the list (`kindIcons`); the kinds themselves, to know whether there are any; the label naming the kinds among items in an order of kinds, "" for none | `entries`, `skip`; `entries`, `skip`; `items`, `kinds` |
 | `OkPill` | `problems.tsx` | the green check in a list's place (`okPill`) | `label` |
@@ -2169,13 +2182,16 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `whoOf`, `Who` | `me.ts` | who is in in the page's words, for the personal page's row, ☰'s Sign out and Personal settings' tooltip and the question before a sign-out alike: the row's line, Sign out or Forget key (none on an open server) with its icon, the name for the tooltip, and whether My profile is there | `me` |
 | `cardBadges`, `badgesOf`, `BadgeSpec` | `card.ts` | what a section card's head shows at a glance, also while it is folded: a region gives a card's badges by its id from its drawing's effect, `[]` for none, and the page's chrome draws them (`ui/src/chrome/Cards.tsx`) | `id`, `list` of `{ text, kind }` |
 | `showCard`, `wireCards`, `keepInView` | `card.ts` | a section card brought into view, unfolded, the focus on its heading's button, kept there for two seconds where its page has just been opened (`instant`); the cards' folds wired once, each kept in this browser (`massimo.fold.<card id>`), set on the skeleton at once; an element kept in view while the page's content changes size, for `ms` or until the user scrolls, a card at the top, a row in the middle (`block` `"center"`: My profile's marked key), keeping another ending the last | `id`, `instant`; `el`, `ms`, `block` |
-| `Brand` | `brand.tsx` | Massimo's logo and small mark from the sprite (`brandMarks` of `components.js`, which draws them over the skeleton's `data-brand`), of which the place's style shows one, hidden from screen readers: ☰'s first row | |
+| `Brand`, `BrandName` | `brand.tsx` | Massimo's logo and small mark from the sprite (`brandMarks` of `components.js`, which draws them over the skeleton's `data-brand`), of which the place's style shows one, hidden from screen readers: ☰'s first row; `BrandName`, the big name under the logo, the first owner's form and the sign-in's card | |
 | `page`, `isShown`, `showView`, `onView`, `mayShow` | `pages.ts` | the page of the main area shown, a signal: a drawing that reads `page.value` follows it, `isShown` asks at that moment and follows nothing (a handler, a reader, a timer), so that no request is sent again at a change of page; showing a page puts it into the address, as a new entry of the history or in place of the current one, and brings each page back at the scroll it was left at; `onView` runs at each showing, on the `viewshown` event; `mayShow` says who may open which, reading who is in; a page with an address of its own (the log's, `ui/src/log/index.tsx`) hands it over with `ownAddress`, a card's region what the card's address holds after its `?` with `readCardAddress` (My profile's key to mark), told of every address read, null for another, before the page is shown; `pages.js` keeps the plain names, and `currentView` | `view`, `address`, `card`; `card`, `read(q)` |
 | `userPath`, `Run`, `loadTokens`, `revokeToken`, `revokeOwn`, `createKey`, `loadIdentities`, `addIdentity`, `changeIdentity`, `removeIdentity` | `account.ts` | what a user's sessions, keys and identities read and send (`…/users/{name}/tokens`, `…/identities`), for System settings → Users and My profile alike; a change through the caller's runner (`Run`), which reloads what it shows and says how it went in its own line; Revoke of the token in use signs out | `name`, `rest`; `run`, `name`, and what each sends |
 | `Tokens` | `tokens.tsx` | a user's sessions and keys (a user's panel, My profile): each with Revoke, "this device" and "its key" by `own`, Create key and the key just made, shown once by the read that follows and kept in the part's own state alone; read when its place opens and again at each change of the caller's counter while open; an answer after a sign-out dropped; the API key the caller names tinted (`token-marked`), and the caller told of each read drawn with that row (My profile's key of its address) | `u`, `off`, `open`, `reads` (the caller's counter), `run`, `say` (the caller's message line), `labelId` (the new key's field's id), `help` (the group's ⓘ after Create key, My profile's), `marked` (the id of the API key marked), `drawn(row)` (told of each read drawn, with the row marked or null) |
 | `Identities`, `Changes` | `identities.tsx` | a user's identities at the sign-in providers (a user's panel, My profile): each with what the provider said and Remove; with `changes`, Change of one no sign-in used, a settings form kept by its key, the forms of identities gone or made unchangeable forgotten, and all of them where the box goes off; with `assign`, Assign; `after` what follows the list once read (My profile's Link buttons); `quiet` draws nothing while the list is empty and the caller offers nothing after it (`offer`: My profile's Link buttons, none in the app, where the rows are still named from every provider) | `u`, `off`, `open`, `reads`, `providers` (the enabled ones), `run`, `say`, `title`, `none`, `cls`, `changes` (`key(id)`, `under`, `ui(key)`, `forget(key)`, `show(key)`: the caller's forms and how one is brought into sight), `assign`, `after(list)`, `quiet`, `offer` |
 | `FileButton` | `file.tsx` | a button that opens the browser's choice of a file of the types it accepts (`filePicker`), the same file again too | `id` (the button's), `cls`, `label`, `accept`, `off`, `inputId` and `inputLabel` (the input's id and its name in the page's language: the Appearance card's Import…), `onFile(file)` |
 | `Adder` | `adder.tsx` | the end of a list that adds an item: the new item's form in its place while shown, the button that shows it hidden meanwhile, the focus in the form's first field when it comes, in the drawing's own turn, and back on the button when it goes (Users, Roles, Sign-in providers) | `id` (the button's), `formId` (the form's place), `label`, `shown`, `set(shown)`, the form as children |
+| `UserNameField`, `useNameCheck`, `wordNameError` | `username.tsx` | a new user's login name (Add a user, the first owner's form): checked 2 s after the last keystroke and when left, the store's rule and the names in use; a fixed name clears the line at once; the server's refusal worded alike | `label`, `id`, `msgId` (the line under it, which describes it), `value`, `set`, `nc` (`useNameCheck(taken)`: `problem`, `say`, `check(v)`, `typed(v)`), `name` (the input's, Add a user's alone), `autocomplete`, `placeholder`, `inputRef` |
+| `NewPassword`, `newPasswordProblem` | `password.tsx` | a new password typed twice (My profile's Change password, the first owner's form), free fields of the caller's own state, never a draft; the pair's one check, the mismatch first, then none typed | `ids` (the two inputs'), `names` (their name attributes, My profile's alone), `label` (the first's), `value`, `set`, `again`, `setAgain`, `required` |
+| `toServers` | `app.ts` | back to the app's servers where the page is in the app (`appConnect` of `login.js`): ☰'s Select server, the sign-in's ☰ and Cancels, the first owner's Cancel | |
 | `KvList`, `CountList` | `kv.tsx` | a list of facts, a name and its value each (`kvList`), every fact given, the caller leaving out those it does not show; a list of counts by name, sorted, in columns (`countList`) | `facts` (`[name, value, mono]`); `counts` |
 | `Copy`, `CopyIcon`, `CopyPair` | `copy.tsx` | a text that copies itself, a copy icon (`copyEl`, `copyIcon`); something with its copy icon after it, a text or a link (an address served: an integration's, System info's) | `text`, `value` (what it copies, where it is not the text), `label` (named "Copy …"), `name` (its whole name in its place: the server's version), `icon`, `cls`, `id`; `get`, `label`; `get`, `label`, what it follows as children |
 | `Link` | `link.tsx` | a link in a tab of its own, the text alone for a url that is not http(s) (`linkEl`) | `url`, `text`, `cls` |
@@ -2668,6 +2684,59 @@ where the user who signs in is not the one who was,
 by `/me`'s user or mode, before the reads that waited for it are sent again.
 Moving inside the page (the pages' store, the Cube choice) unloads nothing,
 so nothing asks there.
+The sign-in is a region of its own (`ui/src/signin/`, AP UiParts' Block 14),
+drawn once as `parts.js` loads and from then on by its signals:
+its card into the skeleton's `<dialog id="login-dialog">`,
+which `askLogin` of `login.js` shows, not modal, and closes;
+`askLogin` hands the card the way to open on, a provider's refusal
+and the sign-in it answers
+(`MassimoParts.signIn.open`), the card empties its fields, chooses the way
+and gives the focus in the drawing that follows,
+and each way, the password, a key or the fingerprint, sets the token
+and goes on to `finishSignIn`, which settles the sign-in, closes the dialog
+and starts the page as the plain handlers did.
+Its fields are not controlled (UiParts D210):
+no draw sets what a name, a password or a key field holds,
+so that a password manager's fill stays; they are read at the submit
+and emptied at each opening alone, never at the closing,
+so that a password manager can still save them.
+The app's status of the login by fingerprint is read at each opening
+and after a fingerprint refused
+(`app.ts`); the fingerprint's button and Sign in turn until the sign-in has settled,
+and the button stays the same element while the system's prompt is open;
+a login not kept shows its box, the focus on Try again,
+and the sign-in waits for the choice.
+The providers' list comes from `renderLoginProviders`,
+the self-signed certificate's line from `renderTLS` of `header.js`;
+a change of language draws the card's texts again and reads the providers no more.
+A sign-out, and another user's sign-in after a 401 (`forgetSession` of `login.js`),
+clears who is in for the plain code and for the parts in one turn
+(`state.me`, then `MassimoParts.signedOut`, which raises the session's number first),
+then forgets the settings that followed the user,
+the lines saying a write was not sent,
+the House's panel, the stream and the Cubes' data, shows the tiles,
+and only then awaits the signed-out language's table (UiParts D211):
+nothing of the user who left is drawn, shown, read or answered while it loads.
+Every region drops an answer that comes after a sign-out:
+it takes the session's number (`shared/session.ts`) before its request
+and writes, says, reloads and sends nothing after it where the number has changed,
+also no second request of its own after the first one's answer (a device's settings and its name,
+a copy's programme after its settings, a setpoint after the read of a preset),
+as Blocks 10 to 13 built it and as the regions moved before them do since (UiParts D212):
+the Cubes' pairing and rooms, a Cube's devices and the Cubes' actions,
+a room's configuration, a device's detail and the virtual thermostat's settings,
+the devices without a room, the House panel's writes (which stop at the next room),
+the repairs, the form that puts a device into a room and the header's search for Cubes.
+Only the plain `removeFromCube` of `unlisted.js` still reads the rooms after a removal's late answer,
+a read under the next user's own key, plain code that Block 15 moves.
+Who is in (`shared/me.ts`) draws the rest:
+the first owner's form into `#setup-slot`, shown while who is in says `setup`,
+its form drawn only then, so that what is typed in it goes with it,
+and the open server's warning into `#open-banner-slot`.
+The first owner's form reads the app's status of the login by fingerprint
+each time it is shown (`app.ts`), for its switch;
+its Create the owner turns until the app has answered whether it kept the login,
+so that a second tap while the system's prompt is open creates nothing (UiParts D213).
 A part's place among plain siblings is an element of the class `part-slot`,
 which takes no box of its own (`display: contents`),
 so that the part's element is laid out as if it stood there itself.

@@ -122,12 +122,14 @@
 <!-- partials: header -->
 
 <main>
-  <p id="open-banner" class="open-banner hidden" role="note"><strong data-i18n="open.title">Open server.</strong> <span id="open-banner-text"></span></p>
+  <!-- the open server's warning, while the server asks for no key (ui/src/signin/Banner.tsx) -->
+  <div id="open-banner-slot" class="part-slot"></div>
   <p id="message" class="message hidden"></p>
 
   <!-- partials: home -->
 
-  <!-- partials: setup -->
+  <!-- the first owner's form, on a server without users (ui/src/signin/Setup.tsx) -->
+  <div id="setup-slot" class="part-slot"></div>
 
   <!-- Personal settings, the page 👤 opens: its row kept at the top under
        the header, with who is signed in, Sign out (or Forget key, none on
@@ -223,7 +225,11 @@
   <div id="to-top-slot" class="part-slot"></div>
 </main>
 
-<!-- partials: login -->
+<!-- the sign-in, the signed-out page's one card, centred in the window and
+     without the header: the dialog is the skeleton's, shown (not modal)
+     and closed by login.js askLogin, its card a part drawn into it
+     (ui/src/signin/Card.tsx) -->
+<dialog id="login-dialog"></dialog>
 
 <!-- partials: toast -->
 

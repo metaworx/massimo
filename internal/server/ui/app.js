@@ -1009,7 +1009,6 @@ function applyLanguage() {
   renderDeviceSwitches();
   renderUsers();
   renderProviders(); // providers.js
-  if ($("login-dialog").open) renderLoginProviders(); // login.js
   renderBackups(); // backup.js: each box with its restore
   renderRoles();
   renderCubes();

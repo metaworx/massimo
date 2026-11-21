@@ -5,12 +5,12 @@
 // /api/v1/me), the sign-in dialog in place of the token prompt (a name
 // and a password, signed in by OPAQUE so that the password stays in the
 // browser, or an API key pasted, and in the app the login by
-// fingerprint), Log out, hiding what the role may not do, the proof of
-// the own password and a password registered by OPAQUE (which My
-// profile, ui/src/profile/, sets the own password with), and the form
-// that creates the first owner on a server without users. Loaded after
-// app.js; api() calls askLogin on a 401, and sends only a read again
-// once it is in.
+// fingerprint, its card a part: ui/src/signin/), Log out, hiding what
+// the role may not do, the proof of the own password and a password
+// registered by OPAQUE (which My profile, ui/src/profile/, sets the own
+// password with, and the first owner's form, ui/src/signin/, signs in
+// with). Loaded after app.js; api() calls askLogin on a 401, and sends
+// only a read again once it is in.
 "use strict";
 
 // CAPABILITIES are the server's, in its order (docs/api-v1.md,
@@ -110,8 +110,10 @@ async function loadMe() {
 
 // applyCaps hides what the signed-in user may not do: the body gets a
 // class no-<capability> per capability the user lacks, and the markup
-// marks what each one hides with needs-<capability>; the first-owner
-// form shows on an open server for a caller on the local network.
+// marks what each one hides with needs-<capability>. Who is in goes to
+// the parts (MassimoParts.me): the first owner's form, shown on an open
+// server for a caller on the local network, and the open server's warning
+// are drawn from it (ui/src/signin/).
 function applyCaps() {
   const me = state.me;
   const body = document.body;
@@ -120,21 +122,8 @@ function applyCaps() {
   body.classList.toggle("no-sync", !canSync());
   body.classList.toggle("no-system", !hasSettingsPage());
   body.classList.toggle("no-maint", !hasSystem());
-  $("setup").classList.toggle("hidden", !(me && me.setup));
-  if (me && me.setup) renderSetupKeep();
-  renderOpenBanner();
-  MassimoParts.me(me); // who is in: a user's sessions say "this device", My profile is drawn for whoever is in, and the page's chrome says who it is (ui/src/shared/me.ts)
+  MassimoParts.me(me); // who is in: a user's sessions say "this device", My profile is drawn for whoever is in, the page's chrome says who it is, the first owner's form and the open server's warning show by it (ui/src/shared/me.ts)
   if (!mayShow(currentView)) showView("tiles", "replace"); // pages.js: a page the user signed in now may not open
-}
-
-// renderOpenBanner warns under the header while the server asks for no
-// key: a store without users, or no store and no token. It cannot be
-// dismissed, and goes once the server asks who is there.
-function renderOpenBanner() {
-  const mode = state.me && state.me.mode;
-  const open = mode === "open" || mode === "none";
-  $("open-banner").classList.toggle("hidden", !open);
-  if (open) $("open-banner-text").textContent = t(mode === "open" ? "open.text" : "open.textNoStore");
 }
 
 // --- the sign-in through a provider (docs/api-v1.md, "Sign-in through OpenID Connect")
@@ -183,33 +172,19 @@ async function oidcReturn() {
   }
 }
 
-// renderLoginProviders draws a button per enabled provider on the
-// sign-in card; none in the app, whose WebView the providers refuse.
+// renderLoginProviders hands the sign-in's card the enabled providers,
+// a button each (ui/src/signin/Card.tsx); none in the app, whose WebView
+// the providers refuse.
 async function renderLoginProviders() {
-  const box = $("login-provider-buttons");
-  clear(box);
   const list = appBridge() ? [] : await loadLoginProviders(); // providers.js
-  for (const p of list) {
-    const btn = textEl("button", t("login.with", { name: p.name }));
-    btn.type = "button";
-    btn.dataset.provider = p.key;
-    btn.addEventListener("click", () => startProvider(p.key, btn));
-    box.appendChild(btn);
-  }
-  // shown with its buttons, or with a provider's refusal alone
-  $("login-providers").classList.toggle("hidden", !list.length && $("login-providers-error").classList.contains("hidden"));
+  MassimoParts.signIn.providers(list);
 }
 
-// startProvider starts a sign-in through a provider and opens its page.
-async function startProvider(key, btn) {
-  try {
-    await whileBusy(btn, async () => {
-      const started = await apiRequest("POST", "api/v1/login/oidc/" + encodeURIComponent(key), { redirect: pageBase() }, { auth: false });
-      location.assign(started.url);
-    });
-  } catch (e) {
-    showResult($("login-providers-error"), t("login.failed", { error: e.message }), false);
-  }
+// startProvider starts a sign-in through a provider and opens its page;
+// its refusal is thrown, for the card to say under the providers' buttons.
+async function startProvider(key) {
+  const started = await apiRequest("POST", "api/v1/login/oidc/" + encodeURIComponent(key), { redirect: pageBase() }, { auth: false });
+  location.assign(started.url);
 }
 
 // --- the sign-in dialog -----------------------------------------------
@@ -277,20 +252,26 @@ async function settleSignIn(was, held) {
 
 // forgetSession forgets on the page all that was of whoever was signed
 // in, for a sign-out (logout) and for another user's sign-in after a 401
-// (settleSignIn) alike: the settings that followed the user, where they
-// did (forgetUserSettings, app.js), the forms' drafts, the lines saying a
-// write was not sent (forgetNotSent, app.js), the House's panel, the
-// stream and the Cubes' data; the page shows the tiles. Who is in is
+// (settleSignIn) alike: who is in, for the plain code and the parts in
+// one turn, with the parts' forms, drafts and answers still on their way
+// (MassimoParts.signedOut), the settings that followed the user, where
+// they did (forgetUserSettings, app.js), the lines saying a write was not
+// sent (forgetNotSent, app.js), the House's panel, the stream and the
+// Cubes' data; the page shows the tiles. All of it before the signed-out
+// language's table is awaited, which comes last (UiParts D211), so that
+// nothing of the user who left is drawn, sent or read meanwhile, nor shown
+// (applyLanguage, after it, needs no page of the user's). Who is in is
 // read again after it.
 async function forgetSession(synced) {
   state.me = null;
-  if (synced) await forgetUserSettings();
-  MassimoParts.signedOut();
+  MassimoParts.signedOut(); // the parts' who is in null in the same turn as state.me
+  const language = synced ? forgetUserSettings() : null; // applied at once, its language's table awaited below
   forgetNotSent();
   MassimoParts.rooms.closeHouse();
   closeEvents();
-  clearCubeData(); // app.js: nothing of this session behind the sign-in
+  clearCubeData(); // app.js: nothing of this session behind the sign-in; the poll forgetUserSettings started stops
   showView("tiles", "replace");
+  await language;
 }
 
 // --- the login by fingerprint in the app (docs/app.md, "The login by fingerprint")
@@ -308,115 +289,14 @@ function appConnect() {
   return b && typeof b.connect === "function" ? () => b.connect() : null;
 }
 
-// renderAppLogin draws the sign-in card's part of the app as
-// login.status() answers: the fingerprint first among the ways to sign
-// in where a key is kept, the switch that keeps one where the phone can
-// and none is kept, the notice where the address takes no key (plain
-// HTTP outside the home network), and "Select server…" last in its ☰.
-// Nothing of it in a browser; the forms' Cancel is initLogin's.
-async function renderAppLogin() {
-  const login = appLogin();
-  let st = null;
-  if (login) {
-    try {
-      st = await login.status();
-    } catch (e) {
-      st = null;
-    }
-  }
-  const kept = !!(st && st.user && !st.plain);
-  const fp = $("login-way-fp");
-  fp.classList.toggle("hidden", !kept);
-  if (kept) {
-    const label = t("connect.loginAs", { name: st.user });
-    fp.setAttribute("aria-label", label);
-    fp.title = label;
-  }
-  const plain = !!(st && st.can && st.plain);
-  $("login-fp-plain").classList.toggle("hidden", !plain);
-  const offer = !!(st && st.can && !st.plain && !st.user);
-  $("login-keep-row").classList.toggle("hidden", !offer);
-  if (!offer) $("login-keep").checked = false;
-  const servers = !appConnect();
-  $("login-menu-servers").classList.toggle("hidden", servers);
-  $("login-menu-servers-sep").classList.toggle("hidden", servers);
-}
-
-// renderSetupKeep offers, on the first owner's form in the app, to keep
-// the login by fingerprint, as the sign-in does where the phone can and
-// the address takes a key (login.status).
-async function renderSetupKeep() {
-  const login = appLogin();
-  let st = null;
-  if (login) {
-    try {
-      st = await login.status();
-    } catch (e) {
-      st = null;
-    }
-  }
-  const offer = !!(st && st.can && !st.plain && !st.user);
-  $("setup-keep-row").classList.toggle("hidden", !offer);
-  if (!offer) $("setup-keep").checked = false;
-}
-
-// wayField is the id of the first field of a way's form, password or
-// key, which takes the focus when the form is shown.
-function wayField(way) {
-  return way === "key" ? "login-token" : "login-user";
-}
-
-// chooseWay shows the form of a way to sign in, password or key, and
-// marks its button pressed (the row of the card, partials/login.html).
-function chooseWay(way) {
-  for (const b of document.querySelectorAll("#login-ways .login-way[data-way]")) b.setAttribute("aria-pressed", String(b.dataset.way === way));
-  $("login-form").classList.toggle("hidden", way !== "password");
-  $("login-key-form").classList.toggle("hidden", way !== "key");
-}
-
-// keepLogin keeps the login by fingerprint after a sign-in with the
-// switch on (login.keep, which asks for the fingerprint); where it is not
-// kept the card says so and offers Try again and Sign in without it, and
-// resolves once either is chosen.
-async function keepLogin() {
-  const login = appLogin();
-  if (!login) return;
-  const form = $("login-form");
-  const failed = $("login-keep-failed");
-  const retry = $("login-keep-retry");
-  for (;;) {
-    let said;
-    try {
-      if (await whileBusy($("login-form").querySelector("button[type=submit]"), () => login.keep())) break;
-      said = t("login.keepFailed");
-    } catch (e) {
-      said = t("login.keepError", { error: e.message });
-    }
-    $("login-keep-failed-text").textContent = said;
-    form.classList.add("hidden");
-    $("login-ways").classList.add("hidden");
-    failed.classList.remove("hidden");
-    retry.focus();
-    const again = await new Promise((resolve) => {
-      retry.onclick = () => resolve(true);
-      $("login-keep-skip").onclick = () => resolve(false);
-    });
-    retry.onclick = null;
-    $("login-keep-skip").onclick = null;
-    failed.classList.add("hidden");
-    form.classList.remove("hidden");
-    if (!again) break;
-  }
-  failed.classList.add("hidden");
-  form.classList.remove("hidden");
-  $("login-ways").classList.remove("hidden");
-}
-
 // askLogin opens the sign-in dialog and resolves true once a session or
 // a key is in, false when the dialog was dismissed. While it is open the
 // page is signed out: the body's class signed-out hides all of it but the
 // dialog, which holds the logo and the version, centred in the window
-// (style.css).
+// (style.css). The dialog is the skeleton's; its card is a part
+// (ui/src/signin/), handed the way to open on and the sign-in it
+// answers: it empties its fields, chooses the way and gives the focus as
+// it draws the opening, and each of its ways goes on to finishSignIn.
 function askLogin() {
   if (loginPromise) return loginPromise;
   notSentNow = false; // app.js: only the writes this sign-in answers
@@ -425,91 +305,27 @@ function askLogin() {
   dropPendingSetpoints(); // rooms.js
   loginPromise = new Promise((resolve) => {
     const dlg = $("login-dialog");
-    const form = $("login-form");
-    const keyForm = $("login-key-form");
-    const error = $("login-error");
-    $("login-user").value = "";
-    $("login-password").value = "";
-    $("login-token").value = "";
-    $("login-keep").checked = false;
-    $("login-ways").classList.remove("hidden");
     // the API key's form where the server was seen open, its owner of
     // MASSIMO_API_TOKEN having no password
     const way = sawOpen ? "key" : "password";
-    chooseWay(way);
-    showResult(error, "", false);
     // a provider's refusal under the providers' buttons
-    showResult($("login-providers-error"), "", false);
+    let said = "";
     if (oidcError) {
       const key = "login.oidcError." + oidcError;
-      showResult($("login-providers-error"), t(key) === key ? t("login.oidcError.failed") : t(key), false);
+      said = t(key) === key ? t("login.oidcError.failed") : t(key);
       oidcError = null;
     }
-    renderLoginProviders();
-    renderAppLogin();
-    const submit = form.querySelector("button[type=submit]");
-    const fingerprint = $("login-way-fp");
     const done = (ok) => {
-      form.onsubmit = null;
-      keyForm.onsubmit = null;
-      fingerprint.onclick = null;
       dlg.onclose = null;
       if (dlg.open) dlg.close();
+      MassimoParts.signIn.closed();
       document.body.classList.remove("signed-out");
       loginPromise = null;
       resolve(ok);
     };
-    keyForm.onsubmit = async (ev) => {
-      ev.preventDefault();
-      const key = $("login-token").value.trim();
-      if (!key) return;
-      setToken(key);
-      await settleSignIn(was, held);
-      done(true);
-      if (!startWaits) afterLogin();
-    };
-    form.onsubmit = async (ev) => {
-      ev.preventDefault();
-      if (isBusy(submit)) return; // a second Enter while it signs in
-      const user = $("login-user").value.trim();
-      const password = $("login-password").value;
-      if (!user || !password) {
-        showResult(error, t("login.missing"), false);
-        return;
-      }
-      showResult(error, "", false);
-      let session;
-      try {
-        session = await whileBusy(submit, () => signIn(user, password));
-      } catch (e) {
-        showResult(error, t("login.failed", { error: e.message }), false);
-        $("login-password").focus();
-        return;
-      }
-      setToken(session.token);
-      if ($("login-keep").checked && !$("login-keep-row").classList.contains("hidden")) await keepLogin();
-      await settleSignIn(was, held);
-      done(true);
-      if (!startWaits) afterLogin();
-    };
-    // the login by fingerprint: a session from the key the app keeps
-    fingerprint.onclick = async () => {
-      if (isBusy(fingerprint)) return;
-      showResult(error, "", false);
-      let token;
-      try {
-        token = await whileBusy(fingerprint, () => appLogin().fingerprint());
-      } catch (e) {
-        showResult(error, t("login.fingerprintFailed", { error: e.message }), false);
-        renderAppLogin(); // a key the server refused is gone
-        return;
-      }
-      if (!token) return; // the prompt dismissed: the card stays
-      setToken(token);
-      await settleSignIn(was, held);
-      done(true);
-      if (!startWaits) afterLogin();
-    };
+    MassimoParts.signIn.open(way, said, { was, held, done }); // the fields emptied, the way chosen, the lines cleared, the switch off
+    renderLoginProviders();
+    MassimoParts.signIn.readApp(); // the app's login by fingerprint, as login.status() answers, not awaited (ui/src/signin/app.ts)
     dlg.onclose = () => {
       resumePushes(held); // dismissed: they go as they would have
       done(false);
@@ -517,11 +333,22 @@ function askLogin() {
     document.body.classList.add("signed-out");
     // Not modal: the page behind is empty, and a modal dialog makes the
     // rest of the document inert, where a password manager draws its
-    // choices, which then take no click.
+    // choices, which then take no click. The card gives the focus to the
+    // first field of the form shown in the drawing that follows.
     dlg.show();
-    $(wayField(way)).focus(); // the field of the form shown
   });
   return loginPromise;
+}
+
+// finishSignIn follows a sign-in of the card, by the password, a key or
+// the fingerprint, once its token is set (ask, the sign-in askLogin
+// opened): the sign-in settled (the same user goes on, another starts
+// anew), the dialog closed, askLogin answered, and the page started where
+// no start waits for who is in.
+async function finishSignIn(ask) {
+  await settleSignIn(ask.was, ask.held);
+  ask.done(true);
+  if (!startWaits) afterLogin();
 }
 
 // --- the sign-in by OPAQUE (docs/api-v1.md, "The sign-in by OPAQUE") ----
@@ -787,87 +614,11 @@ async function loadPreferences() {
   await applyStoredSettings();
 }
 
-// --- the first owner --------------------------------------------------
-
-// createOwner handles the form of a server without users: the owner is
-// created with a password of version 2 and signed in at once, the button
-// busy through both.
-async function createOwner(ev) {
-  ev.preventDefault();
-  const msg = $("setup-msg");
-  const submit = $("setup-form").querySelector("button[type=submit]");
-  if (isBusy(submit)) return;
-  if (!checkOwnerName()) {
-    $("setup-user").focus();
-    return;
-  }
-  const name = $("setup-user").value.trim();
-  const password = $("setup-password").value;
-  if (!name || !password) return showResult(msg, t("login.missing"), false);
-  if (password !== $("setup-again").value) return showResult(msg, t("setup.mismatch"), false);
-  try {
-    const session = await whileBusy(submit, async () => {
-      await api("POST", "api/v1/users", { name, role: "owner", ...(await registerPassword(name, password)) });
-      return signIn(name, password);
-    });
-    setToken(session.token);
-    // the login by fingerprint kept for the new owner, where asked for; not
-    // kept, the owner is in all the same and may keep it at a sign-in
-    let kept = true;
-    if ($("setup-keep").checked && !$("setup-keep-row").classList.contains("hidden")) {
-      try {
-        kept = await appLogin().keep();
-      } catch (e) {
-        kept = false;
-      }
-    }
-    showResult(msg, t("setup.done", { name }) + (kept ? "" : " " + t("setup.notKept")), true);
-    afterLogin();
-  } catch (e) {
-    const worded = wordNameError(e, name); // users.js
-    if (worded) checkOwnerName.say(worded);
-    showResult(msg, t("setup.failed", { error: worded || e.message }), false);
-  }
-}
-
-// checkOwnerName checks the first owner's name as it is typed
-// (watchName, users.js); set by initLogin.
-let checkOwnerName = () => true;
-
 function initLogin() {
-  // the sign-in's menu: the language and the mode, as My settings sets them
-  dropdown($("login-menu")); // components.js
-  $("login-lang").addEventListener("change", (ev) => {
-    setSetting("lang", validSetting("lang", ev.target.value) || "auto");
-    changeLanguage(state.settings.lang).then(applyLanguage);
-  });
-  $("login-mode").addEventListener("change", (ev) => chooseMode(ev.target.value)); // theme.js
   window.addEventListener("pagehide", flushPreferences);
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") flushPreferences();
   });
-  // the ways to sign in: the password's form or the key's, the one chosen in focus
-  for (const b of document.querySelectorAll("#login-ways .login-way[data-way]")) {
-    b.addEventListener("click", () => {
-      chooseWay(b.dataset.way);
-      $(wayField(b.dataset.way)).focus();
-    });
-  }
-  // in the app, back to its servers: last in the card's ☰, and as Cancel
-  // beside each form's button that signs in, the first owner's too (AP
-  // MobileApp, D54-C); none in a browser (the main ☰'s is the chrome's,
-  // ui/src/chrome/Menu.tsx)
-  const toServers = () => {
-    const go = appConnect();
-    if (go) go().catch(() => {});
-  };
-  $("login-menu-servers").addEventListener("click", toServers);
-  for (const id of ["login-cancel", "login-key-cancel", "setup-cancel"]) {
-    $(id).addEventListener("click", toServers);
-    $(id).classList.toggle("hidden", !appConnect());
-  }
-  $("setup-form").addEventListener("submit", createOwner);
-  checkOwnerName = watchName($("setup-user"), $("setup-name-msg"), () => []);
 }
 
 document.addEventListener("DOMContentLoaded", initLogin);

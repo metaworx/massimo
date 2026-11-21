@@ -146,7 +146,7 @@ function splitVersion(v) {
 // certificate near its end stay (docs/app.md).
 function renderTLS(tls) {
   const pinned = !!appBridge();
-  $("login-tls").classList.toggle("hidden", pinned || !(tls && tls.self_signed));
+  MassimoParts.signIn.selfSigned(!pinned && !!(tls && tls.self_signed)); // the card's line (ui/src/signin/)
   MassimoParts.header.tls(tls || null, pinned);
 }
 
@@ -177,11 +177,7 @@ async function checkVersion() {
   renderTLS(h && h.tls);
   if (state.version === null) {
     state.version = v;
-    const parts = splitVersion(v);
-    MassimoParts.chrome.version(v); // ☰'s first row (ui/src/chrome/Menu.tsx)
-    // signed out, in the sign-in card, at its foot and first in its ☰
-    $("login-version").textContent = parts.short;
-    $("login-menu-version").textContent = parts.short;
+    MassimoParts.chrome.version(v); // ☰'s first row, and signed out the sign-in card's foot and the first row of its ☰ (ui/src/shared/server.ts)
     renderServerSign();
     return;
   }

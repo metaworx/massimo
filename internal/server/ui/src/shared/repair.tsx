@@ -27,6 +27,7 @@ import { useLang } from "./lang";
 import { live } from "./live";
 import { defaultDeviceName, NAME_BYTES, nameFits } from "./name";
 import { busyProps, Question } from "./question";
+import { session, stillSession } from "./session";
 
 /** What a box of repairs is for: the Cube, a room or a device of it. */
 export type RepairKind = "cube" | "room" | "device";
@@ -182,8 +183,10 @@ async function loadRepair(box: Box, r: Repair, item: Item): Promise<void> {
   // A question never outlives the preview it asked about: read again, it
   // is gone, and Run… asks again about the new one.
   item.ask = "";
+  const n = session();
   try {
     const p = await api<RepairPlan>("GET", box.path + r.route + repairQuery(item));
+    if (!stillSession(n)) return; // an answer after a sign-out: nothing of it for the next user
     const d = p.details || {};
     item.preview = p;
     if (d.code === "room_name_needed") {
@@ -200,6 +203,7 @@ async function loadRepair(box: Box, r: Repair, item: Item): Promise<void> {
       item.state = "ready";
     }
   } catch (e) {
+    if (!stillSession(n)) return;
     item.preview = null;
     item.error = (e as Error).message;
     item.state = "none";
@@ -236,10 +240,13 @@ async function runRepair(box: Box, r: Repair, item: Item): Promise<void> {
   const plan = item.preview?.plan || "";
   const q = repairQuery(item);
   item.state = "running";
+  const n = session();
   try {
     const res = await api<RepairResult>("POST", box.path + r.route + (q ? q + "&" : "?") + "plan=" + encodeURIComponent(plan));
+    if (!stillSession(n)) return; // an answer after a sign-out says nothing and reads nothing again
     item.result = { text: repairOutcome(res), ok: true };
   } catch (e) {
+    if (!stillSession(n)) return;
     item.result = { text: (e as Error).message, ok: false };
   }
   // Read again only where the scope still has a box: this one, or one
