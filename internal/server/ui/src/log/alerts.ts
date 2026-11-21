@@ -189,3 +189,14 @@ export function markAllLogSeen(): void {
   setLogAlerts([]);
   saveLogSeen();
 }
+
+/** forgetLogAlerts forgets the problems and whose marks they were, at a sign-out: ☰ shows none until the next user's are read. */
+export function forgetLogAlerts(): void {
+  logAlerts.list = [];
+  logAlerts.levels = new Map();
+  logAlerts.level = "";
+  logAlerts.seen = { all: 0, lines: [] };
+  logAlerts.seenOf = null;
+  levelSignals = new Map();
+  renderLogSign();
+}

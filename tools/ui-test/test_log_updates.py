@@ -6,11 +6,16 @@ language changed), the log loaded again and its unseen problems read
 again keep what a user holds in it: a command's detail open and the focus
 on its button, a selection of text, the focus on Mark seen, the search
 typed and the choices, a choice's options; a line that came live keeps
-its element when a load brings the same event. The log's reads of the
+its element when a load brings the same event. At a sign-out, and for
+another user after an expired session, an answer still on its way of
+each of the log's reads reaches nothing of the next user. The log's reads of the
 Cube are answered by the test (StubLog), and the server's stream lines
 kept out (isolate_log), so that the lines are the test's own."""
 import json
 
+import pytest
+
+from conftest import TOKEN, URL
 from helpers import LOG_ALERT_A as ALERT_A
 from helpers import LOG_ALERT_B as ALERT_B
 from helpers import LOG_CMD as CMD
@@ -18,11 +23,13 @@ from helpers import LOG_CMD_DETAIL as DETAIL
 from helpers import LOG_CMD_LINE as CMD_LINE
 from helpers import LOG_FIRST as FIRST
 from helpers import LOG_TEXT_LINE as TEXT_LINE
-from helpers import StubLog, frames, isolate_log, mark, replaced, show_view, wait_until
+from helpers import StubLog, frames, isolate_log, mark, owner_page, replaced, safe_route, show_view, sign_out, wait_until
 from helpers import log_event as ev
 from helpers import log_lines as lines
 from helpers import stub_log_command as stub_command
 from test_log_alerts import alerts_route
+from test_login import sign_in
+from test_unsaved import expire
 
 def open_log(page, n=20, hash_="#log"):
     """The log shown with the test's lines alone; the stub."""
@@ -341,4 +348,273 @@ def test_mark_seen_hands_the_focus_on(page, case):
     finally:
         page.unroute("**/api/v1/log/alerts*")
         page.evaluate("() => { localStorage.removeItem('massimo.log.seen'); logAlerts.seenOf = null; return loadLogAlerts(); }")
+    show_view(page, "tiles")
+
+# --- a sign-out (step 2) ---------------------------------------------------
+
+def sign_off(page, how):
+    """The session ended as how says, then the operator in: a sign-out,
+    or the session taken as expired and the operator signed in after it."""
+    if how == "sign-out":
+        sign_out(page)
+    else:
+        expire(page)
+    sign_in(page, "operator", "op-pass")
+
+
+class Held:
+    """The first GET of pattern held until the test lets it go, with the
+    answer of answer(url) (the server's where it gives None); later ones
+    go on."""
+
+    def __init__(self, page, pattern, answer=None):
+        self.routes, self.answer, self.pattern, self.page = [], answer, pattern, page
+        safe_route(page, pattern, self.handle)
+
+    def handle(self, route):
+        if route.request.method != "GET" or self.routes:
+            route.fallback()
+            return
+        self.routes.append(route)
+
+    def ask(self, what, act):
+        """act, which makes the page ask for what is held, waited for until it asks."""
+        with self.page.expect_request(self.pattern):
+            act()
+        frames(self.page)  # the route has the request
+        assert self.routes, f"{what} held"
+
+    def let_go(self, ended="true"):
+        """The held request answered, and waited for until the page took it:
+        the response finished, then ended (an expression: the page's own
+        read over, a promise it gave) holds, then a drawing."""
+        route = self.routes[0]
+        url = route.request.url
+        with self.page.expect_response(lambda r: r.url == url) as info:
+            body = self.answer(url) if self.answer else None
+            if body is None:
+                route.fallback()
+            else:
+                route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
+        info.value.finished()
+        self.page.evaluate("async () => { await (%s); }" % ended)
+        frames(self.page)
+
+
+FIRSTS = 990000  # the first user's lines, which the next must not see
+
+
+def late_page(url):
+    """A page of the first user's lines, as a late answer brings it."""
+    return [ev(FIRSTS - FIRST + k, summary={"firmware": "the-first-users", "duty_cycle_pct": 1, "free_memory_slots": 1}) for k in range(3)]
+
+
+NOTHING_LEFT = """() => logState.lines.every((l) => l.id < 990000 || l.id > 990010) && logState.commands.size === 0
+  && logState.openCommands.size === 0 && !logState.filter && !document.querySelector('#log-lines [data-id^="99000"]')
+  && document.getElementById('log-filter').value === ''"""
+
+
+def owner_log(new_context, guard, watch, hash_="#log"):
+    """The owner's page of its own (owner_page), the log shown by hash_
+    with the search typed into."""
+    page = owner_page(new_context, guard, watch, URL, TOKEN)
+    show_view(page, "log")
+    if hash_ != "#log":
+        page.evaluate("(h) => { location.hash = h; }", hash_)
+        assert wait_until(page, "location.hash === %s && !logState.loading" % json.dumps(hash_), 5), "the log's address"
+    assert wait_until(page, "!logState.loading", 5), "the log loaded"
+    page.locator("#log-filter").fill("typed by the first")
+    return page
+
+
+def assert_forgotten(page, what):
+    """Nothing of the first user's log is left: no line of a late answer,
+    no command's detail, no text typed in the search."""
+    assert page.evaluate(NOTHING_LEFT), f"{what}: nothing of the first user's log left " + page.evaluate(
+        "JSON.stringify({ids: logState.lines.map((l) => l.id).filter((i) => i >= 990000), commands: logState.commands.size, filter: logState.filter})")
+
+
+HOWS = ("sign-out", "expired")
+
+
+@pytest.mark.parametrize("how", HOWS)
+def test_a_late_page_of_the_log_reaches_nothing_of_the_next(new_context, case, watch, guard, how):
+    """The log's page asked for and held while the session ends: let go once
+    the operator is in, it draws nothing, and the search typed is gone.
+    The plain page took it, the log as the first user left it."""
+    page = owner_log(new_context, guard, watch)
+    held = Held(page, "**/api/v1/cubes/*/log?*", late_page)
+    held.ask("the log's page", lambda: page.evaluate("() => { window.__read = loadLog(); }"))
+    sign_off(page, how)
+    held.let_go("window.__read")
+    assert_forgotten(page, "a late page")
+
+
+@pytest.mark.parametrize("how", HOWS)
+def test_a_late_poll_reaches_nothing_of_the_next(new_context, case, watch, guard, how):
+    """Every Cube's log, its poll held while the session ends: let go, it
+    adds nothing, and the search typed is gone. For the poll a forward
+    guard: the plain page's poll ended too, as the log was no longer
+    shown; on the plain page this test fails by the search it kept."""
+    page = owner_log(new_context, guard, watch, "#log?cubes=all")
+    page.evaluate("clearInterval(logState.pollTimer)")
+    held = Held(page, "**/api/v1/log?*", late_page)
+    held.ask("the poll", lambda: page.evaluate("() => { window.__read = pollLog(); }"))
+    sign_off(page, how)
+    held.let_go("window.__read")
+    assert_forgotten(page, "a late poll")
+
+
+@pytest.mark.parametrize("how", HOWS)
+def test_a_late_question_of_older_reaches_nothing_of_the_next(new_context, case, watch, guard, how):
+    """Older's question (after=, logGone) held while the session ends: let
+    go, Older asks for no page and nothing is drawn. The plain page went on
+    to ask for the page before the oldest, and drew it."""
+    page = owner_page(new_context, guard, watch, URL, TOKEN)
+    show_view(page, "log")
+    StubLog(page, lines(200))
+    page.evaluate("location.hash = '#log?range=all'")
+    assert wait_until(page, "logState.range === 'all' && !logState.loading && logState.more", 5), "a full page, Older offered"
+    asked = []
+    page.on("request", lambda r: asked.append(r.url) if "before=" in r.url else None)
+    held = Held(page, "**/api/v1/cubes/*/log?limit=1&after=*")
+    held.ask("Older's question", lambda: page.locator("#log-older").click())
+    sign_off(page, how)
+    held.let_go()
+    frames(page)
+    assert not asked, f"no page before the oldest asked for: {asked}"
+    assert page.evaluate("logState.lines.length") == 0, "no line of the first user"
+
+
+@pytest.mark.parametrize("how", HOWS)
+def test_a_late_command_reaches_nothing_of_the_next(new_context, case, watch, guard, how):
+    """A command's detail asked for and held while the session ends: let
+    go, it is kept nowhere, and no detail is open for the next user. The
+    plain page kept it and the command open."""
+    page = owner_page(new_context, guard, watch, URL, TOKEN)
+    show_view(page, "log")
+    StubLog(page, lines())
+    page.evaluate("loadLog()")
+    held = Held(page, f"**/api/v1/commands/{CMD}", lambda url: DETAIL)
+    held.ask("the command's detail", lambda: page.locator(row(CMD_LINE) + " .log-cmd").click())
+    sign_off(page, how)
+    held.let_go()
+    assert page.evaluate("logState.commands.size === 0 && logState.openCommands.size === 0"), "no command's detail kept, none open"
+
+
+@pytest.mark.parametrize("how", HOWS)
+def test_a_late_list_of_users_reaches_nothing_of_the_next(new_context, case, watch, guard, how):
+    """The who choice's users asked for as the log opens, held while the
+    session ends: let go, the list is kept nowhere, and the next user's log
+    asks for its own. The plain page kept the first user's list for good."""
+    page = owner_page(new_context, guard, watch, URL, TOKEN)
+    users = [{"name": "the-first-users-user", "display_name": "First"}]
+    held = Held(page, "**/api/v1/users", lambda url: users)
+    held.ask("the users", lambda: show_view(page, "log"))
+    sign_off(page, how)
+    held.let_go()
+    assert page.evaluate("logState.users === null"), "the users' list forgotten, to be asked for again"
+    assert page.locator("#log-user option[value='the-first-users-user']").count() == 0, "not in the who choice"
+
+
+@pytest.mark.parametrize("how", HOWS)
+def test_a_late_cubes_rooms_reach_nothing_of_the_next(new_context, case, watch, guard, how):
+    """Under All Cubes a Cube's rooms asked for, held while the session
+    ends: let go, they are kept nowhere. The plain page kept them in every
+    Cube's rooms for the next user."""
+    page = owner_page(new_context, guard, watch, URL, TOKEN)
+    show_view(page, "log")
+    page.evaluate("logState.cubeRooms.clear()")
+    held = Held(page, "**/api/v1/cubes/*/rooms?devices=all")
+    held.ask("a Cube's rooms", lambda: page.evaluate("location.hash = '#log?cubes=all'"))
+    sign_off(page, how)
+    held.let_go()
+    assert page.evaluate("[...logState.cubeRooms.values()].every((v) => !v)"), "no Cube's rooms kept"
+
+
+@pytest.mark.parametrize("how", HOWS)
+def test_late_marks_reach_nothing_of_the_next(new_context, case, watch, guard, how):
+    """The first user's marks (its preferences) asked for and held while
+    the session ends: let go, they are not the next user's. The plain page
+    took them as the marks of whoever was in."""
+    page = owner_page(new_context, guard, watch, URL, TOKEN)
+    held = Held(page, "**/api/v1/me/preferences", lambda url: {"log.seen": {"all": 990999, "lines": []}})
+    held.ask("the marks", lambda: page.evaluate("() => { logAlerts.seenOf = null; window.__read = loadLogAlerts(); }"))
+    sign_off(page, how)
+    held.let_go("window.__read")
+    assert page.evaluate("logAlerts.seen.all") != 990999, "not the first user's marks"
+
+
+@pytest.mark.parametrize("how", HOWS)
+def test_late_problems_reach_nothing_of_the_next(new_context, case, watch, guard, how):
+    """The log's unseen problems asked for and held while the session ends:
+    let go once the operator's own are in, they are not drawn, nor counted
+    on ☰. The plain page drew them."""
+    page = owner_page(new_context, guard, watch, URL, TOKEN)
+    late = {"level": "error", "alerts": [{"id": 990003, "kind": "restart", "level": "error", "time": "2026-11-20T08:00:03Z"}]}
+    held = Held(page, "**/api/v1/log/alerts*", lambda url: late)
+    held.ask("the problems", lambda: page.evaluate("() => { window.__read = loadLogAlerts(); }"))
+    sign_off(page, how)
+    held.let_go("window.__read")
+    assert page.evaluate("!logAlerts.list.some((a) => a.id === 990003)"), "not the first user's problems"
+
+
+def test_the_same_user_after_a_401_keeps_the_log(new_context, case, watch, guard):
+    """The operator's log with the search typed, a page held while the
+    session expires and the operator signs in again: nothing is forgotten,
+    the held page is drawn, and the search holds what was typed, as on the
+    plain page. A forward guard."""
+    ctx = new_context()
+    page = ctx.new_page()
+    guard.page = page
+    page.set_default_timeout(5000)
+    page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+    page.goto(URL)
+    sign_in(page, "operator", "op-pass")
+    show_view(page, "log")
+    assert wait_until(page, "!logState.loading", 5), "the log loaded"
+    page.locator("#log-filter").fill("the-first")
+    held = Held(page, "**/api/v1/cubes/*/log?*", late_page)
+    held.ask("the log's page", lambda: page.evaluate("() => { window.__read = loadLog(); }"))
+    expire(page)
+    # signed in again in the dialog, the log still shown: sign_in waits for the tiles
+    page.locator("#login-user").fill("operator")
+    page.locator("#login-password").fill("op-pass")
+    page.locator("#login-form button[type=submit]").click()
+    assert wait_until(page, "!document.getElementById('login-dialog').open && currentView === 'log'", 10), "signed in again, the log shown"
+    held.let_go("window.__read")
+    assert page.locator("#log-filter").input_value() == "the-first", "the search as typed"
+    assert page.evaluate("logState.lines.filter((l) => l.id >= 990000 && l.id < 990010).length") == 3, "the held page drawn"
+
+
+
+def test_the_who_choice_follows_another_user_without_a_sign_out(new_context, case, watch, guard):
+    """The operator's log, whose who choice it may not have; the owner's key
+    pasted into the sign-in without a sign-out before it, as the page
+    takes it (askLogin, no start waiting): the log shown again asks for
+    the users for the owner, and the who choice is there. The
+    plain page kept the operator's empty list until a reload."""
+    ctx = new_context()
+    page = ctx.new_page()
+    guard.page = page
+    page.set_default_timeout(5000)
+    page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+    page.goto(URL)
+    sign_in(page, "operator", "op-pass")
+    assert not page.evaluate("hasCap('users')"), "the operator may not list the users"
+    show_view(page, "log")
+    assert wait_until(page, "Array.isArray(logState.users) && logState.users.length === 0", 5), "no users for the operator"
+    assert page.locator("#log-user").is_hidden(), "no who choice"
+    show_view(page, "tiles")
+    page.evaluate("() => { askLogin(); }")
+    assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the sign-in"
+    page.locator("#login-ways .login-way[data-way='key']").click()
+    page.locator("#login-token").fill(TOKEN)
+    with page.expect_response(lambda r: r.url.endswith("/api/v1/me")):
+        page.locator("#login-key-form button[type=submit]").click()
+    assert wait_until(page, "!document.getElementById('login-dialog').open && hasCap('users')", 10), "the owner in"
+    with page.expect_response(lambda r: r.url.endswith("/api/v1/users")) as info:
+        show_view(page, "log")
+    info.value.finished()
+    assert wait_until(page, "!document.getElementById('log-user').classList.contains('hidden')", 5), "the who choice, for the owner"
     show_view(page, "tiles")

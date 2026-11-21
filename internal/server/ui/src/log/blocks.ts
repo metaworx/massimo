@@ -99,3 +99,9 @@ export function blocks(view: LogLine[], lines: LogLine[], make: (id: number, lin
   made = next;
   return out;
 }
+
+/** forgetBlocks forgets every line's block, with the lines (a sign-out). */
+export function forgetBlocks(): void {
+  blockOf = new Map();
+  made = new Map();
+}

@@ -825,6 +825,14 @@ the oldest line, where an event of that same millisecond can be missed.
 A page that cannot load says so in the log, whatever is chosen;
 an answer that comes after **Clear**, another choice or another Cube is dropped,
 and another Cube in the header starts the log over with every device.
+A sign-out, and another user's sign-in after an expired session,
+forget the log of whoever was in but its choices, which are its address:
+its lines, the search typed, the users of the who choice, the commands' details,
+every Cube's rooms and the problems not yet seen;
+the who choice is also asked again where another user comes in without a sign-out,
+by a key pasted or as the first owner made on an open server;
+an answer still on its way lands nowhere,
+and the same user signed in again finds the log as it was.
 
 A warning or an error of any Cube's log, or of the server's,
 stays a problem until a later line settles it
@@ -2449,6 +2457,8 @@ put back where it stood as lines come in on top, the scroll kept at a full draw;
 (not over what the filter shows) and kept by the lines' keys,
 so that a new line draws its block alone, not every line,
 and a line keeps its block, and so its element, through any filter or load;
+`index.tsx`' `signedOut`, which `MassimoParts.signedOut` calls, forgets the log
+of whoever was in but its choices (UiParts D209);
 `Log.tsx` and `Line.tsx` the parts, with the markup, classes and ids of the partial
 and the template they replace, a line's alert and its command's detail read by the line
 itself. A line keeps its key while it is the same event:

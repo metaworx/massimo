@@ -25,6 +25,7 @@
 
 import { signal } from "@preact/signals";
 import { counter } from "../shared/counter";
+import { me } from "../shared/me";
 import { setAddress } from "../shared/pages";
 import { session, stillSession } from "../shared/session";
 import { LOG_COUNT, LOG_COUNT_RANGE, LOG_LEVELS, LOG_MAX_LINES, LOG_PAGE, LOG_POLL_MS, LOG_POLL_PAGES } from "./kinds";
@@ -542,12 +543,18 @@ async function logLoadCubeRooms(): Promise<void> {
   else renderLog();
 }
 
+/** Whom the who choice's users were read for, by login name, "" for nobody. */
+let usersFor = "";
+
 /**
- * logLoadUsers fills the who choice once, for a caller who may list the
- * users; for others, and on a server without users, it stays hidden.
+ * logLoadUsers fills the who choice once per user signed in,
+ * for a caller who may list the users; for others, and on a server
+ * without users, it stays hidden.
  */
 export async function logLoadUsers(): Promise<void> {
-  if (logState.users !== null) return;
+  const who = me.peek()?.user?.name || "";
+  if (logState.users !== null && usersFor === who) return;
+  usersFor = who; // another user signed in without a sign-out before (a key pasted, the first owner made): asked again
   logState.users = [];
   if (!state.me || state.me.mode !== "users" || !hasCap("users")) return;
   const n = session();
@@ -710,4 +717,31 @@ export function seen(id: number): void {
   setTimeout(() => {
     if (markFocus.peek() === to) markFocus.value = null;
   }, 0);
+}
+
+/**
+ * forgetLog forgets the log of the user who was signed in, at a sign-out
+ * and for another user's sign-in after a 401 (MassimoParts.signedOut):
+ * the lines and the paging, the text typed in the filter, the users of
+ * the who choice, the commands' details and which are open, every Cube's
+ * rooms; an answer still on its way is dropped (logState.gen, the
+ * session's number). The choices stay: they are the log's address.
+ */
+export function forgetLog(): void {
+  logState.gen++;
+  logState.lines = [];
+  logState.cursor = null;
+  logState.more = false;
+  logState.loading = false;
+  logState.polling = false;
+  logState.room = LOG_MAX_LINES;
+  logState.stick = true;
+  logState.filter = "";
+  logState.users = null;
+  logState.openCommands = new Set();
+  logState.commands = new Map();
+  logState.cubeRooms.clear();
+  markFocus.value = null;
+  view.value = [];
+  choiceCount.bump();
 }

@@ -25,7 +25,7 @@ import "./header";
 import type { HeaderPart } from "./header";
 import "./leaving";
 import type { LeavingPart } from "./leaving";
-import "./log";
+import { signedOut as logSignedOut } from "./log";
 import type { LogPart } from "./log";
 import { signedOut as notifySignedOut } from "./notify";
 import type { NotifyPart } from "./notify";
@@ -74,7 +74,8 @@ export interface MassimoParts {
    * link shown and its messages (profile/), the passwords typed there
    * going with its part, and the scheme editor with its draft (prefs/),
    * and the notifications' rules, devices, the name typed and a save
-   * still waiting (notify/).
+   * still waiting (notify/), and the log's lines, the filter typed, its
+   * users, the commands' details and every Cube's rooms (log/).
    */
   signedOut(): void;
   /**
@@ -144,5 +145,6 @@ register("signedOut", () => {
   profileSignedOut();
   prefsSignedOut();
   notifySignedOut();
+  logSignedOut();
 });
 window.MassimoParts = parts as unknown as MassimoParts;

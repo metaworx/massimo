@@ -18,16 +18,24 @@ import { rfLabel } from "../model/device";
 import { ownAddress } from "../shared/pages";
 import { mounter, register } from "../shared/region";
 import { logRangeStart, upperFirst } from "./text";
-import { logAlerts, loadLogAlerts, renderLogSign } from "./alerts";
+import { forgetBlocks } from "./blocks";
+import { forgetLogAlerts, logAlerts, loadLogAlerts, renderLogSign } from "./alerts";
 import { logHash, readLogHash } from "./address";
 import { LOG_KINDS } from "./kinds";
 import type { LogEvent, LogLine } from "./lines";
 import { Log } from "./Log";
 import { logState } from "./state";
 import {
-  appendLogEvent, fillLogSelects, loadLog, logChoicesChanged, logCubeChanged, logCubesPolled, logLineMatches, logLoadUsers, logOfChoices,
+  appendLogEvent, fillLogSelects, forgetLog, loadLog, logChoicesChanged, logCubeChanged, logCubesPolled, logLineMatches, logLoadUsers, logOfChoices,
   logPollSet, pollLog, pruneLogRange, renderLog,
 } from "./store";
+
+/** signedOut forgets the log of the user who was signed in, but its choices, which are its address (MassimoParts.signedOut, index.ts; UiParts D209). */
+export function signedOut(): void {
+  forgetLog();
+  forgetBlocks();
+  forgetLogAlerts();
+}
 
 const mount = mounter("logview", () => <Log />);
 
