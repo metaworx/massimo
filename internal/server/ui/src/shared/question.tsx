@@ -12,7 +12,7 @@
  * button that asked once it goes.
  */
 
-import { useEffect, useId, useRef, useState } from "preact/hooks";
+import { useId, useLayoutEffect, useRef, useState } from "preact/hooks";
 
 /**
  * useBusy is a request under way, for the button that sends it: busy
@@ -97,7 +97,8 @@ export function Question({ text, yes, no, onYes, onNo }: { text: string; yes: st
   const id = useId();
   const noRef = useRef<HTMLButtonElement>(null);
   const sending = useBusy();
-  useEffect(() => {
+  // in the drawing's own turn, as the plain question did, not after the next frame
+  useLayoutEffect(() => {
     noRef.current?.focus();
   }, []);
   return (
@@ -125,13 +126,14 @@ export function Question({ text, yes, no, onYes, onNo }: { text: string; yes: st
  * useAsk is a row of actions that asks in its own place: asking while
  * the question is shown; ask shows it, done takes it back and puts the
  * focus on the element ref holds, the button that asked, once the row is
- * drawn again.
+ * drawn again: in that drawing's turn (a layout effect), as the plain
+ * questions did at once, not after the next frame.
  */
 export function useAsk<E extends HTMLElement>() {
   const [asking, setAsking] = useState(false);
   const back = useRef(false);
   const ref = useRef<E>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!asking && back.current) {
       back.current = false;
       ref.current?.focus();

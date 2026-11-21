@@ -24,8 +24,9 @@ import { Select } from "../shared/field";
 import { Fold, FoldHead } from "../shared/fold";
 import { FileButton } from "../shared/file";
 import { BusyButton, Question, useAsk } from "../shared/question";
+import { fmtWhen } from "../shared/time";
 import {
-  boxOf, closePlan, compareBackup, deleteBackup, downloadNow, downloadStored, fmtWhen, foldUI, load, of, planFile, planStored, running, sendRestore, takeBackup,
+  boxOf, closePlan, compareBackup, deleteBackup, downloadNow, downloadStored, foldUI, load, of, planFile, planStored, running, sendRestore, takeBackup,
 } from "./store";
 
 /** Diff is what changed from the backup before: the planner's steps. */

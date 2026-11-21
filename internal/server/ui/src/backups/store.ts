@@ -24,6 +24,7 @@ import { counter } from "../shared/counter";
 import { liveMap } from "../shared/live";
 import { cubePath } from "../shared/path";
 import { session, stillSession } from "../shared/session";
+import { fmtWhen } from "../shared/time";
 
 /** A restore shown: its title, the stored backup or the file's body and type, and its plan. */
 export interface Plan {
@@ -93,12 +94,6 @@ export function say(place: string, serial: string, text: string, ok?: boolean, n
 /** running says whether a restore sent to the Cube runs: its Restore… and Restore from file… are off meanwhile, in both places. */
 export function running(serial: string): boolean {
   return of(serial).run?.state === "running";
-}
-
-/** fmtWhen is an API time as date and time. */
-export function fmtWhen(iso: string): string {
-  return new Intl.DateTimeFormat(i18n.lang, { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false })
-    .format(new Date(iso));
 }
 
 /** loadBackups reads a Cube's list; a 503 says that the server keeps none of it (no row in its store). */
