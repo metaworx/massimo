@@ -25,6 +25,8 @@ import "./header";
 import type { HeaderPart } from "./header";
 import "./leaving";
 import type { LeavingPart } from "./leaving";
+import { signedOut as notifySignedOut } from "./notify";
+import type { NotifyPart } from "./notify";
 import { signedOut as prefsSignedOut } from "./prefs";
 import type { PrefsPart } from "./prefs";
 import { signedOut as profileSignedOut } from "./profile";
@@ -44,12 +46,9 @@ import { iconsChanged } from "./shared/look";
 import { parts, register } from "./shared/region";
 import { forgetRepairs } from "./shared/repair";
 import { newSession } from "./shared/session";
-import { fmtWhen } from "./shared/time";
 
 /** The parts the plain code calls, by region. */
 export interface MassimoParts {
-  /** An API time as date and time (shared/time.ts), for the plain fmtWhen of backup.js, which notify.js calls until AP UiParts' Block 13. */
-  fmtWhen(iso: string): string;
   /** The page's language changed (app.js applyLanguage): every part draws its texts again. */
   language(): void;
   /** The icons chosen for the window and the radio changed (theme.js redrawSigns): every sign draws them again. */
@@ -70,7 +69,9 @@ export interface MassimoParts {
    * (maintenance/), and System info with its readings and its clock
    * (sysinfo/), and who was in (shared/me.ts) with My profile's user, its
    * link shown and its messages (profile/), the passwords typed there
-   * going with its part, and the scheme editor with its draft (prefs/).
+   * going with its part, and the scheme editor with its draft (prefs/),
+   * and the notifications' rules, devices, the name typed and a save
+   * still waiting (notify/).
    */
   signedOut(): void;
   /**
@@ -89,6 +90,8 @@ export interface MassimoParts {
   header: HeaderPart;
   /** Leaving the page, and signing out, while a settings form has changes not saved: the dialog that lists them (leaving/). */
   leaving: LeavingPart;
+  /** 👤 → Notifications: the rules, this browser and the devices (notify/). */
+  notify: NotifyPart;
   /** My settings: their rows and the Appearance card with the scheme editor, drawn again where the settings were applied (prefs/). */
   prefs: PrefsPart;
   /** The rooms: a tile per room with its device list (rooms/). */
@@ -110,7 +113,6 @@ declare global {
   }
 }
 
-register("fmtWhen", fmtWhen);
 register("language", languageChanged);
 register("icons", iconsChanged);
 register("me", meChanged);
@@ -133,5 +135,6 @@ register("signedOut", () => {
   meChanged(null); // My profile's parts go, with what is typed in them
   profileSignedOut();
   prefsSignedOut();
+  notifySignedOut();
 });
 window.MassimoParts = parts as unknown as MassimoParts;

@@ -37,7 +37,7 @@ var uiFiles embed.FS
 // feature, by the marker of index.html they replace
 // (<!-- partials: system -->), in their order there: the header, the
 // home notice, the first owner's form, the panels of My settings (its
-// rows first), of Notifications, the panels of System
+// rows first), the panels of System
 // settings (its section cards in three markers: before, in and after the
 // cards that flow in two columns), the cards of Maintenance, System
 // info's card, the Cube page, the House tile, the devices without a
@@ -52,7 +52,6 @@ var uiPartials = []struct {
 	{"home", []string{"home.html"}},
 	{"setup", []string{"setup.html"}},
 	{"prefs", []string{"prefs.html", "appearance.html", "page.html"}},
-	{"notify", []string{"notify.html"}},
 	{"system", []string{"cubes.html"}},
 	{"system-flow", []string{"users.html", "providers.html", "integrations.html", "roles.html", "capabilities.html"}},
 	{"system-end", []string{"backup.html"}},

@@ -52,20 +52,20 @@ export interface Preference {
 }
 
 export interface PushSubscription {
-  id?: number;
-  endpoint?: string;
-  label?: string;
+  id: number;
+  endpoint: string;
+  label: string;
   /** @format date-time */
-  created_at?: string;
+  created_at: string;
   /**
    * The last message the push service took; absent before the first
    * @format date-time
    */
   last_ok_at?: string;
   /** Failed deliveries since then */
-  failures?: number;
+  failures: number;
   /** Made with the caller's session or key */
-  current?: boolean;
+  current: boolean;
 }
 
 /**

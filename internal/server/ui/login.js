@@ -722,6 +722,7 @@ async function logout() {
   for (const key of takeScheduled()) {
     await apiRequest("PUT", "api/v1/me/preferences/" + key, preferenceBody(key)).catch(() => {});
   }
+  await sendNotifySave(); // notify.js: a notification rule changed in the last second, the same way (D205)
   if (me && me.mode === "users" && me.token && me.token.kind === "session") {
     try {
       await apiRequest("POST", "api/v1/logout");

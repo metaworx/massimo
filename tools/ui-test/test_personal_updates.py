@@ -15,9 +15,10 @@ import os
 import pytest
 
 from conftest import TOKEN, URL, api_call
-from helpers import frames, hold, mark, open_main_menu, owner_page, replaced, show_view, wait_held, wait_until
+from helpers import frames, hold, mark, open_main_menu, owner_page, replaced, show_view, undo, wait_held, wait_until
 from test_admin_updates import menu_mark, out
 from test_login import sign_in
+from test_notifications import FAKE_PUSH, reload_with
 from test_oidc import CLIENT_ID, SECRET, provider  # noqa: F401, the fixture
 from test_unsaved import expire
 
@@ -413,3 +414,237 @@ def test_the_next_user_finds_no_scheme_being_edited(new_context, case, watch, gu
     show_view(page, "prefs")
     assert page.locator("#scheme-editor").is_hidden(), "the editor closed"
     assert not page.evaluate("MassimoParts.leaving.changes()"), "nothing left to lose"
+
+
+# --- Notifications ---------------------------------------------------------
+
+WINDOW = "#notify-rules .notify-row[data-kind=window_open] input[type=number]"
+
+
+def push_read(page):
+    """A wait for the card's read of the devices (GET …/me/push)."""
+    return page.expect_response(lambda r: r.request.method == "GET" and r.url.endswith("/api/v1/me/push"))
+
+
+def notify_shown(page):
+    """Notifications shown, its rules and devices read."""
+    with push_read(page):
+        show_view(page, "notify")
+    page.locator(WINDOW).wait_for()
+
+
+def test_a_rule_being_written_stays_when_shown_again(page, case):
+    """A window's delay typed out of bounds, refused on its field and not
+    sent, the focus in it: the personal page shown again reads the rules
+    and devices again, and the field is the element it was, with what is
+    typed, its mark and the range before it; the name of this device typed
+    stays too, in a browser that can be told (conftest's fake push).
+    Nothing is sent."""
+    reload_with(page, FAKE_PUSH)
+    notify_shown(page)
+    box = page.locator(WINDOW)
+    box.fill("2000")
+    box.dispatch_event("change")
+    row = page.locator("#notify-rules .notify-row[data-kind=window_open]")
+    row.locator(".warn-text").wait_for(state="visible")
+    label = page.locator("#notify-label")
+    label.fill("Typed device name")
+    box.focus()
+    sels = [WINDOW, "#notify-rules .notify-row[data-kind=frost] input[type=checkbox]", "#notify-label"]
+    mark(page, sels)
+    writes = []
+    page.on("request", lambda r: writes.append(r.url) if r.method != "GET" and "/api/v1/me/" in r.url else None)
+    with push_read(page):
+        page.evaluate("() => document.dispatchEvent(new CustomEvent('viewshown', { detail: 'me' }))")  # what showing the page does
+    frames(page)
+    assert replaced(page, sels) == [], f"the same elements after the read: {replaced(page, sels)}"
+    assert box.input_value() == "2000", "the delay typed kept"
+    assert box.get_attribute("aria-invalid") == "true" and row.locator(".warn-text").is_visible(), "still marked, the range before it"
+    assert page.evaluate("document.activeElement === document.querySelector(%r)" % WINDOW), "the focus where it was"
+    assert label.input_value() == "Typed device name", "the name typed kept"
+    assert writes == [], f"nothing sent: {writes}"
+    box.fill("30")
+    box.dispatch_event("change")
+    row.locator(".warn-text").wait_for(state="hidden")
+    show_view(page, "tiles")
+
+
+@pytest.mark.parametrize("how", ["sign-out", "expired"])
+def test_the_next_user_finds_no_device_name_typed(new_context, case, watch, guard, how):
+    """The owner's name of this device typed, in a browser that can be
+    told (the fake push); the session ends, and the operator signed in
+    finds the field empty."""
+    page = owner_page(new_context, guard, watch, URL, TOKEN)
+    reload_with(page, FAKE_PUSH)
+    notify_shown(page)
+    label = page.locator("#notify-label")
+    label.fill("Typed by the first")
+    across(page, how)
+    notify_shown(page)
+    assert label.input_value() == "", "the name typed is gone"
+    nothing_of_the_first(page)
+
+
+OWNERS_DEVICE = [{"id": 990001, "endpoint": "http://127.0.0.1:9/push/ui-test/owner", "label": "The first user's phone",
+                  "created_at": "2026-11-20T08:00:00Z", "failures": 0, "current": False}]
+
+
+@pytest.mark.parametrize("how", ["sign-out", "expired"])
+def test_a_late_read_of_the_devices_reaches_nothing_of_the_next_user(new_context, case, watch, guard, how):
+    """The owner's devices read for the card and held while the session
+    ends; answered once the operator is in, with a device of the owner's,
+    it draws nothing of it."""
+    page = owner_page(new_context, guard, watch, URL, TOKEN)
+    held = []
+    hold(page, "**/api/v1/me/push", "GET", held, [])
+    try:
+        show_view(page, "notify")
+        assert wait_held(page, held), "the devices asked for"
+        across(page, how)
+        with page.expect_response(lambda r: r.request.method == "GET" and r.url.endswith("/api/v1/me/push")) as answer:
+            for r in held:
+                r.fulfill(status=200, content_type="application/json", body=json.dumps(OWNERS_DEVICE))
+        answer.value.finished()  # its body read by the page too
+        frames(page)
+        frames(page)  # the read's own drawing, where it drew one
+        assert page.locator(".notify-device", has_text="The first user's phone").count() == 0, "no device of the first user"
+    finally:
+        page.unroute("**/api/v1/me/push")
+
+
+STALE = "#notify-rules .notify-row[data-kind=device_stale] input[type=checkbox]"
+
+
+def notify_puts(page):
+    """The page's PUTs of …/me/preferences/notify from now on: (the token it carried, its body)."""
+    puts = []
+    page.on("request", lambda r: puts.append((r.headers.get("authorization", ""), r.post_data_json))
+            if r.method == "PUT" and r.url.endswith("/api/v1/me/preferences/notify") else None)
+    return puts
+
+
+def forget_rules():
+    undo("the owner's notify preference", lambda: api_call("DELETE", "api/v1/me/preferences/notify"))
+
+
+def pause(page):
+    """Playwright's clock paused at the page's now: the rule's second does
+    not pass by itself. Under it the test drives the page by evaluate and
+    by Python's own waits (wait_until), none of which waits on a timer or
+    a frame of the page's."""
+    page.clock.pause_at(page.evaluate("Date.now()") + 1)
+
+
+def flip_stale(page):
+    """The device_stale rule's switch flipped, as a click does, without the
+    click's own waits for the page's frames."""
+    page.locator(STALE).evaluate("(i) => i.click()")
+
+
+def test_a_rule_changed_just_before_sign_out_is_sent_first(new_context, case, watch, guard):
+    """A rule changed and Sign out within its second (D205), the clock
+    paused so that the second cannot pass by itself: the change is sent
+    once, under the owner's token, as Sign out ends the session; the
+    operator signed in afterwards, the clock running again, gets no PUT of
+    it."""
+    page = owner_page(new_context, guard, watch, URL, TOKEN, clock=True)
+    try:
+        notify_shown(page)
+        puts = notify_puts(page)
+        pause(page)
+        flip_stale(page)
+        page.evaluate("() => { logout(); }")  # Sign out, not waited for: it ends in the sign-in dialog
+        assert wait_until(page, "document.getElementById('login-dialog').open", 5), "signed out"
+        assert len(puts) == 1 and puts[0][0] == "Bearer " + TOKEN, f"one PUT, under the owner's token: {[p[0][:12] for p in puts]}"
+        assert puts[0][1]["device_stale"]["on"] is True, f"the change itself: {puts[0][1]}"
+        page.clock.resume()
+        sign_in(page, "operator", "op-pass")  # waits a second after the stream opens: a save left waiting would have gone by then
+        assert len(puts) == 1, f"no PUT for the operator: {len(puts)}"
+    finally:
+        forget_rules()
+
+
+def test_a_rule_changed_before_another_users_sign_in_is_dropped(new_context, case, watch, guard):
+    """A rule changed, the session taken as expired within its second (the
+    clock paused until the sign-in has opened), the operator signed in:
+    nothing of it is sent, and the operator's card shows the rules the
+    server holds for the operator."""
+    page = owner_page(new_context, guard, watch, URL, TOKEN, clock=True)
+    try:
+        notify_shown(page)
+        puts = notify_puts(page)
+        pause(page)  # the rule's second cannot end before the 401 opens the sign-in
+        flip_stale(page)
+        expire(page)  # the sign-in open: holdPushes has taken the rule's save
+        page.clock.resume()
+        sign_in(page, "operator", "op-pass")
+        with page.expect_response(lambda r: r.request.method == "GET" and r.url.endswith("/api/v1/me/preferences")) as prefs:
+            notify_shown(page)
+        held = ((prefs.value.json() or {}).get("notify") or {}).get("device_stale", {}).get("on", False)
+        assert puts == [], f"nothing sent: {puts}"
+        assert page.locator(STALE).is_checked() == held, "the operator's own rule shown"
+    finally:
+        forget_rules()
+
+
+@pytest.mark.clock
+def test_a_read_that_finds_a_change_waiting_keeps_it(page, case):
+    """The personal page shown again, the rules' read held; the clock
+    paused and a rule changed, its save waiting; the read answers: it keeps
+    the rule as changed and sends nothing; the second run on, the change
+    sent is it."""
+    notify_shown(page)
+    try:
+        was = page.locator(STALE).is_checked()
+        held = []
+        hold(page, "**/api/v1/me/preferences", "GET", held, [])
+        puts = notify_puts(page)
+        page.evaluate("() => document.dispatchEvent(new CustomEvent('viewshown', { detail: 'me' }))")  # what showing the page does
+        assert wait_held(page, held), "the rules asked for"
+        pause(page)  # the save's second cannot pass before the read has answered
+        flip_stale(page)
+        with page.expect_response(lambda r: r.request.method == "GET" and r.url.endswith("/api/v1/me/preferences")) as answer:
+            for r in held:
+                r.continue_()
+        answer.value.finished()
+        page.clock.run_for(100)  # the read's drawing, not the save
+        assert page.locator(STALE).is_checked() != was, "the change kept through the read"
+        assert puts == [], f"nothing sent before the second: {puts}"
+        with page.expect_request(lambda r: r.method == "PUT" and r.url.endswith("/api/v1/me/preferences/notify")):
+            page.clock.run_for(1000)
+        assert len(puts) == 1 and puts[0][1]["device_stale"]["on"] is (not was), f"the change sent: {puts}"
+    finally:
+        page.clock.resume()
+        page.unroute("**/api/v1/me/preferences")
+        forget_rules()
+    show_view(page, "tiles")
+
+
+STORED = {"notify": {"window_open": {"on": True, "after_min": 45}, "device_stale": {"on": True}}}
+
+
+def test_the_rules_wait_for_their_first_read(new_context, case, watch, guard):
+    """The card shown, its first read of the rules held: the switches and
+    the values are off, so that nothing is changed or sent before it; the
+    read answered, they show the rules stored and are on."""
+    page = owner_page(new_context, guard, watch, URL, TOKEN)
+    held = []
+    hold(page, "**/api/v1/me/preferences", "GET", held, [])
+    puts = notify_puts(page)
+    try:
+        show_view(page, "notify")
+        assert wait_held(page, held), "the rules asked for"
+        page.locator(STALE).wait_for(state="attached")
+        assert page.locator("#notify-rules input[type=checkbox]:not([disabled])").count() == 0, "every switch off"
+        assert page.locator("#notify-rules input[type=number]:not([disabled])").count() == 0, "every value off"
+        with page.expect_response(lambda r: r.request.method == "GET" and r.url.endswith("/api/v1/me/preferences")) as answer:
+            for r in held:
+                r.fulfill(status=200, content_type="application/json", body=json.dumps(STORED))
+        answer.value.finished()
+        frames(page)
+        frames(page)
+        assert page.locator(STALE).is_checked() and page.locator(STALE).is_enabled(), "the stored rule, on"
+        assert page.locator(WINDOW).input_value() == "45", "the stored delay"
+        assert puts == [], f"nothing sent: {puts}"
+    finally:
+        page.unroute("**/api/v1/me/preferences")

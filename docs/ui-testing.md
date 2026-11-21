@@ -1,4 +1,4 @@
-# Testing the web UI (v1.16.0)
+# Testing the web UI (v1.17.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -712,6 +712,8 @@ arrive from the server at a sign-in (`applyStoredSettings()`),
 which failed on the page before the move: `applySettings` set the poll typed back;
 the Appearance card too, with the scheme editor open,
 which failed as well: `applyAppearance` made the editor anew.
+Notifications are checked around the personal page shown again,
+which failed on the page before the move: `notify.js` made the rules and the devices anew.
 
 ### Taking a region off the list
 

@@ -1067,11 +1067,13 @@ also while no page is open.
   the Cube out of reach (after 10 min) and back,
   and, off by default, a device that sends no news, a device paired,
   a new Cube on the network and a new version of Massimo.
-  A change is saved a second after the last one;
+  A change is saved a second after the last one,
+  at once where you sign out within that second;
   a delay is 1 to 1440 minutes, the threshold −10 to 20 °C,
   and a value outside is not saved:
   its box turns red, with the range in amber before it,
-  until it holds one inside, whatever a save meanwhile says.
+  until it holds one inside, whatever a save meanwhile says,
+  and what is typed stays when the page is shown again.
   One kind notifies once per device per half hour,
   a device's error once per flag:
   a link error set while the communication error lasts notifies too.
@@ -1949,14 +1951,15 @@ a script for each region of the page, in the order the page loads them:
   which the first owner's form shares;
   `providers.js`, the enabled sign-in providers and the plain name of
   Sign-in providers; My profile has none, a part alone (`ui/src/profile/`);
-  `backup.js`, the plain names of Backup and restore (`ui/src/backups/`),
-  and `fmtWhen`, which `notify.js` calls until Block 13 (`shared/time.ts`);
+  `backup.js`, the plain names of Backup and restore (`ui/src/backups/`);
   `roles.js`, the plain name of Roles and Capabilities (`ui/src/admin/`);
   Integrations has none, a part alone (`ui/src/integrations/`);
 - `theme.js`, the mode and the colour schemes, applied as the script loads;
   `appearance.js`, the plain name of the Appearance card, which applies the appearance
   and calls its part (`ui/src/prefs/`), and the system's changes it follows;
-- `notifytext.js` and `notify.js`, the notifications.
+- `notifytext.js`, a notification's text; `notify.js`, the plain names of the
+  notifications' card, which call its part (`ui/src/notify/`), the service worker's
+  language and the toast of a notification.
 
 A script's top-level code runs as it loads, and the `DOMContentLoaded`
 listeners in the order the scripts register them,
@@ -2057,7 +2060,7 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `Select` | `field.tsx` | a row with a select (`selectInput`), its options as `fillOptions` takes them; with `row={false}` the select alone, in a row of the caller's, which draws its notice | `label`, `id`, `name`, `options` (`[value, label, disabled]` or `{ group, options }`), `value` and `onChange`, or `draft` and `show`; `row`, `wide`, `unit`, `hint`, `hintId` (the hint's id, which the select names as its description: the update channel's note, which changes with the choice), `help`, `cls`, `disabled`, `before` (between the label with its help and the select: a drawing's preview), `after` (after the select in its row: the language's note of a machine translation) |
 | `DateTime` | `field.tsx` | a date and time field (`datetime-local`), its value as the input takes it | `value`, `set`, `id`, `cls`, `step`, `required`, `disabled`, `inputRef` |
 | `localOf`, `isoOf` | `time.ts` | a `DateTime`'s value and the API's time as each other, for a field that shows a stored end and sends it (a user's end); the draft compares the field's minute, all it holds | `iso`; `local` |
-| `fmtWhen` | `time.ts` | an API time as date and time in the page's language, the hour of 24 (a backup's time); the plain page has it as `MassimoParts.fmtWhen`, through `fmtWhen` of `backup.js`, for the notifications' card (`notify.js`) until Block 13 | `iso` |
+| `fmtWhen` | `time.ts` | an API time as date and time in the page's language, the hour of 24 (a backup's time, a device's in Notifications) | `iso` |
 | `Switch` | `field.tsx` | a checkbox drawn as a switch (`switchEl`), in its own row with its help where asked (`fieldRow` without a label) | `name`, `label`, `checked` and `onChange`, or `draft` and `show`; `row`, `help`, `rowCls` (classes its own row adds, a capability's `needs-…`), `cls` (the switch's classes), `id`, `disabled`, `title`, `aria` (its name where `label` is empty, which draws no text: My settings' "only on this device"), `data` (the checkbox's `data-` attributes), `badge` (inside the switch after its label, a capability's state), children after the switch |
 | `Choices` | `choices.tsx` | a choice of several among a list: a group of switches under its heading, All and None as buttons where asked (the configuration's Copy tab), under a legend (an integration's maximum) or without a heading (a role's capabilities, Capabilities for every role), or of checkboxes, All a checkbox first (`look` `check`, the House panel); an option locked shows whether it is chosen and is off (the owner's set, a capability while its request runs) | `title`, `legend` (a fieldset under it), `label` (the group's name for a screen reader), `id`, `cls` (a class the group adds, `cap-grid`, `integration-caps`), `options` (`[value, label, disabled, { title, badge, lock }]`, the last for switches alone), `chosen`, `set(chosen)`, `all` (`{ all, none }`, their labels, `none` left out for All alone), `empty` (said where there is no option), `look` (`switch`, the default, or `check`) |
 | `ChoiceGroup` | `choices.tsx` | the frame of a choice of several drawn as switches, which `Choices` is drawn with and a region uses where each switch is a part of its own (Capabilities for every role, each switch saved at once) | `id`, `cls`, `label` (the group's name for a screen reader), `legend` (a fieldset under it), `head`, the switches as children |
@@ -2162,8 +2165,6 @@ the pairing's `cubeRooms` (`cubes/flow.ts`), the log's `logState.cubeRooms` and
 the data with Block 15;
 the stepped setpoint's end, `apiUntil` of `rooms.js`, which stays with its users
 beside `time.ts`;
-`FileButton` for the Appearance card's import (`appearance.js`, Block 13), which
-needs an id and a name for its input that follows the language;
 a room's write's outcome in words, built in three places
 (`House.tsx` `houseRequests`, `rooms.js` `resultText`, `configuration.ts` `sendCopy`);
 a failed save's error with its unsaved form's item (its tooltip),
@@ -2419,6 +2420,31 @@ name saving only where it would (UiParts D204), Reset putting both back,
 a hex field's text typed
 or refused kept by the field; closing the editor drops the draft and forgets its
 form, and so does a sign-out.
+Notifications (`ui/src/notify/`, AP UiParts Block 13) is a part alone, drawn
+into `#notify-sec` as `parts.js` loads and read each time the personal page is
+shown, the line emptied first, as `notify.js` read it; it registers `notify`
+(`render`, `save`, `takeSave`), which `notify.js` calls as `renderNotify` at a
+change of language and as `saveNotifyRules` and `takeNotifySave`, which
+`login.js` `holdPushes` and `resumePushes` hold and send again around a sign-in,
+as before;
+`store.ts` holds the kinds with their defaults, the rules once read, the
+devices, this browser's endpoint, the name of this device typed and the line
+with whose outcome it shows;
+`send.ts` what it reads and sends, line for line as `notify.js` did, a read that
+finds a change of the rules waiting keeping the rules shown, which that change
+sends;
+`Notify.tsx` the card: a rule's switch, saved a second after the last change,
+its delay or threshold a draft of the rule shown with its limit (`markRange`),
+taken as the field is left;
+a rule has no Save, so the card has no marks (UnsavedMarks D6-A).
+The rules are off until this session's first read has answered, so that a
+change does not send the defaults over the rules the user has.
+Sign out sends a change still waiting at once, under the user's own token, as it
+sends the waiting settings (`sendNotifySave`, UiParts D205); for another user
+after a 401 `holdPushes` takes it and drops it, for the same user sends it again.
+At a sign-out, and for another user after a 401, the rules, the devices, the
+name typed and the line are forgotten; an answer after it is dropped.
+The toast and the service worker's language stay plain in `notify.js`.
 My profile (`ui/src/profile/`, AP UiParts Block 13) is a part alone, drawn into
 `#profile-sec` as `parts.js` loads, for the user `MassimoParts.me` names
 (`shared/me.ts`, which `applyCaps` of `login.js` calls at every read of who is

@@ -357,7 +357,16 @@ hence `failed_checks_forgotten`.
   a folded card, ☰'s mark and Personal settings' disk, and Reset clears them;
   after a sign-out, and for another user after a 401, no scheme is being
   edited; Save as and Enter in the name save only a change (D204), and
-  another scheme chosen or an import drops the draft.
+  another scheme chosen or an import drops the draft;
+  a notification's delay refused on its field stays, the element it was with
+  its mark and the focus, and the name of this device typed too, through the
+  personal page shown again, nothing sent; after a sign-out, and for another
+  user after a 401, the name typed is gone, and a read of the devices that
+  answers late draws nothing; a rule changed just before Sign out is sent
+  once, under the owner's token, and nothing for the operator after it
+  (D205), and one changed before another user's sign-in after a 401 is not
+  sent; a read that finds a change waiting keeps it and sends it; the rules
+  are off until the first read has answered.
 - `test_stream.py`:
   the event stream opens with tickets only, never with the token,
   and after a refused stream (the test hands out a used ticket first,

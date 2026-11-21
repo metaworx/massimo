@@ -657,6 +657,10 @@ function showResult(el, text, ok) {
 // app.js).
 const failedLines = new Set();
 
+// markRange's last caller, the notifications' card, is a part since AP
+// UiParts Block 13 (ui/src/shared/field.tsx Limit); nothing calls it now,
+// and it goes with the builders nobody calls (Block 15).
+
 // markRange marks a number field by what its required, min, max and step
 // allow, or by ok where the caller judges the value itself (the
 // notifications' threshold takes any number in its range, not only its

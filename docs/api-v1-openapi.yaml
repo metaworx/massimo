@@ -4040,6 +4040,7 @@ components:
         version: {type: integer, description: Counts the writes of the key; a later write wins}
     PushSubscription:
       type: object
+      required: [id, endpoint, label, created_at, failures, current]
       properties:
         id: {type: integer}
         endpoint: {type: string}

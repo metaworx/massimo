@@ -10,8 +10,7 @@
  * Moved from users.js with System settings → Users (AP UiParts, Block
  * 10); rooms.js apiUntil, the stepped setpoint's end, stays with its
  * users. An API time as date and time, fmtWhen, moved from backup.js
- * with Backup and restore; the plain page calls it as fmtWhen of
- * backup.js (MassimoParts.fmtWhen) until Block 13.
+ * with Backup and restore; the notifications' card reads it too.
  */
 
 /** localOf is an API time as a DateTime's value, "" for none (localDateTimeValue of app.js). */
