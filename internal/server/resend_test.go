@@ -35,26 +35,16 @@ func resendOptions(within, slotWait time.Duration) func(*Options) {
 // oldest first.
 func (r *driftRig) unconfirmedOutcomes(outcome string) []event {
 	r.t.Helper()
-	var out []event
-	for _, ev := range r.events("unconfirmed") {
-		if ev.Summary["outcome"] == outcome {
-			out = append(out, ev)
-		}
-	}
-	return out
+	return logLines(r.t, logStart(r.ts), unconfirmedOf(outcome))
 }
 
-// waitOutcome waits until the log has n unconfirmed events with outcome
-// and returns the newest.
+// waitOutcome waits until the log has n unconfirmed events with outcome,
+// and no more, and returns the newest.
 func (r *driftRig) waitOutcome(outcome string, n int) event {
 	r.t.Helper()
-	var evs []event
-	testkit.Eventually(r.t, "an unconfirmed event, "+outcome, func() bool {
-		evs = r.unconfirmedOutcomes(outcome)
-		return len(evs) >= n
-	})
-	if len(evs) != n {
-		r.t.Fatalf("%d %s events, want %d: %+v", len(evs), outcome, n, evs)
+	evs, next := logAfterN(r.t, logStart(r.ts), "an unconfirmed event, "+outcome, n, unconfirmedOf(outcome))
+	if more := logLines(r.t, next, unconfirmedOf(outcome)); len(more) != 0 {
+		r.t.Fatalf("%d %s events, want %d: %+v", n+len(more), outcome, n, append(evs, more...))
 	}
 	return evs[n-1]
 }
@@ -179,10 +169,10 @@ func TestUnconfirmedRoomCommandResentBehindTheHold(t *testing.T) {
 	r := startDrift(t, nil, resendOptions(400*time.Millisecond, 1500*time.Millisecond))
 	r.fc.SetDeaf(0x0a0205, true)
 	r.fc.SetFreeSlots(2) // the write's answer: 2 free, so that its re-send waits
-	sent := r.lines.Mark()
+	sent, m := r.lines.Mark(), logMark(t, r.ts)
 	r.setRoom2("22")
 	r.waitOutcome("not_confirmed", 1)
-	testkit.Eventually(t, "the queue's hold", func() bool { return len(r.events("hold")) > 0 })
+	logAfter(t, m, "the queue's hold", logLine("hold", ""))
 	if got := r.radioSince(sent); len(got) != 1 {
 		t.Fatalf("sent before the hold ended: %v", got)
 	}

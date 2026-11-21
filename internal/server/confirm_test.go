@@ -56,29 +56,24 @@ func confirmDevice(t *testing.T, ts *httptest.Server, rf string) view.Device {
 	return d
 }
 
-// unconfirmedEvents are the log's unconfirmed events of an outcome,
-// newest first.
-func unconfirmedEvents(t *testing.T, ts *httptest.Server, outcome string) []event {
-	t.Helper()
-	var evs, out []event
-	getJSON(t, ts, "", confirmBase+"/log?limit=500", &evs)
-	for _, e := range evs {
-		if e.Kind == "unconfirmed" && e.Summary["outcome"] == outcome {
-			out = append(out, e)
-		}
-	}
-	return out
+// unconfirmedOf matches the log's unconfirmed events of an outcome.
+func unconfirmedOf(outcome string) func(event) bool {
+	return func(e event) bool { return logLine("unconfirmed", "")(e) && e.Summary["outcome"] == outcome }
 }
 
-// waitUnconfirmed waits for the first unconfirmed event of an outcome.
+// unconfirmedEvents are the log's unconfirmed events of an outcome,
+// oldest first.
+func unconfirmedEvents(t *testing.T, ts *httptest.Server, outcome string) []event {
+	t.Helper()
+	return logLines(t, logStart(ts), unconfirmedOf(outcome))
+}
+
+// waitUnconfirmed waits for the log's first unconfirmed event of an
+// outcome.
 func waitUnconfirmed(t *testing.T, ts *httptest.Server, outcome string) event {
 	t.Helper()
-	var found []event
-	testkit.Eventually(t, "an unconfirmed event, "+outcome, func() bool {
-		found = unconfirmedEvents(t, ts, outcome)
-		return len(found) > 0
-	})
-	return found[len(found)-1]
+	ev, _ := logAfter(t, logStart(ts), "an unconfirmed event, "+outcome, unconfirmedOf(outcome))
+	return ev
 }
 
 // openWrites is how many writes the runtime has open.
@@ -374,8 +369,10 @@ func TestProxyConfigWriteConfirmed(t *testing.T) {
 		t.Fatal(err)
 	}
 	rt.proxyWrote(c) // as if the Cube had taken it
-	var evs []event
-	testkit.Eventually(t, "three warnings", func() bool { evs = unconfirmedEvents(t, ts, "not_confirmed"); return len(evs) == 3 })
+	evs, next := logAfterN(t, logStart(ts), "three warnings", 3, unconfirmedOf("not_confirmed"))
+	if more := logLines(t, next, unconfirmedOf("not_confirmed")); len(more) != 0 {
+		t.Fatalf("%d warnings more than three: %+v", len(more), more)
+	}
 	for _, ev := range evs {
 		if ev.Summary["source"] != "proxy" || ev.Summary["write"] != "config" || ev.Summary["target"] != "room:2" || ev.Device == "" {
 			t.Fatalf("event %+v", ev)

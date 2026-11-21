@@ -14,7 +14,6 @@ import (
 	"testing"
 
 	"go.metaworx.ch/massimo/internal/store"
-	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 )
 
@@ -49,11 +48,12 @@ func TestLogEventsCarrySerial(t *testing.T) {
 	if v := waitConnected(t, ts, "KEQ0000100"); v != nil {
 		cubeRF, _ = v["rf_address"].(string)
 	}
-	var evs []event
-	testkit.Eventually(t, "a config event per device and the Cube's own", func() bool {
-		_, evs = logOf(t, ts, "?kind=config&limit=1000&level=debug") // the greeting's own lines
-		return len(evs) >= len(serials)+1
-	})
+	// The greeting's own lines, which the start has through the pump and
+	// in the store.
+	_, evs := logOf(t, ts, "?kind=config&limit=1000&level=debug")
+	if len(evs) < len(serials)+1 {
+		t.Fatalf("%d config events, want one per device and the Cube's own, %d: %+v", len(evs), len(serials)+1, evs)
+	}
 	_, states := logOf(t, ts, "?kind=state&limit=1000&level=debug")
 	own := 0
 	for _, e := range append(evs, states...) {
@@ -92,23 +92,14 @@ func TestLogForgottenDeviceHasSerial(t *testing.T) {
 		t.Fatalf("the device without serial or name: %v", dev)
 	}
 	received := cubewatch.Lines(fc)
-	sent := received.Mark()
+	sent, m := received.Mark(), logMark(t, ts)
 	if code, out := do(t, ts, "DELETE", base+"/devices/"+strings.ToLower(serial), ""); code != 200 || out["ok"] != true {
 		t.Fatalf("remove by serial: %d %v", code, out)
 	}
 	if got := lineStrings(received.Since(sent, cubewatch.Except('l'))); len(got) == 0 || !containsLine(got, "t:01,1,CgEK") {
 		t.Fatalf("the removal sent %v, want its t:", got)
 	}
-	var gone *event
-	testkit.Eventually(t, "device_forgotten in the log", func() bool {
-		_, evs := logOf(t, ts, "?kind=device_forgotten")
-		for i := range evs {
-			if evs[i].Device == "0a010a" {
-				gone = &evs[i]
-			}
-		}
-		return gone != nil
-	})
+	gone, _ := logAfter(t, m, "device_forgotten in the log", logLine("device_forgotten", "0a010a"))
 	if gone.Serial != serial || gone.Source != "device" {
 		t.Fatalf("the event: serial %q source %q, want %q", gone.Serial, gone.Source, serial)
 	}
@@ -196,11 +187,12 @@ func TestLogDeviceFilterBySerial(t *testing.T) {
 	t.Parallel()
 	ts := startServer(t, stored()).ts
 	serials := serialsOf(t, ts, "")
-	var byRF []event
-	testkit.Eventually(t, "the device's events", func() bool {
-		_, byRF = logOf(t, ts, "?device=0a010d")
-		return len(byRF) > 0
-	})
+	// The greeting's state line, which the start has through the pump and
+	// in the store.
+	_, byRF := logOf(t, ts, "?device=0a010d")
+	if len(byRF) == 0 {
+		t.Fatal("no event of 0a010d after the start")
+	}
 	for _, q := range []string{serials["0a010d"], strings.ToLower(serials["0a010d"])} {
 		code, bySN := logOf(t, ts, "?device="+q)
 		if code != 200 || len(bySN) != len(byRF) {

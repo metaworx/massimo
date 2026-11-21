@@ -61,15 +61,9 @@ func TestFailedRadiogram(t *testing.T) {
 		getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log?kind=state&device=0a010d", &evs)
 		return evs
 	}
-	// stateLine is a state line of 0a010d whose change of key is want.
-	stateLine := func(key, want string) *event {
-		evs := stateLines()
-		for i := range evs {
-			if evs[i].Device == "0a010d" && change(&evs[i], key) == want {
-				return &evs[i]
-			}
-		}
-		return nil
+	// changed matches a state line of 0a010d whose change of key is want.
+	changed := func(key, want string) func(event) bool {
+		return func(e event) bool { return logLine("state", "0a010d")(e) && change(&e, key) == want }
 	}
 	// shows reports whether a device's state has the flag as flagged
 	// and the failed radiogram as want.
@@ -103,7 +97,7 @@ func TestFailedRadiogram(t *testing.T) {
 	list(0x09, false)
 	testkit.Eventually(t, "the report", func() bool { st := state("0a010d"); return st != nil && st["failed_radiogram"] == nil })
 	caughtUp("the report's line", false, "null")
-	flagged := logs.Mark()
+	flagged, m := logs.Mark(), logMark(t, ts)
 	list(0x03, true)
 	testkit.Eventually(t, "the communication error", func() bool { return state("0a010d")["error"] == true })
 	if got := failed(state("0a010d")); got != `{"code":3,"name":"TimeInformation"}` {
@@ -112,16 +106,15 @@ func TestFailedRadiogram(t *testing.T) {
 	if st := state("0a0108"); st == nil || st["failed_radiogram"] != nil {
 		t.Fatalf("0a0108 without the flag: %v", st)
 	}
-	var line *event
-	testkit.Eventually(t, "the line that set the flag", func() bool { line = stateLine("error", `{"from":false,"to":true}`); return line != nil })
-	if change(line, "failed_radiogram") != `{"from":null,"to":{"code":3,"name":"TimeInformation"}}` {
+	line, _ := logAfter(t, m, "the line that set the flag", changed("error", `{"from":false,"to":true}`))
+	if change(&line, "failed_radiogram") != `{"from":null,"to":{"code":3,"name":"TimeInformation"}}` {
 		t.Fatalf("the line's changes %v", line.Changes)
 	}
-	logLine, _ := logs.Await(t, flagged, "the process log's line", func(l testkit.Record) bool {
+	printed, _ := logs.Await(t, flagged, "the process log's line", func(l testkit.Record) bool {
 		return l.Attrs["kind"] == "state" && l.Attrs["device"] == "0a010d" && l.Attrs["error"] == "true"
 	})
-	if logLine.Attrs["failed_radiogram"] != "TimeInformation" || !strings.Contains(logLine.Attrs["changed"], "failed_radiogram") {
-		t.Fatalf("the process log's line %v", logLine)
+	if printed.Attrs["failed_radiogram"] != "TimeInformation" || !strings.Contains(printed.Attrs["changed"], "failed_radiogram") {
+		t.Fatalf("the process log's line %v", printed)
 	}
 	var alerts logAlertsView
 	testkit.Eventually(t, "the flag's alert", func() bool {
@@ -133,12 +126,10 @@ func TestFailedRadiogram(t *testing.T) {
 
 	// Another radiogram fails while the flag stays; its code is not in
 	// the list.
+	m = logMark(t, ts)
 	list(0xf6, true)
 	testkit.Eventually(t, "the unknown code", func() bool { return failed(state("0a010d")) == `{"code":246}` })
-	testkit.Eventually(t, "its line", func() bool {
-		line = stateLine("failed_radiogram", `{"from":{"code":3,"name":"TimeInformation"},"to":{"code":246}}`)
-		return line != nil
-	})
+	line, _ = logAfter(t, m, "its line", changed("failed_radiogram", `{"from":{"code":3,"name":"TimeInformation"},"to":{"code":246}}`))
 	if _, ok := line.Changes["error"]; ok {
 		t.Fatalf("the flag stayed, yet %v", line.Changes)
 	}
@@ -165,16 +156,14 @@ func TestFailedRadiogram(t *testing.T) {
 	alertNames("the setpoint's still", cube.RadiogramControlMode)
 
 	// The flag cleared, byte 4 kept: no failed radiogram.
+	m = logMark(t, ts)
 	list(0xf6, false)
 	testkit.Eventually(t, "the flag cleared", func() bool { return state("0a010d")["error"] == false })
 	if st := state("0a010d"); st["failed_radiogram"] != nil {
 		t.Fatalf("cleared, yet %v", st)
 	}
-	testkit.Eventually(t, "the line that cleared it", func() bool {
-		line = stateLine("error", `{"from":true,"to":false}`)
-		return line != nil
-	})
-	if change(line, "failed_radiogram") != `{"from":{"code":246},"to":null}` {
+	line, _ = logAfter(t, m, "the line that cleared it", changed("error", `{"from":true,"to":false}`))
+	if change(&line, "failed_radiogram") != `{"from":{"code":246},"to":null}` {
 		t.Fatalf("the clearing line's changes %v", line.Changes)
 	}
 }

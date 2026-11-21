@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"go.metaworx.ch/massimo/internal/store"
-	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // A Cube's log holds the server's events, kept once with no Cube; source=
@@ -64,10 +63,11 @@ func TestLogLevelFilter(t *testing.T) {
 	t.Parallel()
 	r := startServer(t, stored())
 	ts, s := r.ts, r.s
-	testkit.Eventually(t, "the greeting's hello", func() bool {
-		_, evs := logOf(t, ts, "?kind=hello&level=debug")
-		return len(evs) > 0
-	})
+	// The greeting's hello, which the start has through the pump and in
+	// the store.
+	if _, evs := logOf(t, ts, "?kind=hello&level=debug"); len(evs) == 0 {
+		t.Fatal("no hello at debug after the start")
+	}
 	if _, evs := logOf(t, ts, "?kind=hello"); len(evs) != 0 {
 		t.Fatalf("hello at the default level: %+v", evs)
 	}

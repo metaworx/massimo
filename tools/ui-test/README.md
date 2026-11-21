@@ -466,7 +466,17 @@ hence `failed_checks_forgotten`.
   nothing older after a page shorter than 200 (with all events);
   with the server's answers stubbed, Older, under the lines, puts a page
   at the bottom, the view staying where it was,
-  until a short page ends the paging;
+  until a short page ends the paging,
+  and where the server answers 409 to the newest line's id,
+  it loads the log again, no line twice and none of the log before,
+  also not after another choice took its place;
+  under All Cubes a poll asks after the newest line's id,
+  a 409 to it loads the log again once, each line once and none missing,
+  a burst of 250 comes in one poll, the newest 20 shown,
+  a backlog of more than ten pages loads the log again,
+  on a server that ignores `after=` the poll ends,
+  and adds no line from before the range,
+  and a second poll asks nothing while one is on its way;
   with the page's `api()` holding the log's requests until the test answers
   them, an Older answer after Clear is dropped,
   a Cube switch takes the device chosen back to all,

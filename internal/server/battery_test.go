@@ -27,13 +27,14 @@ func TestBatteryLevel(t *testing.T) {
 		t.Fatalf("before its report: %+v", d.Device)
 	}
 	on := true
+	m := logMark(t, ts)
 	if err := fc.SetState(0x0a010d, fakecube.State{Reported: &on, BatteryLow: &on}); err != nil {
 		t.Fatal(err)
 	}
 	testkit.Eventually(t, "the weak level", func() bool {
 		return getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices/0a010d", &d) == 200 && d.Battery == "weak"
 	})
-	testkit.Eventually(t, "the battery event", func() bool { return hasKind(logKinds(t, ts, 0), "battery:0a010d") })
+	logAfter(t, m, "the battery event", logLine("battery", "0a010d"))
 	var devs []deviceDetail
 	if getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/devices", &devs) != 200 {
 		t.Fatal("device list")

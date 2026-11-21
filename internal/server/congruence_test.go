@@ -545,7 +545,11 @@ func TestMismatchSeededFromTheLog(t *testing.T) {
 			st.AddEvent(storedEvent(cubeID, mismatchEvent(nil, m, "found")))
 		}
 	})
-	testkit.Eventually(t, "the cleared finding", func() bool { return c.event(t, view.MismatchType, "0a0109", "cleared") != nil })
+	// The first greeting's check, in the pump's turn, which the start
+	// and its wait for the check have passed.
+	if c.event(t, view.MismatchType, "0a0109", "cleared") == nil {
+		t.Fatalf("the finding that no longer holds is not cleared: %+v", c.events(t))
+	}
 	n := 0
 	for _, e := range c.events(t) {
 		if e.Summary["finding"] == view.MismatchRoom {

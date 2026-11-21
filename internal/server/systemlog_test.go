@@ -107,16 +107,13 @@ func TestLogRotatedLine(t *testing.T) {
 	r := startServer(t, stored())
 	ts, s, st := r.ts, r.s, r.st
 	token := userToken(t, st, "anna", store.RoleOwner)
+	m := logMarkAs(t, ts, token)
 	s.LogRotated("size", "serve.log.1", 8, []string{"serve.log.9.gz"}, nil)
 	s.LogRotated("sighup", "serve.log.1", 3, nil, errors.New("log not rotated: permission denied"))
-	var evs []event
-	testkit.Within(5*time.Second, func() bool {
-		evs = nil
-		getJSON(t, ts, token, "/api/v1/cubes/KEQ0000100/log?kind=log_rotated", &evs)
-		return len(evs) >= 2
-	})
-	if len(evs) != 2 {
-		t.Fatalf("%d lines: %+v", len(evs), evs)
+	isRotated := logLine("log_rotated", "")
+	evs, next := logAfterN(t, m, "the rotations' lines", 2, isRotated)
+	if more := logLines(t, next, isRotated); len(more) != 0 {
+		t.Fatalf("%d lines: %+v", 2+len(more), append(evs, more...))
 	}
 	done, failed := evs[0], evs[1]
 	if done.Summary["why"] != "size" {
@@ -195,14 +192,15 @@ func TestAddressChangedLogged(t *testing.T) {
 	rt.cfg.FollowDiscovery = true
 	rt.cfgMu.Unlock()
 	// 127.0.0.2 is the loopback, where nothing answers: no packet leaves.
+	m := logMark(t, ts)
 	s.note(context.Background(), cubelan.Discovered{Serial: "KEQ0000100", IP: net.ParseIP("127.0.0.2"), Kind: cubelan.KindCube}, time.Now())
-	var evs []event
-	testkit.Eventually(t, "address_changed", func() bool {
-		_, evs = logOf(t, ts, "?kind=address_changed")
-		return len(evs) == 1
-	})
-	if evs[0].Summary["to"] != "127.0.0.2" || evs[0].Summary["from"] != "127.0.0.1" || evs[0].Source != "cube" || evs[0].Serial != "KEQ0000100" {
-		t.Fatalf("the line: %+v", evs[0])
+	isChanged := logLine("address_changed", "")
+	ev, next := logAfter(t, m, "address_changed", isChanged)
+	if ev.Summary["to"] != "127.0.0.2" || ev.Summary["from"] != "127.0.0.1" || ev.Source != "cube" || ev.Serial != "KEQ0000100" {
+		t.Fatalf("the line: %+v", ev)
+	}
+	if more := logLines(t, next, isChanged); len(more) != 0 {
+		t.Fatalf("address_changed again: %+v", more)
 	}
 }
 

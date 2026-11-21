@@ -47,22 +47,13 @@ func TestAutoReset(t *testing.T) {
 	const rf = cube.RFAddress(0x0a010d) // room 6
 	on := true
 	valve := func(n int) *int { return &n }
+	isReset := logLine("error_reset", "0a010d")
+	m := logMark(t, ts)
 	settleState(t, fc, ts, s, rf, fakecube.State{Reported: &on, Error: &on, ValvePct: valve(10)}, "valve_pct", float64(10))
 	if n := received.Count(0, resetOf(rf)); n != 1 {
 		t.Fatalf("the first report: %d resets, want 1", n)
 	}
-	var ev event
-	testkit.Eventually(t, "the error_reset event", func() bool {
-		var evs []event
-		getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log?limit=500", &evs)
-		for _, e := range evs {
-			if e.Kind == "error_reset" && e.Device == "0a010d" {
-				ev = e
-				return true
-			}
-		}
-		return false
-	})
+	ev, first := logAfter(t, m, "the error_reset event", isReset)
 	if ev.Level != "info" || ev.Source != "device" || ev.Summary["room"] != float64(6) || ev.Summary["automatic"] != true {
 		t.Fatalf("event %+v", ev)
 	}
@@ -79,15 +70,10 @@ func TestAutoReset(t *testing.T) {
 	}
 
 	// The second reset's event is in the store; a new server reads it.
-	testkit.Eventually(t, "the second error_reset", func() bool {
-		n := 0
-		for _, k := range logKinds(t, ts, 0) {
-			if k == "error_reset:0a010d" {
-				n++
-			}
-		}
-		return n == 2
-	})
+	_, second := logAfter(t, first, "the second error_reset", isReset)
+	if more := logLines(t, second, isReset); len(more) != 0 {
+		t.Fatalf("%d error_reset lines after the second: %+v", len(more), more)
+	}
 	if err := st.FlushEvents(context.Background()); err != nil {
 		t.Fatal(err)
 	}
