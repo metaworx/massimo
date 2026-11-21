@@ -1655,8 +1655,11 @@ and, as a green badge, the user the app is signed in as there,
 checked at each look,
 a tap opening the server, ⚙ or a long press its settings;
 the Servers card's ☰, with **Add server…**, **Sign out of all**,
-**Forget all stored credentials** where a login is kept (asked first, under
-the list) and **App settings…**;
+**Forget all stored credentials** where a login is kept,
+asked first, under the list,
+which revokes each login's key at its server and signs out there,
+as **Turn off** does, its message naming the servers that keep a key,
+and **App settings…**;
 the card that adds a server, shown while the list is empty or from the ☰,
 with × and closed once a server is added:
 the servers on the network, searched for as it opens, and an address typed;
@@ -1668,8 +1671,11 @@ the name and the addresses, **Open at start** (one server at most),
 when the fingerprint is asked, the session with **Sign out**,
 the certificate's subject and end with **Certificate…**,
 a dialog with its issuer, names, validity, fingerprint and since when it
-is trusted, and the login by fingerprint with **Turn off**,
-which revokes its key and signs out.
+is trusted, the login by fingerprint with **Turn off**,
+which revokes its key and signs out,
+a line for each key of the phone's still valid there with **Show in My profile**,
+which opens the server's page at My profile with the key marked,
+and **Remove**, which turns a kept login off first.
 **App settings** hold the **Appearance**, as the phone, light or dark,
 for that page and for every server's page set to "as the system".
 A browser that opens that page sees a line saying it is the app's.

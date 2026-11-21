@@ -9,12 +9,13 @@ list's ☰, the names a server is shown by, the toast saying what an
 action came to, the fingerprint sheet of a self-signed certificate and
 of a changed one, a server's settings with Open at start and when the
 fingerprint is asked, the panel taking the focus, the login by
-fingerprint from the row, Turn off and Forget all, the sessions the app
-holds with Sign out and Sign out of all, a server's certificate, App
-settings with the appearance, the card of the server on the phone; a
-browser without the bridge; and the server's page taking its token from
-the bridge and handing it back, its login by fingerprint and "Select
-server" (docs/app.md, contract version 3).
+fingerprint from the row, Turn off and Forget all with the keys they
+leave valid, the sessions the app holds with Sign out and Sign out of
+all, a server's certificate, App settings with the appearance, the card
+of the server on the phone; a browser without the bridge; and the
+server's page taking its token from the bridge and handing it back, its
+login by fingerprint and "Select server…" (docs/app.md, contract
+version 4).
 axe-core (axe-playwright-python) finds no violation on the connect page
 in each of its states the tests open.
 
@@ -53,9 +54,9 @@ FP_TITLE = {"en": "Check the certificate", "de": "Zertifikat prüfen"}
 FP_CHANGED = {"en": "The certificate has changed", "de": "Das Zertifikat hat sich geändert"}
 
 
-def server(sid, name, node, lan="", remote="", fp="", login="", ask="start", start=False, session=None, trusted_at=""):
+def server(sid, name, node, lan="", remote="", fp="", login="", ask="start", start=False, session=None, trusted_at="", unrevoked=None):
     return {"id": sid, "name": name, "node": node, "lan": lan, "remote": remote, "fp": fp, "login": login, "ask": ask, "push": False,
-            "start": start, "session": session, "trusted_at": trusted_at}
+            "start": start, "session": session, "trusted_at": trusted_at, "unrevoked": unrevoked or []}
 
 
 def open_connect(new_context, guard, watch, config=None):
@@ -328,7 +329,7 @@ def test_connect_settings(new_context, case, watch, guard):
     panel.locator(".server-remove").click()
     page.locator(".confirm-box .confirm-yes").click()
     home.wait_for(state="detached")
-    assert calls(page, "remove") == [["remove", "s1"]]
+    assert calls(page, "remove") == [["remove", "s1", HOME_LAN]], "at the address the probe chose"
     wait_toast(page, "Home")
     assert page.evaluate("document.activeElement.closest('#servers-menu') !== null"), "the focus goes to the ☰"
 
@@ -534,7 +535,7 @@ def test_connect_login_by_fingerprint(new_context, case, watch, guard):
     panel.locator(".server-login-off").click()
     assert wait_until(page, "window.__fakeBridge.calls.some((c) => c[0] === 'forget')", 3)
     assert calls(page, "forget") == [["forget", "s1", HOME_LAN]]
-    wait_toast(page, "Home")
+    wait_toast(page, LOGIN_OFF_DONE[case.lang])
     assert wait_until(page, "!document.querySelector(\".server-row[data-id='s1'] .server-login-kept\")", 3), "the settings drawn again without it"
     assert home.locator(".server-login").is_hidden(), "and the row without its fingerprint"
 
@@ -554,11 +555,213 @@ def test_connect_login_by_fingerprint(new_context, case, watch, guard):
     page.locator("#servers-ask .confirm-yes").click()
     assert wait_until(page, "window.__fakeBridge.calls.some((c) => c[0] === 'forgetAll')", 3)
     ask.wait_for(state="detached")
+    wait_toast(page, FORGOT_ALL[case.lang])
     assert cabin.locator(".server-login").is_hidden()
     page.locator("#servers-menu > summary").click()
     page.locator("#menu-add").wait_for(state="visible")
     assert page.locator("#menu-forget-all").is_hidden(), "no login left, no Forget all"
     page.keyboard.press("Escape")
+
+
+LOGIN_OFF_DONE = {"en": "The login by fingerprint of Home is off: its key is revoked at the server",
+                  "de": "Die Anmeldung mit Fingerabdruck bei Home ist aus: ihr Schlüssel ist beim Server widerrufen"}
+FORGOT_ALL = {"en": "Every stored login is forgotten, and its key revoked at its server.",
+              "de": "Alle gespeicherten Anmeldungen sind vergessen und ihre Schlüssel bei den Servern widerrufen."}
+FORGET_ALL_SAYS = {"en": ["Each key is revoked at its server too", "the app signed out there"],
+                   "de": ["Jeder Schlüssel wird auch bei seinem Server widerrufen", "die App dort abgemeldet"]}
+FORGOT_PHONE = {"en": "Every stored login is forgotten.", "de": "Alle gespeicherten Anmeldungen sind vergessen."}
+FORGOT_LEFT_ON = {"en": "The key on Cabin stays valid until the app signs in there again as the same user",
+                  "de": "Der Schlüssel bei Cabin bleibt gültig, bis die App sich dort wieder als derselbe Benutzer anmeldet"}
+FORGOT_LOCAL_ON = {"en": "The key on Shed is still listed there under My profile", "de": "Der Schlüssel bei Shed steht dort noch unter Mein Profil"}
+LOGIN_OFF_LEFT = {"en": "is off on this phone, and the app signed out; its key is still valid at the server",
+                  "de": "ist auf diesem Telefon aus, und die App ist abgemeldet; ihr Schlüssel gilt beim Server noch"}
+KEY_LEFT = {"en": "A key of this phone is still valid here: key {id} of {user}.", "de": "Ein Schlüssel dieses Telefons gilt hier noch: Schlüssel {id} von {user}."}
+SHOW_IN_PROFILE = {"en": "Show in My profile", "de": "In Mein Profil zeigen"}
+SHOW_KEY = {"en": "Show in My profile, key {id}", "de": "In Mein Profil zeigen, Schlüssel {id}"}
+REMOVE_KEYS_LEFT = {"en": "Key 47 of this phone stays valid there", "de": "Schlüssel 47 dieses Telefons bleibt dort gültig"}
+REMOVE_LOGIN = {"en": "Its login by fingerprint is turned off first: its key is revoked at the server where it answers",
+                "de": "Die Anmeldung mit Fingerabdruck wird zuerst ausgeschaltet: ihr Schlüssel wird beim Server widerrufen, wo er antwortet"}
+REMOVED_KEYS = {"en": "Key 50 of this phone is still valid there", "de": "Schlüssel 50 dieses Telefons gilt dort noch"}
+
+NODE4, NODE5, NODE6, NODE7 = ("44444444-4444-4444-8444-444444444444", "55555555-5555-4555-8555-555555555555",
+                              "66666666-6666-4666-8666-666666666666", "77777777-7777-4777-8777-777777777777")
+BARN_LAN = "http://192.168.1.50:8099/"
+SHED_LAN = "http://192.168.1.60:8099/"
+ATTIC_LAN = "http://192.168.1.70:8099/"
+GARAGE_LAN = "http://192.168.1.80:8099/"
+
+
+def close_toast(page):
+    """Closes the toast, which at 390 px covers the foot of the open settings."""
+    if page.locator("#toast").is_visible():
+        page.locator("#toast-close").click()
+    assert toast_gone(page)
+
+
+def settings_of(page, name):
+    """Opens a server's settings from its cog and gives the panel."""
+    r = row(page, name)
+    r.locator(".server-cog").click()
+    panel = r.locator(".server-panel")
+    panel.wait_for(state="visible")
+    return panel
+
+
+def test_connect_keys_left(new_context, case, watch, guard):
+    """The keys Turn off, Forget all and Remove could not revoke (AP
+    MobileApp, D56-A, D57-A; the bridge's version 4), as the app's Revoker
+    leaves them: Turn off that leaves one says so, at an address that
+    answers and without one, and the open settings show it at once; Remove
+    with a kept login asks to turn it off first and names the key it could
+    not revoke; Remove warns of a key left; Forget all's question says each
+    key is revoked and the app signed out, and its toast names the servers
+    that keep a key, left or on the phone alone, and not one whose key was
+    revoked; a server's settings show each key left with its id and user
+    and Show in My profile, named for its key, which opens the server's page
+    at My profile with the key marked (open with <address>#profile?key=<id>);
+    a session found there revokes them, and the line goes."""
+    config = {
+        "servers": [server("s1", "Home", NODE1, lan=HOME_LAN, login="anna"), server("s2", "Cabin", NODE2, lan=CABIN_LAN, login="bob"),
+                    server("s3", "Office", NODE3, remote=OFFICE_REMOTE, unrevoked=[{"user": "anna", "id": 47}]),
+                    server("s4", "Barn", NODE4, lan=BARN_LAN, login="carl"), server("s5", "Shed", NODE5, lan=SHED_LAN, login="dora"),
+                    server("s6", "Attic", NODE6, lan=ATTIC_LAN, login="eve"), server("s7", "Garage", NODE7, lan=GARAGE_LAN, login="fay")],
+        "answers": {HOME_LAN: {"node": NODE1}, CABIN_LAN: {"node": NODE2}, OFFICE_REMOTE: {"node": NODE3}, BARN_LAN: {"node": NODE4},
+                    GARAGE_LAN: {"node": NODE7}},
+        "keys": {"s1": {"user": "anna", "id": 45}, "s2": {"user": "bob", "id": 46}, "s4": {"user": "carl", "id": 48},
+                 "s5": {"user": "dora", "id": 0}, "s6": {"user": "eve", "id": 49}, "s7": {"user": "fay", "id": 50}},
+        "unrevokable": ["s1", "s2", "s7"],
+    }
+    page = open_connect(new_context, guard, watch, config)
+    wait_state(page, "Home", STATE[case.lang]["lan"])
+    wait_state(page, "Attic", STATE[case.lang]["offline"])
+
+    # Turn off that cannot revoke, at an address that answers: the toast
+    # says so, the line comes at once
+    panel = settings_of(page, "Home")
+    assert panel.locator(".server-key-left").count() == 0, "no key left yet"
+    panel.locator(".server-login-off").click()
+    wait_toast(page, LOGIN_OFF_LEFT[case.lang])
+    line = panel.locator(".server-key-left")
+    line.wait_for(state="visible")
+    assert KEY_LEFT[case.lang].format(id=45, user="anna") in line.inner_text()
+    row(page, "Home").locator(".server-cog").click()
+    close_toast(page)
+    # and at none: Attic does not answer, its key left all the same
+    panel = settings_of(page, "Attic")
+    panel.locator(".server-login-off").click()
+    wait_toast(page, LOGIN_OFF_LEFT[case.lang])
+    assert calls(page, "forget")[-1] == ["forget", "s6", ""]
+    panel.locator(".server-key-left").wait_for(state="visible")
+    assert KEY_LEFT[case.lang].format(id=49, user="eve") in panel.locator(".server-key-left").inner_text()
+    row(page, "Attic").locator(".server-cog").click()
+    close_toast(page)
+
+    # Remove with a kept login: turned off first, the key it could not
+    # revoke named
+    panel = settings_of(page, "Garage")
+    panel.locator(".server-remove").click()
+    box = page.locator(".confirm-box")
+    box.wait_for(state="visible")
+    assert REMOVE_LOGIN[case.lang] in box.inner_text(), f"Remove says it turns the login off: {box.inner_text()!r}"
+    box.locator(".confirm-yes").click()
+    row(page, "Garage").wait_for(state="detached")
+    assert calls(page, "remove") == [["remove", "s7", GARAGE_LAN]]
+    wait_toast(page, REMOVED_KEYS[case.lang])
+    close_toast(page)
+
+    # Remove warns of a key left; No keeps the server
+    panel = settings_of(page, "Office")
+    assert KEY_LEFT[case.lang].format(id=47, user="anna") in panel.locator(".server-key-left").inner_text()
+    panel.locator(".server-remove").click()
+    box = page.locator(".confirm-box")
+    box.wait_for(state="visible")
+    assert REMOVE_KEYS_LEFT[case.lang] in box.inner_text(), f"Remove warns of the key: {box.inner_text()!r}"
+    box.locator(".confirm-no").click()
+    assert len(calls(page, "remove")) == 1, "No keeps it"
+    # a session found there revokes the key: the list read again, the line gone
+    page.evaluate("() => { window.__fakeBridgeConfig.sessions = { s3: 'anna' }; window.dispatchEvent(new CustomEvent('massimo', { detail: { type: 'network' } })); }")
+    assert wait_until(page, "!document.querySelector(\".server-row[data-id='s3'] .server-key-left\")", 5), "the key's line goes"
+    row(page, "Office").locator(".server-cog").click()
+
+    # Forget all: the question says what it does; Cabin's key left, Shed's
+    # forgotten on the phone alone (no id, no address), Barn's revoked
+    menu_entry(page, "menu-forget-all").click()
+    ask = page.locator("#servers-ask .confirm-box")
+    ask.wait_for(state="visible")
+    for said in FORGET_ALL_SAYS[case.lang]:
+        assert said in ask.inner_text(), f"the question says {said!r}: {ask.inner_text()!r}"
+    ask.locator(".confirm-yes").click()
+    ask.wait_for(state="detached")
+    wait_toast(page, FORGOT_LEFT_ON[case.lang])
+    text = page.locator("#toast").inner_text()
+    assert FORGOT_PHONE[case.lang] in text and FORGOT_LOCAL_ON[case.lang] in text, f"the toast names both: {text!r}"
+    assert "Barn" not in text, f"a revoked key is not named: {text!r}"
+    assert calls(page, "forgetAll") == [["forgetAll"]]
+    assert row(page, "Cabin").locator(".server-login").is_hidden()
+    close_toast(page)
+
+    # Cabin's key left, shown in its settings and in My profile
+    panel = settings_of(page, "Cabin")
+    line = panel.locator(".server-key-left")
+    assert line.count() == 1 and KEY_LEFT[case.lang].format(id=46, user="bob") in line.inner_text()
+    show = line.locator(".server-key-show")
+    assert show.inner_text() == SHOW_IN_PROFILE[case.lang]
+    assert show.get_attribute("aria-label") == SHOW_KEY[case.lang].format(id=46), "named for its key"
+    named_buttons(page, "a server's settings with a key left")
+    assert_axe(page, "a server's settings with a key left")
+    show.click()
+    assert wait_until(page, "window.__fakeBridge.calls.some((c) => c[0] === 'open')", 3)
+    assert calls(page, "open") == [["open", "s2", CABIN_LAN + "#profile?key=46"]], f"My profile with the key marked: {calls(page, 'open')}"
+
+
+LOGIN_OFF_LOCAL = {"en": "The login by fingerprint of Home is off on this phone, and the app signed out; its key is still listed at the server under "
+                         "My profile, to revoke there.",
+                   "de": "Die Anmeldung mit Fingerabdruck bei Home ist auf diesem Telefon aus, und die App ist abgemeldet; ihr Schlüssel steht beim "
+                         "Server noch unter Mein Profil und lässt sich dort widerrufen."}
+REMOVED_REVOKED = {"en": "Cabin removed; its key is revoked at the server, and the app signed out there.",
+                   "de": "Cabin entfernt; sein Schlüssel ist beim Server widerrufen, und die App ist dort abgemeldet."}
+REMOVED_BOTH = {"en": ["Barn removed.", "Key 48 of this phone is still valid there", "Its login's key is still listed at the server under My profile"],
+                "de": ["Barn entfernt.", "Schlüssel 48 dieses Telefons gilt dort noch", "Der Schlüssel seiner Anmeldung steht beim Server noch unter Mein Profil"]}
+
+
+def removed(page, name):
+    """Removes a server from its settings, Yes to the question."""
+    panel = settings_of(page, name)
+    panel.locator(".server-remove").click()
+    page.locator(".confirm-box .confirm-yes").click()
+    row(page, name).wait_for(state="detached")
+
+
+def test_connect_turn_off_and_remove_say_how_the_key_went(new_context, case, watch, guard):
+    """What Turn off and Remove say of a login's key (AP MobileApp,
+    Block 14): Turn off of a login kept without its key's id that the
+    server does not revoke, the key listed at the server alone; Remove of a
+    server whose key the server revokes; and Remove of one with an older key
+    left whose login's key is listed at the server alone, both said."""
+    config = {
+        "servers": [server("s1", "Home", NODE1, lan=HOME_LAN, login="anna"), server("s2", "Cabin", NODE2, lan=CABIN_LAN, login="bob"),
+                    server("s4", "Barn", NODE4, lan=BARN_LAN, login="carl", unrevoked=[{"user": "carl", "id": 48}])],
+        "answers": {HOME_LAN: {"node": NODE1}, CABIN_LAN: {"node": NODE2}, BARN_LAN: {"node": NODE4}},
+        "keys": {"s1": {"user": "anna", "id": 0}, "s2": {"user": "bob", "id": 46}, "s4": {"user": "carl", "id": 0}},
+        "unrevokable": ["s1", "s4"],
+    }
+    page = open_connect(new_context, guard, watch, config)
+    wait_state(page, "Home", STATE[case.lang]["lan"])
+    wait_state(page, "Barn", STATE[case.lang]["lan"])
+    panel = settings_of(page, "Home")
+    panel.locator(".server-login-off").click()
+    wait_toast(page, LOGIN_OFF_LOCAL[case.lang])
+    assert panel.locator(".server-key-left").count() == 0, "nothing left by an id it does not know"
+    row(page, "Home").locator(".server-cog").click()
+    close_toast(page)
+    removed(page, "Cabin")
+    wait_toast(page, REMOVED_REVOKED[case.lang])
+    assert calls(page, "remove") == [["remove", "s2", CABIN_LAN]]
+    close_toast(page)
+    removed(page, "Barn")
+    wait_toast(page, REMOVED_BOTH[case.lang][0])
+    text = page.locator("#toast").inner_text()
+    assert all(part in text for part in REMOVED_BOTH[case.lang]), f"both said: {text!r}"
 
 
 def test_connect_login_refused(new_context, case, watch, guard):

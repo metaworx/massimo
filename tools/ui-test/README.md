@@ -438,6 +438,12 @@ hence `failed_checks_forgotten`.
   save the biometric switch and Remove asks in place;
   discovery offers a server not in the list and moves a saved one's LAN address;
   the card of the server on the phone starts and stops it;
+  Turn off, Forget all and Remove say what they revoked, their toasts naming
+  the keys that stay valid, left or on the phone alone;
+  Remove turns a kept login off first;
+  a key left shows in its server's settings with Show in My profile,
+  which opens `<address>#profile?key=<id>`,
+  Remove warns of it, and a session found there takes its line away;
   a browser without the bridge sees the line saying the page is the app's;
   and the server's page in the app takes its token from the bridge,
   keeps none in the browser, and hands a sign-in and a sign-out to the bridge;

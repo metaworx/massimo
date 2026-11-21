@@ -3,6 +3,7 @@
 
 package ch.metaworx.massimo
 
+import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
@@ -37,12 +38,39 @@ class ServerApi(
         override fun toString(): String = "Key(id=$id)" // never the key
     }
 
+    /**
+     * Me is whose a session is: the user's name, the key the session was
+     * made from (`token.key_id`, `POST /api/v1/login/key`), 0 for none, and
+     * the session's own row (`token.id`).
+     */
+    data class Me(val user: String, val keyId: Long, val tokenId: Long = 0)
+
+    /** Token is a row of a user's sessions and keys: its id, and its kind, `session` or `api`. */
+    data class Token(val id: Long, val kind: String)
+
     /** me is the name of the user whose [session] it is (`GET /api/v1/me`). */
-    fun me(base: String, fp: String, session: String): String {
+    fun me(base: String, fp: String, session: String): String = whoami(base, fp, session).user
+
+    /** whoami is whose [session] is (`GET /api/v1/me`): the user, and the key it was made from. */
+    fun whoami(base: String, fp: String, session: String): Me {
         val o = request("GET", base, "api/v1/me", fp, session, null, HttpURLConnection.HTTP_OK)
         val user = o.optJSONObject("user")?.let { ServerStore.str(it, "name") } ?: ""
         if (user.isEmpty()) throw Failed(HttpURLConnection.HTTP_OK, "no user signed in")
-        return user
+        val token = o.optJSONObject("token")
+        return Me(user, token?.optLong("key_id") ?: 0, token?.optLong("id") ?: 0)
+    }
+
+    /** tokens are the sessions and keys of [user]'s (`GET /api/v1/users/{name}/tokens`), asked with [bearer], the user's. */
+    fun tokens(base: String, fp: String, bearer: String, user: String): List<Token> {
+        val text = send("GET", base, "api/v1/users/${segment(user)}/tokens", fp, bearer, null, HttpURLConnection.HTTP_OK)
+        // an empty answer is no list: a list without tokens is "[]"
+        if (text.isBlank()) throw Failed(HttpURLConnection.HTTP_OK, "no list of tokens in the answer")
+        val a = try {
+            JSONArray(text)
+        } catch (e: JSONException) {
+            throw Failed(HttpURLConnection.HTTP_OK, "no list of tokens in the answer")
+        }
+        return (0 until a.length()).mapNotNull { i -> a.optJSONObject(i)?.let { Token(it.optLong("id"), ServerStore.str(it, "kind")) } }
     }
 
     /** createKey makes an API key of [user]'s, labelled [label], with the user's [session]. */
@@ -72,6 +100,18 @@ class ServerApi(
     }
 
     private fun request(method: String, base: String, path: String, fp: String, bearer: String, body: JSONObject?, want: Int): JSONObject {
+        val text = send(method, base, path, fp, bearer, body, want)
+        return try {
+            if (text.isBlank()) JSONObject() else JSONObject(text)
+        } catch (e: JSONException) {
+            JSONObject()
+        }
+    }
+
+    // send makes a request and returns the answer's text where its status
+    // is [want]; [Refused] for a 401, [Failed] with the server's words for
+    // any other.
+    private fun send(method: String, base: String, path: String, fp: String, bearer: String, body: JSONObject?, want: Int): String {
         val target = Prober.healthz(base)?.removeSuffix("healthz")?.plus(path) ?: throw IOException("not the address of a server")
         val conn = URL(target).openConnection() as HttpURLConnection
         conn.connectTimeout = TIMEOUT_MS
@@ -96,6 +136,7 @@ class ServerApi(
             }
             val code = conn.responseCode
             val text = (if (code < 400) conn.inputStream else conn.errorStream)?.use { readAtMost(it) } ?: ""
+            if (code == want) return text
             val o = try {
                 if (text.isBlank()) JSONObject() else JSONObject(text)
             } catch (e: JSONException) {
@@ -103,8 +144,7 @@ class ServerApi(
             }
             val said = ServerStore.str(o, "error").ifEmpty { "status $code" }
             if (code == HttpURLConnection.HTTP_UNAUTHORIZED) throw Refused(said)
-            if (code != want) throw Failed(code, said)
-            return o
+            throw Failed(code, said)
         } finally {
             conn.disconnect()
         }

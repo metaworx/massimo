@@ -9,14 +9,14 @@
 // typed, probed before they are added, in a card shown while the list is
 // empty or from the ☰; the fingerprint sheet of a self-signed
 // certificate; a server's settings with Open at start, its session, its
-// certificate and its login by fingerprint, and the row's button that
-// opens it signed in; the app's own settings, its appearance; the server
-// on the phone where the app has it built in; what an action came to, in
-// the page's toast. Everything goes through the app's bridge,
-// window.massimo, whose calls answer with promises and whose events
-// arrive as "massimo" events on window; a browser has no bridge and sees
-// a line saying that the page is the app's. Loaded after i18n.js and
-// components.js, without app.js.
+// certificate, its login by fingerprint and the keys of the phone's left
+// valid there, and the row's button that opens it signed in; the app's
+// own settings, its appearance; the server on the phone where the app has
+// it built in; what an action came to, in the page's toast. Everything
+// goes through the app's bridge, window.massimo, whose calls answer with
+// promises and whose events arrive as "massimo" events on window; a
+// browser has no bridge and sees a line saying that the page is the
+// app's. Loaded after i18n.js and components.js, without app.js.
 "use strict";
 
 const $ = (id) => document.getElementById(id);
@@ -39,7 +39,7 @@ const APP_HASH = "#app-settings";
 
 const conn = {
   bridge: null, // window.massimo
-  servers: [], // as the app keeps them: {id, name, node, lan, remote, fp, login, ask, push, start, session, trusted_at}
+  servers: [], // as the app keeps them: {id, name, node, lan, remote, fp, login, ask, push, start, session, trusted_at, unrevoked}
   probes: {}, // by server id: {state, url, fingerprint, cert, error}, the state probing, lan, remote, cert or offline
   probeSeq: {}, // by server id: the latest probe, whose answer alone counts
   seen: {}, // by node: the URL discovery found it at
@@ -250,7 +250,15 @@ async function checkSession(id, url, seq) {
     return;
   }
   const s = serverById(id);
-  if (!s || conn.probeSeq[id] !== seq || (s.session || null) === user) return;
+  if (!s || conn.probeSeq[id] !== seq) return;
+  // a session the app holds revokes the keys left there for its user:
+  // the list read again, so that their lines go
+  if (user && keysLeft(s).some((k) => k.user === user)) {
+    await loadServers();
+    renderServers();
+    return;
+  }
+  if ((s.session || null) === user) return;
   s.session = user;
   renderServers();
 }
@@ -379,19 +387,21 @@ function renderServers() {
 }
 
 // openServer opens a server in the app at the address its probe found,
-// with opts {login: true} signed in by fingerprint first (docs/app.md);
-// a certificate that is not the one trusted asks first, and a server
-// that did not answer is probed again, and said not to answer until a
-// probe finds it. A kept login the server refused is gone from the list
-// afterwards.
-async function openServer(id, opts) {
+// with opts {login: true} signed in by fingerprint first (docs/app.md),
+// and at hash, My profile's `#profile?key=<id>`, with a key marked
+// (contract version 4); a certificate that is not the one trusted asks
+// first, and a server that did not answer is probed again, and said not
+// to answer until a probe finds it. A kept login the server refused is
+// gone from the list afterwards.
+async function openServer(id, opts, hash) {
   const s = serverById(id);
   const p = conn.probes[id] || {};
   if (!s || p.state === "probing") return;
   if (p.state === "lan" || p.state === "remote") {
+    const url = p.url + (hash || "");
     try {
-      if (opts) await conn.bridge.open(s.id, p.url, opts);
-      else await conn.bridge.open(s.id, p.url);
+      if (opts) await conn.bridge.open(s.id, url, opts);
+      else await conn.bridge.open(s.id, url);
     } catch (e) {
       say(t("connect.openFailed", { name: s.name, error: e.message }), { bad: true });
       if (opts && opts.login) {
@@ -414,7 +424,7 @@ async function openServer(id, opts) {
   }
   await probeServer(serverById(id));
   const q = conn.probes[id] || {};
-  if (q.state === "lan" || q.state === "remote" || (q.state === "cert" && p.state !== "cert")) return openServer(id, opts);
+  if (q.state === "lan" || q.state === "remote" || (q.state === "cert" && p.state !== "cert")) return openServer(id, opts, hash);
   say(t("connect.unreachable", { name: s.name }) + (q.error ? " " + q.error : ""), { bad: true, server: id });
 }
 
@@ -444,9 +454,10 @@ function addressInput(value) {
 
 // settingsPanel is a server's settings: its name, its two addresses,
 // Open at start, when the fingerprint is asked, its session with Sign
-// out and its certificate (fillFacts), the login by fingerprint kept
-// with its user and Turn off, notifications where the app has push, and
-// Remove. The panel itself takes the focus (toggleSettings).
+// out, its certificate and the keys left valid there (fillFacts), the
+// login by fingerprint kept with its user and Turn off, notifications
+// where the app has push, and Remove, whose question warns of a key left.
+// The panel itself takes the focus (toggleSettings).
 function settingsPanel(s) {
   const name = document.createElement("input");
   name.type = "text";
@@ -470,8 +481,11 @@ function settingsPanel(s) {
   form.tabIndex = -1;
   form.setAttribute("aria-label", t("connect.settingsOf", { name: s.name }));
   const remove = button(t("connect.remove"), "server-remove", () => {
-    confirmInPlace(form.querySelector(".actions"), t("connect.removeQuestion", { name: s.name }), { yes: t("connect.remove") },
-      () => removeServer(s.id, msg), ".server-remove");
+    const now = serverById(s.id) || s;
+    const left = keysLeft(now);
+    let question = now.login ? t("connect.removeQuestionLogin", { name: s.name }) : t("connect.removeQuestion", { name: s.name });
+    if (left.length) question += " " + tn("connect.removeKeysLeft", left.length, { ids: left.map((k) => k.id).join(", ") });
+    confirmInPlace(form.querySelector(".actions"), question, { yes: t("connect.remove") }, () => removeServer(s.id, msg), ".server-remove");
   });
   const facts = elem("div", "server-facts");
   form.append(
@@ -526,17 +540,32 @@ async function saveSettings(id, form, f) {
   probeServer(serverById(id));
 }
 
+// MAX_KEY_ID is the largest id a key left may have: 15 digits, as My
+// profile's address takes it (pages.js readProfileHash).
+const MAX_KEY_ID = 999999999999999;
+
+// keysLeft are the keys of the phone's that Turn off or Forget all could
+// not revoke at a server, each {user, id} (`unrevoked`, contract version
+// 4); none from an app before it.
+function keysLeft(s) {
+  const good = (k) => k && Number.isInteger(k.id) && k.id > 0 && k.id <= MAX_KEY_ID && typeof k.user === "string";
+  return s && Array.isArray(s.unrevoked) ? s.unrevoked.filter(good) : [];
+}
+
 // fillFacts writes what a server's open settings say of it as it stands,
-// under its choices: the session the app holds there, with Sign out, and
-// the certificate the probe found at the address in use, with
-// Certificate…; drawn again only where it changed, so that a probe that
-// answers keeps the focus.
+// under its choices: the session the app holds there, with Sign out, the
+// certificate the probe found at the address in use, with Certificate…,
+// and each key of the phone's left valid there, with Show in My profile,
+// which opens the server's page at My profile with that key marked;
+// drawn again only where it changed, so that a probe that answers keeps
+// the focus.
 function fillFacts(form, s) {
   const box = form.querySelector(".server-facts");
   if (!box) return;
   const p = conn.probes[s.id] || {};
   const cert = (p.state === "lan" || p.state === "remote") && p.cert && p.cert.not_after ? p.cert : null;
-  const key = JSON.stringify([s.session || "", cert && cert.fingerprint, cert && cert.not_after, cert && p.url]);
+  const left = keysLeft(s);
+  const key = JSON.stringify([s.session || "", cert && cert.fingerprint, cert && cert.not_after, cert && p.url, left]);
   if (box.dataset.key === key) return;
   box.dataset.key = key;
   clear(box);
@@ -548,6 +577,11 @@ function fillFacts(form, s) {
     const line = t("connect.certLine", { name: commonName(cert.subject) || hostOf(p.url), until: fmtDay(cert.not_after) });
     const show = button(t("connect.certButton"), "server-cert-open", () => showCert(s.id));
     box.appendChild(elem("p", "server-fact server-cert", line, " ", show));
+  }
+  for (const k of left) {
+    const show = button(t("connect.keyLeftShow"), { cls: "server-key-show", aria: t("connect.keyLeftShowLabel", { id: k.id }) },
+      () => openServer(s.id, null, "#profile?key=" + k.id));
+    box.appendChild(elem("p", "server-fact server-key-left", t("connect.keyLeft", { id: k.id, name: k.user }), " ", show));
   }
   box.classList.toggle("hidden", !box.firstChild);
 }
@@ -639,7 +673,8 @@ function showCert(id) {
 // app holds there or with the key itself after the fingerprint, and
 // signs the app out there); the open settings lose its line and the
 // session's and keep what is typed in them, and the toast says whether
-// the server revoked the key.
+// the server revoked the key, or whether this Turn off left it, to revoke
+// at the next sign-in there (`left`, contract version 4).
 async function turnOff(id, btn, msg) {
   const s = serverById(id);
   const p = conn.probes[id] || {};
@@ -655,7 +690,9 @@ async function turnOff(id, btn, msg) {
   dropLoginLine();
   renderServers();
   const name = s ? s.name : "";
-  say(res && res.revoked ? t("connect.loginOffDone", { name }) : t("connect.loginOffLocal", { name }));
+  if (res && res.revoked) say(t("connect.loginOffDone", { name }));
+  else if (res && res.left === true) say(t("connect.loginOffLeft", { name }));
+  else say(t("connect.loginOffLocal", { name }));
 }
 
 // dropLoginLine takes the line of a kept login out of the open settings
@@ -701,33 +738,66 @@ function askInCard(text, yes, onYes) {
   box.scrollIntoView({ block: "nearest" });
 }
 
-// forgetAll forgets every kept login, from the ☰, once the user
-// confirmed it in the card; the keys stay at their servers.
+// forgetAll turns every kept login off, from the ☰, once the user
+// confirmed it in the card: each key revoked at its server as Turn off
+// revokes it and the app signed out there, the fingerprint asked once per
+// server where the app holds no session there, then forgotten on the phone
+// (forgetAll, contract version 4); the toast names the servers that keep a
+// key: left, which the app revokes at its next sign-in there as the same
+// user, or forgotten on the phone alone. An app before version 4 answers
+// without them, and forgot on the phone alone.
 function forgetAll() {
   askInCard(t("connect.forgetAllQuestion"), t("connect.forgetAll"), async () => {
+    const names = new Map(conn.servers.map((s) => [s.id, s.name || hostOf(s.lan || s.remote)]));
+    const named = (ids) => ids.map((id) => names.get(id) || id).join(", ");
+    let res;
     try {
-      await conn.bridge.forgetAll();
+      res = await conn.bridge.forgetAll();
     } catch (e) {
+      // some may be off already: the list as it stands
+      await loadServers();
+      dropLoginLine();
+      renderServers();
       say(t("connect.loginOffFailed", { error: e.message }), { bad: true });
       return;
     }
     await loadServers();
     dropLoginLine();
     renderServers();
-    say(t("connect.forgotAll"));
+    if (!res || !Array.isArray(res.revoked) || !Array.isArray(res.left) || !Array.isArray(res.local)) {
+      say(t("connect.forgotAllPhone"));
+      return;
+    }
+    if (!res.left.length && !res.local.length) {
+      say(t("connect.forgotAll"));
+      return;
+    }
+    let text = t("connect.forgotAllPhone");
+    if (res.left.length) text += " " + tn("connect.forgotKeysLeft", res.left.length, { names: named(res.left) });
+    if (res.local.length) text += " " + tn("connect.forgotKeysLocal", res.local.length, { names: named(res.local) });
+    say(text);
   });
 }
 
 // removeServer forgets a server, its certificate, its session and its
-// kept login, and says so in the toast; an error is said in its
-// settings, which stay open. The focus goes to the Add card where the
+// kept login, the login turned off first as Turn off does, at the address
+// the probe chose (remove, contract version 4), and says so in the toast:
+// the login's key revoked, the ids of the phone's keys still valid there
+// and a key listed at the server alone, to revoke under My profile. An
+// error is said in its settings, which stay open, the list read again for
+// what the app did before it. The focus goes to the Add card where the
 // list is empty now, else to the ☰.
 async function removeServer(id, msg) {
   const s = serverById(id);
+  const p = conn.probes[id] || {};
+  const url = p.state === "lan" || p.state === "remote" ? p.url : "";
+  let res;
   try {
-    await conn.bridge.remove(id);
+    res = await conn.bridge.remove(id, url);
   } catch (e) {
     showResult(msg, t("connect.removeFailed", { error: e.message }), false);
+    await loadServers();
+    renderServers();
     return;
   }
   conn.servers = conn.servers.filter((x) => x.id !== id);
@@ -735,7 +805,12 @@ async function removeServer(id, msg) {
   conn.open = null;
   conn.panel = null;
   renderServers();
-  say(t("connect.removed", { name: s ? s.name : "" }));
+  const name = s ? s.name || hostOf(s.lan || s.remote) : "";
+  const keys = res && Array.isArray(res.keys) ? res.keys.filter((k) => Number.isInteger(k) && k > 0 && k <= MAX_KEY_ID) : [];
+  let text = res && res.revoked === true ? t("connect.removedRevoked", { name }) : t("connect.removed", { name });
+  if (keys.length) text += " " + tn("connect.removedKeys", keys.length, { ids: keys.join(", ") });
+  if (res && res.local === true) text += " " + t("connect.removedKeyListed");
+  say(text);
   if (conn.servers.length) menuButton().focus();
   else $("add").focus();
 }

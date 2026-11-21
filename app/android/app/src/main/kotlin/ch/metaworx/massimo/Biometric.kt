@@ -53,9 +53,20 @@ class Biometric(private val activity: FragmentActivity, private val cancel: Stri
     fun withKey(title: String, cipher: Cipher, done: (Cipher?) -> Unit) =
         show(title, BiometricPrompt.CryptoObject(cipher)) { done(it?.cryptoObject?.cipher) }
 
-    // show shows the prompt; a second while one shows is refused.
+    /** close drops the prompt's answer still waiting, as the activity goes, so that it holds nothing of the one that went. */
+    fun close() {
+        pending = null
+    }
+
+    // show shows the prompt; a second while one shows is refused, as
+    // dismissed. So is one while the activity's fragments have their state
+    // saved (the activity stopped, Home pressed between two prompts of
+    // Forget all): androidx.biometric then shows none and calls no callback,
+    // which would leave the answer waiting for ever. That is the library's
+    // own test, not the lifecycle's state, which is still CREATED in
+    // onStart, where the cover asks.
     private fun show(title: String, crypto: BiometricPrompt.CryptoObject?, done: (BiometricPrompt.AuthenticationResult?) -> Unit) {
-        if (pending != null) {
+        if (pending != null || activity.supportFragmentManager.isStateSaved) {
             done(null)
             return
         }

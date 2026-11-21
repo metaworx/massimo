@@ -77,6 +77,22 @@ class LoginStore(private val file: File) {
         write(all)
     }
 
+    /**
+     * setKeyId gives the login kept for the server [id] the id [keyId] of its
+     * key, where it is still [was], kept without one, so that a login kept
+     * or forgotten meanwhile is left as it is; it reports whether the login
+     * has that id now, a check meanwhile having given it the same one too.
+     */
+    @Synchronized
+    fun setKeyId(id: String, was: KeptLogin, keyId: Long): Boolean {
+        if (keyId <= 0) return false
+        val now = get(id) ?: return false
+        if (now == was.copy(keyId = keyId)) return true
+        if (now != was || now.keyId > 0) return false
+        put(id, now.copy(keyId = keyId))
+        return true
+    }
+
     /** forget forgets the login of the server [id], and reports whether there was one. */
     @Synchronized
     fun forget(id: String): Boolean {

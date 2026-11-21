@@ -12,7 +12,7 @@
 //            "server" for a server's page's, token, setToken, login.*
 //            and connect
 //   servers  the servers the app keeps, as {id, name, node, lan, …,
-//            login, ask, start, session, trusted_at}
+//            login, ask, start, session, trusted_at, unrevoked}
 //   answers  by URL, how /healthz answers there: {node, version,
 //            fingerprint, self_signed, subject, issuer, names,
 //            not_before, not_after}; a self-signed certificate is
@@ -38,11 +38,25 @@
 //            user given as keepAs; without it the page has no login
 //   openLogin for kind "connect", what open(id, url, {login: true})
 //            does: true (the default), false, or "error:<message>"
+//   keys     by server id, the key {user, id} its kept login holds, the
+//            id 0 for a login kept before the id was (contract version 4)
+//   unrevokable the ids of the servers whose key the server does not
+//            revoke (it fails there)
 //
-// The connect page's bridge is version 3: save keeps start at one server
-// at most and turns it on for the first one added, as the adapters do;
-// trust notes trusted_at; forget (Turn off) and signOut end the server's
-// session; signOut answers {ended} true where it was given an address.
+// The connect page's bridge is version 4: save keeps start at one server
+// at most and turns it on for the first one added, as the adapters do,
+// and a server's unrevoked as it was; trust notes trusted_at; open takes
+// a server's lan or remote, alone or with #profile?key=<id>, and refuses
+// any other URL; forget (Turn off) and signOut end the server's session;
+// signOut answers {ended} true where it was given an address. Turning a
+// login off, as Turn off, Forget all and Remove do, as the app's Revoker
+// does: the key revoked where the server answers (an address given, or
+// one of its addresses in answers, as the app looks for one) and is not
+// unrevokable; else, with a key id from keys, left once in the server's
+// unrevoked; else forgotten on the phone alone. forget answers
+// {revoked, left}, forgetAll {revoked, left, local} by server id, remove
+// {revoked, keys, local} with keys the ids of the keys still valid there.
+// A session found (session) revokes the keys left there for its user.
 // Every call is recorded in window.__fakeBridge.calls as [name, args…],
 // and the servers, the settings and the token as they stand in
 // window.__fakeBridge.
@@ -121,9 +135,33 @@
     return Object.assign(r, { ok: true, node: a.node || "", version: a.version || "" });
   };
   const server = (id) => rec.servers.find((x) => x.id === id);
+  // turnOff turns a server's kept login off, as the app's Revoker does,
+  // and says how its key went: "revoked", "left" (by its id, once, in the
+  // server's unrevoked) or "local"; the session signed out.
+  const turnOff = (s, reached) => {
+    const key = (cfg.keys || {})[s.id];
+    s.login = "";
+    s.session = null;
+    if (reached && !(cfg.unrevokable || []).includes(s.id)) return "revoked";
+    if (!key || !(key.id > 0)) return "local";
+    s.unrevoked = s.unrevoked || [];
+    if (!s.unrevoked.some((k) => k.user === key.user && k.id === key.id)) s.unrevoked.push(copy(key));
+    return "left";
+  };
+  // reached reports whether the app reaches s: at url where the page gave
+  // one, else at an address that answers, as the app looks for one.
+  const reached = (s, url) => !!url || !!((cfg.answers || {})[s.lan] || (cfg.answers || {})[s.remote]);
+  // opens reports whether open may load url for s: its lan or remote,
+  // alone or with My profile's fragment that marks a key.
+  const opens = (s, url) => {
+    const at = url.indexOf("#");
+    const base = at < 0 ? url : url.slice(0, at);
+    if (!base || (base !== s.lan && base !== s.remote)) return false;
+    return at < 0 || /^profile\?key=[1-9][0-9]{0,14}$/.test(url.slice(at + 1));
+  };
   let seq = 0;
   window.massimo = {
-    version: 3,
+    version: 4,
     servers() {
       call("servers");
       return later(rec.servers);
@@ -139,6 +177,7 @@
         s.login = old.login || "";
         s.session = old.session || null;
         s.trusted_at = old.trusted_at || "";
+        s.unrevoked = old.unrevoked || [];
         Object.assign(old, s);
         return later(old);
       }
@@ -147,13 +186,17 @@
       s.login = "";
       s.session = null;
       s.trusted_at = "";
+      s.unrevoked = [];
       rec.servers.push(s);
       return later(s);
     },
-    remove(id) {
-      call("remove", id);
+    remove(id, url) {
+      call("remove", id, url);
+      const s = server(id);
+      const went = s && s.login ? turnOff(s, reached(s, url)) : "";
+      const keys = s ? (s.unrevoked || []).map((k) => k.id) : [];
       rec.servers = rec.servers.filter((x) => x.id !== id);
-      return later(null);
+      return later({ revoked: went === "revoked", keys, local: went === "local" }, 30);
     },
     discover(ms) {
       call("discover", ms);
@@ -177,6 +220,8 @@
     open(id, url, opts) {
       if (opts) call("open", id, url, opts);
       else call("open", id, url);
+      const target = server(id);
+      if (!target || !opens(target, url)) return answerOf("error:That address is not one of the server's.", 20);
       if (!opts || !opts.login) return later(true);
       const a = cfg.openLogin === undefined ? true : cfg.openLogin;
       if (typeof a === "string") {
@@ -188,23 +233,26 @@
     forget(id, url) {
       call("forget", id, url);
       const s = server(id);
-      if (s) {
-        s.login = "";
-        s.session = null; // Turn off signs out too
-      }
-      return later({ revoked: !!url }, 30);
+      const went = s && s.login ? turnOff(s, reached(s, url)) : "local"; // Turn off signs out too
+      return later({ revoked: went === "revoked", left: went === "left" }, 30);
     },
     forgetAll() {
       call("forgetAll");
-      for (const s of rec.servers) s.login = "";
-      return later(null);
+      const res = { revoked: [], left: [], local: [] };
+      for (const s of rec.servers) {
+        if (s.login) res[turnOff(s, reached(s, ""))].push(s.id); // at the address that answers
+      }
+      return later(res, 30);
     },
     session(id, url) {
       call("session", id, url);
       const s = server(id);
       const found = cfg.sessions && id in cfg.sessions ? cfg.sessions[id] : s ? s.session || null : null;
       if (s && typeof found !== "string") s.session = null; // refused: forgotten
-      if (s && typeof found === "string" && !found.startsWith("error:")) s.session = found;
+      if (s && typeof found === "string" && !found.startsWith("error:")) {
+        s.session = found;
+        s.unrevoked = (s.unrevoked || []).filter((k) => k.user !== found); // revoked with that session
+      }
       return answerOf(found, 20);
     },
     signOut(id, url) {
