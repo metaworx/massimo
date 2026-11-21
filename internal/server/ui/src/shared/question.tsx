@@ -13,7 +13,7 @@
  */
 
 import type { Ref } from "preact";
-import { useEffect, useId, useRef, useState } from "preact/hooks";
+import { useId, useLayoutEffect, useRef, useState } from "preact/hooks";
 
 /**
  * useBusy is a request under way, for the button that sends it: busy
@@ -107,7 +107,8 @@ export function Question({ text, yes, no, onYes, onNo, boxRef }: {
   const id = useId();
   const noRef = useRef<HTMLButtonElement>(null);
   const sending = useBusy();
-  useEffect(() => {
+  // in the drawing's own turn, as the plain question did, not after the next frame
+  useLayoutEffect(() => {
     noRef.current?.focus();
   }, []);
   return (
@@ -136,16 +137,18 @@ export function Question({ text, yes, no, onYes, onNo, boxRef }: {
  * useAsk is a row of actions that asks in its own place: asking while
  * the question is shown; ask shows it, done takes it back and puts the
  * focus on the element ref holds, the button that asked, once the row is
- * drawn again. held, where given, keeps whether it asks beyond the part,
- * a store's live state, so that the store takes the question back where
- * what it asked about changed, and at a sign-out (a part drawn once for
- * the page's life); without it the part keeps it. Where the caller hands
- * box to its Question, a question the store takes back while the focus
- * is in its box gives the focus back the same way, judged as the drawing
- * that takes it away begins; done(false) gives it back to nothing, as
- * before. Where the button cannot take it (hidden or off), the element
- * row holds takes it (a row of the caller's, which holds it with
- * tabindex -1 until it leaves).
+ * drawn again: in that drawing's turn (a layout effect), as the plain
+ * questions did at once, not after the next frame. held, where given,
+ * keeps whether it asks beyond the part, a store's live state, so that
+ * the store takes the question back where what it asked about changed,
+ * and at a sign-out (a part drawn once for the page's life); without it
+ * the part keeps it. Where the caller hands box to its Question, a
+ * question the store takes back while the focus is in its box gives the
+ * focus back the same way, judged as the drawing that takes it away
+ * begins, before the box leaves the page; done(false) gives it back to
+ * nothing, as before. Where the button cannot take it (hidden or off),
+ * the element row holds takes it (a row of the caller's, which holds it
+ * with tabindex -1 until it leaves).
  */
 export function useAsk<E extends HTMLElement>(held?: { asking: boolean }) {
   const [own, setOwn] = useState(false);
@@ -162,7 +165,8 @@ export function useAsk<E extends HTMLElement>(held?: { asking: boolean }) {
   const inside = useRef(false);
   // the drawing that takes the question away begins with its box still in the page: whether the focus is in it
   if (!asking && box.current && box.current.isConnected && box.current.contains(document.activeElement)) inside.current = true;
-  useEffect(() => {
+  // in that drawing's own turn, as the plain questions did, not after the next frame
+  useLayoutEffect(() => {
     const lost = inside.current && !quiet.current;
     inside.current = false;
     quiet.current = false;

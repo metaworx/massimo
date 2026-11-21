@@ -3,8 +3,16 @@
 
 // The Massimo web UI, Backup and restore: its plain names, which call its
 // parts (ui/src/backups/, MassimoParts.backups): a box per Cube, on Cube
-// settings the chosen Cube's, in System settings one fold per Cube.
+// settings the chosen Cube's, in System settings one fold per Cube; and
+// fmtWhen, which notify.js calls until AP UiParts' Block 13.
 "use strict";
+
+// fmtWhen is an API time as date and time (ui/src/shared/time.ts), for
+// the notifications' card (notify.js), plain until AP UiParts' Block 13,
+// which takes it away with that card's last plain caller.
+function fmtWhen(iso) {
+  return MassimoParts.fmtWhen(iso);
+}
 
 // renderBackups draws every box again, after a change of language (app.js
 // applyLanguage).

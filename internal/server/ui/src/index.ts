@@ -39,9 +39,12 @@ import { iconsChanged } from "./shared/look";
 import { parts, register } from "./shared/region";
 import { forgetRepairs } from "./shared/repair";
 import { newSession } from "./shared/session";
+import { fmtWhen } from "./shared/time";
 
 /** The parts the plain code calls, by region. */
 export interface MassimoParts {
+  /** An API time as date and time (shared/time.ts), for the plain fmtWhen of backup.js, which notify.js calls until AP UiParts' Block 13. */
+  fmtWhen(iso: string): string;
   /** The page's language changed (app.js applyLanguage): every part draws its texts again. */
   language(): void;
   /** The icons chosen for the window and the radio changed (theme.js redrawSigns): every sign draws them again. */
@@ -96,6 +99,7 @@ declare global {
   }
 }
 
+register("fmtWhen", fmtWhen);
 register("language", languageChanged);
 register("icons", iconsChanged);
 register("serverEvent", (ev: ServerEvent) => {
