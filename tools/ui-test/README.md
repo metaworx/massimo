@@ -275,6 +275,9 @@ hence `failed_checks_forgotten`.
   focus in the form, ☰ the mark and its System settings the disk, red after a failed
   save and the worse of it and the log's warning; Reset clears them;
   a user gone from the server forgets its form;
+  a new user's, role's and provider's form takes the focus in its first field as it
+  is drawn, and what is typed at once in a later field stays there, under the paused
+  clock;
   a capability refused for every role shows as stored;
   a Cube settings draft marks ☰ and its Cube settings (D24);
   a pill's item unfolds a folded card and puts the focus in the form;

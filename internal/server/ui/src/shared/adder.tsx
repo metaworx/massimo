@@ -7,14 +7,15 @@
  * The end of a list that adds an item (Add a user, Add a role, Add a
  * provider): the new item's form in its place while it is shown, and the
  * button that shows it, hidden meanwhile. Shown, the form takes the focus
- * in its first field; closed, by its Cancel or once the item is added,
- * the focus goes back to the button. The caller keeps whether it is
- * shown (live state, so that it outlives a reload of the list) and draws
- * the form.
+ * in its first field, in the drawing's own turn, so that what is typed at
+ * once stays in the field it is typed in; closed, by its Cancel or once
+ * the item is added, the focus goes back to the button. The caller keeps
+ * whether it is shown (live state, so that it outlives a reload of the
+ * list) and draws the form.
  */
 
 import type { ComponentChildren } from "preact";
-import { useEffect, useRef } from "preact/hooks";
+import { useLayoutEffect, useRef } from "preact/hooks";
 import { hid } from "./cls";
 
 /**
@@ -33,8 +34,9 @@ export function Adder({ id, formId, label, shown, set, children }: {
   const box = useRef<HTMLDivElement>(null);
   const btn = useRef<HTMLButtonElement>(null);
   const was = useRef(shown);
-  // a form just shown takes the focus in its first field, one just closed gives it back to the button
-  useEffect(() => {
+  // a form just shown takes the focus in its first field, one just closed gives it back to the button: in the drawing's own
+  // turn, not a frame later, when the user may be typing in another of its fields already and would go on in the first
+  useLayoutEffect(() => {
     if (was.current === shown) return;
     was.current = shown;
     if (shown) box.current?.querySelector<HTMLElement>("input:not([disabled]), select:not([disabled])")?.focus();

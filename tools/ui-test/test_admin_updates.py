@@ -344,6 +344,44 @@ def test_a_providers_draft_stays_and_its_secret_is_kept_nowhere(page, case):
     show_view(page, "tiles")
 
 
+# Each list's Add: its button, its form's place, the form's first field and a later one.
+ADDERS = {"user": ("#user-add", "#user-new", "name", "password"), "role": ("#role-add", "#role-new", "key", "name"),
+          "provider": ("#provider-add", "#provider-new", "key", "issuer")}
+
+
+@pytest.mark.clock
+@pytest.mark.parametrize("what", list(ADDERS))
+def test_a_new_items_form_keeps_the_focus_where_it_is_typed_in(page, case, what):
+    """Add a user, a role or a provider: the form takes the focus in its
+    first field as it is drawn, not a frame later; what is typed in a later
+    field at once, before the page's next frame, stays there, and so do the
+    focus and what is typed next. Under the paused clock, the page's next
+    frame comes when the test runs it, after the typing: a slow page's late
+    frame took the focus back to the first field, and the rest of what was
+    typed went there (a provider's issuer into its key, a new user's
+    password into its name; CI, 2026-11-21)."""
+    add, box, first, later = ADDERS[what]
+    show_view(page, "system")
+    page.locator(add).wait_for()
+    page.clock.pause_at(page.evaluate("Date.now()") + 1000)
+    try:
+        page.locator(add).click()
+        form = page.locator(box)
+        drawn = page.evaluate("(b) => document.activeElement.closest(b) ? document.activeElement.name : null", box)
+        form.locator(f"[name={later}]").fill("typed")
+        page.clock.run_for(200)  # the page's next frames, and their tasks
+        assert page.evaluate("document.activeElement.name") == later, "the focus stays in the field typed in"
+        page.keyboard.type("-on")
+        assert form.locator(f"[name={later}]").input_value() == "typed-on", "what is typed next goes on there"
+        assert form.locator(f"[name={first}]").input_value() == "", "and nothing into the first field"
+        assert drawn == first, f"the form took the focus in its first field as it was drawn, not {drawn}"
+    finally:
+        page.clock.resume()
+        page.locator(box + " .form-cancel").click()
+    assert wait_until(page, f"document.activeElement === document.querySelector({json.dumps(add)})", 5), "Cancel gives the focus back to Add"
+    show_view(page, "tiles")
+
+
 def test_an_integrations_drafts_stay_and_a_request_keeps_its_choice(page, case):
     """An integration's name typed and a capability of its maximum switched,
     and a request's maximum narrowed, none of it sent: Look again and

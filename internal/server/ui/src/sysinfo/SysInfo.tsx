@@ -17,7 +17,7 @@
  */
 
 import type { ComponentChildren } from "preact";
-import { useEffect } from "preact/hooks";
+import { useLayoutEffect } from "preact/hooks";
 import type { ConfigView, StoreInfo, SystemInfo } from "../api";
 import { Age, Notice } from "../shared/badge";
 import { Copy, CopyPair } from "../shared/copy";
@@ -323,7 +323,7 @@ export function SysInfo() {
   const failing = v ? (v.cube_proxies || []).filter((p) => !p.listening).length : 0;
   const badge = failing ? tn("proxy.badge.failing", failing) : "";
   // the page's row counts the proxies that do not listen
-  useEffect(() => {
+  useLayoutEffect(() => {
     cardBadges("info-page", badge ? [{ text: badge, kind: "warn" }] : []);
   }, [badge]);
   const rows = s ? Object.values(s.rows || {}).reduce((a, b) => a + b, 0) : 0;
