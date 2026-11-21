@@ -26,6 +26,7 @@ import { CountList, KvList } from "../shared/kv";
 import { tParts } from "../shared/lang";
 import { Link } from "../shared/link";
 import { data, folds, load, tick } from "./store";
+import { cardBadges } from "../shared/card";
 
 /** OS_NAMES are the operating systems as Go names them, where the server has no distribution's name. */
 const OS_NAMES: Record<string, string> = { linux: "Linux", darwin: "macOS", windows: "Windows", freebsd: "FreeBSD" };
@@ -323,7 +324,7 @@ export function SysInfo() {
   const badge = failing ? tn("proxy.badge.failing", failing) : "";
   // the page's row counts the proxies that do not listen
   useEffect(() => {
-    sectionBadges($("info-page"), badge ? [badgeEl(badge, "warn")] : []);
+    cardBadges("info-page", badge ? [{ text: badge, kind: "warn" }] : []);
   }, [badge]);
   const rows = s ? Object.values(s.rows || {}).reduce((a, b) => a + b, 0) : 0;
   return (

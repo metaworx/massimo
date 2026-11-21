@@ -28,11 +28,12 @@ import { focusForm, type Place, useForm } from "../shared/forms";
 import { Question, busyProps, useAsk, useBusy } from "../shared/question";
 import { addProvider, autoRoleOptions, removeProvider, saveProvider } from "./sendProviders";
 import { adding, load, providerFormKey, providers, providerUI, said } from "./store";
+import { cardBadges, showCard } from "../shared/card";
 
 /** openProvider shows a provider's settings and puts the focus into them, from any page: System settings shown, its panel open. */
 function openProvider(key: string): void {
   if (!isShown("system")) showView("system");
-  showCard($("sys-providers")); // a folded card unfolded, its form in sight
+  showCard("sys-providers"); // a folded card unfolded, its form in sight
   providerUI.of(key).open = true;
   focusForm(providerFormKey(key));
 }
@@ -204,7 +205,7 @@ export function ProvidersCard() {
   const count = providers.loaded && list.length ? String(list.length) : "";
   // the card's head counts them, once they are read; nothing for none or once forgotten
   useEffect(() => {
-    sectionBadges($("sys-providers"), count ? [badgeEl(count, "mode")] : []);
+    cardBadges("sys-providers", count ? [{ text: count, kind: "mode" }] : []);
   }, [count]);
   return (
     <>

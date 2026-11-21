@@ -29,11 +29,12 @@ import { focusForm, useForm } from "../shared/forms";
 import { BusyButton, Question, busyProps, useAsk, useBusy, useSetAtOnce } from "../shared/question";
 import { createRole, disableRole, removeRole, rolesMsg, saveRole, setCapability } from "./sendRoles";
 import { adding, load, roleFormKey, roleUI, roles, said } from "./store";
+import { cardBadges, showCard } from "../shared/card";
 
 /** openRole shows a role's settings and puts the focus into them, from any page: System settings shown, the role's panel open. */
 function openRole(key: string): void {
   if (!isShown("system")) showView("system");
-  showCard($("sys-roles")); // a folded card unfolded, its form in sight
+  showCard("sys-roles"); // a folded card unfolded, its form in sight
   roleUI.of(key).open = true;
   focusForm(roleFormKey(key));
 }
@@ -164,7 +165,7 @@ export function RolesCard() {
   const count = roles.loaded ? tn("roles.badge.count", list.length) : "";
   // the card's head counts them, in the page's language, once they are read; nothing once forgotten
   useEffect(() => {
-    sectionBadges($("sys-roles"), count ? [badgeEl(count, "mode")] : []);
+    cardBadges("sys-roles", count ? [{ text: count, kind: "mode" }] : []);
   }, [count]);
   return (
     <>
@@ -201,7 +202,7 @@ export function CapsCard() {
   const badge = !roles.loaded ? "" : off ? tn("roles.badge.off", off) : t("roles.badge.allOn");
   // the card's head says how many are off, in the page's language, once they are read; nothing once forgotten
   useEffect(() => {
-    sectionBadges($("sys-caps"), badge ? [badgeEl(badge, off ? "warn" : "ok")] : []);
+    cardBadges("sys-caps", badge ? [{ text: badge, kind: off ? "warn" : "ok" }] : []);
   }, [badge, off]);
   return (
     <div id="caps-list">

@@ -1851,9 +1851,9 @@ A plain panel that opens is a `detailsPanel`:
 its head the name, the serial, login or key, and the badges,
 its body the form cloned from the feature's template.
 A long page is a grid of section cards (`section.section-card`,
-its heading's `button.section-fold` folding it):
-`sectionCards` makes them fold and keeps the fold in the browser,
-`sectionBadges` shows what a card holds in its head,
+its heading's `button.section-fold` folding it), the page's skeleton:
+the parts fold them and keep the fold in the browser,
+and draw what a card holds in its head (`ui/src/shared/card.ts`, `ui/src/chrome/`, below);
 `pageBar` fills the sections menu of its title's row kept at the top
 (with a part without a fold marked `.page-section`, as Cube settings' panel),
 `pageSwitch` puts the settings pages in its title's place (`SETTINGS_PAGES` in `pages.js`,
@@ -2083,6 +2083,8 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `burstReader` | `burst.ts` | one read for a burst of the stream's events: a read in flight and at most one more after it, which reads what the events meanwhile asked for, none asked for in the session before (the parts that follow the server while shown) | `read(what)`, the reads by name; gives `ask(...what)` |
 | `session`, `stillSession`, `newSession` | `session.ts` | the session's number, raised by `MassimoParts.signedOut` before anything is forgotten: a store takes it before an await and drops the answer, its message and its next timer where it changed; `actionRunner`'s `bound` does so for a runner | –; `n`; – |
 | `me`, `own`, `meChanged` | `me.ts` | who the page is signed in as, `state.me` as `applyCaps` of `login.js` hands it over at every read of it (`MassimoParts.me`), null from a sign-out on; the token it is signed in with, by which a user's sessions say "this device" and "its key" | `m` |
+| `cardBadges`, `badgesOf`, `BadgeSpec` | `card.ts` | what a section card's head shows at a glance, also while it is folded: a region gives a card's badges by its id from its drawing's effect, `[]` for none, and the page's chrome draws them (`ui/src/chrome/Cards.tsx`) | `id`, `list` of `{ text, kind }` |
+| `showCard`, `wireCards` | `card.ts` | a section card brought into view, unfolded, the focus on its heading's button, kept there for two seconds where its page has just been opened (`instant`); the cards' folds wired once, each kept in this browser (`massimo.fold.<card id>`), set on the skeleton at once | `id`, `instant` |
 | `userPath`, `Run`, `loadTokens`, `revokeToken`, `revokeOwn`, `createKey`, `loadIdentities`, `addIdentity`, `changeIdentity`, `removeIdentity` | `account.ts` | what a user's sessions, keys and identities read and send (`…/users/{name}/tokens`, `…/identities`), for System settings → Users and My profile alike; a change through the caller's runner (`Run`), which reloads what it shows and says how it went in its own line; Revoke of the token in use signs out | `name`, `rest`; `run`, `name`, and what each sends |
 | `Tokens` | `tokens.tsx` | a user's sessions and keys (a user's panel, My profile): each with Revoke, "this device" and "its key" by `own`, Create key and the key just made, shown once by the read that follows and kept in the part's own state alone; read when its place opens and again at each change of the caller's counter while open; an answer after a sign-out dropped | `u`, `off`, `open`, `reads` (the caller's counter), `run`, `say` (the caller's message line), `labelId` (the new key's field's id), `help` (the group's ⓘ after Create key, My profile's) |
 | `Identities`, `Changes` | `identities.tsx` | a user's identities at the sign-in providers (a user's panel, My profile): each with what the provider said and Remove; with `changes`, Change of one no sign-in used, a settings form kept by its key, the forms of identities gone or made unchangeable forgotten, and all of them where the box goes off; with `assign`, Assign; `after` what follows the list once read (My profile's Link buttons); `quiet` draws nothing while the list is empty and the caller offers nothing after it (`offer`: My profile's Link buttons, none in the app, where the rows are still named from every provider) | `u`, `off`, `open`, `reads`, `providers` (the enabled ones), `run`, `say`, `title`, `none`, `cls`, `changes` (`key(id)`, `under`, `ui(key)`, `forget(key)`, `show(key)`: the caller's forms and how one is brought into sight), `assign`, `after(list)`, `quiet`, `offer` |
@@ -2148,9 +2150,9 @@ What the table cannot say:
   so that its drafts start from them and nothing typed meanwhile is lost.
 
 These builders of `components.js` and `app.js` have no part yet, since no region
-that has moved uses them: `countList`;
-`sectionBadges` is the page's chrome's, plain until Block 14, and a part that
-counts what a card holds calls it, with `badgeEl`, from an effect.
+that has moved uses them: `countList`.
+A part that counts what a card holds gives it from an effect, by the card's id
+(`cardBadges`).
 Known gaps, for the blocks that meet them:
 a device's type and identifiers, drawn twice:
 in a device row's line of expert mode (`rooms/Devices.tsx`, `.device-sub`,
@@ -2179,8 +2181,9 @@ so the browser's prompt asks there too, and staying shows the dialog above the s
 whose forms cannot be shown while signed out.
 The block that first needs one writes it under `ui/src/shared/`,
 knowing no region, and adds its row to the table above; no region writes its own.
-A section card's badges (`sectionBadges`) stay plain until the page's chrome moves
-(Block 14): the Cubes' card badges are drawn by `cubes.js`.
+A section card's badges are the page's chrome's (`ui/src/chrome/Cards.tsx`):
+a region gives them by the card's id, a part with `cardBadges`,
+`cubes.js` the Cubes card's with `MassimoParts.chrome.badges`.
 
 A region that moves calls these, in this order:
 
@@ -2381,8 +2384,7 @@ every list, panel, new item's form and message is forgotten.
 The page's chrome says where they are unsaved (`ui/src/chrome/`, AP UnsavedMarks
 Block 5), a region of its own drawn once as `parts.js` loads,
 since the chrome is plain until Block 14 and the log's mark until Block 11:
-a section's pill in its `span.section-pill` beside the plain badges, which
-`sectionBadges` empties and the pill's place it leaves alone,
+a section's pill in its `span.section-pill` beside the badges (`Cards.tsx`),
 the forms it shows the beginnings of their keys in `data-forms`, its entry's name
 the text key in `data-title`;
 a menu item's disk in its `span.menu-item-mark` with its `data-forms`

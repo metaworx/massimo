@@ -25,6 +25,7 @@ import { SaveButton, useDraft } from "../shared/field";
 import { focusForm, useForm } from "../shared/forms";
 import { changed, closeEditor, coloursChanged, deleteDraft, editor, hexUI, resetColours, SCHEME_FORM, saveDraft, takeColour } from "./scheme";
 import { load } from "./store";
+import { showCard } from "../shared/card";
 
 /** tokenLabel is a token's name for people. */
 function tokenLabel(k: string): string {
@@ -128,7 +129,7 @@ export function Editor() {
     name: { key: "appearance.editorTitle" },
     open: () => {
       if (!isShown("me")) showView("me");
-      showCard($("prefs")); // a folded card unfolded, the editor in sight
+      showCard("prefs"); // a folded card unfolded, the editor in sight
       focusForm(SCHEME_FORM);
     },
   });

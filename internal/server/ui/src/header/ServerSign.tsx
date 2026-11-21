@@ -15,6 +15,7 @@
 
 import { Icon } from "../shared/icon";
 import { MenuItem } from "../shared/menu";
+import { showCard } from "../shared/card";
 
 /** The icon of each state of the server's sign. */
 const SERVER_ICON: Record<string, string> = { up: "icon-plug-on", info: "icon-info", new: "mark-warn", down: "icon-plug-off" };
@@ -44,7 +45,7 @@ export function ServerIcon({ st }: { st: string }) {
 /** openSoftware opens Software update on Maintenance. */
 function openSoftware(): void {
   showView("maint");
-  showCard($("sys-software"));
+  showCard("sys-software");
 }
 
 /**

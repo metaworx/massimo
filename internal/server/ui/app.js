@@ -1041,12 +1041,10 @@ async function init() {
   renderLangSelect();
   initHelpSlots();
   // the header kept at the top; System settings' row there with its
-  // sections menu, its cards that fold; back to top on every page
+  // sections menu (the cards fold by the parts, ui/src/shared/card.ts);
+  // back to top on every page
   stickyHeader();
-  for (const page of [$("system"), $("maint-page"), $("cube-page"), $("me")]) {
-    sectionCards(page);
-    pageBar(page);
-  }
+  for (const page of [$("system"), $("maint-page"), $("cube-page"), $("me")]) pageBar(page);
   backToTop();
   initSettings();
   applySettings();

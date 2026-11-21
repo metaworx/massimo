@@ -27,6 +27,7 @@ import {
   cancelReboot, INTERVALS, type Interval, intervalWaits, announceWaits, load, parseGoDuration, reboot, REBOOT_DELAY_MAX, rebootAsk, rebootDelay, reloadSettings,
   restart, restartAsk, runReboot, runRestart, saveInterval, setAnnounce, settings, waiting,
 } from "./store";
+import { cardBadges } from "../shared/card";
 
 /** intervalLabel is seconds in the language's short units ("10 s", "6 h", "1 min, 30 s"), Off for 0. */
 function intervalLabel(sec: number): string {
@@ -190,7 +191,7 @@ export function Maintenance() {
   const badge = n ? tn("maint.badge.pending", n) : "";
   // the card's head counts what waits for the next start
   useEffect(() => {
-    sectionBadges($("sys-maint"), badge ? [badgeEl(badge, "warn")] : []);
+    cardBadges("sys-maint", badge ? [{ text: badge, kind: "warn" }] : []);
   }, [badge]);
   const file = restart.file;
   return (

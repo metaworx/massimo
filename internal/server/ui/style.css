@@ -569,7 +569,7 @@ body.scrolled #pending { display: none !important; }
 }
 
 /* System settings: the page at full width, its parts section cards in a
-   grid (components.js sectionCards, backToTop); a card is
+   grid (ui/src/shared/card.ts, components.js backToTop); a card is
    as wide as the grid, a .half card shares a row where there is room;
    Users, Roles and Capabilities flow in two columns there, none split,
    the break where their heights put it. */

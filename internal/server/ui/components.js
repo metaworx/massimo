@@ -806,78 +806,16 @@ function filePicker(accept, onFile) {
 // --- a page of section cards -------------------------------------------
 //
 // A long page (System settings) is a grid of cards, each a
-// section.section-card with an id: its head an h3 holding a
-// button.section-fold (aria-controls its body) with the title in a
-// span.section-title, then a span.section-badges and its help; its body
-// the element the button controls. The card's needs-* classes say who
-// sees it, as everywhere on the page.
-
-// foldCard folds a card or opens it: the body hidden, the head with its
-// badges still shown.
-function foldCard(card, folded) {
-  const btn = card.querySelector(".section-fold");
-  btn.setAttribute("aria-expanded", folded ? "false" : "true");
-  document.getElementById(btn.getAttribute("aria-controls")).classList.toggle("hidden", folded);
-  card.classList.toggle("folded", folded);
-}
-
-// sectionCards makes the cards of root fold from the button in their
-// heading, each card's fold kept in this browser (massimo.fold.<card
-// id>, app.js store) and taken up again at the next load. Cards wired
-// once are left alone, so it may be called again.
-function sectionCards(root) {
-  for (const card of root.querySelectorAll(".section-card")) {
-    const btn = card.querySelector(".section-fold");
-    if (!btn || btn.dataset.wired) continue;
-    btn.dataset.wired = "1";
-    foldCard(card, readStored("massimo.fold." + card.id) === "1");
-    btn.addEventListener("click", () => {
-      const folded = btn.getAttribute("aria-expanded") === "true";
-      foldCard(card, folded);
-      store("massimo.fold." + card.id, folded ? "1" : null);
-    });
-  }
-}
-
-// sectionBadges shows what a card holds at a glance in its head, also
-// while it is folded: badges (badgeEl) in place of the ones it had.
-function sectionBadges(card, badges) {
-  const box = card && card.querySelector(".section-badges");
-  if (!box) return;
-  clear(box);
-  box.append(...badges);
-}
+// section.section-card with an id (ui/src/shared/card.ts): their folds,
+// kept in this browser, and their heads' badges are the parts'
+// (ui/src/chrome/).
 
 // showCard brings a card into view, opened, with the focus on its
-// heading's button (a page-section's on its summary, where it has one). On a page just opened (instant) the cards above it
-// still grow as their data comes, and a smooth scroll keeps the target
-// it started with and stops short: the card is brought there at once,
-// and again while the cards around it change size for two seconds,
-// until the user scrolls.
+// heading's button, as the parts do (ui/src/shared/card.ts showCard); on a
+// page just opened (instant) it is kept there while the cards around it
+// grow. home.js and the sections menu call it.
 function showCard(card, instant) {
-  if (card.classList.contains("folded")) {
-    foldCard(card, false);
-    store("massimo.fold." + card.id, null);
-  }
-  const smooth = !instant && !matchMedia("(prefers-reduced-motion: reduce)").matches;
-  card.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" });
-  const head = card.querySelector(".section-fold") || card.querySelector("summary");
-  if (head) head.focus({ preventScroll: true });
-  if (instant) keepCardInView(card, 2000);
-}
-
-// keepCardInView brings a card to the top again whenever its page's
-// cards change size, for ms or until the user scrolls by hand.
-function keepCardInView(card, ms) {
-  const by = ["wheel", "touchstart", "keydown", "pointerdown"];
-  const ro = new ResizeObserver(() => card.scrollIntoView({ block: "start" }));
-  const stop = () => {
-    ro.disconnect();
-    for (const ev of by) removeEventListener(ev, stop);
-  };
-  ro.observe(card.parentElement);
-  for (const ev of by) addEventListener(ev, stop, { passive: true });
-  setTimeout(stop, ms);
+  MassimoParts.chrome.showCard(card.id, instant);
 }
 
 // PAGE_SECTIONS are what a page's sections menu lists: its section cards,

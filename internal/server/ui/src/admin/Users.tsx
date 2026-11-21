@@ -29,6 +29,7 @@ import { type Changes, Identities } from "../shared/identities";
 import { Tokens } from "../shared/tokens";
 import { adding, enabled, identityFormKey, identityUI, load, passwordLogin, reads, said, userFormKey, userUI, users } from "./store";
 import { createUser, mayManage, mayPassword, removeUser, roleOptions, run, saveUser, setPasswordLogin, usersAdmin, usersMsg } from "./sendUsers";
+import { cardBadges, showCard } from "../shared/card";
 
 /** userName is how a user is shown: its chain (AP StoreRaise v1.2), its display name, else its login name. */
 function userName(u: User): string {
@@ -41,7 +42,7 @@ function userName(u: User): string {
  */
 function openUser(name: string): void {
   if (!isShown("system")) showView("system");
-  showCard($("sys-users")); // a folded card unfolded, its form in sight
+  showCard("sys-users"); // a folded card unfolded, its form in sight
   userUI.of(name).open = true;
   focusForm(userFormKey(name));
 }
@@ -59,7 +60,7 @@ function changesOf(name: string): Changes {
     forget: (key) => identityUI.forget(key),
     show: () => {
       if (!isShown("system")) showView("system");
-      showCard($("sys-users")); // a folded card unfolded, its form in sight
+      showCard("sys-users"); // a folded card unfolded, its form in sight
       userUI.of(name).open = true;
     },
   };
@@ -283,7 +284,7 @@ export function UsersCard() {
   const count = users.loaded ? tn("roles.users", list.length) : "";
   // the card's head counts them, in the page's language, once they are read; nothing once forgotten
   useEffect(() => {
-    sectionBadges($("sys-users"), count ? [badgeEl(count, "mode")] : []);
+    cardBadges("sys-users", count ? [{ text: count, kind: "mode" }] : []);
   }, [count]);
   return (
     <>

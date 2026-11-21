@@ -639,6 +639,20 @@ def sections_menu(page):
     page.locator("#system .sec-menu .menu-items").wait_for(state="visible")
 
 
+def users_fold(folded):
+    """System settings, the Users card folded (or opened again) by its
+    button, the focus on it; the fold kept in the browser is taken back by
+    the view that opens it again, the next of the region's."""
+    def show(page):
+        system(page)
+        page.keyboard.press("Escape")
+        fold = page.locator("#sys-users .section-fold")
+        if (fold.get_attribute("aria-expanded") == "true") == folded:
+            fold.click()
+        fold.focus()
+    return show
+
+
 # --- the regions ----------------------------------------------------------
 
 # Every region of the page, the header first, then Rooms, the settings
@@ -776,7 +790,14 @@ REGIONS = (
     ), sources=("applyStoredSettings()",)),
     Region("notifications", ("#notify-sec",), (View("Notifications", personal("notify")),), sources=("the page shown again: me",)),
     Region("my-profile", ("#profile-sec",), (View("My profile", profile),), sources=("the page shown again: me",)),
-    Region("page-chrome", ("#system .page-bar", "#system .section-head"), (View("System settings, its sections menu open", sections_menu),)),
+    # The cards' folds are the skeleton's, their badges and pills parts
+    # (AP UiParts, Block 14): a card folded, the focus on its fold, passed
+    # on the page before the move as well, where nothing drew a head again.
+    Region("page-chrome", ("#system .page-bar", "#system .section-head"), (
+        View("System settings, its sections menu open", sections_menu),
+        View("the Users card folded, the focus on its fold", users_fold(True), "#sys-users .section-fold"),
+        View("the Users card opened again, the focus on its fold", users_fold(False), "#sys-users .section-fold"),
+    )),
     Region("sign-in", ("#login-dialog",),
            gap="shown only to a page without a token, which loads no data while it is open: the poll and the stream start after the sign-in"),
 )

@@ -32,11 +32,12 @@ import { BusyButton } from "../shared/question";
 import { Tokens } from "../shared/tokens";
 import { cancelLink, changePassword, confirmLink, passwordMsg, profileMsg, run, saveName, startLink } from "./send";
 import { type Confirm, NAME_FORM, PASSWORD_FORM, profile, said } from "./store";
+import { showCard } from "../shared/card";
 
 /** openForm shows a form of My profile and puts the focus into it, from any page: the personal page shown, its card unfolded. */
 function openForm(key: string): void {
   if (!isShown("me")) showView("me");
-  showCard($("profile")); // a folded card unfolded, its form in sight
+  showCard("profile"); // a folded card unfolded, its form in sight
   if (key === PASSWORD_FORM) profile.passwordOpen = true;
   focusForm(key);
 }
