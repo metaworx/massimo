@@ -1714,6 +1714,34 @@ The server's sign, when it says an update is out, opens it at Software update.
   the delay and the button are missing and the server's reason is shown:
   the switch is off, the helper is not installed, a server in a terminal
   (`packaging/README.md`, "Rebooting from the web UI").
+  The card is drawn in place each time Maintenance is shown and after each of its changes:
+  the delay typed, a question and the focus stay.
+  The announcement and the intervals are saved as they are chosen,
+  each staying on with the choice in it while its request, the PUT alone, runs,
+  so that the focus stays on it, and showing what is stored once it has answered.
+  The restart's question goes where the restart is no longer offered,
+  the reboot's where the reboot is not, or a reboot waits, asked for elsewhere.
+  A sign-out ends the following of a restart or a reboot,
+  takes the questions back and forgets the delay typed.
+  While Maintenance is shown, the card follows the server's events too:
+
+  | Event | When the server sends it | What Maintenance reads |
+  |---|---|---|
+  | `change` of `announce` or an interval | the setting set, from any browser | the settings (`GET /api/v1/settings`) |
+  | `settings_read` | the settings file read again: changed on disk, SIGHUP, Reload now | nothing: the event names what waits for the next start, and its time is when the file was read |
+  | `reboot` | a reboot asked for, begun or failed | the reboot's state (`GET /api/v1/reboot`) |
+  | `reboot_cancelled` | a reboot taken back, or the owner's switch turned off | the same |
+  | `resync` | the stream opened again with no replay: after the server's restart | the settings, the restart's row and the reboot's |
+
+  `restart` reads nothing: the server is going away,
+  and its start says what it is like when it is back.
+  A restart or a reboot this page follows reads at its own pace,
+  `/healthz` every 2 s, and an event reads its row not at all meanwhile;
+  a reboot that waits keeps its timer through a read that finds the same reboot,
+  and ends it where the read finds it taken back.
+  An event's read of the settings or of the reboot waits
+  while this page's own request of them is under way and is made once when it has ended,
+  and its answer shows nothing where one was made meanwhile.
 
 ## In the apps
 
@@ -1872,7 +1900,8 @@ a script for each region of the page, in the order the page loads them:
   `pages.js`, the pages, the main menu, the address and the scroll;
 - `update.js`, the plain names of Software update,
   which call its part (`ui/src/software/`),
-  for the header's check and the server's sign; `maintenance.js`, the Maintenance card;
+  for the header's check and the server's sign;
+  the Maintenance card has none, a part alone (`ui/src/maintenance/`);
   `system-info.js`, System info;
 - `cubes.js`, the plain names of System settings → Cubes and Cube settings,
   the pairing's among them, which call their part (`ui/src/cubes/`),
@@ -1981,9 +2010,9 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `KindIcons`, `problemKinds`, `kindsLabel` | `problems.tsx` | the kinds' icons of entries without the list (`kindIcons`); the kinds themselves, to know whether there are any; the label naming the kinds among items in an order of kinds, "" for none | `entries`, `skip`; `entries`, `skip`; `items`, `kinds` |
 | `OkPill` | `problems.tsx` | the green check in a list's place (`okPill`) | `label` |
 | `HelpButton`, `HelpText` | `help.tsx` | a setting's help (`helpParts`): the question mark that shows and hides its explanation, `help.<key>` of the texts, shown by its key wherever it is drawn again, in the page's one set of keys shown (`helpOpen` of `app.js`), the parts drawn again by a signal of their own, so a key is drawn by one side only; `Field` and `Switch` draw both from their `help` | `help` (the key), `id` (the explanation's, which the button controls), `label` (the setting's name); `help`, `id` |
-| `Field` | `field.tsx` | a label and its control, `.field` or `.field.wide` (`fieldRow`); with `limit`, what the field takes, said in amber just before the control while a value is refused, the box outlined in red and the limit its description (`markRange`) (`TextField` and `NumberField` mark their input for it; a control of the caller's inside a `Field` with a limit has no marking of its own yet) | `label`, `id`, `wide`, `unit`, `hint`, `hintId` (the hint's id, which a `Select` names as its description), `help` (the key of the setting's help: its button after the label, its explanation under the control), `cls` (classes the row adds, a capability's `needs-…`), `limit` (`{ text, over, cls }`: the text, whether the value is refused, the line's class beside `field-limit`; in the unit's line where there is one, else on a line of its own above the box), `draft`, `show`, the control as children |
+| `Field` | `field.tsx` | a label and its control, `.field` or `.field.wide` (`fieldRow`); with `limit`, what the field takes, said in amber just before the control while a value is refused, the box outlined in red and the limit its description (`markRange`) (`TextField` and `NumberField` mark their input for it; a control of the caller's inside a `Field` with a limit has no marking of its own yet) | `label`, `id`, `wide`, `unit`, `hint`, `hintId` (the hint's id, which a `Select` names as its description), `help` (the key of the setting's help: its button after the label, its explanation under the control), `cls` (classes the row adds, a capability's `needs-…`), `labelCls` (the label's class, `action-title` for a row's title in bold: Maintenance's settings; `Select` passes it on), `limit` (`{ text, over, cls }`: the text, whether the value is refused, the line's class beside `field-limit`; in the unit's line where there is one, else on a line of its own above the box), `draft`, `show`, the control as children |
 | `TextField` | `field.tsx` | a row with a text input that shows a stored text, from its draft, or a free text (a name offered) by `value` and `set` | `label`, `id`, `name`, `draft` and `show`, or `value` and `set`; `wide` (on by default), `unit`, `hint`, `help`, `cls`, `limit`, `placeholder`, `type` (`password` too, by `value` and `set` alone, never a draft), `autocomplete`, `inputCls` (the input's class, `mono` for a key), `maxLength`, `pattern`, `required`, `disabled`, `inputRef` |
-| `NumberField`, `numberNorm` | `field.tsx` | a number input that shows a stored number (`numberInput`), its draft the input's text, "" for none, or a free number (a time) by `value` and `set`; with `row={false}` the input alone, in a row of the caller's, which draws its notice (`Meanwhile`); how such a draft compares, as a number | `label`, `id`, `name`, `min`, `max`, `step`, `draft` and `show`, or `value` and `set`; `aria` (its name where no label names it), `disabled`, `inputRef`, `row`, and a row's `wide`, `unit`, `hint`, `help`, `cls`, `limit`; `v` |
+| `NumberField`, `numberNorm` | `field.tsx` | a number input that shows a stored number (`numberInput`), its draft the input's text, "" for none, or a free number (a time) by `value` and `set`; with `row={false}` the input alone, in a row of the caller's, which draws its notice (`Meanwhile`); how such a draft compares, as a number | `label`, `id`, `name`, `min`, `max`, `step`, `draft` and `show`, or `value` and `set`; `aria` (its name where no label names it), `disabled`, `inputMode` (the keyboard a phone offers: `numeric` for the reboot's delay), `inputRef`, `row`, and a row's `wide`, `unit`, `hint`, `help`, `cls`, `limit`; `v` |
 | `Select` | `field.tsx` | a row with a select (`selectInput`), its options as `fillOptions` takes them; with `row={false}` the select alone, in a row of the caller's, which draws its notice | `label`, `id`, `name`, `options` (`[value, label, disabled]` or `{ group, options }`), `value` and `onChange`, or `draft` and `show`; `row`, `wide`, `unit`, `hint`, `hintId` (the hint's id, which the select names as its description: the update channel's note, which changes with the choice), `help`, `cls`, `disabled` |
 | `DateTime` | `field.tsx` | a date and time field (`datetime-local`), its value as the input takes it | `value`, `set`, `id`, `cls`, `step`, `required`, `disabled`, `inputRef` |
 | `localOf`, `isoOf` | `time.ts` | a `DateTime`'s value and the API's time as each other, for a field that shows a stored end and sends it (a user's end); the draft compares the field's minute, all it holds | `iso`; `local` |
@@ -2001,7 +2030,7 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `changedItems`, `leaveForms` | `forms.ts` | every form with changes not saved, the merely changed and the saving ones too, as `unsavedItems` draws them: what leaving the page drops; every changed form counted as left, unsaved, at an attempt to leave the page | – |
 | `FormsDialog` | `dialog.tsx` | a modal `<dialog>` that lists forms with changes, each a button that closes it and opens its form, with a button that stays (Escape too, and any close without a button of its own) and one that goes on, of the classes `dialog-stay` and `dialog-go` in every use; the focus on the one that stays, given back where it was when it closes | `shown`, `title`, `text`, `forms` (items, as `changedItems` gives them), `stay` (its label), `onStay`, `go` (`{ label, onGo }`, none without) |
 | `Question` | `question.tsx` | a question in the page, No and Yes, Escape for No (`confirmBox`) | `text`, `yes`, `no`, `onYes` (its request's promise), `onNo`, `boxRef` (`useAsk`'s `box`) |
-| `useAsk` | `question.tsx` | a row that asks in its own place, the focus back on its button (`confirmInPlace`); with `held`, whether it asks is a store's live state, which the store takes back where what it asked about changed and at a sign-out (a part drawn once for the page's life: Software update); a question the store takes back while the focus is in its box (`box`, handed to the `Question`'s `boxRef`) gives it back to the button, or to the row where the button cannot take it; `done(false)` gives it to nothing, as before | `held` (`{ asking }`); gives `asking`, `ask`, `done`, `ref`, `row` (the row of the caller's, which holds the focus with `tabindex` -1 until it leaves, where the button cannot), `box` |
+| `useAsk` | `question.tsx` | a row that asks in its own place, the focus back on its button (`confirmInPlace`); with `held`, whether it asks is a store's live state, which the store takes back where what it asked about changed and at a sign-out (a part drawn once for the page's life: Software update, Maintenance); a question the store takes back while the focus is in its box (`box`, handed to the `Question`'s `boxRef`) gives it back to the button, or to the row where the button cannot take it; `done(false)` gives it to nothing, as before | `held` (`{ asking }`); gives `asking`, `ask`, `done`, `ref`, `row` (the row of the caller's, which holds the focus with `tabindex` -1 until it leaves, where the button cannot), `box` |
 | `useBusy`, `busyProps` | `question.tsx` | a button's request under way: busy, off, `aria-busy` (`whileBusy`, `setBusy`) | `run(fn)`; `busyProps(cls, busy, off)` |
 | `useSetAtOnce` | `question.tsx` | a setting saved at once, a switch without a Save: the user's choice shown while its request runs, the control on so that the focus stays on it, a change meanwhile sending nothing and drawn back, then what is stored, the old value where it was refused (the password sign-in, a capability for every role, whether integrations may ask, an integration's Enabled) | `stored`; gives `value`, `busy`, `set(v, fn)` |
 | `BusyButton` | `question.tsx` | a button that sends a request and turns until its answer (`useBusy`, `busyProps`), a click meanwhile sending nothing | `id`, `cls`, `label`, `run`, `aria` (its name where the text is not enough), `off` (kept off: a request that may not be sent now) |

@@ -41,7 +41,7 @@ def test_poll_interval_choice(page, case):
         assert wait_until(page, "document.querySelector('#sys-maint .section-badges').textContent.length > 0", 5), "counted in the card's head"
         assert badges(page) != head, "the head counts one more"
         sel.select_option("10")
-        assert wait_until(page, "!document.querySelector('#interval-poll').disabled", 5)
+        # the line drawn from the PUT's answer: the save has answered
         assert wait_until(page, "document.querySelector('#interval-poll-text').textContent === %r" % before, 5), "the line as at first"
         assert setting("poll_interval").get("set") is False, "the default stored as none"
         assert badges(page) == head, "the head as at first"
@@ -87,6 +87,7 @@ def test_duty_wait_choice(page, case):
         sel = page.locator("#interval-duty")
         assert wait_until(page, "document.querySelector('#interval-duty-text').textContent.length > 0", 5), "the line is filled"
         assert sel.is_enabled() and sel.input_value() == "600", "10 min, and the choice open"
+        first = page.locator("#interval-duty-text").inner_text()
         assert page.locator("#interval-duty-text").inner_text().startswith(page.evaluate("t('maint.dutyWaitHint')")), \
             "the line says what the hold does"
         sel.select_option("1800")
@@ -94,8 +95,10 @@ def test_duty_wait_choice(page, case):
         stored = setting("duty_wait")
         assert stored.get("value") == "30m" and stored.get("set") is True, "30 min stored"
         assert stored.get("in_effect") == "10m", "in effect only at the next start"
+        assert wait_until(page, "document.querySelector('#interval-duty-text').textContent !== %r" % first, 5), "the line says it waits"
         sel.select_option("600")
-        assert wait_until(page, "!document.querySelector('#interval-duty').disabled", 5)
+        # the line drawn from the PUT's answer: the save has answered
+        assert wait_until(page, "document.querySelector('#interval-duty-text').textContent === %r" % first, 5), "the line as at first"
         assert setting("duty_wait").get("set") is False, "the default stored as none"
     finally:
         api_call("PUT", "api/v1/settings", {"duty_wait": None})

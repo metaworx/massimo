@@ -569,12 +569,15 @@ def maint(page):
     settle(page, 500)
 
 
-# The test server runs in a terminal and offers no update: the view of
-# Software update answers its reads with one constant answer, so that the data stay as they
+# The test server runs in a terminal and offers no update, no restart and
+# no reboot: the views of Software update and Maintenance answer their
+# reads with one constant answer each, so that the data stay as they
 # were; the other methods go on to Writes, which refuses them.
 UPDATE_STUB = {"current": "v0.0.0-test", "flavour": "alpha", "channel": "alpha", "latest": "v0.0.1-test", "available": True, "can_update": True,
                "checked_at": "2026-11-15T10:00:00Z", "helper": {"state": "up-to-date", "time": "2026-11-15T10:00:00Z"},
                "history": [{"at": "2026-11-14T18:00:00Z", "by": {"name": "anna"}, "from": "v0.0.0", "to": "v0.0.1-test"}]}
+RESTART_STUB = {"available": True, "by": "systemd", "pending": ["MASSIMO_LISTEN"], "file": "/etc/massimo/env", "read_at": "2026-11-15T10:00:00Z"}
+REBOOT_STUB = {"available": True, "by": "systemd"}
 
 
 def constant(page, pattern, body):
@@ -591,6 +594,16 @@ def software_question(page):
     page.locator(".update .confirm-box").wait_for()
     page.locator("#update-channel").wait_for(state="visible")
 
+
+def maint_question(page):
+    """Maintenance with the restart and the reboot offered, the restart
+    asking in its row; the guard types a delay into the reboot's."""
+    constant(page, "**/api/v1/restart", RESTART_STUB)
+    constant(page, "**/api/v1/reboot", REBOOT_STUB)
+    show_view(page, "maint")
+    page.locator("#restart-btn").click()
+    page.locator(".restart .confirm-box").wait_for()
+    page.locator("#reboot-delay").wait_for(state="visible")
 
 
 def info(page):
@@ -732,11 +745,12 @@ REGIONS = (
         View("Cube settings, a backup's Delete asking", backups_question),
     )),
     Region("log", ("#logview",), (View("the log", log),)),
-    # Software update's views pass on the page before the move too (AP
-    # UiParts, Block 12): update.js filled its elements in place but for
-    # the options of a select and the last updates' lines, which nobody
-    # holds; what it lost is in test_maint_updates.py (a line selected, a
-    # select's focus while it saved, a question about a release gone).
+    # Software update's and Maintenance's views pass on the page before
+    # the move too (AP UiParts, Block 12): update.js and maintenance.js
+    # filled their elements in place but for the options of a select and
+    # the last updates' lines, which nobody holds; what they lost is in
+    # test_maint_updates.py (a line selected, a select's focus while it
+    # saved, a question about a release gone).
     # The stream's events (UiParts D198) are a source of the regions that
     # follow the server while shown, a forward guard: the plain page read
     # nothing for them, so that their views passed there too;
@@ -747,7 +761,10 @@ REGIONS = (
         View("Maintenance", maint),
         View("Update asking, the channel's choice above it", software_question, "#update-channel"),
     ), sources=("loadUpdate(false)", "the page shown again: maint", "the stream's events: resync change")),
-    Region("maintenance", ("#sys-maint-body",), (View("Maintenance", maint),)),
+    Region("maintenance", ("#sys-maint-body",), (
+        View("Maintenance", maint),
+        View("the restart asking, a delay typed for the reboot", maint_question),
+    ), sources=("the page shown again: maint", "the stream's events: resync change reboot reboot_cancelled settings_read")),
     Region("system-info", ("#sys-info-body",), (View("System info, its folds open", info),)),
     Region("my-settings", ("#prefs-sec > .dev-head", "#prefs-sec > .dev-row", "#prefs-sec > p"), (View("My settings", personal("prefs")),)),
     Region("appearance", ("#prefs-sec .appearance",), (

@@ -15,10 +15,12 @@ import time
 
 import pytest
 
-from conftest import TOKEN, URL
+from conftest import TOKEN, URL, api_call
 from helpers import frames, hold, mark, owner_page, replaced, safe_route, show_view, update_json, wait_held, wait_until
 from test_admin_updates import across
 from test_unsaved import expire
+from test_reboot import RebootStub, iso, reboot_text
+from test_restart import AVAILABLE, BLOCKED, stub_restart
 from test_system_info import PENDING, UNREAD
 from test_update import channel_routes, unroute_channel
 
@@ -612,6 +614,399 @@ def test_a_read_asked_for_before_the_session_ended_is_not_made(new_context, case
     first.fallback()
     answered(page)
     assert not held, f"no read for the session before ({len(held)})"
+
+
+# --- Maintenance -------------------------------------------------------------
+
+def test_an_interval_keeps_the_focus_while_it_saves(page, case):
+    """The poll's interval chosen is saved at once: while the PUT runs the
+    choice stays on with 30 s in it and the focus on it, and the store's
+    answer, once let go, shows it waiting for the restart."""
+    api_call("PUT", "api/v1/settings", {"poll_interval": None})
+    held = []
+    try:
+        show_view(page, "maint")
+        sel = page.locator("#interval-poll")
+        assert wait_until(page, "document.querySelector('#interval-poll-text').textContent.length > 0", 5), "the line is filled"
+        hold(page, "**/api/v1/settings", "PUT", held, [])
+        sel.focus()
+        sel.select_option("30")
+        assert wait_held(page, held), "the PUT sent"
+        frames(page)
+        assert sel.is_enabled() and sel.input_value() == "30", "on, with 30 s, while it saves"
+        assert page.evaluate("document.activeElement.id") == "interval-poll", "the focus on it"
+        for r in held:
+            r.fallback()
+        assert wait_until(page, "!document.querySelector('#interval-poll-msg').classList.contains('hidden')", 5), "saved"
+        assert sel.input_value() == "30" and page.evaluate("document.activeElement.id") == "interval-poll", "30 s, the focus still on it"
+    finally:
+        page.unroute("**/api/v1/settings")
+        api_call("PUT", "api/v1/settings", {"poll_interval": None})
+
+
+def test_maintenance_keeps_what_it_holds_through_its_reads(page, case):
+    """The delay typed and the restart's question open: Maintenance shown
+    again reads every row again, and the delay, the question with its
+    buttons, the selects and Reload now are the elements they were, with
+    90 in the delay. It passes on the plain page too, which filled these
+    in place; it guards that the part keeps them."""
+    posts = []
+    stub_restart(page, AVAILABLE, posts)
+    stub = RebootStub(page, {"available": True, "by": "systemd"})
+    try:
+        show_view(page, "maint")
+        page.locator("#reboot-btn").wait_for(state="visible")
+        page.locator("#restart-btn").wait_for(state="visible")
+        page.locator("#reboot-delay").fill("90")
+        page.locator("#restart-btn").click()
+        page.locator(".restart .confirm-box").wait_for()
+        sels = ["#reboot-delay", ".restart .confirm-no", ".restart .confirm-yes", "#announce-mode", "#interval-poll", "#settings-reload", "#reboot-btn"]
+        mark(page, sels)
+        settings_reads = counted(page, "**/api/v1/settings")
+        with page.expect_response(lambda r: r.url.endswith("/api/v1/reboot")), \
+                page.expect_response(lambda r: r.url.endswith("/api/v1/restart")):
+            show_view(page, "maint")
+        # Software's read of the channel and Maintenance's of its settings, both
+        assert wait_reads(page, settings_reads, 2), f"both reads of the settings ({len(settings_reads)})"
+        answered(page)
+        assert replaced(page, sels) == [], f"the same elements after the reads: {replaced(page, sels)}"
+        assert page.locator("#reboot-delay").input_value() == "90", "the delay typed"
+        assert not posts and not stub.requests, "nothing sent"
+    finally:
+        stub.close()
+        page.unroute("**/api/v1/restart")
+
+
+def test_the_restart_question_goes_when_the_restart_is_not_offered(page, case):
+    """The restart asking; Maintenance shown again finds it not offered
+    any more (a terminal's server): the question goes with the button."""
+    posts = []
+    answer = {"body": AVAILABLE}
+
+    def handle(route):
+        if route.request.method != "GET":
+            posts.append(route.request.method)
+            route.abort()
+            return
+        route.fulfill(status=200, content_type="application/json", body=answer["body"])
+    safe_route(page, "**/api/v1/restart", handle)
+    try:
+        show_view(page, "maint")
+        page.locator("#restart-btn").click()
+        page.locator(".restart .confirm-box").wait_for()
+        answer["body"] = BLOCKED
+        show_view(page, "maint")
+        assert wait_until(page, "!document.querySelector('.restart .confirm-box')", 5), "the question gone"
+        assert page.locator("#restart-btn").is_hidden() and "no service manager" in page.locator("#restart-text").inner_text(), \
+            "the reason in its place"
+        assert not posts
+    finally:
+        page.unroute("**/api/v1/restart")
+
+
+def test_the_reboot_question_goes_when_a_reboot_waits(page, case):
+    """The reboot asking with its delay; another browser asks for a
+    reboot meanwhile, and Maintenance shown again finds it waiting: the
+    question goes, Take the reboot back is offered."""
+    stub = RebootStub(page, {"available": True, "by": "systemd"})
+    try:
+        show_view(page, "maint")
+        page.locator("#reboot-btn").click()
+        page.locator(".reboot .confirm-box").wait_for()
+        stub.answer = {"available": False, "by": "systemd", "at": iso(600), "blocked": "a reboot is waiting", "begun": False}
+        show_view(page, "maint")
+        assert wait_until(page, "!document.querySelector('.reboot .confirm-box')", 5), "the question gone"
+        assert page.locator("#reboot-cancel").is_visible() and page.locator("#reboot-btn").is_hidden(), "the reboot that waits"
+        assert not stub.requests, "nothing sent"
+    finally:
+        stub.close()
+
+
+@pytest.mark.parametrize("how", ["sign-out", "expired"])
+def test_the_session_end_ends_the_restarts_following(new_context, case, watch, guard, how):
+    """The restart asked for and followed, the server not back yet: the
+    session ends, and the following has ended with it; a /healthz held
+    across the end with a new start, let go, says nothing to the next
+    user."""
+    page = owner_page(new_context, guard, watch, URL, TOKEN, clock=True)
+    posts = []
+    stub_restart(page, AVAILABLE, posts)
+    health = api_call("GET", "healthz")
+    safe_route(page, "**/healthz", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(health)))
+    show_view(page, "maint")
+    page.locator("#restart-btn").click()
+    page.locator(".restart .confirm-yes").click()
+    restarting = page.evaluate("t('restart.restarting')")
+    assert wait_until(page, "document.getElementById('restart-text').textContent === %s" % json.dumps(restarting), 5), "followed"
+    later = json.dumps(dict(health, started_at="2099-01-02T03:04:05Z"))
+    checks = []
+    hold(page, "**/healthz", "GET", checks, [])
+    assert wait_held(page, checks, 8), "the next /healthz asked for"
+    across(page, how)
+    assert page.locator("#restart-text").inner_text() != restarting, "the following ended with the session"
+    with page.expect_response(lambda r: r.url.endswith("/healthz")):
+        for r in checks:
+            r.fulfill(status=200, content_type="application/json", body=later)
+    frames(page)
+    n = len(checks)
+    page.clock.run_for(5000)
+    page.evaluate("api('GET', 'api/v1/me').then(() => 1)")
+    assert len(checks) == n, f"no /healthz for the next user ({len(checks) - n})"
+    back = page.evaluate("t('restart.back', {time: fmtInstant(new Date(Date.parse('2099-01-02T03:04:05Z')))})")
+    assert back not in page.locator("#sys-maint-body").inner_text(), "the late answer says nothing"
+    assert len(posts) == 1
+
+
+@pytest.mark.parametrize("how", ["sign-out", "expired"])
+def test_the_session_end_forgets_the_delay_and_the_questions(new_context, case, watch, guard, how):
+    """The delay typed and the reboot asking: the session ends, and the
+    operator finds no question and nothing typed."""
+    page = owner_page(new_context, guard, watch, URL, TOKEN)
+    stub = RebootStub(page, {"available": True, "by": "systemd"})
+    show_view(page, "maint")
+    page.locator("#reboot-delay").fill("97")
+    page.locator("#reboot-btn").click()
+    page.locator(".reboot .confirm-box").wait_for()
+    across(page, how)
+    frames(page)
+    assert page.locator(".confirm-box").count() == 0, "no question for the next user"
+    # the next user may reboot (/me stubbed): the delay's row is drawn again, with 60
+    me = {"mode": "users", "user": {"name": "operator", "role": "operator", "has_password": True}, "role": {"key": "operator"},
+          "capabilities": ["read", "preferences", "reboot"], "token": {"kind": "session"}}
+    page.route("**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(me)))
+    page.evaluate("loadMe()")
+    assert wait_until(page, "!document.body.classList.contains('no-reboot')", 5), "the next user may reboot"
+    show_view(page, "maint")
+    page.locator("#reboot-delay").wait_for(state="visible")
+    assert page.locator("#reboot-delay").input_value() == "60", "the delay typed is gone: 60 again"
+    assert not stub.requests
+
+
+def test_maintenance_follows_a_setting_set_elsewhere_while_shown_only(page, case, stream):
+    """Another browser sets the poll's interval (PUT, the server's change
+    event): with Rooms shown nothing is read; with Maintenance shown the
+    choice shows 30 s and the line that it waits, without a reload."""
+    api_call("PUT", "api/v1/settings", {"poll_interval": None})
+    reads = counted(page, "**/api/v1/settings")
+    try:
+        show_view(page, "tiles")
+        mark0 = stream.mark()
+        api_call("PUT", "api/v1/settings", {"poll_interval": "20s"})
+        stream.wait("the change", "change", match=lambda d: (d.get("summary") or {}).get("action") == "settings.update", mark=mark0, server=True)
+        answered(page)
+        assert reads == [], f"no read for a page not shown ({reads})"
+        api_call("PUT", "api/v1/settings", {"poll_interval": None})
+        show_view(page, "maint")
+        assert wait_until(page, "document.getElementById('interval-poll').value === '10'", 5), "10 s"
+        api_call("PUT", "api/v1/settings", {"poll_interval": "30s"})
+        assert wait_until(page, "document.getElementById('interval-poll').value === '30'", 5), "30 s shown, no reload"
+        assert wait_until(page, "document.querySelector('#sys-maint .section-badges').textContent.length > 0", 5), "counted as waiting"
+    finally:
+        page.unroute("**/api/v1/settings")
+        api_call("PUT", "api/v1/settings", {"poll_interval": None})
+
+
+def test_the_settings_file_read_again_shows_what_waits_with_nothing_read(page, case):
+    """A settings_read event says what waits for the next start: the
+    restart's row lists it, and nothing is read for it."""
+    posts = []
+    stub_restart(page, AVAILABLE, posts)
+    try:
+        show_view(page, "maint")
+        page.locator("#restart-btn").wait_for(state="visible")
+        reads = counted(page, "**/api/v1/restart")
+        send(page, "settings_read", {"why": "SIGHUP", "changed": ["MASSIMO_TLS"], "at_next_start": ["MASSIMO_TLS"]})
+        want = page.evaluate("t('restart.pending', {names: 'MASSIMO_TLS'})")
+        assert wait_until(page, f"document.getElementById('restart-pending').textContent === {json.dumps(want)}", 5), "what waits"
+        answered(page)
+        assert reads == [], f"nothing read ({reads})"
+    finally:
+        page.unroute("**/api/v1/restart")
+
+
+@pytest.mark.clock
+def test_a_reboot_event_while_this_pages_reboot_waits(page, case):
+    """This page asks for a reboot in 30 s; a reboot event meanwhile reads
+    the reboot's state, which says the same wait: the row still waits,
+    with Take the reboot back, and the page follows the computer at the
+    reboot's time, as the wait set it."""
+    stub = RebootStub(page, {"available": True, "by": "systemd"})
+    try:
+        show_view(page, "maint")
+        page.locator("#reboot-delay").fill("30")
+        page.locator("#reboot-btn").click()
+        page.locator(".reboot .confirm-yes").click()
+        page.locator("#reboot-cancel").wait_for(state="visible")
+        waiting = reboot_text(page)
+        reads = counted(page, "**/api/v1/reboot")
+        send(page, "reboot", {"by": "systemd", "at": stub.answer["at"]})
+        answered(page)
+        assert len(reads) == 1, f"the event read the reboot's state once ({reads})"
+        assert reboot_text(page) == waiting and page.locator("#reboot-cancel").is_visible(), "still waiting"
+        page.clock.run_for(31_000)
+        rebooting = page.evaluate("t('reboot.rebooting')")
+        assert wait_until(page, "document.getElementById('reboot-text').textContent === %s" % json.dumps(rebooting), 5), \
+            "followed at the reboot's time"
+    finally:
+        stub.close()
+
+
+def test_an_event_keeps_a_question_and_takes_back_one_whose_reboot_waits(page, case):
+    """The restart and the reboot asking, a delay typed: a change of the
+    announcement and a reboot event read again, and the restart's
+    question and the delay stay; once a reboot waits (asked for
+    elsewhere), the reboot event takes the reboot's question back."""
+    posts = []
+    stub_restart(page, AVAILABLE, posts)
+    stub = RebootStub(page, {"available": True, "by": "systemd"})
+    try:
+        show_view(page, "maint")
+        page.locator("#reboot-delay").fill("77")
+        page.locator("#restart-btn").click()
+        page.locator(".restart .confirm-box").wait_for()
+        page.locator("#reboot-btn").click()
+        page.locator(".reboot .confirm-box").wait_for()
+        sels = [".restart .confirm-no", ".reboot .confirm-no", "#reboot-delay"]
+        mark(page, sels)
+        reads = counted(page, "**/api/v1/reboot")
+        send(page, "change", {"action": "settings.update", "set": {"announce": "on"}})
+        send(page, "reboot", {"by": "systemd"})
+        answered(page)
+        assert len(reads) == 1, f"the reboot read ({reads})"
+        frames(page)
+        assert replaced(page, sels) == [], f"the questions and the delay stay: {replaced(page, sels)}"
+        assert page.locator("#reboot-delay").input_value() == "77"
+        stub.answer = {"available": False, "by": "systemd", "at": iso(600), "blocked": "a reboot is waiting", "begun": False}
+        send(page, "reboot", {"by": "systemd", "at": stub.answer["at"]})
+        assert wait_until(page, "!document.querySelector('.reboot .confirm-box')", 5), "the reboot's question gone"
+        assert page.locator(".restart .confirm-box").count() == 1, "the restart's stays"
+        assert not posts and not stub.requests
+    finally:
+        stub.close()
+        page.unroute("**/api/v1/restart")
+
+
+def restart_route(page, answer):
+    """GET /api/v1/restart answered with answer["body"], a dict, at every read; a POST answered 202 and counted in answer["posts"]."""
+    answer.setdefault("posts", [])
+
+    def handle(route):
+        if route.request.method == "POST":
+            answer["posts"].append(1)
+            route.fulfill(status=202, content_type="application/json", body='{"ok": true, "by": "systemd"}')
+            return
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(answer["body"]))
+    safe_route(page, "**/api/v1/restart", handle)
+
+
+def test_maintenance_reads_again_at_a_resync_while_shown_only(page, case):
+    """A resync of the stream, how the page learns of a restart done
+    elsewhere: with Rooms shown nothing is read; with Maintenance shown
+    the restart's row is read once and shows what waits now."""
+    answer = {"body": {"available": True, "by": "systemd", "pending": ["MASSIMO_LISTEN"]}}
+    restart_route(page, answer)
+    reads = counted(page, "**/api/v1/restart")
+    try:
+        show_view(page, "tiles")
+        send(page, "resync")
+        answered(page)
+        assert reads == [], f"no read for a page not shown ({reads})"
+        show_view(page, "maint")
+        assert wait_until(page, "document.getElementById('restart-pending').textContent.includes('MASSIMO_LISTEN')", 5), "what waits"
+        n = len(reads)
+        answer["body"] = {"available": True, "by": "systemd", "pending": ["MASSIMO_TLS"]}
+        send(page, "resync")
+        assert wait_until(page, "document.getElementById('restart-pending').textContent.includes('MASSIMO_TLS')", 5), \
+            "what waits now, no reload"
+        answered(page)
+        assert len(reads) == n + 1, f"one read ({len(reads) - n})"
+    finally:
+        page.unroute("**/api/v1/restart")
+
+
+def test_a_resync_while_this_page_follows_its_restart_reads_no_row(page, case):
+    """The restart asked for and followed by /healthz, the server not back
+    yet: a resync reads the restart's row not at all, the following's
+    /healthz alone."""
+    answer = {"body": {"available": True, "by": "systemd"}}
+    restart_route(page, answer)
+    health = api_call("GET", "healthz")
+    safe_route(page, "**/healthz", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(health)))
+    try:
+        show_view(page, "maint")
+        page.locator("#restart-btn").click()
+        page.locator(".restart .confirm-yes").click()
+        restarting = page.evaluate("t('restart.restarting')")
+        assert wait_until(page, "document.getElementById('restart-text').textContent === %s" % json.dumps(restarting), 5), "followed"
+        reads = counted(page, "**/api/v1/restart")
+        send(page, "resync")
+        page.evaluate("api('GET', 'api/v1/me').then(() => 1)")
+        frames(page)
+        assert reads == [], f"the row not read while the restart is followed ({reads})"
+        assert page.locator("#restart-text").inner_text() == restarting, "still following"
+        assert len(answer["posts"]) == 1
+    finally:
+        page.unroute("**/healthz")
+        page.unroute("**/api/v1/restart")
+
+
+def test_an_intervals_own_change_event_reads_nothing_behind_its_back(page, case):
+    """The poll's interval chosen, its PUT held; the change event of a PUT
+    comes meanwhile: it reads the settings not at all while the page's
+    own request is under way, and 30 s stays chosen throughout."""
+    api_call("PUT", "api/v1/settings", {"poll_interval": None})
+    held = []
+    try:
+        show_view(page, "maint")
+        sel = page.locator("#interval-poll")
+        assert wait_until(page, "document.querySelector('#interval-poll-text').textContent.length > 0", 5), "the line is filled"
+        reads = counted(page, "**/api/v1/settings")
+        page.route("**/api/v1/settings", lambda route: held.append(route) if route.request.method == "PUT" else route.fallback())
+        page.evaluate("""() => { window.__seen = []; const sel = document.getElementById('interval-poll');
+          window.__watch = setInterval(() => window.__seen.push(sel.value), 5); }""")
+        sel.select_option("30")
+        assert wait_held(page, held), "the PUT sent"
+        send(page, "change", {"action": "settings.update", "set": {"poll_interval": "10s"}})
+        answered(page)
+        assert reads == [], f"the event reads nothing while the PUT runs ({reads})"
+        for r in held:
+            r.fallback()
+        assert wait_until(page, "!document.querySelector('#interval-poll-msg').classList.contains('hidden')", 5), "saved"
+        frames(page)
+        seen = page.evaluate("() => { clearInterval(window.__watch); return window.__seen; }")
+        after = seen[seen.index("30"):] if "30" in seen else []
+        assert after and "10" not in after, f"10 s never shown after 30 s was chosen ({seen[-20:]})"
+    finally:
+        page.unroute("**/api/v1/settings")
+        api_call("PUT", "api/v1/settings", {"poll_interval": None})
+
+
+def test_another_setting_changed_during_the_own_put_is_read_after_it(page, case):
+    """The poll's interval chosen, its PUT held; another browser sets the
+    announcement meanwhile (its change event): nothing is read while the
+    PUT runs, one read follows it, and the announcement shows On."""
+    api_call("PUT", "api/v1/settings", {"poll_interval": None, "announce": None})
+    held = []
+    try:
+        show_view(page, "maint")
+        assert wait_until(page, "document.querySelector('#announce-text').textContent.length > 0", 5), "the settings read"
+        assert page.locator("#announce-mode").input_value() == "auto"
+        reads = counted(page, "**/api/v1/settings")
+        page.route("**/api/v1/settings", lambda route: held.append(route) if route.request.method == "PUT" else route.fallback())
+        page.locator("#interval-poll").select_option("30")
+        assert wait_held(page, held), "the PUT sent"
+        api_call("PUT", "api/v1/settings", {"announce": "on"})  # the other browser
+        send(page, "change", {"action": "settings.update", "set": {"announce": "on"}})
+        answered(page)
+        assert reads == [], f"nothing read while the PUT runs ({reads})"
+        for r in held:
+            r.fallback()
+        assert wait_until(page, "document.getElementById('announce-mode').value === 'on'", 5), "the announcement read after the PUT"
+        answered(page)
+        assert len(reads) == 1, f"one read after it ({len(reads)})"
+    finally:
+        page.unroute("**/api/v1/settings")
+        api_call("PUT", "api/v1/settings", {"poll_interval": None, "announce": None})
 
 
 # --- System info ---

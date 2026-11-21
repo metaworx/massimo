@@ -1,4 +1,4 @@
-# Testing the web UI (v1.11.0)
+# Testing the web UI (v1.12.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -695,6 +695,11 @@ around the header's check and Maintenance shown again as well;
 it passed on the page before the move too, as its comment says,
 since `update.js` filled it in place but for a select's options and the last updates' lines,
 which nobody holds: what it lost is `test_maint_updates.py`'s.
+Maintenance is checked with the restart asking in its row and a delay typed for the reboot,
+`GET /api/v1/restart` and `GET /api/v1/reboot` answered as on a box with a service manager
+(`RESTART_STUB`, `REBOOT_STUB`), around Maintenance shown again as well;
+it passed on the page before the move too: `maintenance.js` lost the focus of a setting
+while it saved, which `test_maint_updates.py` shows.
 
 ### Taking a region off the list
 

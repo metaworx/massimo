@@ -34,8 +34,8 @@ function updateLatest() {
 
 // serverEvent takes a server's event of the stream (app.js
 // connectEvents: an update, a reboot, the settings file read, a change,
-// the stream's resync): Software update reads again what it
-// says has changed while Maintenance is shown
+// the stream's resync): Software update and Maintenance read
+// again what it says has changed while Maintenance is shown
 // (MassimoParts.serverEvent, ui/src/index.ts).
 function serverEvent(ev) {
   MassimoParts.serverEvent(ev);

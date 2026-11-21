@@ -146,6 +146,8 @@ interface Row {
   help?: string;
   /** Classes the row adds to field (a capability's needs-…). */
   cls?: string;
+  /** The label's class: action-title for a row's title in bold (Maintenance's settings). */
+  labelCls?: string;
   /** The field's limit, its line before the control (limitAria gives the control its attributes). */
   limit?: Limit;
 }
@@ -156,19 +158,20 @@ interface Row {
  * class field-control; a unit follows it, the two then the row's
  * .field-control; help is the key of the setting's help, its button
  * after the label and its explanation under the control (helpParts);
- * hint is a grey line under the row, hintId its id; cls adds classes to the row; limit
+ * hint is a grey line under the row, hintId its id; cls adds classes to the row,
+ * labelCls to its label (action-title, a row's title in bold); limit
  * is the line of what the field takes, just before the control, in the
  * unit's line where there is one, else on a line of its own above the
  * box. With a draft the row is followed by its "changed meanwhile"
  * notice (show names the value).
  */
-export function Field<T>({ label, id, wide, unit, hint, hintId, help, cls, limit, draft, show, children }: Row & { draft?: Draft<T>; show?: (v: T) => string; children: ComponentChildren }) {
+export function Field<T>({ label, id, wide, unit, hint, hintId, help, cls, labelCls, limit, draft, show, children }: Row & { draft?: Draft<T>; show?: (v: T) => string; children: ComponentChildren }) {
   const helpId = useId();
   const line = limit && <LimitLine id={id} limit={limit} />;
   return (
     <>
       <div class={"field" + (wide ? " wide" : "") + (cls ? " " + cls : "")}>
-        <label for={id}>{label}</label>
+        <label for={id} class={labelCls}>{label}</label>
         {help && <HelpButton help={help} id={helpId} label={label} />}
         {unit ? (
           <span class="inline field-control">
@@ -232,14 +235,17 @@ export function TextField({ label, id, wide = true, unit, hint, help, cls, limit
  * draft of the input's text ("" for none; compare with numberNorm), or a
  * free number by value and set: min, max and step are the input's, name,
  * disabled and aria (its name for a screen reader where no label names
- * it) too, inputRef gives it the focus; limit marks a value refused (one
+ * it) too, inputMode the keyboard a phone offers (numeric, for a whole
+ * number: the reboot's delay), inputRef gives it the focus; limit marks
+ * a value refused (one
  * out of range). It draws its row with its "changed meanwhile" notice,
  * or with row false the input alone, inside a row of the caller's (a
  * field with two controls), whose notice the caller then draws
  * (Meanwhile).
  */
-export function NumberField({ label, id, wide, unit, hint, help, cls, limit, name, min, max, step, aria, disabled, draft, value, set, show, row = true, inputRef }: Partial<Row> & Value<string> & {
+export function NumberField({ label, id, wide, unit, hint, help, cls, limit, name, min, max, step, aria, disabled, draft, value, set, show, row = true, inputRef, inputMode }: Partial<Row> & Value<string> & {
   name?: string;
+  inputMode?: "numeric" | "decimal";
   min: number;
   max: number;
   step: number;
@@ -251,7 +257,7 @@ export function NumberField({ label, id, wide, unit, hint, help, cls, limit, nam
 }) {
   const input = (
     <input ref={inputRef} id={id} type="number" name={name} class={!row || unit ? undefined : "field-control"} min={String(min)} max={String(max)}
-      step={String(step)} aria-label={aria} disabled={disabled} value={draft ? draft.value : value} {...limitAria(id, limit)}
+      step={String(step)} inputMode={inputMode} aria-label={aria} disabled={disabled} value={draft ? draft.value : value} {...limitAria(id, limit)}
       onInput={(ev) => (draft ? draft.set(ev.currentTarget.value) : set(ev.currentTarget.value))} />
   );
   if (!row || label === undefined || id === undefined) return input;
@@ -283,7 +289,7 @@ export type SelectOption = [value: string, label: string, disabled?: boolean] | 
  * description. With row false it is the select alone, inside a row of the
  * caller's (a field with two controls), whose notice the caller draws.
  */
-export function Select({ label, id, wide, unit, hint, hintId, help, cls, name, options, value, onChange, disabled, draft, show, row = true, inputRef }: Partial<Row> & {
+export function Select({ label, id, wide, unit, hint, hintId, help, cls, labelCls, name, options, value, onChange, disabled, draft, show, row = true, inputRef }: Partial<Row> & {
   name?: string;
   disabled?: boolean;
   options: SelectOption[];
@@ -306,7 +312,7 @@ export function Select({ label, id, wide, unit, hint, hintId, help, cls, name, o
   );
   if (!row || label === undefined || id === undefined) return select;
   return (
-    <Field label={label} id={id} wide={wide} unit={unit} hint={hint} hintId={hintId} help={help} cls={cls} draft={draft} show={show}>
+    <Field label={label} id={id} wide={wide} unit={unit} hint={hint} hintId={hintId} help={help} cls={cls} labelCls={labelCls} draft={draft} show={show}>
       {select}
     </Field>
   );

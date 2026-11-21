@@ -1,84 +1,8 @@
-<!-- Maintenance → Maintenance, a section card, in the owner's order: the announcement on the LAN and the Cube intervals at the next start (with settings), the settings file read again and the server's restart (with restart), the computer's reboot (with reboot), maintenance.js. -->
+<!-- Maintenance → Maintenance, a section card, in the owner's order: the announcement on the LAN and the Cube intervals at the next start (with settings), the settings file read again and the server's restart (with restart), the computer's reboot (with reboot); a part (ui/src/maintenance/) drawn into its body. -->
 <section id="sys-maint" class="tile section-card half maint-settings needs-maintenance" aria-labelledby="sys-maint-h">
   <header class="tile-head section-head">
     <h3 id="sys-maint-h"><button type="button" class="section-fold" aria-expanded="true" aria-controls="sys-maint-body"><svg class="fold-i" aria-hidden="true"><use href="#icon-chevron"/></svg><span class="section-title" data-i18n="maint.title">Maintenance</span></button></h3>
     <span class="section-badges"></span>
   </header>
-  <div id="sys-maint-body" class="section-body" aria-live="polite">
-    <div class="announce-row needs-settings">
-      <div class="field">
-        <label for="announce-mode" class="action-title" data-i18n="maint.announce">Announce on the LAN</label>
-        <select id="announce-mode" class="field-control">
-          <option value="auto" data-i18n="maint.announceAuto">Automatic</option>
-          <option value="on" data-i18n="maint.announceOn">On</option>
-          <option value="off" data-i18n="maint.announceOff">Off</option>
-        </select>
-      </div>
-      <p id="announce-text" class="muted small field-hint"></p>
-      <p id="announce-msg" class="small cubes-msg hidden" role="status"></p>
-    </div>
-    <div class="interval-row needs-settings">
-      <div class="field">
-        <label for="interval-poll" class="action-title" data-i18n="maint.poll">Poll the Cubes every</label>
-        <select id="interval-poll" class="field-control"></select>
-      </div>
-      <p id="interval-poll-text" class="muted small field-hint"></p>
-      <p id="interval-poll-msg" class="small cubes-msg hidden" role="status"></p>
-    </div>
-    <div class="interval-row needs-settings">
-      <div class="field">
-        <label for="interval-refresh" class="action-title" data-i18n="maint.refresh">Refresh the Cubes every</label>
-        <select id="interval-refresh" class="field-control"></select>
-      </div>
-      <p id="interval-refresh-text" class="muted small field-hint"></p>
-      <p id="interval-refresh-msg" class="small cubes-msg hidden" role="status"></p>
-    </div>
-    <div class="interval-row needs-settings">
-      <div class="field">
-        <label for="interval-discover" class="action-title" data-i18n="maint.discover">Look for Cubes every</label>
-        <select id="interval-discover" class="field-control"></select>
-      </div>
-      <p id="interval-discover-text" class="muted small field-hint"></p>
-      <p id="interval-discover-msg" class="small cubes-msg hidden" role="status"></p>
-    </div>
-    <div class="interval-row needs-settings">
-      <div class="field">
-        <label for="interval-duty" class="action-title" data-i18n="maint.dutyWait">Re-read the radio budget after a hold every</label>
-        <select id="interval-duty" class="field-control"></select>
-      </div>
-      <p id="interval-duty-text" class="muted small field-hint"></p>
-      <p id="interval-duty-msg" class="small cubes-msg hidden" role="status"></p>
-    </div>
-    <div class="action-row needs-restart">
-      <div>
-        <p class="action-title" data-i18n="maint.file">Settings file</p>
-        <p id="settings-file-text" class="muted small"></p>
-        <p id="settings-reload-msg" class="small cubes-msg hidden" role="status"></p>
-      </div>
-      <div class="actions"><button type="button" id="settings-reload" data-i18n="maint.reload">Reload now</button></div>
-    </div>
-    <div class="action-row restart needs-restart">
-      <div>
-        <p class="action-title" data-i18n="maint.restart">Restart</p>
-        <p id="restart-text" class="muted small hidden"></p>
-      </div>
-      <div class="actions"><button type="button" id="restart-btn" class="hidden" data-i18n="restart.button">Restart the server</button></div>
-    </div>
-    <p id="restart-pending" class="notice small hidden needs-restart"></p>
-    <div class="action-row reboot needs-reboot">
-      <div>
-        <p class="action-title" data-i18n="maint.reboot">Reboot the computer</p>
-        <p id="reboot-text" class="muted small hidden"></p>
-        <div id="reboot-delay-row" class="field reboot-delay hidden">
-          <label for="reboot-delay" data-i18n="maint.rebootDelay">Delay</label>
-          <span class="inline field-control"><input type="number" id="reboot-delay" min="0" max="3600" step="1" value="60" inputmode="numeric"><span class="muted" data-i18n="unit.seconds">s</span></span>
-        </div>
-        <p id="reboot-msg" class="small cubes-msg hidden" role="status"></p>
-      </div>
-      <div class="actions">
-        <button type="button" id="reboot-btn" class="hidden" data-i18n="reboot.button">Reboot</button>
-        <button type="button" id="reboot-cancel" class="hidden" data-i18n="reboot.cancel">Take the reboot back</button>
-      </div>
-    </div>
-  </div>
+  <div id="sys-maint-body" class="section-body" aria-live="polite"></div>
 </section>

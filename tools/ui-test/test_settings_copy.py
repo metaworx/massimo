@@ -89,10 +89,10 @@ def test_maintenance_order(page, case):
     try:
         rows = page.evaluate("""() => [...document.querySelectorAll('#sys-maint-body > div')].map((d) => {
           const title = d.querySelector('.action-title');
-          return [title ? title.dataset.i18n : '', title ? getComputedStyle(title).fontWeight : ''];
+          return [title ? title.textContent : '', title ? getComputedStyle(title).fontWeight : ''];
         })""")
-        assert [r[0] for r in rows] == ["maint.announce", "maint.poll", "maint.refresh", "maint.discover", "maint.dutyWait", "maint.file", "maint.restart", "maint.reboot"], \
-            f"the owner's order ({rows})"
+        keys = ["maint.announce", "maint.poll", "maint.refresh", "maint.discover", "maint.dutyWait", "maint.file", "maint.restart", "maint.reboot"]
+        assert [r[0] for r in rows] == page.evaluate("(ks) => ks.map((k) => t(k))", keys), f"the owner's order ({rows})"
         assert len({r[1] for r in rows}) == 1, f"the titles alike ({rows})"
     finally:
         show_view(page, "tiles")

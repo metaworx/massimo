@@ -29,6 +29,7 @@ import "./rooms";
 import type { RoomsPart } from "./rooms";
 import { signedOut as integrationsSignedOut } from "./integrations";
 import { serverEvent as softwareEvent, signedOut as softwareSignedOut } from "./software";
+import { serverEvent as maintenanceEvent, signedOut as maintenanceSignedOut } from "./maintenance";
 import type { ServerEvent } from "./model/event";
 import type { SoftwarePart } from "./software";
 import { forgetForms } from "./shared/forms";
@@ -53,13 +54,15 @@ export interface MassimoParts {
    * integrations with the readings of an approval (integrations/), and
    * every Cube's backups with a restore shown (backups/), and Software
    * update's reading while the helper works, its question and the
-   * channel's setting (software/).
+   * channel's setting (software/), and Maintenance's following of a
+   * restart or a reboot, its questions, the delay typed and its settings
+   * (maintenance/).
    */
   signedOut(): void;
   /**
    * A server's event of the stream (update.js serverEvent, from app.js
-   * connectEvents): Software update reads again what it says has
-   * changed while Maintenance is shown.
+   * connectEvents): Software update and Maintenance read again what it
+   * says has changed while Maintenance is shown.
    */
   serverEvent(ev: ServerEvent): void;
   /** Backup and restore: Cube settings' box and System settings' fold per Cube (backups/). */
@@ -95,6 +98,7 @@ register("language", languageChanged);
 register("icons", iconsChanged);
 register("serverEvent", (ev: ServerEvent) => {
   softwareEvent(ev);
+  maintenanceEvent(ev);
 });
 register("signedOut", () => {
   newSession(); // first: an answer still on its way for the user who was is dropped
@@ -105,5 +109,6 @@ register("signedOut", () => {
   integrationsSignedOut();
   backupsSignedOut();
   softwareSignedOut();
+  maintenanceSignedOut();
 });
 window.MassimoParts = parts as unknown as MassimoParts;
