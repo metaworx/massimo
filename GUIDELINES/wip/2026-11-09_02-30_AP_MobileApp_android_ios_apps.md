@@ -1,4 +1,4 @@
-# AP MobileApp v1.2: the Android and iOS apps
+# AP MobileApp v1.3: the Android and iOS apps
 
 ## TL;DR
 
@@ -6,15 +6,15 @@ Roadmap items 16 and 17: an app for Android, on F-Droid and Google Play,
 and one for iOS from the same source: the web UI in a thin native shell,
 connected to a `serve` or with one embedded.
 On `main`: the connect page, the Android shell, the release's jobs,
-the login by fingerprint and the phone test's polish;
-v1.2 adds the findings of the login's check on the owner's phone.
+the login by fingerprint, the phone test's polish and the first check's findings;
+v1.3 adds the findings of the second check on the owner's phone.
 
-- the check of 2026-11-20 → Block 13: the sign-in card, the menus,
-  the server list's menu, sessions and default server, the certificate,
-  the app's appearance
-- a dead session at a 401 → dropped, no lockout of the address
-- Turn off → signs out and revokes the key with the session
-- decisions → D40 to D53 (the check's D38 to D51, renumbered)
+- the check of Block 13 → Block 14: the sign-in card centred, with Cancel
+  and "Password"; the fingerprint button's spinner; Turn off with a session
+- Forget all → revokes each key at its server, as Turn off does
+- a key not revoked → its id kept, no secret; revoked at the next session
+  there; "Show in My profile"
+- decisions → D54 to D57
 - first release → the client with the login; the core second
 
 ### Blocks
@@ -39,7 +39,9 @@ v1.2 adds the findings of the login's check on the owner's phone.
     Dependabot for Gradle (done)
 13. Check: the findings of the login's check on the owner's phone:
     the sign-in card, the menus, the server list, Turn off, the certificate,
-    the appearance
+    the appearance (done)
+14. Second check: the findings of Block 13's check: the sign-in card,
+    Forget all revoking, the keys left valid, Turn off with a session
 
 ## Discussion
 
@@ -93,6 +95,13 @@ UnifiedPush.
   the sums and the attestation, the keys, the nightly app, the versionCode
   (`2026-11-17_18-27_NOTE_MobileApp_v1.0_block_4_refit.md`);
 - **D22 to D31** at this revision's gate of 2026-11-18, below.
+
+**Revision v1.3 (2026-11-21).**
+Block 13 is on `main` (pull requests 384 and 386).
+The owner checked it on the phone on 2026-11-20
+(`2026-11-20_23-04_NOTE_MobileApp_v1.2_phone_check_block_13.md`):
+it passed, and found four points,
+which this revision gathers as Block 14 with the decisions D54 to D57.
 
 **Revision v1.2 (2026-11-20).**
 Blocks 8 and 12 are on `main` (pull requests 365, 366 and 368).
@@ -200,6 +209,22 @@ each in its NOTE:
   - **D52-A**: the findings as this revision's Block 13;
   - **D53-A**: an app-wide Appearance in an App settings card, applied to the
     list and to every server's page set to "as the system".
+- **D54 to D57** at the gate of 2026-11-21, after the check of Block 13,
+  recorded here:
+  - **D54-C**, the owner's variant: "Select server …" in the card's ☰,
+    and in the app a Cancel button left of "Sign in" that returns to the list;
+    not a servers icon beside the ☰ (A), nor the ☰ alone (B);
+  - **D55-A**: "Password" in place of "Name" in the row;
+  - **D56-A**: Forget all revokes each key at its server as Turn off does,
+    the fingerprint asked only where no session is held,
+    and no prompt for the forgetting itself;
+  - **D57-A**: a key that could not be revoked stays as its id and user,
+    no secret, and the next session there revokes it;
+    the server's settings name it, with "Show in My profile".
+    Not a SHA-256 of the key with a search by hash (B, the owner's first
+    thought): the app keeps the id already, a session may revoke its user's
+    key by id, and a link marks the row better than a hash read by eye.
+    Nor the key named alone (C).
 
 **Names chosen here**, routine and not decisions of the owner's:
 the directories `app/core`, `app/android`, `app/ios`;
@@ -692,6 +717,36 @@ the calls `session(id, url)`, `signOut(id, url)`, `signOutAll()`,
 `settings()` and `saveSettings(s)` on the connect page;
 on a server's page, a dead session handed to `setToken(null)`.
 
+### The second phone check's findings (Block 14)
+
+The owner's check of Block 13 on 2026-11-20 passed
+(`2026-11-20_23-04_NOTE_MobileApp_v1.2_phone_check_block_13.md`).
+What it found:
+
+| # | Finding | Fix |
+|---|---|---|
+| F25 | the fingerprint button's spinner pushes its icon out | the spinner in the icon's place while the login runs |
+| F26 | Forget all forgets the kept logins on the phone alone; their keys stay valid | D56-A, D57-A |
+| F27 | the sign-in card: not centred, nor its title; the "Sign in with" label; the ☰ apart from the row; "Name"; "Select server" at its foot | centred; no label; the ☰ at the row's end; D55-A; D54-C |
+| F28 | Turn off while signed in: the audit shows the sign-out 14 s before the key revoked itself, no revoke by the session | a test of that path, its cause traced; a login kept without its key's id finds it through its session; step 12 again on the phone |
+
+Revoking needs no secret:
+the app keeps each key's id in clear beside the sealed key (Block 13),
+and `DELETE /api/v1/users/{name}/tokens/{id}` takes any session of that user.
+A key Turn off or Forget all could not revoke
+therefore stays as its server, user and id until a session there revokes it.
+The server keeps the key's SHA-256 (`store.HashToken`),
+which the app needs neither keep nor show.
+
+With Open at start the sign-in card is the app's first page,
+where the back gesture closes the app;
+Cancel is then the visible way to the list.
+
+The bridge's contract becomes version 4 (`docs/app.md`):
+a server's `unrevoked`, the keys left valid on it, each `{user, id}`;
+`forgetAll`'s answer, what it revoked and where it could not;
+and the way to open a server's page at My profile with a key marked.
+
 ### Risks
 
 - gomobile is experimental by its own README; the core's surface is small,
@@ -702,7 +757,9 @@ on a server's page, a dead session handed to `setToken(null)`.
 - The 14-day closed test delays production on Play; F-Droid and the
   GitHub release do not wait for it.
 - A kept key is as strong as the phone's Keystore and its fingerprint;
-  its revocation is one click under My profile, by the phone's name.
+  its revocation is one click under My profile, by the phone's name,
+  and Turn off and Forget all revoke it at its server,
+  or at the next session there where it was not reached.
 - Android ends a hidden app often,
   so `return` and `start` ask for the fingerprint often;
   `logout` is the price's other side, and the choice is the user's (D24-C).
@@ -724,7 +781,7 @@ What changes, by file, in the blocks still to run:
 | `app/core/*.go`, `go.mod`, `Makefile` | 1 | the bound package, the `tool` directive, the targets |
 | a merge request to `fdroiddata` | 5 | the recipe; here `app/README.md`'s section |
 | the Play Console | 6 | the owner's; `app/README.md` records the steps |
-| `app/android/**` | 7, 8, 11 | the service; the login; push |
+| `app/android/**` | 7, 8, 11, 14 | the service; the login; push; Forget all and the keys left |
 | `internal/store/migrations/`, `internal/store/tokens.go`, `docs/store.md`, their tests | 8 | `tokens.parent_id`, a key's sessions revoked with it |
 | `internal/server/login_api.go`, `users_api.go`, `audit.go`, their tests | 8 | `POST /api/v1/login/key`, a session's key in the list |
 | `docs/api-v1.md`, `docs/api-v1-openapi.yaml` | 8 | the route |
@@ -733,8 +790,10 @@ What changes, by file, in the blocks still to run:
 | `app/ios/**`, `.github/workflows/ci.yml` | 9 | the Xcode project, the macOS job |
 | `internal/server/ui/connect.html`, `connect.js`, `header.js`, `src/header/Tls.tsx`, `partials/login.html` | 12 | the toasts, the names, the notice |
 | `.github/dependabot.yml` | 12 | the entry for Gradle |
+| `internal/server/ui/partials/login.html`, `login.js`, `style.css`, `users.js`, `connect.html`, `connect.js`, `i18n/*.json`, `tools/ui-test/` | 14 | the card, its Cancel, My profile's marked key, Forget all, the keys left |
+| `docs/app.md`, `docs/ui.md`, `docs/user-manual.md` | 14 | the contract's version 4, the card, Forget all |
 | `app/README.md`, `README.md`, `docs/roadmap.md`, `GUIDELINES/wip/HANDOVER.md` | 10, 12 | the documents; the roadmap and the handover by the coordinating session |
-| `CHANGELOG.d/` | 1, 7 to 9, 11, 12 | a fragment per block |
+| `CHANGELOG.d/` | 1, 7 to 9, 11, 12, 14 | a fragment per block |
 
 ## Implementation Plan
 
@@ -749,7 +808,7 @@ and `GUIDELINES/shared/tools/check` before every push;
 the whole suite, the race run and the cross builds are CI's.
 Nothing reaches a real Cube or a box: the fake Cube answers;
 a phone is the owner's, used on the owner's word.
-Every commit cites `AP MobileApp v1.1, Block <n>`;
+Every commit cites `AP MobileApp v1.3, Block <n>`;
 a block's bullet is a fragment, `CHANGELOG.d/<Heading>/<branch>.md`;
 a pull request per block.
 
@@ -935,59 +994,83 @@ Its NOTE is `2026-11-18_16-03_NOTE_MobileApp_v1.1_how_block_12_went.md`.
 
 ### Block 13: Check
 
-The findings of the login's check (the Analysis, "The phone check's
-findings"), with D40 to D53, in two pull requests:
-the web UI's on `claude/mobile-check-ui`, the app's on `claude/mobile-check-app`.
+Done on 2026-11-20, pull requests 384 and 386, under v1.2's gate (D40 to D53).
+Its NOTEs are `2026-11-20_22-18_NOTE_MobileApp_v1.2_how_block_13_went.md`
+and, for its check on the owner's phone,
+`2026-11-20_23-04_NOTE_MobileApp_v1.2_phone_check_block_13.md`.
 
-1. The page and a dead session (F7, F19): `app.js` drops the token at the
-   first 401 and the app's with `setToken(null)`; a test that a revoked
-   session sends nothing that counts.
-2. My profile (F2, D41-A): "this device" and "its key"; Revoke on "this
-   device" is Sign out.
-3. The sign-in card (F8 to F13, D44-A, D45-A, D49, D42-A): no header while
-   signed out, the version at the card's foot and first in its ☰;
-   "Sign in with: [fingerprint] | Name | API key"; the switch's layout;
-   the margin under the logo; the switch on the first-owner form in the app;
-   "Select server" last in the card's ☰ and before Sign out in the main ☰.
-4. The menus (F14, D48-A, D50-A): border, shadow, the glow in dark mode.
-5. The icon (F3, D40), in `index.html` and `connect.html`.
-6. The connect page (F21, F22, F16, F17, D43-A, D46-A, F23, D51-B, D53-A):
-   the Servers card's ☰; Add a server on demand; the panel's focus;
-   "Open at start"; the sessions in the list, Sign out and Sign out of all;
-   the certificate's line and dialog; App settings with Appearance.
-7. The adapter (F5, F6, F15, F23, F24, D53-A): the contract's version 3;
-   the server opened at start; `session` checked with `GET /api/v1/me`;
-   `signOut` with `POST /api/v1/logout`; Turn off revoking with the session,
-   the key's id in clear in `LoginStore`, a failed revoke logged; the probe's
-   certificate details; the appearance applied to the activity's theme,
-   `android:isLightTheme` set for day and night.
-8. Tests: the UI suite for the page, the card, the menus' style, My profile
-   and the connect page with the fake bridge's version 3; unit tests of the
-   adapter's sessions, the revoke and the certificate's details.
-9. `docs/app.md`, `docs/ui.md`, `docs/user-manual.md`, `app/README.md`.
+### Block 14: Second check
+
+The findings of Block 13's check (the Analysis, "The second phone check's
+findings"), with D54 to D57, in one pull request on `claude/mobile-check-fixes`,
+the web UI's commit and the app's.
+
+1. The fingerprint button (F25): while its login runs,
+   the spinner takes the icon's place, the button's size unchanged.
+2. The sign-in card (F27, D54-C, D55-A): centred in the window while open,
+   its title centred; no "Sign in with" label,
+   the row's group named by the same text for a screen reader;
+   the card's ☰ at the row's end; "Password" in place of "Name",
+   in all six languages;
+   no "Select server" button at the card's foot, the ☰'s entry "Select server …";
+   in the app, a Cancel button left of each "Sign in"
+   (the password's, the key's, the first owner's),
+   which returns to the server list as Select server does.
+   The row in one line at 390 px in every language,
+   German's way button shortened alone where it is not.
+3. My profile (D57-A): opened with a key's id,
+   it marks that key's row and scrolls it into view.
+4. Forget all (F26, D56-A): each kept login's key revoked at its server,
+   as Turn off does: with the session the app holds,
+   else with the key after one prompt per server;
+   then forgotten on the phone.
+   Its question says so; its answer names what it revoked and what it could not.
+5. The keys left (D57-A): a key Forget all or Turn off could not revoke
+   (the server not reached, the prompt cancelled)
+   stays in the server's entry as its user and id, no secret;
+   the next session the app holds there for that user revokes it,
+   a 404 counting as revoked, another user's session leaving it;
+   the server's settings show that a key of this phone is still valid there,
+   with "Show in My profile", which opens the server's page at My profile
+   with the key marked; removing the server warns of it.
+6. Turn off with a session (F28): a unit test that Turn off while a session
+   is held revokes with it, then signs out;
+   the order the check's audit showed traced, and fixed where the code
+   is its cause; a login kept without its key's id
+   (kept before Block 13) finds it as the held session's `key_id`
+   (`GET /api/v1/users/{name}/tokens`).
+7. The contract's version 4 (`docs/app.md`): a server's `unrevoked`,
+   `forgetAll`'s answer, the call or URL that opens My profile with a key marked.
+8. Tests: the UI suite for the card and its Cancel (the fake bridge's version 4),
+   "Password", the spinner's box, My profile's marked key,
+   Forget all's answer and the keys left on the connect page;
+   unit tests of Forget all's revokes, the keys left and their revoke at the
+   next session, and Turn off with a session.
+9. `docs/app.md`, `docs/ui.md`, `docs/user-manual.md`.
 10. The fragments, under the headings COMMIT.md 5.2 gives them.
 
 **Verification:**
-the touched Go and UI test files in the four cases, `make ui-check`, the
-Gradle tasks; on the owner's phone the findings again, the default server,
-Sign out of all, the certificate's dialog and each Appearance.
+the touched Go and UI test files in the four cases, `make ui-check`,
+the Gradle tasks; on the owner's phone the card
+(centred, the row, Cancel, "Password", the spinner),
+Forget all with a session and without one (a prompt per server),
+a key left while the rig's server is stopped, its line,
+Show in My profile, its revoke at the next sign-in, and step 12 again,
+the audit read after each.
 
 ## Proposed commit message
 
-The revision's registration, a commit of its own on `main`, with the
-phone check's NOTE:
+The revision's registration, a commit of its own on `main`:
 
 ```
-chore(aps): +MobileApp v1.2, +NOTE MobileApp v1.1, the phone check
+chore(aps): +MobileApp v1.3
 
-The login by fingerprint passed the owner's check on the phone; its findings become Block 13, with the decisions D40 to D53, and Blocks 8 and 12 are marked done.
+The owner's check of Block 13 on the phone found four points; they become Block 14, with the decisions D54 to D57, and Block 13 is marked done.
 
 Key changes:
-- GUIDELINES/wip/2026-11-09_02-30_AP_MobileApp_android_ios_apps.md: v1.2: Block 13, the check's findings in the Analysis, D32 to D53 recorded, Blocks 8 and 12 done.
-- GUIDELINES/wip/2026-11-20_20-05_NOTE_MobileApp_v1.1_phone_check_block_8.md: the check, what passed, the findings, the decisions as numbered there and here.
+- GUIDELINES/wip/2026-11-09_02-30_AP_MobileApp_android_ios_apps.md: v1.3: Block 14, the second check's findings in the Analysis, D54 to D57 recorded, Block 13 done.
 
-File-revision-v1: GUIDELINES/wip/2026-11-09_02-30_AP_MobileApp_android_ios_apps.md::v1.2::2026-11-20::TL;DR, Discussion, Analysis, Implementation Plan, Proposed commit message, Change History::Block 13, the phone check's findings
-File-revision-v1: GUIDELINES/wip/2026-11-20_20-05_NOTE_MobileApp_v1.1_phone_check_block_8.md::v1.1::2026-11-20::All::the phone check of Block 8
+File-revision-v1: GUIDELINES/wip/2026-11-09_02-30_AP_MobileApp_android_ios_apps.md::v1.3::2026-11-21::TL;DR, Discussion, Analysis, Implementation Plan, Proposed commit message, Change History::Block 14, the second phone check's findings
 Assisted-by: claude-code:claude-opus-5-5
 ```
 
@@ -998,8 +1081,8 @@ The blocks' commits still to come:
 9. `feat(app): The iOS app`
 10. `docs(app): The apps' documents`
 11. `feat(app): Push through UnifiedPush`
-13. `fix(ui): The sign-in card, the menus and a dead session, as the phone check found`,
-    and `feat(app): The server list's menu, sessions, default server and certificate`
+14. `fix(ui): The sign-in card centred, with Cancel and Password, as the second check found`,
+    and `fix(app): Forget all revokes the keys, and a key left is revoked at the next session`
 
 Blocks 5 and 6 commit nothing but `app/README.md`'s sections.
 
@@ -1018,3 +1101,5 @@ Blocks 5 and 6 commit nothing but `app/README.md`'s sections.
   on the phone, its findings as Block 13 with the decisions D40 to D53
   (D38 to D51 at the check, renumbered after Block 12's D38 and D39);
   D32 to D39 recorded as decided.
+- v1.3 (2026-11-21): Block 13 done; the owner's check of it on the phone,
+  its findings as Block 14 with the decisions D54 to D57.
