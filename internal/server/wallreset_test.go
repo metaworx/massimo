@@ -108,7 +108,7 @@ func TestWallReset(t *testing.T) {
 			t.Fatalf("a wall_reset for a return on the same mode: %+v", ev.Summary)
 		}
 	}
-	before := len(seen)
+	before, m := len(seen), logMark(t, ts)
 	reported(true, fakecube.State{Mode: &auto, Setpoint: &low}, cube.ModeAuto, 5.5)
 	var reset *event
 	for i := before; i < len(seen); i++ {
@@ -123,5 +123,5 @@ func TestWallReset(t *testing.T) {
 	if sum := reset.Summary; sum["mode"] != "auto" || sum["was_mode"] != "manual" || sum["setpoint"] != 5.5 || sum["was_setpoint"] != 6.0 {
 		t.Fatalf("wall_reset summary %v", sum)
 	}
-	testkit.Eventually(t, "the wall_reset in the log", func() bool { return hasKind(logKinds(t, ts, 0), "wall_reset:0a0201") })
+	logAfter(t, m, "the wall_reset in the log", logLine("wall_reset", "0a0201"))
 }

@@ -6,7 +6,6 @@ package server
 import (
 	"context"
 	"net/http/httptest"
-	"slices"
 	"testing"
 	"time"
 
@@ -17,68 +16,48 @@ import (
 	"go.metaworx.ch/massimo/internal/view"
 )
 
-// stateLines counts rf's state lines in the log whose change of key is
-// to, or all of them for key "".
-func stateLines(t *testing.T, ts *httptest.Server, rf cube.RFAddress, key string, to any) int {
-	t.Helper()
-	var evs []event
-	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log?kind=state&limit=1000", &evs)
-	n := 0
-	for _, e := range evs {
-		if e.Device != rf.String() {
-			continue
-		}
-		if c, ok := e.Changes[key]; key == "" || ok && c.To == to {
-			n++
-		}
+// stateChange matches rf's state lines whose change of key is to, or
+// all of them for key "".
+func stateChange(rf cube.RFAddress, key string, to any) func(event) bool {
+	return func(e event) bool {
+		c, ok := e.Changes[key]
+		return logLine("state", rf.String())(e) && (key == "" || ok && c.To == to)
 	}
-	return n
 }
 
 // settleState changes rf's entry to st, waits for the pump's next state
 // line of rf whose change of key is to (any next one for key ""), then
-// for the queue to send what the line queued. The lines are counted once
-// the pump has handled what came before (pumpSync), so that a line of
-// an earlier report is not taken for the next.
+// for the queue to send what the line queued. The log is marked once the
+// pump has handled what came before (pumpSync), so that a line of an
+// earlier report is not taken for the next.
 func settleState(t *testing.T, fc *fakecube.Server, ts *httptest.Server, s *Server, rf cube.RFAddress, st fakecube.State, key string, to any) {
 	t.Helper()
 	pumpSync(t, s)
-	before := stateLines(t, ts, rf, key, to)
+	m := logMark(t, ts)
 	if err := fc.SetState(rf, st); err != nil {
 		t.Fatal(err)
 	}
-	testkit.Eventually(t, "the state line of "+rf.String(), func() bool { return stateLines(t, ts, rf, key, to) > before })
+	logAfter(t, m, "the state line of "+rf.String(), stateChange(rf, key, to))
 	rt := s.runtimes()[0]
 	if res := rt.queue.Enqueue(engine.Command{Priority: engine.PriorityLow, Lines: []cube.Message{cube.CmdGetNTP}}).Wait(context.Background()); res.Err != nil {
 		t.Fatal(res.Err)
 	}
 }
 
-// watchLines are rf's error_watch lines, oldest first.
+// watchLines are rf's error_watch lines in the whole log, oldest first.
 func watchLines(t *testing.T, ts *httptest.Server, rf cube.RFAddress) []event {
 	t.Helper()
-	var evs []event
-	getJSON(t, ts, "", "/api/v1/cubes/KEQ0000100/log?kind=error_watch&limit=1000", &evs)
-	var out []event
-	for _, e := range evs {
-		if e.Device == rf.String() {
-			out = append(out, e)
-		}
-	}
-	slices.SortFunc(out, func(a, b event) int { return int(a.ID - b.ID) })
-	return out
+	return logLines(t, logStart(ts), logLine("error_watch", rf.String()))
 }
 
-// waitWatch waits until rf has n error_watch lines and returns them.
+// waitWatch waits until rf has n error_watch lines in the log, and no
+// more, and returns them.
 func waitWatch(t *testing.T, ts *httptest.Server, rf cube.RFAddress, n int) []event {
 	t.Helper()
-	var lines []event
-	testkit.Eventually(t, "the error_watch lines of "+rf.String(), func() bool {
-		lines = watchLines(t, ts, rf)
-		return len(lines) >= n
-	})
-	if len(lines) != n {
-		t.Fatalf("%s: %d error_watch lines, want %d: %+v", rf, len(lines), n, lines)
+	watch := logLine("error_watch", rf.String())
+	lines, next := logAfterN(t, logStart(ts), "the error_watch lines of "+rf.String(), n, watch)
+	if more := logLines(t, next, watch); len(more) != 0 {
+		t.Fatalf("%s: %d error_watch lines, want %d: %+v", rf, n+len(more), n, append(lines, more...))
 	}
 	return lines
 }
@@ -129,8 +108,9 @@ func TestErrorWatchBack(t *testing.T) {
 	on, off := true, false
 	valve := func(n int) *int { return &n }
 
+	reset := logMark(t, ts)
 	settleState(t, fc, ts, s, rf, fakecube.State{Reported: &on, Error: &on, ValvePct: valve(10)}, "valve_pct", float64(10))
-	testkit.Eventually(t, "the error_reset", func() bool { return hasKind(logKinds(t, ts, 0), "error_reset:0a010d") })
+	logAfter(t, reset, "the error_reset", logLine("error_reset", "0a010d"))
 	if n := received.Count(0, resetOf(rf)); n != 1 {
 		t.Fatalf("the first report: %d resets, want 1", n)
 	}
@@ -278,10 +258,11 @@ func TestErrorWatchLastingAcrossRestart(t *testing.T) {
 	on := true
 	valve := func(n int) *int { return &n }
 	t0 := clock.Now()
+	reset := logMark(t, ts)
 	settleState(t, fc, ts, s, flagged, fakecube.State{Reported: &on, Error: &on, ValvePct: valve(10)}, "error", true)
 	settleState(t, fc, ts, s, linked, fakecube.State{Reported: &on, LinkError: &on}, "link_error", true)
 	settleState(t, fc, ts, s, silent, fakecube.State{Error: &on}, "", nil)
-	testkit.Eventually(t, "the error_reset", func() bool { return hasKind(logKinds(t, ts, 0), "error_reset:0a010a") })
+	logAfter(t, reset, "the error_reset", logLine("error_reset", "0a010a"))
 	if err := st.FlushEvents(context.Background()); err != nil {
 		t.Fatal(err)
 	}

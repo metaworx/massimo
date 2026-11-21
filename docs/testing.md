@@ -144,8 +144,10 @@ put it in `TESTFLAGS`.
 
 `Eventually` waits for a state: a count, a flag, an answer of the API.
 A test that waits for **the next line or event after an action** -
-the fake Cube's next `s:`, the log's next warning, the stream's next state -
-waits through a watch instead:
+the fake Cube's next `s:`, the server log's next warning,
+the stream's next state -
+waits through a watch instead,
+and for the next line of the log's API through the log's cursor (below):
 a state can already hold from before the action,
 or be met by a line that is not the one the test caused.
 
@@ -227,6 +229,92 @@ A `ChanWatch` takes its items from the channel in a goroutine of its own,
 so "once the action is over" holds for it only once the item that shows it
 came through the watch: a `Has` or `HasNot` right after the action can miss
 an item still in the channel.
+
+## The log's cursor
+
+The log's API (`GET …/log`, `docs/api-v1.md`) is no feed a watch could take:
+a client reads it,
+and a watch fed by a goroutine reading it would need a read to catch up at each mark.
+A test of `internal/server` that waits for the log's next line after an action -
+a device's state line, an `error_reset`, a warning of a write not confirmed -
+marks the fake Cube's log before the action and waits from the mark,
+as with a watch (`logcursor_test.go`, AP LogCursor):
+
+```go
+m := logMark(t, ts)
+// the action
+ev, next := logAfter(t, m, "the error_reset", logLine("error_reset", "0a010d"))
+```
+
+| Call | What it does |
+|------|--------------|
+| `logMark(t, ts)`, `logMarkAs(t, ts, token)` | the cursor after the newest line of the fake Cube's log, at any level: "from now on"; its read writes the store's pending lines first, so that a line kept before the mark is behind it; `logMarkAs` for a server that asks for a token |
+| `logStart(ts)` | the cursor before the log's first line, for a helper that counts the whole log, "the log has n", as `waitWatch`, `waitOutcome` and `waitSlotsEvents` do, or takes its first line of a kind, as `waitUnconfirmed` |
+| `logAfter(t, c, what, match)` | the first line after the cursor that matches, and the cursor after it, from which a next wait goes on; fails after 5 s, scaled |
+| `logAfterN(t, c, what, n, match)` | the first `n` lines after the cursor that match, and the cursor after the last; the failure says how many came |
+| `logLines(t, c, match)` | the lines after the cursor that match, as the log holds them now: once the action is over, what came since the mark, or that none came after the lines a wait took |
+| `logLine(kind, device)` | a match of a line of `kind`, and of `device` where it is not `""`, at info and above: the line a page shows without `level=` |
+
+A cursor is the id of the last line before it.
+Each check of a wait reads the log forward with `after=<id>` from the last line it read,
+at every level, page after page,
+in the test's own goroutine:
+it reads each line once, misses none, and stops at no page's `limit`,
+where a count over one page stopped at its 500 or 1000 lines.
+Since it reads every level, a match says the level it takes:
+`logLine` and `atInfo` take what a page without `level=` shows,
+a match of its own takes a debug line too.
+A `nil` match takes every line.
+A failure says what came since the cursor, the last 20 lines,
+each with its id, level, kind, device, changes and summary,
+as a watch's does.
+A cursor beyond the log's newest line, one the log never gave out,
+is the API's `409`, and fails the test at once (AP LogCursor, D3-A).
+
+The helpers read one route, a Cube's own:
+the fake Cube's, `GET /api/v1/cubes/KEQ0000100/log` (`cubeLogPath`).
+A test of every Cube's log, `GET /api/v1/log`, reads that route directly.
+A Cube without its row in the store keeps its log in memory,
+whose ids lie far above the store's:
+a mark taken then is beyond the store's newest line
+once the Cube's log moves to the store with its row,
+and every read from it is answered `409`.
+With `stored()` the Cube has its row before the start returns.
+
+- **Mark before the action**, never after, as for a watch;
+  after `pumpSync` where the pump could still write an earlier report's line,
+  which the wait would take for the action's, as `settleState` marks.
+- **A wait after a wait** goes on from the cursor the first returned.
+- **"The log has n"** - n warnings, n slots lines -
+  is `logAfterN` from `logStart`,
+  and `logLines` after the cursor it returned is empty:
+  none came after them.
+  So is "this line, and no second one" after a mark,
+  as TestAutoReset checks its second `error_reset`.
+- **Right after the start**,
+  the log holds what the start waited for ("The start"):
+  the greeting's lines, the connected line, `server_started`,
+  what the pump's turn of the connected line writes.
+  A test reads them directly, without a wait.
+- **A line written by a call that returned**, such as `s.logServer`'s,
+  is in the log at the next read, the store's pending lines written first;
+  a wait from a mark before the call returns it at its first read.
+
+The cursor or a watch of the server's log (`withLog`, `testkit.LogWatch`):
+
+- **The cursor** is for what a client of the API reads:
+  a line of the log as the store or the memory keeps it,
+  with its id, its level, its summary, its command and who started it;
+  a filter's page (`kind=`, `device=`, `command=`) is read directly
+  once the cursor has its lines.
+- **`testkit.LogWatch`** is for what the server writes to its process log,
+  serve's text log:
+  the message and attributes a user reads there, the Cube client's lines,
+  a warning that is no line of the API's log.
+  A line of the API's log is printed there too,
+  but a test of what the API's log keeps waits through the cursor:
+  the printed line has no id,
+  and is printed before the store keeps it, or drops it.
 
 ## The pump
 
