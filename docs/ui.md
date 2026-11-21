@@ -798,6 +798,15 @@ For a time range and for all events,
 **Older events** under the lines loads the 200 before the oldest shown, within the range,
 the view staying where it was,
 until the server has nothing older ("No older events").
+Older first asks the server for what follows the newest line shown,
+by its id (`after=`, `docs/api-v1.md`, "GET /api/v1/cubes/{sn}/log");
+where the server's log ends before that line, the log loads again
+in place of the page before the oldest:
+so for a Cube served for this run whose lines the server kept in memory,
+once it gains its row in the store and those lines leave its log,
+for a store restored from an older copy or emptied by the prune,
+and for a server without a store restarted with its clock set back.
+A line the prune took while newer ones stay is not noticed.
 The pages fetched stay while new events come in, with room for 2000 more lines;
 past that the oldest lines go, and Older fetches them again.
 Only a log left open until every fetched line has gone pages on by the time of
@@ -851,8 +860,15 @@ the device choice lists every Cube's devices, a group for each Cube,
 and a radio address there names that address on every Cube.
 The page then loads every Cube's rooms once, for the names,
 and asks for the new lines every 10 seconds while the log is shown,
-in place of the header's Cube's stream;
-another Cube in the header leaves the log as it is.
+in place of the header's Cube's stream:
+those after the newest line it has, by its id (`after=`),
+page after page while a page is full, ten at most,
+so that each line comes once, also where a burst brought more than a page,
+and none is missed that the server stamped before the newest but kept after it;
+past ten pages, as after a computer's sleep with the log open,
+and where the server's log ends before that line (as Older finds it, above),
+the log loads again.
+Another Cube in the header leaves the log as it is.
 The choices in the head show one kind of event (all kinds by default,
 grouped by their source), one source or one device (all by default:
 System, Configuration, the Cube, Devices, the queue, the server, the proxy,
