@@ -253,6 +253,19 @@ func (s *Server) SetToken(ctx context.Context, token string) error {
 	return nil
 }
 
+// DropKeepOpen removes the setting auth.keep_open where the server has
+// users (store.DropKeepOpen): at the start and at each reload of the
+// settings file, for what another process, or an older version, left
+// behind (AP FirstOwner, D12). Without a store there is no setting.
+func (s *Server) DropKeepOpen(ctx context.Context) {
+	if s.opts.Store == nil {
+		return
+	}
+	if _, err := s.opts.Store.DropKeepOpen(ctx); err != nil {
+		s.log.Error("store: the keep-open setting not checked", "error", err)
+	}
+}
+
 // tokenMatches compares a presented token with the configured one in
 // constant time, so that response timing reveals nothing about it.
 func tokenMatches(want, got string) bool {

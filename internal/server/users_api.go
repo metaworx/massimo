@@ -380,14 +380,27 @@ func (s *Server) postUser(w http.ResponseWriter, r *http.Request) error {
 	}
 	auditTarget(r, "user:"+store.NormalName(u.Name))
 	var created store.User
+	var rec []byte
 	if req.Record != nil {
-		var rec []byte
 		if rec, err = req.record(); err != nil {
 			return err
 		}
+	}
+	switch {
+	case p.mode == modeOpen && req.Record != nil:
+		// The first owner once (AP FirstOwner, D15): the mode was read
+		// when the request came, so the store counts the users again as
+		// it writes the owner.
+		created, err = st.AddFirstOpaqueOwner(ctx, u, rec, req.KSF)
+	case p.mode == modeOpen:
+		created, err = st.AddFirstOwner(ctx, u, password)
+	case req.Record != nil:
 		created, err = st.AddOpaqueUser(ctx, u, rec, req.KSF, by)
-	} else {
+	default:
 		created, err = st.AddUser(ctx, u, password, by)
+	}
+	if errors.Is(err, store.ErrHasUsers) {
+		return fail(http.StatusConflict, "the first owner exists already: sign in")
 	}
 	if errors.Is(err, store.ErrNoRole) {
 		return fail(http.StatusBadRequest, "%v", err)
