@@ -6,17 +6,21 @@ on the address its `-listen` names.
 The page works on a phone as well as on a desktop,
 and follows the system's light or dark mode.
 
-The page asks who you are on a card in the page, not over it,
-its row **Sign in with: Name | API key** choosing the form:
+The page asks who you are on a card in the middle of the window,
+not over the page, its title centred under the logo,
+its row **Password | API key** choosing the form,
+on one line at a phone's width in every language:
 a name and a password, chosen at first,
 or an API key pasted into a form of its own,
 which is chosen from the start once the page has seen the server ask for no key
-(the owner made from `MASSIMO_API_TOKEN` has no password).
+(the owner made from `MASSIMO_API_TOKEN` has no password),
+the field of the form shown in focus.
+A screen reader names the row's group "Sign in with"; no label shows it.
 The password form holds the one password field, its fields named,
 so that a password manager such as KeePassXC fills it.
 The page keeps the session in the browser for 30 days from its last use;
 **Sign out** in ☰, or on the personal settings, ends it.
-The card's ☰ shows the version first,
+The card's ☰, at the end of that row, shows the version first,
 then sets the language and the appearance (light, dark, as the system)
 before anyone signs in, the same settings as My settings,
 kept in this browser.
@@ -39,15 +43,22 @@ server, which after the sign-in asks for the fingerprint and keeps an API key
 of the user's own behind it,
 or says that nothing was kept, with **Try again** and **Sign in without it**;
 the same switch on the form that creates the first owner;
-the fingerprint first in the row **Sign in with** where a login is kept,
+the fingerprint first in the row where a login is kept,
 named with the user's name, which signs in at once with a new session from
-the key, Name staying the form chosen;
+the key, the password staying the form chosen,
+its spinner in the icon's place while it runs;
 a line instead of both where the page is open over plain HTTP outside the
 home network, where the app sends no key;
-and **Select server**, back to the app's servers,
-at the card's foot and last in the card's ☰.
+**Select server…**, back to the app's servers, last in the card's ☰;
+and **Cancel** left of each **Sign in**, the password's and the key's,
+and of the first owner's **Create the owner**, which goes back there too:
+with **Open at start** the card is the app's first page,
+where the back gesture closes the app.
+A browser has no Cancel.
 While it asks, the page shows the card alone, with the logo and,
-at its foot, the version, and no header;
+at its foot, the version, and no header,
+the card as far from the window's top as from its bottom
+(a card taller than the window starts at the top and the page scrolls);
 from its first moment until the server has said who is in,
 the header's logo and name alone,
 so that no button shows before the sign-in:
@@ -183,7 +194,7 @@ The compacted header has **↑**, back to the top, first of the page buttons: �
   a blue cube is the sign of the Cubes found and not served.
   Open, it stays open when data comes in, the focus where it was,
   and shows what came: a Cube's new name, a problem, a Cube found.
-  In the app the list ends with **Select server**, which shows the app's
+  In the app the list ends with **Select server…**, which shows the app's
   servers (docs/app.md).
   The search's entry, **Search for new Cubes…**,
   asks the server to look for Cubes on the LAN (about two seconds;
@@ -266,7 +277,7 @@ The compacted header has **↑**, back to the top, first of the page buttons: �
   **Maintenance**, for those and a role with `update`, `restart` or `reboot`,
   and **System info**, for every role with `read`;
   **Personal settings**, its tooltip naming whose they are, by display name and login,
-  in the app **Select server**, back to the app's servers;
+  in the app **Select server…**, back to the app's servers;
   and **Sign out** (Forget key for an API key or the token, none on an open server),
   in the accent and bold, as the personal page's button.
   It is highlighted while one of its pages is shown, as a page button is,
@@ -288,7 +299,8 @@ The compacted header has **↑**, back to the top, first of the page buttons: �
   A role that may open one of them alone sees its title there, and no button.
 - The page shown is in the address, Rooms without one:
   `#log`, `#me` (Personal settings, or at a card `#profile`, `#prefs` and
-  `#notify`), `#cube` (Cube settings), `#system` (System settings),
+  `#notify`; `#profile?key=<id>` marks a key, see My profile),
+  `#cube` (Cube settings), `#system` (System settings),
   `#maintenance` (Maintenance) and `#info` (System info),
   so that a reload opens it again, the browser's back and forward move between
   the pages, and an address can be kept as a bookmark.
@@ -924,6 +936,14 @@ as the settings' ⓘ do:
   the key that session was made from **its key**,
   and Revoke on this device signs out, as **Sign out** does;
   **Create key** shows the new key once.
+  Opened at `#profile?key=<id>`, the page marks that API key's row,
+  tinted and outlined in the accent, and brings it into view:
+  the app opens a server's page there, as `<server address>#profile?key=<id>`,
+  for a key of the phone's it could not revoke,
+  the page asking for a sign-in first where it has no session.
+  The address then reads `#profile`, so that a reload marks nothing,
+  and the mark goes once a page is shown again, My profile among them;
+  an id that is no number, or no API key of the user's, marks nothing.
 - **Linked accounts**, where a sign-in provider is enabled or an account is linked:
   the own accounts at the providers, each with its e-mail or user ID,
   what the provider said of it at the last sign-in (name, user name, groups)

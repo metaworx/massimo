@@ -196,7 +196,7 @@ Block 7 adds what else Block 1's `Status()` carries.
 | `login.status()` | `{can, user, ask, plain}` | `can`: the phone has a strong biometric enrolled; `user`: the user whose key is kept for the server, `""` for none; `ask`, as the server's; `plain`: the page is open over plain HTTP outside the private ranges, where no key is sent |
 | `login.keep()` | `true`, or `false` | for a page just signed in: makes an API key of the signed-in user's at the server with the page's session (`POST /api/v1/users/{name}/tokens`, labelled with the phone), asks for the fingerprint and keeps the key sealed behind it; `false`, nothing kept and the key revoked again, where the prompt was not passed |
 | `login.fingerprint()` | a string, or `null` | asks for the fingerprint, opens the kept key, makes a session with it (`POST /api/v1/login/key`) and resolves to that session, which it keeps as `setToken` would; `null` where the prompt was dismissed; a key the server refuses is forgotten and rejects |
-| `connect()` | `null` | shows the connect page, "Select server"; the server's session stays as it was |
+| `connect()` | `null` | shows the connect page, "Select server…" and the sign-in's "Cancel"; the server's session stays as it was |
 
 The page asks `token()` once, at its start, before it asks the server who is in;
 without a token, or with one the server refuses, it shows its sign-in as a browser does,
@@ -313,8 +313,9 @@ under My profile → Sessions and keys by the phone's name, ends the session.
   Where a key is kept (`user`), the form shows "Login by fingerprint",
   which calls `login.fingerprint()` and is signed in with the session it
   resolves to; the password stays the other way.
-  "Select server" calls `connect()`, and in the app the Cube choice ends
-  with the same entry.
+  "Select server…", last in the form's ☰, calls `connect()`,
+  as does "Cancel" left of each form's "Sign in" and of "Create the owner";
+  in the app the Cube choice ends with the same entry.
 - **When the fingerprint is asked** (`ask`, chosen per server on the
   connect page; a server without a kept login keeps its session sealed):
   - `return`: the session is in memory alone;
@@ -368,7 +369,8 @@ bridge in `test_connect.py`, put into the page by Playwright's
 `add_init_script` as the token is (`tools/ui-test/README.md`):
 the page holds no code for tests.
 The same fake bridge checks the server's page's `token` and `setToken`,
-the sign-in form's login by fingerprint, the Cube choice's "Select server",
+the sign-in form's login by fingerprint and its "Cancel",
+the Cube choice's "Select server…",
 and the self-signed notice left out there (`test_tls.py`).
 Its version 3 records the sessions' calls and the settings' as it does the
 others, and answers them from the test's configuration.

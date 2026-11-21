@@ -849,19 +849,29 @@ function showCard(card, instant) {
   card.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" });
   const head = card.querySelector(".section-fold") || card.querySelector("summary");
   if (head) head.focus({ preventScroll: true });
-  if (instant) keepCardInView(card, 2000);
+  if (instant) keepInView(card, 2000);
 }
 
-// keepCardInView brings a card to the top again whenever its page's
-// cards change size, for ms or until the user scrolls by hand.
-function keepCardInView(card, ms) {
+// stopKeeping ends the keeping of keepInView that runs, null for none.
+let stopKeeping = null;
+
+// keepInView brings an element into view again whenever the page's
+// content changes size, for ms or until the user scrolls by hand: a card
+// at the top (block "start"), a row in the middle ("center", clear of
+// the header). Keeping another element ends the keeping of the last, so
+// that a row inside a card just shown (My profile's marked key, users.js
+// fillTokens) takes over from its card.
+function keepInView(el, ms, block = "start") {
+  if (stopKeeping) stopKeeping();
   const by = ["wheel", "touchstart", "keydown", "pointerdown"];
-  const ro = new ResizeObserver(() => card.scrollIntoView({ block: "start" }));
+  const ro = new ResizeObserver(() => el.scrollIntoView({ block }));
   const stop = () => {
     ro.disconnect();
     for (const ev of by) removeEventListener(ev, stop);
+    if (stopKeeping === stop) stopKeeping = null;
   };
-  ro.observe(card.parentElement);
+  stopKeeping = stop;
+  ro.observe(document.querySelector("main"));
   for (const ev of by) addEventListener(ev, stop, { passive: true });
   setTimeout(stop, ms);
 }

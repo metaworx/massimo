@@ -16,7 +16,21 @@ const usersUI = {
   roles: null, // the roles, when they may be read, for the role choice
   open: new Set(), // names of the open panels
   keys: {}, // per name: the key just created, shown once
+  mark: null, // the key My profile marks, by id (markProfileKey)
+  markDrawn: false, // whether My profile's keys were drawn since
 };
+
+// markProfileKey sets the key My profile marks, by its id, as the page's
+// address names it (#profile?key=<id>, pages.js readProfileHash), or none
+// with null: its row is tinted (tokenRow) and brought into view the first
+// time the keys are drawn (fillTokens), and stays tinted as they are drawn
+// again after a change there, until another page is shown, or this one
+// anew (initUsers), the address no longer naming the key. An id of no key
+// of the user's marks nothing.
+function markProfileKey(id) {
+  usersUI.mark = id;
+  usersUI.markDrawn = false;
+}
 
 function usersMsg(text, ok) {
   showResult($("users-msg"), text, ok);
@@ -235,6 +249,7 @@ function tokenRow(u, tk, where, labels) {
     li.querySelector(".token-kind").after(badgeEl(t(current ? "users.thisDevice" : "users.itsKey"), "ok"));
     li.classList.add(current ? "token-current" : "token-its-key");
   }
+  if (where === "profile" && tk.kind === "api" && tk.id === usersUI.mark) li.classList.add("token-marked"); // markProfileKey
   const used = li.querySelector(".token-used");
   if (tk.last_used_at) {
     used.textContent = t("users.lastUsed", { from: tk.last_used_from || "?" }) + " ";
@@ -272,6 +287,13 @@ async function fillTokens(u, box, where) {
   if (!tokens.length) ul.appendChild(textEl("li", t("users.tokensNone"), "muted small"));
   const labels = new Map(tokens.map((tk) => [tk.id, tk.label || t("users.kind." + tk.kind)]));
   for (const tk of tokens) ul.appendChild(tokenRow(u, tk, where, labels));
+  // My profile's marked key, brought into view once, in place of its card
+  const marked = where === "profile" && !usersUI.markDrawn ? ul.querySelector("li.token-marked") : null;
+  if (where === "profile") usersUI.markDrawn = true;
+  if (marked) {
+    marked.scrollIntoView({ block: "center" });
+    keepInView(marked, 2000, "center"); // components.js
+  }
   const key = usersUI.keys[u.name];
   const shown = box.querySelector(".user-key-box");
   shown.classList.toggle("hidden", !key);
@@ -604,6 +626,11 @@ function initUsers() {
   onView("me", () => {
     profileMsg("");
     if (hasProfile()) renderProfile(); // login.js
+  });
+  // a page shown after My profile drew its marked key, My profile again
+  // among them, marks none: the address names it no more (markProfileKey)
+  document.addEventListener("viewshown", () => {
+    if (usersUI.markDrawn) markProfileKey(null);
   });
 }
 

@@ -626,6 +626,59 @@ def sign_out(page):
     page.locator("#logout-btn").click()
 
 
+def assert_login_card_centred(page, what):
+    """The sign-in card, open, in the middle of the window, as much room
+    above it as below and left as right, and its title's text in the
+    middle of the card (AP MobileApp, Block 14: F27), each within 2 px."""
+    m = page.evaluate("""() => {
+      const card = document.getElementById('login-dialog').getBoundingClientRect();
+      const range = document.createRange();
+      range.selectNodeContents(document.getElementById('login-title'));
+      const title = range.getBoundingClientRect();
+      return {top: card.top, bottom: innerHeight - card.bottom, left: card.left, right: document.documentElement.clientWidth - card.right,
+              card: (card.left + card.right) / 2, title: (title.left + title.right) / 2, fits: card.height < innerHeight};
+    }""")
+    assert m["fits"], f"the card fits the window's height on {what}: {m}"
+    assert abs(m["top"] - m["bottom"]) <= 2, f"the card in the middle of the window's height on {what}: {m}"
+    assert abs(m["left"] - m["right"]) <= 2, f"the card in the middle of the window's width on {what}: {m}"
+    assert abs(m["card"] - m["title"]) <= 2, f"the title in the middle of the card on {what}: {m}"
+
+
+def assert_login_row(page, what):
+    """The sign-in card's row on one line: each button's text on one line
+    (its lines counted by a Range over its text, since a button of a fixed
+    height does not grow with a line that wraps), the ways shown, then the
+    card's ☰, all at one height, the ☰ at the card's right edge inside its
+    padding and nothing past it (AP MobileApp, Block 14: F27)."""
+    m = page.evaluate("""() => {
+      const card = document.getElementById('login-dialog');
+      const cs = getComputedStyle(card);
+      const edge = card.getBoundingClientRect().right - parseFloat(cs.paddingRight) - parseFloat(cs.borderRightWidth);
+      const items = [...document.querySelectorAll('#login-ways > .login-way:not(.hidden)'), document.querySelector('#login-menu > summary')];
+      const row = document.getElementById('login-row');
+      const lines = (e) => {
+        const tops = new Set();
+        for (const n of e.childNodes) {
+          if (n.nodeType !== Node.TEXT_NODE || !n.textContent.trim()) continue;
+          const range = document.createRange();
+          range.selectNodeContents(n);
+          for (const r of range.getClientRects()) tops.add(Math.round(r.top));
+        }
+        return tops.size;
+      };
+      return {edge, last: row.lastElementChild.id, items: items.map((e) => {
+        const b = e.getBoundingClientRect();
+        return {name: e.textContent.trim() || e.getAttribute('aria-label'), top: b.top, right: b.right, lines: lines(e)};
+      })};
+    }""")
+    items = m["items"]
+    assert all(i["lines"] <= 1 for i in items), f"each button's text on one line on {what}: {items}"
+    assert m["last"] == "login-menu", f"the card's ☰ ends the row on {what}: {m}"
+    assert max(i["top"] for i in items) - min(i["top"] for i in items) <= 1, f"the row on one line on {what}: {items}"
+    assert abs(items[-1]["right"] - m["edge"]) <= 1, f"the ☰ at the card's right edge on {what}: {m}"
+    assert all(i["right"] <= m["edge"] + 1 for i in items), f"nothing past the card's edge on {what}: {m}"
+
+
 # /me of a viewer signed in, for a test that stubs it: no capability of
 # System settings.
 VIEWER = {"mode": "users", "user": {"name": "viewer1", "role": "viewer", "has_password": True},

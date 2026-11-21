@@ -37,7 +37,8 @@ touch a field to change it.
   in place of the list.
   One server at most has it, and the first server you add has it
   until you choose another.
-  **Select server** takes you back to the list.
+  **Select server…** in its ☰, or **Cancel** on its sign-in form,
+  takes you back to the list.
   When the server does not answer, the app shows the list.
 - **Signed in as …** and **Sign out**, where the app is signed in there:
   Sign out ends that session on the server and on the phone.
@@ -75,8 +76,8 @@ The switch shows only where the phone has a fingerprint enrolled.
 
 ### Signing in
 
-The sign-in form's row **Sign in with** starts with the fingerprint,
-**Login by fingerprint** for your name.
+The sign-in form's row of the ways to sign in, **Password** and **API key**,
+starts with the fingerprint, **Login by fingerprint** for your name.
 Touch it and then the sensor.
 On the list of servers, the fingerprint button beside a server
 signs you in straight away, without the form.
@@ -137,7 +138,8 @@ Do the same if you lose the phone.
 
 ### Moving between servers
 
-**Select server**, at the foot of the sign-in form and last in its ☰,
+**Select server…**, last in the sign-in form's ☰,
 at the end of the Cube choice in the header, and in the ☰ just before Sign out,
-takes you back to the app's list of servers.
+and **Cancel**, left of the sign-in form's **Sign in**,
+take you back to the app's list of servers.
 You stay signed in where you were; the list shows where.

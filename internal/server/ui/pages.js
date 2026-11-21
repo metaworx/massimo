@@ -17,7 +17,8 @@
 // card's own (CARD_HASH, the addresses of the pages they were), and the
 // log's range, kind and device after its page (logHash), so that a
 // reload or a link opens it again as chosen and the browser's back and
-// forward move between the pages.
+// forward move between the pages. My profile's address may name a key
+// to mark (readProfileHash).
 
 const VIEW_SECTION = { log: "logview", me: "me", system: "system", maint: "maint-page", info: "info-page", cube: "cube-page" };
 const VIEW_BUTTON = { tiles: "view-tiles" };
@@ -88,6 +89,17 @@ function readLogHash(hash) {
   logState.user = /^[a-z0-9._-]{1,64}$/.test(user) ? user : "";
 }
 
+// readProfileHash takes the key My profile marks from its address,
+// #profile?key=<id> (users.js markProfileKey; docs/ui.md, "My profile"),
+// as the app opens it for a key of the phone's it could not revoke;
+// another address, or an id that is not a whole number, marks none.
+function readProfileHash(hash) {
+  const i = hash.indexOf("?");
+  const page = i < 0 ? hash : hash.slice(0, i);
+  const id = new URLSearchParams(i < 0 ? "" : hash.slice(i + 1)).get("key") || "";
+  markProfileKey(page === "#profile" && /^[1-9][0-9]{0,14}$/.test(id) ? Number(id) : null);
+}
+
 // setAddress puts a page's hash into the address: as a new entry of the
 // browser's history ("push") or in place of the current one ("replace");
 // nothing where the address already says it.
@@ -99,11 +111,13 @@ function setAddress(hash, how) {
 }
 
 // showAddress shows the page the address names, the log with the choices
-// it holds, at the start and on back and forward; the address is written
-// again in place, a value dropped and the log's choices in their order.
+// it holds and My profile with the key it marks, at the start and on back
+// and forward; the address is written again in place, a value dropped,
+// the key too, and the log's choices in their order.
 function showAddress() {
   const view = viewOfHash(location.hash);
   if (view === "log") readLogHash(location.hash);
+  readProfileHash(location.hash);
   showView(view, "replace", CARD_HASH[location.hash.split("?")[0]]);
 }
 

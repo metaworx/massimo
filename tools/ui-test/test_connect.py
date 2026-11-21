@@ -28,7 +28,7 @@ import os
 from axe_playwright_python.sync_playwright import Axe
 
 from conftest import TOKEN, URL, clear_preferences
-from helpers import named_buttons, open_personal_page, wait_until
+from helpers import assert_login_card_centred, assert_login_row, named_buttons, open_personal_page, wait_until
 
 CONNECT = URL + "ui/connect.html"
 FAKE_BRIDGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fake_bridge.js")
@@ -774,27 +774,54 @@ def server_page(new_context, guard, watch, login, token=None):
     return page
 
 
+SELECT_SERVER = {"en": "Select server…", "de": "Server wählen…"}
+# the sign-in card's title in the suite's two languages and in the four
+# others, for the row in each (FR/IT/NL/PL machine-translated)
+TITLES = {"en": "Sign in", "de": "Anmelden"}
+OTHER_TITLES = {"fr": "Connexion", "it": "Accedi", "nl": "Aanmelden", "pl": "Logowanie"}
+
+
+def connects(page, n):
+    """Whether the page has called the app's connect() n times by now."""
+    return wait_until(page, f"window.__fakeBridge.calls.filter((c) => c[0] === 'connect').length === {n}", 3)
+
+
 def test_server_page_keeps_the_login(new_context, case, watch, guard):
     """On the sign-in form of a server's page in the app: the switch where
     the phone can and nothing is kept; a sign-in with it on asks the app
     to keep the login, a prompt not passed offers Try again and Sign in
-    without it, and the second try keeps it; Select server goes back to
-    the app's servers. The console is not watched: the page's requests
-    without a token are refused on purpose, as in test_login.py."""
+    without it, and the second try keeps it; Cancel, left of each form's
+    Sign in, and Select server…, last in the card's ☰, go back to the
+    app's servers (AP MobileApp, D54-C), as the Cube choice's entry and
+    the main ☰'s do once signed in. The console is not watched: the
+    page's requests without a token are refused on purpose, as in
+    test_login.py."""
     page = server_page(new_context, guard, watch, {"status": {"can": True, "user": "", "ask": "start", "plain": False}, "keep": [False, True]})
     page.locator("#login-dialog[open]").wait_for()
     page.locator("#login-keep-row").wait_for(state="visible")
     assert page.locator("#login-way-fp").is_hidden(), "nothing kept: no Login by fingerprint"
-    assert page.locator("#login-servers").is_visible(), "Select server, the app having its servers"
+    assert page.locator("#login-servers").count() == 0, "no Select server at the card's foot"
+    cancel = page.locator("#login-cancel")
+    assert cancel.is_visible(), "Cancel, the app having its servers"
+    assert cancel.evaluate("(b) => b.nextElementSibling.type === 'submit' && b.getBoundingClientRect().right <= b.nextElementSibling.getBoundingClientRect().left"), \
+        "left of Sign in"
     named_buttons(page, "the sign-in in the app")
-    page.locator("#login-servers").click()
-    assert wait_until(page, "window.__fakeBridge.calls.some((c) => c[0] === 'connect')", 3), "Select server calls the app"
-    # and last in the card's ☰ (AP MobileApp, Block 13: F13)
+    cancel.click()
+    assert connects(page, 1), "Cancel calls the app"
+    # the card's ☰, Select server… last in it (AP MobileApp, Block 13: F13)
     page.locator("#login-menu summary").click()
     last = page.locator("#login-menu .menu-items > :last-child")
-    assert last.get_attribute("id") == "login-menu-servers" and last.is_visible(), "Select server, last in the card's ☰"
+    assert last.get_attribute("id") == "login-menu-servers" and last.is_visible(), "Select server…, last in the card's ☰"
+    assert last.inner_text().strip() == SELECT_SERVER[case.lang]
     last.click()
-    assert wait_until(page, "window.__fakeBridge.calls.filter((c) => c[0] === 'connect').length === 2", 3), "the card's ☰ calls the app"
+    assert connects(page, 2), "the card's ☰ calls the app, as Cancel does"
+    if page.locator("#login-menu").get_attribute("open") is not None:
+        page.locator("#login-menu summary").click()
+    # the API key's form has its Cancel too
+    page.locator("#login-ways .login-way[data-way='key']").click()
+    page.locator("#login-key-cancel").click()
+    assert connects(page, 3), "the API key's Cancel calls the app"
+    page.locator("#login-ways .login-way[data-way='password']").click()
 
     page.locator("#login-user").fill("operator")
     page.locator("#login-password").fill("op-pass")
@@ -817,29 +844,47 @@ def test_server_page_keeps_the_login(new_context, case, watch, guard):
     entry = page.locator("#cube-menu .menu-items button[data-value='__servers']")
     entry.wait_for(state="visible")
     entry.click()
-    assert wait_until(page, "window.__fakeBridge.calls.filter((c) => c[0] === 'connect').length === 3", 3), "the Cube choice's Select server"
+    assert connects(page, 4), "the Cube choice's Select server…"
     page.locator("#nav-menu summary").click()
     servers = page.locator("#menu-servers")
     servers.wait_for(state="visible")
     assert page.evaluate("document.getElementById('menu-servers').nextElementSibling.id") == "menu-logout", "just before Sign out"
+    assert servers.inner_text().strip() == SELECT_SERVER[case.lang], "named as the card's ☰ names it"
     servers.click()
-    assert wait_until(page, "window.__fakeBridge.calls.filter((c) => c[0] === 'connect').length === 4", 3), "the main ☰'s Select server"
+    assert connects(page, 5), "the main ☰'s Select server…"
 
 
 def test_server_page_login_by_fingerprint(new_context, case, watch, guard):
     """Where a key is kept, the sign-in's row starts with the fingerprint,
-    named with the user's name, the name's form staying the one chosen;
-    it signs the page in at once with the session the app made (AP
-    MobileApp, D49); a dismissed prompt leaves the form; over plain HTTP
-    outside the home network the form says why it offers the password
-    alone."""
+    named with the user's name, the password's form staying the one
+    chosen, and the row with it stays on one line, the card centred (AP
+    MobileApp, Block 14); it signs the page in at once with the session
+    the app made (AP MobileApp, D49); at 390 px the row is on one line
+    in French, Italian, Dutch and Polish as well, chosen in the card's ☰;
+    while its login runs, its spinner turns inside the button in the
+    icon's place (Block 14: F25); a dismissed prompt leaves the form;
+    over plain HTTP outside the home network the form says why it offers
+    the password alone."""
     page = server_page(new_context, guard, watch, {"status": {"can": True, "user": "operator", "ask": "start", "plain": False}, "fingerprint": TOKEN})
     page.locator("#login-dialog[open]").wait_for()
     fingerprint = page.locator("#login-way-fp")
     fingerprint.wait_for(state="visible")
     assert "operator" in fingerprint.get_attribute("aria-label"), "named with the user's name"
     assert page.evaluate("document.querySelector('#login-ways .login-way').id") == "login-way-fp", "first in the row"
-    assert page.locator("#login-ways .login-way[data-way='name']").get_attribute("aria-pressed") == "true", "Name stays chosen"
+    assert page.locator("#login-ways .login-way[data-way='password']").get_attribute("aria-pressed") == "true", "Password stays chosen"
+    assert_login_row(page, "the sign-in in the app, the fingerprint kept")
+    assert_login_card_centred(page, "the sign-in in the app")
+    if case.width == 390:
+        # the widest row at a phone's width in the other four languages too,
+        # chosen in the card's ☰, then back to the browser's
+        page.locator("#login-menu summary").click()
+        for lang, title in OTHER_TITLES.items():
+            page.locator("#login-lang").select_option(lang)
+            assert wait_until(page, f"document.getElementById('login-title').textContent === {title!r}", 5), f"the card in {lang}"
+            assert_login_row(page, f"the sign-in in the app in {lang}")
+        page.locator("#login-lang").select_option("auto")
+        assert wait_until(page, f"document.getElementById('login-title').textContent === {TITLES[case.lang]!r}", 5), "the browser's language again"
+        page.keyboard.press("Escape")
     assert page.locator("#login-form").is_visible()
     assert page.locator("#login-keep-row").is_hidden(), "a key kept: no switch"
     fingerprint.click()
@@ -854,18 +899,34 @@ def test_server_page_login_by_fingerprint(new_context, case, watch, guard):
     assert plain.locator("#login-way-fp").is_hidden() and plain.locator("#login-keep-row").is_hidden(), "plain HTTP: neither"
 
     dismissed = server_page(new_context, guard, watch, {"status": {"can": True, "user": "operator", "ask": "start", "plain": False}, "fingerprint": None})
-    dismissed.locator("#login-way-fp").wait_for(state="visible")
-    dismissed.locator("#login-way-fp").click()
+    button = dismissed.locator("#login-way-fp")
+    button.wait_for(state="visible")
+    size = button.evaluate("(b) => [b.offsetWidth, b.offsetHeight]")
+    # the prompt held open until the test lets it go, so that the spinner
+    # can be looked at
+    dismissed.evaluate("""() => { const login = window.massimo.login; const answer = login.fingerprint;
+      login.fingerprint = () => new Promise((resolve) => { window.__letFingerprintGo = () => resolve(answer.call(login)); }); }""")
+    button.click()
+    assert wait_until(dismissed, "document.getElementById('login-way-fp').classList.contains('busy')", 3), "the fingerprint's button turns"
+    spin = button.evaluate("""(b) => { const ring = getComputedStyle(b, '::after');
+      return {size: [b.offsetWidth, b.offsetHeight], icon: getComputedStyle(b.querySelector('svg')).display,
+              ring: [parseFloat(ring.width), parseFloat(ring.height)], content: ring.content}; }""")
+    assert spin["size"] == size, f"the button keeps its size while it turns: {spin['size']}, not {size}"
+    assert spin["icon"] == "none", "the spinner in the icon's place"
+    assert spin["content"] != "none" and all(0 < r <= s for r, s in zip(spin["ring"], size)), f"the spinner inside the button: {spin}"
+    dismissed.evaluate("() => { window.__letFingerprintGo(); }")
     assert wait_until(dismissed, "window.__fakeBridge.calls.some((c) => c[0] === 'login.fingerprint')", 3)
     assert wait_until(dismissed, "!document.getElementById('login-way-fp').classList.contains('busy')", 3)
+    assert button.evaluate("(b) => getComputedStyle(b.querySelector('svg')).display") != "none", "the icon back"
     assert dismissed.evaluate("document.getElementById('login-dialog').open"), "a dismissed prompt leaves the form"
 
 
 def test_server_page_first_owner_keeps_the_login(new_context, case, watch, guard):
     """In the app, the first owner's form offers the login by fingerprint
     as the sign-in does (AP MobileApp, D42-A): its switch where the phone
-    can and nothing is kept, none over plain HTTP. /api/v1/me is stubbed
-    as an open server without users once the page is in."""
+    can and nothing is kept, none over plain HTTP; and Cancel left of
+    Create the owner, back to the app's servers (D54-C). /api/v1/me is
+    stubbed as an open server without users once the page is in."""
     for plain in (False, True):
         page = server_page(new_context, guard, watch, {"status": {"can": True, "user": "", "ask": "start", "plain": plain}}, token=TOKEN)
         page.wait_for_selector(".room", timeout=10000)
@@ -879,4 +940,8 @@ def test_server_page_first_owner_keeps_the_login(new_context, case, watch, guard
             page.locator("#setup-keep-row").wait_for(state="visible")
             assert not page.locator("#setup-keep").is_checked(), "off at first"
             named_buttons(page, "the first owner's form in the app")
+            cancel = page.locator("#setup-cancel")
+            assert cancel.is_visible() and cancel.evaluate("(b) => b.nextElementSibling.type === 'submit'"), "Cancel left of Create the owner"
+            cancel.click()
+            assert connects(page, 1), "Cancel calls the app"
         page.unroute("**/api/v1/me")

@@ -24,7 +24,7 @@ import { discovery, load } from "./store";
 /** DISCOVER is the value of the entry that searches the LAN. */
 const DISCOVER = "__discover";
 
-/** SERVERS is the value of the app's entry "Select server" (docs/app.md, contract version 2). */
+/** SERVERS is the value of the app's entry "Select server…" (docs/app.md, contract version 2). */
 const SERVERS = "__servers";
 
 /** connectOf is the app's way back to its servers, null in a browser or an app without it. */
@@ -69,7 +69,7 @@ function pick(v: string): void {
  * Choice is the Cube choice: the served Cubes; those found on the LAN and
  * not served, which open System settings → Cubes for a role with cubes
  * and are information for others; for a role with discover, the search;
- * in the app, "Select server".
+ * in the app, "Select server…".
  * Closed it shows the cube in the chosen Cube's link's colour, green,
  * amber or red, and its name; folded to a button (fold.ts) the cube
  * alone. Its tooltip names the chosen Cube, its serial, address and

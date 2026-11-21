@@ -187,6 +187,18 @@ body.signed-out header.top > :not(.top-line),
 body.signed-out:has(#login-dialog[open]) header.top,
 body.signed-out main,
 body.signed-out #toast { display: none !important; }
+/* the sign-in's card in the middle of the window, at any width, as much
+   room above it as below; a card taller than the window starts at its
+   top and the page scrolls (AP MobileApp, Block 14: F27) */
+body.signed-out:has(#login-dialog[open]) {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding-top: 16px;
+  padding-bottom: 16px;
+}
 /* A part's place inside plain markup (AP UiParts): the element a part is
    drawn into where it stands among plain siblings, out of the layout, so
    that the part's own element is laid out as if it stood there itself. */
@@ -1476,12 +1488,13 @@ dialog {
 }
 dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
 /* The sign-in, open without a modal (login.js askLogin): a card in the
-   signed-out page's flow, under the header. */
-#login-dialog[open] { position: static; margin: 8px auto 24px; }
-.login-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
-/* its ☰, the language and the mode: drawn as the header's, dropping
-   down from the card's right edge */
-.menu.nav-menu.login-menu { position: relative; flex: none; }
+   signed-out page's flow, centred there, its title under the logo. */
+#login-dialog[open] { position: static; margin: 0 auto; }
+.login-title { text-align: center; }
+/* its ☰, the language and the mode: drawn as the header's, at the end of
+   the row of the ways to sign in, dropping down from the card's right
+   edge */
+.menu.nav-menu.login-menu { position: relative; flex: none; margin-left: auto; }
 .login-menu .menu-items { gap: 10px; padding: 10px; width: min(300px, calc(100vw - 64px)); }
 .login-menu label { margin-bottom: 0; }
 dialog label { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
@@ -1827,9 +1840,11 @@ massimo-week-program { display: contents; }
 .login-providers p { margin: 0; }
 /* the ways to sign in (login.js chooseWay), as System settings' page row
    looks (.page-link), but never folded to icons: in the app the
-   fingerprint first, then Name and API key, the one chosen filled */
-.login-ways { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 14px; }
-#login-ways-label { flex-basis: 100%; }
+   fingerprint first, then Password and API key, the one chosen filled,
+   and the card's ☰ at the row's end; one line at a phone's width, each
+   button's text on one line */
+.login-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 14px; }
+.login-ways { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .login-way {
   display: inline-flex;
   align-items: center;
@@ -1843,19 +1858,32 @@ massimo-week-program { display: contents; }
   background: var(--card);
   color: var(--fg);
   font-size: 0.9rem;
+  white-space: nowrap;
 }
 .login-way:hover { border-color: var(--accent); }
 .login-way[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 .login-way-fp { padding: 0; width: 40px; }
 .login-way-fp > .ni { width: 22px; height: 22px; }
+/* its login running: the ring in the icon's place, the button's size kept
+   (AP MobileApp, Block 14: F25) */
+.login-way-fp.busy > .ni { display: none; }
+.login-way-fp.busy::after { width: 18px; height: 18px; margin: 0; }
 #login-fp-plain { margin: 0 0 12px; }
 .login-keep { margin: 4px 0 8px; }
 /* the version at the card's foot, as ☰ holds it while signed in */
 .login-version { margin: 14px 0 0; text-align: center; overflow-wrap: anywhere; }
 #login-dialog > .brand-big { margin-bottom: 26px; }
-.login-keep-failed .actions, .login-servers { margin-top: 8px; }
-.login-servers { text-align: center; }
+.login-keep-failed .actions { margin-top: 8px; }
 .user-tokens li .revoke-token { margin-left: auto; }
+/* the key My profile was opened with (#profile?key=<id>, users.js
+   markProfileKey): tinted and outlined in the accent, in either theme */
+.user-tokens li.token-marked {
+  margin: 0 -6px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
 .user-key { word-break: break-all; user-select: all; }
 .cap-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 2px 12px; margin: 4px 0; }
 .cap-grid .switch { align-items: center; }
