@@ -7,17 +7,18 @@
  * What System settings → Users reads and sends, line for line as users.js
  * and providers.js did: the users (GET /api/v1/users) with the enabled
  * sign-in providers and, where they may be read, the roles; a user's
- * change and removal (PUT and DELETE …/users/{name}), a new user (POST),
- * its sessions and keys (…/tokens), its identities at the providers
- * (…/identities), and the password sign-in (the setting
- * auth.password_login). A change reads the users again and says how it
- * went under the list; a user gone from a load that went through
+ * change and removal (PUT and DELETE …/users/{name}), a new user (POST)
+ * and the password sign-in (the setting auth.password_login); a user's
+ * sessions, keys and identities send theirs through this list's runner
+ * (run, shared/account.ts). A change reads the users again and says how
+ * it went under the list; a user gone from a load that went through
  * forgets its form and its open panel; an answer after a sign-out is
  * dropped (shared/session.ts). What the signed-in user may do with a user is the
  * server's word per user (may), else the capabilities'.
  */
 
-import type { Identity, Role, Token, User } from "../api";
+import type { Role, User } from "../api";
+import { type Run, userPath } from "../shared/account";
 import { actionRunner } from "../shared/action";
 import { forgetForms } from "../shared/forms";
 import { session, stillSession } from "../shared/session";
@@ -55,11 +56,6 @@ export function roleOptions(current?: string): [string, string][] {
   if (state.me?.role?.key !== "owner") keys = keys.filter((k) => k !== "owner");
   if (current && !keys.includes(current)) keys.push(current);
   return keys.map((k) => [k, roleLabel(k, (read || []).find((x) => x.key === k)?.name)]);
-}
-
-/** userPath is a user's path in the API, rest after it. */
-function userPath(name: string, rest = ""): string {
-  return "api/v1/users/" + encodeURIComponent(name) + rest;
 }
 
 /** loadRolesForUsers reads the roles once for the role choice, where they may be read; none where they may not. */
@@ -115,10 +111,8 @@ const runner = actionRunner({
 /** usersMsg shows text under the list, ok green, else red; no text hides it. */
 export const usersMsg = runner.say;
 
-/** run sends a change of the user name, says ok, or that it failed and why. */
-export function run(name: string, fn: () => Promise<unknown>, ok: string): Promise<boolean> {
-  return runner.run(fn, ok, (error) => t("users.failed", { name, error }));
-}
+/** run sends a change of the user name, says ok, or that it failed and why; a user's sessions, keys and identities send theirs through it (shared/account.ts). */
+export const run: Run = (name, fn, ok) => runner.run(fn, ok, (error) => t("users.failed", { name, error }));
 
 /**
  * saveUser sends a user's change (PUT): body the fields that differ; a
@@ -164,61 +158,6 @@ export function createUser(body: Record<string, unknown> & { name: string }, pas
     }
   };
   return run(body.name, create, t("users.created", { name: body.name }));
-}
-
-/** loadTokens reads a user's sessions and keys. */
-export async function loadTokens(name: string): Promise<Token[]> {
-  return (await api<Token[]>("GET", userPath(name, "/tokens"))) || [];
-}
-
-/** revokeToken revokes one of a user's sessions or keys (DELETE). */
-export function revokeToken(name: string, tk: Token): Promise<boolean> {
-  return run(name, () => api("DELETE", userPath(name, "/tokens/" + tk.id)), t("users.revoked", { id: tk.id }));
-}
-
-/**
- * revokeOwn revokes the token the page is signed in with, as Sign out
- * ends it: a session by Sign out itself (logout, login.js); a key is
- * revoked first, then the page forgets it as Sign out does, and a
- * refusal leaves it signed in, saying nothing, as users.js did.
- */
-export function revokeOwn(name: string, tk: Token): Promise<unknown> {
-  if (tk.kind === "session") return logout();
-  return api("DELETE", userPath(name, "/tokens/" + tk.id)).then(logout, () => {});
-}
-
-/**
- * createKey makes an API key for a user (POST): the key, which the server
- * shows once, goes to shown alone, before the list is read again; it is
- * kept nowhere else.
- */
-export function createKey(name: string, label: string, shown: (key: string) => void): Promise<boolean> {
-  return run(name, async () => {
-    const res = await api<{ token: string }>("POST", userPath(name, "/tokens"), { label });
-    shown(res.token);
-  }, t("users.keyCreated", { label }));
-}
-
-/** loadIdentities reads a user's identities at the sign-in providers. */
-export async function loadIdentities(name: string): Promise<Identity[]> {
-  return (await api<Identity[]>("GET", userPath(name, "/identities"))) || [];
-}
-
-/** addIdentity assigns an identity at a provider to a user, by an e-mail or by the user id there (POST). */
-export function addIdentity(name: string, provider: string, bySubject: boolean, value: string): Promise<boolean> {
-  const body = bySubject ? { provider, subject: value } : { provider, email: value };
-  return run(name, () => api("POST", userPath(name, "/identities"), body),
-    t("users.identityAdded", { email: bySubject ? t("users.identityUserID", { id: value }) : value }));
-}
-
-/** changeIdentity changes an identity's e-mail or user id while no sign-in used it (PUT). */
-export function changeIdentity(name: string, i: Identity, bySubject: boolean, value: string): Promise<boolean> {
-  return run(name, () => api("PUT", userPath(name, "/identities/" + i.id), bySubject ? { subject: value } : { email: value }), t("users.identityChanged"));
-}
-
-/** removeIdentity removes one of a user's identities (DELETE). */
-export function removeIdentity(name: string, i: Identity): Promise<boolean> {
-  return run(name, () => api("DELETE", userPath(name, "/identities/" + i.id)), t("users.identityRemoved"));
 }
 
 /** loadPasswordLogin reads whether the server takes the password sign-in, for a holder of settings, who alone sees the switch. */

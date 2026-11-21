@@ -773,7 +773,7 @@ REGIONS = (
         View("the scheme editor open", scheme_editor),
     )),
     Region("notifications", ("#notify-sec",), (View("Notifications", personal("notify")),)),
-    Region("my-profile", ("#profile-sec",), (View("My profile", profile),)),
+    Region("my-profile", ("#profile-sec",), (View("My profile", profile),), sources=("the page shown again: me",)),
     Region("page-chrome", ("#system .page-bar", "#system .section-head"), (View("System settings, its sections menu open", sections_menu),)),
     Region("sign-in", ("#login-dialog",),
            gap="shown only to a page without a token, which loads no data while it is open: the poll and the stream start after the sign-in"),

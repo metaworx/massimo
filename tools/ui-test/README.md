@@ -338,6 +338,17 @@ hence `failed_checks_forgotten`.
   reads the facts; a resync that finds the certificate being read reads it
   anew, also after the readings gave up; the session's end between two
   readings reads no more.
+- `test_personal_updates.py`, Personal settings as parts (AP UiParts, Block 13,
+  with AP UnsavedMarks, Block 5):
+  My profile's display name and a new password typed stay the elements they
+  were with what is typed through the personal page shown again, nothing sent;
+  the display name left unsaved shows the card's pill, which unfolds the card
+  with the focus in the form, ☰'s mark and its Personal settings' disk, and
+  Reset clears them; a password typed marks its form changed and Reset empties
+  it; after a sign-out, and for another user signed in after an expired
+  session, nothing typed is left, and a read of the user that answers late
+  draws nothing; in the app (fake_bridge.js) a linked account is named by its
+  provider's name, and a current password filled in alone is no change.
 - `test_stream.py`:
   the event stream opens with tickets only, never with the token,
   and after a refused stream (the test hands out a used ticket first,

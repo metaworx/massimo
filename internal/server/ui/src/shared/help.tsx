@@ -11,10 +11,12 @@
  * its key, until its button is pressed again. Which are shown is the
  * page's one set (helpOpen of app.js), which the plain help buttons keep
  * too; a part draws again by a counter of its own, so that a key is drawn
- * by one side only, as every key is today.
+ * by one side only, as every key is today. useHelp gives the pair, which
+ * a field's row, a switch and a group of My profile draw alike.
  */
 
 import { signal } from "@preact/signals";
+import { useId } from "preact/hooks";
 import { IconButton } from "./icon";
 
 /** Counts the parts' changes of helpOpen, so that the parts that read it are drawn again. */
@@ -42,4 +44,15 @@ export function HelpButton({ help, id, label }: { help: string; id: string; labe
 /** HelpText is the explanation of key, with the id its button controls; hidden until its button shows it. */
 export function HelpText({ help, id }: { help: string; id: string }) {
   return <p id={id} class={shown(help) ? "help-text" : "help-text hidden"}>{t("help." + help)}</p>;
+}
+
+/**
+ * useHelp is a setting's or a group's help, by the key of its help: its
+ * button, named after label, and its explanation, of an id of their own
+ * (help-<key>-…); the caller draws the button where it belongs (after a
+ * label, behind a group's last button) and the text under it.
+ */
+export function useHelp(help: string, label: string) {
+  const id = "help-" + help + "-" + useId();
+  return { button: <HelpButton help={help} id={id} label={label} />, text: <HelpText help={help} id={id} /> };
 }

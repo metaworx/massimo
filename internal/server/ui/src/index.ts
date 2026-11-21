@@ -25,16 +25,19 @@ import "./header";
 import type { HeaderPart } from "./header";
 import "./leaving";
 import type { LeavingPart } from "./leaving";
+import { signedOut as profileSignedOut } from "./profile";
 import "./rooms";
 import type { RoomsPart } from "./rooms";
 import { signedOut as integrationsSignedOut } from "./integrations";
 import { serverEvent as softwareEvent, signedOut as softwareSignedOut } from "./software";
 import { serverEvent as maintenanceEvent, signedOut as maintenanceSignedOut } from "./maintenance";
 import { serverEvent as sysinfoEvent, signedOut as sysinfoSignedOut } from "./sysinfo";
+import type { Me } from "./api";
 import type { ServerEvent } from "./model/event";
 import type { SoftwarePart } from "./software";
 import { forgetForms } from "./shared/forms";
 import { languageChanged } from "./shared/lang";
+import { meChanged } from "./shared/me";
 import { iconsChanged } from "./shared/look";
 import { parts, register } from "./shared/region";
 import { forgetRepairs } from "./shared/repair";
@@ -49,6 +52,8 @@ export interface MassimoParts {
   language(): void;
   /** The icons chosen for the window and the radio changed (theme.js redrawSigns): every sign draws them again. */
   icons(): void;
+  /** Who the page is signed in as, at every read of it (login.js applyCaps): a user's sessions say "this device" by its token, and My profile is drawn for it (shared/me.ts). */
+  me(m: Me | null): void;
   /**
    * A sign-out, or another user's sign-in after a 401 (login.js
    * forgetSession): every form's drafts and marks forgotten
@@ -61,7 +66,9 @@ export interface MassimoParts {
    * channel's setting (software/), and Maintenance's following of a
    * restart or a reboot, its questions, the delay typed and its settings
    * (maintenance/), and System info with its readings and its clock
-   * (sysinfo/).
+   * (sysinfo/), and who was in (shared/me.ts) with My profile's user, its
+   * link shown and its messages (profile/), the passwords typed there
+   * going with its part.
    */
   signedOut(): void;
   /**
@@ -102,6 +109,7 @@ declare global {
 register("fmtWhen", fmtWhen);
 register("language", languageChanged);
 register("icons", iconsChanged);
+register("me", meChanged);
 register("serverEvent", (ev: ServerEvent) => {
   softwareEvent(ev);
   maintenanceEvent(ev);
@@ -118,5 +126,7 @@ register("signedOut", () => {
   softwareSignedOut();
   maintenanceSignedOut();
   sysinfoSignedOut();
+  meChanged(null); // My profile's parts go, with what is typed in them
+  profileSignedOut();
 });
 window.MassimoParts = parts as unknown as MassimoParts;

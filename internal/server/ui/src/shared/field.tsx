@@ -18,10 +18,10 @@
  */
 
 import type { ComponentChildren, Ref } from "preact";
-import { useId, useRef, useState } from "preact/hooks";
+import { useRef, useState } from "preact/hooks";
 import { Notice } from "./badge";
 import type { FormLook, Place } from "./forms";
-import { HelpButton, HelpText } from "./help";
+import { useHelp } from "./help";
 import { Icon, Mark } from "./icon";
 import { busyProps } from "./question";
 
@@ -166,13 +166,13 @@ interface Row {
  * notice (show names the value).
  */
 export function Field<T>({ label, id, wide, unit, hint, hintId, help, cls, labelCls, limit, draft, show, children }: Row & { draft?: Draft<T>; show?: (v: T) => string; children: ComponentChildren }) {
-  const helpId = useId();
+  const h = useHelp(help || "", label);
   const line = limit && <LimitLine id={id} limit={limit} />;
   return (
     <>
       <div class={"field" + (wide ? " wide" : "") + (cls ? " " + cls : "")}>
         <label for={id} class={labelCls}>{label}</label>
-        {help && <HelpButton help={help} id={helpId} label={label} />}
+        {help && h.button}
         {unit ? (
           <span class="inline field-control">
             {line}
@@ -180,7 +180,7 @@ export function Field<T>({ label, id, wide, unit, hint, hintId, help, cls, label
             <span class="muted">{unit}</span>
           </span>
         ) : <>{line}{children}</>}
-        {help && <HelpText help={help} id={helpId} />}
+        {help && h.text}
         {hint && <p id={hintId} class="muted small field-hint">{hint}</p>}
       </div>
       {draft && <Meanwhile draft={draft} show={show} />}
@@ -369,7 +369,7 @@ export function Switch({ name, label, checked, onChange, draft, show, row = true
   badge?: ComponentChildren;
   children?: ComponentChildren;
 }) {
-  const helpId = useId();
+  const h = useHelp(help || "", label);
   const sw = (
     <label class={cls ? "switch " + cls : "switch"} title={title}>
       <input id={id} type="checkbox" name={name} disabled={disabled} checked={draft ? draft.value : !!checked} onChange={(ev) => {
@@ -387,9 +387,9 @@ export function Switch({ name, label, checked, onChange, draft, show, row = true
     <>
       <div class={rowCls ? "field " + rowCls : "field"}>
         {sw}
-        {help && <HelpButton help={help} id={helpId} label={label} />}
+        {help && h.button}
         {children}
-        {help && <HelpText help={help} id={helpId} />}
+        {help && h.text}
       </div>
       {draft && <Meanwhile draft={draft} show={show} />}
     </>
@@ -422,9 +422,10 @@ function LookSign({ look }: { look?: FormLook }) {
  * forms.ts), Save shows it: clean, plain and off; changed, primary;
  * unsaved, primary with the warning mark before its text; saving, busy;
  * failed, with the cross; saved, plain and off with the check. Without
- * look it is primary, as it always was.
+ * look it is primary, as it always was. after follows the submit button
+ * (My profile's ⓘ behind a group's last button).
  */
-export function FormFooter({ submit, busy, off, cancel, cancelLabel, reset, look, extra }: {
+export function FormFooter({ submit, busy, off, cancel, cancelLabel, reset, look, extra, after }: {
   submit?: string;
   busy?: boolean;
   off?: boolean;
@@ -433,6 +434,7 @@ export function FormFooter({ submit, busy, off, cancel, cancelLabel, reset, look
   reset?: () => void;
   look?: FormLook;
   extra?: ComponentChildren;
+  after?: ComponentChildren;
 }) {
   const clean = look === "clean" || look === "saved";
   const turning = !!busy || look === "saving";
@@ -449,6 +451,7 @@ export function FormFooter({ submit, busy, off, cancel, cancelLabel, reset, look
             {submit}
           </button>
         )}
+        {after}
       </span>
     </div>
   );

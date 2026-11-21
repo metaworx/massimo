@@ -907,7 +907,10 @@ Behind the last button of each group below, an ⓘ opens what its buttons do,
 as the settings' ⓘ do:
 
 - **Display name**, the name the personal page and the users list show,
-  with **Save**, off while it is the one stored.
+  with **Reset** and **Save**, off while it is the one stored.
+  What is typed stays when the personal page is shown again;
+  left unsaved, the card's head shows the disk, which opens the form,
+  and ☰ and its Personal settings carry the mark, as System settings' forms do.
 - **Change password**, for a user with a password:
   the own password, with the current one,
   which a sign-in by OPAQUE proves without sending it;
@@ -915,6 +918,9 @@ as the settings' ⓘ do:
   A user with keys only, such as the owner made from `MASSIMO_API_TOKEN`,
   has **Set a password** instead, without a current one, and a line saying
   that it lets the user sign in by name in any browser.
+  **Reset** empties the fields; a new password typed is marked as the display name is,
+  but kept nowhere but in its field, and gone at a sign-out;
+  the current one alone, as a password manager fills it in, is no change.
 - **Sessions and keys**: the own sessions and API keys,
   each with where and when it was last used and **Revoke**,
   which signs another browser out without an administrator;
@@ -1931,9 +1937,9 @@ a script for each region of the page, in the order the page loads them:
   and the Cubes card's badges;
 - `login.js`, the sign-in; `users.js`, the plain names of System settings → Users,
   which call its part (`ui/src/admin/`), and the check of a new user's name,
-  which the first owner's form shares; `profile.js`, My profile;
+  which the first owner's form shares;
   `providers.js`, the enabled sign-in providers and the plain name of
-  Sign-in providers; `linked.js`, My profile's linked accounts;
+  Sign-in providers; My profile has none, a part alone (`ui/src/profile/`);
   `backup.js`, the plain names of Backup and restore (`ui/src/backups/`),
   and `fmtWhen`, which `notify.js` calls until Block 13 (`shared/time.ts`);
   `roles.js`, the plain name of Roles and Capabilities (`ui/src/admin/`);
@@ -1953,7 +1959,7 @@ and a script embedded that the page does not load
 The six scripts that held several regions were cut along them by
 `tools/ui-split` (its `README.md`), by moves alone,
 and so were `users.js` and `providers.js` with AP UiParts' Block 10,
-My profile going to `profile.js` and `linked.js`,
+My profile going to `profile.js` and `linked.js`, which went with AP UiParts' Block 13,
 and a branch that was open meanwhile makes the same moves with it.
 The tool is there while the plan UiParts lasts, and goes with it.
 
@@ -2033,6 +2039,7 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `Problems` | `problems.tsx` | the problem list, entries under entries (`problemsEl`), an item with an action a button | `entries`, `label`, `ok` (the green check's label where nothing is wrong), `always` (the list there where nothing is wrong too; where `ok` is given, its summary the green check and `ok` a line of its list), `lead` (drawn first in the summary, a sign of the place's own state), `head` (drawn first in the list, items that act on the place or a row of its own state), `onClick`, `onOpen`, `onClose` (as `Dropdown`'s); an entry's `tail` is drawn after its name (a sign of its state where its icon says what it is) |
 | `KindIcons`, `problemKinds`, `kindsLabel` | `problems.tsx` | the kinds' icons of entries without the list (`kindIcons`); the kinds themselves, to know whether there are any; the label naming the kinds among items in an order of kinds, "" for none | `entries`, `skip`; `entries`, `skip`; `items`, `kinds` |
 | `OkPill` | `problems.tsx` | the green check in a list's place (`okPill`) | `label` |
+| `useHelp` | `help.tsx` | a setting's or a group's help as a pair, the button and its explanation of an id of their own (`help-<key>-…`), which a field's row, a switch and a group of My profile draw where each belongs | `help` (the key), `label` (the name the button is named after); gives `button`, `text` |
 | `HelpButton`, `HelpText` | `help.tsx` | a setting's help (`helpParts`): the question mark that shows and hides its explanation, `help.<key>` of the texts, shown by its key wherever it is drawn again, in the page's one set of keys shown (`helpOpen` of `app.js`), the parts drawn again by a signal of their own, so a key is drawn by one side only; `Field` and `Switch` draw both from their `help` | `help` (the key), `id` (the explanation's, which the button controls), `label` (the setting's name); `help`, `id` |
 | `Field` | `field.tsx` | a label and its control, `.field` or `.field.wide` (`fieldRow`); with `limit`, what the field takes, said in amber just before the control while a value is refused, the box outlined in red and the limit its description (`markRange`) (`TextField` and `NumberField` mark their input for it; a control of the caller's inside a `Field` with a limit has no marking of its own yet) | `label`, `id`, `wide`, `unit`, `hint`, `hintId` (the hint's id, which a `Select` names as its description), `help` (the key of the setting's help: its button after the label, its explanation under the control), `cls` (classes the row adds, a capability's `needs-…`), `labelCls` (the label's class, `action-title` for a row's title in bold: Maintenance's settings; `Select` passes it on), `limit` (`{ text, over, cls }`: the text, whether the value is refused, the line's class beside `field-limit`; in the unit's line where there is one, else on a line of its own above the box), `draft`, `show`, the control as children |
 | `TextField` | `field.tsx` | a row with a text input that shows a stored text, from its draft, or a free text (a name offered) by `value` and `set` | `label`, `id`, `name`, `draft` and `show`, or `value` and `set`; `wide` (on by default), `unit`, `hint`, `help`, `cls`, `limit`, `placeholder`, `type` (`password` too, by `value` and `set` alone, never a draft), `autocomplete`, `inputCls` (the input's class, `mono` for a key), `maxLength`, `pattern`, `required`, `disabled`, `inputRef` |
@@ -2047,7 +2054,7 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `Tabs` | `tabs.tsx` | a row of tabs: a tab list of buttons, each with its key in `data-tab`, the one shown active and selected, and what follows the list (a close button) | `cls` (the row's class), `listCls`, `label` (the list's name), `tabs` (`{ key, label, cls }`), `current`, `onPick(key)`, children after the list |
 | `Stepper` | `field.tsx` | a number field between − and + (`stepper`), the step within its range; its buttons are named for a temperature, half a degree less and more, and the first user of another unit adds their names | `value`, `set`, `min`, `max`, `step`, `id` and `cls` of the field, `hidden` (the whole kept in its place unseen), children after the + (a unit) |
 | `useDraft`, `Meanwhile` | `field.tsx` | a field that shows stored data keeps a draft: untouched it follows, changed it says "changed meanwhile" with Take theirs (D59-A); with a place, a form's (`useForm`), the draft is kept there | `stored`, `norm`, `place`; gives `value`, `stored`, `set`, `changed`, `meanwhile`, `take`; `draft`, `show` |
-| `FormFooter` | `field.tsx` | a form's row of actions (`formFooter`, `sendWhenChanged`); with `look`, Save shows the form's state | `submit`, `busy`, `off`, `cancel` (its button of the class `form-cancel`, as the plain footer's), `cancelLabel`, `reset` (Reset, of the class `form-reset`, one fixed class per footer button as Cancel's `form-cancel`, off while clean), `look` (a `FormLook` of `useForm`), `extra` |
+| `FormFooter` | `field.tsx` | a form's row of actions (`formFooter`, `sendWhenChanged`); with `look`, Save shows the form's state | `submit`, `busy`, `off`, `cancel` (its button of the class `form-cancel`, as the plain footer's), `cancelLabel`, `reset` (Reset, of the class `form-reset`, one fixed class per footer button as Cancel's `form-cancel`, off while clean), `look` (a `FormLook` of `useForm`), `extra`, `after` (after the submit button: My profile's ⓘ) |
 | `useForm` | `forms.ts` | a settings form that keeps its changes until they are saved or reset, kept by a key the region chooses beyond the part, and its state: clean, changed, unsaved (the focus left it, it was taken away, or a minute passed since the last change), saving, failed, saved | `key`, `name` (a text key and its arguments, naming it in the problem list), `open` (shows it and calls `focusForm`); gives `look`, `props` (the form element's), `place(field)` (for `useDraft`; its `known()` the stored value its draft holds, undefined before it has one), `track(changed, drafts)` (after the fields, at each drawing), `save(fn)`, `reset()` |
 | `hasChanges` | `forms.ts` | whether a form, or one under it, has changes not saved: changed, saving, unsaved or failed (a row shown while it holds such a form, otherwise for expert mode alone) | `key` |
 | `unsavedItems`, `focusForm`, `forgetForms` | `forms.ts` | the unsaved and the failed forms as items of `Problems`, the disk naming the form, a click opening it (the registry they come from, a signal inside `forms.ts`, holds the forms merely changed too, for the question on leaving the page); the focus put into a form once it is shown; a form's drafts forgotten, what it belongs to gone, or all at a sign-out (`MassimoParts.signedOut`, `logout` of `login.js`) | `key` (that form's and those under it, `key:…`); `key`; `key` ("" for all) |
@@ -2058,9 +2065,13 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `useAsk` | `question.tsx` | a row that asks in its own place, the focus back on its button in the drawing's own turn, as `confirmInPlace` gave it at once (a layout effect); with `held`, whether it asks is a store's live state, which the store takes back where what it asked about changed and at a sign-out (a part drawn once for the page's life: Software update, Maintenance); a question the store takes back while the focus is in its box (`box`, handed to the `Question`'s `boxRef`, judged as the drawing that takes it away begins) gives it back to the button, or to the row where the button cannot take it, in the same turn; `done(false)` gives it to nothing, as before | `held` (`{ asking }`); gives `asking`, `ask`, `done`, `ref`, `row` (the row of the caller's, which holds the focus with `tabindex` -1 until it leaves, where the button cannot), `box` |
 | `useBusy`, `busyProps` | `question.tsx` | a button's request under way: busy, off, `aria-busy` (`whileBusy`, `setBusy`) | `run(fn)`; `busyProps(cls, busy, off)` |
 | `useSetAtOnce` | `question.tsx` | a setting saved at once, a switch without a Save: the user's choice shown while its request runs, the control on so that the focus stays on it, a change meanwhile sending nothing and drawn back, then what is stored, the old value where it was refused (the password sign-in, a capability for every role, whether integrations may ask, an integration's Enabled) | `stored`; gives `value`, `busy`, `set(v, fn)` |
-| `BusyButton` | `question.tsx` | a button that sends a request and turns until its answer (`useBusy`, `busyProps`), a click meanwhile sending nothing | `id`, `cls`, `label`, `run`, `aria` (its name where the text is not enough), `off` (kept off: a request that may not be sent now) |
+| `BusyButton` | `question.tsx` | a button that sends a request and turns until its answer (`useBusy`, `busyProps`), a click meanwhile sending nothing | `id`, `cls`, `label`, `run`, `aria` (its name where the text is not enough), `off` (kept off: a request that may not be sent now), `data` (its `data-` attributes: a Link button's provider) |
 | `burstReader` | `burst.ts` | one read for a burst of the stream's events: a read in flight and at most one more after it, which reads what the events meanwhile asked for, none asked for in the session before (the parts that follow the server while shown) | `read(what)`, the reads by name; gives `ask(...what)` |
 | `session`, `stillSession`, `newSession` | `session.ts` | the session's number, raised by `MassimoParts.signedOut` before anything is forgotten: a store takes it before an await and drops the answer, its message and its next timer where it changed; `actionRunner`'s `bound` does so for a runner | –; `n`; – |
+| `me`, `own`, `meChanged` | `me.ts` | who the page is signed in as, `state.me` as `applyCaps` of `login.js` hands it over at every read of it (`MassimoParts.me`), null from a sign-out on; the token it is signed in with, by which a user's sessions say "this device" and "its key" | `m` |
+| `userPath`, `Run`, `loadTokens`, `revokeToken`, `revokeOwn`, `createKey`, `loadIdentities`, `addIdentity`, `changeIdentity`, `removeIdentity` | `account.ts` | what a user's sessions, keys and identities read and send (`…/users/{name}/tokens`, `…/identities`), for System settings → Users and My profile alike; a change through the caller's runner (`Run`), which reloads what it shows and says how it went in its own line; Revoke of the token in use signs out | `name`, `rest`; `run`, `name`, and what each sends |
+| `Tokens` | `tokens.tsx` | a user's sessions and keys (a user's panel, My profile): each with Revoke, "this device" and "its key" by `own`, Create key and the key just made, shown once by the read that follows and kept in the part's own state alone; read when its place opens and again at each change of the caller's counter while open; an answer after a sign-out dropped | `u`, `off`, `open`, `reads` (the caller's counter), `run`, `say` (the caller's message line), `labelId` (the new key's field's id), `help` (the group's ⓘ after Create key, My profile's) |
+| `Identities`, `Changes` | `identities.tsx` | a user's identities at the sign-in providers (a user's panel, My profile): each with what the provider said and Remove; with `changes`, Change of one no sign-in used, a settings form kept by its key, the forms of identities gone or made unchangeable forgotten, and all of them where the box goes off; with `assign`, Assign; `after` what follows the list once read (My profile's Link buttons); `quiet` draws nothing while the list is empty and the caller offers nothing after it (`offer`: My profile's Link buttons, none in the app, where the rows are still named from every provider) | `u`, `off`, `open`, `reads`, `providers` (the enabled ones), `run`, `say`, `title`, `none`, `cls`, `changes` (`key(id)`, `under`, `ui(key)`, `forget(key)`, `show(key)`: the caller's forms and how one is brought into sight), `assign`, `after(list)`, `quiet`, `offer` |
 | `FileButton` | `file.tsx` | a button that opens the browser's choice of a file of the types it accepts (`filePicker`), the same file again too | `cls`, `label`, `accept`, `off`, `onFile(file)` |
 | `Adder` | `adder.tsx` | the end of a list that adds an item: the new item's form in its place while shown, the button that shows it hidden meanwhile, the focus in the form's first field when it comes and back on the button when it goes (Users, Roles, Sign-in providers) | `id` (the button's), `formId` (the form's place), `label`, `shown`, `set(shown)`, the form as children |
 | `KvList`, `CountList` | `kv.tsx` | a list of facts, a name and its value each (`kvList`), every fact given, the caller leaving out those it does not show; a list of counts by name, sorted, in columns (`countList`) | `facts` (`[name, value, mono]`); `counts` |
@@ -2140,19 +2151,6 @@ the pairing's `cubeRooms` (`cubes/flow.ts`), the log's `logState.cubeRooms` and
 the data with Block 15;
 the stepped setpoint's end, `apiUntil` of `rooms.js`, which stays with its users
 beside `time.ts`;
-a user's sessions and keys and its identities, drawn twice:
-as parts in System settings → Users (`admin/Tokens.tsx`, `admin/Identities.tsx`)
-and plain in My profile (`profile.js` `tokenRow`, `fillTokens`, `wireNewKey`;
-`linked.js` `identityRow`, `identityDetails`):
-Block 13 moves `Tokens.tsx` and `Identities.tsx` to `shared/` (UiParts D193)
-with `userPath` of `admin/sendUsers.ts` and what they send
-(`loadTokens`, `revokeToken`, `revokeOwn`, `createKey`, `loadIdentities`, `addIdentity`,
-`changeIdentity`, `removeIdentity`), its texts staying the `users.…` keys
-both use, and draws them in My profile; since `shared/` imports no region,
-what they take from `admin/` comes in as parameters there: the send functions
-report through the users' runner (its message line, the reload by `loadUsers`
-and `reads`), and `Identities.tsx` reads `enabled`, `identityUI` and `userUI`
-of `admin/store.ts`;
 `FileButton` for the Appearance card's import (`appearance.js`, Block 13), which
 needs an id and a name for its input that follows the language;
 a room's write's outcome in words, built in three places
@@ -2343,19 +2341,20 @@ the role choice reads the roles, a user's identities the enabled providers,
 a provider's role the roles.
 `index.tsx` draws each into its card's body, `#sys-users-body`, `#sys-roles-body`,
 `#sys-caps-body` and `#sys-providers-body`, reads it each time System settings is shown,
-and registers `users` (`load`, `me`, `render`), `roles` (`render`)
+and registers `users` (`load`, `render`), `roles` (`render`)
 and `providers` (`render`),
-which `users.js` calls as `loadUsers` and `renderUsers`, `login.js` `applyCaps` as
-`users.me` at every read of who is in, `roles.js` as `renderRoles`
+which `users.js` calls as `loadUsers` and `renderUsers`, `roles.js` as `renderRoles`
 and `providers.js` as `renderProviders`;
 `store.ts` holds the one counter, the lists as the last load that went through gave
-them, `own`, the token the page is signed in with, as `users.me` hands it over,
-each panel's `open` by its item's key, each new item's form shown, the message
+them, each panel's `open` by its item's key, each new item's form shown, the message
 lines' outcomes and `reads`, the users' change counter, at which an open user's panel
 reads its sessions, keys and identities again, as every redraw of the plain list did;
 `sendUsers.ts`, `sendRoles.ts` and `sendProviders.ts` what each reads and sends,
 line for line as the plain scripts did, through an `actionRunner` per list;
-`Users.tsx`, `Tokens.tsx`, `Identities.tsx`, `Roles.tsx` and `Providers.tsx` the parts:
+`Users.tsx`, `Roles.tsx` and `Providers.tsx` the parts,
+a user's sessions and keys and its identities the shared `Tokens` and `Identities`
+(`shared/tokens.tsx`, `shared/identities.tsx`, AP UiParts Block 13), drawn with this
+list's runner, `reads` and its forms of an identity's change:
 a panel a `Fold` with its `FoldHead`, its settings form a `useForm` of the key
 `users:<name>` (an identity's change `users:<name>:identity:<id>` under it),
 `roles:<key>` or `providers:<key>`, its footer a `FormFooter` with Reset,
@@ -2375,10 +2374,40 @@ a section's pill in its `span.section-pill` beside the plain badges, which
 the forms it shows the beginnings of their keys in `data-forms`, its entry's name
 the text key in `data-title`;
 a menu item's disk in its `span.menu-item-mark` with its `data-forms`
-(System settings': `users roles providers integrations`; Cube settings': `cube`);
+(System settings': `users roles providers integrations`; Cube settings': `cube`;
+Personal settings': `profile`);
 ☰'s mark in `#nav-menu-mark`, the worse of the log's, which `renderLogSign` of `log.js`
 hands it as `MassimoParts.chrome.log(count, tone)`,
 and the forms' of every menu item (`unsavedTone`), with ☰'s name and tooltip.
+My profile (`ui/src/profile/`, AP UiParts Block 13) is a part alone, drawn into
+`#profile-sec` as `parts.js` loads, for the user `MassimoParts.me` names
+(`shared/me.ts`, which `applyCaps` of `login.js` calls at every read of who is
+in), and read each time the personal page is shown, as `profile.js` read it: the
+user (`GET …/users/{name}`), the enabled providers where none are known yet,
+then its sessions and keys and its identities, and after every change made there
+the users again where the signed-in user may read them, then My profile;
+`store.ts` holds the user as that read gave it, the providers, `reads`, the link
+come back shown to confirm, Change password open and the two message lines'
+outcomes;
+`send.ts` what it reads and sends through its runner, the requests of
+`profile.js`, `linked.js` and `login.js`' `changeOwnPassword`, in the order: the
+user, the providers where none are known yet, then the sessions and keys and the
+identities together;
+`Profile.tsx` the parts: the display name a `useForm` of the key `profile:name`
+and the own password one of `profile:password`, each with Reset and Save by its
+state, the password's three fields its part's own state, never a draft and kept
+by no key, the form's marks knowing only that a new password is typed, the
+current one alone, as a password manager fills it in, being none (UnsavedMarks
+D28);
+the shared `Tokens` and `Identities`, the latter `quiet` and with the Link
+buttons after it, and the link come back above it, its title taking the focus as
+it comes.
+Another user signed in draws all of it from nothing:
+at a sign-out, and for another user after a 401, `MassimoParts.signedOut` sets
+who is in to null, which takes the parts and what is typed in them away, and
+forgets the user read, the link shown and the messages; an answer after it is
+dropped (`session.ts`).
+No plain script calls it.
 Integrations (`ui/src/integrations/`) is a part alone, drawn into `#sys-integrations-body`
 and read each time System settings is shown; no plain script calls it:
 `store.ts` holds its counter, what it shows as the last loads gave it,
