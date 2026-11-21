@@ -5,9 +5,10 @@
  * @file internal/server/ui/src/plain/login.d.ts
  *
  * The globals of the plain script ui/login.js that the parts call: the
- * capabilities of the one signed in, who it is, the roles' names, who is
- * read again, the sign-out, a password registered by OPAQUE and the
- * current one proved, and the page's address.
+ * capabilities of the one signed in, who it is, whether it has My
+ * profile and a link come back for it, the roles' names, who is read
+ * again, the sign-out, a password registered by OPAQUE and the current
+ * one proved, and the page's address.
  */
 
 import type { User } from "../api";
@@ -17,6 +18,10 @@ declare global {
   function hasCap(c: string): boolean;
   /** Whether the one signed in may read the users: with users, guests or passwords. */
   function canManageUsers(): boolean;
+  /** Whether the page is signed in as a user, who has My profile; an open server and the server's token have none. */
+  function hasProfile(): boolean;
+  /** A link of the own account come back from a provider (oidcReturn), for My profile to show or say why there is none; null for none, set back to null once taken. */
+  let oidcLinked: { confirm?: string; error?: string } | null;
   /** Whether a user's login name is the one signed in. */
   function isSelf(name: string): boolean;
   /** A role's display name: the name given, else the key's translated name, else the key. */

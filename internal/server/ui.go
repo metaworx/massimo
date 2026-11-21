@@ -30,14 +30,14 @@ import (
 // /favicon.ico is where browsers look for an icon. /ui/connect.html is the
 // apps' connect page, a page of its own (docs/app.md).
 //
-//go:embed ui/index.html ui/connect.html ui/connect.js ui/i18n.js ui/components.js ui/app.js ui/header.js ui/home.js ui/prefs.js ui/rooms.js ui/tiles.js ui/unlisted.js ui/house.js ui/week-program.js ui/config.js ui/log.js ui/pages.js ui/update.js ui/cubes.js ui/login.js ui/users.js ui/profile.js ui/providers.js ui/linked.js ui/backup.js ui/roles.js ui/theme.js ui/appearance.js ui/notify.js ui/notifytext.js ui/sw.js ui/manifest.webmanifest ui/style.css ui/i18n/*.json ui/brand/*.svg ui/brand/*.css ui/brand/*.png ui/brand/*.ico ui/partials/*.html ui/vendor/opaque.js ui/vendor/opaque.LICENSE ui/parts.js
+//go:embed ui/index.html ui/connect.html ui/connect.js ui/i18n.js ui/components.js ui/app.js ui/header.js ui/home.js ui/prefs.js ui/rooms.js ui/tiles.js ui/unlisted.js ui/house.js ui/week-program.js ui/config.js ui/log.js ui/pages.js ui/update.js ui/cubes.js ui/login.js ui/users.js ui/providers.js ui/backup.js ui/roles.js ui/theme.js ui/appearance.js ui/notify.js ui/notifytext.js ui/sw.js ui/manifest.webmanifest ui/style.css ui/i18n/*.json ui/brand/*.svg ui/brand/*.css ui/brand/*.png ui/brand/*.ico ui/partials/*.html ui/vendor/opaque.js ui/vendor/opaque.LICENSE ui/parts.js
 var uiFiles embed.FS
 
 // uiPartials are the parts of the page in ui/partials/, a file per
 // feature, by the marker of index.html they replace
 // (<!-- partials: system -->), in their order there: the header, the
-// home notice, the first owner's form, the panels of My profile, of My
-// settings (its rows first), of Notifications, the panels of System
+// home notice, the first owner's form, the panels of My settings (its
+// rows first), the panels of System
 // settings (its section cards in three markers: before, in and after the
 // cards that flow in two columns), the cards of Maintenance, System
 // info's card, the Cube page, the House tile, the devices without a
@@ -51,9 +51,7 @@ var uiPartials = []struct {
 	{"header", []string{"header.html"}},
 	{"home", []string{"home.html"}},
 	{"setup", []string{"setup.html"}},
-	{"profile", []string{"profile.html"}},
 	{"prefs", []string{"prefs.html", "appearance.html", "page.html"}},
-	{"notify", []string{"notify.html"}},
 	{"system", []string{"cubes.html"}},
 	{"system-flow", []string{"users.html", "providers.html", "integrations.html", "roles.html", "capabilities.html"}},
 	{"system-end", []string{"backup.html"}},
@@ -65,7 +63,7 @@ var uiPartials = []struct {
 	{"logview", []string{"log-view.html"}},
 	{"login", []string{"login.html"}},
 	{"toast", []string{"toast.html"}},
-	{"templates", []string{"scheme.html", "log.html", "users-panel.html"}},
+	{"templates", []string{"log.html"}},
 }
 
 // uiPage assembles the page: index.html, the skeleton, with each marker

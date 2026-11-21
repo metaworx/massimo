@@ -8,7 +8,7 @@
 "use strict";
 
 // loadUsers reads System settings → Users again, for a change made in My
-// profile (profile.js userAction): the part reads the users and draws them.
+// profile (ui/src/profile/send.ts): the part reads the users and draws them.
 function loadUsers() {
   return MassimoParts.users.load();
 }

@@ -52,20 +52,20 @@ export interface Preference {
 }
 
 export interface PushSubscription {
-  id?: number;
-  endpoint?: string;
-  label?: string;
+  id: number;
+  endpoint: string;
+  label: string;
   /** @format date-time */
-  created_at?: string;
+  created_at: string;
   /**
    * The last message the push service took; absent before the first
    * @format date-time
    */
   last_ok_at?: string;
   /** Failed deliveries since then */
-  failures?: number;
+  failures: number;
   /** Made with the caller's session or key */
-  current?: boolean;
+  current: boolean;
 }
 
 /**
@@ -401,18 +401,18 @@ export interface Identity {
 
 export interface PendingLink {
   /** The provider's key */
-  provider?: string;
-  provider_name?: string;
+  provider: string;
+  provider_name: string;
   /** The user id at the provider */
-  subject?: string;
-  email?: string;
-  name?: string;
-  username?: string;
+  subject: string;
+  email: string;
+  name: string;
+  username: string;
   groups?: string[];
   /** The user's identities at the provider the link replaces */
   replaces?: Identity[];
   /** @format date-time */
-  expires_at?: string;
+  expires_at: string;
 }
 
 /** The provider and either email or subject. */

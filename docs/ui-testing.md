@@ -1,4 +1,4 @@
-# Testing the web UI (v1.13.0)
+# Testing the web UI (v1.17.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -704,6 +704,16 @@ System info is checked with its folds open around the page shown again as well,
 which failed on the page before the move:
 `system-info.js` made the version's and the proxies' copy icons and the proxy's link anew
 at each read.
+My profile (AP UiParts, Block 13) is checked around the personal page shown again as well,
+which failed on the page before the move:
+`profile.js` made the display name's form and the sessions and keys anew at each show.
+My settings are checked around the settings applied again as well, as when the user's
+arrive from the server at a sign-in (`applyStoredSettings()`),
+which failed on the page before the move: `applySettings` set the poll typed back;
+the Appearance card too, with the scheme editor open,
+which failed as well: `applyAppearance` made the editor anew.
+Notifications are checked around the personal page shown again,
+which failed on the page before the move: `notify.js` made the rules and the devices anew.
 
 ### Taking a region off the list
 

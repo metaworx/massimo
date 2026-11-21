@@ -657,6 +657,10 @@ function showResult(el, text, ok) {
 // app.js).
 const failedLines = new Set();
 
+// markRange's last caller, the notifications' card, is a part since AP
+// UiParts Block 13 (ui/src/shared/field.tsx Limit); nothing calls it now,
+// and it goes with the builders nobody calls (Block 15).
+
 // markRange marks a number field by what its required, min, max and step
 // allow, or by ok where the caller judges the value itself (the
 // notifications' threshold takes any number in its range, not only its
@@ -734,6 +738,10 @@ function fromTemplate(id) {
   return document.getElementById(id).content.firstElementChild.cloneNode(true);
 }
 
+// fragmentFromTemplate's last caller, the scheme editor, is a part since
+// AP UiParts Block 13 (ui/src/prefs/Editor.tsx); nothing calls it now, and
+// it goes with the builders nobody calls (Block 15).
+
 // fragmentFromTemplate clones the whole content of a <template> of the
 // page, for a frame of several elements that goes into a container of
 // the page as it is.
@@ -774,6 +782,10 @@ function downloadBlob(name, blob) {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+// filePicker's last caller, the Appearance card's Import…, is a part since
+// AP UiParts Block 13 (ui/src/shared/file.tsx FileButton); nothing calls it
+// now, and it goes with the builders nobody calls (Block 15).
 
 // filePicker is a hidden file input taking the types of accept; a file
 // chosen goes to onFile, and the input is emptied so that the same file

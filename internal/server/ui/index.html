@@ -151,10 +151,9 @@
       <section id="profile" class="tile section-card half profile-page" data-icon="icon-id" aria-labelledby="profile-title">
         <header class="tile-head section-head">
           <h3 id="profile-title"><button type="button" class="section-fold" aria-expanded="true" aria-controls="profile-sec"><svg class="fold-i" aria-hidden="true"><use href="#icon-chevron"/></svg><svg class="ni section-icon" aria-hidden="true"><use href="#icon-id"/></svg><span class="section-title" data-i18n="nav.profile">My profile</span></button></h3>
+          <span class="section-pill part-slot" data-forms="profile" data-title="nav.profile"></span>
         </header>
-        <div id="profile-sec" class="section-body settings-body">
-          <!-- partials: profile -->
-        </div>
+        <div id="profile-sec" class="section-body settings-body"></div>
       </section>
 
       <!-- My settings: a row per setting, the switch that keeps it only on
@@ -163,20 +162,19 @@
       <section id="prefs" class="tile section-card half prefs-page" data-icon="icon-sliders" aria-labelledby="prefs-title">
         <header class="tile-head section-head">
           <h3 id="prefs-title"><button type="button" class="section-fold" aria-expanded="true" aria-controls="prefs-sec"><svg class="fold-i" aria-hidden="true"><use href="#icon-chevron"/></svg><svg class="ni section-icon" aria-hidden="true"><use href="#icon-sliders"/></svg><span class="section-title" data-i18n="nav.prefs">My settings</span></button></h3>
+          <span class="section-pill part-slot" data-forms="scheme" data-title="nav.prefs"></span>
         </header>
         <div id="prefs-sec" class="section-body settings-body">
           <!-- partials: prefs -->
         </div>
       </section>
 
-      <!-- Notifications: which events notify the user, and where (notify.js) -->
+      <!-- Notifications: which events notify the user, and where, a part (ui/src/notify/) drawn into #notify-sec -->
       <section id="notify" class="tile section-card half notify-page" data-icon="icon-bell" aria-labelledby="notify-title">
         <header class="tile-head section-head">
           <h3 id="notify-title"><button type="button" class="section-fold" aria-expanded="true" aria-controls="notify-sec"><svg class="fold-i" aria-hidden="true"><use href="#icon-chevron"/></svg><svg class="ni section-icon" aria-hidden="true"><use href="#icon-bell"/></svg><span class="section-title" data-i18n="nav.notify">Notifications</span></button></h3>
         </header>
-        <div id="notify-sec" class="section-body settings-body">
-          <!-- partials: notify -->
-        </div>
+        <div id="notify-sec" class="section-body settings-body"></div>
       </section>
     </div>
   </section>
@@ -274,9 +272,7 @@
 <script src="ui/cubes.js"></script>
 <script src="ui/login.js"></script>
 <script src="ui/users.js"></script>
-<script src="ui/profile.js"></script>
 <script src="ui/providers.js"></script>
-<script src="ui/linked.js"></script>
 <script src="ui/backup.js"></script>
 <script src="ui/roles.js"></script>
 <script src="ui/theme.js"></script>

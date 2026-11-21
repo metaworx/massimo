@@ -44,9 +44,27 @@ declare global {
     eventsOpen: boolean;
     /** Who the page is signed in as (GET /api/v1/me), null before it is read and after a sign-out. */
     me: Me | null;
-    /** The person's settings, as far as a part reads them. */
-    settings: { poll: number; expert: boolean };
+    /** The person's settings in effect, as far as a part reads them: this device's where it keeps one, else the user's. */
+    settings: { poll: number; expert: boolean; clock: string; lang: string; theme: string; scheme: string; blink: string; iconWindow: string; iconRadio: string };
   };
+  /** The text key of each setting's name, for its "only on this device" switch. */
+  const SETTING_LABELS: Record<string, string>;
+  /** A setting's value where v is one, else undefined (a poll's text taken as its number). */
+  function validSetting(key: string, v: unknown): any;
+  /** Changes a setting: on this device alone where it is kept so, else the user's, which goes to the server too. */
+  function setSetting(key: string, v: unknown): void;
+  /** Whether a setting is kept for this device alone. */
+  function deviceOnly(key: string): boolean;
+  /** Keeps a setting for this device alone with the value in effect, or stops: the user's value applies again. */
+  function setDeviceOnly(key: string, on: boolean): void;
+  /** Applies the settings in effect to the page: expert mode, the appearance, the header, the poll. */
+  function applySettings(): void;
+  /** Starts the page's poll again at the poll setting's pace. */
+  function startPolling(): void;
+  /** Loads the language of a setting (auto: the browser's) and makes it the page's. */
+  function changeLanguage(setting: string): Promise<void>;
+  /** Draws every text of the page again after a change of language. */
+  function applyLanguage(): void;
   /** An instant as the browser's time of day, "20:51:03", its date before it when it is not today's. */
   function fmtTimeOfDay(d: Date): string;
   /** An API time as a Date, null for none (a zero time). */

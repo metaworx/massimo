@@ -4040,6 +4040,7 @@ components:
         version: {type: integer, description: Counts the writes of the key; a later write wins}
     PushSubscription:
       type: object
+      required: [id, endpoint, label, created_at, failures, current]
       properties:
         id: {type: integer}
         endpoint: {type: string}
@@ -4268,6 +4269,7 @@ components:
         last_used_at: {type: string, format: date-time}
     PendingLink:
       type: object
+      required: [provider, provider_name, subject, email, name, username, expires_at]
       properties:
         provider: {type: string, description: The provider's key}
         provider_name: {type: string}

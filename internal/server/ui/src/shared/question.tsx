@@ -72,12 +72,23 @@ export function useSetAtOnce<T>(stored: T): { value: T; busy: boolean; set(v: T,
  * (useBusy, busyProps): cls its class, label its text, run the request;
  * id its element's (a button the page names); aria-label names it for a
  * screen reader where its text does not say enough; off keeps it off (a
- * request that may not be sent now); a click while it turns sends
+ * request that may not be sent now); data are its data- attributes (a
+ * Link button's provider in My profile); a click while it turns sends
  * nothing.
  */
-export function BusyButton({ id, cls, label, run, aria, off }: { id?: string; cls?: string; label: string; run: () => Promise<unknown>; aria?: string; off?: boolean }) {
+export function BusyButton({ id, cls, label, run, aria, off, data }: {
+  id?: string;
+  cls?: string;
+  label: string;
+  run: () => Promise<unknown>;
+  aria?: string;
+  off?: boolean;
+  data?: Record<string, string>;
+}) {
   const b = useBusy();
-  return <button type="button" id={id} {...busyProps(cls || "", b.busy, off)} aria-label={aria} onClick={() => b.run(run)}>{label}</button>;
+  const attrs: Record<string, string> = {};
+  for (const [k, v] of Object.entries(data || {})) attrs["data-" + k] = v;
+  return <button type="button" id={id} {...busyProps(cls || "", b.busy, off)} aria-label={aria} {...attrs} onClick={() => b.run(run)}>{label}</button>;
 }
 
 /**

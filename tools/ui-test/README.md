@@ -338,6 +338,35 @@ hence `failed_checks_forgotten`.
   reads the facts; a resync that finds the certificate being read reads it
   anew, also after the readings gave up; the session's end between two
   readings reads no more.
+- `test_personal_updates.py`, Personal settings as parts (AP UiParts, Block 13,
+  with AP UnsavedMarks, Block 5):
+  My profile's display name and a new password typed stay the elements they
+  were with what is typed through the personal page shown again, nothing sent;
+  the display name left unsaved shows the card's pill, which unfolds the card
+  with the focus in the form, ☰'s mark and its Personal settings' disk, and
+  Reset clears them; a password typed marks its form changed and Reset empties
+  it; after a sign-out, and for another user signed in after an expired
+  session, nothing typed is left, and a read of the user that answers late
+  draws nothing; in the app (fake_bridge.js) a linked account is named by its
+  provider's name, and a current password filled in alone is no change;
+  My settings' poll being typed stays, the element it was with the focus,
+  when the user's settings arrive, and is saved as it is left;
+  the scheme editor's name and a hex value half typed stay with the focus
+  when the settings arrive, and Close drops the draft; a colour changed and
+  left shows My settings' pill, which brings the editor back into sight from
+  a folded card, ☰'s mark and Personal settings' disk, and Reset clears them;
+  after a sign-out, and for another user after a 401, no scheme is being
+  edited; Save as and Enter in the name save only a change (D204), and
+  another scheme chosen or an import drops the draft;
+  a notification's delay refused on its field stays, the element it was with
+  its mark and the focus, and the name of this device typed too, through the
+  personal page shown again, nothing sent; after a sign-out, and for another
+  user after a 401, the name typed is gone, and a read of the devices that
+  answers late draws nothing; a rule changed just before Sign out is sent
+  once, under the owner's token, and nothing for the operator after it
+  (D205), and one changed before another user's sign-in after a 401 is not
+  sent; a read that finds a change waiting keeps it and sends it; the rules
+  are off until the first read has answered.
 - `test_stream.py`:
   the event stream opens with tickets only, never with the token,
   and after a refused stream (the test hands out a used ticket first,

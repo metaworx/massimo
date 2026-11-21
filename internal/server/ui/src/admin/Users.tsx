@@ -15,7 +15,7 @@
  * key just made are a part's own state alone, never in the forms' store.
  */
 
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { User } from "../api";
 import { Adder } from "../shared/adder";
 import { Badge, ResultLine } from "../shared/badge";
@@ -25,10 +25,10 @@ import { Fold, FoldHead } from "../shared/fold";
 import { focusForm, useForm } from "../shared/forms";
 import { Question, busyProps, useAsk, useBusy, useSetAtOnce } from "../shared/question";
 import { isoOf, localOf } from "../shared/time";
-import { Identities } from "./Identities";
-import { adding, enabled, load, passwordLogin, said, userFormKey, userUI, users } from "./store";
-import { Tokens } from "./Tokens";
-import { createUser, mayManage, mayPassword, removeUser, roleOptions, saveUser, setPasswordLogin, usersAdmin, usersMsg } from "./sendUsers";
+import { type Changes, Identities } from "../shared/identities";
+import { Tokens } from "../shared/tokens";
+import { adding, enabled, identityFormKey, identityUI, load, passwordLogin, reads, said, userFormKey, userUI, users } from "./store";
+import { createUser, mayManage, mayPassword, removeUser, roleOptions, run, saveUser, setPasswordLogin, usersAdmin, usersMsg } from "./sendUsers";
 
 /** userName is how a user is shown: its chain (AP StoreRaise v1.2), its display name, else its login name. */
 function userName(u: User): string {
@@ -44,6 +44,25 @@ function openUser(name: string): void {
   showCard($("sys-users")); // a folded card unfolded, its form in sight
   userUI.of(name).open = true;
   focusForm(userFormKey(name));
+}
+
+/**
+ * changesOf are the change forms of a user's identities as this list
+ * keeps them (store.ts identityUI, by identityFormKey), each brought into
+ * sight by its user's panel opened (openUser).
+ */
+function changesOf(name: string): Changes {
+  return {
+    key: (id) => identityFormKey(name, id),
+    under: userFormKey(name) + ":identity",
+    ui: (key) => identityUI.of(key),
+    forget: (key) => identityUI.forget(key),
+    show: () => {
+      if (!isShown("system")) showView("system");
+      showCard($("sys-users")); // a folded card unfolded, its form in sight
+      userUI.of(name).open = true;
+    },
+  };
 }
 
 /** Badges are a user's badges in its panel's head: you first, the role, the state, keys only, and an integration's. */
@@ -149,14 +168,17 @@ function UserPanel({ u }: { u: User }) {
   const manage = mayManage(u);
   const self = isSelf(u.name);
   const locked = !manage && !self && !mayPassword(u);
+  // the same functions for the panel's life, so that the identities' box reads by its own dependencies alone
+  const changes = useMemo(() => changesOf(u.name), [u.name]);
   const links = (u.links || []).map((l) => l.display || l.name || (l.id || "").slice(0, 8)).join(", ");
   return (
     <Fold cls="panel user-panel" open={ui.open} onToggle={(o) => { ui.open = o; }} data={{ name: u.name }}
       summary={<FoldHead name={userName(u)} mono={u.integration ? "" : u.name} badges={badges(u)} />}>
       {links && <p class="muted small user-integration-links">{t("users.linksList", { users: links })}</p>}
       <UserForm u={u} off={locked} />
-      <Tokens u={u} off={!manage && !self} open={ui.open} />
-      <Identities u={u} off={!manage || !enabled.value.length} open={ui.open} />
+      <Tokens u={u} off={!manage && !self} open={ui.open} reads={reads.value} run={run} say={usersMsg} labelId={"user-key-label-" + u.name} />
+      <Identities u={u} off={!manage || !enabled.value.length} open={ui.open} reads={reads.value} providers={enabled.value} run={run} say={usersMsg}
+        title={t("users.identities")} none={t("users.identitiesNone")} changes={changes} assign />
       {locked && <p class="muted small">{t(u.role === "owner" ? "users.ownerOnly" : "users.outranked")}</p>}
     </Fold>
   );

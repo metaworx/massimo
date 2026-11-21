@@ -637,8 +637,7 @@ func TestRegionsKnowNoOtherRegion(t *testing.T) {
 // types.
 func partsImportOnly(t *testing.T, dir string, also ...string) {
 	t.Helper()
-	// from is a word of its own, not the end of a text's key ("vwt.from").
-	spec := regexp.MustCompile(`(?:(?:^|[^.\w])from\s*|\bimport\s*\(?\s*)["']([^"']+)["']`)
+	spec := partsImportSpec
 	files := 0
 	err := fs.WalkDir(os.DirFS(dir), ".", func(name string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !(strings.HasSuffix(name, ".ts") || strings.HasSuffix(name, ".tsx")) {
@@ -674,6 +673,45 @@ func partsImportOnly(t *testing.T, dir string, also ...string) {
 	}
 	if files == 0 {
 		t.Fatalf("%s holds no part", dir)
+	}
+}
+
+// partsImportSpec finds what a line of a part imports from: from and
+// import are words of their own, not the end of a text's key
+// ("vwt.from", "appearance.import"), of a text ("import") or of an id
+// ("scheme-import"); a dynamic import after an operator counts
+// (TestPartsImportSpec).
+var partsImportSpec = regexp.MustCompile(`(?:(?:^|[^.\w])from\s*|(?:^|[^.\w"'\x60-])import\s*\(?\s*)["']([^"']+)["']`)
+
+// partsImportSpec takes every way a part imports and leaves the words
+// import and from where they are a text's key, a text or an id.
+func TestPartsImportSpec(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct{ line, want string }{
+		{`import { h } from "preact";`, "preact"},
+		{`import "./chrome";`, "./chrome"},
+		{`const m = await import("./x");`, "./x"},
+		{`const m = import("./x");`, "./x"},
+		{`const m=import("./x")`, "./x"},
+		{`a?import("./x"):0`, "./x"},
+		{`f(a,import("./x"))`, "./x"},
+		{`{ m:import("./x") }`, "./x"},
+		{`a ? import("./x") : null`, "./x"},
+		{`!import("./x")`, "./x"},
+		{`export { a } from "../shared/b";`, "../shared/b"},
+		{`import type { User } from "../api";`, "../api"},
+	} {
+		if m := partsImportSpec.FindStringSubmatch(c.line); m == nil || m[1] != c.want {
+			t.Errorf("%s: want %q, got %v", c.line, c.want, m)
+		}
+	}
+	for _, line := range []string{
+		`t("appearance.import")`, `id="scheme-import"`, `t("import")`, `t('import')`, "t(`import`)",
+		`t("vwt.from")`, `label={t("appearance.import")} accept="application/json"`,
+	} {
+		if m := partsImportSpec.FindStringSubmatch(line); m != nil {
+			t.Errorf("%s: no import, got %q", line, m[1])
+		}
 	}
 }
 

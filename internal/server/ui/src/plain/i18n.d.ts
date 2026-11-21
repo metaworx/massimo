@@ -17,6 +17,14 @@ declare global {
   function t(key: string, params?: Record<string, string | number>): string;
   /** The plural form of a key for n, {n} filled. */
   function tn(key: string, n: number, params?: Record<string, string | number>): string;
+  /** The languages the settings offer, by their own name. */
+  const LANGUAGE_NAMES: Record<string, string>;
+  /** The codes of the languages with a translation table. */
+  function languages(): string[];
+  /** The first of the browser's preferred languages the page offers, else en. */
+  function browserLanguage(): string;
+  /** The note of a machine translation in the page's language and in English, null for a language reviewed. */
+  function machineNote(): string[] | null;
   /** A number with digits decimals in the page's language. */
   function fmtNum(v: number, digits: number): string;
 }
