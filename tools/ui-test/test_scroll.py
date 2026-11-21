@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (C) 2026 The Massimo Authors
-"""A slow scroll down from the top (components.js stickyHeader): the
+"""A slow scroll down from the top (ui/src/chrome/scroll.ts stickyHeader): the
 header compacts once the page is 96 px down and stays so, and the page
 goes down at every step. With expert mode on and the found Cubes counted
 under the header, the browser's scroll anchoring once took the page back

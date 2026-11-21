@@ -136,7 +136,7 @@ def test_configuration_send_is_off_until_a_change(page, case):
 
 def reset_all_in_view(page, tile):
     """Reset all, scrolled into view with the page at rest: at 390 px the
-    scroll compacts the header a frame later (components.js stickyHeader),
+    scroll compacts the header a frame later (ui/src/chrome/scroll.ts stickyHeader),
     and the page then moves by 53 px, so a click aimed before that lands
     on the note above the button."""
     reset = tile.locator(".prog-reset-all")

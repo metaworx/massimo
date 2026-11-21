@@ -1,2 +1,2 @@
-- The web UI's section cards fold and show their badges by its parts
-  (AP UiParts).
+- The web UI's section cards' badges and folds, its compacting header
+  and back to top are drawn by its parts (AP UiParts).

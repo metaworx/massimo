@@ -6,7 +6,9 @@
  *
  * The page's chrome (AP UiParts, Block 14), a region of its own, drawn
  * once into its places as parts.js loads: the section cards' badges and
- * pills, their folds wired (Cards.tsx, shared/card.ts); and where it says
+ * pills, their folds wired (Cards.tsx, shared/card.ts); the header kept
+ * at the top and compacted as the page scrolls, and back to top
+ * (scroll.ts, ToTop.tsx); and where it says
  * that settings are unsaved (AP UnsavedMarks, Block 5, UiParts.D188): on
  * ☰ the worse of the log's mark and the unsaved sign, and on a menu item
  * the disk where a page it leads to holds a form unsaved or failed. The
@@ -28,6 +30,8 @@ import { Mark, Sign } from "../shared/icon";
 import { useLang } from "../shared/lang";
 import { register } from "../shared/region";
 import { drawCards, keysOf } from "./Cards";
+import { stickyHeader, toTop } from "./scroll";
+import { ToTop } from "./ToTop";
 
 /** The log's unseen problems as ☰ shows them: their count and the tone of the worst, "" for none (log.js renderLogSign). */
 const logSign = signal<{ count: number; tone: "" | "warn" | "bad" }>({ count: 0, tone: "" });
@@ -70,9 +74,15 @@ function ItemMark({ keys }: { keys: string[] }) {
   return <Sign kind="disk" state={tone} cls="menu-unsaved" label={t("problem.unsaved")} />;
 }
 
-// drawn once into the places the page has for them; the cards' folds wired
+// drawn once into the places the page has for them; the cards' folds
+// wired; the header kept at the top, and the compacted header's ↑, which
+// is the page's skeleton until the page buttons are parts
 wireCards();
 drawCards();
+stickyHeader();
+document.getElementById("top-btn")?.addEventListener("click", toTop);
+const toTopSlot = document.getElementById("to-top-slot");
+if (toTopSlot) render(<ToTop />, toTopSlot);
 const menu = document.getElementById("nav-menu");
 const items = menu ? [...menu.querySelectorAll(".menu-item-mark[data-forms]")] : [];
 for (const el of items) render(<ItemMark keys={keysOf(el)} />, el);

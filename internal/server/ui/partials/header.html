@@ -1,4 +1,4 @@
-<!-- The header: Massimo's word with the version while signed out, and the radio budget (header.js); the pile, the server's sign, the reads' times, the Cube choice and every Cube's problems and the TLS notice, parts (ui/src/header/), each in its place here; the Rooms button and ☰ with the version (pages.js); back to top (components.js). -->
+<!-- The header: Massimo's word with the version while signed out, and the radio budget (header.js); the pile, the server's sign, the reads' times, the Cube choice and every Cube's problems and the TLS notice, parts (ui/src/header/), each in its place here; the Rooms button and ☰ with the version (pages.js); back to top (ui/src/chrome/). -->
 <header class="top">
   <!-- one row on its lower edge (style.css .top-line): the logo at the
        left; the pile, the Cube choice and the pages ↑ ⌂ ☰ at the right.
@@ -21,7 +21,7 @@
     <div id="header-cube" class="cube"></div>
     <nav class="nav" aria-label="pages" data-i18n-attr="aria-label:nav.pages">
       <!-- back to top, first of the pages while the header is compacted
-           (components.js backToTop) -->
+           (ui/src/chrome/scroll.ts toTop) -->
       <button type="button" id="top-btn" class="icon-btn nav-btn top-btn" aria-label="back to top" title="Back to top" data-i18n-attr="aria-label:page.toTop title:page.toTopTitle"><svg class="ni" aria-hidden="true"><use href="#icon-up"/></svg></button>
       <button type="button" id="view-tiles" class="icon-btn nav-btn active" aria-current="page" aria-label="rooms" title="Rooms" data-i18n-attr="aria-label:nav.rooms title:nav.roomsTitle"><svg class="ni" aria-hidden="true"><use href="#icon-house"/></svg></button>
       <!-- ☰, every page but Rooms, at every width, each for the roles that

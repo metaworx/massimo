@@ -1040,12 +1040,9 @@ async function init() {
   if (I18N.en) applyI18n(document);
   renderLangSelect();
   initHelpSlots();
-  // the header kept at the top; System settings' row there with its
-  // sections menu (the cards fold by the parts, ui/src/shared/card.ts);
-  // back to top on every page
-  stickyHeader();
+  // System settings' row with its sections menu (the cards fold, the
+  // header compacts and back to top is drawn by the parts, ui/src/chrome/)
   for (const page of [$("system"), $("maint-page"), $("cube-page"), $("me")]) pageBar(page);
-  backToTop();
   initSettings();
   applySettings();
   checkVersion();

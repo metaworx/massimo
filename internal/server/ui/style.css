@@ -96,7 +96,7 @@ h3 { margin: 0 0 12px; }
 .tls-fp { word-break: break-all; }
 body:not(.expert) .expert-only { display: none !important; }
 
-/* header, kept at the top on every page (components.js stickyHeader):
+/* header, kept at the top on every page (ui/src/chrome/scroll.ts):
    once scrolled it drops the lines under its row, which keeps its pile
    and gains ↑ */
 .top {
@@ -401,7 +401,7 @@ button.copy-icon .ni { width: 16px; height: 16px; }
   line-height: 1.3;
   height: 36px;
 }
-/* Compacted (components.js stickyHeader): the TLS notice and the pending
+/* Compacted (ui/src/chrome/scroll.ts): the TLS notice and the pending
    line go; the row stays as it is, ↑ joining it. */
 body.scrolled .top { padding: 8px 0; }
 body.scrolled #tls-notice,
@@ -569,7 +569,7 @@ body.scrolled #pending { display: none !important; }
 }
 
 /* System settings: the page at full width, its parts section cards in a
-   grid (ui/src/shared/card.ts, components.js backToTop); a card is
+   grid (ui/src/shared/card.ts, ui/src/chrome/); a card is
    as wide as the grid, a .half card shares a row where there is room;
    Users, Roles and Capabilities flow in two columns there, none split,
    the break where their heights put it. */
@@ -727,7 +727,7 @@ body.scrolled .page-bar { border-bottom-color: var(--line); box-shadow: 0 8px 8p
 }
 .icon-btn.to-top:hover, .icon-btn.to-top:focus-visible { background: color-mix(in srgb, var(--accent) 85%, var(--fg)); }
 .top-btn { display: none; }
-/* ↑ first of the pages while the header is compacted (backToTop) */
+/* ↑ first of the pages while the header is compacted (ui/src/chrome/scroll.ts) */
 body.scrolled .nav .top-btn { display: inline-flex; }
 @media (prefers-reduced-motion: reduce) {
   .fold-i { transition: none; }

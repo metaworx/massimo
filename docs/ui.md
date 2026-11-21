@@ -1859,7 +1859,8 @@ and draw what a card holds in its head (`ui/src/shared/card.ts`, `ui/src/chrome/
 `pageSwitch` puts the settings pages in its title's place (`SETTINGS_PAGES` in `pages.js`,
 as ☰'s pages are `MENU_VIEWS`; `markSettingsPages` shows the title for one page alone),
 `fitPageTabs` gives the page shown's button the longest name's width,
-and `backToTop` wires the two ↑, the floating one and the compacted header's;
+and the two ↑, the floating one and the compacted header's, are the chrome's
+(`ui/src/chrome/ToTop.tsx`, `scroll.ts` `toTop`);
 `showToast` shows the page's one toast at its foot (a notification, the search's outcome),
 a Cube's link is its network sign (`cubeSignEl`, `LINK_SIGN`), which no plain region calls
 any more since Backup and restore is a part, and which waits for Block 15 (D181-A);
@@ -1867,7 +1868,8 @@ a device's serial and radio address are a `deviceIds`;
 a list of facts is a `kvList`, of counts a `countList`
 (`KvList` and `CountList` for a part);
 an action with what it does and its button is an `.action-row`;
-`stickyHeader` keeps the header at the top and compacts it once scrolled.
+the chrome keeps the header at the top and compacts it once scrolled
+(`ui/src/chrome/scroll.ts` `stickyHeader`, drawing nothing on a scroll's path).
 A state is a sign, a colour and a mark, so that it reads without its colour:
 nothing for a state that is fine, a triangle for a warning (amber),
 a cross for a failure (red).
@@ -2252,8 +2254,8 @@ and after each measure places an open list of the row in the window again (`plac
 The choice is a `Picker`, the problems a `Problems` with `lead`, `always` and `head`,
 Refresh now a `MenuItem` with `keepOpen` and its times as `sub`,
 the certificate's line a `Notice`.
-The logo, the version (in ☰, and in the sign-in card) and ↑ stay plain,
-around the parts' places and not in them,
+The logo and the version (in ☰, and in the sign-in card) stay plain,
+around the parts' places and not in them; ↑ is the page's chrome's (`ui/src/chrome/`),
 and the home notice's place is shown and hidden by the plain code (and by `pages.js`),
 the part drawing inside it.
 The rooms (`ui/src/rooms/`) are the third:
