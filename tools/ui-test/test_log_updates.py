@@ -8,7 +8,8 @@ on its button, a selection of text, the focus on Mark seen, the search
 typed and the choices, a choice's options; a line that came live keeps
 its element when a load brings the same event. At a sign-out, and for
 another user after an expired session, an answer still on its way of
-each of the log's reads reaches nothing of the next user. The log's reads of the
+each of the log's reads reaches nothing of the next user; at the
+stream's resync a Cube's log shown reads on from its newest line. The log's reads of the
 Cube are answered by the test (StubLog), and the server's stream lines
 kept out (isolate_log), so that the lines are the test's own."""
 import json
@@ -618,3 +619,138 @@ def test_the_who_choice_follows_another_user_without_a_sign_out(new_context, cas
     info.value.finished()
     assert wait_until(page, "!document.getElementById('log-user').classList.contains('hidden')", 5), "the who choice, for the owner"
     show_view(page, "tiles")
+
+# --- the stream's resync (step 3) ----------------------------------------
+
+RESYNC = "state.events.dispatchEvent(new MessageEvent('resync', { data: '{}' }))"
+MISSED = {"firmware": "missed-by-the-stream", "duty_cycle_pct": 1, "free_memory_slots": 1}
+
+
+def reads_on(stub, since):
+    """The log's reads after a mark: the pages on from a line (after=, not
+    Older's question of one line) and the pages loaded (neither)."""
+    asked = stub.asked[since:]
+    on = [u for u in asked if "after=" in u and "limit=1&" not in u]
+    loads = [u for u in asked if "after=" not in u and "before=" not in u]
+    return on, loads
+
+
+def test_a_cubes_log_reads_on_at_a_resync(page, case):
+    """A Cube's own log shown, older pages under it, the box scrolled down
+    and a command's detail open, and a line in the server's log that the
+    stream did not bring: at the stream's resync the log reads on from its
+    newest line, once, and loads nothing; the line the stream missed is on
+    top, every line before it still there, the line read first where it
+    stood and the detail open (UiParts D208). The plain page read nothing
+    there, the line missing until a reload (AP LogCursor's NOTE on how its
+    run went, "Found, not changed" 1)."""
+    page.evaluate(SMALL_BOX)
+    try:
+        stub = open_log(page, 400, "#log?range=all")
+        page.locator("#log-older").click()
+        assert wait_until(page, "!logState.loading && logState.lines.length === 400", 5), "an older page under the lines"
+        page.locator(row(CMD_LINE) + " .log-cmd").click()
+        page.locator(row(CMD_LINE) + " .log-cmd-detail .log-cmd-head").wait_for()
+        page.evaluate(SCROLL_DOWN, 90)
+        was = page.evaluate(READ_LINE)
+        stub.lines = stub.lines + [ev(30, summary=MISSED)]
+        since = len(stub.asked)
+        with page.expect_response(lambda r: "after=" in r.url) as info:
+            page.evaluate(RESYNC)
+        info.value.finished()
+        assert wait_until(page, "!!document.querySelector(%s)" % json.dumps(row(FIRST + 30)), 5), "the line the stream missed"
+        frames(page)
+        on, loads = reads_on(stub, since)
+        assert len(on) == 1 and not loads, f"read on once, nothing loaded: {on} {loads}"
+        assert page.evaluate("logState.lines.length") == 401, "every line before it still there"
+        now = page.evaluate(READ_LINE)
+        assert now["id"] == was["id"] and abs(now["at"] - was["at"]) <= 1, f"the line read first where it stood ({was} → {now})"
+        assert page.locator(row(CMD_LINE) + " .log-cmd").get_attribute("aria-expanded") == "true", "the detail open"
+    finally:
+        page.evaluate(NO_SMALL_BOX)
+    page.evaluate("location.hash = '#log'")
+    show_view(page, "tiles")
+
+
+def test_a_resync_waits_for_older(page, case):
+    """Older's page held while the stream's resync comes: the resync reads
+    nothing meanwhile; Older's page is there when it answers, and then the
+    log reads on once (UiParts D208). A load at the resync would have
+    dropped Older's page."""
+    stub = open_log(page, 200, "#log?range=all")
+    held = Held(page, "**/api/v1/cubes/*/log?*before=*")
+    held.ask("Older's page", lambda: page.locator("#log-older").click())
+    stub.lines = [ev(-400 + i) for i in range(5)] + stub.lines + [ev(30, summary=MISSED)]
+    since = len(stub.asked)
+    page.evaluate(RESYNC)
+    frames(page)
+    assert reads_on(stub, since) == ([], []), "nothing read while Older's page is on its way"
+    with page.expect_response(lambda r: "after=" in r.url and "limit=1&" not in r.url) as info:
+        held.let_go("new Promise((r) => { const t = () => (logState.loading ? setTimeout(t, 20) : r()); t(); })")
+    info.value.finished()
+    assert wait_until(page, "!!document.querySelector(%s)" % json.dumps(row(FIRST + 30)), 5), "the line the stream missed"
+    on, loads = reads_on(stub, since)
+    assert len(on) == 1 and not loads, f"then read on once: {on} {loads}"
+    assert page.evaluate("logState.lines.length") == 206, "Older's page kept"
+    page.evaluate("location.hash = '#log'")
+    show_view(page, "tiles")
+
+
+def test_a_resync_loads_the_log_where_the_servers_log_ends_before_it(page, case, watch):
+    """A resync whose read on meets a 409, a log that ends before the
+    newest line (a store restored, the server's log started again): the
+    log loads again, once, as under All Cubes."""
+    stub = open_log(page)
+    stub.gone = True
+    watch.expected.append((f"after={CMD_LINE}", 409))
+    since = len(stub.asked)
+    with page.expect_response(lambda r: "after=" not in r.url and "/log?" in r.url and "alerts" not in r.url) as info:
+        page.evaluate(RESYNC)
+    info.value.finished()
+    assert wait_until(page, "!logState.loading", 5), "the load ended"
+    frames(page)
+    on, loads = reads_on(stub, since)
+    assert len(on) == 1 and len(loads) == 1, f"read on, then one load: {on} {loads}"
+    show_view(page, "tiles")
+
+
+ORDERED = """() => logState.lines.every((l, i, a) => !i || a[i - 1].time <= l.time) && !logState.lines.some((l) => l.kind === 'error')"""
+
+
+@pytest.mark.parametrize("before", ["failed", "empty"])
+def test_a_resync_without_a_stored_line_loads_the_log(page, case, watch, before):
+    """A Cube's log that holds no line of the server's log, live lines in it
+    since: after a load that failed (the server not up yet: the error's
+    line), or one that found no line. At the stream's resync there is no
+    place to read on from: the log loads, once, the error's line goes, and
+    the lines are in their order. A read on from nothing put the
+    newest page above the live lines, out of order, the error's line
+    under it; with the last 20 its cut hid that, so every event is shown."""
+    stub = open_log(page, 20, "#log?range=all")
+    page_lines = stub.lines
+    if before == "failed":
+        stub.fail = True
+        watch.expected.append(("/log?limit=200", 503))  # the load that fails
+    else:
+        stub.lines = []
+    page.evaluate("loadLog()")
+    frames(page)
+    if before == "failed":
+        assert page.locator("#log-lines .log-line.kind-error").count() == 1, "the error's line"
+    page.evaluate(NEW_LINE)
+    page.evaluate(NEW_LINE)
+    frames(page)
+    stub.fail, stub.lines = False, page_lines
+    since = len(stub.asked)
+    with page.expect_response(lambda r: "/log?" in r.url and "alerts" not in r.url) as info:
+        page.evaluate(RESYNC)
+    info.value.finished()
+    assert wait_until(page, "!logState.loading", 5), "the load ended"
+    frames(page)
+    on, loads = reads_on(stub, since)
+    assert not on and len(loads) == 1, f"one load, no read on: {on} {loads}"
+    assert page.evaluate(ORDERED), "no error's line, the lines in their order: " + page.evaluate(
+        "JSON.stringify(logState.lines.map((l) => [l.kind, l.at]).slice(-4))")
+    page.evaluate("location.hash = '#log'")
+    show_view(page, "tiles")
+

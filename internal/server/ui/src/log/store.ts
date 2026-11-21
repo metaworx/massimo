@@ -354,6 +354,7 @@ export async function loadLog(): Promise<void> {
   logState.room = LOG_MAX_LINES;
   logState.stick = true;
   draw();
+  flowEnded();
 }
 
 /**
@@ -402,6 +403,7 @@ export async function loadOlder(): Promise<void> {
   afterDraw((b) => {
     b.scrollTop = top; // the older lines came in below
   });
+  flowEnded();
 }
 
 /** logSameLine reports whether two lines are one event: by its id, else (a line without one, as the error line) by its time, kind, device and Cube. */
@@ -494,6 +496,7 @@ async function readOn(all: boolean): Promise<void> {
   }
   keyLines(got, [], logState.lines);
   addLogLines(got);
+  flowEnded();
 }
 
 /**
@@ -744,4 +747,39 @@ export function forgetLog(): void {
   markFocus.value = null;
   view.value = [];
   choiceCount.bump();
+}
+
+/** A resync noted while the page's own load, Older or read on was under way: its generation and session. */
+let resyncFor: { gen: number; n: number } | null = null;
+
+/**
+ * serverEvent follows the stream's events beside its lines: at a resync,
+ * a Cube's own log shown reads on from its newest line (readOn), or loads
+ * where it holds no stored line (resynced), for the
+ * lines the stream missed (UiParts D208), the place and what is open kept;
+ * not while the page's own load, Older or read on is under way, but once
+ * after it (flowEnded).
+ */
+export function serverEvent(ev: { kind: string }): void {
+  if (ev.kind !== "resync" || !logState.open || logState.cubes === "all") return;
+  if (logState.loading || logState.polling) {
+    resyncFor = { gen: logState.gen, n: session() };
+    return;
+  }
+  resynced();
+}
+
+/** resynced reads on from the newest stored line; where the log holds none (a load that failed, a log that loaded empty), there is no place to read on from: it loads the log. */
+function resynced(): void {
+  if (logNewestID()) readOn(false);
+  else loadLog();
+}
+
+/** flowEnded reads on once for a resync that came while the page's own flow ran, in the same generation and session, the Cube's log still shown. */
+function flowEnded(): void {
+  const r = resyncFor;
+  if (!r) return;
+  resyncFor = null;
+  if (r.gen !== logState.gen || !stillSession(r.n) || !logState.open || logState.cubes === "all" || logState.loading || logState.polling) return;
+  resynced();
 }

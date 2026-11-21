@@ -30,6 +30,8 @@ import {
   logPollSet, pollLog, pruneLogRange, renderLog,
 } from "./store";
 
+export { serverEvent } from "./store";
+
 /** signedOut forgets the log of the user who was signed in, but its choices, which are its address (MassimoParts.signedOut, index.ts; UiParts D209). */
 export function signedOut(): void {
   forgetLog();

@@ -833,6 +833,15 @@ the who choice is also asked again where another user comes in without a sign-ou
 by a key pasted or as the first owner made on an open server;
 an answer still on its way lands nowhere,
 and the same user signed in again finds the log as it was.
+A Cube's log shown reads on from its newest line when the stream starts over
+(a `resync`: after the server's restart, or a gap the server no longer holds),
+as every Cube's poll does, so that the lines the stream missed come in on top
+without a reload, the lines, the place and what is open kept;
+where it holds no line of the server's log, as after a load that failed
+while the server was down, or one that found none, it loads again;
+a resync that comes while a page or Older of the user's is on its way
+waits for it to end, and where the server's log ends before the newest line,
+or past ten pages, the log loads again.
 
 A warning or an error of any Cube's log, or of the server's,
 stays a problem until a later line settles it
@@ -2458,7 +2467,10 @@ put back where it stood as lines come in on top, the scroll kept at a full draw;
 so that a new line draws its block alone, not every line,
 and a line keeps its block, and so its element, through any filter or load;
 `index.tsx`' `signedOut`, which `MassimoParts.signedOut` calls, forgets the log
-of whoever was in but its choices (UiParts D209);
+of whoever was in but its choices (UiParts D209),
+and its `serverEvent`, which `MassimoParts.serverEvent` calls,
+has a Cube's log shown read on from its newest line at the stream's `resync`,
+once the page's own load or Older has ended (UiParts D208);
 `Log.tsx` and `Line.tsx` the parts, with the markup, classes and ids of the partial
 and the template they replace, a line's alert and its command's detail read by the line
 itself. A line keeps its key while it is the same event:

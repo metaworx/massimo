@@ -25,7 +25,7 @@ import "./header";
 import type { HeaderPart } from "./header";
 import "./leaving";
 import type { LeavingPart } from "./leaving";
-import { signedOut as logSignedOut } from "./log";
+import { serverEvent as logEvent, signedOut as logSignedOut } from "./log";
 import type { LogPart } from "./log";
 import { signedOut as notifySignedOut } from "./notify";
 import type { NotifyPart } from "./notify";
@@ -81,7 +81,8 @@ export interface MassimoParts {
   /**
    * A server's event of the stream (update.js serverEvent, from app.js
    * connectEvents): Software update, Maintenance and System info read
-   * again what it says has changed while their page is shown.
+   * again what it says has changed while their page is shown, and a
+   * Cube's log shown loads again at a resync (log/).
    */
   serverEvent(ev: ServerEvent): void;
   /** The pages of the main area: which is shown, its address, who may open it (shared/pages.ts; pages.js calls it). */
@@ -126,6 +127,7 @@ register("icons", iconsChanged);
 register("me", meChanged);
 register("pages", pagesPart);
 register("serverEvent", (ev: ServerEvent) => {
+  logEvent(ev);
   softwareEvent(ev);
   maintenanceEvent(ev);
   sysinfoEvent(ev);
