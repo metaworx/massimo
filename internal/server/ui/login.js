@@ -252,20 +252,26 @@ async function settleSignIn(was, held) {
 
 // forgetSession forgets on the page all that was of whoever was signed
 // in, for a sign-out (logout) and for another user's sign-in after a 401
-// (settleSignIn) alike: the settings that followed the user, where they
-// did (forgetUserSettings, app.js), the forms' drafts, the lines saying a
-// write was not sent (forgetNotSent, app.js), the House's panel, the
-// stream and the Cubes' data; the page shows the tiles. Who is in is
+// (settleSignIn) alike: who is in, for the plain code and the parts in
+// one turn, with the parts' forms, drafts and answers still on their way
+// (MassimoParts.signedOut), the settings that followed the user, where
+// they did (forgetUserSettings, app.js), the lines saying a write was not
+// sent (forgetNotSent, app.js), the House's panel, the stream and the
+// Cubes' data; the page shows the tiles. All of it before the signed-out
+// language's table is awaited, which comes last (UiParts D211), so that
+// nothing of the user who left is drawn, sent or read meanwhile, nor shown
+// (applyLanguage, after it, needs no page of the user's). Who is in is
 // read again after it.
 async function forgetSession(synced) {
   state.me = null;
-  if (synced) await forgetUserSettings();
-  MassimoParts.signedOut();
+  MassimoParts.signedOut(); // the parts' who is in null in the same turn as state.me
+  const language = synced ? forgetUserSettings() : null; // applied at once, its language's table awaited below
   forgetNotSent();
   MassimoParts.rooms.closeHouse();
   closeEvents();
-  clearCubeData(); // app.js: nothing of this session behind the sign-in
+  clearCubeData(); // app.js: nothing of this session behind the sign-in; the poll forgetUserSettings started stops
   showView("tiles", "replace");
+  await language;
 }
 
 // --- the login by fingerprint in the app (docs/app.md, "The login by fingerprint")

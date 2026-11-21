@@ -2631,6 +2631,13 @@ and the button stays the same element while the system's prompt is open;
 a login not kept shows its box, the focus on Try again, and the sign-in waits for the choice.
 The providers' list comes from `renderLoginProviders`, the self-signed certificate's line from `renderTLS` of `header.js`;
 a change of language draws the card's texts again and reads the providers no more.
+A sign-out, and another user's sign-in after a 401 (`forgetSession` of `login.js`),
+clears who is in for the plain code and for the parts in one turn
+(`state.me`, then `MassimoParts.signedOut`, which raises the session's number first),
+then forgets the settings that followed the user, the lines saying a write was not sent,
+the House's panel, the stream and the Cubes' data, shows the tiles, and only then awaits the
+signed-out language's table (UiParts D211): nothing of the user who left is drawn, shown,
+read or answered while it loads.
 Who is in (`shared/me.ts`) draws the rest:
 the first owner's form into `#setup-slot`, shown while who is in says `setup`,
 its form drawn only then, so that what is typed in it goes with it,

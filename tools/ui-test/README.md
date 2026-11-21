@@ -376,6 +376,8 @@ hence `failed_checks_forgotten`.
   showing, path for path, and nothing more at a change of page;
   Personal settings shown while a sign-out waits for the signed-out
   language's table reads nothing of My profile, and the page ends signed out;
+  in that wait the rooms are gone, the stream closed, the poll stopped, the
+  personal row says nobody and the tiles are shown (D211);
   the personal page's sections menu, an item in focus, stays the element it
   was through who is in read again and the language applied again; after
   changes of page in both orders of the rows, the cards' scroll margin is
