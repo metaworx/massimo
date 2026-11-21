@@ -652,6 +652,11 @@ with the Cubes found, the room tiles and the House tile with theirs (Block 7).
 The devices without a room left it with the rooms too: their view answers
 `GET …/devices` with the server's answer and one device without a room
 (`UNLISTED_STUB`), and opens its form that puts it into a room.
+The sign-in left it last (Block 14): its views open its card on a page signed in,
+as a 401 opens it, and its sources are a second `askLogin`, the providers read again,
+the language drawn again and who is in read again;
+the first owner's form, a region of its own, shows by a stub of `GET /api/v1/me`.
+The list has been empty since, and Block 15 removes it.
 A tile's configuration left it with its own move (Block 8), in a view per tab;
 before, a data event filled it again, but while the focus was in it,
 and once the focus left, the fill put off came: every element was new,

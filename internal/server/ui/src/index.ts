@@ -33,7 +33,8 @@ import { signedOut as profileSignedOut } from "./profile";
 import "./rooms";
 import type { RoomsPart } from "./rooms";
 import { signedOut as integrationsSignedOut } from "./integrations";
-import "./signin";
+import { signedOut as signinSignedOut } from "./signin";
+import type { SignInPart } from "./signin";
 import { serverEvent as softwareEvent, signedOut as softwareSignedOut } from "./software";
 import { serverEvent as maintenanceEvent, signedOut as maintenanceSignedOut } from "./maintenance";
 import { serverEvent as sysinfoEvent, signedOut as sysinfoSignedOut } from "./sysinfo";
@@ -73,7 +74,8 @@ export interface MassimoParts {
    * link shown and its messages (profile/), the passwords typed there
    * going with its part, and the scheme editor with its draft (prefs/),
    * and the notifications' rules, devices, the name typed and a save
-   * still waiting (notify/).
+   * still waiting (notify/), and the sign-in card's choice still waited
+   * for and its lines (signin/).
    */
   signedOut(): void;
   /**
@@ -108,6 +110,8 @@ export interface MassimoParts {
   software: SoftwarePart;
   /** System settings → Users: the password sign-in and a panel per user (admin/). */
   users: UsersPart;
+  /** The sign-in's card, what askLogin of login.js hands it and the app's status for it (signin/). */
+  signIn: SignInPart;
 }
 
 declare global {
@@ -141,5 +145,6 @@ register("signedOut", () => {
   profileSignedOut();
   prefsSignedOut();
   notifySignedOut();
+  signinSignedOut();
 });
 window.MassimoParts = parts as unknown as MassimoParts;

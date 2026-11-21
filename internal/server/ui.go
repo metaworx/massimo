@@ -60,7 +60,6 @@ var uiPartials = []struct {
 	{"house", []string{"house-tile.html"}},
 	{"unlisted", []string{"unlisted.html"}},
 	{"logview", []string{"log-view.html"}},
-	{"login", []string{"login.html"}},
 	{"toast", []string{"toast.html"}},
 	{"templates", []string{"log.html"}},
 }

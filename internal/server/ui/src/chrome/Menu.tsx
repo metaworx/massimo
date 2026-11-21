@@ -21,8 +21,6 @@
  */
 
 import { toServers } from "../shared/app";
-import { Brand } from "../shared/brand";
-import { Copy } from "../shared/copy";
 import { unsavedTone } from "../shared/forms";
 import { Icon, IconButton, Mark, Sign } from "../shared/icon";
 import { useLang } from "../shared/lang";
@@ -31,7 +29,8 @@ import { Dropdown, MenuItem } from "../shared/menu";
 import { page, showView } from "../shared/pages";
 import { MENU_PAGES } from "./pages";
 import { toTop } from "./scroll";
-import { logSign, version } from "./store";
+import { VersionRow } from "../shared/server";
+import { logSign } from "./store";
 
 /** worse is the worse of two tones: bad over warn over none. */
 function worse(a: "" | "warn" | "bad", b: "" | "warn" | "bad"): "" | "warn" | "bad" {
@@ -50,7 +49,6 @@ function ItemMark({ keys }: { keys: string[] }) {
 function Menu({ view }: { view: string }) {
   useLang();
   const log = logSign.value;
-  const v = version.value;
   const who = whoOf(me.value);
   const keys = MENU_PAGES.flatMap((p) => p.forms);
   const forms = unsavedTone(keys);
@@ -58,7 +56,6 @@ function Menu({ view }: { view: string }) {
   const extra = [log.count ? t("nav.logAlerts", { count: log.count }) : "", forms ? t("problem.unsaved") : ""].filter(Boolean);
   const label = [t("nav.more"), ...extra].join(", ");
   const title = [t("nav.moreTitle"), ...extra].join(" · ");
-  const short = v ? splitVersion(v).short : "";
   const servers = !!appConnect();
   const entry = (p: (typeof MENU_PAGES)[number]) => (
     <MenuItem key={p.view} id={p.id} cls={p.needs || undefined} current={view === p.view ? "page" : undefined}
@@ -75,11 +72,7 @@ function Menu({ view }: { view: string }) {
           <span class="menu-mark">{tone && <Mark state={tone} blink="log-sign-menu" />}</span>
         </>
       }>
-      <p class="menu-version">
-        <span class="menu-brand" aria-hidden="true"><Brand /></span>
-        {v ? <Copy id="version-short" cls="mono small" text={short} value={v} name={t("header.versionTitle", { version: v }) + " · " + t("copy.hint")} />
-          : <span id="version-short" class="mono small" />}
-      </p>
+      <VersionRow id="version-short" copy />
       <hr class="menu-sep" />
       {entry(MENU_PAGES[0])}
       <hr class="menu-sep" />

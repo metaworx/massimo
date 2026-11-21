@@ -383,7 +383,13 @@ hence `failed_checks_forgotten`.
   head to rest below the row.
 - `test_sign_in_updates.py`, the sign-in as parts (AP UiParts, Block 14):
   in the app, Create the owner turns until the app has answered whether it
-  kept the login, and a second submit meanwhile creates nothing.
+  kept the login, and a second submit meanwhile creates nothing; a name and
+  a password typed, the focus, a refusal and the way chosen stay, the same
+  elements, through a second 401, the providers read again, a change of
+  language and who is in read again; the fields are emptied at an opening
+  alone, never at the closing; the fingerprint's button keeps the user's
+  name at a change of language, and stays the same element, turning, while
+  the system's prompt is open and the status and the language change.
 - `test_stream.py`:
   the event stream opens with tickets only, never with the token,
   and after a refused stream (the test hands out a used ticket first,

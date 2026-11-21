@@ -47,6 +47,14 @@ declare global {
   } | null;
   /** In the app, the way back to its servers (Select server); null in a browser. */
   function appConnect(): (() => Promise<unknown>) | null;
+  /** A sign-in askLogin opened, which the sign-in's card hands back to finishSignIn: who was in, the pushes held, its end. */
+  interface SignInAsk {
+    readonly was: string;
+  }
+  /** Goes on after a sign-in of the card: settleSignIn, the card closed and askLogin answered, the page started where no start waits for it. */
+  function finishSignIn(ask: SignInAsk): Promise<void>;
+  /** Starts a sign-in through a provider and opens its page; its refusal is thrown. */
+  function startProvider(key: string): Promise<void>;
   /** Keeps the page's token, or forgets it with null: in the browser's storage, or in the app's. */
   function setToken(token: string | null): void;
   /** Signs in by OPAQUE, without a token and without the dialog: the session, its token among it; the answer's error is thrown. */

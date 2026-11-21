@@ -8,9 +8,9 @@ watched on a page without a token, whose first requests are refused on
 purpose (test_login.py)."""
 import json
 
-from conftest import TOKEN
-from helpers import wait_until
-from test_connect import calls, server_page
+from conftest import TOKEN, URL
+from helpers import frames, sign_out, wait_until
+from test_connect import server_page
 
 OPEN_SETUP = json.dumps({"mode": "open", "user": None, "role": None, "capabilities": [], "setup": True})
 
@@ -70,3 +70,117 @@ def test_create_the_owner_stays_busy_while_the_app_keeps(new_context, case, watc
     finally:
         page.unroute("**/api/v1/me")
         page.unroute("**/api/v1/users")
+
+
+MARK = "(ids) => { for (const id of ids) document.getElementById(id).__held = true; }"
+SAME = "(ids) => ids.filter((id) => !document.getElementById(id) || !document.getElementById(id).__held)"
+HELD = ["login-user", "login-password", "login-form", "login-way-fp", "login-menu"]
+
+
+def open_card(new_context, guard, watch):
+    """A page without a token, its sign-in's card open."""
+    ctx = new_context()
+    page = ctx.new_page()
+    guard.page = page
+    page.set_default_timeout(5000)
+    page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+    page.goto(URL)
+    assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the sign-in's card"
+    return page
+
+
+def test_the_card_keeps_what_is_typed(new_context, case, watch, guard):
+    """A name and a password typed, the focus in the password and a
+    refusal shown stay, the same elements, through everything that may
+    draw the card again while it is open: a second 401's askLogin, which
+    hands out the same opening, the providers read again (one arriving),
+    a change of language and who is in read again (a 401 too). A
+    forward guard: the plain card passed it, drawn again by nothing but an
+    opening."""
+    page = open_card(new_context, guard, watch)
+    page.locator("#login-user").fill("operator")
+    page.locator("#login-password").fill("wrong")
+    page.locator("#login-form button[type=submit]").click()
+    assert wait_until(page, "!document.getElementById('login-error').classList.contains('hidden')", 5), "a wrong password is refused"
+    said = page.locator("#login-error").inner_text()
+    page.locator("#login-password").fill("op-pass")
+    page.locator("#login-password").focus()
+    page.evaluate(MARK, HELD)
+    provider = json.dumps([{"key": "test-idp", "name": "Test IdP"}])
+    page.route("**/api/v1/login/providers", lambda route: route.fulfill(status=200, content_type="application/json", body=provider))
+    try:
+        other = "de" if case.lang == "en" else "en"
+        with page.expect_response(lambda r: r.url.endswith("/api/v1/me")):
+            page.evaluate("async (other) => { askLogin(); await renderLoginProviders(); await changeLanguage(other); applyLanguage(); loadMe(); }", other)
+        page.locator("#login-providers button[data-provider='test-idp']").wait_for(state="visible")
+        assert wait_until(page, f"i18n.lang === {other!r} && document.getElementById('login-title').textContent === t('login.title')", 5), \
+            "the card drawn again in the other language"
+        frames(page)  # who is in's 401 taken and drawn
+    finally:
+        page.unroute("**/api/v1/login/providers")
+    assert page.evaluate(SAME, HELD) == [], "the card's elements are the same"
+    assert page.locator("#login-user").input_value() == "operator" and page.locator("#login-password").input_value() == "op-pass", \
+        "what is typed stays"
+    assert page.evaluate("document.activeElement.id") == "login-password", "the focus stays in the password"
+    assert page.locator("#login-error").inner_text() == said, "the refusal stays said"
+    assert page.locator("#login-ways .login-way[data-way='password']").get_attribute("aria-pressed") == "true", "the way stays chosen"
+    page.locator("#login-form button[type=submit]").click()
+    page.wait_for_selector(".room", timeout=10000)
+
+
+def test_the_fields_are_emptied_at_an_opening_alone(new_context, case, watch, guard):
+    """What was signed in with stays in the card's fields once it is
+    closed, for a password manager that saves it then, and is gone at the
+    next opening (UiParts D210, the app's word). A forward guard: the
+    plain card emptied them at the opening alone too."""
+    page = open_card(new_context, guard, watch)
+    page.locator("#login-user").fill("operator")
+    page.locator("#login-password").fill("op-pass")
+    page.locator("#login-form button[type=submit]").click()
+    page.wait_for_selector(".room", timeout=10000)
+    assert page.evaluate("!document.getElementById('login-dialog').open"), "signed in"
+    assert page.locator("#login-password").input_value() == "op-pass", "not emptied at the closing"
+    sign_out(page)
+    assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the card again"
+    assert wait_until(page, "document.getElementById('login-user').value === '' && document.getElementById('login-password').value === ''", 3), \
+        "emptied at the opening"
+    assert page.evaluate("document.activeElement.id") == "login-user", "the focus in the name"
+
+
+def test_the_fingerprint_keeps_its_name_and_its_turn(new_context, case, watch, guard):
+    """In the app with a login kept: the fingerprint's button keeps the
+    user's name at a change of language, where the plain card's markup
+    named it "Login by fingerprint" again; and while the system's prompt
+    is open, the button stays the same element and turns through the
+    app's status answering and the language changing, and the name typed
+    and the way chosen stay. The prompt is held until the test lets it go,
+    and answers dismissed."""
+    page = server_page(new_context, guard, watch, {"status": {"can": True, "user": "operator", "ask": "start", "plain": False}, "fingerprint": None})
+    fp = page.locator("#login-way-fp")
+    fp.wait_for(state="visible")
+    assert "operator" in fp.get_attribute("aria-label"), "named with the user's name"
+    other = "de" if case.lang == "en" else "en"
+    page.locator("#login-menu summary").click()
+    page.locator("#login-lang").select_option(other)
+    assert wait_until(page, f"i18n.lang === {other!r}", 5), "the language chosen"
+    page.keyboard.press("Escape")
+    assert "operator" in fp.get_attribute("aria-label") and "operator" in fp.get_attribute("title"), \
+        f"still named with the user's name: {fp.get_attribute('aria-label')!r}"
+    page.locator("#login-user").fill("operator")
+    page.evaluate(MARK, HELD)
+    page.evaluate("""() => { const login = window.massimo.login; const answer = login.fingerprint;
+      login.fingerprint = () => new Promise((resolve) => { window.__letFingerprintGo = () => resolve(answer.call(login)); }); }""")
+    fp.click()
+    assert wait_until(page, "document.getElementById('login-way-fp').classList.contains('busy')", 3), "the button turns"
+    page.evaluate("() => MassimoParts.signIn.readApp()")
+    page.locator("#login-menu summary").click()
+    page.locator("#login-lang").select_option("auto")
+    assert wait_until(page, f"i18n.lang === {case.lang!r}", 5), "the language back"
+    assert page.evaluate(SAME, HELD) == [], "the card's elements are the same"
+    assert fp.evaluate("(b) => b.classList.contains('busy') && b.disabled"), "still turning while the prompt is open"
+    assert page.locator("#login-user").input_value() == "operator", "the name typed stays"
+    assert page.locator("#login-ways .login-way[data-way='password']").get_attribute("aria-pressed") == "true", "the way stays chosen"
+    page.evaluate("() => { window.__letFingerprintGo(); }")
+    assert wait_until(page, "!document.getElementById('login-way-fp').classList.contains('busy')", 3), "dismissed: it stops turning"
+    assert page.evaluate("document.getElementById('login-dialog').open"), "and the card stays"
+

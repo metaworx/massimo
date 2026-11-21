@@ -8,7 +8,8 @@
  * reads, so that a change of language draws it again; applyLanguage
  * (app.js) raises it through MassimoParts.language. A part calls t() for
  * its texts and carries no data-i18n, which applyI18n would write over.
- * Beside it, a text with parts in it, and parts joined into a line.
+ * Beside it, the choices of the language, a text with parts in it, and
+ * parts joined into a line.
  */
 
 import { signal } from "@preact/signals";
@@ -34,6 +35,17 @@ export function languageChanged(): void {
  */
 export function useLang(): string {
   return lang.value;
+}
+
+/**
+ * languageOptions are the choices of the language, as My settings and the
+ * sign-in card's ☰ offer them: from the browser, then every language with
+ * a translation table, by its own name.
+ */
+export function languageOptions(): [string, string][] {
+  const options: [string, string][] = [["auto", t("lang.auto") + " (" + LANGUAGE_NAMES[browserLanguage()] + ")"]];
+  for (const l of languages()) options.push([l, LANGUAGE_NAMES[l] || l]);
+  return options;
 }
 
 /**

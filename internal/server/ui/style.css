@@ -506,7 +506,7 @@ body.scrolled #pending { display: none !important; }
   margin: 0 0 12px;
   width: 100%;
 }
-/* The warning under the header while the server is open (login.js). */
+/* The warning under the header while the server is open (ui/src/signin/Banner.tsx). */
 .open-banner {
   background: var(--notice-bg);
   color: var(--notice-fg);
@@ -1844,7 +1844,7 @@ massimo-week-program { display: contents; }
 .login-provider-buttons { display: flex; flex-direction: column; gap: 8px; }
 .login-providers button { width: 100%; }
 .login-providers p { margin: 0; }
-/* the ways to sign in (login.js chooseWay), as System settings' page row
+/* the ways to sign in (ui/src/signin/Card.tsx), as System settings' page row
    looks (.page-link), but never folded to icons: in the app the
    fingerprint first, then Password and API key, the one chosen filled,
    and the card's ☰ at the row's end; one line at a phone's width, each

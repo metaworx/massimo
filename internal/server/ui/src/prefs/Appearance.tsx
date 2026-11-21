@@ -18,6 +18,7 @@ import { ResultLine } from "../shared/badge";
 import { Select } from "../shared/field";
 import { FileButton } from "../shared/file";
 import { Icon, Sign } from "../shared/icon";
+import { ModeSelect } from "../shared/mode";
 import { useIcons } from "../shared/look";
 import { Editor } from "./Editor";
 import { DevRow } from "./rows";
@@ -67,8 +68,7 @@ export function Appearance() {
         <span class="dev-cell needs-sync" />
       </div>
       <DevRow setting="theme">
-        <Select label={t("appearance.mode")} id="theme-select" help="theme" value={s.theme} onChange={chooseMode}
-          options={[["system", t("appearance.modeSystem")], ["light", t("appearance.modeLight")], ["dark", t("appearance.modeDark")]]} />
+        <ModeSelect id="theme-select" label={t("appearance.mode")} help="theme" />
       </DevRow>
       <DevRow setting="scheme">
         <Select label={t("appearance.scheme")} id="scheme-select" wide help="scheme" value={s.scheme} options={schemeOptions()} onChange={(v) => {

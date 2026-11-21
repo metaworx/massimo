@@ -667,6 +667,27 @@ def first_owner(page):
     settle(page)
 
 
+def sign_in_card(page):
+    """The sign-in's card on the signed-in page, opened as a 401 opens it
+    (askLogin), the password's way chosen."""
+    page.evaluate("askLogin(); null")
+    page.locator("#login-dialog[open] #login-user").wait_for(state="visible")
+    settle(page)
+
+
+def sign_in_key(page):
+    """The card's API key's way chosen."""
+    page.locator("#login-ways .login-way[data-way='key']").click()
+    page.locator("#login-token").wait_for(state="visible")
+
+
+def sign_in_menu(page):
+    """The card's ☰ open, back on the password's way."""
+    page.locator("#login-ways .login-way[data-way='password']").click()
+    page.locator("#login-menu > summary").click()
+    page.locator("#login-lang").wait_for(state="visible")
+
+
 def users_fold(folded):
     """System settings, the Users card folded (or opened again) by its
     button, the focus on it; the fold kept in the browser is taken back by
@@ -842,8 +863,17 @@ REGIONS = (
     # passed on the page before the move as well, where nothing drew the
     # plain form again.
     Region("first-owner", ("#setup",), (View("the first owner's form, the focus in Again", first_owner, "#setup-again"),), sources=("loadMe()",)),
-    Region("sign-in", ("#login-dialog",),
-           gap="shown only to a page without a token, which loads no data while it is open: the poll and the stream start after the sign-in"),
+    # The sign-in's card is a part (AP UiParts, Block 14), shown here as a
+    # 401 opens it on a page signed in: its sources are a second askLogin
+    # (another request's 401, which hands out the same opening), the
+    # providers' list read again, the page's language drawn again and who
+    # is in read again. The plain card passed these views as well: nothing
+    # drew it again but at an opening.
+    Region("sign-in", ("#login-dialog",), (
+        View("the sign-in's card, a name and a password typed", sign_in_card),
+        View("its API key's way chosen, a key typed", sign_in_key, "#login-token"),
+        View("its ☰ open", sign_in_menu, "#login-lang"),
+    ), sources=("askLogin()", "renderLoginProviders()", "applyLanguage()", "loadMe()")),
 )
 
 # The regions not yet moved to parts that the guard fails today, each
@@ -853,12 +883,11 @@ REGIONS = (
 # (2026-11-15), although none has moved: they are filled in place, or
 # drawn again only by the user's own action (Create key, a backup, a
 # command's detail), which the guard does not apply. The block that
-# moves one of them keeps it passing. The sign-in, which the fixture
-# cannot show, stays here until it can; the devices without a room,
-# which it cannot show either, are given one by their view's stub.
-NOT_MOVED = {
-    "sign-in": "the dialog is filled again at each askLogin",
-}
+# moves one of them keeps it passing. The sign-in left it last (Block
+# 14), shown on a page signed in as a 401 shows it: the list is empty,
+# and Block 15 removes it; the devices without a room, which the fixture
+# cannot show, are given one by their view's stub.
+NOT_MOVED = {}
 
 
 def checked_regions():
@@ -1037,6 +1066,9 @@ GUARD_JS = r"""() => {
       case "pollLog()": return pollLog();
       case "applyStoredSettings()": return applyStoredSettings();
       case "loadMe()": return loadMe();
+      case "askLogin()": askLogin(); return settled(); // the opening it hands out is the one open
+      case "renderLoginProviders()": return renderLoginProviders();
+      case "applyLanguage()": applyLanguage(); return settled();
     }
     throw new Error("the guard knows no data source " + source);
   }
