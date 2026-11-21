@@ -1,0 +1,344 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 The Massimo Authors
+"""The log as a part (AP UiParts, Block 11): its lines follow the server
+in place. A new line, every line drawn again (the rooms came, the
+language changed), the log loaded again and its unseen problems read
+again keep what a user holds in it: a command's detail open and the focus
+on its button, a selection of text, the focus on Mark seen, the search
+typed and the choices, a choice's options; a line that came live keeps
+its element when a load brings the same event. The log's reads of the
+Cube are answered by the test (StubLog), and the server's stream lines
+kept out (isolate_log), so that the lines are the test's own."""
+import json
+
+from helpers import LOG_ALERT_A as ALERT_A
+from helpers import LOG_ALERT_B as ALERT_B
+from helpers import LOG_CMD as CMD
+from helpers import LOG_CMD_DETAIL as DETAIL
+from helpers import LOG_CMD_LINE as CMD_LINE
+from helpers import LOG_FIRST as FIRST
+from helpers import LOG_TEXT_LINE as TEXT_LINE
+from helpers import StubLog, frames, isolate_log, mark, replaced, show_view, wait_until
+from helpers import log_event as ev
+from helpers import log_lines as lines
+from helpers import stub_log_command as stub_command
+from test_log_alerts import alerts_route
+
+def open_log(page, n=20, hash_="#log"):
+    """The log shown with the test's lines alone; the stub."""
+    show_view(page, "log")
+    isolate_log(page)
+    if hash_ != "#log":
+        page.evaluate("(h) => { location.hash = h; }", hash_)
+        assert wait_until(page, "location.hash === %s && !logState.loading" % json.dumps(hash_), 5), "the log's address"
+    stub = StubLog(page, lines(n))
+    stub_command(page)
+    page.evaluate("loadLog()")
+    frames(page)
+    assert wait_until(page, "!!document.querySelector(\"#log-lines .log-line[data-id='%d']\")" % CMD_LINE, 5), "the test's lines"
+    return stub
+
+
+NEW_LINE = """() => appendLogEvent({ kind: 'hello', source: 'cube', level: 'info', time: new Date().toISOString(),
+  summary: { firmware: 'new-line', duty_cycle_pct: 1, free_memory_slots: 1 } })"""
+
+# What comes in while a user holds something in the log: a new line, every
+# line drawn again (renderLog, as after the rooms or a language), the rooms
+# read again, the log loaded again, its unseen problems read again.
+ACTS = (("a new line on top", NEW_LINE), ("every line drawn again", "renderLog()"), ("the rooms read again", "loadRooms()"),
+        ("the log loaded again", "loadLog()"), ("its problems read again", "loadLogAlerts()"))
+
+
+def row(n):
+    return "#log-lines .log-line[data-id='%d']" % n
+
+
+def focused(page, sel):
+    return page.evaluate("(s) => document.activeElement === document.querySelector(s)", sel)
+
+
+def test_a_commands_detail_and_its_focus_stay(page, case):
+    """A command's detail opened by its button, the focus on the button:
+    through a new line, every line drawn again, the rooms, the log loaded
+    again and its problems read again, the line, its button and its detail
+    are the elements they were, the detail open and the focus on the
+    button. The plain page built every line again for each of them but a
+    new line, and for its own toggle (the first analysis's case)."""
+    open_log(page)
+    btn = page.locator(row(CMD_LINE) + " .log-cmd")
+    btn.click()
+    page.locator(row(CMD_LINE) + " .log-cmd-detail .log-cmd-head").wait_for()
+    assert focused(page, row(CMD_LINE) + " .log-cmd"), "the button keeps the focus as it opens the detail"
+    sels = [row(CMD_LINE), row(CMD_LINE) + " .log-cmd", row(CMD_LINE) + " .log-cmd-detail"]
+    mark(page, sels)
+    for what, call in ACTS:
+        page.evaluate(call)
+        frames(page)
+        assert replaced(page, sels) == [], f"{what}: the same line, button and detail ({replaced(page, sels)})"
+        assert btn.get_attribute("aria-expanded") == "true", f"{what}: the detail open"
+        assert focused(page, row(CMD_LINE) + " .log-cmd"), f"{what}: the focus on its button"
+    btn.click()
+    assert wait_until(page, "!document.querySelector(%s)" % json.dumps(row(CMD_LINE) + " .log-cmd-detail"), 5), "closed again"
+    show_view(page, "tiles")
+
+
+SELECTED = """(s) => { const el = document.querySelector(s); const r = document.createRange(); r.selectNodeContents(el);
+  const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); return sel.toString(); }"""
+STILL_SELECTED = """(s) => { const sel = getSelection(); const el = document.querySelector(s);
+  return sel.rangeCount === 1 && !!el && el.contains(sel.anchorNode) && sel.toString(); }"""
+
+
+def test_a_selection_of_text_stays(page, case):
+    """A line's text selected, as a user selects it to copy it: through
+    the same as above, the selection stays on that text. The plain page
+    built the lines again, and the selection went with them."""
+    open_log(page)
+    sel = row(TEXT_LINE) + " .log-text"
+    want = page.evaluate(SELECTED, sel)
+    assert "selected-firmware" in want, f"the line's text selected: {want!r}"
+    for what, call in ACTS:
+        page.evaluate(call)
+        frames(page)
+        assert page.evaluate(STILL_SELECTED, sel) == want, f"{what}: the selection stays"
+    page.evaluate("getSelection().removeAllRanges()")
+    show_view(page, "tiles")
+
+
+def test_mark_seen_keeps_the_focus_while_another_line_changes(page, case):
+    """Two lines are problems; the focus on the first's Mark seen. The
+    second's turns from a warning to an error: only that line is drawn
+    again, the first and its button stay the elements they were, with the
+    focus. The plain page drew every line again where a level changed."""
+    open_log(page)
+    alerts = [{"id": ALERT_A, "kind": "hello", "level": "warn", "time": "2026-11-20T08:00:17Z"},
+              {"id": ALERT_B, "kind": "hello", "level": "warn", "time": "2026-11-20T08:00:16Z"}]
+    alerts_route(page, alerts)
+    try:
+        page.evaluate("loadLogAlerts()")
+        assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.log-alert').length === 2", 5), "both lines highlighted"
+        page.locator(row(ALERT_A) + " .log-mark").focus()
+        sels = [row(ALERT_A), row(ALERT_A) + " .log-mark"]
+        mark(page, sels)
+        alerts[1]["level"] = "error"
+        page.evaluate("loadLogAlerts()")
+        assert wait_until(page, "document.querySelector(%s).classList.contains('log-alert-bad')" % json.dumps(row(ALERT_B)), 5), "the second line red"
+        assert replaced(page, sels) == [], f"the first line and its Mark seen the same ({replaced(page, sels)})"
+        assert focused(page, row(ALERT_A) + " .log-mark"), "the focus on its Mark seen"
+    finally:
+        page.unroute("**/api/v1/log/alerts*")
+        page.evaluate("loadLogAlerts()")
+    show_view(page, "tiles")
+
+
+def test_the_search_and_the_choices_stay(page, case):
+    """The search typed and a kind chosen: through a new line, the log
+    loaded again, another page and the log again, the search holds what
+    was typed and the choice the kind, and the lines drawn match them. A
+    forward guard: the plain page kept its head, which it never built
+    again, so that this passes there too."""
+    open_log(page)
+    page.locator("#log-kind").select_option("hello")
+    assert wait_until(page, "logState.kind === 'hello' && !logState.loading", 5), "the kind chosen, its page in"
+    page.locator("#log-filter").fill("selected-firm")
+    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line').length === 1", 5), "the line that matches alone"
+    for what, call in (("a new line on top", NEW_LINE), ("the log loaded again", "loadLog()")):
+        page.evaluate(call)
+        frames(page)
+        assert page.locator("#log-filter").input_value() == "selected-firm", f"{what}: the search kept"
+        assert page.locator("#log-kind").input_value() == "hello", f"{what}: the kind kept"
+    show_view(page, "tiles")
+    show_view(page, "log")
+    assert wait_until(page, "!logState.loading", 5), "the log loaded again as it is shown"
+    frames(page)
+    assert page.locator("#log-filter").input_value() == "selected-firm", "another page and back: the search kept"
+    assert page.locator("#log-kind").input_value() == "hello", "and the kind"
+    assert page.evaluate("[...document.querySelectorAll('#log-lines .log-line')].map((l) => l.dataset.id)") == [str(TEXT_LINE)], \
+        "the lines drawn match them"
+    page.locator("#log-clear").click()
+    assert wait_until(page, "logState.kind === '' && !logState.filter", 5), "Clear"
+    show_view(page, "tiles")
+
+
+def test_a_choices_options_stay(page, case):
+    """The focus on the kind's choice: the rooms read again (which made the
+    plain page fill every choice anew) and the Cubes read again keep its
+    options and the device choice's the elements they were, and the focus."""
+    open_log(page)
+    sels = ["#log-kind", "#log-kind optgroup:first-of-type option:first-child", "#log-device option:first-child", "#log-device optgroup option"]
+    page.locator("#log-kind").focus()
+    mark(page, sels)
+    for what, call in (("the rooms read again", "loadRooms()"), ("the Cubes read again", "loadCubes()"), ("every line drawn again", "renderLog()")):
+        page.evaluate(call)
+        frames(page)
+        assert replaced(page, sels) == [], f"{what}: the same options ({replaced(page, sels)})"
+        assert focused(page, "#log-kind"), f"{what}: the focus on the choice"
+    show_view(page, "tiles")
+
+
+OBSERVE = """() => { const box = document.getElementById('log-lines'); window.__logMuts = { added: 0, removed: 0 };
+  window.__logObs = new MutationObserver((ms) => { for (const m of ms) { window.__logMuts.added += m.addedNodes.length;
+    window.__logMuts.removed += m.removedNodes.length; } });
+  window.__logObs.observe(box, { childList: true }); }"""
+TAKEN = "() => { window.__logObs.takeRecords(); const m = window.__logMuts; window.__logMuts = { added: 0, removed: 0 }; return m; }"
+
+
+def test_a_new_line_adds_one_element(page, case):
+    """With 200 lines shown, a page (every event, range all): a new line adds one
+    element and removes none; every line drawn again, and the log loaded
+    again with the same events, add and remove none (the elements of the
+    same events are kept). The plain page added one for the new line too,
+    and built all 200 again for the other two."""
+    open_log(page, 200, "#log?range=all")
+    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line').length === 200", 5), "200 lines (a page)"
+    page.evaluate(OBSERVE)
+    try:
+        page.evaluate(NEW_LINE)
+        frames(page)
+        assert page.evaluate(TAKEN) == {"added": 1, "removed": 0}, "a new line: one element added, none removed"
+        page.evaluate("renderLog()")
+        frames(page)
+        assert page.evaluate(TAKEN) == {"added": 0, "removed": 0}, "every line drawn again: none added or removed"
+        page.evaluate("loadLog()")
+        frames(page)
+        # the new line, live, is not in the page the stub answers: it goes
+        assert page.evaluate(TAKEN) == {"added": 0, "removed": 1}, "the log loaded again: the 200 kept, the live line gone"
+    finally:
+        page.evaluate("window.__logObs.disconnect()")
+    page.evaluate("location.hash = '#log'")
+    show_view(page, "tiles")
+
+
+def test_a_live_line_keeps_its_element_when_a_load_brings_it(page, case):
+    """A line that came live, without an id, and is then in a page the log
+    loads, with its id: its element is the one it was, the user's focus on
+    it kept (UiParts Q5-A), and a problem of that id highlights it. The
+    plain page built every line again."""
+    stub = open_log(page)
+    at = "2026-11-20T09:00:00.000Z"
+    page.evaluate("""(at) => appendLogEvent({ kind: 'hello', source: 'cube', level: 'info', time: at,
+      summary: { firmware: 'live-then-loaded', duty_cycle_pct: 1, free_memory_slots: 1 } })""", at)
+    frames(page)
+    live = "#log-lines .log-line:first-child"
+    assert "live-then-loaded" in page.locator(live + " .log-text").inner_text(), "the live line on top"
+    page.evaluate("(s) => { const el = document.querySelector(s); el.tabIndex = -1; el.focus(); el.__mark = 'live'; }", live)
+    stub.lines = stub.lines + [dict(ev(40), time=at, summary={"firmware": "live-then-loaded", "duty_cycle_pct": 1, "free_memory_slots": 1})]
+    page.evaluate("loadLog()")
+    frames(page)
+    assert page.evaluate("document.querySelector(%s).dataset.id" % json.dumps(live)) == str(FIRST + 40), "the loaded line, with its id, on top"
+    assert page.evaluate("document.querySelector(%s).__mark === 'live'" % json.dumps(live)), "the element the live line had"
+    assert page.evaluate("document.activeElement === document.querySelector(%s)" % json.dumps(live)), "the focus on it kept"
+    alerts_route(page, [{"id": FIRST + 40, "kind": "hello", "level": "warn", "time": at}])
+    try:
+        page.evaluate("loadLogAlerts()")
+        assert wait_until(page, "document.querySelector(%s).classList.contains('log-alert-warn')" % json.dumps(live), 5), \
+            "a problem of its id highlights it, the id it came to have"
+    finally:
+        page.unroute("**/api/v1/log/alerts*")
+        page.evaluate("loadLogAlerts()")
+    show_view(page, "tiles")
+
+
+
+# The box made small by a rule of the page's own style sheet (the policy
+# takes no style element of the test's), so that it scrolls at every width.
+SMALL_BOX = """() => { const sheet = [...document.styleSheets].find((s) => (s.href || '').endsWith('style.css'));
+  window.__logRule = sheet.insertRule('#log-lines { max-height: 160px !important; }', sheet.cssRules.length); }"""
+NO_SMALL_BOX = """() => { const sheet = [...document.styleSheets].find((s) => (s.href || '').endsWith('style.css'));
+  if (window.__logRule !== undefined) sheet.deleteRule(window.__logRule); window.__logRule = undefined; }"""
+# The first line in the box's view, and how far below the box's top it stands.
+READ_LINE = """() => { const b = document.getElementById('log-lines'); const top = b.getBoundingClientRect().top;
+  for (const el of b.children) { const r = el.getBoundingClientRect(); if (r.bottom > top) return { id: el.dataset.id, at: Math.round(r.top - top) }; }
+  return null; }"""
+SCROLL_DOWN = """(y) => { const b = document.getElementById('log-lines'); b.scrollTop = y; b.dispatchEvent(new Event('scroll')); }"""
+
+
+def assert_place_kept(page, what):
+    """A live line in, the box scrolled down: the line read first stays where it stood."""
+    page.evaluate(SCROLL_DOWN, 90)
+    was = page.evaluate(READ_LINE)
+    assert was and was["id"], f"{what}: a line in view"
+    n = page.evaluate("document.querySelectorAll('#log-lines .log-line').length")
+    page.evaluate(NEW_LINE)
+    frames(page)
+    assert page.evaluate("document.querySelectorAll('#log-lines .log-line').length") == n, f"{what}: a line in, one cut at the bottom"
+    now = page.evaluate(READ_LINE)
+    assert now["id"] == was["id"] and abs(now["at"] - was["at"]) <= 1, f"{what}: the line read first stays where it stood ({was} → {now})"
+
+
+def test_a_view_scrolled_down_keeps_its_place_as_lines_are_cut(page, case):
+    """The box scrolled down, a live line comes in on top and one goes at
+    the bottom: with the last 20, where each new line cuts one, and
+    at the 2000 lines a view holds, the line the user reads first stays
+    where it stood. The plain page removed the cut lines before it
+    measured; a reading of the height with them still there moved the view
+    by a line at every new line."""
+    page.evaluate(SMALL_BOX)
+    try:
+        open_log(page)
+        assert page.evaluate("document.querySelectorAll('#log-lines .log-line').length") == 20, "the last 20"
+        assert_place_kept(page, "the last 20")
+        show_view(page, "tiles")
+        page.evaluate("location.hash = '#log?range=all'")
+        assert wait_until(page, "logState.range === 'all' && !logState.loading", 5), "every event"
+        stub = StubLog(page, lines(2000), whole=True)
+        page.evaluate("loadLog()")
+        frames(page)
+        assert page.evaluate("logState.lines.length") == 2000, "2000 lines, the view's room"
+        assert_place_kept(page, "2000 lines")
+        stub.off()
+        page.evaluate("location.hash = '#log'")
+    finally:
+        page.evaluate(NO_SMALL_BOX)
+    show_view(page, "tiles")
+
+
+def test_a_line_shown_keeps_its_element_through_a_filter(page, case):
+    """A line's button in focus: a kind chosen that keeps the line, and all
+    kinds again, and the search typed and cleared, keep the line, its
+    button and the focus the elements they were: a line keeps its
+    block, and so its element, while it is among the lines, shown or not.
+    A forward guard: the stub ignores the kind, so that it does not reach
+    the fault the first blocks had, and the blocks cut over the lines'
+    order cannot split a block by their making."""
+    open_log(page, 200, "#log?range=all")
+    sel = row(CMD_LINE) + " .log-cmd"
+    page.locator(sel).focus()
+    mark(page, [row(CMD_LINE), sel])
+    for what, act in (("the kind chosen", lambda: page.locator("#log-kind").select_option("command")),
+                      ("every kind again", lambda: page.locator("#log-kind").select_option(""))):
+        act()
+        assert wait_until(page, "!logState.loading", 5), f"{what}: its page in"
+        frames(page)
+        assert replaced(page, [row(CMD_LINE), sel]) == [], f"{what}: the same line and button"
+    page.locator(sel).focus()
+    for text in ("command", ""):  # the kind's own name, in every language
+        page.evaluate("(t) => { const f = document.getElementById('log-filter'); f.value = t; f.dispatchEvent(new Event('input', { bubbles: true })); }", text)
+        frames(page)
+        assert replaced(page, [row(CMD_LINE), sel]) == [], f"the search {text!r}: the same line and button"
+        assert focused(page, sel), f"the search {text!r}: the focus on its button"
+    page.evaluate("location.hash = '#log'")
+    show_view(page, "tiles")
+
+
+def test_mark_seen_hands_the_focus_on(page, case):
+    """Mark seen of a problem's line, by the keyboard: the button goes with
+    its mark, and the focus goes to the next problem's Mark seen below it;
+    the last one's to the search. The plain page left it on the
+    page's body."""
+    open_log(page)
+    alerts = [{"id": ALERT_A, "kind": "hello", "level": "warn", "time": "2026-11-20T08:00:17Z"},
+              {"id": ALERT_B, "kind": "hello", "level": "warn", "time": "2026-11-20T08:00:16Z"}]
+    alerts_route(page, alerts)
+    try:
+        page.evaluate("loadLogAlerts()")
+        assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.log-alert').length === 2", 5), "both lines highlighted"
+        page.locator(row(ALERT_A) + " .log-mark").focus()
+        page.keyboard.press("Enter")
+        assert wait_until(page, "document.activeElement === document.querySelector(%s)" % json.dumps(row(ALERT_B) + " .log-mark"), 5), \
+            "the focus on the next problem's Mark seen"
+        page.keyboard.press("Enter")
+        assert wait_until(page, "document.activeElement === document.getElementById('log-filter')", 5), "the last one's: the search"
+    finally:
+        page.unroute("**/api/v1/log/alerts*")
+        page.evaluate("() => { localStorage.removeItem('massimo.log.seen'); logAlerts.seenOf = null; return loadLogAlerts(); }")
+    show_view(page, "tiles")

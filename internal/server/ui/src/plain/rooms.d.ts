@@ -67,6 +67,8 @@ declare global {
   function modeName(mode: string): string;
   /** A device's type in words. */
   function typeName(type: string): string;
+  /** A field of a write a device has not shown, in words ("setpoint"). */
+  function confirmFieldName(f: string): string;
   /** The mark of a write a device has not shown by its deadline, as an item; null for none. */
   function confirmItem(d: Device): Item | null;
   /** The values of a write a device has not shown by its deadline, in words, "eco, Monday's program". */

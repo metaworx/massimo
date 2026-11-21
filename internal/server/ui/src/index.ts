@@ -25,6 +25,8 @@ import "./header";
 import type { HeaderPart } from "./header";
 import "./leaving";
 import type { LeavingPart } from "./leaving";
+import "./log";
+import type { LogPart } from "./log";
 import { signedOut as notifySignedOut } from "./notify";
 import type { NotifyPart } from "./notify";
 import { signedOut as prefsSignedOut } from "./prefs";
@@ -93,6 +95,8 @@ export interface MassimoParts {
   header: HeaderPart;
   /** Leaving the page, and signing out, while a settings form has changes not saved: the dialog that lists them (leaving/). */
   leaving: LeavingPart;
+  /** The log: its lines, its choices, its address and its unseen problems (log/; log.js calls it). */
+  log: LogPart;
   /** 👤 → Notifications: the rules, this browser and the devices (notify/). */
   notify: NotifyPart;
   /** My settings: their rows and the Appearance card with the scheme editor, drawn again where the settings were applied (prefs/). */

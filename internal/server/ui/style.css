@@ -1651,7 +1651,8 @@ massimo-week-program { display: contents; }
 .log-older { display: flex; justify-content: center; padding: 0 14px 10px; }
 .log .tile-head h2 { flex: 0 0 auto; }
 #log-filter { flex: 1; min-width: 8em; }
-/* newest first: log.js keeps the place of a view scrolled down itself,
+/* newest first: the log's part (ui/src/log/store.ts) keeps the place of a
+   view scrolled down itself,
    so the browser's own scroll anchoring stays out */
 .log-lines {
   max-height: 70vh;
@@ -1675,7 +1676,7 @@ massimo-week-program { display: contents; }
 .log-device { font-weight: 600; }
 .log-text { color: var(--muted); }
 .log-cmd { padding: 0 8px; font-size: 0.85rem; }
-/* an unsettled problem not marked seen (log.js renderLogLine): a bar in
+/* an unsettled problem not marked seen (ui/src/log/Line.tsx): a bar in
    its tone, its mark first, Mark seen last; the log's entry in ☰ in its
    tone over the menu's muted icons (renderLogSign) */
 .log-line.log-alert { margin-left: -9px; padding-left: 6px; border-left: 3px solid var(--warn-mark); }

@@ -5,8 +5,8 @@
  * @file internal/server/ui/src/chrome/store.ts
  *
  * What the plain code hands the page's chrome (MassimoParts.chrome): the
- * log's unseen problems, which ☰ and its Log entry show (log.js
- * renderLogSign, plain until AP UiParts' Block 11), and the server's
+ * log's unseen problems, which ☰ and its Log entry show (the log's part,
+ * log/alerts.ts renderLogSign), and the server's
  * version, ☰'s first row (header.js checkVersion).
  */
 

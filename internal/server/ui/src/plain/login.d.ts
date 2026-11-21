@@ -24,6 +24,8 @@ declare global {
   function hasSystem(): boolean;
   /** A link of the own account come back from a provider (oidcReturn), for My profile to show or say why there is none; null for none, set back to null once taken. */
   let oidcLinked: { confirm?: string; error?: string } | null;
+  /** Whether the settings follow the one signed in: a user with the capability preferences. */
+  function canSync(): boolean;
   /** Whether a user's login name is the one signed in. */
   function isSelf(name: string): boolean;
   /** A role's display name: the name given, else the key's translated name, else the key. */
