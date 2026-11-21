@@ -164,8 +164,10 @@ func TestRoomCommandNotConfirmed(t *testing.T) {
 	}
 }
 
-// A newer setpoint of a room replaces the one before it: one warning, for
-// the newer, at its deadline.
+// A newer setpoint of a room replaces the one before it: one write open,
+// one warning, for the newer, at its deadline, and no second one up to
+// the report of its re-send (resend.go), not confirmed either, which the
+// room then says.
 func TestNewerWriteReplaces(t *testing.T) {
 	t.Parallel()
 	r := startServer(t, confirming(600*time.Millisecond, 0))
@@ -179,13 +181,17 @@ func TestNewerWriteReplaces(t *testing.T) {
 	if n := openWrites(rt); n != 1 {
 		t.Fatalf("%d writes open", n)
 	}
-	ev := waitUnconfirmed(t, ts, "not_confirmed")
+	ev, next := logAfter(t, logStart(ts), "the warning", unconfirmedOf("not_confirmed"))
 	if e := ev.Summary["expected"].(map[string]any); e["setpoint"] != float64(23) {
 		t.Fatalf("expected %v", e)
 	}
-	time.Sleep(300 * time.Millisecond)
-	if evs := unconfirmedEvents(t, ts, "not_confirmed"); len(evs) != 1 {
-		t.Fatalf("%d warnings", len(evs))
+	logAfter(t, next, "the re-send's report", unconfirmedOf("resend_not_confirmed"))
+	if c := confirmRoom(t, ts, 2).Confirmation; c == nil || c.State != "unconfirmed" {
+		t.Fatalf("room after the re-send's report: %+v", c)
+	}
+	// From the warning on, not from the report: the lines between them too.
+	if more := logLines(t, next, unconfirmedOf("not_confirmed")); len(more) != 0 {
+		t.Fatalf("%d warnings after the first: %+v", len(more), more)
 	}
 }
 
