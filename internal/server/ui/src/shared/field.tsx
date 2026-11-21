@@ -238,13 +238,15 @@ export function TextField({ label, id, wide = true, unit, hint, help, cls, limit
  * it) too, inputMode the keyboard a phone offers (numeric, for a whole
  * number: the reboot's delay), inputRef gives it the focus; limit marks
  * a value refused (one
- * out of range). It draws its row with its "changed meanwhile" notice,
+ * out of range); onChange is told of the value as the field is left
+ * changed (the change event: My settings' poll, saved then). It draws its row with its "changed meanwhile" notice,
  * or with row false the input alone, inside a row of the caller's (a
  * field with two controls), whose notice the caller then draws
  * (Meanwhile).
  */
-export function NumberField({ label, id, wide, unit, hint, help, cls, limit, name, min, max, step, aria, disabled, draft, value, set, show, row = true, inputRef, inputMode }: Partial<Row> & Value<string> & {
+export function NumberField({ label, id, wide, unit, hint, help, cls, limit, name, min, max, step, aria, disabled, draft, value, set, show, row = true, inputRef, inputMode, onChange }: Partial<Row> & Value<string> & {
   name?: string;
+  onChange?: (v: string) => void;
   inputMode?: "numeric" | "decimal";
   min: number;
   max: number;
@@ -258,7 +260,8 @@ export function NumberField({ label, id, wide, unit, hint, help, cls, limit, nam
   const input = (
     <input ref={inputRef} id={id} type="number" name={name} class={!row || unit ? undefined : "field-control"} min={String(min)} max={String(max)}
       step={String(step)} inputMode={inputMode} aria-label={aria} disabled={disabled} value={draft ? draft.value : value} {...limitAria(id, limit)}
-      onInput={(ev) => (draft ? draft.set(ev.currentTarget.value) : set(ev.currentTarget.value))} />
+      onInput={(ev) => (draft ? draft.set(ev.currentTarget.value) : set(ev.currentTarget.value))}
+      onChange={onChange && ((ev) => onChange(ev.currentTarget.value))} />
   );
   if (!row || label === undefined || id === undefined) return input;
   return (
@@ -286,10 +289,13 @@ export type SelectOption = [value: string, label: string, disabled?: boolean] | 
  * stored value (with its "changed meanwhile" notice) or from value and
  * onChange; name and disabled (off) are the select's, the row narrow
  * unless wide; inputRef gives it the focus; hintId names the hint as its
- * description. With row false it is the select alone, inside a row of the
- * caller's (a field with two controls), whose notice the caller draws.
+ * description; after follows the select in its row (the language's note
+ * of a machine translation). With row false it is the select alone,
+ * inside a row of the caller's (a field with two controls), whose notice
+ * the caller draws.
  */
-export function Select({ label, id, wide, unit, hint, hintId, help, cls, labelCls, name, options, value, onChange, disabled, draft, show, row = true, inputRef }: Partial<Row> & {
+export function Select({ label, id, wide, unit, hint, hintId, help, cls, labelCls, name, options, value, onChange, disabled, draft, show, row = true, inputRef, after }: Partial<Row> & {
+  after?: ComponentChildren;
   name?: string;
   disabled?: boolean;
   options: SelectOption[];
@@ -314,6 +320,7 @@ export function Select({ label, id, wide, unit, hint, hintId, help, cls, labelCl
   return (
     <Field label={label} id={id} wide={wide} unit={unit} hint={hint} hintId={hintId} help={help} cls={cls} labelCls={labelCls} draft={draft} show={show}>
       {select}
+      {after}
     </Field>
   );
 }
@@ -348,11 +355,13 @@ export function DateTime({ value, set, id, cls, step, required, disabled, inputR
  * of a menu), with help, the key of the setting's help, its button after
  * the switch and its explanation under it, and rowCls, classes the row
  * adds (a capability's needs-…); cls adds classes to the switch; id,
- * name, disabled and title are the checkbox's; badge is drawn inside the
- * switch after its label (a capability's state), children follow the
- * switch.
+ * name, disabled and title are the checkbox's; aria names it where its
+ * label is empty, which draws no text (a switch in a column headed for
+ * it: My settings' "only on this device"), data are the checkbox's data-
+ * attributes; badge is drawn inside the switch after its label (a
+ * capability's state), children follow the switch.
  */
-export function Switch({ name, label, checked, onChange, draft, show, row = true, help, rowCls, cls, id, disabled, title, badge, children }: {
+export function Switch({ name, label, checked, onChange, draft, show, row = true, help, rowCls, cls, id, disabled, title, aria, data, badge, children }: {
   name?: string;
   label: string;
   checked?: boolean;
@@ -366,19 +375,23 @@ export function Switch({ name, label, checked, onChange, draft, show, row = true
   id?: string;
   disabled?: boolean;
   title?: string;
+  aria?: string;
+  data?: Record<string, string>;
   badge?: ComponentChildren;
   children?: ComponentChildren;
 }) {
   const h = useHelp(help || "", label);
+  const attrs: Record<string, string> = {};
+  for (const [k, v] of Object.entries(data || {})) attrs["data-" + k] = v;
   const sw = (
     <label class={cls ? "switch " + cls : "switch"} title={title}>
-      <input id={id} type="checkbox" name={name} disabled={disabled} checked={draft ? draft.value : !!checked} onChange={(ev) => {
+      <input id={id} type="checkbox" name={name} disabled={disabled} aria-label={aria} {...attrs} checked={draft ? draft.value : !!checked} onChange={(ev) => {
         const on = ev.currentTarget.checked;
         if (draft) draft.set(on);
         if (onChange) onChange(on);
       }} />
       <span class="slider" aria-hidden="true" />
-      <span class="switch-label">{label}</span>
+      {label && <span class="switch-label">{label}</span>}
       {badge}
     </label>
   );

@@ -25,6 +25,8 @@ import "./header";
 import type { HeaderPart } from "./header";
 import "./leaving";
 import type { LeavingPart } from "./leaving";
+import "./prefs";
+import type { PrefsPart } from "./prefs";
 import { signedOut as profileSignedOut } from "./profile";
 import "./rooms";
 import type { RoomsPart } from "./rooms";
@@ -87,6 +89,8 @@ export interface MassimoParts {
   header: HeaderPart;
   /** Leaving the page, and signing out, while a settings form has changes not saved: the dialog that lists them (leaving/). */
   leaving: LeavingPart;
+  /** My settings: their rows, drawn again where the settings were applied (prefs/). */
+  prefs: PrefsPart;
   /** The rooms: a tile per room with its device list (rooms/). */
   rooms: RoomsPart;
   /** System settings → Sign-in providers (admin/). */

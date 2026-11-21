@@ -13,7 +13,8 @@ For a region off the list, in each of its views and around each data
 source of SOURCES and of its own (Region.sources: the page shown again,
 or the stream's server events of the kinds named, each dispatched on the
 page's stream, whose reads the guard waits for until their requests have
-answered), applied with the data as it was (GUARD_JS, round):
+answered, or the settings applied again, as when the user's arrive from
+the server, applyStoredSettings()), applied with the data as it was (GUARD_JS, round):
 
 1. identity: every element a user can hold (a button, a field, a
    summary, a link, a details, anything with a tabindex) shown in the
@@ -767,7 +768,8 @@ REGIONS = (
         View("the restart asking, a delay typed for the reboot", maint_question),
     ), sources=("the page shown again: maint", "the stream's events: resync change reboot reboot_cancelled settings_read")),
     Region("system-info", ("#sys-info-body",), (View("System info, its folds open", info),), sources=("the page shown again: info", "the stream's events: resync settings_read change.cube")),
-    Region("my-settings", ("#prefs-sec > .dev-head", "#prefs-sec > .dev-row", "#prefs-sec > p"), (View("My settings", personal("prefs")),)),
+    # the settings applied again, as when the user's arrive from the server at a sign-in (loadPreferences)
+    Region("my-settings", ("#prefs-rows", "#prefs-sec > p"), (View("My settings", personal("prefs")),), sources=("applyStoredSettings()",)),
     Region("appearance", ("#prefs-sec .appearance",), (
         View("My settings", personal("prefs")),
         View("the scheme editor open", scheme_editor),
@@ -968,6 +970,7 @@ GUARD_JS = r"""() => {
       case "loadLogAlerts()": return loadLogAlerts();
       case "refreshAges()": return refreshAges();
       case "pollLog()": return pollLog();
+      case "applyStoredSettings()": return applyStoredSettings();
     }
     throw new Error("the guard knows no data source " + source);
   }

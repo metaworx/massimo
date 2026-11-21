@@ -348,7 +348,9 @@ hence `failed_checks_forgotten`.
   it; after a sign-out, and for another user signed in after an expired
   session, nothing typed is left, and a read of the user that answers late
   draws nothing; in the app (fake_bridge.js) a linked account is named by its
-  provider's name, and a current password filled in alone is no change.
+  provider's name, and a current password filled in alone is no change;
+  My settings' poll being typed stays, the element it was with the focus,
+  when the user's settings arrive, and is saved as it is left.
 - `test_stream.py`:
   the event stream opens with tickets only, never with the token,
   and after a refused stream (the test hands out a used ticket first,

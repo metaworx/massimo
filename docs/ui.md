@@ -957,6 +957,8 @@ and every browser you sign in on takes them at sign-in,
 the first one handing over what it had.
 Once the server has your schemes, its list is the list:
 a scheme deleted in one browser goes from the others when they next load the page.
+A setting is saved as it is chosen, Poll every as its field is left,
+and a poll being typed stays when your settings arrive from the server.
 Beside each of **Poll every**, **Expert mode**, **Cube clock shown in**,
 **Language**, **Mode**, **Colour scheme**, **Blinking signs**,
 **Window icon** and **Radio icon**,
@@ -1917,7 +1919,8 @@ a script for each region of the page, in the order the page loads them:
   the version in ☰ and in the sign-in card, the server's state;
   `home.js`, the home notice's place shown or hidden, the Cubes a `cube_found` event adds
   and the way to them;
-  `prefs.js`, the wiring of My settings' rows and the language choice;
+  `prefs.js`, the plain names of My settings, which call their part (`ui/src/prefs/`),
+  the sign-in's language choice and the copy of the version in ☰;
 - `rooms.js`, a room's facts, the plain names of the rooms' drawing,
   which call their parts (`ui/src/rooms/`), a device's state event
   and the actions behind a tile; `tiles.js`, the tile's actions that stay plain
@@ -2043,12 +2046,12 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `HelpButton`, `HelpText` | `help.tsx` | a setting's help (`helpParts`): the question mark that shows and hides its explanation, `help.<key>` of the texts, shown by its key wherever it is drawn again, in the page's one set of keys shown (`helpOpen` of `app.js`), the parts drawn again by a signal of their own, so a key is drawn by one side only; `Field` and `Switch` draw both from their `help` | `help` (the key), `id` (the explanation's, which the button controls), `label` (the setting's name); `help`, `id` |
 | `Field` | `field.tsx` | a label and its control, `.field` or `.field.wide` (`fieldRow`); with `limit`, what the field takes, said in amber just before the control while a value is refused, the box outlined in red and the limit its description (`markRange`) (`TextField` and `NumberField` mark their input for it; a control of the caller's inside a `Field` with a limit has no marking of its own yet) | `label`, `id`, `wide`, `unit`, `hint`, `hintId` (the hint's id, which a `Select` names as its description), `help` (the key of the setting's help: its button after the label, its explanation under the control), `cls` (classes the row adds, a capability's `needs-…`), `labelCls` (the label's class, `action-title` for a row's title in bold: Maintenance's settings; `Select` passes it on), `limit` (`{ text, over, cls }`: the text, whether the value is refused, the line's class beside `field-limit`; in the unit's line where there is one, else on a line of its own above the box), `draft`, `show`, the control as children |
 | `TextField` | `field.tsx` | a row with a text input that shows a stored text, from its draft, or a free text (a name offered) by `value` and `set` | `label`, `id`, `name`, `draft` and `show`, or `value` and `set`; `wide` (on by default), `unit`, `hint`, `help`, `cls`, `limit`, `placeholder`, `type` (`password` too, by `value` and `set` alone, never a draft), `autocomplete`, `inputCls` (the input's class, `mono` for a key), `maxLength`, `pattern`, `required`, `disabled`, `inputRef` |
-| `NumberField`, `numberNorm` | `field.tsx` | a number input that shows a stored number (`numberInput`), its draft the input's text, "" for none, or a free number (a time) by `value` and `set`; with `row={false}` the input alone, in a row of the caller's, which draws its notice (`Meanwhile`); how such a draft compares, as a number | `label`, `id`, `name`, `min`, `max`, `step`, `draft` and `show`, or `value` and `set`; `aria` (its name where no label names it), `disabled`, `inputMode` (the keyboard a phone offers: `numeric` for the reboot's delay), `inputRef`, `row`, and a row's `wide`, `unit`, `hint`, `help`, `cls`, `limit`; `v` |
-| `Select` | `field.tsx` | a row with a select (`selectInput`), its options as `fillOptions` takes them; with `row={false}` the select alone, in a row of the caller's, which draws its notice | `label`, `id`, `name`, `options` (`[value, label, disabled]` or `{ group, options }`), `value` and `onChange`, or `draft` and `show`; `row`, `wide`, `unit`, `hint`, `hintId` (the hint's id, which the select names as its description: the update channel's note, which changes with the choice), `help`, `cls`, `disabled` |
+| `NumberField`, `numberNorm` | `field.tsx` | a number input that shows a stored number (`numberInput`), its draft the input's text, "" for none, or a free number (a time) by `value` and `set`; with `row={false}` the input alone, in a row of the caller's, which draws its notice (`Meanwhile`); how such a draft compares, as a number | `label`, `id`, `name`, `min`, `max`, `step`, `draft` and `show`, or `value` and `set`; `aria` (its name where no label names it), `disabled`, `inputMode` (the keyboard a phone offers: `numeric` for the reboot's delay), `inputRef`, `onChange` (told of the value as the field is left changed: My settings' poll, saved then), `row`, and a row's `wide`, `unit`, `hint`, `help`, `cls`, `limit`; `v` |
+| `Select` | `field.tsx` | a row with a select (`selectInput`), its options as `fillOptions` takes them; with `row={false}` the select alone, in a row of the caller's, which draws its notice | `label`, `id`, `name`, `options` (`[value, label, disabled]` or `{ group, options }`), `value` and `onChange`, or `draft` and `show`; `row`, `wide`, `unit`, `hint`, `hintId` (the hint's id, which the select names as its description: the update channel's note, which changes with the choice), `help`, `cls`, `disabled`, `after` (after the select in its row: the language's note of a machine translation) |
 | `DateTime` | `field.tsx` | a date and time field (`datetime-local`), its value as the input takes it | `value`, `set`, `id`, `cls`, `step`, `required`, `disabled`, `inputRef` |
 | `localOf`, `isoOf` | `time.ts` | a `DateTime`'s value and the API's time as each other, for a field that shows a stored end and sends it (a user's end); the draft compares the field's minute, all it holds | `iso`; `local` |
 | `fmtWhen` | `time.ts` | an API time as date and time in the page's language, the hour of 24 (a backup's time); the plain page has it as `MassimoParts.fmtWhen`, through `fmtWhen` of `backup.js`, for the notifications' card (`notify.js`) until Block 13 | `iso` |
-| `Switch` | `field.tsx` | a checkbox drawn as a switch (`switchEl`), in its own row with its help where asked (`fieldRow` without a label) | `name`, `label`, `checked` and `onChange`, or `draft` and `show`; `row`, `help`, `rowCls` (classes its own row adds, a capability's `needs-…`), `cls` (the switch's classes), `id`, `disabled`, `title`, `badge` (inside the switch after its label, a capability's state), children after the switch |
+| `Switch` | `field.tsx` | a checkbox drawn as a switch (`switchEl`), in its own row with its help where asked (`fieldRow` without a label) | `name`, `label`, `checked` and `onChange`, or `draft` and `show`; `row`, `help`, `rowCls` (classes its own row adds, a capability's `needs-…`), `cls` (the switch's classes), `id`, `disabled`, `title`, `aria` (its name where `label` is empty, which draws no text: My settings' "only on this device"), `data` (the checkbox's `data-` attributes), `badge` (inside the switch after its label, a capability's state), children after the switch |
 | `Choices` | `choices.tsx` | a choice of several among a list: a group of switches under its heading, All and None as buttons where asked (the configuration's Copy tab), under a legend (an integration's maximum) or without a heading (a role's capabilities, Capabilities for every role), or of checkboxes, All a checkbox first (`look` `check`, the House panel); an option locked shows whether it is chosen and is off (the owner's set, a capability while its request runs) | `title`, `legend` (a fieldset under it), `label` (the group's name for a screen reader), `id`, `cls` (a class the group adds, `cap-grid`, `integration-caps`), `options` (`[value, label, disabled, { title, badge, lock }]`, the last for switches alone), `chosen`, `set(chosen)`, `all` (`{ all, none }`, their labels, `none` left out for All alone), `empty` (said where there is no option), `look` (`switch`, the default, or `check`) |
 | `ChoiceGroup` | `choices.tsx` | the frame of a choice of several drawn as switches, which `Choices` is drawn with and a region uses where each switch is a part of its own (Capabilities for every role, each switch saved at once) | `id`, `cls`, `label` (the group's name for a screen reader), `legend` (a fieldset under it), `head`, the switches as children |
 | `Tabs` | `tabs.tsx` | a row of tabs: a tab list of buttons, each with its key in `data-tab`, the one shown active and selected, and what follows the list (a close button) | `cls` (the row's class), `listCls`, `label` (the list's name), `tabs` (`{ key, label, cls }`), `current`, `onPick(key)`, children after the list |
@@ -2379,6 +2382,18 @@ Personal settings': `profile`);
 ☰'s mark in `#nav-menu-mark`, the worse of the log's, which `renderLogSign` of `log.js`
 hands it as `MassimoParts.chrome.log(count, tone)`,
 and the forms' of every menu item (`unsavedTone`), with ☰'s name and tooltip.
+My settings (`ui/src/prefs/`, AP UiParts Block 13) draws their rows into
+`#prefs-rows` as `parts.js` loads, before `init` applies the settings, and
+registers `prefs` (`render`), which `prefs.js` calls as `renderDeviceSwitches`
+and `renderLangSelect`, where the plain code applied the settings
+(`applySettings`, a sign-in's `loadPreferences`) or changed the language;
+the settings stay `app.js`' plain `state.settings`, saved by `setSetting` as
+before, and `store.ts` holds the counter that draws them again;
+`rows.tsx` a row with its switch that keeps the setting on this device alone
+(`DevRow`), `Settings.tsx` the rows: each saved as it is changed, the poll as it
+is left, a poll being typed kept as a draft through the settings applied again
+(without the "changed meanwhile" notice, which the plain field had not: leaving
+the field for Take theirs would save it).
 My profile (`ui/src/profile/`, AP UiParts Block 13) is a part alone, drawn into
 `#profile-sec` as `parts.js` loads, for the user `MassimoParts.me` names
 (`shared/me.ts`, which `applyCaps` of `login.js` calls at every read of who is

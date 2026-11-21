@@ -656,9 +656,6 @@ function clockText(cube) {
 function applySettings() {
   const s = state.settings;
   document.body.classList.toggle("expert", s.expert);
-  $("expert-toggle").checked = s.expert;
-  $("poll-input").value = s.poll;
-  $("clock-select").value = s.clock;
   applyAppearance();
   renderDeviceSwitches();
   const cube = state.cubes.find((c) => c.serial === state.serial);

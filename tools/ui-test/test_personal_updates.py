@@ -237,3 +237,31 @@ def test_the_own_password_is_marked_and_set_again_empty(page, case):
     assert page.locator(NEW).input_value() == "", "Reset empties it"
     assert not page.evaluate("MassimoParts.leaving.changes()"), "nothing left to lose"
     show_view(page, "tiles")
+
+
+# --- My settings ---------------------------------------------------------
+
+def test_a_poll_being_typed_stays_when_the_settings_arrive(page, case):
+    """Poll every typed and not yet left; the user's settings arrive with
+    another poll, as at a sign-in (loadPreferences: kept in the browser,
+    then applied again): the field is the element it was with what is
+    typed and the focus, and nothing typed was saved; left, it saves what
+    it holds."""
+    show_view(page, "prefs")
+    field = page.locator("#poll-input")
+    was = page.evaluate("state.settings.poll")
+    other = 31 if was != 31 else 32
+    field.fill("27")
+    mark(page, ["#poll-input"])
+    try:
+        page.evaluate("(v) => { storeUserSetting('poll', v); return applyStoredSettings(); }", other)
+        frames(page)
+        assert replaced(page, ["#poll-input"]) == [], "the same field"
+        assert field.input_value() == "27", "what is typed kept"
+        assert page.evaluate("document.activeElement.id") == "poll-input", "the focus where it was"
+        assert page.evaluate("state.settings.poll") == other, "nothing typed saved"
+        page.locator("#expert-toggle").focus()
+        assert wait_until(page, "state.settings.poll === 27", 5), "left, it saves what it holds"
+    finally:
+        page.evaluate("(v) => { setSetting('poll', v); applySettings(); }", was)
+    show_view(page, "tiles")
