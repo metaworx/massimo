@@ -1009,4 +1009,221 @@ def test_another_setting_changed_during_the_own_put_is_read_after_it(page, case)
         api_call("PUT", "api/v1/settings", {"poll_interval": None, "announce": None})
 
 
-# --- System info ---
+# --- System info -------------------------------------------------------------
+
+PROXIED_BOX = {"version": "massimo v0.0.1-test (go1.26.0, linux/arm64)", "started_at": "2026-11-13T08:00:00+01:00",
+               "install": "other", "os": "linux", "arch": "arm64", "hostname": "massimo-box", "fqdn": "massimo-box.example.net",
+               "client_ip": "192.0.2.20", "now": "2026-11-13T09:00:00+01:00", "time_zone": "UTC", "interfaces": [],
+               "cube_proxies": [{"serial": "KEQ0000100", "addr": "192.0.2.5:62910", "listening": True}],
+               "proxy": {"proto": "https", "host": "massimo.example.net", "port": 443}}
+
+
+def test_system_info_keeps_its_folds_a_copy_and_a_selection(page, case):
+    """System info with its folds open and
+    the host's name selected: the certificate read again (every 2 s while
+    it is being read) keeps the name selected; a proxy's serial copied,
+    the page shown again keeps it "copied" until it fades; the copy
+    icons, the link, the folds and their lists are the elements they
+    were, and the folds are open."""
+    reads = []
+
+    def answer(route):
+        reads.append(1)
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(PROXIED_BOX))
+    safe_route(page, "**/api/v1/system", answer)
+    try:
+        show_view(page, "info")
+        page.locator("#info-proxies .copy-icon").first.wait_for()
+        page.locator("#store-info summary").click()
+        page.locator("#config-info summary").click()
+        page.locator("#store-info-body .kv-rows li").first.wait_for()
+        sels = ["#info-proxies .copy-icon", "#info-version .copy-icon", "#info-tls a", "#store-info > summary", "#config-info > summary",
+                "#store-info-body dl", "#config-info-body dl", "#info-host strong"]
+        mark(page, sels)
+        select_text(page, "#info-host")
+        want = selected(page)
+        assert want, "the name selected"
+        n = len(reads)
+        assert wait_reads(page, reads, n + 1), "the certificate read again"
+        assert selected(page) == want, "the name still selected"
+        icon = page.locator("#info-proxies .copy-icon").first
+        icon.focus()
+        page.keyboard.press("Enter")
+        assert wait_until(page, "document.querySelector('#info-proxies .copy-icon').classList.contains('copied')", 1), "copied"
+        n = len(reads)
+        show_view(page, "info")
+        assert wait_reads(page, reads, n + 1), "the page read again"
+        assert icon.evaluate("(b) => b.classList.contains('copied')"), "still copied, until it fades"
+        assert replaced(page, sels) == [], f"the same elements after the reads: {replaced(page, sels)}"
+        assert page.evaluate("document.getElementById('store-info').open && document.getElementById('config-info').open"), "the folds open"
+    finally:
+        page.unroute("**/api/v1/system")
+        show_view(page, "tiles")
+
+
+@pytest.mark.parametrize("how", ["sign-out", "expired"])
+def test_the_session_end_forgets_system_info(new_context, case, watch, guard, how):
+    """System info shown with the settings in effect open, a proxy's
+    certificate being read: the session ends, and the operator finds no
+    fact, no variable of the first; the reading held across the end, let
+    go, shows nothing, and the clock run past the readings' pace brings no
+    more."""
+    page = owner_page(new_context, guard, watch, URL, TOKEN, clock=True)
+    safe_route(page, "**/api/v1/system", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(PROXIED_BOX)))
+    show_view(page, "info")
+    page.locator("#config-info summary").click()
+    assert wait_until(page, "document.getElementById('config-info-body').textContent.includes('MASSIMO_API_TOKEN')", 5), "the variables shown"
+    held = []
+    hold(page, "**/api/v1/system", "GET", held, [])
+    assert wait_held(page, held, 8), "the certificate read again"
+    across(page, how)
+    with page.expect_response(lambda r: r.url.endswith("/api/v1/system")):
+        for r in held:
+            r.fallback()
+    frames(page)
+    n = len(held)
+    page.clock.run_for(5000)
+    answered(page)
+    assert len(held) == n, f"no reading of the certificate for the next user ({len(held) - n})"
+    assert "MASSIMO_API_TOKEN" not in page.locator("#config-info-body").inner_text(), "no variable of the first"
+    assert page.locator("#info-client").inner_text() == "–" and "massimo-box" not in page.locator("#info-host").inner_text(), "no fact"
+
+
+def test_system_info_reads_again_at_a_resync_while_shown_only(page, case):
+    """A resync of the stream (how the page learns of a restart) with
+    Rooms shown reads nothing; with System info shown it reads the facts
+    and the settings in effect once, the new start shown, the fold left
+    open."""
+    box = dict(PROXIED_BOX, proxy=None)
+    box.pop("proxy")
+    safe_route(page, "**/api/v1/system", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(box)))
+    facts = counted(page, "**/api/v1/system")
+    configs = counted(page, "**/api/v1/config")
+    try:
+        show_view(page, "tiles")
+        send(page, "resync")
+        answered(page)
+        assert facts == [] and configs == [], "no read for a page not shown"
+        show_view(page, "info")
+        page.locator("#config-info summary").click()
+        assert wait_until(page, "document.getElementById('info-client').textContent === '192.0.2.20'", 5), "the facts"
+        before = page.locator("#info-started").inner_text()
+        n, k = len(facts), len(configs)
+        box["started_at"] = "2026-11-13T09:30:00+01:00"
+        send(page, "resync")
+        assert wait_until(page, "document.getElementById('info-started').textContent !== %s" % json.dumps(before), 5), "the new start"
+        answered(page)
+        assert len(facts) == n + 1 and len(configs) == k + 1, f"one read each ({len(facts) - n}, {len(configs) - k})"
+        assert page.evaluate("document.getElementById('config-info').open"), "the fold open"
+    finally:
+        page.unroute("**/api/v1/system")
+        show_view(page, "tiles")
+
+
+def test_system_info_reads_its_facts_when_a_cube_changes(page, case):
+    """A Cube's proxy changed (change, cube.update) with System info shown:
+    the facts are read once and the proxy's new address is listed."""
+    box = dict(PROXIED_BOX, proxy=None)
+    box.pop("proxy")
+    safe_route(page, "**/api/v1/system", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(box)))
+    facts = counted(page, "**/api/v1/system")
+    try:
+        show_view(page, "info")
+        assert wait_until(page, "document.getElementById('info-proxies').textContent.includes('192.0.2.5:62910')", 5), "the proxy"
+        n = len(facts)
+        box["cube_proxies"] = [{"serial": "KEQ0000100", "addr": "192.0.2.6:62910", "listening": True}]
+        send(page, "change", {"action": "cube.update", "target": "cube:KEQ0000100"})
+        assert wait_until(page, "document.getElementById('info-proxies').textContent.includes('192.0.2.6:62910')", 5), \
+            "the proxy's new address"
+        answered(page)
+        assert len(facts) == n + 1, f"one read ({len(facts) - n})"
+    finally:
+        page.unroute("**/api/v1/system")
+        show_view(page, "tiles")
+
+
+def test_the_session_end_between_two_readings_reads_no_more(new_context, case, watch, guard):
+    """A proxy's certificate being read every 2 s: the user signs out
+    right after a reading's answer, while the next one waits on its
+    timer (logout, without the menu's clicks, so that the timer is still
+    to come); the clock run past it sends no read of the system. An
+    expired session is no end of it until another user signs in."""
+    page = owner_page(new_context, guard, watch, URL, TOKEN, clock=True)
+    safe_route(page, "**/api/v1/system", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(PROXIED_BOX)))
+    show_view(page, "info")
+    page.locator("#info-proxies .copy-icon").first.wait_for()
+    facts = counted(page, "**/api/v1/system")
+    with page.expect_response(lambda r: r.url.endswith("/api/v1/system")):
+        page.clock.run_for(2100)
+    answered(page)  # the answer handled: the next reading's timer runs, the line still "being read"
+    assert PENDING[case.lang] in page.locator("#info-tls").inner_text(), "the certificate being read"
+    page.evaluate("() => { logout(); }")  # the session ends while the next reading's timer runs
+    assert wait_until(page, "document.getElementById('login-dialog').open", 5), "signed out"
+    n = len(facts)
+    page.clock.run_for(5000)
+    answered(page)
+    assert len(facts) == n, f"no reading after the end ({len(facts) - n})"
+
+
+def certificate_routes(page, box, read):
+    """GET /api/v1/system answered with box, its proxy's certificate read where read["now"] is set; the reads counted."""
+    asked = []
+    cert = {"source": "proxy", "names": ["massimo.example.net"], "not_after": "2027-02-10T12:00:00Z", "fingerprint": "00",
+            "self_signed": False, "issuer": "Example CA", "trusted": True, "checked_at": "2026-11-13T09:50:02+01:00"}
+
+    def answer(route):
+        asked.append(1)
+        body = dict(box, proxy=dict(box["proxy"], certificate=cert)) if read["now"] else box
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
+    safe_route(page, "**/api/v1/system", answer)
+    return asked
+
+
+@pytest.mark.clock
+def test_a_resync_finds_the_certificate_being_read_and_reads_it(page, case):
+    """The certificate read; a resync after a restart finds it being read
+    again on the new server: "being read…", and the readings every 2 s
+    until it is read."""
+    read = {"now": True}
+    asked = certificate_routes(page, PROXIED_BOX, read)
+    try:
+        show_view(page, "info")
+        assert wait_until(page, "document.getElementById('info-tls').textContent.includes('Example CA')", 5), "read"
+        read["now"] = False
+        send(page, "resync")
+        assert wait_until(page, "document.getElementById('info-tls').textContent.includes(%r)" % PENDING[case.lang], 5), "being read…"
+        n = len(asked)
+        page.clock.run_for(2100)
+        answered(page)
+        assert len(asked) == n + 1, f"read again 2 s later ({len(asked) - n})"
+        read["now"] = True
+        page.clock.run_for(2100)
+        assert wait_until(page, "document.getElementById('info-tls').textContent.includes('Example CA')", 5), "read again, shown"
+    finally:
+        page.unroute("**/api/v1/system")
+        show_view(page, "tiles")
+
+
+@pytest.mark.clock
+def test_a_resync_after_the_readings_gave_up_reads_anew(page, case):
+    """The certificate never read: after its 15 readings the line says it
+    could not be read; a resync finds it being read on the new server:
+    "being read…" again, and the readings start anew."""
+    read = {"now": False}
+    asked = certificate_routes(page, PROXIED_BOX, read)
+    try:
+        show_view(page, "info")
+        for _ in range(17):
+            page.clock.run_for(2100)
+            answered(page)
+        assert wait_until(page, "document.getElementById('info-tls').textContent.includes(%r)" % UNREAD[case.lang], 5), "gave up"
+        send(page, "resync")
+        assert wait_until(page, "document.getElementById('info-tls').textContent.includes(%r)" % PENDING[case.lang], 5), \
+            "being read… again"
+        n = len(asked)
+        page.clock.run_for(2100)
+        answered(page)
+        assert len(asked) == n + 1, f"the readings start anew ({len(asked) - n})"
+    finally:
+        page.unroute("**/api/v1/system")
+        show_view(page, "tiles")

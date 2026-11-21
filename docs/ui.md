@@ -1210,6 +1210,27 @@ settings file, the data directory, the listen address, TLS, the log level
 and every `MASSIMO_*` variable with where it came from, a key, an IV, a
 token or a password as "set, not shown"
 (`docs/api-v1.md`, "GET /api/v1/store, GET /api/v1/config").
+The page is drawn in place as its facts are read again,
+while a certificate is being read and each time the page is shown,
+and as its clock ticks:
+the folds stay open, a text selected stays selected
+and a copy says "Copied" until it fades.
+A sign-out forgets the facts, the store and the settings in effect,
+and ends the readings of a certificate;
+the next user who opens the page reads them again.
+While it is shown, the page follows the server's events:
+a `resync` of the stream, after the server's restart, reads the facts,
+the store and the settings in effect;
+`settings_read`, the settings file read again, the store and the settings in effect;
+a `change` that adds, changes or takes away a Cube
+(`cube.add`, `cube.update`, `cube.remove`) the facts,
+since the proxies' listeners and the interfaces listened on change with it.
+No other event changes a fact it shows:
+the proxies' events are about their clients, not their listeners,
+and the store's rows, which every event adds to, are read when the page is shown.
+The certificate's readings keep their count and their pace through an event's read;
+where an event's read finds the certificate being read and nothing reading it,
+as after a restart, the readings start anew, their count at none.
 
 ## System settings
 
@@ -1827,7 +1848,8 @@ and `backToTop` wires the two ↑, the floating one and the compacted header's;
 a Cube's link is its network sign (`cubeSignEl`, `LINK_SIGN`), which no plain region calls
 any more since Backup and restore is a part, and which waits for Block 15 (D181-A);
 a device's serial and radio address are a `deviceIds`;
-a list of facts is a `kvList`, of counts a `countList`;
+a list of facts is a `kvList`, of counts a `countList`
+(`KvList` and `CountList` for a part);
 an action with what it does and its button is an `.action-row`;
 `stickyHeader` keeps the header at the top and compacts it once scrolled.
 A state is a sign, a colour and a mark, so that it reads without its colour:
@@ -1854,7 +1876,8 @@ the badges under the name, and the entries under it (`subs`) indented to the nam
 a line down from its icon;
 its plain twins in `components.js`
 (`problemsEl`, `problemEntry`, `kindIcons`, `entryItems`)
-have no caller left and wait for Block 15.
+have no caller left and wait for Block 15,
+and so do `noticeEl`, `linkEl`, `kvList` and `countList` since System info is a part.
 A button that sends a request is busy from its click until the answer:
 off, with a turning ring after its text, and `aria-busy`
 (`setBusy` and `whileBusy`),
@@ -1902,7 +1925,7 @@ a script for each region of the page, in the order the page loads them:
   which call its part (`ui/src/software/`),
   for the header's check and the server's sign;
   the Maintenance card has none, a part alone (`ui/src/maintenance/`);
-  `system-info.js`, System info;
+  System info has none, a part alone (`ui/src/sysinfo/`);
 - `cubes.js`, the plain names of System settings → Cubes and Cube settings,
   the pairing's among them, which call their part (`ui/src/cubes/`),
   and the Cubes card's badges;
@@ -1991,7 +2014,7 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `lang`, `useLang`, `tParts`, `joinParts` | `lang.ts` | the page's language as a signal, raised by `applyLanguage` (`MassimoParts.language`); a text with parts in it (`tNodes`); parts joined with " · ", the empty ones left out | `key`, `texts`, `parts`; `parts`, `lead` (" · " before the first too) |
 | `useIcons` | `look.ts` | the icons chosen for the window and the radio as a signal, raised by `redrawSigns` (`MassimoParts.icons`); `Sign` reads it | – |
 | `Island` | `island.tsx` | a plain piece inside a part: an element the part draws empty and plain code fills, again where a key or the language changed | `tag` (div, p, span), `cls`, `keys`, `fill(el)` |
-| `Fold`, `FoldHead` | `fold.tsx` | a details that opens and closes (`detailsPanel`), the toggle of its making not passed on; a panel's head | `cls`, `open`, `onToggle(open)`, `summary`, `summaryProps`, `data`, the body as children; `before`, `name`, `mono`, `after` (after the monospaced part, a sign of the thing's state), `badges` |
+| `Fold`, `FoldHead` | `fold.tsx` | a details that opens and closes (`detailsPanel`), the toggle of its making not passed on; a panel's head | `id` (the plain markup's id, which a region keeps: System info's two folds), `cls`, `open`, `onToggle(open)`, `summary`, `summaryProps`, `data`, the body as children; `before`, `name`, `mono`, `after` (after the monospaced part, a sign of the thing's state), `badges` |
 | `Dropdown` | `menu.tsx` | a menu that drops down (`dropdown`), with `arrows` its arrow keys (`menuArrows`) and with `focusCurrent` the focus on its current item when it opens (among `arrows`' items, else its list's buttons that are on); a click on any button of its list closes it, as `dropdown()` of `components.js` does for every menu of the page, but on one marked `data-keep-open` (`MenuItem`'s `keepOpen`) | `id`, `cls`, `summaryId`, `summaryCls`, `label` (without it the summary is named by its text), `title` (where the tooltip is not the label), `summary`, `listCls`, `arrows` (a selector of its items), `focusCurrent`, `busy` (the summary turning while a request sent from its list runs), `onClick`, `onOpen` (told each time it opens), `onClose` (told each time it closes), the items as children |
 | `MenuItem` | `menu.tsx` | a menu's button, its icon, label, the icons after it and a grey second line (`menuItem`) | `icon`, `blank`, `label`, `icons`, `sub` (the second line, a text or elements, there whenever given, empty too), `subCls` (its class), `cls`, `value` (its `data-value`), `current`, `disabled`, `busy`, `keepOpen` (a click on it leaves the menu open, for an item whose result shows in the list), `onClick` |
 | `Picker` | `menu.tsx` | a menu that chooses one item, its summary the chosen one (`pickerMenu`) | `id`, `cls`, `summaryId`, `summaryCls`, `entries` (an item `{ value, label, sub, icon, icons, disabled }`, `{ group }` or `{ separator: true }`), `value`, `onPick(value)`, `shown` (`{ icon, label, title, aria }`) |
@@ -2038,8 +2061,8 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `session`, `stillSession`, `newSession` | `session.ts` | the session's number, raised by `MassimoParts.signedOut` before anything is forgotten: a store takes it before an await and drops the answer, its message and its next timer where it changed; `actionRunner`'s `bound` does so for a runner | –; `n`; – |
 | `FileButton` | `file.tsx` | a button that opens the browser's choice of a file of the types it accepts (`filePicker`), the same file again too | `cls`, `label`, `accept`, `off`, `onFile(file)` |
 | `Adder` | `adder.tsx` | the end of a list that adds an item: the new item's form in its place while shown, the button that shows it hidden meanwhile, the focus in the form's first field when it comes and back on the button when it goes (Users, Roles, Sign-in providers) | `id` (the button's), `formId` (the form's place), `label`, `shown`, `set(shown)`, the form as children |
-| `KvList` | `kv.tsx` | a list of facts, a name and its value each (`kvList`), every fact given; the caller leaves out those it does not show | `facts` (`[name, value, mono]`) |
-| `Copy`, `CopyIcon` | `copy.tsx` | a text that copies itself, a copy icon (`copyEl`, `copyIcon`) | `text`, `value` (what it copies, where it is not the text), `label`, `icon`, `cls`; `get`, `label` |
+| `KvList`, `CountList` | `kv.tsx` | a list of facts, a name and its value each (`kvList`), every fact given, the caller leaving out those it does not show; a list of counts by name, sorted, in columns (`countList`) | `facts` (`[name, value, mono]`); `counts` |
+| `Copy`, `CopyIcon`, `CopyPair` | `copy.tsx` | a text that copies itself, a copy icon (`copyEl`, `copyIcon`); something with its copy icon after it, a text or a link (an address served: an integration's, System info's) | `text`, `value` (what it copies, where it is not the text), `label` (named "Copy …"), `name` (its whole name in its place: the server's version), `icon`, `cls`; `get`, `label`; `get`, `label`, what it follows as children |
 | `Link` | `link.tsx` | a link in a tab of its own, the text alone for a url that is not http(s) (`linkEl`) | `url`, `text`, `cls` |
 | `DeviceIds` | `device.tsx` | a device's serial and radio address (`deviceIds`) | `serial`, `rf`, `always` |
 | `cubePath` | `path.ts` | a Cube's path in the API, which every part's request about a Cube starts from, Backup and restore's too; `base()` of `app.js` is its next user, with its block | `serial` |

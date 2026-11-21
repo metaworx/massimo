@@ -23,7 +23,7 @@ import { session } from "../shared/session";
 import { Age, Badge, ResultLine } from "../shared/badge";
 import { Choices } from "../shared/choices";
 import { hid } from "../shared/cls";
-import { Copy, CopyIcon } from "../shared/copy";
+import { Copy, CopyPair } from "../shared/copy";
 import { Field, FormFooter, Meanwhile, Select, Switch, TextField, useDraft } from "../shared/field";
 import { Fold, FoldHead } from "../shared/fold";
 import { focusForm, useForm } from "../shared/forms";
@@ -374,7 +374,7 @@ function Seen({ f, n }: { f: FoundIntegration; n: number }) {
     <li>
       <span class="integration-found-name">{name}</span>{" "}
       {url ? (
-        <span class="copy-pair"><Link url={url} text={url} cls="mono small" /><CopyIcon get={() => url} label={t("copy.what", { what: url })} /></span>
+        <CopyPair get={() => url} label={t("copy.what", { what: url })}><Link url={url} text={url} cls="mono small" /></CopyPair>
       ) : (
         <Copy text={f.url || f.address} icon cls="mono muted small" />
       )}{" "}

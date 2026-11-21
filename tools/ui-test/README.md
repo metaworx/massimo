@@ -329,7 +329,15 @@ hence `failed_checks_forgotten`.
   the settings file read again shows what waits with nothing read;
   a reboot event keeps this page's wait, which follows at its time; an event
   keeps the restart's question and the delay, and takes the reboot's back
-  where a reboot waits.
+  where a reboot waits;
+  System info keeps a text selected through a certificate's reading
+  and a copy's "Copied", its folds and its copy icons through the page shown
+  again; the session's end forgets its facts and the settings in effect, and a
+  reading that answers late shows nothing; a resync reads the facts and the
+  settings in effect once while it is shown, nothing for Rooms; a Cube changed
+  reads the facts; a resync that finds the certificate being read reads it
+  anew, also after the readings gave up; the session's end between two
+  readings reads no more.
 - `test_stream.py`:
   the event stream opens with tickets only, never with the token,
   and after a refused stream (the test hands out a used ticket first,

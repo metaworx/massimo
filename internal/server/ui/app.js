@@ -1029,7 +1029,6 @@ function applyLanguage() {
   fillLogSelects();
   renderLog();
   renderLogSign(); // log.js
-  if (infoState.store || infoState.config) renderServerInfo();
   if (isShown("me")) renderNotify(); // notify.js
   tellWorkerLanguage();
 }

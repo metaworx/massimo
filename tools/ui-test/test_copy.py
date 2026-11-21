@@ -66,8 +66,7 @@ def test_proxies_copy(page, case, reads):
         return v
     reads.change("**/api/v1/system", with_proxy)
     try:
-        show_view(page, "info")
-        page.evaluate("loadSystemInfo()")
+        show_view(page, "info")  # which reads the system's answer
         assert wait_until(page, "!!document.querySelector('#info-proxies .copy-icon')", 5), "the proxy with its copy icon"
         page.evaluate("navigator.clipboard.writeText('')")
         page.locator("#info-proxies .sys-proxy .copy-icon").last.click()

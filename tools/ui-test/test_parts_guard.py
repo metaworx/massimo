@@ -750,7 +750,8 @@ REGIONS = (
     # filled their elements in place but for the options of a select and
     # the last updates' lines, which nobody holds; what they lost is in
     # test_maint_updates.py (a line selected, a select's focus while it
-    # saved, a question about a release gone).
+    # saved, a question about a release gone). System info's fails there:
+    # system-info.js made the copy icons and the link anew at each read.
     # The stream's events (UiParts D198) are a source of the regions that
     # follow the server while shown, a forward guard: the plain page read
     # nothing for them, so that their views passed there too;
@@ -765,7 +766,7 @@ REGIONS = (
         View("Maintenance", maint),
         View("the restart asking, a delay typed for the reboot", maint_question),
     ), sources=("the page shown again: maint", "the stream's events: resync change reboot reboot_cancelled settings_read")),
-    Region("system-info", ("#sys-info-body",), (View("System info, its folds open", info),)),
+    Region("system-info", ("#sys-info-body",), (View("System info, its folds open", info),), sources=("the page shown again: info", "the stream's events: resync settings_read change.cube")),
     Region("my-settings", ("#prefs-sec > .dev-head", "#prefs-sec > .dev-row", "#prefs-sec > p"), (View("My settings", personal("prefs")),)),
     Region("appearance", ("#prefs-sec .appearance",), (
         View("My settings", personal("prefs")),
