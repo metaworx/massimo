@@ -190,3 +190,60 @@ def test_no_read_of_my_profile_while_signing_out(new_context, case, watch, guard
     finally:
         clear_user(op)
         api_call("DELETE", "api/v1/users/operator/tokens/%d" % op_id)
+
+
+# The chrome's names checked on a page just loaded: an element, the
+# attribute or "text" read of it, and the key of its text.
+FIRST_NAMES = (
+    ("#view-tiles", "aria-label", "nav.rooms"),
+    ("#view-tiles", "title", "nav.roomsTitle"),
+    ("#top-btn", "aria-label", "page.toTop"),
+    ("#menu-log .menu-item-label", "text", "nav.logTitle"),
+    ("#menu-cube .menu-item-label", "text", "nav.cubeTitle"),
+    ("#menu-system .menu-item-label", "text", "nav.settingsTitle"),
+    ("#menu-maint .menu-item-label", "text", "nav.maintTitle"),
+    ("#menu-info .menu-item-label", "text", "nav.infoTitle"),
+    ("#menu-me .menu-item-label", "text", "nav.userTitle"),
+    ("#menu-servers .menu-item-label", "text", "app.selectServer"),
+    ("#system .page-switch", "aria-label", "page.switch"),
+    ("#system .sec-menu > summary", "aria-label", "page.sections"),
+    ("#system .sec-menu > summary", "title", "page.sectionsTitle"),
+)
+
+
+def test_the_chrome_speaks_the_page_language_from_the_start(page, case):
+    """On a page just loaded, with no change of page and no change of
+    language, the header's buttons, ☰'s entries and a settings page's row
+    are named in the page's language: the parts drawn as parts.js loads,
+    before any table has come, were not drawn again when the page's
+    language had loaded, so that a part drawn again by nothing else kept
+    its first drawing: the header's Rooms and back to top were named by
+    their texts' keys until a change of page, in English as in German (AP
+    UiParts v1.0, Block 14: the first half's fault, found by the second).
+    Fails on the page before."""
+    page.wait_for_selector(".room", timeout=10000)
+    assert page.evaluate("i18n.lang") == case.lang, "the page in the case's language"
+    wrong = page.evaluate("""(names) => names.map(([sel, attr, key]) => {
+      const el = document.querySelector(sel);
+      const got = !el ? null : attr === "text" ? el.textContent : el.getAttribute(attr);
+      return [sel, attr, key, got, t(key)];
+    }).filter(([, , key, got, want]) => got !== want || want === key || /\\b(nav|page|app)\\.[A-Za-z]/.test(got || ""))""", [list(n) for n in FIRST_NAMES])
+    assert not wrong, "named in the page's language from the start: " + "; ".join(
+        f"{sel} {attr} {got!r}, not {want!r}" for sel, attr, key, got, want in wrong) + " (a text, never its key)"
+
+
+@pytest.mark.cases("1100-de", "390-de")
+def test_the_chrome_follows_english_on_a_german_page(page, case):
+    """On a page loaded in German, English chosen draws the chrome's names
+    in English: the parts took English for the page's language until the
+    first change of language, so that a change to English changed nothing
+    they read. Fails on the page before."""
+    assert wait_until(page, "i18n.lang === 'de'", 5), "the page in German"
+    page.evaluate("() => { setSetting('lang', 'en'); changeLanguage('en').then(applyLanguage); }")
+    try:
+        assert wait_until(page, "i18n.lang === 'en'", 5), "English chosen"
+        frames(page)
+        assert page.evaluate("document.querySelector('#menu-system .menu-item-label').textContent === t('nav.settingsTitle')"), \
+            page.evaluate("document.querySelector('#menu-system .menu-item-label').textContent")
+    finally:
+        page.evaluate("() => { setSetting('lang', 'auto'); changeLanguage('auto').then(applyLanguage); }")
