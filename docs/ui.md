@@ -741,8 +741,9 @@ disconnected)").
 A list or configuration line says what changed: "MEQ0000101 “Window” moved
 from Bath to Kitchen", "comfort 21.0 → 21.5", "Monday's program changed".
 The server's own lines are there too: its start with its version, its stop
-and why, the settings file read again with the names of what changed, a
-restart, a reboot or an update asked for and its outcome, the backups, their
+and why, the settings file read again with the names of what changed
+(a warning where the next start would refuse a log level or format),
+a restart, a reboot or an update asked for and its outcome, the backups, their
 prune and the log's, a restore started; and a Cube's new address or its
 leaving the LAN.
 A line someone asked for says by whom ("backup 12 taken (by hand), by Anna").
@@ -866,6 +867,8 @@ or the person marks it seen (`docs/api-v1.md`, "GET /api/v1/log/alerts"):
 a lost connection until the next one,
 a failed command until the same one is acknowledged,
 a failed backup until the next, a hold until it ends,
+a setting the next start would refuse until the settings file is read
+again without it or the server starts,
 a room whose thermostats disagree until they agree again,
 a thermostat off its week programme until it follows it again,
 a room's setpoint not confirmed until every thermostat shows its re-send;

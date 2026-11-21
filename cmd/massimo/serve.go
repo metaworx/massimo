@@ -123,7 +123,7 @@ func runServe(args []string) error {
 		defer logFile.Close()
 		fileOut = logFile
 	}
-	root, err := newServeLogger(os.Stderr, fileOut, fileFormat, processFormat, *logLevelFlag, "-log-level or "+env.LogLevel)
+	root, err := newServeLogger(os.Stderr, fileOut, fileFormat, processFormat, *logLevelFlag, serveLevelWhat)
 	if err != nil {
 		return fmt.Errorf("serve: %w", err)
 	}

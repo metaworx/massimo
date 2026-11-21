@@ -3387,6 +3387,7 @@ of the same Cube, or of the server for the server's own:
 | `command` retried, failed or dropped | the same command key acknowledged for the same device |
 | `hold` | its end: the duty cycle's reset, or the wait for free slots |
 | `backup`, `restore_done`, `update_result`, `log_rotated` failed | the next one of its kind below warn |
+| `settings_read` with a value the next start would refuse | the next `settings_read` below warn, or `server_started` |
 | `proxy_refused` | the Cube's `connected`, or `proxy_connected` |
 | `proxy_warning`, a pairing not stopped or not started | `pairing_ended`; `pairing_started` or `proxy_pairing` |
 | `disagree`, a room's thermostats differing or its state not sent again | a `disagree` of the same `room` whose `outcome` is `agree` |
@@ -3499,7 +3500,9 @@ request asked for it, `by`:
 `server_started` (`version`, and `before` when it changed),
 `server_stopping` (`why`: `restart`, `reboot`, `update` or `stop`),
 `settings_read` (the settings file read again: `why`, the names of the
-variables `changed` and of those waiting `at_next_start`, never their values),
+variables `changed` and of those waiting `at_next_start`, never their values;
+at `warn` with its `error` where the next start would refuse one of them,
+a log level or format that does not parse),
 `restart`, `reboot`, `reboot_cancelled`, `update` (`from`, `to`, `channel`),
 `update_result` (the helper's outcome after the restart, once:
 `state`, `from`, `to`; a failure at `warn` with its `error`),
@@ -3985,6 +3988,9 @@ Needs the capability `restart`, and answers what it found:
 
 `changed` names the variables this read changed, `pending` those that now
 differ from the start and wait for the next one; names, never values.
+A log level or format among them that the next start would refuse is not refused here:
+the log's `settings_read` is then at `warn`,
+its `error` the start's own after "the next start refuses: ".
 It sends nothing to a Cube, and is an audit row (`server.reload`) but no
 command, so a retry is harmless.
 `409` when the server reads no settings file,

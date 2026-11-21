@@ -26,6 +26,10 @@ var logLevel slog.LevelVar
 // logLevelNames are the levels -log-level and MASSIMO_LOG_LEVEL take.
 const logLevelNames = "debug, info, warn or error"
 
+// serveLevelWhat names serve's level in the start's error: its
+// -log-level, whose default is MASSIMO_LOG_LEVEL.
+const serveLevelWhat = "-log-level or " + env.LogLevel
+
 // parseLogLevel reads a level name in any case; empty is info.
 func parseLogLevel(s string) (slog.Level, error) {
 	switch strings.ToLower(strings.TrimSpace(s)) {

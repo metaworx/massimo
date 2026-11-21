@@ -56,6 +56,12 @@ func TestUnsettled(t *testing.T) {
 		ev(12, "backup", "warn", "KEQ0000100", nil),
 		ev(13, "backup", "warn", "KEQ0000100", nil),
 		ev(14, "proxy_delete_refused", "warn", "KEQ0000100", nil),
+		// a value the next start refuses: settled by the file read again
+		// without one, or by a start; not by another that refuses one
+		ev(15, "settings_read", "warn", "", nil),
+		ev(17, "settings_read", "warn", "", nil),
+		ev(20, "settings_read", "warn", "", nil),
+		ev(21, "settings_read", "warn", "", nil),
 	}
 	lines[2].Device, lines[3].Device = "0a0101", "0a0102"
 	ack := ev(6, "command", "info", "KEQ0000100", cmd("acknowledged"))
@@ -65,12 +71,17 @@ func TestUnsettled(t *testing.T) {
 		ev(4, "connected", "info", "KEQ0000200", nil), // another Cube's
 		ack,
 		ev(11, "server_started", "info", "", nil),
+		ev(16, "settings_read", "info", "", nil),
+		ev(17, "settings_read", "warn", "", nil),
+		ev(19, "server_started", "info", "", nil),
+		ev(20, "settings_read", "warn", "", nil),
+		ev(21, "settings_read", "warn", "", nil),
 	}
 	var got []int64
 	for _, a := range unsettled(lines, settling, now) {
 		got = append(got, a.ID)
 	}
-	if want := []int64{3, 7, 9, 12, 13, 14}; !slices.Equal(got, want) {
+	if want := []int64{3, 7, 9, 12, 13, 14, 20, 21}; !slices.Equal(got, want) {
 		t.Fatalf("unsettled %v, want %v", got, want)
 	}
 }

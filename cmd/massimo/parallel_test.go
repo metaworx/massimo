@@ -29,6 +29,7 @@ var serialTests = map[string]string{
 	"TestDataDir":                           "sets MASSIMO_DATA",
 	"TestNoEnv":                             "sets MASSIMO_ENV_FILE, as -no-env does",
 	"TestReloadAppliesTheRebootSwitch":      "unsets settings variables (unsetForTest)",
+	"TestReloadWarnsOfARefusedLogSetting":   "unsets settings variables (unsetForTest) and reloads a settings file into the environment",
 	"TestRestartHelper":                     "sets ProgramData",
 	"TestSettingsReloader":                  "unsets settings variables (unsetForTest) and reloads a settings file into the environment",
 	"TestTLSCommand":                        "sets MASSIMO_DATA and the TLS variables",
