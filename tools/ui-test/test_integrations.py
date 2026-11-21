@@ -11,7 +11,7 @@ import ssl
 import urllib.request
 
 from conftest import URL, api_call
-from helpers import cleanup, named_buttons, reads_of, safe_route, scroll_width, show_view, undo, wait_until
+from helpers import cleanup, frames, named_buttons, reads_of, safe_route, scroll_width, show_view, undo, wait_until
 
 HEADER = "X-MassimoHA-On-Behalf-Of"
 
@@ -184,9 +184,19 @@ def _end(uuid):
 
 def found_box(page):
     """System settings → Integrations, Seen on the LAN, opened afresh so
-    that the card reads the found answer again."""
+    that the card reads the found answer again, and that answer drawn.
+    A `p` in the box is no sign of it: the part keeps the box through a
+    new read, and draws why it does not look as soon as the list of
+    integrations is in, before the found answer is (refresh reads it
+    last); so the box is returned once the read this showing starts has
+    been answered and drawn."""
     show_view(page, "tiles")
-    show_view(page, "system")
+    with page.expect_request(lambda r: r.method == "GET" and "/api/v1/integrations/found" in r.url, timeout=10000) as asked:
+        show_view(page, "system")
+    answer = asked.value.response()
+    assert answer is not None and answer.ok, "the found answer read"
+    answer.finished()
+    frames(page)
     box = page.locator("#integrations-found")
     box.locator("p").first.wait_for()
     return box
