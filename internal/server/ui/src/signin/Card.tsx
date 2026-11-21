@@ -14,8 +14,10 @@
  * end with the version, the language, the mode and in the app Select
  * server; the notice where the address takes no kept key; a form for
  * each way, in the app with Cancel; the box that says the login by
- * fingerprint was not kept; the version at the foot. The forms are real
- * forms with named fields, for a password manager, and their fields are
+ * fingerprint was not kept, the two forms and the box in one place of one
+ * height (style.css .login-forms), so that a switch of the way moves
+ * nothing of the card (UiParts D224); the version at the foot. The forms
+ * are real forms with named fields, for a password manager, and their fields are
  * not controlled (UiParts D210): a draw never sets what they hold, they
  * are read at the submit and emptied at each opening alone, as
  * askLogin did. Each way signs in as askLogin's handlers did, then
@@ -99,8 +101,11 @@ export function Card() {
     else if (focus.on === "password") passRef.current?.focus();
     else retryRef.current?.focus();
   }, [focus]);
-  // the one place that puts the focus into the chosen way's first field, at an opening and at a way's click
+  // the one place that puts the focus into the chosen way's first field, at an opening and at a way's click; none on a
+  // touch screen, where it would bring the soft keyboard up by itself and move the card (UiParts D224): the keyboard
+  // comes when a field is tapped
   function wayFocus(): void {
+    if (matchMedia("(pointer: coarse)").matches) return;
     (card.way === "key" ? keyRef : userRef).current?.focus();
   }
   const fail = (text: string) => {
@@ -182,36 +187,38 @@ export function Card() {
         <Menu />
       </div>
       <p id="login-fp-plain" class={"notice small" + hid(!plainHere(st))} role="note">{t("login.fingerprintPlain")}</p>
-      <form id="login-form" method="post" class={hid(way !== "password" || !!keepFailed).trim() || undefined} onSubmit={submitPassword}>
-        <p class="muted">{t("login.text")}</p>
-        <p id="login-tls" class={"notice small" + hid(!card.selfSigned)} role="note">{t("header.selfSigned")}</p>
-        <label><span>{t("login.user")}</span> <input ref={userRef} type="text" id="login-user" name="username" autocomplete="username" autocapitalize="none" spellcheck={false} /></label>
-        <label><span>{t("login.password")}</span> <input ref={passRef} type="password" id="login-password" name="password" autocomplete="current-password" /></label>
-        <label id="login-keep-row" class={"switch login-keep" + hid(!offered)}>
-          <input type="checkbox" id="login-keep" checked={keep && offered} onChange={(ev) => setKeep(ev.currentTarget.checked)} />
-          <span class="slider" aria-hidden="true" />
-          <span class="switch-label">{t("login.keepFingerprint")}</span>
-        </label>
-        <ResultLine id="login-error" cls="small" role="alert" res={card.said} />
-        <div class="actions">
-          <button type="button" id="login-cancel" class={"form-cancel" + hid(!servers)} onClick={toServers}>{t("action.cancel")}</button>
-          <button type="submit" {...busyProps("primary", pw.busy)}>{t("login.submit")}</button>
+      <div class="login-forms">
+        <form id="login-form" method="post" class={hid(way !== "password" || !!keepFailed).trim() || undefined} onSubmit={submitPassword}>
+          <p class="muted">{t("login.text")}</p>
+          <p id="login-tls" class={"notice small" + hid(!card.selfSigned)} role="note">{t("header.selfSigned")}</p>
+          <label><span>{t("login.user")}</span> <input ref={userRef} type="text" id="login-user" name="username" autocomplete="username" autocapitalize="none" spellcheck={false} /></label>
+          <label><span>{t("login.password")}</span> <input ref={passRef} type="password" id="login-password" name="password" autocomplete="current-password" /></label>
+          <label id="login-keep-row" class={"switch login-keep" + hid(!offered)}>
+            <input type="checkbox" id="login-keep" checked={keep && offered} onChange={(ev) => setKeep(ev.currentTarget.checked)} />
+            <span class="slider" aria-hidden="true" />
+            <span class="switch-label">{t("login.keepFingerprint")}</span>
+          </label>
+          <ResultLine id="login-error" cls="small" role="alert" res={card.said} />
+          <div class="actions">
+            <button type="button" id="login-cancel" class={"form-cancel" + hid(!servers)} onClick={toServers}>{t("action.cancel")}</button>
+            <button type="submit" {...busyProps("primary", pw.busy)}>{t("login.submit")}</button>
+          </div>
+        </form>
+        <div id="login-keep-failed" class={"login-keep-failed" + hid(!keepFailed)}>
+          <p id="login-keep-failed-text" class="small" role="alert">{keepFailed || ""}</p>
+          <div class="actions">
+            <button type="button" id="login-keep-skip" onClick={() => keepChosen(false)}>{t("login.keepSkip")}</button>
+            <button ref={retryRef} type="button" id="login-keep-retry" class="primary" onClick={() => keepChosen(true)}>{t("login.keepRetry")}</button>
+          </div>
         </div>
-      </form>
-      <div id="login-keep-failed" class={"login-keep-failed" + hid(!keepFailed)}>
-        <p id="login-keep-failed-text" class="small" role="alert">{keepFailed || ""}</p>
-        <div class="actions">
-          <button type="button" id="login-keep-skip" onClick={() => keepChosen(false)}>{t("login.keepSkip")}</button>
-          <button ref={retryRef} type="button" id="login-keep-retry" class="primary" onClick={() => keepChosen(true)}>{t("login.keepRetry")}</button>
-        </div>
+        <form id="login-key-form" class={hid(way !== "key").trim() || undefined} onSubmit={submitKey}>
+          <label><span>{t("login.token")}</span> <input ref={keyRef} type="password" id="login-token" name="api-key" autocomplete="off" /></label>
+          <div class="actions">
+            <button type="button" id="login-key-cancel" class={"form-cancel" + hid(!servers)} onClick={toServers}>{t("action.cancel")}</button>
+            <button type="submit" class="primary">{t("login.submit")}</button>
+          </div>
+        </form>
       </div>
-      <form id="login-key-form" class={hid(way !== "key").trim() || undefined} onSubmit={submitKey}>
-        <label><span>{t("login.token")}</span> <input ref={keyRef} type="password" id="login-token" name="api-key" autocomplete="off" /></label>
-        <div class="actions">
-          <button type="button" id="login-key-cancel" class={"form-cancel" + hid(!servers)} onClick={toServers}>{t("action.cancel")}</button>
-          <button type="submit" class="primary">{t("login.submit")}</button>
-        </div>
-      </form>
       <p id="login-version" class="login-version mono small muted">{v ? splitVersion(v).short : ""}</p>
     </>
   );

@@ -1880,6 +1880,15 @@ massimo-week-program { display: contents; }
 .login-version { margin: 14px 0 0; text-align: center; overflow-wrap: anywhere; }
 #login-dialog > .brand-big { margin-bottom: 26px; }
 .login-keep-failed .actions { margin-top: 8px; }
+/* the two ways' forms and the box of a login not kept in one place, its
+   height the tallest's as shown, the way not chosen kept there unseen, so
+   that a switch of the way moves nothing of the card (UiParts D224) */
+.login-forms { display: grid; }
+.login-forms > * { grid-area: 1 / 1; min-width: 0; }
+.login-forms > form.hidden { display: block !important; visibility: hidden; }
+/* a grid item's margins collapse with nothing outside it: the first line's
+   top margin, which collapsed with the row's above it, would add itself */
+.login-forms > * > :first-child { margin-top: 0; }
 .user-tokens li .revoke-token { margin-left: auto; }
 /* the key My profile was opened with (#profile?key=<id>, ui/src/profile/
    store.ts markKey, shared/tokens.tsx): tinted and outlined in the

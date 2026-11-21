@@ -24,6 +24,11 @@ The card's ☰, at the end of that row, shows the version first,
 then sets the language and the appearance (light, dark, as the system)
 before anyone signs in, the same settings as My settings,
 kept in this browser.
+On a touch screen the card puts no field in focus by itself,
+at its opening or when the way is switched: the keyboard comes when a field is tapped;
+on a desktop the chosen way's first field takes the focus.
+The two ways' forms take one height, so that the card stays where it is
+when the way is switched (UiParts D224).
 Above the form, a button per enabled OpenID Connect provider,
 **Sign in with Nextcloud** for example
 (docs/api-v1.md, "Sign-in through OpenID Connect"),

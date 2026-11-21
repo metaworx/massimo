@@ -8,6 +8,8 @@ watched on a page without a token, whose first requests are refused on
 purpose (test_login.py)."""
 import json
 
+import pytest
+
 from conftest import TOKEN, URL
 from helpers import frames, sign_out, wait_until
 from test_connect import server_page
@@ -184,3 +186,72 @@ def test_the_fingerprint_keeps_its_name_and_its_turn(new_context, case, watch, g
     assert wait_until(page, "!document.getElementById('login-way-fp').classList.contains('busy')", 3), "dismissed: it stops turning"
     assert page.evaluate("document.getElementById('login-dialog').open"), "and the card stays"
 
+
+
+BOX = "(() => { const r = document.getElementById('login-dialog').getBoundingClientRect(); return [r.top, r.height]; })()"
+WAY = "#login-ways .login-way[data-way='%s']"
+IN_FIELD = "!!document.activeElement && ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)"
+KEPT = {"status": {"can": True, "user": "operator", "ask": "start", "plain": False}}
+
+
+def card_in(new_context, guard, watch, kept, **touch):
+    """The sign-in's card open in a context of its own (touch, where
+    given: has_touch and is_mobile), in the app with a kept login (the
+    fingerprint's way shown) or in a browser."""
+    ctx = lambda: new_context(**touch)  # noqa: E731, the context server_page makes
+    if kept:
+        page = server_page(ctx, guard, watch, KEPT)
+        page.locator("#login-dialog[open]").wait_for()
+        page.locator("#login-way-fp").wait_for(state="visible")
+    else:
+        page = ctx().new_page()
+        guard.page = page
+        page.set_default_timeout(5000)
+        page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+        page.goto(URL)
+        assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the sign-in's card"
+    frames(page)
+    return page
+
+
+def same_box(page, before, what):
+    """The card where it was and as tall, within half a pixel."""
+    after = page.evaluate(BOX)
+    assert all(abs(a - b) <= 0.5 for a, b in zip(after, before)), f"{what}: the card moved, {before} → {after}"
+
+
+@pytest.mark.parametrize("kept", (False, True), ids=("browser", "app"))
+def test_a_touch_screen_gets_no_focus_and_no_move(new_context, case, watch, guard, kept):
+    """On a touch screen (UiParts D224) the card puts no focus into a field
+    by itself, at its opening or at a way's tap, so that the soft keyboard
+    comes when a field is tapped, and a switch of the way, both directions,
+    leaves the card where it is and as tall: the two ways' forms take one
+    height. Fails on the page before: it focused the way's first field and
+    the card changed its height with the way."""
+    page = card_in(new_context, guard, watch, kept, has_touch=True, is_mobile=case.width == 390)
+    assert page.evaluate("matchMedia('(pointer: coarse)').matches"), "the context is a touch screen"
+    assert not page.evaluate(IN_FIELD), "no focus in a field at the opening"
+    before = page.evaluate(BOX)
+    for way in ("key", "password"):
+        page.locator(WAY % way).tap()
+        frames(page)
+        assert page.locator(WAY % way).get_attribute("aria-pressed") == "true", f"{way} chosen"
+        assert not page.evaluate(IN_FIELD), f"no focus in a field after {way}'s tap"
+        same_box(page, before, f"after {way}'s tap")
+
+
+@pytest.mark.parametrize("kept", (False, True), ids=("browser", "app"))
+def test_a_desktop_keeps_the_focus_and_no_move(new_context, case, watch, guard, kept):
+    """On a desktop the card puts the focus into the chosen way's first
+    field at its opening and at a way's click, as before, and a switch of
+    the way leaves the card where it is and as tall (UiParts D224). The
+    focus is a forward guard, the page before gave it so too; the card's
+    place fails there."""
+    page = card_in(new_context, guard, watch, kept)
+    assert wait_until(page, "document.activeElement && document.activeElement.id === 'login-user'", 3), "the name in focus at the opening"
+    before = page.evaluate(BOX)
+    for way, field in (("key", "login-token"), ("password", "login-user")):
+        page.locator(WAY % way).click()
+        frames(page)
+        assert page.evaluate("document.activeElement.id") == field, f"{field} in focus after {way}'s click"
+        same_box(page, before, f"after {way}'s click")
