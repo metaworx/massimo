@@ -463,7 +463,12 @@ func (s *Store) LogKeepDays(ctx context.Context) (int, error) {
 
 // PruneEvents removes the events older than log.keep_days before now,
 // per Cube and then the server's, in chunks, and returns how many it
-// removed.
+// removed. It keeps the log's newest row, of any Cube or the server's,
+// whatever its age (AP LogEdges, D5-A): log.id has no AUTOINCREMENT, so
+// SQLite gives a new row the highest id plus one, and a log the prune
+// emptied would give its ids out again. With the newest row kept, the
+// highest id never falls; each chunk reads it anew, and the row kept
+// goes at a later chunk or prune, once a newer one is written.
 func (s *Store) PruneEvents(ctx context.Context, now time.Time) (int, error) {
 	return s.pruneEvents(ctx, now, nil)
 }
@@ -488,8 +493,7 @@ func (s *Store) pruneEvents(ctx context.Context, now time.Time, between func() b
 cubes:
 	for _, cube := range cubes {
 		for {
-			res, err := s.db.ExecContext(ctx, `DELETE FROM log WHERE id IN (SELECT id FROM log WHERE `+cubeTerm(cube)+` AND time < ? LIMIT ?)`,
-				cubeArgs(cube, cutoff, pruneChunk)...)
+			res, err := s.db.ExecContext(ctx, pruneWalk(cube), cubeArgs(cube, cutoff, pruneChunk)...)
 			if err != nil {
 				return removed, fmt.Errorf("store: prune events: %w", err)
 			}
@@ -543,6 +547,16 @@ func (s *Store) cubeIDs(ctx context.Context) ([]int64, error) {
 	return out, rows.Err()
 }
 
+// pruneWalk is the statement of a prune's chunk of a Cube's rows, the
+// server's for cube 0, with cubeArgs(cube, cutoff, chunk): the rows
+// before the cutoff by log_cube_time, but the log's newest row
+// (PruneEvents), whose max(id) SQLite reads at the table's end
+// (TestEventsPrunePlan).
+func pruneWalk(cube int64) string {
+	return `DELETE FROM log WHERE id IN (SELECT id FROM log WHERE ` + cubeTerm(cube) + ` AND time < ?
+		AND id < (SELECT max(id) FROM log) LIMIT ?)`
+}
+
 // cubeTerm is the term of a Cube's rows, the server's for cube 0;
 // cubeArgs puts the Cube's id, where the term binds one, before args.
 func cubeTerm(cube int64) string {
@@ -561,7 +575,8 @@ func cubeArgs(cube int64, args ...any) []any {
 
 // ErrBeyondNewest is a page forward whose cursor (EventQuery.AfterID) is
 // beyond the log's newest row: an id the log never gave out, or gave out
-// before a restore from an older copy or a prune that emptied it.
+// before a restore from an older copy, which gives it out again. The
+// prune makes none, since it keeps the newest row (PruneEvents).
 var ErrBeyondNewest = errors.New("store: the cursor is beyond the log's newest row")
 
 // Events returns a page of a Cube's events, or of the Cubes of

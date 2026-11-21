@@ -427,10 +427,10 @@ function logNewestID(): number {
  * log is then the store's, its ids far below those of the lines it kept
  * in memory, so that a page before the oldest line would be the store's
  * newest, shown under the lines as if older; a store restored from an
- * older copy or emptied by the prune; a server without a store
- * restarted with its clock set back. A line the prune removed while
- * newer ones stay gives no sign (D4-A). A question that fails says
- * nothing is gone.
+ * older copy; a server without a store restarted with its clock set
+ * back. The prune never makes one, since it keeps the log's newest row
+ * (AP LogEdges, D5-A); a line it removed gives no sign (LogCursor's
+ * D4-A). A question that fails says nothing is gone.
  */
 async function logGone(): Promise<boolean> {
   const newest = logNewestID();

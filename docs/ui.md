@@ -832,9 +832,9 @@ where the server's log ends before that line, the log loads again
 in place of the page before the oldest:
 so for a Cube served for this run whose lines the server kept in memory,
 once it gains its row in the store and those lines leave its log,
-for a store restored from an older copy or emptied by the prune,
+for a store restored from an older copy,
 and for a server without a store restarted with its clock set back.
-A line the prune took while newer ones stay is not noticed.
+A line the prune took is not noticed: the prune keeps the log's newest.
 The pages fetched stay while new events come in, with room for 2000 more lines;
 past that the oldest lines go, and Older fetches them again.
 Only a log left open until every fetched line has gone pages on by the time of

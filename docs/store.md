@@ -8,7 +8,8 @@ It follows section 4 of the proposal of 2026-11-05 and roadmap item 6;
 docs/design.md sections 2, 6 and 7 are the frame.
 Stages (a) to (c) shipped in v0.7.0-alpha.1 to v0.9.0-alpha.1,
 and stages (d) and (e) are implemented (section 9);
-the owner's decisions are listed at the end. docs/server.md looks further ahead,
+the owner's decisions are listed in section 10, and the improvements left
+for later in section 11. docs/server.md looks further ahead,
 at encryption at rest, the public server and sync,
 and says what version 1 prepares for them.
 
@@ -656,10 +657,18 @@ Notes on the tables:
   The ids are given out in the order of the commits,
   so a row at or below that id is committed and in every walk that matches it:
   a client that pages on from the last id misses none.
-  `log.id` has no `AUTOINCREMENT` (AP LogCursor, D10-A):
-  a store restored from an older copy, or emptied by the prune,
-  gives ids out again; a cursor beyond `max(id)` is answered `409`,
+  `log.id` has no `AUTOINCREMENT`:
+  SQLite gives a new row the highest id plus one,
+  so a log the prune emptied would give its ids out again.
+  The prune therefore keeps the log's newest row, whatever its age:
+  the highest id never falls, and no id is given out twice;
+  the row kept goes at a later prune, once a newer one is written.
+  That is AP LogEdges' D5-A,
+  reversing AP LogCursor's D10-A, which left the reuse documented.
+  A store restored from an older copy still gives ids out again:
+  a cursor beyond `max(id)` is answered `409`,
   one that such a reuse has already passed goes unnoticed.
+  Section 11 keeps `AUTOINCREMENT` for a later migration.
   A page before a time looks up the newest id before it first.
   The level is no column of an index, its "and above" being a range that would
   give up the id order: a page reads past the rows below it.
@@ -693,6 +702,10 @@ Notes on the tables:
   Retention is a daily `DELETE … WHERE time < ?` by `log.keep_days`,
   per Cube and then for the server's rows,
   30 days by default as decision 5 took it, 0 keeping everything.
+  Each chunk walks `log_cube_time` and leaves out the log's newest row (above),
+  `id < (SELECT max(id) FROM log)`, which SQLite reads at the table's end:
+  its last chunk, which finds nothing, reads no row but the one it keeps
+  (`TestEventsPrunePlan`).
   Measured in `TestEventSize` (stage (d), and again with 0009's columns):
   a state event of about 420 bytes of JSON takes about 730 bytes in the file,
   its indexes included (640 before 0009),
@@ -1826,6 +1839,12 @@ Implemented on 2026-11-06 (AP StoreLog v1.0), with its review's fixes (v1.1).
   and the ring's events carry ids too,
   from one counter of the server's, started at its start in microseconds,
   taken with the append under one lock (`logRing`, `internal/server/log.go`).
+  A clock set behind the previous run's gives a cursor of that run a `409`,
+  and the client reads the log again;
+  the unit needs no ordering on the clock,
+  since systemd and systemd-timesyncd set it forward before `serve` starts,
+  to their build time or the time last saved,
+  also on a Raspberry Pi without a clock of its own (AP LogEdges, D6-A).
   A device hidden later keeps its events until the prune.
 - Settings: `log.keep_days` in `/api/v1/settings` (30, 0 keeps everything,
   at most 3650), applied at once; Settings → Server waits for its own plan.
@@ -2039,3 +2058,21 @@ From docs/server.md, the later questions:
 18. **The trust anchor for the page** (docs/server.md, "Trusting the code"):
     the web app installed from the edge on the LAN with the service worker as
     the verifier, the app shells, or both.
+
+## 11. Future improvements
+
+Changes worth making that wait for other work,
+each with what it waits for and why.
+
+**`AUTOINCREMENT` for `log.id`**,
+with the next migration that makes `log` again anyway.
+Today the prune keeps the log's newest row (section 5, `log.id`),
+so no id is given out twice;
+that holds only as long as the prune is the only thing that deletes log rows.
+`AUTOINCREMENT` would make it the schema's guarantee, covering any later delete:
+a route that clears the log, or a `DELETE` run by hand.
+On its own it costs a rebuild of `log` at the upgrade,
+1.7 s at 90,000 rows on a PC and not measured on a Raspberry Pi,
+and a down part under the store's downgrade rule (section 5, "Migrations"),
+which is why it waits for a rebuild that is needed anyway.
+Migration 0013 did the same for `backups` (section 5, "Migrations").
