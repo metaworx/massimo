@@ -1031,6 +1031,7 @@ async function init() {
   loadSettings();
   await changeLanguage(state.settings.lang);
   if (I18N.en) applyI18n(document);
+  MassimoParts.language(); // the page's language loaded: the parts drawn as parts.js loaded, before any table had come, draw again in it (ui/src/shared/lang.ts)
   renderLangSelect();
   initHelpSlots();
   initSettings();

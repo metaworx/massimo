@@ -14,8 +14,13 @@
 import { signal } from "@preact/signals";
 import type { ComponentChildren } from "preact";
 
-/** The page's language, i18n.lang, as the parts last drew it. */
-export const lang = signal(i18n.lang);
+/**
+ * The page's language, i18n.lang, as the parts last drew it: "" until
+ * the page's language has loaded and init of app.js raises it, so that
+ * that first raise draws again every part drawn as parts.js loaded,
+ * before any table had come, English too.
+ */
+export const lang = signal("");
 
 /** languageChanged takes the page's language after applyLanguage (app.js). */
 export function languageChanged(): void {
