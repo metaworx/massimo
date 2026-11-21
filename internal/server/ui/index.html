@@ -122,12 +122,14 @@
 <!-- partials: header -->
 
 <main>
-  <p id="open-banner" class="open-banner hidden" role="note"><strong data-i18n="open.title">Open server.</strong> <span id="open-banner-text"></span></p>
+  <!-- the open server's warning, while the server asks for no key (ui/src/signin/Banner.tsx) -->
+  <div id="open-banner-slot" class="part-slot"></div>
   <p id="message" class="message hidden"></p>
 
   <!-- partials: home -->
 
-  <!-- partials: setup -->
+  <!-- the first owner's form, on a server without users (ui/src/signin/Setup.tsx) -->
+  <div id="setup-slot" class="part-slot"></div>
 
   <!-- Personal settings, the page 👤 opens: its row kept at the top under
        the header, with who is signed in, Sign out (or Forget key, none on

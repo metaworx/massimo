@@ -7,8 +7,8 @@
 // browser, or an API key pasted, and in the app the login by
 // fingerprint), Log out, hiding what the role may not do, the proof of
 // the own password and a password registered by OPAQUE (which My
-// profile, ui/src/profile/, sets the own password with), and the form
-// that creates the first owner on a server without users. Loaded after
+// profile, ui/src/profile/, sets the own password with, and the first
+// owner's form, ui/src/signin/, signs in with). Loaded after
 // app.js; api() calls askLogin on a 401, and sends only a read again
 // once it is in.
 "use strict";
@@ -110,8 +110,10 @@ async function loadMe() {
 
 // applyCaps hides what the signed-in user may not do: the body gets a
 // class no-<capability> per capability the user lacks, and the markup
-// marks what each one hides with needs-<capability>; the first-owner
-// form shows on an open server for a caller on the local network.
+// marks what each one hides with needs-<capability>. Who is in goes to
+// the parts (MassimoParts.me): the first owner's form, shown on an open
+// server for a caller on the local network, and the open server's warning
+// are drawn from it (ui/src/signin/).
 function applyCaps() {
   const me = state.me;
   const body = document.body;
@@ -120,21 +122,8 @@ function applyCaps() {
   body.classList.toggle("no-sync", !canSync());
   body.classList.toggle("no-system", !hasSettingsPage());
   body.classList.toggle("no-maint", !hasSystem());
-  $("setup").classList.toggle("hidden", !(me && me.setup));
-  if (me && me.setup) renderSetupKeep();
-  renderOpenBanner();
-  MassimoParts.me(me); // who is in: a user's sessions say "this device", My profile is drawn for whoever is in, and the page's chrome says who it is (ui/src/shared/me.ts)
+  MassimoParts.me(me); // who is in: a user's sessions say "this device", My profile is drawn for whoever is in, the page's chrome says who it is, the first owner's form and the open server's warning show by it (ui/src/shared/me.ts)
   if (!mayShow(currentView)) showView("tiles", "replace"); // pages.js: a page the user signed in now may not open
-}
-
-// renderOpenBanner warns under the header while the server asks for no
-// key: a store without users, or no store and no token. It cannot be
-// dismissed, and goes once the server asks who is there.
-function renderOpenBanner() {
-  const mode = state.me && state.me.mode;
-  const open = mode === "open" || mode === "none";
-  $("open-banner").classList.toggle("hidden", !open);
-  if (open) $("open-banner-text").textContent = t(mode === "open" ? "open.text" : "open.textNoStore");
 }
 
 // --- the sign-in through a provider (docs/api-v1.md, "Sign-in through OpenID Connect")
@@ -340,24 +329,6 @@ async function renderAppLogin() {
   const servers = !appConnect();
   $("login-menu-servers").classList.toggle("hidden", servers);
   $("login-menu-servers-sep").classList.toggle("hidden", servers);
-}
-
-// renderSetupKeep offers, on the first owner's form in the app, to keep
-// the login by fingerprint, as the sign-in does where the phone can and
-// the address takes a key (login.status).
-async function renderSetupKeep() {
-  const login = appLogin();
-  let st = null;
-  if (login) {
-    try {
-      st = await login.status();
-    } catch (e) {
-      st = null;
-    }
-  }
-  const offer = !!(st && st.can && !st.plain && !st.user);
-  $("setup-keep-row").classList.toggle("hidden", !offer);
-  if (!offer) $("setup-keep").checked = false;
 }
 
 // wayField is the id of the first field of a way's form, password or
@@ -787,53 +758,6 @@ async function loadPreferences() {
   await applyStoredSettings();
 }
 
-// --- the first owner --------------------------------------------------
-
-// createOwner handles the form of a server without users: the owner is
-// created with a password of version 2 and signed in at once, the button
-// busy through both.
-async function createOwner(ev) {
-  ev.preventDefault();
-  const msg = $("setup-msg");
-  const submit = $("setup-form").querySelector("button[type=submit]");
-  if (isBusy(submit)) return;
-  if (!checkOwnerName()) {
-    $("setup-user").focus();
-    return;
-  }
-  const name = $("setup-user").value.trim();
-  const password = $("setup-password").value;
-  if (!name || !password) return showResult(msg, t("login.missing"), false);
-  if (password !== $("setup-again").value) return showResult(msg, t("setup.mismatch"), false);
-  try {
-    const session = await whileBusy(submit, async () => {
-      await api("POST", "api/v1/users", { name, role: "owner", ...(await registerPassword(name, password)) });
-      return signIn(name, password);
-    });
-    setToken(session.token);
-    // the login by fingerprint kept for the new owner, where asked for; not
-    // kept, the owner is in all the same and may keep it at a sign-in
-    let kept = true;
-    if ($("setup-keep").checked && !$("setup-keep-row").classList.contains("hidden")) {
-      try {
-        kept = await appLogin().keep();
-      } catch (e) {
-        kept = false;
-      }
-    }
-    showResult(msg, t("setup.done", { name }) + (kept ? "" : " " + t("setup.notKept")), true);
-    afterLogin();
-  } catch (e) {
-    const worded = wordNameError(e, name); // users.js
-    if (worded) checkOwnerName.say(worded);
-    showResult(msg, t("setup.failed", { error: worded || e.message }), false);
-  }
-}
-
-// checkOwnerName checks the first owner's name as it is typed
-// (watchName, users.js); set by initLogin.
-let checkOwnerName = () => true;
-
 function initLogin() {
   // the sign-in's menu: the language and the mode, as My settings sets them
   dropdown($("login-menu")); // components.js
@@ -854,20 +778,18 @@ function initLogin() {
     });
   }
   // in the app, back to its servers: last in the card's ☰, and as Cancel
-  // beside each form's button that signs in, the first owner's too (AP
-  // MobileApp, D54-C); none in a browser (the main ☰'s is the chrome's,
-  // ui/src/chrome/Menu.tsx)
+  // beside each form's button that signs in (AP MobileApp, D54-C); none in
+  // a browser (the main ☰'s is the chrome's, ui/src/chrome/Menu.tsx; the
+  // first owner's Cancel is its form's, ui/src/signin/Setup.tsx)
   const toServers = () => {
     const go = appConnect();
     if (go) go().catch(() => {});
   };
   $("login-menu-servers").addEventListener("click", toServers);
-  for (const id of ["login-cancel", "login-key-cancel", "setup-cancel"]) {
+  for (const id of ["login-cancel", "login-key-cancel"]) {
     $(id).addEventListener("click", toServers);
     $(id).classList.toggle("hidden", !appConnect());
   }
-  $("setup-form").addEventListener("submit", createOwner);
-  checkOwnerName = watchName($("setup-user"), $("setup-name-msg"), () => []);
 }
 
 document.addEventListener("DOMContentLoaded", initLogin);

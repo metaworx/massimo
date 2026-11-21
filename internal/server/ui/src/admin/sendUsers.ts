@@ -22,6 +22,7 @@ import { type Run, userPath } from "../shared/account";
 import { actionRunner } from "../shared/action";
 import { forgetForms } from "../shared/forms";
 import { session, stillSession } from "../shared/session";
+import { wordNameError } from "../shared/username";
 import { enabled, load, passwordLogin, reads, roles, said, userFormKey, userUI, users } from "./store";
 
 /** usersAdmin says what the signed-in user may do with users: everything, guests only, or nothing but its own user. */

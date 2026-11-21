@@ -654,6 +654,19 @@ def personal_sections(page):
     page.locator("#me .sec-menu .toc-link[data-target='prefs']").focus()
 
 
+def first_owner(page):
+    """The first owner's form, GET /api/v1/me stubbed as an open server
+    without users for a caller on the local network for the rest of the
+    test (the region's own source, loadMe(), reads the stub again); Rooms
+    shown, where the form is, the focus moved onto Again by the view."""
+    body = json.dumps({"mode": "open", "user": None, "role": None, "capabilities": [], "setup": True})
+    safe_route(page, "**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body=body))
+    on_rooms(page)
+    page.evaluate("loadMe()")
+    page.locator("#setup-form").wait_for(state="visible")
+    settle(page)
+
+
 def users_fold(folded):
     """System settings, the Users card folded (or opened again) by its
     button, the focus on it; the fold kept in the browser is taken back by
@@ -824,6 +837,11 @@ REGIONS = (
         View("the Users card opened again, the focus on its fold", users_fold(False), "#sys-users .section-fold"),
         View("the personal page's sections menu open, the focus on an item", personal_sections, "#me .sec-menu .toc-link[data-target='prefs']"),
     ), sources=("loadMe()",)),
+    # The first owner's form is a part (AP UiParts, Block 14), drawn from
+    # who is in: who is in read again (loadMe) is its source; the view
+    # passed on the page before the move as well, where nothing drew the
+    # plain form again.
+    Region("first-owner", ("#setup",), (View("the first owner's form, the focus in Again", first_owner, "#setup-again"),), sources=("loadMe()",)),
     Region("sign-in", ("#login-dialog",),
            gap="shown only to a page without a token, which loads no data while it is open: the poll and the stream start after the sign-in"),
 )

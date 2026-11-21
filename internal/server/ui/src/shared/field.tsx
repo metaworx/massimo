@@ -208,7 +208,7 @@ type Value<T> = { draft: Draft<T>; value?: undefined; set?: undefined } | { draf
  * beside field-control (mono for a key).
  */
 export function TextField({ label, id, wide = true, unit, hint, help, cls, limit, name, placeholder, type, autocomplete, inputCls, maxLength, pattern, required, disabled, draft, value, set, show, inputRef }: Row & Value<string> & {
-  name: string;
+  name?: string;
   disabled?: boolean;
   placeholder?: string;
   type?: "text" | "email" | "url" | "search" | "password";

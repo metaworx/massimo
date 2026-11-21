@@ -33,6 +33,7 @@ import { signedOut as profileSignedOut } from "./profile";
 import "./rooms";
 import type { RoomsPart } from "./rooms";
 import { signedOut as integrationsSignedOut } from "./integrations";
+import "./signin";
 import { serverEvent as softwareEvent, signedOut as softwareSignedOut } from "./software";
 import { serverEvent as maintenanceEvent, signedOut as maintenanceSignedOut } from "./maintenance";
 import { serverEvent as sysinfoEvent, signedOut as sysinfoSignedOut } from "./sysinfo";

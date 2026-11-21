@@ -28,6 +28,7 @@ import { focusForm, useForm } from "../shared/forms";
 import { useHelp } from "../shared/help";
 import { Identities } from "../shared/identities";
 import { useLang } from "../shared/lang";
+import { NewPassword, newPasswordProblem } from "../shared/password";
 import { me, profileOf } from "../shared/me";
 import { BusyButton } from "../shared/question";
 import { Tokens } from "../shared/tokens";
@@ -105,8 +106,8 @@ function PasswordForm({ who }: { who: User }) {
   const submit = (ev: Event) => {
     ev.preventDefault();
     if (form.look === "saving") return;
-    if (password !== again) return passwordMsg(t("setup.mismatch"), false);
-    if (!password) return passwordMsg(t("login.missing"), false);
+    const problem = newPasswordProblem(password, again);
+    if (problem) return passwordMsg(problem, false);
     form.save(() => changePassword(who, current, password));
   };
   return (
@@ -115,8 +116,7 @@ function PasswordForm({ who }: { who: User }) {
       <form {...form.props} id="me-password-form" onSubmit={submit}>
         <TextField label={t("users.currentPassword")} id="me-current" name="current_password" type="password" autocomplete="current-password"
           cls={"me-current-field" + hid(!hasPw)} value={current} set={typed(setCurrent)} />
-        <TextField label={t("users.password")} id="me-new" name="password" type="password" autocomplete="new-password" value={password} set={typed(setPassword)} />
-        <TextField label={t("setup.again")} id="me-again" name="again" type="password" autocomplete="new-password" value={again} set={typed(setAgain)} />
+        <NewPassword ids={["me-new", "me-again"]} names={["password", "again"]} label={t("users.password")} value={password} set={typed(setPassword)} again={again} setAgain={typed(setAgain)} />
         <FormFooter submit={t("action.save")} look={form.look} reset={form.reset} after={help.button} />
         <ResultLine id="me-password-msg" cls="small cubes-msg" role="status" res={said.password} />
         {help.text}

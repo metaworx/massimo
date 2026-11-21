@@ -20,6 +20,7 @@
  * header's nav, the details kept, so that ☰ stays open through data.
  */
 
+import { toServers } from "../shared/app";
 import { Brand } from "../shared/brand";
 import { Copy } from "../shared/copy";
 import { unsavedTone } from "../shared/forms";
@@ -43,12 +44,6 @@ function ItemMark({ keys }: { keys: string[] }) {
   const tone = unsavedTone(keys);
   if (!tone) return null;
   return <Sign kind="disk" state={tone} cls="menu-unsaved" label={t("problem.unsaved")} />;
-}
-
-/** toServers goes back to the app's servers, where the page is in the app. */
-function toServers(): void {
-  const go = appConnect();
-  if (go) go().catch(() => {});
 }
 
 /** Menu is ☰ with its entries; view is the page shown. */
