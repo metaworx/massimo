@@ -85,6 +85,48 @@ def scroll_settled(page, seconds=3):
     })""", seconds * 1000)
 
 
+class ApiReads:
+    """The page's requests to the API that have no answer yet, counted from
+    the moment it is made: a page shown sends its cards' reads at once, and
+    their answers come in any order, so a card that grows with a later one
+    (System settings → Integrations, with why the server does not look on
+    the LAN, api/v1/integrations/found) changes the page's height after the
+    answer a test waited for. The event stream, which stays open, is left
+    out."""
+
+    def __init__(self, page):
+        self.page = page
+        self.open = set()
+        page.on("request", self._sent)
+        page.on("requestfinished", self._done)
+        page.on("requestfailed", self._done)
+
+    @staticmethod
+    def _api(request):
+        return "/api/v1/" in request.url and not re.search(r"/events(\?|$)", request.url)  # not the stream (app.js connectEvents)
+
+    def _sent(self, request):
+        if self._api(request):
+            self.open.add(request)
+
+    def _done(self, request):
+        self.open.discard(request)
+
+    def answered(self, seconds=5, quiet_ms=200):
+        """Waits until every read has its answer and nothing more is drawn
+        for quiet_ms (the page's height unchanged); false after so many
+        seconds."""
+        end = time.monotonic() + seconds
+        while time.monotonic() < end:
+            if not self.open and self.page.evaluate("""(quiet) => new Promise((done) => {
+                const h = document.documentElement.scrollHeight;
+                setTimeout(() => done(document.documentElement.scrollHeight === h), quiet);
+            })""", quiet_ms) and not self.open:
+                return True
+            self.page.wait_for_timeout(25)
+        return False
+
+
 def scroll_width(page):
     """The page's width with what sticks out of it; more than the
     viewport's width is a horizontal scroll."""
