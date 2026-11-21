@@ -16,7 +16,7 @@
  * the server does not look; Look again.
  */
 
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { Integration, IntegrationUser } from "../api";
 import { capLabel } from "../model/cap";
 import { session } from "../shared/session";
@@ -397,7 +397,7 @@ export function IntegrationsCard() {
   const counts = badges ? badges.join("|") : "";
   // the card's head counts the requests and the integrations, once they are read; nothing once forgotten
   // biome-ignore lint/correctness/useExhaustiveDependencies: counts is the badges' texts joined, which change with them; badges is a new list at every drawing.
-  useEffect(() => {
+  useLayoutEffect(() => {
     const out: BadgeSpec[] = [];
     if (badges?.[0]) out.push({ text: badges[0], kind: "warn" });
     if (badges?.[1]) out.push({ text: badges[1], kind: "mode" });

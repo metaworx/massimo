@@ -2112,7 +2112,7 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `session`, `stillSession`, `newSession` | `session.ts` | the session's number, raised by `MassimoParts.signedOut` before anything is forgotten: a store takes it before an await and drops the answer, its message and its next timer where it changed; `actionRunner`'s `bound` does so for a runner | –; `n`; – |
 | `me`, `own`, `meChanged` | `me.ts` | who the page is signed in as, `state.me` as `applyCaps` of `login.js` hands it over at every read of it (`MassimoParts.me`), null from a sign-out on; the token it is signed in with, by which a user's sessions say "this device" and "its key" | `m` |
 | `whoOf`, `Who` | `me.ts` | who is in in the page's words, for the personal page's row, ☰'s Sign out and Personal settings' tooltip and the question before a sign-out alike: the row's line, Sign out or Forget key (none on an open server) with its icon, the name for the tooltip, and whether My profile is there | `me` |
-| `cardBadges`, `badgesOf`, `BadgeSpec` | `card.ts` | what a section card's head shows at a glance, also while it is folded: a region gives a card's badges by its id from its drawing's effect, `[]` for none, and the page's chrome draws them (`ui/src/chrome/Cards.tsx`) | `id`, `list` of `{ text, kind }` |
+| `cardBadges`, `badgesOf`, `BadgeSpec` | `card.ts` | what a section card's head shows at a glance, also while it is folded: a region gives a card's badges by its id in its drawing's own turn (a layout effect), `[]` for none, and the page's chrome draws them (`ui/src/chrome/Cards.tsx`) | `id`, `list` of `{ text, kind }` |
 | `showCard`, `wireCards` | `card.ts` | a section card brought into view, unfolded, the focus on its heading's button, kept there for two seconds where its page has just been opened (`instant`); the cards' folds wired once, each kept in this browser (`massimo.fold.<card id>`), set on the skeleton at once | `id`, `instant` |
 | `Brand` | `brand.tsx` | Massimo's logo and small mark from the sprite (`brandMarks` of `components.js`, which draws them over the skeleton's `data-brand`), of which the place's style shows one, hidden from screen readers: ☰'s first row | |
 | `page`, `isShown`, `showView`, `onView`, `mayShow` | `pages.ts` | the page of the main area shown, a signal: a drawing that reads `page.value` follows it, `isShown` asks at that moment and follows nothing (a handler, a reader, a timer), so that no request is sent again at a change of page; showing a page puts it into the address, as a new entry of the history or in place of the current one, and brings each page back at the scroll it was left at; `onView` runs at each showing, on the `viewshown` event; `mayShow` says who may open which, reading who is in; a page with an address of its own (the log's, `pages.js`) hands it over with `ownAddress`; `pages.js` keeps the plain names, and `currentView` | `view`, `address`, `card` |
@@ -2182,8 +2182,9 @@ What the table cannot say:
 
 These builders of `components.js` and `app.js` have no part yet, since no region
 that has moved uses them: `countList`.
-A part that counts what a card holds gives it from an effect, by the card's id
-(`cardBadges`).
+A part that counts what a card holds gives it by the card's id (`cardBadges`)
+from a layout effect, in its drawing's own turn,
+so that the card's head and body agree whenever either is read.
 Known gaps, for the blocks that meet them:
 a device's type and identifiers, drawn twice:
 in a device row's line of expert mode (`rooms/Devices.tsx`, `.device-sub`,
@@ -2213,8 +2214,8 @@ whose forms cannot be shown while signed out.
 The block that first needs one writes it under `ui/src/shared/`,
 knowing no region, and adds its row to the table above; no region writes its own.
 A section card's badges are the page's chrome's (`ui/src/chrome/Cards.tsx`):
-a region gives them by the card's id, a part with `cardBadges`,
-`cubes.js` the Cubes card's with `MassimoParts.chrome.badges`.
+a region gives them by the card's id, a part with `cardBadges` from a layout effect,
+`cubes.js` the Cubes card's with `MassimoParts.chrome.badges` as it draws the panels.
 
 A region that moves calls these, in this order:
 

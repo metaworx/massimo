@@ -17,7 +17,7 @@
  */
 
 import type { Ref } from "preact";
-import { useEffect, useRef } from "preact/hooks";
+import { useLayoutEffect, useRef } from "preact/hooks";
 import type { Setting } from "../api";
 import { Notice, ResultLine } from "../shared/badge";
 import { hid } from "../shared/cls";
@@ -190,7 +190,7 @@ export function Maintenance() {
   const n = waiting();
   const badge = n ? tn("maint.badge.pending", n) : "";
   // the card's head counts what waits for the next start
-  useEffect(() => {
+  useLayoutEffect(() => {
     cardBadges("sys-maint", badge ? [{ text: badge, kind: "warn" }] : []);
   }, [badge]);
   const file = restart.file;
