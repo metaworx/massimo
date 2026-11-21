@@ -381,6 +381,9 @@ hence `failed_checks_forgotten`.
   changes of page in both orders of the rows, the cards' scroll margin is
   the shown row's height and an item of the sections menu brings its card's
   head to rest below the row.
+- `test_sign_in_updates.py`, the sign-in as parts (AP UiParts, Block 14):
+  in the app, Create the owner turns until the app has answered whether it
+  kept the login, and a second submit meanwhile creates nothing.
 - `test_stream.py`:
   the event stream opens with tickets only, never with the token,
   and after a refused stream (the test hands out a used ticket first,

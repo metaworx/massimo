@@ -10,8 +10,8 @@
  * twice (shared/password.tsx), and in the app where the phone can and the
  * address takes a key the switch that keeps the login by fingerprint;
  * Create the owner creates the owner with a password of version 2 and
- * signs in at once, busy through both, then starts the page as a sign-in
- * does. In the app
+ * signs in at once, busy through both and through the app's keeping
+ * (UiParts D213), then starts the page as a sign-in does. In the app
  * Cancel, left of it, goes back to the app's servers. What is typed is
  * the form's own and goes with it: the form is drawn only while it is
  * shown, and who is in is null after a sign-out. So it goes too at a read
@@ -66,13 +66,12 @@ function OwnerForm() {
       setMsg({ text: problem, ok: false });
       return;
     }
-    (async () => {
+    // busy through the creation, the sign-in and the app's keeping of the login (UiParts D213): a second tap
+    // while the system's prompt is open creates nothing
+    create.run(async () => {
       try {
-        const session = await create.run(async () => {
-          await api("POST", "api/v1/users", { name: n, role: "owner", ...(await registerPassword(n, password)) });
-          return signIn(n, password);
-        });
-        if (!session) return; // a second submit while it creates
+        await api("POST", "api/v1/users", { name: n, role: "owner", ...(await registerPassword(n, password)) });
+        const session = await signIn(n, password);
         setToken(session.token);
         // the login by fingerprint kept for the new owner, where asked for; not kept, the owner is in all the
         // same and may keep it at a sign-in
@@ -92,7 +91,7 @@ function OwnerForm() {
         if (worded) nc.say(worded);
         setMsg({ text: t("setup.failed", { error: worded || (e as Error).message }), ok: false });
       }
-    })();
+    });
   };
   return (
     <form id="setup-form" class="setup-form" onSubmit={submit}>

@@ -2614,7 +2614,9 @@ the first owner's form into `#setup-slot`, shown while who is in says `setup`,
 its form drawn only then, so that what is typed in it goes with it,
 and the open server's warning into `#open-banner-slot`.
 The first owner's form reads the app's status of the login by fingerprint
-each time it is shown (`app.ts`), for its switch.
+each time it is shown (`app.ts`), for its switch;
+its Create the owner turns until the app has answered whether it kept the login,
+so that a second tap while the system's prompt is open creates nothing (UiParts D213).
 A part's place among plain siblings is an element of the class `part-slot`,
 which takes no box of its own (`display: contents`),
 so that the part's element is laid out as if it stood there itself.
