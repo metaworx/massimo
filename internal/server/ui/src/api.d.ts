@@ -626,6 +626,11 @@ export interface Me {
   capabilities?: string[];
   /** The first owner can be created from here */
   setup?: boolean;
+  /**
+   * An open server kept open on purpose (the setting auth.keep_open): the web
+   * UI does not ask for the first owner
+   */
+  kept_open?: boolean;
   token?: Token;
   /** The registered integration whose key it is; null for any other key */
   integration?: {

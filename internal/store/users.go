@@ -310,7 +310,8 @@ func (s *Store) AddOpaqueUser(ctx context.Context, u User, record []byte, ksf st
 	return s.addUser(ctx, u, credential{record: record, ksf: ksf}, by)
 }
 
-// addUser writes a user that newUser checked, with its credential.
+// addUser writes a user that newUser checked, with its credential, and
+// removes the setting KeepOpenKey in the same transaction.
 func (s *Store) addUser(ctx context.Context, u User, c credential, by int64) (User, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -331,9 +332,14 @@ func (s *Store) addUser(ctx context.Context, u User, c credential, by int64) (Us
 	if err != nil {
 		return User{}, fmt.Errorf("store: add user %s: %w", u.Name, err)
 	}
+	dropped, err := s.dropKeepOpen(ctx, tx)
+	if err != nil {
+		return User{}, err
+	}
 	if err := tx.Commit(); err != nil {
 		return User{}, fmt.Errorf("store: add user %s: %w", u.Name, err)
 	}
+	s.keepOpenDropped(dropped, "user added", "user", u.Name)
 	out, _, err := s.User(ctx, u.Name)
 	return out, err
 }

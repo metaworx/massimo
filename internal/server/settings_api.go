@@ -13,6 +13,7 @@ package server
 import (
 	"cmp"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"slices"
 	"sort"
@@ -86,6 +87,10 @@ var boolSettings = []boolSetting{
 	// Integrations may ask to be registered (integrations_api.go); the
 	// announcement's reg says it on the LAN.
 	{key: store.IntegrationRequestsKey, def: true},
+	// A server without users kept open on purpose (AP FirstOwner, D11):
+	// the web UI does not ask for the first owner. It counts only while
+	// the server has no users, and goes with the first one (D12).
+	{key: store.KeepOpenKey, def: false},
 }
 
 var durationSettings = []durationSetting{
@@ -200,7 +205,11 @@ func (s *Server) settingsView(r *http.Request) (map[string]settingView, error) {
 		if !ok {
 			v = d.def
 		}
-		out[d.key] = settingView{Value: strconv.FormatBool(v), Default: strconv.FormatBool(d.def), Set: ok, InEffect: strconv.FormatBool(v), Applies: "now"}
+		inEffect := v
+		if d.key == store.KeepOpenKey && v && s.authMode(r.Context()) != modeOpen {
+			inEffect = false // it counts only while the server has no users
+		}
+		out[d.key] = settingView{Value: strconv.FormatBool(v), Default: strconv.FormatBool(d.def), Set: ok, InEffect: strconv.FormatBool(inEffect), Applies: "now"}
 	}
 	tenant, err := st.TenantID()
 	if err != nil {
@@ -329,6 +338,9 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 			if json.Unmarshal(raw, &on) != nil {
 				return fail(http.StatusBadRequest, "%s: want true or false", k)
 			}
+			if k == store.KeepOpenKey && on && s.authMode(r.Context()) != modeOpen {
+				return fail(http.StatusConflict, "%s counts only on a server without users: this one has users", k)
+			}
 			writes = append(writes, write{key: k, on: &on})
 			continue
 		}
@@ -381,6 +393,12 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 	if alert < warn {
 		return fail(http.StatusBadRequest, "%s (%s) must not be under %s (%s)", store.WindowAlertKey, fmtDuration(alert), store.WindowWarnKey, fmtDuration(warn))
 	}
+	// auth.keep_open first: its write counts the users again and may be
+	// refused (409), and a refusal then comes before any other key is
+	// written or audited.
+	slices.SortStableFunc(writes, func(a, b write) int {
+		return cmp.Compare(btoi(b.key == store.KeepOpenKey), btoi(a.key == store.KeepOpenKey))
+	})
 	pruneBackups := false
 	for _, wr := range writes {
 		var from any
@@ -391,6 +409,12 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 		switch {
 		case wr.clear:
 			err = st.DeleteSettingBy(r.Context(), wr.key, by)
+		case wr.on != nil && wr.key == store.KeepOpenKey:
+			// The count of the users in the write's transaction: a first
+			// user made since the check above wins.
+			if err = st.SetKeepOpen(r.Context(), *wr.on, by); errors.Is(err, store.ErrHasUsers) {
+				return fail(http.StatusConflict, "%s counts only on a server without users: this one has users", wr.key)
+			}
 		case wr.duration != nil:
 			err = st.SetSettingBy(r.Context(), wr.key, fmtDuration(*wr.duration), by)
 		case wr.on != nil:
@@ -453,6 +477,14 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) error {
 		s.pruneBackups(r.Context(), st, time.Now())
 	}
 	return s.getSettings(w, r)
+}
+
+// btoi is 1 for true, 0 for false.
+func btoi(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // checkBackupWindows refuses a change that leaves backups.auto_min above

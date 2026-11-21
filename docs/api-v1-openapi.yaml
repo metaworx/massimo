@@ -367,7 +367,9 @@ paths:
         effective capabilities, and the token presented; outside users
         mode user and role are null and the capabilities are all of
         them. setup is true on an open server for a caller on the local
-        network, which may create the first owner.
+        network, which may create the first owner; kept_open is true on an
+        open server while the setting auth.keep_open is on, and absent
+        otherwise.
       responses:
         "200":
           description: The caller
@@ -3334,6 +3336,7 @@ paths:
                 backups.keep_newest: {value: "10", default: "10", set: false, in_effect: "10", applies: now}
                 auth.password_login: {value: "true", default: "true", set: false, in_effect: "true", applies: now}
                 integrations.requests: {value: "true", default: "true", set: false, in_effect: "true", applies: now}
+                auth.keep_open: {value: "false", default: "false", set: false, in_effect: "false", applies: now}
                 announce: {value: auto, default: auto, set: false, in_effect: "off", applies: restart}
                 update.channel: {value: alpha, default: alpha, set: false, in_effect: alpha, applies: now}
                 poll_interval: {value: 10s, default: 10s, set: false, in_effect: 10s, applies: restart}
@@ -3364,7 +3367,12 @@ paths:
         numbers; auth.password_login, true or false, whether POST
         /api/v1/login takes a password (off, the users sign in by OPAQUE
         alone); integrations.requests, true or false, whether
-        integrations may ask to be registered; announce, auto, on or off,
+        integrations may ask to be registered; auth.keep_open, true or
+        false, whether a server without users is kept open on purpose, so
+        that the web UI does not ask for the first owner (it changes
+        nothing about who is let in, counts only while the server has no
+        users, goes with the first user, and true is 409 on a server with
+        users); announce, auto, on or off,
         the announcement on the LAN at the next start; update.channel, devel, nightly, alpha, beta, rc or stable,
         the releases the box takes (its own flavour's and every more
         stable one's; the default is the build's flavour); null goes back
@@ -3395,6 +3403,11 @@ paths:
         "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          description: auth.keep_open switched on where the server has users
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
         "429": {$ref: "#/components/responses/LockedOut"}
         "503":
           description: The server has no store
@@ -4440,6 +4453,7 @@ components:
           description: What the caller may do; every capability outside users mode
           items: {type: string}
         setup: {type: boolean, description: The first owner can be created from here}
+        kept_open: {type: boolean, description: "An open server kept open on purpose (the setting auth.keep_open): the web UI does not ask for the first owner"}
         token: {$ref: "#/components/schemas/Token"}
         integration:
           type: object

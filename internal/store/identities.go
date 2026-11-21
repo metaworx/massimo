@@ -289,7 +289,8 @@ func (s *Store) BindIdentity(ctx context.Context, providerID int64, email, subje
 
 // AddIdentityUser creates a user for a provider's subject, a sign-in
 // without an identity at a provider that creates users: the name u
-// gives, or with -2, -3 … where it is taken, and the identity bound.
+// gives, or with -2, -3 … where it is taken, and the identity bound;
+// the setting KeepOpenKey goes in the same transaction.
 func (s *Store) AddIdentityUser(ctx context.Context, u User, providerID int64, subject, email string) (User, Identity, error) {
 	base, err := s.newUser(u)
 	if err != nil {
@@ -337,9 +338,14 @@ func (s *Store) AddIdentityUser(ctx context.Context, u User, providerID int64, s
 	if err != nil {
 		return User{}, Identity{}, err
 	}
+	dropped, err := s.dropKeepOpen(ctx, tx)
+	if err != nil {
+		return User{}, Identity{}, err
+	}
 	if err := tx.Commit(); err != nil {
 		return User{}, Identity{}, fmt.Errorf("store: add user %s: %w", name, err)
 	}
+	s.keepOpenDropped(dropped, "user of a provider added", "user", name)
 	out, _, err := s.User(ctx, name)
 	return out, i, err
 }
