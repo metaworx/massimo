@@ -4,8 +4,8 @@
 /**
  * @file internal/server/ui/src/log/Log.tsx
  *
- * The log's page (AP UiParts, Block 11; partials/log-view.html and
- * log.js initLog): its head with the title, the text filter, the choices
+ * The log's page (AP UiParts, Block 11, in place of log.js' initLog and
+ * the markup of partials/log-view.html): its head with the title, the text filter, the choices
  * of Cubes, kind, source or device, level, who and how far back, Clear
  * and Mark all as seen; the lines, newest first; and Older events. Drawn
  * once into its section and updated in place: a new line adds its

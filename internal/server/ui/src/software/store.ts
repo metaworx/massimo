@@ -26,6 +26,7 @@ import { live } from "../shared/live";
 import { session, stillSession } from "../shared/session";
 import { isShown } from "../shared/pages";
 import { can } from "../shared/me";
+import { update } from "../shared/update";
 
 /** A text said in the page's language at its drawing. */
 export type Say = () => string;
@@ -39,8 +40,6 @@ export const UPDATE_FLAVOURS = ["devel", "nightly", "alpha", "beta", "rc", "stab
 
 /** What the section shows, as the last loads gave it. */
 export const data = live({
-  /** GET /api/v1/update's last answer, null before one came. */
-  info: null as UpdateInfo | null,
   /** Why the last load failed, said in the version's line in place of it; null after one that went through. */
   failed: null as Say | null,
   /** What the request to the helper said, in its line until the next load. */
@@ -108,7 +107,7 @@ export async function loadUpdate(refresh: boolean, mine: () => boolean = () => t
   }
   if (!stillSession(n)) return null; // signed out meanwhile: the next user's reads are their own
   if (!mine()) return u; // a later change of the channel reads its own: this answer shows nothing
-  data.info = u;
+  update.value = u;
   data.failed = null;
   data.said = null;
   if (question.asking && (!u.can_update || u.latest !== question.version)) question.asking = false;
@@ -220,7 +219,7 @@ function followUpdate(): void {
 
 /** ask asks in the section whether to install the update the last load offers. */
 export function ask(): void {
-  const u = data.info;
+  const u = update.value;
   if (!u || !u.latest) return;
   question.version = u.latest;
   question.asking = true;
@@ -311,17 +310,6 @@ export function serverEvent(ev: ServerEvent): void {
 function fresh(ev: ServerEvent): boolean {
   const at = Date.parse(ev.time || "");
   return isNaN(at) || Date.now() + serverSkew - at < 60 * 1000;
-}
-
-/** updateOut tells whether an update is out, for one who may install it (the server's sign, update.js). */
-export function updateOut(): boolean {
-  const u = data.info;
-  return !!u && !!u.available && can("settings");
-}
-
-/** updateLatest is the version an update would install, "" for none (update.js). */
-export function updateLatest(): string {
-  return (data.info && data.info.latest) || "";
 }
 
 /**

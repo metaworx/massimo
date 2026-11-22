@@ -8,8 +8,8 @@
 // itself is a part (ui/src/rooms/Tile.tsx), drawn from the tile's live
 // state (rooms.js roomUI) that these set. The rooms' facts and the other
 // actions behind a tile are in rooms.js, the devices without a room and
-// their removal parts (ui/src/rooms/), the House tile in house.js. Uses
-// the state, api and helpers
+// their removal and the House tile parts (ui/src/rooms/). Uses the state,
+// api and helpers
 // of app.js.
 "use strict";
 
@@ -29,7 +29,7 @@ function radiogramName(r) {
 // their names, else their numbers; its types.
 function mismatchArgs(m) {
   const room = (id, name) => name || (id === 0 ? t("mismatch.noRoom") : t("log.room", { id }));
-  const known = m.device ? rfLabel(m.device) : ""; // log.js
+  const known = m.device ? MassimoParts.log.rfLabel(m.device) : ""; // ui/src/model/device.ts
   return {
     device: known && known !== m.device ? known : m.name || m.device || "–",
     room: room(m.room, m.room_name),

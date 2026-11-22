@@ -5,11 +5,10 @@ in with nothing changed takes nothing away from what the user holds.
 
 REGIONS is the page cut into its regions, each with the containers it
 lives in and its views: how a user brings it on screen and opens what it
-has to open (a menu, a panel, a form). NOT_MOVED is the list of the
-regions not yet rewritten as parts that fail the guard today, each with
-what it loses; the block that moves a region takes its line off.
+has to open (a menu, a panel, a form). Every region of the page is a
+part since AP UiParts' Block 15, and every one is checked.
 
-For a region off the list, in each of its views and around each data
+For a region, in each of its views and around each data
 source of SOURCES and of its own (Region.sources: the page shown again,
 or the stream's server events of the kinds named, each dispatched on the
 page's stream, whose reads the guard waits for until their requests have
@@ -32,12 +31,10 @@ is refused and counted during the whole test, and the test fails on
 one: the guard sends nothing to the Cube and changes nothing in the
 server's store (Writes says the one exception, outside the rounds).
 
-A region on the list is still shown, so that the table stays true to
-the page, and then skipped with its note, which the run's summary
-(pytest -rs) shows. UI_GUARD_CHECK, comma-separated region names or
-"all", checks regions although they are on the list: how a block sees
-that its region passes before it takes the line off, and how the guard
-is shown to bite.
+The parts mounted with nothing a user can hold are no region: the
+expert's reads' times, the certificate's line under the header, the open
+server's banner; nor is the leaving dialog, modal and drawn by no data
+source while it is open.
 
 The guard runs in two of the suite's four cases, 1100 px in English and
 390 px in German (GUARD_CASES, D176-D): each width once and each
@@ -55,6 +52,7 @@ from typing import Callable
 
 import pytest
 
+from test_to_top import long_page, scrolled_to
 from helpers import LOG_ALERT_A, LOG_ALERT_B, LOG_CMD, LOG_CMD_LINE, STATE_EVENTS_JS, RepairStub, StubLog, log_lines, open_main_menu, reads_of, safe_route, show_view, stub_log_command, wait_until
 
 # The cases the guard runs in (D176-D); in the others its tests are
@@ -79,7 +77,7 @@ class View:
 class Region:
     """A region of the page: the CSS selectors of its containers, the
     elements inside them that belong to another region (exclude), its
-    views, where the fake Cube's fixture cannot show it, why (gap), and
+    views, and
     the data sources of its own beside SOURCES (sources), by their
     names in GUARD_JS's run, and what is undone once its views are done
     (after: a stub's routes)."""
@@ -88,7 +86,6 @@ class Region:
     containers: tuple
     views: tuple = ()
     exclude: str = ""
-    gap: str = ""
     sources: tuple = ()
     after: Callable | None = None
 
@@ -457,7 +454,7 @@ def pairing_running(page):
     until = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
     reads_of(page).change("**/api/v1/cubes/*/pairing", lambda st: dict(st or {}, active=True, until=until, paired=[JOINED_STUB]))
     cube_page(page)
-    page.evaluate("pairingEvent(state.serial)")
+    page.evaluate("MassimoParts.cubes.pairingEvent(state.serial)")
     form = page.locator("#cube-page-body .cube-pairing .pair-device[data-rf='0a0f02'] form")
     form.wait_for(state="visible")
     assert wait_until(page, "document.querySelectorAll(\"#cube-page-body .pair-device select[name=room] option\").length > 1", 5), "the rooms offered"
@@ -604,14 +601,14 @@ def unstub_log(page):
     off = getattr(page, "_guard_log_off", None)
     if off and not page.is_closed():
         off()
-        page.evaluate("loadLogAlerts()")  # ☰'s mark as the server has it again
+        page.evaluate("MassimoParts.log.loadAlerts()")  # ☰'s mark as the server has it again
 
 
 def log_stubbed(page):
     """The log with the stubbed lines (stub_log), its problems read."""
     stub_log(page)
     show_view(page, "log")
-    page.evaluate("loadLog().then(() => loadLogAlerts())")
+    page.evaluate("MassimoParts.log.load().then(() => MassimoParts.log.loadAlerts())")
     page.locator(f"#log-lines .log-line[data-id='{LOG_ALERT_A}'] .log-mark").wait_for()
     settle(page)
 
@@ -708,6 +705,14 @@ def personal_sections(page):
     page.keyboard.press("Escape")
     page.locator("#me .sec-menu > summary").click()
     page.locator("#me .sec-menu .toc-link[data-target='prefs']").focus()
+
+
+def scrolled_down(page):
+    """Rooms made long and scrolled a screen down, where ↑ shows."""
+    on_rooms(page)
+    long_page(page, "rooms")
+    scrolled_to(page, page.evaluate("window.innerHeight") + 40)
+    assert wait_until(page, "!document.getElementById('to-top').classList.contains('hidden')", 3), "↑ shown"
 
 
 def first_owner(page):
@@ -878,7 +883,7 @@ REGIONS = (
     # plain page too, which never built it again. Its lines are a region
     # of their own here, so that the round's typing into the search, which
     # filters them all out, leaves them: their views fail on the plain
-    # page, where loadRooms and loadLogAlerts built every line again.
+    # page, where loadRooms and MassimoParts.log.loadAlerts built every line again.
     Region("log", ("#logview",), (
         View("the log", log),
         View("the kind's choice in focus", log, "#log-kind"),
@@ -903,7 +908,7 @@ REGIONS = (
     Region("software-update", ("#sys-software-body",), (
         View("Maintenance", maint),
         View("Update asking, the channel's choice above it", software_question, "#update-channel"),
-    ), sources=("loadUpdate(false)", "the page shown again: maint", "the stream's events: resync change")),
+    ), sources=("MassimoParts.software.load(false)", "the page shown again: maint", "the stream's events: resync change")),
     Region("maintenance", ("#sys-maint-body",), (
         View("Maintenance", maint),
         View("the restart asking, a delay typed for the reboot", maint_question),
@@ -945,36 +950,11 @@ REGIONS = (
         View("its API key's way chosen, a key typed", sign_in_key, "#login-token"),
         View("its ☰ open", sign_in_menu, "#login-lang"),
     ), sources=("askLogin()", "renderLoginProviders()", "applyLanguage()")),
+    # ↑, the way back to the top a screen down (ui/src/chrome/ToTop.tsx,
+    # UiParts D221): a part since Block 14, drawn from the page's scroll
+    # alone, which no data source moves; a forward guard.
+    Region("to-top", ("#to-top",), (View("Rooms a screen down, ↑ shown", scrolled_down),)),
 )
-
-# The regions not yet moved to parts that the guard fails today, each
-# with what it loses; the block that moves a region takes its line off
-# (AP UiParts, "How a region moves"). A region that is not here is
-# checked. The others passed the guard on the day it was written
-# (2026-11-15), although none has moved: they are filled in place, or
-# drawn again only by the user's own action (Create key, a backup, a
-# command's detail), which the guard does not apply. The block that
-# moves one of them keeps it passing. The sign-in left it last (Block
-# 14), shown on a page signed in as a 401 shows it: the list is empty,
-# and Block 15 removes it; the devices without a room, which the fixture
-# cannot show, are given one by their view's stub.
-NOT_MOVED = {}
-
-
-def checked_regions():
-    """The regions UI_GUARD_CHECK names to be checked although they are
-    on the list: comma-separated names, or all. An unknown name stops
-    the run, so that a typo does not check nothing."""
-    names = {n.strip() for n in os.environ.get("UI_GUARD_CHECK", "").split(",") if n.strip()}
-    if names == {"all"}:
-        return {r.name for r in REGIONS}
-    unknown = names - {r.name for r in REGIONS}
-    if unknown:
-        raise pytest.UsageError(f"UI_GUARD_CHECK names {', '.join(sorted(unknown))}; the regions are {', '.join(r.name for r in REGIONS)}")
-    return names
-
-
-CHECK = checked_regions()
 
 # The data sources, each applied with the data as it was, by its name in
 # GUARD_JS's run: the poll the timer runs (poll(false)), the Cubes' list
@@ -982,13 +962,13 @@ CHECK = checked_regions()
 # (loadRooms, also metadata, paired and device_forgotten), the whole
 # reload (refresh, the stream's connected and resync), a state event of
 # the stream for every device of the Cube, as the server sends it, the
-# log button's sign (loadLogAlerts), the ages' minute (refreshAges), the
-# log's poll under All Cubes (pollLog), the settings applied again, as
+# log button's sign (MassimoParts.log.loadAlerts), the ages' minute (refreshAges), the
+# log's poll under All Cubes (MassimoParts.log.poll), the settings applied again, as
 # when the user's arrive from the server (applyStoredSettings), and who is
 # in read again (loadMe), which every part follows as signals since AP
 # UiParts' Block 15 (UiParts D221).
-SOURCES = ("poll(false)", "loadCubes()", "loadRooms()", "refresh()", "a state event per device", "loadLogAlerts()",
-           "refreshAges()", "pollLog()", "applyStoredSettings()", "loadMe()")
+SOURCES = ("poll(false)", "loadCubes()", "loadRooms()", "refresh()", "a state event per device", "MassimoParts.log.loadAlerts()",
+           "refreshAges()", "MassimoParts.log.poll()", "applyStoredSettings()", "loadMe()")
 
 # The guard in the page, window.__guard: marks what the user can hold in
 # a region, types into its fields, gives it the focus, applies a data
@@ -1111,7 +1091,7 @@ GUARD_JS = r"""() => {
   }
   async function run(source) {
     if (source.startsWith("the page shown again: ")) {
-      // what showing the page again does: the viewshown event its loaders take (pages.js showView)
+      // what showing the page again does: the viewshown event its loaders take (MassimoParts.pages.showView)
       document.dispatchEvent(new CustomEvent("viewshown", { detail: source.slice("the page shown again: ".length) }));
       return settled();
     }
@@ -1129,15 +1109,15 @@ GUARD_JS = r"""() => {
       return settled();
     }
     switch (source) {
-      case "loadUpdate(false)": return loadUpdate(false);
+      case "MassimoParts.software.load(false)": return MassimoParts.software.load(false);
       case "poll(false)": return poll(false);
       case "loadCubes()": return loadCubes();
       case "loadRooms()": return loadRooms();
       case "refresh()": return refresh();
       case "a state event per device": return stateEvents();
-      case "loadLogAlerts()": return loadLogAlerts();
+      case "MassimoParts.log.loadAlerts()": return MassimoParts.log.loadAlerts();
       case "refreshAges()": return refreshAges();
-      case "pollLog()": return pollLog();
+      case "MassimoParts.log.poll()": return MassimoParts.log.poll();
       case "applyStoredSettings()": return applyStoredSettings();
       case "loadMe()": return loadMe();
       case "askLogin()": askLogin(); return settled(); // the opening it hands out is the one open
@@ -1268,44 +1248,31 @@ def guard_view(page, writes, region, view):
 
 @pytest.mark.parametrize("region", REGIONS, ids=lambda r: r.name)
 def test_guard(page, case, region):
-    """A region off the list keeps, in every view and around every data
-    source, what the user holds; a region on the list is shown and
-    skipped with its note. Nothing but GETs is sent either way."""
-    listed = region.name in NOT_MOVED
-    if region.gap:
-        reason = f"{region.name}: cannot be shown with the fake Cube's fixture: {region.gap}"
-        pytest.skip(reason + (f"; on the list: {NOT_MOVED[region.name]}" if listed else ""))
-    checked = not listed or region.name in CHECK
+    """A region keeps, in every view and around every data source, what
+    the user holds. Nothing but GETs is sent."""
     loaded(page)
     writes = Writes(page)
-    failures, held, counts = [], [], []
+    failures, held = [], []
     try:
         for view in region.views:
             view.show(page)
             page.evaluate(GUARD_JS)
             n = page.evaluate("(a) => window.__guard.count(a)", {"roots": list(region.containers), "exclude": region.exclude})
             assert n > 0, f"{region.name} [{view.name}]: the region shows nothing a user can hold ({', '.join(region.containers)})"
-            counts.append(f"{view.name}: {n}")
-            if checked:
-                lines, h = guard_view(page, writes, region, view)
-                failures += lines
-                held += [f"[{view.name}] {x}" for x in h]
+            lines, h = guard_view(page, writes, region, view)
+            failures += lines
+            held += [f"[{view.name}] {x}" for x in h]
     finally:
         if region.after:
             region.after(page)
     assert not writes.sent, f"{region.name}: the guard sent requests other than GET: {writes.sent}"
     let = f", let through as the page loaded: {'; '.join(writes.let)}" if writes.let else ""
-    if not checked:
-        pytest.skip(f"{region.name}: on the list, not moved yet: {NOT_MOVED[region.name]} "
-                    f"(shown, elements to hold: {'; '.join(counts)}; requests other than GET: 0{let})")
     print(f"{region.name}: checked, {len(SOURCES) + len(region.sources)} data sources in {len(region.views)} view(s); requests other than GET: 0{let}")
     assert not failures, f"{region.name}: {len(failures)} failure(s) of the guard:\n" + "\n".join(failures) + \
         "\nwhat was held:\n" + "\n".join(held)
 
 
-def test_the_list_names_regions(case):
-    """Every line of the list is a region of the table, so that a region
-    renamed does not leave a line that skips nothing."""
-    names = {r.name for r in REGIONS}
-    assert not set(NOT_MOVED) - names, f"the list names no region: {sorted(set(NOT_MOVED) - names)}"
-    assert len(names) == len(REGIONS), "every region has a name of its own"
+def test_every_region_has_a_name_of_its_own(case):
+    """Every region of the table has a name of its own, by which its test
+    is named."""
+    assert len({r.name for r in REGIONS}) == len(REGIONS), "every region has a name of its own"

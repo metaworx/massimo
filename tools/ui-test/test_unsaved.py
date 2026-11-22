@@ -262,11 +262,11 @@ def test_taken_away_after_reset_or_save(page, case, how):
                if route.request.method == "PUT" else route.continue_())
     try:
         if how == "reset":
-            page.evaluate("(sel) => { document.querySelector(sel).click(); showView('cube'); }", PANEL + " form.cube-form .form-reset")
+            page.evaluate("(sel) => { document.querySelector(sel).click(); MassimoParts.pages.showView('cube'); }", PANEL + " form.cube-form .form-reset")
         else:
             form.locator("button[type=submit]").click()
             wait_save(page, form, [True, False, False, "ok"], "saved")
-            page.evaluate("() => showView('cube')")
+            page.evaluate("() => MassimoParts.pages.showView('cube')")
         page_form = page.locator(PAGE_PANEL + " form.cube-form")
         page_form.wait_for(state="visible")
         page.wait_for_timeout(300)

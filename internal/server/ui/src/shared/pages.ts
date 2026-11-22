@@ -224,5 +224,5 @@ export function onView(view: string, fn: () => void): void {
   });
 }
 
-/** The functions the plain code calls, MassimoParts.pages (pages.js). */
+/** The functions the plain code calls, MassimoParts.pages; shown is the page shown, for login.js and the UI tests. */
 export const pagesPart = { isShown, showView, showAddress, setAddress, mayShow, onView, ownAddress, shown: () => page.peek() };

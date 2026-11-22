@@ -2344,8 +2344,9 @@ with Refresh now and the reads' times, `Times.tsx`),
 the Cube choice in `#header-cube`, the reads' times of expert mode's line
 in `#header-times`, the certificate's line in `#tls-slot`
 and the home notice inside `#home-notice`, and registers `render` and `tls`,
-which `header.js` calls as `renderCubeSelect`, `renderUpdated`, `renderServerSign`
-and `renderTLS`, and `home.js` as `renderHomeNotice`;
+which the plain code calls where a plain field the header shows changed
+(`app.js`' loads, `header.js`' `renderHeader`, `renderServerSign` and `renderTLS`,
+`home.js`' `renderHomeNotice` and `addFound`, a change of language or of the icons);
 `store.ts` holds its counter, the search under way and the certificate,
 `send.ts` the search,
 and `clock.ts` the header's one clock, a signal that moves on each second,

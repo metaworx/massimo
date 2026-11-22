@@ -45,8 +45,8 @@ def remove_user(name):
 
 
 def reload_users(page):
-    """The list read again, as a change made in My profile does (users.js loadUsers)."""
-    page.evaluate("loadUsers()")
+    """The list read again, as a change made in My profile does (MassimoParts.users.load)."""
+    page.evaluate("MassimoParts.users.load()")
     frames(page)
 
 
@@ -105,7 +105,7 @@ def test_a_users_pill_and_the_menu_say_unsaved(page, case, watch):
     the log's warning alone leaves ☰ amber."""
     alerts = []
     alerts_route(page, alerts)
-    page.evaluate("loadLogAlerts()")
+    page.evaluate("MassimoParts.log.loadAlerts()")
     panel = open_panel(page, OP)
     name = panel.locator("input[name=display_name]")
     name.fill("Unsaved name")
@@ -136,7 +136,7 @@ def test_a_users_pill_and_the_menu_say_unsaved(page, case, watch):
         assert wait_until(page, "document.querySelector(%r)?.classList.contains('tone-bad')" % menu, 5), "a failed save: ☰ red"
         assert "tone-bad" in (page.locator(item).get_attribute("class") or ""), "and System settings' disk"
         alerts.append({"id": 900101, "kind": "disconnected", "level": "warn", "cube_serial": "KEQ0000100", "time": "2026-11-14T20:00:00Z"})
-        page.evaluate("loadLogAlerts()")
+        page.evaluate("MassimoParts.log.loadAlerts()")
         frames(page)
         assert "tone-bad" in (page.locator(menu).get_attribute("class") or ""), "the worse of the two: red"
     finally:
@@ -147,7 +147,7 @@ def test_a_users_pill_and_the_menu_say_unsaved(page, case, watch):
     assert page.locator(item).count() == 0, "no disk on System settings"
     assert "tone-warn" in (page.locator(menu).get_attribute("class") or ""), "☰ amber for the log alone"
     alerts.clear()
-    page.evaluate("loadLogAlerts()")
+    page.evaluate("MassimoParts.log.loadAlerts()")
     assert wait_until(page, "!document.querySelector(%r)" % menu, 5), "nothing on ☰"
     show_view(page, "tiles")
 
@@ -1074,7 +1074,7 @@ def test_a_running_restore_stays_in_sight(page, case):
         show_view(page, "cube")
         first_row(page, CUBE_BOX).locator(".backup-actions button").nth(1).click()
         page.locator(CUBE_BOX + " .restore-plan .restore-actions button.primary").click()
-        page.evaluate("(s) => restoreEvent({kind: 'restore_step', cube: s, restore: {id: 'rw-run', step: 1, ok: true}})", SERIAL)
+        page.evaluate("(s) => MassimoParts.backups.restoreEvent({kind: 'restore_step', cube: s, restore: {id: 'rw-run', step: 1, ok: true}})", SERIAL)
         frames(page)
         assert page.locator(CUBE_BOX + " .restore-file").is_disabled(), "Restore from file… off"
         assert first_row(page, CUBE_BOX).locator(".backup-actions button").nth(1).is_disabled(), "Restore… off"
@@ -1083,7 +1083,7 @@ def test_a_running_restore_stays_in_sight(page, case):
         if not fold.evaluate("(d) => d.open"):
             fold.locator("> summary").click()
         assert fold.locator(".restore-file").is_disabled(), "off in System settings too"
-        page.evaluate("(s) => restoreEvent({kind: 'restore_done', cube: s, restore: {id: 'rw-run', ok: true, state: 'done', sent: 1}})", SERIAL)
+        page.evaluate("(s) => MassimoParts.backups.restoreEvent({kind: 'restore_done', cube: s, restore: {id: 'rw-run', ok: true, state: 'done', sent: 1}})", SERIAL)
         assert wait_until(page, f"!document.querySelector(\"#backups-cubes > .backup-fold[data-serial='{SERIAL}'] .restore-file\").disabled", 5), "on again"
         fold.locator(".restore-actions button").first.click()
     finally:
@@ -1105,7 +1105,7 @@ def test_a_restore_unseen_at_a_resync(page, case):
         show_view(page, "cube")
         first_row(page, CUBE_BOX).locator(".backup-actions button").nth(1).click()
         page.locator(CUBE_BOX + " .restore-plan .restore-actions button.primary").click()
-        page.evaluate("(s) => restoreEvent({kind: 'restore_step', cube: s, restore: {id: 'rw-lost', step: 1, ok: true}})", SERIAL)
+        page.evaluate("(s) => MassimoParts.backups.restoreEvent({kind: 'restore_step', cube: s, restore: {id: 'rw-lost', step: 1, ok: true}})", SERIAL)
         assert wait_until(page, f"document.querySelector('{CUBE_BOX} .restore-file').disabled", 5), "running: Restore from file… off"
         page.evaluate("() => state.events.dispatchEvent(new MessageEvent('resync', { data: '{}' }))")
         want = page.evaluate("t('restore.unseen')")

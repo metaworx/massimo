@@ -116,14 +116,6 @@ function renderRooms() {
   $("unlisted").classList.toggle("hidden", !state.unlisted.length);
 }
 
-// roomsLoaded takes a load of the rooms that went through, before
-// renderRooms draws them (loadRooms of app.js): the forms of a room or a
-// virtual wall thermostat it no longer gives are forgotten, and settings
-// asked to be opened before the rooms were there are opened
-// (MassimoParts.rooms.loaded).
-function roomsLoaded() {
-  MassimoParts.rooms.loaded();
-}
 
 // updateDevice applies a state event to the room or the unlisted list:
 // a room's fields are signals (ui/src/shared/data.ts), so that its tile
@@ -371,7 +363,7 @@ async function deleteRoom(room) {
 // closePanels closes every inline panel (vacation, delete confirm,
 // House), for the Escape key; dropdown (components.js) closes the menus.
 function closePanels() {
-  if (houseOpen()) closeHouse(); // house.js
+  if (MassimoParts.rooms.houseOpen()) MassimoParts.rooms.closeHouse();
   for (const room of state.rooms) {
     const ui = state.ui[room.id];
     if (!ui) continue;

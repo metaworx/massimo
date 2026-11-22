@@ -234,11 +234,11 @@ def held_poll(page):
 # every event the page's listeners take is recorded in
 # window.__uiTest.events, in order, the server's and those a test
 # dispatches, each with whether it is trusted (the server's) and how many
-# times the page handed it to appendLogEvent (Stream reads them); and,
+# times the page handed it to MassimoParts.log.event (Stream reads them); and,
 # once the page's scripts are in,
-# its appendLogEvent, which isolate_log can have keep the server's lines
-# out and wait_log_live probes. The page itself is not changed: it calls
-# its own functions by their global names.
+# its MassimoParts.log.event, which isolate_log can have keep the server's lines
+# out and wait_log_live probes. The page itself is not changed: app.js
+# calls the log's event through window.MassimoParts at each event.
 PAGE_KIT = """(() => {
   const k = window.__uiTest = { events: [], streams: 0, fromServer: false, isolated: false, probes: 0, probed: 0, appends: 0 };
   const Real = window.EventSource;
@@ -289,9 +289,10 @@ PAGE_KIT = """(() => {
   }
   window.EventSource = Watched;
   document.addEventListener("DOMContentLoaded", () => {
-    if (typeof window.appendLogEvent !== "function") return;
-    const append = window.appendLogEvent;
-    window.appendLogEvent = function (ev) {
+    const log = window.MassimoParts && window.MassimoParts.log;
+    if (!log || typeof log.event !== "function") return;
+    const append = log.event;
+    log.event = function (ev) {
       if (ev && ev.__probe) {
         k.probed = ev.__probe;
         return;
@@ -495,7 +496,7 @@ class Stream:
         isTrusted: true for what the server sent and for the browser's own
         open and error, false for what a test dispatched), stream (the
         page's stream it came on, counted from 1), logged (how many times
-        the page handed it to appendLogEvent, those isolate_log keeps out
+        the page handed it to MassimoParts.log.event, those isolate_log keeps out
         of the log among them), t (the page's milliseconds)."""
         events = self.page.evaluate("(m) => window.__uiTest.events.slice(m)", mark)
         for e in events:
@@ -535,7 +536,7 @@ def describe_event(e):
 
 
 # The probe of wait_log_live: a state event without a state, which the
-# page's state listener hands to appendLogEvent once the stream's first
+# page's state listener hands to MassimoParts.log.event once the stream's first
 # 1.5 s are over, and PAGE_KIT's wrapper takes out before the log.
 LOG_PROBE = """() => {
   const k = window.__uiTest;
@@ -575,8 +576,8 @@ def isolate_log(page, reads=None):
     page.evaluate("window.__uiTest.isolated = true")
     if reads is not None:
         reads.change(CUBE_LOG, no_lines)
-        page.evaluate("loadLog()")
-        assert wait_until(page, "!logState.loading && logState.lines.length === 0", 5), "the log loaded, without a line of the server's"
+        page.evaluate("MassimoParts.log.load()")
+        assert wait_until(page, "!MassimoParts.log.state.loading && MassimoParts.log.state.lines.length === 0", 5), "the log loaded, without a line of the server's"
 
 
 def undo(what, call, absent=(404,)):

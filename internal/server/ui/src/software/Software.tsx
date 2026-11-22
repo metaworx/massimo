@@ -20,6 +20,7 @@ import type { Setting, UpdateEntry, UpdateInfo, UpdateStatus } from "../api";
 import { hid } from "../shared/cls";
 import { Select } from "../shared/field";
 import { BusyButton, busyProps, Question, useAsk, useSetAtOnce } from "../shared/question";
+import { update } from "../shared/update";
 import { ask, data, loadUpdate, question, runUpdate, setChannel, UPDATE_FLAVOURS } from "./store";
 import { cardBadges } from "../shared/card";
 import { can } from "../shared/me";
@@ -128,7 +129,7 @@ function Channel({ u, setting }: { u: UpdateInfo; setting: Setting }) {
 export function Software() {
   useLook();
   const asking = useAsk<HTMLButtonElement>(question);
-  const u = data.info;
+  const u = update.value;
   const setting = data.setting;
   const busy = data.busy;
   const history = (u && u.history) || [];

@@ -112,7 +112,7 @@ def test_a_viewer_sees_its_title_and_no_button(page, case):
     try:
         page.evaluate("loadMe()")
         assert wait_until(page, "document.body.classList.contains('no-system')", 5), "a viewer"
-        page.evaluate("showView('info')")
+        page.evaluate("MassimoParts.pages.showView('info')")
         page.locator("#info-page").wait_for(state="visible")
         title = page.locator("#info-title")
         assert title.is_visible() and title.bounding_box()["width"] > 10, "its title shown"

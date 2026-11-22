@@ -218,7 +218,7 @@ function stopTick(serial: string): void {
   ticks.delete(serial);
 }
 
-/** pairingEvent takes the shown Cube's pairing_started and pairing_ended events (app.js, by cubes.js): the state is asked for. */
+/** pairingEvent takes the shown Cube's pairing_started and pairing_ended events (app.js connectEvents): the state is asked for. */
 export function pairingEvent(serial: string): void {
   loadPairing(serial);
 }

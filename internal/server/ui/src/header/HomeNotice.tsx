@@ -10,7 +10,7 @@
  * sent data or else last answered discovery, what to check, and for a
  * role with cubes the way to System settings → Cubes. The rooms the
  * server still has stay under it. Its element is the page's, shown and
- * hidden by home.js renderHomeNotice and pages.js; the part draws inside.
+ * hidden by home.js renderHomeNotice; the part draws inside.
  */
 
 import type { Cube } from "../api";

@@ -15,7 +15,7 @@
 
 import "./shared/data"; // first: the page's data are signals before any part draws from them
 import { signedOut as adminSignedOut } from "./admin";
-import type { ProvidersPart, RolesPart, UsersPart } from "./admin";
+import type { UsersPart } from "./admin";
 import { signedOut as backupsSignedOut } from "./backups";
 import type { BackupsPart } from "./backups";
 import "./chrome";
@@ -82,13 +82,12 @@ export interface MassimoParts {
   /** Whether the number a plain load took is still the session's: an answer after a sign-out does nothing (UiParts D212). */
   stillSession(n: number): boolean;
   /**
-   * A server's event of the stream (update.js serverEvent, from app.js
-   * connectEvents): Software update, Maintenance and System info read
+   * A server's event of the stream (app.js connectEvents): Software update, Maintenance and System info read
    * again what it says has changed while their page is shown, and a
    * Cube's log shown loads again at a resync (log/).
    */
   serverEvent(ev: ServerEvent): void;
-  /** The pages of the main area: which is shown, its address, who may open it (shared/pages.ts; pages.js calls it). */
+  /** The pages of the main area: which is shown, its address, who may open it (shared/pages.ts; app.js, home.js, login.js and header.js call it). */
   pages: typeof pagesPart;
   /** Backup and restore: Cube settings' box and System settings' fold per Cube (backups/). */
   backups: BackupsPart;
@@ -100,16 +99,12 @@ export interface MassimoParts {
   header: HeaderPart;
   /** Leaving the page, and signing out, while a settings form has changes not saved: the dialog that lists them (leaving/). */
   leaving: LeavingPart;
-  /** The log: its lines, its choices, its address and its unseen problems (log/; log.js calls it). */
+  /** The log: its lines, its choices, its address and its unseen problems (log/; app.js' loads, poll, stream and language call it, and the UI tests read its state, its alerts and its matches). */
   log: LogPart;
   /** 👤 → Notifications: the rules, this browser and the devices (notify/). */
   notify: NotifyPart;
   /** The rooms: a tile per room with its device list (rooms/). */
   rooms: RoomsPart;
-  /** System settings → Sign-in providers (admin/). */
-  providers: ProvidersPart;
-  /** System settings → Roles and Capabilities for every role (admin/). */
-  roles: RolesPart;
   /** Maintenance → Software update (software/). */
   software: SoftwarePart;
   /** System settings → Users: the password sign-in and a panel per user (admin/). */

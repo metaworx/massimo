@@ -210,7 +210,7 @@ export async function removeDevice(s: PushSubscription): Promise<void> {
 /**
  * sendNow sends a save that waits at once, under the user's own token
  * and without asking for a sign-in, as logout sends the waiting ui and
- * schemes (login.js logout, notify.js sendNotifySave; UiParts D205); a
+ * schemes (login.js logout; UiParts D205); a
  * refusal changes nothing; nothing waits, nothing is sent.
  */
 export async function sendNow(): Promise<void> {

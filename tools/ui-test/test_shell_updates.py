@@ -7,7 +7,7 @@ read.
 
 The pages shown are a signal (ui/src/shared/pages.ts): a part that read
 the page shown in a drawing or an effect would follow it and could read
-again at each change of page. The regions ask isShown, which follows
+again at each change of page. The regions ask MassimoParts.pages.isShown, which follows
 nothing; the first test counts every read of each showing of every page
 against what the page before the store read. The rows (ui/src/chrome/
 Bar.tsx) keep their sections menu through who is in read again, and the
@@ -287,7 +287,7 @@ def test_a_sign_out_forgets_before_the_language(new_context, case, watch, guard)
             frames(page)
             got = page.evaluate("""() => ({ rooms: document.querySelectorAll('#rooms .room').length, events: !!state.events,
               poll: !!state.pollTimer, signedOut: !document.getElementById('me-line') || !document.getElementById('me-line').textContent,
-              tiles: isShown('tiles') })""")
+              tiles: MassimoParts.pages.isShown('tiles') })""")
             assert got == {"rooms": 0, "events": False, "poll": False, "signedOut": True, "tiles": True}, f"in the wait, nothing of the user who left: {got}"
             held[0].continue_()
         finally:

@@ -7,9 +7,9 @@
 // helpParts; fmtNum is in i18n.js, the components in components.js),
 // settings, the Cube clock, loading of cubes and rooms,
 // polling and the event stream with its tickets. The header is in
-// header.js, the home notice and the search for Cubes in home.js, My
-// settings' wiring in prefs.js; the rooms and their tiles are in rooms.js
-// and the scripts after it.
+// header.js, the home notice and the search for Cubes in home.js; the
+// rooms' actions are in rooms.js and tiles.js; the regions are parts
+// (ui/src/), which this file calls through window.MassimoParts.
 "use strict";
 
 const state = {
@@ -512,7 +512,7 @@ function fillAge(el) {
 // refreshAges updates every age on the page; it runs once a minute.
 function refreshAges() {
   for (const el of document.querySelectorAll(".age[data-at]")) fillAge(el);
-  pruneLogRange(); // log.js: the lines a time range no longer holds
+  MassimoParts.log.prune(); // the lines a time range no longer holds
 }
 
 function isThermostat(d) {
@@ -688,14 +688,13 @@ async function loadCubes() {
   if (!MassimoParts.stillSession(n)) return false; // the user before's
   state.cubes = all.filter(isConfigured);
   state.found = all.filter((c) => !isConfigured(c));
-  cubesPolled(); // cubes.js
+  MassimoParts.cubes.polled(); // the panels follow the list, a Cube gone forgets its forms
   state.lastPoll = new Date();
   if (!state.serial || !state.cubes.some((c) => c.serial === state.serial)) {
     state.serial = state.cubes.length ? state.cubes[0].serial : null;
   }
-  renderCubeSelect();
-  renderHomeNotice();
-  logCubesPolled(); // log.js: the Cubes choice, and under All Cubes a new Cube's rooms
+  renderHomeNotice(); // the header with it (home.js)
+  MassimoParts.log.cubesPolled(); // the Cubes choice, and under All Cubes a new Cube's rooms
   const cube = state.cubes.find((c) => c.serial === state.serial);
   if (cube) {
     if (!state.tz[cube.serial]) await loadTimeZone(cube.serial);
@@ -764,13 +763,14 @@ async function loadRooms() {
   state.rooms = rooms;
   state.unlisted = unlisted;
   state.roomsOf = serial;
-  roomsLoaded(); // rooms.js
+  MassimoParts.rooms.loaded(); // the forms of what it no longer gives forgotten, a room asked to be opened opened
   renderRooms();
-  // log.js: the device chosen is gone, or else the lines drawn before the
+  // the log: the device chosen is gone, or else the lines drawn before the
   // rooms came (a reload on the log, a Cube switch there) get their names
-  if (logState.open) {
-    if (fillLogSelects()) logChoicesChanged();
-    else renderLog();
+  const log = MassimoParts.log;
+  if (log.state.open) {
+    if (log.selects()) log.choicesChanged();
+    else log.render();
   }
   return true;
 }
@@ -791,7 +791,7 @@ async function refresh() {
   const n = MassimoParts.session();
   try {
     if (!(await loadCubes()) || !(await loadRooms())) return false;
-    loadLogAlerts(); // log.js
+    MassimoParts.log.loadAlerts(); // the log button's sign
     if (langError) showLanguageError();
     else $("message").classList.add("hidden");
   } catch (e) {
@@ -813,8 +813,8 @@ function selectCube(serial) {
   state.details = {};
   state.ui = {};
   refresh().then((fresh) => fresh && connectEvents());
-  logCubeChanged();
-  backupCubeChanged();
+  MassimoParts.log.cubeChanged();
+  MassimoParts.backups.cubeChanged();
 }
 
 // --- polling ----------------------------------------------------------
@@ -824,7 +824,7 @@ function selectCube(serial) {
 // connected, or always when the user asked (the pile's Refresh now).
 function poll(rooms) {
   checkVersion();
-  loadLogAlerts(); // log.js: the log button's sign
+  MassimoParts.log.loadAlerts(); // the log button's sign
   return loadCubes().then((fresh) => {
     if (fresh && (rooms || !state.eventsOpen)) return loadRooms();
   }).catch(() => {});
@@ -841,9 +841,7 @@ function clearCubeData() {
   for (const ui of Object.values(state.ui)) if (ui.timer) clearTimeout(ui.timer);
   Object.assign(state, { cubes: [], found: [], rooms: [], unlisted: [], roomsOf: null, details: {}, ui: {}, lastPoll: null });
   renderRooms(); // rooms.js
-  renderCubeSelect();
-  renderHomeNotice();
-  renderUpdated();
+  renderHomeNotice(); // the header with it (home.js)
   for (const id of ["stats-cube", "duty", "slots", "pending-n", "queued"]) $(id).textContent = "";
 }
 
@@ -929,35 +927,35 @@ async function connectEvents() {
   if (!resume) burst();
   on("resync", () => {
     burst();
-    restoreResynced(); // backup.js: a restore's end the stream lost
-    serverEvent({ kind: "resync" }); // update.js: the parts that follow the server read again what they show
+    MassimoParts.backups.resynced(); // a restore's end the stream lost
+    MassimoParts.serverEvent({ kind: "resync" }); // the parts that follow the server read again what they show
     Promise.resolve(refresh()).catch(() => {});
   });
   on("state", (ev) => {
     const data = JSON.parse(ev.data);
     if (data.state) updateDevice(data.state);
-    if (!initial && !(data.state && data.state.virtual)) appendLogEvent(data); // the log is the real devices
+    if (!initial && !(data.state && data.state.virtual)) MassimoParts.log.event(data); // the log is the real devices
   });
   // A handler's load that fails, as when the server is briefly gone, is
   // left to the next poll or event: its rejection is caught here, as the
   // other call sites catch theirs.
   const logged = (handler) => (ev) => {
     const data = JSON.parse(ev.data);
-    appendLogEvent(data);
+    MassimoParts.log.event(data);
     const done = handler(data);
     if (done && typeof done.catch === "function") done.catch(() => {});
   };
   on("hello", logged(() => loadCubes()));
   on("metadata", logged(() => loadRooms()));
-  // Pairing (cubes.js, ui/src/cubes/flow.ts): a device that joined is among the devices
+  // Pairing (ui/src/cubes/flow.ts): a device that joined is among the devices
   // without a room once the server read its C line, which the reload
   // after its config event finds as well.
-  on("pairing_started", logged(() => pairingEvent(serial)));
-  on("pairing_ended", logged(() => pairingEvent(serial)));
+  on("pairing_started", logged(() => MassimoParts.cubes.pairingEvent(serial)));
+  on("pairing_ended", logged(() => MassimoParts.cubes.pairingEvent(serial)));
   on("paired", (ev) => {
     const data = JSON.parse(ev.data);
-    appendLogEvent(data);
-    pairingJoined(serial, data.paired);
+    MassimoParts.log.event(data);
+    MassimoParts.cubes.pairingJoined(serial, data.paired);
     loadRooms().catch(() => {});
   });
   on("device_forgotten", logged(() => loadRooms()));
@@ -978,23 +976,23 @@ async function connectEvents() {
   }));
   on("cube_found", (ev) => {
     const data = JSON.parse(ev.data);
-    appendLogEvent(data);
+    MassimoParts.log.event(data);
     addFound(data.cube);
   });
   // A restore's steps and its end go to the log and to the backup panel
-  // that sent it (backup.js).
-  on("restore_step", logged(restoreEvent));
-  on("restore_done", logged(restoreEvent));
+  // that sent it (ui/src/backups/).
+  on("restore_step", logged((data) => MassimoParts.backups.restoreEvent(data)));
+  on("restore_done", logged((data) => MassimoParts.backups.restoreEvent(data)));
   // A notification for the signed-in user, which only that user's
   // streams get: a toast, not a line of the log (notify.js).
   on("notification", (ev) => notifyToast(JSON.parse(ev.data).notification));
-  // The log's other kinds (log.js LOG_KINDS): the server's own lines, a
+  // The log's other kinds (ui/src/log/kinds.ts): the server's own lines, a
   // Cube's address and its leaving the LAN, the changes, for the log, and
   // for the parts that follow the server while their page is shown
-  // (update.js serverEvent).
+  // (MassimoParts.serverEvent).
   const handled = new Set(["state", "hello", "metadata", "pairing_started", "pairing_ended", "paired", "device_forgotten",
     "connected", "disconnected", "slots", "mismatch", "config", "cube_found", "restore_step", "restore_done", "unconfirmed"]);
-  for (const kind of LOG_KINDS) if (!handled.has(kind)) on(kind, logged(serverEvent));
+  for (const kind of MassimoParts.log.kinds) if (!handled.has(kind)) on(kind, logged((data) => MassimoParts.serverEvent(data)));
   es.onerror = () => {
     if (gen !== eventsGen) return;
     es.close();
@@ -1035,20 +1033,14 @@ function applyLanguage() {
   MassimoParts.language(); // the parts draw their texts again (ui/src/shared/lang.ts)
   initHelpSlots();
   applyAppearance();
-  renderCubeSelect();
+  MassimoParts.header.render(); // the header's row folded anew for the texts' widths
   renderServerSign();
-  renderUsers();
-  renderProviders(); // providers.js
-  renderBackups(); // backup.js: each box with its restore
-  renderRoles();
-  renderCubes();
   const cube = state.cubes.find((c) => c.serial === state.serial);
-  if (cube) renderHeader(cube);
-  renderRooms();
-  fillLogSelects();
-  renderLog();
-  renderLogSign(); // log.js
-  if (isShown("me")) renderNotify(); // notify.js
+  if (cube) renderHeader(cube); // the radio budget's plain texts
+  MassimoParts.log.selects();
+  MassimoParts.log.render(); // the lines shown as the filter matches their texts in the new language
+  MassimoParts.log.sign();
+  if (MassimoParts.pages.isShown("me")) MassimoParts.notify.render();
   tellWorkerLanguage();
 }
 
@@ -1062,20 +1054,20 @@ async function init() {
   if (I18N.en) applyI18n(document);
   MassimoParts.language(); // the page's language loaded: the parts drawn as parts.js loaded, before any table had come, draw again in it (ui/src/shared/lang.ts)
   initHelpSlots();
-  initSettings();
+  initAppearance(); // theme.js: the system's changes the appearance follows
   applySettings();
   checkVersion();
   await loadMeAndPreferences(); // login.js: who is signed in, or the sign-in dialog, then the user's settings
   initRooms();
-  initPages();
-  initLog();
+  window.addEventListener("popstate", () => MassimoParts.pages.showAddress()); // back and forward, a page named in the address bar
+  MassimoParts.log.mount(); // the log's page into its section
   initNotify(); // notify.js, before the page the address names is shown
   const hadSerial = !!state.serial;
-  showAddress(); // pages.js: the page the address names, the log with its choices
+  MassimoParts.pages.showAddress(); // the page the address names, the log with its choices
   refresh().then((fresh) => {
     if (!fresh) return; // another user signed in meanwhile: their sign-in started the data (login.js afterLogin)
     store("massimo.serial", state.serial);
-    if (isShown("log") && !hadSerial) loadLog(); // it had no Cube to load from yet
+    if (MassimoParts.pages.isShown("log") && !hadSerial) MassimoParts.log.load(); // it had no Cube to load from yet
     connectEvents();
   });
   setInterval(refreshAges, 60000);

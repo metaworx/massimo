@@ -65,8 +65,8 @@ UI_TEST_CASES=390-en,390-de make ui-test              # some cases; a CI job run
 tools/ui-test/run.sh smoke test_log.py                # one file
 tools/ui-test/run.sh smoke 'test_log.py::test_log_changes[1100-en-chromium]' -x
 UI_TEST_WORKERS=1 make ui-test                        # in one process
-PYTEST_ADDOPTS='test_parts_guard.py -rs' make ui-test # the parts' guard alone, its skips' notes shown
-UI_GUARD_CHECK=rooms PYTEST_ADDOPTS='test_parts_guard.py -k rooms' make ui-test  # a region checked though on the list
+PYTEST_ADDOPTS='test_parts_guard.py' make ui-test    # the parts' guard alone
+PYTEST_ADDOPTS='test_parts_guard.py -k rooms' make ui-test  # the guard of one region
 ```
 
 `PYTEST_ADDOPTS` is pytest's own;
@@ -370,6 +370,13 @@ hence `failed_checks_forgotten`.
   (D205), and one changed before another user's sign-in after a 401 is not
   sent; a read that finds a change waiting keeps it and sends it; the rules
   are off until the first read has answered.
+- `test_data_updates.py`, the page's data as signals (AP UiParts, Block 15):
+  on every page with a row, the log and Rooms, each data source applied once
+  (the poll, the loads, the reload, a state event per device, the log's
+  sign, the ages' minute, who is in, the settings and the language applied
+  again) reads under `/api/v1/` what it read on the page before the data
+  became signals, path for path: no part reads again because the data it
+  draws from were written.
 - `test_shell_updates.py`, the page's chrome as parts (AP UiParts, Block 14):
   every page with a row and Rooms, shown in turn twice with the poll held,
   read under `/api/v1/` what the page before the pages' store read at each
@@ -639,14 +646,15 @@ hence `failed_checks_forgotten`.
   and its views, which open its menus, panels and forms),
   around each data source (`SOURCES`: `poll(false)`, `loadCubes()`,
   `loadRooms()`, `refresh()`, a state event per device on the page's
-  `EventSource`, `loadLogAlerts()`, `refreshAges()`, `pollLog()`,
+  `EventSource`, `MassimoParts.log.loadAlerts()`, `refreshAges()`,
+  `MassimoParts.log.poll()`,
   `applyStoredSettings()`, `loadMe()`),
   with the data as it was:
   every element a user can hold is the same element, every open `details`
   open, every text, number, date or time field holds what was typed into it,
   the focus where it was, and the first three again once the focus has left;
-  a region on the list `NOT_MOVED` is shown and skipped with its note,
-  and `UI_GUARD_CHECK` (region names, or `all`) checks it all the same;
+  every region of the page is checked, the list of those not moved gone
+  with AP UiParts' Block 15;
   every request but a GET is refused and fails the test,
   so nothing reaches the fake Cube or the store.
   It runs in two of the four cases, 1100 px in English and 390 px in

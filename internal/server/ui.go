@@ -30,7 +30,7 @@ import (
 // /favicon.ico is where browsers look for an icon. /ui/connect.html is the
 // apps' connect page, a page of its own (docs/app.md).
 //
-//go:embed ui/index.html ui/connect.html ui/connect.js ui/i18n.js ui/components.js ui/app.js ui/header.js ui/home.js ui/prefs.js ui/rooms.js ui/tiles.js ui/house.js ui/week-program.js ui/config.js ui/log.js ui/pages.js ui/update.js ui/cubes.js ui/login.js ui/users.js ui/providers.js ui/backup.js ui/roles.js ui/theme.js ui/appearance.js ui/notify.js ui/notifytext.js ui/sw.js ui/manifest.webmanifest ui/style.css ui/i18n/*.json ui/brand/*.svg ui/brand/*.css ui/brand/*.png ui/brand/*.ico ui/partials/*.html ui/vendor/opaque.js ui/vendor/opaque.LICENSE ui/parts.js
+//go:embed ui/index.html ui/connect.html ui/connect.js ui/i18n.js ui/components.js ui/app.js ui/header.js ui/home.js ui/rooms.js ui/tiles.js ui/week-program.js ui/config.js ui/login.js ui/providers.js ui/theme.js ui/notify.js ui/notifytext.js ui/sw.js ui/manifest.webmanifest ui/style.css ui/i18n/*.json ui/brand/*.svg ui/brand/*.css ui/brand/*.png ui/brand/*.ico ui/partials/*.html ui/vendor/opaque.js ui/vendor/opaque.LICENSE ui/parts.js
 var uiFiles embed.FS
 
 // uiPartials are the parts of the page in ui/partials/, a file per

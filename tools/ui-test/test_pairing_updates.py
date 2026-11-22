@@ -67,8 +67,8 @@ def test_a_joined_device_keeps_what_is_typed(page, case, reads):
     countdown = "document.querySelector(%s).textContent" % json.dumps(held[3])
     was = page.evaluate(countdown)
     assert wait_until(page, "%s !== %s" % (countdown, json.dumps(was)), 5), "the countdown moves on"
-    asked(page, "pairingEvent(%s)" % json.dumps(SERIAL))
-    page.evaluate("pairingJoined(%s, %s)" % (json.dumps(SERIAL), json.dumps(SECOND)))
+    asked(page, "MassimoParts.cubes.pairingEvent(%s)" % json.dumps(SERIAL))
+    page.evaluate("MassimoParts.cubes.pairingJoined(%s, %s)" % (json.dumps(SERIAL), json.dumps(SECOND)))
     panel.locator(".pair-device[data-rf='%s']" % SECOND["rf_address"]).wait_for(state="visible")
     page.evaluate("loadCubes()")
     frames(page)
@@ -92,7 +92,7 @@ def test_the_time_typed_stays(page, case):
             "#cube-page-body .cube-pairing .pairing-countdown"]
     mark(page, held)
     secs.focus()
-    asked(page, "pairingEvent(state.serial)")
+    asked(page, "MassimoParts.cubes.pairingEvent(state.serial)")
     page.evaluate("loadCubes()")
     frames(page)
     assert replaced(page, held) == [], "the time's field and Start are the ones they were"

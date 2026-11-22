@@ -118,7 +118,7 @@ def test_redraw_of_an_open_panel_loads_nothing(page, case):
     held = []
     page.route("**/api/v1/cubes/KEQ0000100/pairing", lambda route: held.append(route))
     try:
-        page.evaluate("renderCubes()")
+        page.evaluate("MassimoParts.cubes.render()")
         panel.locator(".pair-open").click()
         seconds = "pair-seconds-KEQ0000100"
         assert wait_until(page, "document.activeElement && document.activeElement.id === %r" % seconds, 5), "the time has the focus"

@@ -101,8 +101,8 @@ export function deviceProblems(d: Device, withWindow?: boolean): Item[] {
  * rfLabel names a device by its radio address as the page names it
  * (deviceName of app.js), among the chosen Cube's rooms, the address
  * where the page does not know it: a structure event's devices in the
- * log, a finding's device (tiles.js mismatchArgs, through the plain name
- * of log.js).
+ * log, a finding's device (tiles.js mismatchArgs, through
+ * MassimoParts.log.rfLabel).
  */
 export function rfLabel(rf: string): string {
   // the rooms by the list; a device's state event draws no name again

@@ -15,7 +15,7 @@
 // which a server will later store per user, so the format is fixed. The
 // Settings page's Appearance card, the editor with a contrast hint
 // (WCAG ratio) for the pairs that must stay readable, Export and Import,
-// is a part (ui/src/prefs/), which appearance.js calls. Loaded after app.js (readStored, store, state, the DOM helpers); the
+// is a part (ui/src/prefs/), which follows the settings as signals. Loaded after app.js (readStored, store, state, the DOM helpers); the
 // stored choice is applied as soon as this file runs, before the page
 // is drawn, so a scheme does not flash the default first.
 "use strict";
@@ -343,12 +343,11 @@ function applyIcons() {
 }
 
 // redrawSigns draws again what shows the window and the radio: the
-// plain regions by name, the parts through the icons' signal, which their
+// header's row folded anew, the parts through the icons' signal, which their
 // signs read (ui/src/shared/look.ts).
 function redrawSigns() {
   MassimoParts.icons();
-  renderRooms(); // rooms.js
-  renderCubeSelect(); // header.js, the header's problems
+  MassimoParts.header.render(); // the header's row folded anew for the drawings' widths
 }
 
 // chooseIcon is a drawing's choice, kept as the other settings are.
@@ -368,6 +367,24 @@ function chooseMode(mode) {
 function chooseScheme(id) {
   setSetting("scheme", validScheme(id));
   applyAppearance();
+}
+
+// applyAppearance applies the appearance settings of state.settings;
+// applySettings and a change of language call it, and the choices of the
+// mode and the scheme. My settings' Appearance card is a part
+// (ui/src/prefs/), which follows the settings as signals.
+function applyAppearance() {
+  reapplyTheme();
+  applyBlink();
+  applyIcons();
+}
+
+// initAppearance follows the system's changes: its wish for less motion,
+// which blinking "as the system" follows, and its light or dark, which
+// the mode "as the system" follows (app.js init).
+function initAppearance() {
+  REDUCED_MOTION.addEventListener("change", applyBlink);
+  if (darkQuery) darkQuery.addEventListener("change", reapplyTheme);
 }
 
 // The stored choice, applied before the page is drawn; init() in app.js

@@ -7,11 +7,10 @@
  * 👤 → Notifications as a part (AP UiParts, Block 13), drawn once into
  * its card's body, #notify-sec, as parts.js loads, and updated in place;
  * read each time the personal page is shown, the line emptied first, as
- * notify.js did. The plain code calls MassimoParts.notify: notify.js
- * renderNotify at a change of language, and saveNotifyRules and
- * takeNotifySave, which login.js holdPushes and resumePushes hold and
- * send again around a sign-in, and sendNotifySave, which login.js logout
- * sends at once before the session ends. The toast of a notification and the
+ * notify.js did. The plain code calls MassimoParts.notify: app.js
+ * render at a change of language, login.js holdPushes and resumePushes
+ * takeSave and save around a sign-in, and logout sendNow before the
+ * session ends. The toast of a notification and the
  * service worker's language stay plain in notify.js.
  */
 
@@ -26,15 +25,15 @@ mount();
 
 /** The functions the plain code calls, MassimoParts.notify. */
 const parts = register("notify", {
-  /** render draws the card again (notify.js renderNotify). */
+  /** render draws the card again (app.js, at a change of language). */
   render(): void {
     notify.ver++;
   },
-  /** save sends the rules a second from now (notify.js saveNotifyRules: login.js resumePushes). */
+  /** save sends the rules a second from now (login.js resumePushes). */
   save: saveRules,
-  /** takeSave ends a save that waits and says whether one did (notify.js takeNotifySave: login.js holdPushes). */
+  /** takeSave ends a save that waits and says whether one did (login.js holdPushes). */
   takeSave,
-  /** sendNow sends a save that waits at once, under the user's token (notify.js sendNotifySave: login.js logout, D205). */
+  /** sendNow sends a save that waits at once, under the user's token (login.js logout, D205). */
   sendNow,
 });
 

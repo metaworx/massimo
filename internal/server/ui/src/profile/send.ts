@@ -30,7 +30,7 @@ const runner = actionRunner({
     said.profile = res;
   },
   reload: async () => {
-    if (canManageUsersOf()) await loadUsers();
+    if (canManageUsersOf()) await window.MassimoParts.users.load(); // System settings → Users, another region
     await loadProfile();
   },
   bound: true,

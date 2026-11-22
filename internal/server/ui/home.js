@@ -37,14 +37,14 @@ function addFound(c) {
   if (!c || !c.serial || state.cubes.some((x) => x.serial === c.serial)) return;
   const i = state.found.findIndex((x) => x.serial === c.serial);
   state.found = i >= 0 ? state.found.map((x, j) => (j === i ? c : x)) : [...state.found, c];
-  renderCubeSelect();
+  MassimoParts.header.render();
 }
 
 // showFound opens System settings with the Cubes card in view and the
 // fold of what was found open (ui/src/cubes/Found.tsx).
 function showFound() {
-  showFoundFold(); // cubes.js
-  showView("system");
-  renderCubes(); // cubes.js
+  MassimoParts.cubes.openFound();
+  MassimoParts.pages.showView("system");
+  MassimoParts.cubes.render();
   showCard($("sys-cubes"), true); // components.js
 }

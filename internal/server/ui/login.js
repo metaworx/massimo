@@ -130,7 +130,8 @@ function applyCaps() {
   body.classList.toggle("no-sync", !canSync());
   body.classList.toggle("no-system", !hasSettingsPage());
   body.classList.toggle("no-maint", !hasSystem());
-  if (!mayShow(currentView)) showView("tiles", "replace"); // pages.js: a page the user signed in now may not open
+  const pages = MassimoParts.pages;
+  if (!pages.mayShow(pages.shown())) pages.showView("tiles", "replace"); // a page the user signed in now may not open
 }
 
 // --- the sign-in through a provider (docs/api-v1.md, "Sign-in through OpenID Connect")
@@ -153,7 +154,7 @@ let oidcError = null;
 let oidcLinked = null;
 
 // oidcReturn reads the fragment a provider's sign-in comes back with,
-// before the page reads its own (pages.js showAddress): #oidc=<code>,
+// before the page reads its own (MassimoParts.pages.showAddress): #oidc=<code>,
 // traded for the session, or #oidc-error=<reason>; a link's,
 // #oidc-link-confirm=<code> or #oidc-link-error=<reason>, opens My
 // profile, which shows the link to confirm or says why there is none.
@@ -225,16 +226,16 @@ function whoIs(me) {
 }
 
 // holdPushes takes the settings pushes that wait for their second
-// (schedulePreferences, saveNotifyRules of notify.js) as the sign-in of
+// (schedulePreferences, MassimoParts.notify's save) as the sign-in of
 // askLogin opens, so that none goes out under whoever signs in;
 // resumePushes schedules them again, for the same user.
 function holdPushes() {
-  return { prefs: takeScheduled(), notify: takeNotifySave() };
+  return { prefs: takeScheduled(), notify: MassimoParts.notify.takeSave() };
 }
 
 function resumePushes(held) {
   for (const key of held.prefs) schedulePreferences(key);
-  if (held.notify) saveNotifyRules(); // notify.js
+  if (held.notify) MassimoParts.notify.save(); // ui/src/notify/
 }
 
 // settleSignIn follows a sign-in of askLogin after a 401, before the
@@ -277,7 +278,7 @@ async function forgetSession(synced) {
   MassimoParts.rooms.closeHouse();
   closeEvents();
   clearCubeData(); // app.js: nothing of this session behind the sign-in; the poll forgetUserSettings started stops
-  showView("tiles", "replace");
+  MassimoParts.pages.showView("tiles", "replace");
   await language;
 }
 
@@ -512,7 +513,7 @@ async function logout() {
   for (const key of takeScheduled()) {
     await apiRequest("PUT", "api/v1/me/preferences/" + key, preferenceBody(key)).catch(() => {});
   }
-  await sendNotifySave(); // notify.js: a notification rule changed in the last second, the same way (D205)
+  await MassimoParts.notify.sendNow(); // ui/src/notify/: a notification rule changed in the last second, the same way (D205)
   if (me && me.mode === "users" && me.token && me.token.kind === "session") {
     try {
       await apiRequest("POST", "api/v1/logout");

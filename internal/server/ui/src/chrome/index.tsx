@@ -18,7 +18,7 @@
  */
 
 import { render } from "preact";
-import { type BadgeSpec, cardBadges, showCard, wireCards } from "../shared/card";
+import { showCard, wireCards } from "../shared/card";
 import { definePages } from "../shared/pages";
 import { register } from "../shared/region";
 import { drawBars } from "./Bar";
@@ -52,10 +52,6 @@ const chrome = register("chrome", {
   /** version takes the server's whole version, ☰'s first row (header.js checkVersion). */
   version(v: string): void {
     version.value = v;
-  },
-  /** badges shows a card's badges in its head, by the card's id (cubes.js renderCubesBadges; a part calls cardBadges of shared/card.ts). */
-  badges(id: string, list: BadgeSpec[]): void {
-    cardBadges(id, list);
   },
   /** showCard brings the card of the id into view, opened, the focus on its heading (components.js showCard). */
   showCard(id: string, instant?: boolean): void {

@@ -10,8 +10,10 @@
  * line about the certificate; and the home notice on Rooms, each drawn
  * once into its place in the page and updated in place; and the row's
  * fold where it is short (fold.ts). The plain code
- * calls MassimoParts.header (header.js renderCubeSelect, renderUpdated,
- * renderServerSign and renderTLS, home.js renderHomeNotice). The logo,
+ * calls MassimoParts.header where a plain field the header shows changed
+ * (app.js' loads, header.js renderHeader, renderServerSign and renderTLS,
+ * home.js renderHomeNotice and addFound, a change of language or of the
+ * icons, which folds the row anew). The logo,
  * the version, the radio budget and the pages stay plain, in elements the
  * parts leave alone.
  */

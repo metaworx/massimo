@@ -8,9 +8,8 @@
  * panel in #house-slot, a tile per room of the chosen Cube in #rooms, with
  * its device list, and the devices without a room in #unlisted-devices,
  * each built once per room or device and updated in place. The plain code
- * calls MassimoParts.rooms (rooms.js renderRooms,
- * updateDevice, showTileResult, roomUI and roomsLoaded, house.js houseOpen and
- * closeHouse);
+ * calls MassimoParts.rooms (rooms.js renderRooms, showTileResult, roomUI
+ * and closePanels, app.js loadRooms, header.js somethingOpen, login.js);
  * the tile's actions stay plain and set the tile's live state, which the
  * tile follows. A room's forms are forgotten once a load no longer gives
  * the room, or the virtual thermostat whose settings they hold, and the
@@ -101,7 +100,7 @@ const rooms = register("rooms", {
   },
   /**
    * loaded takes a load of the rooms that went through, before they are
-   * drawn (roomsLoaded): the forms of what it no longer gives are
+   * drawn (app.js loadRooms): the forms of what it no longer gives are
    * forgotten, and a virtual thermostat's settings asked to be opened
    * before its Cube's rooms were there are opened.
    */
@@ -121,11 +120,11 @@ const rooms = register("rooms", {
   },
   /** ui makes what a room's tile keeps, live (roomUI). */
   ui: newUI,
-  /** houseOpen says whether the House tile's panel is open (house.js houseOpen). */
+  /** houseOpen says whether the House tile's panel is open (header.js somethingOpen, rooms.js closePanels). */
   houseOpen(): boolean {
     return house.open;
   },
-  /** closeHouse closes the House tile's panel (house.js closeHouse, Escape). */
+  /** closeHouse closes the House tile's panel (rooms.js closePanels for Escape, login.js forgetSession). */
   closeHouse,
 });
 
