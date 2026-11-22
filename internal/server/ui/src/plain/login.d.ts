@@ -70,7 +70,7 @@ declare global {
   /** Signs out as Sign out does: the page's dialog first where settings are unsaved, then a session ends and the page forgets who was in. */
   function logout(): Promise<void>;
   /** Reads who the page is signed in as again and applies it. */
-  function loadMe(): Promise<void>;
+  function loadMe(asks?: boolean): Promise<void>;
   /** A password of version 2 made in the browser for a name: the fields that set it, for POST /api/v1/users or PUT …/users/{name}. */
   function registerPassword(name: string, password: string): Promise<{ record: string; ksf: string }>;
   /** The proof of one's own current password, or for a user still of version 1 the password itself, for PUT …/users/{name}. */

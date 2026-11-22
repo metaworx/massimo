@@ -87,7 +87,27 @@ its ☰ as at a sign-in, no provider.
 Its fields are emptied at an opening alone, never when the card closes,
 so that a password manager finds what was typed (FirstOwner D43);
 under the form, **Skip for now**, which shows the page as it is for this load,
-and the next load asks again.
+and the next load asks again,
+and **Keep it open…**, where the server is not kept open already.
+Keep it open… shows a confirmation in the form's place, of the same height:
+the warning "Not recommended - ONLY use it on a local network you trust!" first,
+what keeping it open means, this page's address, which a tap copies,
+and a field to enter it into;
+**Keep it open** is off until the address entered is this page's own
+as the browser reads it:
+the same origin, scheme, host and port,
+with no path but "/" or the page's own base under a prefix,
+and no user, query or fragment;
+spaces around it, the letters' case
+and other spellings of the same address do not matter,
+and a line under the field says when it is not (FirstOwner D13, D28).
+It is a confirmation, not a lock:
+anybody on the local network may write the setting through the API.
+**Back** shows the form again with what was typed in both.
+Keep it open writes the setting `auth.keep_open`, reads who is in,
+and closes the card as Skip for now does, Back and Select server off meanwhile;
+a refusal is said under the field, and one that says the server has users now
+turns the card to the sign-in.
 The page behind the card is hidden as at a sign-in.
 At the page's start and after a sign-out the start waits for the card:
 the Cubes, the rooms, the stream and the providers are read once it has closed,
@@ -1583,6 +1603,14 @@ settings forms and have none of it.
   which the page uses for users whose password the server still hashes;
   the line under it says how many those are,
   and they cannot sign in once it is off until a password is set for them here.
+  On a server kept open without an owner (Keep it open… of the sign-in card),
+  **This server is kept open without an owner** comes first, on:
+  turned off, it is saved at once and stays in sight, off, for that showing,
+  with the line that the page asks for the owner again at its next load;
+  who is in is read again then, by the one read that asks for nobody,
+  so nothing more happens at once (FirstOwner D31, D44).
+  It is shown only while the server is kept open:
+  keeping it open is the card's confirmation alone (FirstOwner D32).
 - **Sign-in providers** (with `auth`, the owner's alone by default),
   explained by the ⓘ in its head:
   the redirect URI to register at a provider,

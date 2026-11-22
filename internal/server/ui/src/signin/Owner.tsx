@@ -19,7 +19,10 @@
  * refusal for lack of a session, or the server's word that the first
  * owner exists already, turns the card to the sign-in (askLogin): the
  * server has users now. Under the form, Skip for now closes the card for
- * this load (D10, D21). Its fields are not controlled, as the card's
+ * this load (D10, D21), and Keep it open… shows the confirmation that
+ * keeps the server open (KeepOpen.tsx, AP FirstOwner, Block 3) in the
+ * form's place, the two of one height, where the server is not kept open
+ * already. Its fields are not controlled, as the card's
  * (UiParts D210): no drawing writes what they hold, they are read at the
  * submit and emptied at each opening alone, never at the closing nor at
  * the turn to the sign-in, so that a password manager finds what was
@@ -35,13 +38,18 @@ import { useLang } from "../shared/lang";
 import { NewPassword, newPasswordProblem } from "../shared/password";
 import { busyProps, useBusy } from "../shared/question";
 import { UserNameField, useNameCheck, wordNameError } from "../shared/username";
+import { me } from "../shared/me";
 import { app, offer } from "./app";
-import { ask, card, skip } from "./store";
+import { KeepOpen } from "./KeepOpen";
+import { ask, card, keepAsk, skip } from "./store";
 
 /** Owner is the first owner's place in the card: the form, and under it the row with Skip for now. */
 export function Owner() {
   useLang();
   const shown = card.owner;
+  const step = card.ownerStep;
+  const working = card.working;
+  const kept = !!me.value?.kept_open;
   const opened = card.opened;
   const focus = card.focus;
   const offered = offer(app.value);
@@ -49,6 +57,7 @@ export function Owner() {
   const nameRef = useRef<HTMLInputElement>(null);
   const passRef = useRef<HTMLInputElement>(null);
   const againRef = useRef<HTMLInputElement>(null);
+  const keepRef = useRef<HTMLButtonElement>(null);
   const nc = useNameCheck(() => []);
   const create = useBusy();
   // each opening empties the fields, the name's line and the switch, as the card's own (UiParts D210)
@@ -61,9 +70,12 @@ export function Owner() {
   }, [opened]);
   // the name in focus at the first owner's opening, in the drawing that shows the form; none on a touch screen, where it
   // would bring the soft keyboard up by itself (UiParts D224)
+  // and Keep it open… in focus again after Back
   // biome-ignore lint/correctness/useExhaustiveDependencies: focus is read from the card's store, which Biome takes for a stable import; the effect is for each focus asked, so it is listed.
   useLayoutEffect(() => {
-    if (!focus.n || focus.on !== "owner") return;
+    if (!focus.n) return;
+    if (focus.on === "keepButton") keepRef.current?.focus();
+    if (focus.on !== "owner") return;
     if (matchMedia("(pointer: coarse)").matches) return;
     nameRef.current?.focus();
   }, [focus]);
@@ -84,6 +96,7 @@ export function Owner() {
     const problem = n ? newPasswordProblem(password, againRef.current?.value || "") : t("login.missing");
     if (problem) return say(problem);
     card.ownerSaid = null;
+    card.working = true;
     // busy through the creation, the sign-in, the app's keeping of the login (UiParts D213) and the read of who is in
     // until the card has closed: a second tap meanwhile creates nothing
     create.run(async () => {
@@ -116,31 +129,39 @@ export function Owner() {
         const worded = wordNameError(err, n);
         if (worded) nc.say(worded);
         say(t("setup.failed", { error: worded || err.message }));
+      } finally {
+        card.working = false;
       }
     });
   };
   return (
     <div id="setup" class={"login-owner" + hid(!shown)}>
-      <form id="setup-form" class="setup-form" onSubmit={submit}>
-        <p class="muted">{t("setup.text")}</p>
-        <p id="setup-tls" class={"notice small" + hid(!card.selfSigned)} role="note">{t("header.selfSigned")}</p>
-        <UserNameField label={t("users.name")} id="setup-user" msgId="setup-name-msg" nc={nc} autocomplete="username" inputRef={nameRef} />
-        <NewPassword ids={["setup-password", "setup-again"]} label={t("login.password")} inputRefs={[passRef, againRef]} required />
-        <label id="setup-keep-row" class={"switch login-keep" + hid(!offered)}>
-          <input type="checkbox" id="setup-keep" checked={keep && offered} onChange={(ev) => setKeep(ev.currentTarget.checked)} />
-          <span class="slider" aria-hidden="true" />
-          <span class="switch-label">{t("login.keepFingerprint")}</span>
-        </label>
-        <div class="actions">
-          <span class="actions-right">
-            <button type="button" id="setup-cancel" class={"form-cancel" + hid(!appConnect())} disabled={create.busy} onClick={toServers}>{t("action.cancel")}</button>
-            <button type="submit" {...busyProps("primary", create.busy)}>{t("setup.create")}</button>
-          </span>
+      <div class="owner-steps">
+        <div id="setup-step" class={"owner-step" + hid(step !== "form")}>
+          <form id="setup-form" class="setup-form" onSubmit={submit}>
+            <p class="muted">{t("setup.text")}</p>
+            <p id="setup-tls" class={"notice small" + hid(!card.selfSigned)} role="note">{t("header.selfSigned")}</p>
+            <UserNameField label={t("users.name")} id="setup-user" msgId="setup-name-msg" nc={nc} autocomplete="username" inputRef={nameRef} />
+            <NewPassword ids={["setup-password", "setup-again"]} label={t("login.password")} inputRefs={[passRef, againRef]} required />
+            <label id="setup-keep-row" class={"switch login-keep" + hid(!offered)}>
+              <input type="checkbox" id="setup-keep" checked={keep && offered} onChange={(ev) => setKeep(ev.currentTarget.checked)} />
+              <span class="slider" aria-hidden="true" />
+              <span class="switch-label">{t("login.keepFingerprint")}</span>
+            </label>
+            <div class="actions">
+              <span class="actions-right">
+                <button type="button" id="setup-cancel" class={"form-cancel" + hid(!appConnect())} disabled={working} onClick={toServers}>{t("action.cancel")}</button>
+                <button type="submit" {...busyProps("primary", create.busy)}>{t("setup.create")}</button>
+              </span>
+            </div>
+            <ResultLine id="setup-msg" cls="small cubes-msg" role="status" res={card.ownerSaid} />
+          </form>
+          <div id="setup-more" class="login-owner-more">
+            <button type="button" id="setup-skip" disabled={working} onClick={skip}>{t("setup.skip")}</button>
+            <button ref={keepRef} type="button" id="setup-keep-open" class={hid(kept).trim() || undefined} disabled={working} onClick={keepAsk}>{t("setup.keepOpen")}</button>
+          </div>
         </div>
-        <ResultLine id="setup-msg" cls="small cubes-msg" role="status" res={card.ownerSaid} />
-      </form>
-      <div id="setup-more" class="login-owner-more">
-        <button type="button" id="setup-skip" disabled={create.busy} onClick={skip}>{t("setup.skip")}</button>
+        <KeepOpen />
       </div>
     </div>
   );

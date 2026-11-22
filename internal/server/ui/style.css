@@ -1792,6 +1792,16 @@ massimo-week-program { display: contents; }
    its own height (AP FirstOwner, D23), Skip for now in a row under it */
 .setup-form { display: flex; flex-direction: column; gap: 8px; }
 .setup-form > p { margin: 0; }
+/* the form and the confirmation that keeps the server open (ui/src/signin/
+   KeepOpen.tsx) in one place of one height, the step not shown kept there
+   unseen, so that Keep it open… and Back move nothing of the card */
+.owner-steps { display: grid; }
+.owner-steps > * { grid-area: 1 / 1; min-width: 0; }
+.owner-steps > .hidden { display: block !important; visibility: hidden; }
+.keep-open { display: flex; flex-direction: column; gap: 8px; }
+.keep-open > p { margin: 0; }
+#keep-open-warning { font-weight: 600; }
+.keep-open-origin { overflow-wrap: anywhere; }
 .login-owner-more { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
 #me-line { margin: 8px 0 4px; }
 #me-password { margin-bottom: 8px; }

@@ -1820,6 +1820,8 @@ at once; the announcement's `reg` says it on the LAN.
 open on purpose, and applies at once:
 `GET /api/v1/me` then says `kept_open`, and the web UI does not ask for the
 first owner.
+The web UI sets it from the sign-in card once the page's own address is entered,
+and System settings → Users turns it off again (docs/ui.md).
 It changes nothing about who is let in:
 the local network alone, as on any open server (Authentication).
 It counts only while the server has no users:
