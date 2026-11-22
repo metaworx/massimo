@@ -410,7 +410,9 @@ function devicePath(d) {
 async function deviceDetail(dev) {
   const rf = dev.rf_address;
   if (state.details[rf]) return state.details[rf];
+  const n = MassimoParts.session();
   const d = await api("GET", devicePath(dev));
+  if (!MassimoParts.stillSession(n)) return d; // the user before's: kept nowhere, its awaiter asks its own session
   state.details[rf] = d;
   return d;
 }
@@ -669,8 +671,21 @@ function applySettings() {
 
 // --- loading ----------------------------------------------------------
 
+// A plain load takes the session's number before its request
+// (MassimoParts.session(); a sign-out, or another user's sign-in after
+// a 401, raises it: UiParts D212). Where its answer comes after the
+// session it was asked in had ended, it writes, draws and says nothing
+// and still settles: it resolves false (a device's detail: the answer,
+// kept nowhere), so that every awaiter's finally runs and nothing of
+// the next session waits on it. A plain chain that would go on from it
+// tests the value; a part's awaiter asks its own session.
+
+// loadCubes reads the Cubes; false where the answer came after the
+// session ended (above), else true.
 async function loadCubes() {
+  const n = MassimoParts.session();
   const all = (await api("GET", "api/v1/cubes")) || [];
+  if (!MassimoParts.stillSession(n)) return false; // the user before's
   state.cubes = all.filter(isConfigured);
   state.found = all.filter((c) => !isConfigured(c));
   cubesPolled(); // cubes.js
@@ -684,8 +699,10 @@ async function loadCubes() {
   const cube = state.cubes.find((c) => c.serial === state.serial);
   if (cube) {
     if (!state.tz[cube.serial]) await loadTimeZone(cube.serial);
+    if (!MassimoParts.stillSession(n)) return false;
     renderHeader(cube);
   }
+  return true;
 }
 
 // timeOf is an API time as a Date, null for none (a zero time).
@@ -715,11 +732,14 @@ function linkText(c) {
 
 // loadTimeZone reads the Cube's daylight-saving rules once per Cube.
 async function loadTimeZone(serial) {
+  const n = MassimoParts.session();
   try {
     const detail = await api("GET", "api/v1/cubes/" + encodeURIComponent(serial));
+    if (!MassimoParts.stillSession(n)) return;
     const cfg = detail && detail.config;
     state.tz = { ...state.tz, [serial]: cfg && cfg.tz_winter ? { winter: cfg.tz_winter, summer: cfg.tz_summer } : false };
   } catch (e) {
+    if (!MassimoParts.stillSession(n)) return;
     state.tz = { ...state.tz, [serial]: false };
   }
 }
@@ -733,10 +753,14 @@ async function fetchRooms(serial) {
   return { rooms: (rooms || []).map(splitVirtual), unlisted: (devices || []).filter((d) => d.unlisted || d.room_id === 0) };
 }
 
+// loadRooms reads the chosen Cube's rooms; false where the answer came
+// after the session ended, else true.
 async function loadRooms() {
-  if (!state.serial) return;
+  if (!state.serial) return true;
   const serial = state.serial;
+  const n = MassimoParts.session();
   const { rooms, unlisted } = await fetchRooms(serial);
+  if (!MassimoParts.stillSession(n)) return false; // the user before's: the next user's load reads theirs
   state.rooms = rooms;
   state.unlisted = unlisted;
   state.roomsOf = serial;
@@ -748,6 +772,7 @@ async function loadRooms() {
     if (fillLogSelects()) logChoicesChanged();
     else renderLog();
   }
+  return true;
 }
 
 // splitVirtual takes a room's virtual wall thermostat out of its devices
@@ -760,16 +785,20 @@ function splitVirtual(room) {
   return room;
 }
 
+// refresh reads the Cubes and the rooms; false where an answer came after
+// the session ended, else true, a failure said on the message line.
 async function refresh() {
+  const n = MassimoParts.session();
   try {
-    await loadCubes();
-    await loadRooms();
+    if (!(await loadCubes()) || !(await loadRooms())) return false;
     loadLogAlerts(); // log.js
     if (langError) showLanguageError();
     else $("message").classList.add("hidden");
   } catch (e) {
+    if (!MassimoParts.stillSession(n)) return false;
     showMessage(t("msg.cannotLoad", { error: e.message }), false);
   }
+  return true;
 }
 
 // isConfigured tells the Cubes the server serves from those it only
@@ -783,7 +812,7 @@ function selectCube(serial) {
   store("massimo.serial", serial);
   state.details = {};
   state.ui = {};
-  refresh().then(connectEvents);
+  refresh().then((fresh) => fresh && connectEvents());
   logCubeChanged();
   backupCubeChanged();
 }
@@ -796,8 +825,8 @@ function selectCube(serial) {
 function poll(rooms) {
   checkVersion();
   loadLogAlerts(); // log.js: the log button's sign
-  return loadCubes().then(() => {
-    if (rooms || !state.eventsOpen) return loadRooms();
+  return loadCubes().then((fresh) => {
+    if (fresh && (rooms || !state.eventsOpen)) return loadRooms();
   }).catch(() => {});
 }
 
@@ -1044,7 +1073,8 @@ async function init() {
   initNotify(); // notify.js, before the page the address names is shown
   const hadSerial = !!state.serial;
   showAddress(); // pages.js: the page the address names, the log with its choices
-  refresh().then(() => {
+  refresh().then((fresh) => {
+    if (!fresh) return; // another user signed in meanwhile: their sign-in started the data (login.js afterLogin)
     store("massimo.serial", state.serial);
     if (isShown("log") && !hadSerial) loadLog(); // it had no Cube to load from yet
     connectEvents();

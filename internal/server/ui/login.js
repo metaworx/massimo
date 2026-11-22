@@ -90,6 +90,11 @@ function setToken(token) {
 // MASSIMO_API_TOKEN has no password.
 let sawOpen = false;
 
+// A sign-in waits for none of its reads to come back in this session:
+// askLogin settles before forgetSession raises the session's number, and
+// the start that waited for it (loadMeAndPreferences) and afterLogin each
+// read who is in again after it, in the new session, so that a late
+// answer here, which writes nothing, leaves who is in to that read.
 // loadMe reads who the page is signed in as and applies it; a server
 // that refuses opens the sign-in dialog through api(). The page starts
 // signed out (index.html), so that no button of the header shows before
@@ -97,11 +102,15 @@ let sawOpen = false;
 // all (a server out of reach shows the page and its message), the page
 // shows, unless the sign-in dialog is still open (askLogin).
 async function loadMe() {
+  const n = MassimoParts.session();
+  let me = null;
   try {
-    state.me = await api("GET", "api/v1/me");
+    me = await api("GET", "api/v1/me");
   } catch (e) {
-    state.me = null;
+    me = null;
   }
+  if (!MassimoParts.stillSession(n)) return state.me; // who was in before a sign-out: the next sign-in reads who is in
+  state.me = me;
   if (state.me && (state.me.mode === "open" || state.me.mode === "none")) sawOpen = true;
   applyCaps();
   if (!$("login-dialog").open) document.body.classList.remove("signed-out");
@@ -466,7 +475,9 @@ function afterLogin() {
     .then(loadPreferences)
     .then(() => {
       startPolling(); // app.js: stopped where another user's sign-in forgot the session
-      refresh().then(() => {
+      refresh().then((fresh) => {
+        if (!fresh) return; // answered after the session ended: the next sign-in starts the data again
+        store("massimo.serial", state.serial); // as the page's start does, which another user's sign-in may have cut short
         if (said && $("message").classList.contains("hidden")) showMessage(said, false);
         return connectEvents();
       });
@@ -513,7 +524,7 @@ async function logout() {
   await forgetSession(synced);
   await loadMeAndPreferences();
   startPolling();
-  refresh().then(connectEvents);
+  refresh().then((fresh) => fresh && connectEvents());
 }
 
 // --- the user's settings on the server ---------------------------------
@@ -561,9 +572,11 @@ function preferenceBody(key) {
 // pushPreferences sends the preferences scheduled.
 async function pushPreferences() {
   for (const key of takeScheduled()) {
+    const n = MassimoParts.session();
     try {
       await api("PUT", "api/v1/me/preferences/" + key, preferenceBody(key));
     } catch (e) {
+      if (!MassimoParts.stillSession(n)) return;
       showMessage(t("prefs.saveFailed", { error: e.message }), false);
     }
   }
@@ -589,12 +602,14 @@ function flushPreferences() {
 // settings and the schemes the browser had.
 async function loadPreferences() {
   if (!canSync()) return;
+  const n = MassimoParts.session();
   let prefs;
   try {
     prefs = (await api("GET", "api/v1/me/preferences")) || {};
   } catch (e) {
     return;
   }
+  if (!MassimoParts.stillSession(n)) return; // the settings of the user before
   if (prefs.schemes) {
     takeSchemes(prefs.schemes); // theme.js
   } else if (themeState.custom.length) {

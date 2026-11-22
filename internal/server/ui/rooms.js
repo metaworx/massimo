@@ -310,15 +310,18 @@ function sendRoomSetpoint(room, body, label, key) {
 
 async function setpointRequest(room, body, label) {
   showTileResult(room.id, t("result.waiting", { label }), true);
+  const n = MassimoParts.session();
   try {
     const res = await api("PUT", base() + "/rooms/" + room.id + "/setpoint", body);
+    if (!MassimoParts.stillSession(n)) return null; // answered after the session ended: no line on the next user's tile
     showTileResult(room.id, resultText(label, res), !(res && res.discarded));
     return res;
   } catch (e) {
+    if (!MassimoParts.stillSession(n)) return null;
     showTileResult(room.id, errorText(label, e), false);
     return null;
   } finally {
-    loadCubes().catch(() => {});
+    if (MassimoParts.stillSession(n)) loadCubes().catch(() => {});
   }
 }
 
@@ -326,20 +329,24 @@ async function setLock(d, locked) {
   const label = t(locked ? "label.lock" : "label.unlock", { name: deviceName(d) });
   const roomId = d.room_id;
   showTileResult(roomId, t("result.waiting", { label }), true);
+  const n = MassimoParts.session();
   try {
     const res = await api("PUT", devicePath(d) + "/lock", { locked });
+    if (!MassimoParts.stillSession(n)) return false; // answered after the session ended
     showTileResult(roomId, resultText(label, res), !(res && res.discarded));
   } catch (e) {
+    if (!MassimoParts.stillSession(n)) return false;
     showTileResult(roomId, errorText(label, e), false);
   }
   loadCubes().catch(() => {});
+  return true;
 }
 
 async function lockRoom(room, locked, el) {
   closeMenu(el);
   await tileWrite(room, locked ? "lock" : "unlock", async () => {
     for (const d of room.devices.filter(isThermostat)) {
-      await setLock(d, locked);
+      if (!(await setLock(d, locked))) return; // the session ended: the next device is not written
     }
   });
 }
@@ -353,10 +360,13 @@ function lockDevice(d, locked, btn) {
 }
 
 async function deleteRoom(room) {
+  const n = MassimoParts.session();
   try {
     await api("DELETE", base() + "/rooms/" + room.id);
+    if (!MassimoParts.stillSession(n)) return;
     showMessage(t("room.deleted", { name: room.name }), true);
   } catch (e) {
+    if (!MassimoParts.stillSession(n)) return;
     showMessage(t("room.deleteFailed", { name: room.name, error: e.message }), false);
   }
   await loadRooms();

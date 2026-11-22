@@ -85,13 +85,16 @@ function sendPreset(room, which) {
   if (sum) sum.focus();
   return tileWrite(room, which, async () => {
     const what = t(which === "eco" ? "room.eco" : "room.comfort");
+    const n = MassimoParts.session();
     let temp;
     try {
       temp = (await presetTemps(roomThermostat(room)))[which];
     } catch (e) {
+      if (!MassimoParts.stillSession(n)) return null;
       showTileResult(room.id, errorText(what, e), false);
       return null;
     }
+    if (!MassimoParts.stillSession(n)) return null; // read after the session ended: no setpoint under the next user's key
     if (temp === undefined) {
       showTileResult(room.id, t("result.error", { label: what, error: t(which === "eco" ? "house.noEco" : "house.noComfort") }), false);
       return null;

@@ -48,7 +48,7 @@ import { pagesPart } from "./shared/pages";
 import { iconsChanged } from "./shared/look";
 import { parts, register } from "./shared/region";
 import { forgetRepairs } from "./shared/repair";
-import { newSession } from "./shared/session";
+import { newSession, session, stillSession } from "./shared/session";
 
 /** The parts the plain code calls, by region. */
 export interface MassimoParts {
@@ -77,6 +77,10 @@ export interface MassimoParts {
    * sign-in card's choice still waited for and its lines (signin/).
    */
   signedOut(): void;
+  /** The session's number now, which a plain load takes before its request (app.js, rooms.js, login.js; shared/session.ts). */
+  session(): number;
+  /** Whether the number a plain load took is still the session's: an answer after a sign-out does nothing (UiParts D212). */
+  stillSession(n: number): boolean;
   /**
    * A server's event of the stream (update.js serverEvent, from app.js
    * connectEvents): Software update, Maintenance and System info read
@@ -130,6 +134,8 @@ register("serverEvent", (ev: ServerEvent) => {
   maintenanceEvent(ev);
   sysinfoEvent(ev);
 });
+register("session", session);
+register("stillSession", stillSession);
 register("signedOut", () => {
   newSession(); // first: an answer still on its way for the user who was is dropped
   forgetForms("");

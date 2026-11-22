@@ -2729,6 +2729,15 @@ the Cubes' pairing and rooms, a Cube's devices and the Cubes' actions,
 a room's configuration, a device's detail and the virtual thermostat's settings,
 the devices without a room, the House panel's writes (which stop at the next room),
 the repairs, the form that puts a device into a room and the header's search for Cubes.
+The plain loads hold the rule too: the Cubes (`loadCubes`, `loadTimeZone`), the rooms
+(`loadRooms`, `refresh`), a device's detail (`deviceDetail`), a tile's writes
+(`setpointRequest`, `setLock`, `deleteRoom`), who is in (`loadMe`) and the settings
+(`loadPreferences`, `pushPreferences`) take the number as `MassimoParts.session()`
+and ask `MassimoParts.stillSession(n)` after the answer and after its error;
+a late answer writes, draws and says nothing and still settles,
+the Cubes', the rooms' and `refresh` to `false`, which a plain chain tests
+before it goes on, so that every awaiter's `finally` runs and nothing of the next
+session waits on the one before; a part's awaiter asks its own session.
 Only the plain `removeFromCube` of `unlisted.js` still reads the rooms after a removal's late answer,
 a read under the next user's own key, plain code that Block 15 moves.
 Who is in (`shared/me.ts`) draws the rest:

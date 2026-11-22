@@ -4,7 +4,8 @@
 (AP UiParts, D197 and D212): the regions moved to parts before Block 10
 take the session's number before a request and drop its answer, and
 whatever would follow it, where a sign-out came meanwhile, as the later
-blocks' do (ui/src/shared/session.ts).
+blocks' do (ui/src/shared/session.ts), and so do the plain loads, which
+take it as MassimoParts.session().
 
 Each test holds a request of one of them on the owner's page (its key),
 ends the session one of two ways, a sign-out (Forget key) or an expired
@@ -13,7 +14,8 @@ an answer of its own, so that it comes in the next user's session. It
 waits until the page has taken the answer (the response finished, two
 frames for what a part draws and sends after it) and asserts that
 nothing of it is drawn, said, sent or started: a toast, a line, a next
-request, a countdown.
+request, a countdown; and that nothing of the next user's page waits on
+it: no control busy, turning or off (nothing_waits).
 
 The other rows of the design's table cannot reach the next user and
 have no test here: a room's configuration's lines and data (state.ui is
@@ -59,6 +61,17 @@ def let_go(page, held, method, end, body):
         held[0].fulfill(status=200, content_type="application/json", body=json.dumps(body))
     answered.value.finished()
     frames(page)
+    nothing_waits(page)
+
+
+def nothing_waits(page):
+    """Nothing of the next user's page waits on a request of the user
+    before: no control busy, turning or off for it (aria-busy, the class
+    busy), and the header's search for Cubes free to run."""
+    left = page.evaluate("() => [...document.querySelectorAll('[aria-busy=true], button.busy')].map((e) => e.id || e.className)")
+    assert not left, f"nothing of the next user's page busy: {left}"
+    search = page.evaluate("() => { const e = document.querySelector(\"#cube-menu button[data-value='__discover']\"); return e ? e.disabled : false; }")
+    assert not search, "the next user's search for Cubes can run"
 
 
 def requests_of(page, method, end):
@@ -314,3 +327,102 @@ def test_the_device_settings_then_its_name(new_context, case, watch, guard, way)
     end_session(page, way)
     let_go(page, held, "PUT", "/config", {"ok": True, "devices": []})
     assert not names, f"no name's write after the settings' answer: {names}"
+
+
+def hold_first(page, pattern, method, held):
+    """Holds the first request of a method to pattern until the test lets
+    it go, and lets every later one through: the next user's own loads go
+    on as the sign-in starts them."""
+
+    def handle(route):
+        if route.request.method == method and not held:
+            held.append(route)
+        else:
+            route.continue_()
+
+    page.route(pattern, handle)
+
+
+@pytest.mark.parametrize("way", WAYS)
+def test_the_rooms_load(new_context, case, watch, guard, way):
+    """The page's own load of the rooms (app.js loadRooms), answered in
+    the next user's session, writes no room: the next user's load has read
+    theirs. Fails on the page before: the user before's rooms took their
+    place on the tiles."""
+    page = owner_page(new_context, guard, watch, URL, TOKEN)
+    held = []
+    hold_first(page, "**/api/v1/cubes/*/rooms?devices=all", "GET", held)
+    page.evaluate("() => { loadRooms().catch(() => {}); }")
+    assert wait_held(page, held), "the rooms' read is on its way"
+    end_session(page, way)
+    let_go(page, held, "GET", "/rooms", [{"id": 99, "name": "Late room", "devices": []}])
+    names = page.evaluate("state.rooms.map((r) => r.name)")
+    assert "Late room" not in names, f"no room of the user before: {names}"
+    assert page.locator(".room[data-id='99']").count() == 0, "no tile of the user before"
+
+
+@pytest.mark.parametrize("way", WAYS)
+def test_the_cubes_load(new_context, case, watch, guard, way):
+    """The page's own load of the Cubes (app.js loadCubes), answered in
+    the next user's session, writes no Cube. Fails on the page before: the
+    user before's Cubes took the place of the next user's, in the header's
+    choice and in System settings."""
+    page = owner_page(new_context, guard, watch, URL, TOKEN)
+    late = page.evaluate("({ ...state.cubes[0], serial: 'KEQ0000990', name: 'Late Cube' })")
+    held = []
+    hold_first(page, "**/api/v1/cubes", "GET", held)
+    page.evaluate("() => { loadCubes().catch(() => {}); }")
+    assert wait_held(page, held), "the Cubes' read is on its way"
+    end_session(page, way)
+    let_go(page, held, "GET", "/api/v1/cubes", [late])
+    serials = page.evaluate("state.cubes.map((c) => c.serial)")
+    assert "KEQ0000990" not in serials, f"no Cube of the user before: {serials}"
+
+
+@pytest.mark.parametrize("way", WAYS)
+def test_the_tiles_setpoint(new_context, case, watch, guard, way):
+    """A tile's setpoint (rooms.js setpointRequest), answered in the next
+    user's session, says nothing on the next user's tile of the same room.
+    Fails on the page before: its outcome stood on that tile."""
+    page = owner_page(new_context, guard, watch, URL, TOKEN)
+    room = page.evaluate("state.rooms[0].id")
+    held = []
+    hold_first(page, "**/rooms/*/setpoint", "PUT", held)
+    page.evaluate("(id) => { const r = state.rooms.find((x) => x.id === id); sendRoomSetpoint(r, { mode: 'manual', temp: 21 }, 'Late write', 'manual'); }", room)
+    assert wait_held(page, held), "the setpoint is on its way"
+    end_session(page, way)
+    let_go(page, held, "PUT", "/setpoint", {})
+    tile = page.locator(".room[data-id='%d']" % room)
+    assert "Late write" not in tile.inner_text(), "no line of the user before on the tile"
+
+
+@pytest.mark.parametrize("way", WAYS)
+def test_refresh_now_after_a_late_poll(new_context, case, watch, guard, way):
+    """Refresh now (the header's pile), its read of the Cubes answered
+    after the session ended: the next user's Refresh now turns no more and
+    takes a click."""
+    page = owner_page(new_context, guard, watch, URL, TOKEN)
+    page.evaluate("clearInterval(state.pollTimer)")
+    held = []
+    hold_first(page, "**/api/v1/cubes", "GET", held)
+    page.locator("#cube-problems .problems-sum").click()
+    page.locator("#cube-problems .refresh-now").click()
+    assert wait_held(page, held), "the poll's read is on its way"
+    end_session(page, way)
+    let_go(page, held, "GET", "/api/v1/cubes", [])
+
+
+@pytest.mark.parametrize("way", WAYS)
+def test_the_search_for_cubes_reload(new_context, case, watch, guard, way):
+    """The search for Cubes answered in the session, its reload of the
+    Cubes (app.js loadCubes) answered after it ended: the next user's Cube
+    choice does not stay "Searching…", and the search can run again."""
+    page = owner_page(new_context, guard, watch, URL, TOKEN)
+    page.evaluate("clearInterval(state.pollTimer)")
+    page.route("**/api/v1/cubes/discover", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps({"found": []})))
+    held = []
+    hold_first(page, "**/api/v1/cubes", "GET", held)
+    choose_cube(page, "__discover")
+    assert wait_held(page, held), "the search's reload is on its way"
+    end_session(page, way)
+    let_go(page, held, "GET", "/api/v1/cubes", [])

@@ -340,7 +340,9 @@ export async function reloadSettings(): Promise<void> {
 /** serverBack reads the data again and opens the stream again, the server back with a new start. */
 function serverBack(): void {
   checkVersion(); // header.js: the start in the settings, and a reload for a new version
-  refresh().then(connectEvents);
+  refresh().then((fresh) => {
+    if (fresh) connectEvents(); // false: answered after the session ended
+  });
 }
 
 /**

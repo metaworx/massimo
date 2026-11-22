@@ -88,11 +88,11 @@ declare global {
   /** A request to the API with the page's token, headers added to its own; the answer's JSON, or an error with the server's message (and its status). */
   function api<T = unknown>(method: string, path: string, body?: unknown, headers?: Record<string, string>): Promise<T>;
   /** Loads the Cubes, the rooms and the log's alerts again. */
-  function refresh(): Promise<void>;
+  function refresh(): Promise<boolean>;
   /** Loads the Cubes' list into state.cubes and state.found and draws what shows them. */
-  function loadCubes(): Promise<void>;
+  function loadCubes(): Promise<boolean>;
   /** Loads the chosen Cube's rooms and its devices in no room, and draws them. */
-  function loadRooms(): Promise<void>;
+  function loadRooms(): Promise<boolean>;
   /** Asks the server for the current state now, the rooms too with rooms. */
   function poll(rooms?: boolean): Promise<void>;
   /** Chooses the Cube the page shows, by its serial, and loads it. */
