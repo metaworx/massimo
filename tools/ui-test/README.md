@@ -646,7 +646,7 @@ hence `failed_checks_forgotten`.
   and its views, which open its menus, panels and forms),
   around each data source (`SOURCES`: `poll(false)`, `loadCubes()`,
   `loadRooms()`, `refresh()`, a state event per device on the page's
-  `EventSource`, `MassimoParts.log.loadAlerts()`, `refreshAges()`,
+  `EventSource`, `MassimoParts.log.loadAlerts()`, `MassimoParts.minute()`,
   `MassimoParts.log.poll()`,
   `applyStoredSettings()`, `loadMe()`),
   with the data as it was:

@@ -13,7 +13,7 @@
  * plain/, a file per script.
  */
 
-import "./shared/data"; // first: the page's data are signals before any part draws from them
+import { minuteTick } from "./shared/data"; // first: the page's data are signals before any part draws from them
 import { signedOut as adminSignedOut } from "./admin";
 import type { UsersPart } from "./admin";
 import { signedOut as backupsSignedOut } from "./backups";
@@ -56,6 +56,8 @@ export interface MassimoParts {
   language(): void;
   /** The icons chosen for the window and the radio changed (theme.js redrawSigns): every sign draws them again. */
   icons(): void;
+  /** The page's minute, at once (shared/data.ts minuteNow): the ages and the log's time range follow it; the UI tests' handle of the clock. */
+  minute(): void;
   /**
    * A sign-out, or another user's sign-in after a 401 (login.js
    * forgetSession): every form's drafts and marks forgotten
@@ -122,6 +124,7 @@ declare global {
 
 register("language", languageChanged);
 register("icons", iconsChanged);
+register("minute", minuteTick);
 register("pages", pagesPart);
 register("serverEvent", (ev: ServerEvent) => {
   logEvent(ev);

@@ -17,10 +17,11 @@
  */
 
 import type { Device, Mismatch } from "../api";
-import { deviceEntry, deviceProblems, WINDOW_TONE, windowState } from "../model/device";
+import { deviceEntry, deviceProblems, mismatchArgs, mismatchText, WINDOW_TONE, windowState } from "../model/device";
 import { unsavedItems } from "../shared/forms";
 import { kindsLabel, type Entry, type Item } from "../shared/problems";
 import { cfgFormKey, vwtFormKey } from "./store";
+import { confirmItem, staleText } from "../model/room";
 
 /** The kinds of problems a tile's head and a device's row name, in their order there; a holiday is listed with its end. */
 const KINDS = ["radio", "battery", "window", "unconfirmed", "mixed", "unsaved", "notready", "stale", "mismatch"];

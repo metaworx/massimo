@@ -14,12 +14,6 @@
 import type { Device, FailedRadiogram, Mismatch } from "../api";
 
 declare global {
-  /** A failed radiogram's type by the original software's name and its code, "TimeInformation (0x03)". */
-  function radiogramName(r: FailedRadiogram): string;
-  /** A finding of the Cube's lines against its room list in a sentence that names the device and both rooms. */
-  function mismatchText(m: Mismatch): string;
-  /** A finding's words: its device, its rooms and its types, by the names the page knows. */
-  function mismatchArgs(m: Mismatch): Record<string, string>;
   /** A thermostat's configured eco and comfort temperatures. */
   function presetTemps(th: Device): Promise<{ eco?: number; comfort?: number }>;
   /** Sets the room to its thermostat's eco or comfort temperature in the room's mode, from the More menu. */

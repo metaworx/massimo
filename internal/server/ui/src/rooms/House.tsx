@@ -23,6 +23,7 @@ import { session, stillSession } from "../shared/session";
 import { untracked } from "@preact/signals";
 import { useLook } from "../shared/look";
 import { house } from "./store";
+import { apiUntil } from "../model/room";
 
 /** The modes of the House tile, by their value, with their button's id and their text. */
 const MODES: [string, string, string][] = [["eco", "house-eco", "mode.eco"], ["auto", "house-auto", "mode.auto"], ["comfort", "house-comfort", "mode.comfort"],

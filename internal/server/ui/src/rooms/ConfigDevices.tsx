@@ -41,6 +41,7 @@ import {
   type DeviceChanges,
 } from "./configuration";
 import { useLook } from "../shared/look";
+import { confirmFieldsText, confirmItem } from "../model/room";
 
 const trim = (v: string) => v.trim();
 

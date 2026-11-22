@@ -294,7 +294,7 @@ func TestUIBrand(t *testing.T) {
 // ui/partials/ is listed in uiPartials exactly once and every listed one
 // exists, no marker is left, the page is served at / as assembled, and
 // every id the scripts look up ($("…")) and every template they clone
-// (fromTemplate("…"), fragmentFromTemplate("…")) is in it, or, for the
+// (fromTemplate("…")) is in it, or, for the
 // script of another page (uiPageScripts), in that page.
 func TestUIPage(t *testing.T) {
 	t.Parallel()
@@ -337,7 +337,7 @@ func TestUIPage(t *testing.T) {
 			t.Errorf("%s does not load %s", name, script)
 		}
 	}
-	lookup := regexp.MustCompile(`(?:\$|fromTemplate|fragmentFromTemplate)\("([^"]+)"\)`)
+	lookup := regexp.MustCompile(`(?:\$|fromTemplate)\("([^"]+)"\)`)
 	scripts, _ := fs.Glob(uiFiles, "ui/*.js")
 	n := 0
 	for _, f := range scripts {

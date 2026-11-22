@@ -3,7 +3,7 @@
 
 // The Massimo web UI, core: API access with the token (the sign-in is
 // login.js), the helpers the
-// other files share that read the page's state (fmtTemp, ageEl,
+// other files share that read the page's state (fmtTemp, fmtAge,
 // helpParts; fmtNum is in i18n.js, the components in components.js),
 // settings, the Cube clock, loading of cubes and rooms,
 // polling and the event stream with its tickets. The header is in
@@ -481,38 +481,6 @@ function fmtTimeOfDay(d) {
 function fmtShortTime(ms) {
   const opts = { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false };
   return new Intl.DateTimeFormat(i18n.lang, opts).format(new Date(ms));
-}
-
-// ageEl shows how old a value is that the server received at iso (an API
-// time): the age, the exact time as its tooltip and, in expert mode,
-// after it; greyed when stale. refreshAges keeps it current. null when
-// there is no time. plain leaves out the "already there" mark, for
-// times that are not device values.
-function ageEl(iso, stale, plain) {
-  const ms = Date.parse(iso || "");
-  if (isNaN(ms)) return null;
-  const el = textEl("span", "", "age" + (stale ? " stale" : ""));
-  el.dataset.at = String(ms);
-  const since = ms - observedSince();
-  if (!plain && since >= 0 && since < SINCE_MS) el.dataset.since = "1";
-  el.appendChild(textEl("span", "", "age-text"));
-  el.appendChild(textEl("span", "", "age-exact expert-only"));
-  fillAge(el);
-  return el;
-}
-
-function fillAge(el) {
-  const ms = Number(el.dataset.at);
-  const since = el.dataset.since === "1";
-  el.firstChild.textContent = fmtAge(ms, since);
-  el.lastChild.textContent = fmtShortTime(ms);
-  el.title = t(since ? "age.titleSince" : "age.title", { time: fmtInstant(new Date(ms)) });
-}
-
-// refreshAges updates every age on the page; it runs once a minute.
-function refreshAges() {
-  for (const el of document.querySelectorAll(".age[data-at]")) fillAge(el);
-  MassimoParts.log.prune(); // the lines a time range no longer holds
 }
 
 function isThermostat(d) {
@@ -1070,7 +1038,6 @@ async function init() {
     if (MassimoParts.pages.isShown("log") && !hadSerial) MassimoParts.log.load(); // it had no Cube to load from yet
     connectEvents();
   });
-  setInterval(refreshAges, 60000);
 }
 
 document.addEventListener("DOMContentLoaded", init);

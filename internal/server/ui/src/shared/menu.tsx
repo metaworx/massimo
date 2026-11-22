@@ -7,7 +7,7 @@
  * A menu that drops down, as dropdown of components.js makes one of a
  * details.menu: one open at a time, kept in the window, closed by a choice
  * of one of its items, by Escape and by a click outside it; an item of a
- * menu (menuItem); and the choice of one item (pickerMenu), whose summary
+ * menu (MenuItem); and the choice of one item (Picker), whose summary
  * shows the item chosen. The details is made once and kept, so that an
  * open menu stays open, and its items follow, when data comes in.
  */
@@ -86,7 +86,7 @@ export function Dropdown({ id, cls, summaryId, summaryCls, label, title, summary
 }
 
 /**
- * MenuItem is a button of a menu's list (menuItem of components.js): its
+ * MenuItem is a button of a menu's list: its
  * icon (an element such as a sign; with blank and no icon an empty place
  * of an icon's width, so that the labels line up), its label with icons
  * after it on its line where given, and under it in grey a second line
@@ -154,8 +154,7 @@ export type PickEntry =
   | { separator: true };
 
 /**
- * Picker makes a menu the choice of one item (pickerMenu of
- * components.js), where a select could not show the chosen item's name
+ * Picker makes a menu the choice of one item, where a select could not show the chosen item's name
  * alone while its list shows more: its summary shows shown's icon and
  * label, its tooltip shown.title and its name for a screen reader
  * shown.aria; its list the entries, the item of value marked current. A

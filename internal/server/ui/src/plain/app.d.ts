@@ -109,8 +109,8 @@ declare global {
   function timeOf(iso?: string): Date | null;
   /** A time of day, short, from milliseconds. */
   function fmtShortTime(ms: number): string;
-  /** Fills an age (.age[data-at]) with how old it is; refreshAges does so once a minute. */
-  function fillAge(el: HTMLElement): void;
+  /** How old a value received at ms is, in the page's language ("3 min"); since marks one already there when the server first heard from the Cube. */
+  function fmtAge(ms: number, since: boolean): string;
   /** When the server first heard from the chosen Cube, in milliseconds; NaN before. */
   function observedSince(): number;
   /** How long after observedSince a value counts as already there. */

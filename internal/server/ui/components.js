@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 The Massimo Authors
 
-// The Massimo web UI, components: the pieces the panels are built from,
-// each a function that returns an element or fills one. Texts arrive
-// translated (t() in i18n.js) and go in through textContent only; a
-// component never builds markup from a string. Loaded after i18n.js and
-// before app.js; the helpers that read the page's state (ageEl,
-// helpParts, fmtTemp) are in app.js.
+// The Massimo web UI, components: the pieces the plain scripts build
+// with, each a function that returns an element or fills one, for the
+// connect page (connect.js), the sign-in's plain code (login.js), the
+// week programme's kit (config.js) and app.js' help; and what the parts
+// call of the page's (the menus' placing, a copy, a toast, a sign's
+// blinking, a result line). Texts arrive translated (t() in i18n.js) and
+// go in through textContent only; a component never builds markup from a
+// string. Loaded after i18n.js and before app.js; the helpers that read
+// the page's state (fmtAge, helpParts, fmtTemp) are in app.js.
 "use strict";
 
 // How long a result that went well stays shown, in ms: a result line's
@@ -115,23 +118,6 @@ async function whileBusy(btn, fn) {
   }
 }
 
-// sendWhenChanged keeps a form's submit button off while changed()
-// reports nothing to send: at once, at every input and change in the
-// form, and when the returned function is called, for a change the
-// form's events do not see. With lazy, the form's values reach what
-// changed() reads only at their change event (numberInput), so a
-// keystroke turns the button on and the change sets it again; a click
-// on it right after typing then finds it on. A busy button keeps
-// turning, and is set for when its request has answered (setOff).
-function sendWhenChanged(form, changed, { btn, lazy } = {}) {
-  const b = btn || form.querySelector("button[type=submit]");
-  const check = () => setOff(b, !changed());
-  form.addEventListener("input", lazy ? () => setOff(b, false) : check);
-  form.addEventListener("change", check);
-  check();
-  return check;
-}
-
 // badgeEl is a small outlined or filled label (.flag) of a kind: ok,
 // warn, bad, mode, fill-ok, fill-warn (the Manual mode), fill-bad,
 // fill-info. A warning or a failure (warn, bad, fill-bad) is set in bold
@@ -154,22 +140,6 @@ const BADGE_STATE = { warn: "warn", bad: "bad", "fill-bad": "bad" };
 // its first class: "warn stale-badge" is a warning.
 function badgeState(kind) {
   return BADGE_STATE[(kind || "").split(" ")[0]];
-}
-
-// noticeEl is a lasting warning (.notice) of a text, for a state the
-// server keeps trying to leave, such as a Cube proxy that does not listen
-// (ui/src/shared/badge.tsx Notice for a part): since, an API time, adds from when it holds;
-// next, an API time, when the server tries again, as its tooltip. Times,
-// not ages: a try comes every few seconds, and refreshAges runs once a
-// minute. Nothing calls it since System info is a part (AP UiParts,
-// Block 12); it goes with the builders nobody calls (Block 15).
-function noticeEl(text, { since, next } = {}) {
-  const p = textEl("p", text, "notice");
-  const from = Date.parse(since || "");
-  if (!isNaN(from)) p.append(" ", textEl("span", t("notice.since", { time: fmtShortTime(from) }), "notice-since"));
-  const at = Date.parse(next || "");
-  if (!isNaN(at)) p.title = t("notice.next", { time: new Date(at).toLocaleTimeString(i18n.lang) });
-  return p;
 }
 
 // iconEl returns a small inline icon referencing a symbol of the page.
@@ -234,26 +204,6 @@ function iconChoice(kind) {
 // radio, SIGNS' for the others.
 function signOf(kind) {
   return ICON_CHOICES[kind] ? iconChoice(kind).sign : SIGNS[kind];
-}
-
-// signEl is the icon of a kind of SIGNS in a state: "" or "ok" plain,
-// "warn" with a triangle, "bad" with a cross, coloured by the state
-// (tone-…) where it is one; "open" (a window open, not yet for long)
-// plain in the accent. The mark is a part of its own (use.mark), which
-// is what blinks (html.blink-on, blink-first). cls adds classes; key
-// names the sign across redraws (keepBlink).
-function signEl(kind, state, cls, key) {
-  const s = signOf(kind);
-  const mark = s[state];
-  const svg = iconEl(mark ? s.base : s.icon, "ni sign" + (state ? " tone-" + state : "") + (cls ? " " + cls : ""));
-  if (mark) {
-    const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
-    use.setAttribute("href", "#" + mark);
-    use.setAttribute("class", state === "bad" ? "mark x" : "mark");
-    svg.appendChild(use);
-    keepBlink(use, key);
-  }
-  return svg;
 }
 
 // markEl is a mark alone, the triangle of a warning or the cross of a
@@ -436,44 +386,6 @@ function copyEl(text, { label, icon, cls } = {}) {
   return elem("span", "copy-pair", span, copyIcon(() => text, name));
 }
 
-// okPill stands in a problem pill's place where nothing is wrong: a
-// green check in the pill's frame, label its name and tooltip, with no
-// list behind it, so that a problem's pill takes its place without moving
-// what is beside it.
-function okPill(label) {
-  const pill = elem("span", "ok-pill", iconEl("icon-check", "ni ok-check"));
-  pill.setAttribute("role", "img");
-  pill.setAttribute("aria-label", label);
-  pill.title = label;
-  return pill;
-}
-
-// foundCountEl is the sign of the Cubes found on the network and not
-// served: a cube with their number in a corner badge, in the accent's
-// blue, as information rather than a problem; hidden from a screen
-// reader, which the label beside it tells. Nothing calls okPill and
-// foundCountEl since the header is a part (ui/src/shared/problems.tsx
-// OkPill, icon.tsx CountIcon); they go with Block 15.
-function foundCountEl(n) {
-  const w = elem("span", "found-count", iconEl("icon-cube3d", "ni"), textEl("b", String(n)));
-  w.setAttribute("aria-hidden", "true");
-  return w;
-}
-
-// linkEl is a link to url that opens in a tab of its own, its text text;
-// a url that is not http(s), as one from the network may be, gives the
-// text alone. Nothing calls it since System info is a part
-// (ui/src/shared/link.tsx Link); it goes with Block 15.
-function linkEl(url, text, cls) {
-  if (!/^https?:\/\//i.test(url || "")) return textEl("span", text, cls);
-  const a = textEl("a", text, cls);
-  a.href = url;
-  a.target = "_blank";
-  a.rel = "noopener noreferrer";
-  a.title = url;
-  return a;
-}
-
 // iconButton is a button that shows an icon of the page only, so its
 // name is aria; opts as for button, iconCls the icon's class ("ni").
 function iconButton(symbol, aria, onClick, opts) {
@@ -575,39 +487,6 @@ function fieldRow(label, control, { unit, help, hint, id, wide } = {}) {
   return row;
 }
 
-// fillOptions fills a select (or a datalist) with options, each
-// [value, label, disabled], or {group, options} for an optgroup of them.
-function fillOptions(select, options) {
-  clear(select);
-  const add = (parent, [value, label, disabled]) => {
-    const o = document.createElement("option");
-    o.value = value;
-    o.textContent = label;
-    if (disabled) o.disabled = true;
-    parent.appendChild(o);
-  };
-  for (const item of options) {
-    if (Array.isArray(item)) {
-      add(select, item);
-      continue;
-    }
-    const group = document.createElement("optgroup");
-    group.label = item.group;
-    for (const o of item.options) add(group, o);
-    select.appendChild(group);
-  }
-  return select;
-}
-
-// selectInput is a select of options (as fillOptions takes them) with a
-// value, calling onChange with the value chosen.
-function selectInput(options, value, onChange) {
-  const s = fillOptions(document.createElement("select"), options);
-  if (value !== undefined && value !== null) s.value = String(value);
-  s.addEventListener("change", () => onChange(s.value));
-  return s;
-}
-
 // numberInput is a number input calling onChange with its number, or
 // undefined when emptied.
 function numberInput(value, min, max, step, onChange) {
@@ -619,26 +498,6 @@ function numberInput(value, min, max, step, onChange) {
   if (value !== undefined && value !== null) i.value = String(value);
   i.addEventListener("change", () => onChange(i.value === "" ? undefined : Number(i.value)));
   return i;
-}
-
-// stepper is drawn by a part since AP UiParts Block 7
-// (ui/src/shared/field.tsx Stepper); nothing calls it now, and it goes
-// with the builders nobody calls (Block 15).
-
-// stepper puts a − and a + button around a number input, which change
-// it by step within min and max and fire its change event; labels names
-// the two buttons ({less, more}), half a degree less and more if not.
-function stepper(input, step, min, max, labels) {
-  const l = labels || { less: t("temp.less"), more: t("temp.more") };
-  const box = document.createElement("span");
-  box.className = "inline";
-  const by = (d) => () => {
-    const v = Number(input.value === "" ? min : input.value) + d;
-    input.value = String(Math.min(max, Math.max(min, Math.round(v / step) * step)));
-    input.dispatchEvent(new Event("change"));
-  };
-  box.append(button("−", { cls: "step small", aria: l.less }, by(-step)), input, button("+", { cls: "step small", aria: l.more }, by(step)));
-  return box;
 }
 
 // showResult says how an action went in a message element: the text,
@@ -656,29 +515,6 @@ function showResult(el, text, ok) {
 // the page can take back what it told a user who is gone (forgetNotSent,
 // app.js).
 const failedLines = new Set();
-
-// markRange's last caller, the notifications' card, is a part since AP
-// UiParts Block 13 (ui/src/shared/field.tsx Limit); nothing calls it now,
-// and it goes with the builders nobody calls (Block 15).
-
-// markRange marks a number field by what its required, min, max and step
-// allow, or by ok where the caller judges the value itself (the
-// notifications' threshold takes any number in its range, not only its
-// step): a value refused sets aria-invalid, which style.css outlines in
-// red, and shows hint, the amber range before the box, which the field
-// then names as its description; a good value clears both. It returns
-// whether the value is good.
-function markRange(input, hint, ok = input.validity.valid) {
-  if (ok) {
-    input.removeAttribute("aria-invalid");
-    input.removeAttribute("aria-describedby");
-  } else {
-    input.setAttribute("aria-invalid", "true");
-    input.setAttribute("aria-describedby", hint.id);
-  }
-  hint.classList.toggle("hidden", ok);
-  return ok;
-}
 
 // confirmBox asks in the page whether to go on: the question, No and
 // Yes (yes and no their labels, Yes the primary), Escape for No. The
@@ -738,38 +574,6 @@ function fromTemplate(id) {
   return document.getElementById(id).content.firstElementChild.cloneNode(true);
 }
 
-// fragmentFromTemplate's last caller, the scheme editor, is a part since
-// AP UiParts Block 13 (ui/src/prefs/Editor.tsx); nothing calls it now, and
-// it goes with the builders nobody calls (Block 15).
-
-// fragmentFromTemplate clones the whole content of a <template> of the
-// page, for a frame of several elements that goes into a container of
-// the page as it is.
-function fragmentFromTemplate(id) {
-  return document.getElementById(id).content.cloneNode(true);
-}
-
-// detailsPanel is a <details> panel: a summary of a name, a monospaced
-// part (a serial) and badges, then the body; onToggle gets open.
-function detailsPanel({ name, mono, badges, open, onToggle, cls }, body) {
-  const d = document.createElement("details");
-  d.className = "panel" + (cls ? " " + cls : "");
-  d.open = !!open;
-  const sum = document.createElement("summary");
-  if (name !== undefined) sum.appendChild(textEl("span", name, "panel-name"));
-  if (mono) sum.appendChild(textEl("span", mono, "mono"));
-  if (badges && badges.length) {
-    const b = document.createElement("span");
-    b.className = "panel-badges";
-    b.append(...badges);
-    sum.appendChild(b);
-  }
-  d.appendChild(sum);
-  if (body) d.append(...[].concat(body));
-  if (onToggle) d.addEventListener("toggle", () => onToggle(d.open));
-  return d;
-}
-
 // downloadBlob saves a blob as a file: a blob: link with the download
 // attribute, which the page's Content-Security-Policy allows.
 function downloadBlob(name, blob) {
@@ -781,26 +585,6 @@ function downloadBlob(name, blob) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-// filePicker's last caller, the Appearance card's Import…, is a part since
-// AP UiParts Block 13 (ui/src/shared/file.tsx FileButton); nothing calls it
-// now, and it goes with the builders nobody calls (Block 15).
-
-// filePicker is a hidden file input taking the types of accept; a file
-// chosen goes to onFile, and the input is emptied so that the same file
-// can be chosen again. Its click() opens the browser's file choice.
-function filePicker(accept, onFile) {
-  const input = document.createElement("input");
-  input.type = "file";
-  input.className = "hidden";
-  if (accept) input.accept = accept;
-  input.addEventListener("change", () => {
-    const file = input.files && input.files[0];
-    input.value = "";
-    if (file) onFile(file);
-  });
-  return input;
 }
 
 // --- a page of section cards -------------------------------------------
@@ -863,216 +647,7 @@ function brandMarks(root = document) {
 
 document.addEventListener("DOMContentLoaded", () => brandMarks());
 
-// deviceIds is a device's serial number and radio address, as
-// "S/N MEQ0000103 · RF 0a0103": the serial as the API has it (a device
-// may have none) and printed on the device; the radio address, which is
-// not, in expert mode only (rf: "always" shows it always, where it is
-// what the user types, as when hiding a device). The dot between them is
-// the radio address's, so that it goes where that does.
-function deviceIds(serial, rf, { rf: show } = {}) {
-  const box = elem("span", "device-ids mono");
-  if (serial) box.appendChild(textEl("span", t("device.sn", { serial })));
-  if (rf) box.appendChild(textEl("span", (serial ? " · " : "") + t("device.rf", { rf }), show === "always" ? "" : "expert-only"));
-  return box;
-}
-
-// kvList is a list of facts, a name and its value each ([name, value,
-// mono]), the values in a column of their own; mono sets a value in the
-// monospaced font (a path, an identifier). Nothing calls it since System
-// info is a part (ui/src/shared/kv.tsx KvList); it goes with Block 15.
-function kvList(pairs) {
-  const dl = elem("dl", "kv");
-  for (const [name, value, mono] of pairs) dl.append(textEl("dt", name), textEl("dd", value, mono ? "mono" : ""));
-  return dl;
-}
-
-// countList is a list of counts by name ({name: n}), in columns as many
-// as there is room for, the names in grey and the numbers right-aligned.
-// Nothing calls it since System info is a part (ui/src/shared/kv.tsx
-// CountList); it goes with Block 15.
-function countList(counts) {
-  const ul = elem("ul", "kv-rows");
-  for (const name of Object.keys(counts).sort()) ul.appendChild(elem("li", "", textEl("span", name), textEl("span", fmtNum(counts[name], 0))));
-  return ul;
-}
-
-// --- a choice of one in a menu -------------------------------------------
-
-// menuItem and pickerMenu made the Cube choice, which is a part since AP
-// UiParts Block 6 (ui/src/shared/menu.tsx MenuItem and Picker); nothing
-// calls them now, and they go with the builders nobody calls (Block 15).
-
-// menuItem is an item of a dropdown's list: a button with its icon (a
-// symbol's name, or an element such as a Cube's sign; with blank and no icon
-// an empty place of an icon's width, so that the labels line up), its
-// label and, under it in grey, a second line (sub).
-function menuItem({ icon, label, sub, blank, icons }, onClick) {
-  const b = document.createElement("button");
-  b.type = "button";
-  if (icon) b.appendChild(typeof icon === "string" ? iconEl(icon, "ni") : icon);
-  else if (blank) b.appendChild(elem("span", "menu-icon-none"));
-  let name = textEl("span", label, "menu-item-label");
-  // icons after the name, on its line (the Cube choice: a Cube's problems)
-  if (icons && icons.length) name = elem("span", "menu-item-line", name, elem("span", "menu-item-icons", ...icons));
-  b.appendChild(sub ? elem("span", "menu-item-text", name, textEl("span", sub, "menu-item-sub")) : name);
-  if (onClick) b.addEventListener("click", onClick);
-  return b;
-}
-
-// pickerMenu makes a dropdown (details.menu, its summary holding a
-// .picker-icon and a .picker-label, and a .menu-items) the choice of one
-// item, a menu of the page where a select could not show the chosen
-// item's name alone while its list shows more. The summary shows
-// shown's icon and label, its title and aria-label; the list the items:
-// { value, label, sub, icon, icons, disabled } (menuItem, the chosen value
-// marked aria-current), { group: heading } or { separator: true }.
-// A click on an item calls onPick with its value; the arrow keys move
-// between the items, and opening puts the focus on the chosen one.
-function pickerMenu(details, { items, value, onPick, shown }) {
-  const sum = details.querySelector("summary");
-  const icon = sum.querySelector(".picker-icon");
-  clear(icon);
-  if (shown.icon) icon.appendChild(shown.icon);
-  sum.querySelector(".picker-label").textContent = shown.label;
-  sum.title = shown.title || shown.label;
-  sum.setAttribute("aria-label", shown.aria || shown.label);
-  const list = details.querySelector(".menu-items");
-  clear(list);
-  const blank = items.some((it) => it.icon);
-  for (const it of items) {
-    if (it.group) list.appendChild(textEl("p", it.group, "menu-group"));
-    else if (it.separator) list.appendChild(elem("hr", "menu-sep"));
-    else {
-      const b = menuItem({ icon: it.icon, label: it.label, sub: it.sub, blank, icons: it.icons }, () => onPick(it.value));
-      b.dataset.value = it.value;
-      b.disabled = !!it.disabled;
-      if (it.value === value) b.setAttribute("aria-current", "true");
-      list.appendChild(b);
-    }
-  }
-  if (details.dataset.picker) return;
-  details.dataset.picker = "1";
-  dropdown(details);
-  const enabled = () => [...details.querySelectorAll(".menu-items button:not(:disabled)")];
-  details.addEventListener("toggle", () => {
-    if (!details.open) return;
-    const b = details.querySelector(".menu-items button[aria-current='true']") || enabled()[0];
-    if (b) b.focus();
-  });
-  menuArrows(details, ".menu-items button:not(:disabled)");
-}
-
-// problemsEl, kindIcons, entryItems and problemEntry made the problem
-// lists of the plain regions, which are parts since AP UiParts Blocks 5
-// to 7 (ui/src/shared/problems.tsx Problems); nothing calls them now, and
-// they go with the builders nobody calls (Block 15).
-
-// problemsEl shows what is wrong in a place, wherever it is put (a
-// tile's head, a device's, a section card's, the header's): one icon per
-// kind of problem among its entries, in the order they come, each in the
-// colour of the worst tone of its kind, as the summary of a menu
-// (dropdown) that lists the entries in one format at every level
-// (problemEntry).
-// An entry is { icon, sign, node, title, sub, items, subs, info, summary }:
-// its icon, or sign ({ kind, state }, a sign of SIGNS) where its own
-// state shows, or node, an element of its own (foundCountEl), its name,
-// a grey detail (a serial; an array of texts and elements, a link among
-// them, is not monospaced), its items, and subs, entries under it (a
-// Cube's devices); info lists the entry and those under it without an
-// item, as information, and summary is an element the summary shows
-// after the kinds' icons (the found Cubes' sign). An item is { kind, icon, sign, tone, mark, text, title, at,
-// stale }: title, where set, is its badge's tooltip; kind groups the summary's icons (sign, a kind of SIGNS, draws
-// it with its state's mark), an item without one is listed but adds no
-// icon (a device's mode beside its problems); tone is a badgeEl kind
-// ("bad", "warn", "fill-ok", …), which colours the badge and, without
-// "fill-", the icon, or mark where an item says how its icon is coloured
-// ("warn"); at is when the value came (ageEl). label names the problems
-// to a screen reader and in the tooltip. Null where no item has a kind
-// and no entry a summary: nothing is wrong there, nor to tell.
-function problemsEl(entries, label) {
-  const icons = kindIcons(entries);
-  const extra = entries.map((e) => e.summary).filter(Boolean);
-  if (!icons.length && !extra.length) return null;
-  // information alone: nothing wrong, said first (okPill's check)
-  if (!icons.length) extra.unshift(iconEl("icon-check", "ni ok-check"));
-  const details = elem("details", "menu problems");
-  const summary = document.createElement("summary");
-  summary.className = "problems-sum";
-  summary.title = label;
-  summary.setAttribute("aria-label", label);
-  summary.append(...icons, ...extra);
-  const list = elem("div", "menu-items problems-list");
-  for (const e of entries) {
-    const el = problemEntry(e);
-    if (el) list.appendChild(el);
-  }
-  details.append(summary, list);
-  return dropdown(details);
-}
-
-// kindIcons are the icons of the kinds of problems among entries' items,
-// one per kind in the order they come, each in its worst tone (a sign of
-// SIGNS where the kind has one); skip leaves kinds out (the Cube choice's
-// list its network, which the Cube's own sign shows).
-function kindIcons(entries, skip = []) {
-  const kinds = new Map(); // kind: { icon, sign, tone }
-  for (const it of entries.flatMap(entryItems)) {
-    if (!it.kind || skip.includes(it.kind)) continue;
-    const k = kinds.get(it.kind) || { icon: it.icon, sign: it.sign, tone: "" };
-    const tone = it.mark || (it.tone || "").replace(/^fill-/, "");
-    const rank = (x) => ({ bad: 3, warn: 2 })[x] || (x ? 1 : 0); // the worst of a kind shows
-    if (rank(tone) > rank(k.tone)) k.tone = tone;
-    kinds.set(it.kind, k);
-  }
-  const who = entries.filter((e) => entryItems(e).length).map((e) => e.title + " " + (e.sub || "")).join("|");
-  return [...kinds.values()].map((k) =>
-    k.sign ? signEl(k.sign, k.tone, "", [who, k.sign, k.tone].join(":")) : iconEl(k.icon, "ni" + (k.tone ? " tone-" + k.tone : "")),
-  );
-}
-
-// entryItems are an entry's items and those of the entries under it.
-function entryItems(e) {
-  return (e.items || []).concat(...(e.subs || []).map(entryItems));
-}
-
-// problemEntry is one entry of a problem list, the same at every level:
-// its icon in a column of its own, beside it its name and grey detail,
-// under the name its badges, each led by its icon (a warning's or a
-// failure's by its mark instead), with its age; then the entries under
-// it, indented to the name, a line down from its icon. Null for an entry
-// without an item, its own or under it, but for information (info).
-function problemEntry(e) {
-  if (!entryItems(e).length && !e.info) return null;
-  const entry = elem("div", "problem-entry");
-  if (e.sign) entry.appendChild(signEl(e.sign.kind, e.sign.state, "problem-icon", e.title + ":" + e.sign.state));
-  else if (e.node) {
-    e.node.classList.add("problem-icon");
-    entry.appendChild(e.node);
-  } else entry.appendChild(e.icon ? iconEl(e.icon, "ni problem-icon") : elem("span", "problem-icon"));
-  const who = elem("div", "problem-who");
-  who.appendChild(textEl("span", e.title, "problem-name"));
-  if (Array.isArray(e.sub)) who.appendChild(elem("span", "problem-sub", ...e.sub));
-  else if (e.sub) who.appendChild(textEl("span", e.sub, "mono problem-sub"));
-  entry.appendChild(who);
-  if ((e.items || []).length) {
-    const flags = elem("div", "problem-flags");
-    for (const it of e.items) {
-      // A warning's or a failure's badge is led by its mark, which takes
-      // the place of its kind's icon; another state keeps the icon.
-      const b = badgeEl("", it.tone || "mode", [e.title, e.sub, it.kind, it.text].join(":"));
-      if (it.title) b.title = it.title; // what the badge means, as a radio fault's says
-      if (it.icon && !badgeState(it.tone)) b.appendChild(iconEl(it.icon, "ni"));
-      b.appendChild(document.createTextNode(it.text));
-      const age = it.at ? ageEl(it.at, it.stale) : null; // app.js
-      if (age) b.appendChild(age);
-      flags.appendChild(b);
-    }
-    entry.appendChild(flags);
-  }
-  const subs = (e.subs || []).map((x) => problemEntry(e.info ? { ...x, info: true } : x)).filter(Boolean);
-  if (subs.length) entry.appendChild(elem("div", "problem-subs", ...subs));
-  return entry;
-}
+// --- menus ---------------------------------------------------------------
 
 // dropdown makes a <details class="menu"> a menu that drops down: one
 // open at a time, kept in the window (placeMenu), closed by a choice of

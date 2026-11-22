@@ -64,6 +64,21 @@ adopt(state, ["unlisted", "roomsOf"]);
  */
 export const windowNow = signal(0);
 
+/**
+ * minuteNow is the page's minute, raised once a minute from parts.js'
+ * load on: an age (Age of shared/badge.tsx) shows how old its value is
+ * by it, and the log drops the lines its time range no longer holds
+ * (log/); MassimoParts.minute raises it at once, for the UI tests.
+ */
+export const minuteNow = signal(0);
+
+/** minuteTick raises the page's minute. */
+export function minuteTick(): void {
+  minuteNow.value++;
+}
+
+setInterval(minuteTick, 60000);
+
 // The user's colour schemes, the editor's draft and the scheme it started
 // from (theme.js themeState), each written whole.
 adopt(themeState, ["custom", "draft", "base"]);

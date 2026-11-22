@@ -136,10 +136,10 @@ def scheme_hex(page, lang):
         "the icons' amber graded by its contrast on a tile, at 3 for a graphic"
 
 
-# The animation of a mark drawn for the test: its name and how often it
-# runs.
+# The animation of a mark drawn for the test (components.js markEl, which
+# a badge leads with, as the parts' Mark): its name and how often it runs.
 MARK_ANIMATION = """() => {
-  const s = signEl("radio", "bad");
+  const s = markEl("bad");
   document.body.appendChild(s);
   const st = getComputedStyle(s.querySelector("use.mark"));
   const out = [st.animationName, st.animationIterationCount];
@@ -168,9 +168,9 @@ def test_blinking_signs(page, case):
     sel.select_option("on")
     assert page.evaluate(MARK_ANIMATION) == ["markblink", "infinite"], "on: always, reduced motion or not"
     delay = page.evaluate("""async () => {
-      const a = signEl("radio", "bad", "", "test:the same sign");
+      const a = markEl("bad", "test:the same sign");
       await new Promise((r) => setTimeout(r, 400));
-      const b = signEl("radio", "bad", "", "test:the same sign");
+      const b = markEl("bad", "test:the same sign");
       return [a.querySelector("use.mark").style.animationDelay, b.querySelector("use.mark").style.animationDelay];
     }""")
     assert delay[0] in ("0s", "-0s") and float(delay[1].rstrip("s")) <= -0.3, f"drawn again, it goes on where it was ({delay})"

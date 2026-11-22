@@ -15,7 +15,7 @@
  * state.
  */
 
-import type { Device, State } from "../api";
+import type { Device, FailedRadiogram, Mismatch, State } from "../api";
 import { untracked } from "@preact/signals";
 import { windowNow } from "../shared/data";
 import type { Entry, Item } from "../shared/problems";
@@ -101,8 +101,7 @@ export function deviceProblems(d: Device, withWindow?: boolean): Item[] {
  * rfLabel names a device by its radio address as the page names it
  * (deviceName of app.js), among the chosen Cube's rooms, the address
  * where the page does not know it: a structure event's devices in the
- * log, a finding's device (tiles.js mismatchArgs, through
- * MassimoParts.log.rfLabel).
+ * log, a finding's device (mismatchArgs).
  */
 export function rfLabel(rf: string): string {
   // the rooms by the list; a device's state event draws no name again
@@ -124,4 +123,45 @@ export function rfLabel(rf: string): string {
  */
 export function deviceEntry(d: Device, items: Item[], title?: string): Entry {
   return { icon: deviceIcon(d), title: title || deviceName(d), sub: d.serial || d.rf_address, items };
+}
+
+/** roomName names a room by its name, else by its number (log.room): the log's lines and a finding's words name a room so. */
+export function roomName(id: number, name?: string): string {
+  return name || t("log.room", { id });
+}
+
+/**
+ * radiogramName is a failed radiogram's type as the API gives it, {code,
+ * name}: the original software's name with its code, "TimeInformation
+ * (0x03)", or the code alone for one its list lacks. The names are
+ * technical and stay untranslated (tiles.js before, UiParts D218).
+ */
+export function radiogramName(r: FailedRadiogram): string {
+  const code = "0x" + (Number(r.code) & 0xff).toString(16).padStart(2, "0");
+  return r.name ? r.name + " (" + code + ")" : code;
+}
+
+/**
+ * mismatchArgs are a finding's words: its device by the name the page
+ * knows, else the room list's, else its radio address; its rooms by their
+ * names, else their numbers, no room by its word; its types.
+ */
+export function mismatchArgs(m: Mismatch): Record<string, string> {
+  const room = (id: number | undefined, name?: string) => (id === 0 && !name ? t("mismatch.noRoom") : roomName(id || 0, name));
+  const known = m.device ? rfLabel(m.device) : "";
+  return {
+    device: known && known !== m.device ? known : m.name || m.device || "–",
+    room: room(m.room, m.room_name),
+    cube: m.cube_room === undefined ? "–" : room(m.cube_room, m.cube_room_name),
+    list: m.list_room === undefined ? "–" : room(m.list_room, m.list_room_name),
+    cubeType: m.cube_type ? typeName(m.cube_type) : "–",
+    listType: m.list_type ? typeName(m.list_type) : "–",
+  };
+}
+
+/** mismatchText is a finding in a sentence that names the device and both rooms; a room master's by why. */
+export function mismatchText(m: Mismatch): string {
+  const key = m.finding === "master" ? "mismatch.master." + m.why : "mismatch." + m.finding;
+  const s = t(key, mismatchArgs(m));
+  return s === key ? m.finding : s;
 }

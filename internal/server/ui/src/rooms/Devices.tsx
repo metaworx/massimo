@@ -19,7 +19,7 @@
 import type { ComponentChildren } from "preact";
 import { useEffect, useState } from "preact/hooks";
 import type { Device, DeviceDetail } from "../api";
-import { deviceEntry, deviceIcon } from "../model/device";
+import { deviceEntry, deviceIcon, mismatchText } from "../model/device";
 import { actionRunner, type Outcome } from "../shared/action";
 import { Age, Badge, ResultLine } from "../shared/badge";
 import { DeviceIds } from "../shared/device";

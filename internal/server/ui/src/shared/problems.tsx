@@ -4,8 +4,7 @@
 /**
  * @file internal/server/ui/src/shared/problems.tsx
  *
- * The problem list as a part, wherever it is put (problemsEl of
- * components.js): one icon per kind of problem among its entries, each in
+ * The problem list as a part, wherever it is put: one icon per kind of problem among its entries, each in
  * the colour of the worst tone of its kind, as the summary of a menu that
  * lists the entries in one format at every level, with the entries under
  * an entry (subs) indented under it. Its details is made once and kept
@@ -82,7 +81,7 @@ const RANK: Record<string, number> = { bad: 3, warn: 2 };
 /**
  * problemKinds are the kinds of problems among entries' items, one per
  * kind in the order they come, each in its worst tone; skip leaves kinds
- * out (kindIcons of components.js).
+ * out.
  */
 export function problemKinds(entries: Entry[], skip: string[] = []): Kind[] {
   const kinds = new Map<string, Kind>();
@@ -121,7 +120,7 @@ function KindIcon({ k, who }: { k: Kind; who: string }) {
 
 /**
  * KindIcons are the icons of the kinds of problems among entries, one per
- * kind in its worst tone, without the list (kindIcons of components.js):
+ * kind in its worst tone, without the list:
  * the summary of Problems, and where a place shows the icons alone (the
  * Cube choice's items); skip leaves kinds out.
  */

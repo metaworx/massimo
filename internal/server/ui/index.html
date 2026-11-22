@@ -80,7 +80,7 @@
   <!-- a room whose commands wait until every device has reported: paused -->
   <symbol id="icon-paused" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M10 9v6M14 9v6"/></symbol>
   <!-- signs (AP Signs): a state is a colour and a mark. An icon with a
-       mark is two parts (components.js signEl): its drawing and the mark,
+       mark is two parts (Sign of ui/src/shared/icon.tsx): its drawing and the mark,
        a use.mark of its own, which blinks (html.blink-on, blink-first).
        The radio is the Wi-Fi fan and the window the paned window of the
        original MAX! software, their marks at the bottom right, unless the
@@ -126,7 +126,8 @@
   <div id="open-banner-slot" class="part-slot"></div>
   <p id="message" class="message hidden"></p>
 
-  <!-- partials: home -->
+  <!-- The home notice on Rooms: why it shows nothing, or only what the server last had, shown by home.js renderHomeNotice, its content a part (ui/src/header/HomeNotice.tsx). -->
+  <div id="home-notice" class="notice home-notice hidden" role="status"></div>
 
   <!-- the first owner's form, on a server without users (ui/src/signin/Setup.tsx) -->
   <div id="setup-slot" class="part-slot"></div>
@@ -158,6 +159,10 @@
           <span class="section-pill part-slot" data-forms="scheme" data-title="nav.prefs"></span>
         </header>
         <div id="prefs-sec" class="section-body settings-body">
+          <!-- My settings' rows: the poll, expert mode, the Cube clock and the language, each with its switch for this device alone, a part (ui/src/prefs/) drawn into #prefs-rows. -->
+          <div id="prefs-rows" class="prefs-rows"></div>
+          <!-- My settings → Appearance: the mode, the colour scheme, the blinking signs and the window's and the radio's drawings in the rows of My settings, Customise…, Export and Import…, and the scheme editor, a part (ui/src/prefs/) drawn into #appearance. -->
+          <div id="appearance" class="appearance"></div>
           <!-- partials: prefs -->
         </div>
       </section>
@@ -213,13 +218,17 @@
 
   <!-- partials: cube-page -->
 
-  <!-- partials: house -->
+  <!-- The House tile: its head, named after the chosen Cube, the mode for the whole house, and its panel for the rooms ticked, a part (ui/src/rooms/House.tsx) in #house-slot; rooms.js shows and hides it. -->
+  <section id="house" class="tile house needs-setpoint hidden">
+    <div id="house-slot" class="part-slot"></div>
+  </section>
 
   <section id="rooms" class="tiles"></section>
 
   <!-- partials: unlisted -->
 
-  <!-- partials: logview -->
+  <!-- The log: its section, which its part draws (ui/src/log/). -->
+  <section id="logview" class="tile log hidden" aria-label="event log" data-i18n-attr="aria-label:log.aria"></section>
   <!-- back to top, button#to-top at the bottom right of every page a
        screen down (ui/src/chrome/ToTop.tsx) -->
   <div id="to-top-slot" class="part-slot"></div>

@@ -1,4 +1,4 @@
-# Testing the web UI (v1.20.0)
+# Testing the web UI (v1.21.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -590,7 +590,8 @@ a user's panel with the new user's form, the scheme editor.
 In each view, around each data source applied with the data as it was
 (`poll(false)`, `loadCubes()`, `loadRooms()`, `refresh()`,
 a `state` event per device on the page's `EventSource` as the server sends it,
-`loadLogAlerts()`, `refreshAges()` and the log's `pollLog()`),
+`MassimoParts.log.loadAlerts()`, the page's minute (`MassimoParts.minute()`)
+and the log's `MassimoParts.log.poll()`),
 and around the region's own (`Region.sources`):
 the header's check for an update, `loadUpdate(false)`,
 the page shown again, the `viewshown` event its loaders take,

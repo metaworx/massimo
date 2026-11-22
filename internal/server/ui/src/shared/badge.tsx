@@ -5,14 +5,14 @@
  * @file internal/server/ui/src/shared/badge.tsx
  *
  * A badge, a notice, a value's age and an action's result line as parts:
- * badgeEl, noticeEl, ageEl and showResult of components.js and app.js. An age is filled by the page's own
- * fillAge, which refreshAges runs once a minute over every .age[data-at],
- * so that a part's ages and the plain ones read alike.
+ * badgeEl and showResult of components.js and app.js, where the plain
+ * code still has them. An age shows how old its value is by the page's
+ * minute (minuteNow of shared/data.ts), which it reads as a signal.
  */
 
 import type { ComponentChildren } from "preact";
-import { useLayoutEffect, useRef } from "preact/hooks";
 import type { Outcome } from "./action";
+import { minuteNow } from "./data";
 import { Mark } from "./icon";
 
 /**
@@ -84,18 +84,16 @@ export function ResultLine({ res, cls, role, id }: { res: Outcome | null | undef
  * time that is no device value. Nothing without a time.
  */
 export function Age({ at, stale, plain }: { at?: string; stale?: boolean; plain?: boolean }) {
-  const ref = useRef<HTMLSpanElement>(null);
+  void minuteNow.value; // how old it is moves on with the page's minute
   const ms = Date.parse(at || "");
+  if (isNaN(ms)) return null;
   const since = ms - observedSince();
   const already = !plain && since >= 0 && since < SINCE_MS;
-  useLayoutEffect(() => {
-    if (ref.current) fillAge(ref.current);
-  });
-  if (isNaN(ms)) return null;
   return (
-    <span ref={ref} class={"age" + (stale ? " stale" : "")} data-at={String(ms)} data-since={already ? "1" : undefined}>
-      <span class="age-text" />
-      <span class="age-exact expert-only" />
+    <span class={"age" + (stale ? " stale" : "")} data-at={String(ms)} data-since={already ? "1" : undefined}
+      title={t(already ? "age.titleSince" : "age.title", { time: fmtInstant(new Date(ms)) })}>
+      <span class="age-text">{fmtAge(ms, already)}</span>
+      <span class="age-exact expert-only">{fmtShortTime(ms)}</span>
     </span>
   );
 }

@@ -14,7 +14,7 @@
  * meanwhile, with Take theirs; the field draws that notice itself. A
  * free field, which shows no stored data (a time, a name offered), takes
  * its value and its set instead. A field's limit says what it takes
- * while a value is refused (markRange).
+ * while a value is refused (Limit).
  */
 
 import type { ComponentChildren, Ref } from "preact";
@@ -101,7 +101,7 @@ export function Meanwhile<T>({ draft, show }: { draft: Draft<T>; show?: (v: T) =
 }
 
 /**
- * A field's limit (markRange of components.js): text says what the
+ * A field's limit: text says what the
  * field takes ("only 1 to 255", "longer than 32 bytes"), shown in amber
  * before the box while over says that the value is refused, the box then
  * outlined in red and the limit its description; cls is the line's class
@@ -287,15 +287,15 @@ export function numberNorm(v: string): unknown {
 }
 
 /**
- * An option of a Select, as fillOptions of components.js takes it: its
+ * An option of a Select: its
  * value, its label and whether it cannot be chosen; or a group of
  * options under a heading.
  */
 export type SelectOption = [value: string, label: string, disabled?: boolean] | { group: string; options: [string, string, boolean?][] };
 
 /**
- * Select is a row with a select (selectInput of components.js): its
- * options as fillOptions takes them, the value chosen from a draft of a
+ * Select is a row with a select: its
+ * options (SelectOption), the value chosen from a draft of a
  * stored value (with its "changed meanwhile" notice) or from value and
  * onChange; name and disabled (off) are the select's, the row narrow
  * unless wide; inputRef gives it the focus; hintId names the hint as its
@@ -478,7 +478,7 @@ export function SaveButton({ label, look, busy, off, type, onClick }: {
  * given (cancelLabel in place of "Cancel"; its class form-cancel, as the
  * plain footer's), and the submit button, submit its label, busy while
  * its request runs (useBusy) and off where off says nothing is to be
- * sent (sendWhenChanged). Where look gives the form's state (useForm of
+ * sent. Where look gives the form's state (useForm of
  * forms.ts), Save shows it: clean, plain and off; changed, primary;
  * unsaved, primary with the warning mark before its text; saving, busy;
  * failed, with the cross; saved, plain and off with the check. Without
@@ -512,8 +512,7 @@ export function FormFooter({ submit, busy, off, cancel, cancelLabel, reset, look
 }
 
 /**
- * Stepper is a number field between a − and a + button (stepper of
- * components.js), which change it by step within min and max, rounded to
+ * Stepper is a number field between a − and a + button, which change it by step within min and max, rounded to
  * the step; an empty field steps from min. value is what the field shows,
  * set is told of every change, typed or stepped. id and cls are the
  * field's; hidden keeps the whole in its place unseen; children follow the

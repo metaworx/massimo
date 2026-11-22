@@ -33,6 +33,7 @@ import { closeConfig, openConfig } from "./configuration";
 import { DeviceList } from "./Devices";
 import { problemsLabel, roomEntries } from "./facts";
 import { useLook } from "../shared/look";
+import { apiUntil, roomActual, roomActualDevice } from "../model/room";
 import { cubePath } from "../shared/path";
 
 /** The arrow keys of More move between these: its buttons that are on, and the Hold switch where shown. */

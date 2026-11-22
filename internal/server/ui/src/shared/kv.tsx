@@ -4,10 +4,10 @@
 /**
  * @file internal/server/ui/src/shared/kv.tsx
  *
- * A list of facts as a part (kvList of components.js): a name and its
+ * A list of facts as a part (components.js' kvList before): a name and its
  * value each, the values in a column of their own, a value that is an
  * identifier or a path in the monospaced font; and a list of counts by
- * name (countList).
+ * name (CountList).
  */
 
 /** A fact of KvList: its name, its value, and whether the value is monospaced. */

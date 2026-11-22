@@ -4,8 +4,8 @@
 /**
  * @file internal/server/ui/src/shared/icon.tsx
  *
- * An icon, a sign and a mark as parts: iconEl, signEl and markEl of
- * components.js, drawn once and updated in place; and a button that is an
+ * An icon, a sign and a mark as parts, as iconEl, markEl and the gone
+ * signEl of components.js draw them, drawn once and updated in place; and a button that is an
  * icon alone (iconButton). A mark is an element of
  * its own (use.mark), which is what blinks; it is made again only where
  * its state changes, and then starts its blinking where the mark of its
@@ -45,7 +45,7 @@ function MarkUse({ href, bad, blink }: { href: string; bad: boolean; blink?: str
 }
 
 /**
- * Sign is the icon of a kind of SIGNS in a state (signEl): "" or "ok"
+ * Sign is the icon of a kind of SIGNS in a state: "" or "ok"
  * plain, "warn" with a triangle, "bad" with a cross, coloured by the
  * state, in the drawing the person chose for the window and the radio
  * (it reads the choice itself); cls adds classes, blink names the mark across the page, and
@@ -75,8 +75,7 @@ export function Mark({ state, blink }: { state: "warn" | "bad"; blink?: string }
 }
 
 /**
- * CountIcon is an icon with a number in its corner badge (foundCountEl of
- * components.js), hidden from a screen reader, which the label beside it
+ * CountIcon is an icon with a number in its corner badge, hidden from a screen reader, which the label beside it
  * tells; cls is its class, which colours and places it.
  */
 export function CountIcon({ symbol, n, cls }: { symbol: string; n: number; cls: string }) {

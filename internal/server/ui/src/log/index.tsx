@@ -9,11 +9,12 @@
  * of its own handed to the pages' store (ownAddress), which reads it at a
  * reload, a link, back and forward and tells the log when it is shown;
  * the log's unseen problems handed to ☰ (alerts.ts). The plain code calls
- * MassimoParts.log (app.js' stream, poll, loads and language; tiles.js'
- * rfLabel), and the UI tests read its state and its alerts there.
+ * MassimoParts.log (app.js' stream, poll, loads and language), and the
+ * UI tests read its state and its alerts there.
  */
 
-import { rfLabel } from "../model/device";
+import { effect, untracked } from "@preact/signals";
+import { minuteNow } from "../shared/data";
 import { ownAddress } from "../shared/pages";
 import { mounter, register } from "../shared/region";
 import { logRangeStart, upperFirst } from "./text";
@@ -39,6 +40,11 @@ export function signedOut(): void {
 }
 
 const mount = mounter("logview", () => <Log />);
+
+// Each minute of the page the lines a time range no longer holds go.
+effect(() => {
+  if (minuteNow.value) untracked(() => pruneLogRange());
+});
 
 // The log's address of its own: read from an address of the log, written
 // for it (a device the Cube does not have goes before the address takes
@@ -88,8 +94,6 @@ const log = register("log", {
   matches: (line: LogLine) => logLineMatches(line),
   ofChoices: (line: LogLine) => logOfChoices(line),
   rangeStart: logRangeStart,
-  /** rfLabel is model/device.ts', which tiles.js reaches through the log's plain name until AP UiParts' Block 15 gives it a home of its own. */
-  rfLabel,
   upperFirst,
 });
 

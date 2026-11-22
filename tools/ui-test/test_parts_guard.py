@@ -962,13 +962,13 @@ REGIONS = (
 # (loadRooms, also metadata, paired and device_forgotten), the whole
 # reload (refresh, the stream's connected and resync), a state event of
 # the stream for every device of the Cube, as the server sends it, the
-# log button's sign (MassimoParts.log.loadAlerts), the ages' minute (refreshAges), the
+# log button's sign (MassimoParts.log.loadAlerts), the page's minute (MassimoParts.minute), which the ages follow, the
 # log's poll under All Cubes (MassimoParts.log.poll), the settings applied again, as
 # when the user's arrive from the server (applyStoredSettings), and who is
 # in read again (loadMe), which every part follows as signals since AP
 # UiParts' Block 15 (UiParts D221).
 SOURCES = ("poll(false)", "loadCubes()", "loadRooms()", "refresh()", "a state event per device", "MassimoParts.log.loadAlerts()",
-           "refreshAges()", "MassimoParts.log.poll()", "applyStoredSettings()", "loadMe()")
+           "MassimoParts.minute()", "MassimoParts.log.poll()", "applyStoredSettings()", "loadMe()")
 
 # The guard in the page, window.__guard: marks what the user can hold in
 # a region, types into its fields, gives it the focus, applies a data
@@ -1116,7 +1116,7 @@ GUARD_JS = r"""() => {
       case "refresh()": return refresh();
       case "a state event per device": return stateEvents();
       case "MassimoParts.log.loadAlerts()": return MassimoParts.log.loadAlerts();
-      case "refreshAges()": return refreshAges();
+      case "MassimoParts.minute()": return MassimoParts.minute();
       case "MassimoParts.log.poll()": return MassimoParts.log.poll();
       case "applyStoredSettings()": return applyStoredSettings();
       case "loadMe()": return loadMe();

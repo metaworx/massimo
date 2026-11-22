@@ -13,9 +13,10 @@
 
 import { computed, untracked } from "@preact/signals";
 import type { Device } from "../api";
-import { rfLabel } from "../model/device";
+import { mismatchText, radiogramName, rfLabel, roomName } from "../model/device";
 import type { Loose, LogLine } from "./lines";
 import { type CubeRooms, logState } from "./state";
+import { confirmFieldName } from "../model/room";
 
 /**
  * logRoomsOf are the rooms and the unlisted list loaded of a Cube, by its
@@ -136,7 +137,7 @@ function logDeviceRoom(d: Device, serial: string): string {
   const rs = logRoomsOf(serial);
   const r = rs && rs.rooms.find((x) => x.devices.includes(d));
   if (!r) return "";
-  return r.name || t("log.room", { id: r.id });
+  return roomName(r.id, r.name);
 }
 
 /** logStateText is the short state text of a state event. */
@@ -153,7 +154,7 @@ function logStateText(s: Loose | null): string {
   if (st.until) parts.push(t("log.until", { until: st.until }));
   for (const [k, key] of [["battery_low", "log.batteryLow"], ["error", "log.error"], ["link_error", "log.linkError"], ["panel_locked", "log.locked"]]) {
     if (!st[k]) continue;
-    if (k === "error" && st.failed_radiogram) parts.push(t("log.errorRadiogram", { radiogram: radiogramName(st.failed_radiogram) })); // tiles.js
+    if (k === "error" && st.failed_radiogram) parts.push(t("log.errorRadiogram", { radiogram: radiogramName(st.failed_radiogram) }));
     else parts.push(t(key));
   }
   return parts.join(", ");
@@ -202,7 +203,7 @@ function logChangesText(changes: Loose): string {
         parts.push(flag(to, "log.batteryLow", "log.ch.batteryOk"));
         break;
       case "error":
-        if (to && failed) parts.push(t("log.errorRadiogram", { radiogram: radiogramName(failed) })); // tiles.js
+        if (to && failed) parts.push(t("log.errorRadiogram", { radiogram: radiogramName(failed) }));
         else parts.push(flag(to, "log.error", "log.ch.errorCleared"));
         break;
       case "failed_radiogram":
@@ -360,7 +361,7 @@ function logSummaryText(kind: string, s: Loose, serial: string): string {
       return t("log.sum.slotsFree", { slots: num(s.free_slots), since: at(s.since) });
     }
     case "mismatch": {
-      const text = mismatchText(s as Parameters<typeof mismatchText>[0]); // tiles.js
+      const text = mismatchText(s as Parameters<typeof mismatchText>[0]);
       return s.state === "cleared" ? t("log.sum.mismatchCleared", { text }) : text;
     }
     case "disagree":
@@ -424,7 +425,7 @@ function logErrorWatchText(s: Loose): string {
     default:
       return "";
   }
-  if (!link && s.failed_radiogram) parts.push(t("log.ch.failedRadiogram", { radiogram: radiogramName(s.failed_radiogram) })); // tiles.js
+  if (!link && s.failed_radiogram) parts.push(t("log.ch.failedRadiogram", { radiogram: radiogramName(s.failed_radiogram) }));
   if (s.what === "back") parts.push(t("log.sum.watchHeld"));
   else if (s.what === "clear" && s.held) parts.push(t("log.sum.watchResume"));
   return parts.join("; ");
@@ -433,7 +434,7 @@ function logErrorWatchText(s: Loose): string {
 /** logRoomName names a room of a line's Cube by its name, else its number. */
 function logRoomName(id: number, serial: string): string {
   const r = (logRoomsOf(serial) || { rooms: [] as PageRoom[] }).rooms.find((x) => x.id === id);
-  return r && r.name ? r.name : t("log.room", { id });
+  return roomName(id, r?.name);
 }
 
 /**
@@ -515,7 +516,7 @@ function logUnconfirmedText(s: Loose, serial: string): string {
   const devices = ((s.devices || []) as Loose[]).map((d) => {
     const dev = logDevice(d.rf_address, serial);
     const name = dev ? deviceName(dev) : d.rf_address;
-    const shows = Object.keys(d.shows || {}).sort().map((k) => (confirmFieldName(k) + " " + value(k, d.shows[k])).trim()); // rooms.js
+    const shows = Object.keys(d.shows || {}).sort().map((k) => (confirmFieldName(k) + " " + value(k, d.shows[k])).trim());
     return shows.length ? name + " (" + shows.join(", ") + ")" : name;
   }).join(", ");
   const args: Record<string, string> = { write, minutes: num(s.minutes), devices: devices || "–" };
@@ -536,7 +537,7 @@ function logDriftText(s: Loose): string {
     case "not_following": {
       const parts = [t("log.sum.driftNot", { setpoint: fmtNum(s.setpoint, 1), expected: fmtNum(s.expected, 1), at: s.switch_at || "–" })];
       if (s.hour_off) parts.push(t(s.auto_dst === false ? "log.sum.driftHourNoDst" : "log.sum.driftHour"));
-      if (s.failed_radiogram) parts.push(t("log.errorRadiogram", { radiogram: radiogramName(s.failed_radiogram) })); // tiles.js
+      if (s.failed_radiogram) parts.push(t("log.errorRadiogram", { radiogram: radiogramName(s.failed_radiogram) }));
       return parts.join("; ");
     }
     case "follows":
@@ -568,7 +569,7 @@ function logTargetText(s: Loose, serial: string): string {
     }
     case "room": {
       const r = (logRoomsOf(serial) || { rooms: [] as PageRoom[] }).rooms.find((x) => String(x.id) === id);
-      return r && r.name ? r.name : t("log.room", { id });
+      return roomName(Number(id), r?.name);
     }
     case "token":
       return s.subject && s.subject.name ? s.subject.name : id;
