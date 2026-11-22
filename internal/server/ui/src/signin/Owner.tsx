@@ -19,7 +19,8 @@
  * refusal for lack of a session, or the server's word that the first
  * owner exists already, turns the card to the sign-in (askLogin): the
  * server has users now. Under the form, Skip for now closes the card for
- * this load (D10, D21), and Keep it open… shows the confirmation that
+ * this load (D10, D21), or "Back to the page" where the user opened the
+ * card on a running page, which marks nothing (D36), and Keep it open… shows the confirmation that
  * keeps the server open (KeepOpen.tsx, AP FirstOwner, Block 3) in the
  * form's place, the two of one height, where the server is not kept open
  * already. Its fields are not controlled, as the card's
@@ -39,9 +40,10 @@ import { NewPassword, newPasswordProblem } from "../shared/password";
 import { busyProps, useBusy } from "../shared/question";
 import { UserNameField, useNameCheck, wordNameError } from "../shared/username";
 import { me } from "../shared/me";
+import { keptOpen } from "../shared/owner";
 import { app, offer } from "./app";
 import { KeepOpen } from "./KeepOpen";
-import { ask, card, keepAsk, skip } from "./store";
+import { ask, card, creationEnded, keepAsk, skip } from "./store";
 
 /** Owner is the first owner's place in the card: the form, and under it the row with Skip for now. */
 export function Owner() {
@@ -49,7 +51,7 @@ export function Owner() {
   const shown = card.owner;
   const step = card.ownerStep;
   const working = card.working;
-  const kept = !!me.value?.kept_open;
+  const kept = keptOpen(me.value);
   const opened = card.opened;
   const focus = card.focus;
   const offered = offer(app.value);
@@ -97,6 +99,7 @@ export function Owner() {
     if (problem) return say(problem);
     card.ownerSaid = null;
     card.working = true;
+    card.creating = true;
     // busy through the creation, the sign-in, the app's keeping of the login (UiParts D213) and the read of who is in
     // until the card has closed: a second tap meanwhile creates nothing
     create.run(async () => {
@@ -106,6 +109,7 @@ export function Owner() {
         made = true;
         const session = await signIn(n, password);
         setToken(session.token);
+        creationEnded(true); // the owner signed in: a refusal now is of this session, and turns the card
         // the login by fingerprint kept for the new owner, where asked for; not kept, the owner is in all the same and
         // may keep it at a sign-in (FirstOwner D26)
         let kept = true;
@@ -123,6 +127,7 @@ export function Owner() {
         // the server has users now: refused for lack of a session (api() has turned the card already), the first owner
         // made by another request (409), or this one made and its sign-in failed: the card becomes the sign-in
         if (made || err.status === 401 || err.status === 409) {
+          creationEnded(false); // the creation has ended: the card turns, once
           askLogin();
           return;
         }
@@ -131,6 +136,7 @@ export function Owner() {
         say(t("setup.failed", { error: worded || err.message }));
       } finally {
         card.working = false;
+        if (card.creating) creationEnded(false); // ended without a session: a refusal meanwhile turns the card now
       }
     });
   };
@@ -157,7 +163,7 @@ export function Owner() {
             <ResultLine id="setup-msg" cls="small cubes-msg" role="status" res={card.ownerSaid} />
           </form>
           <div id="setup-more" class="login-owner-more">
-            <button type="button" id="setup-skip" disabled={working} onClick={skip}>{t("setup.skip")}</button>
+            <button type="button" id="setup-skip" disabled={working} onClick={skip}>{t(card.byUser ? "setup.back" : "setup.skip")}</button>
             <button ref={keepRef} type="button" id="setup-keep-open" class={hid(kept).trim() || undefined} disabled={working} onClick={keepAsk}>{t("setup.keepOpen")}</button>
           </div>
         </div>

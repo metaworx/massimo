@@ -319,21 +319,48 @@ function appConnect() {
 // turns to the sign-in, the same opening (D15): it keeps the owner's ask,
 // nobody before it and nothing held, and notSentNow is not reset at the
 // owner's opening nor at the turn. That is right at a start and after a
-// sign-out, where nothing of the page ran behind the card; an opening on
-// a running page (the banner, ☰, Users) must look at it again. Each
+// sign-out, where nothing of the page ran behind the card. An opening on
+// a running page (the banner, ☰ and Users, by the user's word; a read of
+// who is in) leaves the page standing still behind the card: the page's
+// poll stopped and its stream closed (connectEvents opens none
+// meanwhile, a restart's end included), both started again where the
+// card is left with nobody signed in (AP FirstOwner, D35). What a region
+// follows by itself goes on (the log's own poll of All Cubes, an update
+// or a restart being followed): a read of theirs refused while the owner
+// is being made waits for the sign-in the creation ends in and is sent
+// again, so it does no harm. Its turn to the sign-in
+// answers what the open page had under way as a refused request's sign-in
+// does: who was in (the open server), the pushes held, the setpoints
+// still waiting dropped, only the writes it answers said not sent. Each
 // opening's ask is closed once: its end (done, finishSignIn) does nothing
 // for an ask that was closed already, a late way's answer after the card
 // was dismissed or opened anew.
 function askLogin(on) {
   if (loginPromise) {
-    if (on !== "owner" && MassimoParts.signIn.toSignIn()) renderLoginProviders();
+    if (on !== "owner" && MassimoParts.signIn.toSignIn()) {
+      const ask = loginPromise.ask;
+      if (ask.still) {
+        notSentNow = false; // app.js: only the writes this sign-in answers
+        ask.was = whoIs(state.me);
+        ask.held = holdPushes();
+        dropPendingSetpoints(); // rooms.js
+      }
+      renderLoginProviders();
+    }
     return loginPromise;
   }
   const owner = on === "owner";
+  const still = owner && !startWaits; // on a running page: the page stands still behind the card
+  if (still) {
+    if (state.pollTimer) clearInterval(state.pollTimer);
+    state.pollTimer = null;
+    closeEvents(); // app.js
+  }
   if (!owner) notSentNow = false; // app.js: only the writes this sign-in answers
   const was = owner ? "" : whoIs(state.me); // a 401 while signed in: the drafts stay for this user alone (settleSignIn)
   const held = owner ? { prefs: [], notify: false } : holdPushes();
   if (!owner) dropPendingSetpoints(); // rooms.js
+  let made = null;
   loginPromise = new Promise((resolve) => {
     const dlg = $("login-dialog");
     // the API key's form where a server without a store was seen, whose
@@ -356,12 +383,19 @@ function askLogin(on) {
       loginPromise = null;
       resolve(ok);
     };
-    // dismissed: the pushes held go as they would have (the dialog's close, and Skip for now)
+    // dismissed: the pushes held go as they would have (the dialog's close, and Skip for now); a running page stood
+    // still behind the card goes on
     const dismiss = () => {
-      resumePushes(held);
+      if (ask.closed) return;
+      resumePushes(ask.held);
       done(false);
+      if (still) {
+        startPolling(); // app.js
+        connectEvents();
+      }
     };
-    const ask = { was, held, done, owner, dismiss, closed: false };
+    const ask = { was, held, done, owner, still, dismiss, closed: false };
+    made = ask;
     MassimoParts.signIn.open(way, said, ask); // the fields emptied, the way chosen, the lines cleared, the switch off
     if (!owner) renderLoginProviders();
     MassimoParts.signIn.readApp(); // the app's login by fingerprint, as login.status() answers, not awaited (ui/src/signin/app.ts)
@@ -373,6 +407,7 @@ function askLogin(on) {
     // first field of the form shown in the drawing that follows.
     dlg.show();
   });
+  loginPromise.ask = made; // the opening a later refusal turns
   return loginPromise;
 }
 
@@ -383,7 +418,8 @@ function askLogin(on) {
 // no start waits for who is in. The first owner's opening reads who is in
 // before the card closes, so that the page shows the owner at once and
 // not the open server for a moment, and Create the owner turns until
-// then (AP FirstOwner). An ask closed meanwhile (dismissed, or ended by
+// then (AP FirstOwner); on a running page the page it was opened on is
+// shown again, read anew under the owner (D37). An ask closed meanwhile (dismissed, or ended by
 // another way) is left as it is: nothing is closed or started twice. It
 // reports whether it ended the ask.
 async function finishSignIn(ask) {
@@ -393,7 +429,10 @@ async function finishSignIn(ask) {
   if (ask.owner) await loadMe();
   if (ask.closed) return false;
   ask.done(true);
-  if (!startWaits) afterLogin(!ask.owner);
+  if (!startWaits) {
+    afterLogin(!ask.owner);
+    if (ask.still) showView(currentView, "replace"); // pages.js
+  }
   return true;
 }
 

@@ -860,6 +860,9 @@ function retryEvents(gen) {
 }
 
 async function connectEvents() {
+  // a page standing still behind the first owner's card opens no stream: the card opens it again where it is left
+  // (askLogin, login.js; AP FirstOwner, D35), whatever asks meanwhile (a restart's end, serverBack)
+  if (loginPromise && loginPromise.ask && loginPromise.ask.still) return;
   closeEvents();
   const gen = eventsGen;
   if (!state.serial) return;

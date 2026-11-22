@@ -14,9 +14,10 @@ from conftest import URL
 from helpers import VIEWER, css_hidden, open_main_menu, show_view, wait_until
 from test_login import sign_in
 
-ORDER = ["#menu-log", "hr", "#menu-cube", "#menu-system", "#menu-maint", "#menu-info", "hr", "#menu-me", "#menu-servers", "#menu-logout"]
-# in the app alone: Select server…, back to the app's servers (test_connect.py)
-APP_ONLY = {"#menu-servers"}
+ORDER = ["#menu-log", "hr", "#menu-cube", "#menu-system", "#menu-maint", "#menu-info", "hr", "#menu-me", "#menu-servers", "#menu-logout", "#menu-owner"]
+# in the app alone: Select server…, back to the app's servers (test_connect.py); on a server without users alone, in
+# Sign out's place: Create the owner… (AP FirstOwner, test_ways.py)
+APP_ONLY = {"#menu-servers", "#menu-owner"}
 PAGES = {"log": ("#logview", "#log", "#menu-log"), "cube": ("#cube-page", "#cube", "#menu-cube"),
          "system": ("#system", "#system", "#menu-system"), "maint": ("#maint-page", "#maintenance", "#menu-maint"),
          "info": ("#info-page", "#info", "#menu-info"),
@@ -39,7 +40,7 @@ def test_main_menu_entries(page, case):
             continue
         assert page.locator(sel + " > svg.ni").count() == 1, f"{sel} with its icon"
         if sel in APP_ONLY:
-            assert page.locator(sel).is_hidden(), f"{sel} in the app alone"
+            assert page.locator(sel).is_hidden(), f"{sel} not shown to the owner of a browser"
             continue
         assert page.locator(sel).is_visible(), f"{sel} shown to the owner"
     ys = [page.locator(sel).bounding_box()["y"] for sel in ORDER if sel != "hr" and sel not in APP_ONLY]

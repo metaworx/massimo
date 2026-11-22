@@ -130,7 +130,33 @@ Until the owner exists everything is open,
 and a warning under the header's rule says so and what closes it:
 the first owner, or `MASSIMO_API_TOKEN` in the server's settings file
 (`-token` for a server without a store).
-It cannot be dismissed, and goes once the server asks who is there.
+It goes once the server asks who is there.
+On a server with a store it has **Create the owner…**,
+which opens the sign-in card with the first owner's form,
+and **Hide**, which hides it in this browser while the server has no owner,
+the focus then on ☰'s button;
+the hiding is forgotten as soon as this browser learns that the server has users,
+from who is in or from a sign-in asked for (FirstOwner D45),
+so that a server open again shows its warning (FirstOwner D2).
+A server without a store keeps it as it is, without buttons (FirstOwner D39).
+☰'s Create the owner… and System settings → Users open the card too.
+Opened so on a running page, the card hides the page as at every opening,
+and the page stands still behind it, its poll stopped and its stream closed,
+a restart's end opening none meanwhile (FirstOwner D34, D35);
+what a part follows by itself goes on (the log's own poll of All Cubes,
+an update or a restart being followed),
+a read of it refused while the owner is being made waiting for the sign-in;
+**Back to the page**, in Skip for now's place, closes the card,
+starts both again and gives the focus back to what opened it,
+marking nothing as skipped (FirstOwner D36);
+after Create the owner the page it was opened on is shown again,
+read anew as the owner (FirstOwner D37).
+A request refused while the owner is being made waits for the sign-in it ends in,
+a read sent again, a write said not sent;
+where the server gets its owner elsewhere,
+the card turns to the sign-in as a refused request's sign-in:
+the page's settings still to be saved held, a stepped setpoint dropped,
+and another user's sign-in forgets the open page.
 The first owner's name is checked as a new user's is (System settings → Users),
 and its password is registered by OPAQUE, as every password the page sets.
 What the signed-in role may not do is not shown (docs/api-v1.md,
@@ -332,6 +358,8 @@ The compacted header has **↑**, back to the top, first of the page buttons: �
   **Personal settings**, its tooltip naming whose they are, by display name and login,
   in the app **Select server…**, back to the app's servers;
   and **Sign out** (Forget key for an API key or the token, none on an open server),
+  or on a server without users where the owner can be created from here
+  **Create the owner…**, which opens the sign-in card with its form (FirstOwner D9),
   in the accent and bold, as the personal page's button.
   It is highlighted while one of its pages is shown, as a page button is,
   that page's entry marked current.
@@ -1603,8 +1631,11 @@ settings forms and have none of it.
   which the page uses for users whose password the server still hashes;
   the line under it says how many those are,
   and they cannot sign in once it is off until a password is set for them here.
-  On a server kept open without an owner (Keep it open… of the sign-in card),
-  **This server is kept open without an owner** comes first, on:
+  On a server without users (FirstOwner D14) the section says so instead,
+  with **Create the owner…**, which opens the sign-in card with its form,
+  and no password sign-in, no list and no Add a user;
+  while the server is kept open (Keep it open… of the sign-in card),
+  **This server is kept open without an owner** follows, on:
   turned off, it is saved at once and stays in sight, off, for that showing,
   with the line that the page asks for the owner again at its next load;
   who is in is read again then, by the one read that asks for nobody,
@@ -2187,7 +2218,8 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `useIcons` | `look.ts` | the icons chosen for the window and the radio as a signal, raised by `redrawSigns` (`MassimoParts.icons`); `Sign` reads it | – |
 | `Island` | `island.tsx` | a plain piece inside a part: an element the part draws empty and plain code fills, again where a key or the language changed | `tag` (div, p, span), `cls`, `keys`, `fill(el)` |
 | `Fold`, `FoldHead` | `fold.tsx` | a details that opens and closes (`detailsPanel`), the toggle of its making not passed on; a panel's head | `id` (the plain markup's id, which a region keeps: System info's two folds), `cls`, `open`, `onToggle(open)`, `summary`, `summaryProps`, `data`, the body as children; `before`, `name`, `mono`, `after` (after the monospaced part, a sign of the thing's state), `badges` |
-| `Dropdown` | `menu.tsx` | a menu that drops down (`dropdown`), with `arrows` its arrow keys (`menuArrows`) and with `focusCurrent` the focus on its current item when it opens (among `arrows`' items, else its list's buttons that are on); a click on any button of its list closes it, as `dropdown()` of `components.js` does for every menu of the page, but on one marked `data-keep-open` (`MenuItem`'s `keepOpen`) | `id`, `cls`, `summaryId`, `summaryCls`, `label` (without it the summary is named by its text), `title` (where the tooltip is not the label), `summary`, `listCls`, `arrows` (a selector of its items), `focusCurrent`, `busy` (the summary turning while a request sent from its list runs), `onClick`, `onOpen` (told each time it opens), `onClose` (told each time it closes), the items as children |
+| `mainMenuButton` | `menu.tsx` | the header's ☰ button, filled by the page's chrome, for a part that gives the focus back there (the open server's Hide, ☰'s Create the owner…) | |
+| `Dropdown` | `menu.tsx` | a menu that drops down (`dropdown`), with `arrows` its arrow keys (`menuArrows`) and with `focusCurrent` the focus on its current item when it opens (among `arrows`' items, else its list's buttons that are on); a click on any button of its list closes it, as `dropdown()` of `components.js` does for every menu of the page, but on one marked `data-keep-open` (`MenuItem`'s `keepOpen`) | `id`, `cls`, `summaryId`, `summaryCls`, `summaryRef` (its summary, for an item that gives the focus back there), `label` (without it the summary is named by its text), `title` (where the tooltip is not the label), `summary`, `listCls`, `arrows` (a selector of its items), `focusCurrent`, `busy` (the summary turning while a request sent from its list runs), `onClick`, `onOpen` (told each time it opens), `onClose` (told each time it closes), the items as children |
 | `MenuItem` | `menu.tsx` | a menu's button, its icon, label, the icons after it and a grey second line (`menuItem`) | `icon`, `blank`, `label`, `icons`, `sub` (the second line, a text or elements, there whenever given, empty too), `subCls` (its class), `cls`, `value` (its `data-value`), `current`, `disabled`, `busy`, `keepOpen` (a click on it leaves the menu open, for an item whose result shows in the list), `onClick`; `current` "page" for the entry of the page shown (☰'s), `id`, `title`, `aria` (its name for a screen reader), `labelId` and `after` (a mark at its end) where the page names them |
 | `Picker` | `menu.tsx` | a menu that chooses one item, its summary the chosen one (`pickerMenu`) | `id`, `cls`, `summaryId`, `summaryCls`, `entries` (an item `{ value, label, sub, icon, icons, disabled }`, `{ group }` or `{ separator: true }`), `value`, `onPick(value)`, `shown` (`{ icon, label, title, aria }`) |
 | `actionRunner`, `fader` | `action.ts` | a request, a reload, and its outcome (`Outcome`, `{ text, ok }`) in the region's message line (`showResult`) or in a part's state that a `ResultLine` draws, a success fading where a fade is given; `fader` is that fade alone, for a result set by other means | `where()`, `set(res)`, `fade` (ms), `reload()`, `bound` (an answer after a sign-out reloads and says nothing, `session.ts`); gives `run(fn, ok, fail)`, `say(text, ok)`; `set`, `ms` |
@@ -2235,6 +2267,7 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `burstReader` | `burst.ts` | one read for a burst of the stream's events: a read in flight and at most one more after it, which reads what the events meanwhile asked for, none asked for in the session before (the parts that follow the server while shown) | `read(what)`, the reads by name; gives `ask(...what)` |
 | `session`, `stillSession`, `newSession` | `session.ts` | the session's number, raised by `MassimoParts.signedOut` before anything is forgotten: a store takes it before an await and drops the answer, its message and its next timer where it changed; `actionRunner`'s `bound` does so for a runner | –; `n`; – |
 | `me`, `own`, `meChanged` | `me.ts` | who the page is signed in as, `state.me` as `applyCaps` of `login.js` hands it over at every read of it (`MassimoParts.me`), null from a sign-out on; the token it is signed in with, by which a user's sessions say "this device" and "its key" | `m` |
+| `keptOpen`, `askOwner`, `takeAsker` | `owner.ts` | the ways to the first owner: whether the server is kept open, from who is in, for every place that asks; askOwner opens the sign-in card with the first owner's form and keeps the control that asked, which the card gives the focus back to (the banner, ☰, Users) | `m`, `from` |
 | `firstOwnerOf` | `me.ts` | whether the first owner can be created from here: an open server, which has a store, where who is in says `setup`; the sign-in card asks for the owner by it where the server is not kept open | `m` |
 | `whoOf`, `Who` | `me.ts` | who is in in the page's words, for the personal page's row, ☰'s Sign out and Personal settings' tooltip and the question before a sign-out alike: the row's line, Sign out or Forget key (none on an open server) with its icon, the name for the tooltip, and whether My profile is there | `me` |
 | `cardBadges`, `badgesOf`, `BadgeSpec` | `card.ts` | what a section card's head shows at a glance, also while it is folded: a region gives a card's badges by its id from its drawing's effect, `[]` for none, and the page's chrome draws them (`ui/src/chrome/Cards.tsx`) | `id`, `list` of `{ text, kind }` |

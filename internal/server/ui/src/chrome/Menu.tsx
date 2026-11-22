@@ -10,7 +10,10 @@
  * open it (their needs-* classes, login.js applyCaps): the log; the
  * settings pages; Personal settings, named after who is in in its
  * tooltip; in the app Select server; and Sign out, as the personal page's
- * button says it. Its first row is Massimo's icon and the server's
+ * button says it, or on a server without users where the owner can be
+ * created from here Create the owner…, which opens the sign-in card with
+ * its form and gives the focus back to ☰'s button when it is left (AP
+ * FirstOwner, D9). Its first row is Massimo's icon and the server's
  * version, which copies itself, a rule under it. ☰ carries the worse of
  * the log's mark and the unsaved settings' (AP UnsavedMarks, Block 5), an
  * entry the disk where a page it leads to holds a form unsaved or failed
@@ -24,8 +27,9 @@ import { toServers } from "../shared/app";
 import { unsavedTone } from "../shared/forms";
 import { Icon, IconButton, Mark, Sign } from "../shared/icon";
 import { useLang } from "../shared/lang";
-import { me, whoOf } from "../shared/me";
-import { Dropdown, MenuItem } from "../shared/menu";
+import { firstOwnerOf, me, whoOf } from "../shared/me";
+import { askOwner } from "../shared/owner";
+import { Dropdown, MenuItem, mainMenuButton } from "../shared/menu";
 import { page, showView } from "../shared/pages";
 import { MENU_PAGES } from "./pages";
 import { toTop } from "./scroll";
@@ -57,6 +61,7 @@ function Menu({ view }: { view: string }) {
   const label = [t("nav.more"), ...extra].join(", ");
   const title = [t("nav.moreTitle"), ...extra].join(" · ");
   const servers = !!appConnect();
+  const owner = firstOwnerOf(me.value);
   const entry = (p: (typeof MENU_PAGES)[number]) => (
     <MenuItem key={p.view} id={p.id} cls={p.needs || undefined} current={view === p.view ? "page" : undefined}
       icon={p.view === "log" ? <Sign kind="log" state={log.tone} blink="log-sign" /> : <Icon symbol={p.icon} cls="ni" />}
@@ -65,7 +70,7 @@ function Menu({ view }: { view: string }) {
       after={p.forms.length ? <ItemMark keys={p.forms} /> : undefined} onClick={() => showView(p.view)} />
   );
   return (
-    <Dropdown id="nav-menu" cls="nav-menu" summaryCls={view in MENU_VIEWS ? "nav-btn active" : "nav-btn"} label={label} title={title}
+    <Dropdown id="nav-menu" cls="nav-menu" summaryCls={view in MENU_VIEWS ? "nav-btn active" : "nav-btn"} summaryRef={mainMenuButton} label={label} title={title}
       summary={
         <>
           <Icon symbol="icon-menu" cls="ni" />
@@ -83,6 +88,8 @@ function Menu({ view }: { view: string }) {
         onClick={toServers} />
       <MenuItem id="menu-logout" cls={who.signOut ? undefined : "hidden"} icon={<Icon symbol={who.icon} cls="ni" useId="menu-logout-icon" />}
         label={who.signOut || t("me.signOut")} labelId="menu-logout-label" onClick={() => logout()} />
+      <MenuItem id="menu-owner" cls={owner ? undefined : "hidden"} icon={<Icon symbol="icon-user" cls="ni" />} label={t("setup.ask")}
+        onClick={() => askOwner(mainMenuButton.current)} />
     </Dropdown>
   );
 }

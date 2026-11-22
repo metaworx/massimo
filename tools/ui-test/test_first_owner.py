@@ -266,10 +266,12 @@ def test_a_page_left_open_learns_of_the_owner(new_context, case, watch, guard, w
     learns it when the server next refuses it: nothing reads who is in at
     a resync, but the stream's next ticket is refused once the server
     has users, and the page asks for a sign-in. With the first owner's
-    card shown the card turns to the sign-in; after Skip for now the
-    sign-in's card opens. The ticket asked again stands in for the
-    stream the server ends at its next keep-alive. Fails on the page
-    before: no card, no Skip."""
+    card shown on a running page the page stands still, no stream opened
+    (AP FirstOwner, D35), and what still reads by itself (the log's own
+    poll, a read here) is refused: the card turns to the sign-in; after
+    Skip for now the sign-in's card opens. The ticket asked again stands
+    in for the stream the server ends at its next keep-alive. Fails on
+    the page before: no card, no Skip."""
     stage = {"me": None if where == "card" else OPEN}
     page = start_page(new_context, guard, watch, lambda: stage["me"])
     if where == "card":
@@ -285,10 +287,15 @@ def test_a_page_left_open_learns_of_the_owner(new_context, case, watch, guard, w
         page.wait_for_selector(".room", timeout=10000)
         assert wait_until(page, "state.eventsOpen", 10), "the page started"
     page.route("**/events/ticket", lambda route: route.fulfill(status=401, content_type="application/json", body='{"error":"authentication required"}'))
-    page.evaluate("() => { connectEvents(); }")
     if where == "card":
+        page.route("**/api/v1/me?again=1", lambda route: route.fulfill(status=401, content_type="application/json",
+                                                                     body='{"error":"authentication required"}'))
+        page.evaluate("() => { api('GET', 'api/v1/me?again=1').catch(() => {}); }")
         turned(page)
+        page.unroute("**/api/v1/me?again=1")
     else:
+        page.evaluate("() => { connectEvents(); }")
+    if where != "card":
         assert wait_until(page, DIALOG_OPEN, 5), "the sign-in opens"
         assert page.locator("#login-ways").is_visible() and page.locator("#setup").is_hidden(), "the sign-in's card"
         assert page.locator("#login-ways .login-way[data-way='password']").get_attribute("aria-pressed") == "true", \
