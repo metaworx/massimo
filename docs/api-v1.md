@@ -162,6 +162,10 @@ The server authenticates in one of three ways, by what it has:
   as the original software can on the LAN.
   `POST /api/v1/users` from an address on the local network creates the first
   owner (see that route), and `massimo user add` does the same on the box.
+  The setting `auth.keep_open` says the server is kept open on purpose,
+  so that the web UI does not ask for the first owner;
+  it changes nothing about who is let in,
+  and goes with the first user (GET and PUT /api/v1/settings).
 - **Token**, no store (`serve -addr`):
   `MASSIMO_API_TOKEN` (or `-token`) is the one token, as before the store;
   without it the API is open as in open mode.
@@ -457,6 +461,8 @@ none for a disabled role) and `token`, the one presented;
 outside users mode `user` and `role` are null and `capabilities` is every one.
 `setup` is true on an open server for a caller on the local network,
 the one that may create the first owner.
+`kept_open` is true on an open server while the setting `auth.keep_open` is on,
+and absent otherwise: the web UI then does not ask for the first owner.
 `auth_version` 1 says the server hashes the password;
 2, that the user signs in by OPAQUE (below) and the server never sees it.
 
@@ -637,6 +643,11 @@ On a server without users, `POST /api/v1/users` creates the first owner:
 open to a caller on the local network (loopback, a private range, link-local),
 `role` `owner` (absent, or that) and a password or a record required,
 `403` from anywhere else; `massimo user add` on the box is the other way.
+The first owner is created once:
+where two requests come at the same moment,
+the server counts the users again as it writes the owner,
+and the second is `409` with `the first owner exists already: sign in`;
+its registration (below) kept nothing, so nothing is left of it.
 From then on the server is in users mode (Authentication).
 
 `GET /api/v1/users/{name}` is one user.
@@ -1805,6 +1816,22 @@ until someone with `users` sets a password for it.
 `integrations.requests`, true by default, says whether integrations may
 ask to be registered (`POST /api/v1/integrations/requests`), and applies
 at once; the announcement's `reg` says it on the LAN.
+`auth.keep_open`, false by default, says that a server without users is kept
+open on purpose, and applies at once:
+`GET /api/v1/me` then says `kept_open`, and the web UI does not ask for the
+first owner.
+The web UI sets it from the sign-in card once the page's own address is entered,
+and System settings → Users turns it off again (docs/ui.md).
+It changes nothing about who is let in:
+the local network alone, as on any open server (Authentication).
+It counts only while the server has no users:
+the first user removes it, however it is made
+(the API, `massimo user add`, `MASSIMO_API_TOKEN`, an integration approved),
+and so do the server's start and a reload of the settings file
+where they find users beside it;
+the log says `keep-open setting removed`.
+With users, `in_effect` is `false`, and `true` is `409`;
+`false` and `null` are taken.
 `announce`, `auto` by default, says whether the server announces itself
 on the LAN by mDNS (README.md, "Server"): `on`, `off`,
 or `auto`, on unless it listens on a loopback address;
@@ -1819,7 +1846,7 @@ the build's flavour by default, and applies at once;
 `{"stale_after": "36h", "refresh_interval": null}`,
 with `null` for the default and `"0"` to switch the refresh or the periodic discovery off.
 A number setting takes a JSON number, or the number as a string,
-`auth.password_login` and `integrations.requests` `true` or `false`,
+`auth.password_login`, `integrations.requests` and `auth.keep_open` `true` or `false`,
 `announce` `auto`, `on` or `off`, and `update.channel` a name.
 The ranges: `stale_after` and `stale_after_wall` 1h to 720h, `poll_interval` 10s to 1h,
 `refresh_interval` 10m to 168h, `discover_interval` 1m to 24h, `duty_wait` 1m to 1h,

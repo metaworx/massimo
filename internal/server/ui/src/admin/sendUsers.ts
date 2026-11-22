@@ -23,7 +23,7 @@ import { actionRunner } from "../shared/action";
 import { forgetForms } from "../shared/forms";
 import { session, stillSession } from "../shared/session";
 import { wordNameError } from "../shared/username";
-import { enabled, passwordLogin, reads, roles, said, userFormKey, userUI, users } from "./store";
+import { enabled, keptOff, passwordLogin, reads, roles, said, userFormKey, userUI, users } from "./store";
 import { can, canManageUsersOf, isMe, me } from "../shared/me";
 
 /** usersAdmin says what the signed-in user may do with users: everything, guests only, or nothing but its own user. */
@@ -172,6 +172,26 @@ export async function loadPasswordLogin(): Promise<void> {
     passwordLogin.value = !v || v.value !== "false";
   } catch {
     // the switch stays as it was
+  }
+}
+
+/**
+ * keepOpenOff turns keeping the server open off (auth.keep_open false),
+ * saved at once, then reads who is in, so that the whole page knows the
+ * server is kept open no more, by a read that asks for nobody: the page
+ * asks for the owner again at its next load and nothing at once (AP
+ * FirstOwner, D5, D31, D44); refused, the switch stays on and the line
+ * says why. Turning it on is the sign-in card's confirmation alone (D32).
+ */
+export async function keepOpenOff(): Promise<void> {
+  const n = session();
+  try {
+    await api("PUT", "api/v1/settings", { "auth.keep_open": false });
+    if (!stillSession(n)) return;
+    keptOff.showing = true;
+    await loadMe(false);
+  } catch (e) {
+    if (stillSession(n)) usersMsg(t("users.keepOpenFailed", { error: (e as Error).message }), false);
   }
 }
 

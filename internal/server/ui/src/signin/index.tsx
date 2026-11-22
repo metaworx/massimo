@@ -5,11 +5,12 @@
  * @file internal/server/ui/src/signin/index.tsx
  *
  * The sign-in as parts (AP UiParts, Block 14): the card into the
- * skeleton's #login-dialog, the first owner's form into #setup-slot and
- * the open server's warning into #open-banner-slot, each drawn once as
- * parts.js loads, before any sign-in is asked for, and from then on by
- * their signals: who is in (shared/me.ts, state.me underneath, which
- * login.js applyCaps writes at every read of it), and what askLogin and the plain code
+ * skeleton's #login-dialog, with the first owner's form in it on a server
+ * without users (AP FirstOwner), and the open server's warning into
+ * #open-banner-slot, each drawn once as parts.js loads, before any
+ * sign-in is asked for, and from then on by their signals: who is in
+ * (shared/me.ts, state.me underneath, which login.js applyCaps writes at
+ * every read of it), and what askLogin and the plain code
  * hand over through MassimoParts.signIn.
  */
 
@@ -18,11 +19,9 @@ import { register, mounter } from "../shared/region";
 import { readApp } from "./app";
 import { Banner } from "./Banner";
 import { Card } from "./Card";
-import { Setup } from "./Setup";
-import { card, closed, forgetCard, open, type Way } from "./store";
+import { asksOwner, card, closed, forgetCard, open, toSignIn, type Way } from "./store";
 
 mounter("login-dialog", () => <Card />)();
-mounter("setup-slot", () => <Setup />)();
 mounter("open-banner-slot", () => <Banner />)();
 
 /** signedOut forgets what the card holds of the last opening (MassimoParts.signedOut, index.ts): a choice it waits for, its lines. */
@@ -30,9 +29,17 @@ export const signedOut = forgetCard;
 
 /** The functions the plain code calls, MassimoParts.signIn. */
 const signIn = register("signIn", {
-  /** open takes askLogin's opening: the way chosen, a provider's refusal to say ("" for none) and the sign-in it answers. */
-  open(way: Way, said: string, ask: SignInAsk): void {
-    open(way, said, ask);
+  /** open takes askLogin's opening: the way chosen, or "owner" for the first owner's form, a provider's refusal to say ("" for none) and the sign-in it answers. */
+  open(on: Way | "owner", said: string, ask: SignInAsk): void {
+    open(on, said, ask);
+  },
+  /** asksOwner says whether the card asks for the first owner, after a read of who is in (login.js loadMe). */
+  asksOwner(): boolean {
+    return asksOwner();
+  },
+  /** toSignIn turns the first owner's form into the sign-in where a refusal says the server has users now (login.js askLogin); it reports whether it turned. */
+  toSignIn(): boolean {
+    return toSignIn();
   },
   /** closed takes the card's closing (askLogin's done). */
   closed(): void {

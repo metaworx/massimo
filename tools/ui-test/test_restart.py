@@ -155,24 +155,37 @@ def test_reload_settings(page):
         page.unroute("**/api/v1/restart")
 
 
-def test_sign_in_offers_the_key_after_an_open_server(page):
+def test_sign_in_offers_the_key_after_a_server_without_a_store(page):
     """The sign-in dialog chooses its API key's form once the page has
-    seen the server open, since the owner made from MASSIMO_API_TOKEN has
-    no password; before that the name's form."""
+    seen a server without a store ask for no key, since the only way in
+    there is MASSIMO_API_TOKEN; a server seen open with a store keeps the
+    name's form, its owner made with a password by the first owner's
+    form (AP FirstOwner, D42); before either the name's form. The open
+    server's stub says the caller is not on the local network, so that
+    no first owner's card opens."""
+    def seen(mode):
+        body = json.dumps({"mode": mode, "user": None, "role": None, "capabilities": [], "setup": False})
+        page.route("**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body=body))
+        page.evaluate("loadMe()")
+        page.unroute("**/api/v1/me")
+        page.evaluate("askLogin(); null")
+        assert wait_until(page, "document.getElementById('login-dialog').open", 5), f"the dialog opens after mode {mode}"
+
+    def close():
+        page.evaluate("document.getElementById('login-dialog').close()")
+        # askLogin() hands out the open dialog's promise until its close event ran.
+        assert wait_until(page, "loginPromise === null", 5), "the dialog's close handled"
+
     page.evaluate("askLogin(); null")
     assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the dialog opens"
     assert page.locator("#login-form").is_visible() and page.locator("#login-key-form").is_hidden(), "the name's form on a server that always asked"
-    page.evaluate("document.getElementById('login-dialog').close()")
-    # askLogin() hands out the open dialog's promise until its close event ran.
-    assert wait_until(page, "loginPromise === null", 5), "the dialog's close handled"
-    body = json.dumps({"mode": "open", "user": None, "role": None, "capabilities": [], "setup": False})
-    page.route("**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body=body))
-    page.evaluate("loadMe()")
-    page.unroute("**/api/v1/me")
-    page.evaluate("askLogin(); null")
-    assert wait_until(page, "document.getElementById('login-dialog').open", 5), "the dialog opens again"
+    close()
+    seen("open")
+    assert page.locator("#login-form").is_visible() and page.locator("#login-key-form").is_hidden(), "the name's form after an open server"
+    close()
+    seen("none")
     assert page.locator("#login-key-form").is_visible() and page.locator("#login-form").is_hidden(), "the API key's form is chosen"
-    page.evaluate("document.getElementById('login-dialog').close()")
+    close()
 
 
 def test_store_and_settings_in_effect(page):

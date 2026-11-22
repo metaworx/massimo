@@ -18,7 +18,7 @@ import { ProvidersCard } from "./Providers";
 import { CapsCard, RolesCard } from "./Roles";
 import { loadProviders, providersMsg } from "./sendProviders";
 import { loadRoles, rolesMsg } from "./sendRoles";
-import { forgetAdmin, reads, said } from "./store";
+import { forgetAdmin, keptOff, reads, said } from "./store";
 import { UsersCard } from "./Users";
 import { loadPasswordLogin, loadUsers, usersMsg } from "./sendUsers";
 import { onView } from "../shared/pages";
@@ -50,6 +50,7 @@ export const signedOut = forgetAdmin;
 // System settings shown: the users read and drawn, the open panels' sessions, keys and identities with them
 onView("system", () => {
   said.users = null;
+  keptOff.showing = false; // a server's keeping open turned off in the last showing: its row goes now
   if (!canManageUsersOf()) return;
   mountUsers();
   loadUsers()

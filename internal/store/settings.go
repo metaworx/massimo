@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 )
 
@@ -289,4 +290,116 @@ func (s *Store) IntegrationRequests(ctx context.Context) bool {
 		s.log.Warn("store: the integrations' requests setting not read; it stays on", "error", err)
 	}
 	return !ok || on
+}
+
+// KeepOpenKey says that a server without users is kept open on purpose
+// (false by default): the web UI then does not ask for the first owner
+// (AP FirstOwner, D11). It counts only while the server has no users,
+// and goes with the first one: every transaction of the store that
+// makes a user removes it (dropKeepOpen), and the server removes it at
+// its start and at a reload where it finds users (DropKeepOpen). It
+// changes nothing about who is let in.
+const KeepOpenKey = "auth.keep_open"
+
+// ErrHasUsers is a change that only a server without users takes: the
+// setting KeepOpenKey switched on, or the first owner once there is one.
+var ErrHasUsers = errors.New("store: the server has users")
+
+// KeepOpen reports whether the server without users is kept open; a
+// setting that cannot be read counts as the default, off.
+func (s *Store) KeepOpen(ctx context.Context) bool {
+	on, ok, err := s.SettingBool(ctx, KeepOpenKey)
+	if err != nil {
+		s.log.Warn("store: the keep-open setting not read; it counts as off", "error", err)
+	}
+	return ok && on
+}
+
+// SetKeepOpen writes the setting KeepOpenKey for the user by (0: nobody,
+// as on an open server), in one transaction with the count of the
+// users: on, it is ErrHasUsers where the server has any.
+func (s *Store) SetKeepOpen(ctx context.Context, on bool, by int64) error {
+	if err := s.writable(); err != nil {
+		return err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("store: setting %s: %w", KeepOpenKey, err)
+	}
+	defer tx.Rollback()
+	if on {
+		var n int
+		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM users WHERE deleted_at IS NULL`).Scan(&n); err != nil {
+			return fmt.Errorf("store: setting %s: %w", KeepOpenKey, err)
+		}
+		if n > 0 {
+			return fmt.Errorf("%w: %s counts only on a server without users", ErrHasUsers, KeepOpenKey)
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO settings (key, value, updated_at, updated_by, origin) VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at, updated_by = excluded.updated_by,
+			origin = excluded.origin, version = settings.version + 1, deleted_at = NULL`, KeepOpenKey, strconv.FormatBool(on), s.nowText(), nullID(by), s.nodeID); err != nil {
+		return fmt.Errorf("store: setting %s: %w", KeepOpenKey, err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("store: setting %s: %w", KeepOpenKey, err)
+	}
+	return nil
+}
+
+// dropKeepOpen removes the setting KeepOpenKey inside tx, a transaction
+// that has just made a user: a tombstone, written by the server itself.
+// It reports whether the setting was there; the caller logs it once tx
+// is committed (keepOpenDropped).
+func (s *Store) dropKeepOpen(ctx context.Context, tx execer) (bool, error) {
+	now := s.nowText()
+	res, err := tx.ExecContext(ctx, `UPDATE settings SET deleted_at = ?, updated_at = ?, updated_by = NULL, origin = ?, version = version + 1 WHERE key = ? AND deleted_at IS NULL`,
+		now, now, s.nodeID, KeepOpenKey)
+	if err != nil {
+		return false, fmt.Errorf("store: setting %s: %w", KeepOpenKey, err)
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+// keepOpenDropped logs a removal of dropKeepOpen whose transaction is
+// committed: why says what made the user, and who the key-value pairs
+// that name it (user, or integration).
+func (s *Store) keepOpenDropped(dropped bool, why string, who ...any) {
+	if dropped {
+		s.log.Info("keep-open setting removed: the server has a user", append([]any{"key", KeepOpenKey, "why", why}, who...)...)
+	}
+}
+
+// DropKeepOpen removes the setting KeepOpenKey where the server has
+// users, for a start and a reload: what another process, or an older
+// version, left behind. It reports whether it removed it; a store
+// opened read-only is left as it is.
+func (s *Store) DropKeepOpen(ctx context.Context) (bool, error) {
+	if s.writable() != nil {
+		return false, nil
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, fmt.Errorf("store: setting %s: %w", KeepOpenKey, err)
+	}
+	defer tx.Rollback()
+	var n int
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM users WHERE deleted_at IS NULL`).Scan(&n); err != nil {
+		return false, fmt.Errorf("store: setting %s: %w", KeepOpenKey, err)
+	}
+	if n == 0 {
+		return false, nil
+	}
+	dropped, err := s.dropKeepOpen(ctx, tx)
+	if err != nil {
+		return false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return false, fmt.Errorf("store: setting %s: %w", KeepOpenKey, err)
+	}
+	if dropped {
+		s.log.Info("keep-open setting removed: the server has users", "key", KeepOpenKey, "users", n)
+	}
+	return dropped, nil
 }

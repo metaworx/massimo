@@ -20,29 +20,38 @@ OPEN_SETUP = json.dumps({"mode": "open", "user": None, "role": None, "capabiliti
 def test_create_the_owner_stays_busy_while_the_app_keeps(new_context, case, watch, guard):
     """In the app, Create the owner with the switch on stays busy until
     the app has answered whether it kept the login by fingerprint (UiParts
-    D213): a second tap while the system's prompt is open creates nothing,
-    where it posted the owner again and said the name was taken. The
-    second submit is the form's own (requestSubmit, as Enter on another
-    form's field would be): Enter on a field whose default button is off
-    never submits, so a key press would try the button's disabled
-    attribute and not the part's guard. A second creation would be sent
-    at once, the creation being stubbed: the posts are counted once the
-    first has ended. The owner's creation and sign-in are stubbed (POST
-    /api/v1/users, and the page's registerPassword and signIn), so that
-    the test server keeps its users; /api/v1/me says an open server
-    without users."""
+    D213), and then until the sign-in card that holds the form has closed
+    (AP FirstOwner): a second tap while the system's prompt is open
+    creates nothing, where it posted the owner again and said the name was
+    taken. The second submit is the form's own (requestSubmit, as Enter
+    on another form's field would be): Enter on a field whose default
+    button is off never submits, so a key press would try the button's
+    disabled attribute and not the part's guard. A second creation would
+    be sent at once, the creation being stubbed: the posts are counted
+    once the first has ended. The owner's creation and sign-in are stubbed
+    (POST /api/v1/users, and the page's registerPassword and signIn), so
+    that the test server keeps its users; /api/v1/me says an open server
+    without users, which opens the card on the running page, and the
+    server's own answer once the owner is made."""
     page = server_page(new_context, guard, watch, {"status": {"can": True, "user": "", "ask": "start", "plain": False}}, token=TOKEN)
     page.wait_for_selector(".room", timeout=10000)
     posts = []
+    stage = {"open": True}
 
     def users(route):
         if route.request.method != "POST":
             return route.continue_()
         posts.append(route.request.url)
+        stage["open"] = False
         route.fulfill(status=201, content_type="application/json", body="{}")
 
+    def me(route):
+        if not stage["open"]:
+            return route.continue_()
+        route.fulfill(status=200, content_type="application/json", body=OPEN_SETUP)
+
     page.route("**/api/v1/users", users)
-    page.route("**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body=OPEN_SETUP))
+    page.route("**/api/v1/me", me)
     try:
         page.evaluate("""() => {
           registerPassword = async () => ({ record: "r", ksf: "m=19456,t=2,p=1" });
@@ -63,12 +72,13 @@ def test_create_the_owner_stays_busy_while_the_app_keeps(new_context, case, watc
         assert submit.evaluate("(b) => b.classList.contains('busy') && b.disabled"), "Create the owner turns while the app keeps the login"
         page.evaluate("() => { document.getElementById('setup-form').requestSubmit(); }")
         page.evaluate("() => { window.__letKeepGo(); }")
-        assert wait_until(page, "!document.getElementById('setup-msg').classList.contains('hidden') && "
+        assert wait_until(page, "!document.getElementById('login-dialog').open && "
                                 "!document.querySelector('#setup-form button[type=submit]').classList.contains('busy')", 5), \
-            "the form says how it went, and Create the owner stops turning"
+            "the card closes, and Create the owner stops turning"
         assert len(posts) == 1, f"a second submit while the app keeps the login creates nothing: {posts}"
-        assert not page.evaluate("document.getElementById('setup-msg').classList.contains('bad')"), \
-            page.evaluate("document.getElementById('setup-msg').textContent")
+        assert page.evaluate("document.getElementById('toast-body').textContent === t('setup.done', {name: %s})"
+                             % json.dumps(f"owner-{case.width}-{case.lang}")), \
+            page.evaluate("document.getElementById('toast-body').textContent")
     finally:
         page.unroute("**/api/v1/me")
         page.unroute("**/api/v1/users")

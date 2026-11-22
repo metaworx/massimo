@@ -16,7 +16,10 @@
  * each way, in the app with Cancel; the box that says the login by
  * fingerprint was not kept, the two forms and the box in one place of one
  * height (style.css .login-forms), so that a switch of the way moves
- * nothing of the card (UiParts D224); the version at the foot. The forms
+ * nothing of the card (UiParts D224); on a server without users, in
+ * their place and the ways', the first owner's form (Owner.tsx), the card
+ * at its own height, its title saying that there are no users yet and no
+ * provider read (AP FirstOwner, D23); the version at the foot. The forms
  * are real forms with named fields, for a password manager, and their fields are
  * not controlled (UiParts D210): a draw never sets what they hold, they
  * are read at the submit and emptied at each opening alone, as
@@ -40,12 +43,13 @@ import { ModeSelect } from "../shared/mode";
 import { BusyButton, busyProps, useBusy } from "../shared/question";
 import { VersionRow, version } from "../shared/server";
 import { app, keepLogin, kept, offer, plainHere, readApp } from "./app";
+import { Owner } from "./Owner";
 import { ask, askFocus, card, chooseWay, keepChosen, type Way } from "./store";
 
 /** The ways to sign in by a form, their data-way and their name's key, in the row's order after the fingerprint. */
 const WAYS: [Way, string][] = [["password", "login.password"], ["key", "login.token"]];
 
-/** Menu is the card's ☰: the version, the language and the mode before anyone signs in, as My settings sets them, and in the app Select server last. */
+/** Menu is the card's ☰: the version, the language and the mode before anyone signs in, as My settings sets them, and in the app Select server last, off while a request of the card is under way. */
 function Menu() {
   useLang(); // the language and the mode chosen are state.settings', signals (shared/data.ts)
   const servers = !!appConnect();
@@ -60,7 +64,7 @@ function Menu() {
       <ModeSelect id="login-mode" label={t("appearance.title")} wide />
       <hr id="login-menu-servers-sep" class={"menu-sep" + hid(!servers)} />
       <MenuItem id="login-menu-servers" cls={servers ? undefined : "hidden"} icon={<Icon symbol="icon-servers" cls="ni" />} label={t("app.selectServer")}
-        onClick={toServers} />
+        disabled={card.working} onClick={toServers} />
     </Dropdown>
   );
 }
@@ -71,6 +75,7 @@ export function Card() {
   const opened = card.opened;
   const focus = card.focus;
   const way = card.way;
+  const owner = card.owner;
   const st = app.value;
   const fpShown = kept(st);
   const offered = offer(st);
@@ -91,13 +96,14 @@ export function Card() {
     setKeep(false);
   }, [opened]);
   // the focus asked for, given in the drawing that shows its place: the chosen way's first field at an opening and at a
-  // way's click, the password after a refusal, Try again where the login by fingerprint was not kept
+  // way's click, the password after a refusal, Try again where the login by fingerprint was not kept; the first owner's
+  // name is Owner's
   // biome-ignore lint/correctness/useExhaustiveDependencies: focus is read from the card's store, which Biome takes for a stable import; the effect is for each focus asked, so it is listed.
   useLayoutEffect(() => {
     if (!focus.n) return;
     if (focus.on === "way") wayFocus();
     else if (focus.on === "password") passRef.current?.focus();
-    else retryRef.current?.focus();
+    else if (focus.on === "retry") retryRef.current?.focus();
   }, [focus]);
   // the one place that puts the focus into the chosen way's first field, at an opening and at a way's click; none on a
   // touch screen, where it would bring the soft keyboard up by itself and move the card (UiParts D224): the keyboard
@@ -164,8 +170,8 @@ export function Card() {
   return (
     <>
       <BrandName />
-      <h3 id="login-title" class="login-title">{t("login.title")}</h3>
-      <div id="login-providers" class={"login-providers" + hid(!card.providers.length && !card.providersSaid)}>
+      <h3 id="login-title" class="login-title">{t(!owner ? "login.title" : card.ownerStep === "keep" ? "keepOpen.title" : "setup.title")}</h3>
+      <div id="login-providers" class={"login-providers" + hid(owner || (!card.providers.length && !card.providersSaid))}>
         <div id="login-provider-buttons" class="login-provider-buttons">
           {card.providers.map((p) => (
             <BusyButton key={p.key} label={t("login.with", { name: p.name })} data={{ provider: p.key }}
@@ -175,7 +181,7 @@ export function Card() {
         <ResultLine id="login-providers-error" cls="small" role="alert" res={card.providersSaid} />
       </div>
       <div id="login-row" class="login-row">
-        <div id="login-ways" class={"login-ways" + hid(card.waysOff)} role="group" aria-label={t("login.ways")}>
+        <div id="login-ways" class={"login-ways" + hid(card.waysOff || owner)} role="group" aria-label={t("login.ways")}>
           <button type="button" id="login-way-fp" {...busyProps("login-way login-way-fp" + hid(!fpShown), fp.busy)} aria-label={fpLabel} title={fpLabel}
             onClick={fingerprint}><Icon symbol="icon-fingerprint" cls="ni" /></button>
           {WAYS.map(([w, key]) => (
@@ -184,8 +190,8 @@ export function Card() {
         </div>
         <Menu />
       </div>
-      <p id="login-fp-plain" class={"notice small" + hid(!plainHere(st))} role="note">{t("login.fingerprintPlain")}</p>
-      <div class="login-forms">
+      <p id="login-fp-plain" class={"notice small" + hid(!plainHere(st) || owner)} role="note">{t("login.fingerprintPlain")}</p>
+      <div class={"login-forms" + hid(owner)}>
         <form id="login-form" method="post" class={hid(way !== "password" || !!keepFailed).trim() || undefined} onSubmit={submitPassword}>
           <p class="muted">{t("login.text")}</p>
           <p id="login-tls" class={"notice small" + hid(!card.selfSigned)} role="note">{t("header.selfSigned")}</p>
@@ -217,6 +223,7 @@ export function Card() {
           </div>
         </form>
       </div>
+      <Owner />
       <p id="login-version" class="login-version mono small muted">{v ? splitVersion(v).short : ""}</p>
     </>
   );

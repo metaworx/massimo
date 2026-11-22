@@ -158,7 +158,8 @@ sudo systemctl start massimo
 ```
 
 or start it and create the owner in the web UI from the local network,
-which until then may use it unasked;
+which asks for the owner at each load until it exists,
+and which until then may use it unasked;
 the Cubes are added there too (System settings → Cubes, "Found on the LAN").
 The binary's full path and `-env` let the first line run from any
 directory, a home directory the service user may not enter included,
@@ -386,7 +387,8 @@ sudo systemctl start massimo
 ```
 
 or start it and create the owner in the web UI from the local network,
-which until then may use it unasked.
+which asks for the owner at each load until it exists,
+and which until then may use it unasked.
 The Cubes are added there too, under System settings → Cubes,
 "Found on the LAN";
 `/etc/massimo/env` takes what the web UI does not,

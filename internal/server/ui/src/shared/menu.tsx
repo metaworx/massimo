@@ -12,10 +12,13 @@
  * open menu stays open, and its items follow, when data comes in.
  */
 
-import type { ComponentChildren, TargetedMouseEvent } from "preact";
+import { createRef, type ComponentChildren, type Ref, type TargetedMouseEvent } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import { Icon } from "./icon";
 import { busyProps } from "./question";
+
+/** mainMenuButton is the header's ☰ button, filled by the page's chrome (its Dropdown's summaryRef), for a part that gives the focus back there (the open server's Hide, ☰'s Create the owner…). */
+export const mainMenuButton = createRef<HTMLElement>();
 
 /**
  * Dropdown is a details of the classes "menu" and cls (its id id): its
@@ -31,10 +34,13 @@ import { busyProps } from "./question";
  * the focus on the item marked aria-current, else on the first, among
  * arrows' items, or its list's buttons that are on without arrows. A click
  * on any button of its list closes it (dropdown), as every menu of the
- * page, but on one marked keepOpen (MenuItem).
+ * page, but on one marked keepOpen (MenuItem). summaryRef holds its
+ * summary, for an item whose result gives the focus back there (☰'s
+ * Create the owner…).
  */
-export function Dropdown({ id, cls, summaryId, summaryCls, label, title, summary, listCls, arrows, focusCurrent, busy, onClick, onOpen, onClose, children }: {
+export function Dropdown({ id, cls, summaryId, summaryCls, summaryRef, label, title, summary, listCls, arrows, focusCurrent, busy, onClick, onOpen, onClose, children }: {
   id?: string;
+  summaryRef?: Ref<HTMLElement>;
   cls?: string;
   summaryId?: string;
   summaryCls?: string;
@@ -78,7 +84,7 @@ export function Dropdown({ id, cls, summaryId, summaryCls, label, title, summary
   const sum = summaryCls || "";
   return (
     <details ref={ref} id={id} class={cls ? "menu " + cls : "menu"} onClick={onClick}>
-      <summary id={summaryId} class={(busy ? sum + " busy" : sum) || undefined} title={title || label} aria-label={label}
+      <summary ref={summaryRef} id={summaryId} class={(busy ? sum + " busy" : sum) || undefined} title={title || label} aria-label={label}
         aria-busy={busy ? "true" : undefined}>{summary}</summary>
       <div class={listCls ? "menu-items " + listCls : "menu-items"}>{children}</div>
     </details>

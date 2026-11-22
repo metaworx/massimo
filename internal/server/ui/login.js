@@ -5,7 +5,8 @@
 // /api/v1/me), the sign-in dialog in place of the token prompt (a name
 // and a password, signed in by OPAQUE so that the password stays in the
 // browser, or an API key pasted, and in the app the login by
-// fingerprint, its card a part: ui/src/signin/), Log out, hiding what
+// fingerprint, and on a server without users the first owner's form,
+// its card a part: ui/src/signin/), Log out, hiding what
 // the role may not do, the proof of the own password and a password
 // registered by OPAQUE (which My profile, ui/src/profile/, sets the own
 // password with, and the first owner's form, ui/src/signin/, signs in
@@ -85,9 +86,11 @@ function setToken(token) {
   b.setToken(token).catch(() => {});
 }
 
-// sawOpen is set once the page has seen the server ask for no key: the
-// sign-in dialog then opens its API-key part, since the owner made from
-// MASSIMO_API_TOKEN has no password.
+// sawOpen is set once the page has seen a server without a store ask for
+// no key: the sign-in dialog then opens its API-key part, since the only
+// way in there is MASSIMO_API_TOKEN (or -token). A server seen open with
+// a store gets its owner from the first owner's form, with a password,
+// so its later sign-in opens on the password (AP FirstOwner, D42).
 let sawOpen = false;
 
 // A sign-in waits for none of its reads to come back in this session:
@@ -100,8 +103,15 @@ let sawOpen = false;
 // signed out (index.html), so that no button of the header shows before
 // the sign-in; once the server has answered, signed in, open, or not at
 // all (a server out of reach shows the page and its message), the page
-// shows, unless the sign-in dialog is still open (askLogin).
-async function loadMe() {
+// shows, unless the sign-in dialog is still open (askLogin). A server
+// without users that asks for its owner gets the sign-in card with the
+// first owner's form (askLogin "owner"), opened here, after every read
+// of who is in, and not waited for: the starts wait for it
+// (loadMeAndPreferences), so that nothing of the page is read or shown
+// behind it (AP FirstOwner, D27); with asks false the read asks for
+// nobody, for the read that follows keeping the server open turned off,
+// after which the next load asks (D31, D44).
+async function loadMe(asks = true) {
   const n = MassimoParts.session();
   let me = null;
   try {
@@ -109,10 +119,11 @@ async function loadMe() {
   } catch (e) {
     me = null;
   }
-  if (!MassimoParts.stillSession(n)) return state.me; // who was in before a sign-out: the next sign-in reads who is in
+  if (!MassimoParts.stillSession(n)) return state.me; // who was in before a sign-out: the next sign-in reads who is in, and asks for the owner there
   state.me = me;
-  if (state.me && (state.me.mode === "open" || state.me.mode === "none")) sawOpen = true;
+  if (state.me && state.me.mode === "none") sawOpen = true;
   applyCaps();
+  if (asks && MassimoParts.signIn.asksOwner()) askLogin("owner"); // ui/src/signin/store.ts: open, with a store, kept open by nobody, not skipped in this load
   if (!$("login-dialog").open) document.body.classList.remove("signed-out");
   return state.me;
 }
@@ -120,9 +131,9 @@ async function loadMe() {
 // applyCaps hides what the signed-in user may not do: the body gets a
 // class no-<capability> per capability the user lacks, and the markup
 // marks what each one hides with needs-<capability>. Who is in is the
-// parts' signal underneath state.me (ui/src/shared/data.ts): the first
-// owner's form, shown on an open server for a caller on the local network,
-// and the open server's warning are drawn from it (ui/src/signin/).
+// parts' signal underneath state.me (ui/src/shared/data.ts): the open
+// server's warning is drawn from it, and the sign-in card says by it
+// whether to ask for the first owner (ui/src/signin/).
 function applyCaps() {
   const body = document.body;
   for (const c of CAPABILITIES) body.classList.toggle("no-" + capClass(c), !hasCap(c));
@@ -206,11 +217,14 @@ let loginPromise = null;
 let startWaits = 0;
 
 // loadMeAndPreferences reads who is in, through the sign-in dialog where
-// the server asks for one, then the user's settings from the server.
+// the server asks for one, and through the first owner's card where the
+// server asks for its owner (loadMe), then the user's settings from the
+// server.
 async function loadMeAndPreferences() {
   startWaits++;
   try {
     await loadMe();
+    if (loginPromise) await loginPromise; // the first owner's card: created, skipped or turned to a sign-in
   } finally {
     startWaits--;
   }
@@ -305,25 +319,71 @@ function appConnect() {
 // (ui/src/signin/), handed the way to open on and the sign-in it
 // answers: it empties its fields, chooses the way and gives the focus as
 // it draws the opening, and each of its ways goes on to finishSignIn.
-function askLogin() {
-  if (loginPromise) return loginPromise;
-  notSentNow = false; // app.js: only the writes this sign-in answers
-  const was = whoIs(state.me); // a 401 while signed in: the drafts stay for this user alone (settleSignIn)
-  const held = holdPushes();
-  dropPendingSetpoints(); // rooms.js
+// With on "owner" it opens the card with the first owner's form, on a
+// server without users (loadMe), where nothing was refused: nobody was
+// signed in, no write was refused, so nothing is held, dropped or said
+// not sent, and no provider is read (AP FirstOwner). A refusal while the
+// first owner's form is shown means the server has users now: the card
+// turns to the sign-in, the same opening (D15): it keeps the owner's ask,
+// nobody before it and nothing held, and notSentNow is not reset at the
+// owner's opening nor at the turn. That is right at a start and after a
+// sign-out, where nothing of the page ran behind the card. An opening on
+// a running page (the banner, ☰ and Users, by the user's word; a read of
+// who is in) leaves the page standing still behind the card: the page's
+// poll stopped and its stream closed (connectEvents opens none
+// meanwhile, a restart's end included), both started again where the
+// card is left with nobody signed in (AP FirstOwner, D35). What a region
+// follows by itself goes on (the log's own poll of All Cubes, an update
+// or a restart being followed): a read of theirs refused while the owner
+// is being made waits for the sign-in the creation ends in and is sent
+// again, so it does no harm. Its turn to the sign-in
+// answers what the open page had under way as a refused request's sign-in
+// does: who was in (the open server), the pushes held, the setpoints
+// still waiting dropped, only the writes it answers said not sent. Each
+// opening's ask is closed once: its end (done, finishSignIn) does nothing
+// for an ask that was closed already, a late way's answer after the card
+// was dismissed or opened anew.
+function askLogin(on) {
+  if (loginPromise) {
+    if (on !== "owner" && MassimoParts.signIn.toSignIn()) {
+      const ask = loginPromise.ask;
+      if (ask.still) {
+        notSentNow = false; // app.js: only the writes this sign-in answers
+        ask.was = whoIs(state.me);
+        ask.held = holdPushes();
+        dropPendingSetpoints(); // rooms.js
+      }
+      renderLoginProviders();
+    }
+    return loginPromise;
+  }
+  const owner = on === "owner";
+  const still = owner && !startWaits; // on a running page: the page stands still behind the card
+  if (still) {
+    if (state.pollTimer) clearInterval(state.pollTimer);
+    state.pollTimer = null;
+    closeEvents(); // app.js
+  }
+  if (!owner) notSentNow = false; // app.js: only the writes this sign-in answers
+  const was = owner ? "" : whoIs(state.me); // a 401 while signed in: the drafts stay for this user alone (settleSignIn)
+  const held = owner ? { prefs: [], notify: false } : holdPushes();
+  if (!owner) dropPendingSetpoints(); // rooms.js
+  let made = null;
   loginPromise = new Promise((resolve) => {
     const dlg = $("login-dialog");
-    // the API key's form where the server was seen open, its owner of
-    // MASSIMO_API_TOKEN having no password
-    const way = sawOpen ? "key" : "password";
+    // the API key's form where a server without a store was seen, whose
+    // only way in is MASSIMO_API_TOKEN (AP FirstOwner, D42)
+    const way = owner ? "owner" : sawOpen ? "key" : "password";
     // a provider's refusal under the providers' buttons
     let said = "";
-    if (oidcError) {
+    if (!owner && oidcError) {
       const key = "login.oidcError." + oidcError;
       said = t(key) === key ? t("login.oidcError.failed") : t(key);
       oidcError = null;
     }
     const done = (ok) => {
+      if (ask.closed) return; // closed already: a late answer closes nothing of a later opening
+      ask.closed = true;
       dlg.onclose = null;
       if (dlg.open) dlg.close();
       MassimoParts.signIn.closed();
@@ -331,13 +391,23 @@ function askLogin() {
       loginPromise = null;
       resolve(ok);
     };
-    MassimoParts.signIn.open(way, said, { was, held, done }); // the fields emptied, the way chosen, the lines cleared, the switch off
-    renderLoginProviders();
-    MassimoParts.signIn.readApp(); // the app's login by fingerprint, as login.status() answers, not awaited (ui/src/signin/app.ts)
-    dlg.onclose = () => {
-      resumePushes(held); // dismissed: they go as they would have
+    // dismissed: the pushes held go as they would have (the dialog's close, and Skip for now); a running page stood
+    // still behind the card goes on
+    const dismiss = () => {
+      if (ask.closed) return;
+      resumePushes(ask.held);
       done(false);
+      if (still) {
+        startPolling(); // app.js
+        connectEvents();
+      }
     };
+    const ask = { was, held, done, owner, still, dismiss, closed: false };
+    made = ask;
+    MassimoParts.signIn.open(way, said, ask); // the fields emptied, the way chosen, the lines cleared, the switch off
+    if (!owner) renderLoginProviders();
+    MassimoParts.signIn.readApp(); // the app's login by fingerprint, as login.status() answers, not awaited (ui/src/signin/app.ts)
+    dlg.onclose = dismiss;
     document.body.classList.add("signed-out");
     // Not modal: the page behind is empty, and a modal dialog makes the
     // rest of the document inert, where a password manager draws its
@@ -345,6 +415,7 @@ function askLogin() {
     // first field of the form shown in the drawing that follows.
     dlg.show();
   });
+  loginPromise.ask = made; // the opening a later refusal turns
   return loginPromise;
 }
 
@@ -352,11 +423,25 @@ function askLogin() {
 // the fingerprint, once its token is set (ask, the sign-in askLogin
 // opened): the sign-in settled (the same user goes on, another starts
 // anew), the dialog closed, askLogin answered, and the page started where
-// no start waits for who is in.
+// no start waits for who is in. The first owner's opening reads who is in
+// before the card closes, so that the page shows the owner at once and
+// not the open server for a moment, and Create the owner turns until
+// then (AP FirstOwner); on a running page the page it was opened on is
+// shown again, read anew under the owner (D37). An ask closed meanwhile (dismissed, or ended by
+// another way) is left as it is: nothing is closed or started twice. It
+// reports whether it ended the ask.
 async function finishSignIn(ask) {
+  if (ask.closed) return false;
   await settleSignIn(ask.was, ask.held);
+  if (ask.closed) return false;
+  if (ask.owner) await loadMe();
+  if (ask.closed) return false;
   ask.done(true);
-  if (!startWaits) afterLogin();
+  if (!startWaits) {
+    afterLogin(!ask.owner);
+    if (ask.still) MassimoParts.pages.showView(MassimoParts.pages.shown(), "replace"); // the page it was opened on, read anew
+  }
+  return true;
 }
 
 // --- the sign-in by OPAQUE (docs/api-v1.md, "The sign-in by OPAQUE") ----
@@ -464,15 +549,16 @@ async function currentPassword(user, password) {
   return { current_password: password };
 }
 
-// afterLogin reads who is in, and starts the poll, the stream and the
+// afterLogin reads who is in, unless read is false (the first owner's
+// card read it before it closed), and starts the poll, the stream and the
 // data again, for a sign-in that no start waited for: a session that
 // ended while the page ran, a key pasted, the first owner. A write that
 // was not sent while the sign-in was open (notSent, app.js) and said so
 // on the page's message line, which the reload of the data clears, is
 // said there again, where the reload left the line empty.
-function afterLogin() {
+function afterLogin(read = true) {
   const said = notSentSaid();
-  loadMe()
+  (read ? loadMe() : Promise.resolve())
     .then(loadPreferences)
     .then(() => {
       startPolling(); // app.js: stopped where another user's sign-in forgot the session

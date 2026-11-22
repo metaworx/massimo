@@ -392,7 +392,8 @@ hence `failed_checks_forgotten`.
   head to rest below the row.
 - `test_sign_in_updates.py`, the sign-in as parts (AP UiParts, Block 14):
   in the app, Create the owner turns until the app has answered whether it
-  kept the login, and a second submit meanwhile creates nothing; a name and
+  kept the login and the card has closed, and a second submit meanwhile
+  creates nothing; a name and
   a password typed, the focus, a refusal and the way chosen stay, the same
   elements, through a second 401, the providers read again, a change of
   language and who is in read again; the fields are emptied at an opening
@@ -480,6 +481,60 @@ hence `failed_checks_forgotten`.
   marks that key and scrolls a row below the first screen into view,
   marks nothing for an id that is not one of the user's keys,
   and nothing once the address or the page shown changes.
+- `test_first_owner.py`, the first owner in the sign-in card (AP FirstOwner),
+  `/api/v1/me` stubbed as an open server:
+  the card opens at the page's start with the first owner's form,
+  no way to sign in, no provider, ☰ there, the name in focus,
+  nothing of the page read behind it;
+  Skip for now shows the open page with its banner, and a reload asks again;
+  no card where the server is kept open, has no store, or has users;
+  Create the owner turns until the card has closed, Skip for now and Cancel
+  off meanwhile, a second submit creates nothing, one read of `/me` from the
+  click to the page, a toast says it, with the login not kept in the app;
+  a card closed while it turns starts the page once, and the late end leaves
+  a later sign-in open;
+  the passwords' mismatch first, the name checked 2 s after the last
+  keystroke under the paused clock;
+  a 401 or a 409 turns the card to the sign-in, nothing carried over,
+  no write said not sent after the sign-in;
+  a page left open learns of an owner made elsewhere from its stream's
+  ticket refused, with the card shown and after Skip, the password's way
+  chosen;
+  the card centred and no wider than the window, each button's text on one
+  line, in a browser and in the app, at 390 px in six languages; on a
+  phone of 640 px it starts at the top and scrolls; over plain HTTP in the
+  app no sign-in's notice; on a touch screen no field in focus.
+- `test_keep_open.py`, keeping a server without users open (AP FirstOwner,
+  Block 3), `/api/v1/me` and the setting's write stubbed:
+  Keep it open… shows the confirmation in the form's place, the card not
+  moved, the owner's warning first, this page's address, the field in focus;
+  Confirm off for every other address and on for this page's, typed or
+  pasted, also reached as localhost; Enter with another address sends
+  nothing; Back keeps what was typed; Confirm sends the setting once and the
+  page starts once, a reload asks no more; a 401 or a 409 turns the card to
+  the sign-in, a 403 or a network failure is said; on a touch screen the
+  warning takes the focus; no Keep it open… where the server is kept open;
+  the switch in System settings → Users turns it off once and stays off for
+  that showing, and a refusal leaves it on; turned off, the card offers
+  Keep it open… again, and kept open from it the switch is back; after a
+  turn the card's ways out are on; the measures in six languages, and the
+  address copied in a browser and in the app without the clipboard's API.
+- `test_ways.py`, the ways to the first owner on a running page (AP
+  FirstOwner, Block 4), `/api/v1/me` stubbed: the banner's Create the
+  owner…, ☰'s and Users' each open the card, the page behind it still (no
+  poll, no stream) and Back to the page starts both again, the focus back
+  on what opened it, nothing skipped; Hide hides the warning, kept after a
+  reload, forgotten once the server has users, for that page alone where
+  the storage refuses; no buttons without a store; ☰'s entries on an open
+  server and with users; a hidden warning and ☰ to Create, the same page
+  shown again; Users' section on an open server, and the owner listed
+  after Create there; a setpoint under way lands; a refusal during Create
+  does not turn the card, a read waits and a write is said not sent; the
+  turn on a running page drops a stepped setpoint and another user's
+  sign-in forgets the open page; no stream behind the card; a refusal
+  during a Create that fails turns the card then; a half-typed form stays
+  through the card; a refused read forgets the hiding; a storage that
+  throws at the read; the warning's buttons at 390 px in six languages.
 - `test_preferences.py`, the settings that follow the user:
   the poll and the scheme set in one browser reach the server and a fresh
   browser with the same token,

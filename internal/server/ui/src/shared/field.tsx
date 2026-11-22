@@ -196,6 +196,13 @@ export function Field<T>({ label, id, wide, unit, hint, hintId, help, cls, label
 type Value<T> = { draft: Draft<T>; value?: undefined; set?: undefined } | { draft?: undefined; value: T; set: (v: T) => void };
 
 /**
+ * A text field's value: as Value, or not controlled at all, a field no
+ * drawing writes, read through its inputRef at the submit (the sign-in
+ * card's fields, UiParts D210, so that a password manager's fill stays).
+ */
+type TextValue = Value<string> | { draft?: undefined; value?: undefined; set?: undefined; inputRef: Ref<HTMLInputElement> };
+
+/**
  * TextField is a row with a text input that shows a stored text, as its
  * draft, or a free text by value and set: name, placeholder, maxLength
  * and pattern (what a valid value looks like), type (text by default; a
@@ -203,14 +210,17 @@ type Value<T> = { draft: Draft<T>; value?: undefined; set?: undefined } | { draf
  * input's, inputRef gives it the focus; limit marks a value refused (a
  * name too long), and the row is wide unless wide is false. A password
  * (type password, autocomplete new-password or current-password) is no
- * stored text: it is a free field by value and set, never a draft, so
- * that it is kept by its form's part alone; inputCls is the input's class
+ * stored text: it is a free field by value and set, or a field not
+ * controlled read through inputRef, never a draft, so that it is kept by
+ * its form's part alone; inputCls is the input's class
  * beside field-control (mono for a key). With row false it is the input
  * alone, standing in a tile's head (the log's search), as plain as it is
  * written: aria its name for a screen reader, as NumberField's and
- * Select's, no name, autocomplete or spellcheck of its own.
+ * Select's, no name, autocomplete or spellcheck of its own. Without a
+ * draft, a value and a set it is not controlled: no drawing writes what
+ * it holds, and its caller reads it through inputRef.
  */
-export function TextField({ label, id, wide = true, unit, hint, help, cls, limit, name, placeholder, type, autocomplete, inputCls, maxLength, pattern, required, disabled, draft, value, set, show, inputRef, row = true, aria }: Omit<Row, "label"> & Value<string> & {
+export function TextField({ label, id, wide = true, unit, hint, help, cls, limit, name, placeholder, type, autocomplete, inputCls, maxLength, pattern, required, disabled, draft, value, set, show, inputRef, row = true, aria }: Omit<Row, "label"> & TextValue & {
   label?: string;
   row?: boolean;
   aria?: string;
@@ -230,7 +240,7 @@ export function TextField({ label, id, wide = true, unit, hint, help, cls, limit
     <input ref={inputRef} id={id} type={(type || "text") as "text"} name={name} class={[unit || !row ? "" : "field-control", inputCls || ""].filter(Boolean).join(" ") || undefined}
       autocomplete={row ? autocomplete || "off" : autocomplete} spellcheck={row ? false : undefined} aria-label={aria}
       placeholder={placeholder} maxLength={maxLength} pattern={pattern} required={required} disabled={disabled} value={draft ? draft.value : value}
-      {...limitAria(id, limit)} onInput={(ev) => (draft ? draft.set(ev.currentTarget.value) : set(ev.currentTarget.value))} />
+      {...limitAria(id, limit)} onInput={(ev) => (draft ? draft.set(ev.currentTarget.value) : set?.(ev.currentTarget.value))} />
   );
   if (!row) return input;
   return (

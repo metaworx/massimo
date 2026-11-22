@@ -1,6 +1,6 @@
 > **Fragment** — inlined by `tools/sync-docs.sh`; not a standalone document.
 
-# {{project_name}} — Project Contract (v1.17.0)
+# {{project_name}} — Project Contract (v1.18.0)
 
 <!-- TEMPLATE: installed as {{guidelines_root}}/project/_CONTRACT.md. Replace
      every {{TODO: …}}, delete rows that do not apply. Shared documents
@@ -205,8 +205,10 @@ the ones an agent trips over most come first:
     (`shared/session.ts`).
   - **The plain scripts** are the texts (`i18n.js`) and the theme
     (`theme.js`), applied before the page draws;
-    the session, the sign-in by OPAQUE and through a provider and the
-    settings' pushes (`login.js`), with the providers' list (`providers.js`);
+    the session, the sign-in by OPAQUE and through a provider, the first
+    owner asked for, a running page held still behind the card the user
+    opened, and the settings' pushes (`login.js`), with the providers'
+    list (`providers.js`);
     the API, the settings, the loads, the stream and the page's start (`app.js`);
     what stays plain of the header: the radio budget, the server's clock,
     a Cube's link sign and word, the certificate's text and the version

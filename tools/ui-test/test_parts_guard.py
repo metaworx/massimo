@@ -296,6 +296,33 @@ def main_menu(page):
     open_main_menu(page)
 
 
+KEPT_OPEN = json.dumps({"mode": "open", "user": None, "role": None, "capabilities": [], "setup": True, "kept_open": True})
+
+
+def kept_open(page):
+    """GET /api/v1/me stubbed as an open server kept open for the rest of
+    the test (AP FirstOwner): no card asks, the banner and ☰ offer the
+    owner; who is in read again (the regions' source loadMe()) reads the
+    stub again."""
+    safe_route(page, "**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body=KEPT_OPEN))
+    page.evaluate("() => loadMe()")
+
+
+def main_menu_open_server(page):
+    """☰ open on an open server kept open, the focus on Create the owner…."""
+    kept_open(page)
+    main_menu(page)
+    page.locator("#menu-owner").focus()
+
+
+def open_banner(page):
+    """The open server's warning on a server kept open, the focus on its
+    Create the owner…."""
+    kept_open(page)
+    on_rooms(page)
+    page.locator("#open-banner-create").focus()
+
+
 def main_menu_item(page):
     """☰ open, the focus moved onto System settings' entry."""
     main_menu(page)
@@ -716,15 +743,26 @@ def scrolled_down(page):
 
 
 def first_owner(page):
-    """The first owner's form, GET /api/v1/me stubbed as an open server
-    without users for a caller on the local network for the rest of the
-    test (the region's own source, loadMe(), reads the stub again); Rooms
-    shown, where the form is, the focus moved onto Again by the view."""
+    """The first owner's form in the sign-in card (AP FirstOwner), GET
+    /api/v1/me stubbed as an open server without users for a caller on
+    the local network for the rest of the test, which opens the card on
+    the running page (loadMe(), one of SOURCES, reads the stub again and
+    hands out the same opening); the focus moved onto Again by the view."""
     body = json.dumps({"mode": "open", "user": None, "role": None, "capabilities": [], "setup": True})
     safe_route(page, "**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body=body))
     on_rooms(page)
-    page.evaluate("loadMe()")
-    page.locator("#setup-form").wait_for(state="visible")
+    page.evaluate("() => { loadMe(); }")
+    page.locator("#login-dialog[open] #setup-form").wait_for(state="visible")
+    settle(page)
+
+
+def keep_open_step(page):
+    """The confirmation that keeps the server open (AP FirstOwner, Block
+    3), shown from the first owner's form in the card, an address typed."""
+    if not page.locator("#login-dialog[open] #setup").is_visible():
+        first_owner(page)
+    page.locator("#setup-keep-open").click()
+    page.locator("#keep-open-address").fill("http://example.invalid")
     settle(page)
 
 
@@ -785,7 +823,13 @@ REGIONS = (
     Region("main-menu", ("header.top nav.nav",), (
         View("☰ open", main_menu),
         View("☰ open, the focus on an entry", main_menu_item, "#menu-system"),
+        View("☰ open on an open server, the focus on Create the owner…", main_menu_open_server, "#menu-owner"),
     )),
+    # The open server's warning with its buttons (AP FirstOwner, Block 4),
+    # drawn from who is in: who is in read again (one of SOURCES) and the
+    # language applied again are its sources.
+    Region("open-banner", ("#open-banner",), (View("the warning on a server kept open, the focus on Create the owner…", open_banner,
+                                                    "#open-banner-create"),), sources=("applyLanguage()",)),
     Region("home-notice", ("#home-notice",), (View("on the second server, its Cube not connected", home_notice),)),
     Region("rooms", ("#rooms",), (
         View("a tile's ⋯ menu open", rooms_menu),
@@ -934,11 +978,15 @@ REGIONS = (
         View("the Users card opened again, the focus on its fold", users_fold(False), "#sys-users .section-fold"),
         View("the personal page's sections menu open, the focus on an item", personal_sections, "#me .sec-menu .toc-link[data-target='prefs']"),
     )),
-    # The first owner's form is a part (AP UiParts, Block 14), drawn from
-    # who is in: who is in read again (loadMe) is its source; the view
+    # The first owner's form is a part (AP UiParts, Block 14), in the
+    # sign-in card since AP FirstOwner, opened from who is in: who is in
+    # read again (one of SOURCES, the same opening), the page's language
+    # drawn again and the app's status read again are its sources; the view
     # passed on the page before the move as well, where nothing drew the
     # plain form again.
-    Region("first-owner", ("#setup",), (View("the first owner's form, the focus in Again", first_owner, "#setup-again"),)),
+    Region("first-owner", ("#setup",), (View("the first owner's form in the card, the focus in Again", first_owner, "#setup-again"),
+                                        View("the confirmation that keeps the server open, an address typed", keep_open_step, "#keep-open-address")),
+           sources=("applyLanguage()", "MassimoParts.signIn.readApp()")),
     # The sign-in's card is a part (AP UiParts, Block 14), shown here as a
     # 401 opens it on a page signed in: its sources are a second askLogin
     # (another request's 401, which hands out the same opening), the
@@ -1123,6 +1171,7 @@ GUARD_JS = r"""() => {
       case "askLogin()": askLogin(); return settled(); // the opening it hands out is the one open
       case "renderLoginProviders()": return renderLoginProviders();
       case "applyLanguage()": applyLanguage(); return settled();
+      case "MassimoParts.signIn.readApp()": return MassimoParts.signIn.readApp().then(settled); // the app's status read again, as at an opening
     }
     throw new Error("the guard knows no data source " + source);
   }

@@ -1788,8 +1788,21 @@ massimo-week-program { display: contents; }
 
 /* the sign-in dialog, the first-owner form, System settings → Users and Roles */
 #login-error.bad { color: var(--bad); }
-.setup { margin-bottom: 16px; }
-.setup-form { padding: 0 14px 12px; display: flex; flex-direction: column; gap: 8px; }
+/* the first owner's form in the sign-in card (ui/src/signin/Owner.tsx), at
+   its own height (AP FirstOwner, D23), Skip for now in a row under it */
+.setup-form { display: flex; flex-direction: column; gap: 8px; }
+.setup-form > p { margin: 0; }
+/* the form and the confirmation that keeps the server open (ui/src/signin/
+   KeepOpen.tsx) in one place of one height, the step not shown kept there
+   unseen, so that Keep it open… and Back move nothing of the card */
+.owner-steps { display: grid; }
+.owner-steps > * { grid-area: 1 / 1; min-width: 0; }
+.owner-steps > .hidden { display: block !important; visibility: hidden; }
+.keep-open { display: flex; flex-direction: column; gap: 8px; }
+.keep-open > p { margin: 0; }
+#keep-open-warning { font-weight: 600; }
+.keep-open-origin { overflow-wrap: anywhere; }
+.login-owner-more { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
 #me-line { margin: 8px 0 4px; }
 #me-password { margin-bottom: 8px; }
 #me-password summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; }
@@ -2025,3 +2038,11 @@ massimo-week-program { display: contents; }
    configuration's devices tab (config.js renderDeviceForm). */
 .notice.device-unconfirmed { display: flex; gap: 6px; align-items: flex-start; }
 .notice.device-unconfirmed .ni { flex: none; margin-top: 2px; }
+/* the open server's warning's buttons (ui/src/signin/Banner.tsx): Create the
+   owner… and Hide after its text, wrapping under it on a phone */
+.open-banner-actions { display: inline-flex; flex-wrap: wrap; gap: 6px; margin-left: 6px; vertical-align: middle; }
+.open-banner-actions button { white-space: nowrap; }
+/* System settings → Users on a server without users (ui/src/admin/Users.tsx) */
+.users-open { display: flex; flex-direction: column; gap: 8px; }
+.users-open > p { margin: 0; }
+.users-kept-open { padding-top: 8px; border-top: 1px solid var(--line); }

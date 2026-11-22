@@ -16,7 +16,8 @@
  * notifications' card are drawn for whoever it names; whether it has My
  * profile (profileOf); and who is in in
  * the page's words (whoOf): the personal page's row, ☰'s Sign out and
- * Personal settings' tooltip, and the sign-out's question say it alike.
+ * Personal settings' tooltip, and the sign-out's question say it alike;
+ * and whether the first owner can be created from here (firstOwnerOf).
  */
 
 import { computed, signal } from "@preact/signals";
@@ -108,4 +109,15 @@ export function settingsPageOf(m: Me | null = me.value): boolean {
 /** isMe reports whether a user is the one signed in (isSelf of login.js). */
 export function isMe(name: string, m: Me | null = me.value): boolean {
   return !!(m && m.user && m.user.name === name);
+}
+
+/**
+ * firstOwnerOf says whether the first owner can be created from here: an
+ * open server, a store without users (a server without a store has no
+ * owner to create, AP FirstOwner D6), where who is in says the caller may
+ * (setup, a caller on the local network). The sign-in card asks for the
+ * owner by it, where the server is not kept open (auth.keep_open).
+ */
+export function firstOwnerOf(m: Me | null): boolean {
+  return !!(m && m.mode === "open" && m.setup);
 }

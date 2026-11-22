@@ -67,11 +67,11 @@ def test_logo_over_the_word(page, case):
     assert m.evaluate("(u) => getComputedStyle(u).fill") == DARK_M, "the lighter blue in dark mode"
     page.evaluate("document.documentElement.dataset.theme = 'light'")
     marked = page.evaluate("[...document.querySelectorAll('[data-brand]')].map((e) => e.querySelectorAll('svg').length)")
-    assert len(marked) >= 3 and all(n == 2 for n in marked), f"every marked element drawn, logo and mark ({marked})"
+    assert len(marked) >= 2 and all(n == 2 for n in marked), f"every marked element drawn, logo and mark ({marked})"
     clipped = page.evaluate("[...document.querySelectorAll('[data-brand] svg')].filter((e) => getComputedStyle(e).overflow !== 'visible').length")
     assert clipped == 0, "the round letters' overshoot below the baseline painted, not cut at the tight box"
     # each cover in the background of its place, so that it hides the word
-    covers = page.evaluate("""[['.top', '.top'], ['#login-dialog', '#login-dialog'], ['#setup', '#setup']].map(([place, bg]) => [
+    covers = page.evaluate("""[['.top', '.top'], ['#login-dialog', '#login-dialog']].map(([place, bg]) => [
       getComputedStyle(document.querySelector(place + ' [data-brand] .brand-logo use.brand-cover')).fill,
       getComputedStyle(document.querySelector(bg)).backgroundColor])""")
     assert all(fill == bg for fill, bg in covers), f"the covers in their places' backgrounds ({covers})"
