@@ -13,7 +13,7 @@
  */
 
 import { clockOf, fmtAgo, lastReads, now } from "./clock";
-import { load } from "./store";
+import { useLook } from "../shared/look";
 
 /**
  * ListTimes are Refresh now's second line, three rows of a label and its
@@ -22,7 +22,7 @@ import { load } from "./store";
  * not drawn again each second.
  */
 export function ListTimes({ open }: { open: boolean }) {
-  load.useLoad();
+  useLook();
   // the clock read, and so followed, only while the list is open
   const at = open ? now.value : now.peek();
   const r = lastReads();
@@ -45,7 +45,7 @@ export function ListTimes({ open }: { open: boolean }) {
  * changes).
  */
 export function ExpertTimes() {
-  load.useLoad();
+  useLook();
   const at = state.settings.expert ? now.value : now.peek();
   const r = lastReads();
   return (

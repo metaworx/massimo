@@ -867,8 +867,9 @@ REGIONS = (
     Region("backups", ("#sys-backup-body", "#cube-backup-body"), (
         View("System settings, the Cube's fold open", backups_system),
         View("Cube settings", backups_cube),
-        # Passed on the page before the move as well: none of SOURCES draws
-        # a Cube's backups again. From now on it guards that the question stays through the data;
+        # Passed on the page before the move as well: none of SOURCES drew
+        # a Cube's backups again, where since AP UiParts' Block 15 a load of
+        # the Cubes does (their folds follow the list), which this view holds too. From now on it guards that the question stays through the data;
         # the list's own reads (an action in another panel, the list read
         # again, the page shown again) are test_admin_updates.py's.
         View("Cube settings, a backup's Delete asking", backups_question),

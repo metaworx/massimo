@@ -253,7 +253,7 @@ export function DeviceRow({ d, ui, room, actions, children }: {
   const known = new Map((room?.devices || []).map((x) => [x.rf_address, x]));
   const from = virtual ? (d.sources?.actual_temp || []).map((rf) => known.get(rf)?.serial || rf) : [];
   const cfg = detail?.thermostat || detail?.wall_thermostat;
-  const scope = repairScope(state.serial || "", "device", d.rf_address);
+  const scope = repairScope(state.roomsOf || "", "device", d.rf_address); // the Cube the row's rooms are of, also while another one's load is on its way
   return (
     <div class={virtual ? "device virtual" + (expert ? " expert-only" : "") : "device"} data-rf={d.rf_address}>
       <div class="device-head">

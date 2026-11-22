@@ -46,6 +46,8 @@ declare global {
     me: Me | null;
     /** The person's settings in effect, as far as a part reads them: this device's where it keeps one, else the user's. */
     settings: { poll: number; expert: boolean; clock: string; lang: string; theme: string; scheme: string; blink: string; iconWindow: string; iconRadio: string };
+    /** Each Cube's daylight-saving rules by its serial, false where it has none, from the Cube's detail (app.js loadTimeZone). */
+    tz: Record<string, unknown>;
     /** The settings kept for this device alone, by key, as last stored (app.js storeDeviceOverrides). */
     device: Record<string, unknown>;
   };

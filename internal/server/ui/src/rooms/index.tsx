@@ -27,7 +27,7 @@ import { mounter, register } from "../shared/region";
 import { closeHouse, House } from "./House";
 import { Tile } from "./Tile";
 import { UNLISTED, Unlisted } from "./Unlisted";
-import { cfgFormKey, changed, cubesLoad, house, load, newUI, planWindows, roomOf, takeOpening, tickOf, vwtFormKey } from "./store";
+import { cfgFormKey, changed, house, load, newUI, planWindows, roomOf, takeOpening, tickOf, vwtFormKey } from "./store";
 
 /** Rooms is a tile per room, kept by its Cube and its id for as long as the room is there. */
 function Rooms() {
@@ -105,10 +105,6 @@ const rooms = register("rooms", {
   data(id: number): void {
     changed(id);
     planWindows();
-  },
-  /** cubes takes a load of the Cubes' list (renderCubeSelect): the House tile's name follows the Cube's. */
-  cubes(): void {
-    cubesLoad.bump();
   },
   /** unlisted takes a state event of a device without a room (updateDevice): its row follows. */
   unlisted(): void {

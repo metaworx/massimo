@@ -718,9 +718,9 @@ async function loadTimeZone(serial) {
   try {
     const detail = await api("GET", "api/v1/cubes/" + encodeURIComponent(serial));
     const cfg = detail && detail.config;
-    state.tz[serial] = cfg && cfg.tz_winter ? { winter: cfg.tz_winter, summer: cfg.tz_summer } : false;
+    state.tz = { ...state.tz, [serial]: cfg && cfg.tz_winter ? { winter: cfg.tz_winter, summer: cfg.tz_summer } : false };
   } catch (e) {
-    state.tz[serial] = false;
+    state.tz = { ...state.tz, [serial]: false };
   }
 }
 

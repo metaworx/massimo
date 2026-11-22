@@ -33,6 +33,7 @@ import { closeConfig, openConfig } from "./configuration";
 import { DeviceList } from "./Devices";
 import { problemsLabel, roomEntries } from "./facts";
 import { load, tickOf } from "./store";
+import { cubePath } from "../shared/path";
 
 /** The arrow keys of More move between these: its buttons that are on, and the Hold switch where shown. */
 const MORE_ITEMS = ".menu-items button:not(:disabled), .menu-items .switch:not(.hidden) input";
@@ -91,7 +92,7 @@ function RoomMenu({ room, ui, tile }: { room: PageRoom; ui: RoomUI; tile: () => 
       }} />
       <MenuItem cls="menu-repair needs-repair" label={t("repair.open")} onClick={() => {
         closeMenu(tile());
-        toggleRepair(repairScope(state.serial || "", "room", room.id), "room", base() + "/rooms/" + room.id);
+        toggleRepair(repairScope(state.roomsOf || "", "room", room.id), "room", cubePath(state.roomsOf || "") + "/rooms/" + room.id);
       }} />
     </Dropdown>
   );
@@ -282,7 +283,7 @@ export function Tile({ room }: { room: PageRoom }) {
       </div>
       <Vacation room={room} ui={ui} />
       <DeleteQuestion room={room} ui={ui} tile={tile} />
-      <RepairBox scope={repairScope(state.serial || "", "room", room.id)} />
+      <RepairBox scope={repairScope(state.roomsOf || "", "room", room.id)} />
       <ResultLine res={res} cls="tile-result" />
       <div class={"devices" + hid(!ui.open)}>{ui.open && <DeviceList room={room} ui={ui} />}</div>
       <Config room={room} ui={ui} />

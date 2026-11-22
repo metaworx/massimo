@@ -23,7 +23,7 @@ import { FormFooter, NumberField } from "../shared/field";
 import { PutForm } from "../shared/put";
 import { busyProps } from "../shared/question";
 import { cubeRooms, flowOf, loadCubeRooms, secondsOk, startPairing, stopPairing } from "./flow";
-import { load } from "./store";
+import { useLook } from "../shared/look";
 
 /**
  * Joined is a device that joined: its type, serial and radio address,
@@ -31,7 +31,7 @@ import { load } from "./store";
  * went once it is in its room.
  */
 function Joined({ serial, d }: { serial: string; d: NewDevice }) {
-  load.useLoad();
+  useLook();
   const put = flowOf(serial).puts[d.rf_address];
   const rooms = cubeRooms.value[serial] || [];
   // The rooms are read again; for the Cube shown, Rooms' tiles and devices without a room too.
@@ -56,7 +56,7 @@ function Joined({ serial, d }: { serial: string; d: NewDevice }) {
  * as it is typed, and Start then goes back to the field instead.
  */
 export function Pairing({ serial }: { serial: string }) {
-  load.useLoad();
+  useLook();
   const f = flowOf(serial);
   const secs = useRef<HTMLInputElement>(null);
   const focus = useRef(false);

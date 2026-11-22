@@ -31,12 +31,12 @@ function renderHomeNotice() {
 
 // --- Cube discovery ---------------------------------------------------
 
-// addFound takes a Cube from a cube_found event into the list.
+// addFound takes a Cube from a cube_found event into the list, which it
+// writes whole (the parts follow it, ui/src/shared/data.ts).
 function addFound(c) {
   if (!c || !c.serial || state.cubes.some((x) => x.serial === c.serial)) return;
   const i = state.found.findIndex((x) => x.serial === c.serial);
-  if (i >= 0) state.found[i] = c;
-  else state.found.push(c);
+  state.found = i >= 0 ? state.found.map((x, j) => (j === i ? c : x)) : [...state.found, c];
   renderCubeSelect();
 }
 

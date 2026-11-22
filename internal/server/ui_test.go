@@ -728,7 +728,7 @@ func alsoText(also []string) string {
 // underneath (ui/src/shared/data.ts, AP UiParts D123-A): a write tells
 // the parts only as an assignment of the field, so none of them is
 // written in place.
-var wholeFields = []string{"themeState.custom", "themeState.draft"}
+var wholeFields = []string{"state.cubes", "state.found", "state.tz", "themeState.custom", "themeState.draft"}
 
 // writtenInPlace finds a write in place to a field of wholeFields on a
 // line: an item assigned by its index, an array's method that changes

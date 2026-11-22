@@ -16,9 +16,9 @@
 import type { Cube } from "../api";
 import { chosenCube, hostPort } from "../model/cube";
 import { Island } from "../shared/island";
-import { load } from "./store";
 import { showView } from "../shared/pages";
 import { can } from "../shared/me";
+import { useLook } from "../shared/look";
 
 /** detailOf is what the notice says of a Cube that is not connected, in one paragraph. */
 function detailOf(cube: Cube): string {
@@ -50,7 +50,7 @@ function Check({ cube }: { cube?: Cube }) {
 
 /** HomeNotice is the notice's content, nothing while the Cube chosen is connected. */
 export function HomeNotice() {
-  load.useLoad();
+  useLook();
   const cube = chosenCube();
   if (cube && cube.connected) return null;
   return (

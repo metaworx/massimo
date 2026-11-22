@@ -23,12 +23,13 @@ import { forgetPairing, loadCubeRooms, loadPairing, pairingEvent, pairingJoined 
 import { msg } from "./send";
 import { Found } from "./Found";
 import { Panel } from "./Panel";
-import { cubeUI, folds, load, loadDevices, panelLoads, place } from "./store";
+import { cubeUI, devices, folds, loadDevices, panelLoads, place } from "./store";
 import { isShown, onView } from "../shared/pages";
+import { useLook } from "../shared/look";
 
 /** List is System settings → Cubes: a panel per served Cube, then the fold of those found; empty while Cube settings holds the panel. */
 function List() {
-  load.useLoad();
+  useLook();
   if (place.value !== "list") return null;
   return (
     <>
@@ -39,7 +40,7 @@ function List() {
   );
 }
 
-/** pageLoaded is the serial Cube settings has loaded the pairing and the devices for since it was last shown. */
+/** pageLoaded is the serial Cube settings has loaded the pairing and the devices for since it was last shown: its showing loads them, and its panel where another Cube is chosen while it is shown. */
 let pageLoaded = "";
 
 /** PagePanel is Cube settings' panel of a Cube, which loads what it shows once per Cube and showing of the page. */
@@ -54,7 +55,7 @@ function PagePanel({ c }: { c: Cube }) {
 
 /** Page is Cube settings: the panel of the Cube chosen in the header, open, or that no Cube is configured. */
 function Page() {
-  load.useLoad();
+  useLook();
   if (place.value !== "page") return null;
   const c = chosenCube();
   if (!c) return <p class="muted small">{t("cubes.none")}</p>;
@@ -91,14 +92,12 @@ const cubes = register("cubes", {
     mountList();
     mountPage();
     place.value = isShown("cube") ? "page" : "list";
-    load.bump();
   },
   /** polled takes a load of the Cubes' list (cubesPolled): every panel follows it in place, and a Cube no longer given forgets its form. */
   polled(): void {
     mountList();
     mountPage();
     forgetGone();
-    load.bump();
   },
   /** openFound opens the fold of the Cubes found (showFound). */
   openFound(): void {
@@ -112,12 +111,12 @@ const cubes = register("cubes", {
 
 /**
  * signedOut forgets what the Cubes' parts kept of the user who was signed
- * in (MassimoParts.signedOut, index.ts): every Cube's pairing and rooms;
- * the panels are drawn again from nothing.
+ * in (MassimoParts.signedOut, index.ts): every Cube's pairing and rooms,
+ * and the devices its panel read; the panels follow, drawn from nothing.
  */
 export function signedOut(): void {
   forgetPairing();
-  load.bump();
+  devices.value = {}; // the devices a panel read, the user's who was
 }
 
 /** MassimoParts.cubes, as index.ts declares it. */
@@ -128,8 +127,12 @@ export type CubesPart = typeof cubes;
 // before load what they would load when opened.
 onView("cube", () => {
   msg("");
-  pageLoaded = "";
   renderCubes();
+  // each showing loads what the panel shows, the page drawn again or not:
+  // the place and the Cube may be what they were at the last showing
+  const c = chosenCube();
+  pageLoaded = c ? c.serial : "";
+  if (c) panelLoads(c.serial);
 });
 onView("system", () => {
   msg("");

@@ -21,9 +21,10 @@ import { FormFooter, Switch, TextField, useDraft } from "../shared/field";
 import { focusForm, useForm } from "../shared/forms";
 import { busyProps, useBusy } from "../shared/question";
 import { msg, saveCube } from "./send";
-import { cubeUI, deviceOf, devices, load } from "./store";
+import { cubeUI, deviceOf, devices } from "./store";
 import { valueText } from "./util";
 import { isShown, showView } from "../shared/pages";
+import { useLook } from "../shared/look";
 
 /** Differs is a line of the settings file that says something else than the store, with Take the file's value. */
 function Differs({ c, d }: { c: Cube; d: FileDifference }) {
@@ -148,7 +149,7 @@ function openForm(serial: string): void {
  * differ from the Cube as the list last gave it.
  */
 export function Form({ c }: { c: Cube }) {
-  load.useLoad();
+  useLook();
   const form = useForm({ key: cubeFormKey(c.serial), name: { key: "nav.cubeTitle" }, open: () => openForm(c.serial) });
   const name = useDraft(c.name || "", trim, form.place("name"));
   const address = useDraft(c.configured_address || "", trim, form.place("address"));

@@ -19,8 +19,9 @@ import { CubeIcon, CubeSign, chosenCube, cubeEntry } from "../model/cube";
 import { Picker, type PickEntry } from "../shared/menu";
 import { KindIcons, problemKinds } from "../shared/problems";
 import { discoverCubes } from "./send";
-import { discovery, load } from "./store";
+import { discovery } from "./store";
 import { can } from "../shared/me";
+import { useLook } from "../shared/look";
 
 /** DISCOVER is the value of the entry that searches the LAN. */
 const DISCOVER = "__discover";
@@ -78,7 +79,7 @@ function pick(v: string): void {
  * D200-A, D201-A).
  */
 export function Choice() {
-  load.useLoad();
+  useLook();
   const entries: PickEntry[] = state.cubes.map(entryOf);
   if (state.found.length) {
     entries.push({ group: t("discover.group") });

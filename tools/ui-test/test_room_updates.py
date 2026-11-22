@@ -19,7 +19,7 @@ redraw is the test's. The setpoint's PUT is answered with a stub where
 a test presses +, so that nothing reaches the fake Cube."""
 import pytest
 
-from helpers import wait_until
+from helpers import frames, hold, wait_held, wait_until
 
 
 def held(page):
@@ -521,3 +521,40 @@ def test_house_focus_stays(page, case):
     focus = page.evaluate("document.activeElement === document.querySelector('#house-rooms .check:not(.check-all) input')")
     page.locator("#house-panel .form-cancel").click()
     assert focus, f"the focus on the room's checkbox: {active(page)}"
+
+
+# A device without a room, as GET …/devices gives one (the fake Cube has
+# none), at every load of the rooms.
+UNLISTED_DEVICE = {"rf_address": "0a0f01", "type": "radiator_thermostat", "name": "", "room_id": 0, "serial": "MEQ0000901",
+                   "unlisted": True, "reported": False}
+
+
+def test_a_put_stays_with_its_cube_through_a_change_of_cube(page, case, reads):
+    """A device without a room, its form that puts it into a room open,
+    and another Cube chosen, the Cubes' and the rooms' reads held: the form
+    stays the shown rooms' Cube's, its ids and what it would send, until
+    the other Cube's rooms have come. Fails on the page before, where the
+    form took the new Cube's serial over the old Cube's device and rooms
+    at once, and a put sent then went to the wrong Cube."""
+    reads.change("**/api/v1/cubes/*/devices?devices=real", lambda devices: (devices or []) + [UNLISTED_DEVICE])
+    page.evaluate("loadRooms()")
+    row = page.locator("#unlisted .device[data-rf='0a0f01']")
+    row.wait_for(state="visible")
+    row.locator(".put-open").click()
+    form = row.locator("form.pair-device-form")
+    form.wait_for(state="visible")
+    before = form.locator("select").first.get_attribute("id")
+    assert "KEQ0000100" in before, f"the form the Cube's: {before}"
+    held, sent = [], []
+    hold(page, "**/api/v1/cubes", "GET", held, sent)
+    try:
+        page.evaluate("selectCube('KEQ0000200')")
+        assert wait_held(page, held), "the Cubes' read on its way"
+        frames(page)
+        assert page.evaluate("state.serial") == "KEQ0000200", "another Cube chosen"
+        assert form.locator("select").first.get_attribute("id") == before, "the form still the shown rooms' Cube's"
+    finally:
+        page.unroute("**/api/v1/cubes")
+        for route in held:
+            route.continue_()
+    assert wait_until(page, "state.serial === 'KEQ0000100'", 10), "the Cube served chosen again by the next load"

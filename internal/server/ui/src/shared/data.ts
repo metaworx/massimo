@@ -36,6 +36,11 @@ adopt(state, ["device"]);
 // applyCaps' write and a sign-out's clearing are the parts' at once.
 me.value = state.me;
 Object.defineProperty(state, "me", { enumerable: true, configurable: true, get: () => me.value, set: (v) => { me.value = v; } });
+// The Cubes the server serves and those found on the network, the Cube
+// chosen, each Cube's daylight-saving rules, and the server's state: the
+// loads of app.js and the stream write them (loadCubes, selectCube,
+// addFound, loadTimeZone, serverReached, checkVersion).
+adopt(state, ["cubes", "found", "serial", "tz", "serverDown", "newVersion"]);
 // The user's colour schemes, the editor's draft and the scheme it started
 // from (theme.js themeState), each written whole.
 adopt(themeState, ["custom", "draft", "base"]);

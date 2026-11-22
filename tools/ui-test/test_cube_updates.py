@@ -148,3 +148,25 @@ def test_a_file_difference_that_comes_later_gets_its_row(page, case, where, read
         reads.clear(CUBES)
     loaded(page)
     show_view(page, "tiles")
+
+
+def test_a_sign_out_forgets_the_devices_read(page, case):
+    """The devices Cube settings' panel read for its user are forgotten at a
+    sign-out (MassimoParts.signedOut, which a sign-out and another user's
+    sign-in after an expired session call): Cube settings shown again
+    reads them anew, for whoever is in then. Fails on the page before,
+    which kept them and read nothing."""
+    devices = []
+    page.on("request", lambda r: devices.append(r.url) if r.method == "GET" and r.url.split("?")[0].endswith("/cubes/KEQ0000100/devices") else None)
+    with page.expect_response(lambda r: r.request.method == "GET" and r.url.split("?")[0].endswith("/cubes/KEQ0000100/devices")) as first:
+        show_view(page, "cube")
+    first.value.finished()
+    assert wait_until(page, "!!document.querySelector('#cube-page-body .cube-panel')", 5), "Cube settings drawn"
+    assert devices, "the panel read the Cube's devices"
+    show_view(page, "tiles")
+    page.evaluate("MassimoParts.signedOut()")
+    devices.clear()
+    with page.expect_response(lambda r: r.request.method == "GET" and r.url.split("?")[0].endswith("/cubes/KEQ0000100/devices")) as read:
+        show_view(page, "cube")
+    read.value.finished()
+    assert devices, "read anew after the sign-out"

@@ -23,8 +23,8 @@ import { useBusy } from "../shared/question";
 import { nowAgain } from "./clock";
 import { cubeProblems } from "./CubeProblems";
 import { ServerIcon, ServerItem, serverState, serverWords } from "./ServerSign";
-import { load } from "./store";
 import { ListTimes } from "./Times";
+import { useLook } from "../shared/look";
 
 /**
  * RefreshNow is the list's first item: a poll now, turning while it runs,
@@ -34,7 +34,7 @@ import { ListTimes } from "./Times";
  * counter is not drawn again with its parent otherwise).
  */
 function RefreshNow({ open }: { open: boolean }) {
-  load.useLoad();
+  useLook();
   const busy = useBusy();
   return (
     <MenuItem cls="refresh-now" icon={<Icon symbol="icon-refresh" cls="ni" />} label={t("header.refreshTitle")} sub={<ListTimes open={open} />}
@@ -44,7 +44,7 @@ function RefreshNow({ open }: { open: boolean }) {
 
 /** Pile is the header's pile, in #header-pile. */
 export function Pile() {
-  load.useLoad();
+  useLook();
   const [open, setOpen] = useState(false);
   const opened = () => {
     nowAgain(); // the times from now as the list opens, not from the clock's last second

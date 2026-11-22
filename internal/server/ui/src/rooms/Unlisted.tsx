@@ -46,7 +46,7 @@ export const UNLISTED = -1;
 function Put({ d, done, cancel }: { d: Device; done: () => void; cancel: () => void }) {
   const [put] = useState(newPut);
   return (
-    <PutForm id={"pair-" + (state.serial || "") + "-" + d.rf_address} serial={state.serial || ""} dev={d} rooms={state.rooms} put={put} reload={loadRooms}
+    <PutForm id={"pair-" + (state.roomsOf || "") + "-" + d.rf_address} serial={state.roomsOf || ""} dev={d} rooms={state.rooms} put={put} reload={loadRooms}
       focus onCancel={cancel}
       onDone={() => {
         done();

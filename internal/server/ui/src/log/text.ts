@@ -11,6 +11,7 @@
  * summary, in the language shown. A line is worded when it is drawn.
  */
 
+import { computed } from "@preact/signals";
 import type { Device } from "../api";
 import { rfLabel } from "../model/device";
 import type { Loose, LogLine } from "./lines";
@@ -49,10 +50,26 @@ export function logDevice(rf: string, serial?: string): Device | null {
   return rs.unlisted.find((x) => x.rf_address === rf) || null;
 }
 
-/** logCubeName names a Cube by its name, else its S/N. */
+/**
+ * cubeNamesKey is every Cube's serial and name, as the choices' key has
+ * them (cubesKey of choices.ts): a string, so that a load that writes the
+ * list whole with the same names changes nothing that follows it.
+ */
+const cubeNamesKey = computed(() => state.cubes.map((c) => c.serial + "\u0000" + (c.name || "")).join("\u0001"));
+
+/** cubeNames is the Cubes' names by serial, made again only where a name or a serial changed. */
+const cubeNames = computed(() => {
+  const names = new Map<string, string>();
+  for (const entry of cubeNamesKey.value ? cubeNamesKey.value.split("\u0001") : []) {
+    const [serial, name] = entry.split("\u0000");
+    if (name) names.set(serial, name);
+  }
+  return names;
+});
+
+/** logCubeName names a Cube by its name, else its S/N: a line under All Cubes follows its Cube's name, not each load of the Cubes. */
 export function logCubeName(serial: string): string {
-  const c = state.cubes.find((x) => x.serial === serial);
-  return c && c.name ? c.name : serial;
+  return cubeNames.value.get(serial) || serial;
 }
 
 /** logLineCube is the name of a line's Cube where the log shows every Cube's lines (D2); "" under This Cube and for the server's own lines. */

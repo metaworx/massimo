@@ -110,7 +110,6 @@ function cubeSignEl(c) {
 // following the data.
 function renderCubeSelect() {
   MassimoParts.header.render();
-  MassimoParts.rooms.cubes(); // the House tile's name, the Cube's
 }
 
 // --- version ----------------------------------------------------------
