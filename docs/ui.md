@@ -2642,6 +2642,11 @@ reads its sessions, keys and identities again, as every redraw of the plain list
 `sendUsers.ts`, `sendRoles.ts` and `sendProviders.ts` what each reads and sends,
 line for line as the plain scripts did, through an `actionRunner` per list;
 `Users.tsx`, `Roles.tsx` and `Providers.tsx` the parts,
+on a server without users the Users card a section of its own (`OpenServer` of `Users.tsx`):
+the line, Create the owner… (`askOwner` of `shared/owner.ts`, the focus given back to it),
+and while the server is kept open its switch,
+saved at once (`keepOpenOff` of `sendUsers.ts`),
+which stays in sight, off, for that showing (`keptOff` of `store.ts`),
 a user's sessions and keys and its identities the shared `Tokens` and `Identities`
 (`shared/tokens.tsx`, `shared/identities.tsx`, AP UiParts Block 13), drawn with this
 list's runner, `reads` and its forms of an identity's change:
@@ -2907,6 +2912,11 @@ a late answer writes, draws and says nothing and still settles,
 the Cubes', the rooms' and `refresh` to `false`, which a plain chain tests
 before it goes on, so that every awaiter's `finally` runs and nothing of the next
 session waits on the one before; a part's awaiter asks its own session.
+Two requests of the sign-in card take no number: Create the owner (`Owner.tsx`)
+and Keep it open (`KeepOpen.tsx`) are bound to the card's ask instead,
+which is ended once and does nothing for an ask closed already (`done`, `finishSignIn`),
+and they run on an open server, where no sign-out ends a session
+and another user signs in only through this card, which they themselves end in.
 Who is in (`shared/me.ts`) draws the open server's warning into `#open-banner-slot`.
 The first owner's form is the sign-in card's other state (`Owner.tsx`),
 which `loadMe` opens through `askLogin("owner")` (AP FirstOwner),
@@ -2917,6 +2927,12 @@ for its switch;
 its Create the owner turns until the card has closed,
 through the app's keeping of the login and the read of who is in after it,
 so that a second tap creates nothing (UiParts D213).
+Keep it open… shows the card's other step in the form's place (`KeepOpen.tsx`,
+the store's `card.ownerStep`): the confirmation with the page's address to enter,
+whose Keep it open writes `auth.keep_open`, reads who is in and closes the card,
+the card's `card.working` keeping Back and Select server off meanwhile;
+`keepAsk` and `keepBack` of `signin/store.ts` go there and back,
+what is typed in both kept.
 A part's place among plain siblings is an element of the class `part-slot`,
 which takes no box of its own (`display: contents`),
 so that the part's element is laid out as if it stood there itself.
