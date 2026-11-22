@@ -43,7 +43,12 @@ def test_slow_scroll_goes_down(page, case):
     the found Cubes' count was, the page scrolled down 8 px at a time:
     every step goes down, and the header compacts once and does not grow
     back on the way; then up again to the top, where the header grows back
-    once."""
+    once. A step is read by the page's content, the room below the header,
+    as a user sees it move: a notice of a radiogram pending that goes in the
+    middle of the scroll (two minutes after an earlier test's write, at a
+    moment no test chooses) makes the header lower, and the browser's
+    scroll anchoring then keeps the content where it was by scrolling up by
+    the notice's height, which window.scrollY would read as going back."""
     page.evaluate("""async () => {
       state.settings.expert = true;
       applySettings();
@@ -76,26 +81,30 @@ def test_slow_scroll_goes_down(page, case):
         last = now;
       }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
     }""")
-    ys = []
+    content = "Math.round(document.getElementById('scroll-spacer').getBoundingClientRect().top)"
+    ys, tops = [], [page.evaluate(content)]
     for _ in range(40):
         page.evaluate("window.scrollBy(0, 8)")
         page.wait_for_timeout(40)
         ys.append(page.evaluate("Math.round(window.scrollY)"))
+        tops.append(page.evaluate(content))
     page.wait_for_timeout(200)
     ys.append(page.evaluate("Math.round(window.scrollY)"))
-    back = [(i, ys[i - 1], ys[i]) for i in range(1, len(ys)) if ys[i] < ys[i - 1]]
-    assert not back, f"the page went back up while scrolling down: (step, from, to) {back[:5]}, all {ys}"
-    assert ys[-1] >= 300, f"the page went down 320 px in steps ({ys})"
+    tops.append(page.evaluate(content))
+    back = [(i, tops[i - 1], tops[i]) for i in range(1, len(tops)) if tops[i] > tops[i - 1]]
+    assert not back, f"the content came back down while scrolling down: (step, from, to) {back[:5]}, all {tops}"
+    assert tops[0] - tops[-1] >= 300, f"the content went up 320 px in steps ({tops})"
     toggles = page.evaluate("window.scrollLog")
     assert toggles == [True], f"the header compacted once and stayed so ({toggles})"
     # and back up to the top, where the header grows back once
-    ys = [ys[-1]]
+    ys, tops = [ys[-1]], [tops[-1]]
     while ys[-1] > 0 and len(ys) < 80:
         page.evaluate("window.scrollBy(0, -8)")
         page.wait_for_timeout(40)
         ys.append(page.evaluate("Math.round(window.scrollY)"))
-    down = [(i, ys[i - 1], ys[i]) for i in range(1, len(ys)) if ys[i] > ys[i - 1]]
-    assert not down and ys[-1] == 0, f"the page went up to the top step by step ({ys})"
+        tops.append(page.evaluate(content))
+    down = [(i, tops[i - 1], tops[i]) for i in range(1, len(tops)) if tops[i] < tops[i - 1]]
+    assert not down and ys[-1] == 0, f"the page went up to the top step by step ({ys}, the content {tops})"
     page.wait_for_timeout(200)
     toggles = page.evaluate("window.scrollLog")
     assert toggles == [True, False], f"at the top the header grew back once ({toggles})"
