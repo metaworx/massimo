@@ -470,7 +470,10 @@ def test_a_late_poll_reaches_nothing_of_the_next(new_context, case, watch, guard
 def test_a_late_question_of_older_reaches_nothing_of_the_next(new_context, case, watch, guard, how):
     """Older's question (after=, logGone) held while the session ends: let
     go, Older asks for no page and nothing is drawn. The plain page went on
-    to ask for the page before the oldest, and drew it."""
+    to ask for the page before the oldest, and drew it. Only the
+    stub's lines count: the next user's own stream may bring a line of
+    theirs meanwhile (an unconfirmed write an earlier test left on the
+    worker's server), which is no line of the first user."""
     page = owner_page(new_context, guard, watch, URL, TOKEN)
     show_view(page, "log")
     StubLog(page, lines(200))
@@ -484,7 +487,8 @@ def test_a_late_question_of_older_reaches_nothing_of_the_next(new_context, case,
     held.let_go()
     frames(page)
     assert not asked, f"no page before the oldest asked for: {asked}"
-    assert page.evaluate("MassimoParts.log.state.lines.length") == 0, "no line of the first user"
+    left = page.evaluate("(f) => MassimoParts.log.state.lines.filter((l) => l.id >= f - 1000 && l.id <= f + 1000).map((l) => l.id)", FIRST)
+    assert not left, f"no line of the first user: {left}"
 
 
 @pytest.mark.parametrize("how", HOWS)
