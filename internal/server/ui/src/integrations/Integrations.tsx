@@ -16,7 +16,7 @@
  * the server does not look; Look again.
  */
 
-import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
+import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { Integration, IntegrationUser } from "../api";
 import { capLabel } from "../model/cap";
 import { session } from "../shared/session";
@@ -69,7 +69,8 @@ function Register({ url, address, name, id }: { url?: string; address: string; n
   const [typed, setTyped] = useState(address ? "http://" + address + ":8123" : "http://");
   const [bad, setBad] = useState(false);
   const input = useRef<HTMLInputElement>(null);
-  useEffect(() => {
+  // the address asked for: the focus in it in the drawing that shows it
+  useLayoutEffect(() => {
     if (shown) input.current?.focus();
   }, [shown]);
   const go = () => {

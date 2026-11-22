@@ -17,7 +17,7 @@
  */
 
 import { signal } from "@preact/signals";
-import { useEffect, useId, useRef } from "preact/hooks";
+import { useId, useLayoutEffect, useRef } from "preact/hooks";
 import type { RepairPlan, RepairResult } from "../api";
 import type { Outcome } from "./action";
 import { ResultLine } from "./badge";
@@ -304,8 +304,8 @@ function RepairItem({ box, r, item }: { box: Box; r: Repair; item: Item }) {
   useLang(); // its texts follow the page's language
   const runRef = useRef<HTMLButtonElement>(null);
   const back = useRef(false);
-  // a question taken back: the focus on Run… once it is drawn again
-  useEffect(() => {
+  // a question taken back: the focus on Run… in the drawing that shows it again
+  useLayoutEffect(() => {
     if (item.ask !== "" || !back.current) return;
     back.current = false;
     runRef.current?.focus();
@@ -404,7 +404,8 @@ function Warning({ cost, onNo, onGo }: { cost: string; onNo: () => void; onGo: (
   useLang(); // its texts follow the page's language
   const id = useId();
   const no = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
+  // the focus on Cancel in the drawing that shows the warning
+  useLayoutEffect(() => {
     no.current?.focus();
   }, []);
   return (

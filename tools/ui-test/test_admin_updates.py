@@ -15,7 +15,7 @@ import json
 import pytest
 
 from conftest import TOKEN, URL, api_call
-from helpers import frames, hold, mark, open_main_menu, owner_page, reads_of, replaced, safe_route, show_view, sign_out, undo, wait_held, wait_until
+from helpers import focus_in_turn, frames, hold, mark, open_main_menu, owner_page, reads_of, replaced, safe_route, show_view, sign_out, undo, wait_held, wait_until
 from test_log_alerts import alerts_route
 from test_login import sign_in
 from test_oidc import provider  # noqa: F401, the fixture
@@ -847,6 +847,7 @@ def test_integrations_may_ask_keeps_the_focus(page, case, watch):
     show_view(page, "tiles")
 
 
+@pytest.mark.clock
 def test_an_identitys_change(page, case, provider):
     """A2, A3: an identity at an enabled provider, its Change typed and
     left: the pill names it; saved with another e-mail, the form closes;
@@ -870,6 +871,19 @@ def test_an_identitys_change(page, case, provider):
         row.locator(".identity-change button[type=submit]").click()
         assert wait_until(page, f"!document.querySelector(\".user-panel[data-name='{user}'] .identity-change\")", 5), "saved, the form closes"
         row.locator(".change-identity").click()
+        sel = f".user-panel[data-name='{user}'] .user-identities li[data-id]"
+        # the clock paused: the page's next frame comes only when the test runs it, so that
+        # a focus given a frame late, in an effect, is not there yet when Enter is pressed
+        page.clock.pause_at(page.evaluate("Date.now()") + 1000)
+        try:
+            back = focus_in_turn(page, sel + " .identity-change .form-cancel", sel + " .change-identity")
+            page.keyboard.press("Enter")  # at once, before the next frame: Change, where the focus is, opens again
+            opened = page.evaluate("(s) => !!document.querySelector(s)", sel + " .identity-change")
+            page.clock.run_for(200)
+        finally:
+            page.clock.resume()
+        assert back, "Cancel gives the focus back to Change in the drawing that shows it"
+        assert opened, "Enter at once opens Change again: the focus was on it before the next frame"
         row.locator(".identity-change input[name=account]").fill("third@example.org")
         leave(page)
         assert wait_until(page, "!!document.querySelector('#sys-users .section-pill .problems')", 5), "the pill names it"

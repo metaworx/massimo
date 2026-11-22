@@ -17,7 +17,7 @@
  * in another place.
  */
 
-import { useEffect, useRef } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef } from "preact/hooks";
 import type { Device, Room } from "../api";
 import type { Outcome } from "./action";
 import { ResultLine } from "./badge";
@@ -82,7 +82,8 @@ export function PutForm({ id, serial, dev, rooms, put, reload, onDone, onFail, o
   useLang(); // its texts follow the page's language
   const nameRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
-  useEffect(() => {
+  // the focus in the first field, in the drawing that shows the form
+  useLayoutEffect(() => {
     if (focus) formRef.current?.querySelector<HTMLElement>("input, select")?.focus();
   }, [focus]);
   // The room is pinned at the first drawing, the first of the rooms, and

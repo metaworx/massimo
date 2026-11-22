@@ -10,7 +10,8 @@
  * button.section-fold (aria-controls its body) with the title, then a
  * span.section-badges, its pill and its help; its body the element the
  * button controls. Its badges are a signal per card's id, which a region
- * sets from its drawing's effect (cardBadges) and the page's chrome draws
+ * sets from a layout effect of its drawing, or from an effect of the data
+ * they count (cardBadges), and the page's chrome draws
  * into the head (chrome/Cards.tsx), also while it is folded. Its fold is
  * kept in this browser (massimo.fold.<card id>) and set on the skeleton
  * at once, so that a card shown is open before it is scrolled to. A card

@@ -771,6 +771,20 @@ def replaced(page, selectors):
     return page.evaluate("(ss) => ss.filter((s) => { const e = document.querySelector(s); return !e || e.__mark !== s; })", selectors)
 
 
+def focus_in_turn(page, click, focused):
+    """Clicks the element of click in the page and reports whether the
+    element of focused has the focus once the drawing that follows is
+    done, before a frame: a part gives the focus in a layout effect, in
+    the drawing's own turn, where an effect gives it a frame later, when a
+    user (or a test) may be typing elsewhere (common.md, "The focus is
+    given in a layout effect")."""
+    return page.evaluate("""async ([click, focused]) => {
+      document.querySelector(click).click();
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+      return document.activeElement === document.querySelector(focused);
+    }""", [click, focused])
+
+
 def frames(page):
     """Two frames and a task: a part drawn again after a change has been drawn."""
     page.evaluate("() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(done, 0))))")

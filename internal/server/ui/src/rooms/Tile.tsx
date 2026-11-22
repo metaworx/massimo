@@ -132,7 +132,10 @@ function More({ room, ui, mode, modes, tile }: { room: PageRoom; ui: RoomUI; mod
       summary={<><span class="more-label">{holiday || t("mode.more")}</span><Icon symbol="icon-chevron-down" cls="ni caret" /></>}>
       {(["eco", "comfort"] as const).map((which) => (
         <MenuItem key={which} cls={"menu-" + which} label={t("room." + which)} subCls="more-temp"
-          sub={temps[which] === undefined ? "" : fmtTemp(temps[which])} disabled={off} onClick={() => sendPreset(room, which)} />
+          sub={temps[which] === undefined ? "" : fmtTemp(temps[which])} disabled={off} onClick={() => {
+            sendPreset(room, which);
+            tile()?.querySelector<HTMLElement>(".more-sum")?.focus(); // the menu closes on its item: the focus back on More
+          }} />
       ))}
       <Switch row={false} cls={"more-hold" + hid(mode !== "auto")} label={t("room.hold")} checked={ui.hold}
         onChange={(on) => {

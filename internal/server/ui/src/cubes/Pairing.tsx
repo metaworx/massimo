@@ -14,7 +14,7 @@
  * holds is made again.
  */
 
-import { useEffect, useRef } from "preact/hooks";
+import { useLayoutEffect, useRef } from "preact/hooks";
 import type { NewDevice } from "../api";
 import { ResultLine } from "../shared/badge";
 import { hid } from "../shared/cls";
@@ -60,8 +60,8 @@ export function Pairing({ serial }: { serial: string }) {
   const f = flowOf(serial);
   const secs = useRef<HTMLInputElement>(null);
   const focus = useRef(false);
-  // Pair a device asked for the time: the focus goes into it once it is shown.
-  useEffect(() => {
+  // Pair a device asked for the time: the focus goes into it in the drawing that shows it.
+  useLayoutEffect(() => {
     if (!f.form || !focus.current) return;
     focus.current = false;
     secs.current?.focus();

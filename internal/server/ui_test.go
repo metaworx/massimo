@@ -359,6 +359,28 @@ func TestUIPage(t *testing.T) {
 	if n < 50 {
 		t.Fatalf("only %d lookups found in the scripts", n)
 	}
+	// A plain script reaches what a part draws only through MassimoParts:
+	// it looks up by selector in the whole page only what every element of
+	// a kind shares, a part's too, and finds anything else in an element
+	// it is handed (a part's own, which the part hands it) or by an id of
+	// the page's above.
+	wholePage := regexp.MustCompile(`document\.querySelector(?:All)?\(([^)]*)\)`)
+	shared := map[string]string{
+		`"details.menu[open]"`: "the menus: one open at a time, closed by Escape and by a click outside (components.js)",
+		`"[data-help]"`:        "the help slots of the cards' heads, the skeleton's (app.js initHelpSlots)",
+	}
+	for _, f := range scripts {
+		if f == "ui/parts.js" || f == "ui/connect.js" {
+			continue // the bundle, and the connect page, which has no part
+		}
+		for i, line := range jsCode(fileLines(t, f)) {
+			for _, m := range wholePage.FindAllStringSubmatch(line, -1) {
+				if _, ok := shared[strings.TrimSpace(m[1])]; !ok {
+					t.Errorf("%s:%d: looks up %s in the whole page; a plain script reaches a part through MassimoParts", f, i+1, m[1])
+				}
+			}
+		}
+	}
 
 	ts := startServer(t).ts
 	resp, err := http.Get(ts.URL + "/")
@@ -941,8 +963,8 @@ func TestUINoHTMLInjection(t *testing.T) {
 					t.Errorf("%s:%d: %s puts markup or script into the page from a string", file, n+1, b.what)
 				}
 			}
-			if part && i18n.MatchString(line) {
-				t.Errorf("%s:%d: a part carries no data-i18n; it calls t()", file, n+1)
+			if i18n.MatchString(line) && (part || file != "ui/i18n.js") {
+				t.Errorf("%s:%d: only the skeleton's static texts carry data-i18n (i18n.js applies them); a script calls t()", file, n+1)
 			}
 		}
 	}

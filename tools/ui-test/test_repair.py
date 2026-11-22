@@ -8,7 +8,7 @@ nothing reaches the fake Cube; the routes have their Go tests
 import json
 from urllib.parse import parse_qs, urlparse
 
-from helpers import REPAIR_BUDGET, RepairStub, named_buttons, scroll_width, show_view, wait_until
+from helpers import REPAIR_BUDGET, RepairStub, focus_in_turn, named_buttons, scroll_width, show_view, wait_until
 
 PANEL = ".cube-panel[data-serial='KEQ0000100']"
 
@@ -64,7 +64,8 @@ def test_room_repairs(page, case):
         question = relink.locator(".confirm-box .confirm-text")
         assert question.inner_text() == page.evaluate("t('repair.confirm', {what: t('repair.relink'), cost: %s})" % json.dumps(want)), \
             "Run… asks, naming the cost"
-        relink.locator(".confirm-no").click()
+        assert focus_in_turn(page, ".room .repair-item[data-repair=relink] .confirm-no", ".room .repair-item[data-repair=relink] .repair-run"), \
+            "Cancel gives the focus back to Run… in the drawing that shows it"
         assert not stub.runs and relink.locator(".repair-run").is_visible(), "Cancel sends nothing"
         relink.locator(".repair-run").click()
         relink.locator(".confirm-yes").click()
@@ -366,7 +367,8 @@ def test_unlink_relink_warns_and_asks_twice(page, case):
         tile.locator(".menu-repair").click()
         item = tile.locator(".repair-item[data-repair=unlinkRelink]")
         item.locator(".repair-run").wait_for(state="visible")
-        item.locator(".repair-run").click()
+        assert focus_in_turn(page, ".room .repair-item[data-repair=unlinkRelink] .repair-run", ".room .repair-item[data-repair=unlinkRelink] .repair-warning-no"), \
+            "the warning's Cancel takes the focus in the drawing that shows it"
         warning = item.locator(".repair-warning")
         want = page.evaluate("(c) => t('repair.unlinkRelinkWarning', {cost: c})", cost(page, UNLINK))
         assert warning.locator(".repair-warning-text").inner_text() == want, "the warning names the cost and the risk"

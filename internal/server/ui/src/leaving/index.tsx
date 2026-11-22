@@ -18,7 +18,7 @@
  */
 
 import { effect, signal } from "@preact/signals";
-import { useEffect } from "preact/hooks";
+import { useLayoutEffect } from "preact/hooks";
 import { FormsDialog } from "../shared/dialog";
 import { changedItems, leaveForms } from "../shared/forms";
 import { useLang } from "../shared/lang";
@@ -93,9 +93,10 @@ function Leaving() {
   const forms = changedItems();
   const a = asking.value;
   const shown = !!a && forms.length > 0;
-  // every form saved, reset or forgotten while it asks
+  // every form saved, reset or forgotten while it asks: settled in the drawing's own turn, as the
+  // dialog closes (shared/dialog.tsx), before its close event, which would take it for a stay
   const gone = !!a && !forms.length;
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (gone) settle(!!asking.peek()?.go);
   }, [gone]);
   const signOut = a?.go;

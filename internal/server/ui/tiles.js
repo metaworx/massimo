@@ -41,12 +41,10 @@ function presetLabel(which, body) {
 }
 
 // sendPreset sets the room to its thermostat's eco or comfort
-// temperature (which) in the room's mode, from the More menu, which
-// keeps the focus.
+// temperature (which) in the room's mode, from the More menu, whose
+// summary the tile gives the focus back to (ui/src/rooms/Tile.tsx).
 function sendPreset(room, which) {
   leaveEditing(room);
-  const sum = document.querySelector('.room[data-id="' + room.id + '"] .more-sum');
-  if (sum) sum.focus();
   return tileWrite(room, which, async () => {
     const what = t(which === "eco" ? "room.eco" : "room.comfort");
     const n = MassimoParts.session();

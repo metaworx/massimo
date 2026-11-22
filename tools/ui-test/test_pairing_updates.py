@@ -14,7 +14,7 @@ import json
 from datetime import datetime, timedelta, timezone
 
 from conftest import TOKEN, URL
-from helpers import frames, hold, mark, owner_page, reads_of, replaced, show_view, sign_out, wait_held, wait_until
+from helpers import focus_in_turn, frames, hold, mark, owner_page, reads_of, replaced, show_view, sign_out, wait_held, wait_until
 from test_login import sign_in
 from test_unsaved import expire
 
@@ -184,3 +184,35 @@ def test_another_user_after_a_401_forgets_the_pairing(new_context, case, watch, 
     another user signed in finds a new form, the Cube's rooms asked for
     again."""
     forgotten_after(new_context, guard, watch, expire)
+
+
+def test_pair_a_device_gives_the_time_the_focus_at_once(page, case):
+    """Pair a device on Cube settings gives the focus to the time in the
+    drawing that shows it, not a frame later. Fails on the page before,
+    where an effect gave it a frame later."""
+    show_view(page, "cube")
+    pairing = "#cube-page-body .cube-pairing"
+    try:
+        assert focus_in_turn(page, pairing + " .pair-open", pairing + " input[name=seconds]"), \
+            "the time takes the focus in the drawing that shows it"
+    finally:
+        page.locator(pairing + " .form-cancel").click()
+    show_view(page, "tiles")
+
+
+def test_put_into_a_room_gives_its_first_field_the_focus_at_once(page, case):
+    """Put into a room… of a device without a room gives the focus to the
+    form's first field in the drawing that shows it. Fails on the page
+    before, where an effect gave it a frame later."""
+    from test_sign_out_late import UNLISTED, unlisted_row
+    row = unlisted_row(page)
+    sel = "#unlisted .device[data-rf='%s']" % UNLISTED["rf_address"]
+    try:
+        assert focus_in_turn(page, sel + " .put-open", sel + " form.pair-device-form :is(input, select)"), \
+            "the form's first field takes the focus in the drawing that shows it"
+    finally:
+        cancel = row.locator("form.pair-device-form .form-cancel")
+        if cancel.count():
+            cancel.click()
+        reads_of(page).clear("**/api/v1/cubes/*/devices?devices=real")
+        page.evaluate("loadRooms()")
