@@ -1,4 +1,4 @@
-# Testing the web UI (v1.23.0)
+# Testing the web UI (v1.24.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -580,7 +580,8 @@ users, roles, capabilities, providers, integrations, backups, the log,
 software update, maintenance, system info, my settings, appearance,
 notifications, my profile, the page's chrome, the sign-in dialog,
 the first owner's form in it with its step that keeps the server open,
-and the open server's warning (AP FirstOwner), and ↑.
+the open server's warning and Users on a server without users (AP FirstOwner),
+and ↑.
 Each has the CSS selectors of its containers,
 what inside them belongs to another region,
 and its views: how a user brings it on screen and opens what it has to open,

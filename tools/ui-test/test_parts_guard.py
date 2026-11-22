@@ -323,6 +323,25 @@ def open_banner(page):
     page.locator("#open-banner-create").focus()
 
 
+def users_open_server(page):
+    """System settings → Users on an open server kept open (AP FirstOwner,
+    Block 4): the section of its own instead of the list, the focus on
+    Create the owner…. Who is in read again (loadMe(), one of SOURCES)
+    reads the stub of a server kept open, which asks for no owner: no card
+    opens over the view, as in the other views of an open server."""
+    kept_open(page)
+    system(page)
+    page.locator("#users-create-owner").wait_for(state="visible")
+    page.locator("#users-create-owner").focus()
+
+
+def users_keep_open_switch(page):
+    """The same section, the focus on the switch that undoes keep open,
+    shown while the server is kept open."""
+    page.locator("#keep-open-switch").wait_for(state="attached")  # the switch's input, drawn under its slider
+    page.locator("#keep-open-switch").focus()
+
+
 def main_menu_item(page):
     """☰ open, the focus moved onto System settings' entry."""
     main_menu(page)
@@ -893,6 +912,14 @@ REGIONS = (
         # the list's own reads (an action in another panel, the list read
         # again, the page shown again) are test_admin_updates.py's.
         View("the operator's Remove asking", users_question),
+    )),
+    # Users on a server without users is a section of its own (AP
+    # FirstOwner, Block 4), drawn from who is in: who is in read again
+    # (loadMe, one of SOURCES) draws it again, with the stub of a server
+    # kept open, so that no card asks for the owner over it.
+    Region("users-open", ("#sys-users-body",), (
+        View("Users on a server kept open, the focus on Create the owner…", users_open_server, "#users-create-owner"),
+        View("the switch that undoes keep open, in focus", users_keep_open_switch, "#keep-open-switch"),
     )),
     Region("roles", ("#sys-roles-body",), (View("the operator role's panel and the new role's form", roles),)),
     Region("capabilities", ("#sys-caps-body",), (View("System settings", system),)),
