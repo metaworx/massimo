@@ -729,7 +729,7 @@ func alsoText(also []string) string {
 // the parts only as an assignment of the field, so none of them is
 // written in place.
 var wholeFields = []string{"state.cubes", "state.found", "state.tz", "state.rooms", "state.unlisted", "state.roomsOf", "state.device", "state.me",
-	"themeState.custom", "themeState.draft", "themeState.base"}
+	"themeState.custom", "themeState.draft", "themeState.base", "logState.cubeRooms", "logState.commands", "logState.openCommands", "logAlerts.levels"}
 
 // roomDevicesInPlace is a write in place to a room's devices, by any
 // name of the room: a room's fields are signals, its devices written whole.
@@ -737,7 +737,8 @@ var roomDevicesInPlace = regexp.MustCompile(`\.devices\[[^\]]*\](?:\.[\w$]+)*\s*
 
 // writtenInPlace finds a write in place to a field of wholeFields on a
 // line: an item assigned by its index, an array's method that changes
-// it, delete, Object.assign into it, or a property of it assigned; and a
+// it (a map's or a set's too), delete, Object.assign into it, or a
+// property of it assigned; and a
 // write in place to a room's devices.
 func writtenInPlace(line string) bool {
 	if roomDevicesInPlace.MatchString(line) {
@@ -746,7 +747,7 @@ func writtenInPlace(line string) bool {
 	for _, f := range wholeFields {
 		q := regexp.QuoteMeta(f)
 		re := regexp.MustCompile(`(?:^|[^\w.$])` + q + `(?:\[[^\]]*\]|\.[\w$]+)+\s*=[^=]|(?:^|[^\w.$])` + q +
-			`\.(?:push|splice|sort|reverse|unshift|shift|pop|fill|copyWithin)\(|delete\s+` + q + `\b|Object\.assign\(\s*` + q + `\b`)
+			`\.(?:push|splice|sort|reverse|unshift|shift|pop|fill|copyWithin|set|delete|clear|add)\(|delete\s+` + q + `\b|Object\.assign\(\s*` + q + `\b`)
 		if re.MatchString(line) {
 			return true
 		}
@@ -817,6 +818,9 @@ func TestWrittenInPlace(t *testing.T) {
 		{"if (themeState.custom[i] === entry) return;", false},
 		{"const d = themeState.draft;", false},
 		{"themeState.customs.push(x);", false},
+		{"logState.cubeRooms.set(c.serial, rs);", true},
+		{"logState.cubeRooms = new Map(logState.cubeRooms).set(c.serial, rs);", false},
+		{"if (logState.cubeRooms.has(c.serial)) return;", false},
 		{"r.devices[i] = d;", true},
 		{"room.devices.push(twin);", true},
 		{"r.devices[i].name = n;", true},

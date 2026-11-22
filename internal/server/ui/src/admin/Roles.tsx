@@ -28,9 +28,10 @@ import { Fold, FoldHead } from "../shared/fold";
 import { focusForm, useForm } from "../shared/forms";
 import { BusyButton, Question, busyProps, useAsk, useBusy, useSetAtOnce } from "../shared/question";
 import { createRole, disableRole, removeRole, rolesMsg, saveRole, setCapability } from "./sendRoles";
-import { adding, load, roleFormKey, roleUI, roles, said } from "./store";
+import { adding, roleFormKey, roleUI, roles, said } from "./store";
 import { cardBadges, showCard } from "../shared/card";
 import { isShown, showView } from "../shared/pages";
+import { useLook } from "../shared/look";
 
 /** openRole shows a role's settings and puts the focus into them, from any page: System settings shown, the role's panel open. */
 function openRole(key: string): void {
@@ -62,7 +63,7 @@ const asSet = (l: string[]) => [...l].sort().join(",");
  * nothing to change, says so.
  */
 function RoleForm({ r }: { r: Role }) {
-  load.useLoad();
+  useLook();
   const owner = r.key === "owner";
   const form = useForm({ key: roleFormKey(r.key), name: { key: "roles.formName", args: { name: roleLabel(r.key, r.name) } }, open: () => openRole(r.key) });
   const name = useDraft(r.name || "", trim, form.place("name"));
@@ -112,7 +113,7 @@ function RoleForm({ r }: { r: Role }) {
 
 /** RolePanel is a role's panel: its head with its name, its key and its badges, built in, disabled and how many users have it; its form. */
 function RolePanel({ r }: { r: Role }) {
-  load.useLoad();
+  useLook();
   const ui = roleUI.of(r.key);
   const badges = [];
   if (r.builtin) badges.push(<Badge key="builtin" kind="mode" text={t("roles.builtin")} />);
@@ -128,7 +129,7 @@ function RolePanel({ r }: { r: Role }) {
 
 /** NewRole is the form that creates a role: its key, its display name and its set, read alone at first; what is typed is the form's own. */
 function NewRole() {
-  load.useLoad();
+  useLook();
   const [key, setKey] = useState("");
   const [name, setName] = useState("");
   const [set, setSet] = useState(["read"]);
@@ -161,7 +162,7 @@ function NewRole() {
 
 /** RolesCard is System settings → Roles' body: a panel per role, the form that adds one, the message line. */
 export function RolesCard() {
-  load.useLoad();
+  useLook();
   const list = roles.list || [];
   const count = roles.loaded ? tn("roles.badge.count", list.length) : "";
   // the card's head counts them, in the page's language, once they are read; nothing once forgotten
@@ -197,7 +198,7 @@ function CapSwitch({ k, disabled }: { k: string; disabled: boolean }) {
  * (CapSwitch), in the frame of a choice of several (ChoiceGroup).
  */
 export function CapsCard() {
-  load.useLoad();
+  useLook();
   const caps = roles.caps;
   const off = caps.filter((c) => c.disabled).length;
   const badge = !roles.loaded ? "" : off ? tn("roles.badge.off", off) : t("roles.badge.allOn");

@@ -25,8 +25,9 @@ import { Fold, FoldHead } from "../shared/fold";
 import { FileButton } from "../shared/file";
 import { BusyButton, Question, useAsk } from "../shared/question";
 import { fmtWhen } from "../shared/time";
+import { useLook } from "../shared/look";
 import {
-  boxOf, closePlan, compareBackup, deleteBackup, downloadNow, downloadStored, foldUI, load, of, planFile, planStored, running, sendRestore, takeBackup,
+  boxOf, closePlan, compareBackup, deleteBackup, downloadNow, downloadStored, foldUI, of, planFile, planStored, running, sendRestore, takeBackup,
 } from "./store";
 
 /** Diff is what changed from the backup before: the planner's steps. */
@@ -43,7 +44,7 @@ function Diff({ d }: { d: { steps?: { what?: string }[] } }) {
 
 /** Row is a stored backup: when, why, the size and who, the note, and its actions; older is the one before it, to compare with. */
 function Row({ place, serial, b, older }: { place: string; serial: string; b: StoredBackup; older?: StoredBackup }) {
-  load.useLoad();
+  useLook();
   const ask = useAsk<HTMLButtonElement>();
   const diff = of(serial).diff[b.id];
   const who = [t("backup.size", { size: fmtNum(b.size / 1024, 1) })];
@@ -77,7 +78,7 @@ function Row({ place, serial, b, older }: { place: string; serial: string; b: St
 
 /** PlanBox is the restore shown: its steps with how each went once sent, the notes, the cost, and Send or how it ended. */
 function PlanBox({ place, serial }: { place: string; serial: string }) {
-  load.useLoad();
+  useLook();
   const c = of(serial);
   const p = c.plan;
   const run = c.run;
@@ -135,7 +136,7 @@ function PlanBox({ place, serial }: { place: string; serial: string }) {
  * as both pages may hold the same Cube's.
  */
 export function Box({ serial, place }: { serial: string; place: string }) {
-  load.useLoad();
+  useLook();
   const c = of(serial);
   const ui = boxOf(place, serial);
   const due = !!(c.changed && c.due);
@@ -170,7 +171,7 @@ export function keptText(serial: string): string {
 
 /** CubeFold is a Cube's fold in System settings: the cube, its name and serial, its network sign after them, the count kept, and its box. */
 function CubeFold({ c }: { c: Cube }) {
-  load.useLoad();
+  useLook();
   const ui = foldUI.of(c.serial);
   // a single Cube's fold open at first, kept so once another Cube comes
   // biome-ignore lint/correctness/useExhaustiveDependencies: the fold's first state is decided once, at its first drawing.
@@ -189,14 +190,14 @@ function CubeFold({ c }: { c: Cube }) {
 
 /** SystemBackups is System settings' card: a fold per Cube, or that none is configured. */
 export function SystemBackups() {
-  load.useLoad();
+  useLook();
   if (!state.cubes.length) return <p class="muted small">{t("cubes.none")}</p>;
   return <>{state.cubes.map((c) => <CubeFold key={c.serial} c={c} />)}</>;
 }
 
 /** CubeBackup is Cube settings' card: the chosen Cube's box, nothing where none is chosen. */
 export function CubeBackup() {
-  load.useLoad();
+  useLook();
   const serial = state.serial;
   if (!serial) return null;
   return <Box key={serial} serial={serial} place="cube" />;

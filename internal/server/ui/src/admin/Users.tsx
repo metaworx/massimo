@@ -28,11 +28,12 @@ import { isoOf, localOf } from "../shared/time";
 import { type Changes, Identities } from "../shared/identities";
 import { Tokens } from "../shared/tokens";
 import { UserNameField, useNameCheck } from "../shared/username";
-import { adding, enabled, identityFormKey, identityUI, load, passwordLogin, reads, said, userFormKey, userUI, users } from "./store";
+import { adding, enabled, identityFormKey, identityUI, passwordLogin, reads, said, userFormKey, userUI, users } from "./store";
 import { createUser, mayManage, mayPassword, removeUser, roleOptions, run, saveUser, setPasswordLogin, usersAdmin, usersMsg } from "./sendUsers";
 import { cardBadges, showCard } from "../shared/card";
 import { isShown, showView } from "../shared/pages";
 import { isMe } from "../shared/me";
+import { useLook } from "../shared/look";
 
 /** userName is how a user is shown: its chain (AP StoreRaise v1.2), its display name, else its login name. */
 function userName(u: User): string {
@@ -97,7 +98,7 @@ const trim = (v: string) => v.trim();
  * differ from the user as the list last gave it.
  */
 function UserForm({ u, off }: { u: User; off: boolean }) {
-  load.useLoad();
+  useLook();
   const manage = mayManage(u);
   const self = isMe(u.name);
   const form = useForm({ key: userFormKey(u.name), name: { key: "users.formName", args: { name: userName(u) } }, open: () => openUser(u.name) });
@@ -167,7 +168,7 @@ function UserForm({ u, off }: { u: User; off: boolean }) {
  * the manager's, where a provider is enabled.
  */
 function UserPanel({ u }: { u: User }) {
-  load.useLoad();
+  useLook();
   const ui = userUI.of(u.name);
   const manage = mayManage(u);
   const self = isMe(u.name);
@@ -196,7 +197,7 @@ function UserPanel({ u }: { u: User }) {
  * added; the password never leaves it but registered by OPAQUE.
  */
 function NewUser() {
-  load.useLoad();
+  useLook();
   const [name, setName] = useState("");
   const [display, setDisplay] = useState("");
   const [chosen, setRole] = useState("");
@@ -251,7 +252,7 @@ function NewUser() {
  * switch off they cannot sign in until a password is set for them here.
  */
 function PasswordLogin() {
-  load.useLoad();
+  useLook();
   const on = useSetAtOnce(!!passwordLogin.value);
   const list = users.list;
   const left = list.filter((u) => u.has_password && u.auth_version === 1).length;
@@ -265,7 +266,7 @@ function PasswordLogin() {
 
 /** UsersCard is the section's body: the password sign-in, the users' panels, the form that adds one, and the message line. */
 export function UsersCard() {
-  load.useLoad();
+  useLook();
   const list = users.list;
   const count = users.loaded ? tn("roles.users", list.length) : "";
   // the card's head counts them, in the page's language, once they are read; nothing once forgotten

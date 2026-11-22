@@ -1,2 +1,2 @@
-- The web UI draws My settings, who is in, the Cubes and the rooms from
-  the page's data as signals (AP UiParts).
+- The web UI draws every page from the page's data as signals, where
+  counters told its parts to draw again (AP UiParts).

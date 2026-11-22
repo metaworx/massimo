@@ -24,10 +24,10 @@ import { hid } from "../shared/cls";
 import { NumberField, Select } from "../shared/field";
 import { BusyButton, Question, useAsk, useSetAtOnce } from "../shared/question";
 import {
-  cancelReboot, INTERVALS, type Interval, intervalWaits, announceWaits, load, parseGoDuration, reboot, REBOOT_DELAY_MAX, rebootAsk, rebootDelay, reloadSettings,
-  restart, restartAsk, runReboot, runRestart, saveInterval, setAnnounce, settings, waiting,
+  cancelReboot, INTERVALS, type Interval, intervalWaits, announceWaits, parseGoDuration, reboot, REBOOT_DELAY_MAX, rebootAsk, rebootDelay, reloadSettings, restart, restartAsk, runReboot, runRestart, saveInterval, setAnnounce, settings, waiting,
 } from "./store";
 import { cardBadges } from "../shared/card";
+import { useLook } from "../shared/look";
 
 /** intervalLabel is seconds in the language's short units ("10 s", "6 h", "1 min, 30 s"), Off for 0. */
 function intervalLabel(sec: number): string {
@@ -50,7 +50,7 @@ function intervalLabel(sec: number): string {
  * choice read-only with what sets it (AP AnnounceSetting, D15-A).
  */
 function Announce() {
-  load.useLoad();
+  useLook();
   const v = settings.announce;
   const choice = useSetAtOnce(v ? v.value || "auto" : "auto");
   let text = "";
@@ -85,7 +85,7 @@ function stateLine(iv: Interval, v: Setting): string {
  * sets it where a flag decides (as the announcement, D15-A).
  */
 function IntervalRow({ iv }: { iv: Interval }) {
-  load.useLoad();
+  useLook();
   const v = settings.intervals[iv.key] || null;
   const value = v ? parseGoDuration(v.value) : NaN;
   const choice = useSetAtOnce(v ? String(value) : "");
@@ -103,7 +103,7 @@ function IntervalRow({ iv }: { iv: Interval }) {
 
 /** Restart is the restart's row: what it does or why it is not offered, its button, which asks in its place; then what waits for it. */
 function Restart() {
-  load.useLoad();
+  useLook();
   const asking = useAsk<HTMLButtonElement>(restartAsk);
   const text = restart.text;
   const pending = restart.pending;
@@ -139,7 +139,7 @@ function Restart() {
  * reboot back.
  */
 function Reboot() {
-  load.useLoad();
+  useLook();
   const asking = useAsk<HTMLButtonElement>(rebootAsk);
   const delayRef = useRef<HTMLInputElement>(null);
   const text = reboot.text;
@@ -186,7 +186,7 @@ function Reboot() {
 
 /** Maintenance is the card's body, with its head's badge. */
 export function Maintenance() {
-  load.useLoad();
+  useLook();
   const n = waiting();
   const badge = n ? tn("maint.badge.pending", n) : "";
   // the card's head counts what waits for the next start

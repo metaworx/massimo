@@ -20,7 +20,7 @@ import { actionRunner } from "../shared/action";
 import { capLabel } from "../model/cap";
 import { forgetForms } from "../shared/forms";
 import { session, stillSession } from "../shared/session";
-import { load, roleFormKey, roleUI, roles, said } from "./store";
+import { roleFormKey, roleUI, roles, said } from "./store";
 import { can } from "../shared/me";
 
 /** rolePath is a role's path in the API, rest after it. */
@@ -48,7 +48,6 @@ export async function loadRoles(): Promise<void> {
   roles.list = list;
   roles.caps = res.capabilities || [];
   roles.loaded = true;
-  load.bump();
 }
 
 /** The roles' runner: its message under the roles, the roles read again after a change. */

@@ -197,7 +197,7 @@ def test_log_names_devices_once_the_rooms_come(page):
     assert first.locator(".log-device").inner_text() == kept, "the name the line kept, before the rooms"
     # Lines that kept no name show the device's type until the rooms come,
     # and its S/N as the tooltip.
-    page.evaluate("logState.lines.forEach((l) => { if (l.state) l.state = { ...l.state, name: '' }; }); renderLog();")
+    page.evaluate("logState.lines = logState.lines.map((l) => (l.state ? { ...l, state: { ...l.state, name: '' } } : l)); renderLog();")  # the lines written whole
     last = page.evaluate("(() => { const l = logState.lines.filter((x) => x.state).at(-1); return { serial: l.serial, type: upperFirst(typeName(l.state.type)) }; })()")
     assert first.locator(".log-device").inner_text() == last["type"], "the type, no name yet"
     assert first.locator(".log-device").get_attribute("title") == last["serial"], "the S/N as the tooltip"
@@ -242,12 +242,13 @@ def test_log_names_room_and_device(page, case, reads):
         assert page.locator("#log-lines .log-line.kind-config").count() > 0, f"the filter finds it by {what!r}"
     page.locator("#log-filter").fill("")
     name = d["name"]
-    page.evaluate("state.rooms[0].devices[0].name = ''; renderLog();")
+    rename = "(n) => { state.rooms = state.rooms.map((r, i) => (i ? r : { ...r, devices: r.devices.map((x, j) => (j ? x : { ...x, name: n })) })); }"
+    page.evaluate(rename, "")  # the rooms written whole, as a load writes them
     try:
         want = page.evaluate("(t) => upperFirst(typeName(t))", d["type"])
         assert line.locator(".log-device").inner_text() == room + " › " + want, "no name: the room and the type"
     finally:
-        page.evaluate("(n) => { state.rooms[0].devices[0].name = n; renderLog(); }", name)
+        page.evaluate(rename, name)
     show_view(page, "tiles")
 
 

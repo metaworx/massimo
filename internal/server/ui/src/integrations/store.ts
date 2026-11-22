@@ -22,7 +22,6 @@
 import { signal } from "@preact/signals";
 import type { Integration, User } from "../api";
 import { actionRunner, type Outcome } from "../shared/action";
-import { counter } from "../shared/counter";
 import { forgetForms } from "../shared/forms";
 import { live, liveMap } from "../shared/live";
 import { session, stillSession } from "../shared/session";
@@ -48,9 +47,6 @@ interface NotLooking {
   fixed_by?: string;
   why?: string;
 }
-
-/** The section's load counter: bumped after every load and change; every part of it uses it. */
-export const load = counter();
 
 /** What the section shows, as the last loads that went through gave it. */
 export const data = live({
@@ -157,7 +153,6 @@ export async function loadIntegrations(): Promise<void> {
   for (const i of list) if (panelUI.of(i.uuid).open) await loadDetails(i.uuid);
   // every approval whose key waits is read again, as the plain list's every drawing started it
   for (const i of list) if (keyState(i) === "waiting") watchApproval(i.uuid);
-  load.bump();
 }
 
 /** loadSeen reads what the last look at the LAN saw; refresh looks now. */
@@ -191,7 +186,6 @@ export async function refresh(): Promise<void> {
   await loadIntegrations();
   await loadLinkUsers();
   await loadSeen(false);
-  load.bump();
 }
 
 /** loadRequestsSwitch reads whether integrations may ask, for a holder of settings, who alone sees the switch. */
@@ -280,7 +274,6 @@ export function watchApproval(uuid: string): void {
     if (panelUI.of(uuid).open) data.details = { ...data.details, [uuid]: i };
     const now = keyState(i);
     if (now !== was) {
-      load.bump();
       if (was === "waiting" && !now) msg(t("integrations.collected", { name: i.name }), true);
       return;
     }
@@ -309,5 +302,4 @@ export function forgetIntegrations(): void {
   panelUI.clear();
   requestUI.clear();
   said.value = null;
-  load.bump();
 }

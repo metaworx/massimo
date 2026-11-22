@@ -18,7 +18,7 @@ import type { Provider } from "../api";
 import { actionRunner } from "../shared/action";
 import { forgetForms } from "../shared/forms";
 import { session, stillSession } from "../shared/session";
-import { enabled, load, providerFormKey, providers, providerUI, reads, roles, said } from "./store";
+import { enabled, providerFormKey, providers, providerUI, reads, roles, said } from "./store";
 import { can } from "../shared/me";
 
 /** ADMIN_CAPS are the capabilities a role may not hold to be given to the users a provider creates (adminCapabilities in internal/server/oidc.go). */
@@ -53,7 +53,6 @@ export async function loadProviders(): Promise<void> {
   }
   providers.list = list;
   providers.loaded = true;
-  load.bump();
 }
 
 /** The providers' runner: its message under the list, the providers and the enabled ones read again after a change. */

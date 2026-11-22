@@ -20,14 +20,10 @@ import { signal } from "@preact/signals";
 import type { ConfigView, StoreInfo, SystemInfo } from "../api";
 import type { ServerEvent } from "../model/event";
 import { burstReader } from "../shared/burst";
-import { counter } from "../shared/counter";
 import { live } from "../shared/live";
 import { session, stillSession } from "../shared/session";
 import { isShown } from "../shared/pages";
 import { can } from "../shared/me";
-
-/** The page's load counter: every part of it uses it. */
-export const load = counter();
 
 /** What the page shows, as the last loads that went through gave it. */
 export const data = live({
@@ -81,7 +77,6 @@ export async function loadServerInfo(): Promise<void> {
   } catch (e) {
     if (stillSession(n)) data.error = (e as Error).message;
   }
-  load.bump();
 }
 
 /** certPending reports whether the proxy's certificate is still to be read. */
@@ -145,7 +140,6 @@ export async function loadSystemInfo(follow = true): Promise<void> {
     cert.last = v;
     certFollow(v);
   }
-  load.bump();
 }
 
 /** The page's reads for the stream's events, one at a time: "config" the store and the settings in effect, "facts" the server's facts. */
@@ -197,5 +191,4 @@ export function forgetSysinfo(): void {
   cert.tries = 0;
   cert.last = null;
   Object.assign(data, { sys: null, store: null, config: null, error: "", unread: false, skew: 0 });
-  load.bump();
 }

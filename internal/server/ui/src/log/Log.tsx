@@ -24,7 +24,8 @@ import { LOG_COUNT_RANGE, LOG_RANGES } from "./kinds";
 import { Line } from "./Line";
 import type { LogLine } from "./lines";
 import { logState } from "./state";
-import { choiceCount, clearLogFilter, drawn, fillLogSelects, filterTyped, loadOlder, logChoicesChanged, markFocus, scrolled, setBox, view } from "./store";
+import { clearLogFilter, drawn, fillLogSelects, filterTyped, loadOlder, logChoicesChanged, markFocus, scrolled, setBox, view } from "./store";
+import { useLook } from "../shared/look";
 
 /** The element of each line, made once: the list's drawing hands Preact the same element again, which it leaves as it is. */
 const made = new WeakMap<LogLine, VNode>();
@@ -70,7 +71,7 @@ function Lines() {
 
 /** Older shows whether Older can page further back; the newest LOG_COUNT have no Older, a time range pages back within it. */
 function Older() {
-  choiceCount.useLoad();
+  useLook();
   const can = logState.more && logState.cursor !== null;
   return (
     <div class={"log-older" + (logState.range === LOG_COUNT_RANGE ? " hidden" : "")}>
@@ -83,7 +84,7 @@ function Older() {
 
 /** Head is the log's head: the title, the filter, the choices, Clear and Mark all as seen. */
 function Head() {
-  choiceCount.useLoad();
+  useLook();
   const searchRef = useRef<HTMLInputElement>(null);
   const toSearch = markFocus.value === "search";
   // the focus handed on from the last Mark seen, in the drawing's own turn

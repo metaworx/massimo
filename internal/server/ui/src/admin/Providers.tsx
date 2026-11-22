@@ -27,9 +27,10 @@ import { Fold, FoldHead } from "../shared/fold";
 import { focusForm, type Place, useForm } from "../shared/forms";
 import { Question, busyProps, useAsk, useBusy } from "../shared/question";
 import { addProvider, autoRoleOptions, removeProvider, saveProvider } from "./sendProviders";
-import { adding, load, providerFormKey, providers, providerUI, said } from "./store";
+import { adding, providerFormKey, providers, providerUI, said } from "./store";
 import { cardBadges, showCard } from "../shared/card";
 import { isShown, showView } from "../shared/pages";
+import { useLook } from "../shared/look";
 
 /** openProvider shows a provider's settings and puts the focus into them, from any page: System settings shown, its panel open. */
 function openProvider(key: string): void {
@@ -123,7 +124,7 @@ function Fields({ id, p, d, secret, setSecret }: { id: string; p: Provider | nul
  * discovery document.
  */
 function ProviderForm({ p }: { p: Provider }) {
-  load.useLoad();
+  useLook();
   const form = useForm({ key: providerFormKey(p.key), name: { key: "providers.formName", args: { name: p.name || p.key } }, open: () => openProvider(p.key) });
   const d = useDrafts(p, form.place);
   // written only: the part's own state, not the forms' store
@@ -157,7 +158,7 @@ function ProviderForm({ p }: { p: Provider }) {
 
 /** NewProvider is the form that adds a provider: its key, then the fields of a provider; what is typed is the form's own, the secret too. */
 function NewProvider() {
-  load.useLoad();
+  useLook();
   const d = useDrafts(null);
   const [key, setKey] = useState("");
   const [secret, setSecret] = useState("");
@@ -185,7 +186,7 @@ function NewProvider() {
 
 /** ProviderPanel is a provider's panel: its head with its name, its key and its badges, disabled and creates users; its form. */
 function ProviderPanel({ p }: { p: Provider }) {
-  load.useLoad();
+  useLook();
   const ui = providerUI.of(p.key);
   const badges = [];
   if (!p.enabled) badges.push(<Badge key="off" kind="bad" text={t("providers.off")} />);
@@ -200,7 +201,7 @@ function ProviderPanel({ p }: { p: Provider }) {
 
 /** ProvidersCard is the section's body: what to register at a provider, the panels, the form that adds one, the message line. */
 export function ProvidersCard() {
-  load.useLoad();
+  useLook();
   const list = providers.list;
   const callback = pageBase() + "api/v1/login/oidc/callback";
   const count = providers.loaded && list.length ? String(list.length) : "";

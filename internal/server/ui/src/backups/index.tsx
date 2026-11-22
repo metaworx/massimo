@@ -17,10 +17,11 @@
 import { useLayoutEffect } from "preact/hooks";
 import { mounter, register } from "../shared/region";
 import { CubeBackup, keptText, SystemBackups } from "./Backups";
-import { type RestoreEvent, boxUI, forgetBackups, load, of, refreshBackups, restoreEvent, resynced } from "./store";
+import { type RestoreEvent, boxUI, forgetBackups, of, refreshBackups, restoreEvent, resynced } from "./store";
 import { cardBadges } from "../shared/card";
 import { isShown, onView } from "../shared/pages";
 import { can } from "../shared/me";
+import { useLook } from "../shared/look";
 
 /** The badges of System settings' card: every Cube's backups kept, once one list has come. */
 function systemCount(): string {
@@ -30,7 +31,7 @@ function systemCount(): string {
 
 /** System is System settings' card with its head's count. */
 function System() {
-  load.useLoad();
+  useLook();
   const count = systemCount();
   // the card's head counts every Cube's backups
   useLayoutEffect(() => {
@@ -41,7 +42,7 @@ function System() {
 
 /** Page is Cube settings' card with its head's count, the chosen Cube's. */
 function Page() {
-  load.useLoad();
+  useLook();
   const count = state.serial ? keptText(state.serial) : "";
   // the card's head counts the chosen Cube's backups
   useLayoutEffect(() => {
@@ -62,7 +63,6 @@ function quiet(): void {
 function showPage(): void {
   if (!can("backup")) return;
   mountPage();
-  load.bump();
   if (state.serial) refreshBackups(state.serial);
 }
 
@@ -70,7 +70,6 @@ function showPage(): void {
 const backups = register("backups", {
   /** render draws every box again, after a change of language (backup.js renderBackups). */
   render(): void {
-    load.bump();
   },
   /** cubeChanged follows the Cube choice on Cube settings (backup.js backupCubeChanged). */
   cubeChanged(): void {
@@ -94,7 +93,6 @@ onView("system", () => {
   quiet();
   if (!can("backup")) return;
   mountSystem();
-  load.bump();
   for (const c of state.cubes) refreshBackups(c.serial);
 });
 onView("cube", () => {

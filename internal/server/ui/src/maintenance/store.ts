@@ -21,7 +21,6 @@ import type { RebootInfo, RestartInfo, Setting } from "../api";
 import { type ServerEvent, settingsChanged } from "../model/event";
 import type { Outcome } from "../shared/action";
 import { burstReader } from "../shared/burst";
-import { counter } from "../shared/counter";
 import { live } from "../shared/live";
 import { session, stillSession } from "../shared/session";
 import { isShown } from "../shared/pages";
@@ -29,9 +28,6 @@ import { can } from "../shared/me";
 
 /** A text said in the page's language at its drawing. */
 export type Say = () => string;
-
-/** The section's load counter: every part of it uses it. */
-export const load = counter();
 
 /** RESTART_POLL_MS is how often the page asks /healthz while the server restarts, RESTART_WAIT_MS how long it waits for it to come back. */
 const RESTART_POLL_MS = 2000;
@@ -237,7 +233,6 @@ export async function loadSettings(mine: () => boolean = () => true): Promise<vo
   } catch (e) {
     if (stillSession(n) && mine()) settings.announceSaid = { text: t("maint.cannotAsk", { error: (e as Error).message }), ok: false };
   }
-  load.bump();
 }
 
 /** setAnnounce stores the choice, auto, the default, sent as null; it says how it went. */
@@ -256,7 +251,6 @@ async function putAnnounce(value: string): Promise<void> {
   } catch (e) {
     if (stillSession(n)) settings.announceSaid = { text: t("maint.announceFailed", { error: (e as Error).message }), ok: false };
   }
-  load.bump();
 }
 
 /** saveInterval stores the interval chosen, in seconds; the default is sent as null, so that the store keeps no copy of it. */
@@ -280,7 +274,6 @@ async function putInterval(iv: Interval, sec: number): Promise<void> {
     said = { text: t("maint.intervalFailed", { error: (e as Error).message }), ok: false };
   }
   settings.intervalSaid = { ...settings.intervalSaid, [iv.key]: said };
-  load.bump();
 }
 
 // --- the settings file and the restart (with restart) --------------------
@@ -304,7 +297,6 @@ function renderRestart(v: RestartInfo): void {
     return file.join(" ");
   };
   if (!v.available) restartAsk.asking = false;
-  load.bump();
 }
 
 /** loadRestart asks whether the server can be restarted from here, for a holder of restart, not while the page follows a restart. */
@@ -630,10 +622,10 @@ export function forgetMaintenance(): void {
   rebootBefore = "";
   waitAt = NaN;
   lastRestart = null;
+  for (const o of [owns.settings, owns.reboot]) o.missed = false; // a read skipped for the user who was is no read of the next one's
   Object.assign(restart, { shown: false, off: false, text: null, pending: [], file: null, following: false, reloaded: null });
   Object.assign(reboot, { shown: false, cancel: false, off: false, text: null, msg: null, following: false, delay: "60" });
   restartAsk.asking = false;
   rebootAsk.asking = false;
   Object.assign(settings, { announce: null, intervals: {}, announceSaid: null, intervalSaid: {} });
-  load.bump();
 }

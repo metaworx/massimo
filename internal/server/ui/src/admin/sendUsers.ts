@@ -23,7 +23,7 @@ import { actionRunner } from "../shared/action";
 import { forgetForms } from "../shared/forms";
 import { session, stillSession } from "../shared/session";
 import { wordNameError } from "../shared/username";
-import { enabled, load, passwordLogin, reads, roles, said, userFormKey, userUI, users } from "./store";
+import { enabled, passwordLogin, reads, roles, said, userFormKey, userUI, users } from "./store";
 import { can, canManageUsersOf, isMe, me } from "../shared/me";
 
 /** usersAdmin says what the signed-in user may do with users: everything, guests only, or nothing but its own user. */
@@ -95,7 +95,6 @@ export async function loadUsers(): Promise<void> {
   if (!stillSession(n)) return;
   enabled.value = providers;
   await loadRolesForUsers(n);
-  load.bump();
 }
 
 /** The users' runner: its message under the list; a change read again, and the open panels' sessions, keys and identities with it. */

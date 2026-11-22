@@ -20,9 +20,10 @@ import type { Setting, UpdateEntry, UpdateInfo, UpdateStatus } from "../api";
 import { hid } from "../shared/cls";
 import { Select } from "../shared/field";
 import { BusyButton, busyProps, Question, useAsk, useSetAtOnce } from "../shared/question";
-import { ask, data, load, loadUpdate, question, runUpdate, setChannel, UPDATE_FLAVOURS } from "./store";
+import { ask, data, loadUpdate, question, runUpdate, setChannel, UPDATE_FLAVOURS } from "./store";
 import { cardBadges } from "../shared/card";
 import { can } from "../shared/me";
+import { useLook } from "../shared/look";
 
 /** stateText is a helper state's text, as the helper reports it where the page has none. */
 function stateText(state: string): string {
@@ -108,7 +109,7 @@ function channelNote(u: UpdateInfo): string {
  * on it; or the channel fixed, with the reason and the way to change it.
  */
 function Channel({ u, setting }: { u: UpdateInfo; setting: Setting }) {
-  load.useLoad();
+  useLook();
   const fixed = channelFixed(u, setting);
   const stored = fixed ? setting.in_effect || "" : setting.set ? setting.value : "";
   const choice = useSetAtOnce(stored);
@@ -125,7 +126,7 @@ function Channel({ u, setting }: { u: UpdateInfo; setting: Setting }) {
 
 /** Software is the section's body. */
 export function Software() {
-  load.useLoad();
+  useLook();
   const asking = useAsk<HTMLButtonElement>(question);
   const u = data.info;
   const setting = data.setting;

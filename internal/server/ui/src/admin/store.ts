@@ -18,11 +18,7 @@
 import { signal } from "@preact/signals";
 import type { Capability, LoginProvider, Provider, Role, User } from "../api";
 import type { Outcome } from "../shared/action";
-import { counter } from "../shared/counter";
 import { live, liveMap } from "../shared/live";
-
-/** The lists' load counter: bumped after every load and change; every part of the four uses it. */
-export const load = counter();
 
 /** The users (GET /api/v1/users), as the last load that went through gave them; loaded says that one did. */
 export const users = live({ list: [] as User[], loaded: false });
@@ -98,5 +94,4 @@ export function forgetAdmin(): void {
   providerUI.clear();
   adding.user = adding.role = adding.provider = false;
   said.users = said.roles = said.providers = null;
-  load.bump();
 }

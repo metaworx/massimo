@@ -840,7 +840,6 @@ function clearCubeData() {
   state.pollTimer = null;
   for (const ui of Object.values(state.ui)) if (ui.timer) clearTimeout(ui.timer);
   Object.assign(state, { cubes: [], found: [], rooms: [], unlisted: [], roomsOf: null, details: {}, ui: {}, lastPoll: null });
-  logState.cubeRooms.clear(); // log.js: every Cube's rooms, as the last user saw them
   renderRooms(); // rooms.js
   renderCubeSelect();
   renderHomeNotice();

@@ -20,7 +20,7 @@ import { ProvidersCard } from "./Providers";
 import { CapsCard, RolesCard } from "./Roles";
 import { loadProviders, providersMsg } from "./sendProviders";
 import { loadRoles, rolesMsg } from "./sendRoles";
-import { forgetAdmin, load, reads, said } from "./store";
+import { forgetAdmin, reads, said } from "./store";
 import { UsersCard } from "./Users";
 import { loadPasswordLogin, loadUsers, usersMsg } from "./sendUsers";
 import { onView } from "../shared/pages";
@@ -39,7 +39,6 @@ const users = register("users", {
   /** render draws the users again (users.js renderUsers). */
   render(): void {
     mountUsers();
-    load.bump();
   },
 });
 
@@ -55,7 +54,6 @@ const roles = register("roles", {
   render(): void {
     mountRoles();
     mountCaps();
-    load.bump();
   },
 });
 
@@ -69,7 +67,6 @@ const providers = register("providers", {
   /** render draws the providers again (providers.js renderProviders). */
   render(): void {
     mountProviders();
-    load.bump();
   },
 });
 

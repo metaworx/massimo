@@ -31,12 +31,12 @@ import { type Fact, KvList } from "../shared/kv";
 import { Link } from "../shared/link";
 import { BusyButton, Question, useAsk, useSetAtOnce } from "../shared/question";
 import {
-  type FoundIntegration, INTEGRATION_CEILING, data, formKey, integrationPath, keyState, load, loadDetails, loadIntegrations, loadSeen, panelUI,
-  msgIn, requestUI, requestsOn, run, said, setRequests, shown, watchApproval,
+  type FoundIntegration, INTEGRATION_CEILING, data, formKey, integrationPath, keyState, loadDetails, loadIntegrations, loadSeen, panelUI, msgIn, requestUI, requestsOn, run, said, setRequests, shown, watchApproval,
 } from "./store";
 import { type BadgeSpec, cardBadges, showCard } from "../shared/card";
 import { isShown, mayShow, showView } from "../shared/pages";
 import { can } from "../shared/me";
+import { useLook } from "../shared/look";
 
 /** capOptions are the capabilities of the ceiling as a choice of switches. */
 function capOptions(): [string, string][] {
@@ -108,7 +108,7 @@ function Register({ url, address, name, id }: { url?: string; address: string; n
  * panel's own, until it is approved or refused.
  */
 function RequestPanel({ r }: { r: Integration }) {
-  load.useLoad();
+  useLook();
   const ui = requestUI.of(r.uuid);
   // an integration of the same kind registered before, the same installation first: approved as it, it keeps its users and links
   const earlier = data.list.filter((i) => i.kind === r.kind && i.state !== "pending" && (i.state as string) !== "refused")
@@ -174,7 +174,7 @@ const asSet = (l: string[]) => [...l].sort().join(",");
  * or empty.
  */
 function NameForm({ i }: { i: Integration }) {
-  load.useLoad();
+  useLook();
   const form = useForm({ key: formKey(i.uuid, "name"), name: { key: "integrations.nameFormName", args: { name: i.name } }, open: () => openForm(i.uuid, "name") });
   const name = useDraft(i.name || "", trim, form.place("name"));
   const changed = name.changed && name.value.trim() !== "";
@@ -195,7 +195,7 @@ function NameForm({ i }: { i: Integration }) {
 
 /** MaxForm is an integration's maximum, a switch per capability of the ceiling, with Reset and Save the maximum. */
 function MaxForm({ i }: { i: Integration }) {
-  load.useLoad();
+  useLook();
   const form = useForm({ key: formKey(i.uuid, "max"), name: { key: "integrations.maxFormName", args: { name: i.name } }, open: () => openForm(i.uuid, "max") });
   const max = useDraft(i.max_caps || [], asSet, form.place("max_caps"));
   form.track(max.changed, [max]);
@@ -269,7 +269,7 @@ function UserRow({ i, u }: { i: Integration; u: IntegrationUser }) {
  * panel opens, and Revoke.
  */
 function IntegrationPanel({ i }: { i: Integration }) {
-  load.useLoad();
+  useLook();
   const ui = panelUI.of(i.uuid);
   const key = keyState(i);
   const enabled = useSetAtOnce(i.state === "active");
@@ -285,7 +285,7 @@ function IntegrationPanel({ i }: { i: Integration }) {
       ui.open = o;
       if (!o) return;
       const n = session();
-      loadDetails(i.uuid).then(() => load.bump(), (e: Error) => msgIn(n, t("integrations.failed", { name: i.name, error: e.message }), false));
+      loadDetails(i.uuid).catch((e: Error) => msgIn(n, t("integrations.failed", { name: i.name, error: e.message }), false));
     }}>
       <div class="integration-body">
         {key === "waiting" && (
@@ -389,7 +389,7 @@ function Seen({ f, n }: { f: FoundIntegration; n: number }) {
 
 /** IntegrationsCard is the section's body. */
 export function IntegrationsCard() {
-  load.useLoad();
+  useLook();
   const list = data.list;
   const waiting = list.filter((i) => i.state === "pending");
   const registered = list.filter((i) => i.state === "active" || i.state === "disabled");

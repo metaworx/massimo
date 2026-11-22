@@ -22,7 +22,6 @@
 import type { Setting, UpdateInfo, UpdateStatus } from "../api";
 import { type ServerEvent, settingsChanged } from "../model/event";
 import { burstReader } from "../shared/burst";
-import { counter } from "../shared/counter";
 import { live } from "../shared/live";
 import { session, stillSession } from "../shared/session";
 import { isShown } from "../shared/pages";
@@ -30,9 +29,6 @@ import { can } from "../shared/me";
 
 /** A text said in the page's language at its drawing. */
 export type Say = () => string;
-
-/** The section's load counter: every part of it uses it. */
-export const load = counter();
 
 /**
  * UPDATE_FLAVOURS are the channels a box may follow, the most rolling
@@ -121,7 +117,6 @@ export async function loadUpdate(refresh: boolean, mine: () => boolean = () => t
     setBusy(true);
     if (!follow.on) followUpdate();
   }
-  load.bump();
   renderServerSign(); // header.js
   return u;
 }
@@ -140,7 +135,6 @@ export async function loadChannel(mine: () => boolean = () => true): Promise<voi
   if (!stillSession(n) || !mine()) return;
   data.setting = setting;
   data.channelSaid = null;
-  load.bump();
 }
 
 /**
@@ -339,11 +333,11 @@ export function updateLatest(): string {
  */
 export function forgetSoftware(): void {
   stopFollow();
+  channelMissed = false; // a read skipped for the user who was is no read of the next one's
   data.busy = false;
   data.said = null;
   data.setting = null;
   data.channelSaid = null;
   question.asking = false;
   question.version = "";
-  load.bump();
 }

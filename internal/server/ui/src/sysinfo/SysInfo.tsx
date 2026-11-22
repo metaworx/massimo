@@ -25,8 +25,9 @@ import { Fold } from "../shared/fold";
 import { CountList, KvList } from "../shared/kv";
 import { tParts } from "../shared/lang";
 import { Link } from "../shared/link";
-import { data, folds, load, tick } from "./store";
+import { data, folds, tick } from "./store";
 import { cardBadges } from "../shared/card";
+import { useLook } from "../shared/look";
 
 /** OS_NAMES are the operating systems as Go names them, where the server has no distribution's name. */
 const OS_NAMES: Record<string, string> = { linux: "Linux", darwin: "macOS", windows: "Windows", freebsd: "FreeBSD" };
@@ -234,7 +235,7 @@ function Certificate({ v }: { v: SystemInfo }) {
 
 /** Facts is the table of the server's facts, dashes before the first answer. */
 function Facts() {
-  load.useLoad();
+  useLook();
   const v = data.sys;
   const dash = (id: string, cls?: string) => <td id={id} class={cls}>–</td>;
   const parts = splitVersion((v && v.version) || "");
@@ -316,7 +317,7 @@ function ConfigBody({ c }: { c: ConfigView | null }) {
 
 /** SysInfo is the page's card: the facts, then the store and the settings in effect (with settings), and the page row's badge. */
 export function SysInfo() {
-  load.useLoad();
+  useLook();
   const v = data.sys;
   const s = data.store;
   const c = data.config;
