@@ -20,7 +20,9 @@ import { Choices } from "../shared/choices";
 import { DateTime, FormFooter, Stepper } from "../shared/field";
 import { useBusy } from "../shared/question";
 import { session, stillSession } from "../shared/session";
-import { house, load } from "./store";
+import { untracked } from "@preact/signals";
+import { useLook } from "../shared/look";
+import { house } from "./store";
 
 /** The modes of the House tile, by their value, with their button's id and their text. */
 const MODES: [string, string, string][] = [["eco", "house-eco", "mode.eco"], ["auto", "house-auto", "mode.auto"], ["comfort", "house-comfort", "mode.comfort"],
@@ -125,10 +127,12 @@ async function houseRequests(): Promise<void> {
  * rooms.js shows and hides the tile, as there is a room with a thermostat.
  */
 export function House() {
-  load.useLoad();
+  useLook();
   const sending = useBusy();
   const panel = useRef<HTMLFormElement>(null);
-  const rooms = state.rooms.filter((r) => roomThermostat(r));
+  // the rooms by the list, which it follows; their devices' states draw nothing here, as before
+  const list = state.rooms;
+  const rooms = untracked(() => list.filter((r) => roomThermostat(r)));
   const any = rooms.some((r) => ticked(r.id));
   const res = house.result;
   useLayoutEffect(() => {

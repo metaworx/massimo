@@ -19,7 +19,7 @@ redraw is the test's. The setpoint's PUT is answered with a stub where
 a test presses +, so that nothing reaches the fake Cube."""
 import pytest
 
-from helpers import frames, hold, wait_held, wait_until
+from helpers import frames, held_poll, hold, wait_held, wait_until
 
 
 def held(page):
@@ -558,3 +558,41 @@ def test_a_put_stays_with_its_cube_through_a_change_of_cube(page, case, reads):
         for route in held:
             route.continue_()
     assert wait_until(page, "state.serial === 'KEQ0000100'", 10), "the Cube served chosen again by the next load"
+
+
+def test_the_house_follows_a_room_renamed(page, case, reads):
+    """A room renamed, as a metadata event's load of the rooms brings it,
+    without a load of the Cubes: its tile says the new name, and so does
+    the House panel's list of rooms. Fails on the page where the House
+    tile read the rooms' list untracked and followed a load of the Cubes
+    alone."""
+    with held_poll(page):
+        rid = page.evaluate("state.rooms.find(roomThermostat).id")
+
+        def rename(rooms):
+            for r in rooms or []:
+                if r.get("id") == rid:
+                    r["name"] = "Renamed room"
+            return rooms
+
+        reads.change("**/rooms?devices=all", rename)
+        page.evaluate("loadRooms()")
+        assert wait_until(page, "state.rooms.some((r) => r.name === 'Renamed room')", 5), "the rooms read again"
+        assert wait_until(page, "document.querySelector('#rooms').textContent.includes('Renamed room')", 5), "the tile follows"
+        frames(page)
+        house = page.evaluate("document.getElementById('house-rooms').textContent")
+        assert "Renamed room" in house, f"the House panel's rooms follow: {house!r}"
+
+
+def test_the_house_follows_a_room_removed(page, case, reads):
+    """A room gone, as a metadata event's load of the rooms brings it: the
+    House panel no longer offers it."""
+    with held_poll(page):
+        gone = page.evaluate("state.rooms.filter(roomThermostat)[0].name")
+        rid = page.evaluate("state.rooms.filter(roomThermostat)[0].id")
+        reads.change("**/rooms?devices=all", lambda rooms: [r for r in (rooms or []) if r.get("id") != rid])
+        page.evaluate("loadRooms()")
+        assert wait_until(page, "!state.rooms.some((r) => r.id === %d)" % rid, 5), "the rooms read again"
+        frames(page)
+        house = page.evaluate("document.getElementById('house-rooms').textContent")
+        assert gone not in house, f"the House panel no longer offers {gone!r}: {house!r}"

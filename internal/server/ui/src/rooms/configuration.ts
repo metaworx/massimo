@@ -25,6 +25,7 @@ import { focusForm, useForm, type Form, type FormName } from "../shared/forms";
 import { liveMap } from "../shared/live";
 import { byteLength, NAME_BYTES } from "../shared/name";
 import { session, stillSession } from "../shared/session";
+import { removeFromCube } from "./send";
 import { cfgFormKey, openRoom, roomOf } from "./store";
 import { can } from "../shared/me";
 
@@ -398,7 +399,7 @@ export async function sendDevice(room: PageRoom, cs: ConfigState, d: Device, cha
 
 /**
  * removeDevice removes a device of the room from the Cube (removeFromCube
- * of unlisted.js), which loads the rooms again, and says how it went on
+ * of rooms/send.ts), which loads the rooms again, and says how it went on
  * the Devices tab, or on the tile where the configuration closed
  * meanwhile.
  */
@@ -406,7 +407,7 @@ export async function removeDevice(room: PageRoom, cs: ConfigState, d: Device): 
   say(cs, t("device.removing", { device: deviceName(d) }), true);
   const n = session();
   const res = await removeFromCube(d);
-  if (!stillSession(n)) return false; // an answer after a sign-out says nothing
+  if (!res || !stillSession(n)) return false; // an answer after a sign-out says nothing
   const again = roomOf(room.id);
   if (!again || !roomUI(again).config) {
     showTileResult(room.id, res.text, res.ok);

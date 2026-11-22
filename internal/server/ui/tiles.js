@@ -7,8 +7,9 @@
 // words and a failed radiogram's name, which the log uses too. The tile
 // itself is a part (ui/src/rooms/Tile.tsx), drawn from the tile's live
 // state (rooms.js roomUI) that these set. The rooms' facts and the other
-// actions behind a tile are in rooms.js, the devices without a room in
-// unlisted.js, the House tile in house.js. Uses the state, api and helpers
+// actions behind a tile are in rooms.js, the devices without a room and
+// their removal parts (ui/src/rooms/), the House tile in house.js. Uses
+// the state, api and helpers
 // of app.js.
 "use strict";
 

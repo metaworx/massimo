@@ -33,7 +33,7 @@ import { useLook } from "../shared/look";
 function Joined({ serial, d }: { serial: string; d: NewDevice }) {
   useLook();
   const put = flowOf(serial).puts[d.rf_address];
-  const rooms = cubeRooms.value[serial] || [];
+  const rooms = serial === state.roomsOf ? state.rooms : cubeRooms.value[serial] || [];
   // The rooms are read again; for the Cube shown, Rooms' tiles and devices without a room too.
   const reload = () => (serial === state.serial ? Promise.all([loadRooms(), loadCubeRooms(serial)]) : loadCubeRooms(serial));
   return (

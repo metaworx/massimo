@@ -499,7 +499,7 @@ def test_vwt_settings_kept_and_the_disk_opens_them(page, case, reads, stream):
         reads.change(room["path"], stored_elsewhere)
         try:
             page.evaluate("state.details = {}")
-            page.evaluate("(id) => { MassimoParts.rooms.data(id); return loadRooms(); }", room["id"])  # a device reports, the rooms load
+            page.evaluate("(id) => { const r = state.rooms.find((x) => x.id === id); updateDevice(JSON.parse(JSON.stringify(r.vwt))); return loadRooms(); }", room["id"])  # a device reports, the rooms load
             assert wait_until(page, "[...document.querySelectorAll(%s)].some((e) => e.textContent.includes(%s))"
                               % (json.dumps(field_meanwhile), json.dumps(meanwhile)), 5), "the form says the address stored meanwhile"
             assert value(page, room, "rf_address") == OTHER_ADDRESS, "the draft kept at a device's report and a load of the rooms"

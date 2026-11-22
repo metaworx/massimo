@@ -15,22 +15,13 @@
  */
 
 import { roomFormKey } from "../model/cube";
-import { counter } from "../shared/counter";
 import { focusForm } from "../shared/forms";
-import { live, liveMap } from "../shared/live";
+import { effect } from "@preact/signals";
+import { windowNow } from "../shared/data";
+import { live } from "../shared/live";
 import { windowState } from "../model/device";
 import { isShown, showView } from "../shared/pages";
 
-/** The rooms' load counter: bumped at every drawing of the rooms (renderRooms); every rooms part uses it. */
-export const load = counter();
-
-/** Per room, by its id: n, raised when a device of the room changed (a state event), which its tile and its configuration read. */
-export const ticks = liveMap(() => ({ n: 0 }));
-
-/** tickOf is a room's counter. */
-export function tickOf(id: number): { n: number } {
-  return ticks.of(String(id));
-}
 
 /** newUI is what a room's tile keeps, live (rooms.js roomUI). */
 export function newUI(): RoomUI {
@@ -129,20 +120,16 @@ export function roomOf(id: number): PageRoom | undefined {
   return state.rooms.find((r) => r.id === id);
 }
 
-/** changed draws a room's tile again, its configuration with it, in place: with the focus in it or not. */
-export function changed(id: number): void {
-  tickOf(id).n++;
-}
-
 /** The timer of the next change of an open window's state by the clock alone. */
 let windowTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
- * planWindows draws again, when an open window's state changes by the
- * clock alone (windowState), the tiles of the rooms whose window changes
- * then.
+ * planWindows raises windowNow when an open window's state changes by the
+ * clock alone (windowState), so that what shows it is drawn again then;
+ * an effect, run again at every write of the rooms or of a room's
+ * devices.
  */
-export function planWindows(): void {
+function planWindows(): void {
   if (windowTimer) clearTimeout(windowTimer);
   windowTimer = null;
   const now = Date.now();
@@ -158,7 +145,10 @@ export function planWindows(): void {
   if (next === Infinity) return;
   windowTimer = setTimeout(() => {
     windowTimer = null;
-    for (const r of state.rooms) if (r.devices.some((d) => d.window)) changed(r.id);
-    planWindows();
+    windowNow.value++;
   }, Math.min(next - now + 250, 2 ** 31 - 1));
 }
+effect(() => {
+  void windowNow.value; // the next time planned anew once one has come
+  planWindows();
+});

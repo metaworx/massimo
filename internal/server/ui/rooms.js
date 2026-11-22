@@ -125,32 +125,28 @@ function roomsLoaded() {
   MassimoParts.rooms.loaded();
 }
 
-// updateDevice applies a state event to the room or the unlisted list.
-// The room's tile follows in place (MassimoParts.rooms.data), its
-// configuration with it, with the focus in it or not.
+// updateDevice applies a state event to the room or the unlisted list:
+// a room's fields are signals (ui/src/shared/data.ts), so that its tile
+// follows in place, its configuration with it, with the focus in it or
+// not; the list is written whole, and its row follows, the form under it
+// as it is.
 function updateDevice(d) {
   if (d.virtual) {
     const r = state.rooms.find((x) => x.id === d.room_id);
-    if (!r) return;
-    r.vwt = d;
-    MassimoParts.rooms.data(r.id);
+    if (r) r.vwt = d;
     return;
   }
   for (const r of state.rooms) {
     const i = r.devices.findIndex((x) => x.rf_address === d.rf_address);
     if (i >= 0) {
-      r.devices[i] = d;
+      r.devices = r.devices.map((x, k) => (k === i ? d : x));
       r.ready = r.devices.every((x) => x.reported);
       r.stale = r.devices.some((x) => x.stale);
-      MassimoParts.rooms.data(r.id);
       return;
     }
   }
   const j = state.unlisted.findIndex((x) => x.rf_address === d.rf_address);
-  if (j >= 0) {
-    state.unlisted[j] = d;
-    MassimoParts.rooms.unlisted(); // its row follows, the form under it as it is
-  }
+  if (j >= 0) state.unlisted = state.unlisted.map((x, k) => (k === j ? d : x));
 }
 
 // --- results ----------------------------------------------------------

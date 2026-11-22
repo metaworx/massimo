@@ -46,8 +46,7 @@ TWIN = """(rid) => {
   if (r.devices.filter(isThermostat).length >= 2) return;
   const twin = JSON.parse(JSON.stringify(r.devices.find(isThermostat)));
   Object.assign(twin, { rf_address: "0a0fff", serial: "MEQ0000999", name: "Twin" });
-  r.devices.push(twin);
-  MassimoParts.rooms.data(r.id);
+  r.devices = [...r.devices, twin]; // a room's devices are a signal: its tile follows
 }"""
 
 

@@ -32,7 +32,7 @@ import { Config } from "./Config";
 import { closeConfig, openConfig } from "./configuration";
 import { DeviceList } from "./Devices";
 import { problemsLabel, roomEntries } from "./facts";
-import { load, tickOf } from "./store";
+import { useLook } from "../shared/look";
 import { cubePath } from "../shared/path";
 
 /** The arrow keys of More move between these: its buttons that are on, and the Hold switch where shown. */
@@ -205,9 +205,7 @@ function DeleteQuestion({ room, ui, tile }: { room: PageRoom; ui: RoomUI; tile: 
 
 /** Tile is a room's tile. */
 export function Tile({ room }: { room: PageRoom }) {
-  load.useLoad();
-  const tick = tickOf(room.id);
-  void tick.n; // drawn again when a device of the room changed
+  useLook(); // a device of the room changed: room.devices, a signal (shared/data.ts)
   const ui = roomUI(room);
   const ref = useRef<HTMLElement>(null);
   const tile = () => ref.current;

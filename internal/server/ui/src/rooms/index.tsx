@@ -26,12 +26,13 @@ import { forgetForms } from "../shared/forms";
 import { mounter, register } from "../shared/region";
 import { closeHouse, House } from "./House";
 import { Tile } from "./Tile";
-import { UNLISTED, Unlisted } from "./Unlisted";
-import { cfgFormKey, changed, house, load, newUI, planWindows, roomOf, takeOpening, tickOf, vwtFormKey } from "./store";
+import { Unlisted } from "./Unlisted";
+import { useLook } from "../shared/look";
+import { cfgFormKey, house, newUI, roomOf, takeOpening, vwtFormKey } from "./store";
 
 /** Rooms is a tile per room, kept by its Cube and its id for as long as the room is there. */
 function Rooms() {
-  load.useLoad();
+  useLook();
   return <>{state.rooms.map((r) => <Tile key={(state.roomsOf || "") + ":" + r.id} room={r} />)}</>;
 }
 
@@ -94,21 +95,9 @@ function forgetGone(): void {
 
 /** The functions the plain code calls, MassimoParts.rooms. */
 const rooms = register("rooms", {
-  /** render draws the rooms as the page has them now (renderRooms): every tile follows in place, its configuration with it. */
+  /** render takes a drawing of the rooms (renderRooms): every tile follows the rooms itself, in place, its configuration with it. */
   render(): void {
     for (const m of mounts) m();
-    load.bump();
-    for (const r of state.rooms) changed(r.id);
-    planWindows();
-  },
-  /** data takes a state event of a device of the room (updateDevice): its tile follows, its configuration with it. */
-  data(id: number): void {
-    changed(id);
-    planWindows();
-  },
-  /** unlisted takes a state event of a device without a room (updateDevice): its row follows. */
-  unlisted(): void {
-    tickOf(UNLISTED).n++;
   },
   /**
    * loaded takes a load of the rooms that went through, before they are

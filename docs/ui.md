@@ -2738,8 +2738,6 @@ a late answer writes, draws and says nothing and still settles,
 the Cubes', the rooms' and `refresh` to `false`, which a plain chain tests
 before it goes on, so that every awaiter's `finally` runs and nothing of the next
 session waits on the one before; a part's awaiter asks its own session.
-Only the plain `removeFromCube` of `unlisted.js` still reads the rooms after a removal's late answer,
-a read under the next user's own key, plain code that Block 15 moves.
 Who is in (`shared/me.ts`) draws the rest:
 the first owner's form into `#setup-slot`, shown while who is in says `setup`,
 its form drawn only then, so that what is typed in it goes with it,

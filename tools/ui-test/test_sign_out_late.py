@@ -203,9 +203,11 @@ LINES = "['message', 'unlisted-msg'].map((id) => { const el = document.getElemen
 
 @pytest.mark.parametrize("way", WAYS)
 def test_the_device_removed(new_context, case, watch, guard, way):
-    """A device without a room removed from the Cube (rooms/Unlisted.tsx),
-    answered in the next user's session, says nothing on the page's plain
-    lines. Fails on the page before: it said the device was removed."""
+    """A device without a room removed from the Cube (rooms/Unlisted.tsx,
+    rooms/send.ts), answered in the next user's session, reads the rooms
+    no more and says nothing on the page's plain lines. Fails on the page
+    before: it said the device was removed, and before UiParts D233 the
+    plain removal read the rooms under the next user's key."""
     page = owner_page(new_context, guard, watch, URL, TOKEN)
     row = unlisted_row(page)
     held, sent = [], []
@@ -215,12 +217,10 @@ def test_the_device_removed(new_context, case, watch, guard, way):
     row.locator(".confirm-yes").click()
     assert wait_held(page, held), "the removal is on its way"
     end_session(page, way)
+    rooms = requests_of(page, "GET", "/rooms")
     lines = page.evaluate(LINES)
-    # the plain removeFromCube reads the rooms after the answer, and the line was said after that read
-    with page.expect_response(lambda r: r.request.method == "GET" and r.url.split("?")[0].endswith("/rooms")) as read:
-        let_go(page, held, "DELETE", held[0].request.url.rsplit("/", 1)[1], {})
-    read.value.finished()
-    frames(page)
+    let_go(page, held, "DELETE", held[0].request.url.rsplit("/", 1)[1], {})
+    assert not rooms, f"the rooms not read for the removal: {rooms}"
     assert page.evaluate(LINES) == lines, "nothing said of the removal"
 
 

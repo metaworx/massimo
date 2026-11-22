@@ -14,14 +14,15 @@
  * comes in.
  */
 
-import { useRef, useState } from "preact/hooks";
+import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { Device } from "../api";
 import { actionRunner } from "../shared/action";
 import { newPut, PutForm } from "../shared/put";
 import { Question, useAsk } from "../shared/question";
 import { session, stillSession } from "../shared/session";
 import { DeviceRow } from "./Devices";
-import { load, tickOf } from "./store";
+import { useLook } from "../shared/look";
+import { removeFromCube } from "./send";
 
 /**
  * said says under the devices without a room how the last action went,
@@ -31,9 +32,6 @@ import { load, tickOf } from "./store";
  * sign-out are dropped where they come (below, and shared/put.tsx).
  */
 const said = actionRunner({ where: () => ($("unlisted")?.classList.contains("hidden") ? $("message") : $("unlisted-msg")), fade: RESULT_FADE_MS });
-
-/** The key of the devices without a room's counter (tickOf), which a state event of one of them raises (MassimoParts.rooms.unlisted). */
-export const UNLISTED = -1;
 
 /**
  * Put is the form that puts the device into a room (the shared PutForm)
@@ -68,6 +66,13 @@ function UnlistedRow({ d }: { d: Device }) {
   const [form, setForm] = useState(false);
   const ask = useAsk<HTMLButtonElement>();
   const put = useRef<HTMLButtonElement>(null);
+  const back = useRef(false);
+  // Cancel puts the focus back on Put into a room… in the drawing that shows it again
+  useLayoutEffect(() => {
+    if (form || !back.current) return;
+    back.current = false;
+    put.current?.focus();
+  }, [form]);
   const label = deviceName(d);
   const actions = !form && !ask.asking && (
     <>
@@ -80,8 +85,8 @@ function UnlistedRow({ d }: { d: Device }) {
   return (
     <DeviceRow d={d} actions={actions}>
       {form && <Put d={d} done={() => setForm(false)} cancel={() => {
+        back.current = true;
         setForm(false);
-        setTimeout(() => put.current?.focus(), 0); // once the row shows its buttons again
       }} />}
       {ask.asking && (
         <Question text={t("device.removeConfirm", { device: label })} yes={t("device.remove")} no={t("action.keep")} onNo={() => ask.done()}
@@ -89,7 +94,7 @@ function UnlistedRow({ d }: { d: Device }) {
             const n = session();
             const res = await removeFromCube(d);
             ask.done(false);
-            if (stillSession(n)) said.say(res.text, res.ok); // an answer after a sign-out says nothing
+            if (res && stillSession(n)) said.say(res.text, res.ok); // an answer after a sign-out says nothing
           }} />
       )}
     </DeviceRow>
@@ -98,7 +103,6 @@ function UnlistedRow({ d }: { d: Device }) {
 
 /** Unlisted is the list of the devices without a room, in #unlisted-devices; its section is shown and hidden by rooms.js. */
 export function Unlisted() {
-  load.useLoad();
-  void tickOf(UNLISTED).n; // drawn again when one of them reported
+  useLook(); // one of them reported: state.unlisted, a signal (shared/data.ts)
   return <>{state.unlisted.map((d) => <UnlistedRow key={(state.roomsOf || "") + ":" + d.rf_address} d={d} />)}</>;
 }

@@ -21,7 +21,6 @@ from test_unsaved import expire
 SERIAL = "KEQ0000100"
 PANEL = ".cube-panel[data-serial='%s']" % SERIAL
 PAIRING = "**/api/v1/cubes/%s/pairing" % SERIAL
-ROOMS = "**/api/v1/cubes/%s/rooms?devices=real" % SERIAL
 # Two devices that join, as GET …/pairing and a paired event give them.
 JOINED = {"type": "radiator_thermostat", "rf_address": "0a0f02", "serial": "MEQ0000902"}
 SECOND = {"type": "shutter_contact", "rf_address": "0a0f03", "serial": "MEQ0000903"}
@@ -115,11 +114,15 @@ def with_pairing(me):
 def forgotten_after(new_context, guard, watch, leave):
     """The owner's page with a Cube pairing (GET …/pairing answered as
     running with JOINED), its form's name typed and a room chosen, the
-    Cube's rooms read; leave(page) ends the session, and the operator
+    Cube's rooms offered; leave(page) ends the session, and the operator
     signs in. While the sign-in is asked no request of the pairing goes
-    (its countdown does not run); then, the Cube's rooms held, the form
-    is a new one, with nothing typed and no room offered, until the rooms
-    asked of the server again have come."""
+    (its countdown does not run); then, the next user's rooms held (the
+    page's load and the pairing's own read, which serves a Cube until the
+    page's load has given its rooms), the form is a new element, with nothing typed and no room offered, and
+    once they have come it offers the rooms the next user's load read: the
+    chosen Cube's rooms are the page's own since UiParts D216, which the
+    end of the session forgets and the next user's load reads again,
+    where the pairing read them by a request of its own."""
     page = owner_page(new_context, guard, watch, URL, TOKEN)
     reads = reads_of(page)
     until = (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat()
@@ -128,12 +131,14 @@ def forgotten_after(new_context, guard, watch, leave):
     show_view(page, "system")
     panel = page.locator("#cubes-list " + PANEL)
     panel.locator(":scope > summary").click()
-    form = panel.locator(".pair-device[data-rf='%s'] form" % JOINED["rf_address"])
+    sel = "#cubes-list %s .pair-device[data-rf='%s'] form" % (PANEL, JOINED["rf_address"])
+    form = page.locator(sel)
     form.wait_for(state="visible")
     options = "document.querySelectorAll(%s).length" % json.dumps("#cubes-list %s .pair-device select[name=room] option" % PANEL)
     assert wait_until(page, options + " > 1", 5), "the Cube's rooms offered"
     form.locator("select[name=room]").select_option(index=1)
     form.locator("input[name=name]").fill("Hall radiator")
+    mark(page, [sel])
     asked = []
     page.on("request", lambda r: asked.append(r.url) if r.method == "GET" and r.url.endswith("/pairing") else None)
     leave(page)
@@ -142,25 +147,30 @@ def forgotten_after(new_context, guard, watch, leave):
     page.wait_for_timeout(3500)  # the countdown asks every third second where nothing reports it; nothing signals its absence
     assert len(asked) == since, f"no request of the pairing while the sign-in is asked: {asked[since:]}"
     held, sent = [], []
-    hold(page, ROOMS, "GET", held, sent)
+    hold(page, "**/api/v1/cubes/*/rooms?devices=all", "GET", held, sent)
+    hold(page, "**/api/v1/cubes/*/rooms?devices=real", "GET", held, sent)
     try:
-        sign_in(page, "operator", "op-pass")
-        assert page.evaluate("state.me.user.name") == "operator", "another user"
+        # the sign-in by the dialog, the rooms' load held: sign_in waits for the tiles
+        page.locator("#login-user").fill("operator")
+        page.locator("#login-password").fill("op-pass")
+        page.locator("#login-form button[type=submit]").click()
+        assert wait_until(page, "state.me && state.me.user && state.me.user.name === 'operator'", 10), "another user"
+        assert wait_held(page, held), "the next user's rooms asked for, held"
         show_view(page, "system")
         panel = page.locator("#cubes-list " + PANEL)
         if panel.get_attribute("open") is None:
             panel.locator(":scope > summary").click()
-        assert wait_held(page, held), "the Cube's rooms asked for again"
         form.wait_for(state="visible")
         frames(page)
-        assert page.evaluate(options) == 0, "no room offered from before"
-        assert form.locator("input[name=name]").input_value() == "", "nothing typed left"
+        assert replaced(page, [sel]) == [sel], "a new form, not the one typed into before"
+        assert form.locator("input[name=name]").input_value() != "Hall radiator", "nothing typed left"
+        assert page.evaluate(options) == 0, "no room offered from before while the next user's rooms are on their way"
     finally:
+        page.unroute("**/api/v1/cubes/*/rooms?devices=all")
+        page.unroute("**/api/v1/cubes/*/rooms?devices=real")
         for route in held:
             route.continue_()
-        page.unroute(ROOMS)
-    assert wait_until(page, options + " > 1", 5), "the rooms read again offered"
-    assert form.locator("input[name=name]").input_value() != "Hall radiator", "the name offered, not the one typed before"
+    assert wait_until(page, options + " > 1", 5), "the rooms the next user's load read offered"
 
 
 def test_sign_out_forgets_the_pairing(new_context, case, watch, guard):

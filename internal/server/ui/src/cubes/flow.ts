@@ -75,6 +75,7 @@ export const cubeRooms = signal<Record<string, Room[]>>({});
 
 /** loadCubeRooms reads the rooms a device of the Cube can be put into, its devices with them for the name offered; none on an error. */
 export async function loadCubeRooms(serial: string): Promise<void> {
+  if (serial === state.roomsOf) return; // the shown Cube's are the page's own, state.rooms (UiParts D216)
   const n = session();
   let list: Room[] = [];
   try {

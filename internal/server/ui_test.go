@@ -728,12 +728,21 @@ func alsoText(also []string) string {
 // underneath (ui/src/shared/data.ts, AP UiParts D123-A): a write tells
 // the parts only as an assignment of the field, so none of them is
 // written in place.
-var wholeFields = []string{"state.cubes", "state.found", "state.tz", "themeState.custom", "themeState.draft"}
+var wholeFields = []string{"state.cubes", "state.found", "state.tz", "state.rooms", "state.unlisted", "state.roomsOf", "state.device", "state.me",
+	"themeState.custom", "themeState.draft", "themeState.base"}
+
+// roomDevicesInPlace is a write in place to a room's devices, by any
+// name of the room: a room's fields are signals, its devices written whole.
+var roomDevicesInPlace = regexp.MustCompile(`\.devices\[[^\]]*\](?:\.[\w$]+)*\s*=[^=]|\.devices\.length\s*=[^=]|\.devices\.(?:push|splice|sort|reverse|unshift|shift|pop|fill|copyWithin)\(`)
 
 // writtenInPlace finds a write in place to a field of wholeFields on a
 // line: an item assigned by its index, an array's method that changes
-// it, delete, Object.assign into it, or a property of it assigned.
+// it, delete, Object.assign into it, or a property of it assigned; and a
+// write in place to a room's devices.
 func writtenInPlace(line string) bool {
+	if roomDevicesInPlace.MatchString(line) {
+		return true
+	}
 	for _, f := range wholeFields {
 		q := regexp.QuoteMeta(f)
 		re := regexp.MustCompile(`(?:^|[^\w.$])` + q + `(?:\[[^\]]*\]|\.[\w$]+)+\s*=[^=]|(?:^|[^\w.$])` + q +
@@ -749,9 +758,10 @@ func writtenInPlace(line string) bool {
 // no part writes a field of wholeFields in place, which would change the
 // data without telling the parts that draw from them. It reads the
 // written name alone: a write through another name of the same array
-// (const list = themeState.custom; list.push(…)) it cannot see; the
-// drawings counted per poll at each step of Block 15 and the review
-// cover that.
+// (const list = themeState.custom; list.push(…)), nor an item's
+// property written through find or for … of (for (const r of
+// state.rooms) r.devices[0].x = …), it cannot see; the drawings counted
+// per poll at each step of Block 15 and the review cover that.
 func TestStateWrittenWhole(t *testing.T) {
 	t.Parallel()
 	files, err := filepath.Glob("ui/*.js")
@@ -807,6 +817,12 @@ func TestWrittenInPlace(t *testing.T) {
 		{"if (themeState.custom[i] === entry) return;", false},
 		{"const d = themeState.draft;", false},
 		{"themeState.customs.push(x);", false},
+		{"r.devices[i] = d;", true},
+		{"room.devices.push(twin);", true},
+		{"r.devices[i].name = n;", true},
+		{"r.devices.length = 0;", true},
+		{"state.me.role = r;", true},
+		{"r.devices = r.devices.map((x, k) => (k === i ? d : x));", false},
 	} {
 		if got := writtenInPlace(c.line); got != c.want {
 			t.Errorf("writtenInPlace(%q) = %v, want %v", c.line, got, c.want)

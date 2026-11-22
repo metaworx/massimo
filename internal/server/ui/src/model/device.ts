@@ -16,6 +16,8 @@
  */
 
 import type { Device, State } from "../api";
+import { untracked } from "@preact/signals";
+import { windowNow } from "../shared/data";
 import type { Entry, Item } from "../shared/problems";
 
 /**
@@ -42,6 +44,7 @@ export function windowState(d: Device): WindowState {
   if (d.state?.window_open !== true) return "";
   const w = d.window;
   if (!w) return "open";
+  void windowNow.value; // an open window's times: drawn again when the clock alone changes its state
   const now = Date.now();
   if (now >= Date.parse(w.alert_at)) return "bad";
   if (now >= Date.parse(w.warn_at)) return "warn";
@@ -102,12 +105,16 @@ export function deviceProblems(d: Device, withWindow?: boolean): Item[] {
  * of log.js).
  */
 export function rfLabel(rf: string): string {
-  for (const r of state.rooms || []) {
-    for (const d of r.devices || []) {
-      if (d.rf_address === rf) return deviceName(d);
+  // the rooms by the list; a device's state event draws no name again
+  const rooms = state.rooms || [];
+  return untracked(() => {
+    for (const r of rooms) {
+      for (const d of r.devices || []) {
+        if (d.rf_address === rf) return deviceName(d);
+      }
     }
-  }
-  return rf;
+    return rf;
+  });
 }
 
 /**

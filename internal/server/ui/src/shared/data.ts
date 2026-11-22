@@ -41,6 +41,29 @@ Object.defineProperty(state, "me", { enumerable: true, configurable: true, get: 
 // loads of app.js and the stream write them (loadCubes, selectCube,
 // addFound, loadTimeZone, serverReached, checkVersion).
 adopt(state, ["cubes", "found", "serial", "tz", "serverDown", "newVersion"]);
+// The chosen Cube's rooms, each a live item, a signal per field: a state
+// event writes a room's devices (updateDevice), so that its tile alone is
+// drawn again, and a load writes the list whole (loadRooms), each room
+// made live as it comes; the devices in no room, written whole; and whose
+// rooms they are.
+const madeLive = new WeakSet<object>();
+const liveRoom = (r: PageRoom): PageRoom => {
+  if (madeLive.has(r)) return r;
+  const l = live<PageRoom>({ ...r, vwt: r.vwt ?? null, stale: r.stale }); // every field a state event writes
+  madeLive.add(l);
+  return l;
+};
+const rooms = signal<PageRoom[]>(state.rooms.map(liveRoom));
+Object.defineProperty(state, "rooms", { enumerable: true, configurable: true, get: () => rooms.value, set: (v: PageRoom[]) => { rooms.value = v.map(liveRoom); } });
+adopt(state, ["unlisted", "roomsOf"]);
+
+/**
+ * windowNow says that an open window's state changed by the clock alone
+ * (windowState of model/device.ts reads it): rooms/store.ts raises it at
+ * the next warning or alert time of a window that is open.
+ */
+export const windowNow = signal(0);
+
 // The user's colour schemes, the editor's draft and the scheme it started
 // from (theme.js themeState), each written whole.
 adopt(themeState, ["custom", "draft", "base"]);

@@ -11,7 +11,7 @@
  * summary, in the language shown. A line is worded when it is drawn.
  */
 
-import { computed } from "@preact/signals";
+import { computed, untracked } from "@preact/signals";
 import type { Device } from "../api";
 import { rfLabel } from "../model/device";
 import type { Loose, LogLine } from "./lines";
@@ -26,7 +26,11 @@ import { type CubeRooms, logState } from "./state";
  */
 export function logRoomsOf(serial?: string | null): CubeRooms | null {
   const sn = serial || state.serial;
-  if (sn && sn === state.serial && state.roomsOf === sn) return { rooms: state.rooms, unlisted: state.unlisted };
+  if (sn && sn === state.serial && state.roomsOf === sn) {
+    // the list followed, its rooms as they are now: a device's state event draws no line again
+    const rooms = state.rooms;
+    return { rooms: untracked(() => rooms.map((r) => ({ ...r }))), unlisted: state.unlisted };
+  }
   return (sn && logState.cubeRooms.get(sn)) || null;
 }
 
@@ -34,7 +38,10 @@ export function logRoomsOf(serial?: string | null): CubeRooms | null {
 export function logDevicesOf(rs: CubeRooms | null): Device[] {
   const devs: Device[] = [];
   if (!rs) return devs;
-  for (const r of rs.rooms) for (const d of r.devices) devs.push(d);
+  // the rooms by the list; a device's state event draws no line or choice again
+  untracked(() => {
+    for (const r of rs.rooms) for (const d of r.devices) devs.push(d);
+  });
   for (const d of rs.unlisted) if (!devs.some((x) => x.rf_address === d.rf_address)) devs.push(d);
   return devs.sort((a, b) => (a.name || logDeviceKey(a)).localeCompare(b.name || logDeviceKey(b)));
 }
@@ -43,11 +50,15 @@ export function logDevicesOf(rs: CubeRooms | null): Device[] {
 export function logDevice(rf: string, serial?: string): Device | null {
   const rs = logRoomsOf(serial);
   if (!rs) return null;
-  for (const r of rs.rooms) {
-    const d = r.devices.find((x) => x.rf_address === rf);
-    if (d) return d;
-  }
-  return rs.unlisted.find((x) => x.rf_address === rf) || null;
+  // the rooms by the list; a device's state event draws no line again
+  const d = untracked(() => {
+    for (const r of rs.rooms) {
+      const x = r.devices.find((y) => y.rf_address === rf);
+      if (x) return x;
+    }
+    return null;
+  });
+  return d || rs.unlisted.find((x) => x.rf_address === rf) || null;
 }
 
 /**
