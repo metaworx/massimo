@@ -20,6 +20,7 @@ import { CubeBackup, keptText, SystemBackups } from "./Backups";
 import { type RestoreEvent, boxUI, forgetBackups, load, of, refreshBackups, restoreEvent, resynced } from "./store";
 import { cardBadges } from "../shared/card";
 import { isShown, onView } from "../shared/pages";
+import { can } from "../shared/me";
 
 /** The badges of System settings' card: every Cube's backups kept, once one list has come. */
 function systemCount(): string {
@@ -59,7 +60,7 @@ function quiet(): void {
 
 /** showPage draws Cube settings' card and reads the chosen Cube's list again. */
 function showPage(): void {
-  if (!hasCap("backup")) return;
+  if (!can("backup")) return;
   mountPage();
   load.bump();
   if (state.serial) refreshBackups(state.serial);
@@ -91,7 +92,7 @@ export const signedOut = forgetBackups;
 
 onView("system", () => {
   quiet();
-  if (!hasCap("backup")) return;
+  if (!can("backup")) return;
   mountSystem();
   load.bump();
   for (const c of state.cubes) refreshBackups(c.serial);

@@ -32,6 +32,7 @@ import { adding, enabled, identityFormKey, identityUI, load, passwordLogin, read
 import { createUser, mayManage, mayPassword, removeUser, roleOptions, run, saveUser, setPasswordLogin, usersAdmin, usersMsg } from "./sendUsers";
 import { cardBadges, showCard } from "../shared/card";
 import { isShown, showView } from "../shared/pages";
+import { isMe } from "../shared/me";
 
 /** userName is how a user is shown: its chain (AP StoreRaise v1.2), its display name, else its login name. */
 function userName(u: User): string {
@@ -71,7 +72,7 @@ function changesOf(name: string): Changes {
 /** Badges are a user's badges in its panel's head: you first, the role, the state, keys only, and an integration's. */
 function badges(u: User) {
   const out = [];
-  if (isSelf(u.name)) out.push(<Badge key="you" kind="ok" text={t("users.you")} />);
+  if (isMe(u.name)) out.push(<Badge key="you" kind="ok" text={t("users.you")} />);
   out.push(<Badge key="role" kind="mode" text={roleLabel(u.role)} />);
   if (u.disabled) out.push(<Badge key="state" kind="bad" text={t("users.state.disabled")} />);
   else if (u.expires_at && Date.parse(u.expires_at) <= Date.now()) out.push(<Badge key="state" kind="bad" text={t("users.state.expired")} />);
@@ -98,7 +99,7 @@ const trim = (v: string) => v.trim();
 function UserForm({ u, off }: { u: User; off: boolean }) {
   load.useLoad();
   const manage = mayManage(u);
-  const self = isSelf(u.name);
+  const self = isMe(u.name);
   const form = useForm({ key: userFormKey(u.name), name: { key: "users.formName", args: { name: userName(u) } }, open: () => openUser(u.name) });
   const display = useDraft(u.display_name || "", trim, form.place("display_name"));
   const role = useDraft(u.role, undefined, form.place("role"));
@@ -169,7 +170,7 @@ function UserPanel({ u }: { u: User }) {
   load.useLoad();
   const ui = userUI.of(u.name);
   const manage = mayManage(u);
-  const self = isSelf(u.name);
+  const self = isMe(u.name);
   const locked = !manage && !self && !mayPassword(u);
   // the same functions for the panel's life, so that the identities' box reads by its own dependencies alone
   const changes = useMemo(() => changesOf(u.name), [u.name]);
@@ -198,7 +199,11 @@ function NewUser() {
   load.useLoad();
   const [name, setName] = useState("");
   const [display, setDisplay] = useState("");
-  const [role, setRole] = useState(usersAdmin() === "guests" ? "guest" : "viewer");
+  const [chosen, setRole] = useState("");
+  // the role chosen while it is offered, else the first default offered: who is in may change the roles offered (roleOptions)
+  const offered = roleOptions().map(([k]) => k);
+  const fallback = usersAdmin() === "guests" ? "guest" : "viewer";
+  const role = offered.includes(chosen) ? chosen : offered.includes(fallback) ? fallback : offered[0] || fallback;
   const [password, setPassword] = useState("");
   const [expires, setExpires] = useState("");
   const nameRef = useRef<HTMLInputElement>(null);

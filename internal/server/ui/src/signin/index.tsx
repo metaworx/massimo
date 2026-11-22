@@ -8,8 +8,8 @@
  * skeleton's #login-dialog, the first owner's form into #setup-slot and
  * the open server's warning into #open-banner-slot, each drawn once as
  * parts.js loads, before any sign-in is asked for, and from then on by
- * their signals: who is in (shared/me.ts), which login.js applyCaps
- * hands over at every read of it, and what askLogin and the plain code
+ * their signals: who is in (shared/me.ts, state.me underneath, which
+ * login.js applyCaps writes at every read of it), and what askLogin and the plain code
  * hand over through MassimoParts.signIn.
  */
 

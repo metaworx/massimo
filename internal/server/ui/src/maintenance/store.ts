@@ -25,6 +25,7 @@ import { counter } from "../shared/counter";
 import { live } from "../shared/live";
 import { session, stillSession } from "../shared/session";
 import { isShown } from "../shared/pages";
+import { can } from "../shared/me";
 
 /** A text said in the page's language at its drawing. */
 export type Say = () => string;
@@ -224,7 +225,7 @@ function backAt(key: string, now: string): Say {
 
 /** loadSettings reads the announcement and the Cube intervals, for a holder of settings. */
 export async function loadSettings(mine: () => boolean = () => true): Promise<void> {
-  if (!hasCap("settings")) return; // login.js
+  if (!can("settings")) return;
   const n = session();
   try {
     const all = (await api<Record<string, Setting>>("GET", "api/v1/settings")) || {};
@@ -308,7 +309,7 @@ function renderRestart(v: RestartInfo): void {
 
 /** loadRestart asks whether the server can be restarted from here, for a holder of restart, not while the page follows a restart. */
 export async function loadRestart(): Promise<void> {
-  if (!hasCap("restart") || restart.following) return; // login.js
+  if (!can("restart") || restart.following) return;
   const n = session();
   try {
     const v = await api<RestartInfo>("GET", "api/v1/restart");
@@ -441,7 +442,7 @@ function renderReboot(v: RebootInfo | null): void {
 
 /** loadReboot asks whether the computer can be rebooted from here, for a holder of reboot, not while the page follows a reboot. */
 export async function loadReboot(mine: () => boolean = () => true): Promise<void> {
-  if (!hasCap("reboot") || reboot.following) return; // login.js
+  if (!can("reboot") || reboot.following) return;
   const n = session();
   try {
     const v = await api<RebootInfo>("GET", "api/v1/reboot");
@@ -583,7 +584,7 @@ const reader = burstReader(async (what) => {
  */
 function pendingOf(ev: ServerEvent): void {
   const p = (ev.summary || {}).at_next_start;
-  if (!hasCap("restart") || restart.following || !lastRestart || !Array.isArray(p)) return;
+  if (!can("restart") || restart.following || !lastRestart || !Array.isArray(p)) return;
   renderRestart({ ...lastRestart, pending: p.map(String), read_at: ev.time || lastRestart.read_at });
 }
 

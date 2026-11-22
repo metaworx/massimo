@@ -18,6 +18,7 @@ import { chosenCube, hostPort } from "../model/cube";
 import { Island } from "../shared/island";
 import { load } from "./store";
 import { showView } from "../shared/pages";
+import { can } from "../shared/me";
 
 /** detailOf is what the notice says of a Cube that is not connected, in one paragraph. */
 function detailOf(cube: Cube): string {
@@ -55,7 +56,7 @@ export function HomeNotice() {
   return (
     <>
       <p class="home-notice-title">{cube ? t("home.notConnected", { name: cube.name || cube.serial }) : t("home.noCube")}</p>
-      <p class="home-notice-detail small">{cube ? detailOf(cube) : t(hasCap("cubes") ? "home.noCubeAdd" : "home.noCubeAsk")}</p>
+      <p class="home-notice-detail small">{cube ? detailOf(cube) : t(can("cubes") ? "home.noCubeAdd" : "home.noCubeAsk")}</p>
       <Check cube={cube} />
       <button type="button" id="home-notice-cubes" class="needs-cubes" onClick={() => showView("system")}>{t("home.toCubes")}</button>
     </>

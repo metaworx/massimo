@@ -25,6 +25,7 @@ import { liveMap } from "../shared/live";
 import { cubePath } from "../shared/path";
 import { session, stillSession } from "../shared/session";
 import { fmtWhen } from "../shared/time";
+import { can } from "../shared/me";
 
 /** A restore shown: its title, the stored backup or the file's body and type, and its plan. */
 export interface Plan {
@@ -98,7 +99,7 @@ export function running(serial: string): boolean {
 
 /** loadBackups reads a Cube's list; a 503 says that the server keeps none of it (no row in its store). */
 async function loadBackups(serial: string): Promise<void> {
-  if (!serial || !hasCap("backup")) return;
+  if (!serial || !can("backup")) return;
   const n = session();
   const b = of(serial);
   try {

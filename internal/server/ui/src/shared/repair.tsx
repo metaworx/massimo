@@ -28,6 +28,7 @@ import { live } from "./live";
 import { defaultDeviceName, NAME_BYTES, nameFits } from "./name";
 import { busyProps, Question } from "./question";
 import { session, stillSession } from "./session";
+import { can } from "./me";
 
 /** What a box of repairs is for: the Cube, a room or a device of it. */
 export type RepairKind = "cube" | "room" | "device";
@@ -131,7 +132,7 @@ export function toggleRepair(scope: string, kind: RepairKind, path: string, { sk
 
 /** repairsOf are the repairs a box offers: those it does not leave out, for which the user has what they need besides repair. */
 function repairsOf(box: Box): Repair[] {
-  return REPAIRS[box.kind].filter((r) => !box.skip.includes(r.key) && (!r.needs || hasCap(r.needs)));
+  return REPAIRS[box.kind].filter((r) => !box.skip.includes(r.key) && (!r.needs || can(r.needs)));
 }
 
 /** newItem is a repair's state before its preview has come. */

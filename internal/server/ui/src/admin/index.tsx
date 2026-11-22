@@ -24,6 +24,7 @@ import { forgetAdmin, load, reads, said } from "./store";
 import { UsersCard } from "./Users";
 import { loadPasswordLogin, loadUsers, usersMsg } from "./sendUsers";
 import { onView } from "../shared/pages";
+import { can, canManageUsersOf } from "../shared/me";
 
 const mountUsers = mounter("sys-users-body", () => <UsersCard />);
 
@@ -81,7 +82,7 @@ export const signedOut = forgetAdmin;
 // System settings shown: the users read and drawn, the open panels' sessions, keys and identities with them
 onView("system", () => {
   said.users = null;
-  if (!canManageUsers()) return;
+  if (!canManageUsersOf()) return;
   mountUsers();
   loadUsers()
     .then(() => {
@@ -94,7 +95,7 @@ onView("system", () => {
 // System settings shown: the roles and the capabilities read and drawn
 onView("system", () => {
   said.roles = null;
-  if (!hasCap("roles")) return;
+  if (!can("roles")) return;
   mountRoles();
   mountCaps();
   loadRoles().catch((e: Error) => rolesMsg(t("roles.failed", { role: "", error: e.message }), false));
@@ -103,7 +104,7 @@ onView("system", () => {
 // System settings shown: the providers read and drawn
 onView("system", () => {
   said.providers = null;
-  if (!hasCap("auth")) return;
+  if (!can("auth")) return;
   mountProviders();
   loadProviders().catch((e: Error) => providersMsg(t("providers.failed", { name: "", error: e.message }), false));
 });

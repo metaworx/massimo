@@ -20,7 +20,7 @@
 import type { PendingLink, User } from "../api";
 import { type Run, userPath } from "../shared/account";
 import { actionRunner } from "../shared/action";
-import { me, profileOf } from "../shared/me";
+import { canManageUsersOf, me, profileOf } from "../shared/me";
 import { session, stillSession } from "../shared/session";
 import { profile, said } from "./store";
 
@@ -30,7 +30,7 @@ const runner = actionRunner({
     said.profile = res;
   },
   reload: async () => {
-    if (canManageUsers()) await loadUsers();
+    if (canManageUsersOf()) await loadUsers();
     await loadProfile();
   },
   bound: true,
@@ -59,13 +59,13 @@ export const passwordMsg = passwordRunner.say;
  * sessions, keys and identities are read again; then a link come back
  * from a provider (oidcReturn, login.js) is shown to confirm, or why there
  * is none. A read that fails says so and leaves the card as it was;
- * nothing is read where no user name is left to read, as during a
- * sign-out, which forgets the plain state.me before who is in.
+ * nothing is read where no user name is left to read, as after a
+ * sign-out.
  */
 export async function loadProfile(): Promise<void> {
   if (!profileOf(me.peek())) return;
-  const name = state.me?.user?.name || "";
-  if (!name) return; // a sign-out under way: state.me gone before who is in is cleared (login.js forgetSession)
+  const name = me.peek()?.user?.name || "";
+  if (!name) return; // nobody in any more
   const n = session();
   let u: User;
   try {

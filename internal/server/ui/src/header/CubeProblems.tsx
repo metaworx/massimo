@@ -16,6 +16,7 @@ import { foundWhat } from "../model/found";
 import { CountIcon } from "../shared/icon";
 import { joinParts } from "../shared/lang";
 import type { Entry, Item } from "../shared/problems";
+import { can } from "../shared/me";
 
 /**
  * foundEntry is what was found on the network and is not served, as the
@@ -26,7 +27,7 @@ import type { Entry, Item } from "../shared/problems";
  */
 function foundEntry(found: FoundCube[]): Entry {
   const sub = [t("found.notSetUp")];
-  const go = hasCap("cubes") && (
+  const go = can("cubes") && (
     <button type="button" class="link-button found-to-cubes" onClick={showFound}>{t("found.toCubes")}</button>
   );
   return {
@@ -51,7 +52,7 @@ function foundEntry(found: FoundCube[]): Entry {
  */
 export function cubeProblems(): Entry[] {
   const out = state.cubes.map((c) => cubeEntry(c));
-  if (hasCap("settings")) {
+  if (can("settings")) {
     const items: Item[] = [];
     for (const c of state.cubes) items.push(...cubeSettingItems(c, c.name || c.serial));
     out.push({ sign: { kind: "cog", state: items.length ? "warn" : "" }, title: t("problem.settings"), items });

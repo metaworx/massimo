@@ -40,12 +40,10 @@ import type { SignInPart } from "./signin";
 import { serverEvent as softwareEvent, signedOut as softwareSignedOut } from "./software";
 import { serverEvent as maintenanceEvent, signedOut as maintenanceSignedOut } from "./maintenance";
 import { serverEvent as sysinfoEvent, signedOut as sysinfoSignedOut } from "./sysinfo";
-import type { Me } from "./api";
 import type { ServerEvent } from "./model/event";
 import type { SoftwarePart } from "./software";
 import { forgetForms } from "./shared/forms";
 import { languageChanged } from "./shared/lang";
-import { meChanged } from "./shared/me";
 import { pagesPart } from "./shared/pages";
 import { iconsChanged } from "./shared/look";
 import { parts, register } from "./shared/region";
@@ -58,8 +56,6 @@ export interface MassimoParts {
   language(): void;
   /** The icons chosen for the window and the radio changed (theme.js redrawSigns): every sign draws them again. */
   icons(): void;
-  /** Who the page is signed in as, at every read of it (login.js applyCaps): a user's sessions say "this device" by its token, and My profile is drawn for it (shared/me.ts). */
-  me(m: Me | null): void;
   /**
    * A sign-out, or another user's sign-in after a 401 (login.js
    * forgetSession): every form's drafts and marks forgotten
@@ -127,7 +123,6 @@ declare global {
 
 register("language", languageChanged);
 register("icons", iconsChanged);
-register("me", meChanged);
 register("pages", pagesPart);
 register("serverEvent", (ev: ServerEvent) => {
   logEvent(ev);
@@ -146,7 +141,6 @@ register("signedOut", () => {
   softwareSignedOut();
   maintenanceSignedOut();
   sysinfoSignedOut();
-  meChanged(null); // My profile's parts go, with what is typed in them
   profileSignedOut();
   prefsSignedOut();
   notifySignedOut();

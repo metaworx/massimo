@@ -26,6 +26,7 @@ import { liveMap } from "../shared/live";
 import { byteLength, NAME_BYTES } from "../shared/name";
 import { session, stillSession } from "../shared/session";
 import { cfgFormKey, openRoom, roomOf } from "./store";
+import { can } from "../shared/me";
 
 /** The common fields of a room's configuration on the Temperatures tab, as GET and PUT /rooms/{id}/config have them, in the order they are sent. */
 export const TEMP_FIELDS = ["comfort_temp", "eco_temp", "window_open_temp", "window_open_minutes", "max_setpoint", "min_setpoint"] as const;
@@ -100,7 +101,7 @@ export function configOf(id: number): ConfigState {
 
 /** The tab a configuration opens on where none is asked for: the Room tab is a rename, which the role may not do, so the temperatures come first then. */
 function firstTab(): string {
-  return hasCap("rename") ? "room" : "temps";
+  return can("rename") ? "room" : "temps";
 }
 
 /**
@@ -114,7 +115,7 @@ export async function openConfig(room: PageRoom, el: HTMLElement | null, tab?: s
   const ui = roomUI(room);
   ui.open = false;
   const cs = configOf(room.id);
-  cs.tab = tab || (cs.tab && (cs.tab !== "room" || hasCap("rename")) ? cs.tab : firstTab());
+  cs.tab = tab || (cs.tab && (cs.tab !== "room" || can("rename")) ? cs.tab : firstTab());
   cs.loading = true;
   cs.error = "";
   cs.result = null;
@@ -352,7 +353,7 @@ export async function sendDevice(room: PageRoom, cs: ConfigState, d: Device, cha
     say(cs, t("cfg.devNameTooLong", { name: label, n: NAME_BYTES }), false);
     return false;
   }
-  if (meta.room_id !== undefined && !hasCap("configure")) meta.copy = false; // the copy of the room's settings needs configure
+  if (meta.room_id !== undefined && !can("configure")) meta.copy = false; // the copy of the room's settings needs configure
   if (Object.keys(meta).length === 0 && Object.keys(cfg).length === 0) {
     say(cs, t("cfg.nothingChanged", { label }), true);
     return true;

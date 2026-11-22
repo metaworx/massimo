@@ -4,10 +4,13 @@
 /**
  * @file internal/server/ui/src/shared/me.ts
  *
- * Who the page is signed in as, as a signal: state.me as login.js
- * applyCaps hands it over at every read of who is in
- * (MassimoParts.me), and null from a sign-out until the next read; the
- * token the page is signed in with beside it. A user's sessions say by
+ * Who the page is signed in as, as a signal: app.js' state.me is it
+ * underneath (shared/data.ts), written by login.js applyCaps at every
+ * read of who is in, and null from a sign-out until the next read; the
+ * token the page is signed in with beside it. What who is in may do, the
+ * rules of login.js line for line (can, canManageUsersOf, systemOf,
+ * settingsPageOf, isMe): a part's drawing that asks one follows who is
+ * in, a handler asks at that moment. A user's sessions say by
  * it which is "this device" and which key it was made from (System
  * settings → Users and My profile alike), and My profile and the
  * notifications' card are drawn for whoever it names; whether it has My
@@ -24,11 +27,6 @@ export const me = signal<Me | null>(null);
 
 /** The token the page is signed in with, null for none. */
 export const own = computed<Token | null>(() => me.value?.token || null);
-
-/** meChanged takes who is in, as applyCaps of login.js read it, or null at a sign-out. */
-export function meChanged(m: Me | null): void {
-  me.value = m;
-}
 
 /** What the page says of who is in (whoOf): the row's line, Sign out's label (null for none) and icon, the name for ☰'s tooltip, and whether My profile is there. */
 export interface Who {
@@ -79,4 +77,35 @@ export function whoOf(me: Me | null): Who {
  */
 export function profileOf(m: Me | null): boolean {
   return !!(m && m.mode === "users" && m.user);
+}
+
+/**
+ * can reports whether who is in may do something (hasCap of login.js,
+ * line for line): outside users mode, and with nobody known, everyone
+ * may do everything. A part's drawing that asks it follows who is in; a
+ * handler asks it at that moment.
+ */
+export function can(c: string, m: Me | null = me.value): boolean {
+  if (!m || m.mode !== "users") return true;
+  return (m.capabilities || []).includes(c);
+}
+
+/** canManageUsersOf reports whether who is in may use the users' routes: with users, guests or passwords (canManageUsers of login.js). */
+export function canManageUsersOf(m: Me | null = me.value): boolean {
+  return can("users", m) || can("guests", m) || can("passwords", m);
+}
+
+/** systemOf reports whether who is in sees System settings or Maintenance: a capability of one of their cards (hasSystem of login.js). */
+export function systemOf(m: Me | null = me.value): boolean {
+  return ["cubes", "pair", "backup", "roles", "capabilities", "auth", "integrations", "update", "restart", "reboot"].some((c) => can(c, m)) || canManageUsersOf(m);
+}
+
+/** settingsPageOf reports whether who is in may open System settings: a capability of one of its cards, not of Maintenance's alone (hasSettingsPage of login.js). */
+export function settingsPageOf(m: Me | null = me.value): boolean {
+  return ["cubes", "pair", "backup", "roles", "capabilities", "auth", "integrations"].some((c) => can(c, m)) || canManageUsersOf(m);
+}
+
+/** isMe reports whether a user is the one signed in (isSelf of login.js). */
+export function isMe(name: string, m: Me | null = me.value): boolean {
+  return !!(m && m.user && m.user.name === name);
 }

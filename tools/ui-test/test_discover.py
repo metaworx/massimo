@@ -160,7 +160,7 @@ def test_cube_found_live(page, case, found_event):
     assert facts.count() == 1 and VIA_PROXY[case.lang].format(address="192.0.2.7") in facts.inner_text(), "the proxy that answers for it"
     show_view(page, "tiles")
     # a role without cubes: the group without its link, the choice's entry information
-    page.evaluate("() => { document.body.classList.add('no-cubes'); const k = hasCap; window.hasCap = (c) => c !== 'cubes' && k(c); renderCubeSelect(); }")
+    page.evaluate("() => { document.body.classList.add('no-cubes'); state.me = { ...state.me, mode: 'users', capabilities: CAPABILITIES.filter((c) => c !== 'cubes') }; }")
     assert found_sign(page)[1] == str(before + 1), "without cubes the sign all the same"
     open_pill(page)
     assert page.locator(FOUND_GROUP + " .found-to-cubes").count() == 0, "and no link"

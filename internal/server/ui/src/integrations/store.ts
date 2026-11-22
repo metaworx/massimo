@@ -26,6 +26,7 @@ import { counter } from "../shared/counter";
 import { forgetForms } from "../shared/forms";
 import { live, liveMap } from "../shared/live";
 import { session, stillSession } from "../shared/session";
+import { can, canManageUsersOf } from "../shared/me";
 
 /** An installation seen on the LAN (GET /api/v1/integrations/found). */
 export interface FoundIntegration {
@@ -135,7 +136,7 @@ export async function loadDetails(uuid: string): Promise<void> {
  * list as it was.
  */
 export async function loadIntegrations(): Promise<void> {
-  if (!hasCap("integrations")) return;
+  if (!can("integrations")) return;
   const n = session();
   const list = (await api<Integration[]>("GET", "api/v1/integrations")) || [];
   if (!stillSession(n)) return; // signed out meanwhile: nothing of it is the next user's
@@ -171,7 +172,7 @@ export async function loadSeen(refresh: boolean): Promise<void> {
 
 /** loadLinkUsers reads the Massimo users an integration's user may be linked to: none of an integration; null where they may not be read. */
 async function loadLinkUsers(): Promise<void> {
-  if (!canManageUsers()) {
+  if (!canManageUsersOf()) {
     data.users = null;
     return;
   }
@@ -195,7 +196,7 @@ export async function refresh(): Promise<void> {
 
 /** loadRequestsSwitch reads whether integrations may ask, for a holder of settings, who alone sees the switch. */
 export async function loadRequestsSwitch(): Promise<void> {
-  if (!hasCap("settings")) return;
+  if (!can("settings")) return;
   const n = session();
   try {
     const all = (await api<Record<string, { value?: string }>>("GET", "api/v1/settings")) || {};

@@ -36,6 +36,7 @@ import {
 } from "./store";
 import { type BadgeSpec, cardBadges, showCard } from "../shared/card";
 import { isShown, mayShow, showView } from "../shared/pages";
+import { can } from "../shared/me";
 
 /** capOptions are the capabilities of the ceiling as a choice of switches. */
 function capOptions(): [string, string][] {
@@ -348,7 +349,7 @@ const NOT_LOOKING: Record<string, string> = {
 function NotLooking() {
   const a = data.announce || {};
   const key = (a.why && NOT_LOOKING[a.why]) || "integrations.foundNot";
-  const opens = !!a.why && !!NOT_LOOKING[a.why] && a.why !== "fixed" && hasCap("settings") && mayShow("maint");
+  const opens = !!a.why && !!NOT_LOOKING[a.why] && a.why !== "fixed" && can("settings") && mayShow("maint");
   return (
     <>
       <p class="muted small">{t(key, { by: a.fixed_by || "" })}</p>

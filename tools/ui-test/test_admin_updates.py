@@ -1180,3 +1180,25 @@ def test_own_panel_says_this_device_and_revoke_signs_out(new_context, case, watc
             assert (len(deletes), len(logouts)) == (1, 0), f"the key revoked, no session to end: {deletes}, {logouts}"
     finally:
         remove_user(name)
+
+
+def test_the_new_users_role_follows_who_is_in(page, case):
+    """New user's form open, who is in read again as a role that may add
+    guests alone: the role offered is the guest's, and the choice shows it
+    (Create sends it). Fails on the page before, where the role was read
+    once as the form opened: the choice showed nothing and Create sent the
+    viewer's."""
+    show_view(page, "system")
+    page.locator("#user-add").click()
+    role = page.locator("#user-new select[name=role]")
+    role.wait_for()
+    assert role.input_value() == "viewer", "the viewer at first"
+    try:
+        page.evaluate("() => { state.me = { ...state.me, mode: 'users', capabilities: CAPABILITIES.filter((c) => c !== 'users').concat(['guests']) }; }")
+        assert wait_until(page, "[...document.querySelectorAll('#user-new select[name=role] option')].map((o) => o.value).join() === 'guest'", 5), \
+            "the guest's role alone offered"
+        assert role.input_value() == "guest", "and chosen"
+    finally:
+        page.locator("#user-new .form-cancel").click()
+        page.evaluate("loadMe()")
+    show_view(page, "tiles")

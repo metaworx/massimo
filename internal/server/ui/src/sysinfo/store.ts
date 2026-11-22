@@ -24,6 +24,7 @@ import { counter } from "../shared/counter";
 import { live } from "../shared/live";
 import { session, stillSession } from "../shared/session";
 import { isShown } from "../shared/pages";
+import { can } from "../shared/me";
 
 /** The page's load counter: every part of it uses it. */
 export const load = counter();
@@ -69,7 +70,7 @@ let clockTimer: ReturnType<typeof setInterval> | 0 = 0;
 
 /** loadServerInfo reads the store and the settings in effect, for a holder of settings; the others see neither. */
 export async function loadServerInfo(): Promise<void> {
-  if (!hasCap("settings")) return; // login.js
+  if (!can("settings")) return;
   const n = session();
   data.error = "";
   try {

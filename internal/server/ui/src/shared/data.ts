@@ -17,6 +17,7 @@
 
 import { signal } from "@preact/signals";
 import { live } from "./live";
+import { me } from "./me";
 
 /** adopt makes the fields of obj named signals underneath, each starting from its plain value. */
 function adopt<T extends object>(obj: T, keys: (keyof T)[]): void {
@@ -31,6 +32,10 @@ function adopt<T extends object>(obj: T, keys: (keyof T)[]): void {
 // the overrides kept for this device alone beside it (storeDeviceOverrides).
 state.settings = live({ ...state.settings });
 adopt(state, ["device"]);
+// Who is in: state.me is shared/me.ts' signal me underneath, so that
+// applyCaps' write and a sign-out's clearing are the parts' at once.
+me.value = state.me;
+Object.defineProperty(state, "me", { enumerable: true, configurable: true, get: () => me.value, set: (v) => { me.value = v; } });
 // The user's colour schemes, the editor's draft and the scheme it started
 // from (theme.js themeState), each written whole.
 adopt(themeState, ["custom", "draft", "base"]);

@@ -110,19 +110,17 @@ async function loadMe() {
 
 // applyCaps hides what the signed-in user may not do: the body gets a
 // class no-<capability> per capability the user lacks, and the markup
-// marks what each one hides with needs-<capability>. Who is in goes to
-// the parts (MassimoParts.me): the first owner's form, shown on an open
-// server for a caller on the local network, and the open server's warning
-// are drawn from it (ui/src/signin/).
+// marks what each one hides with needs-<capability>. Who is in is the
+// parts' signal underneath state.me (ui/src/shared/data.ts): the first
+// owner's form, shown on an open server for a caller on the local network,
+// and the open server's warning are drawn from it (ui/src/signin/).
 function applyCaps() {
-  const me = state.me;
   const body = document.body;
   for (const c of CAPABILITIES) body.classList.toggle("no-" + capClass(c), !hasCap(c));
   body.classList.toggle("no-users-admin", !canManageUsers());
   body.classList.toggle("no-sync", !canSync());
   body.classList.toggle("no-system", !hasSettingsPage());
   body.classList.toggle("no-maint", !hasSystem());
-  MassimoParts.me(me); // who is in: a user's sessions say "this device", My profile is drawn for whoever is in, the page's chrome says who it is, the first owner's form and the open server's warning show by it (ui/src/shared/me.ts)
   if (!mayShow(currentView)) showView("tiles", "replace"); // pages.js: a page the user signed in now may not open
 }
 
@@ -264,7 +262,7 @@ async function settleSignIn(was, held) {
 // read again after it.
 async function forgetSession(synced) {
   state.me = null;
-  MassimoParts.signedOut(); // the parts' who is in null in the same turn as state.me
+  MassimoParts.signedOut(); // the session's number first, then every region's forgetting; who is in is null already (state.me is the parts' signal)
   const language = synced ? forgetUserSettings() : null; // applied at once, its language's table awaited below
   forgetNotSent();
   MassimoParts.rooms.closeHouse();

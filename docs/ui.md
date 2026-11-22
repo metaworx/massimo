@@ -2178,7 +2178,8 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `BusyButton` | `question.tsx` | a button that sends a request and turns until its answer (`useBusy`, `busyProps`), a click meanwhile sending nothing | `id`, `cls`, `label`, `run`, `aria` (its name where the text is not enough), `off` (kept off: a request that may not be sent now), `data` (its `data-` attributes: a Link button's provider) |
 | `burstReader` | `burst.ts` | one read for a burst of the stream's events: a read in flight and at most one more after it, which reads what the events meanwhile asked for, none asked for in the session before (the parts that follow the server while shown) | `read(what)`, the reads by name; gives `ask(...what)` |
 | `session`, `stillSession`, `newSession` | `session.ts` | the session's number, raised by `MassimoParts.signedOut` before anything is forgotten: a store takes it before an await and drops the answer, its message and its next timer where it changed; `actionRunner`'s `bound` does so for a runner | –; `n`; – |
-| `me`, `own`, `meChanged` | `me.ts` | who the page is signed in as, `state.me` as `applyCaps` of `login.js` hands it over at every read of it (`MassimoParts.me`), null from a sign-out on; the token it is signed in with, by which a user's sessions say "this device" and "its key" | `m` |
+| `me`, `own` | `me.ts` | who the page is signed in as, `state.me` underneath (`shared/data.ts`), which `applyCaps` of `login.js` writes at every read of it, null from a sign-out on; the token it is signed in with, by which a user's sessions say "this device" and "its key" | — |
+| `can`, `isMe`, `canManageUsersOf`, `systemOf`, `settingsPageOf` | `me.ts` | what who is in may do, the rules of `login.js` (`hasCap`, `isSelf`, `canManageUsers`, `hasSystem`, `hasSettingsPage`) line for line, nobody known answering as `hasCap` does: a drawing that asks follows who is in, a handler asks at that moment | `c` or `name`, and `m` (who is in by default) |
 | `whoOf`, `Who` | `me.ts` | who is in in the page's words, for the personal page's row, ☰'s Sign out and Personal settings' tooltip and the question before a sign-out alike: the row's line, Sign out or Forget key (none on an open server) with its icon, the name for the tooltip, and whether My profile is there | `me` |
 | `cardBadges`, `badgesOf`, `BadgeSpec` | `card.ts` | what a section card's head shows at a glance, also while it is folded: a region gives a card's badges by its id from its drawing's effect, `[]` for none, and the page's chrome draws them (`ui/src/chrome/Cards.tsx`) | `id`, `list` of `{ text, kind }` |
 | `showCard`, `wireCards`, `keepInView` | `card.ts` | a section card brought into view, unfolded, the focus on its heading's button, kept there for two seconds where its page has just been opened (`instant`); the cards' folds wired once, each kept in this browser (`massimo.fold.<card id>`), set on the skeleton at once; an element kept in view while the page's content changes size, for `ms` or until the user scrolls, a card at the top, a row in the middle (`block` `"center"`: My profile's marked key), keeping another ending the last | `id`, `instant`; `el`, `ms`, `block` |
@@ -2595,9 +2596,10 @@ At a sign-out, and for another user after a 401, the rules, the devices, the
 name typed and the line are forgotten; an answer after it is dropped.
 The toast and the service worker's language stay plain in `notify.js`.
 My profile (`ui/src/profile/`, AP UiParts Block 13) is a part alone, drawn into
-`#profile-sec` as `parts.js` loads, for the user `MassimoParts.me` names
-(`shared/me.ts`, which `applyCaps` of `login.js` calls at every read of who is
-in), and read each time the personal page is shown, as `profile.js` read it: the
+`#profile-sec` as `parts.js` loads, for the user who is in names
+(`me` of `shared/me.ts`, `state.me` underneath, which `applyCaps` of `login.js`
+writes at every read of who is in),
+and read each time the personal page is shown, as `profile.js` read it: the
 user (`GET …/users/{name}`), the enabled providers where none are known yet,
 then its sessions and keys and its identities, and after every change made there
 the users again where the signed-in user may read them, then My profile;

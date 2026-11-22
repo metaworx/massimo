@@ -21,7 +21,7 @@
  * (shared/forms.ts).
  */
 
-import { me, profileOf } from "../shared/me";
+import { can, me, profileOf, settingsPageOf, systemOf } from "../shared/me";
 import type { CardAddress, PageView } from "../shared/pages";
 
 /** The pages, Rooms first: what each shows, hidden while another is. */
@@ -29,10 +29,10 @@ export const PAGE_VIEWS: PageView[] = [
   { view: "tiles", hash: "", shows: ["home-notice", "house", "rooms", "unlisted"], hide: "view-hidden" },
   { view: "log", hash: "#log", shows: ["logview"] },
   { view: "me", hash: "#me", shows: ["me"] },
-  { view: "system", hash: "#system", shows: ["system"], may: () => hasSettingsPage() },
-  { view: "maint", hash: "#maintenance", shows: ["maint-page"], may: () => hasSystem() },
-  { view: "info", hash: "#info", shows: ["info-page"], may: () => hasCap("read") },
-  { view: "cube", hash: "#cube", shows: ["cube-page"], may: () => hasCap("cubes") || hasCap("pair") },
+  { view: "system", hash: "#system", shows: ["system"], may: () => settingsPageOf() },
+  { view: "maint", hash: "#maintenance", shows: ["maint-page"], may: () => systemOf() },
+  { view: "info", hash: "#info", shows: ["info-page"], may: () => can("read") },
+  { view: "cube", hash: "#cube", shows: ["cube-page"], may: () => can("cubes") || can("pair") },
 ];
 
 /** The personal page's cards with addresses of their own. */

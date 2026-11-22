@@ -1,1 +1,2 @@
-- The web UI draws My settings from the settings as signals (AP UiParts).
+- The web UI draws My settings and who is in from the page's data as
+  signals (AP UiParts).

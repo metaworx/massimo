@@ -780,7 +780,7 @@ REGIONS = (
     Region("main-menu", ("header.top nav.nav",), (
         View("☰ open", main_menu),
         View("☰ open, the focus on an entry", main_menu_item, "#menu-system"),
-    ), sources=("loadMe()",)),
+    )),
     Region("home-notice", ("#home-notice",), (View("on the second server, its Cube not connected", home_notice),)),
     Region("rooms", ("#rooms",), (
         View("a tile's ⋯ menu open", rooms_menu),
@@ -838,8 +838,9 @@ REGIONS = (
     )),
     Region("users", ("#sys-users-body",), (
         View("the operator's panel and the new user's form", users),
-        # Passed on the page before the move as well: none of SOURCES draws
-        # the users again. From now on it guards that the question stays through the data;
+        # Passed on the page before the move as well: none of SOURCES drew
+        # the users again, where since AP UiParts' Block 15 who is in read again
+        # (loadMe) does, which this view holds too. From now on it guards that the question stays through the data;
         # the list's own reads (an action in another panel, the list read
         # again, the page shown again) are test_admin_updates.py's.
         View("the operator's Remove asking", users_question),
@@ -856,8 +857,9 @@ REGIONS = (
     )),
     Region("integrations", ("#sys-integrations-body",), (
         View("System settings", system),
-        # Passed on the page before the move as well: none of SOURCES draws
-        # the integrations again. From now on it guards that a request, an integration's panel and Register's address stays through the data;
+        # Passed on the page before the move as well: none of SOURCES drew
+        # the integrations again, where since AP UiParts' Block 15 who is in read again
+        # (loadMe) does, which this view holds too. From now on it guards that a request, an integration's panel and Register's address stays through the data;
         # the list's own reads (an action in another panel, the list read
         # again, the page shown again) are test_admin_updates.py's.
         View("a request, an integration's panel with a user, Register's address", integrations),
@@ -925,12 +927,12 @@ REGIONS = (
         View("the Users card folded, the focus on its fold", users_fold(True), "#sys-users .section-fold"),
         View("the Users card opened again, the focus on its fold", users_fold(False), "#sys-users .section-fold"),
         View("the personal page's sections menu open, the focus on an item", personal_sections, "#me .sec-menu .toc-link[data-target='prefs']"),
-    ), sources=("loadMe()",)),
+    )),
     # The first owner's form is a part (AP UiParts, Block 14), drawn from
     # who is in: who is in read again (loadMe) is its source; the view
     # passed on the page before the move as well, where nothing drew the
     # plain form again.
-    Region("first-owner", ("#setup",), (View("the first owner's form, the focus in Again", first_owner, "#setup-again"),), sources=("loadMe()",)),
+    Region("first-owner", ("#setup",), (View("the first owner's form, the focus in Again", first_owner, "#setup-again"),)),
     # The sign-in's card is a part (AP UiParts, Block 14), shown here as a
     # 401 opens it on a page signed in: its sources are a second askLogin
     # (another request's 401, which hands out the same opening), the
@@ -941,7 +943,7 @@ REGIONS = (
         View("the sign-in's card, a name and a password typed", sign_in_card),
         View("its API key's way chosen, a key typed", sign_in_key, "#login-token"),
         View("its ☰ open", sign_in_menu, "#login-lang"),
-    ), sources=("askLogin()", "renderLoginProviders()", "applyLanguage()", "loadMe()")),
+    ), sources=("askLogin()", "renderLoginProviders()", "applyLanguage()")),
 )
 
 # The regions not yet moved to parts that the guard fails today, each
@@ -980,11 +982,12 @@ CHECK = checked_regions()
 # reload (refresh, the stream's connected and resync), a state event of
 # the stream for every device of the Cube, as the server sends it, the
 # log button's sign (loadLogAlerts), the ages' minute (refreshAges), the
-# log's poll under All Cubes (pollLog) and the settings applied again, as
-# when the user's arrive from the server (applyStoredSettings), which
-# every part follows as signals since AP UiParts' Block 15 (UiParts D221).
+# log's poll under All Cubes (pollLog), the settings applied again, as
+# when the user's arrive from the server (applyStoredSettings), and who is
+# in read again (loadMe), which every part follows as signals since AP
+# UiParts' Block 15 (UiParts D221).
 SOURCES = ("poll(false)", "loadCubes()", "loadRooms()", "refresh()", "a state event per device", "loadLogAlerts()",
-           "refreshAges()", "pollLog()", "applyStoredSettings()")
+           "refreshAges()", "pollLog()", "applyStoredSettings()", "loadMe()")
 
 # The guard in the page, window.__guard: marks what the user can hold in
 # a region, types into its fields, gives it the focus, applies a data

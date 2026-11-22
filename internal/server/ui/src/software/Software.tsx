@@ -22,6 +22,7 @@ import { Select } from "../shared/field";
 import { BusyButton, busyProps, Question, useAsk, useSetAtOnce } from "../shared/question";
 import { ask, data, load, loadUpdate, question, runUpdate, setChannel, UPDATE_FLAVOURS } from "./store";
 import { cardBadges } from "../shared/card";
+import { can } from "../shared/me";
 
 /** stateText is a helper state's text, as the helper reports it where the page has none. */
 function stateText(state: string): string {
@@ -142,7 +143,7 @@ export function Software() {
   const version = question.version;
   return (
     <>
-      {u && setting && hasCap("settings") && <Channel u={u} setting={setting} />}
+      {u && setting && can("settings") && <Channel u={u} setting={setting} />}
       <div ref={asking.row as Ref<HTMLDivElement>} class="update" aria-live="polite">
         <p id="update-text">{failed ? failed() : u ? versionLine(u) : "–"}</p>
         <p>

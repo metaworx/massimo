@@ -27,6 +27,7 @@ import { live } from "./live";
 import { byteLength, defaultDeviceName, NAME_BYTES } from "./name";
 import { cubePath } from "./path";
 import { session, stillSession } from "./session";
+import { can } from "./me";
 
 /** What a form that puts a device into a room keeps: the name typed, the room and the copy chosen, its request under way, its outcome, and done once the device is in its room. */
 export interface Put {
@@ -100,10 +101,10 @@ export function PutForm({ id, serial, dev, rooms, put, reload, onDone, onFail, o
     if (put.busy || !room) return;
     // Without rename the field is hidden: the server names the device by
     // its default.
-    const nm = hasCap("rename") ? name.trim() : "";
+    const nm = can("rename") ? name.trim() : "";
     const label = nm || deviceName(dev as Device);
     const body: { room_id: number; copy?: boolean; name?: string } = { room_id: room.id };
-    if (thermostat) body.copy = hasCap("configure") && put.copy;
+    if (thermostat) body.copy = can("configure") && put.copy;
     if (nm) {
       if (long) {
         nameRef.current?.focus(); // its field says why, as the pairing time's does

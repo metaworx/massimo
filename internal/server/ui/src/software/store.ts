@@ -26,6 +26,7 @@ import { counter } from "../shared/counter";
 import { live } from "../shared/live";
 import { session, stillSession } from "../shared/session";
 import { isShown } from "../shared/pages";
+import { can } from "../shared/me";
 
 /** A text said in the page's language at its drawing. */
 export type Say = () => string;
@@ -127,7 +128,7 @@ export async function loadUpdate(refresh: boolean, mine: () => boolean = () => t
 
 /** loadChannel reads the setting update.channel, for a holder of settings; mine as loadUpdate's. */
 export async function loadChannel(mine: () => boolean = () => true): Promise<void> {
-  if (!hasCap("settings")) return; // login.js
+  if (!can("settings")) return;
   const n = session();
   let setting: Setting | null;
   try {
@@ -321,7 +322,7 @@ function fresh(ev: ServerEvent): boolean {
 /** updateOut tells whether an update is out, for one who may install it (the server's sign, update.js). */
 export function updateOut(): boolean {
   const u = data.info;
-  return !!u && !!u.available && hasCap("settings"); // login.js
+  return !!u && !!u.available && can("settings");
 }
 
 /** updateLatest is the version an update would install, "" for none (update.js). */

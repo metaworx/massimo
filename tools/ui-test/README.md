@@ -639,7 +639,8 @@ hence `failed_checks_forgotten`.
   and its views, which open its menus, panels and forms),
   around each data source (`SOURCES`: `poll(false)`, `loadCubes()`,
   `loadRooms()`, `refresh()`, a state event per device on the page's
-  `EventSource`, `loadLogAlerts()`, `refreshAges()`, `pollLog()`),
+  `EventSource`, `loadLogAlerts()`, `refreshAges()`, `pollLog()`,
+  `applyStoredSettings()`, `loadMe()`),
   with the data as it was:
   every element a user can hold is the same element, every open `details`
   open, every text, number, date or time field holds what was typed into it,

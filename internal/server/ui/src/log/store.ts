@@ -25,7 +25,7 @@
 
 import { signal } from "@preact/signals";
 import { counter } from "../shared/counter";
-import { me } from "../shared/me";
+import { can, me } from "../shared/me";
 import { setAddress } from "../shared/pages";
 import { session, stillSession } from "../shared/session";
 import { LOG_COUNT, LOG_COUNT_RANGE, LOG_LEVELS, LOG_MAX_LINES, LOG_PAGE, LOG_POLL_MS, LOG_POLL_PAGES } from "./kinds";
@@ -559,7 +559,7 @@ export async function logLoadUsers(): Promise<void> {
   if (logState.users !== null && usersFor === who) return;
   usersFor = who; // another user signed in without a sign-out before (a key pasted, the first owner made): asked again
   logState.users = [];
-  if (!state.me || state.me.mode !== "users" || !hasCap("users")) return;
+  if (!me.value || me.value.mode !== "users" || !can("users")) return;
   const n = session();
   let users: LogUser[];
   try {

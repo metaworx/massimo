@@ -19,6 +19,7 @@ import { actionRunner } from "../shared/action";
 import { forgetForms } from "../shared/forms";
 import { session, stillSession } from "../shared/session";
 import { enabled, load, providerFormKey, providers, providerUI, reads, roles, said } from "./store";
+import { can } from "../shared/me";
 
 /** ADMIN_CAPS are the capabilities a role may not hold to be given to the users a provider creates (adminCapabilities in internal/server/oidc.go). */
 const ADMIN_CAPS = ["guests", "users", "passwords", "roles", "roles.disable", "capabilities", "cubes", "cubes.reboot", "settings", "update", "restart",
@@ -40,7 +41,7 @@ export function autoRoleOptions(current?: string): [string, string][] {
 
 /** loadProviders reads every provider, for a holder of auth; a provider the list no longer gives forgets its form. */
 export async function loadProviders(): Promise<void> {
-  if (!hasCap("auth")) return;
+  if (!can("auth")) return;
   const n = session();
   const list = (await api<Provider[]>("GET", "api/v1/providers")) || [];
   if (!stillSession(n)) return; // signed out meanwhile: nothing of it is the next user's
