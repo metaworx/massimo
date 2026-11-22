@@ -512,6 +512,22 @@ hence `failed_checks_forgotten`.
   Keep it open… again, and kept open from it the switch is back; after a
   turn the card's ways out are on; the measures in six languages, and the
   address copied in a browser and in the app without the clipboard's API.
+- `test_ways.py`, the ways to the first owner on a running page (AP
+  FirstOwner, Block 4), `/api/v1/me` stubbed: the banner's Create the
+  owner…, ☰'s and Users' each open the card, the page behind it still (no
+  poll, no stream) and Back to the page starts both again, the focus back
+  on what opened it, nothing skipped; Hide hides the warning, kept after a
+  reload, forgotten once the server has users, for that page alone where
+  the storage refuses; no buttons without a store; ☰'s entries on an open
+  server and with users; a hidden warning and ☰ to Create, the same page
+  shown again; Users' section on an open server, and the owner listed
+  after Create there; a setpoint under way lands; a refusal during Create
+  does not turn the card, a read waits and a write is said not sent; the
+  turn on a running page drops a stepped setpoint and another user's
+  sign-in forgets the open page; no stream behind the card; a refusal
+  during a Create that fails turns the card then; a half-typed form stays
+  through the card; a refused read forgets the hiding; a storage that
+  throws at the read; the warning's buttons at 390 px in six languages.
 - `test_preferences.py`, the settings that follow the user:
   the poll and the scheme set in one browser reach the server and a fresh
   browser with the same token,

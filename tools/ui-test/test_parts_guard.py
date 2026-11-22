@@ -299,6 +299,33 @@ def main_menu(page):
     open_main_menu(page)
 
 
+KEPT_OPEN = json.dumps({"mode": "open", "user": None, "role": None, "capabilities": [], "setup": True, "kept_open": True})
+
+
+def kept_open(page):
+    """GET /api/v1/me stubbed as an open server kept open for the rest of
+    the test (AP FirstOwner): no card asks, the banner and ☰ offer the
+    owner; who is in read again (the regions' source loadMe()) reads the
+    stub again."""
+    safe_route(page, "**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body=KEPT_OPEN))
+    page.evaluate("() => loadMe()")
+
+
+def main_menu_open_server(page):
+    """☰ open on an open server kept open, the focus on Create the owner…."""
+    kept_open(page)
+    main_menu(page)
+    page.locator("#menu-owner").focus()
+
+
+def open_banner(page):
+    """The open server's warning on a server kept open, the focus on its
+    Create the owner…."""
+    kept_open(page)
+    on_rooms(page)
+    page.locator("#open-banner-create").focus()
+
+
 def main_menu_item(page):
     """☰ open, the focus moved onto System settings' entry."""
     main_menu(page)
@@ -792,7 +819,13 @@ REGIONS = (
     Region("main-menu", ("header.top nav.nav",), (
         View("☰ open", main_menu),
         View("☰ open, the focus on an entry", main_menu_item, "#menu-system"),
+        View("☰ open on an open server, the focus on Create the owner…", main_menu_open_server, "#menu-owner"),
     ), sources=("loadMe()",)),
+    # The open server's warning with its buttons (AP FirstOwner, Block 4),
+    # drawn from who is in: who is in read again and the language applied
+    # again are its sources.
+    Region("open-banner", ("#open-banner",), (View("the warning on a server kept open, the focus on Create the owner…", open_banner,
+                                                    "#open-banner-create"),), sources=("loadMe()", "applyLanguage()")),
     Region("home-notice", ("#home-notice",), (View("on the second server, its Cube not connected", home_notice),)),
     Region("rooms", ("#rooms",), (
         View("a tile's ⋯ menu open", rooms_menu),

@@ -2038,3 +2038,11 @@ massimo-week-program { display: contents; }
    configuration's devices tab (config.js renderDeviceForm). */
 .notice.device-unconfirmed { display: flex; gap: 6px; align-items: flex-start; }
 .notice.device-unconfirmed .ni { flex: none; margin-top: 2px; }
+/* the open server's warning's buttons (ui/src/signin/Banner.tsx): Create the
+   owner… and Hide after its text, wrapping under it on a phone */
+.open-banner-actions { display: inline-flex; flex-wrap: wrap; gap: 6px; margin-left: 6px; vertical-align: middle; }
+.open-banner-actions button { white-space: nowrap; }
+/* System settings → Users on a server without users (ui/src/admin/Users.tsx) */
+.users-open { display: flex; flex-direction: column; gap: 8px; }
+.users-open > p { margin: 0; }
+.users-kept-open { padding-top: 8px; border-top: 1px solid var(--line); }

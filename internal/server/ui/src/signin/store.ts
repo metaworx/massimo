@@ -25,6 +25,7 @@ import type { LoginProvider } from "../api";
 import { live } from "../shared/live";
 import type { Outcome } from "../shared/action";
 import { firstOwnerOf, me } from "../shared/me";
+import { keptOpen, takeAsker } from "../shared/owner";
 
 /** A way to sign in, by the button's data-way: the name and the password, or an API key. */
 export type Way = "password" | "key";
@@ -34,6 +35,9 @@ export type FocusOn = "way" | "password" | "retry" | "owner" | "keep" | "keepBut
 
 /** The first owner's place: the form, or the confirmation that keeps the server open. */
 export type OwnerStep = "form" | "keep";
+
+/** BANNER is the browser's key for the open server's warning hidden, per origin and so per server, while there is no owner (AP FirstOwner, D2, D38). */
+const BANNER = "massimo.openBanner";
 
 /** The card's state; opened counts the openings, owner says the first owner's form is shown instead of the ways, focus the focus asked for. */
 export const card = live({
@@ -45,6 +49,9 @@ export const card = live({
   ownerStep: "form" as OwnerStep,
   keepSaid: null as Outcome | null,
   working: false,
+  creating: false,
+  byUser: false,
+  bannerHidden: readStored(BANNER) === "hidden",
   providers: [] as LoginProvider[],
   providersSaid: null as Outcome | null,
   selfSigned: false,
@@ -52,6 +59,9 @@ export const card = live({
   waysOff: false,
   focus: { n: 0, on: "way" as FocusOn },
 });
+
+/** The control that asked for the first owner's card (shared/owner.ts askOwner), given the focus back when the card is left; null for none. */
+let asker: HTMLElement | null = null;
 
 /** The sign-in the card answers, as askLogin handed it over; null while none is open. */
 let asking: SignInAsk | null = null;
@@ -87,6 +97,9 @@ export function open(on: Way | "owner", said: string, ask: SignInAsk): void {
   dropChoice();
   asking = ask;
   card.owner = on === "owner";
+  if (on !== "owner") bannerAgain(); // a sign-in asked for: the server has users, and the warning's hiding is forgotten (D45)
+  asker = on === "owner" ? takeAsker() : null;
+  card.byUser = !!asker;
   card.way = on === "owner" ? "password" : on;
   card.ownerStep = "form";
   card.said = null;
@@ -106,7 +119,7 @@ export function open(on: Way | "owner", said: string, ask: SignInAsk): void {
  */
 export function asksOwner(): boolean {
   const m = me.peek();
-  return !skipped && firstOwnerOf(m) && !m?.kept_open;
+  return !skipped && firstOwnerOf(m) && !keptOpen(m);
 }
 
 /**
@@ -116,10 +129,18 @@ export function asksOwner(): boolean {
  * chosen and its first field given the focus, the reason said; the
  * fields stay as the opening left them; the card's request that met the
  * refusal is over as far as the card goes, so its ways out are on again.
- * It reports whether it turned.
+ * Not while the card's own creation of the owner has no session yet: a
+ * refusal of another request then comes from the owner just made, and
+ * the creation ends in its sign-in or turns the card itself. It reports
+ * whether it turned.
  */
 export function toSignIn(): boolean {
   if (!card.owner) return false;
+  if (card.creating) {
+    missed = true; // turned where the creation ends without a session (creationEnded)
+    return false;
+  }
+  bannerAgain(); // a refusal says the server has users: the warning's hiding is forgotten (D45)
   card.owner = false;
   card.working = false;
   card.way = "password";
@@ -168,16 +189,52 @@ export function sameAddress(input: string): boolean {
   return u.pathname === "/" || u.pathname === base || u.pathname + "/" === base;
 }
 
+/** missed is a refusal not turned while the card's creation ran, turned where the creation ends without a session. */
+let missed = false;
+
+/**
+ * creationEnded takes the end of the card's creation of the owner: with
+ * its session in, a refusal meanwhile is answered by that session's
+ * requests sent again; without, a refusal meanwhile said the server has
+ * users, and the card turns to the sign-in now.
+ */
+export function creationEnded(session: boolean): void {
+  card.creating = false;
+  const turn = missed && !session;
+  missed = false;
+  if (turn) askLogin();
+}
+
 /** skip takes Skip for now: the card closes, as a dismissal, and asks no more in this load (AP FirstOwner, D10). */
 export function skip(): void {
-  skipped = true;
+  if (!card.byUser) skipped = true; // "Back to the page" on the user's own opening marks nothing (D36)
+  const back = asker;
+  asker = null;
   if (asking) asking.dismiss();
+  // the page shown again in this turn, dismiss having taken the class signed-out away: the control that asked, which
+  // was in the page all along, takes the focus in the handler of the user's action (a drawing that shows an element
+  // gives it in a layout effect)
+  if (back && back.isConnected) back.focus();
+}
+
+/** hideBanner hides the open server's warning, kept in the browser's storage while the server has no owner (AP FirstOwner, D2); a storage that refuses keeps it hidden for this page. */
+export function hideBanner(): void {
+  card.bannerHidden = true;
+  store(BANNER, "hidden");
+}
+
+/** bannerAgain forgets the warning's hiding once the server has users, so that a server open again shows it (AP FirstOwner, D2). */
+export function bannerAgain(): void {
+  if (!card.bannerHidden && readStored(BANNER) === null) return;
+  card.bannerHidden = false;
+  store(BANNER, null);
 }
 
 /** closed takes the card's closing: a choice still waited for dropped. */
 export function closed(): void {
   dropChoice();
   asking = null;
+  asker = null;
 }
 
 /** ask is the sign-in the card answers now, taken at a submit's start; null while none is open. */

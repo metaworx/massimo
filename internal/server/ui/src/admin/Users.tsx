@@ -29,7 +29,8 @@ import { type Changes, Identities } from "../shared/identities";
 import { Tokens } from "../shared/tokens";
 import { UserNameField, useNameCheck } from "../shared/username";
 import { useLang } from "../shared/lang";
-import { me } from "../shared/me";
+import { firstOwnerOf, me } from "../shared/me";
+import { askOwner, keptOpen } from "../shared/owner";
 import { adding, enabled, identityFormKey, identityUI, keptOff, load, passwordLogin, reads, said, userFormKey, userUI, users } from "./store";
 import { createUser, keepOpenOff, mayManage, mayPassword, removeUser, roleOptions, run, saveUser, setPasswordLogin, usersAdmin, usersMsg } from "./sendUsers";
 import { cardBadges, showCard } from "../shared/card";
@@ -261,36 +262,48 @@ function PasswordLogin() {
 }
 
 /**
- * KeptOpen is the switch that undoes keeping a server without users open
- * (AP FirstOwner, D5, D32): shown while who is in says the server is kept
- * open, on; turned off it is saved at once, and its row stays for this
- * showing of the section, off and no longer to be turned, with the line
- * that the page asks for the owner again at its next load, the focus on
- * that line; turning it on is the sign-in card's confirmation alone.
- * Who is in, read again after the turning off, says whether it is kept.
+ * OpenServer is the section on a server without users (AP FirstOwner,
+ * D14, Block 4): a line that says so; Create the owner…, which opens the
+ * sign-in card with the first owner's form where the owner can be created
+ * from here, the focus back on it when the card is left; and while the
+ * server is kept open the switch that undoes it (D5, D32): on; turned off
+ * it is saved at once, and its row stays for this showing of the section,
+ * off and no longer to be turned, with the line that the page asks for
+ * the owner again at its next load, the focus on that line; turning it on
+ * is the sign-in card's confirmation alone. Whether it is kept open is
+ * shared/owner.ts keptOpen's answer, from who is in, read again after the
+ * turning off (D44).
  */
-function KeptOpen() {
+function OpenServer() {
   useLang();
   const m = me.value;
-  const kept = !!(m && m.mode === "open" && m.kept_open);
+  const kept = keptOpen(m);
   const off = keptOff.showing && !kept; // kept open again from the card meanwhile: the switch is back, on
   const on = useSetAtOnce(kept);
   const lineRef = useRef<HTMLParagraphElement>(null);
+  const createRef = useRef<HTMLButtonElement>(null);
   // turned off: the switch can no longer be turned, so the focus goes to the line that says what follows
   useLayoutEffect(() => {
     if (off && document.activeElement && document.activeElement.id === "keep-open-switch") lineRef.current?.focus();
   }, [off]);
-  if (!kept && !off) return null;
   return (
-    <div id="users-open" class="users-open needs-settings">
-      <Switch id="keep-open-switch" label={t("users.keptOpen")} checked={!off && on.value} disabled={off}
-        onChange={(v) => { if (!v) on.set(false, keepOpenOff); }} />
-      <p id="keep-open-switch-hint" ref={lineRef} class="muted small" tabIndex={-1}>{t(off ? "users.keptOpenOff" : "users.keptOpenHint")}</p>
+    <div id="users-open" class="users-open">
+      <p id="users-no-owner" class="muted small">{t("users.noOwner")}</p>
+      <div class={"actions" + hid(!firstOwnerOf(m))}>
+        <button ref={createRef} type="button" id="users-create-owner" class="primary" onClick={() => askOwner(createRef.current)}>{t("setup.ask")}</button>
+      </div>
+      {(kept || off) && (
+        <div class="users-kept-open needs-settings">
+          <Switch id="keep-open-switch" label={t("users.keptOpen")} checked={!off && on.value} disabled={off}
+            onChange={(v) => { if (!v) on.set(false, keepOpenOff); }} />
+          <p id="keep-open-switch-hint" ref={lineRef} class="muted small" tabIndex={-1}>{t(off ? "users.keptOpenOff" : "users.keptOpenHint")}</p>
+        </div>
+      )}
     </div>
   );
 }
 
-/** UsersCard is the section's body: the password sign-in, the users' panels, the form that adds one, and the message line. */
+/** UsersCard is the section's body: the password sign-in, the users' panels, the form that adds one, and the message line; on a server without users its own section instead of the three (OpenServer), and the line. */
 export function UsersCard() {
   load.useLoad();
   const list = users.list;
@@ -299,9 +312,16 @@ export function UsersCard() {
   useLayoutEffect(() => {
     cardBadges("sys-users", count ? [{ text: count, kind: "mode" }] : []);
   }, [count]);
+  if (me.value?.mode === "open") {
+    return (
+      <>
+        <OpenServer />
+        <ResultLine id="users-msg" cls="small cubes-msg" role="status" res={said.users} />
+      </>
+    );
+  }
   return (
     <>
-      <KeptOpen />
       <PasswordLogin />
       <div id="users-list">
         {users.loaded && !list.length && <p class="muted small">{t("users.none")}</p>}
