@@ -2,18 +2,16 @@
 // Copyright (C) 2026 The Massimo Authors
 
 // The Massimo web UI, the Appearance card of My settings: its plain name,
-// which applies the appearance and calls its part (ui/src/prefs/,
-// MassimoParts.prefs), where the choices of mode and scheme, the scheme
-// editor with its contrast hints, and a scheme's export and import as a
-// file are drawn; and the system's changes it follows.
+// which applies the appearance; the card is a part (ui/src/prefs/), where
+// the choices of mode and scheme, the scheme editor with its contrast
+// hints, and a scheme's export and import as a file are drawn, following
+// the settings as signals; and the system's changes it follows.
 "use strict";
 
-// applyAppearance draws the appearance settings from state.settings and
-// applies them; applySettings and a change of language call it, and
-// theme.js' choices of the mode and the scheme; the sign-in card's
-// choice of the mode is drawn by the same part (ui/src/shared/mode.tsx).
+// applyAppearance applies the appearance settings of state.settings;
+// applySettings and a change of language call it, and theme.js' choices
+// of the mode and the scheme.
 function applyAppearance() {
-  MassimoParts.prefs.render();
   reapplyTheme();
   applyBlink();
   applyIcons();

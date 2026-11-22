@@ -196,6 +196,7 @@ function validScheme(id) {
 }
 
 // loadCustomSchemes reads the user's schemes; a broken entry is dropped.
+// The list is written whole, the parts' signal under it (ui/src/shared/data.ts).
 function loadCustomSchemes() {
   themeState.custom = [];
   let list;
@@ -205,11 +206,13 @@ function loadCustomSchemes() {
     return;
   }
   if (!Array.isArray(list)) return;
+  const custom = [];
   for (const s of list) {
     const name = s && schemeName(s.name, "");
-    if (!name || themeState.custom.some((c) => c.name === name)) continue;
-    themeState.custom.push({ name, light: tokenSet(s.light, "light"), dark: tokenSet(s.dark, "dark") });
+    if (!name || custom.some((c) => c.name === name)) continue;
+    custom.push({ name, light: tokenSet(s.light, "light"), dark: tokenSet(s.dark, "dark") });
   }
+  themeState.custom = custom;
 }
 
 function storeCustomSchemes() {
@@ -247,8 +250,7 @@ function takeSchemes(doc) {
 function putCustomScheme(name, light, dark) {
   const entry = { name, light: Object.assign({}, light), dark: Object.assign({}, dark) };
   const i = themeState.custom.findIndex((c) => c.name === name);
-  if (i >= 0) themeState.custom[i] = entry;
-  else themeState.custom.push(entry);
+  themeState.custom = i >= 0 ? themeState.custom.map((c, j) => (j === i ? entry : c)) : [...themeState.custom, entry];
   storeCustomSchemes();
   return CUSTOM_PREFIX + name;
 }

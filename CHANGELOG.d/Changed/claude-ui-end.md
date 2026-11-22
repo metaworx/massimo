@@ -1,0 +1,1 @@
+- The web UI draws My settings from the settings as signals (AP UiParts).

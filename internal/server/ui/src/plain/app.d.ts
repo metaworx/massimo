@@ -16,7 +16,7 @@ import type { Cube, Device, DeviceDetail, FoundCube, Me, Room } from "../api";
 declare global {
   /** A room as the page keeps it: its virtual wall thermostat taken out of its devices (app.js splitVirtual). */
   type PageRoom = Room & { vwt: Device | null };
-  /** What the page loaded, as far as a part reads it (app.js state). */
+  /** What the page loaded, as far as a part reads it (app.js state); the fields shared/data.ts adopts are signals underneath, written whole. */
   const state: {
     /** The Cubes the server serves, as the last load of GET /api/v1/cubes gave them. */
     cubes: Cube[];
@@ -46,6 +46,8 @@ declare global {
     me: Me | null;
     /** The person's settings in effect, as far as a part reads them: this device's where it keeps one, else the user's. */
     settings: { poll: number; expert: boolean; clock: string; lang: string; theme: string; scheme: string; blink: string; iconWindow: string; iconRadio: string };
+    /** The settings kept for this device alone, by key, as last stored (app.js storeDeviceOverrides). */
+    device: Record<string, unknown>;
   };
   /** The text key of each setting's name, for its "only on this device" switch. */
   const SETTING_LABELS: Record<string, string>;

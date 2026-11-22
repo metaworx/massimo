@@ -19,11 +19,10 @@ import { Select } from "../shared/field";
 import { FileButton } from "../shared/file";
 import { Icon, Sign } from "../shared/icon";
 import { ModeSelect } from "../shared/mode";
-import { useIcons } from "../shared/look";
+import { useIcons, useLook } from "../shared/look";
 import { Editor } from "./Editor";
 import { DevRow } from "./rows";
 import { closeEditor, editor, exportScheme, importScheme, openEditor, said, schemeMessage } from "./scheme";
-import { load } from "./store";
 
 /** schemeOptions are the scheme's choices: the built-in schemes by their translated names, then the user's own under a group. */
 function schemeOptions() {
@@ -50,15 +49,9 @@ function Preview({ id, kind }: { id: string; kind: "window" | "radio" }) {
   );
 }
 
-/** choose makes a choice theme.js keeps (chooseBlink, chooseIcon), which applies it without drawing the card, and draws the card again. */
-function choose(fn: () => void): void {
-  fn();
-  load.bump();
-}
-
 /** Appearance is the card's Appearance: its rows, its buttons and their line, and the editor while it is open. */
 export function Appearance() {
-  load.useLoad();
+  useLook();
   const s = state.settings;
   const open = editor.open;
   return (
@@ -78,15 +71,15 @@ export function Appearance() {
         }} />
       </DevRow>
       <DevRow setting="blink">
-        <Select label={t("appearance.blink")} id="blink-select" help="blink" value={s.blink} onChange={(v) => choose(() => chooseBlink(v))}
+        <Select label={t("appearance.blink")} id="blink-select" help="blink" value={s.blink} onChange={chooseBlink}
           options={[["system", t("appearance.blinkSystem")], ["on", t("appearance.blinkOn")], ["first", t("appearance.blinkFirst")], ["off", t("appearance.blinkOff")]]} />
       </DevRow>
       <DevRow setting="iconWindow">
-        <Select label={t("appearance.iconWindow")} id="icon-window-select" help="iconWindow" value={s.iconWindow} onChange={(v) => choose(() => chooseIcon("iconWindow", v))}
+        <Select label={t("appearance.iconWindow")} id="icon-window-select" help="iconWindow" value={s.iconWindow} onChange={(v) => chooseIcon("iconWindow", v)}
           options={[["sash", t("appearance.iconWindowSash")], ["paned", t("appearance.iconWindowPaned")]]} before={<Preview id="icon-window-preview" kind="window" />} />
       </DevRow>
       <DevRow setting="iconRadio">
-        <Select label={t("appearance.iconRadio")} id="icon-radio-select" help="iconRadio" value={s.iconRadio} onChange={(v) => choose(() => chooseIcon("iconRadio", v))}
+        <Select label={t("appearance.iconRadio")} id="icon-radio-select" help="iconRadio" value={s.iconRadio} onChange={(v) => chooseIcon("iconRadio", v)}
           options={[["wifi", t("appearance.iconRadioWifi")], ["tower", t("appearance.iconRadioTower")]]} before={<Preview id="icon-radio-preview" kind="radio" />} />
       </DevRow>
       <DevRow last>

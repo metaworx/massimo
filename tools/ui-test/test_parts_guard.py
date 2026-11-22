@@ -906,12 +906,12 @@ REGIONS = (
         View("the restart asking, a delay typed for the reboot", maint_question),
     ), sources=("the page shown again: maint", "the stream's events: resync change reboot reboot_cancelled settings_read")),
     Region("system-info", ("#sys-info-body",), (View("System info, its folds open", info),), sources=("the page shown again: info", "the stream's events: resync settings_read change.cube")),
-    # the settings applied again, as when the user's arrive from the server at a sign-in (loadPreferences)
-    Region("my-settings", ("#prefs-rows", "#prefs-sec > p"), (View("My settings", personal("prefs")),), sources=("applyStoredSettings()",)),
+    # the settings applied again, as when the user's arrive from the server at a sign-in, are one of SOURCES
+    Region("my-settings", ("#prefs-rows", "#prefs-sec > p"), (View("My settings", personal("prefs")),)),
     Region("appearance", ("#prefs-sec .appearance",), (
         View("My settings", personal("prefs")),
         View("the scheme editor open", scheme_editor),
-    ), sources=("applyStoredSettings()",)),
+    )),
     Region("notifications", ("#notify-sec",), (View("Notifications", personal("notify")),), sources=("the page shown again: me",)),
     Region("my-profile", ("#profile-sec",), (View("My profile", profile),), sources=("the page shown again: me",)),
     # The pages' rows are parts (AP UiParts, Block 14), drawn from who is
@@ -979,10 +979,12 @@ CHECK = checked_regions()
 # (loadRooms, also metadata, paired and device_forgotten), the whole
 # reload (refresh, the stream's connected and resync), a state event of
 # the stream for every device of the Cube, as the server sends it, the
-# log button's sign (loadLogAlerts), the ages' minute (refreshAges) and
-# the log's poll under All Cubes (pollLog).
+# log button's sign (loadLogAlerts), the ages' minute (refreshAges), the
+# log's poll under All Cubes (pollLog) and the settings applied again, as
+# when the user's arrive from the server (applyStoredSettings), which
+# every part follows as signals since AP UiParts' Block 15 (UiParts D221).
 SOURCES = ("poll(false)", "loadCubes()", "loadRooms()", "refresh()", "a state event per device", "loadLogAlerts()",
-           "refreshAges()", "pollLog()")
+           "refreshAges()", "pollLog()", "applyStoredSettings()")
 
 # The guard in the page, window.__guard: marks what the user can hold in
 # a region, types into its fields, gives it the focus, applies a data

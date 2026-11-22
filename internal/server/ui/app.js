@@ -24,6 +24,7 @@ const state = {
   events: null,
   eventsOpen: false,
   settings: { poll: 10, expert: false, clock: "browser", lang: "auto", theme: "system", scheme: "massimo", blink: "system", iconWindow: "sash", iconRadio: "wifi" },
+  device: {}, // the settings kept for this device alone (deviceOverrides), as last stored
   tz: {}, // per serial: {winter, summer} time zone rules from the cube detail
   details: {}, // device detail by rf address, fetched on demand
   ui: {}, // per room id: {open, pending, timer, vacation, confirm}
@@ -170,10 +171,13 @@ function deviceOverrides() {
 
 function storeDeviceOverrides(d) {
   store("massimo.device", Object.keys(d).length ? JSON.stringify(d) : null);
+  state.device = { ...d };
 }
 
+// deviceOnly reports whether a setting is kept for this device alone, as
+// state.device has it, which My settings' switches draw from.
 function deviceOnly(key) {
-  return Object.prototype.hasOwnProperty.call(deviceOverrides(), key);
+  return Object.prototype.hasOwnProperty.call(state.device, key);
 }
 
 // readSetting is the value in effect of a setting: this device's, else
@@ -189,6 +193,7 @@ function readSetting(key) {
 
 function loadSettings() {
   const s = state.settings;
+  state.device = deviceOverrides();
   for (const k of SETTING_KEYS) s[k] = readSetting(k);
   s.theme = validMode(s.theme); // theme.js
   s.scheme = validScheme(s.scheme);
@@ -657,7 +662,6 @@ function applySettings() {
   const s = state.settings;
   document.body.classList.toggle("expert", s.expert);
   applyAppearance();
-  renderDeviceSwitches();
   const cube = state.cubes.find((c) => c.serial === state.serial);
   if (cube) renderHeader(cube);
   startPolling();
@@ -1002,11 +1006,9 @@ function applyLanguage() {
   if (I18N.en) applyI18n(document);
   MassimoParts.language(); // the parts draw their texts again (ui/src/shared/lang.ts)
   initHelpSlots();
-  renderLangSelect();
   applyAppearance();
   renderCubeSelect();
   renderServerSign();
-  renderDeviceSwitches();
   renderUsers();
   renderProviders(); // providers.js
   renderBackups(); // backup.js: each box with its restore
@@ -1031,7 +1033,6 @@ async function init() {
   await changeLanguage(state.settings.lang);
   if (I18N.en) applyI18n(document);
   MassimoParts.language(); // the page's language loaded: the parts drawn as parts.js loaded, before any table had come, draw again in it (ui/src/shared/lang.ts)
-  renderLangSelect();
   initHelpSlots();
   initSettings();
   applySettings();

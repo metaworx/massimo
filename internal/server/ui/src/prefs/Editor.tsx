@@ -24,7 +24,7 @@ import { ResultLine } from "../shared/badge";
 import { SaveButton, useDraft } from "../shared/field";
 import { focusForm, useForm } from "../shared/forms";
 import { changed, closeEditor, coloursChanged, deleteDraft, editor, hexUI, resetColours, SCHEME_FORM, saveDraft, takeColour } from "./scheme";
-import { load } from "./store";
+import { useLook } from "../shared/look";
 import { showCard } from "../shared/card";
 import { isShown, showView } from "../shared/pages";
 
@@ -121,7 +121,7 @@ function HexMessage() {
  * from, Delete for the user's own, Close dropping the draft.
  */
 export function Editor() {
-  load.useLoad();
+  useLook();
   void editor.ver; // the draft's changes
   const d = themeState.draft;
   const own = schemeById(themeState.base);

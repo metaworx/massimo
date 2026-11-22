@@ -39,7 +39,6 @@ import { Dropdown, MenuItem } from "../shared/menu";
 import { ModeSelect } from "../shared/mode";
 import { BusyButton, busyProps, useBusy } from "../shared/question";
 import { VersionRow, version } from "../shared/server";
-import { applied } from "../shared/settings";
 import { app, keepLogin, kept, offer, plainHere, readApp } from "./app";
 import { ask, askFocus, card, chooseWay, keepChosen, type Way } from "./store";
 
@@ -48,14 +47,13 @@ const WAYS: [Way, string][] = [["password", "login.password"], ["key", "login.to
 
 /** Menu is the card's ☰: the version, the language and the mode before anyone signs in, as My settings sets them, and in the app Select server last. */
 function Menu() {
-  useLang();
-  applied.useLoad(); // the language and the mode chosen are the plain code's, drawn again where they were applied
+  useLang(); // the language and the mode chosen are state.settings', signals (shared/data.ts)
   const servers = !!appConnect();
   return (
     <Dropdown id="login-menu" cls="nav-menu login-menu" summaryCls="nav-btn" label={t("login.menu")} summary={<Icon symbol="icon-menu" cls="ni" />}>
       <VersionRow id="login-menu-version" />
       <hr class="menu-sep" />
-      <Select label={t("settings.language")} id="login-lang" wide options={languageOptions()} value={i18n.setting} onChange={(v) => {
+      <Select label={t("settings.language")} id="login-lang" wide options={languageOptions()} value={state.settings.lang} onChange={(v) => {
         setSetting("lang", validSetting("lang", v) || "auto");
         changeLanguage(state.settings.lang).then(applyLanguage);
       }} />

@@ -724,6 +724,96 @@ func alsoText(also []string) string {
 	return s
 }
 
+// wholeFields are the fields of the page's data that are signals
+// underneath (ui/src/shared/data.ts, AP UiParts D123-A): a write tells
+// the parts only as an assignment of the field, so none of them is
+// written in place.
+var wholeFields = []string{"themeState.custom", "themeState.draft"}
+
+// writtenInPlace finds a write in place to a field of wholeFields on a
+// line: an item assigned by its index, an array's method that changes
+// it, delete, Object.assign into it, or a property of it assigned.
+func writtenInPlace(line string) bool {
+	for _, f := range wholeFields {
+		q := regexp.QuoteMeta(f)
+		re := regexp.MustCompile(`(?:^|[^\w.$])` + q + `(?:\[[^\]]*\]|\.[\w$]+)+\s*=[^=]|(?:^|[^\w.$])` + q +
+			`\.(?:push|splice|sort|reverse|unshift|shift|pop|fill|copyWithin)\(|delete\s+` + q + `\b|Object\.assign\(\s*` + q + `\b`)
+		if re.MatchString(line) {
+			return true
+		}
+	}
+	return false
+}
+
+// The page's data are written whole (UiParts D234): no plain script and
+// no part writes a field of wholeFields in place, which would change the
+// data without telling the parts that draw from them. It reads the
+// written name alone: a write through another name of the same array
+// (const list = themeState.custom; list.push(…)) it cannot see; the
+// drawings counted per poll at each step of Block 15 and the review
+// cover that.
+func TestStateWrittenWhole(t *testing.T) {
+	t.Parallel()
+	files, err := filepath.Glob("ui/*.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = fs.WalkDir(os.DirFS("ui/src"), ".", func(name string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() && (strings.HasSuffix(name, ".ts") || strings.HasSuffix(name, ".tsx")) {
+			files = append(files, path.Join("ui/src", name))
+		}
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, f := range files {
+		if f == "ui/parts.js" {
+			continue // the bundle
+		}
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		n++
+		for i, line := range strings.Split(string(b), "\n") {
+			if code, _, _ := strings.Cut(line, "//"); writtenInPlace(code) {
+				t.Errorf("%s:%d writes the page's data in place, which tells no part: %s", f, i+1, strings.TrimSpace(line))
+			}
+		}
+	}
+	if n < 40 {
+		t.Fatalf("only %d files read", n)
+	}
+}
+
+// writtenInPlace tells a write in place from a write of the whole field
+// and from a read.
+func TestWrittenInPlace(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		line string
+		want bool
+	}{
+		{"themeState.custom.push(entry);", true},
+		{"themeState.custom[i] = entry;", true},
+		{"themeState.draft.name = name;", true},
+		{"themeState.draft.light[k] = c;", true},
+		{"delete themeState.draft;", true},
+		{"Object.assign(themeState.draft, x);", true},
+		{"themeState.custom = [...themeState.custom, entry];", false},
+		{"themeState.draft = { ...d, name };", false},
+		{"if (themeState.custom[i] === entry) return;", false},
+		{"const d = themeState.draft;", false},
+		{"themeState.customs.push(x);", false},
+	} {
+		if got := writtenInPlace(c.line); got != c.want {
+			t.Errorf("writtenInPlace(%q) = %v, want %v", c.line, got, c.want)
+		}
+	}
+}
+
 // Every file of the web UI opens with its licence lines (the contract,
 // "Go code"; docs/ui.md, "How the page is built"): a plain script or
 // style sheet with the SPDX line and the copyright line, in either

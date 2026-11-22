@@ -13,6 +13,7 @@
  * plain/, a file per script.
  */
 
+import "./shared/data"; // first: the page's data are signals before any part draws from them
 import { signedOut as adminSignedOut } from "./admin";
 import type { ProvidersPart, RolesPart, UsersPart } from "./admin";
 import { signedOut as backupsSignedOut } from "./backups";
@@ -30,7 +31,6 @@ import type { LogPart } from "./log";
 import { signedOut as notifySignedOut } from "./notify";
 import type { NotifyPart } from "./notify";
 import { signedOut as prefsSignedOut } from "./prefs";
-import type { PrefsPart } from "./prefs";
 import { signedOut as profileSignedOut } from "./profile";
 import "./rooms";
 import type { RoomsPart } from "./rooms";
@@ -104,8 +104,6 @@ export interface MassimoParts {
   log: LogPart;
   /** 👤 → Notifications: the rules, this browser and the devices (notify/). */
   notify: NotifyPart;
-  /** My settings: their rows and the Appearance card with the scheme editor, drawn again where the settings were applied (prefs/). */
-  prefs: PrefsPart;
   /** The rooms: a tile per room with its device list (rooms/). */
   rooms: RoomsPart;
   /** System settings → Sign-in providers (admin/). */
