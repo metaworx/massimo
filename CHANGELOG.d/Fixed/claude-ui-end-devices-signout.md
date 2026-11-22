@@ -1,0 +1,1 @@
+- A sign-out forgets the devices a Cube's panel had read for its user.

@@ -15,7 +15,7 @@ import json
 import pytest
 
 from conftest import TOKEN, URL, api_call
-from helpers import frames, hold, mark, open_main_menu, owner_page, reads_of, replaced, safe_route, show_view, sign_out, undo, wait_held, wait_until
+from helpers import focus_in_turn, frames, hold, mark, open_main_menu, owner_page, reads_of, replaced, safe_route, show_view, sign_out, undo, wait_held, wait_until
 from test_log_alerts import alerts_route
 from test_login import sign_in
 from test_oidc import provider  # noqa: F401, the fixture
@@ -45,8 +45,8 @@ def remove_user(name):
 
 
 def reload_users(page):
-    """The list read again, as a change made in My profile does (users.js loadUsers)."""
-    page.evaluate("loadUsers()")
+    """The list read again, as a change made in My profile does (MassimoParts.users.load)."""
+    page.evaluate("MassimoParts.users.load()")
     frames(page)
 
 
@@ -105,7 +105,7 @@ def test_a_users_pill_and_the_menu_say_unsaved(page, case, watch):
     the log's warning alone leaves ☰ amber."""
     alerts = []
     alerts_route(page, alerts)
-    page.evaluate("loadLogAlerts()")
+    page.evaluate("MassimoParts.log.loadAlerts()")
     panel = open_panel(page, OP)
     name = panel.locator("input[name=display_name]")
     name.fill("Unsaved name")
@@ -136,7 +136,7 @@ def test_a_users_pill_and_the_menu_say_unsaved(page, case, watch):
         assert wait_until(page, "document.querySelector(%r)?.classList.contains('tone-bad')" % menu, 5), "a failed save: ☰ red"
         assert "tone-bad" in (page.locator(item).get_attribute("class") or ""), "and System settings' disk"
         alerts.append({"id": 900101, "kind": "disconnected", "level": "warn", "cube_serial": "KEQ0000100", "time": "2026-11-14T20:00:00Z"})
-        page.evaluate("loadLogAlerts()")
+        page.evaluate("MassimoParts.log.loadAlerts()")
         frames(page)
         assert "tone-bad" in (page.locator(menu).get_attribute("class") or ""), "the worse of the two: red"
     finally:
@@ -147,7 +147,7 @@ def test_a_users_pill_and_the_menu_say_unsaved(page, case, watch):
     assert page.locator(item).count() == 0, "no disk on System settings"
     assert "tone-warn" in (page.locator(menu).get_attribute("class") or ""), "☰ amber for the log alone"
     alerts.clear()
-    page.evaluate("loadLogAlerts()")
+    page.evaluate("MassimoParts.log.loadAlerts()")
     assert wait_until(page, "!document.querySelector(%r)" % menu, 5), "nothing on ☰"
     show_view(page, "tiles")
 
@@ -847,6 +847,7 @@ def test_integrations_may_ask_keeps_the_focus(page, case, watch):
     show_view(page, "tiles")
 
 
+@pytest.mark.clock
 def test_an_identitys_change(page, case, provider):
     """A2, A3: an identity at an enabled provider, its Change typed and
     left: the pill names it; saved with another e-mail, the form closes;
@@ -870,6 +871,19 @@ def test_an_identitys_change(page, case, provider):
         row.locator(".identity-change button[type=submit]").click()
         assert wait_until(page, f"!document.querySelector(\".user-panel[data-name='{user}'] .identity-change\")", 5), "saved, the form closes"
         row.locator(".change-identity").click()
+        sel = f".user-panel[data-name='{user}'] .user-identities li[data-id]"
+        # the clock paused: the page's next frame comes only when the test runs it, so that
+        # a focus given a frame late, in an effect, is not there yet when Enter is pressed
+        page.clock.pause_at(page.evaluate("Date.now()") + 1000)
+        try:
+            back = focus_in_turn(page, sel + " .identity-change .form-cancel", sel + " .change-identity")
+            page.keyboard.press("Enter")  # at once, before the next frame: Change, where the focus is, opens again
+            opened = page.evaluate("(s) => !!document.querySelector(s)", sel + " .identity-change")
+            page.clock.run_for(200)
+        finally:
+            page.clock.resume()
+        assert back, "Cancel gives the focus back to Change in the drawing that shows it"
+        assert opened, "Enter at once opens Change again: the focus was on it before the next frame"
         row.locator(".identity-change input[name=account]").fill("third@example.org")
         leave(page)
         assert wait_until(page, "!!document.querySelector('#sys-users .section-pill .problems')", 5), "the pill names it"
@@ -1074,7 +1088,7 @@ def test_a_running_restore_stays_in_sight(page, case):
         show_view(page, "cube")
         first_row(page, CUBE_BOX).locator(".backup-actions button").nth(1).click()
         page.locator(CUBE_BOX + " .restore-plan .restore-actions button.primary").click()
-        page.evaluate("(s) => restoreEvent({kind: 'restore_step', cube: s, restore: {id: 'rw-run', step: 1, ok: true}})", SERIAL)
+        page.evaluate("(s) => MassimoParts.backups.restoreEvent({kind: 'restore_step', cube: s, restore: {id: 'rw-run', step: 1, ok: true}})", SERIAL)
         frames(page)
         assert page.locator(CUBE_BOX + " .restore-file").is_disabled(), "Restore from file… off"
         assert first_row(page, CUBE_BOX).locator(".backup-actions button").nth(1).is_disabled(), "Restore… off"
@@ -1083,7 +1097,7 @@ def test_a_running_restore_stays_in_sight(page, case):
         if not fold.evaluate("(d) => d.open"):
             fold.locator("> summary").click()
         assert fold.locator(".restore-file").is_disabled(), "off in System settings too"
-        page.evaluate("(s) => restoreEvent({kind: 'restore_done', cube: s, restore: {id: 'rw-run', ok: true, state: 'done', sent: 1}})", SERIAL)
+        page.evaluate("(s) => MassimoParts.backups.restoreEvent({kind: 'restore_done', cube: s, restore: {id: 'rw-run', ok: true, state: 'done', sent: 1}})", SERIAL)
         assert wait_until(page, f"!document.querySelector(\"#backups-cubes > .backup-fold[data-serial='{SERIAL}'] .restore-file\").disabled", 5), "on again"
         fold.locator(".restore-actions button").first.click()
     finally:
@@ -1105,7 +1119,7 @@ def test_a_restore_unseen_at_a_resync(page, case):
         show_view(page, "cube")
         first_row(page, CUBE_BOX).locator(".backup-actions button").nth(1).click()
         page.locator(CUBE_BOX + " .restore-plan .restore-actions button.primary").click()
-        page.evaluate("(s) => restoreEvent({kind: 'restore_step', cube: s, restore: {id: 'rw-lost', step: 1, ok: true}})", SERIAL)
+        page.evaluate("(s) => MassimoParts.backups.restoreEvent({kind: 'restore_step', cube: s, restore: {id: 'rw-lost', step: 1, ok: true}})", SERIAL)
         assert wait_until(page, f"document.querySelector('{CUBE_BOX} .restore-file').disabled", 5), "running: Restore from file… off"
         page.evaluate("() => state.events.dispatchEvent(new MessageEvent('resync', { data: '{}' }))")
         want = page.evaluate("t('restore.unseen')")
@@ -1180,3 +1194,25 @@ def test_own_panel_says_this_device_and_revoke_signs_out(new_context, case, watc
             assert (len(deletes), len(logouts)) == (1, 0), f"the key revoked, no session to end: {deletes}, {logouts}"
     finally:
         remove_user(name)
+
+
+def test_the_new_users_role_follows_who_is_in(page, case):
+    """New user's form open, who is in read again as a role that may add
+    guests alone: the role offered is the guest's, and the choice shows it
+    (Create sends it). Fails on the page before, where the role was read
+    once as the form opened: the choice showed nothing and Create sent the
+    viewer's."""
+    show_view(page, "system")
+    page.locator("#user-add").click()
+    role = page.locator("#user-new select[name=role]")
+    role.wait_for()
+    assert role.input_value() == "viewer", "the viewer at first"
+    try:
+        page.evaluate("() => { state.me = { ...state.me, mode: 'users', capabilities: CAPABILITIES.filter((c) => c !== 'users').concat(['guests']) }; }")
+        assert wait_until(page, "[...document.querySelectorAll('#user-new select[name=role] option')].map((o) => o.value).join() === 'guest'", 5), \
+            "the guest's role alone offered"
+        assert role.input_value() == "guest", "and chosen"
+    finally:
+        page.locator("#user-new .form-cancel").click()
+        page.evaluate("loadMe()")
+    show_view(page, "tiles")

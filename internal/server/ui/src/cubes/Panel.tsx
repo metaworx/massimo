@@ -25,7 +25,8 @@ import { Actions } from "./Actions";
 import { Facts } from "./Facts";
 import { Form } from "./Form";
 import { saveCube } from "./send";
-import { cubeUI, load, panelLoads } from "./store";
+import { cubeUI, panelLoads } from "./store";
+import { useLook } from "../shared/look";
 
 /** proxyFailing counts a Cube's proxy listeners that do not listen. */
 function proxyFailing(c: Cube): number {
@@ -132,7 +133,7 @@ function keepPanel(ev: TargetedMouseEvent<HTMLDetailsElement>) {
  * of its own.
  */
 function Head({ c }: { c: Cube }) {
-  load.useLoad(); // it reads the unsaved forms' signal too, and a part that reads signals is drawn again only for them or new properties
+  useLook(); // it reads the Cubes and the unsaved forms' signal, and a part that reads signals is drawn again only for them or new properties
   const { host } = hostPort(c.address);
   const f = budgetFacts(c);
   const entries = [cubeEntry(c, { settings: true, own: true })];
@@ -174,7 +175,7 @@ function keepOpen(ev: TargetedMouseEvent<HTMLElement>) {
  * order, and a click on its head folds nothing.
  */
 export function Panel({ c, page }: { c: Cube; page: boolean }) {
-  load.useLoad();
+  useLook();
   const ui = cubeUI.of(c.serial);
   const toggle = (open: boolean) => {
     if (page) return;

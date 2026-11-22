@@ -19,7 +19,9 @@ import { CubeIcon, CubeSign, chosenCube, cubeEntry } from "../model/cube";
 import { Picker, type PickEntry } from "../shared/menu";
 import { KindIcons, problemKinds } from "../shared/problems";
 import { discoverCubes } from "./send";
-import { discovery, load } from "./store";
+import { discovery } from "./store";
+import { can } from "../shared/me";
+import { useLook } from "../shared/look";
 
 /** DISCOVER is the value of the entry that searches the LAN. */
 const DISCOVER = "__discover";
@@ -41,7 +43,7 @@ function connectOf(): (() => Promise<null>) | null {
  * with settings; under it its serial and address.
  */
 function entryOf(c: Cube): PickEntry {
-  const entries = [cubeEntry(c, { settings: hasCap("settings") })];
+  const entries = [cubeEntry(c, { settings: can("settings") })];
   const skip = ["net"];
   return {
     value: c.serial,
@@ -77,13 +79,13 @@ function pick(v: string): void {
  * D200-A, D201-A).
  */
 export function Choice() {
-  load.useLoad();
+  useLook();
   const entries: PickEntry[] = state.cubes.map(entryOf);
   if (state.found.length) {
     entries.push({ group: t("discover.group") });
-    for (const c of state.found) entries.push({ value: "found:" + c.serial, label: c.serial, sub: c.address || "", disabled: !hasCap("cubes") });
+    for (const c of state.found) entries.push({ value: "found:" + c.serial, label: c.serial, sub: c.address || "", disabled: !can("cubes") });
   }
-  if (hasCap("discover")) {
+  if (can("discover")) {
     entries.push({ separator: true });
     entries.push({ value: DISCOVER, label: t(discovery.running ? "discover.searching" : "discover.search"), disabled: discovery.running });
   }

@@ -136,7 +136,7 @@ def set_value(box, value):
 
 
 def assert_refused(page, row, bounds):
-    """The row's value is refused on its field (markRange): the box
+    """The row's value is refused on its field (its Limit): the box
     marked invalid, the range in amber before it, which the box names
     as its description."""
     box = row.locator("input[type=number]")

@@ -75,6 +75,7 @@ export const cubeRooms = signal<Record<string, Room[]>>({});
 
 /** loadCubeRooms reads the rooms a device of the Cube can be put into, its devices with them for the name offered; none on an error. */
 export async function loadCubeRooms(serial: string): Promise<void> {
+  if (serial === state.roomsOf) return; // the shown Cube's are the page's own, state.rooms (UiParts D216)
   const n = session();
   let list: Room[] = [];
   try {
@@ -217,7 +218,7 @@ function stopTick(serial: string): void {
   ticks.delete(serial);
 }
 
-/** pairingEvent takes the shown Cube's pairing_started and pairing_ended events (app.js, by cubes.js): the state is asked for. */
+/** pairingEvent takes the shown Cube's pairing_started and pairing_ended events (app.js connectEvents): the state is asked for. */
 export function pairingEvent(serial: string): void {
   loadPairing(serial);
 }

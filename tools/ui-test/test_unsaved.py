@@ -38,7 +38,7 @@ import time
 import pytest
 
 from conftest import URL, api_call
-from helpers import CUBES, choose_cube, describe_event, found_only, held_poll, hold, show_view, sign_out, wait_held, wait_until
+from helpers import open_personal_page, focus_in_turn, CUBES, choose_cube, describe_event, found_only, held_poll, hold, show_view, sign_out, wait_held, wait_until
 from test_login import sign_in
 
 pytestmark = pytest.mark.clock
@@ -212,11 +212,11 @@ def test_typing_kept_and_the_disk_opens_it(page, case):
     page.locator("#cube-problems .problems-sum").click()
     disk = item(page, "#cube-problems")
     assert disk.count() == 1 and disk.inner_text().strip() == UNSAVED[case.lang], f"the header's list shows the disk: {disk.all_inner_texts()}"
-    disk.click()
+    # the focus in the form's first field in the drawing that shows it, not a frame later
+    assert focus_in_turn(page, "#cube-problems .problems-list .problem-action", PAGE_PANEL + " form.cube-form input[name=name]"), \
+        "the focus in the form's first field"
     page.locator("#cube-page").wait_for(state="visible")
     name = page.locator(PAGE_PANEL + " form.cube-form input[name=name]")
-    assert wait_until(page, "document.activeElement === document.querySelector(%s)" % json.dumps(PAGE_PANEL + " form.cube-form input[name=name]"), 5), \
-        "the focus in the form's first field"
     assert name.input_value() == "Kept across pages", "with what was typed"
     show_view(page, "system")
     _, form = open_panel(page)
@@ -262,11 +262,11 @@ def test_taken_away_after_reset_or_save(page, case, how):
                if route.request.method == "PUT" else route.continue_())
     try:
         if how == "reset":
-            page.evaluate("(sel) => { document.querySelector(sel).click(); showView('cube'); }", PANEL + " form.cube-form .form-reset")
+            page.evaluate("(sel) => { document.querySelector(sel).click(); MassimoParts.pages.showView('cube'); }", PANEL + " form.cube-form .form-reset")
         else:
             form.locator("button[type=submit]").click()
             wait_save(page, form, [True, False, False, "ok"], "saved")
-            page.evaluate("() => showView('cube')")
+            page.evaluate("() => MassimoParts.pages.showView('cube')")
         page_form = page.locator(PAGE_PANEL + " form.cube-form")
         page_form.wait_for(state="visible")
         page.wait_for_timeout(300)
@@ -499,7 +499,7 @@ def test_vwt_settings_kept_and_the_disk_opens_them(page, case, reads, stream):
         reads.change(room["path"], stored_elsewhere)
         try:
             page.evaluate("state.details = {}")
-            page.evaluate("(id) => { MassimoParts.rooms.data(id); return loadRooms(); }", room["id"])  # a device reports, the rooms load
+            page.evaluate("(id) => { const r = state.rooms.find((x) => x.id === id); updateDevice(JSON.parse(JSON.stringify(r.vwt))); return loadRooms(); }", room["id"])  # a device reports, the rooms load
             assert wait_until(page, "[...document.querySelectorAll(%s)].some((e) => e.textContent.includes(%s))"
                               % (json.dumps(field_meanwhile), json.dumps(meanwhile)), 5), "the form says the address stored meanwhile"
             assert value(page, room, "rf_address") == OTHER_ADDRESS, "the draft kept at a device's report and a load of the rooms"
@@ -1407,7 +1407,9 @@ def test_sign_out_asks_first(new_context, case, watch, guard):
     room = vwt_room(page)
     form, stored = unsaved(page, room)
     want = VWT_UNSAVED[case.lang].format(room=room["name"])
-    sign_out(page)
+    open_personal_page(page)
+    # the dialog shows with the focus on Stay in the drawing that opens it, not a frame later
+    assert focus_in_turn(page, "#logout-btn", DIALOG + " .dialog-stay"), "Stay takes the focus as the dialog opens"
     assert wait_until(page, "!!document.querySelector(%s)?.open" % json.dumps(DIALOG), 5), "the dialog asks"
     assert dialog_forms(page) == [want], f"listing the form: {dialog_forms(page)}"
     assert page.locator(DIALOG + " .dialog-go").inner_text().strip() == SIGN_OUT[case.lang], "its Sign out"

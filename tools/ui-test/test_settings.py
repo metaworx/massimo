@@ -140,7 +140,7 @@ def test_no_system_settings_without_their_capabilities(page, case):
         assert css_hidden(page, "#menu-system"), "not in ☰"
         assert page.locator("#system").is_hidden() and page.locator(".room").first.is_visible(), \
             "System settings, open as the viewer signs in, gives way to Rooms"
-        page.evaluate("showView('system')")
+        page.evaluate("MassimoParts.pages.showView('system')")
         assert page.locator("#system").is_hidden(), "and does not open"
     finally:
         page.unroute("**/api/v1/me")

@@ -12,10 +12,12 @@ choice in the page's settings and draw the signs again."""
 from helpers import show_view, wait_until
 
 # Chooses the drawings in the page's settings and draws what shows them
-# again, as a change of the choice does (theme.js redrawSigns).
+# again, as a change of the choice does (theme.js redrawSigns); no choice
+# is no value: the settings are a live object, whose keys a delete does
+# not take away (ui/src/shared/data.ts).
 CHOOSE = """([win, radio]) => {
-  if (win) state.settings.iconWindow = win; else delete state.settings.iconWindow;
-  if (radio) state.settings.iconRadio = radio; else delete state.settings.iconRadio;
+  state.settings.iconWindow = win || undefined;
+  state.settings.iconRadio = radio || undefined;
   redrawSigns();
 }"""
 

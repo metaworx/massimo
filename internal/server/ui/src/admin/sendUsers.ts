@@ -23,11 +23,12 @@ import { actionRunner } from "../shared/action";
 import { forgetForms } from "../shared/forms";
 import { session, stillSession } from "../shared/session";
 import { wordNameError } from "../shared/username";
-import { enabled, keptOff, load, passwordLogin, reads, roles, said, userFormKey, userUI, users } from "./store";
+import { enabled, keptOff, passwordLogin, reads, roles, said, userFormKey, userUI, users } from "./store";
+import { can, canManageUsersOf, isMe, me } from "../shared/me";
 
 /** usersAdmin says what the signed-in user may do with users: everything, guests only, or nothing but its own user. */
 export function usersAdmin(): "all" | "guests" | "self" {
-  return hasCap("users") ? "all" : hasCap("guests") ? "guests" : "self";
+  return can("users") ? "all" : can("guests") ? "guests" : "self";
 }
 
 /** mayManage says whether a user is the signed-in user's to change beyond its own name and password: the server's may, else the capabilities. */
@@ -39,7 +40,7 @@ export function mayManage(u: User): boolean {
 
 /** mayPassword says whether a user's password is the signed-in user's to set. */
 export function mayPassword(u: User): boolean {
-  return u.may ? u.may.password : mayManage(u) || isSelf(u.name);
+  return u.may ? u.may.password : mayManage(u) || isMe(u.name);
 }
 
 /**
@@ -54,14 +55,14 @@ export function roleOptions(current?: string): [string, string][] {
   if (usersAdmin() === "guests") keys = ["guest"];
   else if (read) keys = read.map((r) => r.key);
   else keys = [...DEFAULT_ROLES];
-  if (state.me?.role?.key !== "owner") keys = keys.filter((k) => k !== "owner");
+  if (me.value?.role?.key !== "owner") keys = keys.filter((k) => k !== "owner");
   if (current && !keys.includes(current)) keys.push(current);
   return keys.map((k) => [k, roleLabel(k, (read || []).find((x) => x.key === k)?.name)]);
 }
 
 /** loadRolesForUsers reads the roles once for the role choice, where they may be read; none where they may not. */
 async function loadRolesForUsers(n: number): Promise<void> {
-  if (!hasCap("roles") || roles.list) return;
+  if (!can("roles") || roles.list) return;
   let list: Role[] | null;
   try {
     list = (await api<{ roles?: Role[] }>("GET", "api/v1/roles"))?.roles || null;
@@ -78,7 +79,7 @@ async function loadRolesForUsers(n: number): Promise<void> {
  * fails throws before it and leaves the list as it was.
  */
 export async function loadUsers(): Promise<void> {
-  if (!canManageUsers()) return;
+  if (!canManageUsersOf()) return;
   const n = session();
   const list = (await api<User[]>("GET", "api/v1/users")) || [];
   if (!stillSession(n)) return; // signed out meanwhile: nothing of it is the next user's
@@ -94,7 +95,6 @@ export async function loadUsers(): Promise<void> {
   if (!stillSession(n)) return;
   enabled.value = providers;
   await loadRolesForUsers(n);
-  load.bump();
 }
 
 /** The users' runner: its message under the list; a change read again, and the open panels' sessions, keys and identities with it. */
@@ -129,7 +129,7 @@ export function saveUser(u: User, body: Record<string, unknown>, password: strin
     return api("PUT", userPath(u.name), body);
   };
   return run(u.name, send, t("users.saved", { name: u.name })).then((ok) => {
-    if (ok && password && isSelf(u.name)) loadMe();
+    if (ok && password && isMe(u.name)) loadMe();
     return ok;
   });
 }
@@ -163,7 +163,7 @@ export function createUser(body: Record<string, unknown> & { name: string }, pas
 
 /** loadPasswordLogin reads whether the server takes the password sign-in, for a holder of settings, who alone sees the switch. */
 export async function loadPasswordLogin(): Promise<void> {
-  if (!hasCap("settings")) return;
+  if (!can("settings")) return;
   const n = session();
   try {
     const all = (await api<Record<string, { value?: string }>>("GET", "api/v1/settings")) || {};

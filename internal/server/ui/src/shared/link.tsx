@@ -4,7 +4,7 @@
 /**
  * @file internal/server/ui/src/shared/link.tsx
  *
- * A link that opens in a tab of its own, as linkEl of components.js: a
+ * A link that opens in a tab of its own, as components.js' linkEl did: a
  * url that is not http(s), as one from the network may be, gives the text
  * alone.
  */

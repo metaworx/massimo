@@ -3,49 +3,13 @@
 
 // The Massimo web UI, tiles: the actions of a room's tile that stay
 // plain (the More menu's presets, a write of the tile, the holiday form,
-// the device list, its menus closed), a finding of the Cube's lines in
-// words and a failed radiogram's name, which the log uses too. The tile
-// itself is a part (ui/src/rooms/Tile.tsx), drawn from the tile's live
-// state (rooms.js roomUI) that these set. The rooms' facts and the other
-// actions behind a tile are in rooms.js, the devices without a room in
-// unlisted.js, the House tile in house.js. Uses the state, api and helpers
-// of app.js.
+// the device list, its menus closed). The tile itself is a part
+// (ui/src/rooms/Tile.tsx), drawn from the tile's live state (rooms.js
+// roomUI) that these set; a finding of the Cube's lines in words and a
+// failed radiogram's name are ui/src/model/device.ts' (UiParts D218).
+// The rooms' facts and the other actions behind a tile are in rooms.js.
+// Uses the state, api and helpers of app.js.
 "use strict";
-
-// --- texts ------------------------------------------------------------
-
-// radiogramName is a failed radiogram's type as the API gives it,
-// {code, name}: the original software's name with its code,
-// "TimeInformation (0x03)", or the code alone for one its list lacks.
-// The names are technical and stay untranslated.
-function radiogramName(r) {
-  const code = "0x" + (Number(r.code) & 0xff).toString(16).padStart(2, "0");
-  return r.name ? r.name + " (" + code + ")" : code;
-}
-
-// mismatchArgs are a finding's words: its device by the name the page
-// knows, else the room list's, else its radio address; its rooms by
-// their names, else their numbers; its types.
-function mismatchArgs(m) {
-  const room = (id, name) => name || (id === 0 ? t("mismatch.noRoom") : t("log.room", { id }));
-  const known = m.device ? rfLabel(m.device) : ""; // log.js
-  return {
-    device: known && known !== m.device ? known : m.name || m.device || "–",
-    room: room(m.room, m.room_name),
-    cube: m.cube_room === undefined ? "–" : room(m.cube_room, m.cube_room_name),
-    list: m.list_room === undefined ? "–" : room(m.list_room, m.list_room_name),
-    cubeType: m.cube_type ? typeName(m.cube_type) : "–", // rooms.js
-    listType: m.list_type ? typeName(m.list_type) : "–",
-  };
-}
-
-// mismatchText is a finding in a sentence that names the device and both
-// rooms; a room master's by why.
-function mismatchText(m) {
-  const key = m.finding === "master" ? "mismatch.master." + m.why : "mismatch." + m.finding;
-  const s = t(key, mismatchArgs(m));
-  return s === key ? m.finding : s;
-}
 
 // presetTemps are a thermostat's configured eco and comfort
 // temperatures, { eco, comfort }, undefined where it has none.
@@ -77,21 +41,22 @@ function presetLabel(which, body) {
 }
 
 // sendPreset sets the room to its thermostat's eco or comfort
-// temperature (which) in the room's mode, from the More menu, which
-// keeps the focus.
+// temperature (which) in the room's mode, from the More menu, whose
+// summary the tile gives the focus back to (ui/src/rooms/Tile.tsx).
 function sendPreset(room, which) {
   leaveEditing(room);
-  const sum = document.querySelector('.room[data-id="' + room.id + '"] .more-sum');
-  if (sum) sum.focus();
   return tileWrite(room, which, async () => {
     const what = t(which === "eco" ? "room.eco" : "room.comfort");
+    const n = MassimoParts.session();
     let temp;
     try {
       temp = (await presetTemps(roomThermostat(room)))[which];
     } catch (e) {
+      if (!MassimoParts.stillSession(n)) return null;
       showTileResult(room.id, errorText(what, e), false);
       return null;
     }
+    if (!MassimoParts.stillSession(n)) return null; // read after the session ended: no setpoint under the next user's key
     if (temp === undefined) {
       showTileResult(room.id, t("result.error", { label: what, error: t(which === "eco" ? "house.noEco" : "house.noComfort") }), false);
       return null;

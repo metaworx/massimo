@@ -8,8 +8,7 @@
  * API's time as each other: for a field that shows a stored end and sends
  * it (a user's end), whose draft compares the minute the field holds.
  * Moved from users.js with System settings → Users (AP UiParts, Block
- * 10); rooms.js apiUntil, the stepped setpoint's end, stays with its
- * users. An API time as date and time, fmtWhen, moved from backup.js
+ * 10); apiUntil, the API's form of a holiday's end, is model/room.ts'. An API time as date and time, fmtWhen, moved from backup.js
  * with Backup and restore; the notifications' card reads it too.
  */
 

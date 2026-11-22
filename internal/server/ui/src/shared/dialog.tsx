@@ -17,7 +17,7 @@
  * else a Stay.
  */
 
-import { useEffect, useId, useRef } from "preact/hooks";
+import { useId, useLayoutEffect, useRef } from "preact/hooks";
 import { Sign } from "./icon";
 import type { Item } from "./problems";
 
@@ -43,8 +43,8 @@ export function FormsDialog({ shown, title, text, forms, stay, onStay, go }: {
   const after = useRef<(() => void) | null>(null);
   const titleId = useId();
   const textId = useId();
-  // opened and closed as shown says; a button closes it itself (end)
-  useEffect(() => {
+  // opened and closed as shown says, Stay taking the focus in the drawing that opens it; a button closes it itself (end)
+  useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     if (shown && !el.open) {

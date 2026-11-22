@@ -34,7 +34,7 @@ refer to linked documents for extended guidance.
   6. Commit Policy (STRICT)
   7. Additional References
   8. Document Governance
-- Massimo — Project Contract (v1.16.0)
+- Massimo — Project Contract (v1.18.0)
   1. Project Facts
   2. Primary References
   3. Project-Specific Conventions
@@ -431,7 +431,7 @@ Their values come from `GUIDELINES/config.ini`.
 ---
 
 
-# Massimo — Project Contract (v1.16.0)
+# Massimo — Project Contract (v1.18.0)
 
 What binds work in this project, for everyone working on it.
 Inlined into `/AGENTS.md` for agents and into `GUIDELINES/README.md` for people,
@@ -599,9 +599,13 @@ the ones an agent trips over most come first:
   A client needs a token: `MASSIMO_API_TOKEN` is the owner's key,
   every other user has one of their own (`docs/api-v1.md`, "Authentication");
   without one the API answers 401.
-- **The web UI** is under `internal/server/ui/`, embedded with `go:embed`,
-  and is being moved from plain scripts to parts, a region at a time (AP UiParts):
-  a region of the page is plain or a part, not both.
+- **The web UI** is under `internal/server/ui/`, embedded with `go:embed`:
+  the skeleton, the parts drawn into it, and the plain scripts.
+  - **The skeleton** is `index.html` with the frames in `ui/partials/`
+    (`uiPartials` in `ui.go`): the page's sections, the cards' frames,
+    and the places the parts draw into.
+    Its static texts take `data-i18n`, which `i18n.js` applies;
+    no script writes one (`TestUINoHTMLInjection`).
   - **A part** is Preact with signals, in TSX under `internal/server/ui/src/<region>/`,
     bundled by `make ui` (esbuild as a Go tool, `tools/uibundle`) into `ui/parts.js`,
     which is not committed.
@@ -611,11 +615,15 @@ the ones an agent trips over most come first:
     data never replaces an element the user can hold.
     A field that shows stored data keeps a draft.
     A part that reads a signal reads everything it depends on as signals.
+    A part gives the focus in the handler of the user's action
+    (or in a timer that handler sets, where a listener of the page must
+    run first: the click outside an open menu, which closes it),
+    or in a layout effect, in the drawing that shows its place.
     A part calls `t()` and carries no `data-i18n`.
     Its shared elements come from `internal/server/ui/src/shared/`,
     which knows no region (`TestSharedPartsKnowNoRegion`):
     a region writes no copy of one,
-    and the block that first needs one that is missing writes it there,
+    and the change that first needs one that is missing writes it there,
     with its row in `docs/ui.md` ("How the page is built").
     `make ui-check` type-checks the parts and checks their hooks:
     a hook is called at the top of a part's drawing and is known by its name,
@@ -626,15 +634,51 @@ the ones an agent trips over most come first:
     (`TestUIFileHeaders`);
     `make ui-check` is the parts' lint and `make ui-test` their test:
     they have no unit-test runner.
-  - **A plain region**:
-    `index.html` is the page's skeleton;
-    a feature's markup (its settings panel,
-    the `<template>`s its script clones) is its partial under `ui/partials/`,
-    listed in `uiPartials` in `ui.go`.
-    Shared elements come from `components.js`,
-    texts through `t()` or `data-i18n`,
-    and each region has a script of its own (`docs/ui.md`,
-    "How the page is built").
+  - **The data are signals:** `state` of `app.js` and `themeState` of
+    `theme.js` stay the plain scripts' objects, and `shared/data.ts` makes
+    their fields signals.
+    A field is written whole, never in place (`TestStateWrittenWhole`):
+    by the loads of `app.js` (the Cubes, the rooms, the settings, a sign-out's
+    clearing), and beside them by `home.js` (a Cube found),
+    `rooms.js` (a device's state), `header.js` (the server's answer, a new
+    version), `login.js` (who is in) and `theme.js` and the scheme editor
+    (the colour schemes); `docs/ui.md` ("The data") names each field's.
+    A part that draws from them follows them, and reads nothing again
+    because they were written (`test_data_updates.py`).
+    Who is in is `shared/me.ts`', the settings `state.settings`'.
+    An answer that comes after a sign-out changes nothing:
+    a part's request and a plain load take the session's number before it
+    (`shared/session.ts`).
+  - **The plain scripts** are the texts (`i18n.js`) and the theme
+    (`theme.js`), applied before the page draws;
+    the session, the sign-in by OPAQUE and through a provider, the first
+    owner asked for, a running page held still behind the card the user
+    opened, and the settings' pushes (`login.js`), with the providers'
+    list (`providers.js`);
+    the API, the settings, the loads, the stream and the page's start (`app.js`);
+    what stays plain of the header: the radio budget, the server's clock,
+    a Cube's link sign and word, the certificate's text and the version
+    check (`header.js`);
+    the home notice's facts and the Cubes found (`home.js`);
+    the rooms' actions (`rooms.js`, `tiles.js`);
+    the week programme editor (`week-program.js`) and its kit (`config.js`);
+    the toast and the service worker (`notify.js`, `notifytext.js`, `sw.js`);
+    and the connect page (`connect.js`), which clones the `<template>`s
+    of `connect.html`.
+    A plain script builds an element with the builders of `components.js`
+    and writes no copy of one (the week programme editor's and the
+    connect page's own inputs aside).
+    It looks up the skeleton's ids alone (`TestUIPage`),
+    and in the whole page only what every element of a kind shares,
+    a part's too: the menus, one open at a time and closed by Escape
+    and by a click outside (`components.js`), the help slots of the cards'
+    heads (`app.js`), the static texts (`applyI18n`, which finds none in
+    a part) and the brand's marks (`brandMarks`, which passes over one a
+    part has drawn); `TestUIPage` refuses any other
+    `document.querySelector` of a plain script.
+    Anything else of a part it is handed by the part,
+    or reaches through `window.MassimoParts`,
+    which is also the UI tests' one handle.
   - **Both**:
     no inline handlers, no `innerHTML`,
     API text only as text (`textContent`, in a part a JSX text child).

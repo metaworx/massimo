@@ -13,8 +13,9 @@
  * plain/, a file per script.
  */
 
+import { minuteTick } from "./shared/data"; // first: the page's data are signals before any part draws from them
 import { signedOut as adminSignedOut } from "./admin";
-import type { ProvidersPart, RolesPart, UsersPart } from "./admin";
+import type { UsersPart } from "./admin";
 import { signedOut as backupsSignedOut } from "./backups";
 import type { BackupsPart } from "./backups";
 import "./chrome";
@@ -30,7 +31,6 @@ import type { LogPart } from "./log";
 import { signedOut as notifySignedOut } from "./notify";
 import type { NotifyPart } from "./notify";
 import { signedOut as prefsSignedOut } from "./prefs";
-import type { PrefsPart } from "./prefs";
 import { signedOut as profileSignedOut } from "./profile";
 import "./rooms";
 import type { RoomsPart } from "./rooms";
@@ -40,17 +40,15 @@ import type { SignInPart } from "./signin";
 import { serverEvent as softwareEvent, signedOut as softwareSignedOut } from "./software";
 import { serverEvent as maintenanceEvent, signedOut as maintenanceSignedOut } from "./maintenance";
 import { serverEvent as sysinfoEvent, signedOut as sysinfoSignedOut } from "./sysinfo";
-import type { Me } from "./api";
 import type { ServerEvent } from "./model/event";
 import type { SoftwarePart } from "./software";
 import { forgetForms } from "./shared/forms";
 import { languageChanged } from "./shared/lang";
-import { meChanged } from "./shared/me";
 import { pagesPart } from "./shared/pages";
 import { iconsChanged } from "./shared/look";
 import { parts, register } from "./shared/region";
 import { forgetRepairs } from "./shared/repair";
-import { newSession } from "./shared/session";
+import { newSession, session, stillSession } from "./shared/session";
 
 /** The parts the plain code calls, by region. */
 export interface MassimoParts {
@@ -58,8 +56,8 @@ export interface MassimoParts {
   language(): void;
   /** The icons chosen for the window and the radio changed (theme.js redrawSigns): every sign draws them again. */
   icons(): void;
-  /** Who the page is signed in as, at every read of it (login.js applyCaps): a user's sessions say "this device" by its token, and My profile is drawn for it (shared/me.ts). */
-  me(m: Me | null): void;
+  /** The page's minute, at once (shared/data.ts minuteNow): the ages and the log's time range follow it; the UI tests' handle of the clock. */
+  minute(): void;
   /**
    * A sign-out, or another user's sign-in after a 401 (login.js
    * forgetSession): every form's drafts and marks forgotten
@@ -81,14 +79,17 @@ export interface MassimoParts {
    * sign-in card's choice still waited for and its lines (signin/).
    */
   signedOut(): void;
+  /** The session's number now, which a plain load takes before its request (app.js, rooms.js, login.js; shared/session.ts). */
+  session(): number;
+  /** Whether the number a plain load took is still the session's: an answer after a sign-out does nothing (UiParts D212). */
+  stillSession(n: number): boolean;
   /**
-   * A server's event of the stream (update.js serverEvent, from app.js
-   * connectEvents): Software update, Maintenance and System info read
+   * A server's event of the stream (app.js connectEvents): Software update, Maintenance and System info read
    * again what it says has changed while their page is shown, and a
    * Cube's log shown loads again at a resync (log/).
    */
   serverEvent(ev: ServerEvent): void;
-  /** The pages of the main area: which is shown, its address, who may open it (shared/pages.ts; pages.js calls it). */
+  /** The pages of the main area: which is shown, its address, who may open it (shared/pages.ts; app.js, home.js, login.js and header.js call it). */
   pages: typeof pagesPart;
   /** Backup and restore: Cube settings' box and System settings' fold per Cube (backups/). */
   backups: BackupsPart;
@@ -100,18 +101,12 @@ export interface MassimoParts {
   header: HeaderPart;
   /** Leaving the page, and signing out, while a settings form has changes not saved: the dialog that lists them (leaving/). */
   leaving: LeavingPart;
-  /** The log: its lines, its choices, its address and its unseen problems (log/; log.js calls it). */
+  /** The log: its lines, its choices, its address and its unseen problems (log/; app.js' loads, poll, stream and language call it, and the UI tests read its state, its alerts and its matches). */
   log: LogPart;
   /** 👤 → Notifications: the rules, this browser and the devices (notify/). */
   notify: NotifyPart;
-  /** My settings: their rows and the Appearance card with the scheme editor, drawn again where the settings were applied (prefs/). */
-  prefs: PrefsPart;
   /** The rooms: a tile per room with its device list (rooms/). */
   rooms: RoomsPart;
-  /** System settings → Sign-in providers (admin/). */
-  providers: ProvidersPart;
-  /** System settings → Roles and Capabilities for every role (admin/). */
-  roles: RolesPart;
   /** Maintenance → Software update (software/). */
   software: SoftwarePart;
   /** System settings → Users: the password sign-in and a panel per user (admin/). */
@@ -129,7 +124,7 @@ declare global {
 
 register("language", languageChanged);
 register("icons", iconsChanged);
-register("me", meChanged);
+register("minute", minuteTick);
 register("pages", pagesPart);
 register("serverEvent", (ev: ServerEvent) => {
   logEvent(ev);
@@ -137,6 +132,8 @@ register("serverEvent", (ev: ServerEvent) => {
   maintenanceEvent(ev);
   sysinfoEvent(ev);
 });
+register("session", session);
+register("stillSession", stillSession);
 register("signedOut", () => {
   newSession(); // first: an answer still on its way for the user who was is dropped
   forgetForms("");
@@ -148,7 +145,6 @@ register("signedOut", () => {
   softwareSignedOut();
   maintenanceSignedOut();
   sysinfoSignedOut();
-  meChanged(null); // My profile's parts go, with what is typed in them
   profileSignedOut();
   prefsSignedOut();
   notifySignedOut();

@@ -16,7 +16,7 @@ import type { Cube, Device, DeviceDetail, FoundCube, Me, Room } from "../api";
 declare global {
   /** A room as the page keeps it: its virtual wall thermostat taken out of its devices (app.js splitVirtual). */
   type PageRoom = Room & { vwt: Device | null };
-  /** What the page loaded, as far as a part reads it (app.js state). */
+  /** What the page loaded, as far as a part reads it (app.js state); the fields shared/data.ts adopts are signals underneath, written whole. */
   const state: {
     /** The Cubes the server serves, as the last load of GET /api/v1/cubes gave them. */
     cubes: Cube[];
@@ -46,6 +46,10 @@ declare global {
     me: Me | null;
     /** The person's settings in effect, as far as a part reads them: this device's where it keeps one, else the user's. */
     settings: { poll: number; expert: boolean; clock: string; lang: string; theme: string; scheme: string; blink: string; iconWindow: string; iconRadio: string };
+    /** Each Cube's daylight-saving rules by its serial, false where it has none, from the Cube's detail (app.js loadTimeZone). */
+    tz: Record<string, unknown>;
+    /** The settings kept for this device alone, by key, as last stored (app.js storeDeviceOverrides). */
+    device: Record<string, unknown>;
   };
   /** The text key of each setting's name, for its "only on this device" switch. */
   const SETTING_LABELS: Record<string, string>;
@@ -84,11 +88,11 @@ declare global {
   /** A request to the API with the page's token, headers added to its own; the answer's JSON, or an error with the server's message (and its status). */
   function api<T = unknown>(method: string, path: string, body?: unknown, headers?: Record<string, string>): Promise<T>;
   /** Loads the Cubes, the rooms and the log's alerts again. */
-  function refresh(): Promise<void>;
+  function refresh(): Promise<boolean>;
   /** Loads the Cubes' list into state.cubes and state.found and draws what shows them. */
-  function loadCubes(): Promise<void>;
+  function loadCubes(): Promise<boolean>;
   /** Loads the chosen Cube's rooms and its devices in no room, and draws them. */
-  function loadRooms(): Promise<void>;
+  function loadRooms(): Promise<boolean>;
   /** Asks the server for the current state now, the rooms too with rooms. */
   function poll(rooms?: boolean): Promise<void>;
   /** Chooses the Cube the page shows, by its serial, and loads it. */
@@ -105,8 +109,8 @@ declare global {
   function timeOf(iso?: string): Date | null;
   /** A time of day, short, from milliseconds. */
   function fmtShortTime(ms: number): string;
-  /** Fills an age (.age[data-at]) with how old it is; refreshAges does so once a minute. */
-  function fillAge(el: HTMLElement): void;
+  /** How old a value received at ms is, in the page's language ("3 min"); since marks one already there when the server first heard from the Cube. */
+  function fmtAge(ms: number, since: boolean): string;
   /** When the server first heard from the chosen Cube, in milliseconds; NaN before. */
   function observedSince(): number;
   /** How long after observedSince a value counts as already there. */

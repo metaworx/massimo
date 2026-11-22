@@ -84,8 +84,7 @@ export function resetColours(): void {
   const s = baseScheme();
   const d = themeState.draft;
   if (!s || !d) return;
-  d.light = { ...s.light };
-  d.dark = { ...s.dark };
+  themeState.draft = { ...d, light: { ...s.light }, dark: { ...s.dark } };
   clearHex();
   changed();
   reapplyTheme();
@@ -103,7 +102,7 @@ export function coloursChanged(): boolean {
 export function takeColour(mode: "light" | "dark", k: string, c: string): void {
   const d = themeState.draft;
   if (!d) return;
-  d[mode][k] = c;
+  themeState.draft = { ...d, [mode]: { ...d[mode], [k]: c } };
   changed();
   reapplyTheme();
 }
@@ -113,7 +112,7 @@ export function saveDraft(typed: string): void {
   const d = themeState.draft;
   if (!d) return;
   const name = schemeName(typed, t("appearance.unnamed"));
-  d.name = name;
+  themeState.draft = { ...d, name };
   themeState.base = putCustomScheme(name, d.light, d.dark);
   chooseScheme(themeState.base);
   schemeMessage(t("appearance.saved", { name }), true);

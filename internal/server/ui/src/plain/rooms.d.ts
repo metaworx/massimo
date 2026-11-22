@@ -49,30 +49,16 @@ declare global {
   function roomState(room: PageRoom): State | null;
   /** The modes of the room's thermostats, boost counted as manual, each once. */
   function roomModes(room: PageRoom): string[];
-  /** The device whose measured temperature stands for the room, its virtual wall thermostat; null while it has none. */
-  function roomActualDevice(room: PageRoom): Device | null;
-  /** The room's measured temperature. */
-  function roomActual(room: PageRoom): number | undefined;
-  /** How long a stale device has not been seen, "Not seen for 30 hours"; "" for one that is not stale. */
-  function staleText(d: Device): string;
   /** When the server received the current value of a field of the device's state. */
   function received(d: Device, field: string): string | undefined;
   /** A temperature within the thermostats' range, on a half degree. */
   function clampTemp(v: number): number;
-  /** A datetime-local value as the API's "YYYY-MM-DD HH:MM". */
-  function apiUntil(value: string): string;
   /** A holiday's end, "YYYY-MM-DD HH:MM", as day, month and time in the page's language. */
   function fmtUntil(text?: string): string;
   /** A mode in a word. */
   function modeName(mode: string): string;
   /** A device's type in words. */
   function typeName(type: string): string;
-  /** A field of a write a device has not shown, in words ("setpoint"). */
-  function confirmFieldName(f: string): string;
-  /** The mark of a write a device has not shown by its deadline, as an item; null for none. */
-  function confirmItem(d: Device): Item | null;
-  /** The values of a write a device has not shown by its deadline, in words, "eco, Monday's program". */
-  function confirmFieldsText(d: Device): string;
   /** The result line of a write that went through: ok, discarded, the radio's budget. */
   function resultText(label: string, res: unknown): string;
   /** The result line of a write that failed, with the devices without a state where the server names them. */

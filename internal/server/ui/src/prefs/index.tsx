@@ -6,18 +6,15 @@
  *
  * My settings as parts (AP UiParts, Block 13): their rows drawn once
  * into #prefs-rows and the Appearance card into #appearance as parts.js
- * loads, before init applies the settings, and updated in place. The
- * plain code calls MassimoParts.prefs.render (prefs.js
- * renderDeviceSwitches and renderLangSelect, appearance.js
- * applyAppearance) where it applied the settings or changed the
- * language.
+ * loads, before init applies the settings, and updated in place: they
+ * follow state.settings, the overrides of this device and theme.js'
+ * schemes as signals (shared/data.ts).
  */
 
-import { mounter, register } from "../shared/region";
+import { mounter } from "../shared/region";
 import { Appearance } from "./Appearance";
 import { forgetEditor } from "./scheme";
 import { Settings } from "./Settings";
-import { load } from "./store";
 
 const mountRows = mounter("prefs-rows", () => <Settings />);
 mountRows();
@@ -26,14 +23,3 @@ mountAppearance();
 
 /** signedOut closes the scheme editor with its draft and clears its line (MassimoParts.signedOut, index.ts): nothing edited is left for the next user. */
 export const signedOut = forgetEditor;
-
-/** The functions the plain code calls, MassimoParts.prefs. */
-const prefs = register("prefs", {
-  /** render draws My settings again from state.settings (prefs.js renderDeviceSwitches, renderLangSelect, appearance.js applyAppearance). */
-  render(): void {
-    load.bump();
-  },
-});
-
-/** MassimoParts.prefs, as index.ts declares it. */
-export type PrefsPart = typeof prefs;

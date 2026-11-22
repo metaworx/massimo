@@ -5,8 +5,8 @@
  * @file internal/server/ui/src/log/state.ts
  *
  * What the log keeps (AP UiParts, Block 11; log.js logState), as live
- * state: the plain code and the UI tests read and write it as the page
- * global logState (log.js), the parts follow it. The lines are the API's
+ * state: the plain code and the UI tests read and write it as
+ * MassimoParts.log.state, the parts follow it. The lines are the API's
  * events as plain objects, oldest first; which of them are drawn, newest
  * first, is view (store.ts).
  */

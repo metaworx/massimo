@@ -180,7 +180,7 @@ def test_hidden_banner_kept_open_menu_to_create(new_context, case, watch, guard)
     create(page)
     assert wait_until(page, f"!({DIALOG_OPEN})", 10), "the card closes"
     assert reads.answered(10), f"the page's reads answered: {reads.open}"
-    assert page.evaluate("currentView") == "info", "the page it was opened on shown again"
+    assert page.evaluate("MassimoParts.pages.shown()") == "info", "the page it was opened on shown again"
     assert page.locator("#sys-info").is_visible(), "System info in view"
     assert wait_until(page, "!document.getElementById('menu-logout').classList.contains('hidden') && "
                             "document.getElementById('menu-owner').classList.contains('hidden')", 5), "signed in: Sign out, no Create"
@@ -204,7 +204,7 @@ def test_create_from_users_shows_the_owner(new_context, case, watch, guard):
     create(page)
     assert wait_until(page, f"!({DIALOG_OPEN})", 10), "the card closes"
     assert wait_until(page, "!!document.querySelector('#users-list .user-panel, #users-list details')", 10), "the users listed"
-    assert page.evaluate("currentView") == "system", "System settings shown again"
+    assert page.evaluate("MassimoParts.pages.shown()") == "system", "System settings shown again"
     assert page.locator("#users-open").count() == 0, "the open server's section gone"
 
 

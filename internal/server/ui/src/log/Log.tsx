@@ -4,8 +4,8 @@
 /**
  * @file internal/server/ui/src/log/Log.tsx
  *
- * The log's page (AP UiParts, Block 11; partials/log-view.html and
- * log.js initLog): its head with the title, the text filter, the choices
+ * The log's page (AP UiParts, Block 11, in place of log.js' initLog and
+ * the markup of partials/log-view.html): its head with the title, the text filter, the choices
  * of Cubes, kind, source or device, level, who and how far back, Clear
  * and Mark all as seen; the lines, newest first; and Older events. Drawn
  * once into its section and updated in place: a new line adds its
@@ -24,7 +24,8 @@ import { LOG_COUNT_RANGE, LOG_RANGES } from "./kinds";
 import { Line } from "./Line";
 import type { LogLine } from "./lines";
 import { logState } from "./state";
-import { choiceCount, clearLogFilter, drawn, fillLogSelects, filterTyped, loadOlder, logChoicesChanged, markFocus, scrolled, setBox, view } from "./store";
+import { clearLogFilter, drawn, fillLogSelects, filterTyped, loadOlder, logChoicesChanged, markFocus, scrolled, setBox, view } from "./store";
+import { useLook } from "../shared/look";
 
 /** The element of each line, made once: the list's drawing hands Preact the same element again, which it leaves as it is. */
 const made = new WeakMap<LogLine, VNode>();
@@ -70,7 +71,7 @@ function Lines() {
 
 /** Older shows whether Older can page further back; the newest LOG_COUNT have no Older, a time range pages back within it. */
 function Older() {
-  choiceCount.useLoad();
+  useLook();
   const can = logState.more && logState.cursor !== null;
   return (
     <div class={"log-older" + (logState.range === LOG_COUNT_RANGE ? " hidden" : "")}>
@@ -83,7 +84,7 @@ function Older() {
 
 /** Head is the log's head: the title, the filter, the choices, Clear and Mark all as seen. */
 function Head() {
-  choiceCount.useLoad();
+  useLook();
   const searchRef = useRef<HTMLInputElement>(null);
   const toSearch = markFocus.value === "search";
   // the focus handed on from the last Mark seen, in the drawing's own turn

@@ -4,7 +4,7 @@
 /**
  * @file internal/server/ui/src/shared/fold.tsx
  *
- * A fold that opens and closes, as detailsPanel of components.js builds a
+ * A fold that opens and closes, as components.js' detailsPanel built a
  * panel: a details whose open state the caller keeps (live state, so that
  * it outlives the fold's being drawn in another place), told of every
  * open and close the user makes. The toggle event a details fires when it
@@ -46,7 +46,7 @@ export function Fold({ id, cls, open, onToggle, summary, summaryProps, data, chi
 }
 
 /**
- * FoldHead is a panel's summary as detailsPanel draws it: before (a sign,
+ * FoldHead is a panel's summary: before (a sign,
  * a count), the name, a monospaced part (a serial), after (a sign of the
  * thing's state after its serial) and the badges, each left out where not
  * given.

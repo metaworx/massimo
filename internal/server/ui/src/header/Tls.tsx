@@ -18,7 +18,8 @@
 
 import type { CertStatus } from "../api";
 import { Notice } from "../shared/badge";
-import { cert, load, pinned } from "./store";
+import { cert, pinned } from "./store";
+import { useLook } from "../shared/look";
 
 /** tlsTexts are the line's sentences for a certificate, none where all is well; inApp leaves out the comparison the app made. */
 function tlsTexts(tls: CertStatus, inApp: boolean): string[] {
@@ -37,7 +38,7 @@ function tlsTexts(tls: CertStatus, inApp: boolean): string[] {
 
 /** TlsNotice is the line, a shared Notice, kept in its place and hidden where it has nothing to say. */
 export function TlsNotice() {
-  load.useLoad();
+  useLook();
   const texts = cert.value ? tlsTexts(cert.value, pinned.value) : [];
   return (
     <Notice id="tls-notice" role="status" hidden={!texts.length}>

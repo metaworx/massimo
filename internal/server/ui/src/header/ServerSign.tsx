@@ -17,6 +17,7 @@ import { Icon } from "../shared/icon";
 import { MenuItem } from "../shared/menu";
 import { showCard } from "../shared/card";
 import { showView } from "../shared/pages";
+import { updateLatest, updateOut } from "../shared/update";
 
 /** The icon of each state of the server's sign. */
 const SERVER_ICON: Record<string, string> = { up: "icon-plug-on", info: "icon-info", new: "mark-warn", down: "icon-plug-off" };
@@ -25,7 +26,7 @@ const SERVER_ICON: Record<string, string> = { up: "icon-plug-on", info: "icon-in
  * serverState is the state the server's sign shows: "down" while the
  * last poll failed, "new" once the server runs another version than the
  * page, "info" while an update is out for one who may install it
- * (updateOut of update.js), "up" otherwise.
+ * (updateOut of shared/update.ts), "up" otherwise.
  */
 export function serverState(): string {
   if (state.serverDown) return "down";

@@ -101,9 +101,9 @@ def test_a_viewer_has_its_entries_alone(page, case):
         assert page.locator("#menu-logout-label").inner_text() == page.evaluate("t('me.signOut')"), "Sign out for a session"
         m.locator("summary").click()
         for view in ("cube", "system", "maint"):
-            page.evaluate(f"showView('{view}')")
+            page.evaluate(f"MassimoParts.pages.showView('{view}')")
             assert page.locator(PAGES[view][0]).is_hidden() and page.locator("#rooms").is_visible(), f"{view} gives way to Rooms"
-        page.evaluate("showView('info')")
+        page.evaluate("MassimoParts.pages.showView('info')")
         page.locator("#info-page").wait_for(state="visible")
     finally:
         page.unroute("**/api/v1/me")

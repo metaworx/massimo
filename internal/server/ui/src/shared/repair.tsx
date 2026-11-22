@@ -17,7 +17,7 @@
  */
 
 import { signal } from "@preact/signals";
-import { useEffect, useId, useRef } from "preact/hooks";
+import { useId, useLayoutEffect, useRef } from "preact/hooks";
 import type { RepairPlan, RepairResult } from "../api";
 import type { Outcome } from "./action";
 import { ResultLine } from "./badge";
@@ -28,6 +28,7 @@ import { live } from "./live";
 import { defaultDeviceName, NAME_BYTES, nameFits } from "./name";
 import { busyProps, Question } from "./question";
 import { session, stillSession } from "./session";
+import { can } from "./me";
 
 /** What a box of repairs is for: the Cube, a room or a device of it. */
 export type RepairKind = "cube" | "room" | "device";
@@ -131,7 +132,7 @@ export function toggleRepair(scope: string, kind: RepairKind, path: string, { sk
 
 /** repairsOf are the repairs a box offers: those it does not leave out, for which the user has what they need besides repair. */
 function repairsOf(box: Box): Repair[] {
-  return REPAIRS[box.kind].filter((r) => !box.skip.includes(r.key) && (!r.needs || hasCap(r.needs)));
+  return REPAIRS[box.kind].filter((r) => !box.skip.includes(r.key) && (!r.needs || can(r.needs)));
 }
 
 /** newItem is a repair's state before its preview has come. */
@@ -303,8 +304,8 @@ function RepairItem({ box, r, item }: { box: Box; r: Repair; item: Item }) {
   useLang(); // its texts follow the page's language
   const runRef = useRef<HTMLButtonElement>(null);
   const back = useRef(false);
-  // a question taken back: the focus on Run… once it is drawn again
-  useEffect(() => {
+  // a question taken back: the focus on Run… in the drawing that shows it again
+  useLayoutEffect(() => {
     if (item.ask !== "" || !back.current) return;
     back.current = false;
     runRef.current?.focus();
@@ -403,7 +404,8 @@ function Warning({ cost, onNo, onGo }: { cost: string; onNo: () => void; onGo: (
   useLang(); // its texts follow the page's language
   const id = useId();
   const no = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
+  // the focus on Cancel in the drawing that shows the warning
+  useLayoutEffect(() => {
     no.current?.focus();
   }, []);
   return (

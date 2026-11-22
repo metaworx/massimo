@@ -93,6 +93,11 @@ function setToken(token) {
 // so its later sign-in opens on the password (AP FirstOwner, D42).
 let sawOpen = false;
 
+// A sign-in waits for none of its reads to come back in this session:
+// askLogin settles before forgetSession raises the session's number, and
+// the start that waited for it (loadMeAndPreferences) and afterLogin each
+// read who is in again after it, in the new session, so that a late
+// answer here, which writes nothing, leaves who is in to that read.
 // loadMe reads who the page is signed in as and applies it; a server
 // that refuses opens the sign-in dialog through api(). The page starts
 // signed out (index.html), so that no button of the header shows before
@@ -107,11 +112,15 @@ let sawOpen = false;
 // nobody, for the read that follows keeping the server open turned off,
 // after which the next load asks (D31, D44).
 async function loadMe(asks = true) {
+  const n = MassimoParts.session();
+  let me = null;
   try {
-    state.me = await api("GET", "api/v1/me");
+    me = await api("GET", "api/v1/me");
   } catch (e) {
-    state.me = null;
+    me = null;
   }
+  if (!MassimoParts.stillSession(n)) return state.me; // who was in before a sign-out: the next sign-in reads who is in, and asks for the owner there
+  state.me = me;
   if (state.me && state.me.mode === "none") sawOpen = true;
   applyCaps();
   if (asks && MassimoParts.signIn.asksOwner()) askLogin("owner"); // ui/src/signin/store.ts: open, with a store, kept open by nobody, not skipped in this load
@@ -121,20 +130,19 @@ async function loadMe(asks = true) {
 
 // applyCaps hides what the signed-in user may not do: the body gets a
 // class no-<capability> per capability the user lacks, and the markup
-// marks what each one hides with needs-<capability>. Who is in goes to
-// the parts (MassimoParts.me): the open server's warning is drawn from
-// it, and the sign-in card says by it whether to ask for the first owner
-// (ui/src/signin/).
+// marks what each one hides with needs-<capability>. Who is in is the
+// parts' signal underneath state.me (ui/src/shared/data.ts): the open
+// server's warning is drawn from it, and the sign-in card says by it
+// whether to ask for the first owner (ui/src/signin/).
 function applyCaps() {
-  const me = state.me;
   const body = document.body;
   for (const c of CAPABILITIES) body.classList.toggle("no-" + capClass(c), !hasCap(c));
   body.classList.toggle("no-users-admin", !canManageUsers());
   body.classList.toggle("no-sync", !canSync());
   body.classList.toggle("no-system", !hasSettingsPage());
   body.classList.toggle("no-maint", !hasSystem());
-  MassimoParts.me(me); // who is in: a user's sessions say "this device", My profile is drawn for whoever is in, the page's chrome says who it is, the open server's warning shows by it (ui/src/shared/me.ts)
-  if (!mayShow(currentView)) showView("tiles", "replace"); // pages.js: a page the user signed in now may not open
+  const pages = MassimoParts.pages;
+  if (!pages.mayShow(pages.shown())) pages.showView("tiles", "replace"); // a page the user signed in now may not open
 }
 
 // --- the sign-in through a provider (docs/api-v1.md, "Sign-in through OpenID Connect")
@@ -157,7 +165,7 @@ let oidcError = null;
 let oidcLinked = null;
 
 // oidcReturn reads the fragment a provider's sign-in comes back with,
-// before the page reads its own (pages.js showAddress): #oidc=<code>,
+// before the page reads its own (MassimoParts.pages.showAddress): #oidc=<code>,
 // traded for the session, or #oidc-error=<reason>; a link's,
 // #oidc-link-confirm=<code> or #oidc-link-error=<reason>, opens My
 // profile, which shows the link to confirm or says why there is none.
@@ -232,16 +240,16 @@ function whoIs(me) {
 }
 
 // holdPushes takes the settings pushes that wait for their second
-// (schedulePreferences, saveNotifyRules of notify.js) as the sign-in of
+// (schedulePreferences, MassimoParts.notify's save) as the sign-in of
 // askLogin opens, so that none goes out under whoever signs in;
 // resumePushes schedules them again, for the same user.
 function holdPushes() {
-  return { prefs: takeScheduled(), notify: takeNotifySave() };
+  return { prefs: takeScheduled(), notify: MassimoParts.notify.takeSave() };
 }
 
 function resumePushes(held) {
   for (const key of held.prefs) schedulePreferences(key);
-  if (held.notify) saveNotifyRules(); // notify.js
+  if (held.notify) MassimoParts.notify.save(); // ui/src/notify/
 }
 
 // settleSignIn follows a sign-in of askLogin after a 401, before the
@@ -278,13 +286,13 @@ async function settleSignIn(was, held) {
 // read again after it.
 async function forgetSession(synced) {
   state.me = null;
-  MassimoParts.signedOut(); // the parts' who is in null in the same turn as state.me
+  MassimoParts.signedOut(); // the session's number first, then every region's forgetting; who is in is null already (state.me is the parts' signal)
   const language = synced ? forgetUserSettings() : null; // applied at once, its language's table awaited below
   forgetNotSent();
   MassimoParts.rooms.closeHouse();
   closeEvents();
   clearCubeData(); // app.js: nothing of this session behind the sign-in; the poll forgetUserSettings started stops
-  showView("tiles", "replace");
+  MassimoParts.pages.showView("tiles", "replace");
   await language;
 }
 
@@ -431,7 +439,7 @@ async function finishSignIn(ask) {
   ask.done(true);
   if (!startWaits) {
     afterLogin(!ask.owner);
-    if (ask.still) showView(currentView, "replace"); // pages.js
+    if (ask.still) MassimoParts.pages.showView(MassimoParts.pages.shown(), "replace"); // the page it was opened on, read anew
   }
   return true;
 }
@@ -554,7 +562,9 @@ function afterLogin(read = true) {
     .then(loadPreferences)
     .then(() => {
       startPolling(); // app.js: stopped where another user's sign-in forgot the session
-      refresh().then(() => {
+      refresh().then((fresh) => {
+        if (!fresh) return; // answered after the session ended: the next sign-in starts the data again
+        store("massimo.serial", state.serial); // as the page's start does, which another user's sign-in may have cut short
         if (said && $("message").classList.contains("hidden")) showMessage(said, false);
         return connectEvents();
       });
@@ -589,7 +599,7 @@ async function logout() {
   for (const key of takeScheduled()) {
     await apiRequest("PUT", "api/v1/me/preferences/" + key, preferenceBody(key)).catch(() => {});
   }
-  await sendNotifySave(); // notify.js: a notification rule changed in the last second, the same way (D205)
+  await MassimoParts.notify.sendNow(); // ui/src/notify/: a notification rule changed in the last second, the same way (D205)
   if (me && me.mode === "users" && me.token && me.token.kind === "session") {
     try {
       await apiRequest("POST", "api/v1/logout");
@@ -601,7 +611,7 @@ async function logout() {
   await forgetSession(synced);
   await loadMeAndPreferences();
   startPolling();
-  refresh().then(connectEvents);
+  refresh().then((fresh) => fresh && connectEvents());
 }
 
 // --- the user's settings on the server ---------------------------------
@@ -649,9 +659,11 @@ function preferenceBody(key) {
 // pushPreferences sends the preferences scheduled.
 async function pushPreferences() {
   for (const key of takeScheduled()) {
+    const n = MassimoParts.session();
     try {
       await api("PUT", "api/v1/me/preferences/" + key, preferenceBody(key));
     } catch (e) {
+      if (!MassimoParts.stillSession(n)) return;
       showMessage(t("prefs.saveFailed", { error: e.message }), false);
     }
   }
@@ -677,12 +689,14 @@ function flushPreferences() {
 // settings and the schemes the browser had.
 async function loadPreferences() {
   if (!canSync()) return;
+  const n = MassimoParts.session();
   let prefs;
   try {
     prefs = (await api("GET", "api/v1/me/preferences")) || {};
   } catch (e) {
     return;
   }
+  if (!MassimoParts.stillSession(n)) return; // the settings of the user before
   if (prefs.schemes) {
     takeSchemes(prefs.schemes); // theme.js
   } else if (themeState.custom.length) {

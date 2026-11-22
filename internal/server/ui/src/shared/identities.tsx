@@ -19,7 +19,7 @@
  */
 
 import type { ComponentChildren } from "preact";
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { Identity, LoginProvider, User } from "../api";
 import { addIdentity, changeIdentity, loadIdentities, removeIdentity, type Run } from "./account";
 import { Age } from "./badge";
@@ -120,8 +120,8 @@ function Row({ u, i, name, providers, run, say, changes }: { u: User; i: Identit
   const account = i.email || t("users.identityUserID", { id: i.subject });
   const changeable = !!ui && !i.last_used_at;
   const changing = changeable && !!ui?.changing;
-  // Cancel gives the focus back to Change, once it is shown again
-  useEffect(() => {
+  // Cancel gives the focus back to Change, in the drawing that shows it again
+  useLayoutEffect(() => {
     if (!changing && back.current) {
       back.current = false;
       changeRef.current?.focus();

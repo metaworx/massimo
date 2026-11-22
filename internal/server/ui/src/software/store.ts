@@ -22,16 +22,14 @@
 import type { Setting, UpdateInfo, UpdateStatus } from "../api";
 import { type ServerEvent, settingsChanged } from "../model/event";
 import { burstReader } from "../shared/burst";
-import { counter } from "../shared/counter";
 import { live } from "../shared/live";
 import { session, stillSession } from "../shared/session";
 import { isShown } from "../shared/pages";
+import { can } from "../shared/me";
+import { update } from "../shared/update";
 
 /** A text said in the page's language at its drawing. */
 export type Say = () => string;
-
-/** The section's load counter: every part of it uses it. */
-export const load = counter();
 
 /**
  * UPDATE_FLAVOURS are the channels a box may follow, the most rolling
@@ -42,8 +40,6 @@ export const UPDATE_FLAVOURS = ["devel", "nightly", "alpha", "beta", "rc", "stab
 
 /** What the section shows, as the last loads gave it. */
 export const data = live({
-  /** GET /api/v1/update's last answer, null before one came. */
-  info: null as UpdateInfo | null,
   /** Why the last load failed, said in the version's line in place of it; null after one that went through. */
   failed: null as Say | null,
   /** What the request to the helper said, in its line until the next load. */
@@ -111,7 +107,7 @@ export async function loadUpdate(refresh: boolean, mine: () => boolean = () => t
   }
   if (!stillSession(n)) return null; // signed out meanwhile: the next user's reads are their own
   if (!mine()) return u; // a later change of the channel reads its own: this answer shows nothing
-  data.info = u;
+  update.value = u;
   data.failed = null;
   data.said = null;
   if (question.asking && (!u.can_update || u.latest !== question.version)) question.asking = false;
@@ -120,14 +116,13 @@ export async function loadUpdate(refresh: boolean, mine: () => boolean = () => t
     setBusy(true);
     if (!follow.on) followUpdate();
   }
-  load.bump();
   renderServerSign(); // header.js
   return u;
 }
 
 /** loadChannel reads the setting update.channel, for a holder of settings; mine as loadUpdate's. */
 export async function loadChannel(mine: () => boolean = () => true): Promise<void> {
-  if (!hasCap("settings")) return; // login.js
+  if (!can("settings")) return;
   const n = session();
   let setting: Setting | null;
   try {
@@ -139,7 +134,6 @@ export async function loadChannel(mine: () => boolean = () => true): Promise<voi
   if (!stillSession(n) || !mine()) return;
   data.setting = setting;
   data.channelSaid = null;
-  load.bump();
 }
 
 /**
@@ -225,7 +219,7 @@ function followUpdate(): void {
 
 /** ask asks in the section whether to install the update the last load offers. */
 export function ask(): void {
-  const u = data.info;
+  const u = update.value;
   if (!u || !u.latest) return;
   question.version = u.latest;
   question.asking = true;
@@ -318,17 +312,6 @@ function fresh(ev: ServerEvent): boolean {
   return isNaN(at) || Date.now() + serverSkew - at < 60 * 1000;
 }
 
-/** updateOut tells whether an update is out, for one who may install it (the server's sign, update.js). */
-export function updateOut(): boolean {
-  const u = data.info;
-  return !!u && !!u.available && hasCap("settings"); // login.js
-}
-
-/** updateLatest is the version an update would install, "" for none (update.js). */
-export function updateLatest(): string {
-  return (data.info && data.info.latest) || "";
-}
-
 /**
  * forgetSoftware forgets what the section kept of the user who was
  * signed in (MassimoParts.signedOut): the reading while the helper works
@@ -338,11 +321,11 @@ export function updateLatest(): string {
  */
 export function forgetSoftware(): void {
   stopFollow();
+  channelMissed = false; // a read skipped for the user who was is no read of the next one's
   data.busy = false;
   data.said = null;
   data.setting = null;
   data.channelSaid = null;
   question.asking = false;
   question.version = "";
-  load.bump();
 }

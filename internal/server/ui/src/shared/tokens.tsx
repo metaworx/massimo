@@ -29,7 +29,7 @@ import { hid } from "./cls";
 import { TextField } from "./field";
 import { useHelp } from "./help";
 import { useLang } from "./lang";
-import { own } from "./me";
+import { isMe, own } from "./me";
 import { BusyButton } from "./question";
 import { session, stillSession } from "./session";
 
@@ -41,7 +41,7 @@ import { session, stillSession } from "./session";
  */
 function TokenRow({ u, tk, labels, run, marked }: { u: User; tk: Token; labels: Map<number, string>; run: Run; marked: boolean }) {
   const kind = t("users.kind." + tk.kind);
-  const mine = isSelf(u.name) ? own.value : null;
+  const mine = isMe(u.name) ? own.value : null;
   const current = !!mine && mine.id === tk.id;
   const itsKey = !!mine && !!mine.key_id && mine.key_id === tk.id;
   const cls = [current ? "token-current" : itsKey ? "token-its-key" : "", marked ? "token-marked" : ""].filter(Boolean).join(" ") || undefined;

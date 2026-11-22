@@ -4,8 +4,7 @@
 /**
  * @file internal/server/ui/src/shared/device.tsx
  *
- * A device's serial number and radio address as a part (deviceIds of
- * components.js): "S/N MEQ0000103 · RF 0a0103", the radio address in
+ * A device's serial number and radio address as a part: "S/N MEQ0000103 · RF 0a0103", the radio address in
  * expert mode only, or always where it is what the user types.
  */
 

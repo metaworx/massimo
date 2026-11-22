@@ -10,8 +10,10 @@
  * line about the certificate; and the home notice on Rooms, each drawn
  * once into its place in the page and updated in place; and the row's
  * fold where it is short (fold.ts). The plain code
- * calls MassimoParts.header (header.js renderCubeSelect, renderUpdated,
- * renderServerSign and renderTLS, home.js renderHomeNotice). The logo,
+ * calls MassimoParts.header where a plain field the header shows changed
+ * (app.js' loads, header.js renderHeader, renderServerSign and renderTLS,
+ * home.js renderHomeNotice and addFound, a change of language or of the
+ * icons, which folds the row anew). The logo,
  * the version, the radio budget and the pages stay plain, in elements the
  * parts leave alone.
  */
@@ -26,7 +28,7 @@ import { HomeNotice } from "./HomeNotice";
 import { Pile } from "./Pile";
 import { ExpertTimes } from "./Times";
 import { TlsNotice } from "./Tls";
-import { cert, load, pinned } from "./store";
+import { cert, pinned } from "./store";
 
 /** The header's places, each the element of the page with the id, and what is drawn there. */
 const mounts = [
@@ -39,14 +41,11 @@ const mounts = [
 
 /** The functions the plain code calls, MassimoParts.header. */
 const header = register("header", {
-  /** render draws the header again from the page's state: the Cubes, the one chosen, the server's (every plain render… of the header). */
+  /** render takes a load of the page's state (every plain render… of the header): the parts follow the data themselves, the reads' times count from now. */
   render(): void {
     for (const m of mounts) m();
     // the reads' times from now, not from the clock's last second
-    batch(() => {
-      nowAgain();
-      load.bump();
-    });
+    nowAgain();
     // the row folded anew where the pile's icons or the Cube's name change its widths
     watchFold();
   },

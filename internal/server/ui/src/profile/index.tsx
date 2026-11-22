@@ -7,8 +7,8 @@
  * My profile as a part (AP UiParts, Block 13), drawn once into its
  * card's body, #profile-sec, as parts.js loads, and updated in place:
  * the user signed in is read each time the personal page is shown, as
- * profile.js read it, and after each change made here. Who is in comes
- * through MassimoParts.me (shared/me.ts). The card's address,
+ * profile.js read it, and after each change made here. Who is in is
+ * the signal me of shared/me.ts, state.me underneath. The card's address,
  * #profile?key=<id>, may name an API key, which is marked (store.ts
  * markKey): the pages' store hands this part what follows the "?" as it
  * reads the address, before the page is shown (shared/pages.ts

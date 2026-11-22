@@ -89,7 +89,7 @@ def selected(page):
 
 def test_software_keeps_a_selection_and_its_question_through_a_load(page, case):
     """Software update with the last updates and Update asking: the
-    header's check every half hour (loadUpdate) and Maintenance shown
+    header's check every half hour (MassimoParts.software.load) and Maintenance shown
     again read the same answer; the line selected stays selected, the
     question, its buttons and the lines are the elements they were."""
     reads = update_route(page, lambda: offered(history=HISTORY))
@@ -105,7 +105,7 @@ def test_software_keeps_a_selection_and_its_question_through_a_load(page, case):
         want = selected(page)
         assert want, "a line selected"
         n = len(reads)
-        page.evaluate("loadUpdate(false)")
+        page.evaluate("MassimoParts.software.load(false)")
         show_view(page, "maint")
         assert wait_reads(page, reads, n + 2), f"read twice more ({len(reads) - n})"
         frames(page)
@@ -132,7 +132,7 @@ def test_a_newer_release_takes_the_question_back(page, case):
         assert "v0.0.1-test" in box.inner_text(), "the question names the release"
         assert wait_until(page, "document.activeElement.classList.contains('confirm-no')", 5), "the focus on No"
         now["version"] = "v0.0.2-test"
-        page.evaluate("loadUpdate(false)")
+        page.evaluate("MassimoParts.software.load(false)")
         assert wait_until(page, "!document.querySelector('.update .confirm-box')", 5), "the question taken back"
         assert wait_until(page, "document.activeElement.id === 'update-btn'", 5), \
             f"the focus back on Update, not the body ({page.evaluate('document.activeElement.id || document.activeElement.tagName')})"
@@ -486,7 +486,7 @@ def test_a_question_taken_back_leaves_a_focus_elsewhere(page, case):
         assert page.evaluate("document.activeElement === document.body"), "the focus on the body after a click on text"
         y = page.evaluate("window.scrollY")
         now["version"] = "v0.0.2-test"
-        page.evaluate("loadUpdate(false)")
+        page.evaluate("MassimoParts.software.load(false)")
         assert wait_until(page, "!document.querySelector('.update .confirm-box')", 5), "the question taken back"
         frames(page)
         assert page.evaluate("document.activeElement === document.body"), \
@@ -543,7 +543,7 @@ def test_a_refused_request_leaves_the_reading_its_buttons(page, case, watch):
         page.locator(".update .confirm-yes").click()
         assert wait_held(page, posts), "the POST sent"
         state["helper"] = "installing"
-        page.evaluate("loadUpdate(false)")  # the header's check: the helper at work, the reading begins
+        page.evaluate("MassimoParts.software.load(false)")  # the header's check: the helper at work, the reading begins
         helper = page.locator("#update-helper").inner_text()
         with page.expect_response(lambda r: r.request.method == "POST" and "/api/v1/update" in r.url):
             posts[0].fulfill(status=409, content_type="application/json", body='{"error": "an update is already running"}')

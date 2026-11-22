@@ -23,7 +23,7 @@
  */
 
 import { signal, type Signal } from "@preact/signals";
-import { useEffect, useRef } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef } from "preact/hooks";
 import { fader } from "./action";
 import type { Item } from "./problems";
 
@@ -319,6 +319,10 @@ export function useForm({ key, name, open }: { key: string; name: FormName; open
     const now = recordOf(key);
     if (!now.changed && (now.phase.peek() === "unsaved" || now.phase.peek() === "failed")) now.phase.value = "";
     publish();
+  });
+  // a form opened from its unsaved item (focusForm) takes the focus in the drawing that shows it
+  useLayoutEffect(() => {
+    const now = recordOf(key);
     const el = ref.current;
     if (now.focus && el) {
       now.focus = false; // for this drawing alone: a form that is not shown now does not take the focus later

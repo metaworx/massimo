@@ -22,10 +22,10 @@
 import { signal } from "@preact/signals";
 import type { Integration, User } from "../api";
 import { actionRunner, type Outcome } from "../shared/action";
-import { counter } from "../shared/counter";
 import { forgetForms } from "../shared/forms";
 import { live, liveMap } from "../shared/live";
 import { session, stillSession } from "../shared/session";
+import { can, canManageUsersOf } from "../shared/me";
 
 /** An installation seen on the LAN (GET /api/v1/integrations/found). */
 export interface FoundIntegration {
@@ -47,9 +47,6 @@ interface NotLooking {
   fixed_by?: string;
   why?: string;
 }
-
-/** The section's load counter: bumped after every load and change; every part of it uses it. */
-export const load = counter();
 
 /** What the section shows, as the last loads that went through gave it. */
 export const data = live({
@@ -135,7 +132,7 @@ export async function loadDetails(uuid: string): Promise<void> {
  * list as it was.
  */
 export async function loadIntegrations(): Promise<void> {
-  if (!hasCap("integrations")) return;
+  if (!can("integrations")) return;
   const n = session();
   const list = (await api<Integration[]>("GET", "api/v1/integrations")) || [];
   if (!stillSession(n)) return; // signed out meanwhile: nothing of it is the next user's
@@ -156,7 +153,6 @@ export async function loadIntegrations(): Promise<void> {
   for (const i of list) if (panelUI.of(i.uuid).open) await loadDetails(i.uuid);
   // every approval whose key waits is read again, as the plain list's every drawing started it
   for (const i of list) if (keyState(i) === "waiting") watchApproval(i.uuid);
-  load.bump();
 }
 
 /** loadSeen reads what the last look at the LAN saw; refresh looks now. */
@@ -171,7 +167,7 @@ export async function loadSeen(refresh: boolean): Promise<void> {
 
 /** loadLinkUsers reads the Massimo users an integration's user may be linked to: none of an integration; null where they may not be read. */
 async function loadLinkUsers(): Promise<void> {
-  if (!canManageUsers()) {
+  if (!canManageUsersOf()) {
     data.users = null;
     return;
   }
@@ -190,12 +186,11 @@ export async function refresh(): Promise<void> {
   await loadIntegrations();
   await loadLinkUsers();
   await loadSeen(false);
-  load.bump();
 }
 
 /** loadRequestsSwitch reads whether integrations may ask, for a holder of settings, who alone sees the switch. */
 export async function loadRequestsSwitch(): Promise<void> {
-  if (!hasCap("settings")) return;
+  if (!can("settings")) return;
   const n = session();
   try {
     const all = (await api<Record<string, { value?: string }>>("GET", "api/v1/settings")) || {};
@@ -279,7 +274,6 @@ export function watchApproval(uuid: string): void {
     if (panelUI.of(uuid).open) data.details = { ...data.details, [uuid]: i };
     const now = keyState(i);
     if (now !== was) {
-      load.bump();
       if (was === "waiting" && !now) msg(t("integrations.collected", { name: i.name }), true);
       return;
     }
@@ -308,5 +302,4 @@ export function forgetIntegrations(): void {
   panelUI.clear();
   requestUI.clear();
   said.value = null;
-  load.bump();
 }

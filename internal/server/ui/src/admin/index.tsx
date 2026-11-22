@@ -8,10 +8,8 @@
  * Capabilities for every role and Sign-in providers, each drawn once
  * into its card's body and updated in place, read each time System
  * settings is shown and after each of its changes. The plain code calls
- * MassimoParts.users (users.js loadUsers and renderUsers, for a change
- * made in My profile and a change of language), MassimoParts.roles
- * (roles.js renderRoles) and MassimoParts.providers (providers.js
- * renderProviders). Every part of the lists reads one store (store.ts),
+ * MassimoParts.users, for a change made in My profile
+ * (profile/send.ts). Every part of the lists reads one store (store.ts),
  * since they read each other's data.
  */
 
@@ -20,25 +18,21 @@ import { ProvidersCard } from "./Providers";
 import { CapsCard, RolesCard } from "./Roles";
 import { loadProviders, providersMsg } from "./sendProviders";
 import { loadRoles, rolesMsg } from "./sendRoles";
-import { forgetAdmin, keptOff, load, reads, said } from "./store";
+import { forgetAdmin, keptOff, reads, said } from "./store";
 import { UsersCard } from "./Users";
 import { loadPasswordLogin, loadUsers, usersMsg } from "./sendUsers";
 import { onView } from "../shared/pages";
+import { can, canManageUsersOf } from "../shared/me";
 
 const mountUsers = mounter("sys-users-body", () => <UsersCard />);
 
 /** The functions the plain code calls, MassimoParts.users. */
 const users = register("users", {
-  /** load reads the users again and draws them (users.js loadUsers), for a change made in My profile. */
+  /** load reads the users again and draws them, for a change made in My profile (profile/send.ts). */
   async load(): Promise<void> {
     mountUsers();
     await loadUsers();
     reads.value++;
-  },
-  /** render draws the users again (users.js renderUsers). */
-  render(): void {
-    mountUsers();
-    load.bump();
   },
 });
 
@@ -48,32 +42,7 @@ export type UsersPart = typeof users;
 const mountRoles = mounter("sys-roles-body", () => <RolesCard />);
 const mountCaps = mounter("sys-caps-body", () => <CapsCard />);
 
-/** The functions the plain code calls, MassimoParts.roles. */
-const roles = register("roles", {
-  /** render draws the roles and the capabilities again (roles.js renderRoles). */
-  render(): void {
-    mountRoles();
-    mountCaps();
-    load.bump();
-  },
-});
-
-/** MassimoParts.roles, as index.ts declares it. */
-export type RolesPart = typeof roles;
-
 const mountProviders = mounter("sys-providers-body", () => <ProvidersCard />);
-
-/** The functions the plain code calls, MassimoParts.providers. */
-const providers = register("providers", {
-  /** render draws the providers again (providers.js renderProviders). */
-  render(): void {
-    mountProviders();
-    load.bump();
-  },
-});
-
-/** MassimoParts.providers, as index.ts declares it. */
-export type ProvidersPart = typeof providers;
 
 /** signedOut forgets what the lists kept of the user who was signed in (MassimoParts.signedOut, index.ts). */
 export const signedOut = forgetAdmin;
@@ -82,7 +51,7 @@ export const signedOut = forgetAdmin;
 onView("system", () => {
   said.users = null;
   keptOff.showing = false; // a server's keeping open turned off in the last showing: its row goes now
-  if (!canManageUsers()) return;
+  if (!canManageUsersOf()) return;
   mountUsers();
   loadUsers()
     .then(() => {
@@ -95,7 +64,7 @@ onView("system", () => {
 // System settings shown: the roles and the capabilities read and drawn
 onView("system", () => {
   said.roles = null;
-  if (!hasCap("roles")) return;
+  if (!can("roles")) return;
   mountRoles();
   mountCaps();
   loadRoles().catch((e: Error) => rolesMsg(t("roles.failed", { role: "", error: e.message }), false));
@@ -104,7 +73,7 @@ onView("system", () => {
 // System settings shown: the providers read and drawn
 onView("system", () => {
   said.providers = null;
-  if (!hasCap("auth")) return;
+  if (!can("auth")) return;
   mountProviders();
   loadProviders().catch((e: Error) => providersMsg(t("providers.failed", { name: "", error: e.message }), false));
 });

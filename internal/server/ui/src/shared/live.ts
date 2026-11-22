@@ -30,21 +30,27 @@ export function live<T extends object>(init: T): T {
 /**
  * liveMap keeps a live object per key, made by make the first time the
  * key is asked for; forget forgets one (what it was kept for is gone),
- * clear forgets them all (a sign-out, a change of whose list it is).
+ * clear forgets them all (a sign-out, a change of whose list it is). A
+ * part that asked for an object is drawn again when it is forgotten, so
+ * that it takes the new one: the map's keys are a signal of their own.
  */
 export function liveMap<T extends object>(make: () => T): { of(key: string): T; forget(key: string): void; clear(): void } {
   const all = new Map<string, T>();
+  const gone = signal(0);
   return {
     of(key) {
+      void gone.value;
       let v = all.get(key);
       if (!v) all.set(key, (v = live(make())));
       return v;
     },
     forget(key) {
-      all.delete(key);
+      if (all.delete(key)) gone.value++;
     },
     clear() {
+      if (!all.size) return;
       all.clear();
+      gone.value++;
     },
   };
 }

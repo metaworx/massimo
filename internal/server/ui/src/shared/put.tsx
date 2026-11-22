@@ -17,7 +17,7 @@
  * in another place.
  */
 
-import { useEffect, useRef } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef } from "preact/hooks";
 import type { Device, Room } from "../api";
 import type { Outcome } from "./action";
 import { ResultLine } from "./badge";
@@ -27,6 +27,7 @@ import { live } from "./live";
 import { byteLength, defaultDeviceName, NAME_BYTES } from "./name";
 import { cubePath } from "./path";
 import { session, stillSession } from "./session";
+import { can } from "./me";
 
 /** What a form that puts a device into a room keeps: the name typed, the room and the copy chosen, its request under way, its outcome, and done once the device is in its room. */
 export interface Put {
@@ -81,7 +82,8 @@ export function PutForm({ id, serial, dev, rooms, put, reload, onDone, onFail, o
   useLang(); // its texts follow the page's language
   const nameRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
-  useEffect(() => {
+  // the focus in the first field, in the drawing that shows the form
+  useLayoutEffect(() => {
     if (focus) formRef.current?.querySelector<HTMLElement>("input, select")?.focus();
   }, [focus]);
   // The room is pinned at the first drawing, the first of the rooms, and
@@ -100,10 +102,10 @@ export function PutForm({ id, serial, dev, rooms, put, reload, onDone, onFail, o
     if (put.busy || !room) return;
     // Without rename the field is hidden: the server names the device by
     // its default.
-    const nm = hasCap("rename") ? name.trim() : "";
+    const nm = can("rename") ? name.trim() : "";
     const label = nm || deviceName(dev as Device);
     const body: { room_id: number; copy?: boolean; name?: string } = { room_id: room.id };
-    if (thermostat) body.copy = hasCap("configure") && put.copy;
+    if (thermostat) body.copy = can("configure") && put.copy;
     if (nm) {
       if (long) {
         nameRef.current?.focus(); // its field says why, as the pairing time's does

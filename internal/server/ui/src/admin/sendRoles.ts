@@ -20,7 +20,8 @@ import { actionRunner } from "../shared/action";
 import { capLabel } from "../model/cap";
 import { forgetForms } from "../shared/forms";
 import { session, stillSession } from "../shared/session";
-import { load, roleFormKey, roleUI, roles, said } from "./store";
+import { roleFormKey, roleUI, roles, said } from "./store";
+import { can } from "../shared/me";
 
 /** rolePath is a role's path in the API, rest after it. */
 function rolePath(key: string, rest = ""): string {
@@ -33,7 +34,7 @@ function rolePath(key: string, rest = ""): string {
  * throws before it and leaves the lists as they were.
  */
 export async function loadRoles(): Promise<void> {
-  if (!hasCap("roles")) return;
+  if (!can("roles")) return;
   const n = session();
   const res = (await api<{ roles?: Role[]; capabilities?: Capability[] }>("GET", "api/v1/roles")) || {};
   if (!stillSession(n)) return; // signed out meanwhile: nothing of it is the next user's
@@ -47,7 +48,6 @@ export async function loadRoles(): Promise<void> {
   roles.list = list;
   roles.caps = res.capabilities || [];
   roles.loaded = true;
-  load.bump();
 }
 
 /** The roles' runner: its message under the roles, the roles read again after a change. */

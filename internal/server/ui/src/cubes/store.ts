@@ -5,22 +5,17 @@
  * @file internal/server/ui/src/cubes/store.ts
  *
  * What the Cubes' parts are drawn from beside the page's state.cubes and
- * state.found, which stay the page's plain objects until the data become
- * signals (AP UiParts, Block 15): the load counter, where they are
- * drawn, what is kept per Cube and per fold, and
- * the devices loaded for the hide choice.
+ * state.found, signals underneath (shared/data.ts): where they are drawn,
+ * what is kept per Cube and per fold, and the devices loaded for the
+ * hide choice.
  */
 
 import { signal } from "@preact/signals";
 import type { Device } from "../api";
-import { counter } from "../shared/counter";
 import { live, liveMap } from "../shared/live";
 import { cubePath } from "../shared/path";
 import { session, stillSession } from "../shared/session";
 import { loadCubeRooms, loadPairing } from "./flow";
-
-/** The Cubes' load counter: bumped at every load of the list and every redraw asked for (renderCubes, cubesPolled); every Cubes part uses it. */
-export const load = counter();
 
 /**
  * Where the Cubes' panels are drawn: System settings → Cubes, or Cube

@@ -21,7 +21,8 @@ import { joinParts } from "../shared/lang";
 import { busyProps, useBusy } from "../shared/question";
 import { addCube } from "./send";
 import { OtherNetwork } from "./Panel";
-import { folds, load } from "./store";
+import { folds } from "./store";
+import { useLook } from "../shared/look";
 
 /**
  * Row is a Cube or a Massimo proxy found: its sign, its serial, for a Cube
@@ -130,7 +131,7 @@ function Hints({ found }: { found: FoundCube[] }) {
  * many Cubes and Massimo proxies, then a row each and how to serve them.
  */
 export function Found({ found }: { found: FoundCube[] }) {
-  load.useLoad();
+  useLook();
   const proxies = found.filter((c) => c.kind === "proxy").length;
   const cubes = found.length - proxies;
   return (

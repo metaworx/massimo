@@ -294,7 +294,7 @@ func TestUIBrand(t *testing.T) {
 // ui/partials/ is listed in uiPartials exactly once and every listed one
 // exists, no marker is left, the page is served at / as assembled, and
 // every id the scripts look up ($("…")) and every template they clone
-// (fromTemplate("…"), fragmentFromTemplate("…")) is in it, or, for the
+// (fromTemplate("…")) is in it, or, for the
 // script of another page (uiPageScripts), in that page.
 func TestUIPage(t *testing.T) {
 	t.Parallel()
@@ -337,7 +337,7 @@ func TestUIPage(t *testing.T) {
 			t.Errorf("%s does not load %s", name, script)
 		}
 	}
-	lookup := regexp.MustCompile(`(?:\$|fromTemplate|fragmentFromTemplate)\("([^"]+)"\)`)
+	lookup := regexp.MustCompile(`(?:\$|fromTemplate)\("([^"]+)"\)`)
 	scripts, _ := fs.Glob(uiFiles, "ui/*.js")
 	n := 0
 	for _, f := range scripts {
@@ -358,6 +358,28 @@ func TestUIPage(t *testing.T) {
 	}
 	if n < 50 {
 		t.Fatalf("only %d lookups found in the scripts", n)
+	}
+	// A plain script reaches what a part draws only through MassimoParts:
+	// it looks up by selector in the whole page only what every element of
+	// a kind shares, a part's too, and finds anything else in an element
+	// it is handed (a part's own, which the part hands it) or by an id of
+	// the page's above.
+	wholePage := regexp.MustCompile(`document\.querySelector(?:All)?\(([^)]*)\)`)
+	shared := map[string]string{
+		`"details.menu[open]"`: "the menus: one open at a time, closed by Escape and by a click outside (components.js)",
+		`"[data-help]"`:        "the help slots of the cards' heads, the skeleton's (app.js initHelpSlots)",
+	}
+	for _, f := range scripts {
+		if f == "ui/parts.js" || f == "ui/connect.js" {
+			continue // the bundle, and the connect page, which has no part
+		}
+		for i, line := range jsCode(fileLines(t, f)) {
+			for _, m := range wholePage.FindAllStringSubmatch(line, -1) {
+				if _, ok := shared[strings.TrimSpace(m[1])]; !ok {
+					t.Errorf("%s:%d: looks up %s in the whole page; a plain script reaches a part through MassimoParts", f, i+1, m[1])
+				}
+			}
+		}
 	}
 
 	ts := startServer(t).ts
@@ -724,6 +746,116 @@ func alsoText(also []string) string {
 	return s
 }
 
+// wholeFields are the fields of the page's data that are signals
+// underneath (ui/src/shared/data.ts, AP UiParts D123-A): a write tells
+// the parts only as an assignment of the field, so none of them is
+// written in place.
+var wholeFields = []string{"state.cubes", "state.found", "state.tz", "state.rooms", "state.unlisted", "state.roomsOf", "state.device", "state.me",
+	"themeState.custom", "themeState.draft", "themeState.base", "logState.cubeRooms", "logState.commands", "logState.openCommands", "logAlerts.levels"}
+
+// roomDevicesInPlace is a write in place to a room's devices, by any
+// name of the room: a room's fields are signals, its devices written whole.
+var roomDevicesInPlace = regexp.MustCompile(`\.devices\[[^\]]*\](?:\.[\w$]+)*\s*=[^=]|\.devices\.length\s*=[^=]|\.devices\.(?:push|splice|sort|reverse|unshift|shift|pop|fill|copyWithin)\(`)
+
+// writtenInPlace finds a write in place to a field of wholeFields on a
+// line: an item assigned by its index, an array's method that changes
+// it (a map's or a set's too), delete, Object.assign into it, or a
+// property of it assigned; and a
+// write in place to a room's devices.
+func writtenInPlace(line string) bool {
+	if roomDevicesInPlace.MatchString(line) {
+		return true
+	}
+	for _, f := range wholeFields {
+		q := regexp.QuoteMeta(f)
+		re := regexp.MustCompile(`(?:^|[^\w.$])` + q + `(?:\[[^\]]*\]|\.[\w$]+)+\s*=[^=]|(?:^|[^\w.$])` + q +
+			`\.(?:push|splice|sort|reverse|unshift|shift|pop|fill|copyWithin|set|delete|clear|add)\(|delete\s+` + q + `\b|Object\.assign\(\s*` + q + `\b`)
+		if re.MatchString(line) {
+			return true
+		}
+	}
+	return false
+}
+
+// The page's data are written whole (UiParts D234): no plain script and
+// no part writes a field of wholeFields in place, which would change the
+// data without telling the parts that draw from them. It reads the
+// written name alone: a write through another name of the same array
+// (const list = themeState.custom; list.push(…)), nor an item's
+// property written through find or for … of (for (const r of
+// state.rooms) r.devices[0].x = …), it cannot see; the drawings counted
+// per poll at each step of Block 15 and the review cover that.
+func TestStateWrittenWhole(t *testing.T) {
+	t.Parallel()
+	files, err := filepath.Glob("ui/*.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = fs.WalkDir(os.DirFS("ui/src"), ".", func(name string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() && (strings.HasSuffix(name, ".ts") || strings.HasSuffix(name, ".tsx")) {
+			files = append(files, path.Join("ui/src", name))
+		}
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, f := range files {
+		if f == "ui/parts.js" {
+			continue // the bundle
+		}
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		n++
+		for i, line := range strings.Split(string(b), "\n") {
+			if code, _, _ := strings.Cut(line, "//"); writtenInPlace(code) {
+				t.Errorf("%s:%d writes the page's data in place, which tells no part: %s", f, i+1, strings.TrimSpace(line))
+			}
+		}
+	}
+	if n < 40 {
+		t.Fatalf("only %d files read", n)
+	}
+}
+
+// writtenInPlace tells a write in place from a write of the whole field
+// and from a read.
+func TestWrittenInPlace(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		line string
+		want bool
+	}{
+		{"themeState.custom.push(entry);", true},
+		{"themeState.custom[i] = entry;", true},
+		{"themeState.draft.name = name;", true},
+		{"themeState.draft.light[k] = c;", true},
+		{"delete themeState.draft;", true},
+		{"Object.assign(themeState.draft, x);", true},
+		{"themeState.custom = [...themeState.custom, entry];", false},
+		{"themeState.draft = { ...d, name };", false},
+		{"if (themeState.custom[i] === entry) return;", false},
+		{"const d = themeState.draft;", false},
+		{"themeState.customs.push(x);", false},
+		{"logState.cubeRooms.set(c.serial, rs);", true},
+		{"logState.cubeRooms = new Map(logState.cubeRooms).set(c.serial, rs);", false},
+		{"if (logState.cubeRooms.has(c.serial)) return;", false},
+		{"r.devices[i] = d;", true},
+		{"room.devices.push(twin);", true},
+		{"r.devices[i].name = n;", true},
+		{"r.devices.length = 0;", true},
+		{"state.me.role = r;", true},
+		{"r.devices = r.devices.map((x, k) => (k === i ? d : x));", false},
+	} {
+		if got := writtenInPlace(c.line); got != c.want {
+			t.Errorf("writtenInPlace(%q) = %v, want %v", c.line, got, c.want)
+		}
+	}
+}
+
 // Every file of the web UI opens with its licence lines (the contract,
 // "Go code"; docs/ui.md, "How the page is built"): a plain script or
 // style sheet with the SPDX line and the copyright line, in either
@@ -831,8 +963,8 @@ func TestUINoHTMLInjection(t *testing.T) {
 					t.Errorf("%s:%d: %s puts markup or script into the page from a string", file, n+1, b.what)
 				}
 			}
-			if part && i18n.MatchString(line) {
-				t.Errorf("%s:%d: a part carries no data-i18n; it calls t()", file, n+1)
+			if i18n.MatchString(line) && (part || file != "ui/i18n.js") {
+				t.Errorf("%s:%d: only the skeleton's static texts carry data-i18n (i18n.js applies them); a script calls t()", file, n+1)
 			}
 		}
 	}

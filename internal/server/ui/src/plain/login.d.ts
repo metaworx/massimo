@@ -4,9 +4,9 @@
 /**
  * @file internal/server/ui/src/plain/login.d.ts
  *
- * The globals of the plain script ui/login.js that the parts call: the
- * capabilities of the one signed in, who it is, whether it has My
- * profile and a link come back for it, the roles' names, who is read
+ * The globals of the plain script ui/login.js that the parts call (who
+ * is in and what it may is shared/me.ts'): whether the settings follow
+ * the one signed in, a link come back for it, the roles' names, who is read
  * again, the sign-out, a password registered by OPAQUE and the current
  * one proved, and the page's address; for the sign-in's parts the app's
  * bridge, the token kept, the sign-in by OPAQUE and the page's start
@@ -16,20 +16,10 @@
 import type { User } from "../api";
 
 declare global {
-  /** Whether the one signed in has a capability; true without users. */
-  function hasCap(c: string): boolean;
-  /** Whether the one signed in may read the users: with users, guests or passwords. */
-  function canManageUsers(): boolean;
-  /** Whether the one signed in may open System settings: one of its cards' capabilities, without those only Maintenance's cards use. */
-  function hasSettingsPage(): boolean;
-  /** Whether the one signed in may open Maintenance: one of System settings' capabilities, or update, restart or reboot. */
-  function hasSystem(): boolean;
   /** A link of the own account come back from a provider (oidcReturn), for My profile to show or say why there is none; null for none, set back to null once taken. */
   let oidcLinked: { confirm?: string; error?: string } | null;
   /** Whether the settings follow the one signed in: a user with the capability preferences. */
   function canSync(): boolean;
-  /** Whether a user's login name is the one signed in. */
-  function isSelf(name: string): boolean;
   /** A role's display name: the name given, else the key's translated name, else the key. */
   function roleLabel(key: string, name?: string): string;
   /** The keys of the six default roles, for a role choice that cannot read the roles. */

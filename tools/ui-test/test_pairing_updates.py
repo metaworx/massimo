@@ -14,14 +14,13 @@ import json
 from datetime import datetime, timedelta, timezone
 
 from conftest import TOKEN, URL
-from helpers import frames, hold, mark, owner_page, reads_of, replaced, show_view, sign_out, wait_held, wait_until
+from helpers import focus_in_turn, frames, hold, mark, owner_page, reads_of, replaced, show_view, sign_out, wait_held, wait_until
 from test_login import sign_in
 from test_unsaved import expire
 
 SERIAL = "KEQ0000100"
 PANEL = ".cube-panel[data-serial='%s']" % SERIAL
 PAIRING = "**/api/v1/cubes/%s/pairing" % SERIAL
-ROOMS = "**/api/v1/cubes/%s/rooms?devices=real" % SERIAL
 # Two devices that join, as GET …/pairing and a paired event give them.
 JOINED = {"type": "radiator_thermostat", "rf_address": "0a0f02", "serial": "MEQ0000902"}
 SECOND = {"type": "shutter_contact", "rf_address": "0a0f03", "serial": "MEQ0000903"}
@@ -68,8 +67,8 @@ def test_a_joined_device_keeps_what_is_typed(page, case, reads):
     countdown = "document.querySelector(%s).textContent" % json.dumps(held[3])
     was = page.evaluate(countdown)
     assert wait_until(page, "%s !== %s" % (countdown, json.dumps(was)), 5), "the countdown moves on"
-    asked(page, "pairingEvent(%s)" % json.dumps(SERIAL))
-    page.evaluate("pairingJoined(%s, %s)" % (json.dumps(SERIAL), json.dumps(SECOND)))
+    asked(page, "MassimoParts.cubes.pairingEvent(%s)" % json.dumps(SERIAL))
+    page.evaluate("MassimoParts.cubes.pairingJoined(%s, %s)" % (json.dumps(SERIAL), json.dumps(SECOND)))
     panel.locator(".pair-device[data-rf='%s']" % SECOND["rf_address"]).wait_for(state="visible")
     page.evaluate("loadCubes()")
     frames(page)
@@ -93,7 +92,7 @@ def test_the_time_typed_stays(page, case):
             "#cube-page-body .cube-pairing .pairing-countdown"]
     mark(page, held)
     secs.focus()
-    asked(page, "pairingEvent(state.serial)")
+    asked(page, "MassimoParts.cubes.pairingEvent(state.serial)")
     page.evaluate("loadCubes()")
     frames(page)
     assert replaced(page, held) == [], "the time's field and Start are the ones they were"
@@ -115,11 +114,15 @@ def with_pairing(me):
 def forgotten_after(new_context, guard, watch, leave):
     """The owner's page with a Cube pairing (GET …/pairing answered as
     running with JOINED), its form's name typed and a room chosen, the
-    Cube's rooms read; leave(page) ends the session, and the operator
+    Cube's rooms offered; leave(page) ends the session, and the operator
     signs in. While the sign-in is asked no request of the pairing goes
-    (its countdown does not run); then, the Cube's rooms held, the form
-    is a new one, with nothing typed and no room offered, until the rooms
-    asked of the server again have come."""
+    (its countdown does not run); then, the next user's rooms held (the
+    page's load and the pairing's own read, which serves a Cube until the
+    page's load has given its rooms), the form is a new element, with nothing typed and no room offered, and
+    once they have come it offers the rooms the next user's load read: the
+    chosen Cube's rooms are the page's own since UiParts D216, which the
+    end of the session forgets and the next user's load reads again,
+    where the pairing read them by a request of its own."""
     page = owner_page(new_context, guard, watch, URL, TOKEN)
     reads = reads_of(page)
     until = (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat()
@@ -128,12 +131,14 @@ def forgotten_after(new_context, guard, watch, leave):
     show_view(page, "system")
     panel = page.locator("#cubes-list " + PANEL)
     panel.locator(":scope > summary").click()
-    form = panel.locator(".pair-device[data-rf='%s'] form" % JOINED["rf_address"])
+    sel = "#cubes-list %s .pair-device[data-rf='%s'] form" % (PANEL, JOINED["rf_address"])
+    form = page.locator(sel)
     form.wait_for(state="visible")
     options = "document.querySelectorAll(%s).length" % json.dumps("#cubes-list %s .pair-device select[name=room] option" % PANEL)
     assert wait_until(page, options + " > 1", 5), "the Cube's rooms offered"
     form.locator("select[name=room]").select_option(index=1)
     form.locator("input[name=name]").fill("Hall radiator")
+    mark(page, [sel])
     asked = []
     page.on("request", lambda r: asked.append(r.url) if r.method == "GET" and r.url.endswith("/pairing") else None)
     leave(page)
@@ -142,25 +147,30 @@ def forgotten_after(new_context, guard, watch, leave):
     page.wait_for_timeout(3500)  # the countdown asks every third second where nothing reports it; nothing signals its absence
     assert len(asked) == since, f"no request of the pairing while the sign-in is asked: {asked[since:]}"
     held, sent = [], []
-    hold(page, ROOMS, "GET", held, sent)
+    hold(page, "**/api/v1/cubes/*/rooms?devices=all", "GET", held, sent)
+    hold(page, "**/api/v1/cubes/*/rooms?devices=real", "GET", held, sent)
     try:
-        sign_in(page, "operator", "op-pass")
-        assert page.evaluate("state.me.user.name") == "operator", "another user"
+        # the sign-in by the dialog, the rooms' load held: sign_in waits for the tiles
+        page.locator("#login-user").fill("operator")
+        page.locator("#login-password").fill("op-pass")
+        page.locator("#login-form button[type=submit]").click()
+        assert wait_until(page, "state.me && state.me.user && state.me.user.name === 'operator'", 10), "another user"
+        assert wait_held(page, held), "the next user's rooms asked for, held"
         show_view(page, "system")
         panel = page.locator("#cubes-list " + PANEL)
         if panel.get_attribute("open") is None:
             panel.locator(":scope > summary").click()
-        assert wait_held(page, held), "the Cube's rooms asked for again"
         form.wait_for(state="visible")
         frames(page)
-        assert page.evaluate(options) == 0, "no room offered from before"
-        assert form.locator("input[name=name]").input_value() == "", "nothing typed left"
+        assert replaced(page, [sel]) == [sel], "a new form, not the one typed into before"
+        assert form.locator("input[name=name]").input_value() != "Hall radiator", "nothing typed left"
+        assert page.evaluate(options) == 0, "no room offered from before while the next user's rooms are on their way"
     finally:
+        page.unroute("**/api/v1/cubes/*/rooms?devices=all")
+        page.unroute("**/api/v1/cubes/*/rooms?devices=real")
         for route in held:
             route.continue_()
-        page.unroute(ROOMS)
-    assert wait_until(page, options + " > 1", 5), "the rooms read again offered"
-    assert form.locator("input[name=name]").input_value() != "Hall radiator", "the name offered, not the one typed before"
+    assert wait_until(page, options + " > 1", 5), "the rooms the next user's load read offered"
 
 
 def test_sign_out_forgets_the_pairing(new_context, case, watch, guard):
@@ -174,3 +184,35 @@ def test_another_user_after_a_401_forgets_the_pairing(new_context, case, watch, 
     another user signed in finds a new form, the Cube's rooms asked for
     again."""
     forgotten_after(new_context, guard, watch, expire)
+
+
+def test_pair_a_device_gives_the_time_the_focus_at_once(page, case):
+    """Pair a device on Cube settings gives the focus to the time in the
+    drawing that shows it, not a frame later. Fails on the page before,
+    where an effect gave it a frame later."""
+    show_view(page, "cube")
+    pairing = "#cube-page-body .cube-pairing"
+    try:
+        assert focus_in_turn(page, pairing + " .pair-open", pairing + " input[name=seconds]"), \
+            "the time takes the focus in the drawing that shows it"
+    finally:
+        page.locator(pairing + " .form-cancel").click()
+    show_view(page, "tiles")
+
+
+def test_put_into_a_room_gives_its_first_field_the_focus_at_once(page, case):
+    """Put into a room… of a device without a room gives the focus to the
+    form's first field in the drawing that shows it. Fails on the page
+    before, where an effect gave it a frame later."""
+    from test_sign_out_late import UNLISTED, unlisted_row
+    row = unlisted_row(page)
+    sel = "#unlisted .device[data-rf='%s']" % UNLISTED["rf_address"]
+    try:
+        assert focus_in_turn(page, sel + " .put-open", sel + " form.pair-device-form :is(input, select)"), \
+            "the form's first field takes the focus in the drawing that shows it"
+    finally:
+        cancel = row.locator("form.pair-device-form .form-cancel")
+        if cancel.count():
+            cancel.click()
+        reads_of(page).clear("**/api/v1/cubes/*/devices?devices=real")
+        page.evaluate("loadRooms()")

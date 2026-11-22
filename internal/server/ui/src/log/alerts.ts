@@ -17,6 +17,7 @@
 
 import { computed, type ReadonlySignal } from "@preact/signals";
 import { live } from "../shared/live";
+import { me } from "../shared/me";
 import { session, stillSession } from "../shared/session";
 import type { LogLine } from "./lines";
 
@@ -83,7 +84,7 @@ export function keepLevelsOf(lines: LogLine[]): void {
 
 /** logSeenOwner is whose marks the page keeps: the signed-in user's where they follow the user (canSync, login.js), else this browser's. */
 function logSeenOwner(): string {
-  return canSync() && state.me?.user ? state.me.user.name : "";
+  return canSync() && me.value?.user ? me.value.user.name : "";
 }
 
 /** validSeen is a marks document as the page keeps it, or none. */

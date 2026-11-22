@@ -51,7 +51,8 @@ import {
   type ConfigState,
   type Programme,
 } from "./configuration";
-import { load, tickOf } from "./store";
+import { untracked } from "@preact/signals";
+import { useLook } from "../shared/look";
 
 /** The configuration's tabs, by their keys, with the classes a capability hides them by. */
 const TABS: { key: string; cls?: string }[] = [{ key: "room", cls: "needs-rename" }, { key: "temps" }, { key: "devices" }, { key: "program" }, { key: "copy" }];
@@ -60,8 +61,7 @@ const trim = (v: string) => v.trim();
 
 /** RoomTab is the room's name, at most NAME_BYTES bytes, with its Send. */
 function RoomTab({ room, cs }: { room: PageRoom; cs: ConfigState }) {
-  load.useLoad();
-  void tickOf(room.id).n;
+  useLook();
   const form = useConfigForm(room, "room", "room", { key: "cfg.form.room", args: { room: room.name } });
   const name = useDraft(room.name, trim, form.place<string>("name"));
   const changed = name.value.trim() !== room.name;
@@ -99,7 +99,7 @@ function tempRows(): NumberRow[] {
  * which writes the fields that differ.
  */
 function TempsTab({ room, cs }: { room: PageRoom; cs: ConfigState }) {
-  load.useLoad();
+  useLook();
   void cs.cfg;
   const form = useConfigForm(room, "temps", "temps", { key: "cfg.form.temps", args: { room: room.name } });
   const rows = tempRows();
@@ -158,7 +158,7 @@ function kept(slot: { base: Programme | null; value: Programme | null; stored: P
  * says whether it does. Its form's Cancel puts every day back as loaded.
  */
 function ProgramTab({ room, cs }: { room: PageRoom; cs: ConfigState }) {
-  load.useLoad();
+  useLook();
   const form = useConfigForm(room, "program", "program", { key: "cfg.form.program", args: { room: room.name } });
   const [typed, setTyped] = useState(false);
   const [, redraw] = useState(0);
@@ -225,8 +225,10 @@ function ProgramTab({ room, cs }: { room: PageRoom; cs: ConfigState }) {
  * settings as the user set them.
  */
 function CopyTab({ room, cs }: { room: PageRoom; cs: ConfigState }) {
-  load.useLoad();
-  const others = state.rooms.filter((r) => r.id !== room.id && roomThermostat(r));
+  useLook();
+  // the other rooms by the list, which it follows; their devices' states draw nothing here
+  const list = state.rooms;
+  const others = untracked(() => list.filter((r) => r.id !== room.id && roomThermostat(r)));
   const ids = cs.copyRooms.map(Number).filter((id) => others.some((r) => r.id === id));
   const what = cs.copyWhat;
   const k = { rooms: ids, temps: what.includes("temps"), program: what.includes("program"), radiator: what.includes("radiator") };
@@ -261,8 +263,7 @@ function CopyTab({ room, cs }: { room: PageRoom; cs: ConfigState }) {
  * programme where the programme changed elsewhere.
  */
 function Body({ room }: { room: PageRoom }) {
-  load.useLoad();
-  void tickOf(room.id).n;
+  useLook();
   const cs = configOf(room.id);
   const tab = cs.tab;
   const res = cs.result;
@@ -301,7 +302,7 @@ function Body({ room }: { room: PageRoom }) {
 
 /** Config is the tile's configuration area: hidden and empty while closed, else its tabs and the tab shown. */
 export function Config({ room, ui }: { room: PageRoom; ui: RoomUI }) {
-  load.useLoad();
+  useLook();
   const open = ui.config;
   return <div class={open ? "config-area" : "config-area hidden"}>{open && <Body room={room} />}</div>;
 }

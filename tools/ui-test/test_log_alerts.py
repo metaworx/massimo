@@ -45,12 +45,12 @@ def test_log_sign_by_level(page):
     alerts = []
     alerts_route(page, alerts)
     try:
-        page.evaluate("loadLogAlerts()")
+        page.evaluate("MassimoParts.log.loadAlerts()")
         s = sign(page, "#menu-log")
         assert "tone-" not in s["cls"] and s["uses"] == ["#icon-log"], f"no problem: the plain log ({s})"
         assert page.locator("#nav-menu > summary .mark-sign").count() == 0, "no mark on ☰"
         alerts.append({"id": 900001, "kind": "disconnected", "level": "warn", "cube_serial": "KEQ0000100", "time": "2026-11-14T20:00:00Z"})
-        page.evaluate("loadLogAlerts()")
+        page.evaluate("MassimoParts.log.loadAlerts()")
         # ☰ is a part (AP UiParts, Block 14), drawn after the alerts are read: waited for by what changed
         assert wait_until(page, SIGN_TONE % "warn", 3), "the entry turns amber"
         s = sign(page, "#menu-log")
@@ -65,7 +65,7 @@ def test_log_sign_by_level(page):
           document.body.appendChild(p); const c = getComputedStyle(p).backgroundColor; p.remove(); return c; }""")
         assert disc == [card, "50%"], f"the mark on a disc of the card's colour, readable on the filled ☰: {disc}, card {card}"
         alerts.append({"id": 900002, "kind": "restart", "level": "error", "time": "2026-11-14T20:01:00Z"})
-        page.evaluate("loadLogAlerts()")
+        page.evaluate("MassimoParts.log.loadAlerts()")
         assert wait_until(page, SIGN_TONE % "bad", 3), "the entry turns red"
         s = sign(page, "#menu-log")
         assert "tone-bad" in s["cls"] and s["uses"] == ["#icon-log-small", "#mark-corner-x"], f"an error: red, the cross ({s})"
@@ -82,14 +82,14 @@ def test_log_marks(page):
     puts = []
     page.on("request", lambda r: puts.append(r.url) if r.method == "PUT" and "log.seen" in r.url else None)
     show_view(page, "log")
-    assert wait_until(page, "logState.lines.filter((l) => l.id && logLineMatches(l)).length >= 2", 10), "two lines with ids"
-    ids = page.evaluate("logState.lines.filter((l) => l.id && logLineMatches(l)).slice(-2).map((l) => l.id)")
+    assert wait_until(page, "MassimoParts.log.state.lines.filter((l) => l.id && MassimoParts.log.matches(l)).length >= 2", 10), "two lines with ids"
+    ids = page.evaluate("MassimoParts.log.state.lines.filter((l) => l.id && MassimoParts.log.matches(l)).slice(-2).map((l) => l.id)")
     older, newer = min(ids), max(ids)
     alerts = [{"id": newer, "kind": "state", "level": "warn", "time": "2026-11-14T20:01:00Z"},
               {"id": older, "kind": "restart", "level": "error", "time": "2026-11-14T20:00:00Z"}]
     asked = alerts_route(page, alerts)
     try:
-        page.evaluate("loadLogAlerts()")
+        page.evaluate("MassimoParts.log.loadAlerts()")
         assert page.locator("#log-lines .log-line.log-alert").count() == 2, "both lines highlighted"
         error_row = page.locator("#log-lines .log-line[data-id='%d']" % older)
         assert "log-alert-bad" in error_row.get_attribute("class") and error_row.locator(".mark-sign").count() == 1, "the error red, its mark"
@@ -97,7 +97,7 @@ def test_log_marks(page):
 
         show_view(page, "tiles")
         show_view(page, "log")
-        page.evaluate("loadLogAlerts()")
+        page.evaluate("MassimoParts.log.loadAlerts()")
         assert page.locator("#log-lines .log-line.log-alert").count() == 2 and not puts, "opening the log marks nothing"
 
         synced = page.evaluate("canSync()")
@@ -110,7 +110,7 @@ def test_log_marks(page):
             assert json.loads(page.evaluate("localStorage.getItem('massimo.log.seen')"))["lines"] == [older], "the browser keeps the mark"
         assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.log-alert').length === 1", 5), "the error's line marked"
         assert wait_until(page, SIGN_TONE % "warn", 3), "the entry amber"
-        page.evaluate("loadLogAlerts()")
+        page.evaluate("MassimoParts.log.loadAlerts()")
         assert page.locator("#log-lines .log-line.log-alert").count() == 1, "marked, it stays marked"
 
         page.locator("#log-seen-all").click()
@@ -118,8 +118,8 @@ def test_log_marks(page):
         assert wait_until(page, "!document.querySelector('#menu-log svg').getAttribute('class').includes('tone-')", 3), "the entry plain again"
         s = sign(page, "#menu-log")
         assert "tone-" not in s["cls"] and page.locator("#log-seen-all").is_hidden(), "the entry plain, Mark all gone"
-        assert page.evaluate("logAlerts.seen") == {"all": newer, "lines": []}, "all up to the newest, the line it covers gone"
-        page.evaluate("loadLogAlerts()")
+        assert page.evaluate("MassimoParts.log.alerts.seen") == {"all": newer, "lines": []}, "all up to the newest, the line it covers gone"
+        page.evaluate("MassimoParts.log.loadAlerts()")
         assert asked[-1].endswith("after=%d" % newer), f"asked after the newest ({asked[-1]})"
     finally:
         page.unroute("**/api/v1/log/alerts*")

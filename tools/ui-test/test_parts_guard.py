@@ -5,11 +5,10 @@ in with nothing changed takes nothing away from what the user holds.
 
 REGIONS is the page cut into its regions, each with the containers it
 lives in and its views: how a user brings it on screen and opens what it
-has to open (a menu, a panel, a form). NOT_MOVED is the list of the
-regions not yet rewritten as parts that fail the guard today, each with
-what it loses; the block that moves a region takes its line off.
+has to open (a menu, a panel, a form). Every region of the page is a
+part since AP UiParts' Block 15, and every one is checked.
 
-For a region off the list, in each of its views and around each data
+For a region, in each of its views and around each data
 source of SOURCES and of its own (Region.sources: the page shown again,
 or the stream's server events of the kinds named, each dispatched on the
 page's stream, whose reads the guard waits for until their requests have
@@ -32,12 +31,10 @@ is refused and counted during the whole test, and the test fails on
 one: the guard sends nothing to the Cube and changes nothing in the
 server's store (Writes says the one exception, outside the rounds).
 
-A region on the list is still shown, so that the table stays true to
-the page, and then skipped with its note, which the run's summary
-(pytest -rs) shows. UI_GUARD_CHECK, comma-separated region names or
-"all", checks regions although they are on the list: how a block sees
-that its region passes before it takes the line off, and how the guard
-is shown to bite.
+The parts mounted with nothing a user can hold are no region: the
+expert's reads' times, the certificate's line under the header, the open
+server's banner; nor is the leaving dialog, modal and drawn by no data
+source while it is open.
 
 The guard runs in two of the suite's four cases, 1100 px in English and
 390 px in German (GUARD_CASES, D176-D): each width once and each
@@ -55,6 +52,7 @@ from typing import Callable
 
 import pytest
 
+from test_to_top import long_page, scrolled_to
 from helpers import LOG_ALERT_A, LOG_ALERT_B, LOG_CMD, LOG_CMD_LINE, STATE_EVENTS_JS, RepairStub, StubLog, log_lines, open_main_menu, reads_of, safe_route, show_view, stub_log_command, wait_until
 
 # The cases the guard runs in (D176-D); in the others its tests are
@@ -79,7 +77,7 @@ class View:
 class Region:
     """A region of the page: the CSS selectors of its containers, the
     elements inside them that belong to another region (exclude), its
-    views, where the fake Cube's fixture cannot show it, why (gap), and
+    views, and
     the data sources of its own beside SOURCES (sources), by their
     names in GUARD_JS's run, and what is undone once its views are done
     (after: a stub's routes)."""
@@ -88,7 +86,6 @@ class Region:
     containers: tuple
     views: tuple = ()
     exclude: str = ""
-    gap: str = ""
     sources: tuple = ()
     after: Callable | None = None
 
@@ -326,6 +323,25 @@ def open_banner(page):
     page.locator("#open-banner-create").focus()
 
 
+def users_open_server(page):
+    """System settings → Users on an open server kept open (AP FirstOwner,
+    Block 4): the section of its own instead of the list, the focus on
+    Create the owner…. Who is in read again (loadMe(), one of SOURCES)
+    reads the stub of a server kept open, which asks for no owner: no card
+    opens over the view, as in the other views of an open server."""
+    kept_open(page)
+    system(page)
+    page.locator("#users-create-owner").wait_for(state="visible")
+    page.locator("#users-create-owner").focus()
+
+
+def users_keep_open_switch(page):
+    """The same section, the focus on the switch that undoes keep open,
+    shown while the server is kept open."""
+    page.locator("#keep-open-switch").wait_for(state="attached")  # the switch's input, drawn under its slider
+    page.locator("#keep-open-switch").focus()
+
+
 def main_menu_item(page):
     """☰ open, the focus moved onto System settings' entry."""
     main_menu(page)
@@ -484,7 +500,7 @@ def pairing_running(page):
     until = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
     reads_of(page).change("**/api/v1/cubes/*/pairing", lambda st: dict(st or {}, active=True, until=until, paired=[JOINED_STUB]))
     cube_page(page)
-    page.evaluate("pairingEvent(state.serial)")
+    page.evaluate("MassimoParts.cubes.pairingEvent(state.serial)")
     form = page.locator("#cube-page-body .cube-pairing .pair-device[data-rf='0a0f02'] form")
     form.wait_for(state="visible")
     assert wait_until(page, "document.querySelectorAll(\"#cube-page-body .pair-device select[name=room] option\").length > 1", 5), "the rooms offered"
@@ -631,14 +647,14 @@ def unstub_log(page):
     off = getattr(page, "_guard_log_off", None)
     if off and not page.is_closed():
         off()
-        page.evaluate("loadLogAlerts()")  # ☰'s mark as the server has it again
+        page.evaluate("MassimoParts.log.loadAlerts()")  # ☰'s mark as the server has it again
 
 
 def log_stubbed(page):
     """The log with the stubbed lines (stub_log), its problems read."""
     stub_log(page)
     show_view(page, "log")
-    page.evaluate("loadLog().then(() => loadLogAlerts())")
+    page.evaluate("MassimoParts.log.load().then(() => MassimoParts.log.loadAlerts())")
     page.locator(f"#log-lines .log-line[data-id='{LOG_ALERT_A}'] .log-mark").wait_for()
     settle(page)
 
@@ -737,13 +753,20 @@ def personal_sections(page):
     page.locator("#me .sec-menu .toc-link[data-target='prefs']").focus()
 
 
+def scrolled_down(page):
+    """Rooms made long and scrolled a screen down, where ↑ shows."""
+    on_rooms(page)
+    long_page(page, "rooms")
+    scrolled_to(page, page.evaluate("window.innerHeight") + 40)
+    assert wait_until(page, "!document.getElementById('to-top').classList.contains('hidden')", 3), "↑ shown"
+
+
 def first_owner(page):
     """The first owner's form in the sign-in card (AP FirstOwner), GET
     /api/v1/me stubbed as an open server without users for a caller on
     the local network for the rest of the test, which opens the card on
-    the running page (the region's own source, loadMe(), reads the stub
-    again and hands out the same opening); the focus moved onto Again by
-    the view."""
+    the running page (loadMe(), one of SOURCES, reads the stub again and
+    hands out the same opening); the focus moved onto Again by the view."""
     body = json.dumps({"mode": "open", "user": None, "role": None, "capabilities": [], "setup": True})
     safe_route(page, "**/api/v1/me", lambda route: route.fulfill(status=200, content_type="application/json", body=body))
     on_rooms(page)
@@ -820,12 +843,12 @@ REGIONS = (
         View("☰ open", main_menu),
         View("☰ open, the focus on an entry", main_menu_item, "#menu-system"),
         View("☰ open on an open server, the focus on Create the owner…", main_menu_open_server, "#menu-owner"),
-    ), sources=("loadMe()",)),
+    )),
     # The open server's warning with its buttons (AP FirstOwner, Block 4),
-    # drawn from who is in: who is in read again and the language applied
-    # again are its sources.
+    # drawn from who is in: who is in read again (one of SOURCES) and the
+    # language applied again are its sources.
     Region("open-banner", ("#open-banner",), (View("the warning on a server kept open, the focus on Create the owner…", open_banner,
-                                                    "#open-banner-create"),), sources=("loadMe()", "applyLanguage()")),
+                                                    "#open-banner-create"),), sources=("applyLanguage()",)),
     Region("home-notice", ("#home-notice",), (View("on the second server, its Cube not connected", home_notice),)),
     Region("rooms", ("#rooms",), (
         View("a tile's ⋯ menu open", rooms_menu),
@@ -883,11 +906,20 @@ REGIONS = (
     )),
     Region("users", ("#sys-users-body",), (
         View("the operator's panel and the new user's form", users),
-        # Passed on the page before the move as well: none of SOURCES draws
-        # the users again. From now on it guards that the question stays through the data;
+        # Passed on the page before the move as well: none of SOURCES drew
+        # the users again, where since AP UiParts' Block 15 who is in read again
+        # (loadMe) does, which this view holds too. From now on it guards that the question stays through the data;
         # the list's own reads (an action in another panel, the list read
         # again, the page shown again) are test_admin_updates.py's.
         View("the operator's Remove asking", users_question),
+    )),
+    # Users on a server without users is a section of its own (AP
+    # FirstOwner, Block 4), drawn from who is in: who is in read again
+    # (loadMe, one of SOURCES) draws it again, with the stub of a server
+    # kept open, so that no card asks for the owner over it.
+    Region("users-open", ("#sys-users-body",), (
+        View("Users on a server kept open, the focus on Create the owner…", users_open_server, "#users-create-owner"),
+        View("the switch that undoes keep open, in focus", users_keep_open_switch, "#keep-open-switch"),
     )),
     Region("roles", ("#sys-roles-body",), (View("the operator role's panel and the new role's form", roles),)),
     Region("capabilities", ("#sys-caps-body",), (View("System settings", system),)),
@@ -901,8 +933,9 @@ REGIONS = (
     )),
     Region("integrations", ("#sys-integrations-body",), (
         View("System settings", system),
-        # Passed on the page before the move as well: none of SOURCES draws
-        # the integrations again. From now on it guards that a request, an integration's panel and Register's address stays through the data;
+        # Passed on the page before the move as well: none of SOURCES drew
+        # the integrations again, where since AP UiParts' Block 15 who is in read again
+        # (loadMe) does, which this view holds too. From now on it guards that a request, an integration's panel and Register's address stays through the data;
         # the list's own reads (an action in another panel, the list read
         # again, the page shown again) are test_admin_updates.py's.
         View("a request, an integration's panel with a user, Register's address", integrations),
@@ -910,8 +943,9 @@ REGIONS = (
     Region("backups", ("#sys-backup-body", "#cube-backup-body"), (
         View("System settings, the Cube's fold open", backups_system),
         View("Cube settings", backups_cube),
-        # Passed on the page before the move as well: none of SOURCES draws
-        # a Cube's backups again. From now on it guards that the question stays through the data;
+        # Passed on the page before the move as well: none of SOURCES drew
+        # a Cube's backups again, where since AP UiParts' Block 15 a load of
+        # the Cubes does (their folds follow the list), which this view holds too. From now on it guards that the question stays through the data;
         # the list's own reads (an action in another panel, the list read
         # again, the page shown again) are test_admin_updates.py's.
         View("Cube settings, a backup's Delete asking", backups_question),
@@ -920,7 +954,7 @@ REGIONS = (
     # plain page too, which never built it again. Its lines are a region
     # of their own here, so that the round's typing into the search, which
     # filters them all out, leaves them: their views fail on the plain
-    # page, where loadRooms and loadLogAlerts built every line again.
+    # page, where loadRooms and MassimoParts.log.loadAlerts built every line again.
     Region("log", ("#logview",), (
         View("the log", log),
         View("the kind's choice in focus", log, "#log-kind"),
@@ -945,18 +979,18 @@ REGIONS = (
     Region("software-update", ("#sys-software-body",), (
         View("Maintenance", maint),
         View("Update asking, the channel's choice above it", software_question, "#update-channel"),
-    ), sources=("loadUpdate(false)", "the page shown again: maint", "the stream's events: resync change")),
+    ), sources=("MassimoParts.software.load(false)", "the page shown again: maint", "the stream's events: resync change")),
     Region("maintenance", ("#sys-maint-body",), (
         View("Maintenance", maint),
         View("the restart asking, a delay typed for the reboot", maint_question),
     ), sources=("the page shown again: maint", "the stream's events: resync change reboot reboot_cancelled settings_read")),
     Region("system-info", ("#sys-info-body",), (View("System info, its folds open", info),), sources=("the page shown again: info", "the stream's events: resync settings_read change.cube")),
-    # the settings applied again, as when the user's arrive from the server at a sign-in (loadPreferences)
-    Region("my-settings", ("#prefs-rows", "#prefs-sec > p"), (View("My settings", personal("prefs")),), sources=("applyStoredSettings()",)),
+    # the settings applied again, as when the user's arrive from the server at a sign-in, are one of SOURCES
+    Region("my-settings", ("#prefs-rows", "#prefs-sec > p"), (View("My settings", personal("prefs")),)),
     Region("appearance", ("#prefs-sec .appearance",), (
         View("My settings", personal("prefs")),
         View("the scheme editor open", scheme_editor),
-    ), sources=("applyStoredSettings()",)),
+    )),
     Region("notifications", ("#notify-sec",), (View("Notifications", personal("notify")),), sources=("the page shown again: me",)),
     Region("my-profile", ("#profile-sec",), (View("My profile", profile),), sources=("the page shown again: me",)),
     # The pages' rows are parts (AP UiParts, Block 14), drawn from who is
@@ -970,16 +1004,16 @@ REGIONS = (
         View("the Users card folded, the focus on its fold", users_fold(True), "#sys-users .section-fold"),
         View("the Users card opened again, the focus on its fold", users_fold(False), "#sys-users .section-fold"),
         View("the personal page's sections menu open, the focus on an item", personal_sections, "#me .sec-menu .toc-link[data-target='prefs']"),
-    ), sources=("loadMe()",)),
+    )),
     # The first owner's form is a part (AP UiParts, Block 14), in the
     # sign-in card since AP FirstOwner, opened from who is in: who is in
-    # read again (loadMe, the same opening), the page's language drawn
-    # again and the app's status read again are its sources; the view
+    # read again (one of SOURCES, the same opening), the page's language
+    # drawn again and the app's status read again are its sources; the view
     # passed on the page before the move as well, where nothing drew the
     # plain form again.
     Region("first-owner", ("#setup",), (View("the first owner's form in the card, the focus in Again", first_owner, "#setup-again"),
                                         View("the confirmation that keeps the server open, an address typed", keep_open_step, "#keep-open-address")),
-           sources=("loadMe()", "applyLanguage()", "MassimoParts.signIn.readApp()")),
+           sources=("applyLanguage()", "MassimoParts.signIn.readApp()")),
     # The sign-in's card is a part (AP UiParts, Block 14), shown here as a
     # 401 opens it on a page signed in: its sources are a second askLogin
     # (another request's 401, which hands out the same opening), the
@@ -990,37 +1024,12 @@ REGIONS = (
         View("the sign-in's card, a name and a password typed", sign_in_card),
         View("its API key's way chosen, a key typed", sign_in_key, "#login-token"),
         View("its ☰ open", sign_in_menu, "#login-lang"),
-    ), sources=("askLogin()", "renderLoginProviders()", "applyLanguage()", "loadMe()")),
+    ), sources=("askLogin()", "renderLoginProviders()", "applyLanguage()")),
+    # ↑, the way back to the top a screen down (ui/src/chrome/ToTop.tsx,
+    # UiParts D221): a part since Block 14, drawn from the page's scroll
+    # alone, which no data source moves; a forward guard.
+    Region("to-top", ("#to-top",), (View("Rooms a screen down, ↑ shown", scrolled_down),)),
 )
-
-# The regions not yet moved to parts that the guard fails today, each
-# with what it loses; the block that moves a region takes its line off
-# (AP UiParts, "How a region moves"). A region that is not here is
-# checked. The others passed the guard on the day it was written
-# (2026-11-15), although none has moved: they are filled in place, or
-# drawn again only by the user's own action (Create key, a backup, a
-# command's detail), which the guard does not apply. The block that
-# moves one of them keeps it passing. The sign-in left it last (Block
-# 14), shown on a page signed in as a 401 shows it: the list is empty,
-# and Block 15 removes it; the devices without a room, which the fixture
-# cannot show, are given one by their view's stub.
-NOT_MOVED = {}
-
-
-def checked_regions():
-    """The regions UI_GUARD_CHECK names to be checked although they are
-    on the list: comma-separated names, or all. An unknown name stops
-    the run, so that a typo does not check nothing."""
-    names = {n.strip() for n in os.environ.get("UI_GUARD_CHECK", "").split(",") if n.strip()}
-    if names == {"all"}:
-        return {r.name for r in REGIONS}
-    unknown = names - {r.name for r in REGIONS}
-    if unknown:
-        raise pytest.UsageError(f"UI_GUARD_CHECK names {', '.join(sorted(unknown))}; the regions are {', '.join(r.name for r in REGIONS)}")
-    return names
-
-
-CHECK = checked_regions()
 
 # The data sources, each applied with the data as it was, by its name in
 # GUARD_JS's run: the poll the timer runs (poll(false)), the Cubes' list
@@ -1028,10 +1037,13 @@ CHECK = checked_regions()
 # (loadRooms, also metadata, paired and device_forgotten), the whole
 # reload (refresh, the stream's connected and resync), a state event of
 # the stream for every device of the Cube, as the server sends it, the
-# log button's sign (loadLogAlerts), the ages' minute (refreshAges) and
-# the log's poll under All Cubes (pollLog).
-SOURCES = ("poll(false)", "loadCubes()", "loadRooms()", "refresh()", "a state event per device", "loadLogAlerts()",
-           "refreshAges()", "pollLog()")
+# log button's sign (MassimoParts.log.loadAlerts), the page's minute (MassimoParts.minute), which the ages follow, the
+# log's poll under All Cubes (MassimoParts.log.poll), the settings applied again, as
+# when the user's arrive from the server (applyStoredSettings), and who is
+# in read again (loadMe), which every part follows as signals since AP
+# UiParts' Block 15 (UiParts D221).
+SOURCES = ("poll(false)", "loadCubes()", "loadRooms()", "refresh()", "a state event per device", "MassimoParts.log.loadAlerts()",
+           "MassimoParts.minute()", "MassimoParts.log.poll()", "applyStoredSettings()", "loadMe()")
 
 # The guard in the page, window.__guard: marks what the user can hold in
 # a region, types into its fields, gives it the focus, applies a data
@@ -1154,7 +1166,7 @@ GUARD_JS = r"""() => {
   }
   async function run(source) {
     if (source.startsWith("the page shown again: ")) {
-      // what showing the page again does: the viewshown event its loaders take (pages.js showView)
+      // what showing the page again does: the viewshown event its loaders take (MassimoParts.pages.showView)
       document.dispatchEvent(new CustomEvent("viewshown", { detail: source.slice("the page shown again: ".length) }));
       return settled();
     }
@@ -1172,15 +1184,15 @@ GUARD_JS = r"""() => {
       return settled();
     }
     switch (source) {
-      case "loadUpdate(false)": return loadUpdate(false);
+      case "MassimoParts.software.load(false)": return MassimoParts.software.load(false);
       case "poll(false)": return poll(false);
       case "loadCubes()": return loadCubes();
       case "loadRooms()": return loadRooms();
       case "refresh()": return refresh();
       case "a state event per device": return stateEvents();
-      case "loadLogAlerts()": return loadLogAlerts();
-      case "refreshAges()": return refreshAges();
-      case "pollLog()": return pollLog();
+      case "MassimoParts.log.loadAlerts()": return MassimoParts.log.loadAlerts();
+      case "MassimoParts.minute()": return MassimoParts.minute();
+      case "MassimoParts.log.poll()": return MassimoParts.log.poll();
       case "applyStoredSettings()": return applyStoredSettings();
       case "loadMe()": return loadMe();
       case "askLogin()": askLogin(); return settled(); // the opening it hands out is the one open
@@ -1312,44 +1324,31 @@ def guard_view(page, writes, region, view):
 
 @pytest.mark.parametrize("region", REGIONS, ids=lambda r: r.name)
 def test_guard(page, case, region):
-    """A region off the list keeps, in every view and around every data
-    source, what the user holds; a region on the list is shown and
-    skipped with its note. Nothing but GETs is sent either way."""
-    listed = region.name in NOT_MOVED
-    if region.gap:
-        reason = f"{region.name}: cannot be shown with the fake Cube's fixture: {region.gap}"
-        pytest.skip(reason + (f"; on the list: {NOT_MOVED[region.name]}" if listed else ""))
-    checked = not listed or region.name in CHECK
+    """A region keeps, in every view and around every data source, what
+    the user holds. Nothing but GETs is sent."""
     loaded(page)
     writes = Writes(page)
-    failures, held, counts = [], [], []
+    failures, held = [], []
     try:
         for view in region.views:
             view.show(page)
             page.evaluate(GUARD_JS)
             n = page.evaluate("(a) => window.__guard.count(a)", {"roots": list(region.containers), "exclude": region.exclude})
             assert n > 0, f"{region.name} [{view.name}]: the region shows nothing a user can hold ({', '.join(region.containers)})"
-            counts.append(f"{view.name}: {n}")
-            if checked:
-                lines, h = guard_view(page, writes, region, view)
-                failures += lines
-                held += [f"[{view.name}] {x}" for x in h]
+            lines, h = guard_view(page, writes, region, view)
+            failures += lines
+            held += [f"[{view.name}] {x}" for x in h]
     finally:
         if region.after:
             region.after(page)
     assert not writes.sent, f"{region.name}: the guard sent requests other than GET: {writes.sent}"
     let = f", let through as the page loaded: {'; '.join(writes.let)}" if writes.let else ""
-    if not checked:
-        pytest.skip(f"{region.name}: on the list, not moved yet: {NOT_MOVED[region.name]} "
-                    f"(shown, elements to hold: {'; '.join(counts)}; requests other than GET: 0{let})")
     print(f"{region.name}: checked, {len(SOURCES) + len(region.sources)} data sources in {len(region.views)} view(s); requests other than GET: 0{let}")
     assert not failures, f"{region.name}: {len(failures)} failure(s) of the guard:\n" + "\n".join(failures) + \
         "\nwhat was held:\n" + "\n".join(held)
 
 
-def test_the_list_names_regions(case):
-    """Every line of the list is a region of the table, so that a region
-    renamed does not leave a line that skips nothing."""
-    names = {r.name for r in REGIONS}
-    assert not set(NOT_MOVED) - names, f"the list names no region: {sorted(set(NOT_MOVED) - names)}"
-    assert len(names) == len(REGIONS), "every region has a name of its own"
+def test_every_region_has_a_name_of_its_own(case):
+    """Every region of the table has a name of its own, by which its test
+    is named."""
+    assert len({r.name for r in REGIONS}) == len(REGIONS), "every region has a name of its own"

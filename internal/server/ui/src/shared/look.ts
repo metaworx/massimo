@@ -11,6 +11,7 @@
  */
 
 import { signal } from "@preact/signals";
+import { useLang } from "./lang";
 
 /** Counts the changes of the icons chosen. */
 const icons = signal(0);
@@ -23,4 +24,14 @@ export function iconsChanged(): void {
 /** useIcons reads the icons chosen in a part's drawing, so that the part is drawn again when they change. */
 export function useIcons(): void {
   void icons.value;
+}
+
+/**
+ * useLook reads the language and the icons chosen in a part's drawing,
+ * the two things every part depends on beside its data (rule 2 of AP
+ * UiParts): the part is drawn again when either changes.
+ */
+export function useLook(): void {
+  useLang();
+  useIcons();
 }

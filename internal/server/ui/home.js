@@ -31,20 +31,20 @@ function renderHomeNotice() {
 
 // --- Cube discovery ---------------------------------------------------
 
-// addFound takes a Cube from a cube_found event into the list.
+// addFound takes a Cube from a cube_found event into the list, which it
+// writes whole (the parts follow it, ui/src/shared/data.ts).
 function addFound(c) {
   if (!c || !c.serial || state.cubes.some((x) => x.serial === c.serial)) return;
   const i = state.found.findIndex((x) => x.serial === c.serial);
-  if (i >= 0) state.found[i] = c;
-  else state.found.push(c);
-  renderCubeSelect();
+  state.found = i >= 0 ? state.found.map((x, j) => (j === i ? c : x)) : [...state.found, c];
+  MassimoParts.header.render();
 }
 
 // showFound opens System settings with the Cubes card in view and the
 // fold of what was found open (ui/src/cubes/Found.tsx).
 function showFound() {
-  showFoundFold(); // cubes.js
-  showView("system");
-  renderCubes(); // cubes.js
+  MassimoParts.cubes.openFound();
+  MassimoParts.pages.showView("system");
+  MassimoParts.cubes.render();
   showCard($("sys-cubes"), true); // components.js
 }

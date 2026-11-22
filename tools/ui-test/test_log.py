@@ -193,18 +193,18 @@ def test_log_names_devices_once_the_rooms_come(page):
     # for the rooms only after the Cubes: wait for the request itself
     assert wait_held(page, held), "the rooms asked for and held"
     first = page.locator("#log-lines .log-line.kind-state").first
-    kept = page.evaluate("logState.lines.filter((l) => l.state).at(-1).state.name")
+    kept = page.evaluate("MassimoParts.log.state.lines.filter((l) => l.state).at(-1).state.name")
     assert first.locator(".log-device").inner_text() == kept, "the name the line kept, before the rooms"
     # Lines that kept no name show the device's type until the rooms come,
     # and its S/N as the tooltip.
-    page.evaluate("logState.lines.forEach((l) => { if (l.state) l.state = { ...l.state, name: '' }; }); renderLog();")
-    last = page.evaluate("(() => { const l = logState.lines.filter((x) => x.state).at(-1); return { serial: l.serial, type: upperFirst(typeName(l.state.type)) }; })()")
+    page.evaluate("MassimoParts.log.state.lines = MassimoParts.log.state.lines.map((l) => (l.state ? { ...l, state: { ...l.state, name: '' } } : l)); MassimoParts.log.render();")  # the lines written whole
+    last = page.evaluate("(() => { const l = MassimoParts.log.state.lines.filter((x) => x.state).at(-1); return { serial: l.serial, type: MassimoParts.log.upperFirst(typeName(l.state.type)) }; })()")
     assert first.locator(".log-device").inner_text() == last["type"], "the type, no name yet"
     assert first.locator(".log-device").get_attribute("title") == last["serial"], "the S/N as the tooltip"
     for route in held:
         route.continue_()
     page.unroute("**/rooms?devices=all")
-    rf = page.evaluate("logState.lines.filter((l) => l.state).at(-1).device")
+    rf = page.evaluate("MassimoParts.log.state.lines.filter((l) => l.state).at(-1).device")
     want = """(() => { const r = state.rooms.find((x) => x.devices.some((d) => d.rf_address === %r));
       const d = r && r.devices.find((x) => x.rf_address === %r);
       return d && d.name ? t("log.devicePath", { room: r.name, device: d.name }) : ""; })()""" % (rf, rf)
@@ -242,12 +242,13 @@ def test_log_names_room_and_device(page, case, reads):
         assert page.locator("#log-lines .log-line.kind-config").count() > 0, f"the filter finds it by {what!r}"
     page.locator("#log-filter").fill("")
     name = d["name"]
-    page.evaluate("state.rooms[0].devices[0].name = ''; renderLog();")
+    rename = "(n) => { state.rooms = state.rooms.map((r, i) => (i ? r : { ...r, devices: r.devices.map((x, j) => (j ? x : { ...x, name: n })) })); }"
+    page.evaluate(rename, "")  # the rooms written whole, as a load writes them
     try:
-        want = page.evaluate("(t) => upperFirst(typeName(t))", d["type"])
+        want = page.evaluate("(t) => MassimoParts.log.upperFirst(typeName(t))", d["type"])
         assert line.locator(".log-device").inner_text() == room + " › " + want, "no name: the room and the type"
     finally:
-        page.evaluate("(n) => { state.rooms[0].devices[0].name = n; renderLog(); }", name)
+        page.evaluate(rename, name)
     show_view(page, "tiles")
 
 
@@ -308,12 +309,12 @@ def open_every_cubes_log(page, query, ready):
     starts no other while it is set, so that the test's polls are the
     only ones."""
     page.evaluate("(h) => { location.hash = h; }", "#log?" + query)
-    assert wait_until(page, "logState.cubes === 'all' && !logState.loading && " + ready, 5), "every Cube's log, the test's lines"
-    page.evaluate("clearInterval(logState.pollTimer)")
+    assert wait_until(page, "MassimoParts.log.state.cubes === 'all' && !MassimoParts.log.state.loading && " + ready, 5), "every Cube's log, the test's lines"
+    page.evaluate("clearInterval(MassimoParts.log.state.pollTimer)")
 
 
 # POLL_ENDS runs a poll of the log and says whether it ended within 3 s.
-POLL_ENDS = "Promise.race([pollLog().then(() => 'ended'), new Promise((r) => setTimeout(() => r('still polling'), 3000))])"
+POLL_ENDS = "Promise.race([MassimoParts.log.poll().then(() => 'ended'), new Promise((r) => setTimeout(() => r('still polling'), 3000))])"
 
 # HOLD_LOG has the page's api() hold every read of the log, after= too,
 # until the test answers it from window.logAnswers; the log button's
@@ -361,8 +362,8 @@ def test_log_of_every_cube(page, case):
         ]
         asked = []
         page.route(every_cubes_log, lambda route: answer_log(route, lines, asked))
-        page.evaluate("loadLog()")
-        assert wait_until(page, "logState.lines.some((l) => l.id === 900003)", 5), "the lines of the test"
+        page.evaluate("MassimoParts.log.load()")
+        assert wait_until(page, "MassimoParts.log.state.lines.some((l) => l.id === 900003)", 5), "the lines of the test"
         dev = page.locator("#log-lines .log-line.kind-config").first.locator(".log-device")
         assert dev.inner_text() == head["name"] + " › " + room + " › " + d["name"], f"the Cube, the room and the device ({dev.inner_text()!r})"
         own = page.locator("#log-lines .log-line.kind-disconnected").first.locator(".log-device")
@@ -371,22 +372,22 @@ def test_log_of_every_cube(page, case):
         groups = page.evaluate("[...document.querySelectorAll('#log-device optgroup')].map((g) => g.label)")
         assert head["name"] in groups, f"the devices grouped by Cube ({groups})"
         # The stream adds nothing under All Cubes; a poll brings the new lines.
-        n = page.evaluate("logState.lines.length")
+        n = page.evaluate("MassimoParts.log.state.lines.length")
         page.evaluate("""(d) => state.events.dispatchEvent(new MessageEvent("config", { data: JSON.stringify({
           kind: "config", device: d.rf_address, serial: d.serial, source: "device", time: new Date().toISOString() }) }))""", d)
-        assert page.evaluate("logState.lines.length") == n, "no line from the stream"
+        assert page.evaluate("MassimoParts.log.state.lines.length") == n, "no line from the stream"
         lines.append({"id": 900004, "kind": "config", "device": "0a0fee", "serial": "MEQ0000999", "source": "device", "cube_serial": SECOND_CUBE, "time": iso(0)})
         asked.clear()
-        # pollLog asks again until a poll brings it: one of the timer's may be on its way
-        assert wait_until(page, "(pollLog(), logState.lines.some((l) => l.id === 900004))", 5), "the poll's new line"
-        assert page.evaluate("logState.lines.filter((l) => l.id >= 900001).length") == 4, "each line once"
+        # MassimoParts.log.poll asks again until a poll brings it: one of the timer's may be on its way
+        assert wait_until(page, "(MassimoParts.log.poll(), MassimoParts.log.state.lines.some((l) => l.id === 900004))", 5), "the poll's new line"
+        assert page.evaluate("MassimoParts.log.state.lines.filter((l) => l.id >= 900001).length") == 4, "each line once"
         q = parse_qs(urlparse(asked[0]).query)
         assert q.get("after") == ["900003"] and "since" not in q, f"asked after the newest line's id ({q})"
         new = page.locator("#log-lines .log-line.kind-config").first.locator(".log-device")
         assert new.inner_text() == "Second › MEQ0000999", f"the other Cube's device ({new.inner_text()!r})"
         page.unroute(every_cubes_log)
         page.locator("#log-clear").click()
-        assert wait_until(page, "logState.cubes === '' && !location.hash.includes('cubes=')", 5) and choice.input_value() == "", "Clear: this Cube again"
+        assert wait_until(page, "MassimoParts.log.state.cubes === '' && !location.hash.includes('cubes=')", 5) and choice.input_value() == "", "Clear: this Cube again"
     finally:
         page.unroute(every_cubes_log)
         api_call("DELETE", f"api/v1/cubes/{SECOND_CUBE}")
@@ -411,22 +412,22 @@ def test_log_of_every_cube_loads_again_after_409(page, case, watch):
     show_view(page, "log")
     page.route(every_cubes_log, lambda route: answer_log(route, lines, asked))
     try:
-        open_every_cubes_log(page, "cubes=all", "logState.lines.some((l) => l.id === 900003)")
+        open_every_cubes_log(page, "cubes=all", "MassimoParts.log.state.lines.some((l) => l.id === 900003)")
         # The server's log starts over: the three lines with ids of its own, and one more.
         lines[:] = [dict(ln, id=11 + i) for i, ln in enumerate(first)] + [{"id": 14, "kind": "hello", "time": iso(now - 50)}]
         watch.expected.append(("after=900003", 409))
         asked.clear()
-        page.evaluate("pollLog()")
-        assert wait_until(page, "!logState.loading && logState.lines.some((l) => l.id === 14)", 5), "the log loaded again"
-        page.evaluate("pollLog()")  # the end: a read after the reload, through the same route
+        page.evaluate("MassimoParts.log.poll()")
+        assert wait_until(page, "!MassimoParts.log.state.loading && MassimoParts.log.state.lines.some((l) => l.id === 14)", 5), "the log loaded again"
+        page.evaluate("MassimoParts.log.poll()")  # the end: a read after the reload, through the same route
         after = [parse_qs(urlparse(u).query).get("after") for u in asked]
         assert after == [["900003"], None, ["14"]], f"the poll after its newest id, the log again once, the next poll: {after}"
-        ids = page.evaluate("logState.lines.map((l) => l.id)")
+        ids = page.evaluate("MassimoParts.log.state.lines.map((l) => l.id)")
         assert ids == [11, 12, 13, 14], f"each line once, none missing: {ids}"
         assert page.locator("#log-lines .log-line").count() == 4, "and the view shows them"
         lines.extend({"id": 14 + i, "kind": "hello", "time": iso(now - 40 + i // 10)} for i in range(1, 251))
         asked.clear()
-        ids = page.evaluate("pollLog().then(() => logState.lines.map((l) => l.id))")
+        ids = page.evaluate("MassimoParts.log.poll().then(() => MassimoParts.log.state.lines.map((l) => l.id))")
         after = [parse_qs(urlparse(u).query).get("after") for u in asked]
         assert after == [["14"], ["214"]], f"one poll, a page after the other: {after}"
         assert ids == list(range(245, 265)), f"the newest 20 after a burst of 250: {ids}"
@@ -448,14 +449,14 @@ def test_log_of_every_cube_loads_again_after_a_long_pause(page, case):
     show_view(page, "log")
     page.route(every_cubes_log, lambda route: answer_log(route, lines, asked))
     try:
-        open_every_cubes_log(page, "cubes=all&range=all", "logState.lines.some((l) => l.id === 20)")
+        open_every_cubes_log(page, "cubes=all&range=all", "MassimoParts.log.state.lines.some((l) => l.id === 20)")
         lines.extend({"id": 20 + i, "kind": "hello", "time": iso(now - 8000 + i)} for i in range(1, 2501))
         asked.clear()
         assert page.evaluate(POLL_ENDS) == "ended", "the poll ends"
-        assert wait_until(page, "!logState.loading && logState.lines.some((l) => l.id === 2520)", 5), "the log loaded again"
+        assert wait_until(page, "!MassimoParts.log.state.loading && MassimoParts.log.state.lines.some((l) => l.id === 2520)", 5), "the log loaded again"
         after = [parse_qs(urlparse(u).query).get("after", [""])[0] for u in asked]
         assert after == [str(20 + 200 * n) for n in range(10)] + [""], f"ten pages, then the log again: {after}"
-        ids = page.evaluate("logState.lines.map((l) => l.id)")
+        ids = page.evaluate("MassimoParts.log.state.lines.map((l) => l.id)")
         assert ids == list(range(2321, 2521)), f"the newest page: {ids[:3]}…{ids[-3:]} ({len(ids)})"
         assert page.locator("#log-lines .log-line").count() == 200, "and the view shows it"
     finally:
@@ -475,13 +476,13 @@ def test_log_of_every_cube_on_an_older_server(page, case):
     show_view(page, "log")
     page.route(every_cubes_log, lambda route: answer_log(route, lines, asked, old_log_page))
     try:
-        open_every_cubes_log(page, "cubes=all", "logState.lines.some((l) => l.id === 300)")
+        open_every_cubes_log(page, "cubes=all", "MassimoParts.log.state.lines.some((l) => l.id === 300)")
         lines.extend({"id": 300 + i, "kind": "hello", "time": iso(now - 100 + i)} for i in range(1, 6))
         asked.clear()
         assert page.evaluate(POLL_ENDS) == "ended", f"the poll ends ({len(asked)} requests)"
         after = [parse_qs(urlparse(u).query).get("after") for u in asked]
         assert after == [["300"], ["305"]], f"two requests, the second after the first's last: {after}"
-        ids = page.evaluate("logState.lines.map((l) => l.id)")
+        ids = page.evaluate("MassimoParts.log.state.lines.map((l) => l.id)")
         assert ids == list(range(286, 306)), f"the newest 20: {ids}"
     finally:
         page.unroute(every_cubes_log)
@@ -501,10 +502,10 @@ def test_log_of_every_cube_on_an_older_server_in_a_range(page, case):
     show_view(page, "log")
     page.route(every_cubes_log, lambda route: answer_log(route, lines, [], old_log_page))
     try:
-        open_every_cubes_log(page, "cubes=all&range=1h", "logState.range === '1h' && logState.lines.length === 10")
+        open_every_cubes_log(page, "cubes=all&range=1h", "MassimoParts.log.state.range === '1h' && MassimoParts.log.state.lines.length === 10")
         lines.extend({"id": 300 + i, "kind": "hello", "time": iso(now - 5 + i)} for i in range(1, 3))
         assert page.evaluate(POLL_ENDS) == "ended", "the poll ends"
-        ids = page.evaluate("logState.lines.map((l) => l.id)")
+        ids = page.evaluate("MassimoParts.log.state.lines.map((l) => l.id)")
         assert ids == list(range(291, 303)), f"the hour's lines and the two new ones, none from before the hour: {ids[:3]}…({len(ids)})"
     finally:
         page.unroute(every_cubes_log)
@@ -519,13 +520,13 @@ def test_log_of_every_cube_polls_one_at_a_time(page, case):
     show_view(page, "log")
     page.route(every_cubes_log, lambda route: answer_log(route, lines, []))
     try:
-        open_every_cubes_log(page, "cubes=all", "logState.lines.some((l) => l.id === 900003)")
+        open_every_cubes_log(page, "cubes=all", "MassimoParts.log.state.lines.some((l) => l.id === 900003)")
     finally:
         page.unroute(every_cubes_log)
     page.evaluate(HOLD_LOG)
-    assert page.evaluate("() => { pollLog(); pollLog(); return window.logAnswers.length; }") == 1, "one poll on its way, the second asks nothing"
+    assert page.evaluate("() => { MassimoParts.log.poll(); MassimoParts.log.poll(); return window.logAnswers.length; }") == 1, "one poll on its way, the second asks nothing"
     page.evaluate("window.logAnswers.shift().resolve([])")
-    assert wait_until(page, "!logState.polling", 5), "the poll ended"
+    assert wait_until(page, "!MassimoParts.log.state.polling", 5), "the poll ended"
     show_view(page, "tiles")
 
 
@@ -640,9 +641,9 @@ def test_log_names_integration_users(page, case, reads):
     text = page.locator("#log-lines .log-line.kind-change").first.locator(".log-text").inner_text()
     assert text == THROUGH_SAYS[case.lang], f"the change: {text}"
     for who in ("anna", real):
-        kept = page.evaluate("""([who, real]) => { const was = logState.user; logState.user = who;
-          const line = logState.lines.find((l) => l.kind === "change" && l.realName === real);
-          const ok = logOfChoices(line); logState.user = was; return ok; }""", [who, real])
+        kept = page.evaluate("""([who, real]) => { const was = MassimoParts.log.state.user; MassimoParts.log.state.user = who;
+          const line = MassimoParts.log.state.lines.find((l) => l.kind === "change" && l.realName === real);
+          const ok = MassimoParts.log.ofChoices(line); MassimoParts.log.state.user = was; return ok; }""", [who, real])
         assert kept, f"the user filter of {who} keeps it"
     assert scroll_width(page) <= case.width, "no horizontal scroll with the chain"
     show_view(page, "tiles")
@@ -699,7 +700,7 @@ def test_log_mismatch_lines(page, case, reads):
         cube_room_name: "Upstairs", cube_type: "radiator_thermostat", since: new Date().toISOString() };
       // as the stream's handler takes them, without its reload of the
       // rooms, which reads the log again from the server
-      const send = (st, level) => appendLogEvent({ kind: "mismatch", source: "cube", level, device: m.device,
+      const send = (st, level) => MassimoParts.log.event({ kind: "mismatch", source: "cube", level, device: m.device,
         time: new Date().toISOString(), summary: Object.assign({ state: st }, m) });
       send("found", "warn");
       send("cleared", "info");
@@ -812,7 +813,7 @@ def stamp(now, i):
 def all_events(page):
     """The range chosen: all events, the log loaded again."""
     page.locator("#log-range").select_option("all")
-    assert wait_until(page, "logState.range === 'all' && !logState.loading", 5), "all events"
+    assert wait_until(page, "MassimoParts.log.state.range === 'all' && !MassimoParts.log.state.loading", 5), "all events"
 
 
 def test_log_filters(page, case):
@@ -824,7 +825,7 @@ def test_log_filters(page, case):
     assert wait_until(page, "document.querySelectorAll('#log-lines .log-line').length >= 7", 5), "the log loaded"
     before = page.locator("#log-lines .log-line").count()
     page.locator("#log-kind").select_option("state")
-    assert wait_until(page, "logState.kind === 'state' && [...document.querySelectorAll('#log-lines .log-line')]"
+    assert wait_until(page, "MassimoParts.log.state.kind === 'state' && [...document.querySelectorAll('#log-lines .log-line')]"
                             ".every((l) => l.classList.contains('kind-state'))", 5), "only state events"
     assert page.locator("#log-lines .log-line").count() >= 7, "the seven devices' states"
     page.locator("#log-kind").select_option("")
@@ -833,7 +834,7 @@ def test_log_filters(page, case):
     with page.expect_request(lambda r: "/log?" in r.url) as asked:
         page.locator("#log-device").select_option(sn)
     assert parse_qs(urlparse(asked.value.url).query).get("device") == [sn], "the device asked for by its S/N"
-    assert wait_until(page, "logState.device === %r && document.querySelectorAll('#log-lines .log-line').length > 0 && "
+    assert wait_until(page, "MassimoParts.log.state.device === %r && document.querySelectorAll('#log-lines .log-line').length > 0 && "
                             "[...document.querySelectorAll('#log-lines .log-line')].every((l) => l.querySelector('.log-rf') && "
                             "l.querySelector('.log-rf').textContent === %r)" % (sn, rf), 5), "only the device's events"
     kinds = set(page.evaluate("[...document.querySelectorAll('#log-lines .log-line')].map((l) => [...l.classList].find((c) => c.startsWith('kind-')))"))
@@ -842,7 +843,7 @@ def test_log_filters(page, case):
         page.locator("#log-device").select_option("")
     n = len(answer.value.json())
     assert wait_until(page, "document.querySelectorAll('#log-lines .log-line').length >= %d" % before, 5), "all again"
-    assert wait_until(page, "!logState.loading", 5), "the page is in"
+    assert wait_until(page, "!MassimoParts.log.state.loading", 5), "the page is in"
     older = page.locator("#log-older")
     if n < 200:
         assert older.is_disabled() and older.inner_text() == NO_OLDER[case.lang], f"a page of {n}: nothing older"
@@ -885,9 +886,9 @@ def test_log_older(page, case):
         top = page.evaluate(box + ".scrollTop")
         older.click()
         assert wait_until(page, "document.querySelectorAll('#log-lines .kind-hello').length === 202", 5), "two older events"
-        assert page.evaluate("logState.lines[0].id === 1 && logState.lines[1].id === 2 && logState.lines[2].id === 201"), "kept oldest first"
+        assert page.evaluate("MassimoParts.log.state.lines[0].id === 1 && MassimoParts.log.state.lines[1].id === 2 && MassimoParts.log.state.lines[2].id === 201"), "kept oldest first"
         assert page.evaluate("[...document.querySelectorAll('#log-lines .kind-hello')].slice(-2).map((l) => l.querySelector('.log-time').textContent)") \
-            == page.evaluate("[logState.lines[1], logState.lines[0]].map((l) => fmtTimeOfDay(l.time))"), "drawn at the bottom"
+            == page.evaluate("[MassimoParts.log.state.lines[1], MassimoParts.log.state.lines[0]].map((l) => fmtTimeOfDay(l.time))"), "drawn at the bottom"
         assert page.evaluate(box + ".scrollTop") == top, "the view stays where it was"
         assert wait_until(page, "document.getElementById('log-older').disabled", 5), "a short page ends the paging"
         assert older.inner_text() == NO_OLDER[case.lang], "nothing older"
@@ -919,22 +920,22 @@ def test_log_older_after_the_log_moved(page, case, watch):
     page.route(LOG_ROUTE, lambda route: answer_log(route, lines, asked))
     try:
         all_events(page)
-        assert wait_until(page, "logState.lines.filter((l) => l.id > %d).length === 200" % RING, 5), "the page the server kept in memory"
+        assert wait_until(page, "MassimoParts.log.state.lines.filter((l) => l.id > %d).length === 200" % RING, 5), "the page the server kept in memory"
         rf = page.evaluate("state.rooms[0].devices[0].rf_address")
         at = iso(now)
         page.evaluate("""([rf, at]) => state.events.dispatchEvent(new MessageEvent("config", { data: JSON.stringify({
           kind: "config", device: rf, time: at }) }))""", [rf, at])
-        assert wait_until(page, "logState.lines.some((l) => l.kind === 'config' && !l.id)", 5), "the live line"
+        assert wait_until(page, "MassimoParts.log.state.lines.some((l) => l.kind === 'config' && !l.id)", 5), "the live line"
         # The Cube gains its row: its log is the store's, the live line in it with an id of the store's.
         lines[:] = [{"id": 7, "kind": "hello", "time": iso(now - 1)}, {"id": 8, "kind": "config", "device": rf, "time": at}]
         watch.expected.append((f"after={RING + 200}", 409))
         asked.clear()
         page.locator("#log-older").click()
-        assert wait_until(page, "!logState.loading && logState.lines.some((l) => l.id === 8)", 5), "the store's log"
+        assert wait_until(page, "!MassimoParts.log.state.loading && MassimoParts.log.state.lines.some((l) => l.id === 8)", 5), "the store's log"
         q = [parse_qs(urlparse(u).query) for u in asked]
         assert q[0].get("after") == [str(RING + 200)] and not any("before" in x or "after" in x for x in q[1:]), \
             f"the newest line's id asked, then the log again, no page before the oldest: {q}"
-        ids = page.evaluate("logState.lines.map((l) => l.id)")
+        ids = page.evaluate("MassimoParts.log.state.lines.map((l) => l.id)")
         assert ids == [7, 8], f"the store's lines, once each, none of the memory's: {ids}"
         assert page.locator("#log-lines .log-line").count() == 2, "and the view shows them"
         assert wait_until(page, "document.getElementById('log-older').disabled", 5), "nothing older"
@@ -954,11 +955,11 @@ def test_log_older_question_after_another_choice(page, case):
     all_events(page)
     isolate_log(page)
     page.evaluate(HOLD_LOG)
-    page.evaluate("() => { loadLog(); }")  # not awaited: the test answers it
+    page.evaluate("() => { MassimoParts.log.load(); }")  # not awaited: the test answers it
     assert wait_until(page, "window.logAnswers.length === 1", 5), "the log's page held"
     page.evaluate("(evs) => window.logAnswers.shift().resolve(evs)",
                   [{"id": i, "kind": "hello", "time": stamp(now, i)} for i in range(201, 401)])
-    assert wait_until(page, "!logState.loading && logState.more", 5), "a full page, Older offered"
+    assert wait_until(page, "!MassimoParts.log.state.loading && MassimoParts.log.state.more", 5), "a full page, Older offered"
     page.locator("#log-older").click()
     assert wait_until(page, "window.logAnswers.length === 1", 5), "Older's question held"
     assert "after=400" in page.evaluate("window.logAnswers[0].path"), "Older asks after the newest line"
@@ -967,7 +968,7 @@ def test_log_older_question_after_another_choice(page, case):
     page.evaluate("() => { const e = new Error('beyond'); e.status = 409; window.logAnswers.shift().reject(e); }")
     page.evaluate("(evs) => window.logAnswers.shift().resolve(evs)", [{"id": 5, "kind": "hello", "time": stamp(now, 5)}])
     # A reload by the question would have taken the choice's page's place: the log would still be loading.
-    assert wait_until(page, "!logState.loading && logState.lines.map((l) => l.id).join() === '5'", 5), \
+    assert wait_until(page, "!MassimoParts.log.state.loading && MassimoParts.log.state.lines.map((l) => l.id).join() === '5'", 5), \
         f"the choice's page, and no reload after it: {page.evaluate('window.logAnswers.map((a) => a.path)')}"
     assert page.evaluate("window.logAnswers.length") == 0, "nothing more asked"
     show_view(page, "tiles")
@@ -1005,7 +1006,7 @@ def test_log_answers(page, case):
         page.evaluate("(evs) => window.logAnswers.shift().resolve(evs)",
                       [{"id": i, "kind": "hello", "time": stamp(now, i)} for i in ids])
 
-    hellos = "logState.lines.filter((l) => l.kind === 'hello').length"
+    hellos = "MassimoParts.log.state.lines.filter((l) => l.kind === 'hello').length"
     older = page.locator("#log-older")
 
     page.locator("#log-kind").select_option("hello")
@@ -1029,11 +1030,11 @@ def test_log_answers(page, case):
     answer([])
     page.evaluate("selectCube(state.serial)")
     assert "device=" not in held(), "a Cube switch asks for all devices"
-    assert page.evaluate("logState.device === '' && document.getElementById('log-device').value === ''"), \
+    assert page.evaluate("MassimoParts.log.state.device === '' && document.getElementById('log-device').value === ''"), \
         "a Cube switch takes the device chosen back to all"
     answer([])
 
-    page.evaluate("() => { loadLog(); }")  # not awaited: the test answers it
+    page.evaluate("() => { MassimoParts.log.load(); }")  # not awaited: the test answers it
     held()
     answer(range(1801, 3801))
     assert wait_until(page, hellos + " === 2000", 5), "a page of 2000"
@@ -1043,22 +1044,22 @@ def test_log_answers(page, case):
     assert wait_until(page, hellos + " === 2200", 5), "2200 lines"
     page.evaluate("""(rf) => state.events.dispatchEvent(new MessageEvent("config", { data: JSON.stringify({
       kind: "config", device: rf, time: new Date().toISOString() }) }))""", rf)
-    assert wait_until(page, "logState.lines.some((l) => l.kind === 'config')", 5), "the live event in the log"
-    assert page.evaluate(hellos) == 2200 and page.evaluate("logState.lines[0].id === 1601 && logState.cursor === '1601'"), \
+    assert wait_until(page, "MassimoParts.log.state.lines.some((l) => l.kind === 'config')", 5), "the live event in the log"
+    assert page.evaluate(hellos) == 2200 and page.evaluate("MassimoParts.log.state.lines[0].id === 1601 && MassimoParts.log.state.cursor === '1601'"), \
         "a live event keeps the page fetched"
 
-    page.evaluate("() => { loadLog(); }")  # not awaited: the test answers it
+    page.evaluate("() => { MassimoParts.log.load(); }")  # not awaited: the test answers it
     held()
     answer(range(1, 2001))
     assert wait_until(page, hellos + " === 2000", 5), "a page of 2000"
     page.evaluate("""(rf) => state.events.dispatchEvent(new MessageEvent("config", { data: JSON.stringify({
       kind: "config", device: rf, time: new Date().toISOString() }) }))""", rf)
-    assert wait_until(page, "logState.lines[0].id >= 2 && logState.cursor === String(logState.lines[0].id)", 5), \
+    assert wait_until(page, "MassimoParts.log.state.lines[0].id >= 2 && MassimoParts.log.state.cursor === String(MassimoParts.log.state.lines[0].id)", 5), \
         "past 2000 lines the oldest go, and Older goes on from the oldest kept"
-    assert page.evaluate("document.querySelectorAll('#log-lines .log-line').length === logState.lines.filter(logLineMatches).length"), \
+    assert page.evaluate("document.querySelectorAll('#log-lines .log-line').length === MassimoParts.log.state.lines.filter(MassimoParts.log.matches).length"), \
         "the view drops the lines that went"
 
-    page.evaluate("() => { loadLog(); }")  # not awaited: the test answers it
+    page.evaluate("() => { MassimoParts.log.load(); }")  # not awaited: the test answers it
     held()
     page.evaluate("window.logAnswers.shift().reject(new Error('nope'))")
     assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-error').length === 1", 5), \
@@ -1074,7 +1075,7 @@ def test_log_keeps_events_that_come_while_it_loads(page, case):
     the kinds the test sends are counted."""
     now = time.time()
     show_view(page, "log")
-    assert wait_until(page, "!logState.loading", 5), "the log loaded"
+    assert wait_until(page, "!MassimoParts.log.state.loading", 5), "the log loaded"
     isolate_log(page)
     page.evaluate("""() => {
       window.logAnswers = [];
@@ -1084,7 +1085,7 @@ def test_log_keeps_events_that_come_while_it_loads(page, case):
         : real(method, path, body);
     }""")
     rf = page.evaluate("state.rooms[0].devices[0].rf_address")
-    page.evaluate("() => { loadLog(); }")  # not awaited: the test answers it
+    page.evaluate("() => { MassimoParts.log.load(); }")  # not awaited: the test answers it
     assert wait_until(page, "window.logAnswers.length === 1", 5), "the log's request held"
     late = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(now + 5)) + "Z"
     both = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(now + 1)) + "Z"
@@ -1094,8 +1095,8 @@ def test_log_keeps_events_that_come_while_it_loads(page, case):
     page.evaluate("(evs) => window.logAnswers.shift().resolve(evs)",
                   [{"id": i, "kind": "hello", "time": stamp(now, i)} for i in (1, 2)] +
                   [{"id": 3, "kind": "config", "device": rf, "time": both}])
-    assert wait_until(page, "!logState.loading", 5), "the page is in"
-    kinds = page.evaluate("logState.lines.filter((l) => l.kind === 'hello' || l.kind === 'config').map((l) => l.kind + ' ' + l.at)")
+    assert wait_until(page, "!MassimoParts.log.state.loading", 5), "the page is in"
+    kinds = page.evaluate("MassimoParts.log.state.lines.filter((l) => l.kind === 'hello' || l.kind === 'config').map((l) => l.kind + ' ' + l.at)")
     assert kinds == ["hello " + stamp(now, 1), "hello " + stamp(now, 2), "config " + both, "config " + late], \
         f"the page, then the live event it lacks, once each: {kinds}"
     assert page.locator("#log-lines .log-line.kind-hello, #log-lines .log-line.kind-config").count() == 4, "and the view shows them"
@@ -1107,12 +1108,12 @@ def test_log_clear_sets_the_filter_back(page, case):
     it sets the text, the kind and the device back to all and loads the
     lines again, and is off again."""
     show_view(page, "log")
-    assert wait_until(page, "!logState.loading && document.querySelectorAll('#log-lines .log-line').length > 0", 5), "the log loaded"
+    assert wait_until(page, "!MassimoParts.log.state.loading && document.querySelectorAll('#log-lines .log-line').length > 0", 5), "the log loaded"
     clear = page.locator("#log-clear")
     assert clear.is_disabled(), "Clear is off with nothing chosen"
     before = page.locator("#log-lines .log-line").count()
     page.locator("#log-kind").select_option("connected")
-    assert wait_until(page, "!logState.loading", 5), "the kind's page is in"
+    assert wait_until(page, "!MassimoParts.log.state.loading", 5), "the kind's page is in"
     page.locator("#log-filter").fill("zzz no such line")
     assert page.locator("#log-lines .log-line").count() == 0, "nothing matches the text"
     assert clear.is_enabled(), "Clear is on"
@@ -1203,7 +1204,7 @@ def test_log_range_is_the_last_20_by_default(page, case):
           kind: "config", device: rf, time: new Date().toISOString() }) }))""", rf)
     assert wait_until(page, "document.querySelectorAll('#log-lines .kind-config').length === 3", 5), "the live events"
     assert page.locator("#log-lines .log-line").count() == 20, "the newest 20 kept"
-    assert page.evaluate("logState.lines.length") == 20, "and no more held"
+    assert page.evaluate("MassimoParts.log.state.lines.length") == 20, "and no more held"
     # the stubbed lines left are the newest 17, the three oldest gone for the
     # three events sent
     kept = sorted(int(i) for i in page.evaluate(
@@ -1243,9 +1244,9 @@ def test_log_range_by_time(page, case):
         assert wait_until(page, "document.querySelectorAll('#log-lines .kind-hello').length === 205", 5), "the page before"
         assert "since" in asked[-1] and asked[-1].get("before") == ["100"], f"Older within the hour: {asked[-1]}"
         assert wait_until(page, "document.getElementById('log-older').disabled", 5), "a short page ends it"
-        start = page.evaluate("(() => { const later = new Date(Date.now() + 10 * 60000); pruneLogRange(later); "
-                              "return logRangeStart('1h', later).getTime() / 1000; })()")
-        kept = page.evaluate("logState.lines.map((l) => l.time.getTime() / 1000)")
+        start = page.evaluate("(() => { const later = new Date(Date.now() + 10 * 60000); MassimoParts.log.prune(later); "
+                              "return MassimoParts.log.rangeStart('1h', later).getTime() / 1000; })()")
+        kept = page.evaluate("MassimoParts.log.state.lines.map((l) => l.time.getTime() / 1000)")
         want = len([i for i in range(200) if int(now - 3500 + i * 15) >= start])
         assert kept and min(kept) >= start and abs(len(kept) - want) <= 1, f"the lines out of the hour gone: {len(kept)}, want {want}"
         assert page.locator("#log-lines .log-line").count() == len(kept), "and from the view"
@@ -1331,7 +1332,7 @@ def test_log_from_a_link(page, case):
         f"the old link's radio address takes the S/N: {page.evaluate('location.hash')}"
     assert choices(page) == ["20", "", sn], "the device chosen by its S/N"
     page.evaluate("location.hash = '#log?range=week'")
-    assert wait_until(page, "logState.range === 'week' && !logState.kind && !logState.device", 5), "the address typed"
+    assert wait_until(page, "MassimoParts.log.state.range === 'week' && !MassimoParts.log.state.kind && !MassimoParts.log.state.device", 5), "the address typed"
     assert choices(page) == ["week", "", ""], "its range, every kind and device"
     show_view(page, "tiles")
 

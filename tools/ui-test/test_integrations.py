@@ -11,7 +11,7 @@ import ssl
 import urllib.request
 
 from conftest import URL, api_call
-from helpers import cleanup, frames, named_buttons, reads_of, safe_route, scroll_width, show_view, undo, wait_until
+from helpers import cleanup, focus_in_turn, frames, named_buttons, reads_of, safe_route, scroll_width, show_view, undo, wait_until
 
 HEADER = "X-MassimoHA-On-Behalf-Of"
 
@@ -307,7 +307,9 @@ def test_seen_on_the_lan_register(page, case):
         one.locator(".register-integration").click()
         assert page.evaluate("window.__opened") == ["http://192.0.2.21:8123/_my_redirect/config_flow_start?domain=massimo"], \
             "Register opens Home Assistant's page"
-        two.locator(".register-integration").click()
+        assert focus_in_turn(page, "#integrations-found .integrations-found-list li:nth-child(2) .register-integration",
+                             "#integrations-found .integrations-found-list li:nth-child(2) .register-address input"), \
+            "the address asked for takes the focus in the drawing that shows it"
         field = two.locator(".register-address input")
         field.wait_for()
         assert field.input_value() == "http://192.0.2.22:8123", "the address asked for, filled in"

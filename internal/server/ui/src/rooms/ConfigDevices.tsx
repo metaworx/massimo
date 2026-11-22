@@ -40,7 +40,8 @@ import {
   type ConfigState,
   type DeviceChanges,
 } from "./configuration";
-import { load, tickOf } from "./store";
+import { useLook } from "../shared/look";
+import { confirmFieldsText, confirmItem } from "../model/room";
 
 const trim = (v: string) => v.trim();
 
@@ -70,7 +71,7 @@ export function NumberRows({ room, rows, drafts }: { room: PageRoom; rows: Numbe
  * each a draft against the configuration as loaded, with their Send.
  */
 function Valves({ room, cs }: { room: PageRoom; cs: ConfigState }) {
-  load.useLoad();
+  useLook();
   void cs.cfg;
   const form = useConfigForm(room, "valves", "devices", { key: "cfg.form.valves", args: { room: room.name } });
   const drafts: Partial<Record<ConfigField, Draft<string>>> = {};
@@ -125,7 +126,7 @@ function Valves({ room, cs }: { room: PageRoom; cs: ConfigState }) {
  * Remove from the Cube asks in the form before it removes the device.
  */
 function DeviceForm({ room, cs, d }: { room: PageRoom; cs: ConfigState; d: Device }) {
-  load.useLoad();
+  useLook();
   const loaded = (cs.cfg?.devices || []).find((x) => x.rf_address === d.rf_address) || {};
   const key = "device:" + d.rf_address;
   const label = deviceName(d);
@@ -214,8 +215,7 @@ function DeviceForm({ room, cs, d }: { room: PageRoom; cs: ConfigState; d: Devic
  * has a thermostat, then its devices, each a form, or that it has none.
  */
 export function ConfigDevices({ room, cs }: { room: PageRoom; cs: ConfigState }) {
-  load.useLoad();
-  void tickOf(room.id).n;
+  useLook();
   return (
     <div>
       {room.devices.some(isThermostat) && <Valves room={room} cs={cs} />}

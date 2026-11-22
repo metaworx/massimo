@@ -20,11 +20,11 @@
 
 import type { BackupList, RestorePlan, StoredBackup } from "../api";
 import type { Outcome } from "../shared/action";
-import { counter } from "../shared/counter";
 import { liveMap } from "../shared/live";
 import { cubePath } from "../shared/path";
 import { session, stillSession } from "../shared/session";
 import { fmtWhen } from "../shared/time";
+import { can } from "../shared/me";
 
 /** A restore shown: its title, the stored backup or the file's body and type, and its plan. */
 export interface Plan {
@@ -43,9 +43,6 @@ export interface Run {
   sent?: number;
   error?: string;
 }
-
-/** The region's load counter: bumped after every load and change; every part of it uses it. */
-export const load = counter();
 
 /**
  * Per serial, what the Cube has: its list, whether the server keeps its
@@ -98,7 +95,7 @@ export function running(serial: string): boolean {
 
 /** loadBackups reads a Cube's list; a 503 says that the server keeps none of it (no row in its store). */
 async function loadBackups(serial: string): Promise<void> {
-  if (!serial || !hasCap("backup")) return;
+  if (!serial || !can("backup")) return;
   const n = session();
   const b = of(serial);
   try {
@@ -128,7 +125,6 @@ export async function refreshBackups(serial: string): Promise<void> {
   } catch (e) {
     for (const place of ["cube", "sys"]) say(place, serial, t("backup.failed", { error: (e as Error).message }), false, n);
   }
-  load.bump();
 }
 
 /** saveResponse saves an answer as a file, named as the server says. */
@@ -181,7 +177,6 @@ export async function compareBackup(place: string, serial: string, b: StoredBack
     if (!stillSession(n)) return;
     const c = of(serial);
     c.diff = { ...c.diff, [b.id]: d };
-    load.bump();
   } catch (e) {
     say(place, serial, t("backup.failed", { error: (e as Error).message }), false, n);
   }
@@ -219,7 +214,6 @@ async function showPlan(place: string, serial: string, src: Omit<Plan, "plan">):
     c.plan = { ...src, plan };
     c.run = null;
     c.asked = place;
-    load.bump();
     return true;
   } catch (e) {
     say(place, serial, t("restore.planFailed", { error: (e as Error).message }), false, n);
@@ -244,7 +238,6 @@ export function closePlan(serial: string): void {
   const c = of(serial);
   c.plan = null;
   c.run = null;
-  load.bump();
 }
 
 /** sendRestore sends the plan's steps; the stream then says how each went. */
@@ -256,7 +249,6 @@ export async function sendRestore(place: string, serial: string): Promise<void> 
   let q = "?plan=" + encodeURIComponent(p.plan.plan);
   if (p.backup) q += "&backup=" + p.backup;
   c.run = { id: "", results: [], state: "running" };
-  load.bump();
   try {
     const r = (await (await apiRaw("POST", cubePath(serial) + "/restore" + q, p.body, p.type)).json()) as { id: string };
     if (!stillSession(n)) return;
@@ -264,7 +256,6 @@ export async function sendRestore(place: string, serial: string): Promise<void> 
   } catch (e) {
     if (!stillSession(n)) return;
     c.run = null;
-    load.bump();
     say(place, serial, t("restore.refused", { error: (e as Error).message }), false);
   }
 }
@@ -299,7 +290,6 @@ export function restoreEvent(ev: RestoreEvent): void {
     refreshBackups(serial);
   }
   b.run = run;
-  load.bump();
 }
 
 /**
@@ -310,14 +300,11 @@ export function restoreEvent(ev: RestoreEvent): void {
  * refuses a second restore while one runs, as before.
  */
 export function resynced(): void {
-  let any = false;
   for (const s of known) {
     const b = cubeData.of(s);
     if (b.run?.state !== "running") continue;
     b.run = { ...b.run, state: "unseen" };
-    any = true;
   }
-  if (any) load.bump();
 }
 
 /** forgetBackups forgets what the boxes kept of the user who was signed in (MassimoParts.signedOut): every Cube's data, every box's message. */
@@ -326,5 +313,4 @@ export function forgetBackups(): void {
   cubeData.clear();
   boxUI.clear();
   foldUI.clear();
-  load.bump();
 }

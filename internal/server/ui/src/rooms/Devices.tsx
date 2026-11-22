@@ -19,7 +19,7 @@
 import type { ComponentChildren } from "preact";
 import { useEffect, useState } from "preact/hooks";
 import type { Device, DeviceDetail } from "../api";
-import { deviceEntry, deviceIcon } from "../model/device";
+import { deviceEntry, deviceIcon, mismatchText } from "../model/device";
 import { actionRunner, type Outcome } from "../shared/action";
 import { Age, Badge, ResultLine } from "../shared/badge";
 import { DeviceIds } from "../shared/device";
@@ -31,7 +31,8 @@ import { busyProps, useBusy } from "../shared/question";
 import { RepairBox, RepairButton, repairScope } from "../shared/repair";
 import { session, stillSession } from "../shared/session";
 import { deviceBadges, deviceItems, mismatchWords, problemsLabel, vwtItems } from "./facts";
-import { load, openSettings, vwtFormKey } from "./store";
+import { useLook } from "../shared/look";
+import { openSettings, vwtFormKey } from "./store";
 
 /**
  * useDetail is a device's detail (deviceDetail of app.js, which keeps it in
@@ -64,7 +65,7 @@ function useDetail(d: Device, want: boolean): {
     return () => {
       gone = true;
     };
-  });
+  }, [want, d]); // read where it is wanted, again where the device reported (a write empties state.details), as each report drew the row again before
   const again = (sent: DeviceDetail["settings"]) => {
     const n = session();
     return deviceDetail(d).then((x) => {
@@ -236,7 +237,7 @@ export function DeviceRow({ d, ui, room, actions, children }: {
   actions?: ComponentChildren;
   children?: ComponentChildren;
 }) {
-  load.useLoad();
+  useLook();
   const virtual = !!d.virtual;
   // An out-of-date device shows the values of its last report.
   const values = isThermostat(d) && !!(d.reported || (d.out_of_date && d.last_known));
@@ -253,7 +254,7 @@ export function DeviceRow({ d, ui, room, actions, children }: {
   const known = new Map((room?.devices || []).map((x) => [x.rf_address, x]));
   const from = virtual ? (d.sources?.actual_temp || []).map((rf) => known.get(rf)?.serial || rf) : [];
   const cfg = detail?.thermostat || detail?.wall_thermostat;
-  const scope = repairScope(state.serial || "", "device", d.rf_address);
+  const scope = repairScope(state.roomsOf || "", "device", d.rf_address); // the Cube the row's rooms are of, also while another one's load is on its way
   return (
     <div class={virtual ? "device virtual" + (expert ? " expert-only" : "") : "device"} data-rf={d.rf_address}>
       <div class="device-head">
@@ -303,7 +304,7 @@ export function DeviceRow({ d, ui, room, actions, children }: {
  * then in expert mode the room's virtual wall thermostat.
  */
 export function DeviceList({ room, ui }: { room: PageRoom; ui: RoomUI }) {
-  load.useLoad();
+  useLook();
   return (
     <>
       {room.devices.length === 0 && <p class="muted">{t("room.noDevices")}</p>}

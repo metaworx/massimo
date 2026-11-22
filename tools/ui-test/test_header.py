@@ -489,7 +489,7 @@ SET_READ = """async ([ago, skew]) => {
   serverSkew = skew;
   const c = state.cubes.find((x) => x.serial === state.serial);
   c.updated = new Date(Date.now() + skew - ago * 1000).toISOString();
-  renderUpdated();
+  MassimoParts.header.render();
   await new Promise((done) => setTimeout(done)); // the part draws after the call
   const v = document.querySelector('#cube-problems .read-times > :nth-child(2)');
   return [v.textContent, v.title, fmtTimeOfDay(new Date(Date.parse(c.updated) - skew))];

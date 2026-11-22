@@ -16,6 +16,7 @@ import { IntegrationsCard } from "./Integrations";
 import { session } from "../shared/session";
 import { forgetIntegrations, loadRequestsSwitch, msgIn, refresh, said } from "./store";
 import { onView } from "../shared/pages";
+import { can } from "../shared/me";
 
 const mount = mounter("sys-integrations-body", () => <IntegrationsCard />);
 
@@ -25,7 +26,7 @@ export const signedOut = forgetIntegrations;
 // System settings shown: everything the section shows read and drawn, and whether integrations may ask
 onView("system", () => {
   said.value = null;
-  if (!hasCap("integrations")) return;
+  if (!can("integrations")) return;
   mount();
   const n = session();
   refresh()

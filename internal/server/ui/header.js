@@ -33,7 +33,7 @@ function budgetFacts(cube) {
 // the Cube choice, and in expert mode its name with its radio budget,
 // queued only while commands wait. Its clock is in its facts (ui/src/cubes/Facts.tsx).
 function renderHeader(cube) {
-  renderCubeSelect(); // the chosen Cube's connection, its plug
+  MassimoParts.header.render(); // the chosen Cube's connection, its plug
   const f = budgetFacts(cube);
   $("stats-cube").textContent = cube.name || cube.serial;
   $("duty").textContent = f.duty;
@@ -49,7 +49,7 @@ function renderHeader(cube) {
   } else {
     p.classList.add("hidden");
   }
-  renderUpdated();
+  MassimoParts.header.render(); // how long ago the Cube was read, from now (ui/src/header/Times.tsx)
 }
 
 // serverSkew is the server's clock less the browser's, in ms, from the
@@ -66,13 +66,6 @@ function noteServerClock(resp) {
   if (isNaN(ms)) return;
   const skew = ms + 500 - Date.now();
   if (Math.abs(skew - serverSkew) > 1500) serverSkew = skew;
-}
-
-// renderUpdated draws again how long ago the chosen Cube was read, in the
-// pile's list under Refresh now and in expert mode's radio budget line
-// (ui/src/header/Times.tsx), which count on by the header's clock.
-function renderUpdated() {
-  MassimoParts.header.render();
 }
 
 // LINK_SIGN is the state of a Cube's network sign by its link (linkState):
@@ -92,26 +85,6 @@ function linkWord(c) {
   return link === "connected" || link === "offline" ? t(c.connected ? "cubes.connected" : "cubes.disconnected") : t("link.badge." + link);
 }
 
-// cubeSignEl is a Cube's network sign, named for a screen reader by its
-// link (components.js signEl). Nothing calls it since Backup and restore
-// became a part (AP UiParts, Block 10), which draws the shared CubeSign;
-// it goes with the builders nobody calls (Block 15, D181-A).
-function cubeSignEl(c) {
-  const svg = signEl("net", linkSign(c), "conn-sign", "cube:" + c.serial);
-  svg.removeAttribute("aria-hidden");
-  svg.setAttribute("role", "img");
-  svg.setAttribute("aria-label", linkWord(c));
-  return svg;
-}
-
-// renderCubeSelect draws the Cube choice and the pile with every Cube's
-// problems (ui/src/header/Choice.tsx, Pile.tsx) from the Cubes as the
-// page has them: in place, an open choice or list staying open and
-// following the data.
-function renderCubeSelect() {
-  MassimoParts.header.render();
-  MassimoParts.rooms.cubes(); // the House tile's name, the Cube's
-}
 
 // --- version ----------------------------------------------------------
 
@@ -120,8 +93,8 @@ function renderCubeSelect() {
 // settings form with changes not saved, for which the browser would ask.
 function somethingOpen() {
   if (MassimoParts.leaving.changes()) return true; // ui/src/leaving/
-  if (isShown("me") || isShown("system") || isShown("maint") || isShown("cube")) return true;
-  if (houseOpen()) return true; // house.js
+  if (["me", "system", "maint", "cube"].some((v) => MassimoParts.pages.isShown(v))) return true;
+  if (MassimoParts.rooms.houseOpen()) return true;
   if ($("login-dialog").open) return true;
   for (const ui of Object.values(state.ui)) {
     if (ui.pending !== null || ui.vacation || ui.confirm || ui.open || ui.config) return true;
@@ -205,10 +178,10 @@ function serverReached(ok) {
 }
 
 // updateDue loads, for one who may install updates, whether one is out:
-// at the first poll and every half hour after (update.js loadUpdate).
+// at the first poll and every half hour after (ui/src/software/).
 function updateDue() {
   if (!hasCap("settings")) return; // login.js
   if (state.updateAt && Date.now() - state.updateAt < 30 * 60000) return;
   state.updateAt = Date.now();
-  loadUpdate(false).then(renderServerSign);
+  MassimoParts.software.load(false).then(renderServerSign);
 }

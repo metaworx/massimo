@@ -36,7 +36,7 @@
   <!-- the log: a sheet with a folded corner and its lines, so that it
        does not read as a menu (three lines alone) -->
   <symbol id="icon-log" viewBox="0 0 24 24"><path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3v5h5"/><path d="M8.5 12h7M8.5 15h7M8.5 18h4.5"/></symbol>
-  <!-- the log smaller, clear of the corner mark: the log button's sign (log.js renderLogSign) -->
+  <!-- the log smaller, clear of the corner mark: the log button's sign (ui/src/log/alerts.ts renderLogSign) -->
   <symbol id="icon-log-small" viewBox="0 0 24 24"><g transform="translate(0.3 0.6) scale(0.74)"><path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3v5h5"/><path d="M8.5 12h7M8.5 15h7M8.5 18h4.5"/></g></symbol>
   <symbol id="icon-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/></symbol>
   <symbol id="icon-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
@@ -80,7 +80,7 @@
   <!-- a room whose commands wait until every device has reported: paused -->
   <symbol id="icon-paused" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M10 9v6M14 9v6"/></symbol>
   <!-- signs (AP Signs): a state is a colour and a mark. An icon with a
-       mark is two parts (components.js signEl): its drawing and the mark,
+       mark is two parts (Sign of ui/src/shared/icon.tsx): its drawing and the mark,
        a use.mark of its own, which blinks (html.blink-on, blink-first).
        The radio is the Wi-Fi fan and the window the paned window of the
        original MAX! software, their marks at the bottom right, unless the
@@ -126,7 +126,8 @@
   <div id="open-banner-slot" class="part-slot"></div>
   <p id="message" class="message hidden"></p>
 
-  <!-- partials: home -->
+  <!-- The home notice on Rooms: why it shows nothing, or only what the server last had, shown by home.js renderHomeNotice, its content a part (ui/src/header/HomeNotice.tsx). -->
+  <div id="home-notice" class="notice home-notice hidden" role="status"></div>
 
   <!-- Personal settings, the page 👤 opens: its row kept at the top under
        the header, with who is signed in, Sign out (or Forget key, none on
@@ -155,6 +156,10 @@
           <span class="section-pill part-slot" data-forms="scheme" data-title="nav.prefs"></span>
         </header>
         <div id="prefs-sec" class="section-body settings-body">
+          <!-- My settings' rows: the poll, expert mode, the Cube clock and the language, each with its switch for this device alone, a part (ui/src/prefs/) drawn into #prefs-rows. -->
+          <div id="prefs-rows" class="prefs-rows"></div>
+          <!-- My settings → Appearance: the mode, the colour scheme, the blinking signs and the window's and the radio's drawings in the rows of My settings, Customise…, Export and Import…, and the scheme editor, a part (ui/src/prefs/) drawn into #appearance. -->
+          <div id="appearance" class="appearance"></div>
           <!-- partials: prefs -->
         </div>
       </section>
@@ -187,7 +192,7 @@
 
   <!-- Maintenance, the page ☰ → Maintenance opens, for a role with one
        of System settings' capabilities or with update, restart or reboot
-       (pages.js mayShow): its row kept at the top under the header, with the
+       (ui/src/shared/pages.ts mayShow): its row kept at the top under the header, with the
        sections menu (ui/src/chrome/Bar.tsx), and two section cards,
        Software update and Maintenance. -->
   <section id="maint-page" class="settings settings-page maint-page hidden" aria-labelledby="maint-title">
@@ -210,13 +215,17 @@
 
   <!-- partials: cube-page -->
 
-  <!-- partials: house -->
+  <!-- The House tile: its head, named after the chosen Cube, the mode for the whole house, and its panel for the rooms ticked, a part (ui/src/rooms/House.tsx) in #house-slot; rooms.js shows and hides it. -->
+  <section id="house" class="tile house needs-setpoint hidden">
+    <div id="house-slot" class="part-slot"></div>
+  </section>
 
   <section id="rooms" class="tiles"></section>
 
   <!-- partials: unlisted -->
 
-  <!-- partials: logview -->
+  <!-- The log: its section, which its part draws (ui/src/log/). -->
+  <section id="logview" class="tile log hidden" aria-label="event log" data-i18n-attr="aria-label:log.aria"></section>
   <!-- back to top, button#to-top at the bottom right of every page a
        screen down (ui/src/chrome/ToTop.tsx) -->
   <div id="to-top-slot" class="part-slot"></div>
@@ -239,24 +248,13 @@
 <script src="ui/app.js"></script>
 <script src="ui/header.js"></script>
 <script src="ui/home.js"></script>
-<script src="ui/prefs.js"></script>
 <script src="ui/rooms.js"></script>
 <script src="ui/tiles.js"></script>
-<script src="ui/unlisted.js"></script>
-<script src="ui/house.js"></script>
 <script src="ui/week-program.js"></script>
 <script src="ui/config.js"></script>
-<script src="ui/log.js"></script>
-<script src="ui/pages.js"></script>
-<script src="ui/update.js"></script>
-<script src="ui/cubes.js"></script>
 <script src="ui/login.js"></script>
-<script src="ui/users.js"></script>
 <script src="ui/providers.js"></script>
-<script src="ui/backup.js"></script>
-<script src="ui/roles.js"></script>
 <script src="ui/theme.js"></script>
-<script src="ui/appearance.js"></script>
 <script src="ui/notifytext.js"></script>
 <script src="ui/notify.js"></script>
 <script src="ui/parts.js"></script>

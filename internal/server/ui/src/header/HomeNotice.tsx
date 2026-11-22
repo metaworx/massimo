@@ -10,14 +10,15 @@
  * sent data or else last answered discovery, what to check, and for a
  * role with cubes the way to System settings → Cubes. The rooms the
  * server still has stay under it. Its element is the page's, shown and
- * hidden by home.js renderHomeNotice and pages.js; the part draws inside.
+ * hidden by home.js renderHomeNotice; the part draws inside.
  */
 
 import type { Cube } from "../api";
 import { chosenCube, hostPort } from "../model/cube";
 import { Island } from "../shared/island";
-import { load } from "./store";
 import { showView } from "../shared/pages";
+import { can } from "../shared/me";
+import { useLook } from "../shared/look";
 
 /** detailOf is what the notice says of a Cube that is not connected, in one paragraph. */
 function detailOf(cube: Cube): string {
@@ -49,13 +50,13 @@ function Check({ cube }: { cube?: Cube }) {
 
 /** HomeNotice is the notice's content, nothing while the Cube chosen is connected. */
 export function HomeNotice() {
-  load.useLoad();
+  useLook();
   const cube = chosenCube();
   if (cube && cube.connected) return null;
   return (
     <>
       <p class="home-notice-title">{cube ? t("home.notConnected", { name: cube.name || cube.serial }) : t("home.noCube")}</p>
-      <p class="home-notice-detail small">{cube ? detailOf(cube) : t(hasCap("cubes") ? "home.noCubeAdd" : "home.noCubeAsk")}</p>
+      <p class="home-notice-detail small">{cube ? detailOf(cube) : t(can("cubes") ? "home.noCubeAdd" : "home.noCubeAsk")}</p>
       <Check cube={cube} />
       <button type="button" id="home-notice-cubes" class="needs-cubes" onClick={() => showView("system")}>{t("home.toCubes")}</button>
     </>

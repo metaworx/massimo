@@ -83,7 +83,7 @@ def test_search_held_then_answered(page, case):
     cube = group.locator(".problem-subs .problem-entry", has_text="KEQ0000000")
     assert cube.count() == 1 and "127.0.0.1" in cube.inner_text(), "the found Cube in it with its address"
     group.locator(".found-to-cubes").click()
-    assert wait_until(page, "currentView === 'system'", 3), "the link opens System settings"
+    assert wait_until(page, "MassimoParts.pages.shown() === 'system'", 3), "the link opens System settings"
     # under the page's row, once the cards above it have their data
     assert wait_until(page, """(() => {
         const r = document.getElementById('sys-cubes').getBoundingClientRect();
@@ -117,7 +117,7 @@ def test_search_held_then_answered(page, case):
     assert scroll_width(page) <= case.width, "no horizontal scroll with the found Cubes in System settings"
     show_view(page, "tiles")
     choose_cube(page, "found:KEQ0000000")
-    assert wait_until(page, "currentView === 'system'", 3), "the found Cube in the choice opens System settings too"
+    assert wait_until(page, "MassimoParts.pages.shown() === 'system'", 3), "the found Cube in the choice opens System settings too"
     # A Cube is announced once per server: where an earlier test on this
     # server found it, its cube_found is older than the log's last 20
     # events can be, so the log is asked for the kind.
@@ -160,7 +160,7 @@ def test_cube_found_live(page, case, found_event):
     assert facts.count() == 1 and VIA_PROXY[case.lang].format(address="192.0.2.7") in facts.inner_text(), "the proxy that answers for it"
     show_view(page, "tiles")
     # a role without cubes: the group without its link, the choice's entry information
-    page.evaluate("() => { document.body.classList.add('no-cubes'); const k = hasCap; window.hasCap = (c) => c !== 'cubes' && k(c); renderCubeSelect(); }")
+    page.evaluate("() => { document.body.classList.add('no-cubes'); state.me = { ...state.me, mode: 'users', capabilities: CAPABILITIES.filter((c) => c !== 'cubes') }; }")
     assert found_sign(page)[1] == str(before + 1), "without cubes the sign all the same"
     open_pill(page)
     assert page.locator(FOUND_GROUP + " .found-to-cubes").count() == 0, "and no link"
@@ -272,7 +272,7 @@ def test_search_toast_shows_the_found(page, case):
     choose_cube(page, "__discover")
     page.locator("#toast-action").wait_for(state="visible", timeout=10000)
     page.locator("#toast-action").click()
-    assert wait_until(page, "currentView === 'system'", 3), "Show opens System settings"
+    assert wait_until(page, "MassimoParts.pages.shown() === 'system'", 3), "Show opens System settings"
     assert page.locator("#toast").is_hidden(), "and closes the toast"
     assert page.locator(".cube-found-row[data-serial='KEQ0000000']").is_visible(), "the found Cube, the fold open"
     assert scroll_width(page) <= case.width, "no horizontal scroll"

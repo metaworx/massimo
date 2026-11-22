@@ -24,8 +24,7 @@
  */
 
 import { signal } from "@preact/signals";
-import { counter } from "../shared/counter";
-import { me } from "../shared/me";
+import { can, me } from "../shared/me";
 import { setAddress } from "../shared/pages";
 import { session, stillSession } from "../shared/session";
 import { LOG_COUNT, LOG_COUNT_RANGE, LOG_LEVELS, LOG_MAX_LINES, LOG_PAGE, LOG_POLL_MS, LOG_POLL_PAGES } from "./kinds";
@@ -35,12 +34,6 @@ import { logDeviceName, logDeviceSerial, logKind, logLineCube, logRangeStart, lo
 import { logHash } from "./address";
 import { keepLevelsOf, logAlerts, markLogSeen } from "./alerts";
 import { cubesKey, settleChoices } from "./choices";
-
-/** The lines' counter: every line is drawn again when it is raised (renderLog: the rooms came, the language changed). */
-export const lineCount = counter();
-
-/** The head's counter: the choices are drawn again when it is raised (fillLogSelects: the Cubes, the rooms or the users changed). */
-export const choiceCount = counter();
 
 /** view is the lines drawn, newest first: those of logState.lines that match the filter and the choices. */
 export const view = signal<LogLine[]>([]);
@@ -205,9 +198,8 @@ function draw(): void {
   });
 }
 
-/** renderLog draws every line again, as it is now: the rooms came, the language changed, a line was changed in place. */
+/** renderLog works the lines shown out again, as the filter matches them now: the rooms came, the language changed; each line follows its data and the language itself. */
 export function renderLog(): void {
-  lineCount.bump();
   draw();
 }
 
@@ -532,10 +524,10 @@ async function logLoadCubeRooms(): Promise<void> {
   const n = session();
   await Promise.all(
     todo.map(async (c) => {
-      logState.cubeRooms.set(c.serial, null);
+      logState.cubeRooms = new Map(logState.cubeRooms).set(c.serial, null); // written whole, a signal (log/state.ts)
       try {
         const rs: CubeRooms = await fetchRooms(c.serial);
-        if (stillSession(n)) logState.cubeRooms.set(c.serial, rs);
+        if (stillSession(n)) logState.cubeRooms = new Map(logState.cubeRooms).set(c.serial, rs);
       } catch {
         // its lines keep the names they came with
       }
@@ -559,7 +551,7 @@ export async function logLoadUsers(): Promise<void> {
   if (logState.users !== null && usersFor === who) return;
   usersFor = who; // another user signed in without a sign-out before (a key pasted, the first owner made): asked again
   logState.users = [];
-  if (!state.me || state.me.mode !== "users" || !hasCap("users")) return;
+  if (!me.value || me.value.mode !== "users" || !can("users")) return;
   const n = session();
   let users: LogUser[];
   try {
@@ -604,7 +596,6 @@ export function pruneLogRange(now = new Date()): void {
 /** fillLogSelects settles the choices against the Cubes and devices there are and draws them again; true where a choice changed so. */
 export function fillLogSelects(): boolean {
   const changed = settleChoices();
-  choiceCount.bump();
   return changed;
 }
 
@@ -661,7 +652,6 @@ export function logCubeChanged(): void {
   logState.more = false;
   logState.loading = false;
   logState.room = LOG_MAX_LINES;
-  choiceCount.bump();
   if (!logState.open) return;
   setAddress(logHash(), "replace");
   draw();
@@ -743,10 +733,9 @@ export function forgetLog(): void {
   logState.users = null;
   logState.openCommands = new Set();
   logState.commands = new Map();
-  logState.cubeRooms.clear();
+  logState.cubeRooms = new Map();
   markFocus.value = null;
   view.value = [];
-  choiceCount.bump();
 }
 
 /** A resync noted while the page's own load, Older or read on was under way: its generation and session. */

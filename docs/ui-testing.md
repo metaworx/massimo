@@ -1,4 +1,4 @@
-# Testing the web UI (v1.20.0)
+# Testing the web UI (v1.24.0)
 
 An evaluation of a Cypress suite for the web UI, against the alternatives:
 what the Playwright smoke test covers today and what it cannot do well,
@@ -555,8 +555,8 @@ and uploads the traces of a failure, in place of a job of its own.
 
 ## 8. The guard of the page's parts
 
-The page's regions are rewritten one by one as parts that are built once
-and updated in place (AP UiParts).
+The page's regions are parts that are built once and updated in place
+(AP UiParts), which draw from the page's data as signals.
 `tools/ui-test/test_parts_guard.py` is the check that holds them to it:
 data that comes in with nothing changed takes nothing away from what the
 user holds.
@@ -578,7 +578,10 @@ the home notice, the room tiles, a tile's configuration, the House tile,
 the devices without a room, the Cubes list, Cube settings, pairing,
 users, roles, capabilities, providers, integrations, backups, the log,
 software update, maintenance, system info, my settings, appearance,
-notifications, my profile, the page's chrome and the sign-in dialog.
+notifications, my profile, the page's chrome, the sign-in dialog,
+the first owner's form in it with its step that keeps the server open,
+the open server's warning and Users on a server without users (AP FirstOwner),
+and ↑.
 Each has the CSS selectors of its containers,
 what inside them belongs to another region,
 and its views: how a user brings it on screen and opens what it has to open,
@@ -590,9 +593,12 @@ a user's panel with the new user's form, the scheme editor.
 In each view, around each data source applied with the data as it was
 (`poll(false)`, `loadCubes()`, `loadRooms()`, `refresh()`,
 a `state` event per device on the page's `EventSource` as the server sends it,
-`loadLogAlerts()`, `refreshAges()` and the log's `pollLog()`),
+`MassimoParts.log.loadAlerts()`, the page's minute
+(`MassimoParts.minute()`), the log's `MassimoParts.log.poll()`,
+the settings applied again, `applyStoredSettings()`, and who is in read again, `loadMe()`,
+every one in every region, since every part follows the data it reads, UiParts D221),
 and around the region's own (`Region.sources`):
-the header's check for an update, `loadUpdate(false)`,
+the header's check for an update, `MassimoParts.software.load(false)`,
 the page shown again, the `viewshown` event its loaders take,
 and the stream's server events of the kinds a region follows,
 dispatched on the page's stream, a forward guard for the three regions
@@ -626,12 +632,11 @@ and the event stream's ticket of a page loaded during a view
 (the home notice's, on the second server) is let through and named in
 the test's output.
 
-### The list
+### How the regions came to pass it
 
-`NOT_MOVED` names the regions not yet moved that fail the guard today,
-each with a line on what it loses.
-A region on it is still shown, so that the table stays true to the page,
-and is then skipped with its note, which `-rs` prints.
+While the regions moved, a list, `NOT_MOVED`, named those not yet moved that
+failed the guard, each with a line on what it lost, and skipped them;
+it went with the move's end (AP UiParts, Block 15).
 On 2026-11-15 it held the room tiles, a tile's configuration,
 the House tile, the Cubes list and Cube settings, which lose what the user
 holds at a state event, a rooms reload or a poll
@@ -656,7 +661,7 @@ The sign-in left it last (Block 14): its views open its card on a page signed in
 as a 401 opens it, and its sources are a second `askLogin`, the providers read again,
 the language drawn again and who is in read again;
 the first owner's form, a region of its own, shows by a stub of `GET /api/v1/me`.
-The list has been empty since, and Block 15 removes it.
+The list was empty since.
 A tile's configuration left it with its own move (Block 8), in a view per tab;
 before, a data event filled it again, but while the focus was in it,
 and once the focus left, the fill put off came: every element was new,
@@ -741,19 +746,15 @@ on its button; both failed on the page before the move,
 where `loadRooms()` and `refresh()` built every line again.
 Its stubs are taken away once its views are done (`Region.after`).
 
-### Taking a region off the list
+### A region that changes
 
-The block that moves a region:
-
-1. runs the guard with the region checked, before and after the move:
-   `UI_GUARD_CHECK=<region> PYTEST_ADDOPTS='test_parts_guard.py -k <region>' make ui-test`
-   (`UI_GUARD_CHECK=all` checks every region);
-2. deletes the region's line from `NOT_MOVED` once it passes in the guard's two cases;
-3. adds a view where the part has something to open that the table does not
-   open yet, and corrects the region's selectors where the part changed them.
-
-`test_the_list_names_regions` fails on a line that names no region.
-The guard bites: with the room tiles and the Cubes list taken off the list,
+A block that changes a region, or adds one,
+adds a view where the part has something to open that the table does not
+open yet, and corrects the region's selectors where the part changed them;
+a new region gets its line in `REGIONS`.
+One region alone runs with
+`PYTEST_ADDOPTS='test_parts_guard.py -k <region>' make ui-test`.
+The guard bites: with the room tiles and the Cubes list checked,
 it failed on the page of 2026-11-15, the tiles at every state event and
 rooms reload, the Cubes list's closed panels at every poll.
 
@@ -809,6 +810,13 @@ The suite's helpers for it are in `tools/ui-test/helpers.py`
   the guard's without, so that a run meets its refusal.
   `state_events` sends a state event per device as the server does,
   the script the guard's round sends too (`STATE_EVENTS_JS`).
+- **What each source reads** (`test_data_updates.py`):
+  on every page, shown and come to rest with the poll held,
+  each data source and the stream's events that make the page read are applied once,
+  and the requests they cause, of every method, path by path, are its `TABLE`,
+  taken on the page before the data became signals (AP UiParts, Block 15):
+  a part's effect that read again at each write of the data it follows fails it.
+  What each showing of a page reads is `test_shell_updates.py`'s.
 - **What the reads do not keep yet:**
   a device's state applied in the page (`updateDevice`, a dispatched `state` event)
   lasts until the rooms are loaded again.
@@ -819,7 +827,7 @@ The suite's helpers for it are in `tools/ui-test/helpers.py`
   every page of the page fixture has `PAGE_KIT` before its own scripts,
   which records each event the page's listeners take,
 the server's and the test's, in order,
-  with how many times the page handed it to `appendLogEvent`.
+  with how many times the page handed it to the log (`MassimoParts.log.event`).
   `stream.mark()` says "from now on";
   `stream.wait(what, kind, match=…, mark=…, server=…)` returns the first match from the mark
   and skips the rest, and on a timeout says what did come since the mark.

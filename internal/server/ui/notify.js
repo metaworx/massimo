@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 The Massimo Authors
 
-// The Massimo web UI, 👤 → Notifications (docs/ui.md, "Notifications"):
-// its plain names, which call its part (ui/src/notify/,
-// MassimoParts.notify), where the rules, this browser's subscription to
-// the server's pushes and the user's devices are drawn; the language the
+// The Massimo web UI, 👤 → Notifications (docs/ui.md, "Notifications"),
+// whose part (ui/src/notify/, MassimoParts.notify) draws the rules, this
+// browser's subscription to the server's pushes and the user's devices:
+// here the language the
 // service worker sw.js shows a notification in; and the toast an open
 // page shows for a notification, from its event stream or from the
 // service worker. A notification's text is notifytext.js's. Loaded after
@@ -35,30 +35,6 @@ async function tellWorkerLanguage() {
   const reg = await workerRegistration();
   const w = reg && (reg.active || reg.waiting || reg.installing);
   if (w) w.postMessage({ type: "lang", lang: i18n.lang });
-}
-
-// renderNotify draws the card again (app.js applyLanguage).
-function renderNotify() {
-  MassimoParts.notify.render();
-}
-
-// saveNotifyRules sends the rules shortly, the next change waiting a
-// second (login.js resumePushes).
-function saveNotifyRules() {
-  MassimoParts.notify.save();
-}
-
-// takeNotifySave ends the wait of saveNotifyRules and reports whether a
-// save waited, for the sign-in to hold it (holdPushes, login.js).
-function takeNotifySave() {
-  return MassimoParts.notify.takeSave();
-}
-
-// sendNotifySave sends a rule changed within the last second at once,
-// under the user's own token, for Sign out before the session ends
-// (logout, login.js; UiParts D205).
-function sendNotifySave() {
-  return MassimoParts.notify.sendNow();
 }
 
 // notifyToast shows a notification at the foot of the page for a while,

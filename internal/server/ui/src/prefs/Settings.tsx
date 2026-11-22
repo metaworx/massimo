@@ -18,14 +18,14 @@
 import { NumberField, numberNorm, Select, Switch, useDraft } from "../shared/field";
 import { languageOptions } from "../shared/lang";
 import { DevRow } from "./rows";
-import { load } from "./store";
+import { useLook } from "../shared/look";
 
 /** Language is the language's choice: from the browser, then every language with a translation table, by its own name, and the note of a machine translation. */
 function Language() {
-  load.useLoad(); // the language chosen is the plain code's, drawn again by the counter
+  useLook();
   const texts = machineNote();
   return (
-    <Select label={t("settings.language")} id="lang-select" wide help="language" options={languageOptions()} value={i18n.setting}
+    <Select label={t("settings.language")} id="lang-select" wide help="language" options={languageOptions()} value={state.settings.lang}
       after={<p id="lang-note" class={"muted small lang-note" + (texts ? "" : " hidden")}>{(texts || []).map((s) => <span key={s}>{s}</span>)}</p>}
       onChange={(v) => {
         setSetting("lang", validSetting("lang", v) || "auto");
@@ -36,7 +36,7 @@ function Language() {
 
 /** Settings are My settings' head and rows. */
 export function Settings() {
-  load.useLoad();
+  useLook();
   const s = state.settings;
   const poll = useDraft(String(s.poll), numberNorm);
   const commitPoll = (typed: string) => {
@@ -44,7 +44,6 @@ export function Settings() {
     poll.set(String(v));
     setSetting("poll", v);
     startPolling();
-    load.bump();
   };
   return (
     <>

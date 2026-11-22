@@ -14,7 +14,7 @@
  * holds is made again.
  */
 
-import { useEffect, useRef } from "preact/hooks";
+import { useLayoutEffect, useRef } from "preact/hooks";
 import type { NewDevice } from "../api";
 import { ResultLine } from "../shared/badge";
 import { hid } from "../shared/cls";
@@ -23,7 +23,7 @@ import { FormFooter, NumberField } from "../shared/field";
 import { PutForm } from "../shared/put";
 import { busyProps } from "../shared/question";
 import { cubeRooms, flowOf, loadCubeRooms, secondsOk, startPairing, stopPairing } from "./flow";
-import { load } from "./store";
+import { useLook } from "../shared/look";
 
 /**
  * Joined is a device that joined: its type, serial and radio address,
@@ -31,9 +31,9 @@ import { load } from "./store";
  * went once it is in its room.
  */
 function Joined({ serial, d }: { serial: string; d: NewDevice }) {
-  load.useLoad();
+  useLook();
   const put = flowOf(serial).puts[d.rf_address];
-  const rooms = cubeRooms.value[serial] || [];
+  const rooms = serial === state.roomsOf ? state.rooms : cubeRooms.value[serial] || [];
   // The rooms are read again; for the Cube shown, Rooms' tiles and devices without a room too.
   const reload = () => (serial === state.serial ? Promise.all([loadRooms(), loadCubeRooms(serial)]) : loadCubeRooms(serial));
   return (
@@ -56,12 +56,12 @@ function Joined({ serial, d }: { serial: string; d: NewDevice }) {
  * as it is typed, and Start then goes back to the field instead.
  */
 export function Pairing({ serial }: { serial: string }) {
-  load.useLoad();
+  useLook();
   const f = flowOf(serial);
   const secs = useRef<HTMLInputElement>(null);
   const focus = useRef(false);
-  // Pair a device asked for the time: the focus goes into it once it is shown.
-  useEffect(() => {
+  // Pair a device asked for the time: the focus goes into it in the drawing that shows it.
+  useLayoutEffect(() => {
     if (!f.form || !focus.current) return;
     focus.current = false;
     secs.current?.focus();

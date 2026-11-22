@@ -10,14 +10,15 @@
  * updated in place. It is read each time Maintenance is shown, by Check
  * for updates, by the header's check every half hour, every 3 s while
  * the helper works, and for the stream's events while Maintenance is
- * shown (serverEvent, MassimoParts.serverEvent). The plain code calls MassimoParts.software
- * (update.js loadUpdate, updateOut and updateLatest, for the header).
+ * shown (serverEvent, MassimoParts.serverEvent). The header's check
+ * calls MassimoParts.software.load (header.js updateDue); whether an
+ * update is out is shared/update.ts', which the server's sign reads.
  */
 
 import type { UpdateInfo } from "../api";
 import { mounter, register } from "../shared/region";
 import { Software } from "./Software";
-import { forgetSoftware, loadChannel, loadUpdate, updateLatest, updateOut } from "./store";
+import { forgetSoftware, loadChannel, loadUpdate } from "./store";
 import { onView } from "../shared/pages";
 
 export { serverEvent } from "./store";
@@ -27,14 +28,10 @@ mount();
 
 /** The functions the plain code calls, MassimoParts.software. */
 const software = register("software", {
-  /** load reads GET /api/v1/update and draws it; refresh asks for a release now (update.js loadUpdate, the header's check). */
+  /** load reads GET /api/v1/update and draws it; refresh asks for a release now (header.js updateDue, the header's check). */
   load(refresh: boolean): Promise<UpdateInfo | null> {
     return loadUpdate(refresh);
   },
-  /** out tells whether an update is out, for one who may install it (update.js updateOut). */
-  out: updateOut,
-  /** latest is the version an update would install, "" for none (update.js updateLatest). */
-  latest: updateLatest,
 });
 
 /** MassimoParts.software, as index.ts declares it. */

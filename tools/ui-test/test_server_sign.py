@@ -58,10 +58,10 @@ def test_server_connected_and_update(page, case):
             "the list's second item, Software update with the version"
         page.locator(ITEM).click()
         page.locator("#sys-software").wait_for(state="visible")
-        assert page.evaluate("isShown('maint')"), "it opens Software update"
+        assert page.evaluate("MassimoParts.pages.isShown('maint')"), "it opens Software update"
     finally:
         page.unroute("**/api/v1/update*")
-        page.evaluate("loadUpdate(false)")  # the server's own answer again, which draws the sign
+        page.evaluate("MassimoParts.software.load(false)")  # the server's own answer again, which draws the sign
         show_view(page, "tiles")
 
 

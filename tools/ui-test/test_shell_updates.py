@@ -7,7 +7,7 @@ read.
 
 The pages shown are a signal (ui/src/shared/pages.ts): a part that read
 the page shown in a drawing or an effect would follow it and could read
-again at each change of page. The regions ask isShown, which follows
+again at each change of page. The regions ask MassimoParts.pages.isShown, which follows
 nothing; the first test counts every read of each showing of every page
 against what the page before the store read. The rows (ui/src/chrome/
 Bar.tsx) keep their sections menu through who is in read again, and the
@@ -29,19 +29,21 @@ WALK = ("system", "maint", "info", "me", "cube", "tiles") * 2
 # taken from the page before the pages' store (the tree of AP UiParts'
 # Block 13, an export of it, 2026-11-21), the same in 1100-en and 390-de
 # and in each of three walks of a page but for the Cube's devices, read
-# at the first showing of Cube settings alone.
+# at the first showing of Cube settings alone; since UiParts D216 Cube
+# settings' pairing takes the chosen Cube's rooms from the page's own,
+# state.rooms, where it read them again at each showing.
 READS = (
     ("system", {"cubes/KEQ0000100/backups": 1, "integrations": 1, "integrations/found": 1, "login/providers": 1, "providers": 1, "roles": 1, "settings": 2, "users": 2}),
     ("maint", {"reboot": 1, "restart": 1, "settings": 2, "update": 1}),
     ("info", {"config": 1, "store": 1, "system": 1}),
     ("me", {"login/providers": 1, "me/preferences": 1, "me/push": 1, "users/owner": 1, "users/owner/identities": 1, "users/owner/tokens": 1}),
-    ("cube", {"cubes/KEQ0000100/backups": 1, "cubes/KEQ0000100/devices": 1, "cubes/KEQ0000100/pairing": 1, "cubes/KEQ0000100/rooms": 1}),
+    ("cube", {"cubes/KEQ0000100/backups": 1, "cubes/KEQ0000100/devices": 1, "cubes/KEQ0000100/pairing": 1}),
     ("tiles", {}),
     ("system", {"cubes/KEQ0000100/backups": 1, "integrations": 1, "integrations/found": 1, "login/providers": 1, "providers": 1, "roles": 1, "settings": 2, "users": 2}),
     ("maint", {"reboot": 1, "restart": 1, "settings": 2, "update": 1}),
     ("info", {"config": 1, "store": 1, "system": 1}),
     ("me", {"login/providers": 1, "me/preferences": 1, "me/push": 1, "users/owner": 1, "users/owner/identities": 1, "users/owner/tokens": 1}),
-    ("cube", {"cubes/KEQ0000100/backups": 1, "cubes/KEQ0000100/pairing": 1, "cubes/KEQ0000100/rooms": 1}),
+    ("cube", {"cubes/KEQ0000100/backups": 1, "cubes/KEQ0000100/pairing": 1}),
     ("tiles", {}),
 )
 
@@ -285,7 +287,7 @@ def test_a_sign_out_forgets_before_the_language(new_context, case, watch, guard)
             frames(page)
             got = page.evaluate("""() => ({ rooms: document.querySelectorAll('#rooms .room').length, events: !!state.events,
               poll: !!state.pollTimer, signedOut: !document.getElementById('me-line') || !document.getElementById('me-line').textContent,
-              tiles: isShown('tiles') })""")
+              tiles: MassimoParts.pages.isShown('tiles') })""")
             assert got == {"rooms": 0, "events": False, "poll": False, "signedOut": True, "tiles": True}, f"in the wait, nothing of the user who left: {got}"
             held[0].continue_()
         finally:

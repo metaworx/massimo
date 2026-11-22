@@ -4,8 +4,8 @@
 /**
  * @file internal/server/ui/src/shared/file.tsx
  *
- * A button that opens the browser's choice of a file, as filePicker of
- * components.js makes one: a hidden file input of the types it accepts
+ * A button that opens the browser's choice of a file, as components.js'
+ * filePicker made one: a hidden file input of the types it accepts
  * beside the button; a file chosen goes to onFile, and the input is
  * emptied, so that the same file can be chosen again. The button's id
  * and the input's, and the input's name in the page's language, are the

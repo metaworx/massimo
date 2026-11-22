@@ -24,12 +24,13 @@ import { Mark } from "../shared/icon";
 import { levelOf } from "./alerts";
 import type { LogLine, Loose } from "./lines";
 import { logState } from "./state";
-import { lineCount, markFocus, seen, toggleLogCommand } from "./store";
+import { markFocus, seen, toggleLogCommand } from "./store";
 import { logDeviceName, logDeviceSerial, logKind, logLineCube, logNamePath, logText, logWord } from "./text";
+import { useLook } from "../shared/look";
 
 /** CommandDetail is a command's detail: its action, target, state and who asked, its steps, and its audit row for a user with audit. */
 function CommandDetail({ id }: { id: number }) {
-  lineCount.useLoad();
+  useLook();
   const c = logState.commands.get(id);
   if (!c) {
     return (
@@ -81,7 +82,7 @@ function CommandDetail({ id }: { id: number }) {
  * where the focus goes.
  */
 function MarkSeen({ id }: { id: number }) {
-  lineCount.useLoad();
+  useLook();
   const wanted = useComputed(() => markFocus.value === id).value;
   const ref = useRef<HTMLButtonElement>(null);
   useLayoutEffect(() => {
@@ -98,7 +99,7 @@ function MarkSeen({ id }: { id: number }) {
 
 /** Line is one line of the log, as renderLogLine drew it. */
 export function Line({ line }: { line: LogLine }) {
-  lineCount.useLoad();
+  useLook();
   const open = useComputed(() => !!line.command && logState.openCommands.has(line.command));
   const alert = levelOf(line.id).value;
   const tone = alert === "error" ? "bad" : alert ? "warn" : "";

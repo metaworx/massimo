@@ -43,7 +43,7 @@ PANEL_HEAD = """(sel) => {
 
 
 def test_panel_heads(page, case):
-    """A user's and a role's head (components.js detailsPanel): the name
+    """A user's and a role's head (FoldHead of shared/fold.tsx): the name
     and the login or key apart, the badges at the right edge, and on the
     signed-in owner's own panel the you badge first."""
     show_view(page, "system")

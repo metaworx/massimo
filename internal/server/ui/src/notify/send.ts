@@ -19,6 +19,7 @@
 import type { PushSubscription } from "../api";
 import { session, stillSession } from "../shared/session";
 import { defaults, notify, rulesOf, type Rules, say } from "./store";
+import { can, me } from "../shared/me";
 
 /** How long a change waits for the next before it goes to the server, as My settings' do. */
 const SAVE_DELAY = 1000;
@@ -28,10 +29,10 @@ let timer: ReturnType<typeof setTimeout> | null = null;
 
 /** unavailable says why the signed-in user has no notifications, "" where it has: they are a user's, with the capability preferences. */
 export function unavailable(): string {
-  const me = state.me;
-  if (!me || me.mode === "open" || me.mode === "none") return t("notify.noUsers");
-  if (me.mode !== "users" || !me.user) return t("notify.serverKey");
-  if (!hasCap("preferences")) return t("notify.noCapability");
+  const m = me.value;
+  if (!m || m.mode === "open" || m.mode === "none") return t("notify.noUsers");
+  if (m.mode !== "users" || !m.user) return t("notify.serverKey");
+  if (!can("preferences")) return t("notify.noCapability");
   return "";
 }
 
@@ -209,7 +210,7 @@ export async function removeDevice(s: PushSubscription): Promise<void> {
 /**
  * sendNow sends a save that waits at once, under the user's own token
  * and without asking for a sign-in, as logout sends the waiting ui and
- * schemes (login.js logout, notify.js sendNotifySave; UiParts D205); a
+ * schemes (login.js logout; UiParts D205); a
  * refusal changes nothing; nothing waits, nothing is sent.
  */
 export async function sendNow(): Promise<void> {

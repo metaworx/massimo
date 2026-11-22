@@ -9,6 +9,7 @@ the staleness, a room not ready and the Cube's findings from the page's
 own reads of the rooms, answered by the fixture reads (ROOMS), since the
 fake Cube does not change its states.
 """
+import json
 import re
 
 from helpers import ECO_BUTTON, OPEN, STALE, named_buttons, scroll_width, wait_until
@@ -630,3 +631,26 @@ def test_mismatch_marks(page, case, reads):
     page.evaluate("loadRooms()")
     sliders.wait_for(state="detached", timeout=5000)
     assert tile.locator(".device .mismatch-badge").count() == 0, "the device's badges gone with the findings"
+
+
+def test_an_age_moves_on_with_the_minute(page, case):
+    """A value's age in a tile's device list follows the page's minute,
+    a signal of the parts (MassimoParts.minute), where a plain timer wrote
+    into the parts' ages before: an hour on, it says so at the next
+    minute."""
+    tile = page.locator(".room").first
+    tile.locator(".room-name-btn").click()
+    age = tile.locator(".device-vals .age .age-text").first
+    try:
+        age.wait_for()
+        was = age.inner_text()
+        page.evaluate("""() => {
+          window.__realNow = Date.now;
+          Date.now = () => window.__realNow() + 3600e3;
+          MassimoParts.minute();
+        }""")
+        assert wait_until(page, "document.querySelector('.room .device-vals .age .age-text').textContent !== %s" % json.dumps(was), 5), \
+            f"the age moves on with the minute: {was}"
+    finally:
+        page.evaluate("() => { if (window.__realNow) Date.now = window.__realNow; if (MassimoParts.minute) MassimoParts.minute(); }")
+        tile.locator(".room-name-btn").click()

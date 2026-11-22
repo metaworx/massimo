@@ -9,17 +9,18 @@
  * each drawn once into its place and updated in place; what a Cube has is
  * kept by its serial, so that both show the same. The lists are read when
  * their page is shown, after every change and after a restore. The plain
- * code calls MassimoParts.backups (backup.js renderBackups,
- * backupCubeChanged, restoreEvent and restoreResynced); the cards' heads count the
- * backups kept.
+ * code calls MassimoParts.backups (app.js selectCube and its stream); the
+ * cards' heads count the backups kept.
  */
 
 import { useLayoutEffect } from "preact/hooks";
 import { mounter, register } from "../shared/region";
 import { CubeBackup, keptText, SystemBackups } from "./Backups";
-import { type RestoreEvent, boxUI, forgetBackups, load, of, refreshBackups, restoreEvent, resynced } from "./store";
+import { type RestoreEvent, boxUI, forgetBackups, of, refreshBackups, restoreEvent, resynced } from "./store";
 import { cardBadges } from "../shared/card";
 import { isShown, onView } from "../shared/pages";
+import { can } from "../shared/me";
+import { useLook } from "../shared/look";
 
 /** The badges of System settings' card: every Cube's backups kept, once one list has come. */
 function systemCount(): string {
@@ -29,7 +30,7 @@ function systemCount(): string {
 
 /** System is System settings' card with its head's count. */
 function System() {
-  load.useLoad();
+  useLook();
   const count = systemCount();
   // the card's head counts every Cube's backups
   useLayoutEffect(() => {
@@ -40,7 +41,7 @@ function System() {
 
 /** Page is Cube settings' card with its head's count, the chosen Cube's. */
 function Page() {
-  load.useLoad();
+  useLook();
   const count = state.serial ? keptText(state.serial) : "";
   // the card's head counts the chosen Cube's backups
   useLayoutEffect(() => {
@@ -59,27 +60,22 @@ function quiet(): void {
 
 /** showPage draws Cube settings' card and reads the chosen Cube's list again. */
 function showPage(): void {
-  if (!hasCap("backup")) return;
+  if (!can("backup")) return;
   mountPage();
-  load.bump();
   if (state.serial) refreshBackups(state.serial);
 }
 
 /** The functions the plain code calls, MassimoParts.backups. */
 const backups = register("backups", {
-  /** render draws every box again, after a change of language (backup.js renderBackups). */
-  render(): void {
-    load.bump();
-  },
-  /** cubeChanged follows the Cube choice on Cube settings (backup.js backupCubeChanged). */
+  /** cubeChanged follows the Cube choice on Cube settings (app.js selectCube). */
   cubeChanged(): void {
     if (isShown("cube")) showPage();
   },
-  /** restoreEvent takes the stream's restore_step and restore_done (backup.js restoreEvent). */
+  /** restoreEvent takes the stream's restore_step and restore_done (app.js connectEvents). */
   restoreEvent(ev: RestoreEvent): void {
     restoreEvent(ev);
   },
-  /** resynced takes a resync of the stream, which lost what a restore said meanwhile (backup.js restoreResynced). */
+  /** resynced takes a resync of the stream, which lost what a restore said meanwhile (app.js connectEvents). */
   resynced,
 });
 
@@ -91,9 +87,8 @@ export const signedOut = forgetBackups;
 
 onView("system", () => {
   quiet();
-  if (!hasCap("backup")) return;
+  if (!can("backup")) return;
   mountSystem();
-  load.bump();
   for (const c of state.cubes) refreshBackups(c.serial);
 });
 onView("cube", () => {

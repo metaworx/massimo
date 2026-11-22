@@ -8,9 +8,8 @@
  * panel in #house-slot, a tile per room of the chosen Cube in #rooms, with
  * its device list, and the devices without a room in #unlisted-devices,
  * each built once per room or device and updated in place. The plain code
- * calls MassimoParts.rooms (rooms.js renderRooms,
- * updateDevice, showTileResult, roomUI and roomsLoaded, house.js houseOpen and
- * closeHouse);
+ * calls MassimoParts.rooms (rooms.js renderRooms, showTileResult, roomUI
+ * and closePanels, app.js loadRooms, header.js somethingOpen, login.js);
  * the tile's actions stay plain and set the tile's live state, which the
  * tile follows. A room's forms are forgotten once a load no longer gives
  * the room, or the virtual thermostat whose settings they hold, and the
@@ -26,12 +25,13 @@ import { forgetForms } from "../shared/forms";
 import { mounter, register } from "../shared/region";
 import { closeHouse, House } from "./House";
 import { Tile } from "./Tile";
-import { UNLISTED, Unlisted } from "./Unlisted";
-import { cfgFormKey, changed, cubesLoad, house, load, newUI, planWindows, roomOf, takeOpening, tickOf, vwtFormKey } from "./store";
+import { Unlisted } from "./Unlisted";
+import { useLook } from "../shared/look";
+import { cfgFormKey, house, newUI, roomOf, takeOpening, vwtFormKey } from "./store";
 
 /** Rooms is a tile per room, kept by its Cube and its id for as long as the room is there. */
 function Rooms() {
-  load.useLoad();
+  useLook();
   return <>{state.rooms.map((r) => <Tile key={(state.roomsOf || "") + ":" + r.id} room={r} />)}</>;
 }
 
@@ -94,29 +94,13 @@ function forgetGone(): void {
 
 /** The functions the plain code calls, MassimoParts.rooms. */
 const rooms = register("rooms", {
-  /** render draws the rooms as the page has them now (renderRooms): every tile follows in place, its configuration with it. */
+  /** render takes a drawing of the rooms (renderRooms): every tile follows the rooms itself, in place, its configuration with it. */
   render(): void {
     for (const m of mounts) m();
-    load.bump();
-    for (const r of state.rooms) changed(r.id);
-    planWindows();
-  },
-  /** data takes a state event of a device of the room (updateDevice): its tile follows, its configuration with it. */
-  data(id: number): void {
-    changed(id);
-    planWindows();
-  },
-  /** cubes takes a load of the Cubes' list (renderCubeSelect): the House tile's name follows the Cube's. */
-  cubes(): void {
-    cubesLoad.bump();
-  },
-  /** unlisted takes a state event of a device without a room (updateDevice): its row follows. */
-  unlisted(): void {
-    tickOf(UNLISTED).n++;
   },
   /**
    * loaded takes a load of the rooms that went through, before they are
-   * drawn (roomsLoaded): the forms of what it no longer gives are
+   * drawn (app.js loadRooms): the forms of what it no longer gives are
    * forgotten, and a virtual thermostat's settings asked to be opened
    * before its Cube's rooms were there are opened.
    */
@@ -136,11 +120,11 @@ const rooms = register("rooms", {
   },
   /** ui makes what a room's tile keeps, live (roomUI). */
   ui: newUI,
-  /** houseOpen says whether the House tile's panel is open (house.js houseOpen). */
+  /** houseOpen says whether the House tile's panel is open (header.js somethingOpen, rooms.js closePanels). */
   houseOpen(): boolean {
     return house.open;
   },
-  /** closeHouse closes the House tile's panel (house.js closeHouse, Escape). */
+  /** closeHouse closes the House tile's panel (rooms.js closePanels for Escape, login.js forgetSession). */
   closeHouse,
 });
 

@@ -11,6 +11,7 @@
 import type { Discovery } from "../api";
 import { session, stillSession } from "../shared/session";
 import { discovery } from "./store";
+import { can } from "../shared/me";
 
 /**
  * discoverCubes asks the server to search the LAN for Cubes (about two
@@ -30,7 +31,7 @@ export async function discoverCubes(): Promise<void> {
     await loadCubes();
     if (!stillSession(sn)) return;
     const n = ((res && res.found) || []).filter((c) => !isConfigured(c)).length;
-    const show = n && hasCap("cubes") ? { label: t("discover.show"), run: showFound } : null;
+    const show = n && can("cubes") ? { label: t("discover.show"), run: showFound } : null;
     showToast(n ? tn("discover.found", n) : t("discover.none"), { ms: 8000, action: show });
   } catch (e) {
     if (!stillSession(sn)) return;

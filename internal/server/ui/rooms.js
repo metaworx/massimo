@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 The Massimo Authors
 
-// The Massimo web UI, the rooms: a room's facts, the plain names of the
+// The Massimo web UI, the rooms: the room's facts its actions use (the
+// others are ui/src/model/room.ts'), the plain names of the
 // rooms' drawing, which call their parts (ui/src/rooms/, MassimoParts.rooms),
 // a device's state event, the texts of a result, the actions behind a
 // tile's controls, which set the tile's live state (roomUI) that the tile
@@ -42,29 +43,6 @@ function roomModes(room) {
   return modes;
 }
 
-// roomActualDevice is the device whose measured temperature stands for
-// the room: its virtual wall thermostat, which the server computes from
-// the wall thermostat, else the radiator thermostats' median or mean, so
-// that every client shows the same; null while it has none.
-function roomActualDevice(room) {
-  const v = room.vwt;
-  return v && v.state && v.state.actual_temp !== undefined ? v : null;
-}
-
-function roomActual(room) {
-  const d = roomActualDevice(room);
-  return d ? d.state.actual_temp : undefined;
-}
-
-// staleText is the warning for a device the API calls stale ("Not seen
-// for 30 hours", from two days on in days), "" for any other.
-function staleText(d) {
-  if (!d.stale) return "";
-  const ms = Date.parse(d.last_seen || "");
-  const h = isNaN(ms) ? 24 : Math.max(0, Math.floor((Date.now() - ms) / 3600000));
-  return h < 48 ? tn("stale.hours", h) : tn("stale.days", Math.floor(h / 24));
-}
-
 // received is when the server received the current value of a device's
 // state field, as the API's time, or undefined.
 function received(d, field) {
@@ -86,11 +64,6 @@ function roomUI(room) {
 
 function clampTemp(v) {
   return Math.min(MAX_TEMP, Math.max(MIN_TEMP, Math.round(v * 2) / 2));
-}
-
-// apiUntil turns a datetime-local value into the API's "YYYY-MM-DD HH:MM".
-function apiUntil(value) {
-  return (value || "").replace("T", " ").slice(0, 16);
 }
 
 // fmtUntil is a holiday's end, the Cube's wall-clock "YYYY-MM-DD HH:MM",
@@ -116,41 +89,29 @@ function renderRooms() {
   $("unlisted").classList.toggle("hidden", !state.unlisted.length);
 }
 
-// roomsLoaded takes a load of the rooms that went through, before
-// renderRooms draws them (loadRooms of app.js): the forms of a room or a
-// virtual wall thermostat it no longer gives are forgotten, and settings
-// asked to be opened before the rooms were there are opened
-// (MassimoParts.rooms.loaded).
-function roomsLoaded() {
-  MassimoParts.rooms.loaded();
-}
 
-// updateDevice applies a state event to the room or the unlisted list.
-// The room's tile follows in place (MassimoParts.rooms.data), its
-// configuration with it, with the focus in it or not.
+// updateDevice applies a state event to the room or the unlisted list:
+// a room's fields are signals (ui/src/shared/data.ts), so that its tile
+// follows in place, its configuration with it, with the focus in it or
+// not; the list is written whole, and its row follows, the form under it
+// as it is.
 function updateDevice(d) {
   if (d.virtual) {
     const r = state.rooms.find((x) => x.id === d.room_id);
-    if (!r) return;
-    r.vwt = d;
-    MassimoParts.rooms.data(r.id);
+    if (r) r.vwt = d;
     return;
   }
   for (const r of state.rooms) {
     const i = r.devices.findIndex((x) => x.rf_address === d.rf_address);
     if (i >= 0) {
-      r.devices[i] = d;
+      r.devices = r.devices.map((x, k) => (k === i ? d : x));
       r.ready = r.devices.every((x) => x.reported);
       r.stale = r.devices.some((x) => x.stale);
-      MassimoParts.rooms.data(r.id);
       return;
     }
   }
   const j = state.unlisted.findIndex((x) => x.rf_address === d.rf_address);
-  if (j >= 0) {
-    state.unlisted[j] = d;
-    MassimoParts.rooms.unlisted(); // its row follows, the form under it as it is
-  }
+  if (j >= 0) state.unlisted = state.unlisted.map((x, k) => (k === j ? d : x));
 }
 
 // --- results ----------------------------------------------------------
@@ -178,61 +139,6 @@ function modeName(mode) {
 }
 
 // --- writes not confirmed ---------------------------------------------
-
-// confirmFieldName names a value a write's confirmation waits for (the
-// server's confirm.go): the state's mode, setpoint, vacation end, key
-// lock and display, a configuration's by the log's names, a day of the
-// week programme by its day.
-function confirmFieldName(f) {
-  const day = /^program\.([a-z]+)(\.2)?$/.exec(f);
-  if (day) return t("confirm.program", { day: t("day." + day[1]) });
-  if (f === "locked") return t("confirm.locked");
-  if (f === "display_actual") return t("confirm.display");
-  if (f === "mode" || f === "setpoint" || f === "until") return t("log.disagree.what." + f);
-  const key = "log.cfg." + f;
-  return t(key) === key ? f : t(key);
-}
-
-// confirmShown is what a device's state shows of a value its write waits
-// for; "" for a configuration's value, which the state does not hold.
-function confirmShown(d, f) {
-  const s = d.state || {};
-  switch (f) {
-    case "mode":
-      return s.mode ? modeName(s.mode) : "";
-    case "setpoint":
-      return s.setpoint !== undefined ? fmtTemp(s.setpoint) : "";
-    case "until":
-      return s.until ? fmtUntil(s.until) : "";
-    case "locked":
-      return t(s.panel_locked ? "confirm.lockedOn" : "confirm.lockedOff");
-  }
-  return "";
-}
-
-// confirmFieldsText lists what a device has not shown of the writes to
-// it, each value with what the device shows where its state says:
-// "mode (shows auto), setpoint (shows 20.0 °C)".
-function confirmFieldsText(d) {
-  const out = [];
-  for (const f of (d.confirmation && d.confirmation.fields) || []) {
-    const shown = confirmShown(d, f);
-    const text = confirmFieldName(f) + (shown ? " (" + t("confirm.shows", { value: shown }) + ")" : "");
-    if (!out.includes(text)) out.push(text); // a long day's two parts are one day
-  }
-  return out.join(", ");
-}
-
-// confirmItem is the mark of a device that has not shown a write by its
-// deadline, an amber problem of its tile and of its row whose title says
-// what it does not show; none while the write is pending, nor for a
-// virtual wall thermostat, whose room's devices carry it.
-function confirmItem(d) {
-  const c = d.confirmation;
-  if (!c || c.state !== "unconfirmed" || d.virtual) return null;
-  return { kind: "unconfirmed", icon: "icon-unconfirmed", tone: "warn", text: t("badge.notConfirmed"),
-    title: t("badge.notConfirmedTitle", { fields: confirmFieldsText(d) }) };
-}
 
 function typeName(type) {
   const key = "type." + type;
@@ -310,15 +216,18 @@ function sendRoomSetpoint(room, body, label, key) {
 
 async function setpointRequest(room, body, label) {
   showTileResult(room.id, t("result.waiting", { label }), true);
+  const n = MassimoParts.session();
   try {
     const res = await api("PUT", base() + "/rooms/" + room.id + "/setpoint", body);
+    if (!MassimoParts.stillSession(n)) return null; // answered after the session ended: no line on the next user's tile
     showTileResult(room.id, resultText(label, res), !(res && res.discarded));
     return res;
   } catch (e) {
+    if (!MassimoParts.stillSession(n)) return null;
     showTileResult(room.id, errorText(label, e), false);
     return null;
   } finally {
-    loadCubes().catch(() => {});
+    if (MassimoParts.stillSession(n)) loadCubes().catch(() => {});
   }
 }
 
@@ -326,20 +235,24 @@ async function setLock(d, locked) {
   const label = t(locked ? "label.lock" : "label.unlock", { name: deviceName(d) });
   const roomId = d.room_id;
   showTileResult(roomId, t("result.waiting", { label }), true);
+  const n = MassimoParts.session();
   try {
     const res = await api("PUT", devicePath(d) + "/lock", { locked });
+    if (!MassimoParts.stillSession(n)) return false; // answered after the session ended
     showTileResult(roomId, resultText(label, res), !(res && res.discarded));
   } catch (e) {
+    if (!MassimoParts.stillSession(n)) return false;
     showTileResult(roomId, errorText(label, e), false);
   }
   loadCubes().catch(() => {});
+  return true;
 }
 
 async function lockRoom(room, locked, el) {
   closeMenu(el);
   await tileWrite(room, locked ? "lock" : "unlock", async () => {
     for (const d of room.devices.filter(isThermostat)) {
-      await setLock(d, locked);
+      if (!(await setLock(d, locked))) return; // the session ended: the next device is not written
     }
   });
 }
@@ -353,10 +266,13 @@ function lockDevice(d, locked, btn) {
 }
 
 async function deleteRoom(room) {
+  const n = MassimoParts.session();
   try {
     await api("DELETE", base() + "/rooms/" + room.id);
+    if (!MassimoParts.stillSession(n)) return;
     showMessage(t("room.deleted", { name: room.name }), true);
   } catch (e) {
+    if (!MassimoParts.stillSession(n)) return;
     showMessage(t("room.deleteFailed", { name: room.name, error: e.message }), false);
   }
   await loadRooms();
@@ -365,7 +281,7 @@ async function deleteRoom(room) {
 // closePanels closes every inline panel (vacation, delete confirm,
 // House), for the Escape key; dropdown (components.js) closes the menus.
 function closePanels() {
-  if (houseOpen()) closeHouse(); // house.js
+  if (MassimoParts.rooms.houseOpen()) MassimoParts.rooms.closeHouse();
   for (const room of state.rooms) {
     const ui = state.ui[room.id];
     if (!ui) continue;
