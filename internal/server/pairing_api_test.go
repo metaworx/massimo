@@ -68,6 +68,11 @@ func TestPairingAndAddingToARoom(t *testing.T) {
 		code, d := do(t, ts, "GET", base+"/devices/0a0b0c", "")
 		return code == 200 && d["unlisted"] == true && d["thermostat"] != nil
 	})
+	// The pump logs the paired event after it has asked for the C line,
+	// so the API can show the line before the log has the event: the
+	// log is read once the pump has handled it (docs/testing.md, "The
+	// pump").
+	pumpSync(t, rg.s)
 	var evs []event
 	getJSON(t, ts, "", base+"/log", &evs)
 	kinds := map[string]bool{}
