@@ -33,7 +33,7 @@ def me_route(page, answer):
     page.route("**/api/v1/me", handle)
 
 
-def start_page(new_context, guard, watch, me, app=None, init=None, clock=False, **ctx_args):
+def start_page(new_context, guard, watch, me, app=None, init=None, clock=False, url=URL, **ctx_args):
     """A page loaded with GET /api/v1/me stubbed from its start (me, a
     dict, or a function as me_route takes it), with the owner's key: in
     a browser, or in the app (fake_bridge.js) with the login status app;
@@ -56,7 +56,7 @@ def start_page(new_context, guard, watch, me, app=None, init=None, clock=False, 
     page.requests = []
     page.on("request", lambda r: page.requests.append((r.method, r.url)))
     me_route(page, me if callable(me) else (lambda: me))
-    page.goto(URL)
+    page.goto(url)
     return page
 
 
@@ -381,6 +381,7 @@ def test_skip_and_cancel_are_off_while_create_turns(new_context, case, watch, gu
     assert wait_until(page, "typeof window.__letSignIn === 'function'", 5), "the sign-in reached"
     assert page.evaluate("document.getElementById('setup-skip').disabled && document.getElementById('setup-cancel').disabled"), \
         "Skip for now and Cancel off while Create the owner turns"
+    assert page.evaluate("document.getElementById('login-menu-servers').disabled"), "and the card's Select server"
     page.evaluate("() => { document.getElementById('login-dialog').close(); }")
     page.wait_for_selector(".room", timeout=10000)
     assert wait_until(page, "state.eventsOpen", 10), "the page started"

@@ -28,8 +28,10 @@ import { isoOf, localOf } from "../shared/time";
 import { type Changes, Identities } from "../shared/identities";
 import { Tokens } from "../shared/tokens";
 import { UserNameField, useNameCheck } from "../shared/username";
-import { adding, enabled, identityFormKey, identityUI, load, passwordLogin, reads, said, userFormKey, userUI, users } from "./store";
-import { createUser, mayManage, mayPassword, removeUser, roleOptions, run, saveUser, setPasswordLogin, usersAdmin, usersMsg } from "./sendUsers";
+import { useLang } from "../shared/lang";
+import { me } from "../shared/me";
+import { adding, enabled, identityFormKey, identityUI, keptOff, load, passwordLogin, reads, said, userFormKey, userUI, users } from "./store";
+import { createUser, keepOpenOff, mayManage, mayPassword, removeUser, roleOptions, run, saveUser, setPasswordLogin, usersAdmin, usersMsg } from "./sendUsers";
 import { cardBadges, showCard } from "../shared/card";
 import { isShown, showView } from "../shared/pages";
 
@@ -258,6 +260,36 @@ function PasswordLogin() {
   );
 }
 
+/**
+ * KeptOpen is the switch that undoes keeping a server without users open
+ * (AP FirstOwner, D5, D32): shown while who is in says the server is kept
+ * open, on; turned off it is saved at once, and its row stays for this
+ * showing of the section, off and no longer to be turned, with the line
+ * that the page asks for the owner again at its next load, the focus on
+ * that line; turning it on is the sign-in card's confirmation alone.
+ * Who is in, read again after the turning off, says whether it is kept.
+ */
+function KeptOpen() {
+  useLang();
+  const m = me.value;
+  const kept = !!(m && m.mode === "open" && m.kept_open);
+  const off = keptOff.showing && !kept; // kept open again from the card meanwhile: the switch is back, on
+  const on = useSetAtOnce(kept);
+  const lineRef = useRef<HTMLParagraphElement>(null);
+  // turned off: the switch can no longer be turned, so the focus goes to the line that says what follows
+  useLayoutEffect(() => {
+    if (off && document.activeElement && document.activeElement.id === "keep-open-switch") lineRef.current?.focus();
+  }, [off]);
+  if (!kept && !off) return null;
+  return (
+    <div id="users-open" class="users-open needs-settings">
+      <Switch id="keep-open-switch" label={t("users.keptOpen")} checked={!off && on.value} disabled={off}
+        onChange={(v) => { if (!v) on.set(false, keepOpenOff); }} />
+      <p id="keep-open-switch-hint" ref={lineRef} class="muted small" tabIndex={-1}>{t(off ? "users.keptOpenOff" : "users.keptOpenHint")}</p>
+    </div>
+  );
+}
+
 /** UsersCard is the section's body: the password sign-in, the users' panels, the form that adds one, and the message line. */
 export function UsersCard() {
   load.useLoad();
@@ -269,6 +301,7 @@ export function UsersCard() {
   }, [count]);
   return (
     <>
+      <KeptOpen />
       <PasswordLogin />
       <div id="users-list">
         {users.loaded && !list.length && <p class="muted small">{t("users.none")}</p>}

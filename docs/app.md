@@ -330,8 +330,10 @@ under My profile → Sessions and keys by the phone's name, ends the session.
   and where the phone `can` shows the switch "Enable login by fingerprint".
   After a sign-in with it on, the page hands the session to `setToken`
   and calls `login.keep()`;
-  where that resolves `false` or fails, the form offers "Try again" and
-  "Sign in without it".
+  where that resolves `false` or fails, the sign-in form offers "Try again" and
+  "Sign in without it",
+  and the first owner's form, the owner made and signed in all the same,
+  says in its toast that the login was not kept (AP FirstOwner, D26).
 - **The login.**
   Where a key is kept (`user`), the form shows "Login by fingerprint",
   which calls `login.fingerprint()` and is signed in with the session it

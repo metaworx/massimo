@@ -725,6 +725,16 @@ def first_owner(page):
     settle(page)
 
 
+def keep_open_step(page):
+    """The confirmation that keeps the server open (AP FirstOwner, Block
+    3), shown from the first owner's form in the card, an address typed."""
+    if not page.locator("#login-dialog[open] #setup").is_visible():
+        first_owner(page)
+    page.locator("#setup-keep-open").click()
+    page.locator("#keep-open-address").fill("http://example.invalid")
+    settle(page)
+
+
 def sign_in_card(page):
     """The sign-in's card on the signed-in page, opened as a 401 opens it
     (askLogin), the password's way chosen."""
@@ -934,7 +944,8 @@ REGIONS = (
     # again and the app's status read again are its sources; the view
     # passed on the page before the move as well, where nothing drew the
     # plain form again.
-    Region("first-owner", ("#setup",), (View("the first owner's form in the card, the focus in Again", first_owner, "#setup-again"),),
+    Region("first-owner", ("#setup",), (View("the first owner's form in the card, the focus in Again", first_owner, "#setup-again"),
+                                        View("the confirmation that keeps the server open, an address typed", keep_open_step, "#keep-open-address")),
            sources=("loadMe()", "applyLanguage()", "MassimoParts.signIn.readApp()")),
     # The sign-in's card is a part (AP UiParts, Block 14), shown here as a
     # 401 opens it on a page signed in: its sources are a second askLogin

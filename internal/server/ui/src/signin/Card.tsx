@@ -50,7 +50,7 @@ import { ask, askFocus, card, chooseWay, keepChosen, type Way } from "./store";
 /** The ways to sign in by a form, their data-way and their name's key, in the row's order after the fingerprint. */
 const WAYS: [Way, string][] = [["password", "login.password"], ["key", "login.token"]];
 
-/** Menu is the card's ☰: the version, the language and the mode before anyone signs in, as My settings sets them, and in the app Select server last. */
+/** Menu is the card's ☰: the version, the language and the mode before anyone signs in, as My settings sets them, and in the app Select server last, off while a request of the card is under way. */
 function Menu() {
   useLang();
   applied.useLoad(); // the language and the mode chosen are the plain code's, drawn again where they were applied
@@ -66,7 +66,7 @@ function Menu() {
       <ModeSelect id="login-mode" label={t("appearance.title")} wide />
       <hr id="login-menu-servers-sep" class={"menu-sep" + hid(!servers)} />
       <MenuItem id="login-menu-servers" cls={servers ? undefined : "hidden"} icon={<Icon symbol="icon-servers" cls="ni" />} label={t("app.selectServer")}
-        onClick={toServers} />
+        disabled={card.working} onClick={toServers} />
     </Dropdown>
   );
 }
@@ -172,7 +172,7 @@ export function Card() {
   return (
     <>
       <BrandName />
-      <h3 id="login-title" class="login-title">{t(owner ? "setup.title" : "login.title")}</h3>
+      <h3 id="login-title" class="login-title">{t(!owner ? "login.title" : card.ownerStep === "keep" ? "keepOpen.title" : "setup.title")}</h3>
       <div id="login-providers" class={"login-providers" + hid(owner || (!card.providers.length && !card.providersSaid))}>
         <div id="login-provider-buttons" class="login-provider-buttons">
           {card.providers.map((p) => (

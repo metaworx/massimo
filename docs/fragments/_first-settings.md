@@ -6,8 +6,10 @@ On the Cubes' LAN the server needs no settings to begin with:
 while there are no users,
 the web UI, `http://<the box>:8099/`,
 asks whoever opens it from the local network to create the first owner,
-in its sign-in card at each load,
-where **Skip for now** shows the page without one until the next,
+in its sign-in card at each load:
+**Skip for now** shows the page without an owner until the next load,
+and **Keep it open…**, once the page's address is entered there,
+stops the asking and leaves the server open to the local network;
 and System settings → Cubes lists the Cubes the server finds,
 each added with **Add**.
 The settings take what discovery and the web UI cannot give:

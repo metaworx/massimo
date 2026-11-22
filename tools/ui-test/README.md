@@ -497,6 +497,21 @@ hence `failed_checks_forgotten`.
   line, in a browser and in the app, at 390 px in six languages; on a
   phone of 640 px it starts at the top and scrolls; over plain HTTP in the
   app no sign-in's notice; on a touch screen no field in focus.
+- `test_keep_open.py`, keeping a server without users open (AP FirstOwner,
+  Block 3), `/api/v1/me` and the setting's write stubbed:
+  Keep it open… shows the confirmation in the form's place, the card not
+  moved, the owner's warning first, this page's address, the field in focus;
+  Confirm off for every other address and on for this page's, typed or
+  pasted, also reached as localhost; Enter with another address sends
+  nothing; Back keeps what was typed; Confirm sends the setting once and the
+  page starts once, a reload asks no more; a 401 or a 409 turns the card to
+  the sign-in, a 403 or a network failure is said; on a touch screen the
+  warning takes the focus; no Keep it open… where the server is kept open;
+  the switch in System settings → Users turns it off once and stays off for
+  that showing, and a refusal leaves it on; turned off, the card offers
+  Keep it open… again, and kept open from it the switch is back; after a
+  turn the card's ways out are on; the measures in six languages, and the
+  address copied in a browser and in the app without the clipboard's API.
 - `test_preferences.py`, the settings that follow the user:
   the poll and the scheme set in one browser reach the server and a fresh
   browser with the same token,

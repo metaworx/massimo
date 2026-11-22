@@ -13,7 +13,10 @@
  * without users whether the card asks for the first owner (asksOwner),
  * Skip for now, which holds for the page's load (AP FirstOwner, D10),
  * and the card turned to the sign-in where the server has users after
- * all. No name, password or key typed is kept here: the card's fields
+ * all; the step of the first owner's place, the form or the confirmation
+ * that keeps the server open (AP FirstOwner, Block 3), its line, and
+ * whether a request of the card is under way, which keeps every control
+ * that ends the card off. No name, password or key typed is kept here: the card's fields
  * are not controlled (UiParts D210), read at the submit and emptied at
  * each opening.
  */
@@ -26,8 +29,11 @@ import { firstOwnerOf, me } from "../shared/me";
 /** A way to sign in, by the button's data-way: the name and the password, or an API key. */
 export type Way = "password" | "key";
 
-/** Where the focus is asked to go: the chosen way's first field, the password, Try again, the first owner's name. */
-export type FocusOn = "way" | "password" | "retry" | "owner";
+/** Where the focus is asked to go: the chosen way's first field, the password, Try again, the first owner's name, the confirmation that keeps the server open, the button that opens it. */
+export type FocusOn = "way" | "password" | "retry" | "owner" | "keep" | "keepButton";
+
+/** The first owner's place: the form, or the confirmation that keeps the server open. */
+export type OwnerStep = "form" | "keep";
 
 /** The card's state; opened counts the openings, owner says the first owner's form is shown instead of the ways, focus the focus asked for. */
 export const card = live({
@@ -36,6 +42,9 @@ export const card = live({
   way: "password" as Way,
   said: null as Outcome | null,
   ownerSaid: null as Outcome | null,
+  ownerStep: "form" as OwnerStep,
+  keepSaid: null as Outcome | null,
+  working: false,
   providers: [] as LoginProvider[],
   providersSaid: null as Outcome | null,
   selfSigned: false,
@@ -79,8 +88,10 @@ export function open(on: Way | "owner", said: string, ask: SignInAsk): void {
   asking = ask;
   card.owner = on === "owner";
   card.way = on === "owner" ? "password" : on;
+  card.ownerStep = "form";
   card.said = null;
   card.ownerSaid = null;
+  card.keepSaid = null;
   card.providersSaid = said ? { text: said, ok: false } : null;
   card.opened++;
   askFocus(on === "owner" ? "owner" : "way");
@@ -103,16 +114,58 @@ export function asksOwner(): boolean {
  * opening, where a request was refused for lack of a session or the
  * owner exists already: the server has users now. The password's way
  * chosen and its first field given the focus, the reason said; the
- * fields stay as the opening left them. It reports whether it turned.
+ * fields stay as the opening left them; the card's request that met the
+ * refusal is over as far as the card goes, so its ways out are on again.
+ * It reports whether it turned.
  */
 export function toSignIn(): boolean {
   if (!card.owner) return false;
   card.owner = false;
+  card.working = false;
   card.way = "password";
+  card.ownerStep = "form";
   card.ownerSaid = null;
+  card.keepSaid = null;
   card.said = { text: t("setup.exists"), ok: false };
   askFocus("way");
   return true;
+}
+
+/** keepAsk shows the confirmation that keeps the server open in the form's place, its line cleared (AP FirstOwner, D4). */
+export function keepAsk(): void {
+  card.ownerStep = "keep";
+  card.keepSaid = null;
+  askFocus("keep");
+}
+
+/** keepBack shows the first owner's form again, what was typed in both kept, the focus on the button that asked. */
+export function keepBack(): void {
+  card.ownerStep = "form";
+  card.keepSaid = null;
+  askFocus("keepButton");
+}
+
+/**
+ * sameAddress says whether an address entered is this page's own (AP
+ * FirstOwner, D13, D28): parsed as a URL, trimmed, its origin the page's
+ * (scheme, host and port as the browser has them, so letters' case, a
+ * default port typed and another spelling of the same host do not
+ * matter), its path "/" or the page's own base with or without the slash
+ * at its end, and no user, password, query or fragment. An address
+ * without a scheme is none.
+ */
+export function sameAddress(input: string): boolean {
+  const v = input.trim();
+  if (!v) return false;
+  let u: URL;
+  try {
+    u = new URL(v);
+  } catch {
+    return false;
+  }
+  if (u.origin !== location.origin || u.username || u.password || u.search || u.hash || v.includes("?") || v.includes("#")) return false;
+  const base = new URL(pageBase()).pathname;
+  return u.pathname === "/" || u.pathname === base || u.pathname + "/" === base;
 }
 
 /** skip takes Skip for now: the card closes, as a dismissal, and asks no more in this load (AP FirstOwner, D10). */
@@ -167,5 +220,6 @@ export function forgetCard(): void {
   dropChoice();
   card.said = null;
   card.ownerSaid = null;
+  card.keepSaid = null;
   card.providersSaid = null;
 }

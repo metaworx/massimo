@@ -103,8 +103,10 @@ let sawOpen = false;
 // first owner's form (askLogin "owner"), opened here, after every read
 // of who is in, and not waited for: the starts wait for it
 // (loadMeAndPreferences), so that nothing of the page is read or shown
-// behind it (AP FirstOwner, D27).
-async function loadMe() {
+// behind it (AP FirstOwner, D27); with asks false the read asks for
+// nobody, for the read that follows keeping the server open turned off,
+// after which the next load asks (D31, D44).
+async function loadMe(asks = true) {
   try {
     state.me = await api("GET", "api/v1/me");
   } catch (e) {
@@ -112,7 +114,7 @@ async function loadMe() {
   }
   if (state.me && state.me.mode === "none") sawOpen = true;
   applyCaps();
-  if (MassimoParts.signIn.asksOwner()) askLogin("owner"); // ui/src/signin/store.ts: open, with a store, kept open by nobody, not skipped in this load
+  if (asks && MassimoParts.signIn.asksOwner()) askLogin("owner"); // ui/src/signin/store.ts: open, with a store, kept open by nobody, not skipped in this load
   if (!$("login-dialog").open) document.body.classList.remove("signed-out");
   return state.me;
 }

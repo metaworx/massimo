@@ -39,6 +39,9 @@ export const enabled = signal<LoginProvider[]>([]);
 /** Whether the server takes the password sign-in (the setting auth.password_login), null before it is read. */
 export const passwordLogin = signal<boolean | null>(null);
 
+/** Keeping the server open turned off in this showing of System settings, whose row stays in sight, off, until it is shown again (AP FirstOwner, D32). */
+export const keptOff = live({ showing: false });
+
 /** Per user's login name, its panel open. */
 export const userUI = liveMap(() => ({ open: false }));
 /** Per identity's form key (identityFormKey), its form that changes the e-mail or the user id shown. */
@@ -92,6 +95,7 @@ export function forgetAdmin(): void {
   providers.loaded = false;
   enabled.value = [];
   passwordLogin.value = null;
+  keptOff.showing = false;
   userUI.clear();
   identityUI.clear();
   roleUI.clear();
