@@ -7,8 +7,9 @@
  * The sign-in's part of the app (docs/app.md, "The login by
  * fingerprint"): what the app's status of the login by fingerprint
  * offers (shared/app.ts, which My profile reads too), line for line as
- * login.js renderAppLogin and renderSetupKeep read it, and the keeping
- * of the login after a password's sign-in (keepLogin). Nothing of it in a
+ * login.js renderAppLogin and renderSetupKeep read it, the server the
+ * page was opened for (serverOf, contract version 5), and the keeping of
+ * the login after a password's sign-in (keepLogin). Nothing of it in a
  * browser: the status is null there.
  */
 
@@ -27,6 +28,39 @@ export function kept(st: AppLoginStatus | null): boolean {
 /** plainHere says whether the phone could keep a login but the address takes no key (plain HTTP outside the home network): the card's notice. */
 export function plainHere(st: AppLoginStatus | null): boolean {
   return !!(st && st.can && st.plain);
+}
+
+/** The server the card names in the app (Server.tsx): its name, "" where it is the address; the address; its instance id and pinned fingerprint, "" for none. */
+export interface CardServer {
+  name: string;
+  address: string;
+  node: string;
+  fp: string;
+}
+
+/**
+ * serverOf is the server the app opened the page for, from its status
+ * (login.status's server, contract version 5; AP MobileApp, D62-A): the
+ * address it was opened at in full, https://host:port with its path but
+ * the last slash, the name left out where it is that address or its host
+ * and port, as a server added by its address is named (connect.js
+ * saveNew); null in a browser, from an app before version 5, and for an
+ * address that is not one.
+ */
+export function serverOf(st: AppLoginStatus | null): CardServer | null {
+  const s = st?.server;
+  if (!s || typeof s.url !== "string") return null;
+  let u: URL;
+  try {
+    u = new URL(s.url);
+  } catch {
+    return null;
+  }
+  if (u.protocol !== "https:" && u.protocol !== "http:") return null;
+  const address = u.origin + u.pathname.replace(/\/$/, "");
+  const text = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+  const name = text(s.name);
+  return { name: name === address || name === u.host ? "" : name, address, node: text(s.node), fp: text(s.fp) };
 }
 
 /**

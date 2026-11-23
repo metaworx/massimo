@@ -134,7 +134,8 @@ the page sees only what follows.
   and `setToken` ending the session it replaces;
   the key of this device: `login.status()`'s `key_id` and a server's
   `login_key`; and `setToken` answering `{revoked}` (Block 16);
-  and a tap's rule in `open`, with `{signIn: true}` (Block 15).
+  and a tap's rule in `open`, with `{signIn: true}`, and on a server's page
+  `login.status()`'s `server` (Block 15).
 - **Where the bridge exists, and with what:**
   - on the connect page, the shell's own origin: every call below
     but `token` and `setToken`;
@@ -221,7 +222,7 @@ Block 7 adds what else Block 1's `Status()` carries.
 |---|---|---|
 | `token()` | a string, or `null` | the session or API key kept for the server it opened, `null` for none |
 | `setToken(t)` | `{revoked}`, or `null` | keeps `t` for that server, `null` forgets it (but from a page whose session is withheld, at its sign-in card, where it forgets nothing: version 5): sealed by the Keystore (Android) or the Keychain (iOS), or, for a server with a kept login whose `ask` is `return` or `start`, in the app's memory alone; what the connect page's `session` last found of the one before holds no more. A session `t` replaces is ended at the address the page was opened at once the answer is given (`POST /api/v1/logout`, AP MobileApp D68-A), so that a server slow to answer holds no sign-in up, the page leaving that to the app; a key it replaces is not, the server's `400` there going to no log, and one the server does not end is left in its `unended`. A new session is then checked as `session` checks one, at the address the page was opened at, before the answer: its id kept, and the server's `unrevoked` keys and `unended` sessions of its user revoked; `revoked` names the ids the server revoked so (AP MobileApp, D67-A), which My profile waits for before it reads its keys; `null` for `null`, and from an app before version 5 |
-| `login.status()` | `{can, user, ask, plain, key_id}` | `can`: the phone has a strong biometric enrolled; `user`: the user whose key is kept for the server, `""` for none; `ask`, as the server's; `plain`: the page is open over plain HTTP outside the private ranges, where no key is sent; `key_id` (version 5): the id of the key kept, `0` for none or not known, which My profile tags "this device's key" (AP MobileApp, D65-A) |
+| `login.status()` | `{can, user, ask, plain, key_id, server}` | `can`: the phone has a strong biometric enrolled; `user`: the user whose key is kept for the server, `""` for none; `ask`, as the server's; `plain`: the page is open over plain HTTP outside the private ranges, where no key is sent; `key_id` (version 5): the id of the key kept, `0` for none or not known, which My profile tags "this device's key" (AP MobileApp, D65-A); `server` (version 5): the server the page was opened for, `{name, url, node, fp}`, its name in the list, the address it was opened at, its `node` (the instance id of `/healthz`) and its pinned fingerprint, `""` for none, which the sign-in card shows under its title in place of the address bar the app has not (D62-A) |
 | `login.keep()` | `true`, or `false` | for a page just signed in: makes an API key of the signed-in user's at the server with the page's session (`POST /api/v1/users/{name}/tokens`, labelled with the phone), asks for the fingerprint once and keeps the key sealed under the app key behind it; `false`, nothing kept and the key revoked again, where the prompt was not passed |
 | `login.fingerprint()` | a string, or `null` | asks for the fingerprint, opens the kept key, makes a session with it (`POST /api/v1/login/key`) and resolves to that session, which it keeps as `setToken` would; `null` where the prompt was dismissed; a key the server refuses is forgotten and rejects |
 | `connect()` | `null` | shows the connect page, "Select server…" and the sign-in's "Cancel"; the server's session stays as it was |
@@ -524,7 +525,7 @@ The same fake bridge checks the server's page's `token` and `setToken`,
 the sign-in form's login by fingerprint and its "Cancel",
 the Cube choice's "Select server…",
 and the self-signed notice left out there (`test_tls.py`).
-On a server's page, its `login.status()` answers the test's `key_id`,
+On a server's page, its `login.status()` answers the test's `key_id` and `server`,
 and its `setToken` revokes the test's `revokeAtSignIn` at the server with the
 new token before it answers `{revoked}`, as the app's check does.
 Its version 3 records the sessions' calls and the settings' as it does the

@@ -1243,6 +1243,100 @@ def test_server_page_first_owner_keeps_the_login(new_context, case, watch, guard
         page.unroute("**/api/v1/me")
 
 
+SERVER_MORE = {"en": "About this server", "de": "Über diesen Server"}
+SERVER_FACTS = {"en": ["Instance id", "Certificate fingerprint"], "de": ["Instanz-ID", "Fingerabdruck des Zertifikats"]}
+
+# the server's line and its facts inside the card, nothing past its padding
+LINE_FITS = """() => {
+  const card = document.getElementById('login-dialog');
+  const cs = getComputedStyle(card);
+  const box = card.getBoundingClientRect();
+  const left = box.left + parseFloat(cs.paddingLeft) - 0.5;
+  const right = box.right - parseFloat(cs.paddingRight) + 0.5;
+  const out = [...document.querySelectorAll('#login-server, #login-server *')].filter((e) => {
+    const r = e.getBoundingClientRect();
+    return r.width && (r.left < left || r.right > right);
+  }).map((e) => e.id || e.tagName);
+  return {out, wide: card.scrollWidth > card.clientWidth};
+}"""
+
+
+def test_server_page_names_its_server(new_context, case, watch, guard):
+    """In the app the sign-in card names the server it signs in to (AP
+    MobileApp, F31, D62-A), on a line of its own after the title, whose
+    text stays the title's: the server's name and the full address the
+    page was opened at, the name once where it is the address, with a
+    labelled ⓘ that shows the instance id and the pinned fingerprint,
+    each copied with a tap, an empty one left out and the ⓘ too where
+    both are, the ⓘ closed again at the next opening; the line and its
+    facts fit the card at 390 px in the six languages; a browser shows
+    no line."""
+    address = URL.rstrip("/")
+    status = {"can": True, "user": "", "ask": "start", "plain": False, "server": {"name": "Home", "url": URL, "node": NODE1, "fp": FP1}}
+    page = server_page(new_context, guard, watch, {"status": status})
+    page.context.grant_permissions(["clipboard-read", "clipboard-write"], origin=page.evaluate("location.origin"))
+    page.locator("#login-dialog[open]").wait_for()
+    line = page.locator("#login-server")
+    line.wait_for(state="visible")
+    assert page.evaluate("document.getElementById('login-title').nextElementSibling.id") == "login-server", "a line of its own after the title"
+    assert page.locator("#login-title").inner_text() == TITLES[case.lang], "the title's text as it was"
+    assert page.locator("#login-server-name").inner_text() == "Home"
+    assert page.locator("#login-server-address").inner_text() == address, "the full address the page was opened at"
+    more = page.locator("#login-server-more")
+    assert more.get_attribute("aria-label") == SERVER_MORE[case.lang] and more.get_attribute("aria-expanded") == "false", "the ⓘ, labelled"
+    facts = page.locator("#login-server-facts")
+    assert facts.is_hidden(), "its facts hidden until asked for"
+    assert_login_card_centred(page, "the card naming its server")
+    named_buttons(page, "the card naming its server")
+    more.click()
+    facts.wait_for(state="visible")
+    assert more.get_attribute("aria-expanded") == "true"
+    assert page.locator("#login-server-facts dt").all_inner_texts() == SERVER_FACTS[case.lang]
+    assert page.locator("#login-server-node").inner_text() == NODE1 and page.locator("#login-server-fp").inner_text() == FP1
+    for fact, value in (("#login-server-node", NODE1), ("#login-server-fp", FP1)):
+        page.evaluate("navigator.clipboard.writeText('')")
+        page.locator(fact).click()
+        assert wait_until(page, f"navigator.clipboard.readText().then((t) => t === {value!r})", 3), f"{fact} copied with a tap"
+    fits = page.evaluate(LINE_FITS)
+    assert not fits["out"] and not fits["wide"], f"the line and its facts inside the card: {fits}"
+    if case.width == 390:
+        page.locator("#login-menu summary").click()
+        for lang, title in OTHER_TITLES.items():
+            page.locator("#login-lang").select_option(lang)
+            assert wait_until(page, f"document.getElementById('login-title').textContent === {title!r}", 5), f"the card in {lang}"
+            fits = page.evaluate(LINE_FITS)
+            assert not fits["out"] and not fits["wide"], f"the line and its facts inside the card in {lang}: {fits}"
+        page.locator("#login-lang").select_option("auto")
+        assert wait_until(page, f"document.getElementById('login-title').textContent === {TITLES[case.lang]!r}", 5)
+        page.keyboard.press("Escape")
+    # the next opening: the ⓘ closed again
+    page.evaluate("""() => new Promise((done) => { const d = document.getElementById('login-dialog');
+      d.addEventListener('close', () => setTimeout(() => { askLogin(); done(); }, 0), { once: true }); d.close(); })""")
+    assert wait_until(page, "document.getElementById('login-dialog').open && document.getElementById('login-server-more').getAttribute('aria-expanded') === 'false'", 5), \
+        "the ⓘ closed at the next opening"
+    assert facts.is_hidden()
+
+    # named by its address: the address once; no fingerprint pinned: its fact left out
+    named = server_page(new_context, guard, watch, {"status": dict(status, server={"name": URL.split("//")[1].rstrip("/"), "url": URL, "node": NODE1, "fp": ""})})
+    named.locator("#login-server").wait_for(state="visible")
+    assert named.locator("#login-server-name").count() == 0 and named.locator("#login-server-address").inner_text() == address, "the name once"
+    named.locator("#login-server-more").click()
+    assert named.locator("#login-server-facts dt").all_inner_texts() == SERVER_FACTS[case.lang][:1], "the fingerprint left out"
+    # neither known: no ⓘ
+    bare = server_page(new_context, guard, watch, {"status": dict(status, server={"name": "Home", "url": URL, "node": "", "fp": ""})})
+    bare.locator("#login-server").wait_for(state="visible")
+    assert bare.locator("#login-server-more").count() == 0 and bare.locator("#login-server-facts").count() == 0, "no ⓘ"
+
+    # a browser: no line, its address bar names the server
+    ctx = new_context()
+    browser = ctx.new_page()
+    guard.page = browser
+    browser.goto(URL)
+    browser.locator("#login-dialog[open]").wait_for()
+    browser.locator("#login-title").wait_for(state="visible")
+    assert browser.locator("#login-server").count() == 0, "no line in a browser"
+
+
 THIS_DEVICE_KEY = {"en": "this device's key", "de": "Schlüssel dieses Geräts"}
 THIS_DEVICE = {"en": "this device", "de": "dieses Gerät"}
 TOKEN_ID = {"en": "id {id}", "de": "ID {id}"}

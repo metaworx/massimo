@@ -7,8 +7,9 @@
  * The sign-in's card, drawn once into the skeleton's #login-dialog as
  * parts.js loads (AP UiParts, Block 14; partials/login.html and askLogin
  * of login.js before), the dialog itself the skeleton's: askLogin shows
- * it, not modal, and closes it. The logo and the title; a button per
- * enabled provider, with its refusal under them; the row of the ways to
+ * it, not modal, and closes it. The logo and the title, in the app the
+ * server it signs in to under it (Server.tsx); a button per enabled
+ * provider, with its refusal under them; the row of the ways to
  * sign in, the fingerprint first in the app where a login is kept, then
  * the password, chosen at first, and an API key, and the card's ☰ at its
  * end with the version, the language, the mode and in the app Select
@@ -44,6 +45,7 @@ import { BusyButton, busyProps, useBusy } from "../shared/question";
 import { VersionRow, version } from "../shared/server";
 import { keepLogin, kept, offer, plainHere } from "./app";
 import { Owner } from "./Owner";
+import { ServerLine } from "./Server";
 import { ask, askFocus, card, chooseWay, keepChosen, type Way } from "./store";
 
 /** The ways to sign in by a form, their data-way and their name's key, in the row's order after the fingerprint. */
@@ -174,6 +176,7 @@ export function Card() {
     <>
       <BrandName />
       <h3 id="login-title" class="login-title">{t(!owner ? "login.title" : card.ownerStep === "keep" ? "keepOpen.title" : "setup.title")}</h3>
+      <ServerLine />
       <div id="login-providers" class={"login-providers" + hid(owner || (!card.providers.length && !card.providersSaid))}>
         <div id="login-provider-buttons" class="login-provider-buttons">
           {card.providers.map((p) => (

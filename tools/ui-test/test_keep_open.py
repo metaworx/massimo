@@ -403,3 +403,22 @@ def test_keep_open_measures(new_context, case, watch, guard, app):
             assert not wrapped(page), f"each button's text on one line in {lang}: {wrapped(page)}"
         page.locator("#login-lang").select_option("auto")
         page.keyboard.press("Escape")
+
+
+def test_the_server_named_on_the_owner_steps(new_context, case, watch, guard):
+    """In the app the server's line under the card's title (AP MobileApp,
+    D62-A) shows on the first owner's form and on the confirmation that
+    keeps the server open alike, the title's text each step's own, and
+    the card stays where it is as the steps turn."""
+    app = dict(APP, status=dict(APP["status"], server={"name": "Home", "url": URL, "node": "11111111-1111-4111-8111-111111111111", "fp": ""}))
+    page = start_page(new_context, guard, watch, OPEN, app=app)
+    owner_card(page)
+    line = page.locator("#login-server")
+    line.wait_for(state="visible")
+    assert page.evaluate("document.getElementById('login-title').nextElementSibling.id") == "login-server", "after the title"
+    assert page.evaluate("document.getElementById('login-title').textContent === t('setup.title')"), "the form's title alone"
+    before = page.evaluate(BOX)
+    keep_step(page)
+    assert line.is_visible(), "on the confirmation too"
+    assert page.evaluate("document.getElementById('login-title').textContent === t('keepOpen.title')"), "the confirmation's title alone"
+    same_box(page, before, "the confirmation shown")

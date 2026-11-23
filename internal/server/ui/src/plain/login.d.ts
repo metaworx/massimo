@@ -24,13 +24,21 @@ declare global {
   function roleLabel(key: string, name?: string): string;
   /** The keys of the six default roles, for a role choice that cannot read the roles. */
   const DEFAULT_ROLES: string[];
-  /** The app's status of the login by fingerprint (docs/app.md): whether the phone can keep one, the user kept, whether the address is plain HTTP outside the private ranges; from contract version 5 the id of the key kept, 0 for none or not known. */
+  /** The server a page in the app was opened for (login.status's server, contract version 5): its name in the app's list, the address it was opened at, its node (the instance id of /healthz) and its pinned certificate fingerprint, "" for none. */
+  interface AppServer {
+    name?: string;
+    url?: string;
+    node?: string;
+    fp?: string;
+  }
+  /** The app's status of the login by fingerprint (docs/app.md): whether the phone can keep one, the user kept, whether the address is plain HTTP outside the private ranges; from contract version 5 the id of the key kept, 0 for none or not known, and the server the page was opened for. */
   interface AppLoginStatus {
     can?: boolean;
     user?: string;
     plain?: boolean;
     ask?: string;
     key_id?: number;
+    server?: AppServer;
   }
   /** In the app, the bridge's login by fingerprint (contract version 2 and later); null in a browser. */
   function appLogin(): {

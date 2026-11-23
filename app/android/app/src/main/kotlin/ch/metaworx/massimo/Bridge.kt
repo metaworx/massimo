@@ -304,9 +304,12 @@ class Bridge(
                 val can = biometric.canStrong()
                 background(answer) {
                     val s = servers.get(o.id) ?: throw BridgeException(R.string.err_no_server)
-                    // key_id: the kept login's key, 0 for none or not known (contract version 5; AP MobileApp, D65-A)
+                    // key_id: the kept login's key, 0 for none or not known (contract version 5; AP MobileApp, D65-A); server:
+                    // the server the page was opened for, at the address it was opened at, its node and pinned fingerprint,
+                    // which the sign-in card names in place of the address bar the app has not (D62-A)
                     JSONObject().put("can", can).put("user", logins.user(s.id)).put("ask", s.ask).put("plain", Origins.plainOutside(o.url))
                         .put("key_id", logins.get(s.id)?.keyId?.coerceAtLeast(0) ?: 0)
+                        .put("server", JSONObject().put("name", s.name).put("url", o.url).put("node", s.node).put("fp", s.fp))
                 }
             }
             "login.keep" -> keep(now ?: throw bad(), answer)

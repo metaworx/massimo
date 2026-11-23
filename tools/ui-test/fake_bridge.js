@@ -37,7 +37,7 @@
 //            5): each revoked at the page's server with that token, ms
 //            after the call, as the app's check takes its time
 //   login    for kind "server", the login by fingerprint (contract
-//            version 2): {status: {can, user, ask, plain, key_id}, keep: [answers
+//            version 2): {status: {can, user, ask, plain, key_id, server}, keep: [answers
 //            of login.keep in turn, true, false or "error:<message>"],
 //            fingerprint: the token login.fingerprint resolves to, null,
 //            or "error:<message>"}; a keep that resolves true keeps the

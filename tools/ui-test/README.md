@@ -699,6 +699,10 @@ hence `failed_checks_forgotten`.
   with a login kept, the row with the fingerprint is on one line at 390 px
   in all six languages, the card centred,
   and the fingerprint's spinner turns inside its button in the icon's place;
+  the card names its server under its title, in the app alone, with the
+  name once where it is the address and an ⓘ for the instance id and the
+  fingerprint, each copied with a tap, fitting the card at 390 px in all six
+  languages (and in `test_keep_open.py` on the first owner's steps);
   My profile in the app tags the key the phone keeps "this device's key",
   by `login.status()`'s `key_id`, and reads its keys once the sign-in's
   revoke is done, a key it revoked not marked but named in a toast;

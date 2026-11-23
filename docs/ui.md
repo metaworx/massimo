@@ -40,8 +40,19 @@ the account not known, no e-mail sent, the e-mail not verified,
 or the account in none of the groups the provider admits.
 The app shows no such button yet:
 the providers refuse a sign-in inside an app's page.
-In the app the card has the login by fingerprint instead (docs/app.md,
-"The login by fingerprint"):
+In the app the card names the server it signs in to, on a line of its own
+under its title, in place of the address bar the app has not
+(`login.status()`'s `server`, docs/app.md):
+the server's name as the app's list has it and the full address the page
+was opened at (`https://host:port`), the name once where it is the address,
+and ⓘ, "About this server", which shows the server's instance id (its `node`)
+and the certificate's fingerprint the app pinned, each copied with a tap,
+one the app does not have left out;
+the line shows on the sign-in, the first owner's form and the confirmation
+that keeps the server open alike, the ⓘ closed again at each opening;
+a browser shows none, its address bar naming the server.
+In the app the card has the login by fingerprint instead of the providers
+(docs/app.md, "The login by fingerprint"):
 **Enable login by fingerprint**, a switch under the password, its label to
 its right, where the phone has a fingerprint and keeps no login for the
 server, which after the sign-in asks for the fingerprint and keeps an API key
@@ -2931,7 +2942,9 @@ and emptied at each opening alone, never at the closing,
 so that a password manager can still save them.
 The app's status of the login by fingerprint is read at each opening
 and after a fingerprint refused
-(`app.ts`); the fingerprint's button and Sign in turn until the sign-in has settled,
+(`app.ts`), and with it the server the line under the title names (`Server.tsx`,
+`serverOf` of `signin/app.ts`), its ⓘ closed at each opening;
+the fingerprint's button and Sign in turn until the sign-in has settled,
 and the button stays the same element while the system's prompt is open;
 a login not kept shows its box, the focus on Try again,
 and the sign-in waits for the choice.

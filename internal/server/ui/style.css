@@ -1490,6 +1490,19 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
    signed-out page's flow, centred there, its title under the logo. */
 #login-dialog[open] { position: static; margin: 0 auto; }
 .login-title { text-align: center; }
+/* in the app, the server under the title (ui/src/signin/Server.tsx): its
+   name and its address on a line that wraps at a phone's width, the ⓘ at
+   its end, and under it the facts the ⓘ shows, each copied with a tap */
+.login-server { margin: -6px 0 12px; text-align: center; }
+.login-server-line { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0 8px; margin: 0; }
+.login-server-name { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.login-server-address { min-width: 0; color: var(--muted); overflow-wrap: anywhere; }
+button.login-server-more { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 0; background: none; color: var(--muted); }
+button.login-server-more:hover, button.login-server-more:focus-visible, button.login-server-more[aria-expanded="true"] { color: var(--accent); }
+button.login-server-more .ni { width: 18px; height: 18px; }
+.login-server-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 10px; margin: 4px 0 0; text-align: left; }
+.login-server-facts dt { color: var(--muted); font-size: 0.85rem; }
+.login-server-facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 /* its ☰, the language and the mode: drawn as the header's, at the end of
    the row of the ways to sign in, dropping down from the card's right
    edge */
