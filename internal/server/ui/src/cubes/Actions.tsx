@@ -6,17 +6,18 @@
  *
  * A Cube's actions in one row at the bottom of its panel: Pair a device,
  * with its progress under the row (Pairing.tsx), and Repair… with its
- * box (the shared RepairBox); Reboot the
- * Cube and Remove, each asking in its own place. Reboot's question names
- * the radiograms pending as the Cube says now (D126).
+ * box (the shared RepairBox); Refresh the Cube, which asks nothing (AP
+ * RefreshBatteries, D10-B); Reboot the Cube and Remove, each asking in
+ * its own place. Reboot's question names the radiograms pending as the
+ * Cube says now (D126).
  */
 
 import type { Cube } from "../api";
 import { cubePath } from "../shared/path";
-import { Question, useAsk } from "../shared/question";
+import { BusyButton, Question, useAsk } from "../shared/question";
 import { RepairBox, RepairButton, repairScope } from "../shared/repair";
 import { Pairing } from "./Pairing";
-import { rebootCube, removeCube } from "./send";
+import { rebootCube, refreshCube, removeCube } from "./send";
 import { cubeUI } from "./store";
 
 /**
@@ -31,6 +32,20 @@ function Repair({ c }: { c: Cube }) {
         <RepairButton scope={scope} kind="cube" path={cubePath(c.serial)} label={c.name || c.serial} />
       </div>
       <RepairBox scope={scope} />
+    </div>
+  );
+}
+
+/**
+ * Refresh is the Cube's Refresh, for a role with restart: the Cube read
+ * again at once by a new connection, as the periodic refresh does, with
+ * nothing sent by radio, so it asks nothing; it turns until the answer,
+ * which the Cubes' message line says, as Reboot's.
+ */
+function Refresh({ serial }: { serial: string }) {
+  return (
+    <div class="actions cube-refresh needs-restart">
+      <BusyButton cls="cube-refresh-btn" label={t("cubes.refresh")} run={() => refreshCube(serial)} />
     </div>
   );
 }
@@ -91,6 +106,7 @@ export function Actions({ c, editable }: { c: Cube; editable: boolean }) {
   return (
     <div class="cube-actions">
       <Pairing serial={c.serial} />
+      <Refresh serial={c.serial} />
       <Reboot c={c} />
       <Repair c={c} />
       {editable && <Remove serial={c.serial} />}

@@ -114,6 +114,19 @@ function updateDevice(d) {
   if (j >= 0) state.unlisted = state.unlisted.map((x, k) => (k === j ? d : x));
 }
 
+// updateBattery applies a battery event, a device's level that changed
+// (docs/api-v1.md, "battery"), as when new batteries were marked: the
+// device takes the event's level, its other values as the page has them,
+// so that its row's badge follows before the next device list. A device
+// without a state has no level.
+function updateBattery(ev) {
+  const level = ev.summary && ev.summary.level;
+  if (!ev.device || !level) return;
+  const all = state.rooms.flatMap((r) => r.devices).concat(state.unlisted);
+  const d = all.find((x) => x.rf_address === ev.device);
+  if (d && d.state && d.battery !== level) updateDevice({ ...d, battery: level });
+}
+
 // --- results ----------------------------------------------------------
 
 function resultText(label, res) {

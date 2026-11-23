@@ -1021,6 +1021,12 @@ async function connectEvents() {
     loadRooms().catch(() => {});
   });
   on("device_forgotten", logged(() => loadRooms()));
+  // A device's battery level changed: its row's badge follows (rooms.js),
+  // and the parts that follow the server see it as before.
+  on("battery", logged((data) => {
+    updateBattery(data);
+    MassimoParts.serverEvent(data);
+  }));
   // A write a device has not shown by its deadline, or showed late: the
   // rooms' confirmations changed without a state event (confirm.go).
   on("unconfirmed", logged(() => loadRooms()));
@@ -1052,7 +1058,7 @@ async function connectEvents() {
   // Cube's address and its leaving the LAN, the changes, for the log, and
   // for the parts that follow the server while their page is shown
   // (MassimoParts.serverEvent).
-  const handled = new Set(["state", "hello", "metadata", "pairing_started", "pairing_ended", "paired", "device_forgotten",
+  const handled = new Set(["state", "hello", "metadata", "pairing_started", "pairing_ended", "paired", "device_forgotten", "battery",
     "connected", "disconnected", "slots", "mismatch", "config", "cube_found", "restore_step", "restore_done", "unconfirmed"]);
   for (const kind of MassimoParts.log.kinds) if (!handled.has(kind)) on(kind, logged((data) => MassimoParts.serverEvent(data)));
   es.onerror = () => {

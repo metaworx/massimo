@@ -516,7 +516,9 @@ Every room has a tile:
   its tooltip the radiogram that failed, where the server gives it,
   by its technical name and code:
   "Last radiogram that failed: TimeInformation (0x03)");
-  a battery, one getting weak (amber) or low (red), as the server keeps its level;
+  a battery, by the level the server keeps, in words that say what to do:
+  "Batteries weak, replace soon" in amber, "Batteries low, replace now" in red
+  (their kind in the problems' tooltip: "batteries to replace");
   an open window, the opening sash or the paned window as you choose,
   a window contact reporting it:
   blue for its first 5 minutes, then amber with a triangle,
@@ -609,6 +611,16 @@ Every room has a tile:
   and measured temperature, offset), its problems as icons that list them,
   as in the tile's head, a write not confirmed among them,
   and badges for lock, window and mode.
+  A device whose battery is weak or low and whose battery flag is off
+  offers **New batteries**, first among its actions, for a role with `configure`:
+  it tells the server that the device has new batteries,
+  and its level is ok at once (`POST …/devices/{rf}/battery`, `docs/api-v1.md`).
+  The line under the row's actions says that they are noted,
+  or the server's error, as for a device that still reports its batteries low;
+  the battery's badge and the button go with the level's `battery` event,
+  or with the next device list, not with the answer.
+  The log's line of the level says so, and who marked them:
+  "Batteries ok (new batteries, before: low), by Anna".
   A device the Cube has not heard for some minutes keeps the values of its
   last report, greyed, with the badge "out of date" and its age in place of
   "not reported".
@@ -992,7 +1004,7 @@ again without it or the server starts,
 a room whose thermostats disagree until they agree again,
 a thermostat off its week programme until it follows it again,
 a room's setpoint not confirmed until every thermostat shows its re-send;
-a device's communication error, link error and low battery
+a device's communication error, link error and battery warning
 while the device has them, at the line that set them;
 a communication error's line names the radiogram that failed,
 "communication error: TimeInformation (0x03)", as the badge's tooltip does.
@@ -1002,6 +1014,11 @@ Opening the log marks nothing.
 The marks follow a signed-in user with `preferences` (the preference `log.seen`);
 anyone else's stay in the browser.
 The page asks at every poll.
+A device's battery level, the server's, has a line of its own at each change,
+in the badge's words with the level before in a short word:
+"Batteries low, replace now (before: weak)";
+the device's own flag, `battery_low`,
+is the **battery warning** of its state's line.
 A device that reports while its communication error is set is reset by the server,
 once a day at most: the log's **communication error reset** line.
 Where the error is back within that day,
@@ -1262,7 +1279,8 @@ also while no page is open.
   On an iPhone or iPad the page has to be added to the Home Screen first.
 - **What notifies you**:
   a switch per kind, with its delay or threshold, each with its help:
-  a window open (after 30 min), frost (below 8 °C), a low battery, a battery getting weak,
+  a window open (after 30 min), frost (below 8 °C),
+  "Batteries low, replace now" and "Batteries weak, replace soon",
   a device's communication error or link error,
   the Cube out of reach (after 10 min) and back,
   and, off by default, a device that sends no news, a device paired,
@@ -1566,6 +1584,12 @@ settings forms and have none of it.
   **Repair…**, in the panel's actions for a role with `repair`,
   opens the Cube's repairs under them (Rooms, Repairs):
   the reset of every communication error of the Cube.
+  **Refresh the Cube**, in the panel's actions beside Reboot for a role with `restart`,
+  reads the Cube again at once (`POST /api/v1/cubes/{sn}/refresh`):
+  the server connects to it anew and reads everything it holds,
+  as the periodic refresh does, and nothing goes by radio, so it asks nothing;
+  it turns until the answer, and the message line says the Cube was read again,
+  or the error.
   **Reboot the Cube**, in the panel's actions for a role with `cubes.reboot`,
   restarts the Cube (`POST /api/v1/cubes/{sn}/reboot`),
   which frees one that still holds the server's old connection at once:
@@ -1610,7 +1634,7 @@ settings forms and have none of it.
 
   A Cube's panel has three groups: its facts, its settings with **Hidden devices**
   and **Save**, and its actions in one row under both,
-  **Pair a device**, **Reboot the Cube** and **Remove**,
+  **Pair a device**, **Refresh the Cube**, **Reboot the Cube** and **Remove**,
   each question and the pairing's progress in a line under them;
   from 760 px the facts and the settings are side by side.
   **Pair a device**
@@ -1914,7 +1938,8 @@ The server's sign, when it says an update is out, opens it at Software update.
   that came while it ran.
 - **Maintenance** (with `restart`, `reboot` for its reboot,
   or `settings` for its announcement, its Cube intervals and its last two parts),
-  in this order: **Announce on the LAN**, the three Cube intervals,
+  in this order: **Announce on the LAN**, the Cube intervals
+  with **Refresh the Cubes** after the refresh's,
   **Settings file**, **Restart** and **Reboot the computer**,
   each under a bold title:
   **Restart the server**
@@ -1954,6 +1979,19 @@ The server's sign, when it says an update is out, opens it at Software update.
   It then gives this run's value, or says that a change waits for the
   next restart; where `-poll`, `-refresh` or `-discover-interval`
   decides, the choice is read-only and names the flag.
+  **Refresh the Cubes** (with `restart`,
+  so that a manager has it without the intervals)
+  reads every Cube the server serves again at once, one after the other,
+  with **Refresh now** (`POST /api/v1/cubes/{sn}/refresh` for each):
+  a new connection that reads everything the Cube holds,
+  what its devices and their batteries last reported among it,
+  and nothing goes by radio.
+  The button turns until the last Cube has answered,
+  and under the row each Cube's line says, as its answer comes,
+  that it was read again and when, or the error;
+  then the page reads its data again.
+  Showing Maintenance again takes the lines back, but not while a run goes on,
+  and a sign-out ends the run with nothing shown.
   **Settings file** names the file and when the server last read it;
   **Reload now** reads it again at once, as SIGHUP does
   (`docs/api-v1.md`, "POST /api/v1/reload"), and says what changed.
@@ -2268,7 +2306,9 @@ and wires with `addEventListener`; no script uses `innerHTML`.
 
 `app.js` opens the event stream with a ticket, none while a card the user opened
 holds a running page still (`connectEvents`, AP FirstOwner D35), and hands each kind on:
-`state` to `updateDevice` and the log; `hello`, `disconnected` and `slots` to
+`state` to `updateDevice` and the log;
+`battery` to `updateBattery` (rooms.js, the device's level alone),
+the log and `MassimoParts.serverEvent`; `hello`, `disconnected` and `slots` to
 `loadCubes`, `metadata`, `device_forgotten`, `unconfirmed` and `mismatch` to
 `loadRooms`, `connected` and `resync` to `refresh` (with `resync` to
 `MassimoParts.backups.resynced` and `MassimoParts.serverEvent`);

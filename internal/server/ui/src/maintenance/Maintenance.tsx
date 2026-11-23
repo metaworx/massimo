@@ -7,24 +7,25 @@
  * Maintenance → Maintenance as a part, built once and updated in place,
  * in the owner's order: the announcement on the LAN and the Cube
  * intervals, each saved at once and kept on while it saves, so that the
- * focus stays on it (with settings); the settings file read again and the
- * server's restart, which asks in place of its button, with the settings
- * that wait for the next start (with restart); the computer's reboot with
- * its delay, which asks naming it, and Take the reboot back (with
- * reboot). A load that comes in leaves the delay typed, a question and
+ * focus stays on it (with settings), and under the refresh's Refresh
+ * now, every Cube read again at once (with restart); the settings file
+ * read again and the server's restart, which asks in place of its
+ * button, with the settings that wait for the next start (with
+ * restart); the computer's reboot with its delay, which asks naming it,
+ * and Take the reboot back (with reboot). A load that comes in leaves the delay typed, a question and
  * the focus where they are; the card's badge counts what waits for the
  * next start.
  */
 
-import type { Ref } from "preact";
+import { Fragment, type Ref } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import type { Setting } from "../api";
 import { Notice, ResultLine } from "../shared/badge";
 import { hid } from "../shared/cls";
 import { NumberField, Select } from "../shared/field";
-import { BusyButton, Question, useAsk, useSetAtOnce } from "../shared/question";
+import { BusyButton, busyProps, Question, useAsk, useSetAtOnce } from "../shared/question";
 import {
-  cancelReboot, INTERVALS, type Interval, intervalWaits, announceWaits, parseGoDuration, reboot, REBOOT_DELAY_MAX, rebootAsk, rebootDelay, reloadSettings, restart, restartAsk, runReboot, runRestart, saveInterval, setAnnounce, settings, waiting,
+  cancelReboot, INTERVALS, type Interval, intervalWaits, announceWaits, parseGoDuration, reboot, REBOOT_DELAY_MAX, rebootAsk, rebootDelay, refreshNow, reloadSettings, restart, restartAsk, runReboot, runRefreshNow, runRestart, saveInterval, setAnnounce, settings, waiting,
 } from "./store";
 import { cardBadges } from "../shared/card";
 import { useLook } from "../shared/look";
@@ -97,6 +98,33 @@ function IntervalRow({ iv }: { iv: Interval }) {
         onChange={(x) => choice.set(x, (s) => saveInterval(iv, Number(s)))} />
       <p id={iv.id + "-text"} class="muted small field-hint">{v ? stateLine(iv, v) : ""}</p>
       <ResultLine id={iv.id + "-msg"} cls="small cubes-msg" role="status" res={settings.intervalSaid[iv.key]} />
+    </div>
+  );
+}
+
+/**
+ * RefreshNow is the row under the refresh's interval (with restart, so
+ * shown to a manager without the interval): Refresh now reads every Cube
+ * the server serves again at once, one after the other, turning until
+ * the last has answered, and each Cube's outcome shows under the row as
+ * its answer comes (AP RefreshBatteries, D10-B).
+ */
+function RefreshNow() {
+  useLook();
+  const cubes = state.cubes;
+  const said = refreshNow.said;
+  return (
+    <div class="action-row refresh-now needs-restart">
+      <div>
+        <p class="action-title">{t("maint.refreshNowTitle")}</p>
+        <p class="muted small">{t("maint.refreshNowText")}</p>
+        <div class="refresh-results">
+          {cubes.map((c) => <ResultLine key={c.serial} cls="small cubes-msg refresh-result" role="status" res={said[c.serial]} />)}
+        </div>
+      </div>
+      <div class="actions">
+        <button type="button" id="refresh-now" {...busyProps("", refreshNow.running, !cubes.length)} onClick={runRefreshNow}>{t("maint.refreshNow")}</button>
+      </div>
     </div>
   );
 }
@@ -197,7 +225,12 @@ export function Maintenance() {
   return (
     <>
       <Announce />
-      {INTERVALS.map((iv) => <IntervalRow key={iv.key} iv={iv} />)}
+      {INTERVALS.map((iv) => (
+        <Fragment key={iv.key}>
+          <IntervalRow iv={iv} />
+          {iv.key === "refresh_interval" && <RefreshNow />}
+        </Fragment>
+      ))}
       <div class="action-row needs-restart">
         <div>
           <p class="action-title">{t("maint.file")}</p>
