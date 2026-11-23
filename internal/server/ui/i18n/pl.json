@@ -104,6 +104,8 @@
   "msg.cannotLoad": "Nie można wczytać: {error}",
   "api.badToken": "brak tokenu lub błędny token",
   "api.notSent": "nie wysłano, ponieważ nastąpiło wylogowanie: zrób to ponownie po zalogowaniu",
+  "api.noAnswer": "brak odpowiedzi serwera",
+  "api.noAnswerWrite": "brak odpowiedzi serwera; mogło to jednak zostać wykonane",
 
   "settings.poll": "Odpytuj co",
   "settings.seconds": "s",

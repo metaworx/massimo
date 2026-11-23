@@ -102,6 +102,8 @@
   "msg.cannotLoad": "Laden mislukt: {error}",
   "api.badToken": "token ontbreekt of is onjuist",
   "api.notSent": "niet verzonden, omdat u afgemeld was: doe het opnieuw zodra u aangemeld bent",
+  "api.noAnswer": "geen antwoord van de server",
+  "api.noAnswerWrite": "geen antwoord van de server; het is misschien toch uitgevoerd",
 
   "settings.poll": "Opvragen elke",
   "settings.seconds": "s",

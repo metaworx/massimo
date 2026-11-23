@@ -464,7 +464,9 @@ hence `failed_checks_forgotten`.
   a guest made with an end date that has seconds is saved without the end date
   when its display name alone changes, and Save without a change sends nothing;
   a user's Remove asks in the panel, Keep gives the focus back to Remove,
-  and a double click on Yes sends one DELETE and says it worked.
+  and a double click on Yes sends one DELETE and says it worked;
+  a Revoke the server never answers turns until the page's limit, under
+  Playwright's clock, and then says that no answer came.
 - `test_login.py`, in a fresh browser context without the stored token:
   the sign-in dialog opens in the middle of the window, its title centred,
   refuses a wrong password, signs in as the operator,

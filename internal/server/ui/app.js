@@ -256,23 +256,78 @@ function base() {
   return "api/v1/cubes/" + encodeURIComponent(state.serial);
 }
 
+// API_WAIT_MS is how long a request waits for the server's answer (AP
+// MobileApp, F32, D82-A): a link that stalls answers nothing, and what
+// waits for it, a button turning, would wait for good. A route that waits
+// longer by design has its own limit (waitOf).
+const API_WAIT_MS = 20000;
+
+// waitOf is how long a request of method to path waits for its answer:
+// API_WAIT_MS, but for the routes that wait longer by design, each a
+// little longer than the server's own limit (internal/server): a repair's
+// run ten minutes (repair_api.go); every other write to a Cube, its rooms
+// or its devices, and a Cube added, the Cube's answer through its queue,
+// up to five minutes for a device's settings, its removal and the
+// configurations and week programs (config_api.go); the search for Cubes
+// waits for a run going on and its own, each up to 30 s while another
+// program holds the discovery port; the look for an update, asked or
+// before an update is started, 30 s under the server's lock of the look,
+// which a request may first wait for while another holds it, so twice
+// that (update_api.go); the look for integrations on the LAN 30 s; the end
+// of a sign-in through a provider up to 10 s for each of its calls there
+// (oidc.go). The stream's ticket asks no Cube.
+function waitOf(method, path) {
+  const route = path.split("?")[0];
+  if (route === "api/v1/cubes/discover") return 90000;
+  if (method !== "GET" && /^api\/v1\/cubes\/[^/]+\/events\/ticket$/.test(route)) return API_WAIT_MS;
+  if (method !== "GET" && /^api\/v1\/cubes\/[^/]+\/(.+\/)?repair\//.test(route)) return 630000;
+  if (method !== "GET" && (route === "api/v1/cubes" || /^api\/v1\/cubes\/[^/]+\/./.test(route))) return 330000;
+  if (route === "api/v1/update") return 75000;
+  if (method === "GET" && route === "api/v1/integrations/found") return 45000;
+  if (route === "api/v1/login/oidc/finish") return 45000;
+  return API_WAIT_MS;
+}
+
+// noAnswer is the error of a request the server did not answer within its
+// limit (waitOf): a read failed, a write's text saying that it may have
+// been done all the same, since it may have reached the server; its status
+// 0, as no answer has one.
+function noAnswer(method) {
+  const err = new Error(t(method === "GET" ? "api.noAnswer" : "api.noAnswerWrite"));
+  err.status = 0;
+  err.noAnswer = true;
+  return err;
+}
+
 // apiRequest sends one request and returns the answer's JSON, null for
 // an empty one; an answer that is not ok is thrown as an Error with the
 // server's error (or the status), its status and its data. The token
 // goes along unless auth is false, and a token given in its place;
-// keepalive lets the request outlive the page. api() adds the sign-in on
-// a 401; the sign-in itself and the last preferences sent as the page is
-// left use it as it is (login.js).
+// keepalive lets the request outlive the page, and has no time limit;
+// every other request is aborted where its answer has not come within
+// its limit (waitOf), and fails as no answer (noAnswer). api() adds the
+// sign-in on a 401; the sign-in itself and the last preferences sent as
+// the page is left use it as it is (login.js).
 async function apiRequest(method, path, body, { auth = true, keepalive = false, token = "", headers: extra = {} } = {}) {
   const headers = { ...extra };
   const bearer = token || (auth && state.token);
   if (bearer) headers.Authorization = "Bearer " + bearer;
   if (body !== undefined) headers["Content-Type"] = "application/json";
-  const resp = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), keepalive });
+  const stop = keepalive ? null : new AbortController();
+  const timer = stop ? setTimeout(() => stop.abort(), waitOf(method, path)) : null;
+  let resp, text;
+  try {
+    resp = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), keepalive, signal: stop ? stop.signal : undefined });
+    text = await resp.text(); // the answer's body within the same limit
+  } catch (e) {
+    if (stop && stop.signal.aborted) throw noAnswer(method);
+    throw e;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
   noteServerClock(resp);
   state.repliedAt = Date.now();
   let data = null;
-  const text = await resp.text();
   if (text) {
     try {
       data = JSON.parse(text);

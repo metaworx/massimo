@@ -101,6 +101,8 @@
   "msg.cannotLoad": "Laden fehlgeschlagen: {error}",
   "api.badToken": "Token fehlt oder ist falsch",
   "api.notSent": "nicht gesendet, da Sie abgemeldet waren: tun Sie es angemeldet noch einmal",
+  "api.noAnswer": "keine Antwort vom Server",
+  "api.noAnswerWrite": "keine Antwort vom Server; es wurde vielleicht trotzdem ausgeführt",
 
   "settings.poll": "Abfrage alle",
   "settings.seconds": "s",

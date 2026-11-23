@@ -103,6 +103,8 @@
   "msg.cannotLoad": "Chargement impossible : {error}",
   "api.badToken": "jeton manquant ou erroné",
   "api.notSent": "non envoyé, car vous étiez déconnecté : recommencez une fois connecté",
+  "api.noAnswer": "pas de réponse du serveur",
+  "api.noAnswerWrite": "pas de réponse du serveur ; c'est peut-être fait quand même",
 
   "settings.poll": "Interroger toutes les",
   "settings.seconds": "s",

@@ -2238,6 +2238,25 @@ a line down from its icon.
 A button that sends a request is busy from its click until the answer:
 off, with a turning ring after its text, and `aria-busy` (`BusyButton`, `useBusy`),
 so that a second click or Enter sends nothing.
+A request waits about 20 seconds for its answer (`apiRequest` of `app.js`,
+AP MobileApp, D82-A), so that a link that stalls leaves no button turning for good:
+then it fails as "no answer from the server",
+a write adding that it may have been done all the same;
+the routes that wait longer by design have limits of their own (`waitOf`),
+each a little longer than the server's own:
+a repair's run ten and a half minutes, the server's being ten;
+every other write to a Cube, its rooms or its devices, and a Cube added,
+five and a half minutes, a device's settings, its removal and the configurations
+and week programs taking up to five, a setpoint up to two;
+the search for Cubes a minute and a half;
+the look for an update, also as an update is started, 75 seconds,
+the server's look taking up to 30 under a lock another look may hold as long;
+the look for integrations on the LAN and the end of a sign-in through a provider
+45 seconds;
+the stream's ticket the 20 seconds of every other request.
+The event stream and what the page sends as it is left (`keepalive`) have none,
+and neither has what goes as a file (`apiRaw`):
+a backup's download, and a restore's plan and its run.
 A part gives the focus in the handler of the user's action, or in a layout effect,
 in the drawing that shows the thing, never in an effect, which runs a frame later,
 when a user may be typing elsewhere;

@@ -103,6 +103,8 @@
   "msg.cannotLoad": "Impossibile caricare: {error}",
   "api.badToken": "token mancante o errato",
   "api.notSent": "non inviato, perché eri disconnesso: riprova una volta connesso",
+  "api.noAnswer": "nessuna risposta dal server",
+  "api.noAnswerWrite": "nessuna risposta dal server; potrebbe essere stato fatto comunque",
 
   "settings.poll": "Interroga ogni",
   "settings.seconds": "s",

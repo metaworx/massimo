@@ -101,6 +101,8 @@
   "msg.cannotLoad": "Cannot load: {error}",
   "api.badToken": "missing or wrong token",
   "api.notSent": "not sent, since you were signed out: do it again once signed in",
+  "api.noAnswer": "no answer from the server",
+  "api.noAnswerWrite": "no answer from the server; it may have been done all the same",
 
   "settings.poll": "Poll every",
   "settings.seconds": "s",
