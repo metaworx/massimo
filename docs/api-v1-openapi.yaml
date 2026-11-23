@@ -3914,9 +3914,10 @@ components:
     LogCursorBeyond:
       description: >-
         The cursor after is beyond the log's newest event, one the log
-        never gave out: a store restored from an older copy or emptied by
-        the prune, a restart without a store on a clock set back, the
-        cursor of a Cube's events kept in memory once the Cube has its row.
+        never gave out: a store restored from an older copy (the prune
+        keeps the log's newest event and never makes one), a restart
+        without a store on a clock set back, the cursor of a Cube's events
+        kept in memory once the Cube has its row.
         The error says to reload the log: the client reads it again
         without after.
       content:

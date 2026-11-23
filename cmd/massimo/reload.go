@@ -9,10 +9,14 @@ package main
 // start would apply it), and so does MASSIMO_REBOOT, the owner's switch
 // of the reboot (Server.SetRebootAllowed); every other setting that
 // changed is listed as applying at the next restart (GET
-// /api/v1/restart), by name, never by value.
+// /api/v1/restart), by name, never by value. A log level or format
+// among them that the next start would refuse makes the log's
+// settings_read a warning (startChecks), and still waits for that start.
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"slices"
@@ -42,6 +46,29 @@ var flagVars = map[string]string{
 	"acme-directory": env.ACMEDirectory, "tls-http": env.TLSHTTP, "trusted-proxies": env.TrustedProxies,
 	"acme-dns-hook": env.ACMEDNSHook, "hsts": env.HSTS, "restart": restartVar, "sighup": sighupVar, "allow-reboot": rebootVar,
 	"announce": env.Announce,
+}
+
+// startChecks are the settings serve's start refuses where they do not
+// parse, each checked as the start checks it (logging.go), so that its
+// error is the one the start would stop with. Their values are no
+// secrets: massimo config and GET /api/v1/config show them, and so may
+// the error.
+var startChecks = map[string]func(string) error{
+	env.LogLevel: func(v string) error {
+		if _, err := parseLogLevel(v); err != nil {
+			return fmt.Errorf("%s: %w", serveLevelWhat, err)
+		}
+		return nil
+	},
+	env.LogFormat:        func(v string) error { return formatsCheck(logFormatFlags{general: v}) },
+	env.LogFileFormat:    func(v string) error { return formatsCheck(logFormatFlags{file: v}) },
+	env.LogProcessFormat: func(v string) error { return formatsCheck(logFormatFlags{process: v}) },
+}
+
+// formatsCheck is the start's check of the log's formats, its error.
+func formatsCheck(g logFormatFlags) error {
+	_, _, err := g.formats()
+	return err
 }
 
 // fileStamp is what watchSettings compares: a file's size and time of
@@ -156,9 +183,36 @@ func (r *settingsReloader) reload(ctx context.Context, why string) (changed, pen
 	r.srv.SetPendingRestart(pending)
 	if len(changed) > 0 || why != "the settings file changed" {
 		r.log.Info("settings file read again", "why", why, "changed", strings.Join(changed, ","), "at_next_restart", strings.Join(pending, ","))
-		r.srv.LogSettingsRead(ctx, why, changed, pending) // the names, never the values
+		// The names, never the values; the errors of the refused
+		// settings quote theirs, which are no secrets. The event's own
+		// line is the warning, on stderr as in the web UI's log, as
+		// log_rotated's is.
+		r.srv.LogSettingsRead(ctx, why, changed, pending, refused(pending))
 	}
 	return changed, pending, nil
+}
+
+// refused is what the next start refuses of pending (startChecks): the
+// start's errors, each naming its flag and variable, after "the next
+// start refuses: ", nil for none. pending leaves out a setting a flag
+// fixed, which the start does not read from the file, and
+// env.ReloadFile keeps a value the process environment set, which the
+// start took and takes again.
+func refused(pending []string) error {
+	var errs []string
+	for _, k := range pending {
+		check, ok := startChecks[k]
+		if !ok {
+			continue
+		}
+		if err := check(os.Getenv(k)); err != nil {
+			errs = append(errs, err.Error())
+		}
+	}
+	if len(errs) == 0 {
+		return nil
+	}
+	return errors.New("the next start refuses: " + strings.Join(errs, "; "))
 }
 
 // nonNil is a list as JSON shows an empty one: [], not null.

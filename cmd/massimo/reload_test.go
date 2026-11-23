@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -169,6 +170,106 @@ func TestSettingsReloader(t *testing.T) {
 	if srv2.AuthMode() != "open" || len(r2.pending()) != 0 {
 		t.Fatalf("with -token: mode %s, pending %v", srv2.AuthMode(), r2.pending())
 	}
+}
+
+// A log level or format the settings file changes to a value the next
+// start refuses makes the reload's settings_read a warning, with the
+// start's errors after "the next start refuses: ": one line, on the
+// process's log as in the server's, where the log's warning sign counts
+// it. The value still waits for the next start, and the running level
+// stays. A good change warns of nothing and settles the warning; a
+// setting a flag fixed is not the file's, and warns of nothing.
+func TestReloadWarnsOfARefusedLogSetting(t *testing.T) {
+	unsetForTest(t, env.LogLevel, env.LogFormat, env.LogFileFormat, env.LogProcessFormat)
+	p := filepath.Join(t.TempDir(), "env")
+	os.WriteFile(p, nil, 0o600)
+	t.Cleanup(func() { os.WriteFile(p, nil, 0o600); env.ReloadFile(p) }) // the env package forgets the test's names
+	st := storekit.Open(t, "")
+	// The log's writer, which the server's Run would start.
+	wctx, stopWriter := context.WithCancel(context.Background())
+	writerDone := make(chan struct{})
+	go func() { st.RunEvents(wctx); close(writerDone) }()
+	t.Cleanup(func() { stopWriter(); <-writerDone })
+	// One process log, as serve's: the reloader's lines and the server's.
+	log, w := testkit.LogWatch(nil)
+	srv := server.New(server.Options{Store: st, Logger: log})
+	apiGet := func(path string, v any) {
+		t.Helper()
+		req := httptest.NewRequest("GET", path, nil)
+		req.RemoteAddr = "127.0.0.1:5000"
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, req)
+		if rec.Code != 200 || json.Unmarshal(rec.Body.Bytes(), v) != nil {
+			t.Fatalf("GET %s: %d %s", path, rec.Code, rec.Body.String())
+		}
+	}
+	reads := 0 // the settings_read lines the reloads wrote, one each
+	warned := func(r testkit.Record) bool { return r.Level >= slog.LevelWarn }
+	// reload writes the settings file and reads it again with r; then
+	// checks the process log, the server's newest settings_read and the
+	// log's warning sign: one warning, the event's line, with want as
+	// its error, or for want "" none.
+	reload := func(r *settingsReloader, what, text, want string) {
+		t.Helper()
+		m := w.Mark()
+		if err := os.WriteFile(p, []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := r.reload(t.Context(), "test"); err != nil {
+			t.Fatalf("%s: %v", what, err)
+		}
+		reads++
+		var lines []struct{ Level, Error string }
+		testkit.Eventually(t, what+": the settings_read in the server's log", func() bool {
+			lines = nil
+			apiGet("/api/v1/log?kind=settings_read", &lines)
+			return len(lines) == reads
+		})
+		var sign struct {
+			Level string `json:"level"`
+		}
+		apiGet("/api/v1/log/alerts", &sign)
+		l := lines[len(lines)-1]
+		if want == "" {
+			w.HasNot(t, m, what+": a warning", warned)
+			if l.Level != "info" || l.Error != "" || sign.Level != "" {
+				t.Fatalf("%s: the line %+v, the sign %q", what, l, sign.Level)
+			}
+			return
+		}
+		rec, _ := w.Has(t, m, what+": the settings_read line at warn", testkit.MsgAt(slog.LevelWarn, "settings read", "kind", "settings_read"))
+		if rec.Attrs["error"] != want {
+			t.Fatalf("%s: the line's error\n%q, want\n%q", what, rec.Attrs["error"], want)
+		}
+		if n := w.Count(m, warned); n != 1 {
+			t.Fatalf("%s: %d warnings, want the event's line alone: %v", what, n, w.Since(m, warned))
+		}
+		if l.Level != "warn" || l.Error != want || sign.Level != "warn" {
+			t.Fatalf("%s: the line %+v, the sign %q", what, l, sign.Level)
+		}
+	}
+	r := newSettingsReloader(p, log.With("source", "system"), srv, settings(), map[string]bool{})
+	level := logLevel.Level()
+
+	reload(r, "a good change, none for stderr alone",
+		env.LogLevel+"=Debug\n"+env.LogFormat+"=json\n"+env.LogFileFormat+"=plain\n"+env.LogProcessFormat+"=none\n", "")
+	reload(r, "a bad level", env.LogLevel+"=deubg\n",
+		`the next start refuses: -log-level or MASSIMO_LOG_LEVEL: unknown log level "deubg", want debug, info, warn or error`)
+	if !slices.Contains(r.pending(), env.LogLevel) || logLevel.Level() != level {
+		t.Fatalf("a bad level: pending %v, the level %v, want %v", r.pending(), logLevel.Level(), level)
+	}
+	reload(r, "three bad formats, none where only stderr takes it",
+		env.LogFormat+"=xml\n"+env.LogFileFormat+"=none\n"+env.LogProcessFormat+"=yaml\n",
+		`the next start refuses: -log-file-format or MASSIMO_LOG_FILE_FORMAT: unknown log format "none", want json or plain; `+
+			`-log-format or MASSIMO_LOG_FORMAT: unknown log format "xml", want json or plain; `+
+			`-log-process-format or MASSIMO_LOG_PROCESS_FORMAT: unknown log format "yaml", want json, plain or none`)
+	reload(r, "good again, which settles the warnings", env.LogLevel+"=warn\n", "")
+
+	// The flags' settings are not the file's; one no flag fixes still is.
+	fixed := newSettingsReloader(p, log.With("source", "system"), srv, settings(), map[string]bool{"log-level": true, "log-format": true})
+	reload(fixed, "-log-level and -log-format given", env.LogLevel+"=deubg\n"+env.LogFormat+"=xml\n", "")
+	reload(fixed, "-log-file-format not given", env.LogLevel+"=deubg\n"+env.LogFormat+"=xml\n"+env.LogFileFormat+"=xml\n",
+		`the next start refuses: -log-file-format or MASSIMO_LOG_FILE_FORMAT: unknown log format "xml", want json or plain`)
 }
 
 // A reload removes the keep-open setting where the server has users

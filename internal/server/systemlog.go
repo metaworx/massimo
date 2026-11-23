@@ -125,12 +125,19 @@ func (s *Server) logStopping() {
 // LogSettingsRead writes settings_read: the settings file read again,
 // why (the file changed, SIGHUP, the API), the variables that changed
 // and those that wait for the next start, by name, never their values,
-// which may be secrets; with who asked for it through the API (ctx).
-func (s *Server) LogSettingsRead(ctx context.Context, why string, changed, pending []string) {
+// which may be secrets; with who asked for it through the API (ctx). It
+// is at warn, with refused as its error, where the next start would
+// refuse a value that waits for it (cmd/massimo: a log level or format
+// that does not parse).
+func (s *Server) LogSettingsRead(ctx context.Context, why string, changed, pending []string, refused error) {
 	c, p := append([]string{}, changed...), append([]string{}, pending...)
 	sort.Strings(c)
 	sort.Strings(p)
-	s.logServer(systemEvent("settings_read", userIDOfContext(ctx), map[string]any{"why": why, "changed": c, "at_next_start": p}))
+	ev := systemEvent("settings_read", userIDOfContext(ctx), map[string]any{"why": why, "changed": c, "at_next_start": p})
+	if refused != nil {
+		ev.Level, ev.Error = "warn", refused.Error()
+	}
+	s.logServer(ev)
 }
 
 // LogRotated writes log_rotated: serve's log file rotated (internal/

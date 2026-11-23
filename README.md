@@ -768,6 +768,9 @@ which checkpoints the store too;
 `MASSIMO_API_TOKEN` applies at once, as at a start, unless `-token` was given;
 every other setting that changed is listed by `GET /api/v1/restart`
 as applying at the next restart.
+A log level or format among them that the next start would refuse,
+such as `MASSIMO_LOG_LEVEL=deubg`, is also a warning in the log,
+the web UI's included, unless a flag such as `-log-level` fixes it.
 `-sighup` (or `MASSIMO_SIGHUP`) says what SIGHUP does:
 `reload`, `stop` as SIGTERM does,
 or `auto`, a reload under a service manager or after `nohup`,

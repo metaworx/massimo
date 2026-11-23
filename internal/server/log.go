@@ -359,10 +359,11 @@ func (lq logQuery) beyond(newest int64) error {
 }
 
 // afterBeyond is the answer to a cursor beyond the log's newest id, one
-// the log never gave out: a store restored from an older copy, or that
-// the prune emptied (store.ErrBeyondNewest); a ring whose run started
-// with the clock set back, or the ring of a Cube that has since gained
-// its row in the store. 409, after which the client reads the log again.
+// the log never gave out: a store restored from an older copy
+// (store.ErrBeyondNewest; the prune keeps the newest row, and so makes
+// none); a ring whose run started with the clock set back, or the ring
+// of a Cube that has since gained its row in the store. 409, after which
+// the client reads the log again.
 func afterBeyond(after int64) error {
 	return fail(http.StatusConflict, "after %d is beyond the log's newest line: reload the log", after)
 }

@@ -80,7 +80,7 @@ func TestSettingsReadNamesOnly(t *testing.T) {
 	ts, s, st := r.ts, r.s, r.st
 	token := userToken(t, st, "anna", store.RoleOwner)
 	s.SetReloader("/etc/massimo/massimo.env", func(ctx context.Context) (ReloadResult, error) {
-		s.LogSettingsRead(ctx, "the API", []string{"MASSIMO_LOG_LEVEL"}, []string{"MASSIMO_CUBE_KEQ0000000_ADDRESS"})
+		s.LogSettingsRead(ctx, "the API", []string{"MASSIMO_LOG_LEVEL"}, []string{"MASSIMO_CUBE_KEQ0000000_ADDRESS"}, nil)
 		return ReloadResult{Changed: []string{"MASSIMO_LOG_LEVEL"}, Pending: []string{}, ReadAt: time.Now()}, nil
 	})
 	if code, body := callAPI(t, ts, "POST", "/api/v1/reload", token, ""); code != 200 {

@@ -91,9 +91,12 @@ var settleRules = map[string]settleRule{
 	"drift":    {by: []string{"drift"}, match: roomCheckSettles},
 	// the server's own: an update failed or rolled back, the log's file
 	// not rotated, a failed sign-in, an address locked out, a restart, a
-	// reboot or an update not started
+	// reboot or an update not started; a settings file read again whose
+	// value the next start refuses: the file read again without one, or
+	// a start, which took the values
 	"update_result": {by: []string{"update_result"}},
 	"log_rotated":   {by: []string{"log_rotated"}},
+	"settings_read": {by: []string{"settings_read", "server_started"}},
 	"login_failed":  {by: []string{"login"}, match: sameUser},
 	"locked_out":    {ends: lockoutEnds},
 	"restart":       {by: []string{"server_started"}},

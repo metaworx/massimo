@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"slices"
 	"strings"
@@ -34,19 +35,22 @@ func eventsStore(t *testing.T, dir string) (*Store, Cube, Cube) {
 	return s, a, b
 }
 
-// startWriter runs the store's writer until the test ends.
-func startWriter(t *testing.T, s *Store) {
+// startWriter runs the store's writer until the test ends, or until the
+// test calls the stop it returns, which waits for the writer's end.
+func startWriter(t *testing.T, s *Store) (stop func()) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { s.RunEvents(ctx); close(done) }()
 	var once sync.Once
-	t.Cleanup(func() { once.Do(func() { cancel(); <-done }) })
+	stop = func() { once.Do(func() { cancel(); <-done }) }
+	t.Cleanup(stop)
 	testkit.Eventually(t, "the writer's start", func() bool {
 		s.ev.mu.Lock()
 		defer s.ev.mu.Unlock()
 		return s.ev.done != nil
 	})
+	return stop
 }
 
 func ev(cube int64, at time.Time, kind, device string, n int) Event {
@@ -513,9 +517,13 @@ func TestEventsPruned(t *testing.T) {
 		t.Fatalf("a second prune removed %d", n)
 	}
 
-	// A request prunes now: the two events older than the retention go.
+	// A request prunes now: the two events older than the retention go,
+	// at its first prune, since a newer one follows them (the prune keeps
+	// the log's newest row) and the second request may find the first
+	// still pending.
 	s.AddEvent(ev(a.ID, t0, "state", "", 100))
 	s.AddEvent(ev(b.ID, t0, "state", "", 100))
+	s.AddEvent(ev(a.ID, now, "state", "", 101))
 	flush(t, s)
 	s.PruneEventsSoon()
 	s.PruneEventsSoon()
@@ -534,6 +542,188 @@ func TestEventsPruned(t *testing.T) {
 	idle.PruneEventsSoon()
 	if n := len(idle.ev.prune); n != 1 {
 		t.Fatalf("%d requests pending", n)
+	}
+}
+
+// oldRows writes n rows of the Cube b, the server and the Cube a in
+// turn, a minute apart from at, and returns the newest's id. The newest
+// is a's, the first walk of a prune, and a minute before at: the oldest
+// by time, as a line handed over late with an earlier time, so that the
+// newest by id is not the newest by time.
+func oldRows(t *testing.T, s *Store, a, b int64, at time.Time, n int) int64 {
+	t.Helper()
+	for i := range n {
+		when := at.Add(time.Duration(i) * time.Minute)
+		if i == n-1 {
+			when = at.Add(-time.Minute)
+		}
+		s.AddEvent(ev([]int64{b, 0, a}[i%3], when, "state", "", i))
+	}
+	flush(t, s)
+	newest, err := s.NewestEventID(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return newest
+}
+
+// logRows are the log's rows, id to uuid.
+func logRows(t *testing.T, s *Store) map[int64]string {
+	t.Helper()
+	rows, err := s.db.Query(`SELECT id, uuid FROM log`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	out := map[int64]string{}
+	for rows.Next() {
+		var id int64
+		var uuid string
+		if err := rows.Scan(&id, &uuid); err != nil {
+			t.Fatal(err)
+		}
+		out[id] = uuid
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// A prune of every row keeps the log's newest by id (AP LogEdges,
+// D5-A), so that the next row's id is above it: SQLite gives out the
+// highest id plus one, and a log emptied would give its ids out again.
+// The next row is the prune's own line, written by the flush.
+func TestEventsPruneKeepsTheNewest(t *testing.T) {
+	t.Parallel()
+	s, a, b := eventsStore(t, t.TempDir())
+	ctx := context.Background()
+	now := time.Now().UTC()
+	newest := oldRows(t, s, a.ID, b.ID, now.Add(-40*24*time.Hour), 30)
+	if n, err := s.PruneEvents(ctx, now); err != nil || n != 29 {
+		t.Fatalf("pruned %d %v, want every row but the newest", n, err)
+	}
+	flush(t, s)
+	if left := slices.Sorted(maps.Keys(logRows(t, s))); !slices.Equal(left, []int64{newest, newest + 1}) {
+		t.Fatalf("left %v, want the newest, %d, and the prune's line after it", left, newest)
+	}
+	if page, err := s.Events(ctx, EventQuery{Kind: "log_pruned"}); err != nil || len(page) != 1 || page[0].ID != newest+1 {
+		t.Fatalf("the prune's line: %v %v", eventIDs(page), err)
+	}
+}
+
+// A later prune removes the row the prune kept, once a newer one is
+// there.
+func TestEventsPruneTakesTheKeptRow(t *testing.T) {
+	t.Parallel()
+	s, a, b := eventsStore(t, t.TempDir())
+	ctx := context.Background()
+	now := time.Now().UTC()
+	kept := oldRows(t, s, a.ID, b.ID, now.Add(-40*24*time.Hour), 30)
+	if n, err := s.PruneEvents(ctx, now); err != nil || n != 29 {
+		t.Fatalf("pruned %d %v, want every row but the newest", n, err)
+	}
+	s.AddEvent(ev(b.ID, now, "hello", "", 1))
+	flush(t, s)
+	if n, err := s.PruneEvents(ctx, now); err != nil || n != 1 {
+		t.Fatalf("the later prune removed %d %v, want the row kept", n, err)
+	}
+	flush(t, s)
+	// The two prunes' own lines and hello.
+	rows := logRows(t, s)
+	if _, ok := rows[kept]; ok || len(rows) != 3 {
+		t.Fatalf("left %v, want the prunes' lines and hello, not %d", slices.Sorted(maps.Keys(rows)), kept)
+	}
+}
+
+// A start after log.keep_days, whose prune runs before the writer's
+// first batch, gives no id twice: an id of the run before names the row
+// it named then, or none. The newest row is the first walk's (oldRows),
+// so that a prune that takes it gives an id out again whether the batch
+// is written between two of its chunks or after them.
+func TestEventsStartAfterKeepDays(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	dir := copied(t)
+	then := time.Now().UTC().Add(-40 * 24 * time.Hour)
+	s, err := Open(dir, Options{Logger: quiet(), Now: func() time.Time { return then }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := s.AddCube(ctx, Cube{Serial: "KEQ0000001", Configured: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := s.AddCube(ctx, Cube{Serial: "KEQ0000002", Configured: true})
+	stop := startWriter(t, s)
+	newest := oldRows(t, s, a.ID, b.ID, then, 30)
+	before := logRows(t, s)
+	stop()
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// The next start, 40 days later: what the server logs as it starts
+	// is handed over before the writer runs. A flush may be answered
+	// between two chunks of the start's prune, which writes its own line
+	// once it ends.
+	s = open(t, dir)
+	s.AddEvent(ev(0, time.Now(), "server_started", "", 100))
+	s.AddEvent(ev(a.ID, time.Now(), "connected", "", 101))
+	startWriter(t, s)
+	testkit.Eventually(t, "the start's prune", func() bool {
+		flush(t, s)
+		page, _ := s.Events(ctx, EventQuery{Kind: "log_pruned", Limit: 1})
+		return len(page) == 1
+	})
+	after := logRows(t, s)
+	added := 0
+	for id, uuid := range after {
+		was, ok := before[id]
+		switch {
+		case ok && was != uuid:
+			t.Errorf("id %d given out twice: %s, then %s", id, was, uuid)
+		case ok && id != newest:
+			t.Errorf("id %d of the run before left by the start's prune", id)
+		case !ok:
+			added++
+		}
+	}
+	// The two lines and the prune's own.
+	if added != 3 {
+		t.Errorf("%d rows added at the start, want 3: %v", added, slices.Sorted(maps.Keys(after)))
+	}
+}
+
+// A prune's walk reads log_cube_time, the rows before the cutoff alone,
+// and the log's newest id at the table's end, so that its last chunk,
+// which finds nothing, reads no row but the one it keeps
+// (TestEventsPageQuery holds the pages to theirs).
+func TestEventsPrunePlan(t *testing.T) {
+	t.Parallel()
+	s, a, _ := eventsStore(t, t.TempDir())
+	for _, cube := range []int64{a.ID, 0} {
+		rows, err := s.db.Query("EXPLAIN QUERY PLAN "+pruneWalk(cube), cubeArgs(cube, formatTime(time.Now()), pruneChunk)...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var plan []string
+		for rows.Next() {
+			var id, parent, unused int
+			var detail string
+			if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
+				t.Fatal(err)
+			}
+			plan = append(plan, detail)
+		}
+		rows.Close()
+		joined := strings.Join(plan, "; ")
+		if !strings.Contains(joined, "USING COVERING INDEX log_cube_time (cube_id=? AND time<?)") ||
+			strings.Contains(joined, "SCAN") || strings.Contains(joined, "TEMP B-TREE") {
+			t.Errorf("cube %d: %s", cube, joined)
+		} else {
+			t.Logf("cube %d: %s", cube, joined)
+		}
 	}
 }
 
