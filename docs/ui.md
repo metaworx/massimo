@@ -193,8 +193,9 @@ and a sign-out it asked about then goes on, since nothing is lost any more.
 A session that expires, is revoked, or ends in another tab,
 asks for a sign-in and nothing more:
 the page forgets it at the first request the server refuses,
-so that its reads and its stream do not go on sending it until the server
-locks the address out (ten failed checks a minute);
+so that its reads and its stream do not go on sending it,
+which the server refuses each time but does not count toward the address's lockout,
+a session that ended being no guess (`docs/api-v1.md`, "Authentication");
 the same user signed in again finds the changes,
 another user does not.
 What the page was reading when the session ended it reads again after the sign-in;

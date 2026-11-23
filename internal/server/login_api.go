@@ -375,9 +375,10 @@ type loginKeyRequest struct {
 // that makes the call, for the apps' login by fingerprint (docs/app.md),
 // answered as POST /api/v1/login answers. The session names the key, and
 // the key's earlier session ends, so that a phone holds one per key.
-// The wrapper has refused a wrong or revoked key, 401 and counted
-// against the address as every failed token check is, and a user or role
-// that may not use the API, 403. A session as the bearer is 400, a
+// The wrapper has refused a wrong key, 401 and counted against the
+// address as every failed token check is, a revoked one, 401 and not
+// counted, as no token that ended is (D64-A), and a user or role that
+// may not use the API, 403. A session as the bearer is 400, a
 // registered integration's key 403. It sends no password, so it works
 // where the password sign-in is off.
 func (s *Server) loginKey(w http.ResponseWriter, r *http.Request) error {

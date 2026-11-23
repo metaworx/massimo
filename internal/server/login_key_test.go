@@ -101,21 +101,30 @@ func TestLoginKey(t *testing.T) {
 		t.Fatalf("an integration's key: %d %s", code, text)
 	}
 
-	// Revoking the key ends its session at the session's next request,
-	// and the revoked key is a failed check, counted toward the lockout.
+	// Revoking the key ends its session at the session's next request;
+	// the revoked key is refused, but has ended, which is no guess and
+	// does not count toward the lockout (D64-A); a wrong key counts.
 	if code, text := callAPI(t, ts, "DELETE", "/api/v1/users/anna/tokens/"+strconv.FormatInt(keyTok.ID, 10), second.Token, ""); code != 200 {
 		t.Fatalf("revoke the key: %d %s", code, text)
 	}
 	if code, _ := callAPI(t, ts, "GET", "/api/v1/cubes", second.Token, ""); code != 401 {
 		t.Fatalf("the key's session after the key: %d", code)
 	}
-	for i := 0; i < 2; i++ {
+	for i := 0; i < 3; i++ {
 		if code, _ := callAPI(t, ts, "POST", "/api/v1/login/key", key, ""); code != 401 {
 			t.Fatalf("a revoked key, try %d: %d", i+1, code)
 		}
 	}
+	if code, _ := callAPI(t, ts, "GET", "/api/v1/cubes", "secret", ""); code != 200 {
+		t.Fatalf("after a revoked key three times: %d", code)
+	}
+	for i := 0; i < 3; i++ {
+		if code, _ := callAPI(t, ts, "POST", "/api/v1/login/key", "wrong-key", ""); code != 401 {
+			t.Fatalf("a wrong key, try %d: %d", i+1, code)
+		}
+	}
 	if code, _ := callAPI(t, ts, "GET", "/api/v1/cubes", "secret", ""); code != 429 {
-		t.Fatalf("after three failed checks: %d", code)
+		t.Fatalf("after three wrong keys: %d", code)
 	}
 }
 

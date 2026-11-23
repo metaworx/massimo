@@ -149,7 +149,7 @@ the page sees only what follows.
 | `trust(id, fp)` | `null` | pins the fingerprint for the server and notes when (`trusted_at`): its certificate is accepted in `probe` and in the WebView, and a self-signed one with another fingerprint is refused |
 | `open(id, url, opts)` | `true`, or `false` | loads `url`, the server's `lan` or `remote`, in the WebView, or one of them with My profile's fragment that marks a key, `#profile?key=<id>` (docs/ui.md, "My profile"); another URL is refused. With `opts` `{login: true}` it first logs in by fingerprint (below): `false`, nothing opened, where the prompt was dismissed; a kept key the server refuses is forgotten and rejects |
 | `forget(id, url)` | `{revoked, left}` | turns the server's login by fingerprint off (Turn off) at `url`, an address of the server that answered, or, for `""`, at the one that answers now with its node, the LAN one first: revokes the kept key with the session the app holds there (`DELETE /api/v1/users/{name}/tokens/{id}`, the key's id kept beside it, or, for a login kept before version 3, the id of the key the session was made from, `GET /api/v1/me`), without a prompt; where it holds none, or the server refuses it, asks for the fingerprint once and revokes the key with the key itself, never over plain HTTP outside the private ranges; then signs the session out and forgets the login. Where the prompt or the server fails it forgets both all the same, `revoked` `false`, the key, where its id is known, is left in the server's `unrevoked` first (`left` `true`), and the failure is in the phone's log, without any secret |
-| `forgetAll()` | `{revoked, left, local}` | turns every kept login off as `forget` does, one server after the other in the list's order, each at the address that answers with its node, the LAN one first: the fingerprint asked once per server where the app holds no session there, never only for the forgetting; `revoked`, `left` and `local` are the ids of the servers whose key the server revoked, of those whose key was left in their `unrevoked`, and of those whose key was forgotten on the phone alone (no id known, or a login no longer the server's), still listed at the server under My profile |
+| `forgetAll()` | `{revoked, left, local}` | turns every kept login off as `forget` does, one server after the other in the list's order, each at the address that answers with its node, the LAN one first: the fingerprint asked once for every server where the app holds no session there (the app key), and once more for each login kept before it, never only for the forgetting; `revoked`, `left` and `local` are the ids of the servers whose key the server revoked, of those whose key was left in their `unrevoked`, and of those whose key was forgotten on the phone alone (no id known, or a login no longer the server's), still listed at the server under My profile |
 | `session(id, url)` | a string, or `null` | the user of the session the app holds for the server, checked at `url`, an address of the server's that answered (`GET /api/v1/me`, over the probe's trust); `null` where it holds none, or the server refused it (`401`), which forgets it, so that it is not sent again; a server that cannot be asked leaves what the last check found. With the user known, it revokes the server's `unrevoked` keys of that user with the session: an id only where the user's list (`GET /api/v1/users/{name}/tokens`) has it as an API key, and never the token in use, an id the list does not have as a key being dropped unasked (gone, or another token's after a store rolled back); a `404` drops a key too, a `403` or a failure keeps it, a failure in the phone's log. A login kept without its key's id takes the id of the key the session was made from, unless it was kept or forgotten meanwhile |
 | `signOut(id, url)` | `{ended}` | ends the session the app holds for the server at `url` (`POST /api/v1/logout`), `""` for no address that answers, and forgets it in every case; `ended` `true` where the server ended it, or had already |
 | `signOutAll()` | `null` | the same for every server the app holds a session for, at the address that answers with its node, the LAN one first; each forgotten at once |
@@ -210,7 +210,7 @@ Block 7 adds what else Block 1's `Status()` carries.
 | `token()` | a string, or `null` | the session or API key kept for the server it opened, `null` for none |
 | `setToken(t)` | `null` | keeps `t` for that server, `null` forgets it: sealed by the Keystore (Android) or the Keychain (iOS), or, for a server with a kept login whose `ask` is `return` or `start`, in the app's memory alone; what the connect page's `session` last found of the one before holds no more. Once it has answered, a new session where the server has `unrevoked` keys, or a login kept without its key's id, is checked as `session` checks one, at the address the page was opened at |
 | `login.status()` | `{can, user, ask, plain}` | `can`: the phone has a strong biometric enrolled; `user`: the user whose key is kept for the server, `""` for none; `ask`, as the server's; `plain`: the page is open over plain HTTP outside the private ranges, where no key is sent |
-| `login.keep()` | `true`, or `false` | for a page just signed in: makes an API key of the signed-in user's at the server with the page's session (`POST /api/v1/users/{name}/tokens`, labelled with the phone), asks for the fingerprint and keeps the key sealed behind it; `false`, nothing kept and the key revoked again, where the prompt was not passed |
+| `login.keep()` | `true`, or `false` | for a page just signed in: makes an API key of the signed-in user's at the server with the page's session (`POST /api/v1/users/{name}/tokens`, labelled with the phone), asks for the fingerprint once and keeps the key sealed under the app key behind it; `false`, nothing kept and the key revoked again, where the prompt was not passed |
 | `login.fingerprint()` | a string, or `null` | asks for the fingerprint, opens the kept key, makes a session with it (`POST /api/v1/login/key`) and resolves to that session, which it keeps as `setToken` would; `null` where the prompt was dismissed; a key the server refuses is forgotten and rejects |
 | `connect()` | `null` | shows the connect page, "Select server…" and the sign-in's "Cancel"; the server's session stays as it was |
 
@@ -370,9 +370,13 @@ under My profile → Sessions and keys by the phone's name, ends the session.
   The session is signed out before the login is forgotten,
   so that one kept in memory for the login is ended at the server too.
 - **Forget all stored credentials** (`forgetAll`) does the same for every kept login,
-  one server after the other,
-  the fingerprint asked once per server where the app holds no session there
-  (F26, D56-A);
+  one server after the other (F26, D56-A),
+  the fingerprint asked once for all the servers where the app holds no session there,
+  since one prompt, titled as the menu's entry,
+  opens the app key for the whole run (D63-A),
+  and once more for each login kept before the app key;
+  that prompt dismissed asks no more in the run,
+  each key it would have opened left as a dismissed prompt leaves one;
   a prompt that cannot show (the app hidden) counts as dismissed.
   **Remove** turns a kept login off the same way before the server goes.
 - **The keys left.**
@@ -400,12 +404,42 @@ under My profile → Sessions and keys by the phone's name, ends the session.
 - **The prompt**: a strong biometric, with the screen lock's PIN as the
   prompt's fallback on Android 11 and later;
   on Android 8 to 10 the fingerprint alone.
-  The key is a Keystore key that requires the prompt for every use,
-  sealing included, so "ask for the fingerprint, then keep" is one step.
-  On Android 8 to 10 a fingerprint enrolled later invalidates it;
+- **One key for the app**, AP MobileApp's D63-A:
+  one Keystore key, `massimo.login.app`, requires the prompt for every use,
+  sealing included, and seals the app key, 256 random bits,
+  kept sealed beside the logins;
+  each server's login is sealed under the app key in software (AES-GCM),
+  bound as above, so that it still opens for its own server alone.
+  A prompt opens the app key for one step:
+  keeping a login, opening one, turning one off, or Forget all,
+  which opens every login it needs with it;
+  the step's end drops it, its bytes cleared, and so does the app closing.
+  Keeping a login asks once, as before:
+  the app key opened, or made the first time, so "ask for the fingerprint,
+  then keep" is one step.
+  One keep at a time makes it:
+  a second keep while the first one's prompt shows is answered as dismissed.
+  When the app asks is each server's own choice (`ask`), not the Keystore's.
+  The cost: for its step, a prompt passed for one server gives what opens
+  every server's login, in the app's memory;
+  every opening still asks, and a copy of the files opens nothing.
+- **A login kept before the app key** keeps its own Keystore key,
+  `massimo.login.<id>`, and its own prompt until it is turned off,
+  forgotten or kept anew; nothing is moved at the update,
+  which would take a prompt per login.
+- **A key the phone takes back**:
+  on Android 8 to 10 a fingerprint enrolled later invalidates the Keystore key;
   from Android 11, where the PIN opens it as well, it does not (D35-A).
   Turning the screen lock off invalidates it on every version.
-  An invalidated key is forgotten, and the form offers the password.
+  Where the app's key is taken back,
+  every login under the app key is forgotten at once,
+  each with its key left by its id (D57-A),
+  as each went one by one before, and the next keep makes a new app key;
+  where a login's own key is, that login is.
+  The form then offers the password.
+  Only the Keystore saying so counts, a bad tag or the key invalidated:
+  any other failure of an opening (a key user not authenticated,
+  an operation pruned) forgets nothing, and the step fails.
 - **Version 1's switch**, "Ask for my fingerprint or PIN", is gone:
   a server that had it on starts without a kept login and with its
   session forgotten.
@@ -433,6 +467,9 @@ Each adapter tests its own side: Block 3 for Android, Block 9 for iOS;
 Android's JVM tests (`app/android/app/src/test/`) cover the sessions'
 check, sign-out and Turn off's revoke against a fake server,
 Turn off and Forget all on every path,
+the app key over a fake Keystore (one prompt a step, Forget all's included,
+none more once dismissed, its drop, a login kept before it,
+a key taken back and a failure that is none, two keeps at once),
 the keys left and their revoke at the next session,
 the certificate's details, the address a server opens at at the start,
 and the app's settings.

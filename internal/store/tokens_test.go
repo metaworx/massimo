@@ -173,3 +173,86 @@ func TestKeySessions(t *testing.T) {
 		t.Fatalf("live tokens after the older binary %+v (third %d)", list, third.ID)
 	}
 }
+
+// TokenEnded tells a token the store issued and that ended, which the
+// server refuses without counting it toward the lockout (AP MobileApp
+// v1.4, D64-A), from a live one and from a hash no token has: revoked,
+// logged out, past its end, its user removed, a session whose key was
+// revoked, by this binary or alone by one before migration 0025.
+func TestTokenEnded(t *testing.T) {
+	t.Parallel()
+	clock := time.Date(2026, 11, 23, 12, 0, 0, 0, time.UTC)
+	s, err := Open(copied(t), Options{Logger: quiet(), Now: func() time.Time { return clock }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	anna, _ := s.AddUser(ctx, User{Name: "anna", Role: RoleOperator}, "pw", 0)
+	bob, _ := s.AddUser(ctx, User{Name: "bob", Role: RoleOperator}, "pw", 0)
+	end := clock.Add(30 * 24 * time.Hour)
+	ended := func(what, secret string, want bool) {
+		t.Helper()
+		got, err := s.TokenEnded(ctx, HashToken(secret), clock)
+		if err != nil || got != want {
+			t.Errorf("%s: ended %v %v, want %v", what, got, err, want)
+		}
+	}
+
+	_, live, _ := s.AddToken(ctx, anna.ID, TokenSession, "Firefox", end)
+	_, key, _ := s.AddToken(ctx, anna.ID, TokenAPI, "Loxone", zeroTime)
+	ended("a live session", live, false)
+	ended("a live key", key, false)
+	ended("a hash no token has", "nope", false)
+
+	loggedOut, loggedOutSecret, _ := s.AddToken(ctx, anna.ID, TokenSession, "Firefox", end)
+	if err := s.RevokeToken(ctx, loggedOut.ID); err != nil {
+		t.Fatal(err)
+	}
+	ended("a session logged out", loggedOutSecret, true)
+	revokedKey, revokedKeySecret, _ := s.AddToken(ctx, anna.ID, TokenAPI, "phone, login by fingerprint", zeroTime)
+	_, keySession, _ := s.AddKeySession(ctx, revokedKey.ID, "phone", end)
+	if err := s.RevokeToken(ctx, revokedKey.ID); err != nil {
+		t.Fatal(err)
+	}
+	ended("a revoked key", revokedKeySecret, true)
+	ended("the session of a revoked key", keySession, true)
+	_, expired, _ := s.AddToken(ctx, anna.ID, TokenSession, "Firefox", clock.Add(-time.Second))
+	_, atItsEnd, _ := s.AddToken(ctx, anna.ID, TokenSession, "Firefox", clock)
+	ended("a session past its end", expired, true)
+	ended("a session at its end", atItsEnd, true)
+	bobsTok, bobs, err := s.AddToken(ctx, bob.ID, TokenAPI, "k", zeroTime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteUser(ctx, "bob", 0); err != nil {
+		t.Fatal(err)
+	}
+	ended("a removed user's key", bobs, true)
+	// The user's tombstone alone, the key's revocation undone by hand:
+	// ended all the same, by the user removed.
+	if _, err := s.db.ExecContext(ctx, `UPDATE tokens SET deleted_at = NULL WHERE id = ?`, bobsTok.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok, _ := s.Token(ctx, bobsTok.ID); !ok || !got.DeletedAt.IsZero() {
+		t.Fatalf("the removed user's key still revoked: %+v", got)
+	}
+	ended("the key of a removed user, the key itself not revoked", bobs, true)
+
+	// A binary before 0025 revoked the key alone: its session counts no
+	// more, so it has ended.
+	older, _, _ := s.AddToken(ctx, anna.ID, TokenAPI, "phone, login by fingerprint", zeroTime)
+	_, olderSession, _ := s.AddKeySession(ctx, older.ID, "phone", end)
+	if _, err := s.db.ExecContext(ctx, `UPDATE tokens SET deleted_at = ? WHERE id = ?`, s.nowText(), older.ID); err != nil {
+		t.Fatal(err)
+	}
+	ended("a session whose key an older binary revoked", olderSession, true)
+
+	// A password set by someone else ends the sessions; the keys live.
+	_, plain, _ := s.AddToken(ctx, anna.ID, TokenSession, "Firefox", end)
+	if err := s.RevokeSessions(ctx, anna.ID); err != nil {
+		t.Fatal(err)
+	}
+	ended("a session a new password ended", plain, true)
+	ended("a key beside it", key, false)
+}

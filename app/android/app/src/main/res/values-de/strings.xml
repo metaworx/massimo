@@ -16,6 +16,7 @@
     <string name="login_title">Bei %1$s anmelden</string>
     <string name="login_keep_title">Anmeldung für %1$s speichern</string>
     <string name="login_off_title">Anmeldung für %1$s ausschalten</string>
+    <string name="login_forget_all_title">Alle gespeicherten Anmeldungen vergessen</string>
     <string name="login_key_label">%1$s, Anmeldung mit Fingerabdruck</string>
     <string name="cover_text">Massimo ist gesperrt. Mit dem Fingerabdruck entsperren.</string>
     <string name="cover_unlock">Entsperren</string>

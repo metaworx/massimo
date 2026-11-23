@@ -17,6 +17,7 @@
     <string name="login_title">Accedi a %1$s</string>
     <string name="login_keep_title">Conserva l\'accesso a %1$s</string>
     <string name="login_off_title">Disattiva l\'accesso a %1$s</string>
+    <string name="login_forget_all_title">Dimentica tutte le credenziali conservate</string>
     <string name="login_key_label">%1$s, accesso con impronta</string>
     <string name="cover_text">Massimo è bloccato. Sbloccalo con l\'impronta digitale.</string>
     <string name="cover_unlock">Sblocca</string>
