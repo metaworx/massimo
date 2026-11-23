@@ -32,7 +32,7 @@
  */
 
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
-import { toServers } from "../shared/app";
+import { app, toServers } from "../shared/app";
 import { ResultLine } from "../shared/badge";
 import { hid } from "../shared/cls";
 import { useLang } from "../shared/lang";
@@ -41,7 +41,7 @@ import { busyProps, useBusy } from "../shared/question";
 import { UserNameField, useNameCheck, wordNameError } from "../shared/username";
 import { me } from "../shared/me";
 import { keptOpen } from "../shared/owner";
-import { app, offer } from "./app";
+import { offer } from "./app";
 import { KeepOpen } from "./KeepOpen";
 import { ask, card, creationEnded, keepAsk, skip } from "./store";
 
@@ -108,13 +108,14 @@ export function Owner() {
         await api("POST", "api/v1/users", { name: n, role: "owner", ...(await registerPassword(n, password)) });
         made = true;
         const session = await signIn(n, password);
-        setToken(session.token);
+        const put = setToken(session.token); // in the app, the session kept by the bridge before login.keep reads it (D68-A)
         creationEnded(true); // the owner signed in: a refusal now is of this session, and turns the card
         // the login by fingerprint kept for the new owner, where asked for; not kept, the owner is in all the same and
         // may keep it at a sign-in (FirstOwner D26)
         let kept = true;
         const login = appLogin();
         if (keep && offer(app.value) && login) {
+          await put;
           try {
             kept = await login.keep();
           } catch (e) {

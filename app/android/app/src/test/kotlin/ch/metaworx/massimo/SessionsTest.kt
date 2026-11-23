@@ -66,8 +66,13 @@ class SessionsTest {
             when {
                 m == "GET" && path == "/api/v1/me" && bearer == "session-anna" -> answer(ex, 200, """{"mode":"users","user":{"name":"anna"}}""")
                 m == "GET" && path == "/api/v1/me" && bearer == "session-bob" -> answer(ex, 200, """{"mode":"users","user":{"name":"bob"}}""")
+                m == "GET" && path == "/api/v1/me" && bearer == "api-key" ->
+                    answer(ex, 200, """{"mode":"users","user":{"name":"anna"},"token":{"id":45,"kind":"api"}}""")
                 m == "POST" && path == "/api/v1/logout" && bearer in setOf("session-anna", "session-bob") -> answer(ex, 200, """{"ok":true}""")
                 m == "POST" && path == "/api/v1/logout" && bearer == "api-key" -> answer(ex, 400, """{"error":"the token is an API key, not a session"}""")
+                // key-self revokes itself; key-secret meets a server older than the route, whose mux knows none
+                m == "DELETE" && path == "/api/v1/me/token" && bearer == "key-self" -> answer(ex, 200, """{"ok":true,"id":42}""")
+                m == "DELETE" && path == "/api/v1/me/token" && bearer == "key-secret" -> answer(ex, 404, "404 page not found")
                 m == "DELETE" && path.startsWith("/api/v1/users/anna/tokens/") && bearer == "session-bob" ->
                     answer(ex, 403, """{"error":"capability \"users\" required"}""")
                 m == "DELETE" && path.startsWith("/api/v1/users/anna/tokens/") && bearer in setOf("session-anna", "key-secret") ->
@@ -161,6 +166,62 @@ class SessionsTest {
     }
 
     @Test
+    fun aTokenPutEndsTheSessionItReplaces() {
+        // a session the page's new sign-in replaces ends at the address the page was opened at, once (D68-A)
+        val st = sessions()
+        st.put(home(), "session-anna")
+        val ending = st.put(home(), "session-bob", base)
+        assertEquals("the new one held at once", "session-bob", st.held(home()))
+        assertTrue("the end is the caller's, after its answer", requests().isEmpty())
+        ending!!.end()
+        assertEquals(listOf("POST /api/v1/logout session-anna"), requests())
+        assertEquals("session-bob", st.held(home()))
+        for (none in listOf(st.put(home(), "session-bob", base), st.put(home(), null, base), st.put(home(), "session-anna"), st.put(home(), "session-bob"))) {
+            assertNull("the same token, a forgetting and a put without the address end nothing", none)
+        }
+        assertEquals(1, requests().size)
+        assertTrue(logged.isEmpty())
+    }
+
+    @Test
+    fun twoPutsAtOnceEachEndTheirOwn() {
+        // each put reads the session it replaces and keeps its own in one step: none is ended twice, none lost
+        val st = sessions()
+        st.put(home(), "t0")
+        val endings = java.util.concurrent.ConcurrentLinkedQueue<Sessions.Ending>()
+        val start = java.util.concurrent.CountDownLatch(1)
+        val threads = (1..4).map { n ->
+            Thread {
+                start.await()
+                for (i in 1..50) st.put(home(), "t$n-$i", base)?.let(endings::add)
+            }
+        }
+        threads.forEach { it.start() }
+        start.countDown()
+        threads.forEach { it.join() }
+        endings.forEach { it.end() }
+        val all = listOf("t0") + (1..4).flatMap { n -> (1..50).map { "t$n-$it" } }
+        val ended = requests().map { it.substringAfterLast(' ') }
+        assertEquals("every token replaced ended once", (all - st.held(home())!!).sorted(), ended.sorted())
+    }
+
+    @Test
+    fun aKeyReplacedIsNotEndedAndItsRefusalLogsNothing() {
+        // a key the page held: the server refuses a logout of it with 400, which is no failure
+        val st = sessions()
+        st.put(home(), "api-key")
+        st.put(home(), "session-anna", base)!!.end()
+        assertEquals(listOf("POST /api/v1/logout api-key"), requests())
+        assertTrue(logged.toString(), logged.isEmpty())
+        // a key checked as one is not even asked
+        st.put(home(), "api-key")
+        st.check(home(), base)
+        assertNull("a key checked as one is no session to end", st.put(home(), "session-anna", base))
+        assertEquals(listOf("POST /api/v1/logout api-key", "GET /api/v1/me api-key"), requests())
+        assertTrue(logged.isEmpty())
+    }
+
+    @Test
     fun signOutOfAllEndsEverySessionWhereItAnswers() {
         val st = sessions()
         val a = home()
@@ -231,8 +292,14 @@ class SessionsTest {
     @Test
     fun turnOffWithTheKeyItself() {
         val st = sessions()
+        assertTrue(st.revokeWithKey(home(), base, "anna", LoginSecret("key-self", 42)))
+        assertEquals("the key revokes itself (D80-B)", "DELETE /api/v1/me/token key-self", requests().single())
         assertTrue(st.revokeWithKey(home(), base, "anna", LoginSecret("key-secret", 42)))
-        assertEquals("DELETE /api/v1/users/anna/tokens/42 key-secret", requests().single())
+        assertEquals(
+            "a server older than the route: by the user and the id",
+            listOf("DELETE /api/v1/me/token key-secret", "DELETE /api/v1/users/anna/tokens/42 key-secret"),
+            requests().drop(1),
+        )
         assertTrue("a key the server takes no more is gone there", st.revokeWithKey(home(), base, "anna", LoginSecret("key-revoked", 42)))
         assertTrue(logged.isEmpty())
     }

@@ -404,7 +404,7 @@ and `warning` is set while something needs the owner:
 a certificate within two weeks of its end,
 or an order from Let's Encrypt that has not succeeded yet.
 
-### POST /api/v1/login, POST /api/v1/logout, GET /api/v1/me
+### POST /api/v1/login, POST /api/v1/logout, DELETE /api/v1/me/token, GET /api/v1/me
 
 `POST /api/v1/login` with `{"user": "anna", "password": "…"}`,
 and an optional `label` that names the session under the user's tokens
@@ -453,7 +453,25 @@ with which the client sets the user's own record (`PUT /api/v1/users/{name}`
 with `record`, `ksf` and `proof`) without the password.
 
 `POST /api/v1/logout` revokes the session that makes the call, `{"ok": true}`.
-An API key answers `400`; a key is revoked under the user's tokens.
+An API key answers `400`; a key is revoked under the user's tokens,
+or by itself (below).
+
+`DELETE /api/v1/me/token` revokes the token that makes the call,
+whatever it is: a session, or an API key and the sessions made from it,
+`{"ok": true, "id": 4}` with the token's id (AP MobileApp, D80-B).
+It is one call for any token, without the user's name or the token's id:
+the apps revoke a kept key with the key alone so,
+and an integration may revoke its own key.
+It is audited as `token.revoke`, as a revoke under the user's tokens is.
+A caller without a token of a user,
+on an open server or with the one token of a server without users,
+is `400`, and so is an integration's call on a user's behalf
+(`X-MassimoHA-On-Behalf-Of`), which would revoke the integration's key in that
+user's name: the integration revokes its key without the header.
+The settings file's token, `MASSIMO_API_TOKEN`, is `409`:
+the next start would not add the owner's key back, its hash being taken,
+so it is changed or removed in the settings file;
+revoked under the user's tokens by the owner's choice, it stays revoked too.
 
 `GET /api/v1/me` says who the caller is:
 
@@ -727,6 +745,10 @@ and a retry with its `Idempotency-Key` answers `201` without it too.
 a token of another user is `404`.
 A session made from a key (`POST /api/v1/login/key`) carries the key's id
 as `key_id`; revoking the key revokes that session with it.
+A token revokes itself the same way, as its own bearer:
+a key with `DELETE …/tokens/{id}` and its own id,
+or any token with `DELETE /api/v1/me/token`, which needs neither the name nor the id;
+a session ends itself with `POST /api/v1/logout`.
 
 ### Identities: /api/v1/users/{name}/identities
 

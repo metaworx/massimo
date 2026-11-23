@@ -1,3 +1,3 @@
 - The app opens the server marked Open at start, and its list marks
-  where the app is signed in, checked at each look and forgotten where
-  refused, with Sign out per server and of all (docs/app.md).
+  where it is signed in, checked at each look and forgotten where
+  refused; Sign out per server, of all and before Remove (docs/app.md).

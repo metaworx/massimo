@@ -24,11 +24,27 @@ data class KeyLeft(val user: String, val id: Long) {
 }
 
 /**
+ * A session of the phone's that the app forgot without the server ending
+ * it (AP MobileApp, D70-A): Turn off, Forget all, Sign out, Sign out of
+ * all or a session replaced, the server not answering; its user, its row
+ * at the server and when it was made ([createdAt], as the server writes
+ * it), as the session's last check found them, no secret; the next
+ * session the app holds there for that user revokes it, where the row of
+ * that id was made then: an id a store rolled back gave again is
+ * another's.
+ */
+data class SessionLeft(val user: String, val id: Long, val createdAt: String = "") {
+    /** toJson is the session as the connect page sees it, `{user, id, created_at}`. */
+    fun toJson(): JSONObject = JSONObject().put("user", user).put("id", id).put("created_at", createdAt)
+}
+
+/**
  * A server the app keeps (docs/app.md, "A server"); [ask] is when the
  * fingerprint is asked once a login is kept, one of [ASKS]; [start] marks
  * the one server the app opens at its start; [trustedAt] is when its
  * pinned fingerprint was trusted (RFC 3339), "" for none; [unrevoked] are
- * the keys of the phone's left valid there (contract version 4).
+ * the keys of the phone's left valid there (contract version 4), [unended]
+ * its sessions left valid there (version 5).
  */
 data class Server(
     val id: String,
@@ -42,14 +58,16 @@ data class Server(
     val start: Boolean = false,
     val trustedAt: String = "",
     val unrevoked: List<KeyLeft> = emptyList(),
+    val unended: List<SessionLeft> = emptyList(),
 ) {
     /**
      * toJson is the server as the connect page sees it, with the user whose
      * login is kept, [login], or "", the user of the session the app holds
-     * and checked, [session], or null (contract version 3), and the keys
-     * left valid there (version 4).
+     * and checked, [session], or null (contract version 3), the keys left
+     * valid there (version 4), and the sessions, and the id of the kept
+     * login's key, [loginKey], 0 for none or not known (version 5).
      */
-    fun toJson(login: String = "", session: String? = null): JSONObject = JSONObject()
+    fun toJson(login: String = "", session: String? = null, loginKey: Long = 0): JSONObject = JSONObject()
         .put("id", id)
         .put("name", name)
         .put("node", node)
@@ -57,16 +75,19 @@ data class Server(
         .put("remote", remote)
         .put("fp", fp)
         .put("login", login)
+        .put("login_key", if (login.isEmpty()) 0 else loginKey.coerceAtLeast(0))
         .put("ask", ask)
         .put("push", push)
         .put("start", start)
         .put("session", session ?: JSONObject.NULL)
         .put("trusted_at", trustedAt)
         .put("unrevoked", JSONArray().apply { unrevoked.forEach { put(it.toJson()) } })
+        .put("unended", JSONArray().apply { unended.forEach { put(it.toJson()) } })
 
-    /** fileJson is the server as the store keeps it: what the page sees, but the login and the session, which are kept elsewhere. */
+    /** fileJson is the server as the store keeps it: what the page sees, but the login, its key and the session, which are kept elsewhere. */
     fun fileJson(): JSONObject = toJson().apply {
         remove("login")
+        remove("login_key")
         remove("session")
     }
 
@@ -126,8 +147,9 @@ class ServerStore(private val file: File, private val now: () -> String = { nowU
     /**
      * save adds [input] where it has no `id`, giving it one, or replaces the
      * server with its `id`, in place. `fp` and `trusted_at` are kept as
-     * [trust] set them, and `unrevoked` as [leave] and [revoked] set it,
-     * dropped where the node changed: those keys are another server's.
+     * [trust] set them, `unrevoked` as [leave] and [revoked] set it, and
+     * `unended` as [leaveSession] and [ended], both dropped where the node
+     * changed: those keys and sessions are another server's.
      * `start` true turns it off at every other server; the first server
      * added opens at start whatever it says.
      */
@@ -153,6 +175,7 @@ class ServerStore(private val file: File, private val now: () -> String = { nowU
             start = input.opt("start") == true || (old == null && servers.isEmpty()),
             trustedAt = old?.trustedAt ?: "",
             unrevoked = if (old != null && old.node == node) old.unrevoked else emptyList(),
+            unended = if (old != null && old.node == node) old.unended else emptyList(),
         )
         if (s.start) servers.replaceAll { if (it.start && it.id != s.id) it.copy(start = false) else it }
         val at = servers.indexOfFirst { it.id == s.id }
@@ -205,6 +228,34 @@ class ServerStore(private val file: File, private val now: () -> String = { nowU
     }
 
     /**
+     * leaveSession notes the session [sessionId] of [user]'s, made at
+     * [createdAt], as left valid on the server [id] (D70-A), and reports
+     * whether it is noted now: a session noted already is, once; one
+     * without an id, or of a server not kept, is not.
+     */
+    @Synchronized
+    fun leaveSession(id: String, user: String, sessionId: Long, createdAt: String = ""): Boolean {
+        val at = servers.indexOfFirst { it.id == id }
+        if (at < 0 || sessionId <= 0 || user.isEmpty()) return false
+        val left = SessionLeft(user, sessionId, createdAt)
+        if (left in servers[at].unended) return true
+        servers[at] = servers[at].copy(unended = servers[at].unended + left)
+        write()
+        return true
+    }
+
+    /** ended drops [sessions] from the sessions left on the server [id], revoked at last or gone there. */
+    @Synchronized
+    fun ended(id: String, sessions: Collection<SessionLeft>) {
+        val at = servers.indexOfFirst { it.id == id }
+        if (at < 0 || sessions.isEmpty()) return
+        val rest = servers[at].unended - sessions.toSet()
+        if (rest.size == servers[at].unended.size) return
+        servers[at] = servers[at].copy(unended = rest)
+        write()
+    }
+
+    /**
      * takeLegacy is the ids of the servers that had version 1's switch on,
      * once: their sessions were kept behind a prompt the app no longer
      * asks, so the caller forgets them, and the file is written without
@@ -238,6 +289,7 @@ class ServerStore(private val file: File, private val now: () -> String = { nowU
                     start = o.opt("start") == true,
                     trustedAt = str(o, "trusted_at"),
                     unrevoked = keysLeft(o.optJSONArray("unrevoked")),
+                    unended = sessionsLeft(o.optJSONArray("unended")),
                 )
             }.filter { it.id.isNotEmpty() }.let(::oneAtStart).toMutableList()
         } catch (e: JSONException) {
@@ -271,6 +323,16 @@ class ServerStore(private val file: File, private val now: () -> String = { nowU
             return (0 until a.length()).mapNotNull { i ->
                 val o = a.optJSONObject(i) ?: return@mapNotNull null
                 KeyLeft(str(o, "user"), o.optLong("id")).takeIf { it.user.isNotEmpty() && it.id > 0 }
+            }.distinct()
+        }
+
+        // sessionsLeft reads a server's sessions left, each {user, id},
+        // leaving out what is not one.
+        private fun sessionsLeft(a: JSONArray?): List<SessionLeft> {
+            if (a == null) return emptyList()
+            return (0 until a.length()).mapNotNull { i ->
+                val o = a.optJSONObject(i) ?: return@mapNotNull null
+                SessionLeft(str(o, "user"), o.optLong("id"), str(o, "created_at")).takeIf { it.user.isNotEmpty() && it.id > 0 }
             }.distinct()
         }
 

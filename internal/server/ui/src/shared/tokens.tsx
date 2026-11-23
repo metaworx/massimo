@@ -6,24 +6,29 @@
  *
  * A user's sessions and API keys, wherever they are drawn: in a user's
  * panel of System settings → Users and in My profile. Each with its
- * kind, label, the key a session was made from, when and from where it
- * was last used, and Revoke; of one's own user the token the page is
- * signed in with says "this device" and the key that session was made
- * of "its key", and Revoke on "this device" signs out; the label of a new key
- * with Create key, and the key just made, shown once. The list is read
- * when its place opens and again at every change of the caller's
- * counter while it is open; the key just made is shown by the read that
- * follows its making and gone at the next, kept in this part's own state
- * alone. An API key the caller names is marked, its row tinted, and the
- * caller is told of every read drawn, with that row, to bring it into
- * view (My profile's key of its address). Moved from System settings'
- * users (AP UiParts, Block 13), its texts the users.… keys both places
- * use.
+ * kind, its id, label, the key a session was made from, when and from
+ * where it was last used, and Revoke; of one's own user the token the
+ * page is signed in with says "this device" and the key that session was
+ * made of "its key", and Revoke on "this device" signs out; in the app the
+ * key the phone keeps for the server (its status' key_id, shared/app.ts)
+ * says "this device's key", in place of "its key" where both hold,
+ * however the session was made (AP MobileApp, D65-A, D66-A); the label of
+ * a new key with Create key, and the key just made, shown once. The list
+ * is read when its place opens and again at every change of the caller's
+ * counter while it is open, in the app once the app has revoked what the
+ * last sign-in revokes (D67-A); the key just made is shown by the read
+ * that follows its making and gone at the next, kept in this part's own
+ * state alone. An API key the caller names is marked, its row tinted,
+ * and the caller is told of every read drawn, with that row, to bring it
+ * into view (My profile's key of its address). Moved from System
+ * settings' users (AP UiParts, Block 13), its texts the users.… keys both
+ * places use.
  */
 
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { Token, User } from "../api";
 import { createKey, loadTokens, revokeOwn, revokeToken, type Run } from "./account";
+import { app, appKeyId, signInRevoked } from "./app";
 import { Age, Badge } from "./badge";
 import { hid } from "./cls";
 import { TextField } from "./field";
@@ -34,21 +39,33 @@ import { BusyButton } from "./question";
 import { session, stillSession } from "./session";
 
 /**
- * TokenRow is one session or key, with Revoke; labels names a session's
- * key by the list's labels; marked tints it (token-marked). Of one's own
- * user, the token the page is signed in with says "this device", the key
- * that session was made of "its key"; Revoke on "this device" signs out.
+ * TokenRow is one session or key, with its id and Revoke; labels names a
+ * session's key by the list's labels; marked tints it (token-marked). Of
+ * one's own user, the token the page is signed in with says "this
+ * device", the key that session was made of "its key"; in the app the key
+ * the phone keeps, of the id deviceKey, says "this device's key" in its
+ * place; Revoke on "this device" signs out.
  */
-function TokenRow({ u, tk, labels, run, marked }: { u: User; tk: Token; labels: Map<number, string>; run: Run; marked: boolean }) {
+function TokenRow({ u, tk, labels, run, marked, deviceKey }: {
+  u: User;
+  tk: Token;
+  labels: Map<number, string>;
+  run: Run;
+  marked: boolean;
+  deviceKey: number;
+}) {
   const kind = t("users.kind." + tk.kind);
   const mine = isMe(u.name) ? own.value : null;
   const current = !!mine && mine.id === tk.id;
-  const itsKey = !!mine && !!mine.key_id && mine.key_id === tk.id;
-  const cls = [current ? "token-current" : itsKey ? "token-its-key" : "", marked ? "token-marked" : ""].filter(Boolean).join(" ") || undefined;
+  const device = tk.kind === "api" && deviceKey > 0 && tk.id === deviceKey;
+  const itsKey = !device && !!mine && !!mine.key_id && mine.key_id === tk.id;
+  const tag = current ? "users.thisDevice" : device ? "users.thisDeviceKey" : itsKey ? "users.itsKey" : "";
+  const cls = [current ? "token-current" : device ? "token-device-key" : itsKey ? "token-its-key" : "", marked ? "token-marked" : ""].filter(Boolean).join(" ") || undefined;
   return (
     <li data-id={String(tk.id)} class={cls}>
       <span class="flag mode token-kind">{kind}</span>
-      {(current || itsKey) && <Badge kind="ok" text={t(current ? "users.thisDevice" : "users.itsKey")} />}
+      <span class="muted small token-id">{t("users.tokenId", { id: tk.id })}</span>
+      {tag && <Badge kind="ok" text={t(tag)} />}
       <span class="token-label">{tk.label || ""}</span>
       <span class={"muted small token-key" + hid(!tk.key_id)}>{tk.key_id ? t("users.fromKey", { label: labels.get(tk.key_id) || "#" + tk.key_id }) : ""}</span>
       <span class="muted small token-used">
@@ -86,6 +103,7 @@ export function Tokens({ u, off, open, reads, run, say, labelId, help, marked, d
   drawn?: (row: HTMLElement | null) => void;
 }) {
   useLang();
+  const deviceKey = appKeyId(app.value); // the key the phone keeps for this server, in the app
   const helps = useHelp(help || "", t("users.tokens"));
   const [list, setList] = useState<Token[] | null>(null);
   const [error, setError] = useState("");
@@ -99,7 +117,9 @@ export function Tokens({ u, off, open, reads, run, say, labelId, help, marked, d
     if (!open || off) return;
     let stale = false;
     const n = session();
-    loadTokens(u.name).then((l) => {
+    // in the app, once the last sign-in's revoke of the keys and sessions left is done: none of those is listed (D67-A)
+    signInRevoked().then(() => (stale || !stillSession(n) ? null : loadTokens(u.name))).then((l) => {
+      if (l === null) return;
       if (stale || !stillSession(n)) return;
       setList(l);
       setError("");
@@ -134,7 +154,9 @@ export function Tokens({ u, off, open, reads, run, say, labelId, help, marked, d
       <ul ref={ul} class="user-tokens">
         {error && <li class="muted small bad">{error}</li>}
         {list && !list.length && <li class="muted small">{t("users.tokensNone")}</li>}
-        {(list || []).map((tk) => <TokenRow key={tk.id} u={u} tk={tk} labels={labels} run={run} marked={tk.kind === "api" && tk.id === marked} />)}
+        {(list || []).map((tk) => (
+          <TokenRow key={tk.id} u={u} tk={tk} labels={labels} run={run} marked={tk.kind === "api" && tk.id === marked} deviceKey={deviceKey} />
+        ))}
       </ul>
       <div class={"user-key-box" + hid(!shown)}>
         <p class="small">{t("users.keyShown")}</p>

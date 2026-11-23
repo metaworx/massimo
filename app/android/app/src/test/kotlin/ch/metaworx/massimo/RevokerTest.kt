@@ -38,9 +38,12 @@ import java.util.concurrent.Executors
  * login kept before it, and no more once that prompt was dismissed; Turn
  * off asks once; the app key dropped at the run's end, where the run
  * stops, and where a step throws; a key the phone took back leaving every
- * key by its id; a page's id `app` reaching no Keystore key. The
- * Bridge's wiring of it (the prompt on the main thread, the answers'
- * shapes) is checked by reading it and on a phone.
+ * key by its id; a page's id `app` reaching no Keystore key. Remove
+ * signs the session out before the server goes, where no login is kept
+ * (F38, D69-A), and names the sessions left valid there; a server down
+ * leaves the session in its `unended` (D70-A). The Bridge's wiring of it
+ * (the prompt on the main thread, the answers' shapes) is checked by
+ * reading it and on a phone.
  */
 class RevokerTest {
     @get:Rule
@@ -169,6 +172,11 @@ class RevokerTest {
     private val leftHere = Revoker.Outcome.LEFT
     private val local = Revoker.Outcome.LOCAL
 
+    // byKeyAt is what the key key-secret's own revoke of the key [id] sends
+    // at the fake, a server older than DELETE /api/v1/me/token: that route,
+    // which it does not know, then the key's by its user and id (D80-B).
+    private fun byKeyAt(id: Long) = listOf("DELETE /api/v1/me/token key-secret", "DELETE /api/v1/users/anna/tokens/$id key-secret")
+
     @Test
     fun turnOffWithASessionRevokesWithItThenSignsOut() {
         val s = server("home")
@@ -203,7 +211,18 @@ class RevokerTest {
         keep(s, 42)
         assertEquals(Revoker.Off(revoked, 42), turnOff(s, fake.base, LoginSecret("key-secret", 42)))
         assertEquals(listOf("home"), prompts)
-        assertEquals(listOf("DELETE /api/v1/users/anna/tokens/42 key-secret"), fake.requests())
+        assertEquals(byKeyAt(42), fake.requests())
+        assertNull(logins.get(s.id))
+        assertTrue(left(s).isEmpty())
+    }
+
+    @Test
+    fun theKeyRevokesItselfWithoutItsUserOrId() {
+        // a server with DELETE /api/v1/me/token: one request, whatever id the login keeps (D80-B)
+        val s = server("home")
+        keep(s, 46)
+        assertEquals(Revoker.Off(revoked, 46), turnOff(s, fake.base, LoginSecret("key-self-46", 46)))
+        assertEquals(listOf("DELETE /api/v1/me/token key-self-46"), fake.requests())
         assertNull(logins.get(s.id))
         assertTrue(left(s).isEmpty())
     }
@@ -221,7 +240,7 @@ class RevokerTest {
         assertEquals(
             listOf(
                 "DELETE /api/v1/users/anna/tokens/45 session-bob",
-                "DELETE /api/v1/users/anna/tokens/45 key-secret",
+                *byKeyAt(45).toTypedArray(),
                 "POST /api/v1/logout session-bob",
             ),
             fake.requests(),
@@ -260,6 +279,63 @@ class RevokerTest {
 
         assertEquals("one prompt, for the first", listOf("home"), prompts)
         assertTrue(logged.joinToString("\n"), logged.none { it.contains("session-") || it.contains("key-secret") })
+    }
+
+    private fun remove(s: Server, url: String, byKey: Revoker.ByKey = byKey(null)): Revoker.Removed {
+        var got: Result<Revoker.Removed>? = null
+        revoker.remove(s.id, url, byKey) { got = it }
+        return (got ?: throw AssertionError("remove did not answer")).getOrThrow()
+    }
+
+    @Test
+    fun removeSignsTheSessionOutBeforeTheServerGoes() {
+        // without a kept login: signed out at the address given, then forgotten (F38, D69-A)
+        val s = server("home")
+        sessions.put(s, "session-anna")
+        assertEquals(Revoker.Removed(null, emptyList(), emptyList()), remove(s, fake.base))
+        assertEquals(listOf("POST /api/v1/logout session-anna"), fake.requests())
+        assertNull(servers.get(s.id))
+        assertNull(sessions.held(s))
+        // without an address: at the one that answers
+        val t = server("cabin")
+        sessions.put(t, "session-bob")
+        remove(t, "")
+        assertEquals("POST /api/v1/logout session-bob", fake.requests().last())
+        // none held: nothing sent
+        val u = server("barn")
+        remove(u, fake.base)
+        assertEquals(2, fake.requests().size)
+        assertTrue("no prompt", prompts.isEmpty())
+    }
+
+    @Test
+    fun aServerDownLeavesTheSessionByItsId() {
+        // reached at its remote address for the check, then at none: the
+        // session the app forgets is left in unended (D70-A), and Remove names it
+        fun down(name: String) = servers.save(JSONObject().put("name", name).put("node", "node-$name").put("lan", fake.closed).put("remote", fake.base))
+        val s = down("home")
+        keep(s, 46)
+        sessions.put(s, "session-anna")
+        assertEquals("anna", sessions.check(s, fake.base))
+        assertEquals("Turn off with the server down", Revoker.Off(leftHere, 46), turnOff(s, ""))
+        assertEquals(listOf(KeyLeft("anna", 46)), left(s))
+        assertEquals(listOf(SessionLeft("anna", 7, FakeServer.made(7))), servers.get(s.id)!!.unended)
+        assertNull(sessions.held(s))
+
+        val t = down("cabin")
+        sessions.put(t, "session-anna")
+        sessions.check(t, fake.base)
+        val gone = remove(t, "")
+        assertEquals("Remove without a kept login names the session left", Revoker.Removed(null, emptyList(), listOf(7L)), gone)
+        assertNull(servers.get(t.id))
+
+        val u = down("barn")
+        keep(u, 49)
+        sessions.put(u, "session-anna")
+        sessions.check(u, fake.base)
+        val off = remove(u, "")
+        assertEquals("and with a kept login, its key and its session", Revoker.Removed(Revoker.Off(leftHere, 49), listOf(49L), listOf(7L)), off)
+        assertTrue(logged.joinToString("\n"), logged.none { it.contains("session-") })
     }
 
     @Test
@@ -369,7 +445,7 @@ class RevokerTest {
         assertEquals("one prompt per server, each after the last was answered", listOf("home", "cabin", "barn", "shed"), prompts)
         assertEquals("a dismissed prompt leaves its key by its id, or on the phone alone without one, and the next is asked",
             Revoker.Summary(listOf(a.id, d.id), listOf(b.id), listOf(c.id)), summary)
-        assertEquals(listOf("DELETE /api/v1/users/anna/tokens/42 key-secret", "DELETE /api/v1/users/anna/tokens/46 key-secret"), fake.requests())
+        assertEquals(byKeyAt(42) + byKeyAt(46), fake.requests())
         assertEquals(listOf(KeyLeft("anna", 45)), left(b))
         assertTrue(logins.ids().isEmpty())
     }
@@ -381,7 +457,7 @@ class RevokerTest {
         sessions.put(s, "session-dead")
         assertEquals(Revoker.Summary(listOf(s.id), listOf(), listOf()), forgetAll(OnePrompt(LoginSecret("key-secret", 42))))
         assertEquals(listOf("home"), prompts)
-        assertEquals(listOf("DELETE /api/v1/users/anna/tokens/42 session-dead", "DELETE /api/v1/users/anna/tokens/42 key-secret"), fake.requests())
+        assertEquals(listOf("DELETE /api/v1/users/anna/tokens/42 session-dead") + byKeyAt(42), fake.requests())
         assertNull("the refused session forgotten", sessions.held(s))
     }
 
@@ -395,7 +471,7 @@ class RevokerTest {
         assertEquals(Revoker.Summary(listOf(a.id, b.id, c.id), listOf(), listOf()), forgetAll(appByKey(forgetAll = true)))
         assertEquals("three servers that need the key, one prompt, its own title", listOf("Forget all ${LoginKey.APP}"), prompt.shown)
         assertEquals(
-            listOf("DELETE /api/v1/users/anna/tokens/42 key-secret", "DELETE /api/v1/users/anna/tokens/45 key-secret", "DELETE /api/v1/users/anna/tokens/46 key-secret"),
+            byKeyAt(42) + byKeyAt(45) + byKeyAt(46),
             fake.requests(),
         )
         assertTrue(logins.ids().isEmpty())
@@ -425,7 +501,7 @@ class RevokerTest {
         revoker.turnOff(s.id, fake.base, appByKey()) { got = it }
         assertEquals(Revoker.Off(revoked, 42), got)
         assertEquals(listOf("home ${LoginKey.APP}"), prompt.shown)
-        assertEquals(listOf("DELETE /api/v1/users/anna/tokens/42 key-secret"), fake.requests())
+        assertEquals(byKeyAt(42), fake.requests())
         assertFalse(appKey.held)
     }
 

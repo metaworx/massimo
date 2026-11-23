@@ -16,7 +16,7 @@
 
 import type { LoginProvider } from "../api";
 import { register, mounter } from "../shared/region";
-import { readApp } from "./app";
+import { readApp } from "../shared/app";
 import { Banner } from "./Banner";
 import { Card } from "./Card";
 import { asksOwner, card, closed, forgetCard, open, toSignIn, type Way } from "./store";
