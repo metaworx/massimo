@@ -854,10 +854,36 @@ export interface RestartInfo {
   /** The settings file serve reads */
   file?: string;
   /**
-   * When the settings file was last read, at the start or since
+   * When the settings file was last read, at the start or since, also where it
+   * did not parse, or was there but could not be read
    * @format date-time
    */
   read_at?: string;
+  /**
+   * What the last read of the settings file found the next start refuses;
+   * absent where it found nothing, and at the start, which would have refused
+   * it. The restart is offered all the same.
+   */
+  refused?: Refusal[];
+}
+
+/**
+ * One thing the next start of serve refuses, in the start's order: a setting of
+ * the settings file, or the file itself
+ */
+export interface Refusal {
+  /**
+   * The settings that changed since the start and that the refusing check
+   * reads, by name; absent where the file itself does not parse, or is there
+   * but cannot be read
+   */
+  settings?: string[];
+  /**
+   * The start's own text, which may quote a value, a secret's named by its
+   * variable; for the file, its error naming the file and the line by its
+   * number
+   */
+  error: string;
 }
 
 export interface RebootInfo {
@@ -883,6 +909,8 @@ export interface ReloadResult {
   changed: string[];
   /** The variables that differ from the start and apply only at the next one */
   pending: string[];
+  /** What the next start refuses of the settings now; empty for nothing */
+  refused: Refusal[];
   /** @format date-time */
   read_at: string;
 }

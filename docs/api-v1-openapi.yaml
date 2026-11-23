@@ -3544,8 +3544,10 @@ paths:
         Reads the settings file again and applies MASSIMO_API_TOKEN at once, as
         SIGHUP does, and checkpoints the store; every other setting that
         changed applies at the next start. The server also reads the file by
-        itself within seconds of a change. Sends nothing to a Cube, so a
-        retry is harmless.
+        itself within seconds of a change. A setting the next start would
+        refuse is not refused here: refused says it, as GET /api/v1/restart
+        does until a read finds nothing refused. Sends nothing to a Cube, so
+        a retry is harmless.
       responses:
         "200":
           description: What reading the file again found
@@ -4603,7 +4605,39 @@ components:
           items: {type: string}
           description: The settings file's variables that changed since the start and apply only at the next one; names, never values
         file: {type: string, description: The settings file serve reads}
-        read_at: {type: string, format: date-time, description: "When the settings file was last read, at the start or since"}
+        read_at:
+          type: string
+          format: date-time
+          description: >-
+            When the settings file was last read, at the start or since, also
+            where it did not parse, or was there but could not be read
+        refused:
+          type: array
+          items: {$ref: "#/components/schemas/Refusal"}
+          description: >-
+            What the last read of the settings file found the next start
+            refuses; absent where it found nothing, and at the start, which
+            would have refused it. The restart is offered all the same.
+    Refusal:
+      type: object
+      description: >-
+        One thing the next start of serve refuses, in the start's order: a
+        setting of the settings file, or the file itself
+      required: [error]
+      properties:
+        settings:
+          type: array
+          items: {type: string}
+          description: >-
+            The settings that changed since the start and that the refusing
+            check reads, by name; absent where the file itself does not parse,
+            or is there but cannot be read
+        error:
+          type: string
+          description: >-
+            The start's own text, which may quote a value, a secret's named by
+            its variable; for the file, its error naming the file and the
+            line by its number
     RebootInfo:
       type: object
       required: [available]
@@ -4616,7 +4650,7 @@ components:
         error: {type: string, description: Why the last reboot failed}
     ReloadResult:
       type: object
-      required: [changed, pending, read_at]
+      required: [changed, pending, refused, read_at]
       properties:
         changed:
           type: array
@@ -4626,6 +4660,10 @@ components:
           type: array
           items: {type: string}
           description: The variables that differ from the start and apply only at the next one
+        refused:
+          type: array
+          items: {$ref: "#/components/schemas/Refusal"}
+          description: What the next start refuses of the settings now; empty for nothing
         read_at: {type: string, format: date-time}
     SystemInfo:
       type: object

@@ -282,6 +282,8 @@
   "restart.notBack": "The server has not come back within two minutes; look at its service on the box.",
   "restart.failed": "Not restarted: {error}",
   "restart.pending": "Applies at the next restart: {names}.",
+  "restart.refused": "The next start refuses the following; the server does not come back after a restart, an update or a reboot until the settings file is fixed:",
+  "restart.refusal": "{names}: {error}",
   "restart.unavailable": "No restart from here: {reason}.",
   "restart.cannotAsk": "Cannot ask the server about the restart: {error}",
   "reboot.button": "Reboot",

@@ -284,6 +284,8 @@
   "restart.notBack": "Le serveur n’est pas revenu en deux minutes ; vérifiez son service sur la machine.",
   "restart.failed": "Non redémarré : {error}",
   "restart.pending": "S’applique au prochain redémarrage : {names}.",
+  "restart.refused": "Le prochain démarrage refuse ce qui suit ; le serveur ne revient pas après un redémarrage, une mise à jour ou un redémarrage de l’ordinateur tant que le fichier de réglages n’est pas corrigé :",
+  "restart.refusal": "{names} : {error}",
   "restart.unavailable": "Le redémarrage depuis cette page est impossible : {reason}.",
   "restart.cannotAsk": "Impossible d’interroger le serveur sur le redémarrage : {error}",
   "reboot.button": "Redémarrer",

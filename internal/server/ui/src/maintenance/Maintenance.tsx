@@ -9,7 +9,8 @@
  * intervals, each saved at once and kept on while it saves, so that the
  * focus stays on it (with settings); the settings file read again and the
  * server's restart, which asks in place of its button, with the settings
- * that wait for the next start (with restart); the computer's reboot with
+ * that wait for the next start and what that start refuses, which
+ * blocks nothing (with restart); the computer's reboot with
  * its delay, which asks naming it, and Take the reboot back (with
  * reboot). A load that comes in leaves the delay typed, a question and
  * the focus where they are; the card's badge counts what waits for the
@@ -101,12 +102,19 @@ function IntervalRow({ iv }: { iv: Interval }) {
   );
 }
 
-/** Restart is the restart's row: what it does or why it is not offered, its button, which asks in its place; then what waits for it. */
+/**
+ * Restart is the restart's row: what it does or why it is not offered,
+ * its button, which asks in its place; then what waits for it, and what
+ * the next start refuses, a line each, the server's text as text: the
+ * owner reads it where the restart is asked for, and the button stays
+ * (AP ReloadChecks, D8-B).
+ */
 function Restart() {
   useLook();
   const asking = useAsk<HTMLButtonElement>(restartAsk);
   const text = restart.text;
   const pending = restart.pending;
+  const refused = restart.refused;
   return (
     <>
       <div ref={asking.row as Ref<HTMLDivElement>} class="action-row restart needs-restart">
@@ -128,6 +136,11 @@ function Restart() {
         )}
       </div>
       <Notice id="restart-pending" cls="small needs-restart" hidden={!pending.length} text={pending.length ? t("restart.pending", { names: pending.join(", ") }) : ""} />
+      <Notice id="restart-refused" cls="small needs-restart restart-refused" role="status" hidden={!refused.length} text={refused.length ? t("restart.refused") : ""}>
+        {refused.map((f, i) => (
+          <span key={i} class="restart-refusal">{f.settings && f.settings.length ? t("restart.refusal", { names: f.settings.join(", "), error: f.error }) : f.error}</span>
+        ))}
+      </Notice>
     </>
   );
 }

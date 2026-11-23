@@ -3538,6 +3538,10 @@ even where nothing changed:
 the start's own error after "the next start refuses: ",
 a secret's value, the path of `MASSIMO_TLS_KEY`, named by its variable,
 and a line by its number, never quoted;
+GET /api/v1/restart's `refused` says the same, each with its settings,
+and a read whose settings did not change writes its `settings_read`
+where that differs from the last read's,
+as a DNS hook made or removed meanwhile makes it;
 README.md, "Server", says which settings it checks),
 `restart`, `reboot`, `reboot_cancelled`, `update` (`from`, `to`, `channel`),
 `update_result` (the helper's outcome after the restart, once:
@@ -3981,6 +3985,33 @@ such as `["MASSIMO_TLS", "MASSIMO_LISTEN"]`: names, never values;
 `file` is the settings file `serve` reads and `read_at` when it last read it,
 at the start or since,
 also where the file did not parse, or was there but could not be read.
+`refused`, where there is any,
+is what that read found the next start refuses, in the start's order,
+as the log's `settings_read` says it (POST /api/v1/reload):
+
+```json
+{"available": true, "by": "systemd", "pending": ["MASSIMO_HSTS"], "refused": [
+  {"settings": ["MASSIMO_HSTS"], "error": "-hsts or MASSIMO_HSTS \"-1\": want a number of days, 0 or more"}
+]}
+```
+
+each with `settings`, the settings that changed since the start
+and that the refusing check reads, by name,
+such as `MASSIMO_TLS`, changed from acme,
+for the `MASSIMO_TLS_HTTP` the start took beside it,
+also one that `pending` does not list,
+`MASSIMO_REBOOT`, which applies at once,
+or `MASSIMO_CUBE_SN`, which it never lists,
+and `error`, the start's own text,
+which may quote a value,
+a secret's (the path of `MASSIMO_TLS_KEY`) named by its variable;
+without `settings` for the file itself,
+one that does not parse or is there but cannot be read,
+its error naming the file and the line by its number, never the line.
+A read that finds nothing refused clears it,
+and the start has none, since it would have refused it.
+It blocks nothing: the restart is offered all the same,
+and so are an update and a reboot.
 `by` is `systemd`, `launchd` (also Homebrew's job), `windows`
 (the Windows service manager) or `exit` (`serve -restart exit`:
 whatever runs the server, told by the exit status).
@@ -4022,15 +4053,16 @@ so this is for not waiting, and for systems without SIGHUP.
 Needs the capability `restart`, and answers what it found:
 
 ```json
-{"changed": ["MASSIMO_LISTEN"], "pending": ["MASSIMO_LISTEN"], "read_at": "2026-11-08T19:52:00Z"}
+{"changed": ["MASSIMO_LISTEN"], "pending": ["MASSIMO_LISTEN"], "refused": [], "read_at": "2026-11-08T19:52:00Z"}
 ```
 
 `changed` names the variables this read changed, `pending` those that now
 differ from the start and wait for the next one; names, never values.
 A setting the next start would refuse is not refused here:
-the log's `settings_read` is then at `warn`,
-its `error` the start's own after "the next start refuses: " (`settings_read`,
-under GET /api/v1/cubes/{sn}/events),
+`refused` says it, as GET /api/v1/restart does from then on,
+each with its settings and the start's own text, `[]` for none;
+the log's `settings_read` (under GET /api/v1/cubes/{sn}/events) is then at `warn`,
+its `error` those texts after "the next start refuses: ", joined by "; ",
 and a reboot's switch the start would refuse is off.
 It sends nothing to a Cube, and is an audit row (`server.reload`) but no
 command, so a retry is harmless.
@@ -4039,7 +4071,8 @@ command, so a retry is harmless.
 nothing is applied, and what waits for the next start stays as it was,
 and the log's `settings_read` is at `warn`
 with the start's own error after "the next start refuses: "
-for a file that does not parse, or is there but cannot be read;
+for a file that does not parse, or is there but cannot be read,
+which GET /api/v1/restart's `refused` then says, without a setting;
 a missing one, which an editor may be replacing,
 is a warning on the process's log alone.
 

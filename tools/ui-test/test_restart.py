@@ -155,6 +155,67 @@ def test_reload_settings(page):
         page.unroute("**/api/v1/restart")
 
 
+# What the last read of the settings file found the next start refuses
+# (AP ReloadChecks, D8-B): a setting with markup in its value, and two
+# settings of one check with a path whose segment, without a hyphen or a
+# space, is wider than a phone and wraps only anywhere.
+REFUSED = [
+    {"settings": ["MASSIMO_TRUSTED_PROXIES"],
+     "error": '-trusted-proxies or MASSIMO_TRUSTED_PROXIES: "<b>10.0.0.300</b><img src=x>" is neither an address nor a CIDR'},
+    {"settings": ["MASSIMO_TLS", "MASSIMO_TLS_CERT"],
+     "error": "tls: open /var/lib/massimo/certificates/adirectorynamefartoolongforanyphonescreenwhatsoevertowrapwithoutbreaking/cert.pem: "
+              "no such file or directory"},
+]
+
+
+def test_reload_shows_what_the_next_start_refuses(page):
+    """Under the restart, beside what waits for the next start, the card
+    says what that start refuses, a line each, the server's text as text:
+    no element of its markup, nothing wider than the page. The restart is
+    still offered. Reload now reads the file again (POST /api/v1/reload,
+    stubbed: the route has its Go test), and once the server finds
+    nothing refused, the restart's row no longer says it."""
+    answer = {"body": {"available": True, "by": "systemd", "pending": ["MASSIMO_TLS", "MASSIMO_TLS_CERT", "MASSIMO_TRUSTED_PROXIES"],
+                       "file": "/etc/massimo/env", "read_at": "2026-11-08T19:52:00Z", "refused": REFUSED}}
+
+    def restart(route):
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(answer["body"]))
+
+    def reload(route):
+        """The file fixed: the TLS lines gone, the proxy a good one, which still waits for the next start."""
+        good = {"available": True, "by": "systemd", "pending": ["MASSIMO_TRUSTED_PROXIES"], "file": "/etc/massimo/env",
+                "read_at": "2026-11-08T20:00:00Z"}
+        answer["body"] = good
+        route.fulfill(status=200, content_type="application/json", body=json.dumps({
+            "changed": ["MASSIMO_TLS", "MASSIMO_TLS_CERT", "MASSIMO_TRUSTED_PROXIES"], "pending": good["pending"], "refused": [],
+            "read_at": good["read_at"]}))
+    page.route("**/api/v1/restart", restart)
+    page.route("**/api/v1/reload", reload)
+    try:
+        show_view(page, "maint")
+        notice = page.locator("#restart-refused")
+        assert wait_until(page, "document.querySelectorAll('#restart-refused .restart-refusal').length === 2", 5), "a line each"
+        want = page.evaluate("""(refused) => [t('restart.refused')].concat(refused.map((f) =>
+          t('restart.refusal', { names: f.settings.join(', '), error: f.error })))""", REFUSED)
+        got = page.evaluate("""() => { const n = document.getElementById('restart-refused');
+          return [n.firstChild.textContent].concat([...n.querySelectorAll('.restart-refusal')].map((s) => s.textContent)); }""")
+        assert got == want, f"what the next start refuses, as text ({got})"
+        assert notice.is_visible() and page.locator("#restart-refused b, #restart-refused img").count() == 0, "no markup of the server's text"
+        assert page.evaluate("""() => { const n = document.getElementById('restart-refused');
+          return n.previousElementSibling.id === 'restart-pending' && n.scrollWidth <= n.clientWidth; }"""), \
+            "beside what waits for the next start, wrapped within the card"
+        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth"), "nothing wider than the page"
+        assert page.locator("#restart-btn").is_visible() and page.locator("#restart-btn").is_enabled(), "the restart still offered"
+        page.locator("#settings-reload").click()
+        assert wait_until(page, "document.getElementById('restart-refused').classList.contains('hidden')", 5), "gone after a good reload"
+        assert page.locator("#restart-refused .restart-refusal").count() == 0, "no line left"
+        names = page.evaluate("t('restart.pending', {names: 'MASSIMO_TRUSTED_PROXIES'})")
+        assert page.locator("#restart-pending").inner_text() == names, "what still waits"
+    finally:
+        page.unroute("**/api/v1/reload")
+        page.unroute("**/api/v1/restart")
+
+
 def test_sign_in_offers_the_key_after_a_server_without_a_store(page):
     """The sign-in dialog chooses its API key's form once the page has
     seen a server without a store ask for no key, since the only way in

@@ -178,7 +178,10 @@ func TestStartChecksCoverTheStart(t *testing.T) {
 				break
 			}
 		}
-		return startRefusals(get, nil), first
+		for _, f := range startRefusals(get, nil) {
+			errs = append(errs, f.err)
+		}
+		return errs, first
 	}
 	wants := make([]string, len(cases))
 	covered := map[int]bool{}

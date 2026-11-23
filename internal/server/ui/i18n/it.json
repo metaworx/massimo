@@ -284,6 +284,8 @@
   "restart.notBack": "Il server non è tornato entro due minuti; controlla il suo servizio sulla macchina.",
   "restart.failed": "Non riavviato: {error}",
   "restart.pending": "Vale dal prossimo riavvio: {names}.",
+  "restart.refused": "Il prossimo avvio rifiuta quanto segue; il server non torna dopo un riavvio, un aggiornamento o un riavvio del computer finché il file delle impostazioni non viene corretto:",
+  "restart.refusal": "{names}: {error}",
   "restart.unavailable": "Non è possibile riavviare da qui: {reason}.",
   "restart.cannotAsk": "Impossibile chiedere al server del riavvio: {error}",
   "reboot.button": "Riavvia",

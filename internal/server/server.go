@@ -387,13 +387,15 @@ type Server struct {
 	// historyMu holds the last updates' row while it is read and written
 	// again (editHistory).
 	historyMu sync.Mutex
-	// restartGate lets one restart through (restart_api.go), and
-	// pending lists what applies only at the next one.
+	// restartGate lets one restart through (restart_api.go), pending
+	// lists what applies only at the next one, and refused what the
+	// next start refuses (SetRefused).
 	restartGate restartGate
 	// reboot is the reboot that waits (reboot_api.go).
 	reboot    rebootPlan
 	pendingMu sync.Mutex
 	pending   []string
+	refused   []Refusal
 	// the settings file, when it was last read, and what reads it again
 	// (restart_api.go, SetReloader)
 	settingsFile string

@@ -112,7 +112,7 @@ func runServe(args []string) error {
 	// What the start refuses of its settings, before it opens anything,
 	// in the order and the words a reload names it in (startchecks.go).
 	if errs := startRefusals(settingOf(fixed), nil); len(errs) > 0 {
-		return fmt.Errorf("serve: %w", errs[0])
+		return fmt.Errorf("serve: %w", errs[0].err)
 	}
 	// The values the checks passed, parsed again: an error here is one
 	// the checks lack, and stops serve rather than run it on a zero value.
@@ -274,17 +274,12 @@ func runServe(args []string) error {
 	go watchSettings(ctx, env.File(), settingsWatchEvery, func() { reloader.reload(ctx, "the settings file changed") })
 	// POST /api/v1/reload: what SIGHUP does, from System settings →
 	// Maintenance; the file counts as read at the start.
-	srv.SetReloader(env.File(), func(rctx context.Context) (server.ReloadResult, error) {
-		changed, pending, err := reloader.reload(rctx, "the API")
-		if err != nil {
-			return server.ReloadResult{}, err
-		}
+	srv.SetReloader(env.File(), reloader.apiReload(func(rctx context.Context) {
 		if logFile != nil {
 			logFile.Rotate("reload")
 		}
 		checkpointStore(rctx, inst.Store(), logger)
-		return server.ReloadResult{Changed: nonNil(changed), Pending: nonNil(pending), ReadAt: time.Now()}, nil
-	})
+	}))
 	srv.SetSettingsRead(settingsRead)
 	// GET /api/v1/config: the settings in effect, as massimo config shows
 	srv.SetConfigView(func() server.ConfigView { return configView(*listen, tlsInEffect) })

@@ -282,6 +282,8 @@
   "restart.notBack": "Der Server ist nach zwei Minuten nicht zurück; den Dienst auf dem Gerät prüfen.",
   "restart.failed": "Nicht neu gestartet: {error}",
   "restart.pending": "Gilt ab dem nächsten Neustart: {names}.",
+  "restart.refused": "Der nächste Start lehnt Folgendes ab; nach einem Neustart, einem Update oder einem Neustart des Computers startet der Server erst wieder, wenn die Einstellungsdatei korrigiert ist:",
+  "restart.refusal": "{names}: {error}",
   "restart.unavailable": "Von hier aus ist kein Neustart möglich: {reason}.",
   "restart.cannotAsk": "Der Server kann nicht nach dem Neustart gefragt werden: {error}",
   "reboot.button": "Neu starten",

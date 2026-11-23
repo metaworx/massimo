@@ -777,6 +777,10 @@ changes nothing and is such a warning too,
 since every command stops on it at its start;
 the warning names the bad line by its number and never quotes it.
 A missing one changes nothing either, as an editor may be replacing it.
+`GET /api/v1/restart` and `POST /api/v1/reload` name what the next start refuses
+until a read finds nothing refused,
+and System settings → Maintenance says it under **Restart**,
+without blocking the restart.
 A setting a flag fixes is the flag's, now and at the next start,
 and one the process environment sets wins over the file's;
 the warning names the path of `MASSIMO_TLS_KEY` by its variable.

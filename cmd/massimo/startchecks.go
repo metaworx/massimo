@@ -15,6 +15,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"go.metaworx.ch/massimo/internal/env"
@@ -121,31 +122,41 @@ func rotationCheck(g logRotation) error {
 	return err
 }
 
+// checkRefusal is a check of the start's that refuses: the variables of
+// only (startRefusals) it reads, sorted, and its error.
+type checkRefusal struct {
+	vars []string
+	err  error
+}
+
 // startRefusals runs the start's checks in its order, each reading the
-// settings through get, and returns the errors of those that refuse; a
-// nil only runs every check, another only those that read one of its
-// variables.
-func startRefusals(get func(string) string, only map[string]bool) []error {
-	var errs []error
+// settings through get, and returns those that refuse; a nil only runs
+// every check, another only those that read one of its variables, each
+// refusal naming those it reads.
+func startRefusals(get func(string) string, only map[string]bool) []checkRefusal {
+	var out []checkRefusal
 	for _, c := range startChecks {
-		if only != nil && !readsAny(c, only) {
+		vars := readOf(c, only)
+		if only != nil && len(vars) == 0 {
 			continue
 		}
 		if err := c.check(get); err != nil {
-			errs = append(errs, err)
+			out = append(out, checkRefusal{vars: vars, err: err})
 		}
 	}
-	return errs
+	return out
 }
 
-// readsAny reports whether c reads one of the variables of only.
-func readsAny(c startCheck, only map[string]bool) bool {
+// readOf are the variables of only that c reads, sorted.
+func readOf(c startCheck, only map[string]bool) []string {
+	var vars []string
 	for k := range only {
 		if c.reads(k) {
-			return true
+			vars = append(vars, k)
 		}
 	}
-	return false
+	sort.Strings(vars)
+	return vars
 }
 
 // settingOf is how the start reads a setting: the value of its flag

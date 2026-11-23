@@ -560,6 +560,11 @@ body.scrolled #pending { display: none !important; }
 .action-title { font-weight: 600; }
 .settings .action-row .actions { margin: 0; }
 .action-row + .notice { margin: 0 0 10px; }
+/* what the next start refuses, under what waits for it (Maintenance's
+   Restart): edged as the open server's warning is, a line per setting,
+   a long path wrapped anywhere */
+.restart-refused { border-left: 4px solid var(--warn); overflow-wrap: anywhere; }
+.restart-refusal { display: block; margin-top: 4px; }
 .action-row .reboot-delay { margin-top: 6px; }
 .reboot-delay input[type="number"] { width: 5.5em; }
 /* a part of a card that opens (System settings → Maintenance: the store,

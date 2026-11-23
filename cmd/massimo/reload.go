@@ -14,7 +14,11 @@ package main
 // own words (startchecks.go), and still waits for that start; a reboot
 // switch it would refuse is off. A file that does not parse, or is
 // there but cannot be read, changes nothing, and its settings_read is a
-// warning too (unreadable).
+// warning too (unreadable). The server keeps what each read found the
+// next start refuses, which GET /api/v1/restart and POST /api/v1/reload
+// answer (Server.SetRefused): a read that finds nothing clears it, and
+// one that finds otherwise than the last writes its settings_read,
+// though no setting changed, so that the log's sign agrees.
 
 import (
 	"context"
@@ -139,7 +143,13 @@ type settingsReloader struct {
 	// warned of it (unreadable): the next read writes its own, which
 	// settles it, though nothing changed.
 	unread bool
-	mu     sync.Mutex
+	// lastRefused is what the last read found the next start refuses
+	// (Server.SetRefused): a read whose settings did not change writes
+	// its settings_read where that differs, a check of the box's state
+	// having answered otherwise (a DNS hook made, a key file put in
+	// place), so that the log's sign and GET /api/v1/restart agree.
+	lastRefused []server.Refusal
+	mu          sync.Mutex
 }
 
 func newSettingsReloader(path string, log *slog.Logger, srv *server.Server, start, fixed map[string]string) *settingsReloader {
@@ -153,15 +163,16 @@ func (r *settingsReloader) isFixed(k string) bool {
 }
 
 // reload reads the file again and applies what changed; why says what
-// asked for it, for the log. It returns the variables that changed and
-// those that apply only at the next start (POST /api/v1/reload).
-func (r *settingsReloader) reload(ctx context.Context, why string) (changed, pending []string, err error) {
+// asked for it, for the log. It returns the variables that changed,
+// those that apply only at the next start and what that start refuses
+// (POST /api/v1/reload, apiReload).
+func (r *settingsReloader) reload(ctx context.Context, why string) (changed, pending []string, refused []server.Refusal, err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	changed, err = env.ReloadFile(r.path)
 	if err != nil {
 		r.unreadable(ctx, why, err)
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	r.srv.SetSettingsRead(time.Now())
 	if slices.Contains(changed, tokenVar) && !r.isFixed(tokenVar) {
@@ -182,16 +193,38 @@ func (r *settingsReloader) reload(ctx context.Context, why string) (changed, pen
 	}
 	pending = r.pending()
 	r.srv.SetPendingRestart(pending)
-	if len(changed) > 0 || why != "the settings file changed" || r.unread {
+	// What the next start refuses, kept for the API, cleared by a read
+	// that finds nothing (AP ReloadChecks, D8-B); a change of it is
+	// written to the log, though no setting changed.
+	refused = r.refused()
+	r.srv.SetRefused(refused)
+	refusalsChanged := !slices.EqualFunc(refused, r.lastRefused, sameRefusal)
+	r.lastRefused = refused
+	if len(changed) > 0 || why != "the settings file changed" || r.unread || refusalsChanged {
 		r.unread = false
 		r.log.Info("settings file read again", "why", why, "changed", strings.Join(changed, ","), "at_next_restart", strings.Join(pending, ","))
 		// The names, never the values; the errors of the refused
 		// settings quote theirs, a secret's by its name. The event's
 		// own line is the warning, on stderr as in the web UI's log, as
 		// log_rotated's is.
-		r.srv.LogSettingsRead(ctx, why, changed, pending, r.refused())
+		r.srv.LogSettingsRead(ctx, why, changed, pending, refusedError(refused))
 	}
-	return changed, pending, nil
+	return changed, pending, refused, nil
+}
+
+// apiReload is POST /api/v1/reload's read of the file (Server.SetReloader):
+// reload, then after, what else the API's read does (serve.go: the log
+// file's rotation, the store's checkpoint); its answer is what reload
+// found, every list [] rather than null for none.
+func (r *settingsReloader) apiReload(after func(context.Context)) func(context.Context) (server.ReloadResult, error) {
+	return func(ctx context.Context) (server.ReloadResult, error) {
+		changed, pending, refused, err := r.reload(ctx, "the API")
+		if err != nil {
+			return server.ReloadResult{}, err
+		}
+		after(ctx)
+		return server.ReloadResult{Changed: nonNil(changed), Pending: nonNil(pending), Refused: refused, ReadAt: time.Now()}, nil
+	}
 }
 
 // unreadable says that the settings file could not be read again, which
@@ -205,30 +238,37 @@ func (r *settingsReloader) reload(ctx context.Context, why string) (changed, pen
 // and the read's time is the event's, which the web UI shows as the
 // file's; the next read writes its settings_read, which settles it. The
 // error names the file and the line by its number, never the line,
-// which may hold a secret (env.ReloadFile).
+// which may hold a secret (env.ReloadFile). The server keeps it as what
+// the next start refuses, the file's alone, without a setting: the
+// start refuses the file before it looks at one (D8-B).
 func (r *settingsReloader) unreadable(ctx context.Context, why string, err error) {
 	if os.IsNotExist(err) {
 		r.log.Warn("settings file not read again", "file", r.path, "why", why, "error", err)
 		return
 	}
+	refused := []server.Refusal{{Error: err.Error()}}
 	r.srv.SetSettingsRead(time.Now())
-	r.srv.LogSettingsRead(ctx, why, nil, r.pending(), errors.New("the next start refuses: "+err.Error()))
+	r.srv.SetRefused(refused)
+	r.lastRefused = refused
+	r.srv.LogSettingsRead(ctx, why, nil, r.pending(), refusedError(refused))
 	r.unread = true
 }
 
-// refused is what the next start refuses of the settings now: the
-// start's errors (startRefusals), after "the next start refuses: ", nil
-// for none. A check runs where one of the variables it reads differs
-// from the start and no flag fixed it, and reads a fixed flag's value
-// where it has one, as the next start will (AP ReloadChecks, D2-A): an
-// unchanged MASSIMO_TLS_HTTP is refused once MASSIMO_TLS changes from
-// acme. env.ReloadFile keeps a value the process environment set, which
-// therefore never differs: the start took it and takes it again. A
-// secret's value, the path of MASSIMO_TLS_KEY, is named by its variable
-// instead (D5-A): the log is read by more people than GET
+// refused is what the next start refuses of the settings now, an empty
+// list for nothing: the start's checks that refuse (startRefusals), in
+// its order, each with the variables it reads that differ from the
+// start, and its error. A check runs where one of the variables it reads
+// differs from the start and no flag fixed it, and reads a fixed flag's
+// value where it has one, as the next start will (AP ReloadChecks,
+// D2-A): an unchanged MASSIMO_TLS_HTTP is refused once MASSIMO_TLS
+// changes from acme, and the refusal names MASSIMO_TLS. env.ReloadFile
+// keeps a value the process environment set, which therefore never
+// differs: the start took it and takes it again. A secret's value, the
+// path of MASSIMO_TLS_KEY, is named by its variable instead (D5-A): the
+// log and GET /api/v1/restart are read by more people than GET
 // /api/v1/config, which does not show it; the start's own error, on its
 // stderr, keeps the value.
-func (r *settingsReloader) refused() error {
+func (r *settingsReloader) refused() []server.Refusal {
 	now := settings()
 	differs := map[string]bool{}
 	for _, m := range []map[string]string{r.start, now} {
@@ -239,12 +279,29 @@ func (r *settingsReloader) refused() error {
 		}
 	}
 	get := settingOf(r.fixed)
-	var texts []string
-	for _, err := range startRefusals(get, differs) {
-		texts = append(texts, hideSecrets(err.Error(), get))
+	out := []server.Refusal{}
+	for _, f := range startRefusals(get, differs) {
+		out = append(out, server.Refusal{Settings: f.vars, Error: hideSecrets(f.err.Error(), get)})
 	}
-	if len(texts) == 0 {
+	return out
+}
+
+// sameRefusal reports whether two refusals name the same settings and
+// say the same.
+func sameRefusal(a, b server.Refusal) bool {
+	return slices.Equal(a.Settings, b.Settings) && a.Error == b.Error
+}
+
+// refusedError is settings_read's error of what the next start refuses:
+// the start's texts after "the next start refuses: ", in its order, nil
+// for none.
+func refusedError(refused []server.Refusal) error {
+	if len(refused) == 0 {
 		return nil
+	}
+	texts := make([]string, len(refused))
+	for i, f := range refused {
+		texts[i] = f.Error
 	}
 	return errors.New("the next start refuses: " + strings.Join(texts, "; "))
 }
