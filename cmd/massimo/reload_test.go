@@ -116,6 +116,19 @@ func TestWatchSettings(t *testing.T) {
 	}
 }
 
+// Every variable behind a flag of serve is one env.Known knows, so that
+// massimo config does not call it a typo and a reload can list a change
+// of it as waiting for the next start (settings); MASSIMO_RESTART and
+// MASSIMO_SIGHUP were not known.
+func TestFlagVariablesAreKnown(t *testing.T) {
+	t.Parallel()
+	for f, v := range flagVars {
+		if !env.Known(v) {
+			t.Errorf("-%s: %s unknown to massimo config and to a reload", f, v)
+		}
+	}
+}
+
 // unsetForTest unsets variables for the test and restores them after it.
 func unsetForTest(t *testing.T, names ...string) {
 	t.Helper()
