@@ -183,7 +183,9 @@ class MainActivity : AppCompatActivity() {
         val id = savedInstanceState?.getString(KEY_ID)
         val origin = savedInstanceState?.getString(KEY_ORIGIN)
         val url = savedInstanceState?.getString(KEY_URL)
-        bridge.opened = if (id != null && origin != null && url != null) Bridge.Opened(id, origin, url) else null
+        // a page opened at its card stays there when the activity is made anew (a new appearance), its session still withheld
+        val withheld = savedInstanceState?.getBoolean(KEY_WITHHELD) == true
+        bridge.opened = if (id != null && origin != null && url != null) Bridge.Opened(id, origin, url, withheld) else null
         channel(bridge.opened?.origin)
         if (savedInstanceState == null || web.restoreState(savedInstanceState) == null) {
             val first = if (savedInstanceState == null) servers.atStart() else null
@@ -241,6 +243,7 @@ class MainActivity : AppCompatActivity() {
             outState.putString(KEY_ID, it.id)
             outState.putString(KEY_ORIGIN, it.origin)
             outState.putString(KEY_URL, it.url)
+            outState.putBoolean(KEY_WITHHELD, it.withheld)
         }
     }
 
@@ -374,10 +377,23 @@ class MainActivity : AppCompatActivity() {
             back.isEnabled = view.canGoBack()
         }
 
-        // The page shown decides whether Recents may keep its picture.
+        // The page shown decides whether Recents may keep its picture. The
+        // list in a server's page's place withholds the session of a server
+        // asked at each return, so that its page reached again without a
+        // tap shows its card (Bridge.leaving, D72-B).
         override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
             shown = url?.let(Origins::of)
+            if (shown == Origins.APP) bridge.leaving()
             privacy()
+        }
+
+        // The list is the app's first page: once it has loaded, the pages
+        // before it are forgotten, so that Back from it leaves the app, never
+        // back into a server's page past its prompt.
+        override fun onPageFinished(view: WebView, url: String?) {
+            if (url?.let(Origins::of) != Origins.APP) return
+            view.clearHistory()
+            back.isEnabled = view.canGoBack()
         }
 
         // A certificate the system does not trust is the server's where it
@@ -496,6 +512,7 @@ class MainActivity : AppCompatActivity() {
         const val KEY_ID = "massimo.opened.id"
         const val KEY_ORIGIN = "massimo.opened.origin"
         const val KEY_URL = "massimo.opened.url"
+        const val KEY_WITHHELD = "massimo.opened.withheld"
         const val SETTLE_MS = 2000L
 
         // agent names the app and the phone first: the server labels a

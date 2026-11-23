@@ -1827,6 +1827,7 @@
   "connect.keyLeftShowLabel": "Mostra in Il mio profilo, chiave {id}",
   "connect.sessionLeft": "Una sessione di questo telefono è ancora valida qui: sessione {id} di {name}, chiusa al prossimo accesso di questo utente.",
   "connect.loginAs": "Accesso con impronta digitale come {name}",
+  "connect.signIn": "Accedi con password o chiave",
   "connect.loginOff": "Disattiva",
   "connect.loginOffDone": "L'accesso con impronta digitale a {name} è disattivato: la sua chiave è revocata sul server, e l'app lì è uscita.",
   "connect.loginOffLocal": "L'accesso con impronta digitale a {name} è disattivato su questo telefono, e l'app è uscita; la sua chiave è ancora elencata sul server in Il mio profilo, da revocare lì.",

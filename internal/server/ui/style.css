@@ -1958,7 +1958,7 @@ massimo-week-program { display: contents; }
 .server-name { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
 .server-where { flex: 1 1 8em; min-width: 0; overflow-wrap: anywhere; }
 .server-badges { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
-.icon-btn.server-cog, .icon-btn.server-login { flex: none; height: auto; min-height: 36px; }
+.icon-btn.server-cog, .icon-btn.server-signin { flex: none; height: auto; min-height: 36px; }
 /* a server's lines in its settings: the login kept, the session, the
    certificate, each with its button */
 .server-login-kept, .server-fact { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; overflow-wrap: anywhere; }

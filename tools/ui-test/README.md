@@ -668,7 +668,10 @@ hence `failed_checks_forgotten`.
   put into the page by `add_init_script` and answering from a configuration
   the test gives it, which it may change while the page runs:
   each server shows what its probe found (on the LAN, remote, not reachable),
-  a tap opens it at the address found, and one that does not answer says so;
+  a tap opens it at the address found with `open(id, url)` alone, one
+  opening at a time, and one that does not answer says so;
+  a server with a kept login has the sign-in icon, labelled, which opens it
+  with `{signIn: true}`, and a key refused at a tap is said and gone;
   an address typed is probed by HTTPS first and added,
   a private one as the LAN address;
   what is not an address says so and plain HTTP outside the home network is warned of;

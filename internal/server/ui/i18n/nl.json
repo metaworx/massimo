@@ -1826,6 +1826,7 @@
   "connect.keyLeftShowLabel": "Tonen in Mijn profiel, sleutel {id}",
   "connect.sessionLeft": "Een sessie van deze telefoon is hier nog geldig: sessie {id} van {name}, beëindigd bij de volgende aanmelding als deze gebruiker.",
   "connect.loginAs": "Aanmelden met vingerafdruk als {name}",
+  "connect.signIn": "Aanmelden met wachtwoord of sleutel",
   "connect.loginOff": "Uitschakelen",
   "connect.loginOffDone": "Aanmelden met vingerafdruk bij {name} is uit: de sleutel ervan is op de server ingetrokken, en de app is daar afgemeld.",
   "connect.loginOffLocal": "Aanmelden met vingerafdruk bij {name} is op deze telefoon uit, en de app is afgemeld; de sleutel staat nog op de server onder Mijn profiel, om daar in te trekken.",

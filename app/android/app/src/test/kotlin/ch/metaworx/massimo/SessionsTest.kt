@@ -129,6 +129,20 @@ class SessionsTest {
     }
 
     @Test
+    fun whereASessionIsHeld() {
+        // what a tap's Opening reads (AP MobileApp, F40): none, sealed without a kept login, in memory with one asked at each start
+        val st = sessions()
+        assertEquals(Held.NONE, st.where(home()))
+        st.put(home(), "session-anna")
+        assertEquals(Held.SEALED, st.where(home()))
+        logins.put("s1", kept(42))
+        keeper.move("s1", true)
+        assertEquals(Held.MEMORY, st.where(home()))
+        st.put(home(), null)
+        assertEquals(Held.NONE, st.where(home()))
+    }
+
+    @Test
     fun aSessionTheServerRefusesIsForgotten() {
         val st = sessions()
         st.put(home(), "session-dead")

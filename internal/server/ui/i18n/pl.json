@@ -1882,6 +1882,7 @@
   "connect.keyLeftShowLabel": "Pokaż w Moim profilu, klucz {id}",
   "connect.sessionLeft": "Sesja tego telefonu jest tu nadal ważna: sesja {id} użytkownika {name}, zakończona przy następnym logowaniu jako ten użytkownik.",
   "connect.loginAs": "Zaloguj odciskiem palca jako {name}",
+  "connect.signIn": "Zaloguj się hasłem lub kluczem",
   "connect.loginOff": "Wyłącz",
   "connect.loginOffDone": "Logowanie odciskiem palca do {name} jest wyłączone: jego klucz jest odwołany na serwerze, a aplikacja tam wylogowana.",
   "connect.loginOffLocal": "Logowanie odciskiem palca do {name} jest wyłączone na tym telefonie, a aplikacja wylogowana; jego klucz nadal widnieje na serwerze w Moim profilu, do odwołania tam.",

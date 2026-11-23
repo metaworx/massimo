@@ -1825,6 +1825,7 @@
   "connect.keyLeftShowLabel": "Show in My profile, key {id}",
   "connect.sessionLeft": "A session of this phone is still valid here: session {id} of {name}, ended at the next sign-in as that user.",
   "connect.loginAs": "Login by fingerprint as {name}",
+  "connect.signIn": "Sign in with password or key",
   "connect.loginOff": "Turn off",
   "connect.loginOffDone": "The login by fingerprint of {name} is off: its key is revoked at the server, and the app is signed out there.",
   "connect.loginOffLocal": "The login by fingerprint of {name} is off on this phone, and the app signed out; its key is still listed at the server under My profile, to revoke there.",

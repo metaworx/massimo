@@ -1825,6 +1825,7 @@
   "connect.keyLeftShowLabel": "In Mein Profil zeigen, Schlüssel {id}",
   "connect.sessionLeft": "Eine Sitzung dieses Telefons gilt hier noch: Sitzung {id} von {name}, beendet bei der nächsten Anmeldung als dieser Benutzer.",
   "connect.loginAs": "Mit Fingerabdruck anmelden als {name}",
+  "connect.signIn": "Mit Passwort oder Schlüssel anmelden",
   "connect.loginOff": "Ausschalten",
   "connect.loginOffDone": "Die Anmeldung mit Fingerabdruck bei {name} ist aus: ihr Schlüssel ist beim Server widerrufen, und die App ist dort abgemeldet.",
   "connect.loginOffLocal": "Die Anmeldung mit Fingerabdruck bei {name} ist auf diesem Telefon aus, und die App ist abgemeldet; ihr Schlüssel steht beim Server noch unter Mein Profil und lässt sich dort widerrufen.",

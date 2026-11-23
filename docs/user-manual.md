@@ -14,6 +14,9 @@ Each server in the list says whether the app reaches it
 (on the LAN, remote, not reachable, or a changed certificate)
 and, in green, who you are signed in as there.
 Touch a server to open it; ⚙, or a long press, opens its settings.
+Where the app keeps a login by fingerprint for a server,
+touching it asks for your fingerprint first (below),
+and the sign-in icon beside it opens its sign-in form straight away.
 
 ### The list's menu
 
@@ -90,8 +93,14 @@ The switch shows only where the phone has a fingerprint enrolled.
 The sign-in form's row of the ways to sign in, **Password** and **API key**,
 starts with the fingerprint, **Login by fingerprint** for your name.
 Touch it and then the sensor.
-On the list of servers, the fingerprint button beside a server
-signs you in straight away, without the form.
+
+On the list of servers, touching a server with a login by fingerprint
+asks for your fingerprint, or your PIN, and opens it signed in,
+without the form.
+If you cancel, the server opens at its sign-in form,
+where the fingerprint, your password and an API key are all offered.
+The sign-in icon beside the server, **Sign in with password or key**,
+opens that form at once, without asking for the fingerprint.
 
 Your password still works as before.
 
@@ -103,6 +112,8 @@ say when the app asks for your fingerprint:
 - **each time the app comes back**: whenever you return to the app,
   it is covered until you touch the sensor;
   the page is as you left it.
+  Opening the server from the list asks each time too,
+  and going back to it from the list shows its sign-in form.
   The phone also keeps no picture of the page in its list of recent apps.
   On Android 12 and older, this also blocks screenshots of that page;
 - **when the app starts** (the usual choice):

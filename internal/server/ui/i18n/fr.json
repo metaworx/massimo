@@ -1827,6 +1827,7 @@
   "connect.keyLeftShowLabel": "Afficher dans Mon profil, clé {id}",
   "connect.sessionLeft": "Une session de ce téléphone est encore valide ici : session {id} de {name}, terminée à la prochaine connexion de cet utilisateur.",
   "connect.loginAs": "Connexion par empreinte digitale en tant que {name}",
+  "connect.signIn": "Se connecter avec un mot de passe ou une clé",
   "connect.loginOff": "Désactiver",
   "connect.loginOffDone": "La connexion par empreinte digitale à {name} est désactivée : sa clé est révoquée sur le serveur, et l'app y est déconnectée.",
   "connect.loginOffLocal": "La connexion par empreinte digitale à {name} est désactivée sur ce téléphone, et l'app déconnectée ; sa clé figure encore sur le serveur sous Mon profil, à révoquer là.",

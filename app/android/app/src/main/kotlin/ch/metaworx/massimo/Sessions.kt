@@ -70,6 +70,16 @@ class Sessions(
     /** held is the session the app holds for [s], or null. */
     fun held(s: Server): String? = keeper.get(s.id, inMemory(s))
 
+    /** where is where the app holds a session for [s], for a tap's [Opening]: none, in memory, or sealed. */
+    fun where(s: Server): Held {
+        val memory = inMemory(s)
+        return when {
+            keeper.get(s.id, memory) == null -> Held.NONE
+            memory -> Held.MEMORY
+            else -> Held.SEALED
+        }
+    }
+
     /**
      * put keeps [token] for [s] (`setToken`, `login.fingerprint`), null
      * forgetting it; what was checked of the one before holds no more. The

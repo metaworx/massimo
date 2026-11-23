@@ -3,14 +3,16 @@
 
 // The Massimo apps' connect page (connect.html, docs/app.md): the
 // servers the app keeps, each probed at its LAN and its remote address,
-// marked where the app holds a session, and opened in the app by a tap;
+// marked where the app holds a session, and opened in the app by a tap,
+// the app asking for the fingerprint first where a login is kept;
 // the list's ☰ (Add server…, Sign out of all, Forget all stored
 // credentials, App settings…); the servers discovery finds and an address
 // typed, probed before they are added, in a card shown while the list is
 // empty or from the ☰; the fingerprint sheet of a self-signed
 // certificate; a server's settings with Open at start, its session, its
 // certificate, its login by fingerprint and the keys and sessions of the
-// phone's left valid there, and the row's button that opens it signed in; the app's
+// phone's left valid there, and the row's sign-in icon that opens its
+// sign-in card; the app's
 // own settings, its appearance; the server on the phone where the app has
 // it built in; what an action came to, in the page's toast. Everything
 // goes through the app's bridge, window.massimo, whose calls answer with
@@ -50,6 +52,7 @@ const conn = {
   adding: false, // the Add card chosen from the ☰, shown with a list that is not empty
   app: { appearance: "system" }, // the app's settings, as settings() said
   open: null, // the id of the server whose settings are open
+  opening: false, // a server being opened, its prompt perhaps shown (openServer)
   panel: null, // their form
   toastServer: null, // the id of the server the toast says does not answer (say)
 };
@@ -301,15 +304,17 @@ function stateBadge(state) {
 const ASKS = ["return", "start", "logout"];
 
 // serverRow is a server's row, wired by its id: a tap opens the server,
-// the fingerprint, where a login is kept, opens it signed in, a long
-// press (the context menu) and the cog its settings.
+// the app asking for the fingerprint first where a login is kept, as its
+// rule says (open, contract version 5); the sign-in icon, where a login is
+// kept, opens it at its sign-in card without the prompt ({signIn: true});
+// a long press (the context menu) and the cog open its settings.
 function serverRow(id) {
   const li = fromTemplate("tpl-server");
   li.dataset.id = id;
   const open = li.querySelector(".server-open");
   open.addEventListener("click", () => openServer(id));
-  const login = li.querySelector(".server-login");
-  login.addEventListener("click", () => whileBusy(login, () => openServer(id, { login: true })));
+  const signIn = li.querySelector(".server-signin");
+  signIn.addEventListener("click", () => whileBusy(signIn, () => openServer(id, { signIn: true })));
   open.addEventListener("contextmenu", (ev) => {
     ev.preventDefault();
     toggleSettings(id);
@@ -337,12 +342,7 @@ function fillRow(li, s) {
   badges.appendChild(stateBadge(p.state));
   if (p.url && plainOutside(p.url)) badges.appendChild(badgeEl(t("connect.state.plain"), "warn"));
   if (s.session) badges.appendChild(badgeEl(t("connect.signedIn", { name: s.session }), "fill-ok session-badge"));
-  const login = li.querySelector(".server-login");
-  login.classList.toggle("hidden", !s.login);
-  if (s.login) {
-    login.setAttribute("aria-label", t("connect.loginAs", { name: s.login }));
-    login.title = t("connect.loginAs", { name: s.login });
-  }
+  li.querySelector(".server-signin").classList.toggle("hidden", !s.login);
   const cog = li.querySelector(".server-cog");
   cog.setAttribute("aria-expanded", String(conn.open === s.id));
   if (conn.open === s.id && conn.panel && conn.panel.parentNode !== li) li.appendChild(conn.panel);
@@ -387,27 +387,34 @@ function renderServers() {
 }
 
 // openServer opens a server in the app at the address its probe found,
-// with opts {login: true} signed in by fingerprint first (docs/app.md),
-// and at hash, My profile's `#profile?key=<id>`, with a key marked
-// (contract version 4); a certificate that is not the one trusted asks
-// first, and a server that did not answer is probed again, and said not
-// to answer until a probe finds it. A kept login the server refused is
-// gone from the list afterwards.
+// the app asking for the fingerprint first where its rule says so, and
+// with opts {signIn: true} at its sign-in card without a prompt
+// (docs/app.md, contract version 5), and at hash, My profile's
+// `#profile?key=<id>`, with a key marked (contract version 4); one opening
+// at a time, so that a second tap while the prompt shows asks nothing; a
+// certificate that is not the one trusted asks first, and a server that
+// did not answer is probed again, and said not to answer until a probe
+// finds it. A kept login the server refused, or that the phone no longer
+// opens, is gone from the list afterwards.
 async function openServer(id, opts, hash) {
   const s = serverById(id);
   const p = conn.probes[id] || {};
   if (!s || p.state === "probing") return;
   if (p.state === "lan" || p.state === "remote") {
+    if (conn.opening) return;
     const url = p.url + (hash || "");
+    conn.opening = true;
     try {
       if (opts) await conn.bridge.open(s.id, url, opts);
       else await conn.bridge.open(s.id, url);
     } catch (e) {
       say(t("connect.openFailed", { name: s.name, error: e.message }), { bad: true });
-      if (opts && opts.login) {
+      if (s.login) {
         await loadServers();
         renderServers();
       }
+    } finally {
+      conn.opening = false;
     }
     return;
   }

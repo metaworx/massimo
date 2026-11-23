@@ -38,9 +38,12 @@ What the page shows:
   what the probe found
   (on the LAN, remote, not reachable, or a changed certificate),
   and, in green, the user the app is signed in as there (`session`);
-  a tap opens the server, a long press (or its ⚙) its settings;
-  a server with a kept login has a fingerprint button on its row,
-  which opens it signed in at once;
+  a tap opens the server, the app asking for the fingerprint first where
+  a login is kept, as `open`'s rule says (below),
+  a long press (or its ⚙) its settings;
+  a server with a kept login has the sign-in icon on its row,
+  the mirror of the sign-out icon, labelled "Sign in with password or key",
+  which opens its sign-in card at once, without the prompt;
 - **the list's ☰**: **Add server…**; **Sign out of all**, where there is a
   server; **Forget all stored credentials**, where a server has a kept login,
   which asks first, in the card under the list, and turns every kept login
@@ -131,7 +134,7 @@ the page sees only what follows.
   and `setToken` ending the session it replaces;
   the key of this device: `login.status()`'s `key_id` and a server's
   `login_key`; and `setToken` answering `{revoked}` (Block 16);
-  Block 15 adds to it what its own block names.
+  and a tap's rule in `open`, with `{signIn: true}` (Block 15).
 - **Where the bridge exists, and with what:**
   - on the connect page, the shell's own origin: every call below
     but `token` and `setToken`;
@@ -154,7 +157,7 @@ the page sees only what follows.
 | `discover(ms)` | `null`, when the search ends | browses `_massimo._tcp` for `ms` milliseconds (Android `NsdManager`, iOS `NWBrowser`) and sends a `found` event for each server resolved |
 | `probe(urls, fp)` | an array of probe results, in the order of `urls` | `GET <url>healthz` of each in parallel, four seconds at most; `fp`, optional, is a certificate fingerprint it accepts beside those the system trusts |
 | `trust(id, fp)` | `null` | pins the fingerprint for the server and notes when (`trusted_at`): its certificate is accepted in `probe` and in the WebView, and a self-signed one with another fingerprint is refused |
-| `open(id, url, opts)` | `true`, or `false` | loads `url`, the server's `lan` or `remote`, in the WebView, or one of them with My profile's fragment that marks a key, `#profile?key=<id>` (docs/ui.md, "My profile"); another URL is refused. With `opts` `{login: true}` it first logs in by fingerprint (below): `false`, nothing opened, where the prompt was dismissed; a kept key the server refuses is forgotten and rejects |
+| `open(id, url, opts)` | `true`, or `false` | loads `url`, the server's `lan` or `remote`, in the WebView, or one of them with My profile's fragment that marks a key, `#profile?key=<id>` (docs/ui.md, "My profile"); another URL is refused. Without `opts`, a tap in the list, it asks for the fingerprint first as the rule of "Opening from the list" says (below, version 5), the prompt titled with the server's name: passed, the page opens with the session held or the one made; cancelled or failed, the page opens with the session withheld for that opening (`token()` answers `null`), so that its sign-in card shows; a kept key the server refuses is forgotten and rejects, as do a key the phone no longer opens and a server that fails the login. With `opts` `{signIn: true}` (version 5) it opens the page so at once, the session withheld and no prompt. With `opts` `{login: true}` it first logs in by fingerprint (below): `false`, nothing opened, where the prompt was dismissed; a kept key the server refuses is forgotten and rejects |
 | `forget(id, url)` | `{revoked, left}` | turns the server's login by fingerprint off (Turn off) at `url`, an address of the server that answered, or, for `""`, at the one that answers now with its node, the LAN one first: revokes the kept key with the session the app holds there (`DELETE /api/v1/users/{name}/tokens/{id}`, the key's id kept beside it, or, for a login kept before version 3, the id of the key the session was made from, `GET /api/v1/me`), without a prompt; where it holds none, or the server refuses it, asks for the fingerprint once and revokes the key with the key itself (`DELETE /api/v1/me/token`, at a server older than that route, which answers `404` or `405`, by its user and id), never over plain HTTP outside the private ranges; then signs the session out and forgets the login. Where the prompt or the server fails it forgets both all the same, `revoked` `false`, the key, where its id is known, is left in the server's `unrevoked` first (`left` `true`), and the failure is in the phone's log, without any secret |
 | `forgetAll()` | `{revoked, left, local}` | turns every kept login off as `forget` does, one server after the other in the list's order, each at the address that answers with its node, the LAN one first: the fingerprint asked once for every server where the app holds no session there (the app key), and once more for each login kept before it, never only for the forgetting; `revoked`, `left` and `local` are the ids of the servers whose key the server revoked, of those whose key was left in their `unrevoked`, and of those whose key was forgotten on the phone alone (no id known, or a login no longer the server's), still listed at the server under My profile |
 | `session(id, url)` | a string, or `null` | the user of the session the app holds for the server, checked at `url`, an address of the server's that answered (`GET /api/v1/me`, over the probe's trust); `null` where it holds none, or the server refused it (`401`), which forgets it, so that it is not sent again; a server that cannot be asked leaves what the last check found. With the user known, and the session's id, which the app keeps beside it, it revokes the server's `unrevoked` keys and its `unended` sessions of that user with the session: an id only where the user's list (`GET /api/v1/users/{name}/tokens`) has it as an API key, or as a session, and never the token in use, an id the list does not have so being dropped unasked (gone, or another token's after a store rolled back); a `404` drops one too, a `403` or a failure keeps it, a failure in the phone's log. A login kept without its key's id takes the id of the key the session was made from, unless it was kept or forgotten meanwhile |
@@ -217,7 +220,7 @@ Block 7 adds what else Block 1's `Status()` carries.
 | Call | Resolves to | What the adapter does |
 |---|---|---|
 | `token()` | a string, or `null` | the session or API key kept for the server it opened, `null` for none |
-| `setToken(t)` | `{revoked}`, or `null` | keeps `t` for that server, `null` forgets it: sealed by the Keystore (Android) or the Keychain (iOS), or, for a server with a kept login whose `ask` is `return` or `start`, in the app's memory alone; what the connect page's `session` last found of the one before holds no more. A session `t` replaces is ended at the address the page was opened at once the answer is given (`POST /api/v1/logout`, AP MobileApp D68-A), so that a server slow to answer holds no sign-in up, the page leaving that to the app; a key it replaces is not, the server's `400` there going to no log, and one the server does not end is left in its `unended`. A new session is then checked as `session` checks one, at the address the page was opened at, before the answer: its id kept, and the server's `unrevoked` keys and `unended` sessions of its user revoked; `revoked` names the ids the server revoked so (AP MobileApp, D67-A), which My profile waits for before it reads its keys; `null` for `null`, and from an app before version 5 |
+| `setToken(t)` | `{revoked}`, or `null` | keeps `t` for that server, `null` forgets it (but from a page whose session is withheld, at its sign-in card, where it forgets nothing: version 5): sealed by the Keystore (Android) or the Keychain (iOS), or, for a server with a kept login whose `ask` is `return` or `start`, in the app's memory alone; what the connect page's `session` last found of the one before holds no more. A session `t` replaces is ended at the address the page was opened at once the answer is given (`POST /api/v1/logout`, AP MobileApp D68-A), so that a server slow to answer holds no sign-in up, the page leaving that to the app; a key it replaces is not, the server's `400` there going to no log, and one the server does not end is left in its `unended`. A new session is then checked as `session` checks one, at the address the page was opened at, before the answer: its id kept, and the server's `unrevoked` keys and `unended` sessions of its user revoked; `revoked` names the ids the server revoked so (AP MobileApp, D67-A), which My profile waits for before it reads its keys; `null` for `null`, and from an app before version 5 |
 | `login.status()` | `{can, user, ask, plain, key_id}` | `can`: the phone has a strong biometric enrolled; `user`: the user whose key is kept for the server, `""` for none; `ask`, as the server's; `plain`: the page is open over plain HTTP outside the private ranges, where no key is sent; `key_id` (version 5): the id of the key kept, `0` for none or not known, which My profile tags "this device's key" (AP MobileApp, D65-A) |
 | `login.keep()` | `true`, or `false` | for a page just signed in: makes an API key of the signed-in user's at the server with the page's session (`POST /api/v1/users/{name}/tokens`, labelled with the phone), asks for the fingerprint once and keeps the key sealed under the app key behind it; `false`, nothing kept and the key revoked again, where the prompt was not passed |
 | `login.fingerprint()` | a string, or `null` | asks for the fingerprint, opens the kept key, makes a session with it (`POST /api/v1/login/key`) and resolves to that session, which it keeps as `setToken` would; `null` where the prompt was dismissed; a key the server refuses is forgotten and rejects |
@@ -314,7 +317,11 @@ An unknown `type` is ignored by the page.
   certificate is the one pinned, and the phone's certificate authorities
   where none is pinned.
 - **The login by fingerprint** is the next section's:
-  the row's button opens a server with `open(id, url, {login: true})`,
+  a tap opens a server with `open(id, url)`, the asking left to the app,
+  one opening at a time, so that a second tap while the prompt shows asks
+  nothing;
+  the row's sign-in icon with `open(id, url, {signIn: true})`;
+  an opening that rejects reads the list again, a kept key refused being gone;
   **Turn off** calls `forget(id, url)` with the address the probe chose,
   and "Forget all stored credentials" `forgetAll()`.
 - **The keys left.**
@@ -368,9 +375,43 @@ under My profile → Sessions and keys by the phone's name, ends the session.
     before it by `FLAG_SECURE`, which forbids them there too.
   - `start`: the session is in memory alone,
     so a start shows the form with "Login by fingerprint",
-    or the row's button signs in at once.
+    or a tap in the list asks for the fingerprint and signs in at once.
   - `logout`: the session is sealed as without a kept login,
     and the fingerprint is asked on the sign-in form alone.
+- **Opening from the list** (AP MobileApp, F40; D72-B, D74-A; version 5).
+  A tap's `open(id, url)` applies one rule, so that no page opens around it
+  (`Opening.kt`, a pure function with a JVM test of every row):
+
+  | Login kept | Asked | Session held | A tap |
+  |---|---|---|---|
+  | none | | either | opens the page, with its session or at its sign-in card |
+  | kept | `return` | in memory | the prompt, then the page with that session: asked each time it is opened, the app hidden between or not (D72-B) |
+  | kept | `start` or `logout` | yes | opens the page with it: the fingerprint was asked in this run, or is asked after a logout |
+  | kept | any | none | the prompt with the key, then the page with a new session (D74-A) |
+
+  The prompt takes the phone's PIN too from Android 11 (below), and offers
+  no "Use password" button:
+  cancelled or failed, it opens the page at its sign-in card,
+  the session held withheld for that opening (`token()` answers `null`),
+  so that the card's fingerprint button, the password and the key are there;
+  a session made there replaces the one withheld, which is ended (D68-A).
+  Over plain HTTP outside the home network the key is not sent:
+  the tap opens the card, which says why.
+  The row's sign-in icon opens the card so, without a prompt.
+  Open at start is not a tap and stays as it was: the card with its
+  fingerprint button.
+  The withholding holds while the page is made anew (a new appearance),
+  and ends with a session the page is handed (`setToken`,
+  `login.fingerprint`); the page's `setToken(null)` meanwhile forgets
+  nothing, the session withheld being none of the page's;
+  the cover leaves a page at its card alone.
+  The list in a server's page's place, by its way back (`connect`,
+  "Cancel", ☰'s entries) or by Back, withholds the session of a server
+  asked at each return, so that its page reached again without a tap shows
+  its card; and once the list has loaded, the WebView forgets the pages
+  before it, so that Back from the list leaves the app
+  (`Bridge.leaving`, `Opened.leaving`, `Opened.takes`, `OpenedTest.kt`;
+  the WebView's half is the emulator suite's, Block 18).
 - **Logout** ends the session alone; the key stays,
   and the form offers both ways.
 - **Turning it off** (**Turn off** in the server's settings, `forget`)
@@ -499,9 +540,13 @@ its version 5 keeps a server's `unended`: a session it forgets without
 reaching the server is left by the id the test's `sessionIds` gives,
 `remove` signs out first and answers `sessions`,
 and a session found revokes the sessions left there for its user too.
+Its `open` answers a tap at a server with a kept login with the test's
+`openLogin`, as a prompt, and `{signIn: true}` at once.
 Each adapter tests its own side: Block 3 for Android, Block 9 for iOS;
 Android's JVM tests (`app/android/app/src/test/`) cover the sessions'
 check, sign-out and Turn off's revoke against a fake server,
+a tap's rule, row for row (`OpeningTest.kt`), and what an opening withholds
+on leaving for the list and of a page's `null` (`OpenedTest.kt`),
 Turn off and Forget all on every path,
 the app key over a fake Keystore (one prompt a step, Forget all's included,
 none more once dismissed, its drop, a login kept before it,

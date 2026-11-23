@@ -1966,7 +1966,11 @@ the servers the app keeps, each with what it found
 when it last looked (on the LAN, remote, not reachable, a changed certificate)
 and, as a green badge, the user the app is signed in as there,
 checked at each look,
-a tap opening the server, ⚙ or a long press its settings;
+a tap opening the server, the app asking for the fingerprint first where it
+keeps a login (docs/app.md, "Opening from the list"),
+a cancel opening the server's sign-in card,
+the sign-in icon, where a login is kept, that card without the prompt,
+⚙ or a long press its settings;
 the Servers card's ☰, with **Add server…**, **Sign out of all**,
 **Forget all stored credentials** where a login is kept,
 asked first, under the list,

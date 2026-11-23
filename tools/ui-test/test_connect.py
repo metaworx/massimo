@@ -8,8 +8,8 @@ from discovery in the Add card, shown for an empty list or from the
 list's ☰, the names a server is shown by, the toast saying what an
 action came to, the fingerprint sheet of a self-signed certificate and
 of a changed one, a server's settings with Open at start and when the
-fingerprint is asked, the panel taking the focus, the login by
-fingerprint from the row, Turn off and Forget all with the keys they
+fingerprint is asked, the panel taking the focus, a tap that leaves the
+fingerprint to the app and the row's sign-in icon, Turn off and Forget all with the keys they
 leave valid, the sessions the app holds with Sign out and Sign out of
 all, a server's certificate, App settings with the appearance, the card
 of the server on the phone; a browser without the bridge; and the
@@ -307,7 +307,7 @@ def test_connect_settings(new_context, case, watch, guard):
     assert_axe(page, "a server's settings")
 
     assert panel.locator("select[name=ask]").input_value() == "start", "when the app starts, until the user chooses"
-    assert panel.locator(".server-login-off").count() == 0 and home.locator(".server-login").is_hidden(), "no kept login, no Turn off"
+    assert panel.locator(".server-login-off").count() == 0 and home.locator(".server-signin").is_hidden(), "no kept login, no Turn off"
     panel.locator("select[name=ask]").select_option("return")
     panel.locator("label.switch", has=page.locator("input[name=start]")).locator(".slider").click()
     panel.locator("button[type=submit]").click()
@@ -504,10 +504,15 @@ def test_server_page_token_from_bridge(new_context, case, watch, guard):
     assert calls(page, "setToken")[-1] == ["setToken", None], "Sign out forgets the session in the app"
 
 
+SIGN_IN_ICON = {"en": "Sign in with password or key", "de": "Mit Passwort oder Schlüssel anmelden"}
+
+
 def test_connect_login_by_fingerprint(new_context, case, watch, guard):
-    """A server with a kept login has the fingerprint on its row, labelled
-    with the user, which opens it signed in (open with {login: true}); a
-    dismissed prompt leaves the list as it was. Its settings name the
+    """A tap on a server opens it with open(id, url) alone, the app asking
+    for the fingerprint first as its rule says (AP MobileApp, D72-B,
+    D74-A); a server with a kept login has the sign-in icon on its row,
+    labelled "Sign in with password or key", which opens its sign-in card
+    without the prompt (open with {signIn: true}). Its settings name the
     user with Turn off, which forgets it at the address the probe chose;
     Forget all stored credentials asks in place and forgets every one."""
     config = {
@@ -518,15 +523,34 @@ def test_connect_login_by_fingerprint(new_context, case, watch, guard):
     page = open_connect(new_context, guard, watch, config)
     wait_state(page, "Home", STATE[case.lang]["lan"])
     home, cabin, office = row(page, "Home"), row(page, "Cabin"), row(page, "Office")
-    button = home.locator(".server-login")
-    assert button.is_visible() and "anna" in (button.get_attribute("aria-label") or ""), "the row's fingerprint names the user"
-    assert office.locator(".server-login").is_hidden(), "a server without a kept login has none"
+    button = home.locator(".server-signin")
+    assert button.is_visible(), "the sign-in icon where a login is kept"
+    assert button.get_attribute("aria-label") == SIGN_IN_ICON[case.lang] and button.get_attribute("title") == SIGN_IN_ICON[case.lang], \
+        f"labelled: {button.get_attribute('aria-label')!r}"
+    assert button.locator("use").get_attribute("href") == "#icon-signin", "the mirror of the sign-out icon"
+    assert office.locator(".server-signin").is_hidden(), "a server without a kept login has none"
+    assert page.locator("#icon-signin").count() == 1, "the icon is the page's"
     named_buttons(page, "the list with kept logins")
     assert_axe(page, "the list with kept logins")
 
-    button.click()
+    home.locator(".server-open").click()
     assert wait_until(page, "window.__fakeBridge.calls.some((c) => c[0] === 'open')", 3)
-    assert calls(page, "open")[-1] == ["open", "s1", HOME_LAN, {"login": True}], f"opened signed in: {calls(page, 'open')}"
+    assert calls(page, "open") == [["open", "s1", HOME_LAN]], f"a tap leaves the asking to the app: {calls(page, 'open')}"
+    assert wait_until(page, "!conn.opening", 3), "one opening at a time, the first answered"
+    button.click()
+    assert wait_until(page, "window.__fakeBridge.calls.filter((c) => c[0] === 'open').length === 2", 3)
+    assert calls(page, "open")[-1] == ["open", "s1", HOME_LAN, {"signIn": True}], f"the sign-in card, no prompt: {calls(page, 'open')}"
+    # one opening at a time: a second tap while the app's prompt shows asks nothing
+    assert wait_until(page, "!conn.opening", 3)
+    page.evaluate("""() => { const b = window.massimo; const open = b.open; window.__open = open;
+      b.open = (...a) => new Promise((resolve) => { window.__letOpenGo = () => resolve(open.apply(b, a)); }); }""")
+    home.locator(".server-open").click()
+    assert wait_until(page, "typeof window.__letOpenGo === 'function'", 3)
+    home.locator(".server-open").click()
+    page.evaluate("() => { window.__letOpenGo(); }")
+    assert wait_until(page, "!conn.opening", 3)
+    assert len(calls(page, "open")) == 3, f"the second tap asked nothing: {calls(page, 'open')}"
+    page.evaluate("() => { window.massimo.open = window.__open; }")
 
     # Turn off: the fingerprint once, the key revoked at the probed address.
     home.locator(".server-cog").click()
@@ -538,11 +562,11 @@ def test_connect_login_by_fingerprint(new_context, case, watch, guard):
     assert calls(page, "forget") == [["forget", "s1", HOME_LAN]]
     wait_toast(page, LOGIN_OFF_DONE[case.lang])
     assert wait_until(page, "!document.querySelector(\".server-row[data-id='s1'] .server-login-kept\")", 3), "the settings drawn again without it"
-    assert home.locator(".server-login").is_hidden(), "and the row without its fingerprint"
+    assert home.locator(".server-signin").is_hidden(), "and the row without its sign-in icon"
 
     # Forget all, from the ☰ where a login is kept: asked in the card
     # under the list, then every login forgotten.
-    assert cabin.locator(".server-login").is_visible()
+    assert cabin.locator(".server-signin").is_visible()
     menu_entry(page, "menu-forget-all").click()
     ask = page.locator("#servers-ask .confirm-box")
     ask.wait_for(state="visible")
@@ -557,7 +581,7 @@ def test_connect_login_by_fingerprint(new_context, case, watch, guard):
     assert wait_until(page, "window.__fakeBridge.calls.some((c) => c[0] === 'forgetAll')", 3)
     ask.wait_for(state="detached")
     wait_toast(page, FORGOT_ALL[case.lang])
-    assert cabin.locator(".server-login").is_hidden()
+    assert cabin.locator(".server-signin").is_hidden()
     page.locator("#servers-menu > summary").click()
     page.locator("#menu-add").wait_for(state="visible")
     assert page.locator("#menu-forget-all").is_hidden(), "no login left, no Forget all"
@@ -698,7 +722,7 @@ def test_connect_keys_left(new_context, case, watch, guard):
     assert FORGOT_PHONE[case.lang] in text and FORGOT_LOCAL_ON[case.lang] in text, f"the toast names both: {text!r}"
     assert "Barn" not in text, f"a revoked key is not named: {text!r}"
     assert calls(page, "forgetAll") == [["forgetAll"]]
-    assert row(page, "Cabin").locator(".server-login").is_hidden()
+    assert row(page, "Cabin").locator(".server-signin").is_hidden()
     close_toast(page)
 
     # Cabin's key left, shown in its settings and in My profile
@@ -766,15 +790,18 @@ def test_connect_turn_off_and_remove_say_how_the_key_went(new_context, case, wat
 
 
 def test_connect_login_refused(new_context, case, watch, guard):
-    """A kept key the server refused is forgotten by the app: the open
-    says why, and the row loses its fingerprint."""
+    """A kept key the server refused at a tap is forgotten by the app: the
+    open says why in the toast, and the list read again loses the row's
+    sign-in icon."""
     config = {"servers": [server("s1", "Home", NODE1, lan=HOME_LAN, login="anna")], "answers": {HOME_LAN: {"node": NODE1}},
               "openLogin": "error:the server no longer takes the kept key"}
     page = open_connect(new_context, guard, watch, config)
     wait_state(page, "Home", STATE[case.lang]["lan"])
-    row(page, "Home").locator(".server-login").click()
+    before = len(calls(page, "servers"))
+    row(page, "Home").locator(".server-open").click()
     wait_toast(page, "no longer takes", bad=True)
-    assert wait_until(page, "document.querySelector(\".server-row[data-id='s1'] .server-login\").classList.contains('hidden')", 3)
+    assert wait_until(page, "document.querySelector(\".server-row[data-id='s1'] .server-signin\").classList.contains('hidden')", 3)
+    assert len(calls(page, "servers")) > before, "the list read again"
 
 
 SIGNED_OUT_ALL = {"en": "Signed out of every server", "de": "Bei jedem Server abgemeldet"}
