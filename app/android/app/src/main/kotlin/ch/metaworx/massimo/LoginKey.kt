@@ -16,9 +16,11 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /**
- * KeySource gives the ciphers that seal and open the kept logins (docs/app.md,
- * "The login by fingerprint"), a key per server under [alias]; a cipher of
- * the Keystore works only once the prompt has passed it, and for that one
+ * KeySource gives the ciphers of the Keystore keys behind the kept logins
+ * (docs/app.md, "The login by fingerprint"): the app's one key,
+ * [LoginKey.APP], which seals the app key ([AppKey]), and the key of its
+ * own of each login kept before it, [LoginKey.alias]; a cipher of the
+ * Keystore works only once the prompt has passed it, and for that one
  * operation.
  */
 interface KeySource {
@@ -40,7 +42,7 @@ interface KeySource {
 class KeyInvalidated : Exception()
 
 /**
- * LoginKey names a server's key and gives it from the Android Keystore:
+ * LoginKey names the keys and gives them from the Android Keystore:
  * AES-256-GCM that requires the prompt for every use, sealing included.
  * From Android 11 the prompt takes a strong biometric or the screen lock's
  * PIN, and a fingerprint enrolled later leaves the key; on Android 8 to 10
@@ -103,7 +105,26 @@ class LoginKey : KeySource {
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
         private const val TAG_BITS = 128
 
-        /** alias is the Keystore alias of the key of the server [id]. */
-        fun alias(id: String): String = "massimo.login.$id"
+        /**
+         * APP is the Keystore alias of the app's one key, which seals the
+         * app key every login is kept under (AP MobileApp, D63-A); no
+         * server's id, which is 24 hex digits.
+         */
+        const val APP = "massimo.login.app"
+
+        /**
+         * alias is the Keystore alias of the key of the server [id], which
+         * a login kept before the app key is sealed by until it is turned
+         * off, forgotten or kept anew. [id] must have a server's form, 24
+         * hex digits (ServerStore), so that no id a page sends names
+         * [APP]: an IllegalArgumentException otherwise.
+         */
+        fun alias(id: String): String {
+            require(SERVER_ID.matches(id)) { "not a server's id" }
+            return "massimo.login.$id"
+        }
+
+        // SERVER_ID is the form of a server's id, as ServerStore makes it.
+        private val SERVER_ID = Regex("[0-9a-f]{24}")
     }
 }

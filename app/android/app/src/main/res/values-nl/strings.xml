@@ -17,6 +17,7 @@
     <string name="login_title">Aanmelden bij %1$s</string>
     <string name="login_keep_title">Aanmelding voor %1$s bewaren</string>
     <string name="login_off_title">Aanmelding voor %1$s uitschakelen</string>
+    <string name="login_forget_all_title">Alle bewaarde aanmeldgegevens vergeten</string>
     <string name="login_key_label">%1$s, aanmelden met vingerafdruk</string>
     <string name="cover_text">Massimo is vergrendeld. Ontgrendel het met je vingerafdruk.</string>
     <string name="cover_unlock">Ontgrendelen</string>

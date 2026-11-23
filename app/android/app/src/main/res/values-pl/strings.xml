@@ -17,6 +17,7 @@
     <string name="login_title">Zaloguj do %1$s</string>
     <string name="login_keep_title">Zachowaj logowanie do %1$s</string>
     <string name="login_off_title">Wyłącz logowanie do %1$s</string>
+    <string name="login_forget_all_title">Zapomnij wszystkie zapisane dane logowania</string>
     <string name="login_key_label">%1$s, logowanie odciskiem</string>
     <string name="cover_text">Massimo jest zablokowany. Odblokuj go odciskiem palca.</string>
     <string name="cover_unlock">Odblokuj</string>
