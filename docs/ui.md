@@ -213,9 +213,15 @@ to the second user's account, the drafts, the settings changes still waiting,
 every line that said a write was not sent, and the Cubes' data, which loads again.
 The stream's ticket alone, which the page asks for by itself and which changes nothing,
 waits for the sign-in as a read does.
-A request sent with the old key whose 401 comes after a sign-in is done
-opens the sign-in once more, though the page is signed in;
-a write so answered fails as any other and is not sent again.
+A request sent before a sign-in, with another token or none,
+whose 401 comes once the sign-in is done, as a read the card's slow link held back,
+opens no sign-in again (AP MobileApp, D68-A):
+a read is sent again with the new session,
+a write so answered fails as not sent, as any other, and is not sent again.
+A sign-in that replaces the session the page holds,
+the card opened on a running page, ends that session at the server
+(`POST /api/v1/logout`);
+a key replaced is not ended: a key is revoked under My profile.
 The page that reloads by itself when the server has a newer version
 waits while there are any.
 

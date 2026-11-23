@@ -132,9 +132,12 @@ export function Card() {
         askFocus("password");
         return;
       }
-      setToken(session.token);
+      const put = setToken(session.token);
       const login = appLogin();
-      if (keep && offer(app.value) && login && !(await keepLogin(login))) return;
+      if (keep && offer(app.value) && login) {
+        await put; // in the app the session kept by the bridge first, which login.keep reads on another thread (D68-A)
+        if (!(await keepLogin(login))) return;
+      }
       if (a) await finishSignIn(a);
     });
   };

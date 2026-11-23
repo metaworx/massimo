@@ -477,6 +477,10 @@ hence `failed_checks_forgotten`.
   each button's text on one line,
   its group named "Sign in with" for a screen reader alone;
   a browser has no Cancel;
+  a sign-in on a running page that replaces the session held signs that
+  session out at the server with its own token, and a key replaced is not
+  (`test_a_replaced_session_ends`); a tab whose session another tab's
+  sign-in replaced leaves that tab's stored token alone at its 401;
   My profile opened at `#profile?key=<id>` (`test_profile_marks_a_key`)
   marks that key and scrolls a row below the first screen into view,
   marks nothing for an id that is not one of the user's keys,
@@ -492,7 +496,8 @@ hence `failed_checks_forgotten`.
   sends nothing of the first one's; and a read sent while the card is open,
   its 401 held back until the sign-in has answered and the card has closed,
   opens no second card and is sent again with the new session, the only
-  one the sign-in left at the server (AP MobileApp, F36).
+  one the sign-in left at the server (AP MobileApp, F36), and a write so
+  held, by `api()` and by `apiRaw`, fails as not sent, no card opening.
 - `test_first_owner.py`, the first owner in the sign-in card (AP FirstOwner),
   `/api/v1/me` stubbed as an open server:
   the card opens at the page's start with the first owner's form,

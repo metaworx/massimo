@@ -296,9 +296,15 @@ async function apiRequest(method, path, body, { auth = true, keepalive = false, 
 // where a dead token sent by each poll and stream ticket would lock the
 // address out within the minute. A 401 of a token the page no longer
 // holds, one a sign-in since replaced, forgets nothing. The app forgets
-// it too (setToken, login.js).
+// it too (setToken, login.js). In a browser the stored token goes only
+// where it is still the one refused: another tab's sign-in may have stored
+// its own since, ending the one this page held (AP MobileApp, D68-A).
 function dropToken(sentWith) {
   if (!sentWith || sentWith !== state.token) return;
+  if (!appBridge() && readStored("massimo.token") !== sentWith) {
+    state.token = null;
+    return;
+  }
   setToken(null);
 }
 
@@ -354,14 +360,40 @@ function notSent() {
   return err;
 }
 
+// earlierSignIn reports whether a 401 is of a sign-in before the page's
+// current one: its request carried another token than the one the page
+// holds now, or none, while it holds one, as a read sent while the card
+// was open whose answer comes once the card has closed (AP MobileApp,
+// F36, D68-A). Such a 401 opens no card and drops nothing: a read is sent
+// again with the token held, a write fails as not sent (lateNotSent). The
+// session's number cannot tell it: a sign-in nobody was signed in before
+// raises none (settleSignIn, login.js).
+function earlierSignIn(sentWith) {
+  return !!state.token && sentWith !== state.token;
+}
+
+// lateNotSent is the error a write fails with whose 401 was of an earlier
+// sign-in (earlierSignIn): not sent, to be done again, as notSent says it,
+// without opening the sign-in, which is in; its status stays 401.
+function lateNotSent() {
+  const err = new Error(notSentText());
+  err.status = 401;
+  return err;
+}
+
 // api is apiRequest with the token, asking for a sign-in on a 401: a read
-// is sent again once one is in, a write fails at once (sentAgain); headers
-// are added to the request's own.
+// is sent again once one is in, a write fails at once (sentAgain); a 401
+// of an earlier sign-in asks for none (earlierSignIn); headers are added
+// to the request's own.
 async function api(method, path, body, headers) {
   try {
     return await apiRequest(method, path, body, { headers });
   } catch (e) {
     if (e.status !== 401) throw e;
+    if (earlierSignIn(e.sentWith)) {
+      if (!sentAgain(method, path)) throw lateNotSent();
+      return api(method, path, body, headers);
+    }
     dropToken(e.sentWith);
     if (!sentAgain(method, path)) throw notSent();
     if (await askLogin()) return api(method, path, body, headers); // login.js
@@ -379,6 +411,10 @@ async function apiRaw(method, path, body, contentType) {
   if (body !== undefined) headers["Content-Type"] = contentType || "application/octet-stream";
   const resp = await fetch(path, { method, headers, body });
   if (resp.status === 401) {
+    if (earlierSignIn(sentWith || "")) {
+      if (!sentAgain(method, path)) throw lateNotSent();
+      return apiRaw(method, path, body, contentType);
+    }
     dropToken(sentWith);
     if (!sentAgain(method, path)) throw notSent();
     if (await askLogin()) return apiRaw(method, path, body, contentType); // login.js

@@ -477,6 +477,50 @@ def test_late_refusal_of_an_earlier_sign_in(new_context, case, watch, guard):
     sign_out(page)
 
 
+def test_late_refusal_of_a_write(new_context, case, watch, guard):
+    """A write sent without a token while the card is open, by api() and
+    by apiRaw (a backup's file), whose 401 comes only once the sign-in has
+    answered and the card has closed (AP MobileApp, D68-A): each fails as
+    not sent, sent once, and no second card opens."""
+    page = own_page(new_context, guard, watch)
+    held, sent = [], []
+
+    def handle(route):
+        sent.append(route.request.method + " " + route.request.url.split("/api/v1/")[-1])
+        held.append(route)
+
+    page.route("**/api/v1/me/preferences/late", handle)
+    page.route("**/restore/plan?late=1", handle)
+    page.goto(URL)
+    assert wait_until(page, DIALOG_OPEN, 5), "the card opens without a token"
+    page.evaluate("""() => {
+      window.late = {};
+      const said = (k) => [() => { window.late[k] = 'sent'; }, (e) => { window.late[k] = e.message; }];
+      api('PUT', 'api/v1/me/preferences/late', {}).then(...said('api'));
+      apiRaw('POST', 'api/v1/cubes/KEQ0000100/restore/plan?late=1', '{}', 'application/json').then(...said('raw'));
+    }""")
+    for _ in range(25):
+        if len(held) == 2:
+            break
+        page.wait_for_timeout(200)
+    assert len(held) == 2, f"both writes are sent while the card is open: {sent}"
+    page.locator("#login-user").fill("operator")
+    page.locator("#login-password").fill("op-pass")
+    page.locator("#login-form button[type=submit]").click()
+    assert wait_until(page, f"!({DIALOG_OPEN}) && !!state.token", 10), "signed in, the card closed"
+    page.wait_for_selector(".room", timeout=10000)
+    for route in held:
+        route.fulfill(status=401, content_type="application/json", body=json.dumps({"error": "unauthorized"}))
+    assert wait_until(page, "window.late.api !== undefined && window.late.raw !== undefined", 5), "both answered"
+    for _ in range(10):
+        assert not page.evaluate(DIALOG_OPEN), "no second card"
+        page.wait_for_timeout(200)
+    late = page.evaluate("window.late")
+    assert late == {"api": NOT_SENT[case.lang], "raw": NOT_SENT[case.lang]}, f"each fails as not sent: {late}"
+    assert sorted(sent) == ["POST cubes/KEQ0000100/restore/plan?late=1", "PUT me/preferences/late"], f"each sent once: {sent}"
+    sign_out(page)
+
+
 def test_dismissed_then_a_later_sign_in(page, case, watch):
     """A settings change whose push meets a 401 says so on the page's
     message line; the sign-in dismissed, the page is back with the line.

@@ -53,8 +53,8 @@ declare global {
   function finishSignIn(ask: SignInAsk): Promise<boolean>;
   /** Starts a sign-in through a provider and opens its page; its refusal is thrown. */
   function startProvider(key: string): Promise<void>;
-  /** Keeps the page's token, or forgets it with null: in the browser's storage, or in the app's. */
-  function setToken(token: string | null): void;
+  /** Keeps the page's token, or forgets it with null: in the browser's storage, or in the app's; a session it replaces is ended at the server once. Its promise is the bridge's answer, null in a browser and where the bridge failed. */
+  function setToken(token: string | null): Promise<unknown>;
   /** Signs in by OPAQUE, without a token and without the dialog: the session, its token among it; the answer's error is thrown. */
   function signIn(user: string, password: string): Promise<{ token: string }>;
   /** Signs out as Sign out does: the page's dialog first where settings are unsaved, then a session ends and the page forgets who was in. */

@@ -72,18 +72,34 @@ function roleLabel(key, name) {
   return s === k ? key : s;
 }
 
+// meToken is the token state.me was read with (loadMe), "" for none: the
+// kind of the token the page holds is known only for that one.
+let meToken = "";
+
 // setToken keeps the page's token, or forgets it with null: in the
 // browser's storage, or in the app's where the page runs in the app
 // (appBridge, app.js). A token the app could not keep still serves this
-// page, and the app asks for a sign-in at its next start.
+// page, and the app asks for a sign-in at its next start. A session that
+// a new token replaces is ended at the server once (AP MobileApp, D68-A):
+// in a browser here, POST /api/v1/logout with it, not awaited and a
+// refusal ignored, where who is in was read with it and it is a session
+// (a key answers 400 there, and one not read yet is left as it is); in
+// the app by the bridge's setToken, which holds it. It returns the
+// bridge's answer, null in a browser and where the bridge failed, so that
+// what reads the session from the app next (login.keep, which the bridge
+// answers from the session it holds) waits for it to be kept there.
 function setToken(token) {
+  const old = state.token;
   state.token = token;
   const b = appBridge();
   if (!b) {
     store("massimo.token", token);
-    return;
+    if (token && old && old !== token && old === meToken && state.me && state.me.token && state.me.token.kind === "session") {
+      apiRequest("POST", "api/v1/logout", undefined, { token: old }).catch(() => {});
+    }
+    return Promise.resolve(null);
   }
-  b.setToken(token).catch(() => {});
+  return Promise.resolve(b.setToken(token)).catch(() => null);
 }
 
 // sawOpen is set once the page has seen a server without a store ask for
@@ -120,6 +136,7 @@ async function loadMe(asks = true) {
     me = null;
   }
   if (!MassimoParts.stillSession(n)) return state.me; // who was in before a sign-out: the next sign-in reads who is in, and asks for the owner there
+  meToken = state.token || ""; // a read sent again after a sign-in carried the token held now (api, app.js)
   state.me = me;
   if (state.me && state.me.mode === "none") sawOpen = true;
   applyCaps();
