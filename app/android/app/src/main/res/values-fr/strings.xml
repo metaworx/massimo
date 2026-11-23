@@ -17,6 +17,7 @@
     <string name="login_title">Se connecter à %1$s</string>
     <string name="login_keep_title">Conserver la connexion à %1$s</string>
     <string name="login_off_title">Désactiver la connexion à %1$s</string>
+    <string name="login_forget_all_title">Oublier tous les identifiants conservés</string>
     <string name="login_key_label">%1$s, connexion par empreinte</string>
     <string name="cover_text">Massimo est verrouillé. Déverrouillez-le avec votre empreinte digitale.</string>
     <string name="cover_unlock">Déverrouiller</string>

@@ -12,9 +12,11 @@ import java.util.concurrent.RejectedExecutionException
  * a server with a kept login (`remove`) and Forget all stored credentials
  * (`forgetAll`) alike (AP MobileApp, D56-A). Each key is revoked with the
  * session the app holds there, without a prompt, else with the key itself
- * after the prompt once ([ByKey]), never over plain HTTP outside the
- * private ranges; then the session is signed out and the login forgotten on
- * the phone ([forgetLogin], with its Keystore key). A key with an id that
+ * after the prompt ([ByKey]), never over plain HTTP outside the private
+ * ranges: one prompt a run for every login under the app key, so that Forget
+ * all asks once (D63-A), and one for each login kept before it ([AppKey]);
+ * then the session is signed out and the login forgotten on the phone
+ * ([forgetLogin], with its Keystore key). A key with an id that
  * could not be revoked is left in [left] first, to revoke with the next
  * session the app holds there (D57-A); one without an id is forgotten on the
  * phone alone.
@@ -22,7 +24,8 @@ import java.util.concurrent.RejectedExecutionException
  * It holds no thread of its own: a caller runs it where requests may go,
  * [ByKey] calls back there too, and Forget all goes on to the next server
  * on [run]; where [run] takes nothing more (the activity went), Forget all
- * stops quietly where it is.
+ * stops quietly where it is. A run ends its [ByKey] ([ByKey.close]) once it
+ * is done or stops.
  */
 class Revoker(
     private val servers: ServerStore,
@@ -40,6 +43,9 @@ class Revoker(
      */
     fun interface ByKey {
         fun open(s: Server, kept: KeptLogin, then: (LoginSecret?) -> Unit)
+
+        /** close ends the run's opening: what it opened (the app key) is dropped. */
+        fun close() {}
     }
 
     /** Outcome is how a kept login's key went. */
@@ -71,69 +77,90 @@ class Revoker(
      * Forget all asks; and calls [done] with what it came to. A login that
      * is not the server's any more is forgotten on the phone; its key is
      * left by its id where the server is the same node (a certificate
-     * trusted anew), and is another server's where it is not.
+     * trusted anew), and is another server's where it is not. [byKey]
+     * is closed before [done] is called, or where a step throws.
      */
     fun turnOff(id: String, url: String, byKey: ByKey, done: (Off) -> Unit) {
-        val s = servers.get(id)
-        val kept = logins.get(id)
-        if (s == null || kept == null) {
-            forgetHere(id, s, url)
-            done(Off(Outcome.LOCAL, 0))
-            return
+        val end = { o: Off ->
+            byKey.close()
+            done(o)
         }
-        if (!matches(s, kept)) {
-            done(forgetMismatched(s, kept))
-            return
+        try {
+            val s = servers.get(id)
+            val kept = logins.get(id)
+            if (s == null || kept == null) {
+                forgetHere(id, s, url)
+                end(Off(Outcome.LOCAL, 0))
+                return
+            }
+            if (!matches(s, kept)) {
+                end(forgetMismatched(s, kept))
+                return
+            }
+            off(s, kept, if (s.has(url)) url else answering(s), byKey, end)
+        } catch (e: Exception) {
+            byKey.close()
+            throw e
         }
-        off(s, kept, if (s.has(url)) url else answering(s), byKey, done)
     }
 
     /**
      * forgetAll turns every kept login off as [turnOff] does, one server
      * after the other in the list's order, so that one prompt shows at a
      * time: each at the address of the server's that answers with its node,
-     * the LAN one first. It calls [done] with what it came to.
+     * the LAN one first. It calls [done] with what it came to, [byKey]
+     * closed first, and closes it where it stops, a step that throws
+     * included.
      */
     fun forgetAll(byKey: ByKey, done: (Summary) -> Unit) {
         val kept = logins.ids().toSet()
         val listed = servers.list().map { it.id }
         val ids = ArrayDeque(listed.filter { it in kept } + kept.filter { it !in listed })
         val went = mapOf(Outcome.REVOKED to mutableListOf<String>(), Outcome.LEFT to mutableListOf(), Outcome.LOCAL to mutableListOf())
+        // next turns the next server's login off; on io through later, so
+        // that a step that throws ends the run's ByKey before it goes on up.
         fun next() {
-            val id = ids.removeFirstOrNull()
-            if (id == null) {
-                done(Summary(went.getValue(Outcome.REVOKED), went.getValue(Outcome.LEFT), went.getValue(Outcome.LOCAL)))
-                return
-            }
-            val s = servers.get(id)
-            val login = logins.get(id)
-            if (s == null || login == null) {
-                forgetHere(id, s, "")
-                later(::next)
-                return
-            }
-            if (!matches(s, login)) {
-                went.getValue(forgetMismatched(s, login).outcome).add(id)
-                later(::next)
-                return
-            }
-            off(s, login, answering(s), byKey) { o ->
-                went.getValue(o.outcome).add(id)
-                // the next server from the executor, not from inside the
-                // prompt's answer, so that each server leaves the stack
-                later(::next)
+            try {
+                val id = ids.removeFirstOrNull()
+                if (id == null) {
+                    byKey.close()
+                    done(Summary(went.getValue(Outcome.REVOKED), went.getValue(Outcome.LEFT), went.getValue(Outcome.LOCAL)))
+                    return
+                }
+                val s = servers.get(id)
+                val login = logins.get(id)
+                if (s == null || login == null) {
+                    forgetHere(id, s, "")
+                    later(byKey, ::next)
+                    return
+                }
+                if (!matches(s, login)) {
+                    went.getValue(forgetMismatched(s, login).outcome).add(id)
+                    later(byKey, ::next)
+                    return
+                }
+                off(s, login, answering(s), byKey) { o ->
+                    went.getValue(o.outcome).add(id)
+                    // the next server from the executor, not from inside the
+                    // prompt's answer, so that each server leaves the stack
+                    later(byKey, ::next)
+                }
+            } catch (e: Exception) {
+                byKey.close()
+                throw e
             }
         }
         next()
     }
 
     // later runs [step] on [run]; where [run] takes nothing more, the
-    // activity having gone, nothing more is done.
-    private fun later(step: () -> Unit) {
+    // activity having gone, nothing more is done, and [byKey] is closed.
+    private fun later(byKey: ByKey, step: () -> Unit) {
         try {
             run.execute(step)
         } catch (e: RejectedExecutionException) {
             // the app is closing: what is left stays as it is
+            byKey.close()
         }
     }
 
@@ -208,6 +235,34 @@ class Revoker(
     }
 
     companion object {
+        /**
+         * byKey is the [ByKey] of one [step] of the app key (D63-A): a login
+         * under the app key opens with the step's one prompt, a login kept
+         * before it with its own, each titled [title] for its server and its
+         * login (Forget all's one prompt its own title); a key that does not
+         * open is said in [log] and counts as not opened. Its close ends the
+         * step.
+         */
+        fun byKey(step: AppKey.Step, title: (Server, KeptLogin) -> String, log: Logger): ByKey = object : ByKey {
+            override fun open(s: Server, kept: KeptLogin, then: (LoginSecret?) -> Unit) =
+                step.open(title(s, kept), s.id, kept) { r ->
+                    when (r) {
+                        is AppKey.Result.Opened -> then(r.secret)
+                        is AppKey.Result.Gone -> {
+                            log.warn("turn off: the kept key of ${s.id} does not open; forgotten on the phone")
+                            then(null)
+                        }
+                        is AppKey.Result.Failed -> {
+                            log.warn("turn off: the kept key of ${s.id} does not open (${r.error.javaClass.simpleName}); forgotten on the phone")
+                            then(null)
+                        }
+                        else -> then(null)
+                    }
+                }
+
+            override fun close() = step.close()
+        }
+
         /**
          * matches reports whether [kept] is still the login of [s]: its node
          * and its pinned fingerprint as they were when it was kept.

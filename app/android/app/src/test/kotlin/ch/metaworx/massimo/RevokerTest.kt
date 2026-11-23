@@ -6,7 +6,10 @@ package ch.metaworx.massimo
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -29,9 +32,15 @@ import java.util.concurrent.Executors
  * one server after the other, one prompt at a time, its summary naming
  * each kind, and stopping quietly where its executor takes nothing more;
  * an address that answers looked for where none is given; a login whose
- * certificate changed leaving its key by its id. The Bridge's wiring of
- * it (the prompt and its Keystore key, the answers' shapes) is checked by
- * reading it and on a phone.
+ * certificate changed leaving its key by its id. With the app key (AP
+ * MobileApp v1.4, Block 17, D63-A): Forget all over three servers that
+ * need the key asks once, under its own title, and once more for each
+ * login kept before it, and no more once that prompt was dismissed; Turn
+ * off asks once; the app key dropped at the run's end, where the run
+ * stops, and where a step throws; a key the phone took back leaving every
+ * key by its id; a page's id `app` reaching no Keystore key. The
+ * Bridge's wiring of it (the prompt on the main thread, the answers'
+ * shapes) is checked by reading it and on a phone.
  */
 class RevokerTest {
     @get:Rule
@@ -51,6 +60,10 @@ class RevokerTest {
     private lateinit var logins: LoginStore
     private lateinit var sessions: Sessions
     private lateinit var revoker: Revoker
+    private lateinit var left: KeysLeft
+    private lateinit var appKey: AppKey
+    private val keys = JvmKeys()
+    private val prompt = FakePrompt(keys)
 
     // The probe finds each server at its LAN address where that is not the
     // closed one, with the server's node.
@@ -62,15 +75,23 @@ class RevokerTest {
         servers = ServerStore(File(tmp.root, "servers.json"))
         logins = LoginStore(File(tmp.root, "logins.json"))
         val keeper = SessionKeeper(TokenStore(File(tmp.root, "tokens.json"), plain))
-        val left = KeysLeft(servers, logins, api, logged::add)
+        left = KeysLeft(servers, logins, api, logged::add)
         val probe = { urls: List<String>, _: String? ->
             urls.map { u -> if (u != fake.closed && u in nodes) ProbeResult(u, ok = true, node = nodes.getValue(u)) else ProbeResult(u, ok = false, error = "refused") }
         }
         sessions = Sessions(keeper, logins, api, probe, left, logged::add)
+        // As the Bridge's forgetLogin: the login, and its Keystore key.
         revoker = Revoker(servers, logins, sessions, left, probe, Executor { it.run() }) { id ->
             logins.forget(id)
+            runCatching { keys.delete(LoginKey.alias(id)) }
             forgotten.add(id)
         }
+        // As the Bridge's: a key taken back forgets each login under it,
+        // its key left by its id where the server is the same node.
+        appKey = AppKey(logins, keys, prompt, { id, kept ->
+            servers.get(id)?.let { if (kept.node == it.node) left.add(id, kept.user, kept.keyId) }
+            logins.forget(id)
+        })
     }
 
     @After
@@ -126,6 +147,23 @@ class RevokerTest {
     }
 
     private fun left(s: Server): List<KeyLeft> = servers.get(s.id)?.unrevoked ?: emptyList()
+
+    // keepUnderAppKey keeps a login of each server under the app key, its
+    // key [secret], in one step, as the app keeps one now.
+    private fun keepUnderAppKey(vararg kept: Pair<Server, LoginSecret>) = appKey.step().use { step ->
+        for ((s, secret) in kept) step.keep(s.name, s.id, s.node, s.fp, "anna", secret) { assertEquals(AppKey.Result.Kept, it) }
+    }
+
+    // keepBefore keeps a login of [s] as the app did before the app key,
+    // sealed by a Keystore key of its own.
+    private fun keepBefore(s: Server, secret: LoginSecret) =
+        logins.put(s.id, LoginStore.seal(keys.encrypter(LoginKey.alias(s.id)), secret, s.id, s.node, s.fp, "anna"))
+
+    // appByKey is the ByKey of one step of the app key, as the Bridge gives
+    // it to a run: each prompt titled with its server's name, but Forget
+    // all's one for the app key.
+    private fun appByKey(forgetAll: Boolean = false): Revoker.ByKey =
+        Revoker.byKey(appKey.step(), { s, kept -> if (forgetAll && kept.byApp) "Forget all" else s.name }, logged::add)
 
     private val revoked = Revoker.Outcome.REVOKED
     private val leftHere = Revoker.Outcome.LEFT
@@ -345,5 +383,147 @@ class RevokerTest {
         assertEquals(listOf("home"), prompts)
         assertEquals(listOf("DELETE /api/v1/users/anna/tokens/42 session-dead", "DELETE /api/v1/users/anna/tokens/42 key-secret"), fake.requests())
         assertNull("the refused session forgotten", sessions.held(s))
+    }
+
+    @Test
+    fun forgetAllAsksOnceForEveryLoginUnderTheAppKey() {
+        val a = server("home", node = "node-shared")
+        val b = server("cabin", node = "node-shared")
+        val c = server("barn", node = "node-shared")
+        keepUnderAppKey(a to LoginSecret("key-secret", 42), b to LoginSecret("key-secret", 45), c to LoginSecret("key-secret", 46))
+        prompt.shown.clear()
+        assertEquals(Revoker.Summary(listOf(a.id, b.id, c.id), listOf(), listOf()), forgetAll(appByKey(forgetAll = true)))
+        assertEquals("three servers that need the key, one prompt, its own title", listOf("Forget all ${LoginKey.APP}"), prompt.shown)
+        assertEquals(
+            listOf("DELETE /api/v1/users/anna/tokens/42 key-secret", "DELETE /api/v1/users/anna/tokens/45 key-secret", "DELETE /api/v1/users/anna/tokens/46 key-secret"),
+            fake.requests(),
+        )
+        assertTrue(logins.ids().isEmpty())
+        assertFalse("the app key dropped at the run's end", appKey.held)
+    }
+
+    @Test
+    fun forgetAllAsksOnceMoreForEachLoginKeptBeforeTheAppKey() {
+        val a = server("home", node = "node-shared")
+        val b = server("cabin", node = "node-shared")
+        val c = server("barn", node = "node-shared")
+        keepUnderAppKey(a to LoginSecret("key-secret", 42), c to LoginSecret("key-secret", 46))
+        keepBefore(b, LoginSecret("key-secret", 45))
+        prompt.shown.clear()
+        assertEquals(Revoker.Summary(listOf(a.id, b.id, c.id), listOf(), listOf()), forgetAll(appByKey(forgetAll = true)))
+        assertEquals(listOf("Forget all ${LoginKey.APP}", "cabin ${LoginKey.alias(b.id)}"), prompt.shown)
+        assertTrue(logins.ids().isEmpty())
+        assertFalse(appKey.held)
+    }
+
+    @Test
+    fun turnOffAsksOnceAndDropsTheAppKey() {
+        val s = server("home")
+        keepUnderAppKey(s to LoginSecret("key-secret", 42))
+        prompt.shown.clear()
+        var got: Revoker.Off? = null
+        revoker.turnOff(s.id, fake.base, appByKey()) { got = it }
+        assertEquals(Revoker.Off(revoked, 42), got)
+        assertEquals(listOf("home ${LoginKey.APP}"), prompt.shown)
+        assertEquals(listOf("DELETE /api/v1/users/anna/tokens/42 key-secret"), fake.requests())
+        assertFalse(appKey.held)
+    }
+
+    @Test
+    fun aKeyTheAppTookBackLeavesEveryKeyByItsId() {
+        val a = server("home", node = "node-shared")
+        val b = server("cabin", node = "node-shared")
+        val c = server("barn", node = "node-shared")
+        keepUnderAppKey(a to LoginSecret("key-secret", 42), b to LoginSecret("key-secret", 45), c to LoginSecret("key-secret", 46))
+        sessions.put(a, "session-anna")
+        prompt.shown.clear()
+        keys.takeBack(LoginKey.APP)
+        assertEquals(
+            "home by its session; the others no more opened, left by their ids",
+            Revoker.Summary(listOf(a.id), listOf(b.id, c.id), listOf()),
+            forgetAll(appByKey(forgetAll = true)),
+        )
+        assertTrue("no prompt for a key taken back", prompt.shown.isEmpty())
+        assertEquals(listOf(KeyLeft("anna", 45)), left(b))
+        assertEquals(listOf(KeyLeft("anna", 46)), left(c))
+        assertTrue(logins.ids().isEmpty())
+        assertNull("the app key taken back is forgotten", logins.appKey())
+        assertFalse(appKey.held)
+    }
+
+    @Test
+    fun aRunThatStopsDropsTheAppKey() {
+        // the activity went after the first server: the app key it opened
+        // is dropped, and the next server waits for nothing
+        val gone = Executors.newSingleThreadExecutor().apply { shutdownNow() }
+        val probe = { urls: List<String>, _: String? -> urls.map { ProbeResult(it, ok = true, node = "node-shared") } }
+        val stopped = Revoker(servers, logins, sessions, left, probe, gone) { id -> logins.forget(id) }
+        val a = server("home", node = "node-shared")
+        val b = server("cabin", node = "node-shared")
+        keepUnderAppKey(a to LoginSecret("key-secret", 42), b to LoginSecret("key-secret", 45))
+        prompt.shown.clear()
+        var summary: Revoker.Summary? = null
+        stopped.forgetAll(appByKey(forgetAll = true)) { summary = it }
+        assertNull(summary)
+        assertEquals(listOf("Forget all ${LoginKey.APP}"), prompt.shown)
+        assertNull("the first one done", logins.get(a.id))
+        assertEquals("the next one as it was", 45L, logins.get(b.id)!!.keyId)
+        assertFalse("the app key dropped where the run stopped", appKey.held)
+    }
+    @Test
+    fun forgetAllAsksNoMoreOnceTheAppKeysPromptIsDismissed() {
+        val a = server("home", node = "node-shared")
+        val b = server("cabin", node = "node-shared")
+        val c = server("barn", node = "node-shared")
+        keepUnderAppKey(a to LoginSecret("key-secret", 42), b to LoginSecret("key-secret", 45), c to LoginSecret("key-secret", 46))
+        prompt.shown.clear()
+        prompt.dismiss = true
+        assertEquals(
+            "each key left by its id, as a dismissed prompt leaves one",
+            Revoker.Summary(listOf(), listOf(a.id, b.id, c.id), listOf()),
+            forgetAll(appByKey(forgetAll = true)),
+        )
+        assertEquals("one prompt, dismissed", listOf("Forget all ${LoginKey.APP}"), prompt.shown)
+        assertTrue(fake.requests().isEmpty())
+        assertEquals(listOf(KeyLeft("anna", 45)), left(b))
+        assertTrue(logins.ids().isEmpty())
+        assertFalse(appKey.held)
+    }
+
+    @Test
+    fun aStepThatThrowsEndsTheRun() {
+        val s = server("home")
+        keep(s, 42)
+        var closed = 0
+        val throwing = object : Revoker.ByKey {
+            override fun open(s: Server, kept: KeptLogin, then: (LoginSecret?) -> Unit) = throw IllegalStateException("the prompt broke")
+
+            override fun close() {
+                closed++
+            }
+        }
+        assertThrows(IllegalStateException::class.java) { revoker.forgetAll(throwing) { throw AssertionError("answered") } }
+        assertEquals("Forget all's run ended", 1, closed)
+        keep(s, 42)
+        assertThrows(IllegalStateException::class.java) { revoker.turnOff(s.id, fake.base, throwing) { throw AssertionError("answered") } }
+        assertEquals("Turn off's run ended", 2, closed)
+    }
+
+    @Test
+    fun aPagesIdAppReachesNoKeystoreKey() {
+        // Turn off of the id `app`, which the connect page may send: no
+        // server's, so its login's Keystore key is no key at all.
+        val s = server("home")
+        keepUnderAppKey(s to LoginSecret("key-secret", 42))
+        prompt.shown.clear()
+        var got: Revoker.Off? = null
+        revoker.turnOff(LoginStore.APP, "", appByKey()) { got = it }
+        assertEquals(Revoker.Off(local, 0), got)
+        assertTrue("the app's Keystore key stays", LoginKey.APP in keys.aliases())
+        assertNotNull(logins.appKey())
+        var off: Revoker.Off? = null
+        revoker.turnOff(s.id, fake.base, appByKey()) { off = it }
+        assertEquals("the login still opens", Revoker.Off(revoked, 42), off)
+        assertEquals(listOf("home ${LoginKey.APP}"), prompt.shown)
     }
 }

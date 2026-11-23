@@ -118,6 +118,13 @@ The key stays, so the next sign-in can again be by fingerprint.
   and the form asks for your password again.
 - On every version, turning the screen lock off ends the key.
 
+The app keeps one key for all its logins, behind your fingerprint,
+so that one fingerprint opens what a step needs: keeping a login,
+signing in, turning one off, or Forget all.
+When that key ends, every login by fingerprint ends with it,
+and the app removes each key at its server the next time it signs in there
+as the same user.
+
 ### Not encrypted
 
 Over a plain `http://` address outside your home network,
@@ -135,7 +142,12 @@ At home, on the local network, plain `http://` works as usual.
 - **Forget all stored credentials**, in the list's ☰,
   does the same for every server with a login by fingerprint,
   one after the other:
-  it asks for your fingerprint once for each server the app is not signed in to.
+  it asks for your fingerprint once,
+  for all the servers the app is not signed in to.
+  A login kept by an older version of the app asks once more for itself,
+  until you turn it off or keep it again.
+  If you cancel the fingerprint, it asks no more,
+  and those keys stay valid at their servers (below).
   Its message names the servers where a key stays valid.
 - **Remove** of a server turns its login by fingerprint off first,
   as Turn off does, then forgets everything the app kept for it.

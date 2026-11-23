@@ -246,6 +246,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         if (::biometric.isInitialized) biometric.close()
+        if (::bridge.isInitialized) bridge.close()
         if (::web.isInitialized) web.destroy()
         io.shutdownNow()
         super.onDestroy()

@@ -13,7 +13,9 @@ package server
 // grants the capabilities; a route is registered with the capability it
 // needs (server.go) and refused with 403 without it. Failed checks are
 // counted per address, and for a login per user name, and lock the key
-// out for a while; with a store the counters survive a restart.
+// out for a while; with a store the counters survive a restart. A token
+// the server issued and that ended is refused as a wrong one is, but
+// guesses nothing, and is not counted.
 
 import (
 	"context"
@@ -683,6 +685,19 @@ const errTooManyTickets = ticketError("too many stream tickets outstanding")
 // user may not use the API now, which is not a failed check.
 var errBadToken = errors.New("missing or wrong token")
 
+// errEndedToken is a token the server issued that has ended: revoked,
+// logged out, expired, or a session whose key was revoked
+// (store.TokenEnded). It is refused as errBadToken is, with its words,
+// but is no guess, and does not count toward the lockout (AP MobileApp
+// v1.4, D64-A).
+var errEndedToken = fmt.Errorf("%w: ended", errBadToken)
+
+// guessed reports whether a token's refusal is a guess, which counts
+// toward the lockout: a token nobody holds, and not one that ended.
+func guessed(why error) bool {
+	return errors.Is(why, errBadToken) && !errors.Is(why, errEndedToken)
+}
+
 type forbiddenError struct{ msg string }
 
 func (e *forbiddenError) Error() string { return e.msg }
@@ -691,7 +706,9 @@ func forbidden(format string, args ...any) error {
 	return &forbiddenError{msg: fmt.Sprintf(format, args...)}
 }
 
-// resolve turns a presented token into a principal, or says why not.
+// resolve turns a presented token into a principal, or says why not: a
+// token the store issued that has ended is errEndedToken, one it never
+// issued errBadToken.
 func (s *Server) resolve(ctx context.Context, mode authMode, secret, ip string) (*principal, error) {
 	if mode == modeLegacy {
 		if want := s.legacyToken(); tokenMatches(want, secret) {
@@ -702,13 +719,17 @@ func (s *Server) resolve(ctx context.Context, mode authMode, secret, ip string) 
 	if secret == "" {
 		return nil, errBadToken
 	}
-	tok, ok, err := s.opts.Store.TokenByHash(ctx, store.HashToken(secret))
+	hash := store.HashToken(secret)
+	tok, ok, err := s.opts.Store.TokenByHash(ctx, hash)
 	if err != nil {
 		return nil, err
 	}
 	now := time.Now()
-	if !ok || tok.Expired(now) {
-		return nil, errBadToken
+	if ok && tok.Expired(now) {
+		return nil, errEndedToken
+	}
+	if !ok {
+		return nil, s.unknownToken(ctx, hash, now)
 	}
 	p, err := s.principalFor(ctx, tok, now)
 	if err != nil {
@@ -716,6 +737,22 @@ func (s *Server) resolve(ctx context.Context, mode authMode, secret, ip string) 
 	}
 	s.touch(ctx, tok, ip, now)
 	return p, nil
+}
+
+// unknownToken says why a hash that is no live token's is refused:
+// errEndedToken where the store issued it and it ended, else
+// errBadToken. A store that cannot tell is logged, and the token counts
+// as a guess, so that an error never lifts the lockout.
+func (s *Server) unknownToken(ctx context.Context, hash string, now time.Time) error {
+	ended, err := s.opts.Store.TokenEnded(ctx, hash, now)
+	if err != nil {
+		s.log.Error("api: ended tokens not read", "error", err)
+		return errBadToken
+	}
+	if ended {
+		return errEndedToken
+	}
+	return errBadToken
 }
 
 // principalFor is the principal of a live token: its user, who must be
@@ -850,27 +887,40 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 	}
 	var p *principal
 	var why error
-	// offered: the request presented something to check, a Bearer
-	// header (an empty one included, which arrives as "Bearer", its
-	// space trimmed) or a stream ticket or token. Only such a request
-	// guesses, and only its refusal counts toward the lockout; one
-	// without any is refused all the same, uncounted, so that a page
-	// before its sign-in, or a scanner behind a proxy that is not
-	// trusted, does not lock the address out.
+	// guess: the request presented something to check that is a guess,
+	// a Bearer header (an empty one included, which arrives as "Bearer",
+	// its space trimmed), a stream ticket or a stream token, that no
+	// live token or ticket matched and that is no token the server
+	// issued and that ended. Only such a request guesses, and only its
+	// refusal counts toward the lockout; one that offers nothing, or
+	// only a token that ended (revoked, logged out, expired, a session
+	// whose key was revoked: D64-A), is refused all the same,
+	// uncounted, so that a page before its sign-in, a client sending
+	// again a session that ended, or a scanner behind a proxy that is
+	// not trusted, does not lock the address out. A guessed secret
+	// never hits the hash of a token that was issued. A Bearer header
+	// that is a guess is refused as it is, the stream's ticket and token
+	// beside it not read, so that a live one neither answers for the
+	// guess, nor tells by its Deprecation header whether the guess was
+	// right, nor clears the address's count with its success.
 	h := r.Header.Get("Authorization")
-	offered := h == "Bearer" || strings.HasPrefix(h, "Bearer ")
+	guess := h == "Bearer"
 	if strings.HasPrefix(h, "Bearer ") {
 		p, why = s.resolve(ctx, mode, strings.TrimPrefix(h, "Bearer "), ip)
+		guess = guessed(why)
 	}
-	if p == nil && r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/events") {
+	if p == nil && !guess && r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/events") {
 		q := r.URL.Query()
 		ticket, tok := q.Get("ticket"), q.Get("token")
-		offered = offered || ticket != "" || tok != ""
 		if tp, ok := s.tickets.redeem(ticket, strings.ToLower(r.PathValue("sn"))); ok {
 			p = tp
-		} else if tok != "" {
-			if p, why = s.resolve(ctx, mode, tok, ip); p != nil {
-				w.Header().Set("Deprecation", tokenQueryDeprecated)
+		} else {
+			guess = guess || ticket != ""
+			if tok != "" {
+				if p, why = s.resolve(ctx, mode, tok, ip); p != nil {
+					w.Header().Set("Deprecation", tokenQueryDeprecated)
+				}
+				guess = guess || guessed(why)
 			}
 		}
 	}
@@ -879,13 +929,18 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 		switch {
 		case errors.As(why, &fe):
 			// A real token whose user may not use the API now: not a
-			// failed check, and the message says why.
+			// failed check, and the message says why; a guess beside it
+			// (a wrong ticket beside such a Bearer header) counts all the
+			// same.
+			if guess && s.limiter.fail(ctx, key) {
+				s.logLockout(ip, "tokens")
+			}
 			writeError(w, http.StatusForbidden, fe.msg)
 		case why != nil && !errors.Is(why, errBadToken):
 			s.log.Error("api: token not resolved", "error", why)
 			writeError(w, http.StatusInternalServerError, "authentication failed; see the log")
 		default:
-			if offered && s.limiter.fail(ctx, key) {
+			if guess && s.limiter.fail(ctx, key) {
 				s.logLockout(ip, "tokens")
 			}
 			writeError(w, http.StatusUnauthorized, errBadToken.Error())

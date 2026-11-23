@@ -304,8 +304,9 @@ paths:
         an API key of the user's own, and the answer the session POST
         /api/v1/login answers. The session names the key (key_id in the
         token list), the key's earlier session ends, and revoking the key
-        ends the session. A wrong or revoked key is 401 and counts toward
-        the address's lockout as every failed token check does; a
+        ends the session. A wrong key is 401 and counts toward the
+        address's lockout as every failed token check does; a revoked
+        key is 401 and does not, as no token that ended does; a
         disabled user, a guest past its end date or a disabled role is
         403, and so is a registered integration's key. It sends no
         password, so it works while auth.password_login is off.
