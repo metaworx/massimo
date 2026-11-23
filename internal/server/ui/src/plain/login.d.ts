@@ -24,12 +24,13 @@ declare global {
   function roleLabel(key: string, name?: string): string;
   /** The keys of the six default roles, for a role choice that cannot read the roles. */
   const DEFAULT_ROLES: string[];
-  /** The app's status of the login by fingerprint (docs/app.md): whether the phone can keep one, the user kept, whether the address is plain HTTP outside the private ranges. */
+  /** The app's status of the login by fingerprint (docs/app.md): whether the phone can keep one, the user kept, whether the address is plain HTTP outside the private ranges; from contract version 5 the id of the key kept, 0 for none or not known. */
   interface AppLoginStatus {
     can?: boolean;
     user?: string;
     plain?: boolean;
     ask?: string;
+    key_id?: number;
   }
   /** In the app, the bridge's login by fingerprint (contract version 2 and later); null in a browser. */
   function appLogin(): {
@@ -55,6 +56,8 @@ declare global {
   function startProvider(key: string): Promise<void>;
   /** Keeps the page's token, or forgets it with null: in the browser's storage, or in the app's; a session it replaces is ended at the server once. Its promise is the bridge's answer, null in a browser and where the bridge failed. */
   function setToken(token: string | null): Promise<unknown>;
+  /** The bridge's answer to the last token setToken handed it, a sign-in's ({revoked}, contract version 5); null in a browser, before any, and where the bridge failed. */
+  function tokenAnswer(): Promise<unknown>;
   /** Signs in by OPAQUE, without a token and without the dialog: the session, its token among it; the answer's error is thrown. */
   function signIn(user: string, password: string): Promise<{ token: string }>;
   /** Signs out as Sign out does: the page's dialog first where settings are unsaved, then a session ends and the page forgets who was in. */

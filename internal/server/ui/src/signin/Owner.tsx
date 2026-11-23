@@ -32,7 +32,7 @@
  */
 
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
-import { toServers } from "../shared/app";
+import { app, toServers } from "../shared/app";
 import { ResultLine } from "../shared/badge";
 import { hid } from "../shared/cls";
 import { useLang } from "../shared/lang";
@@ -41,7 +41,7 @@ import { busyProps, useBusy } from "../shared/question";
 import { UserNameField, useNameCheck, wordNameError } from "../shared/username";
 import { me } from "../shared/me";
 import { keptOpen } from "../shared/owner";
-import { app, offer } from "./app";
+import { offer } from "./app";
 import { KeepOpen } from "./KeepOpen";
 import { ask, card, creationEnded, keepAsk, skip } from "./store";
 

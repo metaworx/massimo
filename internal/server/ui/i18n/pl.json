@@ -1629,6 +1629,7 @@
   "profile.linkError.expired": "Konta, które wróciło, nie można już powiązać: {error}",
 
   "profile.linkCancelled": "Nic nie zostało powiązane.",
+  "profile.keyRevokedAtSignIn": "Klucz {id} jest już odwołany: aplikacja odwołała go przy Twoim logowaniu jako klucz telefonu, który był tu nadal ważny.",
 
   "profile.confirm.title": "Powiązać to konto u {name}?",
 
@@ -1657,6 +1658,8 @@
   "users.neverUsed": "nigdy nie użyty",
   "users.thisDevice": "to urządzenie",
   "users.itsKey": "jego klucz",
+  "users.thisDeviceKey": "klucz tego urządzenia",
+  "users.tokenId": "id {id}",
   "users.fromKey": "utworzona z klucza API {label}",
   "users.revoke": "Unieważnij",
   "users.revokeLabel": "unieważnij {label}",
@@ -1873,6 +1876,7 @@
   "connect.ask.logout": "tylko po wylogowaniu",
   "connect.askHint": "Gdy logowanie odciskiem palca zostanie włączone przy logowaniu do serwera. „Za każdym razem” zakrywa stronę serwera, gdy aplikacja jest ukryta.",
   "connect.loginKept": "Logowanie odciskiem palca: {name}",
+  "connect.loginKeptKey": "Logowanie odciskiem palca: {name}, klucz {id}",
   "connect.keyLeft": "Klucz tego telefonu jest tu nadal ważny: klucz {id} użytkownika {name}.",
   "connect.keyLeftShow": "Pokaż w Moim profilu",
   "connect.keyLeftShowLabel": "Pokaż w Moim profilu, klucz {id}",

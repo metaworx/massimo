@@ -12,7 +12,8 @@
 //            "server" for a server's page's, token, setToken, login.*
 //            and connect
 //   servers  the servers the app keeps, as {id, name, node, lan, …,
-//            login, ask, start, session, trusted_at, unrevoked, unended}
+//            login, login_key, ask, start, session, trusted_at, unrevoked,
+//            unended}
 //   answers  by URL, how /healthz answers there: {node, version,
 //            fingerprint, self_signed, subject, issuer, names,
 //            not_before, not_after}; a self-signed certificate is
@@ -30,8 +31,13 @@
 //   core     the server on the phone's status, for a bridge with core
 //   push     true for a bridge with push
 //   token    the token the app keeps, for kind "server"
+//   revokeAtSignIn for kind "server", {user, ids, ms}: the keys and
+//            sessions left there that the app revokes with a new token
+//            before setToken answers, as {revoked: ids} (contract version
+//            5): each revoked at the page's server with that token, ms
+//            after the call, as the app's check takes its time
 //   login    for kind "server", the login by fingerprint (contract
-//            version 2): {status: {can, user, ask, plain}, keep: [answers
+//            version 2): {status: {can, user, ask, plain, key_id}, keep: [answers
 //            of login.keep in turn, true, false or "error:<message>"],
 //            fingerprint: the token login.fingerprint resolves to, null,
 //            or "error:<message>"}; a keep that resolves true keeps the
@@ -91,10 +97,17 @@
         call("token");
         return later(rec.token, 20);
       },
-      setToken(t) {
+      async setToken(t) {
         call("setToken", t);
         rec.token = t;
-        return later(null);
+        if (!t) return later(null);
+        // as the app's check before its answer: what is left there revoked with the new token (D67-A)
+        const left = cfg.revokeAtSignIn || { user: "", ids: [] };
+        if (left.ms) await new Promise((resolve) => setTimeout(resolve, left.ms));
+        for (const id of left.ids || []) {
+          await fetch("api/v1/users/" + encodeURIComponent(left.user) + "/tokens/" + id, { method: "DELETE", headers: { Authorization: "Bearer " + t } });
+        }
+        return later({ revoked: left.ids || [] });
       },
     };
     if (cfg.login) {
@@ -160,6 +173,7 @@
   const turnOff = (s, reached) => {
     const key = (cfg.keys || {})[s.id];
     s.login = "";
+    s.login_key = 0;
     signedOut(s, reached);
     if (reached && !(cfg.unrevokable || []).includes(s.id)) return "revoked";
     if (!key || !(key.id > 0)) return "local";
@@ -194,6 +208,7 @@
       if (old) {
         s.fp = old.fp;
         s.login = old.login || "";
+        s.login_key = old.login_key || 0;
         s.session = old.session || null;
         s.trusted_at = old.trusted_at || "";
         s.unrevoked = old.unrevoked || [];
@@ -204,6 +219,7 @@
       s.id = "new" + ++seq;
       s.fp = "";
       s.login = "";
+      s.login_key = 0;
       s.session = null;
       s.trusted_at = "";
       s.unrevoked = [];

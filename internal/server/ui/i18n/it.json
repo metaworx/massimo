@@ -1584,6 +1584,7 @@
   "profile.linkError.expired": "L'account tornato non può più essere collegato: {error}",
 
   "profile.linkCancelled": "Non è stato collegato nulla.",
+  "profile.keyRevokedAtSignIn": "La chiave {id} è già revocata: l'app l'ha revocata al tuo accesso, come chiave del telefono ancora valida qui.",
 
   "profile.confirm.title": "Collegare questo account presso {name}?",
 
@@ -1612,6 +1613,8 @@
   "users.neverUsed": "mai usata",
   "users.thisDevice": "questo dispositivo",
   "users.itsKey": "la sua chiave",
+  "users.thisDeviceKey": "chiave di questo dispositivo",
+  "users.tokenId": "id {id}",
   "users.fromKey": "creata dalla chiave API {label}",
   "users.revoke": "Revoca",
   "users.revokeLabel": "revoca {label}",
@@ -1818,6 +1821,7 @@
   "connect.ask.logout": "solo dopo una disconnessione",
   "connect.askHint": "Una volta attivato l'accesso con impronta digitale all'accesso al server. «Ogni volta» copre la pagina del server mentre l'app è nascosta.",
   "connect.loginKept": "Accesso con impronta digitale: {name}",
+  "connect.loginKeptKey": "Accesso con impronta digitale: {name}, chiave {id}",
   "connect.keyLeft": "Una chiave di questo telefono è ancora valida qui: chiave {id} di {name}.",
   "connect.keyLeftShow": "Mostra in Il mio profilo",
   "connect.keyLeftShowLabel": "Mostra in Il mio profilo, chiave {id}",

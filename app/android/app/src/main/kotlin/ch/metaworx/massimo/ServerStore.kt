@@ -64,9 +64,10 @@ data class Server(
      * toJson is the server as the connect page sees it, with the user whose
      * login is kept, [login], or "", the user of the session the app holds
      * and checked, [session], or null (contract version 3), the keys left
-     * valid there (version 4) and the sessions (version 5).
+     * valid there (version 4), and the sessions, and the id of the kept
+     * login's key, [loginKey], 0 for none or not known (version 5).
      */
-    fun toJson(login: String = "", session: String? = null): JSONObject = JSONObject()
+    fun toJson(login: String = "", session: String? = null, loginKey: Long = 0): JSONObject = JSONObject()
         .put("id", id)
         .put("name", name)
         .put("node", node)
@@ -74,6 +75,7 @@ data class Server(
         .put("remote", remote)
         .put("fp", fp)
         .put("login", login)
+        .put("login_key", if (login.isEmpty()) 0 else loginKey.coerceAtLeast(0))
         .put("ask", ask)
         .put("push", push)
         .put("start", start)
@@ -82,9 +84,10 @@ data class Server(
         .put("unrevoked", JSONArray().apply { unrevoked.forEach { put(it.toJson()) } })
         .put("unended", JSONArray().apply { unended.forEach { put(it.toJson()) } })
 
-    /** fileJson is the server as the store keeps it: what the page sees, but the login and the session, which are kept elsewhere. */
+    /** fileJson is the server as the store keeps it: what the page sees, but the login, its key and the session, which are kept elsewhere. */
     fun fileJson(): JSONObject = toJson().apply {
         remove("login")
+        remove("login_key")
         remove("session")
     }
 

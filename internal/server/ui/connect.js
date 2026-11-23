@@ -39,7 +39,7 @@ const APP_HASH = "#app-settings";
 
 const conn = {
   bridge: null, // window.massimo
-  servers: [], // as the app keeps them: {id, name, node, lan, remote, fp, login, ask, push, start, session, trusted_at, unrevoked, unended}
+  servers: [], // as the app keeps them: {id, name, node, lan, remote, fp, login, login_key, ask, push, start, session, trusted_at, unrevoked, unended}
   probes: {}, // by server id: {state, url, fingerprint, cert, error}, the state probing, lan, remote, cert or offline
   probeSeq: {}, // by server id: the latest probe, whose answer alone counts
   seen: {}, // by node: the URL discovery found it at
@@ -455,7 +455,7 @@ function addressInput(value) {
 // settingsPanel is a server's settings: its name, its two addresses,
 // Open at start, when the fingerprint is asked, its session with Sign
 // out, its certificate and the keys and sessions left valid there (fillFacts), the
-// login by fingerprint kept with its user and Turn off, notifications
+// login by fingerprint kept with its user, its key's id, and Turn off, notifications
 // where the app has push, and Remove, whose question warns of a key or a
 // session left.
 // The panel itself takes the focus (toggleSettings).
@@ -502,7 +502,9 @@ function settingsPanel(s) {
   fillFacts(form, s);
   if (s.login) {
     const off = button(t("connect.loginOff"), "server-login-off", () => turnOff(s.id, off, msg));
-    const kept = textEl("p", t("connect.loginKept", { name: s.login }), "server-login-kept");
+    // the kept key's id whenever the app knows it (login_key, contract version 5; AP MobileApp, D66-A)
+    const key = Number.isInteger(s.login_key) && s.login_key > 0 && s.login_key <= MAX_KEY_ID ? s.login_key : 0;
+    const kept = textEl("p", key ? t("connect.loginKeptKey", { name: s.login, id: key }) : t("connect.loginKept", { name: s.login }), "server-login-kept");
     kept.append(" ", off);
     form.append(kept);
   }

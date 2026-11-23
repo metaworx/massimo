@@ -176,7 +176,11 @@ until it is used once; where such a key cannot be removed,
 the message says it is still listed at the server, under My profile.
 To remove it at once, use **Show in My profile**,
 or open **My profile** → **Sessions and keys** in the web UI:
-the key carries the phone's name and "login by fingerprint".
+the key carries the phone's name and "login by fingerprint",
+and in the app the key the phone keeps says **this device's key**.
+Every row there shows its id, and a server's settings in the app
+name the id of the key its login by fingerprint keeps,
+so that you can tell which row is which.
 **Revoke** removes it, and the phone's session with it.
 Do the same if you lose the phone.
 

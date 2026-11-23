@@ -7,7 +7,7 @@ roles with the six default ones."""
 import pytest
 
 from conftest import URL, api_call
-from helpers import NAME_BAD, NAME_TAKEN, assert_busy, hold, named_buttons, scroll_width, show_view, sign_out, undo, wait_held, wait_until
+from helpers import NAME_BAD, NAME_TAKEN, assert_busy, frames, hold, named_buttons, scroll_width, show_view, sign_out, undo, wait_held, wait_until
 
 
 def test_users_and_roles(page, case):
@@ -173,6 +173,47 @@ def test_a_key_session_names_its_key(page, case):
         left = [tk for tk in api_call("GET", "api/v1/users/operator/tokens") or [] if (tk.get("label") or "").startswith(prefix)]
         revoke_keys(prefix)
     assert session["token"] and not left, f"revoking the key ended its session: {left}"
+    show_view(page, "tiles")
+
+
+TOKEN_ID = {"en": "id {id}", "de": "ID {id}"}
+
+
+def test_token_rows_show_their_ids(page, case):
+    """Every row of a user's sessions and keys shows its id (AP MobileApp,
+    D66-A), in System settings → Users as in My profile, the row one part;
+    at 390 px in all six languages each row stays inside its list and the
+    page has no horizontal scroll, the id making the row longer."""
+    prefix = f"ui-test-ids-{case.width}-{case.lang}-"
+    revoke_keys(prefix)
+    key = api_call("POST", "api/v1/users/operator/tokens", {"label": prefix + "a label to fill the row at 390 px"})
+    try:
+        show_view(page, "system")
+        panel = page.locator(".user-panel[data-name='operator']")
+        panel.wait_for()
+        panel.locator("summary").click()
+        panel.locator(f".user-tokens li[data-id='{key['id']}']").wait_for(timeout=5000)
+        ids = "(sel) => [...document.querySelectorAll(sel)].map((li) => [li.dataset.id, (li.querySelector('.token-id') || {}).textContent])"
+        rows = page.evaluate(ids, ".user-panel[data-name='operator'] .user-tokens li[data-id]")
+        assert rows and all(text == TOKEN_ID[case.lang].format(id=i) for i, text in rows), f"every row its id: {rows}"
+        langs = ("en", "de", "fr", "it", "nl", "pl") if case.width == 390 else (case.lang,)
+        for lang in langs:
+            page.evaluate("async (l) => { await changeLanguage(l); applyLanguage(); }", lang)
+            frames(page)
+            m = page.evaluate("""() => [...document.querySelectorAll(".user-panel[data-name='operator'] .user-tokens li[data-id]")].map((li) => {
+              const r = li.getBoundingClientRect(), list = li.parentElement.getBoundingClientRect();
+              const id = li.querySelector('.token-id').getBoundingClientRect();
+              return {id: li.dataset.id, inside: r.left >= list.left - 0.5 && r.right <= list.right + 0.5 && id.right <= list.right + 0.5};
+            })""")
+            assert m and all(x["inside"] for x in m), f"{lang}: every row and its id inside the list: {m}"
+            assert scroll_width(page) <= case.width, f"no horizontal scroll in {lang}"
+        page.evaluate("async (l) => { await changeLanguage(l); applyLanguage(); }", case.lang)
+        show_view(page, "profile")
+        page.locator("#profile-tokens li[data-id]").first.wait_for(timeout=5000)
+        mine = page.evaluate(ids, "#profile-tokens li[data-id]")
+        assert mine and all(text == TOKEN_ID[case.lang].format(id=i) for i, text in mine), f"My profile's rows their ids: {mine}"
+    finally:
+        revoke_keys(prefix)
     show_view(page, "tiles")
 
 

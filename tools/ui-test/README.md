@@ -466,7 +466,9 @@ hence `failed_checks_forgotten`.
   a user's Remove asks in the panel, Keep gives the focus back to Remove,
   and a double click on Yes sends one DELETE and says it worked;
   a Revoke the server never answers turns until the page's limit, under
-  Playwright's clock, and then says that no answer came.
+  Playwright's clock, and then says that no answer came;
+  every row of the sessions and keys shows its id, inside its list at
+  390 px in six languages, and so do My profile's.
 - `test_login.py`, in a fresh browser context without the stored token:
   the sign-in dialog opens in the middle of the window, its title centred,
   refuses a wrong password, signs in as the operator,
@@ -693,7 +695,11 @@ hence `failed_checks_forgotten`.
   and "Select server…" last in its ☰, each calling `connect()`;
   with a login kept, the row with the fingerprint is on one line at 390 px
   in all six languages, the card centred,
-  and the fingerprint's spinner turns inside its button in the icon's place.
+  and the fingerprint's spinner turns inside its button in the icon's place;
+  My profile in the app tags the key the phone keeps "this device's key",
+  by `login.status()`'s `key_id`, and reads its keys once the sign-in's
+  revoke is done, a key it revoked not marked but named in a toast;
+  a server's settings name the kept login's key by its id.
   axe-core (`axe-playwright-python`) finds no violation on the connect page
   in each state the tests open.
 - `test_notifications.py`, 👤 → Notifications:

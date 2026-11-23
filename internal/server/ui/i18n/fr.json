@@ -1584,6 +1584,7 @@
   "profile.linkError.expired": "Le compte revenu ne peut plus être lié : {error}",
 
   "profile.linkCancelled": "Rien n'a été lié.",
+  "profile.keyRevokedAtSignIn": "La clé {id} est déjà révoquée : l'app l'a révoquée à votre connexion, comme clé du téléphone encore valide ici.",
 
   "profile.confirm.title": "Lier ce compte chez {name} ?",
 
@@ -1612,6 +1613,8 @@
   "users.neverUsed": "jamais utilisée",
   "users.thisDevice": "cet appareil",
   "users.itsKey": "sa clé",
+  "users.thisDeviceKey": "clé de cet appareil",
+  "users.tokenId": "id {id}",
   "users.fromKey": "créée à partir de la clé API {label}",
   "users.revoke": "Révoquer",
   "users.revokeLabel": "révoquer {label}",
@@ -1818,6 +1821,7 @@
   "connect.ask.logout": "seulement après une déconnexion",
   "connect.askHint": "Dès que la connexion par empreinte digitale est activée à la connexion au serveur. « Chaque fois » couvre la page du serveur tant que l'application est cachée.",
   "connect.loginKept": "Connexion par empreinte digitale : {name}",
+  "connect.loginKeptKey": "Connexion par empreinte digitale : {name}, clé {id}",
   "connect.keyLeft": "Une clé de ce téléphone est encore valide ici : clé {id} de {name}.",
   "connect.keyLeftShow": "Afficher dans Mon profil",
   "connect.keyLeftShowLabel": "Afficher dans Mon profil, clé {id}",

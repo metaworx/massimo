@@ -28,8 +28,8 @@ import os
 
 from axe_playwright_python.sync_playwright import Axe
 
-from conftest import TOKEN, URL, clear_preferences
-from helpers import assert_login_card_centred, assert_login_row, named_buttons, open_personal_page, wait_until
+from conftest import TOKEN, URL, api_call, clear_preferences
+from helpers import assert_login_card_centred, assert_login_row, cleanup, named_buttons, open_personal_page, undo, wait_until
 
 CONNECT = URL + "ui/connect.html"
 FAKE_BRIDGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fake_bridge.js")
@@ -55,9 +55,9 @@ FP_CHANGED = {"en": "The certificate has changed", "de": "Das Zertifikat hat sic
 
 
 def server(sid, name, node, lan="", remote="", fp="", login="", ask="start", start=False, session=None, trusted_at="", unrevoked=None,
-           unended=None):
-    return {"id": sid, "name": name, "node": node, "lan": lan, "remote": remote, "fp": fp, "login": login, "ask": ask, "push": False,
-            "start": start, "session": session, "trusted_at": trusted_at, "unrevoked": unrevoked or [], "unended": unended or []}
+           unended=None, login_key=0):
+    return {"id": sid, "name": name, "node": node, "lan": lan, "remote": remote, "fp": fp, "login": login, "login_key": login_key, "ask": ask,
+            "push": False, "start": start, "session": session, "trusted_at": trusted_at, "unrevoked": unrevoked or [], "unended": unended or []}
 
 
 def open_connect(new_context, guard, watch, config=None):
@@ -1027,18 +1027,19 @@ def test_connect_app_settings(new_context, case, watch, guard):
     assert page.evaluate("document.activeElement.closest('#servers-menu') !== null"), "the focus back on the ☰"
 
 
-def server_page(new_context, guard, watch, login, token=None):
-    """The server's page in the app, its bridge with the login by
-    fingerprint as login describes it (fake_bridge.js)."""
+def server_page(new_context, guard, watch, login, token=None, address="", more=None):
+    """The server's page in the app at address after the server's, its
+    bridge with the login by fingerprint as login describes it and what
+    more adds to its configuration (fake_bridge.js)."""
     clear_preferences()
     ctx = new_context()
-    ctx.add_init_script(f"window.__fakeBridgeConfig = {json.dumps({'kind': 'server', 'token': token, 'login': login})};")
+    ctx.add_init_script(f"window.__fakeBridgeConfig = {json.dumps({'kind': 'server', 'token': token, 'login': login, **(more or {})})};")
     ctx.add_init_script(path=FAKE_BRIDGE)
     page = ctx.new_page()
     guard.page = page
     page.set_default_timeout(5000)
     page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
-    page.goto(URL)
+    page.goto(URL + address)
     return page
 
 
@@ -1213,3 +1214,76 @@ def test_server_page_first_owner_keeps_the_login(new_context, case, watch, guard
             cancel.click()
             assert connects(page, 1), "Cancel calls the app"
         page.unroute("**/api/v1/me")
+
+
+THIS_DEVICE_KEY = {"en": "this device's key", "de": "Schlüssel dieses Geräts"}
+THIS_DEVICE = {"en": "this device", "de": "dieses Gerät"}
+TOKEN_ID = {"en": "id {id}", "de": "ID {id}"}
+REVOKED_AT_SIGN_IN = {"en": "Key {id} is revoked already", "de": "Schlüssel {id} ist schon widerrufen"}
+
+
+def test_server_page_this_devices_key(new_context, case, watch, guard):
+    """My profile in the app after a password sign-in where the phone
+    keeps a key of the user's (AP MobileApp, F35, F37; D65-A, D66-A,
+    D67-A): that key's row says "this device's key", by login.status()'s
+    key_id, the session's "this device", and every row shows its id;
+    opened at #profile?key=<id> for a key the sign-in revoked, as the app
+    revokes a key left before setToken answers {revoked}, the list is
+    read after that revoke, so the key is not listed nor marked, and a
+    toast names it."""
+    key = api_call("POST", "api/v1/users/operator/tokens", {"label": f"ui-test-device-key-{case.width}-{case.lang}"})
+    gone = api_call("POST", "api/v1/users/operator/tokens", {"label": f"ui-test-left-{case.width}-{case.lang}"})
+    made = []  # the sign-in's session, revoked at the end
+    try:
+        status = {"can": True, "user": "operator", "ask": "start", "plain": False, "key_id": key["id"]}
+        page = server_page(new_context, guard, watch, {"status": status}, address=f"#profile?key={gone['id']}",
+                           more={"revokeAtSignIn": {"user": "operator", "ids": [gone["id"]], "ms": 1500}})
+        order = []
+        page.on("request", lambda r: order.append(r.method + " " + r.url.split("/api/v1/")[-1]) if "/users/operator/tokens" in r.url else None)
+        page.locator("#login-dialog[open]").wait_for()
+        page.locator("#login-user").fill("operator")
+        page.locator("#login-password").fill("op-pass")
+        page.locator("#login-form button[type=submit]").click()
+        row = page.locator(f"#profile-tokens li[data-id='{key['id']}']")
+        row.wait_for(timeout=10000)
+        assert wait_until(page, "!document.getElementById('toast').classList.contains('hidden') && document.getElementById('toast').textContent"
+                                f".includes({json.dumps(REVOKED_AT_SIGN_IN[case.lang].format(id=gone['id']))})", 5), \
+            f"a toast names the key the sign-in revoked: {page.locator('#toast').inner_text()!r}"
+        assert order and order[0] == f"DELETE users/operator/tokens/{gone['id']}", f"the list read after the sign-in's revoke: {order}"
+        assert page.locator(f"#profile-tokens li[data-id='{gone['id']}']").count() == 0, "the key revoked is not listed"
+        assert page.locator("#profile-tokens li.token-marked").count() == 0, "nor marked"
+        assert page.evaluate("location.hash") == "#profile", "the key dropped from the address"
+        assert "token-device-key" in (row.get_attribute("class") or "") and THIS_DEVICE_KEY[case.lang] in row.inner_text(), \
+            f"the phone's key tagged: {row.inner_text()!r}"
+        session = page.evaluate("state.me.token.id")
+        made.append(session)
+        current = page.locator(f"#profile-tokens li[data-id='{session}']")
+        assert THIS_DEVICE[case.lang] in current.inner_text() and THIS_DEVICE_KEY[case.lang] not in current.inner_text(), "the session: this device"
+        rows = page.evaluate("[...document.querySelectorAll('#profile-tokens li[data-id]')].map((li) => [li.dataset.id, "
+                             "(li.querySelector('.token-id') || {}).textContent])")
+        assert rows and all(text == TOKEN_ID[case.lang].format(id=i) for i, text in rows), f"every row its id: {rows}"
+        named_buttons(page, "My profile in the app")
+    finally:
+        cleanup(lambda: undo("the device's key", lambda: api_call("DELETE", "api/v1/users/operator/tokens/%d" % key["id"])),
+                lambda: undo("the key left", lambda: api_call("DELETE", "api/v1/users/operator/tokens/%d" % gone["id"])),
+                *[lambda tid=tid: undo("the session", lambda: api_call("DELETE", "api/v1/users/operator/tokens/%d" % tid)) for tid in made])
+
+
+LOGIN_KEPT_KEY = {"en": "Login by fingerprint: anna, key 45", "de": "Anmeldung mit Fingerabdruck: anna, Schlüssel 45"}
+LOGIN_KEPT = {"en": "Login by fingerprint: bob", "de": "Anmeldung mit Fingerabdruck: bob"}
+
+
+def test_connect_login_key_id(new_context, case, watch, guard):
+    """A server's settings name the kept login's key by its id whenever
+    the app knows it (login_key, the bridge's version 5; AP MobileApp,
+    D66-A), and not where it does not."""
+    config = {"servers": [server("s1", "Home", NODE1, lan=HOME_LAN, login="anna", login_key=45), server("s2", "Cabin", NODE2, lan=CABIN_LAN, login="bob")],
+              "answers": {HOME_LAN: {"node": NODE1}, CABIN_LAN: {"node": NODE2}}}
+    page = open_connect(new_context, guard, watch, config)
+    wait_state(page, "Home", STATE[case.lang]["lan"])
+    panel = settings_of(page, "Home")
+    assert panel.locator(".server-login-kept").inner_text().startswith(LOGIN_KEPT_KEY[case.lang]), panel.locator(".server-login-kept").inner_text()
+    row(page, "Home").locator(".server-cog").click()
+    panel = settings_of(page, "Cabin")
+    text = panel.locator(".server-login-kept").inner_text()
+    assert text.startswith(LOGIN_KEPT[case.lang]) and "45" not in text, f"no id it does not know: {text!r}"

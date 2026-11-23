@@ -1582,6 +1582,7 @@
   "profile.linkError.expired": "The account that came back can no longer be linked: {error}",
 
   "profile.linkCancelled": "Nothing was linked.",
+  "profile.keyRevokedAtSignIn": "Key {id} is revoked already: the app revoked it as you signed in, as a key of the phone's still valid here.",
 
   "profile.confirm.title": "Link this account at {name}?",
 
@@ -1610,6 +1611,8 @@
   "users.neverUsed": "never used",
   "users.thisDevice": "this device",
   "users.itsKey": "its key",
+  "users.thisDeviceKey": "this device's key",
+  "users.tokenId": "id {id}",
   "users.fromKey": "made from the API key {label}",
   "users.revoke": "Revoke",
   "users.revokeLabel": "revoke {label}",
@@ -1816,6 +1819,7 @@
   "connect.ask.logout": "only after a logout",
   "connect.askHint": "Once the login by fingerprint is enabled on the server's sign-in. Each time the app comes back covers the server's page while the app is hidden.",
   "connect.loginKept": "Login by fingerprint: {name}",
+  "connect.loginKeptKey": "Login by fingerprint: {name}, key {id}",
   "connect.keyLeft": "A key of this phone is still valid here: key {id} of {name}.",
   "connect.keyLeftShow": "Show in My profile",
   "connect.keyLeftShowLabel": "Show in My profile, key {id}",

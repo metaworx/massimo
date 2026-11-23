@@ -31,7 +31,7 @@
  */
 
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
-import { toServers } from "../shared/app";
+import { app, readApp, toServers } from "../shared/app";
 import { ResultLine } from "../shared/badge";
 import { BrandName } from "../shared/brand";
 import { hid } from "../shared/cls";
@@ -42,7 +42,7 @@ import { Dropdown, MenuItem } from "../shared/menu";
 import { ModeSelect } from "../shared/mode";
 import { BusyButton, busyProps, useBusy } from "../shared/question";
 import { VersionRow, version } from "../shared/server";
-import { app, keepLogin, kept, offer, plainHere, readApp } from "./app";
+import { keepLogin, kept, offer, plainHere } from "./app";
 import { Owner } from "./Owner";
 import { ask, askFocus, card, chooseWay, keepChosen, type Way } from "./store";
 

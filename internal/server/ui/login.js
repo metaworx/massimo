@@ -76,6 +76,18 @@ function roleLabel(key, name) {
 // kind of the token the page holds is known only for that one.
 let meToken = "";
 
+// tokenAnswered is the bridge's answer to the last token setToken handed
+// it, a sign-in's: from contract version 5 {revoked}, the keys and
+// sessions left there that the app revoked before it answered (AP
+// MobileApp, D67-A); null in a browser.
+let tokenAnswered = Promise.resolve(null);
+
+// tokenAnswer is that answer, for My profile, whose keys are read once the
+// app has revoked what the sign-in revokes (ui/src/shared/app.ts).
+function tokenAnswer() {
+  return tokenAnswered;
+}
+
 // setToken keeps the page's token, or forgets it with null: in the
 // browser's storage, or in the app's where the page runs in the app
 // (appBridge, app.js). A token the app could not keep still serves this
@@ -99,7 +111,9 @@ function setToken(token) {
     }
     return Promise.resolve(null);
   }
-  return Promise.resolve(b.setToken(token)).catch(() => null);
+  const answer = Promise.resolve(b.setToken(token)).catch(() => null);
+  if (token) tokenAnswered = answer;
+  return answer;
 }
 
 // sawOpen is set once the page has seen a server without a store ask for
@@ -423,7 +437,7 @@ function askLogin(on) {
     made = ask;
     MassimoParts.signIn.open(way, said, ask); // the fields emptied, the way chosen, the lines cleared, the switch off
     if (!owner) renderLoginProviders();
-    MassimoParts.signIn.readApp(); // the app's login by fingerprint, as login.status() answers, not awaited (ui/src/signin/app.ts)
+    MassimoParts.signIn.readApp(); // the app's login by fingerprint, as login.status() answers, not awaited (ui/src/shared/app.ts)
     dlg.onclose = dismiss;
     document.body.classList.add("signed-out");
     // Not modal: the page behind is empty, and a modal dialog makes the

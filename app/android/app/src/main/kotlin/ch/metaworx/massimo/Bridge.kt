@@ -220,25 +220,28 @@ class Bridge(
                 }
                 if (token != null && token.length > MAX_TOKEN) throw bad()
                 // null forgets it: Sign out, Forget key, and the dead session
-                // the page drops at the server's first 401. A session the new
-                // one replaces is ended there once the page has its answer
-                // (D68-A), so that a server slow to answer holds no sign-in
-                // up. A new session is checked then too (Sessions.check): its
-                // id learnt, for a session forgotten later without the server
-                // (D70-A), the keys and sessions left there for its user
-                // revoked, and a login kept without its key's id given that id.
+                // the page drops at the server's first 401. A new session is
+                // checked before the answer (Sessions.look): its id learnt,
+                // for a session forgotten later without the server (D70-A),
+                // the keys and sessions left there for its user revoked, and
+                // a login kept without its key's id given that id; the answer
+                // names what it revoked, {revoked}, for My profile, which
+                // reads its keys once it has it (D67-A); null for null. A
+                // session the new one replaces is ended there after the
+                // answer (D68-A), so that a server slow to answer holds no
+                // sign-in up.
                 io.execute {
-                    val ending: Sessions.Ending?
-                    try {
-                        ending = servers.get(id)?.let { sessions.put(it, token, o.url) }
-                        answer.ok(null)
+                    var ending: Sessions.Ending? = null
+                    val revoked = try {
+                        val s = servers.get(id)
+                        if (s != null) ending = sessions.put(s, token, o.url)
+                        if (token == null || s == null) null else runCatching { sessions.look(s, o.url).revoked }.getOrDefault(emptyList())
                     } catch (e: Exception) {
                         answer.fail(e)
                         return@execute
                     }
+                    answer.ok(revoked?.let { JSONObject().put("revoked", JSONArray(it)) })
                     ending?.let { runCatching { it.end() } }
-                    val s = servers.get(id)
-                    if (token != null && s != null) runCatching { sessions.check(s, o.url) }
                 }
             }
             "login.status" -> {
@@ -246,7 +249,9 @@ class Bridge(
                 val can = biometric.canStrong()
                 background(answer) {
                     val s = servers.get(o.id) ?: throw BridgeException(R.string.err_no_server)
+                    // key_id: the kept login's key, 0 for none or not known (contract version 5; AP MobileApp, D65-A)
                     JSONObject().put("can", can).put("user", logins.user(s.id)).put("ask", s.ask).put("plain", Origins.plainOutside(o.url))
+                        .put("key_id", logins.get(s.id)?.keyId?.coerceAtLeast(0) ?: 0)
                 }
             }
             "login.keep" -> keep(now ?: throw bad(), answer)
@@ -264,8 +269,9 @@ class Bridge(
     }
 
     // json is a server as the connect page sees it: with the user whose
-    // login is kept, and the user of the session held, as last checked.
-    private fun json(s: Server): JSONObject = s.toJson(logins.user(s.id), sessions.user(s))
+    // login is kept, the user of the session held, as last checked, and the
+    // id of the kept login's key.
+    private fun json(s: Server): JSONObject = s.toJson(logins.user(s.id), sessions.user(s), logins.get(s.id)?.keyId ?: 0)
 
     // save keeps a server; its session moves where its new choice of when
     // the fingerprint is asked keeps it, and a node that changed forgets
