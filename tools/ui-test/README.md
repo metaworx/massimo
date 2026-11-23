@@ -481,6 +481,18 @@ hence `failed_checks_forgotten`.
   marks that key and scrolls a row below the first screen into view,
   marks nothing for an id that is not one of the user's keys,
   and nothing once the address or the page shown changes.
+- `test_sign_in_resend.py`, a request that meets an expired session (AP
+  SignInResend), its 401 answered by a route:
+  a write is never sent again after the sign-in, whoever signs in,
+  it fails at once and says so where its result shows, also once the page
+  is back, a setpoint, a backup's file, a Cube's and a role's Save, a
+  settings change on the page's message line and a deletion among them;
+  a read is sent again, and the stream's ticket waits for the sign-in;
+  a stepped setpoint is dropped as the sign-in opens; another user sees and
+  sends nothing of the first one's; and a read sent while the card is open,
+  its 401 held back until the sign-in has answered and the card has closed,
+  opens no second card and is sent again with the new session, the only
+  one the sign-in left at the server (AP MobileApp, F36).
 - `test_first_owner.py`, the first owner in the sign-in card (AP FirstOwner),
   `/api/v1/me` stubbed as an open server:
   the card opens at the page's start with the first owner's form,
