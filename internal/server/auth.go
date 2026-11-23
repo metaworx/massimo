@@ -335,8 +335,9 @@ func (s *Server) trustedProxy(ip string) bool {
 	return false
 }
 
-// ParseTrustedProxies reads -trusted-proxies: addresses and CIDRs
-// separated by commas or spaces, an address standing for itself.
+// ParseTrustedProxies reads serve's -trusted-proxies, whose default is
+// MASSIMO_TRUSTED_PROXIES: addresses and CIDRs separated by commas or
+// spaces, an address standing for itself.
 func ParseTrustedProxies(v string) ([]netip.Prefix, error) {
 	var out []netip.Prefix
 	for _, f := range strings.FieldsFunc(v, func(r rune) bool { return r == ',' || r == ' ' || r == ';' || r == '\t' }) {
@@ -346,7 +347,7 @@ func ParseTrustedProxies(v string) ([]netip.Prefix, error) {
 		}
 		a, err := netip.ParseAddr(f)
 		if err != nil {
-			return nil, fmt.Errorf("-trusted-proxies: %q is neither an address nor a CIDR", f)
+			return nil, fmt.Errorf("-trusted-proxies or MASSIMO_TRUSTED_PROXIES: %q is neither an address nor a CIDR", f)
 		}
 		a = a.Unmap()
 		out = append(out, netip.PrefixFrom(a, a.BitLen()))

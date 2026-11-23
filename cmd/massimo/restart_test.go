@@ -62,7 +62,7 @@ func TestRestartBy(t *testing.T) {
 			t.Errorf("%s: by %q, blocked %q, %v; want by %q, blocked %v", c.name, by, blocked, err, c.by, c.blocked)
 		}
 	}
-	if _, _, err := restartBy("always", processInfo{goos: "linux", getenv: envOf(nil)}); err == nil || !strings.Contains(err.Error(), "want auto, exit or off") {
+	if _, _, err := restartBy("always", processInfo{goos: "linux", getenv: envOf(nil)}); err == nil || err.Error() != `-restart or MASSIMO_RESTART "always": want auto, exit or off` {
 		t.Fatalf("a bad -restart: %v", err)
 	}
 }

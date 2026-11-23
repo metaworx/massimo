@@ -44,7 +44,7 @@ func hstsDays(v string) (int, error) {
 	}
 	n, err := strconv.Atoi(v)
 	if err != nil || n < 0 {
-		return 0, fmt.Errorf("serve: -hsts %q: want a number of days, 0 or more", v)
+		return 0, fmt.Errorf("-hsts or %s %q: want a number of days, 0 or more", hstsVar, v)
 	}
 	return n, nil
 }

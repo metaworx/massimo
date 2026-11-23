@@ -768,9 +768,25 @@ which checkpoints the store too;
 `MASSIMO_API_TOKEN` applies at once, as at a start, unless `-token` was given;
 every other setting that changed is listed by `GET /api/v1/restart`
 as applying at the next restart.
-A log level or format among them that the next start would refuse,
-such as `MASSIMO_LOG_LEVEL=deubg`, is also a warning in the log,
-the web UI's included, unless a flag such as `-log-level` fixes it.
+A value the next start would refuse is also a warning in the log,
+the web UI's included, with the start's own error:
+`MASSIMO_LOG_LEVEL=deubg`,
+or an unchanged `MASSIMO_TLS_HTTP` once `MASSIMO_TLS` is no longer `acme`.
+A setting a flag fixes is the flag's, now and at the next start,
+and one the process environment sets wins over the file's;
+the warning names the path of `MASSIMO_TLS_KEY` by its variable.
+The reload checks the log's level, formats and rotation,
+`MASSIMO_HSTS`, `MASSIMO_TRUSTED_PROXIES`, `MASSIMO_RESTART`, `MASSIMO_SIGHUP`,
+`MASSIMO_REBOOT`, `MASSIMO_ANNOUNCE`, the TLS settings, the files they name,
+and a Cube's `_IGNORE`;
+a check runs where one of its settings changed since the start,
+so a certificate file broken since then, its settings unchanged, is no warning.
+It does not check `MASSIMO_LISTEN`, its syntax included,
+nor what fails on the box rather than on the value,
+which the next start still may:
+the file of `MASSIMO_LOG`, the store of `MASSIMO_DATA`
+and the listener of `MASSIMO_TLS_HTTP`;
+every packaged service gives `-listen`, `-log` and `-data` itself.
 `-sighup` (or `MASSIMO_SIGHUP`) says what SIGHUP does:
 `reload`, `stop` as SIGTERM does,
 or `auto`, a reload under a service manager or after `nohup`,

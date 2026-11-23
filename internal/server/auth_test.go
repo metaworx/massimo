@@ -237,8 +237,8 @@ func TestClientIP(t *testing.T) {
 		t.Fatalf("parse: %v %v", proxies, err)
 	}
 	for _, bad := range []string{"host", "10.0.0.0/33", "192.0.2.1:80"} {
-		if _, err := ParseTrustedProxies(bad); err == nil {
-			t.Errorf("%q accepted", bad)
+		if _, err := ParseTrustedProxies(bad); err == nil || err.Error() != `-trusted-proxies or MASSIMO_TRUSTED_PROXIES: "`+bad+`" is neither an address nor a CIDR` {
+			t.Errorf("%q: %v", bad, err)
 		}
 	}
 	plain := &Server{opts: Options{}}

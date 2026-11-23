@@ -83,9 +83,11 @@ func runServe(args []string) error {
 	acmeDNSHook := fs.String("acme-dns-hook", os.Getenv(acmeDNSHookVar), "with -tls acme, get the certificate by the DNS-01 challenge through this executable, run as '<hook> set <record> <txt>' and '<hook> clear <record> <txt>' (packaging/acme-dns-hooks/); no port needed, wildcards allowed (default "+acmeDNSHookVar+")")
 	sighupMode := fs.String("sighup", os.Getenv(sighupVar), "what SIGHUP does on Unix: reload reads the settings file again, applying MASSIMO_API_TOKEN at once, and checkpoints the store; stop stops as SIGTERM does; auto reloads under a service manager and where SIGHUP was ignored at the start (nohup), and stops in a terminal, where SIGHUP means it closed (default "+sighupVar+", else auto)")
 	restartMode := fs.String("restart", os.Getenv(restartVar), "what a restart from the API and the web UI does: auto offers it under a service manager that starts the server again (systemd, launchd, Homebrew, the Windows service); exit stops and exits with status 75 for whatever runs serve, such as Docker's --restart; off never offers it (default "+restartVar+", else auto)")
-	allowReboot, rebootErr := newSwitchFlag("allow-reboot", rebootVar, os.Getenv(rebootVar))
+	// A switch's variable that it does not take is the start's checks'
+	// to refuse (startchecks.go), unless the flag is given.
+	allowReboot, _ := newSwitchFlag("allow-reboot", rebootVar, os.Getenv(rebootVar))
 	fs.Var(allowReboot, "allow-reboot", "let the owner reboot the computer from the API and the web UI: under systemd or launchd with the root helper of massimo install -reboot-helper, and as the Windows service (default "+rebootVar+", "+switchHelp("allow-reboot")+"; else off)")
-	announceOn, announceErr := newSwitchFlag("announce", env.Announce, os.Getenv(env.Announce))
+	announceOn, _ := newSwitchFlag("announce", env.Announce, os.Getenv(env.Announce))
 	fs.Var(announceOn, "announce", "announce the server on the LAN by mDNS as "+announce.ServiceType+", with its node, version and certificate, for massimo discover and the apps (default "+env.Announce+", "+switchHelp("announce")+"; else the setting announce of the store, System settings → Maintenance, whose auto is on when -listen is reachable from the LAN, off on a loopback address)")
 	hstsFlag := fs.String("hsts", os.Getenv(hstsVar), "with TLS, tell browsers to use https:// for this host for this many days (Strict-Transport-Security; default "+hstsVar+", else 365); 0 sends max-age=0, which clears it, and is the way before switching TLS off")
 	snFlag(fs)
@@ -102,6 +104,18 @@ func runServe(args []string) error {
 	if fs.NArg() > 0 {
 		return fmt.Errorf("serve: unexpected argument %q%s", fs.Arg(0), strayHint(fs, args, fs.Arg(0)))
 	}
+	// The flags given, with their values: they win over the settings
+	// file, at this start and at the next (reload.go).
+	given := map[string]string{}
+	fs.Visit(func(f *flag.Flag) { given[f.Name] = f.Value.String() })
+	fixed := fixedSettings(given)
+	// What the start refuses of its settings, before it opens anything,
+	// in the order and the words a reload names it in (startchecks.go).
+	if errs := startRefusals(settingOf(fixed), nil); len(errs) > 0 {
+		return fmt.Errorf("serve: %w", errs[0])
+	}
+	// The values the checks passed, parsed again: an error here is one
+	// the checks lack, and stops serve rather than run it on a zero value.
 	fileFormat, processFormat, err := logFormats.formats()
 	if err != nil {
 		return fmt.Errorf("serve: %w", err)
@@ -109,6 +123,26 @@ func runServe(args []string) error {
 	rotateSize, keep, keepMin, err := logRotate.options()
 	if err != nil {
 		return fmt.Errorf("serve: %w", err)
+	}
+	hsts, err := hstsDays(*hstsFlag)
+	if err != nil {
+		return fmt.Errorf("serve: %w", err)
+	}
+	trusted, err := server.ParseTrustedProxies(*trustedProxies)
+	if err != nil {
+		return fmt.Errorf("serve: %w", err)
+	}
+	restartFor, restartBlocked, err := restartBy(*restartMode, currentProcess())
+	if err != nil {
+		return fmt.Errorf("serve: %w", err)
+	}
+	managed, _, _ := restartBy(restartAuto, currentProcess())
+	hup, err := sighupAction(*sighupMode, managed != "", signal.Ignored(syscall.SIGHUP))
+	if err != nil {
+		return fmt.Errorf("serve: %w", err)
+	}
+	if runtime.GOOS == "windows" {
+		hup = "none" // no SIGHUP to handle
 	}
 	// The log file rotates itself (internal/logfile): at its size, at a
 	// change of its format, on SIGHUP and a reload from the API.
@@ -143,26 +177,6 @@ func runServe(args []string) error {
 			rotations.add(r)
 		})
 	}
-	hsts, err := hstsDays(*hstsFlag)
-	if err != nil {
-		return err
-	}
-	trusted, err := server.ParseTrustedProxies(*trustedProxies)
-	if err != nil {
-		return fmt.Errorf("serve: %w", err)
-	}
-	restartFor, restartBlocked, err := restartBy(*restartMode, currentProcess())
-	if err != nil {
-		return err
-	}
-	managed, _, _ := restartBy(restartAuto, currentProcess())
-	hup, err := sighupAction(*sighupMode, managed != "", signal.Ignored(syscall.SIGHUP))
-	if err != nil {
-		return err
-	}
-	if runtime.GOOS == "windows" {
-		hup = "none" // no SIGHUP to handle
-	}
 	// SIGHUP as a reload is caught from here on, so that one during the
 	// start is logged rather than ending serve (sighup.go).
 	var hups *hupReload
@@ -175,20 +189,12 @@ func runServe(args []string) error {
 	// the settings file applies only at the next start (reload.go).
 	startSettings := settings()
 	settingsRead := time.Now() // the settings file as the start read it
-	given := map[string]bool{}
-	fs.Visit(func(f *flag.Flag) { given[f.Name] = true })
-	if rebootErr != nil && !given["allow-reboot"] {
-		return fmt.Errorf("serve: %w", rebootErr)
-	}
-	if announceErr != nil && !given["announce"] {
-		return fmt.Errorf("serve: %w", announceErr)
-	}
 	// Given, the flag or the variable decides; otherwise the store's
 	// setting, once serve has opened it (serve.Announce.Auto).
 	announceBy := ""
 	if announceOn.set {
 		announceBy = env.Announce
-		if given["announce"] {
+		if _, ok := given["announce"]; ok {
 			announceBy = "-announce"
 		}
 	}
@@ -251,7 +257,7 @@ func runServe(args []string) error {
 		v    *time.Duration
 		to   **time.Duration
 	}{{"poll", poll, &cfg.PollInterval}, {"refresh", refresh, &cfg.RefreshInterval}, {"discover-interval", discoverEvery, &cfg.DiscoverInterval}, {"stale-after", staleAfter, &cfg.StaleAfter}} {
-		if given[d.flag] {
+		if _, ok := given[d.flag]; ok {
 			*d.to = d.v
 		}
 	}
@@ -264,7 +270,7 @@ func runServe(args []string) error {
 	// The settings file while the server runs (reload.go): looked at every
 	// few seconds, and read again on SIGHUP where that is a reload, which
 	// also checkpoints the store.
-	reloader := newSettingsReloader(env.File(), logger, srv, startSettings, given)
+	reloader := newSettingsReloader(env.File(), logger, srv, startSettings, fixed)
 	go watchSettings(ctx, env.File(), settingsWatchEvery, func() { reloader.reload(ctx, "the settings file changed") })
 	// POST /api/v1/reload: what SIGHUP does, from System settings →
 	// Maintenance; the file counts as read at the start.

@@ -9,18 +9,19 @@ package main
 // start would apply it), and so does MASSIMO_REBOOT, the owner's switch
 // of the reboot (Server.SetRebootAllowed); every other setting that
 // changed is listed as applying at the next restart (GET
-// /api/v1/restart), by name, never by value. A log level or format
-// among them that the next start would refuse makes the log's
-// settings_read a warning (startChecks), and still waits for that start.
+// /api/v1/restart), by name, never by value. A setting the next start
+// would refuse makes the log's settings_read a warning, in the start's
+// own words (startchecks.go), and still waits for that start; a reboot
+// switch it would refuse is off.
 
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"os"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -48,27 +49,21 @@ var flagVars = map[string]string{
 	"announce": env.Announce,
 }
 
-// startChecks are the settings serve's start refuses where they do not
-// parse, each checked as the start checks it (logging.go), so that its
-// error is the one the start would stop with. Their values are no
-// secrets: massimo config and GET /api/v1/config show them, and so may
-// the error.
-var startChecks = map[string]func(string) error{
-	env.LogLevel: func(v string) error {
-		if _, err := parseLogLevel(v); err != nil {
-			return fmt.Errorf("%s: %w", serveLevelWhat, err)
+// fixedSettings are the variables of the flags given (flag name to its
+// value), each with its flag's value, and MASSIMO_CUBE_SN with the Cube
+// -sn selected: a flag given wins over the settings file, at this start
+// and at the next.
+func fixedSettings(given map[string]string) map[string]string {
+	fixed := map[string]string{}
+	for f, v := range flagVars {
+		if value, ok := given[f]; ok {
+			fixed[v] = value
 		}
-		return nil
-	},
-	env.LogFormat:        func(v string) error { return formatsCheck(logFormatFlags{general: v}) },
-	env.LogFileFormat:    func(v string) error { return formatsCheck(logFormatFlags{file: v}) },
-	env.LogProcessFormat: func(v string) error { return formatsCheck(logFormatFlags{process: v}) },
-}
-
-// formatsCheck is the start's check of the log's formats, its error.
-func formatsCheck(g logFormatFlags) error {
-	_, _, err := g.formats()
-	return err
+	}
+	if snExplicit {
+		fixed[env.SN] = selectedSN
+	}
+	return fixed
 }
 
 // fileStamp is what watchSettings compares: a file's size and time of
@@ -137,18 +132,18 @@ type settingsReloader struct {
 	log   *slog.Logger
 	srv   *server.Server
 	start map[string]string // settings() at the start
-	fixed map[string]bool   // the variables of the flags given
+	fixed map[string]string // the variables of the flags given, with the flags' values (fixedSettings)
 	mu    sync.Mutex
 }
 
-func newSettingsReloader(path string, log *slog.Logger, srv *server.Server, start map[string]string, given map[string]bool) *settingsReloader {
-	fixed := map[string]bool{}
-	for f, v := range flagVars {
-		if given[f] {
-			fixed[v] = true
-		}
-	}
+func newSettingsReloader(path string, log *slog.Logger, srv *server.Server, start, fixed map[string]string) *settingsReloader {
 	return &settingsReloader{path: path, log: log, srv: srv, start: start, fixed: fixed}
+}
+
+// isFixed reports whether a flag given fixed the variable k.
+func (r *settingsReloader) isFixed(k string) bool {
+	_, ok := r.fixed[k]
+	return ok
 }
 
 // reload reads the file again and applies what changed; why says what
@@ -163,7 +158,7 @@ func (r *settingsReloader) reload(ctx context.Context, why string) (changed, pen
 		return nil, nil, err
 	}
 	r.srv.SetSettingsRead(time.Now())
-	if slices.Contains(changed, tokenVar) && !r.fixed[tokenVar] {
+	if slices.Contains(changed, tokenVar) && !r.isFixed(tokenVar) {
 		if err := r.srv.SetToken(ctx, os.Getenv(tokenVar)); err != nil {
 			r.log.Error("api token from the settings file not applied", "error", err)
 		}
@@ -172,11 +167,11 @@ func (r *settingsReloader) reload(ctx context.Context, why string) (changed, pen
 	// version or a store put in place by hand can leave it (AP
 	// FirstOwner, D12).
 	r.srv.DropKeepOpen(ctx)
-	if slices.Contains(changed, rebootVar) && !r.fixed[rebootVar] {
-		on, err := parseSwitch(rebootVar, os.Getenv(rebootVar))
-		if err != nil {
-			r.log.Warn("the reboot switched off: the settings file's value is not on or off", "error", err)
-		}
+	if slices.Contains(changed, rebootVar) && !r.isFixed(rebootVar) {
+		// A value the switch does not take is off; settings_read warns
+		// of it, as the next start refuses it (refused; AP ReloadChecks,
+		// D6-A).
+		on, _ := parseSwitch(rebootVar, os.Getenv(rebootVar))
 		r.srv.SetRebootAllowed(on)
 	}
 	pending = r.pending()
@@ -184,35 +179,66 @@ func (r *settingsReloader) reload(ctx context.Context, why string) (changed, pen
 	if len(changed) > 0 || why != "the settings file changed" {
 		r.log.Info("settings file read again", "why", why, "changed", strings.Join(changed, ","), "at_next_restart", strings.Join(pending, ","))
 		// The names, never the values; the errors of the refused
-		// settings quote theirs, which are no secrets. The event's own
-		// line is the warning, on stderr as in the web UI's log, as
+		// settings quote theirs, a secret's by its name. The event's
+		// own line is the warning, on stderr as in the web UI's log, as
 		// log_rotated's is.
-		r.srv.LogSettingsRead(ctx, why, changed, pending, refused(pending))
+		r.srv.LogSettingsRead(ctx, why, changed, pending, r.refused())
 	}
 	return changed, pending, nil
 }
 
-// refused is what the next start refuses of pending (startChecks): the
-// start's errors, each naming its flag and variable, after "the next
-// start refuses: ", nil for none. pending leaves out a setting a flag
-// fixed, which the start does not read from the file, and
-// env.ReloadFile keeps a value the process environment set, which the
-// start took and takes again.
-func refused(pending []string) error {
-	var errs []string
-	for _, k := range pending {
-		check, ok := startChecks[k]
-		if !ok {
-			continue
-		}
-		if err := check(os.Getenv(k)); err != nil {
-			errs = append(errs, err.Error())
+// refused is what the next start refuses of the settings now: the
+// start's errors (startRefusals), after "the next start refuses: ", nil
+// for none. A check runs where one of the variables it reads differs
+// from the start and no flag fixed it, and reads a fixed flag's value
+// where it has one, as the next start will (AP ReloadChecks, D2-A): an
+// unchanged MASSIMO_TLS_HTTP is refused once MASSIMO_TLS changes from
+// acme. env.ReloadFile keeps a value the process environment set, which
+// therefore never differs: the start took it and takes it again. A
+// secret's value, the path of MASSIMO_TLS_KEY, is named by its variable
+// instead (D5-A): the log is read by more people than GET
+// /api/v1/config, which does not show it; the start's own error, on its
+// stderr, keeps the value.
+func (r *settingsReloader) refused() error {
+	now := settings()
+	differs := map[string]bool{}
+	for _, m := range []map[string]string{r.start, now} {
+		for k := range m {
+			if r.start[k] != now[k] && !r.isFixed(k) {
+				differs[k] = true
+			}
 		}
 	}
-	if len(errs) == 0 {
+	get := settingOf(r.fixed)
+	var texts []string
+	for _, err := range startRefusals(get, differs) {
+		texts = append(texts, hideSecrets(err.Error(), get))
+	}
+	if len(texts) == 0 {
 		return nil
 	}
-	return errors.New("the next start refuses: " + strings.Join(errs, "; "))
+	return errors.New("the next start refuses: " + strings.Join(texts, "; "))
+}
+
+// hideSecrets names a secret the start's checks read by its variable
+// where text quotes its value, escaped by %q or as it is, in one pass,
+// so that a name put in is not searched again.
+func hideSecrets(text string, get func(string) string) string {
+	var pairs []string
+	for _, c := range startChecks {
+		for _, k := range c.vars {
+			v := get(k)
+			if v == "" || !server.SecretVariable(k) {
+				continue
+			}
+			q := strconv.Quote(v)
+			pairs = append(pairs, q[1:len(q)-1], k, v, k)
+		}
+	}
+	if len(pairs) == 0 {
+		return text
+	}
+	return strings.NewReplacer(pairs...).Replace(text)
 }
 
 // nonNil is a list as JSON shows an empty one: [], not null.
@@ -237,7 +263,7 @@ func (r *settingsReloader) pending() []string {
 				continue
 			}
 			seen[k] = true
-			if r.start[k] != now[k] && k != tokenVar && k != rebootVar && !r.fixed[k] && !unusedByServe(k) {
+			if r.start[k] != now[k] && k != tokenVar && k != rebootVar && !r.isFixed(k) && !unusedByServe(k) {
 				out = append(out, k)
 			}
 		}

@@ -72,18 +72,8 @@ func OpenACME(dataDir string, names []string, email, directory string, log *slog
 	if log == nil {
 		log = slog.Default()
 	}
-	if len(names) == 0 {
-		return nil, errors.New("tls: -tls acme needs the names of -tls-names")
-	}
-	for _, n := range names {
-		switch {
-		case net.ParseIP(n) != nil:
-			return nil, fmt.Errorf("tls: Let's Encrypt issues no certificate for an address (%s); use a DNS name", n)
-		case strings.Contains(n, "*"):
-			return nil, fmt.Errorf("tls: a wildcard (%s) needs the DNS-01 challenge (-acme-dns-hook)", n)
-		case !strings.Contains(n, "."):
-			return nil, fmt.Errorf("tls: %q is not a public DNS name", n)
-		}
+	if err := CheckACMENames(names); err != nil {
+		return nil, err
 	}
 	dir, _ := ACMEPaths(dataDir, "")
 	m := &autocert.Manager{
@@ -98,6 +88,27 @@ func OpenACME(dataDir string, names []string, email, directory string, log *slog
 	}
 	return &ACME{m: m, names: names, log: log, errAt: map[string]time.Time{},
 		status: Status{Source: "acme", Names: names, Warning: "no certificate yet: ordered at the start and at the first connection to " + names[0]}}, nil
+}
+
+// CheckACMENames is what OpenACME refuses of its names: none, an
+// address, a wildcard, which needs the DNS-01 challenge, and a name
+// without a dot. It reads and writes nothing, so that serve can ask at a
+// reload what its next start would refuse.
+func CheckACMENames(names []string) error {
+	if len(names) == 0 {
+		return errors.New("tls: -tls acme needs the names of -tls-names")
+	}
+	for _, n := range names {
+		switch {
+		case net.ParseIP(n) != nil:
+			return fmt.Errorf("tls: Let's Encrypt issues no certificate for an address (%s); use a DNS name", n)
+		case strings.Contains(n, "*"):
+			return fmt.Errorf("tls: a wildcard (%s) needs the DNS-01 challenge (-acme-dns-hook)", n)
+		case !strings.Contains(n, "."):
+			return fmt.Errorf("tls: %q is not a public DNS name", n)
+		}
+	}
+	return nil
 }
 
 // NextProtos is the ALPN protocol of the TLS-ALPN-01 challenge, which

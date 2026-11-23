@@ -3528,8 +3528,13 @@ request asked for it, `by`:
 `server_stopping` (`why`: `restart`, `reboot`, `update` or `stop`),
 `settings_read` (the settings file read again: `why`, the names of the
 variables `changed` and of those waiting `at_next_start`, never their values;
-at `warn` with its `error` where the next start would refuse one of them,
-a log level or format that does not parse),
+at `warn` with its `error`
+where the next start would refuse a setting of the file,
+such as a log level that does not parse
+or a `MASSIMO_TLS_HTTP` beside a `MASSIMO_TLS` that is not `acme`:
+the start's own error after "the next start refuses: ",
+a secret's value, the path of `MASSIMO_TLS_KEY`, named by its variable;
+README.md, "Server", says which settings it checks),
 `restart`, `reboot`, `reboot_cancelled`, `update` (`from`, `to`, `channel`),
 `update_result` (the helper's outcome after the restart, once:
 `state`, `from`, `to`; a failure at `warn` with its `error`),
@@ -4003,6 +4008,8 @@ or while an update runs, which restarts the server itself;
 
 Reads the settings file again at once, as SIGHUP does on Unix:
 `MASSIMO_API_TOKEN` applies at once unless `-token` was given,
+and so does the reboot's switch, `MASSIMO_REBOOT`,
+unless `-allow-reboot` was given;
 every other setting that changed applies at the next start,
 and the store is checkpointed.
 `serve` also reads the file by itself within seconds of a change,
@@ -4015,9 +4022,11 @@ Needs the capability `restart`, and answers what it found:
 
 `changed` names the variables this read changed, `pending` those that now
 differ from the start and wait for the next one; names, never values.
-A log level or format among them that the next start would refuse is not refused here:
+A setting the next start would refuse is not refused here:
 the log's `settings_read` is then at `warn`,
-its `error` the start's own after "the next start refuses: ".
+its `error` the start's own after "the next start refuses: " (`settings_read`,
+under GET /api/v1/cubes/{sn}/events),
+and a reboot's switch the start would refuse is off.
 It sends nothing to a Cube, and is an audit row (`server.reload`) but no
 command, so a retry is harmless.
 `409` when the server reads no settings file,
@@ -4029,7 +4038,7 @@ The reboot of the computer the server runs on, for the capability `reboot`,
 which no default role but `owner` has:
 restarting the server is not rebooting a computer that may run other services.
 It needs the owner's switch, `MASSIMO_REBOOT=on` in the settings file
-or `serve -allow-reboot` (README, "serve"),
+or `serve -allow-reboot` (README.md, "Server"),
 and on Linux and macOS the root helper that `massimo install -reboot-helper`
 installs (packaging/README.md, "Rebooting from the web UI");
 the Windows service reboots by itself.

@@ -43,7 +43,7 @@ func TestSighupAction(t *testing.T) {
 			t.Errorf("%q managed %v ignored %v: %q %v, want %q", c.mode, c.managed, c.ignored, got, err, c.want)
 		}
 	}
-	if _, err := sighupAction("ignore", false, false); err == nil || !strings.Contains(err.Error(), "want auto, reload or stop") {
+	if _, err := sighupAction("ignore", false, false); err == nil || err.Error() != `-sighup or MASSIMO_SIGHUP "ignore": want auto, reload or stop` {
 		t.Fatalf("a bad -sighup: %v", err)
 	}
 }
@@ -148,7 +148,7 @@ func TestSettingsReloader(t *testing.T) {
 	t.Cleanup(func() { os.WriteFile(p, nil, 0o600); env.ReloadFile(p) }) // the env package forgets the test's names
 	st := storekit.Open(t, "")
 	srv := server.New(server.Options{Store: st, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Restart: server.RestartOptions{By: "systemd", Restart: func() error { return nil }}})
-	r := newSettingsReloader(p, slog.New(slog.NewTextHandler(io.Discard, nil)), srv, settings(), map[string]bool{"log": true})
+	r := newSettingsReloader(p, slog.New(slog.NewTextHandler(io.Discard, nil)), srv, settings(), fixedSettings(map[string]string{"log": "/tmp/x.log"}))
 	if srv.AuthMode() != "open" {
 		t.Fatalf("mode %s", srv.AuthMode())
 	}
@@ -177,7 +177,7 @@ func TestSettingsReloader(t *testing.T) {
 	srv2 := server.New(server.Options{Store: st2, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	os.WriteFile(p, nil, 0o600)
 	env.ReloadFile(p)
-	r2 := newSettingsReloader(p, slog.New(slog.NewTextHandler(io.Discard, nil)), srv2, settings(), map[string]bool{"token": true})
+	r2 := newSettingsReloader(p, slog.New(slog.NewTextHandler(io.Discard, nil)), srv2, settings(), fixedSettings(map[string]string{"token": "placeholder-token-0"}))
 	os.WriteFile(p, []byte(tokenVar+"=placeholder-token-2\n"), 0o600)
 	r2.reload(t.Context(), "test")
 	if srv2.AuthMode() != "open" || len(r2.pending()) != 0 {
@@ -185,16 +185,31 @@ func TestSettingsReloader(t *testing.T) {
 	}
 }
 
-// A log level or format the settings file changes to a value the next
-// start refuses makes the reload's settings_read a warning, with the
-// start's errors after "the next start refuses: ": one line, on the
-// process's log as in the server's, where the log's warning sign counts
-// it. The value still waits for the next start, and the running level
-// stays. A good change warns of nothing and settles the warning; a
-// setting a flag fixed is not the file's, and warns of nothing.
-func TestReloadWarnsOfARefusedLogSetting(t *testing.T) {
-	unsetForTest(t, env.LogLevel, env.LogFormat, env.LogFileFormat, env.LogProcessFormat)
-	p := filepath.Join(t.TempDir(), "env")
+// Every setting the start refuses (startChecks), changed in the settings
+// file to a value the start refuses, makes the reload's settings_read a
+// warning with the start's own error after "the next start refuses: ":
+// one line, on the process's log as in the server's, where the log's
+// warning sign counts it; the start, with the same settings and flags,
+// stops with that error after "serve: ". The value still waits for the
+// next start, the running level stays, and the reboot switch is off. A
+// check runs where a setting it reads differs from the start and no flag
+// fixed it, and reads a fixed flag's value; a secret's value is named by
+// its variable, and the checks touch nothing. A good change warns of
+// nothing and settles the warning.
+func TestReloadWarnsOfARefusedSetting(t *testing.T) {
+	clearCubeEnv(t)
+	resetLogLevel(t)
+	for _, c := range startChecks {
+		for _, v := range c.vars {
+			if !strings.HasSuffix(v, "_") {
+				unsetForTest(t, v)
+			}
+		}
+	}
+	unsetForTest(t, tokenVar, "MASSIMO_LOG", "MASSIMO_LISTEN", "MASSIMO_UPDATE_REQUEST", env.ACMEEmail, env.ACMEDirectory)
+	data := os.Getenv(env.DataVar) // clearCubeEnv's, which no check may write to
+	dir := t.TempDir()
+	p := filepath.Join(dir, "env")
 	os.WriteFile(p, nil, 0o600)
 	t.Cleanup(func() { os.WriteFile(p, nil, 0o600); env.ReloadFile(p) }) // the env package forgets the test's names
 	st := storekit.Open(t, "")
@@ -205,7 +220,8 @@ func TestReloadWarnsOfARefusedLogSetting(t *testing.T) {
 	t.Cleanup(func() { stopWriter(); <-writerDone })
 	// One process log, as serve's: the reloader's lines and the server's.
 	log, w := testkit.LogWatch(nil)
-	srv := server.New(server.Options{Store: st, Logger: log})
+	sysLog := log.With("source", "system")
+	srv := server.New(server.Options{Store: st, Logger: log, Reboot: server.RebootOptions{By: bySystemd, Reboot: func() error { t.Error("rebooted"); return nil }}})
 	apiGet := func(path string, v any) {
 		t.Helper()
 		req := httptest.NewRequest("GET", path, nil)
@@ -216,12 +232,20 @@ func TestReloadWarnsOfARefusedLogSetting(t *testing.T) {
 			t.Fatalf("GET %s: %d %s", path, rec.Code, rec.Body.String())
 		}
 	}
+	rebootAvailable := func() bool {
+		t.Helper()
+		var v struct {
+			Available bool `json:"available"`
+		}
+		apiGet("/api/v1/reboot", &v)
+		return v.Available
+	}
 	reads := 0 // the settings_read lines the reloads wrote, one each
 	warned := func(r testkit.Record) bool { return r.Level >= slog.LevelWarn }
 	// reload writes the settings file and reads it again with r; then
 	// checks the process log, the server's newest settings_read and the
-	// log's warning sign: one warning, the event's line, with want as
-	// its error, or for want "" none.
+	// log's warning sign: one warning, the event's line, with want after
+	// "the next start refuses: " as its error, or for want "" none.
 	reload := func(r *settingsReloader, what, text, want string) {
 		t.Helper()
 		m := w.Mark()
@@ -250,6 +274,7 @@ func TestReloadWarnsOfARefusedLogSetting(t *testing.T) {
 			}
 			return
 		}
+		want = "the next start refuses: " + want
 		rec, _ := w.Has(t, m, what+": the settings_read line at warn", testkit.MsgAt(slog.LevelWarn, "settings read", "kind", "settings_read"))
 		if rec.Attrs["error"] != want {
 			t.Fatalf("%s: the line's error\n%q, want\n%q", what, rec.Attrs["error"], want)
@@ -261,28 +286,166 @@ func TestReloadWarnsOfARefusedLogSetting(t *testing.T) {
 			t.Fatalf("%s: the line %+v, the sign %q", what, l, sign.Level)
 		}
 	}
-	r := newSettingsReloader(p, log.With("source", "system"), srv, settings(), map[string]bool{})
+	// refusedAtStart runs the start in the settings the reload left and
+	// with the flags given: it stops with want after "serve: ", before it
+	// opens anything. -addr opens no store, and -listen's port is out of
+	// range, so that a start the checks let through fails at its listener
+	// instead of serving.
+	refusedAtStart := func(what string, flags map[string]string, want string) {
+		t.Helper()
+		args := []string{"-addr", "127.0.0.1:1", "-listen", "127.0.0.1:99999", "-proxy", "off", "-discover-interval", "0"}
+		for f, v := range flags {
+			args = append(args, "-"+f+"="+v)
+		}
+		if err := runServe(args); err == nil || err.Error() != "serve: "+want {
+			t.Fatalf("%s: the start stopped with\n%v, want\nserve: %s", what, err, want)
+		}
+	}
+	covered := map[string]bool{} // the checks a case refuses, by their first variable
+	r := newSettingsReloader(p, sysLog, srv, settings(), nil)
 	level := logLevel.Level()
 
-	reload(r, "a good change, none for stderr alone",
-		env.LogLevel+"=Debug\n"+env.LogFormat+"=json\n"+env.LogFileFormat+"=plain\n"+env.LogProcessFormat+"=none\n", "")
-	reload(r, "a bad level", env.LogLevel+"=deubg\n",
-		`the next start refuses: -log-level or MASSIMO_LOG_LEVEL: unknown log level "deubg", want debug, info, warn or error`)
-	if !slices.Contains(r.pending(), env.LogLevel) || logLevel.Level() != level {
-		t.Fatalf("a bad level: pending %v, the level %v, want %v", r.pending(), logLevel.Level(), level)
+	reload(r, "a good change of every check's, none for stderr alone",
+		env.LogLevel+"=Debug\n"+env.LogFormat+"=json\n"+env.LogFileFormat+"=plain\n"+env.LogProcessFormat+"=none\n"+
+			env.LogRotateSize+"=20M\n"+env.LogKeep+"=3\n"+env.LogKeepMin+"=1M\n"+env.HSTS+"=30\n"+env.TrustedProxies+"=127.0.0.1\n"+
+			restartVar+"=exit\n"+sighupVar+"=reload\n"+rebootVar+"=on\n"+env.Announce+"=off\n"+env.TLS+"=self-signed\n"+
+			"MASSIMO_CUBE_KEQ0000000_ADDRESS=192.0.2.1\nMASSIMO_CUBE_KEQ0000000_IGNORE=0a0101\n", "")
+	if !rebootAvailable() {
+		t.Fatal("a good change: the reboot not switched on")
 	}
-	reload(r, "three bad formats, none where only stderr takes it",
-		env.LogFormat+"=xml\n"+env.LogFileFormat+"=none\n"+env.LogProcessFormat+"=yaml\n",
-		`the next start refuses: -log-file-format or MASSIMO_LOG_FILE_FORMAT: unknown log format "none", want json or plain; `+
-			`-log-format or MASSIMO_LOG_FORMAT: unknown log format "xml", want json or plain; `+
+	reload(r, "the reboot switch's bad value", rebootVar+"=maybe\n", `MASSIMO_REBOOT "maybe": want on or off`)
+	if rebootAvailable() {
+		t.Fatal("the reboot switch's bad value: the reboot still on")
+	}
+	refusedAtStart("the reboot switch's bad value", nil, `MASSIMO_REBOOT "maybe": want on or off`)
+	covered[rebootVar] = true
+
+	// One bad value per check, the TLS checks with several.
+	missingHook := filepath.Join(dir, "none.sh")
+	_, missingHookErr := os.Stat(missingHook)
+	noExec := filepath.Join(dir, "noexec.sh")
+	os.WriteFile(noExec, []byte("#!/bin/sh\n"), 0o644)
+	hook := filepath.Join(dir, "hook.sh")
+	os.WriteFile(hook, []byte("#!/bin/sh\n"), 0o755)
+	cases := []struct{ check, what, text, want string }{
+		{env.LogFormat, "a bad format", env.LogFormat + "=xml\n", `-log-format or MASSIMO_LOG_FORMAT: unknown log format "xml", want json or plain`},
+		{env.LogFileFormat, "none in the file", env.LogFileFormat + "=none\n", `-log-file-format or MASSIMO_LOG_FILE_FORMAT: unknown log format "none", want json or plain`},
+		{env.LogProcessFormat, "a bad format on stderr", env.LogProcessFormat + "=yaml\n", `-log-process-format or MASSIMO_LOG_PROCESS_FORMAT: unknown log format "yaml", want json, plain or none`},
+		{env.LogRotateSize, "a bad rotation size", env.LogRotateSize + "=big\n", `-log-rotate-size or MASSIMO_LOG_ROTATE_SIZE: unknown size "big", want bytes or a number with k, M or G`},
+		{env.LogKeep, "a bad number of files", env.LogKeep + "=many\n", `-log-keep or MASSIMO_LOG_KEEP: "many" is no number of files`},
+		{env.LogKeepMin, "a bad size to keep", env.LogKeepMin + "=-1\n", `-log-keep-min or MASSIMO_LOG_KEEP_MIN: unknown size "-1", want bytes or a number with k, M or G`},
+		{env.LogLevel, "a bad level", env.LogLevel + "=deubg\n", `-log-level or MASSIMO_LOG_LEVEL: unknown log level "deubg", want debug, info, warn or error`},
+		{env.HSTS, "a bad HSTS", env.HSTS + "=-1\n", `-hsts or MASSIMO_HSTS "-1": want a number of days, 0 or more`},
+		{env.TrustedProxies, "a bad proxy", env.TrustedProxies + "=10.0.0.300\n", `-trusted-proxies or MASSIMO_TRUSTED_PROXIES: "10.0.0.300" is neither an address nor a CIDR`},
+		{restartVar, "a bad restart", restartVar + "=always\n", `-restart or MASSIMO_RESTART "always": want auto, exit or off`},
+		{sighupVar, "a bad SIGHUP", sighupVar + "=ignore\n", `-sighup or MASSIMO_SIGHUP "ignore": want auto, reload or stop`},
+		{env.Announce, "a bad announcement", env.Announce + "=maybe\n", `MASSIMO_ANNOUNCE "maybe": want on or off`},
+		{env.TLS, "a bad TLS mode", env.TLS + "=yes\n", `-tls or MASSIMO_TLS "yes": want off, files, self-signed or acme`},
+		{env.TLS, "files without the files", env.TLS + "=files\n", "-tls files needs -tls-cert and -tls-key (MASSIMO_TLS_CERT and MASSIMO_TLS_KEY)"},
+		{env.TLS, "acme without names", env.TLS + "=acme\n", "tls: -tls acme needs the names of -tls-names"},
+		{env.TLS, "a wildcard without DNS-01", env.TLS + "=acme\n" + env.TLSNames + "=*.example.net\n", "tls: a wildcard (*.example.net) needs the DNS-01 challenge (-acme-dns-hook)"},
+		{env.TLS, "a DNS hook that is not there", env.TLS + "=acme\n" + env.TLSNames + "=*.example.net\n" + env.ACMEDNSHook + "=" + missingHook + "\n",
+			"tls: -acme-dns-hook: " + missingHookErr.Error()},
+		{env.Prefix, "a Cube's bad _IGNORE", "MASSIMO_CUBE_KEQ0000000_ADDRESS=192.0.2.1\nMASSIMO_CUBE_KEQ0000000_IGNORE=zz\n",
+			`MASSIMO_CUBE_KEQ0000000_IGNORE: rf address "zz": want 6 hex digits`},
+	}
+	if runtime.GOOS != "windows" { // which checks no execute bit
+		cases = append(cases, struct{ check, what, text, want string }{env.TLS, "a DNS hook that is not executable",
+			env.TLS + "=acme\n" + env.TLSNames + "=*.example.net\n" + env.ACMEDNSHook + "=" + noExec + "\n", "tls: -acme-dns-hook " + noExec + " is not executable"})
+	}
+	for _, c := range cases {
+		reload(r, c.what, c.text, c.want)
+		for _, line := range strings.Fields(c.text) {
+			if k, _, _ := strings.Cut(line, "="); !slices.Contains(r.pending(), k) {
+				t.Fatalf("%s: %s does not wait for the next start: pending %v", c.what, k, r.pending())
+			}
+		}
+		refusedAtStart(c.what, nil, c.want)
+		covered[c.check] = true
+	}
+	if logLevel.Level() != level {
+		t.Fatalf("the running level %v, want %v", logLevel.Level(), level)
+	}
+	for _, c := range startChecks {
+		if !covered[c.vars[0]] {
+			t.Errorf("no case refused by the check of %v", c.vars)
+		}
+	}
+	reload(r, "three bad formats, in the start's order",
+		env.LogFileFormat+"=none\n"+env.LogFormat+"=xml\n"+env.LogProcessFormat+"=yaml\n",
+		`-log-format or MASSIMO_LOG_FORMAT: unknown log format "xml", want json or plain; `+
+			`-log-file-format or MASSIMO_LOG_FILE_FORMAT: unknown log format "none", want json or plain; `+
 			`-log-process-format or MASSIMO_LOG_PROCESS_FORMAT: unknown log format "yaml", want json, plain or none`)
 	reload(r, "good again, which settles the warnings", env.LogLevel+"=warn\n", "")
 
+	// The key's path is named by its variable, as GET /api/v1/config
+	// hides its value; the start's own error keeps the path.
+	certFile, keyFile := filepath.Join(dir, "cert.pem"), filepath.Join(dir, "missing-key.pem")
+	os.WriteFile(certFile, []byte("not read: the key is missing\n"), 0o600)
+	_, keyErr := os.Stat(keyFile)
+	reload(r, "a key that is not there", env.TLS+"=files\n"+env.TLSCert+"="+certFile+"\n"+env.TLSKey+"="+keyFile+"\n",
+		"tls: "+strings.ReplaceAll(keyErr.Error(), keyFile, env.TLSKey))
+	refusedAtStart("a key that is not there", nil, "tls: "+keyErr.Error())
+	w.HasNot(t, 0, "the key's path in the log", testkit.Contains(keyFile))
+	// A short path, which the variable's name holds itself, is named once.
+	_, shortErr := os.Stat("KEY")
+	reload(r, "a key path the name holds", env.TLS+"=files\n"+env.TLSCert+"="+certFile+"\n"+env.TLSKey+"=KEY\n",
+		"tls: "+strings.ReplaceAll(shortErr.Error(), "KEY", env.TLSKey))
+	refusedAtStart("a key path the name holds", nil, "tls: "+shortErr.Error())
+
+	// DNS-01 passes without its directory: the checks make nothing.
+	reload(r, "a good DNS-01 change", env.TLS+"=acme\n"+env.TLSNames+"=*.example.net\n"+env.ACMEDNSHook+"="+hook+"\n", "")
+	if left, err := os.ReadDir(data); err != nil || len(left) != 0 {
+		t.Fatalf("the data directory after the checks: %v %v", left, err)
+	}
+
+	// A pairing: a MASSIMO_TLS_HTTP the start took beside acme is refused,
+	// unchanged, once MASSIMO_TLS changes or leaves the file; a plain
+	// _IGNORE the start took without a Cube, once the file names one.
+	acme := env.TLSNames + "=massimo.example.net\n" + env.TLSHTTP + "=:80\n"
+	startWith := func(text string, flags map[string]string) *settingsReloader {
+		t.Helper()
+		os.WriteFile(p, []byte(text), 0o600)
+		if _, err := env.ReloadFile(p); err != nil {
+			t.Fatal(err)
+		}
+		return newSettingsReloader(p, sysLog, srv, settings(), fixedSettings(flags))
+	}
+	paired := startWith(env.TLS+"=acme\n"+acme+env.Ignore+"=zz\n", nil)
+	reload(paired, "MASSIMO_TLS from acme to off", env.TLS+"=off\n"+acme+env.Ignore+"=zz\n", "-tls-http goes with -tls acme")
+	refusedAtStart("MASSIMO_TLS from acme to off", nil, "-tls-http goes with -tls acme")
+	reload(paired, "a Cube beside the plain _IGNORE", env.TLS+"=acme\n"+acme+env.Ignore+"=zz\nMASSIMO_CUBE_KEQ0000000_ADDRESS=192.0.2.1\n",
+		`MASSIMO_CUBE_IGNORE: rf address "zz": want 6 hex digits`)
+	refusedAtStart("a Cube beside the plain _IGNORE", nil, `MASSIMO_CUBE_IGNORE: rf address "zz": want 6 hex digits`)
+	reload(paired, "MASSIMO_TLS=acme dropped", acme+env.Ignore+"=zz\n", "-tls-http goes with -tls acme")
+	refusedAtStart("MASSIMO_TLS=acme dropped", nil, "-tls-http goes with -tls acme")
+
+	// A flag's value where it fixes a setting the check reads: -tls acme
+	// given, and the file adds a DNS hook beside its MASSIMO_TLS_HTTP.
+	tlsFlag := map[string]string{"tls": "acme"}
+	tlsFixed := startWith(acme, tlsFlag)
+	reload(tlsFixed, "-tls acme given, a DNS hook added", acme+env.ACMEDNSHook+"="+hook+"\n",
+		"-tls-http is for the HTTP-01 challenge; with -acme-dns-hook the DNS-01 challenge needs no port")
+	refusedAtStart("-tls acme given, a DNS hook added", tlsFlag,
+		"-tls-http is for the HTTP-01 challenge; with -acme-dns-hook the DNS-01 challenge needs no port")
+
 	// The flags' settings are not the file's; one no flag fixes still is.
-	fixed := newSettingsReloader(p, log.With("source", "system"), srv, settings(), map[string]bool{"log-level": true, "log-format": true})
-	reload(fixed, "-log-level and -log-format given", env.LogLevel+"=deubg\n"+env.LogFormat+"=xml\n", "")
+	fixed := startWith("", map[string]string{"log-level": "info", "log-format": "plain", "allow-reboot": "on"})
+	reload(fixed, "-log-level, -log-format and -allow-reboot given", env.LogLevel+"=deubg\n"+env.LogFormat+"=xml\n"+rebootVar+"=maybe\n", "")
 	reload(fixed, "-log-file-format not given", env.LogLevel+"=deubg\n"+env.LogFormat+"=xml\n"+env.LogFileFormat+"=xml\n",
-		`the next start refuses: -log-file-format or MASSIMO_LOG_FILE_FORMAT: unknown log format "xml", want json or plain`)
+		`-log-file-format or MASSIMO_LOG_FILE_FORMAT: unknown log format "xml", want json or plain`)
+
+	// The process environment's value wins over the file's, at the next
+	// start as at this one: the file's bad value is not the start's.
+	t.Cleanup(func() { // after t.Setenv's: the env package forgets the environment's name too
+		os.WriteFile(p, []byte(env.HSTS+"=30\n"), 0o600)
+		env.LoadFile(p)
+		os.WriteFile(p, nil, 0o600)
+		env.ReloadFile(p)
+	})
+	t.Setenv(env.HSTS, "30")
+	environment := startWith("", nil)
+	reload(environment, "MASSIMO_HSTS set in the environment", env.HSTS+"=-1\n"+env.TrustedProxies+"=127.0.0.1\n", "")
 }
 
 // A reload removes the keep-open setting where the server has users

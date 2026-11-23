@@ -21,6 +21,31 @@ import (
 	"go.metaworx.ch/massimo/internal/testkit"
 )
 
+// CheckACMENames refuses what OpenACME refuses of its names, in the same
+// words, and takes DNS names.
+func TestCheckACMENames(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		names []string
+		want  string
+	}{
+		{nil, "tls: -tls acme needs the names of -tls-names"},
+		{[]string{"massimo.example.net", "192.0.2.10"}, "tls: Let's Encrypt issues no certificate for an address (192.0.2.10); use a DNS name"},
+		{[]string{"*.example.net"}, "tls: a wildcard (*.example.net) needs the DNS-01 challenge (-acme-dns-hook)"},
+		{[]string{"pi"}, `tls: "pi" is not a public DNS name`},
+	} {
+		if err := CheckACMENames(c.names); err == nil || err.Error() != c.want {
+			t.Errorf("%q: %v, want %s", c.names, err, c.want)
+		}
+		if _, err := OpenACME(t.TempDir(), c.names, "", "", nil); err == nil || err.Error() != c.want {
+			t.Errorf("OpenACME %q: %v, want %s", c.names, err, c.want)
+		}
+	}
+	if err := CheckACMENames([]string{"massimo.example.net", "example.net"}); err != nil {
+		t.Fatalf("DNS names: %v", err)
+	}
+}
+
 func TestOpenACME(t *testing.T) {
 	for _, names := range [][]string{nil, {"192.0.2.10"}, {"*.example.net"}, {"pi"}} {
 		if _, err := OpenACME(t.TempDir(), names, "", "", nil); err == nil {
