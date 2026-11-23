@@ -9,7 +9,10 @@
  * with every page but Rooms, at every width, each for the roles that may
  * open it (their needs-* classes, login.js applyCaps): the log; the
  * settings pages; Personal settings, named after who is in in its
- * tooltip; in the app Select server; and Sign out, as the personal page's
+ * tooltip; in the app Select server, and after it This server's
+ * settings… and App settings…, each where the app has its call, which hand
+ * over to the app's own page as Select server does (AP MobileApp, D73-A);
+ * and Sign out, as the personal page's
  * button says it, or on a server without users where the owner can be
  * created from here Create the owner…, which opens the sign-in card with
  * its form and gives the focus back to ☰'s button when it is left (AP
@@ -23,7 +26,7 @@
  * header's nav, the details kept, so that ☰ stays open through data.
  */
 
-import { toServers } from "../shared/app";
+import { toAppSettings, toServerSettings, toServers } from "../shared/app";
 import { unsavedTone } from "../shared/forms";
 import { Icon, IconButton, Mark, Sign } from "../shared/icon";
 import { useLang } from "../shared/lang";
@@ -61,6 +64,8 @@ function Menu({ view }: { view: string }) {
   const label = [t("nav.more"), ...extra].join(", ");
   const title = [t("nav.moreTitle"), ...extra].join(" · ");
   const servers = !!appConnect();
+  const serverSettings = !!appServerSettings();
+  const appSettings = !!appAppSettings();
   const owner = firstOwnerOf(me.value);
   const entry = (p: (typeof MENU_PAGES)[number]) => (
     <MenuItem key={p.view} id={p.id} cls={p.needs || undefined} current={view === p.view ? "page" : undefined}
@@ -86,6 +91,10 @@ function Menu({ view }: { view: string }) {
       {entry(MENU_PAGES[5])}
       <MenuItem id="menu-servers" cls={servers ? undefined : "hidden"} icon={<Icon symbol="icon-servers" cls="ni" />} label={t("app.selectServer")}
         onClick={toServers} />
+      <MenuItem id="menu-server-settings" cls={serverSettings ? undefined : "hidden"} icon={<Icon symbol="icon-cog" cls="ni" />}
+        label={t("app.serverSettings")} onClick={toServerSettings} />
+      <MenuItem id="menu-app-settings" cls={appSettings ? undefined : "hidden"} icon={<Icon symbol="icon-sliders" cls="ni" />}
+        label={t("app.appSettings")} onClick={toAppSettings} />
       <MenuItem id="menu-logout" cls={who.signOut ? undefined : "hidden"} icon={<Icon symbol={who.icon} cls="ni" useId="menu-logout-icon" />}
         label={who.signOut || t("me.signOut")} labelId="menu-logout-label" onClick={() => logout()} />
       <MenuItem id="menu-owner" cls={owner ? undefined : "hidden"} icon={<Icon symbol="icon-user" cls="ni" />} label={t("setup.ask")}

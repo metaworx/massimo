@@ -1432,6 +1432,8 @@
   "login.keepRetry": "Try again",
   "login.keepSkip": "Sign in without it",
   "app.selectServer": "Select server…",
+  "app.serverSettings": "This server's settings…",
+  "app.appSettings": "App settings…",
   "me.signedIn": "Signed in as {name} ({role}).",
   "me.withKey": "Using the API key “{label}” of {name}.",
   "me.open": "No users yet: the server is open to anyone on the network.",

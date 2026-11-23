@@ -703,6 +703,9 @@ hence `failed_checks_forgotten`.
   name once where it is the address and an ⓘ for the instance id and the
   fingerprint, each copied with a tap, fitting the card at 390 px in all six
   languages (and in `test_keep_open.py` on the first owner's steps);
+  ☰ in the app has This server's settings… and App settings… after Select
+  server…, each calling the bridge, fitting ☰ in all six languages, and the
+  connect page opens a server's settings from `#settings=<id>`;
   My profile in the app tags the key the phone keeps "this device's key",
   by `login.status()`'s `key_id`, and reads its keys once the sign-in's
   revoke is done, a key it revoked not marked but named in a toast;

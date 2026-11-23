@@ -1434,6 +1434,8 @@
   "login.keepRetry": "Réessayer",
   "login.keepSkip": "Continuer sans",
   "app.selectServer": "Choisir le serveur…",
+  "app.serverSettings": "Paramètres de ce serveur…",
+  "app.appSettings": "Paramètres de l'app…",
   "me.signedIn": "Connecté en tant que {name} ({role}).",
   "me.withKey": "Avec la clé API « {label} » de {name}.",
   "me.open": "Pas encore d'utilisateurs : le serveur est ouvert à tout le réseau.",

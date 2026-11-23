@@ -1433,6 +1433,8 @@
   "login.keepRetry": "Opnieuw",
   "login.keepSkip": "Verder zonder",
   "app.selectServer": "Server kiezen…",
+  "app.serverSettings": "Instellingen van deze server…",
+  "app.appSettings": "App-instellingen…",
   "me.signedIn": "Aangemeld als {name} ({role}).",
   "me.withKey": "Met de API-sleutel ‘{label}’ van {name}.",
   "me.open": "Nog geen gebruikers: de server staat open voor iedereen op het netwerk.",

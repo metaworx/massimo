@@ -1475,6 +1475,8 @@
   "login.keepRetry": "Spróbuj ponownie",
   "login.keepSkip": "Kontynuuj bez",
   "app.selectServer": "Wybierz serwer…",
+  "app.serverSettings": "Ustawienia tego serwera…",
+  "app.appSettings": "Ustawienia aplikacji…",
   "me.signedIn": "Zalogowano jako {name} ({role}).",
   "me.withKey": "Z kluczem API „{label}” użytkownika {name}.",
   "me.open": "Nie ma jeszcze użytkowników: serwer jest otwarty dla każdego w sieci.",

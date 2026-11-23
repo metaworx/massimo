@@ -36,6 +36,8 @@ and the sign-in icon beside it opens its sign-in form straight away.
 
 Opening a server's settings does not open the keyboard;
 touch a field to change it.
+On a server's page, **☰** → **This server's settings…** opens them too,
+on the list, and **App settings…** the app's own.
 
 - **Open at start**: the app opens this server when it starts,
   in place of the list.

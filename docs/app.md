@@ -87,6 +87,16 @@ What the page shows:
 - **App settings**, from the ☰, with ×: **Appearance**, as the phone, light
   or dark, for the list and for every server's page whose own appearance is
   "as the system" (`settings`);
+- **what a server's ☰ asked for**: the page loaded with `#settings=<id>`
+  opens that server's settings at its start and takes the fragment from the
+  address, an id not in the list opening nothing; with `#app-settings`,
+  App settings (version 5, `openServerSettings` and `openAppSettings`);
+  the adapter loads it so at the bridge's handover alone: a page's own link
+  or script to the page loads it without its fragment (Android
+  `shouldOverrideUrlLoading`, `Origins.byPage`), a form posted there, which
+  that hook does not see, is answered `405`, the app's own origin serving
+  `GET` alone (`Origins.appServes`), and the page the WebView restores after
+  a new appearance keeps `#app-settings`, as before;
 - **"Run the server on this phone"**, a card with Start, Stop and the status,
   where the app has the server built in (`core`).
 
@@ -135,13 +145,15 @@ the page sees only what follows.
   the key of this device: `login.status()`'s `key_id` and a server's
   `login_key`; and `setToken` answering `{revoked}` (Block 16);
   and a tap's rule in `open`, with `{signIn: true}`, and on a server's page
-  `login.status()`'s `server` (Block 15).
+  `login.status()`'s `server`, `openServerSettings()` and `openAppSettings()`
+  (Block 15).
 - **Where the bridge exists, and with what:**
   - on the connect page, the shell's own origin: every call below
     but `token` and `setToken`;
   - on a server's page, the origin of the address `open` loaded:
     `version`, `token`, `setToken`, `login.status`, `login.keep`,
-    `login.fingerprint` and `connect` alone, for that server alone;
+    `login.fingerprint`, `connect`, `openServerSettings` and
+    `openAppSettings` alone, for that server alone;
   - on any other origin, a page the server's page links to: nothing.
 
   The adapter checks the origin of every message against these,
@@ -226,6 +238,8 @@ Block 7 adds what else Block 1's `Status()` carries.
 | `login.keep()` | `true`, or `false` | for a page just signed in: makes an API key of the signed-in user's at the server with the page's session (`POST /api/v1/users/{name}/tokens`, labelled with the phone), asks for the fingerprint once and keeps the key sealed under the app key behind it; `false`, nothing kept and the key revoked again, where the prompt was not passed |
 | `login.fingerprint()` | a string, or `null` | asks for the fingerprint, opens the kept key, makes a session with it (`POST /api/v1/login/key`) and resolves to that session, which it keeps as `setToken` would; `null` where the prompt was dismissed; a key the server refuses is forgotten and rejects |
 | `connect()` | `null` | shows the connect page, "Select server…" and the sign-in's "Cancel"; the server's session stays as it was |
+| `openServerSettings()` | `null` | shows the connect page with the settings of the server the page was opened for open (`ui/connect.html#settings=<id>`, the id the adapter's), ☰'s "This server's settings…" (version 5; AP MobileApp, D73-A); the page passes no id and reads and saves nothing of them, since a server's page that could would turn its own login off, trust another certificate or see the other servers |
+| `openAppSettings()` | `null` | shows the connect page with App settings open (`ui/connect.html#app-settings`), ☰'s "App settings…" (version 5) |
 
 The page asks `token()` once, at its start, before it asks the server who is in;
 without a token, or with one the server refuses, it shows its sign-in as a browser does,
@@ -542,7 +556,10 @@ reaching the server is left by the id the test's `sessionIds` gives,
 `remove` signs out first and answers `sessions`,
 and a session found revokes the sessions left there for its user too.
 Its `open` answers a tap at a server with a kept login with the test's
-`openLogin`, as a prompt, and `{signIn: true}` at once.
+`openLogin`, as a prompt, and `{signIn: true}` at once;
+a server's page has `openServerSettings` and `openAppSettings`, whether the
+test configures a login or not, but where its `appEntries` is `false`,
+an app before version 5.
 Each adapter tests its own side: Block 3 for Android, Block 9 for iOS;
 Android's JVM tests (`app/android/app/src/test/`) cover the sessions'
 check, sign-out and Turn off's revoke against a fake server,

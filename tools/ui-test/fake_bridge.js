@@ -9,8 +9,8 @@
 // the page runs:
 //
 //   kind     "connect" (the default) for the connect page's calls,
-//            "server" for a server's page's, token, setToken, login.*
-//            and connect
+//            "server" for a server's page's, token, setToken, login.*,
+//            connect, openServerSettings and openAppSettings
 //   servers  the servers the app keeps, as {id, name, node, lan, …,
 //            login, login_key, ask, start, session, trusted_at, unrevoked,
 //            unended}
@@ -31,6 +31,9 @@
 //   core     the server on the phone's status, for a bridge with core
 //   push     true for a bridge with push
 //   token    the token the app keeps, for kind "server"
+//   appEntries for kind "server", false for an app before contract
+//            version 5: no openServerSettings and openAppSettings, which
+//            are there otherwise, login or none
 //   revokeAtSignIn for kind "server", {user, ids, ms}: the keys and
 //            sessions left there that the app revokes with a new token
 //            before setToken answers, as {revoked: ids} (contract version
@@ -137,6 +140,17 @@
       };
       api.connect = () => {
         call("connect");
+        return later(null);
+      };
+    }
+    if (cfg.appEntries !== false) {
+      // ☰'s two entries (contract version 5): the app's own page with this server's settings, or App settings
+      api.openServerSettings = () => {
+        call("openServerSettings");
+        return later(null);
+      };
+      api.openAppSettings = () => {
+        call("openAppSettings");
         return later(null);
       };
     }

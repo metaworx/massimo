@@ -374,7 +374,12 @@ The compacted header has **↑**, back to the top, first of the page buttons: �
   **Maintenance**, for those and a role with `update`, `restart` or `reboot`,
   and **System info**, for every role with `read`;
   **Personal settings**, its tooltip naming whose they are, by display name and login,
-  in the app **Select server…**, back to the app's servers;
+  in the app **Select server…**, back to the app's servers,
+  then **This server's settings…** and **App settings…**,
+  which show the app's own page with that server's settings open,
+  or its App settings (docs/app.md; AP MobileApp, D73-A):
+  the server's page neither reads nor saves them,
+  each shown where the app has its call;
   and **Sign out** (Forget key for an API key or the token, none on an open server),
   or on a server without users where the owner can be created from here
   **Create the owner…**, which opens the sign-in card with its form (FirstOwner D9),
@@ -2013,7 +2018,10 @@ for that page and for every server's page set to "as the system".
 A browser that opens that page sees a line saying it is the app's.
 A server's page in the app is this page,
 except that the app keeps its session in place of the browser,
-behind the phone's fingerprint or PIN where the server's settings in the app ask for it.
+behind the phone's fingerprint or PIN where the server's settings in the app ask for it,
+the sign-in card names the server under its title,
+and ☰ has **Select server…**, **This server's settings…** and **App settings…**,
+which show the app's page, the last two with that server's settings or App settings open.
 
 ## How the page is built
 
@@ -2428,6 +2436,7 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `UserNameField`, `useNameCheck`, `wordNameError` | `username.tsx` | a new user's login name (Add a user, the first owner's form): checked 2 s after the last keystroke and when left, the store's rule and the names in use; a fixed name clears the line at once; the server's refusal worded alike | `label`, `id`, `msgId` (the line under it, which describes it), `value` and `set` (Add a user's), or neither, the field not controlled and read through `inputRef` (the first owner's, UiParts D210), `nc` (`useNameCheck(taken)`: `problem`, `say`, `check(v)`, `typed(v)`), `name` (the input's, Add a user's alone), `autocomplete`, `placeholder`, `inputRef` |
 | `NewPassword`, `newPasswordProblem` | `password.tsx` | a new password typed twice (My profile's Change password, the first owner's form), free fields of the caller's own state, never a draft, or fields not controlled, read through their refs (the first owner's, UiParts D210); the pair's one check, the mismatch first, then none typed | `ids` (the two inputs'), `names` (their name attributes, My profile's alone), `label` (the first's), `value`, `set`, `again`, `setAgain`, or instead `inputRefs` (the two inputs' refs), `required` |
 | `toServers` | `app.ts` | back to the app's servers where the page is in the app (`appConnect` of `login.js`): ☰'s Select server, the sign-in's ☰ and Cancels, the first owner's Cancel | |
+| `toServerSettings`, `toAppSettings` | `app.ts` | to this server's settings and to the app's on the app's own page (`appServerSettings` and `appAppSettings` of `login.js`, contract version 5): ☰'s two entries after Select server | |
 | `app`, `readApp`, `appKeyId`, `signInRevoked` | `app.ts` | the app's status of the login by fingerprint, a signal read again at each opening of the sign-in, a fingerprint refused, the first owner's form and My profile shown (`login.status`), null in a browser; its key of this device's id, 0 for none; the ids of what the last sign-in's `setToken` revoked, `[]` in a browser (`tokenAnswer` of `login.js`) | `st` (the status) |
 | `KvList`, `CountList` | `kv.tsx` | a list of facts, a name and its value each, every fact given, the caller leaving out those it does not show; a list of counts by name, sorted, in columns | `facts` (`[name, value, mono]`); `counts` |
 | `Copy`, `CopyIcon`, `CopyPair` | `copy.tsx` | a text that copies itself, a copy icon (`copyEl`, `copyIcon`); something with its copy icon after it, a text or a link (an address served: an integration's, System info's) | `text`, `value` (what it copies, where it is not the text), `label` (named "Copy …"), `name` (its whole name in its place: the server's version), `icon`, `cls`, `id`; `get`, `label`; `get`, `label`, what it follows as children |
@@ -2777,7 +2786,10 @@ and its entries from the pages' store (`ui/src/shared/pages.ts`) and who is in
 (`ui/src/shared/me.ts`), worded by its `whoOf`,
 as the personal page's row words it:
 Sign out or Forget key, and whose Personal settings they are;
-in the app Select server, by `appConnect` of `login.js`, and Sign out by its `logout`.
+in the app Select server, by `appConnect` of `login.js`,
+This server's settings… and App settings…,
+by its `appServerSettings` and `appAppSettings`,
+and Sign out by its `logout`.
 My settings (`ui/src/prefs/`, AP UiParts Block 13) draws their rows into
 `#prefs-rows` as `parts.js` loads, before `init` applies the settings;
 the rows read `state.settings`, a `live` object of `shared/data.ts`,

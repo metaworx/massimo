@@ -19,7 +19,8 @@ import java.util.concurrent.atomic.AtomicReference
  * checks who sent each by its origin, and answers it. The connect page gets
  * the calls of the server list, the sessions the app holds and the app's
  * settings; a server's page only its own session, its login by fingerprint
- * and the way back to the list. The login's key never reaches a page: the
+ * and the ways back to the list, to its settings there and to the app's.
+ * The login's key never reaches a page: the
  * bridge makes and holds it and hands a page the session alone, each login
  * sealed under the one app key ([AppKey]), which a prompt opens for one
  * step. Turn off, Remove and Forget all are the [Revoker]'s, and the keys
@@ -49,8 +50,8 @@ class Bridge(
         /** open loads [url], an address of the server, in the WebView. */
         fun open(url: String)
 
-        /** connectPage shows the connect page again. */
-        fun connectPage()
+        /** connectPage shows the connect page again, with [fragment] for what it opens at its start ("" for nothing): a server's settings or App settings. */
+        fun connectPage(fragment: String = "")
 
         /** privacy is told that what keeps the page from Recents may have changed (guarded). */
         fun privacy()
@@ -324,6 +325,17 @@ class Bridge(
             "connect" -> {
                 answer.ok(null)
                 host.connectPage()
+            }
+            // ☰'s two entries on a server's page (contract version 5; AP MobileApp, D73-A): the connect page with this
+            // server's settings open, its id the bridge's, or App settings; the page reads and saves nothing of them
+            "openServerSettings" -> {
+                val o = now ?: throw bad()
+                answer.ok(null)
+                host.connectPage(Origins.settingsOf(o.id))
+            }
+            "openAppSettings" -> {
+                answer.ok(null)
+                host.connectPage(Origins.APP_SETTINGS)
             }
             else -> throw bad()
         }

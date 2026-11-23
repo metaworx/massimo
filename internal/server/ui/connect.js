@@ -13,7 +13,8 @@
 // certificate, its login by fingerprint and the keys and sessions of the
 // phone's left valid there, and the row's sign-in icon that opens its
 // sign-in card; the app's
-// own settings, its appearance; the server on the phone where the app has
+// own settings, its appearance; a server's settings or App settings open at
+// the start where a server's ☰ asked for them; the server on the phone where the app has
 // it built in; what an action came to, in the page's toast. Everything
 // goes through the app's bridge, window.massimo, whose calls answer with
 // promises and whose events arrive as "massimo" events on window; a
@@ -36,8 +37,14 @@ const APPEARANCES = ["system", "light", "dark"];
 
 // APP_HASH is the page's address's fragment while App settings are open,
 // so that the page the app loads again once it took a new appearance
-// opens them again.
+// opens them again; the app loads the page with it from a server's ☰,
+// App settings… (contract version 5).
 const APP_HASH = "#app-settings";
+
+// SETTINGS_HASH is the fragment the app loads the page with from a
+// server's ☰, This server's settings… (contract version 5): that server's
+// settings open at the page's start (openFromAddress).
+const SETTINGS_HASH = /^#settings=([A-Za-z0-9_.~-]{1,64})$/;
 
 const conn = {
   bridge: null, // window.massimo
@@ -1233,6 +1240,19 @@ async function initCore() {
   }
 }
 
+// openFromAddress opens the settings of the server the page's address
+// names, #settings=<id>, as the app loads it from that server's ☰ (AP
+// MobileApp, D73-A), and takes the fragment from the address; an id that
+// is none of the list's opens nothing.
+function openFromAddress() {
+  const m = SETTINGS_HASH.exec(location.hash);
+  if (!m) return;
+  history.replaceState(null, "", location.pathname + location.search);
+  if (!serverById(m[1])) return;
+  toggleSettings(m[1]);
+  if (conn.panel) conn.panel.scrollIntoView({ block: "nearest" });
+}
+
 // --- start ----------------------------------------------------------------
 
 // onBridgeEvent takes the app's events; an unknown type is ignored.
@@ -1268,6 +1288,7 @@ async function init() {
   initMenu();
   await loadServers();
   renderServers();
+  openFromAddress();
   probeAll();
   // at the start for the saved servers too: a LAN address that changed,
   // and the names discovery hears (onFound)

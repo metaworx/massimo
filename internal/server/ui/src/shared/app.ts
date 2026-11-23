@@ -4,10 +4,12 @@
 /**
  * @file internal/server/ui/src/shared/app.ts
  *
- * The app's bridge as the parts reach it (appConnect and appLogin of
- * login.js): back to the app's servers, from ☰'s Select server, the
- * sign-in card's ☰ and the Cancels of its forms and of the first owner's
- * form; the app's status of the login by fingerprint as a signal, read
+ * The app's bridge as the parts reach it (appConnect, appServerSettings,
+ * appAppSettings and appLogin of login.js): back to the app's servers,
+ * from ☰'s Select server, the sign-in card's ☰ and the Cancels of its
+ * forms and of the first owner's form, and to this server's settings and
+ * the app's on its own page, from ☰'s two entries after Select server;
+ * the app's status of the login by fingerprint as a signal, read
  * again each time it is asked (readApp: each opening of the sign-in, a
  * fingerprint refused, the first owner's form shown, My profile shown),
  * which the sign-in card and My profile read, its key of this device
@@ -22,6 +24,18 @@ import { signal } from "@preact/signals";
 /** toServers goes back to the app's servers, where the page is in the app. */
 export function toServers(): void {
   const go = appConnect();
+  if (go) go().catch(() => {});
+}
+
+/** toServerSettings shows this server's settings on the app's own page, where the app has the call (contract version 5; AP MobileApp, D73-A). */
+export function toServerSettings(): void {
+  const go = appServerSettings();
+  if (go) go().catch(() => {});
+}
+
+/** toAppSettings shows the app's settings on its own page, where the app has the call (contract version 5). */
+export function toAppSettings(): void {
+  const go = appAppSettings();
   if (go) go().catch(() => {});
 }
 

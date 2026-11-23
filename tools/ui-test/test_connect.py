@@ -1144,7 +1144,9 @@ def test_server_page_keeps_the_login(new_context, case, watch, guard):
     page.locator("#nav-menu summary").click()
     servers = page.locator("#menu-servers")
     servers.wait_for(state="visible")
-    assert page.evaluate("document.getElementById('menu-servers').nextElementSibling.id") == "menu-logout", "just before Sign out"
+    order = page.evaluate("""() => { const ids = []; let e = document.getElementById('menu-servers');
+      for (let i = 0; e && i < 4; i++, e = e.nextElementSibling) ids.push(e.id); return ids; }""")
+    assert order == ["menu-servers", "menu-server-settings", "menu-app-settings", "menu-logout"], f"then the app's two settings, Sign out last: {order}"
     assert servers.inner_text().strip() == SELECT_SERVER[case.lang], "named as the card's ☰ names it"
     servers.click()
     assert connects(page, 5), "the main ☰'s Select server…"
@@ -1241,6 +1243,106 @@ def test_server_page_first_owner_keeps_the_login(new_context, case, watch, guard
             cancel.click()
             assert connects(page, 1), "Cancel calls the app"
         page.unroute("**/api/v1/me")
+
+
+APP_ENTRIES = {"en": ["This server's settings…", "App settings…"], "de": ["Einstellungen dieses Servers…", "App-Einstellungen…"]}
+LANGS = ("en", "de", "fr", "it", "nl", "pl")
+
+# ☰ inside the window, and the app's entries each on one line (counted by a Range over its label), at the case's width
+MENU_FITS = """() => {
+  const items = document.querySelector('#nav-menu .menu-items').getBoundingClientRect();
+  const vw = document.documentElement.clientWidth;
+  const wrapped = [...document.querySelectorAll('#menu-servers, #menu-server-settings, #menu-app-settings')].filter((b) => {
+    const tops = new Set();
+    for (const n of b.querySelectorAll('.menu-item-label')) {
+      const r = document.createRange();
+      r.selectNodeContents(n);
+      for (const rect of r.getClientRects()) tops.add(Math.round(rect.top));
+    }
+    return tops.size > 1;
+  }).map((b) => b.id);
+  return {inside: items.left >= 0 && items.right <= vw, wrapped};
+}"""
+
+
+def test_server_page_menu_app_entries(new_context, case, watch, guard):
+    """In the app ☰ has, after Select server…, This server's settings…
+    and App settings… (AP MobileApp, D73-A), each where the bridge has
+    its call, each calling it with nothing of the page's: the bridge
+    fills the server in; they fit ☰ at the case's width in the six
+    languages; an app before contract version 5 has neither."""
+    page = server_page(new_context, guard, watch, {"status": {"can": True, "user": "", "ask": "start", "plain": False}}, token=TOKEN)
+    page.wait_for_selector(".room", timeout=10000)
+    page.locator("#nav-menu summary").click()
+    entries = [page.locator("#menu-server-settings"), page.locator("#menu-app-settings")]
+    for e in entries:
+        e.wait_for(state="visible")
+    assert [e.inner_text().strip() for e in entries] == APP_ENTRIES[case.lang], "named"
+    assert [e.locator("svg use").get_attribute("href") for e in entries] == ["#icon-cog", "#icon-sliders"], "with their icons"
+    named_buttons(page, "☰ in the app")
+    for lang in LANGS:
+        page.evaluate(f"() => {{ setSetting('lang', {lang!r}); return changeLanguage({lang!r}).then(applyLanguage); }}")
+        assert wait_until(page, f"i18n.lang === {lang!r}", 5), lang
+        if page.locator("#nav-menu").get_attribute("open") is None:
+            page.locator("#nav-menu summary").click()
+        fits = page.evaluate(MENU_FITS)
+        assert fits["inside"] and not fits["wrapped"], f"☰ fits in {lang}: {fits}"
+    page.evaluate("() => { setSetting('lang', 'auto'); return changeLanguage('auto').then(applyLanguage); }")
+    if page.locator("#nav-menu").get_attribute("open") is None:
+        page.locator("#nav-menu summary").click()
+    entries[0].click()
+    assert wait_until(page, "window.__fakeBridge.calls.some((c) => c[0] === 'openServerSettings')", 3), "This server's settings… calls the app"
+    page.locator("#nav-menu summary").click()
+    entries[1].click()
+    assert wait_until(page, "window.__fakeBridge.calls.some((c) => c[0] === 'openAppSettings')", 3), "App settings… calls the app"
+    assert [c for c in calls(page) if c[0].startswith("open")] == [["openServerSettings"], ["openAppSettings"]], "each once, with no argument"
+
+    # the entries are the bridge's calls, a login by fingerprint configured or not
+    plain = server_page(new_context, guard, watch, None, token=TOKEN)
+    plain.wait_for_selector(".room", timeout=10000)
+    plain.locator("#nav-menu summary").click()
+    plain.locator("#menu-server-settings").wait_for(state="visible")
+    assert plain.locator("#menu-app-settings").is_visible(), "both, without the login by fingerprint"
+
+    older = server_page(new_context, guard, watch, {"status": {"can": True, "user": "", "ask": "start", "plain": False}}, token=TOKEN,
+                        more={"appEntries": False})
+    older.wait_for_selector(".room", timeout=10000)
+    older.locator("#nav-menu summary").click()
+    older.locator("#menu-servers").wait_for(state="visible")
+    assert older.locator("#menu-server-settings").is_hidden() and older.locator("#menu-app-settings").is_hidden(), "an app before version 5: neither"
+
+
+def test_connect_opens_what_the_address_names(new_context, case, watch, guard):
+    """The app loads the connect page with #settings=<id> from a server's
+    ☰ and with #app-settings (AP MobileApp, D73-A): the page opens that
+    server's settings at its start, the panel taking the focus, and takes
+    the fragment from the address; an id that is not the list's opens
+    nothing; #app-settings opens App settings."""
+    config = {"servers": [server("s1", "Home", NODE1, lan=HOME_LAN), server("s2", "Cabin", NODE2, lan=CABIN_LAN)],
+              "answers": {HOME_LAN: {"node": NODE1}, CABIN_LAN: {"node": NODE2}}}
+    ctx = new_context()
+    ctx.add_init_script(f"window.__fakeBridgeConfig = {json.dumps(config)};")
+    ctx.add_init_script(path=FAKE_BRIDGE)
+    page = ctx.new_page()
+    guard.page = page
+    page.set_default_timeout(5000)
+    page.on("console", lambda m: watch.problems.append(f"console: {m.text}") if m.type == "error" else None)
+    page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+    page.goto(CONNECT + "#settings=s2")
+    panel = row(page, "Cabin").locator(".server-panel")
+    panel.wait_for(state="visible")
+    assert page.evaluate("document.activeElement.classList.contains('server-panel')"), "the panel takes the focus"
+    assert row(page, "Cabin").locator(".server-cog").get_attribute("aria-expanded") == "true"
+    assert page.evaluate("location.hash") == "", "the fragment taken from the address"
+    assert row(page, "Home").locator(".server-panel").count() == 0
+    page.goto("about:blank")  # a load of its own, not a change of the fragment
+    page.goto(CONNECT + "#settings=nope")
+    page.locator("#servers").wait_for(state="visible")
+    wait_state(page, "Home", STATE[case.lang]["lan"])
+    assert page.locator(".server-panel").count() == 0 and page.evaluate("location.hash") == "", "an id not in the list opens nothing"
+    page.goto("about:blank")
+    page.goto(CONNECT + "#app-settings")
+    page.locator("#app-card").wait_for(state="visible")
 
 
 SERVER_MORE = {"en": "About this server", "de": "Über diesen Server"}

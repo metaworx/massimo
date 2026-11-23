@@ -143,7 +143,7 @@ class MainActivity : AppCompatActivity() {
             host = object : Bridge.Host {
                 override fun open(url: String) = openServer(url)
 
-                override fun connectPage() = web.loadUrl(Origins.CONNECT_URL)
+                override fun connectPage(fragment: String) = web.loadUrl(Origins.CONNECT_URL + fragment)
 
                 override fun privacy() = this@MainActivity.privacy()
 
@@ -358,6 +358,10 @@ class MainActivity : AppCompatActivity() {
     private inner class Client : WebViewClient() {
         override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
             if (request.url.host != Origins.APP_HOST) return null
+            // GET alone: a form a page posts to the list would keep its fragment (Origins.appServes).
+            if (!Origins.appServes(request.method)) {
+                return WebResourceResponse("text/plain", "utf-8", 405, "Method Not Allowed", mapOf("Allow" to "GET"), ByteArrayInputStream(ByteArray(0)))
+            }
             // Nothing of the app's own origin goes to the network.
             // A file the app does not have is answered as not found, where
             // the handler's empty answer is one the WebView calls invalid.
@@ -365,10 +369,17 @@ class MainActivity : AppCompatActivity() {
                 ?: WebResourceResponse("text/plain", "utf-8", 404, "Not Found", null, ByteArrayInputStream(ByteArray(0)))
         }
 
+        // A page's own way to the list carries no fragment: what the list
+        // opens at its start is the bridge's handover alone (Origins.byPage).
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
             if (!request.isForMainFrame) return false
             val origin = Origins.of(request.url.toString())
-            if (origin == Origins.APP || (origin != null && origin == bridge.opened?.origin)) return false
+            if (origin == Origins.APP) {
+                val plain = Origins.byPage(request.url.toString()) ?: return false
+                view.loadUrl(plain)
+                return true
+            }
+            if (origin != null && origin == bridge.opened?.origin) return false
             external(request.url)
             return true
         }
