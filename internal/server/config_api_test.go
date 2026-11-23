@@ -974,10 +974,11 @@ func withRoomMaster(t *testing.T, greeting []cube.Message, room uint8, rf cube.R
 	t.Fatal("no M line")
 }
 
-// A room command names a thermostat of the room: the metadata's master
-// where it is one, else the room's wall thermostat, else its first
-// radiator thermostat (D167, D169-A), never a device of another room, which would take the
-// command too (docs/cube-protocol.md, "Set temperature (0x40)
+// A room command names a thermostat of the room, the first of its order
+// (RoomMajority.D9, in place of D167; one function, D169-A): the
+// metadata's master where it is one, else the room's wall thermostat,
+// else its first radiator thermostat, never a device of another room,
+// which would take the command too (docs/cube-protocol.md, "Set temperature (0x40)
 // addressing"); a room without a thermostat is refused and nothing is
 // sent. Room 1 holds 0a010a and the wall thermostat, room 6 0a010d.
 func TestRoomCommandAddress(t *testing.T) {

@@ -187,3 +187,92 @@ func TestLastTemperatureKept(t *testing.T) {
 		t.Fatal("a forgotten device's temperature is kept")
 	}
 }
+
+// Which values' times are a change from an earlier value made by
+// someone (StateTimes.Changes, AP RoomMajority D3-A): not a first
+// sighting, nor a value back after the entry had none, nor the mode and
+// setpoint with which a boost ends or a holiday ends at its until; a
+// holiday left by hand before its end is. Fields' times are the same
+// either way.
+func TestStateTimesChanges(t *testing.T) {
+	t.Parallel()
+	const rf cube.RFAddress = 0x0a010d
+	s := newSnapshot()
+	state := func(mode cube.Mode, set float64, until *cube.Until) cube.DeviceState {
+		return cube.DeviceState{RFAddress: rf, Type: cube.DeviceRadiatorThermostat, Valid: true, Mode: mode, Setpoint: &set, Until: until}
+	}
+	var last cube.DeviceState
+	had, n := false, 0
+	note := func(st cube.DeviceState, at time.Time) StateTimes {
+		n++
+		st.Raw = []byte{byte(n)} // an entry that differs from the one before
+		s.noteTimesLocked(last, had, st, at)
+		last, had = st, true
+		tm, _ := s.Times(rf)
+		return tm
+	}
+	// want checks the changes of the values named, and the time of
+	// those that are a change.
+	want := func(step string, tm StateTimes, at time.Time, changes map[string]bool) {
+		t.Helper()
+		for k, c := range changes {
+			if tm.Changes[k] != c {
+				t.Errorf("%s: %s a change %v, want %v (%+v)", step, k, tm.Changes[k], c, tm.Changes)
+			}
+			if c && tm.Fields[k] != at {
+				t.Errorf("%s: %s at %v, want %v", step, k, tm.Fields[k], at)
+			}
+		}
+	}
+	t0 := time.Date(2026, 11, 23, 8, 0, 0, 0, time.Local)
+	at := func(h int) time.Time { return t0.Add(time.Duration(h) * time.Hour) }
+	tm := note(state(cube.ModeManual, 21, nil), at(0))
+	want("the first sighting", tm, at(0), map[string]bool{"mode": false, "setpoint": false, "valve_pct": false})
+	if tm.Fields["mode"] != at(0) || tm.Fields["setpoint"] != at(0) {
+		t.Fatalf("a first sighting's times: %+v", tm.Fields)
+	}
+	want("a setpoint set", note(state(cube.ModeManual, 22, nil), at(1)), at(1), map[string]bool{"mode": false, "setpoint": true})
+	want("auto set", note(state(cube.ModeAuto, 22, nil), at(2)), at(2), map[string]bool{"mode": true})
+	want("a boost pressed", note(state(cube.ModeBoost, 22, nil), at(3)), at(3), map[string]bool{"mode": true})
+	tm = note(state(cube.ModeAuto, 22, nil), at(4))
+	want("the boost's end", tm, at(4), map[string]bool{"mode": false})
+	if tm.Fields["mode"] != at(4) {
+		t.Fatalf("the boost's end moved no time: %+v", tm.Fields)
+	}
+	end := cube.UntilFromTime(at(6))
+	want("a holiday set", note(state(cube.ModeVacation, 15, &end), at(5)), at(5), map[string]bool{"mode": true, "setpoint": true, "until": false})
+	tm = note(state(cube.ModeAuto, 21, nil), at(6).Add(2*time.Minute))
+	want("the holiday's end at its until", tm, at(6), map[string]bool{"mode": false, "setpoint": false})
+	if _, ok := tm.Changes["until"]; ok {
+		t.Fatalf("an until gone keeps its change: %+v", tm.Changes)
+	}
+	later := cube.UntilFromTime(at(30))
+	note(state(cube.ModeVacation, 15, &later), at(7))
+	want("a holiday left by hand", note(state(cube.ModeManual, 20, nil), at(8)), at(8), map[string]bool{"mode": true, "setpoint": true})
+	tm = note(cube.DeviceState{RFAddress: rf, Type: cube.DeviceRadiatorThermostat}, at(9)) // the Cube restarted
+	if len(tm.Fields) != 0 || len(tm.Changes) != 0 {
+		t.Fatalf("an entry without values: %+v", tm)
+	}
+	want("values back", note(state(cube.ModeManual, 19, nil), at(10)), at(10), map[string]bool{"mode": false, "setpoint": false})
+
+	// A boost whose entry shows another setpoint ends with the one from
+	// before it: no one's; a boost ended by turning the wheel to a new
+	// setpoint is a change.
+	want("a boost pressed again", note(state(cube.ModeBoost, 30, nil), at(11)), at(11), map[string]bool{"mode": true, "setpoint": true})
+	want("its end at the setpoint from before", note(state(cube.ModeManual, 19, nil), at(12)), at(12), map[string]bool{"mode": false, "setpoint": false})
+	note(state(cube.ModeBoost, 19, nil), at(13))
+	want("a boost ended at the wheel", note(state(cube.ModeManual, 24, nil), at(14)), at(14), map[string]bool{"mode": false, "setpoint": true})
+
+	// With the Cube's time known, a holiday's end is read on its clock,
+	// here 2026-11-03 19:51 at the H line, the host's clock days later:
+	// a holiday whose end has passed for the host but not for the Cube
+	// is left by hand; one whose end has passed for the Cube ends by
+	// itself.
+	s.hello, s.helloAt = &cube.Hello{CubeDate: "2026-11-03", CubeTime: "19:51"}, at(15)
+	hostPast := cube.Until{Year: 2026, Month: 11, Day: 20, Minutes: 12 * 60}
+	note(state(cube.ModeVacation, 15, &hostPast), at(15))
+	want("a holiday left before its end on the Cube's clock", note(state(cube.ModeManual, 20, nil), at(16)), at(16), map[string]bool{"mode": true, "setpoint": true})
+	cubePast := cube.Until{Year: 2026, Month: 11, Day: 3, Minutes: 22 * 60}
+	note(state(cube.ModeVacation, 15, &cubePast), at(17))
+	want("a holiday's end on the Cube's clock", note(state(cube.ModeAuto, 21, nil), at(18)), at(18), map[string]bool{"mode": false, "setpoint": false})
+}

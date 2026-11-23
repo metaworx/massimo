@@ -676,6 +676,20 @@ A command whose header names a device of another room sets that device too,
 besides the room it names; that device's own wall thermostat put it back
 to its room's setpoint about two minutes later.
 
+Which member Massimo names (AP RoomMajority, D9, 2026-11-23,
+in place of AP DeviceUnPairingFix's D167): the first of the room's one order,
+its master where that is a thermostat of the room, else its wall thermostat,
+else its first radiator thermostat, then each other one in the Cube's order,
+a member without valid state (valid bit 0x10 clear, below) passed over;
+where every thermostat of the room is without state, the first of the same
+order with them, since such a radiogram must name one.
+The same order names the member a link radiogram of a move, a removal or
+a placement goes to,
+and gives the state the room checks send again (docs/api-v1.md, "The room checks").
+Passing over a member without state has not been tried on hardware:
+the Cube discards room commands while any member has none (below),
+so it matters most to those link radiograms.
+
 Room commands and never-reported members, 2026-11-04: on a Cube with four rooms,
 0x40 to the two rooms whose members had all reported was accepted,
 0x40 to the two rooms that each held a paired contact that had never reported

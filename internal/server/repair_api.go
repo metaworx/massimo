@@ -492,8 +492,10 @@ func resetAction(rt *runtime, name string, devices []cube.RFAddress, key string)
 }
 
 // buildMaster names a thermostat of the room its master in the metadata,
-// its wall thermostat, else its first radiator thermostat, where the
-// metadata's master is no thermostat of the room (item 3; D167).
+// its wall thermostat, else its first radiator thermostat, a dead one
+// passed over (cubeio.MasterCandidate, RoomMajority.D9, in place of
+// D167), where the metadata's master is no thermostat of the room
+// (item 3).
 func (s *Server) buildMaster(r *http.Request, rt *runtime) (*repairAction, error) {
 	room, md, err := s.visibleRoom(rt, r)
 	if err != nil {
@@ -706,7 +708,8 @@ func (s *Server) buildPlace(r *http.Request, rt *runtime) (*repairAction, error)
 // does not have, named as the request's name says, else by
 // defaultDeviceName (D185). A room the list does not have is made with
 // room_name, its master the room's wall thermostat, else its first
-// radiator thermostat; without the name the request is refused.
+// radiator thermostat, a dead one passed over (cubeio.MasterCandidate);
+// without the name the request is refused.
 func (s *Server) buildList(r *http.Request, rt *runtime) (*repairAction, error) {
 	c, listed, md, err := s.repairDevice(r, rt)
 	if err != nil {

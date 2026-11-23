@@ -138,6 +138,45 @@ def test_log_room_check_lines(page, case, reads):
     show_view(page, "tiles")
 
 
+ROOM_CHECK_HELD_SAYS = {
+    "en": {
+        "newest": "{room}: manual set 19.0 sent again to its thermostats, as the thermostat changed last has it",
+        "held": "{room}: manual set 5.0 sent again to its thermostats, the room's state from before a device was put into it:"
+        " what most of its thermostats showed",
+    },
+    "de": {
+        "newest": "{room}: Manuell Soll 19,0 nochmals an die Thermostate gesendet, wie der zuletzt geänderte Thermostat es hat",
+        "held": "{room}: Manuell Soll 5,0 nochmals an die Thermostate gesendet, der Zustand des Raums, bevor ein Gerät hineinkam:"
+        " was die meisten seiner Thermostate zeigten",
+    },
+}
+
+
+def test_log_room_check_held_lines(page, case, reads):
+    """The room checks' re-send by the newest change, and of the room's
+    state from before a device was put into it (AP RoomMajority, Block 1:
+    before_change), which names the rule that took it then."""
+    show_view(page, "log")
+    isolate_log(page, reads)
+    wait_log_live(page)
+    room = page.evaluate("""() => {
+      const r = state.rooms.find((x) => x.devices.filter((d) => !d.virtual).length >= 2);
+      const send = (ev) => state.events.dispatchEvent(new MessageEvent("disagree",
+        { data: JSON.stringify(Object.assign({ kind: "disagree", source: "cube", level: "info", time: new Date().toISOString() }, ev)) }));
+      send({ summary: { room: r.id, outcome: "resent", from: "newest", mode: "manual", setpoint: 19 } });
+      send({ summary: { room: r.id, outcome: "resent", from: "majority", before_change: true, mode: "manual", setpoint: 5 } });
+      return r.name;
+    }""")
+    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-disagree').length >= 2", 5), "the two lines"
+    says = ROOM_CHECK_HELD_SAYS[case.lang]
+    lines = page.locator("#log-lines .log-line.kind-disagree")
+    assert lines.count() == 2, "the two lines of the room"
+    held, newest = lines.nth(0).locator(".log-text").inner_text(), lines.nth(1).locator(".log-text").inner_text()
+    assert held == says["held"].format(room=room), held
+    assert newest == says["newest"].format(room=room), newest
+    show_view(page, "tiles")
+
+
 def test_log_names_devices_by_serial(page, case, reads):
     """A line names a device without a name by its S/N, the radio address
     in expert mode only; the Cube's own configuration is the Cube's; a

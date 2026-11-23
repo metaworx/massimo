@@ -453,8 +453,11 @@ function logSettingText(m: Loose): string {
 /**
  * logDisagreeText is a room check's line of a room whose thermostats
  * disagree (drift.go): the report with each member's setting, the
- * room's state sent again and from where, or why not, and the members
- * agreeing again.
+ * room's state sent again and from where (AP RoomMajority, D9: Massimo,
+ * the majority, the newest change, the master, the wall thermostat, a
+ * radiator thermostat), the room's state from before a device was put
+ * into it named by the rule that took it then (before_change), or why
+ * not, and the members agreeing again.
  */
 function logDisagreeText(s: Loose, serial: string): string {
   const room = logRoomName(s.room, serial);
@@ -469,8 +472,11 @@ function logDisagreeText(s: Loose, serial: string): string {
       const what = ((s.differs || []) as string[]).map((w) => logWord("log.disagree.what.", w)).join(", ");
       return t("log.sum.disagreeDiffer", { room, what: what || "–", minutes: num(s.minutes), members: members || "–" });
     }
-    case "resent":
-      return t("log.sum.disagreeResent", { room, state: logSettingText(s), from: logWord("log.disagree.from.", s.from) });
+    case "resent": {
+      const state = logSettingText(s);
+      if (s.before_change) return t("log.sum.disagreeResentBefore", { room, state, from: logWord("log.disagree.before.", s.from) });
+      return t("log.sum.disagreeResent", { room, state, from: logWord("log.disagree.from.", s.from) });
+    }
     case "resend_failed":
       return t("log.sum.disagreeFailed", { room, state: logSettingText(s) });
     case "not_resent":

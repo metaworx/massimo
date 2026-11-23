@@ -19,7 +19,8 @@ package server
 // whose week programme, or whose comfort, eco, maximum, minimum or
 // window-open temperature, differs from the room's, the one most members
 // share, on a tie that of the member a room radiogram names
-// (cubeio.Addressee). The window-open minutes are not compared, which a
+// (cubeio.Addressee: the first of the room's order, RoomMajority.D9, the
+// dead passed over). The window-open minutes are not compared, which a
 // wall thermostat does not keep.
 //
 // Left out are the hidden devices and those parked in room 255, and the
@@ -245,7 +246,7 @@ func findMismatches(snap *cubelan.Snapshot, md *cube.Metadata, hidden view.Hidde
 			out = append(out, m)
 		}
 		if !busy[r.ID] {
-			out = append(out, memberMismatches(cfgs, r, members[r.ID], names, listed)...)
+			out = append(out, memberMismatches(snap, cfgs, r, members[r.ID], names, listed)...)
 		}
 	}
 	return out
@@ -277,8 +278,8 @@ func masterMismatch(cfgs map[cube.RFAddress]*cube.DeviceConfig, r cube.RoomMeta,
 // memberMismatches are the thermostats rfs of a room whose week programme
 // or temperatures, by the configurations cfgs, differ from the room's:
 // those most of them share, on a tie those of the member a room
-// radiogram names.
-func memberMismatches(cfgs map[cube.RFAddress]*cube.DeviceConfig, r cube.RoomMeta, rfs []cube.RFAddress, names map[uint8]string, listed map[cube.RFAddress]cube.DeviceMeta) []view.Mismatch {
+// radiogram names (cubeio.Addressee, the dead passed over by snap).
+func memberMismatches(snap *cubelan.Snapshot, cfgs map[cube.RFAddress]*cube.DeviceConfig, r cube.RoomMeta, rfs []cube.RFAddress, names map[uint8]string, listed map[cube.RFAddress]cube.DeviceMeta) []view.Mismatch {
 	if len(rfs) < 2 {
 		return nil
 	}
@@ -289,7 +290,7 @@ func memberMismatches(cfgs map[cube.RFAddress]*cube.DeviceConfig, r cube.RoomMet
 		metas = append(metas, cube.DeviceMeta{Type: c.Type, RFAddress: rf, RoomID: r.ID})
 		progs[rf], temps[rf] = roomSettings(c)
 	}
-	addressee, _ := cubeio.Addressee(r.RFAddress, metas, 0)
+	addressee, _ := cubeio.Addressee(snap, r.RFAddress, metas, 0)
 	var out []view.Mismatch
 	for _, k := range []struct {
 		finding string

@@ -772,7 +772,7 @@ every box is closed and forgotten with what it held.
 - In a room: **Reset the communication errors** of its devices, free;
   **Name the room's master**, where the Cube's list names no thermostat of
   the room, the wall thermostat, else the first radiator thermostat,
-  in the list only;
+  one the Cube has no state for passed over, in the list only;
   **Re-link the room**, each device's links and room sent again,
   adding only;
   **Unlink all and re-link**, with `structure` as well,
@@ -838,8 +838,12 @@ The room checks (`docs/api-v1.md`, "The room checks") have lines of their own:
 with its setting ("Bedroom: its thermostats differ in setpoint for 11 min:
 Window: manual set 21.0, Door: manual set 18.0"), then the room's state sent
 again to them and from where ("as Massimo last set it", "as most of its
-thermostats have it", "as its wall thermostat has it"), or why not,
-and their agreeing again;
+thermostats have it", "as the thermostat changed last has it",
+"as its master has it", "as its wall thermostat has it",
+"as its first radiator thermostat with a state has it"),
+or that it is the room's state from before a device was put into it,
+with what took it then ("what most of its thermostats showed"),
+or why not, and their agreeing again;
 **programme drift**, a thermostat that does not follow its week programme while
 the room's others follow theirs ("does not follow its week programme: 12.0
 instead of 21.0 since the switch point at 18:20, …; its clock or its programme is

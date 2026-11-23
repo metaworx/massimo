@@ -56,7 +56,7 @@ func unlinkFromRoom(snap *cubelan.Snapshot, rf cube.RFAddress, typ cube.DeviceTy
 	if move {
 		lines = append(lines, cube.CmdSetGroup(rf, room, true))
 	}
-	return append(lines, linkLines(roomMaster(snap, room), rf, typ, room, members, false, move)...)
+	return append(lines, linkLines(snap, RoomMaster(snap, room), rf, typ, room, members, false, move)...)
 }
 
 // linkIntoRoom is the link half of a placement and of a move: one r:
@@ -72,7 +72,7 @@ func linkIntoRoom(snap *cubelan.Snapshot, rf cube.RFAddress, typ cube.DeviceType
 		}
 	}
 	lines := flaggedResets(snap, in, rf)
-	lines = append(lines, linkLines(roomMaster(snap, room), rf, typ, room, in, true, true)...)
+	lines = append(lines, linkLines(snap, RoomMaster(snap, room), rf, typ, room, in, true, true)...)
 	return append(lines, cube.CmdSetGroup(rf, room, false))
 }
 

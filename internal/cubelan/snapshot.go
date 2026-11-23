@@ -389,6 +389,37 @@ func (s *Snapshot) HelloAt() time.Time {
 	return s.helloAt
 }
 
+// CubeClock is the Cube's clock at now: the date and time of its last
+// greeting (the H line's, local time to the minute), moved on by this
+// host's local wall clock since, so that a change of summer time here
+// moves it as it moves the Cube's; read as UTC, the Cube's local time
+// without a zone. False before a greeting with the Cube's time.
+func (s *Snapshot) CubeClock(now time.Time) (time.Time, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cubeClockLocked(now)
+}
+
+// cubeClockLocked is CubeClock with s.mu held.
+func (s *Snapshot) cubeClockLocked(now time.Time) (time.Time, bool) {
+	h, at := s.hello, s.helloAt
+	if h == nil || at.IsZero() || h.CubeDate == "" || h.CubeTime == "" {
+		return time.Time{}, false
+	}
+	t, err := time.Parse("2006-01-02 15:04", h.CubeDate+" "+h.CubeTime)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return t.Add(wallClock(now).Sub(wallClock(at))), true
+}
+
+// wallClock is t's local date and time read as UTC, for the difference
+// of two wall clock readings.
+func wallClock(t time.Time) time.Time {
+	l := t.Local()
+	return time.Date(l.Year(), l.Month(), l.Day(), l.Hour(), l.Minute(), l.Second(), l.Nanosecond(), time.UTC)
+}
+
 // Metadata returns the rooms and devices, or nil before the first greeting.
 func (s *Snapshot) Metadata() *cube.Metadata {
 	s.mu.RLock()

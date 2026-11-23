@@ -20,6 +20,8 @@ import (
 	"testing"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/cubelan"
+	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/store"
@@ -573,5 +575,48 @@ func TestMismatchEventLine(t *testing.T) {
 	}
 	if got := eventMessage(mismatchEvent(nil, m, "cleared")); !strings.Contains(got, "agree again") {
 		t.Fatalf("line %q", got)
+	}
+}
+
+// The report's tie of a room's thermostats takes the first of the
+// room's order (RoomMajority.D9), the dead passed over: in room 1 of the
+// rooms fixture, its wall thermostat 0a0201, the master, and the radiator
+// thermostat 0a0202 with another comfort temperature tie; the radiator
+// thermostat is found to differ, and with the master dead the master.
+func TestMemberMismatchesTieByTheOrder(t *testing.T) {
+	t.Parallel()
+	greeting, err := fakecube.RoomsFixture()
+	if err != nil {
+		t.Fatal(err)
+	}
+	room := cube.RoomMeta{ID: 1, Name: "Wohnen", RFAddress: 0x0a0201}
+	rfs := []cube.RFAddress{0x0a0201, 0x0a0202}
+	for _, c := range []struct {
+		name string
+		dead bool
+		want string
+	}{{"the master alive", false, "0a0202"}, {"the master dead", true, "0a0201"}} {
+		lines := greeting
+		if c.dead {
+			lines = withoutValues(t, greeting, 0x0a0201)
+		}
+		snap, err := cubelan.SnapshotOf(lines, time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		radiator := *snap.Config(0x0a0202)
+		th := *radiator.Thermostat
+		th.ComfortTemp++
+		radiator.Thermostat = &th
+		cfgs := map[cube.RFAddress]*cube.DeviceConfig{0x0a0201: snap.Config(0x0a0201), 0x0a0202: &radiator}
+		var got []string
+		for _, m := range memberMismatches(snap, cfgs, room, rfs, nil, nil) {
+			if m.Finding == view.MismatchTemperatures {
+				got = append(got, m.Device)
+			}
+		}
+		if !slices.Equal(got, []string{c.want}) {
+			t.Errorf("%s: the temperatures differ at %v, want %s", c.name, got, c.want)
+		}
 	}
 }

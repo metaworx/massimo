@@ -106,7 +106,7 @@ func RelinkCommands(snap *cubelan.Snapshot, room uint8, skip view.Hidden) []engi
 // the room's flagged members.
 func relink(snap *cubelan.Snapshot, room uint8, skip view.Hidden, reset bool) []engine.Command {
 	members := ConfigMembers(snap, room, skip)
-	master := roomMaster(snap, room)
+	master := RoomMaster(snap, room)
 	var out []engine.Command
 	for _, d := range members {
 		if !Linkable(d.Type) {
@@ -116,7 +116,7 @@ func relink(snap *cubelan.Snapshot, room uint8, skip view.Hidden, reset bool) []
 		if reset && len(out) == 0 {
 			lines = flaggedResets(snap, members, d.RFAddress)
 		}
-		lines = append(lines, linkLines(master, d.RFAddress, d.Type, room, members, true, true)...)
+		lines = append(lines, linkLines(snap, master, d.RFAddress, d.Type, room, members, true, true)...)
 		lines = append(lines, cube.CmdSetGroup(d.RFAddress, room, false))
 		out = append(out, engine.Command{Key: "repair-relink:" + d.RFAddress.String(), Target: d.RFAddress, RoomID: room, Wakeup: true, Lines: lines})
 	}
@@ -134,7 +134,7 @@ func relink(snap *cubelan.Snapshot, room uint8, skip view.Hidden, reset bool) []
 // resets the room's other flagged members. Not yet run on hardware.
 func UnlinkRelinkCommands(snap *cubelan.Snapshot, room uint8, skip view.Hidden) []engine.Command {
 	members := ConfigMembers(snap, room, skip)
-	master := roomMaster(snap, room)
+	master := RoomMaster(snap, room)
 	var out []engine.Command
 	for _, d := range members {
 		if !Linkable(d.Type) {
@@ -144,7 +144,7 @@ func UnlinkRelinkCommands(snap *cubelan.Snapshot, room uint8, skip view.Hidden) 
 		if len(out) == 0 {
 			lines = flaggedResets(snap, members, d.RFAddress)
 		}
-		lines = append(lines, linkLines(master, d.RFAddress, d.Type, room, members, false, true)...)
+		lines = append(lines, linkLines(snap, master, d.RFAddress, d.Type, room, members, false, true)...)
 		if len(lines) == 0 {
 			continue // no partner: nothing to unlink
 		}
@@ -154,19 +154,20 @@ func UnlinkRelinkCommands(snap *cubelan.Snapshot, room uint8, skip view.Hidden) 
 }
 
 // MasterCandidate is the thermostat a room's metadata should name as its
-// master (D167 of AP DeviceUnPairingFix, the master itself left aside):
-// the room's wall thermostat, else its first radiator thermostat, by
-// their C lines, the devices in skip left out; false for a room without
-// a thermostat.
+// master: the first of the room's order with the master itself left
+// aside (RoomOrder, RoomMajority.D9), its wall thermostat, else its
+// first radiator thermostat, by their C lines, the dead passed over
+// where one is alive, the devices in skip left out (Addressee); false
+// for a room without a thermostat.
 func MasterCandidate(snap *cubelan.Snapshot, room uint8, skip view.Hidden) (cube.RFAddress, bool) {
-	return Addressee(0, ConfigMembers(snap, room, skip), 0)
+	return Addressee(snap, 0, ConfigMembers(snap, room, skip), 0)
 }
 
 // MasterValid reports whether the metadata's master of room is a
 // thermostat whose C line names the room, which a room command may
 // name (D167).
 func MasterValid(snap *cubelan.Snapshot, room uint8, skip view.Hidden) bool {
-	m := roomMaster(snap, room)
+	m := RoomMaster(snap, room)
 	if m == 0 {
 		return false
 	}
