@@ -19,8 +19,10 @@ import java.net.InetSocketAddress
  * (row 10), which may list her tokens but is refused (401) by the revoke;
  * `session-anna-quiet` (row 11), whose list of her tokens comes back empty.
  * `key-own` is her key 45 used as the bearer, `key-secret` her key itself
- * for the revoke by key. `session-bob` is Bob's (row 9); every other bearer
- * is refused (401).
+ * for the revoke by key, which `DELETE /api/v1/me/token` does not know, as
+ * a server older than that route (404); `key-self-<id>` her key of that id,
+ * which revokes itself there. `session-bob` is Bob's (row 9); every other
+ * bearer is refused (401).
  *
  * Anna's tokens as `GET /api/v1/users/anna/tokens` lists them: her keys
  * 42, 44 to 49 while not revoked, and the sessions 7, 8, 10 and 51; 43 is
@@ -57,6 +59,11 @@ class FakeServer : Closeable {
         val m = ex.requestMethod
         val anna = setOf("session-anna", "session-anna-fp", "session-anna-expiring", "key-own", "key-secret")
         when {
+            m == "DELETE" && path == "/api/v1/me/token" && bearer == "key-secret" -> answer(ex, 404, "404 page not found")
+            m == "DELETE" && path == "/api/v1/me/token" && bearer.startsWith("key-self-") -> {
+                val id = bearer.removePrefix("key-self-").toLongOrNull() ?: 0
+                if (synchronized(gone) { gone.add(id) }) answer(ex, 200, """{"ok":true,"id":$id}""") else answer(ex, 401, """{"error":"missing or wrong token"}""")
+            }
             m == "GET" && path == "/api/v1/me" && bearer in ME -> answer(ex, 200, ME.getValue(bearer))
             m == "POST" && path == "/api/v1/logout" && bearer in setOf("session-anna", "session-anna-fp", "session-anna-expiring", "session-bob") ->
                 answer(ex, 200, """{"ok":true}""")

@@ -7,8 +7,9 @@ package server
 // takes a name and a password and answers a session token, which the
 // page keeps in localStorage and sends as the bearer header; POST
 // /api/v1/login/key makes one from an API key, for the apps' login by
-// fingerprint; POST /api/v1/logout revokes it; GET /api/v1/me says who
-// the caller is and what the caller may do, so that the page can hide
+// fingerprint; POST /api/v1/logout revokes it; DELETE /api/v1/me/token
+// revokes the token that calls, a session or a key; GET /api/v1/me says
+// who the caller is and what the caller may do, so that the page can hide
 // what the role may not.
 
 import (
@@ -18,6 +19,7 @@ import (
 	"io"
 	"maps"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -420,6 +422,38 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) error {
 	}
 	s.log.Info("api: logout", "user", p.user.Name, "remote", s.clientIP(r))
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	return nil
+}
+
+// deleteMyToken handles DELETE /api/v1/me/token: the token that makes the
+// call is revoked, a session or an API key, a key's sessions with it (AP
+// MobileApp, D80-B), so that a client revokes what it holds without its
+// user's name or the token's id, as the apps' login by fingerprint does
+// with the key alone. A caller without a token of a user (an open
+// server, the one token of a server without users) is 400, and so is a
+// call an integration's key makes on a user's behalf, which would revoke
+// the integration's own key in that user's name. The settings file's
+// token (MASSIMO_API_TOKEN) is 409: the next start would not bring the
+// owner's key back, its hash being taken, so it is changed or removed in
+// the settings file.
+func (s *Server) deleteMyToken(w http.ResponseWriter, r *http.Request) error {
+	p := principalOf(r)
+	if !p.named() || p.token.ID == 0 {
+		return fail(http.StatusBadRequest, "no token of a user to revoke")
+	}
+	if p.actsFor != nil {
+		return fail(http.StatusBadRequest, "a call on a user's behalf revokes nothing: revoke the integration's key without the %s header", OnBehalfHeader)
+	}
+	if file := s.legacyToken(); file != "" && tokenMatches(file, strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")) {
+		return fail(http.StatusConflict, "the token is the settings file's MASSIMO_API_TOKEN: change or remove it in the settings file")
+	}
+	auditTarget(r, "token:"+strconv.FormatInt(p.token.ID, 10))
+	auditSubject(r, tokenSubject(p.token, p.user))
+	if err := s.opts.Store.RevokeToken(r.Context(), p.token.ID); err != nil {
+		return userFail(err)
+	}
+	s.log.Info("token revoked", "user", s.logUserName(r.Context(), p.user), "token", p.token.ID, "kind", p.token.Kind, "by", "itself", "remote", s.clientIP(r))
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": p.token.ID})
 	return nil
 }
 

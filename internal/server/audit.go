@@ -55,6 +55,7 @@ var actions = map[string]string{
 	"POST /api/v1/login/oidc/finish":                             "login",
 	"POST /api/v1/login/key":                                     "login.key",
 	"POST /api/v1/logout":                                        "logout",
+	"DELETE /api/v1/me/token":                                    "token.revoke",
 	"POST /api/v1/cubes":                                         "cube.add",
 	"PUT /api/v1/cubes/{sn}":                                     "cube.update",
 	"DELETE /api/v1/cubes/{sn}":                                  "cube.remove",

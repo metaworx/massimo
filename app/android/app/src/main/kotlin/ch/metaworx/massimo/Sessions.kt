@@ -221,13 +221,14 @@ class Sessions(
 
     /**
      * revokeWithKey revokes the kept key with the key itself, [secret], opened
-     * after the prompt, at [url]: Turn off where the app holds no session.
-     * It reports whether the server revoked it, or takes the key no more; a
-     * failure is logged.
+     * after the prompt, at [url]: Turn off where the app holds no session
+     * (`DELETE /api/v1/me/token`, at an older server by its user and id,
+     * [ServerApi.revokeSelf]). It reports whether the server revoked it, or
+     * takes the key no more; a failure is logged.
      */
     fun revokeWithKey(s: Server, url: String, user: String, secret: LoginSecret): Boolean {
         return try {
-            api.revoke(url, s.fp, secret.key, user, secret.id)
+            api.revokeSelf(url, s.fp, secret.key, user, secret.id)
             true
         } catch (e: ServerApi.Refused) {
             true // the server takes the key no more

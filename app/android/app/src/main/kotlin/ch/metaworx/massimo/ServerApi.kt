@@ -99,6 +99,22 @@ class ServerApi(
         request("DELETE", base, "api/v1/users/${segment(user)}/tokens/$id", fp, bearer, null, HttpURLConnection.HTTP_OK)
     }
 
+    /**
+     * revokeSelf revokes [key], a key of [user]'s whose id is [id], with the
+     * key itself as the bearer: `DELETE /api/v1/me/token` (AP MobileApp,
+     * D80-B), which needs neither the name nor the id, and at a server older
+     * than that route, which answers 404 or 405, [revoke] by the user's name
+     * and the key's id. [Refused] where the server takes the key no more.
+     */
+    fun revokeSelf(base: String, fp: String, key: String, user: String, id: Long) {
+        try {
+            request("DELETE", base, "api/v1/me/token", fp, key, null, HttpURLConnection.HTTP_OK)
+        } catch (e: Failed) {
+            if (e.status != HttpURLConnection.HTTP_NOT_FOUND && e.status != HttpURLConnection.HTTP_BAD_METHOD) throw e
+            revoke(base, fp, key, user, id)
+        }
+    }
+
     private fun request(method: String, base: String, path: String, fp: String, bearer: String, body: JSONObject?, want: Int): JSONObject {
         val text = send(method, base, path, fp, bearer, body, want)
         return try {

@@ -341,7 +341,10 @@ paths:
     post:
       summary: End the session that makes the call
       x-capability: any
-      description: An API key is not a session and answers 400; it is revoked under the user's tokens.
+      description: |
+        An API key is not a session and answers 400; it is revoked with
+        DELETE /api/v1/me/token as its own bearer, or under the user's
+        tokens.
       responses:
         "200":
           description: Ended
@@ -358,6 +361,46 @@ paths:
               schema: {$ref: "#/components/schemas/Error"}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+  /api/v1/me/token:
+    delete:
+      summary: Revoke the token that makes the call
+      x-capability: any
+      description: |
+        The bearer is revoked, whatever it is: a session, or an API key
+        and the sessions made from it (POST /api/v1/login/key). One call
+        for any token, without the user's name or the token's id, as the
+        apps revoke a kept key with the key alone. Audited as
+        token.revoke. A caller without a token of a user, on an open
+        server or with the one token of a server without users, is 400,
+        and so is an integration's call on a user's behalf
+        (X-MassimoHA-On-Behalf-Of). The settings file's token
+        (MASSIMO_API_TOKEN) is 409: it is changed or removed in the
+        settings file, since the next start would not add it back.
+      parameters:
+        - {$ref: "#/components/parameters/idempotencyKey"}
+      responses:
+        "200":
+          description: Revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+                  id: {type: integer, description: "The token's id, as the user's token list had it"}
+        "400":
+          description: No token of a user to revoke, or a call on a user's behalf
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          description: The token is the settings file's MASSIMO_API_TOKEN
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
         "429": {$ref: "#/components/responses/LockedOut"}
   /api/v1/me:
     get:

@@ -169,6 +169,11 @@ class RevokerTest {
     private val leftHere = Revoker.Outcome.LEFT
     private val local = Revoker.Outcome.LOCAL
 
+    // byKeyAt is what the key key-secret's own revoke of the key [id] sends
+    // at the fake, a server older than DELETE /api/v1/me/token: that route,
+    // which it does not know, then the key's by its user and id (D80-B).
+    private fun byKeyAt(id: Long) = listOf("DELETE /api/v1/me/token key-secret", "DELETE /api/v1/users/anna/tokens/$id key-secret")
+
     @Test
     fun turnOffWithASessionRevokesWithItThenSignsOut() {
         val s = server("home")
@@ -203,7 +208,18 @@ class RevokerTest {
         keep(s, 42)
         assertEquals(Revoker.Off(revoked, 42), turnOff(s, fake.base, LoginSecret("key-secret", 42)))
         assertEquals(listOf("home"), prompts)
-        assertEquals(listOf("DELETE /api/v1/users/anna/tokens/42 key-secret"), fake.requests())
+        assertEquals(byKeyAt(42), fake.requests())
+        assertNull(logins.get(s.id))
+        assertTrue(left(s).isEmpty())
+    }
+
+    @Test
+    fun theKeyRevokesItselfWithoutItsUserOrId() {
+        // a server with DELETE /api/v1/me/token: one request, whatever id the login keeps (D80-B)
+        val s = server("home")
+        keep(s, 46)
+        assertEquals(Revoker.Off(revoked, 46), turnOff(s, fake.base, LoginSecret("key-self-46", 46)))
+        assertEquals(listOf("DELETE /api/v1/me/token key-self-46"), fake.requests())
         assertNull(logins.get(s.id))
         assertTrue(left(s).isEmpty())
     }
@@ -221,7 +237,7 @@ class RevokerTest {
         assertEquals(
             listOf(
                 "DELETE /api/v1/users/anna/tokens/45 session-bob",
-                "DELETE /api/v1/users/anna/tokens/45 key-secret",
+                *byKeyAt(45).toTypedArray(),
                 "POST /api/v1/logout session-bob",
             ),
             fake.requests(),
@@ -369,7 +385,7 @@ class RevokerTest {
         assertEquals("one prompt per server, each after the last was answered", listOf("home", "cabin", "barn", "shed"), prompts)
         assertEquals("a dismissed prompt leaves its key by its id, or on the phone alone without one, and the next is asked",
             Revoker.Summary(listOf(a.id, d.id), listOf(b.id), listOf(c.id)), summary)
-        assertEquals(listOf("DELETE /api/v1/users/anna/tokens/42 key-secret", "DELETE /api/v1/users/anna/tokens/46 key-secret"), fake.requests())
+        assertEquals(byKeyAt(42) + byKeyAt(46), fake.requests())
         assertEquals(listOf(KeyLeft("anna", 45)), left(b))
         assertTrue(logins.ids().isEmpty())
     }
@@ -381,7 +397,7 @@ class RevokerTest {
         sessions.put(s, "session-dead")
         assertEquals(Revoker.Summary(listOf(s.id), listOf(), listOf()), forgetAll(OnePrompt(LoginSecret("key-secret", 42))))
         assertEquals(listOf("home"), prompts)
-        assertEquals(listOf("DELETE /api/v1/users/anna/tokens/42 session-dead", "DELETE /api/v1/users/anna/tokens/42 key-secret"), fake.requests())
+        assertEquals(listOf("DELETE /api/v1/users/anna/tokens/42 session-dead") + byKeyAt(42), fake.requests())
         assertNull("the refused session forgotten", sessions.held(s))
     }
 
@@ -395,7 +411,7 @@ class RevokerTest {
         assertEquals(Revoker.Summary(listOf(a.id, b.id, c.id), listOf(), listOf()), forgetAll(appByKey(forgetAll = true)))
         assertEquals("three servers that need the key, one prompt, its own title", listOf("Forget all ${LoginKey.APP}"), prompt.shown)
         assertEquals(
-            listOf("DELETE /api/v1/users/anna/tokens/42 key-secret", "DELETE /api/v1/users/anna/tokens/45 key-secret", "DELETE /api/v1/users/anna/tokens/46 key-secret"),
+            byKeyAt(42) + byKeyAt(45) + byKeyAt(46),
             fake.requests(),
         )
         assertTrue(logins.ids().isEmpty())
@@ -425,7 +441,7 @@ class RevokerTest {
         revoker.turnOff(s.id, fake.base, appByKey()) { got = it }
         assertEquals(Revoker.Off(revoked, 42), got)
         assertEquals(listOf("home ${LoginKey.APP}"), prompt.shown)
-        assertEquals(listOf("DELETE /api/v1/users/anna/tokens/42 key-secret"), fake.requests())
+        assertEquals(byKeyAt(42), fake.requests())
         assertFalse(appKey.held)
     }
 

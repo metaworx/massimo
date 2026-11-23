@@ -68,6 +68,9 @@ class SessionsTest {
                 m == "GET" && path == "/api/v1/me" && bearer == "session-bob" -> answer(ex, 200, """{"mode":"users","user":{"name":"bob"}}""")
                 m == "POST" && path == "/api/v1/logout" && bearer in setOf("session-anna", "session-bob") -> answer(ex, 200, """{"ok":true}""")
                 m == "POST" && path == "/api/v1/logout" && bearer == "api-key" -> answer(ex, 400, """{"error":"the token is an API key, not a session"}""")
+                // key-self revokes itself; key-secret meets a server older than the route, whose mux knows none
+                m == "DELETE" && path == "/api/v1/me/token" && bearer == "key-self" -> answer(ex, 200, """{"ok":true,"id":42}""")
+                m == "DELETE" && path == "/api/v1/me/token" && bearer == "key-secret" -> answer(ex, 404, "404 page not found")
                 m == "DELETE" && path.startsWith("/api/v1/users/anna/tokens/") && bearer == "session-bob" ->
                     answer(ex, 403, """{"error":"capability \"users\" required"}""")
                 m == "DELETE" && path.startsWith("/api/v1/users/anna/tokens/") && bearer in setOf("session-anna", "key-secret") ->
@@ -231,8 +234,14 @@ class SessionsTest {
     @Test
     fun turnOffWithTheKeyItself() {
         val st = sessions()
+        assertTrue(st.revokeWithKey(home(), base, "anna", LoginSecret("key-self", 42)))
+        assertEquals("the key revokes itself (D80-B)", "DELETE /api/v1/me/token key-self", requests().single())
         assertTrue(st.revokeWithKey(home(), base, "anna", LoginSecret("key-secret", 42)))
-        assertEquals("DELETE /api/v1/users/anna/tokens/42 key-secret", requests().single())
+        assertEquals(
+            "a server older than the route: by the user and the id",
+            listOf("DELETE /api/v1/me/token key-secret", "DELETE /api/v1/users/anna/tokens/42 key-secret"),
+            requests().drop(1),
+        )
         assertTrue("a key the server takes no more is gone there", st.revokeWithKey(home(), base, "anna", LoginSecret("key-revoked", 42)))
         assertTrue(logged.isEmpty())
     }

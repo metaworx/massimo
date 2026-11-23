@@ -51,6 +51,7 @@
 //	POST /api/v1/login/start, /login/finish          a session by OPAQUE, no password sent (opaque_api.go)
 //	POST /api/v1/login/key                           a session from the API key that calls, the apps' login by fingerprint
 //	POST /api/v1/logout                              end the session
+//	DELETE /api/v1/me/token                          revoke the token that calls, a session or a key with its sessions
 //	GET  /api/v1/me                                  who the caller is and what the caller may do
 //	GET|POST /api/v1/users, /users/{name}, /users/{name}/tokens    the users and their tokens (users_api.go)
 //	POST /api/v1/users/{name}/register               a registration by OPAQUE, its first step (opaque_api.go)
@@ -1431,6 +1432,7 @@ func (s *Server) routes() {
 	api("POST /api/v1/login/oidc/{key}", "none", s.oidcStartLogin)
 	api("POST /api/v1/login/key", "any", s.loginKey)
 	api("POST /api/v1/logout", "any", s.logout)
+	api("DELETE /api/v1/me/token", "any", s.deleteMyToken)
 	api("GET /api/v1/me", "any", s.me)
 	api("GET /api/v1/audit", "audit", s.getAudit)
 	api("GET /api/v1/commands/{id}", "read", s.getCommand)

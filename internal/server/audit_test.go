@@ -70,6 +70,18 @@ func TestAuditOfEveryWrite(t *testing.T) {
 			t.Errorf("%s %s has no audit action", r.method, r.path)
 			continue
 		}
+		bearer := "secret"
+		if r.method == "DELETE" && r.path == "/api/v1/me/token" {
+			// it revokes its bearer: a key of the bootstrap user's own, not the test's
+			code, text := callAPI(t, ts, "POST", "/api/v1/users/"+store.BootstrapUser+"/tokens", "secret", `{"label":"revokes itself"}`)
+			var key struct {
+				Token string `json:"token"`
+			}
+			if json.Unmarshal([]byte(text), &key); code != 201 || key.Token == "" {
+				t.Fatalf("a key to revoke itself: %d %s", code, text)
+			}
+			bearer = key.Token
+		}
 		before := len(auditRows(t, ts, "secret", "?limit=1000"))
 		body, want := "{}", action
 		switch {
@@ -78,7 +90,7 @@ func TestAuditOfEveryWrite(t *testing.T) {
 		case r.path == "/api/v1/login":
 			body, want = `{"user":"nobody","password":"x"}`, "login.failed"
 		}
-		code, _ := callAPI(t, ts, r.method, fillRoute(r.path), "secret", body)
+		code, _ := callAPI(t, ts, r.method, fillRoute(r.path), bearer, body)
 		rows := auditRows(t, ts, "secret", "?limit=1000")
 		if action == "" {
 			if len(rows) != before {
