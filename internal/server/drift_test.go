@@ -513,7 +513,7 @@ func TestDisagreeResendsTheStateBeforeAChange(t *testing.T) {
 		r := startDrift(t, func(lines []cube.Message) []cube.Message { return withDeviceIn(t, lines, 0x0a0203, 3) })
 		r.set(0x0a0201, "manual", 5)
 		r.set(0x0a0202, "manual", 5)
-		ref, ok := r.rt.roomReference(r.rt.client.Snapshot(), 1, r.s.roomNow())
+		ref, ok := r.rt.roomReference(r.rt.client.Snapshot(), 1, 0, r.s.roomNow())
 		if !ok || ref.mode != cube.ModeManual || ref.temp != 5 || ref.from != fromMajority || ref.room != 1 {
 			t.Fatalf("the room's reference: %+v %v", ref, ok)
 		}
@@ -1050,7 +1050,7 @@ func TestHeldReferenceLifetime(t *testing.T) {
 		r := startDriftWith(t, func(lines []cube.Message) []cube.Message { return withDeviceIn(t, lines, 0x0a0203, 3) },
 			map[cube.RFAddress]fakecube.State{0x0a0202: {Reported: &off}})
 		r.set(0x0a0201, "manual", 5)
-		ref, ok := r.rt.roomReference(r.rt.client.Snapshot(), 1, r.s.roomNow())
+		ref, ok := r.rt.roomReference(r.rt.client.Snapshot(), 1, 0, r.s.roomNow())
 		if !ok || ref.mode != cube.ModeManual || ref.temp != 5 {
 			t.Fatalf("the room's reference: %+v %v", ref, ok)
 		}
@@ -1063,7 +1063,7 @@ func TestHeldReferenceLifetime(t *testing.T) {
 			t.Fatalf("a hold with a thermostat left out: %+v", h)
 		}
 		r.set(0x0a0201, "manual", 21) // by hand
-		ref, ok = r.rt.roomReference(r.rt.client.Snapshot(), 1, r.s.roomNow())
+		ref, ok = r.rt.roomReference(r.rt.client.Snapshot(), 1, 0, r.s.roomNow())
 		if !ok || ref.temp != 21 || ref.beforeChange {
 			t.Fatalf("the room's reference after a check judged the hold: %+v %v", ref, ok)
 		}
@@ -1076,7 +1076,7 @@ func TestHeldReferenceLifetime(t *testing.T) {
 		r.pauseRoom(2)
 		r.clock.add(time.Hour)
 		r.check()
-		ref, ok := r.rt.roomReference(r.rt.client.Snapshot(), 2, r.s.roomNow())
+		ref, ok := r.rt.roomReference(r.rt.client.Snapshot(), 2, 0, r.s.roomNow())
 		if !ok || ref.mode != cube.ModeManual || ref.temp != 5 || !ref.beforeChange {
 			t.Fatalf("the reference of a room left out: %+v %v", ref, ok)
 		}
@@ -1132,7 +1132,7 @@ func TestHeldReferenceLifetime(t *testing.T) {
 		r := startDriftWith(t, func(lines []cube.Message) []cube.Message { return withDeviceIn(t, lines, 0x0a0203, 3) },
 			map[cube.RFAddress]fakecube.State{0x0a0202: {Reported: &off}})
 		r.set(0x0a0201, "manual", 5)
-		ref, ok := r.rt.roomReference(r.rt.client.Snapshot(), 1, r.s.roomNow())
+		ref, ok := r.rt.roomReference(r.rt.client.Snapshot(), 1, 0, r.s.roomNow())
 		if !ok {
 			t.Fatal("no reference")
 		}
@@ -1321,4 +1321,31 @@ func withoutValues(t *testing.T, lines []cube.Message, rf cube.RFAddress) []cube
 		out[i].Data = base64.StdEncoding.EncodeToString(raw)
 	}
 	return out
+}
+
+// A room's state read before a newer setpoint of Massimo's to the room,
+// of another state, is not held (RoomMajority, Block 2): a structure
+// change holds what it read only once its link half went through, and
+// the setpoint in between is the newer wish. One of the same state is
+// held.
+func TestHoldReadBeforeANewerSetpoint(t *testing.T) {
+	t.Parallel()
+	r := startDrift(t, nil)
+	read := r.s.roomNow()
+	r.rt.intend(1, cube.ModeManual, 21, cube.Until{}, read.Add(time.Second))
+	r.rt.holdReference(1, resend{mode: cube.ModeManual, temp: 5, from: fromMajority}, read)
+	d := &r.rt.drift
+	d.mu.Lock()
+	h := d.holds[1]
+	d.mu.Unlock()
+	if h != nil {
+		t.Fatalf("held over a newer setpoint: %+v", h)
+	}
+	r.rt.holdReference(1, resend{mode: cube.ModeManual, temp: 21, from: fromMassimo}, read)
+	d.mu.Lock()
+	h = d.holds[1]
+	d.mu.Unlock()
+	if h == nil || h.state.temp != 21 {
+		t.Fatalf("the setpoint's own state not held: %+v", h)
+	}
 }

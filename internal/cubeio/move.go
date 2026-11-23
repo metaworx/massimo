@@ -77,8 +77,9 @@ func linkIntoRoom(snap *cubelan.Snapshot, rf cube.RFAddress, typ cube.DeviceType
 }
 
 // RoomRadiator returns the configuration of a radiator thermostat in the
-// room (other than rf), or the original software's defaults: the values
-// a wall thermostat does not store are taken from it when writing one.
+// room (other than rf), or the original software's defaults
+// (radiatorDefaults): the values a wall thermostat does not store are
+// taken from it when writing one.
 func RoomRadiator(snap *cubelan.Snapshot, room uint8, rf cube.RFAddress) cube.ThermostatConfig {
 	for _, other := range snap.Devices() {
 		if other == rf {
@@ -88,5 +89,10 @@ func RoomRadiator(snap *cubelan.Snapshot, room uint8, rf cube.RFAddress) cube.Th
 			return *c.Thermostat
 		}
 	}
-	return cube.ThermostatConfig{WindowOpenMins: 15, DecalcDay: cube.Saturday, DecalcHour: 12, MaxValvePct: 100, ValveOffsetPct: 0}
+	return radiatorDefaults
 }
+
+// radiatorDefaults are the original software's values of what a wall
+// thermostat does not store: the window-open minutes, the descaling and
+// the valve limits.
+var radiatorDefaults = cube.ThermostatConfig{WindowOpenMins: 15, DecalcDay: cube.Saturday, DecalcHour: 12, MaxValvePct: 100, ValveOffsetPct: 0}

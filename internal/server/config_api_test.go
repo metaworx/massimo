@@ -4,20 +4,28 @@
 package server
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
+	"go.metaworx.ch/massimo/internal/cubeio"
+	"go.metaworx.ch/massimo/internal/cubelan"
 	"go.metaworx.ch/massimo/internal/cubelan/fakecube"
 	"go.metaworx.ch/massimo/internal/engine"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
+	"go.metaworx.ch/massimo/internal/view"
 )
 
 func do(t *testing.T, ts *httptest.Server, method, path, body string) (int, map[string]any) {
@@ -179,7 +187,10 @@ func TestConfigEndpoints(t *testing.T) {
 // The devices the copy tests add to the fixture: a wall thermostat in
 // room 1 beside 0a010a, a radiator thermostat paired but in no room,
 // whose Saturday and Sunday are room 1's already, a second one like it,
-// and a shutter contact in no room.
+// and a shutter contact in no room. The Cube holds a valid state for
+// each, and for 0a010a, the thermostats in auto at 21 °C, which the
+// programme of room 1 has at the fixture's Tuesday 19:51; the
+// fixture's other devices hold none, as recorded.
 const (
 	copyWall    cube.RFAddress = 0x0c0d0e
 	copyNew     cube.RFAddress = 0x0a0b0c
@@ -212,6 +223,68 @@ func configLine(raw []byte, rf cube.RFAddress, room uint8, serial string) cube.M
 	raw[5] = room
 	copy(raw[8:18], serial)
 	return cube.Message{Type: 'C', Data: rf.String() + "," + base64.StdEncoding.EncodeToString(raw)}
+}
+
+// validEntry is an L entry with a valid state (the valid and the
+// initialized bit of its first flags byte), laid out as the fake Cube's
+// fixtures lay theirs out: a thermostat in auto at setpoint, a window
+// contact closed.
+func validEntry(t *testing.T, rf cube.RFAddress, typ cube.DeviceType, setpoint float64) []byte {
+	t.Helper()
+	a := rf.Bytes()
+	var e []byte
+	switch {
+	case typ == cube.DeviceShutterContact:
+		return []byte{0x06, a[0], a[1], a[2], 0x00, 0x12, 0x18}
+	case typ == cube.DeviceWallThermostat:
+		e = []byte{0x0c, a[0], a[1], a[2], 0x00, 0x12, 0x18, 0x01, 0, 0, 0, 0, 0}
+	default:
+		e = []byte{0x0b, a[0], a[1], a[2], 0x00, 0x12, 0x18, 0, 0, 0, 0, 0}
+	}
+	sp, err := cube.EncodeTemp(setpoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e[8] = sp
+	return e
+}
+
+// withValidStates gives the devices of states a valid state in the
+// greeting's L line (validEntry, at their setpoints), in place of the
+// entry they have, else as a new one; the type is their C line's.
+func withValidStates(t *testing.T, lines []cube.Message, states map[cube.RFAddress]float64) []cube.Message {
+	t.Helper()
+	out := append([]cube.Message(nil), lines...)
+	types := map[cube.RFAddress]cube.DeviceType{}
+	for rf := range states {
+		types[rf] = cube.DeviceType(rawConfig(t, lines, rf)[4])
+	}
+	for i, m := range out {
+		if m.Type != 'L' {
+			continue
+		}
+		raw, err := base64.StdEncoding.DecodeString(m.Data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var list []byte
+		done := map[cube.RFAddress]bool{}
+		for j := 0; j < len(raw); j += int(raw[j]) + 1 {
+			e := raw[j : j+int(raw[j])+1]
+			rf := cube.RFAddressFromBytes(e[1:4])
+			if sp, ok := states[rf]; ok {
+				e, done[rf] = validEntry(t, rf, types[rf], sp), true
+			}
+			list = append(list, e...)
+		}
+		for _, rf := range slices.Sorted(maps.Keys(states)) {
+			if !done[rf] {
+				list = append(list, validEntry(t, rf, types[rf], states[rf])...)
+			}
+		}
+		out[i].Data = base64.StdEncoding.EncodeToString(list)
+	}
+	return out
 }
 
 // copyGreeting is the fixture with the copy tests' devices.
@@ -254,7 +327,7 @@ func copyGreeting(t *testing.T) []cube.Message {
 		}
 		out = append(out, g)
 	}
-	return out
+	return withValidStates(t, out, map[cube.RFAddress]float64{0x0a010a: 21, copyWall: 21, copyNew: 21, copyContact: 0, copyNew2: 21})
 }
 
 // lineStrings writes protocol lines as the Cube received them.
@@ -306,8 +379,11 @@ func roomTemps(t *testing.T, rf cube.RFAddress, offset float64) string {
 // The new radiator thermostat put into room 1 (a radiator and a wall
 // thermostat): the links and the group, the metadata, the re-read, then
 // the room's settings as the original software sends them: 0x40 auto,
-// 0x11 to the room's three thermostats, 0x12, and the five days that
-// differ followed by 0x11 again.
+// the room's state, its thermostats being on their programme, 0x11 to
+// the room's three thermostats, 0x12, and the five days that differ
+// followed by 0x11 again; the radiator thermostat 0a010a, the master,
+// gives the temperatures, which the wall thermostat does not share
+// (RoomMajority.D9), and the valve settings, which it alone has.
 func TestAddCopiesTheRoomsSettings(t *testing.T) {
 	t.Parallel()
 	r := startServer(t, withGreeting(copyGreeting(t)))
@@ -761,7 +837,8 @@ func TestRemoveRefused(t *testing.T) {
 
 // The Cube discarding the copy's 0x40 ends nothing: the rest of the
 // copy follows, the answer says the mode was not set, and no error
-// reset is sent for it.
+// reset is sent for it. The room command of the room's state that then
+// follows (RoomMajority.D16-A), discarded here too, ends nothing either.
 func TestCopyAfterADiscardedMode(t *testing.T) {
 	t.Parallel()
 	rg := startServer(t, withGreeting(copyGreeting(t)), withFake(func(fc *fakecube.Server) {
@@ -773,8 +850,11 @@ func TestCopyAfterADiscardedMode(t *testing.T) {
 	fc, ts := rg.fc, rg.ts
 	code, out := do(t, ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/0a0b0c", `{"room_id":1}`)
 	copied, _ := out["copied"].(map[string]any)
-	if code != 200 || copied["mode_not_set"] != true || copied["valve"] != true || copied["days"] != float64(5) {
+	if code != 200 || copied["mode_not_set"] != true || copied["room_mode"] != nil || copied["valve"] != true || copied["days"] != float64(5) {
 		t.Fatalf("add with a discarded 0x40: %d %v", code, out)
+	}
+	if room := setTemp(t, room1(0x0a010a), 0, cube.ModeAuto, cube.Until{}); !slices.Contains(lineStrings(cubewatch.Lines(fc).Since(0, cubewatch.Type('s'))), room) {
+		t.Fatalf("no room command %s after the discard", room)
 	}
 	if n := cubewatch.Lines(fc).Count(0, cubewatch.Type('r')); n != 0 {
 		t.Fatalf("%d error resets sent", n)
@@ -1025,4 +1105,637 @@ func TestRoomCommandAddress(t *testing.T) {
 			}
 		})
 	}
+}
+
+// The copy takes the room's state from before a newcomer and the room's
+// configuration by the one rule (AP RoomMajority, Block 2: D5-A, D8-A,
+// D9, D15-A, D16-A).
+
+// newcomer is the rooms fixture's wall thermostat, which startNewcomer
+// takes out of its room.
+const newcomer cube.RFAddress = 0x0a0201
+
+// startNewcomer is a driftRig over the rooms fixture with room 1 holding
+// its radiator thermostat 0a0202 alone, its master (0a0203 moved into no
+// room), and the wall thermostat 0a0201 in no room: its C line names
+// none, and the list has it in listed, out of the list for 0. change
+// changes the greeting after that, fake the fake Cube. The structure
+// changes are read back within a fraction of a second. The fake Cube
+// does not take a group (0x22) itself; as the Cube does once the device
+// acknowledged, it answers 0a0201's C line with the room its 0x22 named
+// from then on.
+func startNewcomer(t *testing.T, listed uint8, change func([]cube.Message) []cube.Message, fake func(*fakecube.Server)) *driftRig {
+	t.Helper()
+	clock := &checkClock{}
+	opts := []startOpt{rooms(), stored(),
+		withOptions(Options{PollInterval: 50 * time.Millisecond, driftClock: clock.now, driftEvery: -1,
+			StructureChecks: []time.Duration{10 * time.Millisecond, 20 * time.Millisecond, 30 * time.Millisecond}}),
+		changeGreeting(func(lines []cube.Message) []cube.Message {
+			lines = withDeviceIn(t, lines, 0x0a0203, 0)
+			withConfigRoom(t, lines, newcomer, 0)
+			withMetadata(t, lines, func(md *cube.Metadata) {
+				md.Devices = slices.DeleteFunc(md.Devices, func(d cube.DeviceMeta) bool { return d.RFAddress == newcomer && listed == 0 })
+				for i := range md.Devices {
+					if md.Devices[i].RFAddress == newcomer {
+						md.Devices[i].RoomID = listed
+					}
+				}
+				for i := range md.Rooms {
+					if md.Rooms[i].ID == 1 {
+						md.Rooms[i].RFAddress = 0x0a0202
+					}
+				}
+			})
+			if change != nil {
+				lines = change(lines)
+			}
+			return lines
+		}),
+		withFake(func(fc *fakecube.Server) {
+			raw := rawConfig(t, fc.Greeting, newcomer)
+			fc.OnReceive(func(m cube.Message) {
+				rc, err := cube.ParseRadioCommand(m.Data)
+				if m.Type == 's' && err == nil && rc.Command == cube.RFSetGroupAddress && rc.Target.RFAddress == newcomer && len(rc.Payload) > 0 {
+					fc.SetConfig(configLine(raw, newcomer, rc.Payload[0], string(raw[8:18])))
+				}
+			})
+		}),
+	}
+	if fake != nil {
+		opts = append(opts, withFake(fake))
+	}
+	return &driftRig{rig: startServer(t, opts...), clock: clock}
+}
+
+// putNewcomer puts 0a0201 into room with PUT …/devices/0a0201 and
+// returns the answer, failing the test where it is not 200.
+func (r *driftRig) putNewcomer(room uint8) map[string]any {
+	r.t.Helper()
+	code, out := do(r.t, r.ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/0a0201", fmt.Sprintf(`{"room_id":%d}`, room))
+	if code != 200 {
+		r.t.Fatalf("0a0201 into room %d: %d %v", room, code, out)
+	}
+	return out
+}
+
+// settled waits until no structure change is read back any more
+// (structure.go), so that the room checks take the rooms again.
+func (r *driftRig) settled() {
+	r.t.Helper()
+	testkit.Eventually(r.t, "the structure changes read back", func() bool { return len(r.rt.structureRooms(r.rt.client.Snapshot())) == 0 })
+}
+
+// heldIn is the state held for room (holdReference), false for none.
+func (r *driftRig) heldIn(room uint8) (resend, bool) {
+	d := &r.rt.drift
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if h := d.holds[room]; h != nil {
+		return h.state, true
+	}
+	return resend{}, false
+}
+
+// newcomerLink is 0a0201's link half into room 1 beside 0a0202, the
+// metadata and the re-read, as the fake Cube receives them.
+func newcomerLink() []string {
+	return []string{"z:1e,G,01",
+		linkPartner(room1(0x0a0202), true, newcomer, cube.DeviceWallThermostat),
+		linkPartner(direct(newcomer), true, 0x0a0202, cube.DeviceRadiatorThermostat),
+		cube.CmdSetGroup(newcomer, 1, false).String(), "m:", "c:0a0201"}
+}
+
+// setTemp is a 0x40 to t.
+func setTemp(t *testing.T, to cube.Target, temp float64, mode cube.Mode, until cube.Until) string {
+	t.Helper()
+	m, err := cube.CmdSetTemperature(to, temp, mode, until)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return m.String()
+}
+
+// copyOf is the copy's configuration for 0a0201 put into room after its
+// 0x40, from ref, the room's configuration as RoomConfig decides it:
+// after a wakeup 0x11 to every thermostat of the room, radiator
+// thermostats first (radiators) and 0a0201 last, each with its own
+// offset (0 in the fixture); 0x12 to 0a0201; every day of ref's
+// programme, the wall thermostat's own differing every day, then 0x11
+// again.
+func copyOf(t *testing.T, room uint8, radiators []cube.RFAddress, ref cube.ThermostatConfig) []string {
+	t.Helper()
+	temps := func(rf cube.RFAddress) string {
+		m, err := cube.CmdSetTemperatures(direct(rf), cube.TemperatureSettings{Comfort: ref.ComfortTemp, Eco: ref.EcoTemp, Max: ref.MaxSetpoint,
+			Min: ref.MinSetpoint, WindowOpen: ref.WindowOpenTemp, WindowOpenMinutes: ref.WindowOpenMins})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return m.String()
+	}
+	wakeup := fmt.Sprintf("z:1e,G,%02x", room)
+	out := []string{wakeup}
+	for _, rf := range append(slices.Clone(radiators), newcomer) {
+		out = append(out, temps(rf))
+	}
+	valve, err := cube.CmdSetValveConfig(direct(newcomer), cube.ValveSettings{BoostMinutes: ref.BoostMinutes, BoostValvePct: ref.BoostValvePct,
+		DecalcDay: ref.DecalcDay, DecalcHour: ref.DecalcHour, MaxValvePct: ref.MaxValvePct, ValveOffsetPct: ref.ValveOffsetPct})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out = append(out, wakeup, valve.String(), wakeup)
+	for _, d := range []cube.Weekday{cube.Monday, cube.Tuesday, cube.Wednesday, cube.Thursday, cube.Friday, cube.Saturday, cube.Sunday} {
+		ls, err := cube.CmdSetDayProgram(direct(newcomer), d, ref.WeekProgram[d])
+		if err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, lineStrings(ls)...)
+	}
+	return append(out, temps(newcomer))
+}
+
+// The owner's case of 2026-11-23: a room of one radiator thermostat in
+// manual 5 °C, set at the device, and a wall thermostat put into it. The
+// copy's 0x40 is manual 5 °C, to the wall thermostat directly (D8-A), not
+// auto, after which that room went to its programme; the rest is the
+// radiator thermostat's configuration. Where the radiator thermostat
+// then shows auto, as the wall thermostat's own setpoint did reach it
+// that day, the room checks send the room manual 5 °C, the state from
+// before the change (before_change), not the newest change.
+func TestCopyKeepsTheRoomsManualSetpoint(t *testing.T) {
+	t.Parallel()
+	r := startNewcomer(t, 0, nil, nil)
+	r.set(0x0a0202, "manual", 5)
+	sent := r.lines.Mark()
+	out := r.putNewcomer(1)
+	want := append(newcomerLink(), setTemp(t, direct(newcomer), 5, cube.ModeManual, cube.Until{}))
+	sameLines(t, r.lines, sent, append(want, copyOf(t, 1, []cube.RFAddress{0x0a0202}, *r.rt.client.Snapshot().Config(0x0a0202).Thermostat)...))
+	if copied, _ := out["copied"].(map[string]any); copied["days"] != float64(7) || copied["valve"] != true || copied["mode_not_set"] != nil {
+		t.Fatalf("copied %v", out["copied"])
+	}
+	r.settled()
+	r.waitSetting(newcomer, "manual", 5)
+	r.set(0x0a0202, "auto", 21)
+	sent = r.lines.Mark()
+	r.disagreeAndResend()
+	r.wantResendOf(sent, 0x0a0202, 1, 5, cube.ModeManual, "majority", true)
+}
+
+// stateList is the L line of snap's states with rf's mode and setpoint
+// changed, as the Cube sends it once rf reported them.
+func stateList(t *testing.T, snap *cubelan.Snapshot, rf cube.RFAddress, mode cube.Mode, setpoint float64) cube.Message {
+	t.Helper()
+	sp, err := cube.EncodeTemp(setpoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var list []byte
+	for _, dev := range snap.Devices() {
+		st, ok := snap.State(dev)
+		if !ok {
+			continue
+		}
+		e := slices.Clone(st.Raw)
+		if dev == rf {
+			e[6] = e[6]&^0x03 | byte(mode)
+			e[8] = e[8]&0xc0 | sp
+		}
+		list = append(list, e...)
+	}
+	return cube.Message{Type: 'L', Data: base64.StdEncoding.EncodeToString(list)}
+}
+
+// The room's state is read before the links (D8-A): the radiator
+// thermostat shows auto on its programme from the moment the fake Cube
+// takes the link radiogram that names the wall thermostat, which the
+// server's snapshot shows before the radiogram is answered; the copy
+// still gives the wall thermostat manual 5 °C, the state from before,
+// and the room checks hold it.
+func TestCopyReadsTheRoomBeforeTheLinks(t *testing.T) {
+	t.Parallel()
+	r := startNewcomer(t, 0, nil, nil)
+	r.set(0x0a0202, "manual", 5)
+	later := stateList(t, r.rt.client.Snapshot(), 0x0a0202, cube.ModeAuto, 21)
+	var once sync.Once
+	r.fc.OnReceive(func(m cube.Message) {
+		rc, err := cube.ParseRadioCommand(m.Data)
+		if m.Type != 's' || err != nil || rc.Command != cube.RFAddLinkPartner || !rc.Target.Room || len(rc.Payload) < 3 ||
+			cube.RFAddressFromBytes(rc.Payload[:3]) != newcomer {
+			return
+		}
+		once.Do(func() {
+			mode, temp := "auto", 21.0
+			if err := r.fc.SetState(0x0a0202, fakecube.State{Mode: &mode, Setpoint: &temp}); err != nil {
+				t.Error(err)
+			}
+			r.rt.client.ApplyLocal(later)
+		})
+	})
+	sent := r.lines.Mark()
+	r.putNewcomer(1)
+	if st, ok := r.rt.client.Snapshot().State(0x0a0202); !ok || st.Mode != cube.ModeAuto {
+		t.Fatalf("0a0202 not in auto by the copy: %+v", st)
+	}
+	want := append(newcomerLink(), setTemp(t, direct(newcomer), 5, cube.ModeManual, cube.Until{}))
+	sameLines(t, r.lines, sent, append(want, copyOf(t, 1, []cube.RFAddress{0x0a0202}, *r.rt.client.Snapshot().Config(0x0a0202).Thermostat)...))
+	if held, ok := r.heldIn(1); !ok || held.mode != cube.ModeManual || held.temp != 5 || held.from != fromMajority {
+		t.Fatalf("held for room 1: %+v %v", held, ok)
+	}
+}
+
+// The copy's 0x40 is the room's state: auto on the programme as auto
+// with temperature 0, auto with a temperature set by hand as such, a
+// holiday with its end; in a room with no other thermostat (room 3, a
+// window contact's alone) auto with 0, and nothing is held. The answer's
+// copied names the state and where it came from, and in room 3 that no
+// configuration was sent, its list of temperatures empty, not null.
+func TestCopyGivesTheRoomsState(t *testing.T) {
+	t.Parallel()
+	holiday := cube.Until{Year: 2026, Month: 11, Day: 10, Minutes: 12 * 60}
+	for _, c := range []struct {
+		name  string
+		room  uint8
+		state func(r *driftRig)
+		want  string
+	}{
+		{"auto on the programme", 1, func(r *driftRig) { r.set(0x0a0202, "auto", 21) }, setTemp(t, direct(newcomer), 0, cube.ModeAuto, cube.Until{})},
+		{"auto with a temperature", 1, func(r *driftRig) { r.set(0x0a0202, "auto", 23) }, setTemp(t, direct(newcomer), 23, cube.ModeAuto, cube.Until{})},
+		{"a holiday", 1, func(r *driftRig) {
+			m, err := cube.CmdSetTemperature(direct(0x0a0202), 12, cube.ModeVacation, holiday)
+			if err != nil {
+				r.t.Fatal(err)
+			}
+			if res := r.rt.queue.Enqueue(engine.Command{Lines: []cube.Message{m}}).Wait(r.t.Context()); res.Err != nil {
+				r.t.Fatal(res.Err)
+			}
+			testkit.Eventually(r.t, "0a0202 on holiday", func() bool {
+				st, ok := r.rt.client.Snapshot().State(0x0a0202)
+				return ok && st.Mode == cube.ModeVacation && st.Until != nil && *st.Until == holiday
+			})
+		}, setTemp(t, direct(newcomer), 12, cube.ModeVacation, holiday)},
+		{"no other thermostat", 3, func(r *driftRig) { r.set(0x0a0202, "manual", 5) }, setTemp(t, direct(newcomer), 0, cube.ModeAuto, cube.Until{})},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			r := startNewcomer(t, 0, nil, nil)
+			c.state(r)
+			sent := r.lines.Mark()
+			out := r.putNewcomer(c.room)
+			got := lineStrings(r.lines.Since(sent, cubewatch.Except('l')))
+			at := slices.Index(got, "c:0a0201")
+			if at < 0 || at+1 >= len(got) || got[at+1] != c.want {
+				t.Fatalf("the copy's 0x40, after the re-read, in %v; want %s", got, c.want)
+			}
+			if _, ok := r.heldIn(c.room); ok == (c.room == 3) {
+				t.Fatalf("held for room %d: %v", c.room, ok)
+			}
+			copied, _ := out["copied"].(map[string]any)
+			temps, list := copied["temperatures"].([]any)
+			from, skipped := "room", ""
+			if c.room == 3 {
+				from, skipped = "default", "no_other_thermostat"
+			}
+			if !list || copied["state_from"] != from || (copied["config_skipped"] != nil || skipped != "") && copied["config_skipped"] != skipped ||
+				c.room == 3 && len(temps) != 0 {
+				t.Fatalf("copied %#v", copied)
+			}
+		})
+	}
+}
+
+// A copy whose 0x40 the Cube discards sends the room's state once more
+// as a room command, after the programme (D16-A), which counts as
+// Massimo's own setpoint to the room and keeps the room's hold; the
+// discard is not retried, the device's flag being clear.
+func TestCopyAfterADiscardedModeSendsTheRoom(t *testing.T) {
+	t.Parallel()
+	r := startNewcomer(t, 0, nil, func(fc *fakecube.Server) {
+		fc.DiscardIf = func(m cube.Message) bool {
+			rc, err := cube.ParseRadioCommand(m.Data)
+			return m.Type == 's' && err == nil && rc.Command == cube.RFSetTemperature && !rc.Target.Room && rc.Target.RFAddress == newcomer
+		}
+	})
+	r.set(0x0a0202, "manual", 5)
+	sent := r.lines.Mark()
+	out := r.putNewcomer(1)
+	want := append(newcomerLink(), setTemp(t, direct(newcomer), 5, cube.ModeManual, cube.Until{}))
+	want = append(want, copyOf(t, 1, []cube.RFAddress{0x0a0202}, *r.rt.client.Snapshot().Config(0x0a0202).Thermostat)...)
+	sameLines(t, r.lines, sent, append(want, setTemp(t, room1(0x0a0202), 5, cube.ModeManual, cube.Until{})))
+	if copied, _ := out["copied"].(map[string]any); copied["mode_not_set"] != true || copied["room_mode"] != true {
+		t.Fatalf("copied %v", out["copied"])
+	}
+	d := &r.rt.drift
+	d.mu.Lock()
+	in, intended := d.intent[1]
+	d.mu.Unlock()
+	if !intended || in.mode != cube.ModeManual || in.temp != 5 {
+		t.Fatalf("Massimo's setpoint to room 1: %+v %v", in, intended)
+	}
+	if held, ok := r.heldIn(1); !ok || held.mode != cube.ModeManual || held.temp != 5 {
+		t.Fatalf("held for room 1: %+v %v", held, ok)
+	}
+}
+
+// The repair's placement holds the room's state too (D15-A), before its
+// link half, and copies nothing: a wall thermostat the list has in room
+// 1 and its C line in none is placed there, and once it shows auto, a
+// newer change than the radiator thermostat's manual 5 °C, the room
+// checks send manual 5 °C, the state from before (before_change).
+func TestRepairPlaceHoldsTheRoomsState(t *testing.T) {
+	t.Parallel()
+	r := startNewcomer(t, 1, nil, nil)
+	r.set(0x0a0202, "manual", 5)
+	sent := r.lines.Mark()
+	_, code, out := runRepairOf(t, r.ts, "/api/v1/cubes/KEQ0000100/devices/0a0201/repair/place", "")
+	if code != 200 {
+		t.Fatalf("the placement: %d %v", code, out)
+	}
+	sameLines(t, r.lines, sent, []string{"z:1e,G,01",
+		linkPartner(room1(0x0a0202), true, newcomer, cube.DeviceWallThermostat),
+		linkPartner(direct(newcomer), true, 0x0a0202, cube.DeviceRadiatorThermostat),
+		cube.CmdSetGroup(newcomer, 1, false).String(), "c:0a0201"})
+	if held, ok := r.heldIn(1); !ok || held.mode != cube.ModeManual || held.temp != 5 {
+		t.Fatalf("held for room 1: %+v %v", held, ok)
+	}
+	r.settled()
+	r.set(newcomer, "auto", 21)
+	sent = r.lines.Mark()
+	r.disagreeAndResend()
+	r.wantResendOf(sent, 0x0a0202, 1, 5, cube.ModeManual, "majority", true)
+}
+
+// The copy's configuration is the room's per group and per day
+// (D5-A, D9): in room 2, its master 0a0206 here, 0a0204 has another
+// comfort temperature and Monday, 0a0205 another Tuesday, 0a0206 another
+// Wednesday and other valve settings; the wall thermostat put into it
+// takes what two of the three share in each, a week none of them has,
+// and its own offset. The report after the copy finds the three other
+// days, and nothing of the wall thermostat's, nor any temperatures, the
+// copy's 0x11 having gone to every thermostat of the room.
+func TestCopyTakesTheRoomsConfigurationPerGroup(t *testing.T) {
+	t.Parallel()
+	r := startNewcomer(t, 0, func(lines []cube.Message) []cube.Message {
+		edit := func(rf cube.RFAddress, change func(raw []byte)) {
+			raw := rawConfig(t, lines, rf)
+			change(raw)
+			for i, g := range lines {
+				if g.Type == 'C' && strings.HasPrefix(g.Data, rf.String()+",") {
+					lines[i] = configLine(raw, rf, raw[5], string(raw[8:18]))
+				}
+			}
+		}
+		// A radiator thermostat's programme starts at 0x1d, a day of it
+		// 2 bytes per switch point; a first byte's 0x02 is half a degree
+		// of the first switch point's temperature.
+		const program, day = 0x1d, 2 * cube.DaySlots
+		edit(0x0a0204, func(raw []byte) { raw[0x12] = 46; raw[program+day*int(cube.Monday)] ^= 0x02 }) // comfort 23
+		edit(0x0a0205, func(raw []byte) { raw[program+day*int(cube.Tuesday)] ^= 0x02 })
+		edit(0x0a0206, func(raw []byte) { raw[0x19] = 0x52; raw[program+day*int(cube.Wednesday)] ^= 0x02 }) // boost 10 min at 90 %
+		withRoomMaster(t, lines, 2, 0x0a0206)
+		return lines
+	}, nil)
+	snap := r.rt.client.Snapshot()
+	base := *snap.Config(0x0a0202).Thermostat // the fixture's radiator thermostat, as none of room 2's is now
+	sent := r.lines.Mark()
+	r.putNewcomer(2)
+	want := []string{"z:1e,G,02",
+		linkPartner(cube.Target{RFAddress: 0x0a0206, RoomID: 2, Room: true}, true, newcomer, cube.DeviceWallThermostat),
+		linkPartner(direct(newcomer), true, 0x0a0204, cube.DeviceRadiatorThermostat),
+		linkPartner(direct(newcomer), true, 0x0a0205, cube.DeviceRadiatorThermostat),
+		linkPartner(direct(newcomer), true, 0x0a0206, cube.DeviceRadiatorThermostat),
+		cube.CmdSetGroup(newcomer, 2, false).String(), "m:", "c:0a0201",
+		setTemp(t, direct(newcomer), 20, cube.ModeAuto, cube.Until{})} // the three in auto at 20 °C, off their programme's 21
+	sameLines(t, r.lines, sent, append(want, copyOf(t, 2, []cube.RFAddress{0x0a0204, 0x0a0205, 0x0a0206}, base)...))
+
+	for _, rf := range []cube.RFAddress{0x0a0204, 0x0a0205, 0x0a0206, newcomer} {
+		r.rt.writer().Reread(t.Context(), rf) // the C lines as the fake Cube took the copy
+	}
+	snap = r.rt.client.Snapshot()
+	var found []string
+	mismatches, _ := findMismatches(snap, snap.Metadata(), view.NewHidden(nil, snap.Metadata(), false), nil)
+	for _, m := range mismatches {
+		if m.Room == 2 && (m.Finding == view.MismatchProgramme || m.Finding == view.MismatchTemperatures) {
+			found = append(found, m.Finding+" "+m.Device)
+		}
+	}
+	if want := []string{"programme 0a0204", "programme 0a0205", "programme 0a0206"}; !slices.Equal(found, want) {
+		t.Fatalf("room 2's members that differ after the copy: %v, want %v", found, want)
+	}
+}
+
+// The device being added is left out of the room's state where its C
+// line names the room already, as after a retry whose link half went
+// through: 0a0201, in room 1 by its C line and not in the list, shows
+// manual 18 °C, a newer change than the radiator thermostat's manual
+// 5 °C, and the copy's 0x40 is the room's manual 5 °C, which is held.
+func TestCopyLeavesTheNewcomerOutOfTheRoomsState(t *testing.T) {
+	t.Parallel()
+	r := startNewcomer(t, 0, func(lines []cube.Message) []cube.Message {
+		withConfigRoom(t, lines, newcomer, 1)
+		return lines
+	}, nil)
+	r.set(0x0a0202, "manual", 5)
+	r.set(newcomer, "manual", 18)
+	sent := r.lines.Mark()
+	r.putNewcomer(1)
+	got := lineStrings(r.lines.Since(sent, cubewatch.Except('l')))
+	want := setTemp(t, direct(newcomer), 5, cube.ModeManual, cube.Until{})
+	if at := slices.Index(got, "c:0a0201"); at < 0 || at+1 >= len(got) || got[at+1] != want {
+		t.Fatalf("the copy's 0x40, after the re-read, in %v; want %s", got, want)
+	}
+	if held, ok := r.heldIn(1); !ok || held.mode != cube.ModeManual || held.temp != 5 {
+		t.Fatalf("held for room 1: %+v %v", held, ok)
+	}
+}
+
+// A move of a thermostat into a room takes the room's state as an add
+// does (D8-A): 0a0204 of room 2 moved into room 1, whose radiator
+// thermostat shows manual 5 °C, gets manual 5 °C, to it directly after
+// the move's re-read, and the room's state is held.
+func TestMoveGivesTheRoomsState(t *testing.T) {
+	t.Parallel()
+	r := startNewcomer(t, 0, nil, nil)
+	r.set(0x0a0202, "manual", 5)
+	sent := r.lines.Mark()
+	code, out := do(t, r.ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/0a0204", `{"room_id":1}`)
+	if code != 200 {
+		t.Fatalf("the move: %d %v", code, out)
+	}
+	got := lineStrings(r.lines.Since(sent, cubewatch.Except('l')))
+	want := setTemp(t, direct(0x0a0204), 5, cube.ModeManual, cube.Until{})
+	if at := slices.Index(got, "c:0a0204"); at < 0 || at+1 >= len(got) || got[at+1] != want {
+		t.Fatalf("the copy's 0x40, after the re-read, in %v; want %s", got, want)
+	}
+	if held, ok := r.heldIn(1); !ok || held.mode != cube.ModeManual || held.temp != 5 {
+		t.Fatalf("held for room 1: %+v %v", held, ok)
+	}
+	if copied, _ := out["copied"].(map[string]any); fmt.Sprint(copied["state"]) != "map[mode:manual setpoint:5]" {
+		t.Fatalf("copied %v", out["copied"])
+	}
+}
+
+// The room's state is held only once a radiogram of the link half went
+// through, which may have brought the newcomer's state to the room's
+// members: an add whose link radiogram the Cube discards, its first,
+// holds nothing and leaves a hold of an earlier change as it was, its
+// state and its time; one whose 0x22, the last, is discarded holds the
+// room's state, the 0x20s having gone through. So do a move and the
+// repair's placement.
+func TestHoldOnlyOnceTheLinkWentThrough(t *testing.T) {
+	t.Parallel()
+	discardOf := func(command byte) func(*fakecube.Server) {
+		return func(fc *fakecube.Server) {
+			fc.DiscardIf = func(m cube.Message) bool {
+				rc, err := cube.ParseRadioCommand(m.Data)
+				return m.Type == 's' && err == nil && rc.Command == command
+			}
+		}
+	}
+	t.Run("nothing went through", func(t *testing.T) {
+		t.Parallel()
+		r := startNewcomer(t, 0, nil, discardOf(cube.RFAddLinkPartner))
+		r.set(0x0a0202, "manual", 5)
+		if code, out := do(t, r.ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/0a0201", `{"room_id":1}`); code != http.StatusBadGateway {
+			t.Fatalf("the add: %d %v, want 502", code, out)
+		}
+		if held, ok := r.heldIn(1); ok {
+			t.Fatalf("held for room 1: %+v", held)
+		}
+		earlier := r.s.roomNow().Add(-time.Minute)
+		r.rt.holdReference(1, resend{mode: cube.ModeManual, temp: 7, from: fromMajority}, earlier)
+		d := &r.rt.drift
+		d.mu.Lock()
+		d.holds[1].judged = true
+		d.mu.Unlock()
+		if code, out := do(t, r.ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/0a0201", `{"room_id":1}`); code != http.StatusBadGateway {
+			t.Fatalf("the add again: %d %v, want 502", code, out)
+		}
+		d.mu.Lock()
+		h := d.holds[1]
+		d.mu.Unlock()
+		if h == nil || h.state.temp != 7 || !h.at.Equal(earlier) || !h.judged {
+			t.Fatalf("the earlier hold after the failed add: %+v", h)
+		}
+	})
+	t.Run("the link went through", func(t *testing.T) {
+		t.Parallel()
+		r := startNewcomer(t, 0, nil, discardOf(cube.RFSetGroupAddress))
+		r.set(0x0a0202, "manual", 5)
+		if code, out := do(t, r.ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/0a0201", `{"room_id":1}`); code != http.StatusBadGateway {
+			t.Fatalf("the add: %d %v, want 502", code, out)
+		}
+		if held, ok := r.heldIn(1); !ok || held.mode != cube.ModeManual || held.temp != 5 {
+			t.Fatalf("held for room 1: %+v %v", held, ok)
+		}
+	})
+	t.Run("a move whose link radiogram is discarded", func(t *testing.T) {
+		t.Parallel()
+		r := startNewcomer(t, 0, nil, discardOf(cube.RFAddLinkPartner))
+		r.set(0x0a0202, "manual", 5)
+		if code, out := do(t, r.ts, "PUT", "/api/v1/cubes/KEQ0000100/devices/0a0204", `{"room_id":1}`); code != http.StatusBadGateway {
+			t.Fatalf("the move: %d %v, want 502", code, out)
+		}
+		if held, ok := r.heldIn(1); ok {
+			t.Fatalf("held for room 1: %+v", held)
+		}
+	})
+	t.Run("a placement whose link radiogram is discarded", func(t *testing.T) {
+		t.Parallel()
+		r := startNewcomer(t, 1, nil, discardOf(cube.RFAddLinkPartner))
+		r.set(0x0a0202, "manual", 5)
+		if _, code, out := runRepairOf(t, r.ts, "/api/v1/cubes/KEQ0000100/devices/0a0201/repair/place", ""); code != http.StatusBadGateway {
+			t.Fatalf("the placement: %d %v, want 502", code, out)
+		}
+		if held, ok := r.heldIn(1); ok {
+			t.Fatalf("held for room 1: %+v", held)
+		}
+	})
+}
+
+// A room setpoint of Massimo's taken while an add's link half runs is the
+// newer wish (RoomMajority.D8-A, D4-A first): the copy gives the device
+// that setpoint, manual 21 °C, not the radiator thermostat's manual 5 °C
+// read before the links, both in its direct 0x40, which the Cube
+// discards here, and in the room command that follows (D16-A), which
+// Massimo's intent then records; the state read before is not held. The
+// setpoint is taken while the first link radiogram waits for its
+// answer, and runs after the link half, before the metadata.
+func TestCopyTakesANewerSetpoint(t *testing.T) {
+	t.Parallel()
+	r := startNewcomer(t, 0, nil, func(fc *fakecube.Server) {
+		fc.DiscardIf = func(m cube.Message) bool {
+			rc, err := cube.ParseRadioCommand(m.Data)
+			return m.Type == 's' && err == nil && rc.Command == cube.RFSetTemperature && !rc.Target.Room && rc.Target.RFAddress == newcomer
+		}
+	})
+	r.set(0x0a0202, "manual", 5)
+	var once sync.Once
+	setpoint := make(chan int, 1)
+	r.fc.OnReceive(func(m cube.Message) {
+		rc, err := cube.ParseRadioCommand(m.Data)
+		switch {
+		case m.Type == 's' && err == nil && rc.Command == cube.RFAddLinkPartner:
+			once.Do(func() {
+				go func() {
+					code, _ := do(t, r.ts, "PUT", "/api/v1/cubes/KEQ0000100/rooms/1/setpoint", `{"mode":"manual","temp":21}`)
+					setpoint <- code
+				}()
+				// the setpoint in the queue before the link half ends
+				if !testkit.Within(testkit.Wait, func() bool {
+					return r.rt.queue.Pending(func(c engine.Command) bool { return c.Key == "setpoint:room:1" })
+				}) {
+					t.Error("the room setpoint never queued")
+				}
+			})
+		case m.Type == 'm':
+			// the setpoint's intent recorded before the metadata is answered
+			if !testkit.Within(testkit.Wait, func() bool { _, ok := r.rt.intentAfter(1, time.Time{}); return ok }) {
+				t.Error("the room setpoint's intent never recorded")
+			}
+		}
+	})
+	sent := r.lines.Mark()
+	out := r.putNewcomer(1)
+	if code := <-setpoint; code != 200 {
+		t.Fatalf("the room setpoint: %d", code)
+	}
+	link := newcomerLink()
+	want := append(append([]string(nil), link[:4]...), setTemp(t, room1(0x0a0202), 21, cube.ModeManual, cube.Until{}))
+	want = append(want, link[4:]...)
+	want = append(want, setTemp(t, direct(newcomer), 21, cube.ModeManual, cube.Until{}))
+	want = append(want, copyOf(t, 1, []cube.RFAddress{0x0a0202}, *r.rt.client.Snapshot().Config(0x0a0202).Thermostat)...)
+	sameLines(t, r.lines, sent, append(want, setTemp(t, room1(0x0a0202), 21, cube.ModeManual, cube.Until{})))
+	if copied, _ := out["copied"].(map[string]any); copied["mode_not_set"] != true || copied["room_mode"] != true ||
+		fmt.Sprint(copied["state"]) != "map[mode:manual setpoint:21]" {
+		t.Fatalf("copied %v", out["copied"])
+	}
+	if in, ok := r.rt.intentAfter(1, time.Time{}); !ok || in.mode != cube.ModeManual || in.temp != 21 {
+		t.Fatalf("Massimo's setpoint to room 1: %+v %v", in, ok)
+	}
+	if held, ok := r.heldIn(1); ok {
+		t.Fatalf("held for room 1 over the newer setpoint: %+v", held)
+	}
+}
+
+// A link command whose wait ends with the request's context while the
+// queue still sends it has an unknown fate (cubeio.Reached): the Cube
+// answers its 0x22 a while after it came.
+func TestReachedAfterTheContextEnds(t *testing.T) {
+	t.Parallel()
+	r := startNewcomer(t, 0, nil, func(fc *fakecube.Server) {
+		fc.DiscardIf = func(m cube.Message) bool {
+			if rc, err := cube.ParseRadioCommand(m.Data); m.Type == 's' && err == nil && rc.Command == cube.RFSetGroupAddress {
+				time.Sleep(300 * time.Millisecond)
+			}
+			return false
+		}
+	})
+	cmd := engine.Command{Key: "link-late", Lines: []cube.Message{cube.CmdSetGroup(newcomer, 1, false)}}
+	from := r.lines.Mark()
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer cancel()
+	res := r.rt.writer().Do(ctx, cmd)
+	if !errors.Is(res.Err, context.DeadlineExceeded) || !cubeio.Reached(cmd, res) {
+		t.Fatalf("the result %+v, reached %v", res, cubeio.Reached(cmd, res))
+	}
+	r.lines.Await(t, from, "the 0x22 sent", func(m cube.Message) bool { return m.String() == cmd.Lines[0].String() })
 }

@@ -784,8 +784,12 @@ every box is closed and forgotten with what it held.
   **Continue** asks once more, and only that question's
   **Unlink all and re-link now** sends it.
 - At a device: **Re-send the configuration**, for a thermostat,
-  the temperatures and week programme most of the room's other thermostats
-  share, where its own differ;
+  the room's temperatures and each day of its week programme,
+  where its own differ:
+  what most of the room's thermostats share, its own included,
+  as the room's differences name them,
+  else its master's, its wall thermostat's or its first radiator thermostat's,
+  one the Cube has no state for passed over (RoomMajority.D9);
   **Place in its listed room**, by radio, where the Cube has it in another
   room or none;
   **List where the Cube has it**, in the list only,
@@ -1587,12 +1591,25 @@ settings forms and have none of it.
   and for a thermostat **Copy the room's settings**, on by default,
   shown where the role has `configure`, which the copy needs.
   **Put into a room** links the device with the room's other devices and lists it there;
-  with the copy it also gets the temperatures,
-  valve settings and week programme of the room's other thermostats,
-  as the original software does, which costs up to two thirds of an hour's
-  radio budget for a new thermostat (the **?** says how);
-  the room's other thermostats get its temperatures too.
-  The line under the form says how it went, and the end of pairing is said too.
+  with the copy it also gets the room's state,
+  the mode and setpoint its thermostats showed before it came
+  (a room in manual stays in manual), and the room's settings,
+  setting by setting and day by day of the week programme:
+  what most of the room's other thermostats share,
+  else its master's, its wall thermostat's or its first radiator thermostat's,
+  one the Cube has no state for passed over (RoomMajority, Block 2),
+  which costs up to two thirds of an hour's radio budget for a new thermostat
+  (the **?** says how);
+  the room's other thermostats with a state get its temperatures too.
+  Without the copy the device keeps its own state and settings.
+  The line under the form says how it went:
+  the state the device took, the room's, or Massimo's setpoint to the room
+  where one came while the device was linked,
+  or auto on the week programme where the room had none;
+  or that the Cube did not take it and whether it went to the whole room instead;
+  the days of the programme copied, or why no settings were,
+  the room having no other thermostat or none the Cube has a state for;
+  and the end of pairing is said too.
   A role with the capability `pair` but not `cubes`, the manager's by default,
   sees the Cubes' panels with the pairing alone;
   putting a device into a room needs `structure`.

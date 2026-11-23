@@ -2113,7 +2113,8 @@ A device's room for the Cube is the room byte of its C line, not the room list's
 (the metadata, `M`):
 a previous owner's unlisted devices, their C lines in two rooms,
 made the Cube discard those rooms' commands.
-So at every complete greeting, every C line and every change of the room list
+So at every complete greeting, every C line and every change of the room list,
+and when the Cube gains or loses a device's state,
 the server compares the two, which costs no radio time,
 and gives a device, and each room a finding concerns, `mismatches`,
 a list of what it found, absent where nothing:
@@ -2125,7 +2126,7 @@ a list of what it found, absent where nothing:
 | `no_config` | a device the room list has in `list_room`, that the Cube has no C line for, whatever its device list says: one it no longer holds, as a Cube sends a C line for every device it has |
 | `type` | the C line's type (`cube_type`) and the room list's (`list_type`) differ |
 | `master` | the room's master in the room list, the address of its entry (`device`), is no device of the Cube (`why` `no_device`), a device of another room (`other_room`, that room in `cube_room`) or no thermostat (`not_thermostat`); a room without a thermostat is not looked at |
-| `programme`, `temperatures` | a thermostat of the room, by its C line, whose week programme, or whose comfort, eco, maximum, minimum or window-open temperature, differs from the room's: those most of its thermostats share, on a tie those of the thermostat a room command names (the first of the room's order, RoomMajority.D9: the master where it is a thermostat of the room, else the wall thermostat, else the first radiator thermostat, one the Cube holds no valid state for passed over); the window-open minutes, which a wall thermostat does not keep, are not compared |
+| `programme`, `temperatures` | a thermostat of the room, by its C line, with a day of its week programme, or a comfort, eco, maximum, minimum or window-open temperature, that differs from the room's, as the copy (`PUT …/devices/{rf}`) and the configuration's repair decide it (RoomMajority.D9): each day and the temperatures what more than half of the room's thermostats share, else what the first of the room's order has (the master where it is a thermostat of the room, else the wall thermostat, else the first radiator thermostat), one the Cube holds no valid state for passed over; so a thermostat fresh from its copy is none. While a thermostat of the room has not reported since the Cube's restart, its entry neither valid nor initialized (`reported` false and not `out_of_date`), every finding of the room's thermostats stays as it was, neither found nor cleared, so that a restart of the Cube clears nothing and warns of nothing again as they report one by one; then one the Cube marks out of date (`out_of_date`) is passed over and its finding stays as it was, as do those of a room with fewer than two thermostats with a valid state, which has no reference; the others are judged. The window-open minutes, which a wall thermostat does not keep, are not compared |
 
 Each finding has its `device` (the device concerned, a room's master for
 `master`) and its `name` in the room list, its `room` (the room list's where it
@@ -2321,7 +2322,22 @@ a difference not yet reported then starts again.
      as one state, auto on the programme;
      in its place, where the server holds one for the room,
      the state its thermostats showed before a structure change brought a device in
-     (`before_change`: true, with the `from` of the rule that took it then);
+     (`before_change`: true, with the `from` of the rule that took it then):
+     taken by this order (steps 1 to 5) over the room's thermostats,
+     the device brought in left out where its C line names the room already,
+     under the structure lock, before the device is linked,
+     by `PUT …/devices/{rf}` that adds a thermostat to the room or moves one into it,
+     whose copy gives it to the device too (RoomMajority.D8-A),
+     though not with `"copy": false`, where the device keeps its own,
+     and by the repair `…/devices/{rf}/repair/place` of a thermostat (RoomMajority.D15-A);
+     held once the Cube accepted a radiogram of the change's link half,
+     or one was sent whose answer did not come,
+     or the request's time ran out while the link half was under way,
+     since the room's thermostats may then take the newcomer's state;
+     not held where the room has no state,
+     nor where no radiogram of the link half went through,
+     which leaves a hold of an earlier change as it was;
+     nor where Massimo set the room another state since it was read;
      auto with a temperature as for `massimo`,
      auto on the programme once a switch point has passed since it was held;
      held until the room's first check after the change that finds its thermostats
@@ -2631,29 +2647,55 @@ first unlinked from that room with 0x23 remove group and 0x21 remove link partne
 as in a move.
 
 A thermostat put into a room, by an add or a move,
-then gets the room's settings, as the original software gives them to a device
-it pairs or moves:
-0x40 auto with temperature 0, to the device directly,
+then gets the room's state and settings, in the order of the copy
+the original software gives a device it pairs or moves (RoomMajority, Block 2):
+0x40 with the room's state from before the change, to the device directly,
 with an error reset first, and one more and a retry after a discard,
-only where the device's flag is set;
+only where the device's flag is set:
+its mode, setpoint and `until`, the state the room checks would send the room
+again (RoomMajority.D8-A; "The room checks", below: Massimo's own setpoint,
+what most of the room's thermostats show, the newest change,
+the master's, the wall thermostat's, a radiator thermostat's),
+read under the structure lock before the device is linked,
+so that the new device's own state,
+which may reach the room's thermostats first, does not count,
+and held for the room checks;
+where Massimo set the room another state since it was read,
+as by `PUT …/rooms/{id}/setpoint` while the links were sent,
+that setpoint, Massimo's own command coming first;
+auto with temperature 0, the week programme, where the room's state is auto on
+its programme, where it has none, or no other thermostat,
+as the original software sends it always;
 after a wakeup of the room,
-0x11 to every thermostat of the room, the device included,
+0x11 to the device and to every thermostat of the room the Cube holds a valid state for,
 with the room's comfort, eco, maximum, minimum and window-open temperatures
-and window-open minutes, each keeping its own temperature offset;
+and window-open minutes, each keeping its own temperature offset:
+one it holds none for, whose settings did not count, is not given the others';
 after a wakeup,
 0x12 with the room's boost, descaling and valve settings to the device;
 after a wakeup, one 0x10 per day of the room's week programme that differs from
 the device's own, then 0x11 to the device once more.
-The room's settings are those of its first other thermostat,
-radiator thermostats first;
-a hidden device is neither linked with the device nor given anything,
-nor taken for the room's settings;
-where that is a wall thermostat,
-the window-open minutes, descaling and valve limits it does not store are the
-original software's defaults.
-A room without another thermostat has nothing to copy,
-and the device gets 0x40 alone;
+The room's settings are decided by the one rule that the report of members
+that differ and the configuration's repair take too (RoomMajority.D9, D5-A),
+each group on its own:
+the temperatures, the valve settings and each day of the week programme
+are what more than half of the room's other thermostats share,
+else those of the first of the room's order that has them:
+its master where it is a thermostat of the room, its wall thermostat,
+its radiator thermostats in the Cube's order;
+a thermostat the Cube holds no valid state for
+(`reported` false or `out_of_date`) is passed over.
+The window-open minutes and the valve settings,
+which only radiator thermostats store in full, are decided among them;
+without one, they are the wall thermostat's boost settings
+and the original software's window-open minutes, descaling and valve limits.
+The device keeps its own temperature offset and display mode.
+A hidden device is neither linked with the device nor given anything,
+nor taken for the room's state or settings.
+A room without another thermostat the Cube holds a valid state for
+has no settings to copy, and the device gets 0x40 alone;
 a shutter contact or an eco switch gets nothing.
+With `"copy": false` the device keeps its own state and settings.
 The copy needs the capability `configure` as well as `structure`,
 since its 0x11 changes the room's other thermostats too:
 without it the request is refused with `403` before anything is sent,
@@ -2667,15 +2709,33 @@ the queue waits for the budget as for every write.
 The answer is
 
 ```json
-{"ok": true, "copied": {"temperatures": ["0a010a", "0a0b0c"], "valve": true, "days": 5}, "budget": {…}}
+{"ok": true, "copied": {"state": {"mode": "manual", "setpoint": 5}, "temperatures": ["0a010a", "0a0b0c"], "valve": true, "days": 5}, "budget": {…}}
 ```
 
-with `copied` absent when nothing was copied,
+with `copied` where the copy ran,
+absent without it (`"copy": false`, a device that is no thermostat, a rename):
+`state`, the state its 0x40 carried,
+`mode` with `setpoint` (none for auto on the week programme)
+and `until` (a holiday's end, as `PUT …/rooms/{id}/setpoint` takes it),
+and `state_from`, `room` for the room's or Massimo's setpoint to it,
+`default` where the room had none and the 0x40 carried auto on the programme;
+`temperatures`, `valve` and `days`, what of the room's settings was sent;
+`config_skipped` where none was and why:
+`no_other_thermostat`, the room has no other thermostat,
+or `no_valid_state`,
+the Cube holds no valid state for any other thermostat of it,
+as after its restart until they report;
 `"confirmation": "pending"` where the device went into a room
 (see "Structure changes read back", below),
 and `"mode_not_set": true` in `copied` when the Cube discarded the 0x40,
 which leaves the device's mode as it was and ends nothing:
 on 2026-11-04 the Cube discarded a direct 0x40 to a device in a room.
+The room's state then goes once more as a room command,
+to the room's addressee after the programme (RoomMajority.D16-A),
+with `"room_mode": true` in `copied` where the Cube took it,
+which counts as Massimo's own setpoint to the room ("The room checks");
+its discard ends nothing either,
+and nothing is sent where the room has no state.
 Any other command of the copy that fails ends it with its error (`502`,
 `409` when superseded), which says that the device is in the room:
 what was sent until then stays sent,
@@ -3277,15 +3337,19 @@ A room is its members by their C lines, the Cube's own idea of it.
 | `…/cubes/{sn}/rooms/{id}/repair/master` | the metadata, with the room's wall thermostat as its master, else its first radiator thermostat, one the Cube holds no valid state for passed over while another is not (the room's order without its master, RoomMajority.D9, in place of DeviceUnPairingFix.D167), where the metadata's master is no thermostat whose C line names the room; nothing where it is one, or the room has none | none: metadata only |
 | `…/cubes/{sn}/rooms/{id}/repair/relink` | for each member that takes part in links (thermostats and window contacts), a command of its own after a wakeup of the room: one 0x20 add link partner radiogram with the room flag naming it, to the room's addressee (the first of the room's order, RoomMajority.D9: the master where it is a thermostat of the room and not the member, else its wall thermostat, else its first radiator thermostat, one the Cube holds no valid state for passed over), one to each window contact among its partners, one to the member for each partner, then 0x22, its group; the first resets the room's other flagged members. Nothing is unlinked. Nothing to send where the room's list and its C lines disagree (place or list the devices first) or fewer than two members take part in links | a few radiograms per member: a room of a radiator, a wall thermostat and a window contact is 14, about 17.5 % |
 | `…/cubes/{sn}/rooms/{id}/repair/unlink-relink` | "unlink all and re-link" (D163-B), with `structure` as well as `repair`, its preview too: for each member that takes part in links, a command of its own after a wakeup of the room, the 0x21 remove link partner radiograms of a move's unlink half without its 0x23 (one with the room flag naming it to the room's addressee, one to each window contact among its partners, one to the member for each partner), the room's flagged members reset in the first; then the re-link of every member, as above, whose 0x22 sets each group again. **Not yet run on hardware**: its preview says so (`untested`, a note), and a run that stops halfway, at a discarded radiogram or a lost connection, leaves the room's devices without their partners until it is run again. Nothing to send as the re-link | about twice a re-link's: 25 radiograms, about 31 %, for the room above; a room of five members far more, which the duty-cycle refusal may stop before it starts |
-| `…/cubes/{sn}/devices/{rf}/repair/config` | after a wakeup of the room, the days of the week programme that differ from what more than half of the room's other thermostats share by their C lines (0x10), then 0x11 with the temperatures they share (comfort, eco, maximum, minimum, window open), the device's own offset and window-open minutes kept; its C line read again. Nothing to send where the room has no other thermostat, its others share no temperatures or no programme by a majority (`nothing` says which), the device agrees already, or the Cube and its list have it in different rooms | one or two radiograms per day, one 0x11 |
-| `…/cubes/{sn}/devices/{rf}/repair/place` | where the device's C line names another room than the metadata, or none: a move into the metadata's room (`PUT …/devices/{rf}` with `room_id`, without the copy), from none the placement's link half alone; its C line read again. The metadata stays. Nothing to send where the list does not list the device, has it in no room or where the Cube has it, or the room has a wall thermostat already | about 8 % for a move |
+| `…/cubes/{sn}/devices/{rf}/repair/config` | after a wakeup of the room, the days of the room's week programme that differ from the device's (0x10), then 0x11 with the room's temperatures (comfort, eco, maximum, minimum, window open), the device's own offset and window-open minutes kept; its C line read again. The room's are those the report of members that differ names (`programme`, `temperatures`; RoomMajority.D9, the copy's one rule), by the C lines of every thermostat of the room, the device's included: each day and the temperatures what more than half of them share, else what the first of the room's order has, one the Cube holds no valid state for passed over. Nothing to send where the room has no other thermostat the Cube holds a valid state for (`nothing` says how many it passed over), the device has the room's configuration already, or the Cube and its list have it in different rooms | one or two radiograms per day, one 0x11 |
+| `…/cubes/{sn}/devices/{rf}/repair/place` | where the device's C line names another room than the metadata, or none: a move into the metadata's room (`PUT …/devices/{rf}` with `room_id`, without the copy), from none the placement's link half alone; its C line read again. The metadata stays. A thermostat's run holds the room's state from before it for the room checks, as an add does (RoomMajority.D15-A; "The room checks"). Nothing to send where the list does not list the device, has it in no room or where the Cube has it, or the room has a wall thermostat already | about 8 % for a move |
 | `…/cubes/{sn}/devices/{rf}/repair/list` | the metadata, the device's entry moved to the room its C line names, or one made for a device the list does not have, named by `name` (a query parameter) or by default (below); a room the list does not have is made with `room_name` (a query parameter), its master the room's wall thermostat, else its first radiator thermostat, as the repair of a room's master names it, and asked for (above) where it is not given. Nothing to send where the Cube has the device in no room, or its list where the Cube has it | none: metadata only |
 
 `details` holds, per repair:
 `devices`, those reset;
 `room`, `master` and `new_master`;
-for the configuration `room`, `others` (the room's other thermostats),
-`temperatures_by` and `program_by` (how many share what is re-sent),
+for the configuration `room`, `others` (the room's other thermostats
+the Cube holds a valid state for), `thermostats` (those the room's
+configuration was decided over, the device among them
+where the Cube holds a valid state for it),
+`temperatures_by` and `program_by` (how many of those share what is re-sent,
+for the programme the fewest of any day),
 `temperatures` and `days` (what is re-sent) and `agreed_temperatures`;
 for a placement `from` and `to`;
 for a listing `from`, `to`, `listed` and `new_room`,

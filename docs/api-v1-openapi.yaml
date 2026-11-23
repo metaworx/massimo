@@ -1935,15 +1935,27 @@ paths:
         the room's group (0x22) and listed under name, without name under
         the default "<room name> <type> <n>" a repair's listing gives;
         without room_id it answers 409. A thermostat put into a room, by
-        an add or a move, then gets the room's settings from its first
-        other thermostat: 0x40 auto, 0x11 to every thermostat of the
-        room, 0x12, and 0x10
-        for each day of the programme that differs, then 0x11 again;
-        hidden devices are left out. The copy needs the capability
-        configure as well (403 without it); copy false skips it. A
-        discarded 0x40 sets mode_not_set and ends nothing; any other
-        command that fails ends the copy with its error, the device in
-        the room.
+        an add or a move, then gets the room's state and settings: 0x40
+        to the device directly with the room's state from before the
+        change, read before the device is linked and held for the room
+        checks once a radiogram of the link half went through
+        (RoomMajority.D8-A), auto on the programme where the room has
+        none; 0x11 to the device and the room's thermostats the Cube
+        holds a valid state for, 0x12, and 0x10 for each day of the
+        programme that differs, then 0x11 again. The
+        room's settings are decided by one rule, which the report and the
+        configuration's repair take too (RoomMajority.D9): each group and
+        each day what more than half of the room's other thermostats
+        share, else what the first of the room's order has (master, wall
+        thermostat, radiator thermostats), a thermostat the Cube holds no
+        valid state for passed over; hidden devices are left out. The
+        copy needs the capability configure as well (403 without it);
+        copy false skips it, the device keeping its own state and
+        settings. A discarded 0x40 sets mode_not_set and ends
+        nothing; the room's state then goes once as a room command
+        (room_mode, RoomMajority.D16-A), whose discard ends nothing
+        either; any other command that fails ends the copy with its
+        error, the device in the room.
       parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/rf"}, {$ref: "#/components/parameters/idempotencyKey"}]
       requestBody:
         required: true
@@ -1969,15 +1981,32 @@ paths:
                   ok: {type: boolean}
                   copied:
                     type: object
-                    description: What of the room's settings was sent; absent when nothing was.
+                    description: What of the room's state and settings was sent; present where the copy ran.
                     properties:
+                      state:
+                        type: object
+                        description: "The state the 0x40 carried, the room's from before the change (RoomMajority.D8-A), auto on the programme where the room had none."
+                        required: [mode]
+                        properties:
+                          mode: {type: string, enum: [auto, manual, vacation]}
+                          setpoint: {type: number, description: "The setpoint, absent for auto on the week programme"}
+                          until: {type: string, description: "A holiday's end, YYYY-MM-DD HH:MM"}
+                      state_from:
+                        type: string
+                        enum: [room, default]
+                        description: "Where the state came from: the room's from before the change, or Massimo's setpoint to the room since (room); auto on the programme where the room had none (default)."
+                      config_skipped:
+                        type: string
+                        enum: [no_other_thermostat, no_valid_state]
+                        description: "Why no configuration was sent: the room has no other thermostat, or the Cube holds no valid state for any other one (RoomMajority.D9); absent where it was sent."
                       temperatures:
                         type: array
-                        description: The thermostats that got the room's temperatures (0x11).
+                        description: The thermostats that got the room's temperatures (0x11); empty where none did.
                         items: {type: string, pattern: "^[0-9a-f]{6}$"}
                       valve: {type: boolean, description: The device got the room's valve settings (0x12).}
                       days: {type: integer, minimum: 0, maximum: 7, description: The days of the week programme sent (0x10).}
-                      mode_not_set: {type: boolean, description: The Cube discarded the 0x40 that sets auto; the device keeps its mode.}
+                      mode_not_set: {type: boolean, description: "The Cube discarded the 0x40 that sets the device's mode, the room's state; the device keeps its own."}
+                      room_mode: {type: boolean, description: "After the discarded 0x40, the room's state went to the room as a room command, which the Cube took (RoomMajority.D16-A)."}
                   budget: {$ref: "#/components/schemas/Budget"}
                   confirmation: {type: string, enum: [pending], description: "The device went into a room: the server reads the change back from the Cube's free slots, and the log's structure event says when it is done."}
         "400": {$ref: "#/components/responses/BadRequest"}
@@ -2734,13 +2763,17 @@ paths:
       summary: Preview re-sending a thermostat's configuration from its room
       x-capability: repair
       description: |
-        The temperatures (comfort, eco, maximum, minimum, window open) and
-        the week programme that more than half of the room's other
-        thermostats share by their C lines, where the device's differ:
-        the days that differ (0x10), then 0x11 with the device's own offset
-        and window-open minutes. Nothing to send where the room has no other
-        thermostat, its others share no temperatures or programme by a
-        majority, the device agrees already, or its list and C line name
+        The room's temperatures (comfort, eco, maximum, minimum, window
+        open) and week programme by the C lines of its thermostats, the
+        device's included, as the report of members that differ names
+        them (RoomMajority.D9, the copy's rule): each day and the
+        temperatures what more than half of them share, else what the
+        first of the room's order has, a thermostat the Cube holds no
+        valid state for passed over; where the device's differ, the days
+        that differ (0x10), then 0x11 with the device's own offset and
+        window-open minutes. Nothing to send where the room has no other
+        thermostat the Cube holds a valid state for, the device has the
+        room's configuration already, or its list and C line name
         different rooms.
         The preview sends nothing: the lines a run would send and what they
         cost, and the plan's hash for the run.
@@ -2778,7 +2811,10 @@ paths:
         Where the device's C line names another room than the metadata, or
         none: a move from its C line's room (the removal's unlink half with
         0x23 and the placement's link half), or the link half alone from
-        none. The metadata stays; the room's settings are not copied. Nothing
+        none. The metadata stays; the room's settings are not copied, but a
+        thermostat's run holds the room's state from before it for the room
+        checks once its link half went through, as an add does
+        (RoomMajority.D15-A). Nothing
         to send where the list does not list the device or has it where the Cube
         has it, or a second wall thermostat.
         The preview sends nothing: the lines a run would send and what they
@@ -3867,8 +3903,9 @@ components:
     RepairRefused:
       description: >-
         A run with nothing to send (what its preview's nothing says: no
-        device flagged, the room's list and C lines disagree, no majority
-        to take a configuration from), whose plan changed since its
+        device flagged, the room's list and C lines disagree, no other
+        thermostat with a valid state to take a configuration from),
+        whose plan changed since its
         preview (both hashes in the message), or that would reach the
         queue's hold for the duty cycle or the memory slots (its preview's
         refused). A listing into a room the list does not have carries

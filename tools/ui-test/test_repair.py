@@ -84,7 +84,7 @@ def test_device_repairs(page, case):
     """A device's Repair… opens its repairs under its row; a listing into
     a room the Cube's list lacks asks for the room's name first and then
     shows what it would write."""
-    stub = RepairStub(page, {"config": "the 2 other thermostats of room 1 share no temperatures by a majority",
+    stub = RepairStub(page, {"config": "room 1 has no other thermostat to take the configuration from",
                              "place": "the Cube has the device in room 1 already, as its list", "list": LIST, "list-name": True})
     try:
         tile = page.locator(".room").first
@@ -120,7 +120,7 @@ def test_listing_names_the_device(page, case, reads):
     again, one too long is marked on its field and not read (D201)."""
     unlisted = dict(LIST, details={"from": 0, "to": 1, "listed": False, "new_room": False, "name": "Bath radiator thermostat 1",
                                    "room_name": "Bath", "type": "radiator_thermostat"})
-    stub = RepairStub(page, {"config": "the 2 other thermostats of room 1 share no temperatures by a majority",
+    stub = RepairStub(page, {"config": "room 1 has no other thermostat to take the configuration from",
                              "place": "the Cube's list does not list device 0a0101: list it instead", "list": unlisted})
     names = []
 
@@ -281,7 +281,7 @@ def test_listing_name_too_long(page, case):
     runs with it. The English name fits and is read at once."""
     unlisted = dict(LIST, details={"from": 0, "to": 1, "listed": False, "new_room": False, "name": "Wohnzimmer radiator thermostat 1",
                                    "room_name": "Wohnzimmer", "type": "radiator_thermostat"})
-    stub = RepairStub(page, {"config": "the 2 other thermostats of room 1 share no temperatures by a majority",
+    stub = RepairStub(page, {"config": "room 1 has no other thermostat to take the configuration from",
                              "place": "the Cube's list does not list device 0a0101: list it instead", "list": unlisted})
     names = []
 

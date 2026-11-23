@@ -59,6 +59,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"sync"
 	"time"
@@ -213,6 +214,16 @@ func (rt *runtime) intend(room uint8, mode cube.Mode, temp float64, until cube.U
 	}
 }
 
+// intentAfter is Massimo's last setpoint to room where it was taken
+// after at, a time of the room checks' clock; false for none.
+func (rt *runtime) intentAfter(room uint8, at time.Time) (roomIntent, bool) {
+	d := &rt.drift
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	in, ok := d.intent[room]
+	return in, ok && at.Before(in.at)
+}
+
 // holdReference keeps state as room's reference for the room checks,
 // held at at, a time of the room checks' clock (Server.roomNow): the
 // state the room's members showed before a structure change that brings
@@ -225,9 +236,12 @@ func (rt *runtime) intend(room uint8, mode cube.Mode, temp float64, until cube.U
 // state since the first check that judged it (wishedSince); by a newer
 // setpoint of Massimo's to the room (intend); resendGap after at; once
 // it is a holiday whose end has passed at the Cube's time; and by a
-// later hold for the room, which replaces it. The room checks leave the
-// room out while the change is sent and read back (structureRooms), so
-// that the first check after it is the first to judge the room. A state that is the room's hold itself, as
+// later hold for the room, which replaces it. A state read before a
+// setpoint of Massimo's to the room of another state, as one held only
+// once a structure change's link half went through, is not held. The
+// room checks leave the room out while the change is sent and read back
+// (structureRooms), so that the first check after it is the first to
+// judge the room. A state that is the room's hold itself, as
 // roomReference gives it before a check judged the room (before_change),
 // keeps the hold and its time.
 func (rt *runtime) holdReference(room uint8, state resend, at time.Time) {
@@ -239,6 +253,9 @@ func (rt *runtime) holdReference(room uint8, state resend, at time.Time) {
 	defer d.mu.Unlock()
 	if state.beforeChange && d.holds[room] != nil {
 		return
+	}
+	if in, ok := d.intent[room]; ok && at.Before(in.at) && !state.is(in.mode, in.temp, in.until) {
+		return // read before a newer setpoint of Massimo's to the room, the newer wish (intend)
 	}
 	state.room, state.beforeChange = room, false
 	if d.holds == nil {
@@ -274,15 +291,25 @@ func (d *driftState) holdFor(room uint8, now, cubeNow time.Time, clock bool) *he
 // left out for the structure change that held it (before_change; its
 // time stays as it was, holdReference). A structure change that brings
 // a newcomer into the room reads it before it links the device, and
-// holds it for the room checks (holdReference; RoomMajority, D8-A).
-// False where no thermostat of the room has a state.
-func (rt *runtime) roomReference(snap *cubelan.Snapshot, room uint8, now time.Time) (resend, bool) {
+// holds it for the room checks once its link half reached a member
+// (Server.roomBefore: an add or a move of a thermostat, which gives it
+// to the device too where it copies, and the repair's placement;
+// holdReference; RoomMajority, D8-A, D15-A). leave, the
+// device the change brings in, is left out where its C line names the
+// room already, as after a retry whose link half went through; 0 for
+// none. False where no thermostat of the room has a state.
+func (rt *runtime) roomReference(snap *cubelan.Snapshot, room uint8, leave cube.RFAddress, now time.Time) (resend, bool) {
 	md := snap.Metadata()
 	if md == nil {
 		return resend{}, false
 	}
 	cubeNow, clock := snap.CubeClock(now)
-	sc := scanRoom(snap, room, view.NewHidden(rt.config().Hidden, md, false), cubeNow, clock)
+	skip := view.Hidden{}
+	maps.Copy(skip, view.NewHidden(rt.config().Hidden, md, false))
+	if leave != 0 {
+		skip[leave] = true
+	}
+	sc := scanRoom(snap, room, skip, cubeNow, clock)
 	d := &rt.drift
 	d.mu.Lock()
 	defer d.mu.Unlock()

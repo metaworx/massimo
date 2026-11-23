@@ -121,6 +121,10 @@ type Result struct {
 	// Replies holds the Cube's answer to each of the command's Lines, in
 	// order, up to the first failure. Radio replies are S lines.
 	Replies []cube.Message
+	// Sent counts the command's Lines the queue began to send, the one
+	// that failed included: a line counted without a reply may have
+	// reached the Cube, its answer lost.
+	Sent int
 }
 
 // Errors reported through Result.Err.
@@ -483,6 +487,7 @@ func (q *Queue) execute(ctx context.Context, cmd Command) Result {
 		if i > 0 {
 			q.sleep(ctx, q.opts.Gap)
 		}
+		res.Sent = i + 1
 		if !isRadio(l) {
 			reply, err := q.gw.Send(ctx, l)
 			if err != nil {

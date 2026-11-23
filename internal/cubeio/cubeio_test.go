@@ -143,42 +143,6 @@ func TestMoveCommands(t *testing.T) {
 	}
 }
 
-// The copy of a room's settings: a thermostat alone in its room gets
-// 0x40 only, a shutter contact nothing, and 0a010d put into room 1
-// takes 0a010a's settings, the 0x11 going to both thermostats.
-func TestCopyCommands(t *testing.T) {
-	_, w, _ := connect(t)
-	snap := w.Client.Snapshot()
-	steps, err := CopyCommands(snap, 0x0a010d, cube.DeviceRadiatorThermostat, 6, nil)
-	if err != nil || len(steps) != 1 || steps[0].Command.Key != "copy-mode:0a010d" || !steps[0].Copies.Empty() {
-		t.Fatalf("alone in its room: %+v %v", steps, err)
-	}
-	if steps, err := CopyCommands(snap, 0x0a010d, cube.DeviceShutterContact, 1, nil); err != nil || steps != nil {
-		t.Fatalf("a contact: %+v %v", steps, err)
-	}
-	steps, err = CopyCommands(snap, 0x0a010d, cube.DeviceRadiatorThermostat, 1, nil)
-	if err != nil || len(steps) != 4 {
-		t.Fatalf("into room 1: %+v %v", steps, err)
-	}
-	temps, valve, prog := steps[1], steps[2], steps[3]
-	if !temps.Command.Wakeup || temps.Command.RoomID != 1 || len(temps.Command.Lines) != 2 ||
-		len(temps.Copies.Temperatures) != 2 || temps.Copies.Temperatures[0] != 0x0a010d || temps.Copies.Temperatures[1] != 0x0a010a {
-		t.Fatalf("temperatures %+v", temps)
-	}
-	ref := snap.Config(0x0a010a).Thermostat
-	want, _ := cube.CmdSetTemperatures(cube.Target{RFAddress: 0x0a010d}, cube.TemperatureSettings{Comfort: ref.ComfortTemp, Eco: ref.EcoTemp,
-		Max: ref.MaxSetpoint, Min: ref.MinSetpoint, WindowOpen: ref.WindowOpenTemp, WindowOpenMinutes: ref.WindowOpenMins})
-	if temps.Command.Lines[0].String() != want.String() {
-		t.Fatalf("0x11 %s, want %s", temps.Command.Lines[0], want)
-	}
-	if !valve.Copies.Valve || valve.Command.Target != 0x0a010d || len(valve.Command.Lines) != 1 {
-		t.Fatalf("valve %+v", valve)
-	}
-	if prog.Copies.Days != 7 || len(prog.Command.Lines) != 8 || prog.Command.Lines[7].String() != want.String() {
-		t.Fatalf("programme %+v", prog)
-	}
-}
-
 // RemoveCommands: 0a010d, alone in room 6, has no partner to unlink: a
 // wakeup of room 6 and no line, no 0x23 (a removal sends none), then t:
 // with the force flag; the Cube's own C line names no room, so it has

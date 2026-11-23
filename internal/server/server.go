@@ -1119,9 +1119,11 @@ func (s *Server) pump(ctx context.Context, rt *runtime) {
 			if e.Kind == cubelan.EventConnected {
 				s.slotsGreeting(ctx, rt) // the greeting's free slots (slots.go)
 			}
+			_, reported := ev.Changes["reported"] // the Cube gained or lost the device's state
 			switch {
 			case e.Kind == cubelan.EventConnected,
-				!e.Greeting && (e.Kind == cubelan.EventConfig || e.Kind == cubelan.EventMetadata || e.Kind == cubelan.EventForgotten):
+				!e.Greeting && (e.Kind == cubelan.EventConfig || e.Kind == cubelan.EventMetadata || e.Kind == cubelan.EventForgotten),
+				!e.Greeting && e.Kind == cubelan.EventState && reported: // a member judged again, or no longer (congruence.go)
 				s.checkMismatches(ctx, rt) // the C lines against the metadata (congruence.go)
 			}
 		}

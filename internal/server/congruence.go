@@ -16,12 +16,22 @@ package server
 // M entry, is no device of the Cube, a device of another room or no
 // thermostat, where the room has a thermostat at all. Then, within each
 // room, the thermostats by their C lines (D162-A, third tier): a member
-// whose week programme, or whose comfort, eco, maximum, minimum or
-// window-open temperature, differs from the room's, the one most members
-// share, on a tie that of the member a room radiogram names
-// (cubeio.Addressee: the first of the room's order, RoomMajority.D9, the
-// dead passed over). The window-open minutes are not compared, which a
-// wall thermostat does not keep.
+// with a day of its week programme, or a comfort, eco, maximum, minimum
+// or window-open temperature, that differs from the room's, as the one
+// rule of a room's configuration decides it (cubeio.RoomConfig,
+// RoomMajority.D9), which the copy and the repair take too: per group
+// and per day, what most of the members the Cube holds a valid state for
+// share, else what the first of the room's order has. The window-open
+// minutes are not compared, which a wall thermostat does not keep. While
+// a thermostat of the room has not reported since the Cube's restart
+// (its L entry neither valid nor initialized, 0x10 and 0x02 both clear),
+// every finding of the room's members stays as it was, neither found nor
+// cleared, so that a restart of the Cube clears nothing and warns of
+// nothing again as the members report one by one. Then a member whose
+// entry the Cube marks out of date (initialized, not valid) is passed
+// over (RoomMajority.D9) and its finding stays as it was, as do those of
+// a room with fewer than two members the Cube holds a valid state for,
+// which has no reference; the others are judged.
 //
 // Left out are the hidden devices and those parked in room 255, and the
 // rooms they alone make up; the device of Massimo's own structure change
@@ -31,6 +41,10 @@ package server
 // tier, a room with a member whose configuration write the follow-up
 // still follows (followup.go) or whose programme is on its way (etag.go);
 // and the whole Cube while a restore runs.
+//
+// The checks run at every complete greeting, at every C line, at every
+// change of the metadata, and when the Cube gains or loses a device's
+// state.
 //
 // Each finding is the Cube's log event mismatch at warn, once, and a mark
 // in the device's and its rooms' mismatches in the API, until a check
@@ -45,7 +59,6 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
-	"fmt"
 	"maps"
 	"slices"
 	"sync"
@@ -186,8 +199,9 @@ func (rt *runtime) followedRooms(snap *cubelan.Snapshot) map[uint8]bool {
 // thermostats of each room with each other, the devices in hidden and
 // room 255 left out, and the members of the rooms in busy. It reads each
 // device's configuration once, so that a line applied meanwhile cannot
-// take one away halfway.
-func findMismatches(snap *cubelan.Snapshot, md *cube.Metadata, hidden view.Hidden, busy map[uint8]bool) []view.Mismatch {
+// take one away halfway. kept holds the keys of the members' findings
+// that were not judged (memberMismatches), which stay as they are.
+func findMismatches(snap *cubelan.Snapshot, md *cube.Metadata, hidden view.Hidden, busy map[uint8]bool) (out []view.Mismatch, kept map[string]bool) {
 	names := map[uint8]string{}
 	for _, r := range md.Rooms {
 		names[r.ID] = r.Name
@@ -205,7 +219,7 @@ func findMismatches(snap *cubelan.Snapshot, md *cube.Metadata, hidden view.Hidde
 		}
 	}
 	at := func(r uint8) *uint8 { return &r }
-	var out []view.Mismatch
+	kept = map[string]bool{}
 	members := map[uint8][]cube.RFAddress{} // each room's thermostats by their C lines
 	for _, rf := range devs {
 		c := cfgs[rf]
@@ -246,10 +260,16 @@ func findMismatches(snap *cubelan.Snapshot, md *cube.Metadata, hidden view.Hidde
 			out = append(out, m)
 		}
 		if !busy[r.ID] {
-			out = append(out, memberMismatches(snap, cfgs, r, members[r.ID], names, listed)...)
+			found, unjudged := memberMismatches(snap, cfgs, r, members[r.ID], names, listed)
+			out = append(out, found...)
+			for _, rf := range unjudged {
+				for _, finding := range []string{view.MismatchProgramme, view.MismatchTemperatures} {
+					kept[view.Mismatch{Finding: finding, Device: rf.String(), Room: r.ID}.Key()] = true
+				}
+			}
 		}
 	}
-	return out
+	return out, kept
 }
 
 // masterMismatch is the finding of a room's master in the metadata that
@@ -275,72 +295,62 @@ func masterMismatch(cfgs map[cube.RFAddress]*cube.DeviceConfig, r cube.RoomMeta,
 	return m, true
 }
 
-// memberMismatches are the thermostats rfs of a room whose week programme
-// or temperatures, by the configurations cfgs, differ from the room's:
-// those most of them share, on a tie those of the member a room
-// radiogram names (cubeio.Addressee, the dead passed over by snap).
-func memberMismatches(snap *cubelan.Snapshot, cfgs map[cube.RFAddress]*cube.DeviceConfig, r cube.RoomMeta, rfs []cube.RFAddress, names map[uint8]string, listed map[cube.RFAddress]cube.DeviceMeta) []view.Mismatch {
+// memberMismatches are the thermostats rfs of a room with a day of their
+// week programme or their temperatures, by the configurations cfgs, that
+// differ from the room's: cubeio.RoomConfig's over them all, the one rule
+// the copy and the repair take (RoomMajority.D9; the dead passed over by
+// snap), so that a device fresh from its copy is none. unjudged lists
+// those whose findings stay as they were: every member while one of
+// them has not reported since the Cube's restart (unreported), else the
+// dead (cubeio.Dead: out of date), and every member where fewer than two
+// are alive, as the room then has no reference.
+func memberMismatches(snap *cubelan.Snapshot, cfgs map[cube.RFAddress]*cube.DeviceConfig, r cube.RoomMeta, rfs []cube.RFAddress, names map[uint8]string, listed map[cube.RFAddress]cube.DeviceMeta) (out []view.Mismatch, unjudged []cube.RFAddress) {
 	if len(rfs) < 2 {
-		return nil
+		return nil, nil
+	}
+	if slices.ContainsFunc(rfs, func(rf cube.RFAddress) bool { return unreported(snap, rf) }) {
+		return nil, rfs // the Cube's restart: nothing judged until every member reported
 	}
 	metas := make([]cube.DeviceMeta, 0, len(rfs))
-	progs, temps := map[cube.RFAddress]string{}, map[cube.RFAddress]string{}
+	var alive []cube.RFAddress
 	for _, rf := range rfs {
-		c := cfgs[rf]
-		metas = append(metas, cube.DeviceMeta{Type: c.Type, RFAddress: rf, RoomID: r.ID})
-		progs[rf], temps[rf] = roomSettings(c)
+		metas = append(metas, cube.DeviceMeta{Type: cfgs[rf].Type, RFAddress: rf, RoomID: r.ID})
+		if cubeio.Dead(snap, rf) {
+			unjudged = append(unjudged, rf)
+		} else {
+			alive = append(alive, rf)
+		}
 	}
-	addressee, _ := cubeio.Addressee(snap, r.RFAddress, metas, 0)
-	var out []view.Mismatch
+	if len(alive) < 2 {
+		return nil, rfs // no reference: nothing of theirs is judged
+	}
+	ref, ok := cubeio.RoomConfig(snap, r.RFAddress, metas, 0, func(rf cube.RFAddress) *cube.DeviceConfig { return cfgs[rf] })
+	if !ok {
+		return nil, rfs
+	}
 	for _, k := range []struct {
 		finding string
-		of      map[cube.RFAddress]string
-	}{{view.MismatchProgramme, progs}, {view.MismatchTemperatures, temps}} {
-		ref := roomReferenceKey(rfs, k.of, addressee)
-		for _, rf := range rfs {
-			if k.of[rf] != ref {
+		differs func(*cube.DeviceConfig) bool
+	}{
+		{view.MismatchProgramme, func(c *cube.DeviceConfig) bool { return len(ref.Days(c)) > 0 }},
+		{view.MismatchTemperatures, func(c *cube.DeviceConfig) bool { return !ref.SameTemperatures(c) }},
+	} {
+		for _, rf := range alive {
+			if k.differs(cfgs[rf]) {
 				out = append(out, view.Mismatch{Finding: k.finding, Device: rf.String(), Name: listed[rf].Name, Room: r.ID, RoomName: names[r.ID]})
 			}
 		}
 	}
-	return out
+	return out, unjudged
 }
 
-// roomSettings are a thermostat's week programme and its temperatures
-// that a room's members share, each as a key that compares them.
-func roomSettings(c *cube.DeviceConfig) (prog, temps string) {
-	var wp cube.WeekProgram
-	var comfort, eco, hi, lo, open float64
-	switch {
-	case c.Thermostat != nil:
-		t := c.Thermostat
-		wp, comfort, eco, hi, lo, open = t.WeekProgram, t.ComfortTemp, t.EcoTemp, t.MaxSetpoint, t.MinSetpoint, t.WindowOpenTemp
-	case c.Wall != nil:
-		w := c.Wall
-		wp, comfort, eco, hi, lo, open = w.WeekProgram, w.ComfortTemp, w.EcoTemp, w.MaxSetpoint, w.MinSetpoint, w.WindowOpenTemp
-	}
-	raw, _ := json.Marshal(wp)
-	return string(raw), fmt.Sprintf("%.1f|%.1f|%.1f|%.1f|%.1f", comfort, eco, hi, lo, open)
-}
-
-// roomReferenceKey is the key most of the members share; on a tie the
-// addressee's, else the first member's among those tied.
-func roomReferenceKey(rfs []cube.RFAddress, of map[cube.RFAddress]string, addressee cube.RFAddress) string {
-	count := map[string]int{}
-	best := 0
-	for _, rf := range rfs {
-		count[of[rf]]++
-		best = max(best, count[of[rf]])
-	}
-	if count[of[addressee]] == best {
-		return of[addressee]
-	}
-	for _, rf := range rfs {
-		if count[of[rf]] == best {
-			return of[rf]
-		}
-	}
-	return ""
+// unreported reports whether the Cube holds nothing of rf since its
+// restart: no L entry, or one neither valid nor initialized (0x10 and
+// 0x02 of its first flags byte both clear), unlike one it marks out of
+// date, initialized and not valid, of a device that fell silent.
+func unreported(snap *cubelan.Snapshot, rf cube.RFAddress) bool {
+	st, ok := snap.State(rf)
+	return !ok || !st.Valid && !st.Initialized
 }
 
 // checkMismatches runs the checks on the Cube's snapshot and logs what
@@ -353,7 +363,7 @@ func (s *Server) checkMismatches(ctx context.Context, rt *runtime) {
 	}
 	s.seedMismatches(ctx, rt)
 	now := s.checkNow()
-	found := findMismatches(snap, md, view.NewHidden(rt.config().Hidden, md, false), rt.followedRooms(snap))
+	found, kept := findMismatches(snap, md, view.NewHidden(rt.config().Hidden, md, false), rt.followedRooms(snap))
 	byKey := map[string]view.Mismatch{}
 	for _, m := range found {
 		byKey[m.Key()] = m
@@ -397,7 +407,7 @@ func (s *Server) checkMismatches(ctx context.Context, rt *runtime) {
 	}
 	for _, k := range slices.Sorted(maps.Keys(c.active)) {
 		a := c.active[k]
-		if _, still := byKey[k]; still || c.leftOut(a.m) {
+		if _, still := byKey[k]; still || kept[k] || c.leftOut(a.m) { // kept: a member not judged now
 			continue
 		}
 		delete(c.active, k)

@@ -83,6 +83,11 @@ type repairAction struct {
 	// structure says the run holds the Cube's structure lock, as the
 	// moves and removals do.
 	structure bool
+	// hold is the room a placement brings a thermostat into, whose state
+	// the run reads before its steps and holds for the room checks once
+	// its last step, the link half, reached a member (Server.roomBefore,
+	// AP RoomMajority, D15-A); 0 for none.
+	hold uint8
 }
 
 // repairCmd is one command of a repair and what it does.
@@ -340,6 +345,10 @@ func (s *Server) runRepair(w http.ResponseWriter, r *http.Request, rt *runtime, 
 	if !rt.client.Connected() {
 		return fail(http.StatusServiceUnavailable, "cube not connected")
 	}
+	var was before
+	if a.hold != 0 {
+		was = s.roomBefore(rt, a.hold, a.device) // before the link half
+	}
 	var watch *structureWatch
 	if v.Radiograms > 0 {
 		watch = rt.beginStructure(a.name, a.device, a.rooms...)
@@ -349,8 +358,11 @@ func (s *Server) runRepair(w http.ResponseWriter, r *http.Request, rt *runtime, 
 	var results []repairStepResult
 	var failed error
 	writer := rt.writerOf(ctx)
-	for _, st := range a.steps {
+	for i, st := range a.steps {
 		res := writer.Do(ctx, st.cmd)
+		if a.hold != 0 && i == len(a.steps)-1 {
+			was.hold(rt, cubeio.Reached(st.cmd, res)) // the link half reached the room
+		}
 		sr := repairStepResult{What: st.what, Lines: len(st.cmd.Lines), Discarded: res.Discarded}
 		for _, rep := range res.Replies {
 			if rep.Type != 'S' {
@@ -615,8 +627,12 @@ func (s *Server) repairDevice(r *http.Request, rt *runtime) (*cube.DeviceConfig,
 }
 
 // buildResend re-sends a thermostat's configuration, its temperatures
-// and week programme, from what most of its room's other thermostats
-// share by their C lines (item 2).
+// and the days of its week programme that differ, from its room's by
+// their C lines (item 2; cubeio.RoomAgreement, the one rule of AP
+// RoomMajority's D9 over the room's thermostats, the device's included,
+// as the report of members that differ decides it: what most of them
+// share, else the first of the room's order's, those the Cube holds no
+// valid state for passed over).
 func (s *Server) buildResend(r *http.Request, rt *runtime) (*repairAction, error) {
 	c, listed, _, err := s.repairDevice(r, rt)
 	if err != nil {
@@ -632,7 +648,7 @@ func (s *Server) buildResend(r *http.Request, rt *runtime) (*repairAction, error
 	if listed != nil && listed.RoomID != room {
 		return nil, fail(http.StatusConflict, "the Cube has device %s in room %d and its list in room %d: place or list it first", c.RFAddress, room, listed.RoomID)
 	}
-	cmds, sent, agree, err := cubeio.ResendCommands(rt.client.Snapshot(), c.RFAddress, room, rt.hidden())
+	cmds, sent, agree, others, err := cubeio.ResendCommands(rt.client.Snapshot(), c.RFAddress, room, rt.hidden())
 	var none *cubeio.NoMajorityError
 	switch {
 	case errors.As(err, &none):
@@ -640,15 +656,15 @@ func (s *Server) buildResend(r *http.Request, rt *runtime) (*repairAction, error
 	case err != nil:
 		return nil, fail(http.StatusBadRequest, "%v", err)
 	case len(cmds) == 0:
-		return nil, fail(http.StatusConflict, "device %s has the temperatures and the week programme that %d of the %d other thermostats of room %d share; nothing to re-send",
-			c.RFAddress, min(agree.TempsBy, agree.ProgramBy), agree.Others, room)
+		return nil, fail(http.StatusConflict, "device %s has room %d's temperatures and week programme already (what most of the room's %d thermostats share, else what the first of the room's order has); nothing to re-send",
+			c.RFAddress, room, agree.Others)
 	}
 	days := []string{}
 	for _, d := range sent.Days {
 		days = append(days, d.String())
 	}
 	a := &repairAction{name: "config", device: c.RFAddress, rooms: []uint8{room}, reread: []cube.RFAddress{c.RFAddress},
-		details: map[string]any{"room": room, "others": agree.Others, "temperatures_by": agree.TempsBy, "program_by": agree.ProgramBy,
+		details: map[string]any{"room": room, "others": others, "thermostats": agree.Others, "temperatures_by": agree.TempsBy, "program_by": agree.ProgramBy(),
 			"temperatures": sent.Temperatures, "days": days, "agreed_temperatures": agree.Temps}}
 	for _, cmd := range cmds {
 		what := "temperatures of " + c.RFAddress.String()
@@ -664,7 +680,9 @@ func (s *Server) buildResend(r *http.Request, rt *runtime) (*repairAction, error
 // its C line names another room or none: a move from its C line's room,
 // cubeio.MoveCommands, or the placement's link half alone from none
 // (item 3). The metadata stays as it is; the room's settings are not
-// copied (item 2 re-sends them).
+// copied (item 2 re-sends them). A thermostat's run holds the room's
+// state before its steps, as an add does (hold; AP RoomMajority,
+// D15-A): a placed device brings its state as an added one.
 func (s *Server) buildPlace(r *http.Request, rt *runtime) (*repairAction, error) {
 	c, listed, md, err := s.repairDevice(r, rt)
 	if err != nil {
@@ -696,6 +714,9 @@ func (s *Server) buildPlace(r *http.Request, rt *runtime) (*repairAction, error)
 	out, in := cubeio.MoveCommands(rt.client.Snapshot(), c.RFAddress, c.Type, c.RoomID, to, members, rt.hidden())
 	a := &repairAction{name: "move", device: c.RFAddress, rooms: []uint8{c.RoomID, to}, reread: []cube.RFAddress{c.RFAddress}, structure: true,
 		details: map[string]any{"from": c.RoomID, "to": to}}
+	if c.Type.IsThermostat() {
+		a.hold = to
+	}
 	if c.RoomID != 0 {
 		a.steps = append(a.steps, repairCmd{what: fmt.Sprintf("unlink %s from room %d", c.RFAddress, c.RoomID), cmd: out})
 	}

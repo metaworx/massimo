@@ -533,14 +533,48 @@ and a longer time from a proxy client is capped there.
 Massimo gives a thermostat it puts into a room, after pairing or in a move
 (`PUT /api/v1/cubes/{sn}/devices/{rf}`, 2026-11-06),
 the room's settings as in steps 4 to 7:
-0x40 auto with temperature 0 directly to the device (flags 0, room 0,
-as in the log above),
-0x11 to every thermostat of the room with the values of its first other thermostat,
+0x40 directly to the device (flags 0, room 0, as in the log above),
+0x11 to the device and every thermostat with a valid state, with the room's values,
 each keeping its own offset, 0x12 to the device,
 and 0x10 only for the days that differ from the device's own,
 then 0x11 to the device; `"copy": false` skips it.
-The payloads and the order of steps 4 to 7 are the original software's,
-but Massimo writes the metadata (step 8) before them, with the links.
+The order of steps 4 to 7 is the original software's,
+but Massimo writes the metadata (step 8) before them, with the links,
+and since AP RoomMajority (Block 2, 2026-11-23) their values differ:
+
+- **The 0x40** carries the room's state from before the change,
+  its mode, setpoint and holiday end (RoomMajority.D8-A),
+  where the original sends auto with temperature 0:
+  on 2026-11-23 (Cube firmware 1.1.3) a room of one radiator thermostat in manual 5 °C,
+  set at the device, got a wall thermostat by a copy like the original's,
+  whose auto reached the radiator thermostat within a minute,
+  and the room went to its programme.
+  Massimo reads the state before it links the device,
+  the room's members only, by the order its room checks send a room's state in
+  (Massimo's own setpoint, what most members show, the newest change,
+  the master's, the wall thermostat's, a radiator thermostat's),
+  and, once a radiogram of the link half went through,
+  holds it for those checks,
+  which send it to the room should the device's own state reach its partners after all.
+  Auto with temperature 0 remains where the room is on its programme,
+  has no state, or has no other thermostat.
+  Where the Cube discards the direct 0x40,
+  the state goes once more as a room command after the programme (RoomMajority.D16-A).
+- **The configuration** is the room's by one rule (RoomMajority.D9, D5-A)
+  instead of the first other thermostat's:
+  per radiogram, the temperatures (0x11), the valve settings (0x12)
+  and each day of the programme (0x10),
+  what more than half of the room's other thermostats share,
+  else the master's, the wall thermostat's, a radiator thermostat's,
+  a thermostat the Cube holds no valid state for passed over;
+  the window-open minutes and the valve settings among the radiator thermostats alone,
+  which alone store them,
+  else the wall thermostat's boost settings and the original's defaults
+  (window open 15 minutes, descaling Saturday 12:00, valve 100 % and 0 %).
+  The 0x11 to every thermostat stays,
+  but for one the Cube holds no valid state for, whose own configuration did not count:
+  a member whose temperatures differ takes the room's there.
+  The days and the 0x12 go to the new device only.
 That a device which was in a room before takes the direct 0x40 is *unverified*,
 since a direct 0x40 to a room member was discarded on 2026-11-04 (below):
 Massimo resets the device first, and once more and retries after a discard,
