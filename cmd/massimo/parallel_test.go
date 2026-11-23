@@ -33,6 +33,7 @@ var serialTests = map[string]string{
 	"TestRestartHelper":                     "sets ProgramData",
 	"TestSettingsReloader":                  "unsets settings variables (unsetForTest) and reloads a settings file into the environment",
 	"TestSettingsReloaderDropsKeepOpen":     "unsets settings variables (unsetForTest) and reloads a settings file into the environment",
+	"TestStartChecksCoverTheStart":          "clears the Cube variables and sets each case's settings in the environment, where the check of the Cubes reads them (serve.FileCubes); its runs of the built massimo are parallel subtests",
 	"TestTLSCommand":                        "sets MASSIMO_DATA and the TLS variables",
 	"TestTLSShowIsConfigsView":              "sets MASSIMO_DATA and the TLS variables",
 	"TestHelpCreatesNoStore":                "changes the working directory (t.Chdir), swaps stdin and stdout (runUserWith)",
