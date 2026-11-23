@@ -566,6 +566,15 @@ Every room has a tile:
   and measured temperature, offset), its problems as icons that list them,
   as in the tile's head, a write not confirmed among them,
   and badges for lock, window and mode.
+  A device whose battery is weak or low and whose battery flag is off
+  offers **New batteries**, first among its actions, for a role with `configure`:
+  it tells the server that the device has new batteries,
+  and its level is ok at once (`POST …/devices/{rf}/battery`, `docs/api-v1.md`).
+  The line under the row's actions says that they are noted,
+  or the server's error, as for a device that still reports its batteries low;
+  the battery's badge and the button go with the level's `battery` event,
+  or with the next device list, not with the answer.
+  The log's line of the level ends with "(new batteries)" and who marked them.
   A device the Cube has not heard for some minutes keeps the values of its
   last report, greyed, with the badge "out of date" and its age in place of
   "not reported".
@@ -2215,7 +2224,9 @@ and wires with `addEventListener`; no script uses `innerHTML`.
 
 `app.js` opens the event stream with a ticket, none while a card the user opened
 holds a running page still (`connectEvents`, AP FirstOwner D35), and hands each kind on:
-`state` to `updateDevice` and the log; `hello`, `disconnected` and `slots` to
+`state` to `updateDevice` and the log;
+`battery` to `updateBattery` (rooms.js, the device's level alone),
+the log and `MassimoParts.serverEvent`; `hello`, `disconnected` and `slots` to
 `loadCubes`, `metadata`, `device_forgotten`, `unconfirmed` and `mismatch` to
 `loadRooms`, `connected` and `resync` to `refresh` (with `resync` to
 `MassimoParts.backups.resynced` and `MassimoParts.serverEvent`);
