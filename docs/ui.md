@@ -473,7 +473,9 @@ Every room has a tile:
   its tooltip the radiogram that failed, where the server gives it,
   by its technical name and code:
   "Last radiogram that failed: TimeInformation (0x03)");
-  a battery, one getting weak (amber) or low (red), as the server keeps its level;
+  a battery, by the level the server keeps, in words that say what to do:
+  "Batteries weak, replace soon" in amber, "Batteries low, replace now" in red
+  (their kind in the problems' tooltip: "batteries to replace");
   an open window, the opening sash or the paned window as you choose,
   a window contact reporting it:
   blue for its first 5 minutes, then amber with a triangle,
@@ -574,7 +576,8 @@ Every room has a tile:
   or the server's error, as for a device that still reports its batteries low;
   the battery's badge and the button go with the level's `battery` event,
   or with the next device list, not with the answer.
-  The log's line of the level ends with "(new batteries)" and who marked them.
+  The log's line of the level says so, and who marked them:
+  "Batteries ok (new batteries, before: low), by Anna".
   A device the Cube has not heard for some minutes keeps the values of its
   last report, greyed, with the badge "out of date" and its age in place of
   "not reported".
@@ -958,7 +961,7 @@ again without it or the server starts,
 a room whose thermostats disagree until they agree again,
 a thermostat off its week programme until it follows it again,
 a room's setpoint not confirmed until every thermostat shows its re-send;
-a device's communication error, link error and low battery
+a device's communication error, link error and battery warning
 while the device has them, at the line that set them;
 a communication error's line names the radiogram that failed,
 "communication error: TimeInformation (0x03)", as the badge's tooltip does.
@@ -968,6 +971,11 @@ Opening the log marks nothing.
 The marks follow a signed-in user with `preferences` (the preference `log.seen`);
 anyone else's stay in the browser.
 The page asks at every poll.
+A device's battery level, the server's, has a line of its own at each change,
+in the badge's words with the level before in a short word:
+"Batteries low, replace now (before: weak)";
+the device's own flag, `battery_low`,
+is the **battery warning** of its state's line.
 A device that reports while its communication error is set is reset by the server,
 once a day at most: the log's **communication error reset** line.
 Where the error is back within that day,
@@ -1220,7 +1228,8 @@ also while no page is open.
   On an iPhone or iPad the page has to be added to the Home Screen first.
 - **What notifies you**:
   a switch per kind, with its delay or threshold, each with its help:
-  a window open (after 30 min), frost (below 8 °C), a low battery, a battery getting weak,
+  a window open (after 30 min), frost (below 8 °C),
+  "Batteries low, replace now" and "Batteries weak, replace soon",
   a device's communication error or link error,
   the Cube out of reach (after 10 min) and back,
   and, off by default, a device that sends no news, a device paired,

@@ -336,8 +336,10 @@ function logSummaryText(kind: string, s: Loose, serial: string): string {
     case "wall_reset":
       return t("log.sum.wallReset", { mode: logWord("log.mode.", s.mode), was: logWord("log.mode.", s.was_mode), silent: num(s.silent_min) });
     case "battery":
-      // new batteries marked say so; who marked them is the line's by
-      return t(s.cause === "replaced" ? "log.sum.batteryReplaced" : "log.sum.battery", { level: logWord("log.battery.", s.level), from: logWord("log.battery.", s.from) });
+      // the level's words, "Batteries low, replace now", the level before
+      // in a short word, "(before: weak)"; new batteries marked say so,
+      // and who marked them is the line's by
+      return t(s.cause === "replaced" ? "log.sum.batteryReplaced" : "log.sum.battery", { level: logWord("log.battery.", s.level), from: logWord("log.batteryBefore.", s.from) });
     case "error_reset":
       return t("log.sum.errorReset");
     case "error_watch":

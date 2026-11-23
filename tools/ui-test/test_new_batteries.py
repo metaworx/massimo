@@ -221,11 +221,11 @@ def test_new_batteries_in_the_log(page, case, reads):
     assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-battery, #log-lines .log-line.kind-change').length >= 2", 5), \
         "the two lines"
     want = page.evaluate("""(name) => [
-      t("log.by", { text: t("log.sum.batteryReplaced", { level: t("log.battery.ok"), from: t("log.battery.low") }), name: "Anna" }),
+      t("log.by", { text: t("log.sum.batteryReplaced", { level: t("log.battery.ok"), from: t("log.batteryBefore.low") }), name: "Anna" }),
       t("log.by", { text: t("log.sum.change", { action: t("log.action.device.battery"), target: name }), name: "Anna" })]""", name)
     got = [page.locator("#log-lines .log-line.kind-battery .log-text").first.inner_text(),
            page.locator("#log-lines .log-line.kind-change .log-text").first.inner_text()]
     assert got == want, f"the lines {got}, want {want}"
     if case.lang == "en":
-        assert want[0] == "battery ok, before low (new batteries), by Anna", want[0]
+        assert want[0] == "Batteries ok (new batteries, before: low), by Anna", want[0]
     show_view(page, "tiles")
