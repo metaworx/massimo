@@ -235,6 +235,11 @@ the OpenAPI file carries each operation's as `x-capability`:
 | `cubes` | add, configure and remove Cubes | `POST /api/v1/cubes`, `PUT`/`DELETE /api/v1/cubes/{sn}` |
 | `cubes.reboot` | reboot a Cube, which drops the radiograms it has not delivered; seeded for no role | `POST /api/v1/cubes/{sn}/reboot` |
 | `settings` | the server's settings, its store and the settings in effect | `GET`/`PUT /api/v1/settings`, `GET /api/v1/store`, `GET /api/v1/config` |
+| `update` | start a software update | `POST /api/v1/update` |
+| `restart` | restart the server through the service manager that runs it, read its settings file again, and read a Cube again at once | `GET`/`POST /api/v1/restart`, `POST /api/v1/reload`, `POST /api/v1/cubes/{sn}/refresh` |
+| `reboot` | reboot the computer the server runs on, where its owner switched that on; seeded for no role | `GET`/`POST`/`DELETE /api/v1/reboot` |
+| `audit` | read the audit | `GET /api/v1/audit` |
+| `auth` | the OpenID Connect providers users sign in through; seeded for no role | `GET`/`POST /api/v1/providers`, `PUT`/`DELETE /api/v1/providers/{key}` |
 
 A user changes only users whose role has no capability its own lacks,
 and gives only such roles: an owner changes everyone,
@@ -242,11 +247,6 @@ nobody but an owner changes an owner or gives the role `owner`,
 and a role made with `users` but without, say, `restore` changes no manager.
 The users routes say what the caller may do with each user they list
 (`"may": {"manage": true, "password": true}`).
-| `update` | start a software update | `POST /api/v1/update` |
-| `restart` | restart the server through the service manager that runs it, and read its settings file again | `GET`/`POST /api/v1/restart`, `POST /api/v1/reload` |
-| `reboot` | reboot the computer the server runs on, where its owner switched that on; seeded for no role | `GET`/`POST`/`DELETE /api/v1/reboot` |
-| `audit` | read the audit | `GET /api/v1/audit` |
-| `auth` | the OpenID Connect providers users sign in through; seeded for no role | `GET`/`POST /api/v1/providers`, `PUT`/`DELETE /api/v1/providers/{key}` |
 
 The default roles and their sets are those of docs/store.md section 6:
 `owner` has every capability and cannot be changed,
@@ -1905,6 +1905,37 @@ and the server's log has no loss for it.
 `409` also comes while the Cube's serial or address is not known yet,
 `502` when `R` could not be sent.
 `massimo netconfig -reboot` sends the same request without the server (README.md).
+
+### POST /api/v1/cubes/{sn}/refresh
+
+Reads the Cube again at once,
+as the periodic refresh does every `refresh_interval` (the settings, above):
+the server ends its connection to the Cube and connects again,
+and the Cube's greeting replaces what the server holds of it,
+its rooms, its devices with their state and battery flags, and its budget.
+The reconnect goes through the Cube's queue, after the commands before it,
+so that it cuts none off;
+it sends nothing by radio and takes no memory slot.
+It needs no body, and the capability `restart`.
+The request waits for the new greeting, a minute at most once its turn has come,
+and answers `200`:
+
+```json
+{"ok": true, "budget": {"duty_cycle_pct": 5, "free_memory_slots": 49, "updated_at": "…"}}
+```
+
+`budget` is the one the new greeting brought.
+The server's log says `snapshot refreshed` with `asked` and the user,
+and the Cube's log has the request as a change, with who made it.
+`409` comes while the Cube reboots (`link` `rebooting`),
+whose greeting after the reboot reads it again,
+while the Cube's serial or address is not known yet,
+and when a newer refresh took the request's place before its turn;
+`502` when the reconnect failed:
+the Cube did not greet again within the minute, as when it is not reachable
+or another client holds it (`link` `busy`),
+or the server still holds a lost connection to it (`link` `held`).
+The error names the reconnect's error and the `link` after it.
 
 ### POST /api/v1/cubes/discover
 

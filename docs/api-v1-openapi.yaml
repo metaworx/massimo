@@ -2943,6 +2943,43 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
+  /api/v1/cubes/{sn}/refresh:
+    post:
+      summary: Read the Cube again at once, by a new connection; nothing goes by radio
+      x-capability: restart
+      description: |
+        The reconnect of the periodic refresh (refresh_interval), at once:
+        the server ends its connection to the Cube and connects again, and
+        the Cube's greeting replaces what the server holds of it, its rooms,
+        its devices with their state and battery flags, and its budget. It
+        goes through the Cube's queue after the commands before it, sends
+        nothing by radio and takes no memory slot. The request waits for the
+        new greeting, a minute at most once its turn has come. No body.
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/idempotencyKey"}]
+      responses:
+        "200":
+          description: The new greeting has replaced the snapshot
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+                  budget: {$ref: "#/components/schemas/Budget"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          description: The Cube reboots (link rebooting), its serial or address is not known yet, or a newer refresh took the request's place before its turn
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "502":
+          description: "The reconnect failed: no greeting within the minute, as from a Cube not reachable or held by another client (link busy), or a lost connection still held (link held)"
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
   /api/v1/cubes/{sn}/pairing:
     post:
       summary: Start pairing (inclusion mode)

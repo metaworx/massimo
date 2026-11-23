@@ -1485,6 +1485,7 @@ func (s *Server) routes() {
 	api("PUT /api/v1/cubes/{sn}", "cubes", s.putCube)
 	api("DELETE /api/v1/cubes/{sn}", "cubes", s.deleteCube)
 	api("POST /api/v1/cubes/{sn}/reboot", "cubes.reboot", s.rebootCube)
+	api("POST /api/v1/cubes/{sn}/refresh", "restart", s.refreshCube)
 	api("GET /api/v1/settings", "settings", s.getSettings)
 	api("PUT /api/v1/settings", "settings", s.putSettings)
 	api("POST /api/v1/cubes/discover", "discover", s.postDiscover)
