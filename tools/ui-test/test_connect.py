@@ -325,14 +325,45 @@ def test_connect_settings(new_context, case, watch, guard):
     cabin_panel.wait_for(state="detached")
 
     home.locator(".server-cog").click()
+    close_toast(page)  # at 390 px it covers the panel's foot
     assert panel.locator("select[name=ask]").input_value() == "return", "and shown as saved"
     assert panel.locator("input[name=start]").is_checked()
+    # Remove server on a line of its own under Cancel and Save, after a rule, with what it does (AP MobileApp, F34)
+    box = panel.locator(".server-remove-box")
+    assert panel.evaluate("""(f) => f.lastElementChild.classList.contains('server-remove-box')
+      && f.lastElementChild.previousElementSibling.classList.contains('actions')"""), "under the form's footer, last"
+    assert panel.locator(".server-remove").count() == 1 and box.locator(".server-remove").count() == 1, "out of the footer"
+    assert box.locator(".server-remove").inner_text() == REMOVE_SERVER[case.lang]
+    assert box.locator(".server-remove-hint").inner_text() == REMOVE_HINT[case.lang], "the line saying what it does"
+    m = panel.evaluate("""(f) => { const foot = f.querySelector(':scope > .actions').getBoundingClientRect();
+      const box = f.querySelector('.server-remove-box'); const r = box.getBoundingClientRect(); const cs = getComputedStyle(box);
+      return {below: r.top >= foot.bottom, rule: cs.borderTopStyle === 'solid' && parseFloat(cs.borderTopWidth) >= 1}; }""")
+    assert m["below"] and m["rule"], f"below Cancel and Save, after a rule: {m}"
+    named_buttons(page, "a server's settings with Remove server")
+    assert_axe(page, "a server's settings with Remove server")
+    panel.locator(".server-remove").click()
+    question = box.locator(".confirm-box")
+    question.wait_for(state="visible")
+    assert REMOVE_QUESTION[case.lang] in question.inner_text(), f"its question as before: {question.inner_text()!r}"
+    assert panel.locator(":scope > .actions button[type=submit]").is_visible(), "asked in Remove's place, Save stays"
+    page.locator(".confirm-box .confirm-no").click()
+    box.locator(".server-remove").wait_for(state="visible")
+    assert page.evaluate("document.activeElement.classList.contains('server-remove')"), "No gives the focus back to Remove server"
     panel.locator(".server-remove").click()
     page.locator(".confirm-box .confirm-yes").click()
     home.wait_for(state="detached")
     assert calls(page, "remove") == [["remove", "s1", HOME_LAN]], "at the address the probe chose"
     wait_toast(page, "Home")
     assert page.evaluate("document.activeElement.closest('#servers-menu') !== null"), "the focus goes to the ☰"
+
+
+REMOVE_SERVER = {"en": "Remove server", "de": "Server entfernen"}
+REMOVE_HINT = {"en": "The server leaves this list; where it answers, this phone is signed out there first.",
+               "de": "Der Server wird aus dieser Liste entfernt; antwortet er, wird dieses Telefon dort zuerst abgemeldet."}
+REMOVE_HINT_LOGIN = {"en": "The server leaves this list; where it answers, this phone is signed out there first and its key revoked.",
+                     "de": "Der Server wird aus dieser Liste entfernt; antwortet er, wird dieses Telefon dort zuerst abgemeldet und sein Schlüssel widerrufen."}
+REMOVE_QUESTION = {"en": "Remove Home from the app, with its sign-in?", "de": "Home mit seiner Anmeldung aus der App entfernen?"}
+SHOW_OFF = {"en": "Off until the server answers", "de": "Aus, bis der Server antwortet"}
 
 
 def test_connect_discovery(new_context, case, watch, guard):
@@ -678,12 +709,20 @@ def test_connect_keys_left(new_context, case, watch, guard):
     assert calls(page, "forget")[-1] == ["forget", "s6", ""]
     panel.locator(".server-key-left").wait_for(state="visible")
     assert KEY_LEFT[case.lang].format(id=49, user="eve") in panel.locator(".server-key-left").inner_text()
+    # Show in My profile off while Attic does not answer, its title saying why, on once it answers (AP MobileApp, F33)
+    show = panel.locator(".server-key-show")
+    assert show.is_disabled() and show.get_attribute("title") == SHOW_OFF[case.lang], f"off, saying why: {show.get_attribute('title')!r}"
+    page.evaluate(f"""() => {{ window.__fakeBridgeConfig.answers[{ATTIC_LAN!r}] = {{node: {NODE6!r}}};
+      window.dispatchEvent(new CustomEvent('massimo', {{ detail: {{ type: 'network' }} }})); }}""")
+    assert wait_until(page, "!document.querySelector(\".server-row[data-id='s6'] .server-key-show\").disabled", 5), "on once the server answers"
+    assert not show.get_attribute("title"), "nothing to say then"
     row(page, "Attic").locator(".server-cog").click()
     close_toast(page)
 
     # Remove with a kept login: turned off first, the key it could not
     # revoke named
     panel = settings_of(page, "Garage")
+    assert panel.locator(".server-remove-hint").inner_text() == REMOVE_HINT_LOGIN[case.lang], "with a kept login, its key revoked too"
     panel.locator(".server-remove").click()
     box = page.locator(".confirm-box")
     box.wait_for(state="visible")

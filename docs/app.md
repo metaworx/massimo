@@ -79,10 +79,14 @@ What the page shows:
   is kept (`login`),
   a line for each key of the phone's still valid there, its id and user,
   with **Show in My profile**, which opens the server's page at My profile
-  with the key marked (`unrevoked`),
+  with the key marked (`unrevoked`), off while the probe finds the server
+  at neither address, its title saying why (AP MobileApp, F33),
   "Notify me on this phone" (`push`, where the app has push),
-  Remove, which turns a kept login off first as **Turn off** does,
-  and whose question says so and warns of a key left,
+  Cancel and Save, and under them, after a rule, **Remove server** on a
+  line of its own (F34), with a line saying what it does:
+  the server leaves the list, and where it answers the phone is signed out
+  there first, a kept login turned off first as **Turn off** does;
+  its question says so and warns of a key left,
   its toast naming the keys still valid there;
 - **App settings**, from the ☰, with ×: **Appearance**, as the phone, light
   or dark, for the list and for every server's page whose own appearance is

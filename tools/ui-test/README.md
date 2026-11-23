@@ -679,14 +679,15 @@ hence `failed_checks_forgotten`.
   Cancel adds nothing and Trust pins it,
   and a changed certificate shows the old and the new fingerprint before the server opens;
   a server's settings open from ⚙ and a long press,
-  save the biometric switch and Remove asks in place;
+  save the biometric switch, and Remove server, on a line of its own under
+  Cancel and Save after a rule, with what it does, asks in place;
   discovery offers a server not in the list and moves a saved one's LAN address;
   the card of the server on the phone starts and stops it;
   Turn off, Forget all and Remove say what they revoked, their toasts naming
   the keys that stay valid, left or on the phone alone;
   Remove turns a kept login off first;
   a key left shows in its server's settings with Show in My profile,
-  which opens `<address>#profile?key=<id>`,
+  off while the server does not answer, which opens `<address>#profile?key=<id>`,
   Remove warns of it, and a session found there takes its line away;
   a session left, as the bridge's version 5 keeps one, shows in its
   server's settings, Sign out without an answer leaves one, Remove signs

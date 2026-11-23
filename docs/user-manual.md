@@ -57,7 +57,8 @@ on the list, and **App settings…** the app's own.
   could not remove the phone's key at the server,
   or the phone no longer opens its login, or a new certificate was trusted:
   **Show in My profile** opens the server at My profile,
-  the key marked, to revoke it there.
+  the key marked, to revoke it there;
+  it is off while the server does not answer.
 - **Certificate**, for a server reached over `https://`:
   its name and how long it is valid.
   **Certificate…** shows it in full: who it is for and who issued it,
@@ -65,6 +66,8 @@ on the list, and **App settings…** the app's own.
   and since when the app trusts it:
   since you compared its fingerprint when you added the server,
   or because a certificate authority the phone knows signed it.
+- **Remove server**, at the foot of the settings under **Cancel** and **Save**,
+  takes the server off the list; below.
 
 ### App settings
 
@@ -167,7 +170,7 @@ At home, on the local network, plain `http://` works as usual.
   If you cancel the fingerprint, it asks no more,
   and those keys stay valid at their servers (below).
   Its message names the servers where a key stays valid.
-- **Remove** of a server turns its login by fingerprint off first,
+- **Remove server**, in a server's settings, turns its login by fingerprint off first,
   as Turn off does, or signs the app out there,
   then forgets everything the app kept for it.
   It says so before, and warns where a key or a session of the phone is

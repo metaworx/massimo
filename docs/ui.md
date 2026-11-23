@@ -2008,10 +2008,12 @@ is trusted, the login by fingerprint with **Turn off**,
 which revokes its key and signs out,
 a line for each key of the phone's still valid there with **Show in My profile**,
 which opens the server's page at My profile with the key marked,
+off while the server does not answer, its title saying why,
 a line for each session of the phone's still valid there,
 which the app forgot without the server ending it,
 the server not answering, and ends at the next sign-in there as its user,
-and **Remove**, which turns a kept login off first, or signs out first,
+and under Cancel and Save, after a rule, **Remove server** on a line of its own,
+with a line saying what it does, which turns a kept login off first, or signs out first,
 its question and its message naming a key or a session left.
 **App settings** hold the **Appearance**, as the phone, light or dark,
 for that page and for every server's page set to "as the system".

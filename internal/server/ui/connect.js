@@ -470,8 +470,9 @@ function addressInput(value) {
 // Open at start, when the fingerprint is asked, its session with Sign
 // out, its certificate and the keys and sessions left valid there (fillFacts), the
 // login by fingerprint kept with its user, its key's id, and Turn off, notifications
-// where the app has push, and Remove, whose question warns of a key or a
-// session left.
+// where the app has push, Cancel and Save, and under them, after a rule,
+// Remove server with a line that says what it does, whose question warns
+// of a key or a session left.
 // The panel itself takes the focus (toggleSettings).
 function settingsPanel(s) {
   const name = document.createElement("input");
@@ -495,15 +496,18 @@ function settingsPanel(s) {
   const form = formEl(() => saveSettings(s.id, form, { name, lan, remote, start, ask, push, msg }), "panel server-panel");
   form.tabIndex = -1;
   form.setAttribute("aria-label", t("connect.settingsOf", { name: s.name }));
-  const remove = button(t("connect.remove"), "server-remove", () => {
+  const remove = button(t("connect.removeServer"), "server-remove", () => {
     const now = serverById(s.id) || s;
     const left = keysLeft(now);
     const unended = sessionsLeft(now);
     let question = now.login ? t("connect.removeQuestionLogin", { name: s.name }) : t("connect.removeQuestion", { name: s.name });
     if (left.length) question += " " + tn("connect.removeKeysLeft", left.length, { ids: left.map((k) => k.id).join(", ") });
     if (unended.length) question += " " + tn("connect.removeSessionsLeft", unended.length, { ids: unended.map((x) => x.id).join(", ") });
-    confirmInPlace(form.querySelector(".actions"), question, { yes: t("connect.remove") }, () => removeServer(s.id, msg), ".server-remove");
+    confirmInPlace(removeBox.querySelector(".actions"), question, { yes: t("connect.remove") }, () => removeServer(s.id, msg), ".server-remove");
   });
+  // Remove on a line of its own under Cancel and Save, after a rule, with
+  // what it does (AP MobileApp, F34); its line follows the login (fillFacts)
+  const removeBox = elem("div", "server-remove-box", textEl("p", "", "small muted server-remove-hint"), elem("div", "actions", remove));
   const facts = elem("div", "server-facts");
   form.append(
     fieldRow(t("connect.name"), name, { wide: true }),
@@ -523,8 +527,18 @@ function settingsPanel(s) {
     form.append(kept);
   }
   if (push) form.append(fieldRow("", push));
-  form.append(msg, formFooter({ submit: t("action.save"), cancel: () => toggleSettings(null), extra: [remove] }));
+  form.append(msg, formFooter({ submit: t("action.save"), cancel: () => toggleSettings(null) }), removeBox);
+  fillRemove(form, s);
   return form;
+}
+
+// fillRemove says under the rule what Remove does: the server leaves the
+// list, and where it answers the app is signed out there, the kept
+// login's key revoked first where one is kept.
+function fillRemove(form, s) {
+  const hint = form.querySelector(".server-remove-hint");
+  const text = s.login ? t("connect.removeHintLogin") : t("connect.removeHint");
+  if (hint && hint.textContent !== text) hint.textContent = text;
 }
 
 async function saveSettings(id, form, f) {
@@ -584,18 +598,26 @@ function sessionsLeft(s) {
 // under its choices: the session the app holds there, with Sign out, the
 // certificate the probe found at the address in use, with Certificate…,
 // each key of the phone's left valid there, with Show in My profile,
-// which opens the server's page at My profile with that key marked, and
-// each session of the phone's left valid there; drawn again only where it
-// changed, so that a probe that answers keeps the focus.
+// which opens the server's page at My profile with that key marked, off
+// while the server does not answer, its title saying why (AP MobileApp,
+// F33), and each session of the phone's left valid there; drawn again only
+// where it changed, so that a probe that answers keeps the focus, the
+// buttons Show in My profile turned on and off in place; and what Remove
+// does (fillRemove).
 function fillFacts(form, s) {
+  fillRemove(form, s);
   const box = form.querySelector(".server-facts");
   if (!box) return;
   const p = conn.probes[s.id] || {};
-  const cert = (p.state === "lan" || p.state === "remote") && p.cert && p.cert.not_after ? p.cert : null;
+  const answers = p.state === "lan" || p.state === "remote";
+  const cert = answers && p.cert && p.cert.not_after ? p.cert : null;
   const left = keysLeft(s);
   const unended = sessionsLeft(s);
   const key = JSON.stringify([s.session || "", cert && cert.fingerprint, cert && cert.not_after, cert && p.url, left, unended]);
-  if (box.dataset.key === key) return;
+  if (box.dataset.key === key) {
+    showsKeys(box, answers);
+    return;
+  }
   box.dataset.key = key;
   clear(box);
   if (s.session) {
@@ -614,6 +636,18 @@ function fillFacts(form, s) {
   }
   for (const x of unended) box.appendChild(elem("p", "server-fact server-session-left", t("connect.sessionLeft", { id: x.id, name: x.user })));
   box.classList.toggle("hidden", !box.firstChild);
+  showsKeys(box, answers);
+}
+
+// showsKeys turns each Show in My profile of the open settings on where
+// the server answers, else off with its title saying why: the page it
+// opens is the server's (AP MobileApp, F33).
+function showsKeys(box, answers) {
+  const why = answers ? "" : t("connect.keyLeftShowOff");
+  for (const b of box.querySelectorAll(".server-key-show")) {
+    setOff(b, !answers);
+    if (b.title !== why) b.title = why;
+  }
 }
 
 // signOut signs the app out of a server, at the address the probe chose

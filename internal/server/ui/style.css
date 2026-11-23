@@ -1980,6 +1980,10 @@ massimo-week-program { display: contents; }
 .servers-ask:not(:empty) { margin-top: 10px; }
 .cert-value { overflow-wrap: anywhere; }
 .server-row > .server-panel { flex-basis: 100%; }
+/* Remove server on a line of its own under Cancel and Save, after a rule,
+   with what it does above it (connect.js settingsPanel, AP MobileApp F34) */
+.server-remove-box { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.server-remove-hint { margin: 0 0 8px; }
 .server-panel .field { margin-bottom: 12px; }
 .found-server { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
 .found-name { font-weight: 600; overflow-wrap: anywhere; }
