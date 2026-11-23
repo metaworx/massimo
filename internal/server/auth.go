@@ -897,14 +897,18 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 	// uncounted, so that a page before its sign-in, a client sending
 	// again a session that ended, or a scanner behind a proxy that is
 	// not trusted, does not lock the address out. A guessed secret
-	// never hits the hash of a token that was issued.
+	// never hits the hash of a token that was issued. A Bearer header
+	// that is a guess is refused as it is, the stream's ticket and token
+	// beside it not read, so that a live one neither answers for the
+	// guess, nor tells by its Deprecation header whether the guess was
+	// right, nor clears the address's count with its success.
 	h := r.Header.Get("Authorization")
 	guess := h == "Bearer"
 	if strings.HasPrefix(h, "Bearer ") {
 		p, why = s.resolve(ctx, mode, strings.TrimPrefix(h, "Bearer "), ip)
 		guess = guessed(why)
 	}
-	if p == nil && r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/events") {
+	if p == nil && !guess && r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/events") {
 		q := r.URL.Query()
 		ticket, tok := q.Get("ticket"), q.Get("token")
 		if tp, ok := s.tickets.redeem(ticket, strings.ToLower(r.PathValue("sn"))); ok {
@@ -924,7 +928,12 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 		switch {
 		case errors.As(why, &fe):
 			// A real token whose user may not use the API now: not a
-			// failed check, and the message says why.
+			// failed check, and the message says why; a guess beside it
+			// (a wrong ticket beside such a Bearer header) counts all the
+			// same.
+			if guess && s.limiter.fail(ctx, key) {
+				s.logLockout(ip, "tokens")
+			}
 			writeError(w, http.StatusForbidden, fe.msg)
 		case why != nil && !errors.Is(why, errBadToken):
 			s.log.Error("api: token not resolved", "error", why)

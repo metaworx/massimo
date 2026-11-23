@@ -281,6 +281,11 @@ since a guessed token never matches one that was issued:
 a client that sends again a session that ended,
 as a page does after a link that stalled, does not lock its address out
 (`POST /api/v1/login/key`'s key included).
+A wrong Bearer token counts beside any token and is answered `401` as it is alone:
+the stream's `ticket` or `token` beside it is not read;
+a wrong ticket counts beside the Bearer token of a disabled user,
+of a guest past its end or of a disabled role,
+though the request is answered that token's `403`.
 A failed login counts against the address and against the user name,
 so that password guessing from many addresses locks the name.
 With a store the counters survive a restart.

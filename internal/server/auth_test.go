@@ -326,6 +326,86 @@ func TestEndedTokensAreNotCounted(t *testing.T) {
 	}
 }
 
+// A guess beside the token of a user who may not use the API now (a
+// disabled user, a guest past its end, a disabled role) counts toward
+// the lockout: a wrong Bearer header beside such a ?token= on the stream
+// is refused 401 as any guessed Bearer is, the query not read, and a
+// wrong ticket beside such a Bearer header counts though the answer is
+// that token's 403. The token alone is no failed check.
+func TestGuessesBesideAForbiddenTokenCount(t *testing.T) {
+	t.Parallel()
+	opts := storeOptions(t, t.TempDir(), "secret")
+	rg := startServer(t, withOptions(opts))
+	ts, st := rg.ts, rg.s.opts.Store
+	ctx := t.Context()
+	if _, err := st.AddUser(ctx, store.User{Name: "anna", Role: store.RoleOperator, Disabled: true}, "", 0); err != nil {
+		t.Fatal(err)
+	}
+	anna, ok, err := st.User(ctx, "anna")
+	if err != nil || !ok || !anna.Disabled {
+		t.Fatalf("anna %+v %v %v", anna, ok, err)
+	}
+	_, key, err := st.AddToken(ctx, anna.ID, store.TokenAPI, "Loxone", time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream := "/api/v1/cubes/KEQ0000100/events"
+	lockout := st.Lockout(DefaultAuthFailures, DefaultAuthWindow, DefaultAuthLockout)
+	for i := 0; i < DefaultAuthFailures+1; i++ {
+		if code, text := callAPI(t, ts, "GET", "/api/v1/cubes", key, ""); code != 403 || !strings.Contains(text, "disabled") {
+			t.Fatalf("the disabled user's key alone, %d: %d %s", i+1, code, text)
+		}
+	}
+	if keys, err := lockout.Keys(ctx); err != nil || len(keys) != 0 {
+		t.Fatalf("the disabled user's key alone counted: %v %v", keys, err)
+	}
+	for i := 0; i < DefaultAuthFailures-1; i++ {
+		if code, _ := callAPI(t, ts, "GET", stream+"?token="+key, "wrong-token", ""); code != 401 {
+			t.Fatalf("a wrong Bearer beside the disabled user's ?token=, %d: %d", i+1, code)
+		}
+	}
+	if keys, err := lockout.Keys(ctx); err != nil || len(keys) != 1 {
+		t.Fatalf("wrong Bearer headers beside a forbidden ?token= not counted: %v %v", keys, err)
+	}
+	if code, _ := callAPI(t, ts, "GET", stream+"?ticket=nope", key, ""); code != 403 {
+		t.Fatalf("a wrong ticket beside the disabled user's Bearer: %d", code)
+	}
+	if code, _ := callAPI(t, ts, "GET", "/api/v1/cubes", "secret", ""); code != 429 {
+		t.Fatalf("after as many guesses as the limit beside a forbidden token: %d", code)
+	}
+}
+
+// A guessed Bearer header beside a live ?token= on the stream is refused
+// 401 and counted, the query not read: the live token neither answers
+// for the guess, nor tells by its Deprecation header whether the guess
+// was right, nor clears the address's count with its success.
+func TestGuessedBearerBesideALiveTokenCounts(t *testing.T) {
+	t.Parallel()
+	ts := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret"))).ts
+	stream := ts.URL + "/api/v1/cubes/KEQ0000100/events?token=secret"
+	try := func(bearer string) *http.Response {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(context.Background(), testkit.Scale(5*time.Second))
+		defer cancel()
+		req, _ := http.NewRequestWithContext(ctx, "GET", stream, nil)
+		req.Header.Set("Authorization", "Bearer "+bearer)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp
+	}
+	for i := 0; i < DefaultAuthFailures; i++ {
+		if r := try("wrong-token"); r.StatusCode != 401 || r.Header.Get("Deprecation") != "" {
+			t.Fatalf("a wrong Bearer beside a live ?token=, %d: %d %q", i+1, r.StatusCode, r.Header.Get("Deprecation"))
+		}
+	}
+	if r := try("secret"); r.StatusCode != 429 {
+		t.Fatalf("after as many guessed Bearer headers as the limit beside a live ?token=: %d", r.StatusCode)
+	}
+}
+
 func TestClientIP(t *testing.T) {
 	t.Parallel()
 	proxies, err := ParseTrustedProxies("127.0.0.1, 10.0.0.0/8 ::1")
