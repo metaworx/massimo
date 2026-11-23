@@ -1,28 +1,28 @@
-# AP RoomMajority v1.0: The room before a newcomer
+# AP RoomMajority v1.1: The room before a newcomer
 
 ## TL;DR
 
-A thermostat put into a room takes the room's state and configuration,
-read before it is linked, instead of auto and the first other thermostat's;
-the room checks' re-send then keeps that state.
-4.5 °C shows as OFF, and the tile marks the eco and comfort temperatures.
+A thermostat put into a room takes the state and configuration its members
+showed before it was linked, and the room checks' re-send keeps that state.
+One order speaks for a room, the dead passed over.
+4.5 °C shows as OFF; the tile marks eco and comfort.
 
-- copy's 0x40: auto, temperature 0 → the members' state before the change (mode,
-  setpoint, until), still direct, without a Target
-- re-send order (RadioHealth.D188): + the state before the change, + the
-  member changed last on a tie (D3-A); Massimo's own command first (D4-A)
-- copy's configuration: first other thermostat → per radiogram group, what
-  most members share (D5-A)
-- 4.5 °C → "OFF"; the log "OFF (4.5 °C)" (D6-A)
-- tile and device rows: a moon at the eco temperature, a sun at comfort
+- copy's 0x40: auto, 0 → the members' state before the change, still direct
+- one order (D9): dead passed over → majority → master → wall → radiators
+- re-send (RadioHealth.D188): + the state before the change,
+  + the newest change on a tie (D3-A, D7-C)
+- copy's configuration: first other thermostat → per group and day, by the order
+- 4.5 °C → "OFF"; the log "OFF (4.5 °C)"
+- tile: moon at eco, sun at comfort, both at both;
+  the members' setpoints while they differ
 
 The room of 2026-11-23 then keeps its manual 5 °C.
 
 ### Blocks
 
-1. Order: the re-send order, the tie rule, the held reference (`drift.go`)
-2. Copy: the reference sent in the copy; the majority configuration
-3. Marks: OFF, and the eco and comfort marks (UI, log page, API)
+1. Order: one order for a room's addressee and reference; the re-send (`drift.go`)
+2. Copy: the reference state in the copy; the configuration by the order
+3. Marks: OFF, the eco and comfort marks, the members' setpoints (UI, log, API)
 
 ## Discussion
 
@@ -43,7 +43,7 @@ The owner asked for one plan of three blocks, named RoomMajority.
 
 ### What is decided
 
-The owner, 2026-11-23:
+The owner, 2026-11-23, with the task:
 
 - **The reference state.**
   After an add or a move,
@@ -57,7 +57,7 @@ The owner, 2026-11-23:
   Where those members tie,
   the state of the member whose mode or setpoint changed last:
   a change made by hand at a device is the newest wish.
-  Else the wall thermostat's, as now.
+  Else the wall thermostat's, as now (since v1.1 D9's order).
   Else none.
 - **D4-A.
   Massimo's own command.**
@@ -69,7 +69,8 @@ The owner, 2026-11-23:
   2. what most of the members show, of those before the structure change
      where one brought a newcomer, otherwise of all members;
   3. the tie rule of D3-A;
-  4. the wall thermostat's state;
+  4. the wall thermostat's state (since v1.1 D9's order: the master's,
+     the wall thermostat's, the radiator thermostats');
   5. none.
 - **Outliers take the others' values.**
   Every member that differs, the new device included, gets the others' values,
@@ -91,7 +92,6 @@ The owner, 2026-11-23:
     and the existing repair re-sends it on a click;
     nothing is re-sent automatically,
     since a programme alone is 7 radiograms per device.
-    The plan proposes the tie rule (D9).
 - **D6-A, modified.
   OFF.**
   4.5 °C is shown as "OFF", as the devices' displays show it,
@@ -105,119 +105,103 @@ The owner, 2026-11-23:
   Icons are SVG `<symbol>`s in `internal/server/ui/index.html`;
   every icon has a text label, every text is in all six `ui/i18n/<lang>.json`.
 
+The owner, at v1.0's gate (2026-11-23):
+
+- **D7-C.
+  "Changed last" (D3-A) and the programme.**
+  In auto a setpoint set by hand holds only until the programme's next switch
+  point, so a switch point at 06:00 beats a hand change made in auto at 05:30;
+  in manual or on holiday the programme changes nothing,
+  and the hand setpoint counts.
+  So a member that follows its programme counts its setpoint's time
+  only against members in auto:
+  where any of the tied members is in manual or on holiday,
+  such a member counts its mode's time alone.
+  A member in auto with a setpoint set by hand counts both times.
+- **D8-A.
+  The copy's reference order:**
+  the re-send's order over the members before the change,
+  Massimo's own command first: one function,
+  so that the copy and a later re-send cannot send different states.
+- **D9, the owner's.
+  One order wherever a member stands for its room.**
+  It is the same in every place,
+  and replaces v1.0's D9 options, D3-A's and RadioHealth.D188's last step
+  ("the wall thermostat's"), and the order of DeviceUnPairingFix.D167,
+  which DeviceUnPairingFix.D169-A made one function:
+  1. a dead member is passed over at every step:
+     one the Cube holds no valid state for;
+  2. what most of the members share, where there is something to share
+     (a state, a group of the configuration, a day of the programme);
+  3. the room's master, where it is a thermostat of the room,
+     a radiator or a wall thermostat;
+  4. the room's wall thermostat;
+  5. its first radiator thermostat, then each other one, in the Cube's order.
+
+  For a state, Massimo's own command comes first (D4-A),
+  and the newest change (D3-A, D7-C) between steps 2 and 3.
+  The addressee has no step 2;
+  where every thermostat of the room is dead,
+  it is taken by steps 3 to 5 without step 1,
+  since a radiogram with the room flag must name one.
+  A reference where every member is dead is none.
+- **D10-A.
+  The SET label beside the marks:**
+  the mark beside the setpoint value; SET and its icon stay.
+- **D11-A.
+  Marks in the device rows,**
+  by each device's own eco and comfort temperatures.
+- **D12-D.
+  Comfort equal to eco:**
+  one icon of its own, a moon beside a sun, as the devices' display shows it.
+- **D13-A.
+  Where the page gets eco and comfort:**
+  a thermostat's entry in the device and room lists carries `comfort_temp`
+  and `eco_temp` from its C line.
+- **D14-A.
+  Where OFF shows:**
+  every text that shows a setpoint: the tile's SET and its stepped value,
+  the device rows, More's Eco and Comfort, the tile's "shows …" of a write,
+  the House tile's result, the week programme's segments,
+  the members' setpoints (D17-A), and the log page, as "OFF (4.5 °C)".
+  Number fields keep 4.5 (the holiday form, the programme's fields,
+  the configuration), as do the API,
+  the process log's key-values and the command line.
+- **D15-A.
+  The repair Place**
+  (`buildPlace`, which puts a device into the room its list names and copies
+  nothing) holds the room's reference too, for the re-send:
+  a placed device brings its state as an added one does.
+- **D16-A.
+  A copy whose 0x40 is discarded** (`mode_not_set`)
+  then sends the reference once as a room command, as the re-send does;
+  with no reference, nothing, as now.
+- **D17-A.
+  The members' setpoints in the tile.**
+  While the room's thermostats show different setpoints,
+  a line under the setpoint row names each with its setpoint and mark,
+  and goes once they agree.
+  It is not shown while a write to the room waits for its confirmation,
+  so that a room command reaching the devices one by one does not flicker.
+  A disagreement such as 2026-11-23's then shows at once,
+  not after the room checks' 10 minutes.
+- **D18, from the owner's three places.
+  The mark in a device row:**
+  a mark at the row's end would need its room in every row.
+  Of before the value, after the Set label, or in place of Set's icon,
+  the plan takes the last:
+  the mark replaces Set's gauge icon while the setpoint is the device's eco or
+  comfort temperature, the gauge otherwise.
+  It costs no width in any of the six languages,
+  where a mark after the label would move the value in French, Italian and
+  Dutch, whose labels already pass the label's width,
+  and one before the value would move its digits off Actual's.
+
 Cited, not edited: AP DeviceUnPairingFix,
 whose copy of a room's settings (its Blocks 1 and 2, `MoveCommands`,
-`CopyCommands`) this changes, and AP RadioHealth,
-whose D188 order and Block 7 report (D162-A, third tier) it extends.
-
-### Open decisions
-
-This plan's own decisions start at D7, after the owner's D3 to D6.
-
-- **D7.
-  "Changed last" for a member in auto (D3-A).**
-  - **A (recommended):**
-    for a member in auto, its mode's time only,
-    and its setpoint's where it does not follow its programme (a temperature set
-    by hand): a switch point moves the setpoint, and nobody wished it.
-  - **B:**
-    the mode's or the setpoint's time, whichever is later, always:
-    a member's switch point at 06:00 beats a hand change at 05:30.
-- **D8.
-  The copy's reference order.**
-  - **A (recommended):**
-    the re-send's order over the members before the change,
-    Massimo's own command first: one function,
-    and the copy and a later re-send cannot send different states.
-  - **B:**
-    the members' state alone, without Massimo's own command:
-    a room command Massimo sent minutes before, shown by one member of three,
-    loses in the copy and wins in the re-send.
-- **D9.
-  The configuration's tie rule (D5-A).**
-  - **A (recommended):**
-    per group, what most of the other members share,
-    on a tie the addressee's (`cubeio.Addressee`), then the first member's:
-    the rule the report already uses (`roomReferenceKey`).
-    The report then compares the programme per day, as the copy decides it,
-    so a device fresh from its copy is never reported.
-  - **B:**
-    per group, what more than half share,
-    else nothing for that group (the repair's rule, RadioHealth D163-A):
-    on a tie the device keeps its own, a factory-fresh one its factory values.
-  - **C:**
-    on a tie the first other thermostat's, as today: arbitrary,
-    by the Cube's order.
-- **D10.
-  The SET label beside the marks.**
-  - **A (recommended):**
-    the mark beside the setpoint value; SET and its icon stay:
-    the label says what the number is, the mark which preset it equals.
-  - **B:**
-    the mark replaces SET's icon: one icon less,
-    but the tile's two values look alike without it.
-- **D11.
-  Marks in the device rows.**
-  - **A (recommended):**
-    yes, by each device's own eco and comfort temperatures:
-    a member whose configuration differs then shows it.
-  - **B:**
-    the tile only.
-- **D12.
-  Comfort equal to eco.**
-  - **A (recommended):**
-    both marks, sun then moon: the setpoint is both,
-    and each mark's label says so.
-  - **B:**
-    neither: a setpoint that is both looks like neither.
-  - **C:**
-    the sun alone: arbitrary.
-- **D13.
-  Where the page gets eco and comfort.**
-  - **A (recommended):**
-    a thermostat's entry in the device and room lists carries `comfort_temp`
-    and `eco_temp` from its C line: two numbers each, no extra request,
-    and they follow a configuration change.
-  - **B:**
-    the tile reads each room thermostat's detail,
-    as More's Eco and Comfort do now: a request per room at every load,
-    the marks missing until it answers.
-- **D14.
-  Where OFF shows.**
-  - **A (recommended):**
-    every text that shows a setpoint: the tile's SET and its stepped value,
-    the device rows, More's Eco and Comfort, the tile's "shows …" of a write,
-    the House tile's result, the week programme's segments, and the log page,
-    as "OFF (4.5 °C)".
-    Number fields keep 4.5 (the holiday form, the programme's fields,
-    the configuration), as do the API,
-    the process log's key-values and the command line.
-  - **B:**
-    the three places named, the tile,
-    the device rows and More's Eco and Comfort, and the log page.
-  - **C:**
-    A, and the process log's `setpoint` as "OFF (4.5 °C)":
-    a text where tools read a number.
-- **D15.
-  The repair Place.**
-  It puts a device into the room its list names (`buildPlace`) and copies
-  nothing.
-  - **A (recommended):**
-    it holds the room's reference too, for the re-send:
-    a placed device brings its state as an added one does.
-  - **B:**
-    `PUT …/devices/{rf}` only.
-- **D16.
-  A copy whose 0x40 is discarded** (`mode_not_set`; in a move *unverified*,
-  docs/cube-protocol.md).
-  - **A (recommended):**
-    the copy then sends the reference once as a room command,
-    as the re-send does, which a moved thermostat took within 11 s on hardware;
-    with no reference, nothing, as now.
-  - **B:**
-    as now: the answer says so,
-    and the room checks re-send only where the members still differ,
-    not where the newcomer's state reached them all.
+`CopyCommands`) and addressee (D167, D169-A) this changes, and AP RadioHealth,
+whose D188 order, D163-A repair and Block 7 report (D162-A, third tier) it
+extends.
 
 ## Analysis
 
@@ -233,12 +217,12 @@ This plan's own decisions start at D7, after the owner's D3 to D6.
 - **State times** for D3-A are in the snapshot: `snap.Times(rf).Fields`,
   per value when it appeared; a time equal to `snap.Since()` means the value
   was there at the first connection, its age unknown, and counts as no time.
-  The strictly newest known time wins; none, or two equal,
-  fall to the wall thermostat's.
+  The strictly newest known time wins, as D7-C counts it;
+  none, or two equal, fall to D9's steps 3 to 5.
 - **A tie** is no state shown by more than half, a split three ways included.
 - **The held reference:**
   the request computes the reference over the room's members before the change,
-  by the re-send's order (D8),
+  by the re-send's order (D8-A),
   and keeps it for the room in the room checks' state, with its time.
   The re-send's second step takes it in place of the all-members majority.
   It is dropped at the room's first check after the change that finds the
@@ -248,6 +232,29 @@ This plan's own decisions start at D7, after the owner's D3 to D6.
   then 10 minutes to the Warn and 10 to the re-send.
   A person's change by hand at a device in that window that does not reach its
   partners is overridden once.
+- **Dead** (D9): the L entry's valid bit (0x10) is clear:
+  the Cube has had nothing from the device since its restart,
+  or marks the entry out of date after the device fell silent.
+  The room checks' `scanRoom` passes over such members already,
+  and `view.Silent` lists them;
+  the communication error and the link error do not make a device dead,
+  since it answers, and `r:` clears the first.
+  The virtual wall thermostat is never one of the Cube's devices,
+  so no step can pick it.
+- **The order today:**
+  `cubeio.Addressee` (DeviceUnPairingFix.D167, D169-A):
+  the master where it is a thermostat member, else the wall thermostat,
+  else the first radiator thermostat; nothing passes over a dead one.
+  Its callers: `RoomAddressee` (the room commands of `server.go` and
+  `config_api.go`, the re-send of `drift.go`), `MoveCommands` (moves,
+  removals, a placement's link half), `MasterCandidate` (the repair of
+  a room's master) and the report's tie (`congruence.go`).
+  The re-send's last step is the wall thermostat's state, not the master's.
+  The repair's `RoomAgreement` refuses on a tie (`NoMajorityError`) and
+  compares whole weeks.
+  Since the Cube discards room commands while a room has a member without
+  state (`view.Silent`), a dead addressee matters most to the radiograms
+  that name one directly: the links of a move, a removal, a placement.
 - **The request** (`internal/server/config_api.go`, `updateDevice`): the
   structure lock is taken, then `addDevice` or `moveDevice` links the
   device (`cubeio.MoveCommands`) and writes the metadata; the copy runs
@@ -267,13 +274,16 @@ This plan's own decisions start at D7, after the owner's D3 to D6.
   whole weeks) and `roomReferenceKey` (report, most members, then the addressee,
   whole weeks; the programme and the five temperatures,
   not the window-open minutes, not the valve).
-  D9-A takes the report's rule into `cubeio` per group and per day,
-  and the report calls it; the repair stays as it is.
+  D9 makes one rule of them in `cubeio`, per group and per day,
+  which the copy, the report and the repair call.
+  The repair then re-sends the days that differ from the room's,
+  as the copy does,
+  and refuses only where the room has no other thermostat that is not dead.
   Only radiator thermostats store all of 0x12 and the window-open minutes,
   so those come from the radiator thermostats among the others, else from a
   wall thermostat's boost settings and `RoomRadiator`'s defaults, as now.
 - **The copy's 0x11 to every member** stays, the original software's step:
-  with D9-A's values,
+  with D9's values,
   an existing member whose temperatures differ takes the room's there.
   The 0x12 and the days go to the new device only.
 - **OFF:**
@@ -287,6 +297,8 @@ This plan's own decisions start at D7, after the owner's D3 to D6.
   (`roomThermostat`, `presetTemps`, a detail request);
   the page's device entries carry no configuration.
   No moon or sun symbol is in `index.html` yet.
+  A device row's cell is a flex of label, value, unit and icon
+  (`Cell`, `Devices.tsx`), aligned by minimum widths, not by a grid.
 - **The UI** is AP UiParts':
   the tile and the device rows are parts (`src/rooms/Tile.tsx`,
   `src/rooms/Devices.tsx`),
@@ -294,42 +306,59 @@ This plan's own decisions start at D7, after the owner's D3 to D6.
 
 ## Implementation Plan
 
-A sub-agent on Opus builds each block without a commit,
-a second reader reads it, and the session verifies it and makes the commit;
-the three commits are one pull request.
+A sub-agent on Opus builds each block in this session's worktree without a
+commit, a second reader reads it, and the session verifies it and makes the
+commit; the three commits are one pull request.
 Tests run against the fake Cube and check the exact lines sent;
 identifiers are placeholders (`KEQ0000000`, `0a0101`).
 Nothing goes to a real Cube without the owner's word.
+Locally only the touched packages and UI test files run;
+CI runs the whole suite, the race job and the cross builds.
 
 ### Block 1: Order
 
+- `internal/cubeio`: D9's order, one function (`RoomOrder`):
+  the room's thermostats, the dead passed over,
+  in the order master, wall thermostat, radiator thermostats.
+  `Addressee` and `RoomAddressee` take its first,
+  else, every thermostat dead, its first without step 1;
+  `MasterCandidate` takes it with the master left aside.
+  Every caller of `Addressee` thereby passes over a dead addressee.
 - `internal/server/drift.go`:
   - `referenceState(members, intent, now, cubeNow, clock)`:
-    the re-send's order over the given members, Massimo's intent,
-    what more than half show, the newest change (D3-A, D7),
-    the wall thermostat's, none; `intended()` calls it.
-  - The tie rule from `snap.Times`, a time equal to `snap.Since()` none;
-    a member in auto by D7.
+    Massimo's intent, what more than half show, the newest change (D3-A,
+    D7-C), then D9's steps 3 to 5, the state of the first that has one,
+    none; `intended()` calls it.
+  - The tie rule from `snap.Times`, a time equal to `snap.Since()` none,
+    a member that follows its programme by D7-C.
   - The held reference per room: `holdReference(room, state, at)`,
     taken by the second step in place of the all-members majority,
     dropped as the Analysis says.
   - `from` names the rule: `massimo`, `majority`, `newest` (new),
-    `wall_thermostat`; `before_change: true` marks a held reference.
+    `master` (new), `wall_thermostat`, `radiator_thermostat` (new);
+    `before_change: true` marks a held reference.
 - The log page names the new `from` and `before_change` (`src/log/text.ts`);
   its texts in all six languages (FR/IT/NL/PL machine-translated and marked).
-- Tests (`drift_test.go`), each with the re-send's exact line:
-  a held manual 5 °C over a room of two that differ;
-  two that tie, the newest change wins; a switch point is no change (D7-A);
-  times unknown, the wall thermostat's; Massimo's command still first;
-  the reference dropped at agreement and after 24 h.
+- Tests, each with the exact line sent:
+  `cubeio` the order (a dead master, a dead wall thermostat, every thermostat
+  dead, the master a window contact);
+  a move's link half to a dead wall thermostat's room names the radiator;
+  `drift_test.go`: a held manual 5 °C over a room of two that differ;
+  two that tie, the newest change wins;
+  a switch point beats a hand change in auto, not one in manual (D7-C);
+  times unknown, the master's; a dead member passed over;
+  Massimo's command still first; the reference dropped at agreement and after
+  24 h.
 - Docs: `docs/api-v1.md`, the room checks' numbered list (RadioHealth.D188
-  as changed) and the log's `from`; the OpenAPI file's `disagree` summary.
+  as changed), the log's `from`, and every place that names the addressee's
+  order; the OpenAPI file's `disagree` summary;
+  `docs/cube-protocol.md`, "Set temperature (0x40) addressing", the order.
 - A `Fixed` CHANGELOG fragment.
 
 **Verification:**
-each test fails with its rule taken out; `go test ./internal/server`;
-`go test -race -count=1 ./internal/server`; `gofmt -l .`,
-`go vet` for the three systems; `make ui-check`.
+each test fails with its rule taken out; `go test ./internal/cubeio
+./internal/server`; `gofmt -l .`, `go vet` for the three systems;
+`make ui-check`.
 
 ### Block 2: Copy
 
@@ -337,20 +366,26 @@ each test fails with its rule taken out; `go test ./internal/server`;
   before `addDevice` or `moveDevice`,
   the target room's reference (Block 1's `referenceState` over the room's scan);
   passed to the copy and held for the room checks.
-  The repair Place holds it too (D15).
+  The repair Place holds it too (D15-A).
 - `internal/cubeio/pairing.go`:
   - `CopyCommands` takes the state: the 0x40 carries the reference's mode,
     setpoint and until, to the device directly, without a Target; auto
     with 0 where the reference is auto on the programme, or there is none.
   - `roomReference` → `RoomConfig` (D9): per group, the temperatures,
-    the valve settings, each day;
+    the valve settings, each day, what most of the other members not dead
+    share, else Block 1's order;
     window-open minutes and 0x12 from the radiator thermostats as the Analysis
     says; each device's own offset.
-  - D16: after a discarded 0x40, the reference once as a room command,
+  - D16-A: after a discarded 0x40, the reference once as a room command,
     through the queue, after the programme.
 - `internal/server/congruence.go`:
-  the report takes `RoomConfig`'s rule, the programme per day (D9-A).
-- Tests (`config_api_test.go`, `cubeio_test.go`), with the exact lines:
+  the report takes `RoomConfig`'s rule, the programme per day.
+- `internal/cubeio/repair.go`: `RoomAgreement` takes `RoomConfig`'s rule;
+  `ResendCommands` re-sends the temperatures and the days that differ from
+  it; `NoMajorityError` only for a room without another thermostat that is
+  not dead; the repair's texts follow (`repair_api.go`, the UI's).
+- Tests (`config_api_test.go`, `cubeio_test.go`, the repair's), with the
+  exact lines:
   the 2026-11-23 case,
   a room of one radiator thermostat in manual 5 °C and an added wall thermostat:
   its 0x40 is manual 5 °C, direct;
@@ -359,10 +394,12 @@ each test fails with its rule taken out; `go test ./internal/server`;
   the reference read before the links (the fake Cube changes the old member as
   it takes the link half, the copy still sends the earlier state);
   auto on the programme, no other thermostat, a holiday;
-  the configuration per group and per day, a tie to the addressee's;
-  a discarded 0x40 (D16); the report after a copy finds nothing.
+  the configuration per group and per day, a tie to the master's, a dead
+  member passed over; a discarded 0x40 (D16-A); a placement (D15-A);
+  the report after a copy finds nothing; the repair on a tie.
 - Docs: `docs/api-v1.md`, "PUT /api/v1/cubes/{sn}/devices/{rf}" (the copy
-  paragraph) and the report's room reference; `docs/cube-protocol.md`,
+  paragraph), the report's room reference and the repair's re-send;
+  `docs/cube-protocol.md`,
   "Pairing a device, as the original software does it" (Massimo's copy,
   where it differs from the original's now).
 - A `Fixed` CHANGELOG fragment.
@@ -370,31 +407,38 @@ each test fails with its rule taken out; `go test ./internal/server`;
 **Verification:**
 each test fails on a fault planted for it (auto in the 0x40,
 the reference read after the links, the first other thermostat's configuration,
-a Target on the 0x40); `go test ./internal/cubeio ./internal/server`;
-`-race` for `internal/server`; `gofmt`, `go vet` for the three systems.
+a Target on the 0x40, a tie refused); `go test ./internal/cubeio
+./internal/server`; `gofmt`, `go vet` for the three systems; `make ui-check`
+where the repair's texts changed.
 
 ### Block 3: Marks
 
-- The API (D13): a thermostat's entry carries `comfort_temp` and `eco_temp` from
-  its C line (`internal/view`); `docs/api-v1.md`, the OpenAPI file,
+- The API (D13-A): a thermostat's entry carries `comfort_temp` and `eco_temp`
+  from its C line (`internal/view`); `docs/api-v1.md`, the OpenAPI file,
   `api.d.ts` (`make api-types`); a test of the entry.
 - `src/shared/`:
   `fmtSetpoint`, "OFF" for 4.5 °C, and the preset mark,
   each with its row in `docs/ui.md` ("How the page is built");
   `app.js` the same formatter for the plain scripts.
-- OFF where D14 says; the log page "OFF (4.5 °C)".
+- OFF where D14-A says; the log page "OFF (4.5 °C)".
 - `index.html`:
-  `icon-eco`, a crescent moon, and `icon-comfort`, a sun with rays,
+  `icon-eco`, a crescent moon, `icon-comfort`, a sun with rays,
+  and `icon-eco-comfort`, the two side by side (D12-D),
   each mark with its label.
-- The tile: the mark beside the shown value, the stepped one included, by
-  the room thermostat's eco and comfort, as More's are (D10, D12); the device
-  rows by each device's own (D11).
+- The tile: the mark beside the shown value, the stepped one included,
+  in the accent colour, by the room thermostat's eco and comfort,
+  as More's are (D10-A); the device rows by each device's own,
+  in place of Set's gauge (D11-A, D18).
+- The members' setpoints (D17-A): a line under the tile's setpoint row,
+  each thermostat's name, setpoint and mark, while they differ and no write
+  of the tile waits for its confirmation.
 - Texts in all six languages (FR/IT/NL/PL machine-translated and marked);
   "OFF" as the displays show it.
 - Tests: UI tests of the tile and a device row at OFF, at eco, at comfort,
-  at comfort equal to eco, at 1100 and 390 px, in light and dark; the log
-  page's "OFF (4.5 °C)".
-- Docs: `docs/ui.md`, the tile's SET and the device rows.
+  at comfort equal to eco; the members' line while they differ, not while a
+  write waits, gone once they agree; at 1100 and 390 px,
+  in light and dark; the log page's "OFF (4.5 °C)".
+- Docs: `docs/ui.md`, the tile's SET, the members' line and the device rows.
 - An `Added` CHANGELOG fragment.
 
 **Verification:**
@@ -409,14 +453,21 @@ The owner merges it.
 
 ## Proposed commit messages
 
-- The plan: `chore(aps): +RoomMajority v1.0`
-- Block 1: `fix(roomcheck): A re-send keeps the room's state from before a newcomer`
+- The plan: `chore(aps): +RoomMajority v1.0`, then `chore(aps): +RoomMajority v1.1`
+- Block 1:
+  `fix(rooms): One order speaks for a room, and a re-send keeps its state from before a newcomer`
 - Block 2:
   `fix(copy): A thermostat put into a room takes the room's state and configuration`
 - Block 3:
-  `feat(ui/rooms): OFF for 4.5 °C, and marks for the eco and comfort temperatures`
+  `feat(ui/rooms): OFF for 4.5 °C, marks for eco and comfort, and the setpoints of members that differ`
 
 ## Change History
 
 - v1.0 (2026-11-23): first revision, from the owner's account of the
   2026-11-23 case and decisions D3-A to D6-A; D7 to D16 open.
+- v1.1 (2026-11-23): the owner's answers at v1.0's gate, by PLAN++:
+  D7-C, D8-A, D9 as the owner's one order (the dead passed over, then the
+  majority, the master, the wall thermostat, the radiator thermostats) in every
+  place, the addressee and the repair included, D10-A, D11-A, D12-D, D13-A,
+  D14-A, D15-A, D16-A, D17-A (Block 3), and D18 from the owner's three places;
+  no decision open.
