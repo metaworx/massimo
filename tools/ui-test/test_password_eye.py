@@ -185,7 +185,9 @@ def test_the_first_owners_password_eyes(new_context, case, watch, guard):
 def test_my_profiles_password_eyes(new_context, case, watch, guard):
     """My profile's change of password, the current one and the new one
     twice, each with its eye; the values typed kept; a password shown is
-    hidden again when the fold is closed and opened, the field drawn."""
+    hidden again when the fold is closed and opened, the field drawn, also
+    where the two come before the page takes the first, as one toggle
+    event, as a loaded page meets them (the CI's)."""
     page = fresh_page(new_context, guard, watch)
     sign_in(page, "operator", "op-pass")
     show_view(page, "profile")
@@ -205,6 +207,16 @@ def test_my_profiles_password_eyes(new_context, case, watch, guard):
     s = state(page, "me-new")
     hidden(s, case, "the fold closed and opened again")
     assert s["value"] == "not-set-me-new", f"what is typed kept: {s}"
+    # closed and opened before the page takes the first toggle, as a loaded page does: one event, open to open, which
+    # hides it all the same
+    eye_of(page, "me-new").click()
+    shown(state(page, "me-new"), case, "before the fold's double press")
+    events = page.evaluate("""() => new Promise((done) => { const d = document.getElementById('me-password'); const log = [];
+      d.addEventListener('toggle', (e) => { log.push(e.oldState + '>' + e.newState); setTimeout(() => done(log), 0); }, { once: true });
+      const t = document.getElementById('me-password-title'); t.click(); t.click(); })""")
+    assert events == ["open>open"], f"one event: {events}"
+    frames(page)
+    hidden(state(page, "me-new"), case, "closed and opened at once")
 
 
 def toggle(page, panel):

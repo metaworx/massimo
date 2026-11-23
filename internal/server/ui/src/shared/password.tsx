@@ -64,7 +64,9 @@ type One = { value: string; set: (v: string) => void; inputRef?: Ref<HTMLInputEl
  * required, disabled and placeholder are the input's, inputCls its class
  * (field-control in a row, beside the box's own); value and set, or
  * inputRef alone, as One says. reset is whatever the caller counts as a
- * new start: the card's openings, a fold's open state; switched off, a
+ * new start: the card's openings, a fold's open state; a password shown
+ * is also hidden at each toggle of a fold the field is in, as the browser
+ * fires it, however fast the fold is closed and opened; switched off, a
  * password shown is hidden, and stays hidden when the eye comes back. The
  * type never turns while the field is in a closed fold (a details): Chrome
  * draws nothing of an input whose type turned there once the fold opens,
@@ -117,6 +119,16 @@ export function PasswordInput(props: One & {
   useLayoutEffect(() => {
     if (!on) hide();
   }, [on, hide]);
+  // hidden again at each toggle of a fold the field is in, the browser's own event: a close and an opening pressed
+  // before the page took the first make one event, open to open, which a fold's open state never sees change
+  useEffect(() => {
+    const folds: Element[] = [];
+    for (let d = own.current?.closest("details"); d; d = d.parentElement?.closest("details")) folds.push(d);
+    for (const d of folds) d.addEventListener("toggle", hide);
+    return () => {
+      for (const d of folds) d.removeEventListener("toggle", hide);
+    };
+  }, [hide]);
   // the caret where it was once the type has turned, the field still in focus
   // biome-ignore lint/correctness/useExhaustiveDependencies: shown is what turned the type; the effect follows each turn, so it is listed.
   useLayoutEffect(() => {
