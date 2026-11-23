@@ -273,7 +273,15 @@ no `ticket` or `token` on the stream) is answered `401` and counts as none,
 since it guesses nothing:
 a page before its sign-in, or a scanner behind a proxy not in
 `-trusted-proxies`, does not lock the address out.
-and a failed login counts against the address and against the user name,
+Nor does a token the server issued and that has ended:
+a session revoked, logged out or past its end, a revoked key,
+a session whose key was revoked, or the token of a removed user
+is answered `401` with the words of a wrong token, and counts as none,
+since a guessed token never matches one that was issued:
+a client that sends again a session that ended,
+as a page does after a link that stalled, does not lock its address out
+(`POST /api/v1/login/key`'s key included).
+A failed login counts against the address and against the user name,
 so that password guessing from many addresses locks the name.
 With a store the counters survive a restart.
 The address is the TCP peer's, or,
@@ -485,8 +493,10 @@ session at its next request.
 A password set by someone else ends the sessions and leaves the keys,
 as it does for every key.
 
-A wrong or revoked key is `401` and counts toward the address's lockout,
-as every failed token check does (Authentication above);
+A wrong key is `401` and counts toward the address's lockout,
+as every failed token check does;
+a revoked one is `401` and does not,
+as no token that ended does (Authentication above);
 a session as the bearer is `400`;
 a disabled user, a guest past its end date, a disabled role
 and a registered integration's key are `403`;

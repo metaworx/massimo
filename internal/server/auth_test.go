@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -227,6 +228,101 @@ func TestRequestsWithoutTokenAreNotCounted(t *testing.T) {
 	// Locked out, a request without a token is 429 too.
 	if r := send(t, "GET", cubes, ""); r.StatusCode != 429 {
 		t.Fatalf("without a token during the lockout: %d", r.StatusCode)
+	}
+}
+
+// A token the server issued and that has ended is refused with 401, as
+// a wrong one is, but guesses nothing and does not count toward the
+// address's lockout (AP MobileApp v1.4, D64-A): more refusals than the
+// limit within its window, of a revoked session, a session logged out,
+// one past its end, a revoked key at POST /api/v1/login/key, a session
+// whose key was revoked, and one on the stream's ?token=, lock nothing
+// out; as many unknown tokens do, as before, a wrong ?token= on the
+// stream among them, and so does a wrong ticket beside an ended token.
+func TestEndedTokensAreNotCounted(t *testing.T) {
+	t.Parallel()
+	opts := storeOptions(t, t.TempDir(), "secret")
+	rg := startServer(t, withOptions(opts))
+	ts, st := rg.ts, rg.s.opts.Store
+	ctx := t.Context()
+	anna, err := st.AddUser(ctx, store.User{Name: "anna", Role: store.RoleOperator}, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	session := func(end time.Time) (store.Token, string) {
+		t.Helper()
+		tok, secret, err := st.AddToken(ctx, anna.ID, store.TokenSession, "Firefox", end)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return tok, secret
+	}
+	live := time.Now().Add(SessionLifetime)
+	revokedTok, revoked := session(live)
+	if err := st.RevokeToken(ctx, revokedTok.ID); err != nil {
+		t.Fatal(err)
+	}
+	_, loggedOut := session(live)
+	if code, text := callAPI(t, ts, "POST", "/api/v1/logout", loggedOut, ""); code != 200 {
+		t.Fatalf("logout: %d %s", code, text)
+	}
+	_, expired := session(time.Now().Add(-time.Minute))
+	keyTok, key, err := st.AddToken(ctx, anna.ID, store.TokenAPI, "SM-X, login by fingerprint", time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, text := callAPI(t, ts, "POST", "/api/v1/login/key", key, "")
+	var made struct {
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal([]byte(text), &made); err != nil || code != 200 || made.Token == "" {
+		t.Fatalf("login by key: %d %s %v", code, text, err)
+	}
+	if err := st.RevokeToken(ctx, keyTok.ID); err != nil {
+		t.Fatal(err)
+	}
+	cubes := "/api/v1/cubes"
+	stream := cubes + "/KEQ0000100/events"
+	for i := 0; i < DefaultAuthFailures+1; i++ {
+		for _, c := range []struct{ what, method, path, token string }{
+			{"a revoked session", "GET", cubes, revoked},
+			{"a session logged out", "GET", cubes, loggedOut},
+			{"a session past its end", "GET", cubes, expired},
+			{"a revoked key", "POST", "/api/v1/login/key", key},
+			{"the session of a revoked key", "GET", cubes, made.Token},
+			{"a revoked session on the stream", "GET", stream + "?token=" + revoked, ""},
+		} {
+			if code, text := callAPI(t, ts, c.method, c.path, c.token, ""); code != 401 || !strings.Contains(text, errBadToken.Error()) {
+				t.Fatalf("%s, refusal %d: %d %s", c.what, i+1, code, text)
+			}
+		}
+	}
+	keys, err := st.Lockout(DefaultAuthFailures, DefaultAuthWindow, DefaultAuthLockout).Keys(ctx)
+	if err != nil || len(keys) != 0 {
+		t.Fatalf("ended tokens counted: %v %v", keys, err)
+	}
+	if code, _ := callAPI(t, ts, "GET", cubes, "secret", ""); code != 200 {
+		t.Fatalf("the right token after the ended ones: %d", code)
+	}
+
+	// A wrong ticket beside an ended token is a guess, and counts.
+	if code, _ := callAPI(t, ts, "GET", stream+"?ticket=nope", revoked, ""); code != 401 {
+		t.Fatalf("a wrong ticket with an ended token: %d", code)
+	}
+	if keys, _ := st.Lockout(DefaultAuthFailures, DefaultAuthWindow, DefaultAuthLockout).Keys(ctx); len(keys) != 1 {
+		t.Fatalf("a wrong ticket with an ended token not counted: %v", keys)
+	}
+	// A wrong ?token= on the stream, without a Bearer header, is a guess.
+	if code, _ := callAPI(t, ts, "GET", stream+"?token=unknown-token", "", ""); code != 401 {
+		t.Fatalf("a wrong token on the stream: %d", code)
+	}
+	for i := 2; i < DefaultAuthFailures; i++ {
+		if code, _ := callAPI(t, ts, "GET", cubes, "unknown-token", ""); code != 401 {
+			t.Fatalf("unknown token %d: %d", i, code)
+		}
+	}
+	if code, _ := callAPI(t, ts, "GET", cubes, "secret", ""); code != 429 {
+		t.Fatalf("after as many guesses as the limit: %d", code)
 	}
 }
 

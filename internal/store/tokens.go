@@ -146,6 +146,26 @@ func (s *Store) TokenByHash(ctx context.Context, hash string) (Token, bool, erro
 	return t, true, nil
 }
 
+// TokenEnded reports whether hash is the hash of a token the store issued
+// that has ended by now: revoked (deleted_at: a logout, a revoke, a
+// removed user's tokens), past its end (expires_at), its user removed, or
+// a session made from a key that was revoked. A live token, and a hash
+// no token has, are not. The server asks it of a token it refuses, so
+// that one it issued and that ended, which a client may still send, does
+// not count toward the address's lockout as a guess does: a guessed
+// secret never hits the hash of a token that was issued (docs/api-v1.md,
+// "Authentication").
+func (s *Store) TokenEnded(ctx context.Context, hash string, now time.Time) (bool, error) {
+	var ended bool
+	err := s.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM tokens t LEFT JOIN users u ON u.id = t.user_id LEFT JOIN tokens p ON p.id = t.parent_id
+		WHERE t.hash = ? AND (t.deleted_at IS NOT NULL OR t.expires_at <= ? OR u.id IS NULL OR u.deleted_at IS NOT NULL OR NOT `+liveKey+`))`,
+		hash, formatTime(now)).Scan(&ended)
+	if err != nil {
+		return false, fmt.Errorf("store: ended token: %w", err)
+	}
+	return ended, nil
+}
+
 // Tokens lists a user's live tokens, oldest first: a session made from a
 // key only while the key lives.
 func (s *Store) Tokens(ctx context.Context, userID int64) ([]Token, error) {
