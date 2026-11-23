@@ -448,6 +448,162 @@ func TestReloadWarnsOfARefusedSetting(t *testing.T) {
 	reload(environment, "MASSIMO_HSTS set in the environment", env.HSTS+"=-1\n"+env.TrustedProxies+"=127.0.0.1\n", "")
 }
 
+// A settings file that does not parse, read again, changes nothing: the
+// process's settings, the token and what waits for the next start stay
+// as they were, the file counting as read then, and POST /api/v1/reload
+// answers 500 with the error. Its settings_read is a warning with the
+// start's own error after "the next start refuses: ": one line, on the
+// process's log as in the server's, where the log's warning sign counts
+// it, and without the bad line, which may be half a secret wrapped onto
+// a line of its own. The next read that parses settles it, though it
+// changed nothing; a missing file is the reloader's warning alone.
+func TestReloadWarnsOfAnUnreadableFile(t *testing.T) {
+	unsetForTest(t, tokenVar, env.HSTS)
+	p := filepath.Join(t.TempDir(), "env")
+	put := func(text string) {
+		t.Helper()
+		if err := os.WriteFile(p, []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	put("")
+	t.Cleanup(func() { os.WriteFile(p, nil, 0o600); env.ReloadFile(p) }) // the env package forgets the test's names
+	st := storekit.Open(t, "")
+	// The log's writer, which the server's Run would start.
+	wctx, stopWriter := context.WithCancel(context.Background())
+	writerDone := make(chan struct{})
+	go func() { st.RunEvents(wctx); close(writerDone) }()
+	t.Cleanup(func() { stopWriter(); <-writerDone })
+	// One process log, as serve's: the reloader's lines and the server's.
+	log, w := testkit.LogWatch(nil)
+	srv := server.New(server.Options{Store: st, Logger: log})
+	r := newSettingsReloader(p, log.With("source", "system"), srv, settings(), nil)
+	// The API's reload as serve hands it over, its error kept.
+	srv.SetReloader(p, func(ctx context.Context) (server.ReloadResult, error) {
+		changed, pending, err := r.reload(ctx, "the API")
+		return server.ReloadResult{Changed: nonNil(changed), Pending: nonNil(pending), ReadAt: time.Now()}, err
+	})
+	api := func(method, path string, v any) int {
+		t.Helper()
+		req := httptest.NewRequest(method, path, strings.NewReader("{}"))
+		req.RemoteAddr = "127.0.0.1:5000"
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, req)
+		if err := json.Unmarshal(rec.Body.Bytes(), v); err != nil {
+			t.Fatalf("%s %s: %d %s", method, path, rec.Code, rec.Body.String())
+		}
+		return rec.Code
+	}
+	type line struct{ Level, Error string }
+	type restartView struct {
+		Pending []string   `json:"pending"`
+		ReadAt  *time.Time `json:"read_at"`
+	}
+	type alerts struct {
+		Level  string `json:"level"`
+		Alerts []struct {
+			Kind string `json:"kind"`
+		} `json:"alerts"`
+	}
+	reads := 0 // the settings_read lines written
+	// newest waits for the server's newest settings_read, the reads'th,
+	// and answers it with the log's warning sign.
+	newest := func(what string) (line, alerts) {
+		t.Helper()
+		var lines []line
+		testkit.Eventually(t, what+": the settings_read in the server's log", func() bool {
+			lines = nil
+			api("GET", "/api/v1/log?kind=settings_read", &lines)
+			return len(lines) == reads
+		})
+		var sign alerts
+		api("GET", "/api/v1/log/alerts", &sign)
+		return lines[len(lines)-1], sign
+	}
+	warned := func(rec testkit.Record) bool { return rec.Level >= slog.LevelWarn }
+	settingsRead := testkit.Msg("settings read", "kind", "settings_read")
+
+	// A good read first, which leaves MASSIMO_HSTS waiting for the next start.
+	good := env.HSTS + "=30\n"
+	put(good)
+	if _, _, err := r.reload(t.Context(), "the settings file changed"); err != nil {
+		t.Fatal(err)
+	}
+	reads++
+	newest("a good read")
+
+	// A changed value and a token wrapped onto a line of its own, which
+	// does not parse.
+	put(env.HSTS + "=60\n" + tokenVar + "=placeholder-token-\nwrapped-secret-9\n")
+	m := w.Mark()
+	t0 := time.Now()
+	var answer struct{ Error string }
+	code := api("POST", "/api/v1/reload", &answer)
+	reads++
+	l, sign := newest("a file that does not parse")
+	for _, secret := range []string{"wrapped-secret-9", "placeholder-token-"} {
+		w.HasNot(t, 0, "the token's "+secret+" in the log", testkit.Contains(secret))
+		if strings.Contains(answer.Error, secret) || strings.Contains(l.Error, secret) {
+			t.Fatalf("the token's %s in the answer %q or the server's line %q", secret, answer.Error, l.Error)
+		}
+	}
+	// The start's own error, which every command stops with.
+	parseErr := p + ":3: expected KEY=VALUE"
+	if err := env.LoadFile(p); err == nil || err.Error() != parseErr {
+		t.Fatalf("the start's own error: %v, want %s", err, parseErr)
+	}
+	if code != 500 || answer.Error != "reading the settings file: "+parseErr {
+		t.Fatalf("POST /api/v1/reload: %d %q", code, answer.Error)
+	}
+	want := "the next start refuses: " + parseErr
+	rec, _ := w.Has(t, m, "the settings_read line at warn", testkit.MsgAt(slog.LevelWarn, "settings read", "kind", "settings_read", "why", "the API"))
+	if rec.Attrs["error"] != want {
+		t.Fatalf("the line's error\n%q, want\n%q", rec.Attrs["error"], want)
+	}
+	if n := w.Count(m, warned); n != 1 {
+		t.Fatalf("%d warnings, want the event's line alone: %v", n, w.Since(m, warned))
+	}
+	if l.Level != "warn" || l.Error != want || sign.Level != "warn" || len(sign.Alerts) != 1 || sign.Alerts[0].Kind != "settings_read" {
+		t.Fatalf("the line %+v, the sign %+v", l, sign)
+	}
+	// The file counts as read then, as the event's time says in the web
+	// UI; nothing of it applies.
+	var after restartView
+	api("GET", "/api/v1/restart", &after)
+	if os.Getenv(env.HSTS) != "30" || os.Getenv(tokenVar) != "" || srv.AuthMode() != "open" ||
+		strings.Join(after.Pending, ",") != env.HSTS || strings.Join(r.pending(), ",") != env.HSTS ||
+		after.ReadAt == nil || after.ReadAt.Before(t0) {
+		t.Fatalf("after the failed read: %s=%q, the token %q, mode %s, pending %v and %v, read at %v, the read asked for at %v",
+			env.HSTS, os.Getenv(env.HSTS), os.Getenv(tokenVar), srv.AuthMode(), after.Pending, r.pending(), after.ReadAt, t0)
+	}
+
+	// The file as it was: nothing changed, and the read settles the
+	// warning; a read after it that changes nothing writes no line again.
+	put(good)
+	m = w.Mark()
+	if changed, _, err := r.reload(t.Context(), "the settings file changed"); err != nil || len(changed) != 0 {
+		t.Fatalf("the file as it was: %v %v", changed, err)
+	}
+	reads++
+	w.HasNot(t, m, "a warning", warned)
+	if l, sign := newest("the file as it was"); l.Level != "info" || l.Error != "" || sign.Level != "" {
+		t.Fatalf("the file as it was: the line %+v, the sign %+v", l, sign)
+	}
+	m = w.Mark()
+	r.reload(t.Context(), "the settings file changed")
+	w.HasNot(t, m, "a settings_read of an unchanged file", settingsRead)
+
+	// A missing file: an editor may be replacing it, and the next start
+	// takes it as none.
+	os.Remove(p)
+	m = w.Mark()
+	if _, _, err := r.reload(t.Context(), "SIGHUP"); !os.IsNotExist(err) {
+		t.Fatalf("a missing file: %v", err)
+	}
+	w.Has(t, m, "a missing file: the reloader's warning", testkit.MsgAt(slog.LevelWarn, "settings file not read again", "why", "SIGHUP"))
+	w.HasNot(t, m, "a missing file: a settings_read", settingsRead)
+}
+
 // A reload removes the keep-open setting where the server has users
 // beside it, as a process of an older version, or a store put in place
 // by hand, can leave them (AP FirstOwner, D12).

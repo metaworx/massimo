@@ -819,7 +819,8 @@ from Bath to Kitchen", "comfort 21.0 → 21.5", "Monday's program changed".
 The server's own lines are there too: its start with its version, its stop
 and why, the settings file read again with the names of what changed
 (a warning, in the start's own words,
-where the next start would refuse a setting),
+where the next start would refuse a setting, or the file,
+one that does not parse or is there but cannot be read),
 a restart, a reboot or an update asked for and its outcome, the backups, their
 prune and the log's, a restore started; and a Cube's new address or its
 leaving the LAN.

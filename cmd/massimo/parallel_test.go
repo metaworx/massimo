@@ -30,6 +30,7 @@ var serialTests = map[string]string{
 	"TestNoEnv":                             "sets MASSIMO_ENV_FILE, as -no-env does",
 	"TestReloadAppliesTheRebootSwitch":      "unsets settings variables (unsetForTest)",
 	"TestReloadWarnsOfARefusedSetting":      "unsets settings variables (unsetForTest), clears the Cube variables, sets MASSIMO_HSTS and reloads a settings file into the environment",
+	"TestReloadWarnsOfAnUnreadableFile":     "unsets settings variables (unsetForTest) and reloads a settings file into the environment",
 	"TestRestartHelper":                     "sets ProgramData",
 	"TestSettingsReloader":                  "unsets settings variables (unsetForTest) and reloads a settings file into the environment",
 	"TestSettingsReloaderDropsKeepOpen":     "unsets settings variables (unsetForTest) and reloads a settings file into the environment",

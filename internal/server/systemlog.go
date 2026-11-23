@@ -128,7 +128,9 @@ func (s *Server) logStopping() {
 // which may be secrets; with who asked for it through the API (ctx). It
 // is at warn, with refused as its error, where the next start would
 // refuse a setting of the file (cmd/massimo's startchecks.go: a value
-// that does not parse, or does not go with another).
+// that does not parse, or does not go with another), or the file itself,
+// one that does not parse or is there but cannot be read, which changed
+// nothing (cmd/massimo's reload.go).
 func (s *Server) LogSettingsRead(ctx context.Context, why string, changed, pending []string, refused error) {
 	c, p := append([]string{}, changed...), append([]string{}, pending...)
 	sort.Strings(c)

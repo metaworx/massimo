@@ -772,6 +772,11 @@ A value the next start would refuse is also a warning in the log,
 the web UI's included, with the start's own error:
 `MASSIMO_LOG_LEVEL=deubg`,
 or an unchanged `MASSIMO_TLS_HTTP` once `MASSIMO_TLS` is no longer `acme`.
+A file that does not parse, or is there but cannot be read,
+changes nothing and is such a warning too,
+since every command stops on it at its start;
+the warning names the bad line by its number and never quotes it.
+A missing one changes nothing either, as an editor may be replacing it.
 A setting a flag fixes is the flag's, now and at the next start,
 and one the process environment sets wins over the file's;
 the warning names the path of `MASSIMO_TLS_KEY` by its variable.

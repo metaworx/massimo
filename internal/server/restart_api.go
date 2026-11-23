@@ -38,7 +38,8 @@ type restartView struct {
 	// apply only at the next one.
 	Pending []string `json:"pending,omitempty"`
 	// File is the settings file, ReadAt when it was last read: at the
-	// start, or again since.
+	// start, or again since, also where it did not parse, or was there
+	// but could not be read (the log's settings_read).
 	File   string     `json:"file,omitempty"`
 	ReadAt *time.Time `json:"read_at,omitempty"`
 }

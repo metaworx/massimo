@@ -12,7 +12,9 @@ package main
 // /api/v1/restart), by name, never by value. A setting the next start
 // would refuse makes the log's settings_read a warning, in the start's
 // own words (startchecks.go), and still waits for that start; a reboot
-// switch it would refuse is off.
+// switch it would refuse is off. A file that does not parse, or is
+// there but cannot be read, changes nothing, and its settings_read is a
+// warning too (unreadable).
 
 import (
 	"context"
@@ -133,7 +135,11 @@ type settingsReloader struct {
 	srv   *server.Server
 	start map[string]string // settings() at the start
 	fixed map[string]string // the variables of the flags given, with the flags' values (fixedSettings)
-	mu    sync.Mutex
+	// unread is set where the last read failed and its settings_read
+	// warned of it (unreadable): the next read writes its own, which
+	// settles it, though nothing changed.
+	unread bool
+	mu     sync.Mutex
 }
 
 func newSettingsReloader(path string, log *slog.Logger, srv *server.Server, start, fixed map[string]string) *settingsReloader {
@@ -154,7 +160,7 @@ func (r *settingsReloader) reload(ctx context.Context, why string) (changed, pen
 	defer r.mu.Unlock()
 	changed, err = env.ReloadFile(r.path)
 	if err != nil {
-		r.log.Warn("settings file not read again", "file", r.path, "why", why, "error", err)
+		r.unreadable(ctx, why, err)
 		return nil, nil, err
 	}
 	r.srv.SetSettingsRead(time.Now())
@@ -176,7 +182,8 @@ func (r *settingsReloader) reload(ctx context.Context, why string) (changed, pen
 	}
 	pending = r.pending()
 	r.srv.SetPendingRestart(pending)
-	if len(changed) > 0 || why != "the settings file changed" {
+	if len(changed) > 0 || why != "the settings file changed" || r.unread {
+		r.unread = false
 		r.log.Info("settings file read again", "why", why, "changed", strings.Join(changed, ","), "at_next_restart", strings.Join(pending, ","))
 		// The names, never the values; the errors of the refused
 		// settings quote theirs, a secret's by its name. The event's
@@ -185,6 +192,28 @@ func (r *settingsReloader) reload(ctx context.Context, why string) (changed, pen
 		r.srv.LogSettingsRead(ctx, why, changed, pending, r.refused())
 	}
 	return changed, pending, nil
+}
+
+// unreadable says that the settings file could not be read again, which
+// changed nothing: env.ReloadFile parses the file whole first, so the
+// process's settings, the token and what waits for the next start stay
+// as they were. A missing file is the reloader's warning alone: an
+// editor may be replacing it, and the next start takes it as no file, as
+// env.LoadFile does. Any other error stops the next start of every
+// command (main.go), so settings_read is a warning with it after "the
+// next start refuses: ", the start's own words (AP ReloadChecks, D9-A),
+// and the read's time is the event's, which the web UI shows as the
+// file's; the next read writes its settings_read, which settles it. The
+// error names the file and the line by its number, never the line,
+// which may hold a secret (env.ReloadFile).
+func (r *settingsReloader) unreadable(ctx context.Context, why string, err error) {
+	if os.IsNotExist(err) {
+		r.log.Warn("settings file not read again", "file", r.path, "why", why, "error", err)
+		return
+	}
+	r.srv.SetSettingsRead(time.Now())
+	r.srv.LogSettingsRead(ctx, why, nil, r.pending(), errors.New("the next start refuses: "+err.Error()))
+	r.unread = true
 }
 
 // refused is what the next start refuses of the settings now: the

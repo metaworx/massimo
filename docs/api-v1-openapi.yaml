@@ -3561,7 +3561,10 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
         "500":
-          description: The settings file could not be read
+          description: >-
+            The settings file could not be read, and nothing changed; the log's
+            settings_read is a warning where it does not parse, or is there but
+            cannot be read
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}

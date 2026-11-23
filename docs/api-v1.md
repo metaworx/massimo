@@ -3414,7 +3414,7 @@ of the same Cube, or of the server for the server's own:
 | `command` retried, failed or dropped | the same command key acknowledged for the same device |
 | `hold` | its end: the duty cycle's reset, or the wait for free slots |
 | `backup`, `restore_done`, `update_result`, `log_rotated` failed | the next one of its kind below warn |
-| `settings_read` with a value the next start would refuse | the next `settings_read` below warn, or `server_started` |
+| `settings_read` with a value the next start would refuse, or a file that does not parse or is there but cannot be read | the next `settings_read` below warn, or `server_started` |
 | `proxy_refused` | the Cube's `connected`, or `proxy_connected` |
 | `proxy_warning`, a pairing not stopped or not started | `pairing_ended`; `pairing_started` or `proxy_pairing` |
 | `disagree`, a room's thermostats differing or its state not sent again | a `disagree` of the same `room` whose `outcome` is `agree` |
@@ -3531,9 +3531,13 @@ variables `changed` and of those waiting `at_next_start`, never their values;
 at `warn` with its `error`
 where the next start would refuse a setting of the file,
 such as a log level that does not parse
-or a `MASSIMO_TLS_HTTP` beside a `MASSIMO_TLS` that is not `acme`:
+or a `MASSIMO_TLS_HTTP` beside a `MASSIMO_TLS` that is not `acme`,
+or the file itself, one that does not parse or is there but cannot be read,
+which then changed nothing, and whose next read writes its `settings_read`
+even where nothing changed:
 the start's own error after "the next start refuses: ",
-a secret's value, the path of `MASSIMO_TLS_KEY`, named by its variable;
+a secret's value, the path of `MASSIMO_TLS_KEY`, named by its variable,
+and a line by its number, never quoted;
 README.md, "Server", says which settings it checks),
 `restart`, `reboot`, `reboot_cancelled`, `update` (`from`, `to`, `channel`),
 `update_result` (the helper's outcome after the restart, once:
@@ -3975,7 +3979,8 @@ names the settings of the settings file that changed since the start
 and apply only at the next one,
 such as `["MASSIMO_TLS", "MASSIMO_LISTEN"]`: names, never values;
 `file` is the settings file `serve` reads and `read_at` when it last read it,
-at the start or since.
+at the start or since,
+also where the file did not parse, or was there but could not be read.
 `by` is `systemd`, `launchd` (also Homebrew's job), `windows`
 (the Windows service manager) or `exit` (`serve -restart exit`:
 whatever runs the server, told by the exit status).
@@ -4030,7 +4035,13 @@ and a reboot's switch the start would refuse is off.
 It sends nothing to a Cube, and is an audit row (`server.reload`) but no
 command, so a retry is harmless.
 `409` when the server reads no settings file,
-`500` when the file could not be read.
+`500` when the file could not be read, with the error:
+nothing is applied, and what waits for the next start stays as it was,
+and the log's `settings_read` is at `warn`
+with the start's own error after "the next start refuses: "
+for a file that does not parse, or is there but cannot be read;
+a missing one, which an editor may be replacing,
+is a warning on the process's log alone.
 
 ### GET /api/v1/reboot, POST /api/v1/reboot, DELETE /api/v1/reboot
 
