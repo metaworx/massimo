@@ -19,14 +19,19 @@ import java.net.InetSocketAddress
  * (row 10), which may list her tokens but is refused (401) by the revoke;
  * `session-anna-quiet` (row 11), whose list of her tokens comes back empty.
  * `key-own` is her key 45 used as the bearer, `key-secret` her key itself
- * for the revoke by key. `session-bob` is Bob's (row 9); every other bearer
- * is refused (401).
+ * for the revoke by key, which `DELETE /api/v1/me/token` does not know, as
+ * a server older than that route (404); `key-self-<id>` her key of that id,
+ * which revokes itself there. `session-bob` is Bob's (row 9); every other
+ * bearer is refused (401).
  *
  * Anna's tokens as `GET /api/v1/users/anna/tokens` lists them: her keys
- * 42, 44 to 49 while not revoked, and the sessions 7, 8, 10 and 51; 43 is
- * gone already. The revoke of 42, 45, 46 and 49 succeeds once (then 404),
- * 44 fails (500), 47 is refused (403), 48 drops the connection, and any
- * other id is 404.
+ * 42, 44 to 49 while not revoked, and the sessions 7, 8, 10, 51 and 52, 52
+ * while not revoked, each session made at 2026-11-20T10:00:<id>Z, as
+ * `GET /api/v1/me` says too, and the session 53, listed without its time as
+ * a server that wrote none would list it, while not revoked; 43 is gone
+ * already. The revoke of 42, 45, 46, 49 and
+ * 52 succeeds once (then 404), 44 fails (500), 47 is refused (403), 48
+ * drops the connection, and any other id is 404.
  */
 class FakeServer : Closeable {
     private val seen = mutableListOf<String>()
@@ -57,13 +62,21 @@ class FakeServer : Closeable {
         val m = ex.requestMethod
         val anna = setOf("session-anna", "session-anna-fp", "session-anna-expiring", "key-own", "key-secret")
         when {
+            m == "DELETE" && path == "/api/v1/me/token" && bearer == "key-secret" -> answer(ex, 404, "404 page not found")
+            m == "DELETE" && path == "/api/v1/me/token" && bearer.startsWith("key-self-") -> {
+                val id = bearer.removePrefix("key-self-").toLongOrNull() ?: 0
+                if (synchronized(gone) { gone.add(id) }) answer(ex, 200, """{"ok":true,"id":$id}""") else answer(ex, 401, """{"error":"missing or wrong token"}""")
+            }
             m == "GET" && path == "/api/v1/me" && bearer in ME -> answer(ex, 200, ME.getValue(bearer))
             m == "POST" && path == "/api/v1/logout" && bearer in setOf("session-anna", "session-anna-fp", "session-anna-expiring", "session-bob") ->
                 answer(ex, 200, """{"ok":true}""")
             m == "GET" && path == "/api/v1/users/anna/tokens" && bearer == "session-anna-quiet" -> answer(ex, 200, "")
             m == "GET" && path == "/api/v1/users/anna/tokens" && bearer in anna -> {
                 val keys = (42L..49L).filter { synchronized(gone) { it !in gone } }.joinToString(",") { """{"id":$it,"kind":"api"}""" }
-                answer(ex, 200, """[$keys,{"id":7,"kind":"session"},{"id":8,"kind":"session","key_id":42},{"id":10,"kind":"session"},{"id":51,"kind":"session"}]""")
+                val more = if (synchronized(gone) { 52L in gone }) "" else ""","""+session(52)
+                val timeless = if (synchronized(gone) { 53L in gone }) "" else """,{"id":53,"kind":"session"}"""
+                val listed = listOf(session(7), session(8, ""","key_id":42"""), session(10), session(51)).joinToString(",") + timeless
+                answer(ex, 200, """[$keys,$listed$more]""")
             }
             m == "DELETE" && path.startsWith("/api/v1/users/anna/tokens/") && bearer == "session-bob" ->
                 answer(ex, 403, """{"error":"capability \"users\" required"}""")
@@ -73,7 +86,7 @@ class FakeServer : Closeable {
                 val id = path.substringAfterLast('/').toLongOrNull() ?: 0
                 when {
                     synchronized(gone) { id in gone } -> answer(ex, 404, """{"error":"user anna has no token $id"}""")
-                    id in setOf(42L, 45L, 46L, 49L) -> {
+                    id in setOf(42L, 45L, 46L, 49L, 52L, 53L) -> {
                         synchronized(gone) { gone.add(id) }
                         answer(ex, 200, """{"ok":true,"id":$id}""")
                     }
@@ -94,15 +107,25 @@ class FakeServer : Closeable {
         ex.responseBody.use { it.write(b) }
     }
 
-    private companion object {
+    companion object {
+        /** made is when the fake's token [id] was made, as the server writes it. */
+        fun made(id: Long): String = "2026-11-20T10:00:%02dZ".format(id)
+
+        // session is a session's row in the list, with more of its fields.
+        private fun session(id: Long, more: String = ""): String = """{"id":$id,"kind":"session","created_at":"${made(id)}"$more}"""
+
+        // me is what GET /api/v1/me answers for a token of a user.
+        private fun me(user: String, id: Long, kind: String, more: String = ""): String =
+            """{"mode":"users","user":{"name":"$user"},"token":{"id":$id,"kind":"$kind","created_at":"${made(id)}"$more}}"""
+
         // What GET /api/v1/me answers, by bearer.
-        val ME = mapOf(
-            "session-anna" to """{"mode":"users","user":{"name":"anna"},"token":{"id":7,"kind":"session"}}""",
-            "session-anna-fp" to """{"mode":"users","user":{"name":"anna"},"token":{"id":8,"kind":"session","key_id":42}}""",
-            "session-anna-expiring" to """{"mode":"users","user":{"name":"anna"},"token":{"id":10,"kind":"session"}}""",
-            "session-anna-quiet" to """{"mode":"users","user":{"name":"anna"},"token":{"id":11,"kind":"session"}}""",
-            "key-own" to """{"mode":"users","user":{"name":"anna"},"token":{"id":45,"kind":"api"}}""",
-            "session-bob" to """{"mode":"users","user":{"name":"bob"},"token":{"id":9,"kind":"session"}}""",
+        private val ME = mapOf(
+            "session-anna" to me("anna", 7, "session"),
+            "session-anna-fp" to me("anna", 8, "session", ""","key_id":42"""),
+            "session-anna-expiring" to me("anna", 10, "session"),
+            "session-anna-quiet" to me("anna", 11, "session"),
+            "key-own" to me("anna", 45, "api"),
+            "session-bob" to me("bob", 9, "session"),
         )
     }
 }

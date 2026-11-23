@@ -214,6 +214,91 @@ def test_a_dead_session_is_dropped(new_context, case, watch, guard):
     assert len(sent) == n and n <= 3, f"no request sends it again: {n} at the refusal, {len(sent)} after"
 
 
+def sessions_of(user):
+    """The ids of the user's live sessions at the server."""
+    return {t["id"] for t in api_call("GET", f"api/v1/users/{user}/tokens") or [] if t.get("kind") == "session"}
+
+
+def test_a_replaced_session_ends(new_context, case, watch, guard):
+    """A sign-in that replaces the session the page holds, the card opened
+    on a running page as the open server's banner or ☰ open it: the session
+    replaced is ended at the server (POST /api/v1/logout with it, AP
+    MobileApp, D68-A), and the new one alone is left of the two. A key
+    replaced is not sent there, which would answer 400."""
+    page = new_context().new_page()
+    guard.page = page
+    page.set_default_timeout(5000)
+    page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+    page.goto(URL)
+    sign_in(page, "operator", "op-pass")
+    first, old = page.evaluate("[state.me.token.id, state.token]")
+    logouts = []
+    page.on("request", lambda r: logouts.append(r.headers.get("authorization")) if r.method == "POST" and r.url.endswith("/api/v1/logout") else None)
+    page.evaluate("() => { askLogin(); }")
+    sign_in(page, "operator", "op-pass")
+    second = page.evaluate("state.me.token.id")
+    assert second != first, "a new session"
+    for _ in range(25):
+        if logouts and first not in sessions_of("operator"):
+            break
+        page.wait_for_timeout(200)
+    assert logouts == ["Bearer " + old], f"the replaced session is signed out, with its own token: {len(logouts)} logout(s)"
+    left = sessions_of("operator")
+    assert first not in left and second in left, f"the replaced session ended at the server, the new one live: {first}, {second} in {left}"
+    sign_out(page)
+    assert wait_until(page, "document.getElementById('login-dialog').open", 5), "signed out"
+    logouts.clear()
+    page.locator("#login-ways .login-way[data-way='key']").click()
+    page.locator("#login-token").fill(TOKEN)
+    page.locator("#login-key-form button[type=submit]").click()
+    page.wait_for_selector(".room", timeout=10000)
+    assert page.evaluate("state.me.token.kind") == "api", "in with the key"
+    page.evaluate("() => { askLogin(); }")
+    sign_in(page, "operator", "op-pass")
+    assert page.evaluate("state.me.user.name") == "operator", "signed in over the key"
+    assert logouts == [], f"a key replaced is not signed out: {len(logouts)} logout(s)"
+    sign_out(page)
+    assert wait_until(page, "document.getElementById('login-dialog').open", 5), "signed out at the end"
+
+
+def test_a_dead_session_leaves_another_tabs_token(new_context, case, watch, guard):
+    """Two tabs of one browser signed in with one session: the second
+    signs in again on its running page, which stores its new session and
+    ends the first at the server (D68-A); the first tab's next request
+    meets the 401 and asks for a sign-in, but leaves the stored token, the
+    second tab's, as it is."""
+    ctx = new_context()
+    first = ctx.new_page()
+    guard.page = first
+    first.set_default_timeout(5000)
+    first.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+    first.goto(URL)
+    sign_in(first, "operator", "op-pass")
+    old, old_id = first.evaluate("[state.token, state.me.token.id]")
+    second = ctx.new_page()
+    second.set_default_timeout(5000)
+    second.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+    second.goto(URL)
+    second.wait_for_selector(".room", timeout=10000)
+    assert second.evaluate("state.token") == old, "the second tab starts with the stored session"
+    second.evaluate("() => { askLogin(); }")
+    sign_in(second, "operator", "op-pass")
+    new = second.evaluate("state.token")
+    assert new != old and first.evaluate("localStorage.getItem('massimo.token')") == new, "the new session stored"
+    for _ in range(25):  # the second tab's logout of the replaced session, not awaited
+        if old_id not in sessions_of("operator"):
+            break
+        first.wait_for_timeout(200)
+    assert old_id not in sessions_of("operator"), "the replaced session ended at the server"
+    first.evaluate("() => { poll(false); }")  # not awaited: it waits for the sign-in
+    assert wait_until(first, "document.getElementById('login-dialog').open", 10), "the first tab's session ended: its sign-in"
+    assert first.evaluate("state.token") is None, "the first tab drops the dead session"
+    assert first.evaluate("localStorage.getItem('massimo.token')") == new, "and leaves the second tab's stored token"
+    guard.page = second
+    sign_out(second)
+    assert wait_until(second, "document.getElementById('login-dialog').open", 5), "signed out at the end"
+
+
 def test_sign_in_is_busy_until_answered(new_context, case, watch, guard):
     """Sign in is off with a spinner from its click until the sign-in is
     done, and a second Enter sends nothing. The test holds the sign-in's

@@ -1738,7 +1738,8 @@ export interface Device {
   /**
    * A reported device's battery level, from the history of its flag: weak once
    * the flag was seen, low once it stayed 15 minutes; ok again after a long
-   * valve move without it (weak) or an hour without it (low). Absent for a
+   * valve move without it (weak) or an hour without it (low), or at once when
+   * someone marks new batteries (POST …/devices/{rf}/battery). Absent for a
    * virtual wall thermostat and a device without state
    */
   battery?: "ok" | "weak" | "low";

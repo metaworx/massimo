@@ -1161,7 +1161,7 @@ The capabilities, what each allows, and the routes it guards:
 | `preferences` | keep one's own settings and colour schemes on the server, so that they follow the user across browsers; without it they stay in the browser | `PUT`/`DELETE /api/v1/me/preferences/{key}` |
 | `setpoint` | set temperatures and modes | `PUT …/devices/{rf}/setpoint`, `PUT …/rooms/{id}/setpoint` |
 | `lock` | lock and unlock the thermostats' buttons | `PUT …/devices/{rf}/lock` |
-| `configure` | temperatures, device settings, week programmes | `PUT …/rooms/{id}/config`, `PUT …/devices/{rf}/config`, `PUT …/rooms/{id}/program`, `PUT …/devices/{rf}/program` |
+| `configure` | temperatures, device settings, week programmes, and new batteries marked | `PUT …/rooms/{id}/config`, `PUT …/devices/{rf}/config`, `PUT …/rooms/{id}/program`, `PUT …/devices/{rf}/program`, `POST …/devices/{rf}/battery` |
 | `rename` | room and device names | `PUT …/rooms/{id}`, `PUT …/devices/{rf}` with `name` |
 | `structure` | move devices, delete rooms, remove devices | `PUT …/devices/{rf}` with `room_id`, `DELETE …/rooms/{id}`, `DELETE …/devices/{rf}` |
 | `pair` | put the Cube into pairing mode and stop it | `POST …/pairing`, `DELETE …/pairing` |
@@ -1179,6 +1179,7 @@ The capabilities, what each allows, and the routes it guards:
 | `cubes.reboot` | reboot a Cube, which drops the radiograms it has not delivered | `POST /api/v1/cubes/{sn}/reboot` |
 | `settings` | the server's settings | `GET`/`PUT /api/v1/settings` |
 | `update` | start a software update | `POST /api/v1/update` |
+| `restart` | restart the server, read its settings file again, and read a Cube again at once | `GET`/`POST /api/v1/restart`, `POST /api/v1/reload`, `POST /api/v1/cubes/{sn}/refresh` |
 | `reboot` | reboot the computer the server runs on, where its owner switched that on | `GET`/`POST`/`DELETE /api/v1/reboot` |
 | `audit` | read the audit | `GET /api/v1/audit` |
 | `auth` | the OpenID Connect providers users sign in through; seeded for no role | `GET`/`POST /api/v1/providers`, `PUT`/`DELETE /api/v1/providers/{key}` |

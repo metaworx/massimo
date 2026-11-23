@@ -9,8 +9,8 @@ import java.util.concurrent.RejectedExecutionException
 /**
  * Revoker turns the phone's kept logins off at their servers (docs/app.md,
  * "The login by fingerprint"): Turn off of one server (`forget`), Remove of
- * a server with a kept login (`remove`) and Forget all stored credentials
- * (`forgetAll`) alike (AP MobileApp, D56-A). Each key is revoked with the
+ * a server (`remove`), which signs out first where no login is kept, and
+ * Forget all stored credentials (`forgetAll`) alike (AP MobileApp, D56-A). Each key is revoked with the
  * session the app holds there, without a prompt, else with the key itself
  * after the prompt ([ByKey]), never over plain HTTP outside the private
  * ranges: one prompt a run for every login under the app key, so that Forget
@@ -71,6 +71,13 @@ class Revoker(
     data class Summary(val revoked: List<String>, val left: List<String>, val local: List<String>)
 
     /**
+     * Removed is what Remove came to: how the kept login was turned off,
+     * null where none was kept, and the ids of the phone's keys and
+     * sessions still valid at the server, which goes with what noted them.
+     */
+    data class Removed(val off: Off?, val keys: List<Long>, val sessions: List<Long>)
+
+    /**
      * turnOff turns the login kept for the server [id] off at [url], the
      * address of the server's that answered, or, for "" or another URL, at
      * the address that answers now with its node, the LAN one first, as
@@ -102,6 +109,41 @@ class Revoker(
             byKey.close()
             throw e
         }
+    }
+
+    /**
+     * remove forgets the server [id] (Remove): a kept login is turned off
+     * first as [turnOff] turns it off, at [url] or the address that answers
+     * (D58-A); else the session held is signed out there, so that it is not
+     * left valid at the server unrecorded (F38, D69-A), one the server does
+     * not end left by its id as [Sessions.signOut] leaves it; then the
+     * server goes, with its certificate, its session, its login and what it
+     * noted of the keys and sessions left there, whose ids [done] gets with
+     * the outcome, or the failure of forgetting the server. [byKey] is
+     * closed before [done] is called, or where a step throws.
+     */
+    fun remove(id: String, url: String, byKey: ByKey, done: (Result<Removed>) -> Unit) {
+        val drop = { off: Off? ->
+            done(
+                runCatching {
+                    val s = servers.get(id)
+                    val keys = s?.unrevoked?.map { it.id } ?: emptyList()
+                    val unended = s?.unended?.map { it.id } ?: emptyList()
+                    servers.remove(id)
+                    sessions.forget(id)
+                    forgetLogin(id)
+                    Removed(off, keys, unended)
+                },
+            )
+        }
+        if (logins.get(id) != null) {
+            turnOff(id, url, byKey, drop)
+            return
+        }
+        byKey.close()
+        val s = servers.get(id)
+        if (s != null && sessions.held(s) != null) runCatching { sessions.signOut(s, if (s.has(url)) url else answering(s)) }
+        drop(null)
     }
 
     /**

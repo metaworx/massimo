@@ -9,10 +9,12 @@
  * intervals (GET and PUT /api/v1/settings, each saved at once), the
  * settings file read again (POST /api/v1/reload), the server's restart
  * (GET and POST /api/v1/restart) with what waits for the next start and
- * what that start refuses, and the computer's reboot (GET, POST
- * and DELETE /api/v1/reboot), each followed by /healthz every two seconds
- * until the server reports a new start. While Maintenance is shown, an
- * event of the stream that says one of these changed reads it again
+ * what that start refuses, every Cube read again at once (POST
+ * /api/v1/cubes/{sn}/refresh, one after the other) and the computer's
+ * reboot (GET, POST and DELETE /api/v1/reboot), the restart and the
+ * reboot each followed by /healthz every two seconds until the server
+ * reports a new start. While Maintenance is shown, an event of the
+ * stream that says one of these changed reads it again
  * (serverEvent). The state is what the section shows, live, so that the part draws it in place; an answer after a
  * sign-out is dropped (shared/session.ts), and a sign-out ends what
  * follows the server while it is away.
@@ -26,6 +28,7 @@ import { live } from "../shared/live";
 import { session, stillSession } from "../shared/session";
 import { isShown } from "../shared/pages";
 import { can } from "../shared/me";
+import { cubePath } from "../shared/path";
 
 /** A text said in the page's language at its drawing. */
 export type Say = () => string;
@@ -334,6 +337,50 @@ export async function reloadSettings(): Promise<void> {
   await loadRestart();
 }
 
+// --- the Cubes read again at once (with restart) -------------------------
+
+/** The Cubes read again at once (Refresh now): whether it runs, and each Cube's outcome by its serial. */
+export const refreshNow = live({
+  /** Refresh now runs: its button turns. */
+  running: false,
+  /** How each Cube's read went, by its serial, as its answer came. */
+  said: {} as Record<string, Outcome>,
+});
+
+/**
+ * runRefreshNow reads every Cube the server serves again at once, one
+ * after the other (POST /api/v1/cubes/{sn}/refresh, AP RefreshBatteries,
+ * D10-B): a new connection, nothing sent by radio. Each Cube's outcome
+ * shows beside it as its answer comes, read again with the time, or the
+ * error; then the page's data are read again, so that the tiles show what
+ * the Cubes hold now. A run under way is not started twice, and an answer
+ * after a sign-out ends it with nothing shown.
+ */
+export async function runRefreshNow(): Promise<void> {
+  if (refreshNow.running) return;
+  const n = session();
+  refreshNow.running = true;
+  refreshNow.said = {};
+  try {
+    for (const c of state.cubes.slice()) {
+      const cube = c.name || c.serial;
+      let said: Outcome;
+      try {
+        await api("POST", cubePath(c.serial) + "/refresh", {});
+        said = { text: t("maint.refreshDone", { cube, time: fmtTimeOfDay(new Date()) }), ok: true };
+      } catch (e) {
+        said = { text: t("maint.refreshFailed", { cube, error: (e as Error).message }), ok: false };
+      }
+      if (!stillSession(n)) return;
+      refreshNow.said = { ...refreshNow.said, [c.serial]: said };
+    }
+    await refresh();
+  } finally {
+    // a sign-out has set it back already (forgetMaintenance), and a run of the next user may be under way
+    if (stillSession(n)) refreshNow.running = false;
+  }
+}
+
 /** serverBack reads the data again and opens the stream again, the server back with a new start. */
 function serverBack(): void {
   checkVersion(); // header.js: the start in the settings, and a reload for a new version
@@ -612,18 +659,19 @@ export function serverEvent(ev: ServerEvent): void {
   else if (ev.kind === "reboot" || ev.kind === "reboot_cancelled") reader("reboot");
 }
 
-/** quiet takes the settings' messages back, as Maintenance is shown. */
+/** quiet takes the settings' messages back, as Maintenance is shown, and the Cubes' reads where none runs. */
 export function quiet(): void {
   settings.announceSaid = null;
   settings.intervalSaid = {};
+  if (!refreshNow.running) refreshNow.said = {}; // a run under way keeps saying how it goes
 }
 
 /**
  * forgetMaintenance forgets what the card kept of the user who was
  * signed in (MassimoParts.signedOut): the following of a restart or a
  * reboot ends with its timers, the questions go, the delay typed is 60
- * again, and the restart's, the reboot's and the settings' rows are read
- * again for the next user.
+ * again, the Cubes' reads say nothing, and the restart's, the reboot's
+ * and the settings' rows are read again for the next user.
  */
 export function forgetMaintenance(): void {
   if (timers.restart) clearTimeout(timers.restart);
@@ -638,5 +686,6 @@ export function forgetMaintenance(): void {
   Object.assign(reboot, { shown: false, cancel: false, off: false, text: null, msg: null, following: false, delay: "60" });
   restartAsk.asking = false;
   rebootAsk.asking = false;
+  Object.assign(refreshNow, { running: false, said: {} });
   Object.assign(settings, { announce: null, intervals: {}, announceSaid: null, intervalSaid: {} });
 }

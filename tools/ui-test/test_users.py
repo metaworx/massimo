@@ -4,8 +4,10 @@
 owner's): the operator run.sh creates is listed with the owner, the
 roles with the six default ones."""
 
+import pytest
+
 from conftest import URL, api_call
-from helpers import NAME_BAD, NAME_TAKEN, assert_busy, hold, named_buttons, scroll_width, show_view, sign_out, undo, wait_held, wait_until
+from helpers import NAME_BAD, NAME_TAKEN, assert_busy, frames, hold, named_buttons, scroll_width, show_view, sign_out, undo, wait_held, wait_until
 
 
 def test_users_and_roles(page, case):
@@ -171,6 +173,101 @@ def test_a_key_session_names_its_key(page, case):
         left = [tk for tk in api_call("GET", "api/v1/users/operator/tokens") or [] if (tk.get("label") or "").startswith(prefix)]
         revoke_keys(prefix)
     assert session["token"] and not left, f"revoking the key ended its session: {left}"
+    show_view(page, "tiles")
+
+
+TOKEN_ID = {"en": "id {id}", "de": "ID {id}"}
+
+
+def test_token_rows_show_their_ids(page, case):
+    """Every row of a user's sessions and keys shows its id (AP MobileApp,
+    D66-A), in System settings → Users as in My profile, the row one part;
+    at 390 px in all six languages each row stays inside its list and the
+    page has no horizontal scroll, the id making the row longer."""
+    prefix = f"ui-test-ids-{case.width}-{case.lang}-"
+    revoke_keys(prefix)
+    key = api_call("POST", "api/v1/users/operator/tokens", {"label": prefix + "a label to fill the row at 390 px"})
+    try:
+        show_view(page, "system")
+        panel = page.locator(".user-panel[data-name='operator']")
+        panel.wait_for()
+        panel.locator("summary").click()
+        panel.locator(f".user-tokens li[data-id='{key['id']}']").wait_for(timeout=5000)
+        ids = "(sel) => [...document.querySelectorAll(sel)].map((li) => [li.dataset.id, (li.querySelector('.token-id') || {}).textContent])"
+        rows = page.evaluate(ids, ".user-panel[data-name='operator'] .user-tokens li[data-id]")
+        assert rows and all(text == TOKEN_ID[case.lang].format(id=i) for i, text in rows), f"every row its id: {rows}"
+        langs = ("en", "de", "fr", "it", "nl", "pl") if case.width == 390 else (case.lang,)
+        for lang in langs:
+            page.evaluate("async (l) => { await changeLanguage(l); applyLanguage(); }", lang)
+            frames(page)
+            m = page.evaluate("""() => [...document.querySelectorAll(".user-panel[data-name='operator'] .user-tokens li[data-id]")].map((li) => {
+              const r = li.getBoundingClientRect(), list = li.parentElement.getBoundingClientRect();
+              const id = li.querySelector('.token-id').getBoundingClientRect();
+              return {id: li.dataset.id, inside: r.left >= list.left - 0.5 && r.right <= list.right + 0.5 && id.right <= list.right + 0.5};
+            })""")
+            assert m and all(x["inside"] for x in m), f"{lang}: every row and its id inside the list: {m}"
+            assert scroll_width(page) <= case.width, f"no horizontal scroll in {lang}"
+        page.evaluate("async (l) => { await changeLanguage(l); applyLanguage(); }", case.lang)
+        show_view(page, "profile")
+        page.locator("#profile-tokens li[data-id]").first.wait_for(timeout=5000)
+        mine = page.evaluate(ids, "#profile-tokens li[data-id]")
+        assert mine and all(text == TOKEN_ID[case.lang].format(id=i) for i, text in mine), f"My profile's rows their ids: {mine}"
+    finally:
+        revoke_keys(prefix)
+    show_view(page, "tiles")
+
+
+NO_ANSWER = {"en": "no answer from the server; it may have been done all the same",
+             "de": "keine Antwort vom Server; es wurde vielleicht trotzdem ausgeführt"}
+
+
+@pytest.mark.clock
+def test_revoke_ends_after_the_limit(page, case, watch):
+    """A Revoke the server never answers, as over a link that stalls (AP
+    MobileApp, F32, D82-A): its button turns until the page's limit of
+    about 20 seconds, Playwright's clock run forward to it, and then no
+    longer, the users' line saying that no answer came and that it may
+    have been done all the same. The routes that wait longer by design
+    have limits a little above the server's own (waitOf)."""
+    limits = page.evaluate("""() => [
+      ["PUT", "api/v1/cubes/KEQ0000100/devices/0a0101"], ["DELETE", "api/v1/cubes/KEQ0000100/devices/0a0101"],
+      ["PUT", "api/v1/cubes/KEQ0000100/rooms/1/config"], ["PUT", "api/v1/cubes/KEQ0000100/rooms/1/program"],
+      ["PUT", "api/v1/cubes/KEQ0000100/rooms/1/setpoint"], ["POST", "api/v1/cubes"],
+      ["POST", "api/v1/cubes/KEQ0000100/rooms/1/repair/reset?plan=1"], ["POST", "api/v1/cubes/KEQ0000100/repair/reset?plan=1"],
+      ["POST", "api/v1/cubes/KEQ0000100/events/ticket"], ["POST", "api/v1/cubes/discover"],
+      ["GET", "api/v1/update?refresh=1"], ["POST", "api/v1/update"], ["GET", "api/v1/integrations/found?refresh=1"],
+      ["POST", "api/v1/login/oidc/finish"], ["GET", "api/v1/cubes"], ["GET", "api/v1/cubes/KEQ0000100/rooms?devices=all"],
+      ["DELETE", "api/v1/users/operator/tokens/3"],
+    ].map(([m, p]) => waitOf(m, p))""")
+    assert limits == [330000, 330000, 330000, 330000, 330000, 330000, 630000, 630000, 20000, 90000, 75000, 75000, 45000, 45000,
+                      20000, 20000, 20000], f"the limits: {limits}"
+    prefix = f"ui-test-limit-{case.width}-{case.lang}-"
+    revoke_keys(prefix)
+    key = api_call("POST", "api/v1/users/operator/tokens", {"label": prefix + "key"})
+    path = "**/api/v1/users/operator/tokens/%d" % key["id"]
+    held, sent = [], []
+    try:
+        show_view(page, "system")
+        panel = page.locator(".user-panel[data-name='operator']")
+        panel.wait_for()
+        panel.locator("summary").click()
+        button = f".user-panel[data-name='operator'] .user-tokens li[data-id='{key['id']}'] .revoke-token"
+        page.locator(button).wait_for(timeout=5000)
+        hold(page, path, "DELETE", held, sent)
+        page.locator(button).click()
+        assert wait_held(page, held), "the revoke is sent"
+        assert_busy(page, button, "Revoke")
+        page.clock.run_for(19_000)
+        assert_busy(page, button, "Revoke before the limit")
+        page.clock.run_for(2_000)
+        assert wait_until(page, "!document.querySelector(%r).classList.contains('busy')" % button, 5), "Revoke turns no more after the limit"
+        assert not page.locator(button).is_disabled(), "and is on again"
+        line = page.locator("#users-msg")
+        assert wait_until(page, "document.getElementById('users-msg').textContent.includes(%r)" % NO_ANSWER[case.lang], 5), \
+            f"the users' line says why: {line.text_content()}"
+    finally:
+        page.unroute(path)
+        revoke_keys(prefix)
     show_view(page, "tiles")
 
 

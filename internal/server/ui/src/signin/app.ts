@@ -5,34 +5,14 @@
  * @file internal/server/ui/src/signin/app.ts
  *
  * The sign-in's part of the app (docs/app.md, "The login by
- * fingerprint"): the app's status of the login by fingerprint as a
- * signal, read again each time it is asked (readApp: each opening of the
- * sign-in, a fingerprint refused, the first owner's form shown), what it
- * offers, line for line as login.js renderAppLogin and renderSetupKeep
- * read it, and the keeping of the login after a password's sign-in
- * (keepLogin). Nothing of it in a browser: the status is
- * null there.
+ * fingerprint"): what the app's status of the login by fingerprint
+ * offers (shared/app.ts, which My profile reads too), line for line as
+ * login.js renderAppLogin and renderSetupKeep read it, and the keeping
+ * of the login after a password's sign-in (keepLogin). Nothing of it in a
+ * browser: the status is null there.
  */
 
-import { signal } from "@preact/signals";
 import { askKeep, keepEnded } from "./store";
-
-/** The app's last status of the login by fingerprint, null in a browser or where it could not be read. */
-export const app = signal<AppLoginStatus | null>(null);
-
-/** readApp asks the app for its status (login.status) and keeps the answer; null in a browser and where the app refused. */
-export async function readApp(): Promise<void> {
-  const login = appLogin();
-  let st: AppLoginStatus | null = null;
-  if (login) {
-    try {
-      st = await login.status();
-    } catch (e) {
-      st = null;
-    }
-  }
-  app.value = st;
-}
 
 /** offer says whether the switch that keeps the login by fingerprint is offered: the phone can, the address takes a key and none is kept. */
 export function offer(st: AppLoginStatus | null): boolean {

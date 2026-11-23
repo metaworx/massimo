@@ -28,8 +28,8 @@ import os
 
 from axe_playwright_python.sync_playwright import Axe
 
-from conftest import TOKEN, URL, clear_preferences
-from helpers import assert_login_card_centred, assert_login_row, named_buttons, open_personal_page, wait_until
+from conftest import TOKEN, URL, api_call, clear_preferences
+from helpers import assert_login_card_centred, assert_login_row, cleanup, named_buttons, open_personal_page, undo, wait_until
 
 CONNECT = URL + "ui/connect.html"
 FAKE_BRIDGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fake_bridge.js")
@@ -54,9 +54,10 @@ FP_TITLE = {"en": "Check the certificate", "de": "Zertifikat prüfen"}
 FP_CHANGED = {"en": "The certificate has changed", "de": "Das Zertifikat hat sich geändert"}
 
 
-def server(sid, name, node, lan="", remote="", fp="", login="", ask="start", start=False, session=None, trusted_at="", unrevoked=None):
-    return {"id": sid, "name": name, "node": node, "lan": lan, "remote": remote, "fp": fp, "login": login, "ask": ask, "push": False,
-            "start": start, "session": session, "trusted_at": trusted_at, "unrevoked": unrevoked or []}
+def server(sid, name, node, lan="", remote="", fp="", login="", ask="start", start=False, session=None, trusted_at="", unrevoked=None,
+           unended=None, login_key=0):
+    return {"id": sid, "name": name, "node": node, "lan": lan, "remote": remote, "fp": fp, "login": login, "login_key": login_key, "ask": ask,
+            "push": False, "start": start, "session": session, "trusted_at": trusted_at, "unrevoked": unrevoked or [], "unended": unended or []}
 
 
 def open_connect(new_context, guard, watch, config=None):
@@ -874,6 +875,70 @@ def test_connect_sessions(new_context, case, watch, guard):
     assert wait_until(page, "!document.querySelector('.session-badge')", 3), "no mark left"
 
 
+SESSION_LEFT = {"en": "A session of this phone is still valid here: session {id} of {user}, ended at the next sign-in as that user.",
+                "de": "Eine Sitzung dieses Telefons gilt hier noch: Sitzung {id} von {user}, beendet bei der nächsten Anmeldung als dieser Benutzer."}
+REMOVE_SESSIONS_LEFT = {"en": "Session 11 of this phone stays valid there until it ends", "de": "Sitzung 11 dieses Telefons bleibt dort gültig"}
+REMOVED_SESSIONS = {"en": "Session 11 of this phone is still valid there until it ends", "de": "Sitzung 11 dieses Telefons gilt dort noch"}
+REMOVED = {"en": "Home removed.", "de": "Home entfernt."}
+SIGNED_OUT_LOCAL = {"en": "the session is ended there at the next sign-in as that user",
+                    "de": "die Sitzung wird dort bei der nächsten Anmeldung als dieser Benutzer beendet"}
+
+
+def test_connect_sessions_left(new_context, case, watch, guard):
+    """The sessions the app forgot without the server ending them (AP
+    MobileApp, F39, D70-A; the bridge's version 5): a server's settings
+    name each with its id and user; Sign out where the server does not
+    answer leaves the session, its line there at once; Remove signs out
+    first (F38, D69-A), where the server answers nothing is left, and
+    where a session is left its question warns of it and its toast names
+    it."""
+    config = {
+        "servers": [server("s1", "Home", NODE1, lan=HOME_LAN, session="anna"), server("s2", "Cabin", NODE2, lan=CABIN_LAN, session="bob"),
+                    server("s3", "Office", NODE3, remote=OFFICE_REMOTE, unended=[{"user": "carl", "id": 11}])],
+        "answers": {HOME_LAN: {"node": NODE1}},
+        "sessionIds": {"s1": {"user": "anna", "id": 7}, "s2": {"user": "bob", "id": 9}},
+    }
+    page = open_connect(new_context, guard, watch, config)
+    st = STATE[case.lang]
+    wait_state(page, "Home", st["lan"])
+    wait_state(page, "Cabin", st["offline"])
+
+    panel = settings_of(page, "Office")
+    line = panel.locator(".server-session-left")
+    assert line.count() == 1 and SESSION_LEFT[case.lang].format(id=11, user="carl") in line.inner_text(), "the session left named"
+    named_buttons(page, "a server's settings with a session left")
+    assert_axe(page, "a server's settings with a session left")
+    row(page, "Office").locator(".server-cog").click()
+
+    # Sign out with the server not answering: the session left, its line at once
+    panel = settings_of(page, "Cabin")
+    panel.locator(".server-sign-out").click()
+    assert wait_until(page, "window.__fakeBridge.calls.some((c) => c[0] === 'signOut')", 3)
+    assert calls(page, "signOut") == [["signOut", "s2", ""]], "no address that answers"
+    wait_toast(page, SIGNED_OUT_LOCAL[case.lang])
+    panel.locator(".server-session-left").wait_for(state="visible")
+    assert SESSION_LEFT[case.lang].format(id=9, user="bob") in panel.locator(".server-session-left").inner_text()
+    row(page, "Cabin").locator(".server-cog").click()
+    close_toast(page)
+
+    # Remove of a server that answers: signed out there first, nothing left
+    removed(page, "Home")
+    assert calls(page, "remove") == [["remove", "s1", HOME_LAN]]
+    wait_toast(page, REMOVED[case.lang])
+    assert "9" not in page.locator("#toast").inner_text() and "7" not in page.locator("#toast").inner_text(), "no session named"
+    close_toast(page)
+
+    # Remove of one with a session left: the question warns, the toast names it
+    panel = settings_of(page, "Office")
+    panel.locator(".server-remove").click()
+    box = page.locator(".confirm-box")
+    box.wait_for(state="visible")
+    assert REMOVE_SESSIONS_LEFT[case.lang] in box.inner_text(), f"Remove warns of the session: {box.inner_text()!r}"
+    box.locator(".confirm-yes").click()
+    row(page, "Office").wait_for(state="detached")
+    wait_toast(page, REMOVED_SESSIONS[case.lang])
+
+
 def test_connect_certificate(new_context, case, watch, guard):
     """A server reached over HTTPS shows its certificate in its settings:
     a line with its subject's name and the end of its validity, and
@@ -962,18 +1027,19 @@ def test_connect_app_settings(new_context, case, watch, guard):
     assert page.evaluate("document.activeElement.closest('#servers-menu') !== null"), "the focus back on the ☰"
 
 
-def server_page(new_context, guard, watch, login, token=None):
-    """The server's page in the app, its bridge with the login by
-    fingerprint as login describes it (fake_bridge.js)."""
+def server_page(new_context, guard, watch, login, token=None, address="", more=None):
+    """The server's page in the app at address after the server's, its
+    bridge with the login by fingerprint as login describes it and what
+    more adds to its configuration (fake_bridge.js)."""
     clear_preferences()
     ctx = new_context()
-    ctx.add_init_script(f"window.__fakeBridgeConfig = {json.dumps({'kind': 'server', 'token': token, 'login': login})};")
+    ctx.add_init_script(f"window.__fakeBridgeConfig = {json.dumps({'kind': 'server', 'token': token, 'login': login, **(more or {})})};")
     ctx.add_init_script(path=FAKE_BRIDGE)
     page = ctx.new_page()
     guard.page = page
     page.set_default_timeout(5000)
     page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
-    page.goto(URL)
+    page.goto(URL + address)
     return page
 
 
@@ -1148,3 +1214,76 @@ def test_server_page_first_owner_keeps_the_login(new_context, case, watch, guard
             cancel.click()
             assert connects(page, 1), "Cancel calls the app"
         page.unroute("**/api/v1/me")
+
+
+THIS_DEVICE_KEY = {"en": "this device's key", "de": "Schlüssel dieses Geräts"}
+THIS_DEVICE = {"en": "this device", "de": "dieses Gerät"}
+TOKEN_ID = {"en": "id {id}", "de": "ID {id}"}
+REVOKED_AT_SIGN_IN = {"en": "Key {id} is revoked already", "de": "Schlüssel {id} ist schon widerrufen"}
+
+
+def test_server_page_this_devices_key(new_context, case, watch, guard):
+    """My profile in the app after a password sign-in where the phone
+    keeps a key of the user's (AP MobileApp, F35, F37; D65-A, D66-A,
+    D67-A): that key's row says "this device's key", by login.status()'s
+    key_id, the session's "this device", and every row shows its id;
+    opened at #profile?key=<id> for a key the sign-in revoked, as the app
+    revokes a key left before setToken answers {revoked}, the list is
+    read after that revoke, so the key is not listed nor marked, and a
+    toast names it."""
+    key = api_call("POST", "api/v1/users/operator/tokens", {"label": f"ui-test-device-key-{case.width}-{case.lang}"})
+    gone = api_call("POST", "api/v1/users/operator/tokens", {"label": f"ui-test-left-{case.width}-{case.lang}"})
+    made = []  # the sign-in's session, revoked at the end
+    try:
+        status = {"can": True, "user": "operator", "ask": "start", "plain": False, "key_id": key["id"]}
+        page = server_page(new_context, guard, watch, {"status": status}, address=f"#profile?key={gone['id']}",
+                           more={"revokeAtSignIn": {"user": "operator", "ids": [gone["id"]], "ms": 1500}})
+        order = []
+        page.on("request", lambda r: order.append(r.method + " " + r.url.split("/api/v1/")[-1]) if "/users/operator/tokens" in r.url else None)
+        page.locator("#login-dialog[open]").wait_for()
+        page.locator("#login-user").fill("operator")
+        page.locator("#login-password").fill("op-pass")
+        page.locator("#login-form button[type=submit]").click()
+        row = page.locator(f"#profile-tokens li[data-id='{key['id']}']")
+        row.wait_for(timeout=10000)
+        assert wait_until(page, "!document.getElementById('toast').classList.contains('hidden') && document.getElementById('toast').textContent"
+                                f".includes({json.dumps(REVOKED_AT_SIGN_IN[case.lang].format(id=gone['id']))})", 5), \
+            f"a toast names the key the sign-in revoked: {page.locator('#toast').inner_text()!r}"
+        assert order and order[0] == f"DELETE users/operator/tokens/{gone['id']}", f"the list read after the sign-in's revoke: {order}"
+        assert page.locator(f"#profile-tokens li[data-id='{gone['id']}']").count() == 0, "the key revoked is not listed"
+        assert page.locator("#profile-tokens li.token-marked").count() == 0, "nor marked"
+        assert page.evaluate("location.hash") == "#profile", "the key dropped from the address"
+        assert "token-device-key" in (row.get_attribute("class") or "") and THIS_DEVICE_KEY[case.lang] in row.inner_text(), \
+            f"the phone's key tagged: {row.inner_text()!r}"
+        session = page.evaluate("state.me.token.id")
+        made.append(session)
+        current = page.locator(f"#profile-tokens li[data-id='{session}']")
+        assert THIS_DEVICE[case.lang] in current.inner_text() and THIS_DEVICE_KEY[case.lang] not in current.inner_text(), "the session: this device"
+        rows = page.evaluate("[...document.querySelectorAll('#profile-tokens li[data-id]')].map((li) => [li.dataset.id, "
+                             "(li.querySelector('.token-id') || {}).textContent])")
+        assert rows and all(text == TOKEN_ID[case.lang].format(id=i) for i, text in rows), f"every row its id: {rows}"
+        named_buttons(page, "My profile in the app")
+    finally:
+        cleanup(lambda: undo("the device's key", lambda: api_call("DELETE", "api/v1/users/operator/tokens/%d" % key["id"])),
+                lambda: undo("the key left", lambda: api_call("DELETE", "api/v1/users/operator/tokens/%d" % gone["id"])),
+                *[lambda tid=tid: undo("the session", lambda: api_call("DELETE", "api/v1/users/operator/tokens/%d" % tid)) for tid in made])
+
+
+LOGIN_KEPT_KEY = {"en": "Login by fingerprint: anna, key 45", "de": "Anmeldung mit Fingerabdruck: anna, Schlüssel 45"}
+LOGIN_KEPT = {"en": "Login by fingerprint: bob", "de": "Anmeldung mit Fingerabdruck: bob"}
+
+
+def test_connect_login_key_id(new_context, case, watch, guard):
+    """A server's settings name the kept login's key by its id whenever
+    the app knows it (login_key, the bridge's version 5; AP MobileApp,
+    D66-A), and not where it does not."""
+    config = {"servers": [server("s1", "Home", NODE1, lan=HOME_LAN, login="anna", login_key=45), server("s2", "Cabin", NODE2, lan=CABIN_LAN, login="bob")],
+              "answers": {HOME_LAN: {"node": NODE1}, CABIN_LAN: {"node": NODE2}}}
+    page = open_connect(new_context, guard, watch, config)
+    wait_state(page, "Home", STATE[case.lang]["lan"])
+    panel = settings_of(page, "Home")
+    assert panel.locator(".server-login-kept").inner_text().startswith(LOGIN_KEPT_KEY[case.lang]), panel.locator(".server-login-kept").inner_text()
+    row(page, "Home").locator(".server-cog").click()
+    panel = settings_of(page, "Cabin")
+    text = panel.locator(".server-login-kept").inner_text()
+    assert text.startswith(LOGIN_KEPT[case.lang]) and "45" not in text, f"no id it does not know: {text!r}"

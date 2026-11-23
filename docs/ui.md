@@ -213,9 +213,15 @@ to the second user's account, the drafts, the settings changes still waiting,
 every line that said a write was not sent, and the Cubes' data, which loads again.
 The stream's ticket alone, which the page asks for by itself and which changes nothing,
 waits for the sign-in as a read does.
-A request sent with the old key whose 401 comes after a sign-in is done
-opens the sign-in once more, though the page is signed in;
-a write so answered fails as any other and is not sent again.
+A request sent before a sign-in, with another token or none,
+whose 401 comes once the sign-in is done, as a read the card's slow link held back,
+opens no sign-in again (AP MobileApp, D68-A):
+a read is sent again with the new session,
+a write so answered fails as not sent, as any other, and is not sent again.
+A sign-in that replaces the session the page holds,
+the card opened on a running page, ends that session at the server
+(`POST /api/v1/logout`), in the app through the app, which holds it (docs/app.md);
+a key replaced is not ended: a key is revoked under My profile.
 The page that reloads by itself when the server has a newer version
 waits while there are any.
 
@@ -473,7 +479,9 @@ Every room has a tile:
   its tooltip the radiogram that failed, where the server gives it,
   by its technical name and code:
   "Last radiogram that failed: TimeInformation (0x03)");
-  a battery, one getting weak (amber) or low (red), as the server keeps its level;
+  a battery, by the level the server keeps, in words that say what to do:
+  "Batteries weak, replace soon" in amber, "Batteries low, replace now" in red
+  (their kind in the problems' tooltip: "batteries to replace");
   an open window, the opening sash or the paned window as you choose,
   a window contact reporting it:
   blue for its first 5 minutes, then amber with a triangle,
@@ -566,6 +574,16 @@ Every room has a tile:
   and measured temperature, offset), its problems as icons that list them,
   as in the tile's head, a write not confirmed among them,
   and badges for lock, window and mode.
+  A device whose battery is weak or low and whose battery flag is off
+  offers **New batteries**, first among its actions, for a role with `configure`:
+  it tells the server that the device has new batteries,
+  and its level is ok at once (`POST …/devices/{rf}/battery`, `docs/api-v1.md`).
+  The line under the row's actions says that they are noted,
+  or the server's error, as for a device that still reports its batteries low;
+  the battery's badge and the button go with the level's `battery` event,
+  or with the next device list, not with the answer.
+  The log's line of the level says so, and who marked them:
+  "Batteries ok (new batteries, before: low), by Anna".
   A device the Cube has not heard for some minutes keeps the values of its
   last report, greyed, with the badge "out of date" and its age in place of
   "not reported".
@@ -951,7 +969,7 @@ again without it or the server starts,
 a room whose thermostats disagree until they agree again,
 a thermostat off its week programme until it follows it again,
 a room's setpoint not confirmed until every thermostat shows its re-send;
-a device's communication error, link error and low battery
+a device's communication error, link error and battery warning
 while the device has them, at the line that set them;
 a communication error's line names the radiogram that failed,
 "communication error: TimeInformation (0x03)", as the badge's tooltip does.
@@ -961,6 +979,11 @@ Opening the log marks nothing.
 The marks follow a signed-in user with `preferences` (the preference `log.seen`);
 anyone else's stay in the browser.
 The page asks at every poll.
+A device's battery level, the server's, has a line of its own at each change,
+in the badge's words with the level before in a short word:
+"Batteries low, replace now (before: weak)";
+the device's own flag, `battery_low`,
+is the **battery warning** of its state's line.
 A device that reports while its communication error is set is reset by the server,
 once a day at most: the log's **communication error reset** line.
 Where the error is back within that day,
@@ -1065,19 +1088,27 @@ as the settings' ⓘ do:
   but kept nowhere but in its field, and gone at a sign-out;
   the current one alone, as a password manager fills it in, is no change.
 - **Sessions and keys**: the own sessions and API keys,
-  each with where and when it was last used and **Revoke**,
+  each with its id (AP MobileApp, D66-A), where and when it was last used
+  and **Revoke**,
   which signs another browser out without an administrator;
   a session made from a key, as the app's login by fingerprint makes one,
   names the key by its label, and revoking the key ends it;
   the session or key the page is signed in with says **this device**,
   the key that session was made from **its key**,
   and Revoke on this device signs out, as **Sign out** does;
+  in the app the key the phone keeps for the server says **this device's key**,
+  in place of its key where both hold, however the session was made
+  (the app's status, `key_id`, read again each time the page is shown; D65-A);
   **Create key** shows the new key once.
+  In the app the list is read once the app has revoked what the last sign-in
+  revoked there, the keys and sessions of the phone's left valid (D67-A),
+  so that none of them is listed.
   Opened at `#profile?key=<id>`, the page marks that API key's row,
   tinted and outlined in the accent, and brings it into view:
   the app opens a server's page there, as `<server address>#profile?key=<id>`,
   for a key of the phone's it could not revoke,
-  the page asking for a sign-in first where it has no session.
+  the page asking for a sign-in first where it has no session;
+  a key that sign-in revoked is not marked, and a toast says so.
   The address then reads `#profile`, so that a reload marks nothing,
   and the mark goes once a page is shown again, My profile among them;
   an id that is no number, or no API key of the user's, marks nothing.
@@ -1213,7 +1244,8 @@ also while no page is open.
   On an iPhone or iPad the page has to be added to the Home Screen first.
 - **What notifies you**:
   a switch per kind, with its delay or threshold, each with its help:
-  a window open (after 30 min), frost (below 8 °C), a low battery, a battery getting weak,
+  a window open (after 30 min), frost (below 8 °C),
+  "Batteries low, replace now" and "Batteries weak, replace soon",
   a device's communication error or link error,
   the Cube out of reach (after 10 min) and back,
   and, off by default, a device that sends no news, a device paired,
@@ -1517,6 +1549,12 @@ settings forms and have none of it.
   **Repair…**, in the panel's actions for a role with `repair`,
   opens the Cube's repairs under them (Rooms, Repairs):
   the reset of every communication error of the Cube.
+  **Refresh the Cube**, in the panel's actions beside Reboot for a role with `restart`,
+  reads the Cube again at once (`POST /api/v1/cubes/{sn}/refresh`):
+  the server connects to it anew and reads everything it holds,
+  as the periodic refresh does, and nothing goes by radio, so it asks nothing;
+  it turns until the answer, and the message line says the Cube was read again,
+  or the error.
   **Reboot the Cube**, in the panel's actions for a role with `cubes.reboot`,
   restarts the Cube (`POST /api/v1/cubes/{sn}/reboot`),
   which frees one that still holds the server's old connection at once:
@@ -1561,7 +1599,7 @@ settings forms and have none of it.
 
   A Cube's panel has three groups: its facts, its settings with **Hidden devices**
   and **Save**, and its actions in one row under both,
-  **Pair a device**, **Reboot the Cube** and **Remove**,
+  **Pair a device**, **Refresh the Cube**, **Reboot the Cube** and **Remove**,
   each question and the pairing's progress in a line under them;
   from 760 px the facts and the settings are side by side.
   **Pair a device**
@@ -1610,11 +1648,15 @@ settings forms and have none of it.
   a new password typed stays in its field alone, in no draft, and goes
   with a Save, a Reset or a sign-out;
   **Remove**, which asks in place of the panel's actions;
-  the user's sessions and API keys with **Revoke**,
+  the user's sessions and API keys, each with its id, and **Revoke**,
   read when the panel opens and after every change of the users while it is open;
   in one's own panel the session or key the page is signed in with says **this device**,
   the key that session was made from **its key**,
   and Revoke on this device signs out, as **Sign out** does;
+  in the app the key the phone keeps for the server says **this device's key**
+  in whichever user's panel it is listed, as under My profile:
+  the phone may keep a login of another user than the one signed in,
+  and an administrator looking at that user's panel sees the phone's key rightly;
   and **Create key**, which shows the new key once: from the read that follows it
   until the next, in that panel alone, kept nowhere;
   where a sign-in provider is enabled, the user's identities at the providers,
@@ -1856,7 +1898,8 @@ The server's sign, when it says an update is out, opens it at Software update.
   that came while it ran.
 - **Maintenance** (with `restart`, `reboot` for its reboot,
   or `settings` for its announcement, its Cube intervals and its last two parts),
-  in this order: **Announce on the LAN**, the three Cube intervals,
+  in this order: **Announce on the LAN**, the Cube intervals
+  with **Refresh the Cubes** after the refresh's,
   **Settings file**, **Restart** and **Reboot the computer**,
   each under a bold title:
   **Restart the server**
@@ -1910,6 +1953,19 @@ The server's sign, when it says an update is out, opens it at Software update.
   It then gives this run's value, or says that a change waits for the
   next restart; where `-poll`, `-refresh` or `-discover-interval`
   decides, the choice is read-only and names the flag.
+  **Refresh the Cubes** (with `restart`,
+  so that a manager has it without the intervals)
+  reads every Cube the server serves again at once, one after the other,
+  with **Refresh now** (`POST /api/v1/cubes/{sn}/refresh` for each):
+  a new connection that reads everything the Cube holds,
+  what its devices and their batteries last reported among it,
+  and nothing goes by radio.
+  The button turns until the last Cube has answered,
+  and under the row each Cube's line says, as its answer comes,
+  that it was read again and when, or the error;
+  then the page reads its data again.
+  Showing Maintenance again takes the lines back, but not while a run goes on,
+  and a sign-out ends the run with nothing shown.
   **Settings file** names the file and when the server last read it;
   **Reload now** reads it again at once, as SIGHUP does
   (`docs/api-v1.md`, "POST /api/v1/reload"), and says what changed.
@@ -1986,7 +2042,11 @@ is trusted, the login by fingerprint with **Turn off**,
 which revokes its key and signs out,
 a line for each key of the phone's still valid there with **Show in My profile**,
 which opens the server's page at My profile with the key marked,
-and **Remove**, which turns a kept login off first.
+a line for each session of the phone's still valid there,
+which the app forgot without the server ending it,
+the server not answering, and ends at the next sign-in there as its user,
+and **Remove**, which turns a kept login off first, or signs out first,
+its question and its message naming a key or a session left.
 **App settings** hold the **Appearance**, as the phone, light or dark,
 for that page and for every server's page set to "as the system".
 A browser that opens that page sees a line saying it is the app's.
@@ -2211,7 +2271,9 @@ and wires with `addEventListener`; no script uses `innerHTML`.
 
 `app.js` opens the event stream with a ticket, none while a card the user opened
 holds a running page still (`connectEvents`, AP FirstOwner D35), and hands each kind on:
-`state` to `updateDevice` and the log; `hello`, `disconnected` and `slots` to
+`state` to `updateDevice` and the log;
+`battery` to `updateBattery` (rooms.js, the device's level alone),
+the log and `MassimoParts.serverEvent`; `hello`, `disconnected` and `slots` to
 `loadCubes`, `metadata`, `device_forgotten`, `unconfirmed` and `mismatch` to
 `loadRooms`, `connected` and `resync` to `refresh` (with `resync` to
 `MassimoParts.backups.resynced` and `MassimoParts.serverEvent`);
@@ -2248,6 +2310,25 @@ a line down from its icon.
 A button that sends a request is busy from its click until the answer:
 off, with a turning ring after its text, and `aria-busy` (`BusyButton`, `useBusy`),
 so that a second click or Enter sends nothing.
+A request waits about 20 seconds for its answer (`apiRequest` of `app.js`,
+AP MobileApp, D82-A), so that a link that stalls leaves no button turning for good:
+then it fails as "no answer from the server",
+a write adding that it may have been done all the same;
+the routes that wait longer by design have limits of their own (`waitOf`),
+each a little longer than the server's own:
+a repair's run ten and a half minutes, the server's being ten;
+every other write to a Cube, its rooms or its devices, and a Cube added,
+five and a half minutes, a device's settings, its removal and the configurations
+and week programs taking up to five, a setpoint up to two;
+the search for Cubes a minute and a half;
+the look for an update, also as an update is started, 75 seconds,
+the server's look taking up to 30 under a lock another look may hold as long;
+the look for integrations on the LAN and the end of a sign-in through a provider
+45 seconds;
+the stream's ticket the 20 seconds of every other request.
+The event stream and what the page sends as it is left (`keepalive`) have none,
+and neither has what goes as a file (`apiRaw`):
+a backup's download, and a restore's plan and its run.
 A part gives the focus in the handler of the user's action, or in a layout effect,
 in the drawing that shows the thing, never in an effect, which runs a frame later,
 when a user may be typing elsewhere;
@@ -2381,13 +2462,14 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `Brand`, `BrandName` | `brand.tsx` | Massimo's logo and small mark from the sprite (`brandMarks` of `components.js`, which draws them over the skeleton's `data-brand`), of which the place's style shows one, hidden from screen readers: ☰'s first row; `BrandName`, the big name under the logo, the first owner's form and the sign-in's card | |
 | `page`, `isShown`, `showView`, `onView`, `mayShow`, `setAddress`, `definePages`, `pagesPart` | `pages.ts` | the page of the main area shown, a signal: a drawing that reads `page.value` follows it, `isShown` asks at that moment and follows nothing (a handler, a reader, a timer), so that no request is sent again at a change of page; showing a page puts it into the address, as a new entry of the history or in place of the current one, and brings each page back at the scroll it was left at; `onView` runs at each showing, on the `viewshown` event; `mayShow` says who may open which, reading who is in; a page with an address of its own (the log's, `ui/src/log/index.tsx`) hands it over with `ownAddress`, a card's region what the card's address holds after its `?` with `readCardAddress` (My profile's key to mark), told of every address read, null for another, before the page is shown; the page's chrome hands over the pages at the start (`definePages`, `chrome/pages.ts`), the log puts its choices into the address in place (`setAddress`), and the plain code calls these as `MassimoParts.pages` (`pagesPart`) | `view`, `address`, `card`; `card`, `read(q)` |
 | `userPath`, `Run`, `loadTokens`, `revokeToken`, `revokeOwn`, `createKey`, `loadIdentities`, `addIdentity`, `changeIdentity`, `removeIdentity` | `account.ts` | what a user's sessions, keys and identities read and send (`…/users/{name}/tokens`, `…/identities`), for System settings → Users and My profile alike; a change through the caller's runner (`Run`), which reloads what it shows and says how it went in its own line; Revoke of the token in use signs out | `name`, `rest`; `run`, `name`, and what each sends |
-| `Tokens` | `tokens.tsx` | a user's sessions and keys (a user's panel, My profile): each with Revoke, "this device" and "its key" by `own`, Create key and the key just made, shown once by the read that follows and kept in the part's own state alone; read when its place opens and again at each change of the caller's counter while open; an answer after a sign-out dropped; the API key the caller names tinted (`token-marked`), and the caller told of each read drawn with that row (My profile's key of its address) | `u`, `off`, `open`, `reads` (the caller's counter), `run`, `say` (the caller's message line), `labelId` (the new key's field's id), `help` (the group's ⓘ after Create key, My profile's), `marked` (the id of the API key marked), `drawn(row)` (told of each read drawn, with the row marked or null) |
+| `Tokens` | `tokens.tsx` | a user's sessions and keys (a user's panel, My profile): each with its id and Revoke, "this device" and "its key" by `own`, in the app "this device's key" by the app's status (`app.ts`), Create key and the key just made, shown once by the read that follows and kept in the part's own state alone; read when its place opens and again at each change of the caller's counter while open, in the app once the last sign-in's revoke is done (`signInRevoked`); an answer after a sign-out dropped; the API key the caller names tinted (`token-marked`), and the caller told of each read drawn with that row (My profile's key of its address) | `u`, `off`, `open`, `reads` (the caller's counter), `run`, `say` (the caller's message line), `labelId` (the new key's field's id), `help` (the group's ⓘ after Create key, My profile's), `marked` (the id of the API key marked), `drawn(row)` (told of each read drawn, with the row marked or null) |
 | `Identities`, `Changes` | `identities.tsx` | a user's identities at the sign-in providers (a user's panel, My profile): each with what the provider said and Remove; with `changes`, Change of one no sign-in used, a settings form kept by its key, the forms of identities gone or made unchangeable forgotten, and all of them where the box goes off; with `assign`, Assign; `after` what follows the list once read (My profile's Link buttons); `quiet` draws nothing while the list is empty and the caller offers nothing after it (`offer`: My profile's Link buttons, none in the app, where the rows are still named from every provider) | `u`, `off`, `open`, `reads`, `providers` (the enabled ones), `run`, `say`, `title`, `none`, `cls`, `changes` (`key(id)`, `under`, `ui(key)`, `forget(key)`, `show(key)`: the caller's forms and how one is brought into sight), `assign`, `after(list)`, `quiet`, `offer` |
 | `FileButton` | `file.tsx` | a button that opens the browser's choice of a file of the types it accepts, the same file again too | `id` (the button's), `cls`, `label`, `accept`, `off`, `inputId` and `inputLabel` (the input's id and its name in the page's language: the Appearance card's Import…), `onFile(file)` |
 | `Adder` | `adder.tsx` | the end of a list that adds an item: the new item's form in its place while shown, the button that shows it hidden meanwhile, the focus in the form's first field when it comes, in the drawing's own turn, and back on the button when it goes (Users, Roles, Sign-in providers) | `id` (the button's), `formId` (the form's place), `label`, `shown`, `set(shown)`, the form as children |
 | `UserNameField`, `useNameCheck`, `wordNameError` | `username.tsx` | a new user's login name (Add a user, the first owner's form): checked 2 s after the last keystroke and when left, the store's rule and the names in use; a fixed name clears the line at once; the server's refusal worded alike | `label`, `id`, `msgId` (the line under it, which describes it), `value` and `set` (Add a user's), or neither, the field not controlled and read through `inputRef` (the first owner's, UiParts D210), `nc` (`useNameCheck(taken)`: `problem`, `say`, `check(v)`, `typed(v)`), `name` (the input's, Add a user's alone), `autocomplete`, `placeholder`, `inputRef` |
 | `NewPassword`, `newPasswordProblem` | `password.tsx` | a new password typed twice (My profile's Change password, the first owner's form), free fields of the caller's own state, never a draft, or fields not controlled, read through their refs (the first owner's, UiParts D210); the pair's one check, the mismatch first, then none typed | `ids` (the two inputs'), `names` (their name attributes, My profile's alone), `label` (the first's), `value`, `set`, `again`, `setAgain`, or instead `inputRefs` (the two inputs' refs), `required` |
 | `toServers` | `app.ts` | back to the app's servers where the page is in the app (`appConnect` of `login.js`): ☰'s Select server, the sign-in's ☰ and Cancels, the first owner's Cancel | |
+| `app`, `readApp`, `appKeyId`, `signInRevoked` | `app.ts` | the app's status of the login by fingerprint, a signal read again at each opening of the sign-in, a fingerprint refused, the first owner's form and My profile shown (`login.status`), null in a browser; its key of this device's id, 0 for none; the ids of what the last sign-in's `setToken` revoked, `[]` in a browser (`tokenAnswer` of `login.js`) | `st` (the status) |
 | `KvList`, `CountList` | `kv.tsx` | a list of facts, a name and its value each, every fact given, the caller leaving out those it does not show; a list of counts by name, sorted, in columns | `facts` (`[name, value, mono]`); `counts` |
 | `Copy`, `CopyIcon`, `CopyPair` | `copy.tsx` | a text that copies itself, a copy icon (`copyEl`, `copyIcon`); something with its copy icon after it, a text or a link (an address served: an integration's, System info's) | `text`, `value` (what it copies, where it is not the text), `label` (named "Copy …"), `name` (its whole name in its place: the server's version), `icon`, `cls`, `id`; `get`, `label`; `get`, `label`, what it follows as children |
 | `Link` | `link.tsx` | a link in a tab of its own, the text alone for a url that is not http(s) | `url`, `text`, `cls` |
@@ -2807,7 +2889,10 @@ the pages' store hands `index.tsx` what the card's address holds after its
 after it brings its row into the middle of the window and keeps it there for two
 seconds (`keysDrawn` of `Profile.tsx`, `keepInView` of `shared/card.ts`), and
 the next page shown after that, My profile again among them, takes it away
-(`viewshown`);
+(`viewshown`); in the app, a key marked among those the last sign-in's
+`setToken` answered as revoked (`signInRevoked` of `shared/app.ts`) is marked no
+more as the page is shown, a toast naming it, and the app's status is read
+again then (`readApp`), for the key of this device;
 `send.ts` what it reads and sends through its runner, the requests of
 `profile.js`, `linked.js` and `login.js`' `changeOwnPassword`, in the order: the
 user, the providers where none are known yet, then the sessions and keys and the
