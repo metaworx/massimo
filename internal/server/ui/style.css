@@ -800,7 +800,7 @@ body.scrolled .nav .top-btn { display: inline-flex; }
 .cube-page .panel.cube-panel > summary > .panel-badges { grid-column: 1 / -1; }
 .cube-cols > p.needs-cubes { grid-area: settings; }
 .cube-cols > .cube-actions { grid-area: actions; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 10px; margin-top: 6px; border-top: 1px solid var(--line); }
-.cube-cols > .cube-actions > .cube-pairing, .cube-cols > .cube-actions > .cube-reboot { display: contents; } /* over .panel .actions */
+.cube-cols > .cube-actions > .cube-pairing, .cube-cols > .cube-actions > .cube-refresh, .cube-cols > .cube-actions > .cube-reboot { display: contents; } /* over .panel .actions */
 .cube-actions > .cube-pairing > :not(.pair-open) { flex-basis: 100%; order: 3; }
 .cube-actions > .confirm-box { flex-basis: 100%; }
 .cube-cols > .cube-differs { grid-column: 1 / -1; }

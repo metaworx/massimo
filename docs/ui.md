@@ -1515,6 +1515,12 @@ settings forms and have none of it.
   **Repair…**, in the panel's actions for a role with `repair`,
   opens the Cube's repairs under them (Rooms, Repairs):
   the reset of every communication error of the Cube.
+  **Refresh the Cube**, in the panel's actions beside Reboot for a role with `restart`,
+  reads the Cube again at once (`POST /api/v1/cubes/{sn}/refresh`):
+  the server connects to it anew and reads everything it holds,
+  as the periodic refresh does, and nothing goes by radio, so it asks nothing;
+  it turns until the answer, and the message line says the Cube was read again,
+  or the error.
   **Reboot the Cube**, in the panel's actions for a role with `cubes.reboot`,
   restarts the Cube (`POST /api/v1/cubes/{sn}/reboot`),
   which frees one that still holds the server's old connection at once:
@@ -1559,7 +1565,7 @@ settings forms and have none of it.
 
   A Cube's panel has three groups: its facts, its settings with **Hidden devices**
   and **Save**, and its actions in one row under both,
-  **Pair a device**, **Reboot the Cube** and **Remove**,
+  **Pair a device**, **Refresh the Cube**, **Reboot the Cube** and **Remove**,
   each question and the pairing's progress in a line under them;
   from 760 px the facts and the settings are side by side.
   **Pair a device**
@@ -1854,7 +1860,8 @@ The server's sign, when it says an update is out, opens it at Software update.
   that came while it ran.
 - **Maintenance** (with `restart`, `reboot` for its reboot,
   or `settings` for its announcement, its Cube intervals and its last two parts),
-  in this order: **Announce on the LAN**, the three Cube intervals,
+  in this order: **Announce on the LAN**, the Cube intervals
+  with **Refresh the Cubes** after the refresh's,
   **Settings file**, **Restart** and **Reboot the computer**,
   each under a bold title:
   **Restart the server**
@@ -1894,6 +1901,19 @@ The server's sign, when it says an update is out, opens it at Software update.
   It then gives this run's value, or says that a change waits for the
   next restart; where `-poll`, `-refresh` or `-discover-interval`
   decides, the choice is read-only and names the flag.
+  **Refresh the Cubes** (with `restart`,
+  so that a manager has it without the intervals)
+  reads every Cube the server serves again at once, one after the other,
+  with **Refresh now** (`POST /api/v1/cubes/{sn}/refresh` for each):
+  a new connection that reads everything the Cube holds,
+  what its devices and their batteries last reported among it,
+  and nothing goes by radio.
+  The button turns until the last Cube has answered,
+  and under the row each Cube's line says, as its answer comes,
+  that it was read again and when, or the error;
+  then the page reads its data again.
+  Showing Maintenance again takes the lines back, but not while a run goes on,
+  and a sign-out ends the run with nothing shown.
   **Settings file** names the file and when the server last read it;
   **Reload now** reads it again at once, as SIGHUP does
   (`docs/api-v1.md`, "POST /api/v1/reload"), and says what changed.

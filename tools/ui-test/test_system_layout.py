@@ -113,7 +113,8 @@ def test_cube_panel_columns(page, case):
     """A Cube's panel in three groups: its facts (Info), its settings and
     its actions; Info and the settings side by side at 1100 px, one after
     the other at 390; the actions in one row under both, Pair a device,
-    Reboot the Cube and Remove, the settings form without Remove (D97-A)."""
+    Refresh the Cube, Reboot the Cube and Remove, the settings form
+    without Remove (D97-A)."""
     show_view(page, "system")
     panel = page.locator(".cube-panel[data-serial='KEQ0000100']")
     panel.locator(":scope > summary").click()
@@ -126,10 +127,10 @@ def test_cube_panel_columns(page, case):
         assert form["top"] >= info["bottom"] - 1, f"the settings under Info ({form}, {info})"
     assert acts["top"] >= max(info["bottom"], form["bottom"]) - 1, f"the actions last ({acts})"
     row = panel.locator(".cube-actions")
-    for sel in (".pair-open", ".cube-reboot-btn", ".remove-cube"):
+    for sel in (".pair-open", ".cube-refresh-btn", ".cube-reboot-btn", ".remove-cube"):
         assert row.locator(sel).count() == 1, f"{sel} in the actions' row"
     # in one go: the page may still be scrolling to the opened panel
-    tops = page.evaluate("""() => ['.pair-open', '.cube-reboot-btn', '.remove-cube'].map((s) =>
+    tops = page.evaluate("""() => ['.pair-open', '.cube-refresh-btn', '.cube-reboot-btn', '.remove-cube'].map((s) =>
       document.querySelector(".cube-panel[data-serial='KEQ0000100'] .cube-actions " + s).getBoundingClientRect().top)""")
     if case.width >= 900:
         assert max(tops) - min(tops) <= 2, f"on one row ({tops})"

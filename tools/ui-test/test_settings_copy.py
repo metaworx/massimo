@@ -83,15 +83,17 @@ def test_heads_explained(page, case):
 
 def test_maintenance_order(page, case):
     """Maintenance: Announce on the LAN, the three Cube intervals (AP
-    CubePoll v1.0) and the duty cycle's hold (AP LegacyLogs v1.0), Settings file, Restart, Reboot the computer, their
-    titles alike."""
+    CubePoll v1.0) with Refresh the Cubes after the refresh's (AP
+    RefreshBatteries, D10-B) and the duty cycle's hold (AP LegacyLogs
+    v1.0), Settings file, Restart, Reboot the computer, their titles
+    alike."""
     show_view(page, "maint")
     try:
         rows = page.evaluate("""() => [...document.querySelectorAll('#sys-maint-body > div')].map((d) => {
           const title = d.querySelector('.action-title');
           return [title ? title.textContent : '', title ? getComputedStyle(title).fontWeight : ''];
         })""")
-        keys = ["maint.announce", "maint.poll", "maint.refresh", "maint.discover", "maint.dutyWait", "maint.file", "maint.restart", "maint.reboot"]
+        keys = ["maint.announce", "maint.poll", "maint.refresh", "maint.refreshNowTitle", "maint.discover", "maint.dutyWait", "maint.file", "maint.restart", "maint.reboot"]
         assert [r[0] for r in rows] == page.evaluate("(ks) => ks.map((k) => t(k))", keys), f"the owner's order ({rows})"
         assert len({r[1] for r in rows}) == 1, f"the titles alike ({rows})"
     finally:
