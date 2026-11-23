@@ -124,6 +124,24 @@ func (t *Tracker) Report(dev string, at time.Time, r Report) []Change {
 	return append(out, t.evaluate(dev, d, at)...)
 }
 
+// Replaced takes new batteries in a device, which someone marked at the
+// time at (AP RefreshBatteries v1.0, D8-A): a weak or low device whose
+// flag is off is ok at once, and its change is returned. A device that
+// is ok already, one whose flag is on, since it has not reported its new
+// batteries yet, and one the tracker has not seen change nothing. The
+// device's history stays as it is, so that its later reports follow the
+// rules of an ok device: a flag seen again makes it weak, held it makes
+// it low.
+func (t *Tracker) Replaced(dev string, at time.Time) []Change {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	d, ok := t.devs[dev]
+	if !ok || d.level == OK || d.on {
+		return nil
+	}
+	return []Change{d.set(dev, OK, at)}
+}
+
 // Tick evaluates the rules that depend on time alone, for every device,
 // at the time at, and returns the changes of their levels.
 func (t *Tracker) Tick(at time.Time) []Change {

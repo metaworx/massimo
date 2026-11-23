@@ -5,7 +5,7 @@
  * @file internal/server/ui/src/cubes/send.ts
  *
  * What the Cubes' parts send: a change of a Cube's settings, a Cube
- * added, rebooted or removed. Each runs through the Cubes' action runner
+ * added, read again, rebooted or removed. Each runs through the Cubes' action runner
  * (shared/action.ts): a reload of the page's data afterwards, so that the
  * header, the tiles and the Cubes follow, and the outcome under the list
  * or under Cube settings' panel.
@@ -47,6 +47,11 @@ export function addCube(serial: string, restore?: string): Promise<boolean> {
 /** rebootCube restarts a Cube, with the radiograms pending its question named (POST …/reboot). */
 export function rebootCube(serial: string, pending: number): Promise<boolean> {
   return run(serial, () => api("POST", cubePath(serial) + "/reboot", { pending }), t("cubes.rebooted", { serial }));
+}
+
+/** refreshCube reads a Cube again at once by a new connection, nothing sent by radio (POST …/refresh). */
+export function refreshCube(serial: string): Promise<boolean> {
+  return run(serial, () => api("POST", cubePath(serial) + "/refresh", {}), t("cubes.refreshed", { serial }));
 }
 
 /** removeCube stops serving a Cube (DELETE). */
