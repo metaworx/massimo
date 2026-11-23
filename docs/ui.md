@@ -220,7 +220,7 @@ a read is sent again with the new session,
 a write so answered fails as not sent, as any other, and is not sent again.
 A sign-in that replaces the session the page holds,
 the card opened on a running page, ends that session at the server
-(`POST /api/v1/logout`);
+(`POST /api/v1/logout`), in the app through the app, which holds it (docs/app.md);
 a key replaced is not ended: a key is revoked under My profile.
 The page that reloads by itself when the server has a newer version
 waits while there are any.
@@ -1976,7 +1976,11 @@ is trusted, the login by fingerprint with **Turn off**,
 which revokes its key and signs out,
 a line for each key of the phone's still valid there with **Show in My profile**,
 which opens the server's page at My profile with the key marked,
-and **Remove**, which turns a kept login off first.
+a line for each session of the phone's still valid there,
+which the app forgot without the server ending it,
+the server not answering, and ends at the next sign-in there as its user,
+and **Remove**, which turns a kept login off first, or signs out first,
+its question and its message naming a key or a session left.
 **App settings** hold the **Appearance**, as the phone, light or dark,
 for that page and for every server's page set to "as the system".
 A browser that opens that page sees a line saying it is the app's.

@@ -9,8 +9,8 @@
 // typed, probed before they are added, in a card shown while the list is
 // empty or from the ☰; the fingerprint sheet of a self-signed
 // certificate; a server's settings with Open at start, its session, its
-// certificate, its login by fingerprint and the keys of the phone's left
-// valid there, and the row's button that opens it signed in; the app's
+// certificate, its login by fingerprint and the keys and sessions of the
+// phone's left valid there, and the row's button that opens it signed in; the app's
 // own settings, its appearance; the server on the phone where the app has
 // it built in; what an action came to, in the page's toast. Everything
 // goes through the app's bridge, window.massimo, whose calls answer with
@@ -39,7 +39,7 @@ const APP_HASH = "#app-settings";
 
 const conn = {
   bridge: null, // window.massimo
-  servers: [], // as the app keeps them: {id, name, node, lan, remote, fp, login, ask, push, start, session, trusted_at, unrevoked}
+  servers: [], // as the app keeps them: {id, name, node, lan, remote, fp, login, ask, push, start, session, trusted_at, unrevoked, unended}
   probes: {}, // by server id: {state, url, fingerprint, cert, error}, the state probing, lan, remote, cert or offline
   probeSeq: {}, // by server id: the latest probe, whose answer alone counts
   seen: {}, // by node: the URL discovery found it at
@@ -454,9 +454,10 @@ function addressInput(value) {
 
 // settingsPanel is a server's settings: its name, its two addresses,
 // Open at start, when the fingerprint is asked, its session with Sign
-// out, its certificate and the keys left valid there (fillFacts), the
+// out, its certificate and the keys and sessions left valid there (fillFacts), the
 // login by fingerprint kept with its user and Turn off, notifications
-// where the app has push, and Remove, whose question warns of a key left.
+// where the app has push, and Remove, whose question warns of a key or a
+// session left.
 // The panel itself takes the focus (toggleSettings).
 function settingsPanel(s) {
   const name = document.createElement("input");
@@ -483,8 +484,10 @@ function settingsPanel(s) {
   const remove = button(t("connect.remove"), "server-remove", () => {
     const now = serverById(s.id) || s;
     const left = keysLeft(now);
+    const unended = sessionsLeft(now);
     let question = now.login ? t("connect.removeQuestionLogin", { name: s.name }) : t("connect.removeQuestion", { name: s.name });
     if (left.length) question += " " + tn("connect.removeKeysLeft", left.length, { ids: left.map((k) => k.id).join(", ") });
+    if (unended.length) question += " " + tn("connect.removeSessionsLeft", unended.length, { ids: unended.map((x) => x.id).join(", ") });
     confirmInPlace(form.querySelector(".actions"), question, { yes: t("connect.remove") }, () => removeServer(s.id, msg), ".server-remove");
   });
   const facts = elem("div", "server-facts");
@@ -552,20 +555,30 @@ function keysLeft(s) {
   return s && Array.isArray(s.unrevoked) ? s.unrevoked.filter(good) : [];
 }
 
+// sessionsLeft are the sessions the app forgot at a server without the
+// server ending them, each {user, id} (`unended`, contract version 5),
+// which the next session there for that user revokes; none from an app
+// before it.
+function sessionsLeft(s) {
+  const good = (x) => x && Number.isInteger(x.id) && x.id > 0 && x.id <= MAX_KEY_ID && typeof x.user === "string";
+  return s && Array.isArray(s.unended) ? s.unended.filter(good) : [];
+}
+
 // fillFacts writes what a server's open settings say of it as it stands,
 // under its choices: the session the app holds there, with Sign out, the
 // certificate the probe found at the address in use, with Certificate…,
-// and each key of the phone's left valid there, with Show in My profile,
-// which opens the server's page at My profile with that key marked;
-// drawn again only where it changed, so that a probe that answers keeps
-// the focus.
+// each key of the phone's left valid there, with Show in My profile,
+// which opens the server's page at My profile with that key marked, and
+// each session of the phone's left valid there; drawn again only where it
+// changed, so that a probe that answers keeps the focus.
 function fillFacts(form, s) {
   const box = form.querySelector(".server-facts");
   if (!box) return;
   const p = conn.probes[s.id] || {};
   const cert = (p.state === "lan" || p.state === "remote") && p.cert && p.cert.not_after ? p.cert : null;
   const left = keysLeft(s);
-  const key = JSON.stringify([s.session || "", cert && cert.fingerprint, cert && cert.not_after, cert && p.url, left]);
+  const unended = sessionsLeft(s);
+  const key = JSON.stringify([s.session || "", cert && cert.fingerprint, cert && cert.not_after, cert && p.url, left, unended]);
   if (box.dataset.key === key) return;
   box.dataset.key = key;
   clear(box);
@@ -583,13 +596,16 @@ function fillFacts(form, s) {
       () => openServer(s.id, null, "#profile?key=" + k.id));
     box.appendChild(elem("p", "server-fact server-key-left", t("connect.keyLeft", { id: k.id, name: k.user }), " ", show));
   }
+  for (const x of unended) box.appendChild(elem("p", "server-fact server-session-left", t("connect.sessionLeft", { id: x.id, name: x.user })));
   box.classList.toggle("hidden", !box.firstChild);
 }
 
 // signOut signs the app out of a server, at the address the probe chose
 // (signOut, docs/app.md, the session ended there and forgotten in the
-// app); the open settings lose the session's line and keep what is typed
-// in them, and the toast says whether the server ended it.
+// app); the open settings lose the session's line, show it left where the
+// server did not end it (the list read again: its unended, contract
+// version 5) and keep what is typed in them, and the toast says whether
+// the server ended it.
 async function signOut(id, btn, msg) {
   const s = serverById(id);
   const p = conn.probes[id] || {};
@@ -603,6 +619,7 @@ async function signOut(id, btn, msg) {
   }
   const name = s ? s.name : "";
   if (s) s.session = null;
+  await loadServers();
   renderServers();
   say(res && res.ended ? t("connect.signedOut", { name }) : t("connect.signedOutLocal", { name }));
 }
@@ -780,10 +797,11 @@ function forgetAll() {
 }
 
 // removeServer forgets a server, its certificate, its session and its
-// kept login, the login turned off first as Turn off does, at the address
-// the probe chose (remove, contract version 4), and says so in the toast:
-// the login's key revoked, the ids of the phone's keys still valid there
-// and a key listed at the server alone, to revoke under My profile. An
+// kept login, the login turned off first as Turn off does, else the session
+// signed out, at the address the probe chose (remove, contract version 5),
+// and says so in the toast: the login's key revoked, the ids of the phone's
+// keys and sessions still valid there and a key listed at the server
+// alone, to revoke under My profile. An
 // error is said in its settings, which stay open, the list read again for
 // what the app did before it. The focus goes to the Add card where the
 // list is empty now, else to the ☰.
@@ -806,9 +824,12 @@ async function removeServer(id, msg) {
   conn.panel = null;
   renderServers();
   const name = s ? s.name || hostOf(s.lan || s.remote) : "";
-  const keys = res && Array.isArray(res.keys) ? res.keys.filter((k) => Number.isInteger(k) && k > 0 && k <= MAX_KEY_ID) : [];
+  const ids = (list) => (Array.isArray(list) ? list.filter((k) => Number.isInteger(k) && k > 0 && k <= MAX_KEY_ID) : []);
+  const keys = ids(res && res.keys);
+  const unended = ids(res && res.sessions);
   let text = res && res.revoked === true ? t("connect.removedRevoked", { name }) : t("connect.removed", { name });
   if (keys.length) text += " " + tn("connect.removedKeys", keys.length, { ids: keys.join(", ") });
+  if (unended.length) text += " " + tn("connect.removedSessions", unended.length, { ids: unended.join(", ") });
   if (res && res.local === true) text += " " + t("connect.removedKeyListed");
   say(text);
   if (conn.servers.length) menuButton().focus();

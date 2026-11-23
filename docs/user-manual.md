@@ -43,6 +43,11 @@ touch a field to change it.
   When the server does not answer, the app shows the list.
 - **Signed in as …** and **Sign out**, where the app is signed in there:
   Sign out ends that session on the server and on the phone.
+- **A session of this phone is still valid here**, where the app
+  forgot a session while the server did not answer
+  (Sign out, Turn off, Forget all, or a new sign-in in its place):
+  the next time the app signs in there as the same user,
+  it ends that session by itself.
 - **A key of this phone is still valid here**, where Turn off or Forget all
   could not remove the phone's key at the server,
   or the phone no longer opens its login, or a new certificate was trusted:
@@ -150,9 +155,11 @@ At home, on the local network, plain `http://` works as usual.
   and those keys stay valid at their servers (below).
   Its message names the servers where a key stays valid.
 - **Remove** of a server turns its login by fingerprint off first,
-  as Turn off does, then forgets everything the app kept for it.
-  It says so before, and warns where a key of the phone is still valid there;
-  afterwards its message names any key that stays valid,
+  as Turn off does, or signs the app out there,
+  then forgets everything the app kept for it.
+  It says so before, and warns where a key or a session of the phone is
+  still valid there;
+  afterwards its message names any key or session that stays valid,
   to revoke under My profile.
 
 When Turn off or Forget all cannot remove the key at the server (it does not answer,

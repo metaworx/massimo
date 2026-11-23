@@ -683,6 +683,9 @@ hence `failed_checks_forgotten`.
   a key left shows in its server's settings with Show in My profile,
   which opens `<address>#profile?key=<id>`,
   Remove warns of it, and a session found there takes its line away;
+  a session left, as the bridge's version 5 keeps one, shows in its
+  server's settings, Sign out without an answer leaves one, Remove signs
+  out first and warns of one left and names it;
   a browser without the bridge sees the line saying the page is the app's;
   and the server's page in the app takes its token from the bridge,
   keeps none in the browser, and hands a sign-in and a sign-out to the bridge;

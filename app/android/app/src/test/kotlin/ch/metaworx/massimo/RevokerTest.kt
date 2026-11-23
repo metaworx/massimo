@@ -38,9 +38,12 @@ import java.util.concurrent.Executors
  * login kept before it, and no more once that prompt was dismissed; Turn
  * off asks once; the app key dropped at the run's end, where the run
  * stops, and where a step throws; a key the phone took back leaving every
- * key by its id; a page's id `app` reaching no Keystore key. The
- * Bridge's wiring of it (the prompt on the main thread, the answers'
- * shapes) is checked by reading it and on a phone.
+ * key by its id; a page's id `app` reaching no Keystore key. Remove
+ * signs the session out before the server goes, where no login is kept
+ * (F38, D69-A), and names the sessions left valid there; a server down
+ * leaves the session in its `unended` (D70-A). The Bridge's wiring of it
+ * (the prompt on the main thread, the answers' shapes) is checked by
+ * reading it and on a phone.
  */
 class RevokerTest {
     @get:Rule
@@ -276,6 +279,63 @@ class RevokerTest {
 
         assertEquals("one prompt, for the first", listOf("home"), prompts)
         assertTrue(logged.joinToString("\n"), logged.none { it.contains("session-") || it.contains("key-secret") })
+    }
+
+    private fun remove(s: Server, url: String, byKey: Revoker.ByKey = byKey(null)): Revoker.Removed {
+        var got: Result<Revoker.Removed>? = null
+        revoker.remove(s.id, url, byKey) { got = it }
+        return (got ?: throw AssertionError("remove did not answer")).getOrThrow()
+    }
+
+    @Test
+    fun removeSignsTheSessionOutBeforeTheServerGoes() {
+        // without a kept login: signed out at the address given, then forgotten (F38, D69-A)
+        val s = server("home")
+        sessions.put(s, "session-anna")
+        assertEquals(Revoker.Removed(null, emptyList(), emptyList()), remove(s, fake.base))
+        assertEquals(listOf("POST /api/v1/logout session-anna"), fake.requests())
+        assertNull(servers.get(s.id))
+        assertNull(sessions.held(s))
+        // without an address: at the one that answers
+        val t = server("cabin")
+        sessions.put(t, "session-bob")
+        remove(t, "")
+        assertEquals("POST /api/v1/logout session-bob", fake.requests().last())
+        // none held: nothing sent
+        val u = server("barn")
+        remove(u, fake.base)
+        assertEquals(2, fake.requests().size)
+        assertTrue("no prompt", prompts.isEmpty())
+    }
+
+    @Test
+    fun aServerDownLeavesTheSessionByItsId() {
+        // reached at its remote address for the check, then at none: the
+        // session the app forgets is left in unended (D70-A), and Remove names it
+        fun down(name: String) = servers.save(JSONObject().put("name", name).put("node", "node-$name").put("lan", fake.closed).put("remote", fake.base))
+        val s = down("home")
+        keep(s, 46)
+        sessions.put(s, "session-anna")
+        assertEquals("anna", sessions.check(s, fake.base))
+        assertEquals("Turn off with the server down", Revoker.Off(leftHere, 46), turnOff(s, ""))
+        assertEquals(listOf(KeyLeft("anna", 46)), left(s))
+        assertEquals(listOf(SessionLeft("anna", 7, FakeServer.made(7))), servers.get(s.id)!!.unended)
+        assertNull(sessions.held(s))
+
+        val t = down("cabin")
+        sessions.put(t, "session-anna")
+        sessions.check(t, fake.base)
+        val gone = remove(t, "")
+        assertEquals("Remove without a kept login names the session left", Revoker.Removed(null, emptyList(), listOf(7L)), gone)
+        assertNull(servers.get(t.id))
+
+        val u = down("barn")
+        keep(u, 49)
+        sessions.put(u, "session-anna")
+        sessions.check(u, fake.base)
+        val off = remove(u, "")
+        assertEquals("and with a kept login, its key and its session", Revoker.Removed(Revoker.Off(leftHere, 49), listOf(49L), listOf(7L)), off)
+        assertTrue(logged.joinToString("\n"), logged.none { it.contains("session-") })
     }
 
     @Test

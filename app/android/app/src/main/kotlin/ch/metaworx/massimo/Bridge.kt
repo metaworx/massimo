@@ -14,15 +14,15 @@ import java.util.concurrent.RejectedExecutionException
 
 /**
  * Bridge is the native side of `window.massimo` (docs/app.md, contract
- * version 4): it takes the messages of the page's script (res/raw/bridge.js),
+ * version 5): it takes the messages of the page's script (res/raw/bridge.js),
  * checks who sent each by its origin, and answers it. The connect page gets
  * the calls of the server list, the sessions the app holds and the app's
  * settings; a server's page only its own session, its login by fingerprint
  * and the way back to the list. The login's key never reaches a page: the
  * bridge makes and holds it and hands a page the session alone, each login
  * sealed under the one app key ([AppKey]), which a prompt opens for one
- * step. Turn off and Forget all are the [Revoker]'s, and the keys they leave
- * valid are [left]'s.
+ * step. Turn off, Remove and Forget all are the [Revoker]'s, and the keys
+ * and sessions they leave valid are [left]'s.
  */
 class Bridge(
     private val host: Host,
@@ -220,22 +220,25 @@ class Bridge(
                 }
                 if (token != null && token.length > MAX_TOKEN) throw bad()
                 // null forgets it: Sign out, Forget key, and the dead session
-                // the page drops at the server's first 401. A new session
-                // revokes the keys left there for its user, and gives a login
-                // kept without its key's id that id, once the page has its
-                // answer (Sessions.check).
+                // the page drops at the server's first 401. A session the new
+                // one replaces is ended there once the page has its answer
+                // (D68-A), so that a server slow to answer holds no sign-in
+                // up. A new session is checked then too (Sessions.check): its
+                // id learnt, for a session forgotten later without the server
+                // (D70-A), the keys and sessions left there for its user
+                // revoked, and a login kept without its key's id given that id.
                 io.execute {
+                    val ending: Sessions.Ending?
                     try {
-                        servers.get(id)?.let { sessions.put(it, token) }
+                        ending = servers.get(id)?.let { sessions.put(it, token, o.url) }
                         answer.ok(null)
                     } catch (e: Exception) {
                         answer.fail(e)
                         return@execute
                     }
+                    ending?.let { runCatching { it.end() } }
                     val s = servers.get(id)
-                    if (token != null && s != null && (s.unrevoked.isNotEmpty() || logins.get(id)?.keyId == 0L)) {
-                        runCatching { sessions.check(s, o.url) }
-                    }
+                    if (token != null && s != null) runCatching { sessions.check(s, o.url) }
                 }
             }
             "login.status" -> {
@@ -329,8 +332,9 @@ class Bridge(
             when (r) {
                 is AppKey.Result.Opened -> try {
                     val session = api.loginKey(url, s.fp, r.secret.key)
-                    sessions.put(s, session)
+                    val ending = sessions.put(s, session, url) // a session it replaces ended there (D68-A), after the answer
                     main.post { then(session) }
+                    ending?.let { runCatching { it.end() } }
                 } catch (e: ServerApi.Refused) {
                     forgetLogin(s.id)
                     answer.fail(BridgeException(R.string.err_key_refused))
@@ -424,39 +428,31 @@ class Bridge(
         }
     }
 
-    // remove forgets a server: a kept login is turned off first, at url or
-    // the address that answers, as forget turns it off (AP MobileApp, Block
-    // 14), then the server, its certificate, its session and its login go.
-    // The answer says whether the login's key was revoked (revoked), the
-    // ids of the phone's keys still valid there (keys: its unrevoked, the
-    // login's among them where it could not be revoked), and whether the
-    // login's key went without its id being known (local).
+    // remove forgets a server (Revoker.remove): a kept login is turned off
+    // first, at url or the address that answers, as forget turns it off (AP
+    // MobileApp, Block 14), else the session signed out there (D69-A), then
+    // the server, its certificate, its session and its login go. The answer
+    // says whether the login's key was revoked (revoked), the ids of the
+    // phone's keys still valid there (keys: its unrevoked, the login's among
+    // them where it could not be revoked) and of its sessions (sessions: its
+    // unended, the one signed out among them where the server did not end
+    // it, contract version 5), and whether the login's key went without its
+    // id being known (local).
     private fun remove(id: String, url: String, answer: Answer) {
         io.execute {
-            val drop = { off: Revoker.Off? ->
-                try {
-                    val keys = servers.get(id)?.unrevoked?.map { it.id } ?: emptyList()
-                    servers.remove(id)
-                    sessions.forget(id)
-                    forgetLogin(id)
-                    main.post { host.privacy() }
-                    answer.ok(
-                        JSONObject()
-                            .put("revoked", off?.outcome == Revoker.Outcome.REVOKED)
-                            .put("keys", JSONArray(keys))
-                            .put("local", off?.outcome == Revoker.Outcome.LOCAL),
-                    )
-                } catch (e: Exception) {
-                    answer.fail(e)
-                }
-            }
             val k = byKey()
             try {
-                if (logins.get(id) == null) {
-                    k.close()
-                    drop(null)
-                } else {
-                    revoker.turnOff(id, url, k) { drop(it) }
+                revoker.remove(id, url, k) { r ->
+                    r.fold({ gone ->
+                        main.post { host.privacy() }
+                        answer.ok(
+                            JSONObject()
+                                .put("revoked", gone.off?.outcome == Revoker.Outcome.REVOKED)
+                                .put("keys", JSONArray(gone.keys))
+                                .put("sessions", JSONArray(gone.sessions))
+                                .put("local", gone.off?.outcome == Revoker.Outcome.LOCAL),
+                        )
+                    }, { e -> answer.fail(e) })
                 }
             } catch (e: Exception) {
                 k.close()

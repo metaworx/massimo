@@ -17,7 +17,8 @@ import java.io.File
 import java.security.cert.CertificateException
 
 /**
- * The keys left valid on a server (AP MobileApp, D57-A) against a fake
+ * The keys left valid on a server (AP MobileApp, D57-A), and the sessions
+ * (D70-A), against a fake
  * server: revoked with the next session the app holds there for their
  * user, through the session's check (`session`, and `setToken`'s), each
  * only where the user's list has it as an API key and never the token in
@@ -27,7 +28,9 @@ import java.security.cert.CertificateException
  * keys left alone; and a login kept without its key's id takes the id of
  * the key the session was made from, unless it changed meanwhile (F28);
  * neither the session's key nor the login's own is ever revoked, and an
- * empty list drops nothing.
+ * empty list drops nothing. A session forgotten without the server ending
+ * it is left by the id its check found, and the next session there for its
+ * user revokes it, never the token in use nor a key's id for a session's.
  */
 class KeysLeftTest {
     @get:Rule
@@ -94,6 +97,118 @@ class KeysLeftTest {
         assertEquals("kept across a start", keys(s.id), ServerStore(File(tmp.root, "servers.json")).get(s.id)!!.unrevoked)
     }
 
+    private fun sessionsLeft(id: String): List<SessionLeft> = servers.get(id)!!.unended
+
+    // left is Anna's session [id] as the app leaves it, made when the fake says.
+    private fun left(id: Long) = SessionLeft("anna", id, FakeServer.made(id))
+
+    @Test
+    fun theNextSessionRevokesTheSessionsLeftForItsUser() {
+        val s = home()
+        leave(s, "anna", 42)
+        for ((user, id) in listOf("anna" to 52L, "anna" to 7L, "anna" to 45L, "bob" to 9L)) assertTrue(left.addSession(s.id, user, id, FakeServer.made(id)))
+        // a store rolled back gave 51 to another live session of hers, made later than the one left
+        assertTrue(left.addSession(s.id, "anna", 51, "2026-11-19T09:00:51Z"))
+        assertFalse("never learnt: nothing to note", left.addSession(s.id, "anna", 0))
+        sessions.put(s, "session-anna") // row 7
+        val look = sessions.look(s, fake.base)
+        assertEquals("anna", look.user)
+        assertEquals("the ids the server revoked now, the key's first", listOf(42L, 52L), look.revoked)
+        assertEquals(
+            listOf(
+                "GET /api/v1/me session-anna",
+                "GET /api/v1/users/anna/tokens session-anna",
+                "DELETE /api/v1/users/anna/tokens/42 session-anna",
+                "DELETE /api/v1/users/anna/tokens/52 session-anna",
+            ),
+            fake.requests(),
+        )
+        assertEquals(
+            "52 revoked; the token in use (7) kept; a key's id (45) and an id another session has now (51) dropped unasked; Bob's left alone",
+            listOf(left(7), SessionLeft("bob", 9, FakeServer.made(9))), sessionsLeft(s.id),
+        )
+        assertTrue(keys(s.id).isEmpty())
+        assertTrue(logged.isEmpty())
+    }
+
+    @Test
+    fun aSessionForgottenWithoutTheServerIsLeftByItsId() {
+        // Sign out, and Turn off's, where the server does not answer: left by the id its check found (D70-A)
+        val s = home()
+        // one never checked is forgotten on the phone alone; a key the page held is no session
+        sessions.put(s, "session-anna-fp")
+        assertFalse(sessions.signOut(s, ""))
+        sessions.put(s, "key-own")
+        sessions.check(s, fake.base)
+        assertFalse(sessions.signOut(s, ""))
+        assertTrue(sessionsLeft(s.id).isEmpty())
+        sessions.put(s, "session-anna")
+        sessions.check(s, fake.base)
+        assertFalse(sessions.signOut(s, ""))
+        assertEquals("by its id, its user and when it was made", listOf(left(7)), sessionsLeft(s.id))
+        // Sign out of all, the server not answering (this test's probe answers nowhere); the
+        // session checked first may not revoke 7 (401), which stays
+        sessions.put(s, "session-anna-expiring")
+        sessions.check(s, fake.base)
+        assertEquals(0, sessions.signOutAll(listOf(s)))
+        assertEquals(listOf(left(7), left(10)), sessionsLeft(s.id))
+        assertTrue("kept across a start", ServerStore(File(tmp.root, "servers.json")).get(s.id)!!.unended.size == 2)
+        assertTrue(logged.toString(), logged.none { it.contains("session-") })
+    }
+
+    @Test
+    fun aSessionReplacedWhereTheServerDoesNotAnswerIsLeft() {
+        // the page's new session replaces one the server cannot be asked to end at that address
+        val s = servers.save(JSONObject().put("name", "Home").put("node", "node-a").put("lan", fake.base).put("remote", fake.closed))
+        sessions.put(s, "session-anna")
+        sessions.check(s, fake.base)
+        val ending = sessions.put(s, "session-anna-fp", fake.closed)
+        assertEquals("the new session held at once, the end left to the caller", "session-anna-fp", sessions.held(s))
+        assertEquals("noted before the end", listOf(left(7)), sessionsLeft(s.id))
+        ending!!.end()
+        assertEquals("and still, not ended", listOf(left(7)), sessionsLeft(s.id))
+        assertEquals("session-anna-fp", sessions.held(s))
+        val line = logged.single()
+        assertTrue(line, line.contains(s.id) && !line.contains("session-anna"))
+        // the next check there asks to revoke it, the fake answering 404 for it, as for one gone already: dropped
+        sessions.look(s, fake.base)
+        assertEquals("DELETE /api/v1/users/anna/tokens/7 session-anna-fp", fake.requests().last())
+        assertTrue(sessionsLeft(s.id).isEmpty())
+    }
+
+    @Test
+    fun aSessionReplacedIsNotedUntilItsEndingEndsIt() {
+        // the bridge answers the page before it ends the session replaced: an app gone meanwhile leaves it recorded
+        val s = home()
+        sessions.put(s, "session-anna")
+        sessions.check(s, fake.base)
+        val ending = sessions.put(s, "session-anna-fp", fake.base)
+        assertEquals("the Ending not run: noted", listOf(left(7)), sessionsLeft(s.id))
+        assertEquals("kept across a start", listOf(left(7)), ServerStore(File(tmp.root, "servers.json")).get(s.id)!!.unended)
+        ending!!.end()
+        assertEquals("POST /api/v1/logout session-anna", fake.requests().last())
+        assertTrue("run: ended and gone", sessionsLeft(s.id).isEmpty())
+        // one never checked is not noted, and is ended alone
+        val alone = sessions.put(s, "session-anna", fake.base)
+        assertTrue(sessionsLeft(s.id).isEmpty())
+        alone!!.end()
+        assertEquals("POST /api/v1/logout session-anna-fp", fake.requests().last())
+        assertTrue(sessionsLeft(s.id).isEmpty())
+        assertTrue(logged.isEmpty())
+    }
+
+    @Test
+    fun aSessionLeftWithoutItsTimeIsDroppedUnasked() {
+        // whose row an id names now cannot be told, though the list has the id as a session without a time either:
+        // never signed out by it
+        val s = home()
+        assertTrue(left.addSession(s.id, "anna", 53, ""))
+        sessions.put(s, "session-anna")
+        assertEquals(emptyList<Long>(), sessions.look(s, fake.base).revoked)
+        assertEquals(listOf("GET /api/v1/me session-anna", "GET /api/v1/users/anna/tokens session-anna"), fake.requests())
+        assertTrue("dropped unasked", sessionsLeft(s.id).isEmpty())
+    }
+
     @Test
     fun aRefusedSessionStopsTheRest() {
         val s = home()
@@ -135,12 +250,12 @@ class KeysLeftTest {
         assertEquals(listOf(KeyLeft("anna", 42)), keys(s.id))
         val me = ServerApi.Me("anna", 0, 7)
         // the list not reached: nothing asked, logged
-        assertEquals(0, left.revoke(s.copy(lan = fake.closed), fake.closed, "session-anna", me))
+        assertEquals(emptyList<Long>(), left.revoke(s.copy(lan = fake.closed), fake.closed, "session-anna", me))
         assertEquals(listOf(KeyLeft("anna", 42)), keys(s.id))
         assertTrue(logged.single(), logged.single().contains(s.id) && !logged.single().contains("session-anna"))
         // an address that is not the server's is not asked
         val asked = fake.requests().size
-        assertEquals(0, left.revoke(s, fake.closed, "session-anna", me))
+        assertEquals(emptyList<Long>(), left.revoke(s, fake.closed, "session-anna", me))
         assertEquals(asked, fake.requests().size)
     }
 

@@ -54,9 +54,10 @@ FP_TITLE = {"en": "Check the certificate", "de": "Zertifikat prüfen"}
 FP_CHANGED = {"en": "The certificate has changed", "de": "Das Zertifikat hat sich geändert"}
 
 
-def server(sid, name, node, lan="", remote="", fp="", login="", ask="start", start=False, session=None, trusted_at="", unrevoked=None):
+def server(sid, name, node, lan="", remote="", fp="", login="", ask="start", start=False, session=None, trusted_at="", unrevoked=None,
+           unended=None):
     return {"id": sid, "name": name, "node": node, "lan": lan, "remote": remote, "fp": fp, "login": login, "ask": ask, "push": False,
-            "start": start, "session": session, "trusted_at": trusted_at, "unrevoked": unrevoked or []}
+            "start": start, "session": session, "trusted_at": trusted_at, "unrevoked": unrevoked or [], "unended": unended or []}
 
 
 def open_connect(new_context, guard, watch, config=None):
@@ -872,6 +873,70 @@ def test_connect_sessions(new_context, case, watch, guard):
     assert wait_until(page, "window.__fakeBridge.calls.some((c) => c[0] === 'signOutAll')", 3)
     wait_toast(page, SIGNED_OUT_ALL[case.lang])
     assert wait_until(page, "!document.querySelector('.session-badge')", 3), "no mark left"
+
+
+SESSION_LEFT = {"en": "A session of this phone is still valid here: session {id} of {user}, ended at the next sign-in as that user.",
+                "de": "Eine Sitzung dieses Telefons gilt hier noch: Sitzung {id} von {user}, beendet bei der nächsten Anmeldung als dieser Benutzer."}
+REMOVE_SESSIONS_LEFT = {"en": "Session 11 of this phone stays valid there until it ends", "de": "Sitzung 11 dieses Telefons bleibt dort gültig"}
+REMOVED_SESSIONS = {"en": "Session 11 of this phone is still valid there until it ends", "de": "Sitzung 11 dieses Telefons gilt dort noch"}
+REMOVED = {"en": "Home removed.", "de": "Home entfernt."}
+SIGNED_OUT_LOCAL = {"en": "the session is ended there at the next sign-in as that user",
+                    "de": "die Sitzung wird dort bei der nächsten Anmeldung als dieser Benutzer beendet"}
+
+
+def test_connect_sessions_left(new_context, case, watch, guard):
+    """The sessions the app forgot without the server ending them (AP
+    MobileApp, F39, D70-A; the bridge's version 5): a server's settings
+    name each with its id and user; Sign out where the server does not
+    answer leaves the session, its line there at once; Remove signs out
+    first (F38, D69-A), where the server answers nothing is left, and
+    where a session is left its question warns of it and its toast names
+    it."""
+    config = {
+        "servers": [server("s1", "Home", NODE1, lan=HOME_LAN, session="anna"), server("s2", "Cabin", NODE2, lan=CABIN_LAN, session="bob"),
+                    server("s3", "Office", NODE3, remote=OFFICE_REMOTE, unended=[{"user": "carl", "id": 11}])],
+        "answers": {HOME_LAN: {"node": NODE1}},
+        "sessionIds": {"s1": {"user": "anna", "id": 7}, "s2": {"user": "bob", "id": 9}},
+    }
+    page = open_connect(new_context, guard, watch, config)
+    st = STATE[case.lang]
+    wait_state(page, "Home", st["lan"])
+    wait_state(page, "Cabin", st["offline"])
+
+    panel = settings_of(page, "Office")
+    line = panel.locator(".server-session-left")
+    assert line.count() == 1 and SESSION_LEFT[case.lang].format(id=11, user="carl") in line.inner_text(), "the session left named"
+    named_buttons(page, "a server's settings with a session left")
+    assert_axe(page, "a server's settings with a session left")
+    row(page, "Office").locator(".server-cog").click()
+
+    # Sign out with the server not answering: the session left, its line at once
+    panel = settings_of(page, "Cabin")
+    panel.locator(".server-sign-out").click()
+    assert wait_until(page, "window.__fakeBridge.calls.some((c) => c[0] === 'signOut')", 3)
+    assert calls(page, "signOut") == [["signOut", "s2", ""]], "no address that answers"
+    wait_toast(page, SIGNED_OUT_LOCAL[case.lang])
+    panel.locator(".server-session-left").wait_for(state="visible")
+    assert SESSION_LEFT[case.lang].format(id=9, user="bob") in panel.locator(".server-session-left").inner_text()
+    row(page, "Cabin").locator(".server-cog").click()
+    close_toast(page)
+
+    # Remove of a server that answers: signed out there first, nothing left
+    removed(page, "Home")
+    assert calls(page, "remove") == [["remove", "s1", HOME_LAN]]
+    wait_toast(page, REMOVED[case.lang])
+    assert "9" not in page.locator("#toast").inner_text() and "7" not in page.locator("#toast").inner_text(), "no session named"
+    close_toast(page)
+
+    # Remove of one with a session left: the question warns, the toast names it
+    panel = settings_of(page, "Office")
+    panel.locator(".server-remove").click()
+    box = page.locator(".confirm-box")
+    box.wait_for(state="visible")
+    assert REMOVE_SESSIONS_LEFT[case.lang] in box.inner_text(), f"Remove warns of the session: {box.inner_text()!r}"
+    box.locator(".confirm-yes").click()
+    row(page, "Office").wait_for(state="detached")
+    wait_toast(page, REMOVED_SESSIONS[case.lang])
 
 
 def test_connect_certificate(new_context, case, watch, guard):

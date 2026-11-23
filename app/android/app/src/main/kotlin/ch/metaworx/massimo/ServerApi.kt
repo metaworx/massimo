@@ -40,13 +40,15 @@ class ServerApi(
 
     /**
      * Me is whose a session is: the user's name, the key the session was
-     * made from (`token.key_id`, `POST /api/v1/login/key`), 0 for none, and
-     * the session's own row (`token.id`).
+     * made from (`token.key_id`, `POST /api/v1/login/key`), 0 for none, the
+     * session's own row (`token.id`), its kind (`token.kind`, `session`
+     * or `api` for a key the page holds) and when it was made
+     * (`token.created_at`, as the server writes it).
      */
-    data class Me(val user: String, val keyId: Long, val tokenId: Long = 0)
+    data class Me(val user: String, val keyId: Long, val tokenId: Long = 0, val kind: String = "", val createdAt: String = "")
 
-    /** Token is a row of a user's sessions and keys: its id, and its kind, `session` or `api`. */
-    data class Token(val id: Long, val kind: String)
+    /** Token is a row of a user's sessions and keys: its id, its kind, `session` or `api`, and when it was made, as the server writes it. */
+    data class Token(val id: Long, val kind: String, val createdAt: String = "")
 
     /** me is the name of the user whose [session] it is (`GET /api/v1/me`). */
     fun me(base: String, fp: String, session: String): String = whoami(base, fp, session).user
@@ -57,7 +59,13 @@ class ServerApi(
         val user = o.optJSONObject("user")?.let { ServerStore.str(it, "name") } ?: ""
         if (user.isEmpty()) throw Failed(HttpURLConnection.HTTP_OK, "no user signed in")
         val token = o.optJSONObject("token")
-        return Me(user, token?.optLong("key_id") ?: 0, token?.optLong("id") ?: 0)
+        return Me(
+            user,
+            token?.optLong("key_id") ?: 0,
+            token?.optLong("id") ?: 0,
+            token?.let { ServerStore.str(it, "kind") } ?: "",
+            token?.let { ServerStore.str(it, "created_at") } ?: "",
+        )
     }
 
     /** tokens are the sessions and keys of [user]'s (`GET /api/v1/users/{name}/tokens`), asked with [bearer], the user's. */
@@ -70,7 +78,9 @@ class ServerApi(
         } catch (e: JSONException) {
             throw Failed(HttpURLConnection.HTTP_OK, "no list of tokens in the answer")
         }
-        return (0 until a.length()).mapNotNull { i -> a.optJSONObject(i)?.let { Token(it.optLong("id"), ServerStore.str(it, "kind")) } }
+        return (0 until a.length()).mapNotNull { i ->
+            a.optJSONObject(i)?.let { Token(it.optLong("id"), ServerStore.str(it, "kind"), ServerStore.str(it, "created_at")) }
+        }
     }
 
     /** createKey makes an API key of [user]'s, labelled [label], with the user's [session]. */
