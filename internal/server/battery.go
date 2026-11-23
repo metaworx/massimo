@@ -4,8 +4,10 @@
 package server
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
+	"slices"
 	"time"
 
 	"go.metaworx.ch/massimo/internal/battery"
@@ -19,7 +21,10 @@ import (
 // of a device by the pump, evaluated every minute by batteryTicks, and
 // rebuilt at the start from the log's state rows of the last
 // batteryHistory. A change of a level is an event of the kind battery,
-// in the log, on the stream and for the notification rules.
+// in the log, on the stream and for the notification rules. New
+// batteries marked through the API (battery_api.go, AP RefreshBatteries
+// v1.0, Block 3) make a weak or low device ok at once; their event says
+// so (causeReplaced), and the rebuild replays it.
 
 // batteryHistory is how far back the log is read at the start: a weak
 // level lasts until the next decalcification, a week at most.
@@ -73,29 +78,38 @@ func (rt *runtime) withBattery(devs []view.Device) []view.Device {
 	return devs
 }
 
+// batteryEvent is the event of a change of a level: low at warn, the
+// others at info, its summary the level and the one before, its state
+// the device's view where the device has a state; false for a device
+// that is no radio address.
+func (s *Server) batteryEvent(rt *runtime, c battery.Change) (event, bool) {
+	rf, err := cube.ParseRFAddress(c.Device)
+	if err != nil {
+		return event{}, false
+	}
+	snap := rt.client.Snapshot()
+	level := "info"
+	if c.To == battery.Low {
+		level = "warn"
+	}
+	ev := event{Kind: "battery", Source: "device", Device: c.Device, Serial: snap.Serial(rf), Level: level, Time: c.At,
+		Summary: map[string]any{"level": string(c.To), "from": string(c.From)}}
+	if _, ok := snap.State(rf); ok {
+		dv := view.DeviceOf(snap, rf, s.staleness())
+		rt.setBattery(&dv)
+		ev.State = dv
+	}
+	return ev, true
+}
+
 // emitBattery makes an event of each change of a level: in the log, on
-// the stream and for the notification rules; low at warn, the others at
-// info.
+// the stream and for the notification rules.
 func (s *Server) emitBattery(rt *runtime, changes []battery.Change) {
 	for _, c := range changes {
-		rf, err := cube.ParseRFAddress(c.Device)
-		if err != nil {
-			continue
+		if ev, ok := s.batteryEvent(rt, c); ok {
+			rt.emit(ev)
+			s.notifyEvent(rt, ev)
 		}
-		snap := rt.client.Snapshot()
-		level := "info"
-		if c.To == battery.Low {
-			level = "warn"
-		}
-		ev := event{Kind: "battery", Source: "device", Device: c.Device, Serial: snap.Serial(rf), Level: level, Time: c.At,
-			Summary: map[string]any{"level": string(c.To), "from": string(c.From)}}
-		if _, ok := snap.State(rf); ok {
-			dv := view.DeviceOf(snap, rf, s.staleness())
-			rt.setBattery(&dv)
-			ev.State = dv
-		}
-		rt.emit(ev)
-		s.notifyEvent(rt, ev)
 	}
 }
 
@@ -114,39 +128,73 @@ func (s *Server) batteryTicks(ctx context.Context, rt *runtime) {
 }
 
 // rebuildBattery replays the log's state rows of the Cube's devices of
-// the last batteryHistory into the tracker, oldest first, so that a
-// level outlives a restart; its changes make no events, as they are not
-// news. A Cube without a row in the store has no log to replay.
+// the last batteryHistory into the tracker, and its battery rows of new
+// batteries marked (causeReplaced), in the order of their times, the
+// oldest first, so that a level outlives a restart; its changes make no
+// events, as they are not news. A Cube without a row in the store has no
+// log to replay.
 func (s *Server) rebuildBattery(ctx context.Context, rt *runtime) {
 	id := rt.storeID.Load()
 	if rt.store == nil || id == 0 {
 		return
 	}
 	now := time.Now()
-	var rows []store.Event
-	q := store.EventQuery{CubeID: id, Kind: "state", Source: "device", Since: now.Add(-batteryHistory), Limit: store.MaxEventsPage}
-	for {
-		page, err := rt.store.Events(ctx, q)
-		if err != nil {
-			s.log.Warn("battery levels not rebuilt from the log", "cube", rt.cubeSerial(), "error", err)
-			return
-		}
-		rows = append(rows, page...)
-		if len(page) < store.MaxEventsPage {
-			break
-		}
-		q.BeforeID = page[len(page)-1].ID
+	since := now.Add(-batteryHistory)
+	states, err := eventRows(ctx, rt.store, store.EventQuery{CubeID: id, Kind: "state", Source: "device", Since: since})
+	var marks []store.Event
+	if err == nil {
+		marks, err = eventRows(ctx, rt.store, store.EventQuery{CubeID: id, Kind: "battery", Source: "device", Since: since})
 	}
-	for i := len(rows) - 1; i >= 0; i-- {
-		var row struct {
-			State view.Device `json:"state"`
+	if err != nil {
+		s.log.Warn("battery levels not rebuilt from the log", "cube", rt.cubeSerial(), "error", err)
+		return
+	}
+	rows := append(states, marks...)
+	slices.SortStableFunc(rows, func(a, b store.Event) int {
+		if c := a.Time.Compare(b.Time); c != 0 {
+			return c
 		}
-		if json.Unmarshal(rows[i].Data, &row) != nil {
+		return cmp.Compare(a.ID, b.ID)
+	})
+	for _, row := range rows {
+		if row.Device == "" {
 			continue
 		}
-		if r, ok := batteryReport(row.State); ok && rows[i].Device != "" {
-			rt.battery.Report(rows[i].Device, rows[i].Time, r)
+		var data struct {
+			State   view.Device    `json:"state"`
+			Summary map[string]any `json:"summary"`
+		}
+		if json.Unmarshal(row.Data, &data) != nil {
+			continue
+		}
+		switch row.Kind {
+		case "state":
+			if r, ok := batteryReport(data.State); ok {
+				rt.battery.Report(row.Device, row.Time, r)
+			}
+		case "battery":
+			if data.Summary["cause"] == causeReplaced {
+				rt.battery.Replaced(row.Device, row.Time)
+			}
 		}
 	}
 	rt.battery.Tick(now)
+}
+
+// eventRows reads every row of the log that q asks for, page by page,
+// the newest first.
+func eventRows(ctx context.Context, st *store.Store, q store.EventQuery) ([]store.Event, error) {
+	q.Limit = store.MaxEventsPage
+	var rows []store.Event
+	for {
+		page, err := st.Events(ctx, q)
+		if err != nil {
+			return nil, err
+		}
+		rows = append(rows, page...)
+		if len(page) < store.MaxEventsPage {
+			return rows, nil
+		}
+		q.BeforeID = page[len(page)-1].ID
+	}
 }

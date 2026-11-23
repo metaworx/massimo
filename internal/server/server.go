@@ -1497,6 +1497,7 @@ func (s *Server) routes() {
 	api("PUT /api/v1/cubes/{sn}/rooms/{id}/setpoint", "setpoint", s.setRoomSetpoint)
 	api("DELETE /api/v1/cubes/{sn}/rooms/{id}", "structure", s.deleteRoom)
 	api("PUT /api/v1/cubes/{sn}/devices/{rf}/lock", "lock", s.setDeviceLock)
+	api("POST /api/v1/cubes/{sn}/devices/{rf}/battery", "configure", s.replaceBattery)
 	api("GET /api/v1/cubes/{sn}/backup", "backup", s.getBackup)
 	api("GET /api/v1/cubes/{sn}/backups", "backup", s.listBackups)
 	api("POST /api/v1/cubes/{sn}/backups", "backup", s.postBackup)

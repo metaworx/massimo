@@ -218,7 +218,7 @@ the OpenAPI file carries each operation's as `x-capability`:
 | `preferences` | keep one's own settings and colour schemes on the server, so that they follow the user across browsers, and be notified; without it they stay in the browser | `PUT`/`DELETE /api/v1/me/preferences/{key}`, `/api/v1/me/push` |
 | `setpoint` | set temperatures and modes | `PUT …/devices/{rf}/setpoint`, `PUT …/rooms/{id}/setpoint` |
 | `lock` | lock and unlock the thermostats' buttons | `PUT …/devices/{rf}/lock` |
-| `configure` | temperatures, device settings, week programmes | `PUT …/rooms/{id}/config`, `PUT …/devices/{rf}/config`, `PUT …/rooms/{id}/program`, `PUT …/devices/{rf}/program`, the copy of a room's settings in `PUT …/devices/{rf}` |
+| `configure` | temperatures, device settings, week programmes, and new batteries marked | `PUT …/rooms/{id}/config`, `PUT …/devices/{rf}/config`, `PUT …/rooms/{id}/program`, `PUT …/devices/{rf}/program`, the copy of a room's settings in `PUT …/devices/{rf}`, `POST …/devices/{rf}/battery` |
 | `rename` | room and device names | `PUT …/rooms/{id}`, `PUT …/devices/{rf}` with `name` |
 | `structure` | move and remove devices, delete rooms | `PUT …/devices/{rf}` with `room_id`, `DELETE …/devices/{rf}`, `DELETE …/rooms/{id}` |
 | `pair` | put the Cube into pairing mode and stop it | `POST …/pairing`, `DELETE …/pairing` |
@@ -2097,10 +2097,14 @@ A weak device is `ok` again once a long valve move has gone by without the flag:
 its next decalcification, a valve move of 50 points or more,
 or for a device without a valve a day;
 a low one an hour after the flag went, with new batteries.
+A low or weak device is also `ok` at once when someone marks its new batteries
+once its flag is off (`POST …/devices/{rf}/battery`, below).
 The levels outlive a restart: the server reads them back from its log
 (docs/cube-protocol.md, "How devices report").
 A change of a device's level is a `battery` event in the log,
 its `summary` the `level` and the one before (`from`); `low` at warn.
+Where someone marked new batteries, its `summary` has `cause` `replaced` too,
+and `by` names who marked them.
 
 How old the values are: a device with state also has `received`,
 the time per value of `state` (same names) at which the server saw its current
@@ -2845,6 +2849,37 @@ On the device itself the lock is toggled by pressing Auto/Manu and the second
 button (Boost or the moon/sun key,
 Mode/Menu and Boost/OK on a wall thermostat) together.
 
+### POST /api/v1/cubes/{sn}/devices/{rf}/battery
+
+Marks new batteries in a device:
+a device whose `battery` is `weak` or `low` and whose flag is off,
+`battery_low` as the Cube shows it now, is `ok` at once,
+rather than when the server's rules say so,
+a low one an hour after its flag went (see the devices' `battery` above).
+The body is `{"replaced": true}` and nothing else;
+the route needs the capability `configure`, and sends nothing to the Cube.
+The answer is the level, the one before, and whether it changed:
+
+```json
+{"battery": "ok", "from": "low", "changed": true}
+```
+
+A device that is `ok` already answers `{"battery": "ok", "from": "ok", "changed": false}`.
+The change is a `battery` event in the log, as every change of a level is,
+its `summary` with `cause` `replaced`, and `by` naming who marked the batteries,
+beside the request's `change` line;
+the server reads it back at a start with the device's states,
+so that the level stays `ok` across a restart.
+Later reports follow the rules of an `ok` device:
+the flag seen again makes it `weak`, held for 15 minutes `low`.
+`409` while the device's flag is on, since the device has not reported its new
+batteries yet, and while the Cube holds no current report of the device,
+since the Cube's restart or for some minutes (`reported` false):
+the error says to wait for the device's next report.
+`404` for a device the Cube does not have;
+`400` for another body, a virtual wall thermostat and the Cube itself,
+which have no batteries.
+
 ### Pairing: POST, GET, DELETE /api/v1/cubes/{sn}/pairing
 
 `POST` with `{"seconds": 60}` (optional; 1 to 255,
@@ -3524,7 +3559,9 @@ the server retries by itself, without an event for each attempt,
 and sends `connected` when the Cube is back),
 `hello` (new budget or clock from the Cube),
 `metadata` (rooms or names changed), `config` (a device configuration arrived),
-`state`, `battery` (a device's battery level changed, see the devices above),
+`state`, `battery` (a device's battery level changed, see the devices above;
+with `cause` `replaced` in its `summary` and who in `by` where someone marked
+new batteries),
 `wall_reset` (a wall thermostat came back after five minutes or more without a
 state on another mode than it had, as after new batteries, at warn: its
 `summary` has the `mode` and the `was_mode`, the setpoints and `silent_min`),

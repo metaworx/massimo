@@ -2077,6 +2077,65 @@ paths:
         "404": {$ref: "#/components/responses/NotFound"}
         "409": {$ref: "#/components/responses/Superseded"}
         "502": {$ref: "#/components/responses/CubeError"}
+  /api/v1/cubes/{sn}/devices/{rf}/battery:
+    post:
+      summary: Mark new batteries in a device, whose battery level is then ok at once
+      x-capability: configure
+      description: |
+        A device whose battery level is weak or low and whose battery flag
+        is off, as the Cube shows it now (battery_low), is ok at once, not
+        when the server's rules say so (a low one an hour after the flag
+        went). Its battery event in the log says cause replaced in its
+        summary, and who marked it in "by"; the server reads it back at a
+        start, so that the level stays ok. Nothing goes to the Cube. A
+        device already ok answers changed false.
+      parameters:
+        - {$ref: "#/components/parameters/sn"}
+        - {$ref: "#/components/parameters/rf"}
+        - {$ref: "#/components/parameters/idempotencyKey"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [replaced]
+              additionalProperties: false
+              properties:
+                replaced: {type: boolean, enum: [true]}
+      responses:
+        "200":
+          description: The level, the one before, and whether it changed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  battery: {type: string, enum: [ok]}
+                  from:
+                    type: string
+                    enum: [ok, weak, low]
+                    description: The level before; ok where it did not change
+                  changed: {type: boolean}
+        "400":
+          description: >-
+            Another body than {"replaced": true}, a bad device, a virtual wall
+            thermostat or the Cube itself, which have no batteries
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          description: >-
+            The device's flag is still on: it has not reported its new
+            batteries yet; or the Cube holds no current report of it, since
+            the Cube's restart or for some minutes. Wait for its next report
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
   /api/v1/cubes/{sn}/rooms/{id}:
     put:
       summary: Rename a room
@@ -3228,7 +3287,8 @@ paths:
         then an event per change the Cube reports. Kinds: connected,
         disconnected (once per loss of the connection, not at each retry),
         hello, metadata, config, state, battery (a device's battery
-        level changed), wall_reset (a wall thermostat back from a silence
+        level changed; cause replaced in "summary" and who in "by" where
+        someone marked new batteries), wall_reset (a wall thermostat back from a silence
         on another mode, at warn), error_reset (the server reset the
         communication error of a device that reported while flagged, once a
         day at most: the room of its C line and automatic in "summary"),
@@ -5169,7 +5229,16 @@ components:
             open_since: {type: string, format: date-time}
             warn_at: {type: string, format: date-time}
             alert_at: {type: string, format: date-time}
-        battery: {type: string, enum: [ok, weak, low], description: "A reported device's battery level, from the history of its flag: weak once the flag was seen, low once it stayed 15 minutes; ok again after a long valve move without it (weak) or an hour without it (low). Absent for a virtual wall thermostat and a device without state"}
+        battery:
+          type: string
+          enum: [ok, weak, low]
+          description: >-
+            A reported device's battery level, from the history of its flag:
+            weak once the flag was seen, low once it stayed 15 minutes; ok
+            again after a long valve move without it (weak) or an hour without
+            it (low), or at once when someone marks new batteries (POST
+            …/devices/{rf}/battery). Absent for a virtual wall thermostat and a
+            device without state
         stale: {type: boolean, description: "Radiator or wall thermostat whose entry has not changed for its stale threshold (stale_after, 50 hours, or stale_after_wall, 24 hours): out of range, flat battery, or just quiet. Present when true. A virtual wall thermostat is stale when every source of its actual_temp is"}
         virtual: {type: boolean, description: "A room's virtual wall thermostat, which the server computes from the room's devices; present when true"}
         room_uid: {type: string, description: "A virtual wall thermostat's room's uid"}
