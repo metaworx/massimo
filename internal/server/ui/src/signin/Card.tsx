@@ -14,7 +14,8 @@
  * the password, chosen at first, and an API key, and the card's ☰ at its
  * end with the version, the language, the mode and in the app Select
  * server; the notice where the address takes no kept key; a form for
- * each way, in the app with Cancel; the box that says the login by
+ * each way, in the app with Cancel, the password's field with its eye
+ * (shared/password.tsx), hidden again at each opening; the box that says the login by
  * fingerprint was not kept, the two forms and the box in one place of one
  * height (style.css .login-forms), so that a switch of the way moves
  * nothing of the card (UiParts D224); on a server without users, in
@@ -41,6 +42,7 @@ import { Icon } from "../shared/icon";
 import { languageOptions, useLang } from "../shared/lang";
 import { Dropdown, MenuItem } from "../shared/menu";
 import { ModeSelect } from "../shared/mode";
+import { PasswordInput } from "../shared/password";
 import { BusyButton, busyProps, useBusy } from "../shared/question";
 import { VersionRow, version } from "../shared/server";
 import { keepLogin, kept, offer, plainHere } from "./app";
@@ -202,7 +204,10 @@ export function Card() {
           <p class="muted">{t("login.text")}</p>
           <p id="login-tls" class={"notice small" + hid(!card.selfSigned)} role="note">{t("header.selfSigned")}</p>
           <label><span>{t("login.user")}</span> <input ref={userRef} type="text" id="login-user" name="username" autocomplete="username" autocapitalize="none" spellcheck={false} /></label>
-          <label><span>{t("login.password")}</span> <input ref={passRef} type="password" id="login-password" name="password" autocomplete="current-password" /></label>
+          <div class="login-field">
+            <label for="login-password">{t("login.password")}</label>
+            <PasswordInput id="login-password" name="password" autocomplete="current-password" inputRef={passRef} reset={opened} />
+          </div>
           <label id="login-keep-row" class={"switch login-keep" + hid(!offered)}>
             <input type="checkbox" id="login-keep" checked={keep && offered} onChange={(ev) => setKeep(ev.currentTarget.checked)} />
             <span class="slider" aria-hidden="true" />

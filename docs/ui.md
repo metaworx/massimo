@@ -18,6 +18,27 @@ the field of the form shown in focus.
 A screen reader names the row's group "Sign in with"; no label shows it.
 The password form holds the one password field, its fields named,
 so that a password manager such as KeePassXC fills it.
+Every password field of the page, the sign-in's, the first owner's two,
+My profile's and System settings → Users', has an eye at its right end
+(AP MobileApp, D84-A): a closed eye while the password is hidden,
+an open one while it shows in clear text, labelled **Show password** and
+**Hide password**, a button the keyboard reaches after its field;
+it keeps what is typed, the caret and the field's focus,
+and the password is hidden again at the submit and at each opening of the
+sign-in card.
+A password shown is hidden again when its fold opens again
+(My profile's Change password, a user's panel),
+and when the eye is switched off, staying hidden when it comes back;
+its field's type never turns inside a closed fold,
+where Chrome would draw nothing of the field once the fold opens.
+The browser's own eye (Edge's) is hidden on every field of the page,
+so that a field has one at most.
+The server's setting `auth.password_reveal` turns the eye off
+(System settings → Users, below);
+the page learns it from `/healthz` before anyone signs in,
+so that the card shows the eye or not from its first drawing,
+and none shows until it has answered.
+An API key's field, and a provider's client secret, have no eye.
 The page keeps the session in the browser for 30 days from its last use;
 **Sign out** in ☰, or on the personal settings, ends it.
 The card's ☰, at the end of that row, shows the version first,
@@ -1669,6 +1690,11 @@ settings forms and have none of it.
   which the page uses for users whose password the server still hashes;
   the line under it says how many those are,
   and they cannot sign in once it is off until a password is set for them here.
+  Under it, **Show password button**, on by default (`auth.password_reveal`,
+  AP MobileApp D84-A), offers the eye at the end of every password field,
+  on every device; off, no field has one,
+  and this page's fields lose theirs at once, the others' at their next look
+  at the server.
   On a server without users (FirstOwner D14) the section says so instead,
   with **Create the owner…**, which opens the sign-in card with its form,
   and no password sign-in, no list and no Add a user;
@@ -2087,7 +2113,7 @@ A region's root is drawn once into its place in the skeleton (`mounter` of `shar
 | Region | Directory | Where it draws | What the plain code calls (`MassimoParts.…`) |
 |---|---|---|---|
 | the header | `header/` | `#header-pile`, `#header-cube`, `#header-times`, `#tls-slot`, `#home-notice` | `header.render`, `header.tls` (app.js, header.js, home.js, theme.js) |
-| the page's chrome | `chrome/` | ☰ in `#nav`, each page's `[data-bar]` row, the cards' heads, ↑ | `chrome.version` (header.js), `chrome.showCard` (components.js), `chrome.log` (the log's part) |
+| the page's chrome | `chrome/` | ☰ in `#nav`, each page's `[data-bar]` row, the cards' heads, ↑ | `chrome.version` and `chrome.reveal` (header.js), `chrome.showCard` (components.js), `chrome.log` (the log's part) |
 | the rooms | `rooms/` | `#rooms`, `#house-slot`, `#unlisted-devices` | `rooms.render`, `rooms.loaded`, `rooms.result`, `rooms.ui`, `rooms.houseOpen`, `rooms.closeHouse` (app.js, rooms.js, header.js, login.js) |
 | the Cubes | `cubes/` | `#cubes-list`, `#cube-page-body` | `cubes.render`, `cubes.polled`, `cubes.openFound`, `cubes.pairingEvent`, `cubes.pairingJoined` (app.js, home.js) |
 | the users, roles and providers | `admin/` | `#sys-users-body`, `#sys-roles-body`, `#sys-caps-body`, `#sys-providers-body` | `users.load` (My profile) |
@@ -2436,7 +2462,8 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `FileButton` | `file.tsx` | a button that opens the browser's choice of a file of the types it accepts, the same file again too | `id` (the button's), `cls`, `label`, `accept`, `off`, `inputId` and `inputLabel` (the input's id and its name in the page's language: the Appearance card's Import…), `onFile(file)` |
 | `Adder` | `adder.tsx` | the end of a list that adds an item: the new item's form in its place while shown, the button that shows it hidden meanwhile, the focus in the form's first field when it comes, in the drawing's own turn, and back on the button when it goes (Users, Roles, Sign-in providers) | `id` (the button's), `formId` (the form's place), `label`, `shown`, `set(shown)`, the form as children |
 | `UserNameField`, `useNameCheck`, `wordNameError` | `username.tsx` | a new user's login name (Add a user, the first owner's form): checked 2 s after the last keystroke and when left, the store's rule and the names in use; a fixed name clears the line at once; the server's refusal worded alike | `label`, `id`, `msgId` (the line under it, which describes it), `value` and `set` (Add a user's), or neither, the field not controlled and read through `inputRef` (the first owner's, UiParts D210), `nc` (`useNameCheck(taken)`: `problem`, `say`, `check(v)`, `typed(v)`), `name` (the input's, Add a user's alone), `autocomplete`, `placeholder`, `inputRef` |
-| `NewPassword`, `newPasswordProblem` | `password.tsx` | a new password typed twice (My profile's Change password, the first owner's form), free fields of the caller's own state, never a draft, or fields not controlled, read through their refs (the first owner's, UiParts D210); the pair's one check, the mismatch first, then none typed | `ids` (the two inputs'), `names` (their name attributes, My profile's alone), `label` (the first's), `value`, `set`, `again`, `setAgain`, or instead `inputRefs` (the two inputs' refs), `required` |
+| `PasswordInput`, `PasswordField`, `reveal` | `password.tsx` | a password's input with its eye, every password field's (AP MobileApp, D84-A): the button at the field's right end, inside its box, labelled Show password and Hide password, `aria-pressed`, that turns the type between `password` and `text`, the value, the caret and the `autocomplete` kept, the click keeping the focus in the field; hidden again at each change of `reset` (the card's openings, a fold's open state) and at the form's submit, in the capture before the form's handler, and when switched off, the type never turned inside a closed fold, but as it opens; no eye while `reveal`, the setting `auth.password_reveal` as `/healthz` says it (`MassimoParts.chrome.reveal`), is not `true`; the field in its row | `id`, `name`, `autocomplete`, `value` and `set`, or `inputRef`, `required`, `disabled`, `placeholder`, `reset`; the row's `label`, `hint`, `cls` |
+| `NewPassword`, `newPasswordProblem` | `password.tsx` | a new password typed twice (My profile's Change password, the first owner's form), each field with its eye, free fields of the caller's own state, never a draft, or fields not controlled, read through their refs (the first owner's, UiParts D210); the pair's one check, the mismatch first, then none typed | `ids` (the two inputs'), `names` (their name attributes, My profile's alone), `label` (the first's), `value`, `set`, `again`, `setAgain`, or instead `inputRefs` (the two inputs' refs), `required`, `reset` |
 | `toServers` | `app.ts` | back to the app's servers where the page is in the app (`appConnect` of `login.js`): ☰'s Select server, the sign-in's ☰ and Cancels, the first owner's Cancel | |
 | `toServerSettings`, `toAppSettings` | `app.ts` | to this server's settings and to the app's on the app's own page (`appServerSettings` and `appAppSettings` of `login.js`, contract version 5): ☰'s two entries after Select server | |
 | `app`, `readApp`, `appKeyId`, `signInRevoked` | `app.ts` | the app's status of the login by fingerprint, a signal read again at each opening of the sign-in, a fingerprint refused, the first owner's form and My profile shown (`login.status`), null in a browser; its key of this device's id, 0 for none; the ids of what the last sign-in's `setToken` revoked, `[]` in a browser (`tokenAnswer` of `login.js`) | `st` (the status) |

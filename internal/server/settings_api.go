@@ -91,6 +91,9 @@ var boolSettings = []boolSetting{
 	// the web UI does not ask for the first owner. It counts only while
 	// the server has no users, and goes with the first one (D12).
 	{key: store.KeepOpenKey, def: false},
+	// The web UI's password fields offer their eye (AP MobileApp, D84-A);
+	// GET /healthz says it, for the sign-in before anyone is in.
+	{key: store.PasswordRevealKey, def: true},
 }
 
 var durationSettings = []durationSetting{

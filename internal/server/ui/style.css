@@ -1510,6 +1510,24 @@ button.login-server-more .ni { width: 18px; height: 18px; }
 .login-menu .menu-items { gap: 10px; padding: 10px; width: min(300px, calc(100vw - 64px)); }
 .login-menu label { margin-bottom: 0; }
 dialog label { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+/* a field whose control is more than an input (the sign-in's password with
+   its eye), its label before it, as a label wrapping its input stands */
+dialog .login-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+dialog .login-field > label { margin: 0; }
+/* a password field with its eye (ui/src/shared/password.tsx; AP MobileApp,
+   D84-A): the button inside the field's box at its right end, the text
+   kept clear of it */
+.pw-box { position: relative; display: flex; align-items: center; min-width: 0; }
+.pw-box > input { flex: 1 1 auto; width: 100%; min-width: 0; }
+.pw-box.has-eye > input { padding-right: 42px; }
+/* the browser's own eye and clear button (Edge's) hidden on every field of
+   the page, the setting on or off: a password field has ours at most, and
+   no field shows a password the setting switched off */
+input::-ms-reveal, input::-ms-clear { display: none; }
+button.pw-eye { position: absolute; top: 2px; right: 2px; bottom: 2px; display: inline-flex; align-items: center; justify-content: center; width: 38px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--muted); }
+button.pw-eye:hover, button.pw-eye:focus-visible { color: var(--accent); }
+button.pw-eye:focus-visible { outline-offset: -2px; }
+button.pw-eye .ni { width: 20px; height: 20px; }
 /* a switch's label beside it, the switch at the left */
 dialog label.switch { flex-direction: row; align-items: center; align-self: flex-start; gap: 8px; }
 dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }

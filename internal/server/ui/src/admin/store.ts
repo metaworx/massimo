@@ -35,6 +35,9 @@ export const enabled = signal<LoginProvider[]>([]);
 /** Whether the server takes the password sign-in (the setting auth.password_login), null before it is read. */
 export const passwordLogin = signal<boolean | null>(null);
 
+/** Whether the password fields offer their eye (the setting auth.password_reveal), null before it is read. */
+export const passwordReveal = signal<boolean | null>(null);
+
 /** Keeping the server open turned off in this showing of System settings, whose row stays in sight, off, until it is shown again (AP FirstOwner, D32). */
 export const keptOff = live({ showing: false });
 
@@ -91,6 +94,7 @@ export function forgetAdmin(): void {
   providers.loaded = false;
   enabled.value = [];
   passwordLogin.value = null;
+  passwordReveal.value = null;
   keptOff.showing = false;
   userUI.clear();
   identityUI.clear();

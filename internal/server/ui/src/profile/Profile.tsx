@@ -28,7 +28,7 @@ import { focusForm, useForm } from "../shared/forms";
 import { useHelp } from "../shared/help";
 import { Identities } from "../shared/identities";
 import { useLang } from "../shared/lang";
-import { NewPassword, newPasswordProblem } from "../shared/password";
+import { NewPassword, newPasswordProblem, PasswordField } from "../shared/password";
 import { me, profileOf } from "../shared/me";
 import { BusyButton } from "../shared/question";
 import { Tokens } from "../shared/tokens";
@@ -114,9 +114,10 @@ function PasswordForm({ who }: { who: User }) {
     <Fold id="me-password" cls="" open={profile.passwordOpen} onToggle={(o) => { profile.passwordOpen = o; }} summary={t(title)} summaryProps={{ id: "me-password-title" }}>
       <p id="me-password-hint" class={"muted small" + hid(hasPw)}>{t("me.setPasswordHint")}</p>
       <form {...form.props} id="me-password-form" onSubmit={submit}>
-        <TextField label={t("users.currentPassword")} id="me-current" name="current_password" type="password" autocomplete="current-password"
-          cls={"me-current-field" + hid(!hasPw)} value={current} set={typed(setCurrent)} />
-        <NewPassword ids={["me-new", "me-again"]} names={["password", "again"]} label={t("users.password")} value={password} set={typed(setPassword)} again={again} setAgain={typed(setAgain)} />
+        <PasswordField label={t("users.currentPassword")} id="me-current" name="current_password" autocomplete="current-password"
+          cls={"me-current-field" + hid(!hasPw)} reset={profile.passwordOpen} value={current} set={typed(setCurrent)} />
+        <NewPassword ids={["me-new", "me-again"]} names={["password", "again"]} label={t("users.password")} reset={profile.passwordOpen}
+          value={password} set={typed(setPassword)} again={again} setAgain={typed(setAgain)} />
         <FormFooter submit={t("action.save")} look={form.look} reset={form.reset} after={help.button} />
         <ResultLine id="me-password-msg" cls="small cubes-msg" role="status" res={said.password} />
         {help.text}

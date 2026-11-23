@@ -489,6 +489,18 @@ hence `failed_checks_forgotten`.
   marks that key and scrolls a row below the first screen into view,
   marks nothing for an id that is not one of the user's keys,
   and nothing once the address or the page shown changes.
+- `test_password_eye.py`, the password fields' eye (AP MobileApp, D84-A):
+  the sign-in's password, the first owner's two, My profile's three and the
+  new user's each have it, which turns the field to text and back with the
+  value, the caret and the focus kept, by a click and by the keyboard,
+  labelled Show password and Hide password and pressed while it shows;
+  an API key's field has none; the password hidden again at the submit, at
+  the card's next opening and when My profile's fold or a user's panel
+  opens again, the field drawn, in a browser and in the app;
+  System settings → Users' switch writes `auth.password_reveal` (stubbed)
+  and the page's fields follow at once, a password shown before hidden and
+  staying so when the eye comes back; no eye while `/healthz` is held, and
+  none once it says off, the browser's own hidden on every field.
 - `test_sign_in_resend.py`, a request that meets an expired session (AP
   SignInResend), its 401 answered by a route:
   a write is never sent again after the sign-in, whoever signs in,

@@ -8,7 +8,8 @@
  * Setup.tsx, a tile among the rooms, before): on a server without users
  * the card opens with it instead of the ways to sign in (askLogin
  * "owner" of login.js). The name, checked as Add a user checks it
- * (shared/username.tsx), the password twice (shared/password.tsx), and in
+ * (shared/username.tsx), the password twice (shared/password.tsx), each
+ * with its eye, hidden again at each opening, and in
  * the app where the phone can and the address takes a key the switch that
  * keeps the login by fingerprint, and Cancel, back to the app's servers.
  * Create the owner creates the owner with a password of version 2 and
@@ -149,7 +150,7 @@ export function Owner() {
             <p class="muted">{t("setup.text")}</p>
             <p id="setup-tls" class={"notice small" + hid(!card.selfSigned)} role="note">{t("header.selfSigned")}</p>
             <UserNameField label={t("users.name")} id="setup-user" msgId="setup-name-msg" nc={nc} autocomplete="username" inputRef={nameRef} />
-            <NewPassword ids={["setup-password", "setup-again"]} label={t("login.password")} inputRefs={[passRef, againRef]} required />
+            <NewPassword ids={["setup-password", "setup-again"]} label={t("login.password")} inputRefs={[passRef, againRef]} required reset={opened} />
             <label id="setup-keep-row" class={"switch login-keep" + hid(!offered)}>
               <input type="checkbox" id="setup-keep" checked={keep && offered} onChange={(ev) => setKeep(ev.currentTarget.checked)} />
               <span class="slider" aria-hidden="true" />

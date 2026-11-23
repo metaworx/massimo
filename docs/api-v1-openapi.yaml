@@ -36,6 +36,7 @@ paths:
                     description: "What this server can do, by name, each its version MAJOR.MINOR: event_ids, idempotency, commands, vwt, program_etag, boost, proxy_virtual, integration, log_after; without a store idempotency, commands, proxy_virtual and integration are left out. A name never changes meaning."
                     additionalProperties: {type: string, pattern: "^[0-9]+\\.[0-9]+$", example: "1.0"}
                   tls: {$ref: "#/components/schemas/CertStatus"}
+                  password_reveal: {type: boolean, description: "The setting auth.password_reveal: the web UI's password fields offer their eye, which shows the password as it is typed; true without a store. The sign-in learns it here, before anyone is signed in."}
   /api/v1/login:
     post:
       summary: Log in with a name and a password
@@ -3382,6 +3383,7 @@ paths:
                 auth.password_login: {value: "true", default: "true", set: false, in_effect: "true", applies: now}
                 integrations.requests: {value: "true", default: "true", set: false, in_effect: "true", applies: now}
                 auth.keep_open: {value: "false", default: "false", set: false, in_effect: "false", applies: now}
+                auth.password_reveal: {value: "true", default: "true", set: false, in_effect: "true", applies: now}
                 announce: {value: auto, default: auto, set: false, in_effect: "off", applies: restart}
                 update.channel: {value: alpha, default: alpha, set: false, in_effect: alpha, applies: now}
                 poll_interval: {value: 10s, default: 10s, set: false, in_effect: 10s, applies: restart}
@@ -3417,7 +3419,9 @@ paths:
         that the web UI does not ask for the first owner (it changes
         nothing about who is let in, counts only while the server has no
         users, goes with the first user, and true is 409 on a server with
-        users); announce, auto, on or off,
+        users); auth.password_reveal, true or false, whether the web UI's
+        password fields offer their eye (true by default; GET /healthz says
+        it before anyone signs in); announce, auto, on or off,
         the announcement on the LAN at the next start; update.channel, devel, nightly, alpha, beta, rc or stable,
         the releases the box takes (its own flavour's and every more
         stable one's; the default is the build's flavour); null goes back
