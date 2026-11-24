@@ -162,9 +162,9 @@ def test_last_updates(page):
     """Software update lists the last three updates under the version
     lines, each the date first, then the version with its channel in
     brackets, then who: the newest still under way with who started it,
-    one from outside Massimo through apt, one the helper rolled back,
-    from before the entries kept their channel; a fourth is left out, and
-    the list is gone without a history."""
+    one from outside Massimo through apt, one the helper rolled back after
+    it ran, which says so, from before the entries kept their channel; a
+    fourth is left out, and the list is gone without a history."""
     show_view(page, "maint")
     history = [
         {"at": "2026-11-14T18:00:00Z", "by": {"name": "anna", "display_name": "Anna"}, "from": "v0.0.2", "to": "v0.0.3",
@@ -189,7 +189,8 @@ def test_last_updates(page):
             [when('2026-11-14T18:00:00Z'), t('update.history.running', {version: channel('v0.0.3', 'devel')}),
              t('update.history.by', {name: 'Anna'})],
             [when('2026-11-10T07:00:00Z'), channel('v0.0.2', 'alpha'), t('update.history.outsideWith', {manager: 'apt'})],
-            [when('2026-11-05T12:01:00Z'), 'v0.0.2', t('update.history.by', {name: 'ben'})],
+            [when('2026-11-05T12:01:00Z'), t('update.history.ended', {version: 'v0.0.2', state: t('update.state.rolled-back')}),
+             t('update.history.by', {name: 'ben'})],
         ].map((parts) => parts.join(' · '));
     }""")
     assert texts == expect, "the lines: %r, not %r" % (texts, expect)

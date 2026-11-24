@@ -291,7 +291,7 @@ func (s *Server) startUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	s.noteStop("update")
-	s.noteUpdateStart(r.Context(), asked, userIDOf(r), v.Current, v.Latest, v.Channel)
+	s.noteUpdateStart(r.Context(), asked, userIDOf(r), v.Current, v.Latest, v.Channel, v.Helper)
 	s.logServer(systemEvent("update", userIDOf(r), summary))
 	writeJSON(w, http.StatusAccepted, map[string]any{"ok": true, "requested": v.Latest, "channel": v.Channel})
 	return nil
