@@ -1,4 +1,4 @@
-# Massimo — CI Conventions (v1.70.0)
+# Massimo — CI Conventions (v1.71.0)
 
 What CI does in this project, for whoever has to change it.
 `/AGENTS.md` names this file as the canonical owner of CI conventions,
@@ -719,7 +719,7 @@ nightly.yml then runs that job first, on `main`'s head,
 and skips the night where the commit is older (section 6, D15-B).
 
 The Android app job (AP MobileApp, Block 4) builds `app/android` with the
-image's JDK 17 and Android SDK (platform and build-tools 36),
+image's JDK 17 and Android SDK (platform 37.0, build-tools 36.0.0),
 Gradle through the committed wrapper, nothing cached.
 It checks `app/version.json` against its tag (`packaging/app-version.sh check`),
 runs `:app:assembleFossDebug :app:testFossDebugUnitTest :app:lintFossDebug`
