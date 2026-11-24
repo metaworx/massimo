@@ -24,10 +24,13 @@ the first one on a machine also fetches the test libraries.
   the image is x86_64, which the emulator runs with hardware acceleration
   alone (`-accel on`), never in software.
   WSL 2 has `/dev/kvm` through Windows 11's nested virtualisation.
-  Where it is `root:kvm` and mode `660`, the user joins the group `kvm`,
+  Where it is `root:kvm` and mode `660`, the user joins the group `kvm`
+  (`sudo usermod -aG kvm "$USER"`),
   then logs in again:
   the machine owner's step, which the target does not take;
   it says that KVM is not accessible, and stops.
+  Until that new login, `sg kvm -c 'make app-emulator-test'`
+  runs the target with the group, from a shell that predates it.
   CI's runners give the runner's user the device with a udev rule
   (below, "In CI").
 - **The SDK** at `ANDROID_HOME`, as `app/README.md` sets it up
