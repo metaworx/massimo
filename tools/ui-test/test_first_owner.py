@@ -13,7 +13,7 @@ import json
 import pytest
 
 from conftest import TOKEN, URL
-from helpers import NAME_BAD, ApiReads, assert_login_card_centred, frames, scroll_width, wait_held, wait_until
+from helpers import NAME_BAD, ApiReads, assert_login_card_centred, frames, pause_clock, scroll_width, wait_held, wait_until
 from test_connect import FAKE_BRIDGE
 
 OPEN = {"mode": "open", "user": None, "role": None, "capabilities": [], "setup": True}
@@ -457,7 +457,7 @@ def test_the_name_is_checked_as_it_is_typed(new_context, case, watch, guard):
     forward guard: the tile checked it so."""
     page = start_page(new_context, guard, watch, OPEN, clock=True)
     owner_card(page)
-    page.clock.pause_at(page.evaluate("Date.now()") + 1000)
+    pause_clock(page)
     name = page.locator("#setup-user")
     name.fill("bad name")
     page.clock.run_for(1500)

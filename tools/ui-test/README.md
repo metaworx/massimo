@@ -130,6 +130,22 @@ with the page's DOM, console and network at every step.
 - the marker `used_ticket`: the page's first stream gets a used ticket,
   which the server refuses with 401,
   and the page is handed over before the stream is open again;
+- the marker `clock`: Playwright's clock installed before the page's scripts,
+  its time flowing as the real one, which the test moves on (`page.clock.run_for`,
+  `page.clock.fast_forward`);
+  a test pauses it with `helpers.pause_clock(page)` alone,
+  at the page's now and 50 ms on
+  (and further on where that is past once the call arrives, as under a trace):
+  at the pause Playwright runs once every timer due up to its time, a pending
+  animation frame among them, and after it no timer and no frame of the page's
+  comes until the test runs it, so that nothing due later than the pause has run;
+  the helper hands Python's `pause_at` seconds, which it takes,
+  where the page's `Date.now()` is milliseconds:
+  given those, the clock jumped millennia ahead and fired every timer of the
+  page's at once, its poll and its stream's renewal among them;
+  a test module that calls `clock.pause_at` itself fails its collection
+  with the helper's name (`conftest.py`),
+  where the call is written `….clock.pause_at(`, not through another name for the clock;
 - `failed_checks_forgotten` (autouse): after a test that opened a context
   without the token (`new_context`), one request with the token forgets the
   failed token checks its pages counted against 127.0.0.1;

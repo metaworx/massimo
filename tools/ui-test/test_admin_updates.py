@@ -15,7 +15,7 @@ import json
 import pytest
 
 from conftest import TOKEN, URL, api_call
-from helpers import focus_in_turn, frames, hold, mark, open_main_menu, owner_page, reads_of, replaced, safe_route, show_view, sign_out, undo, wait_held, wait_until
+from helpers import focus_in_turn, frames, hold, mark, open_main_menu, owner_page, pause_clock, reads_of, replaced, safe_route, show_view, sign_out, undo, wait_held, wait_until
 from test_log_alerts import alerts_route
 from test_login import sign_in
 from test_oidc import provider  # noqa: F401, the fixture
@@ -363,7 +363,7 @@ def test_a_new_items_form_keeps_the_focus_where_it_is_typed_in(page, case, what)
     add, box, first, later = ADDERS[what]
     show_view(page, "system")
     page.locator(add).wait_for()
-    page.clock.pause_at(page.evaluate("Date.now()") + 1000)
+    pause_clock(page)
     try:
         page.locator(add).click()
         form = page.locator(box)
@@ -874,7 +874,7 @@ def test_an_identitys_change(page, case, provider):
         sel = f".user-panel[data-name='{user}'] .user-identities li[data-id]"
         # the clock paused: the page's next frame comes only when the test runs it, so that
         # a focus given a frame late, in an effect, is not there yet when Enter is pressed
-        page.clock.pause_at(page.evaluate("Date.now()") + 1000)
+        pause_clock(page)
         try:
             back = focus_in_turn(page, sel + " .identity-change .form-cancel", sel + " .change-identity")
             page.keyboard.press("Enter")  # at once, before the next frame: Change, where the focus is, opens again
