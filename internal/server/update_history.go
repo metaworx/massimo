@@ -175,11 +175,13 @@ func (s *Server) noteVersionStart(ctx context.Context, before, version string, h
 // A helper that restarts the server is left to that start: while it
 // says restarting, the old version still answers, and the version it
 // came from being the one running is no rollback there. The row is
-// written only where the entry ends.
+// written only where the entry ends. An up-to-date also holds the
+// version the entry asked for back from Update (holdVersion).
 func (s *Server) noteHelperOutcome(ctx context.Context, helper *update.Status) {
 	if helper == nil || !unreached(helper.State) {
 		return
 	}
+	held := ""
 	s.editHistory(ctx, func(list []updateEntry) []updateEntry {
 		if len(list) == 0 || !list[0].waiting() {
 			return nil
@@ -189,8 +191,16 @@ func (s *Server) noteHelperOutcome(ctx context.Context, helper *update.Status) {
 			return nil
 		}
 		list[0].Result = r
+		if r == "up-to-date" {
+			held = list[0].To
+		}
 		return list
 	})
+	if held != "" {
+		// apt had nothing newer: the version asked for is held back
+		// until a later check finds it (AP AutoUpdate D5-B)
+		s.holdVersion(held, helper.Time)
+	}
 }
 
 // helperEnded is how the update helper's run of e ended without reaching

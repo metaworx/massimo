@@ -67,6 +67,12 @@ type UpdateOptions struct {
 	// (the Debian package's, which the owner can turn off); nil where
 	// Request alone says it.
 	Helper func() string
+	// Source, where set, reads the newest version the box's package
+	// source has for channel, as a tag, "" for none: apt's index of the
+	// suite the next update uses, or the formula brew follows. A release
+	// is then available only where the source has it (AP AutoUpdate
+	// D5-A); nil on a box massimo install set up, which takes GitHub's.
+	Source func(ctx context.Context, channel string) (string, error)
 }
 
 // ReleaseFinder finds the newest signed release on a channel; nil, nil
@@ -83,12 +89,35 @@ const checkEvery = 10 * time.Minute
 // (updateLoop).
 const selfCheckEvery = 6 * time.Hour
 
-type updateCheck struct {
-	mu      sync.Mutex
+// releaseCheck is what one check found: GitHub's newest signed release
+// on the channel, and, where the box has a package source and the
+// release is newer than the running version, the newest the source had.
+type releaseCheck struct {
 	at      time.Time
-	channel string // the channel checked
 	release *update.Release
 	err     error
+	// source is the source's newest at sourceAt, zero where it was not
+	// read; sourceErr says why it could not be.
+	source    string
+	sourceAt  time.Time
+	sourceErr error
+}
+
+type updateCheck struct {
+	mu      sync.Mutex
+	channel string // the channel checked
+	releaseCheck
+	held updateHold
+}
+
+// updateHold is a version the update helper answered up-to-date for,
+// "apt has nothing newer yet", at since: held back from Update until a
+// check made after since finds the box's source has it (AP AutoUpdate
+// D5-B). It is kept in memory: a restart is followed by a check, which
+// is the later check the hold waits for.
+type updateHold struct {
+	version string
+	since   time.Time
 }
 
 // updateChannel is the channel updates come from: Channel where set,
@@ -184,7 +213,8 @@ func (s *Server) updateLoop(ctx context.Context) {
 
 // updateTick checks for a release where the server's own check is due at
 // now: the first at once, then selfCheckEvery after one that answered,
-// checkEvery after one that failed. The check is updateRelease's, fresh,
+// checkEvery after one that failed, or whose package source could not be
+// read. The check is updateRelease's, fresh,
 // which pushes update where a newer release is out; the rules tell each
 // version once. Nothing is checked without a store, which the rules and
 // the settings need, or without a valid channel: a channel set later is
@@ -194,27 +224,95 @@ func (s *Server) updateTick(ctx context.Context, now time.Time) {
 		return
 	}
 	v, _ := s.updateRelease(ctx, true)
-	if v.CheckError != "" {
+	if v.CheckError != "" || v.SourceError != "" {
 		s.updateNext = now.Add(checkEvery)
-		s.log.Debug("update check failed", "channel", v.Channel, "error", v.CheckError)
+		s.log.Debug("update check failed", "channel", v.Channel, "error", v.CheckError, "source_error", v.SourceError)
 		return
 	}
 	s.updateNext = now.Add(selfCheckEvery)
 }
 
-// latest returns the newest release on the channel, checked at most every
-// checkEvery unless refresh is set.
-func (s *Server) latest(ctx context.Context, channel string, refresh bool) (*update.Release, time.Time, error) {
+// latest returns the newest release on the channel and what the box's
+// package source has, checked at most every checkEvery unless refresh is
+// set. The source is read only where the release is newer than the
+// running version: otherwise there is nothing to install either way.
+func (s *Server) latest(ctx context.Context, channel string, refresh bool) releaseCheck {
 	c := &s.updates
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if refresh || c.at.IsZero() || time.Since(c.at) > checkEvery || c.channel != channel {
-		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		defer cancel()
-		c.release, c.err = s.finder().Latest(ctx, channel)
-		c.at, c.channel = time.Now(), channel
+		fctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		rel, err := s.finder().Latest(fctx, channel)
+		cancel()
+		c.releaseCheck, c.channel = releaseCheck{at: time.Now(), release: rel, err: err}, channel
+		if src := s.opts.Update.Source; src != nil && err == nil && rel != nil && s.newerThanRunning(rel.Tag) {
+			sctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			c.source, c.sourceErr = src(sctx, channel)
+			cancel()
+			c.sourceAt = time.Now()
+		}
 	}
-	return c.release, c.at, c.err
+	return c.releaseCheck
+}
+
+// newerThanRunning reports whether tag is newer than the running
+// version; every release is, where the running one is no release's.
+func (s *Server) newerThanRunning(tag string) bool {
+	v, ok := update.ParseVersion(tag)
+	if !ok {
+		return false
+	}
+	cur, ok := update.ParseVersion(s.opts.Update.Version)
+	return !ok || update.Compare(v, cur) > 0
+}
+
+// olderTag reports whether a is older than b, or no version at all.
+func olderTag(a, b string) bool {
+	av, ok := update.ParseVersion(a)
+	if !ok {
+		return true
+	}
+	bv, ok := update.ParseVersion(b)
+	return ok && update.Compare(av, bv) < 0
+}
+
+// holdVersion holds version back from Update since the helper's status
+// at since said it found nothing to install (updateHold).
+func (s *Server) holdVersion(version string, since time.Time) {
+	c := &s.updates
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.held = updateHold{version: version, since: since}
+}
+
+// heldBack is the version held back from offer (updateHold), "" where
+// none is: none is held, offer is newer than the held one, or the box
+// runs it already; and where what the check found in the box's source
+// (GitHub's release where it has none) after the hold has it, which
+// ends the hold.
+func (s *Server) heldBack(rc releaseCheck, offer string) string {
+	c := &s.updates
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	h := c.held
+	if h.version == "" {
+		return ""
+	}
+	has, at := "", rc.at
+	if rc.release != nil {
+		has = rc.release.Tag
+	}
+	if !rc.sourceAt.IsZero() {
+		has, at = rc.source, rc.sourceAt
+	}
+	if at.After(h.since) && !olderTag(has, h.version) || !s.newerThanRunning(h.version) {
+		c.held = updateHold{}
+		return ""
+	}
+	if offer == "" || olderTag(h.version, offer) {
+		return ""
+	}
+	return h.version
 }
 
 // updateBlocked says why an update cannot be started from the API, or "".
@@ -242,13 +340,26 @@ func (s *Server) updateBlocked(ctx context.Context) string {
 }
 
 type updateView struct {
-	Current    string         `json:"current"`
-	Flavour    string         `json:"flavour,omitempty"`
-	Channel    string         `json:"channel"`
-	Suite      string         `json:"suite,omitempty"`
-	Manager    string         `json:"manager,omitempty"`
-	Latest     string         `json:"latest,omitempty"`
-	ReleaseURL string         `json:"release_url,omitempty"`
+	Current string `json:"current"`
+	Flavour string `json:"flavour,omitempty"`
+	Channel string `json:"channel"`
+	Suite   string `json:"suite,omitempty"`
+	Manager string `json:"manager,omitempty"`
+	// Latest is the version an update would install: GitHub's newest
+	// signed release, or on a box with a package source the newest the
+	// source has, never newer than GitHub's (AP AutoUpdate D8).
+	Latest string `json:"latest,omitempty"`
+	// Released is GitHub's newest where the source has it not yet.
+	Released string `json:"released,omitempty"`
+	// SourceError says why the package source could not be read;
+	// nothing is available then (D9).
+	SourceError string `json:"source_error,omitempty"`
+	// Held is a version the update helper found nothing to install for,
+	// held back from Update until a later check finds it (D5-B).
+	Held       string `json:"held,omitempty"`
+	ReleaseURL string `json:"release_url,omitempty"`
+	// Available is set where Latest is newer than the running version
+	// and not held back.
 	Available  bool           `json:"available"`
 	CheckedAt  time.Time      `json:"checked_at"`
 	CheckError string         `json:"check_error,omitempty"`
@@ -268,29 +379,39 @@ func (s *Server) updateState(ctx context.Context, refresh bool) updateView {
 func (s *Server) updateRelease(ctx context.Context, refresh bool) (updateView, *update.Release) {
 	u := s.opts.Update
 	v := updateView{Current: u.Version, Flavour: u.Flavour, Channel: s.updateChannel(ctx), Suite: s.aptSuite(), Manager: u.Manager, Blocked: s.updateBlocked(ctx)}
-	var found *update.Release
-	if update.ValidChannel(v.Channel) {
-		rel, at, err := s.latest(ctx, v.Channel, refresh)
-		found = rel
-		v.CheckedAt = at
-		if err != nil {
-			v.CheckError = err.Error()
-		}
-		if rel != nil {
-			v.Latest, v.ReleaseURL = rel.Tag, rel.URL
-			cur, ok := update.ParseVersion(u.Version)
-			v.Available = !ok || update.Compare(rel.Version, cur) > 0
-			if v.Available {
-				s.pushNotify(notify.Event{Kind: "update", Values: map[string]any{"version": rel.Tag}})
-			}
-		}
-	}
 	if u.Status != "" {
 		if st, err := update.ReadStatus(u.Status); err == nil && !st.Time.IsZero() {
 			v.Helper = &st
 			// an update the helper ended without restarting the server
-			// ends here, before the history is read
+			// ends here, before the history is read and what is held
+			// back is known
 			s.noteHelperOutcome(ctx, &st)
+		}
+	}
+	var found *update.Release
+	if update.ValidChannel(v.Channel) {
+		rc := s.latest(ctx, v.Channel, refresh)
+		found = rc.release
+		v.CheckedAt = rc.at
+		if rc.err != nil {
+			v.CheckError = rc.err.Error()
+		}
+		if rel := rc.release; rel != nil {
+			offer := rel.Tag
+			switch {
+			case rc.sourceAt.IsZero():
+			case rc.sourceErr != nil:
+				v.SourceError, offer = rc.sourceErr.Error(), ""
+			case olderTag(rc.source, rel.Tag):
+				// GitHub's is out before the source has it
+				v.Released, offer = rel.Tag, rc.source
+			}
+			v.Latest, v.ReleaseURL = offer, rel.URL
+			v.Held = s.heldBack(rc, offer)
+			v.Available = v.Held == "" && s.newerThanRunning(offer)
+			if v.Available {
+				s.pushNotify(notify.Event{Kind: "update", Values: map[string]any{"version": offer}})
+			}
 		}
 	}
 	v.CanUpdate = v.Blocked == "" && v.Available && (v.Helper == nil || !v.Helper.Running())
@@ -298,6 +419,15 @@ func (s *Server) updateRelease(ctx context.Context, refresh bool) (updateView, *
 		v.History = []updateEntry{}
 	}
 	return v, found
+}
+
+// sourceName names a box's package source in a reason: its package
+// manager, apt or brew.
+func sourceName(manager string) string {
+	if manager == "" {
+		return "the package source"
+	}
+	return manager
 }
 
 func (s *Server) getUpdate(w http.ResponseWriter, r *http.Request) error {
@@ -315,10 +445,15 @@ func (s *Server) startUpdate(w http.ResponseWriter, r *http.Request) error {
 	switch {
 	case v.Helper != nil && v.Helper.Running():
 		return fail(http.StatusConflict, "an update is already running (%s)", v.Helper.State)
+	case v.Latest == "" && v.CheckError != "":
+		return fail(http.StatusBadGateway, "release check failed: %s", v.CheckError)
+	case v.SourceError != "":
+		return fail(http.StatusBadGateway, "reading what %s has failed: %s", sourceName(v.Manager), v.SourceError)
+	case v.Held != "":
+		return fail(http.StatusConflict, "%s is held back: the update helper found nothing to install for it, and no check since has found it in %s", v.Held, sourceName(v.Manager))
+	case v.Released != "" && !v.Available:
+		return fail(http.StatusConflict, "%s is out, but %s has it not yet", v.Released, sourceName(v.Manager))
 	case v.Latest == "":
-		if v.CheckError != "" {
-			return fail(http.StatusBadGateway, "release check failed: %s", v.CheckError)
-		}
 		return fail(http.StatusConflict, "no release on channel %s", v.Channel)
 	case !v.Available:
 		return fail(http.StatusConflict, "already up to date (%s)", v.Current)

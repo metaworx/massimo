@@ -67,6 +67,46 @@ def test_update_through_apt(page):
     page.unroute("**/api/v1/update*")
 
 
+def test_version_line_from_the_source(page):
+    """On a box apt updates, a release is offered once apt has it: one
+    out on GitHub that apt has not yet is named as such, without Update;
+    one the helper found nothing to install for is held back; an index
+    that cannot be read says why."""
+    show_view(page, "maint")
+    body = json.loads(update_json("up-to-date", "v0.0.1-test", False, "apt"))
+    body.update({"current": "v0.0.1-test", "latest": "v0.0.1-test", "released": "v0.0.2-test",
+                 "release_url": "https://example.invalid/releases/v0.0.2-test"})
+    page.route("**/api/v1/update*", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(body)))
+    page.locator("#update-check").click()
+    text = page.locator("#update-text")
+    released = page.evaluate("t('update.released', {version: 'v0.0.2-test', manager: 'apt'})")
+    assert wait_until(page, "document.getElementById('update-text').textContent.includes(%s)" % json.dumps(released), 5), \
+        "the line names the release apt has not yet: %r" % text.text_content()
+    assert page.evaluate("t('update.upToDate')") not in text.text_content(), "not up to date beside it"
+    assert not page.locator("#update-btn").is_visible(), "no Update"
+    assert "v0.0.2-test" in page.locator("#update-link").text_content(), "the notes are the release's"
+    page.unroute("**/api/v1/update*")
+
+    body.update({"latest": "v0.0.2-test", "held": "v0.0.2-test"})
+    del body["released"]
+    page.route("**/api/v1/update*", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(body)))
+    page.locator("#update-check").click()
+    held = page.evaluate("t('update.held', {version: 'v0.0.2-test'})")
+    assert wait_until(page, "document.getElementById('update-text').textContent.includes(%s)" % json.dumps(held), 5), \
+        "the line says the version is held back: %r" % text.text_content()
+    assert not page.locator("#update-btn").is_visible(), "no Update while held"
+    page.unroute("**/api/v1/update*")
+
+    del body["held"], body["latest"]
+    body["source_error"] = "GET https://massimo.example.invalid/apt/dists/alpha/main/binary-armhf/Packages.gz: 503"
+    page.route("**/api/v1/update*", lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(body)))
+    page.locator("#update-check").click()
+    failed = page.evaluate("t('update.sourceFailed', {manager: 'apt', error: %s})" % json.dumps(body["source_error"]))
+    assert wait_until(page, "document.getElementById('update-text').textContent.includes(%s)" % json.dumps(failed), 5), \
+        "the line says the index could not be read: %r" % text.text_content()
+    page.unroute("**/api/v1/update*")
+
+
 def channel_routes(page, manager=None, variable=None, suite=None):
     """Stubs GET /api/v1/update and the setting update.channel, the build's
     flavour alpha and no channel stored; variable is the channel

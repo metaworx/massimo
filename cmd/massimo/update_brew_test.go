@@ -211,3 +211,32 @@ func TestBrewHelperPlan(t *testing.T) {
 		t.Fatalf("by hand: %v", err)
 	}
 }
+
+// TestBrewFormulaURL: the formula is read from the tap brew's install
+// receipt names, where it is one of the project's.
+func TestBrewFormulaURL(t *testing.T) {
+	t.Parallel()
+	prefix := t.TempDir()
+	k := brewKeg{prefix: prefix, formula: "massimo-devel", version: "0.16.0-alpha.1-597-g43930b56"}
+	receipt := func(body string) {
+		t.Helper()
+		dir := filepath.Join(prefix, "Cellar", k.formula, k.version)
+		os.MkdirAll(dir, 0o755)
+		if err := os.WriteFile(filepath.Join(dir, "INSTALL_RECEIPT.json"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := brewFormulaURL(k); err == nil {
+		t.Error("a keg without a receipt read")
+	}
+	receipt(`{"homebrew_version": "4.4.0", "source": {"tap": "metaworx/massimo-rolling", "spec": "stable"}}`)
+	if got, err := brewFormulaURL(k); err != nil || got != "https://raw.githubusercontent.com/metaworx/homebrew-massimo-rolling/HEAD/Formula/massimo-devel.rb" {
+		t.Errorf("the rolling tap: %q, %v", got, err)
+	}
+	for _, body := range []string{`{"source": {"tap": "local/massimo"}}`, `{"source": {}}`, `not json`} {
+		receipt(body)
+		if got, err := brewFormulaURL(k); err == nil {
+			t.Errorf("%s: %q", body, got)
+		}
+	}
+}

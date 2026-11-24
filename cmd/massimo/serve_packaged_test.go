@@ -4,13 +4,17 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	"go.metaworx.ch/massimo/internal/install"
 	"go.metaworx.ch/massimo/internal/server"
+	"go.metaworx.ch/massimo/internal/update"
 )
 
 // TestPackagedUpdate: the button goes through apt only with the massimo
@@ -71,5 +75,70 @@ func TestPackagedUpdate(t *testing.T) {
 	}
 	if why := upd.Helper(); why != "" {
 		t.Fatalf("helper on: %q", why)
+	}
+}
+
+// aptRepo writes a local apt repository below dir with an index of the
+// massimo versions given per suite, for arch, gzipped as publish.sh
+// writes it.
+func aptRepo(t *testing.T, dir, arch string, suites map[string][]string) {
+	t.Helper()
+	for suite, versions := range suites {
+		var index strings.Builder
+		for _, v := range versions {
+			index.WriteString("Package: massimo\nVersion: " + v + "\nArchitecture: " + arch + "\n\n")
+		}
+		var buf bytes.Buffer
+		zw := gzip.NewWriter(&buf)
+		zw.Write([]byte(index.String()))
+		zw.Close()
+		p := filepath.Join(dir, "dists", suite, "main", "binary-"+arch, "Packages.gz")
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, buf.Bytes(), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// TestPackagedUpdateSource: on a box apt updates, a release is offered
+// once apt's index has it: the index of the channel's suite, which the
+// helper switches the source to before it fetches, else the source's
+// own; for the box's architecture, armhf for arm.
+func TestPackagedUpdateSource(t *testing.T) {
+	t.Parallel()
+	arch := update.AptArch(runtime.GOARCH)
+	if arch == "" {
+		t.Skip("the apt repository has no packages for", runtime.GOARCH)
+	}
+	root, repo := t.TempDir(), t.TempDir()
+	aptRepo(t, repo, arch, map[string][]string{
+		"alpha": {"0.16.0~alpha.1", "0.16.0~alpha.2"},
+		"devel": {"0.16.0~alpha.2", "0.16.0~alpha.2+3.gabc1234"},
+	})
+	aptRepo(t, repo, "armhf", map[string][]string{"alpha": {"0.16.0~alpha.3"}})
+	source := filepath.Join(root, install.AptSource)
+	os.MkdirAll(filepath.Dir(source), 0o755)
+	os.WriteFile(source, []byte("Types: deb\nURIs: file:"+repo+"\nSuites: alpha\nComponents: main\n"), 0o644)
+	upd := server.UpdateOptions{}
+	packagedUpdate(&upd, install.Manager{Name: "apt"}, root, func(string) string { return "" })
+	if upd.Source == nil {
+		t.Fatalf("no source: %+v", upd)
+	}
+	ctx := t.Context()
+	for channel, want := range map[string]string{"alpha": "v0.16.0-alpha.2", "devel": "v0.16.0-alpha.2-3-gabc1234", "main": "v0.16.0-alpha.2"} {
+		if got, err := upd.Source(ctx, channel); err != nil || got != want {
+			t.Errorf("channel %s: %q, %v; want %q", channel, got, err, want)
+		}
+	}
+	if got, err := aptNewest(ctx, source, "alpha", "arm"); err != nil || got != "v0.16.0-alpha.3" {
+		t.Errorf("arm: %q, %v", got, err)
+	}
+	if _, err := aptNewest(ctx, source, "alpha", "riscv64"); err == nil {
+		t.Error("an architecture without packages read")
+	}
+	if _, err := upd.Source(ctx, "beta"); err == nil {
+		t.Error("a suite without an index read")
 	}
 }

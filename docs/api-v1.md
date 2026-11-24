@@ -4258,8 +4258,31 @@ a channel set later is checked within a minute.
 }
 ```
 
-`latest` is only a release whose manifest verifies against the key compiled into
-the server (see `internal/update`).
+`latest` is the version an update would install,
+never newer than the newest release whose manifest verifies against the key
+compiled into the server (see `internal/update`).
+On a box `massimo install` set up it is that release.
+Where apt or brew owns the binary,
+a release is offered only once the box's package source has it,
+since GitHub's release is out before the apt index and the tap have it:
+the server reads, without root, apt's index of the suite the next update uses
+(the channel's, which the helper switches the source to,
+`dists/<suite>/main/binary-<arch>/Packages.gz` of the source's `URIs`,
+`armhf` for an ARM 32-bit box),
+or the formula of brew's tap on GitHub, the file `brew update` fetches;
+`latest` is then the newest version the source has,
+and `released` the signed release where the source has it not yet.
+The source is read with the release check,
+where the release is newer than the running version.
+`source_error` says why the source could not be read,
+and nothing is available then: apt could not fetch it either.
+After the helper's `up-to-date` ("apt has nothing newer yet")
+for the version an update asked for,
+`held` names that version, which is not available, nor can it be started,
+until a check made after that answer finds it in the source,
+or in the signed release on a box without one;
+a newer version is not held.
+The hold is kept in memory: a restart is followed by a check.
 `check_error` says why a check failed.
 `manager` is the package manager that owns the binary, `apt`,
 where the Debian package installed it, or `brew` under Homebrew's service;
@@ -4315,7 +4338,8 @@ and nothing is rolled back: the helper's last run names the way back
 Where it is `brew`, the server starts a helper as its own user that runs
 `brew upgrade` and restarts the job (packaging/README.md, "Homebrew").
 The request names no version and no file,
-so the most the API can do is install the newest signed release.
+so the most the API can do is install the newest signed release,
+or what the box's package source has of it (`latest`).
 Answers `202` with `{"ok":true,"requested":"v…", "channel":"…"}`;
 follow the progress with GET.
 
@@ -4323,10 +4347,11 @@ Needs the API token: without `MASSIMO_API_TOKEN` it answers `403` even though
 the other routes are open.
 `403` also when no helper is configured (`serve -update-request`);
 `409` when already up to date,
-when the channel has no release or while an update is running (on Windows also
-in the moment between the start of the helper and its first status);
+when the channel has no release, while an update is running (on Windows also
+in the moment between the start of the helper and its first status),
+when the package source has the release not yet, or while it is held;
 `500` on Windows when the helper could not be started (the request is withdrawn);
-`502` when GitHub could not be asked.
+`502` when GitHub or the package source could not be asked.
 
 ### GET /api/v1/restart, POST /api/v1/restart
 

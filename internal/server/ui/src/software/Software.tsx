@@ -66,17 +66,27 @@ function historyLine(e: UpdateEntry, newest: boolean): string {
   return parts.join(" · ");
 }
 
-/** versionLine says the running version and whether a newer release is out on the channel. */
+/**
+ * versionLine says the running version and whether a newer release is
+ * out on the channel: on a box apt or brew updates, one the package
+ * source has; GitHub's newest, where the source has it not yet; or that
+ * the source could not be read. A version the update helper found
+ * nothing to install for is held back until a check finds it.
+ */
 function versionLine(u: UpdateInfo): string {
   const version = u.current || t("update.unknownVersion");
+  const manager = u.manager || "";
   const parts = [u.channel ? t("update.runningChannel", { version, channel: u.channel }) : t("update.running", { version })];
   // a package manager owns the binary: the Debian package's helper installs through apt
-  if (u.manager) parts.push(t("update.manager", { manager: u.manager }));
+  if (manager) parts.push(t("update.manager", { manager }));
   if (u.check_error) parts.push(t("update.checkFailed", { error: u.check_error }));
+  else if (u.source_error) parts.push(t("update.sourceFailed", { manager, error: u.source_error }));
   else if (!u.channel) parts.push(t("update.noChannel"));
-  else if (!u.latest) parts.push(t("update.noRelease"));
-  else if (u.available) parts.push(t("update.available", { version: u.latest }));
-  else parts.push(t("update.upToDate"));
+  else if (!u.latest && !u.released) parts.push(t("update.noRelease"));
+  else if (u.held) parts.push(t("update.held", { version: u.held }));
+  else if (u.available) parts.push(t("update.available", { version: u.latest || "" }));
+  else if (!u.released) parts.push(t("update.upToDate"));
+  if (u.released && u.released !== u.held && !u.check_error && !u.source_error) parts.push(t("update.released", { version: u.released, manager }));
   if (u.available && u.blocked) parts.push(t("update.blocked", { reason: u.blocked }));
   return parts.join(" ");
 }
@@ -154,7 +164,7 @@ export function Software() {
         <p id="update-text">{failed ? failed() : u ? versionLine(u) : "–"}</p>
         <p>
           <a id="update-link" class={u && u.release_url ? undefined : "hidden"} href={(u && u.release_url) || undefined} target="_blank" rel="noopener noreferrer">
-            {u && u.release_url ? t("update.notes", { version: u.latest || "" }) : ""}
+            {u && u.release_url ? t("update.notes", { version: u.released || u.latest || "" }) : ""}
           </a>
         </p>
         <p id="update-helper" class="muted small">{said ? said() : u && u.helper ? t("update.last", { state: helperText(u.helper) }) : ""}</p>

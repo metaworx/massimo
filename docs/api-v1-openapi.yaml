@@ -5001,9 +5001,12 @@ components:
         channel: {type: string, description: "The update channel: MASSIMO_UPDATE_CHANNEL, else the setting update.channel, else the apt source's suite where apt owns the binary, else the flavour"}
         suite: {type: string, description: "The suite of the apt source, where apt owns the binary; where it differs from channel, the next update switches the source to the channel's suite"}
         manager: {type: string, description: "The package manager that owns the binary (apt, brew); absent on a box massimo install set up"}
-        latest: {type: string, description: "Newest signed release the channel takes: of its own flavour or a more stable one"}
-        release_url: {type: string}
-        available: {type: boolean, description: latest is newer than current}
+        latest: {type: string, description: "The version an update would install: the newest signed release the channel takes, of its own flavour or a more stable one; where apt or brew owns the binary, the newest its package source has, never newer than the signed release"}
+        released: {type: string, description: "The newest signed release, where the package source has it not yet"}
+        source_error: {type: string, description: "Why the package source (apt's index, brew's formula) could not be read; nothing is available then"}
+        held: {type: string, description: "A version the update helper found nothing to install for (up-to-date), held back until a check made after it finds it in the package source"}
+        release_url: {type: string, description: "The page of the newest signed release"}
+        available: {type: boolean, description: "latest is newer than current, and not held back"}
         checked_at: {type: string, format: date-time}
         check_error: {type: string}
         can_update: {type: boolean, description: POST would start an update}

@@ -190,7 +190,13 @@ func TestUpdateHistorySecondStart(t *testing.T) {
 	if code, body := callAPI(t, ts, "POST", "/api/v1/update", token, "{}"); code != 202 {
 		t.Fatalf("POST: %d %s", code, body)
 	}
-	if err := update.WriteStatus(status, update.Status{State: "up-to-date", Channel: "alpha", Time: time.Now().Add(time.Second)}); err != nil {
+	// the helper's outcome after the first entry, and before the second
+	// POST's check, which GitHub's release, the box's source here, ends
+	// the hold of
+	ended := time.Now()
+	for at := s.updateHistory(ctx)[0].At; !ended.After(at); ended = time.Now() {
+	}
+	if err := update.WriteStatus(status, update.Status{State: "up-to-date", Channel: "alpha", Time: ended}); err != nil {
 		t.Fatal(err)
 	}
 	if code, body := callAPI(t, ts, "POST", "/api/v1/update", token, "{}"); code != 202 {

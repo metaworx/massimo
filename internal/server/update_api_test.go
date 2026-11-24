@@ -636,3 +636,169 @@ func TestUpdateSelfCheckRuns(t *testing.T) {
 	}
 	r.stop()
 }
+
+// fakePackages is a package source that has tag, or fails with err; calls
+// counts its reads, channel names the last one's channel.
+type fakePackages struct {
+	tag     string
+	err     error
+	calls   int
+	channel string
+}
+
+// read is the source's UpdateOptions.Source.
+func (f *fakePackages) read(_ context.Context, channel string) (string, error) {
+	f.calls++
+	f.channel = channel
+	return f.tag, f.err
+}
+
+// sourceServer is a server over a store that runs v0.1.0-alpha.9 on
+// alpha, finds f's releases and reads src as the box's package source,
+// apt's; with the helper's status file.
+func sourceServer(t *testing.T, f *fakeFinder, src *fakePackages) (*Server, *httptest.Server, string) {
+	t.Helper()
+	dir := t.TempDir()
+	status := filepath.Join(dir, "status.json")
+	s := New(Options{Store: testStore(t, ""), Token: "secret", Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Update: UpdateOptions{
+		Version: "v0.1.0-alpha.9", Channel: "alpha", Manager: "apt", Request: filepath.Join(dir, "update-request"), Status: status,
+		Finder: f, Source: src.read,
+	}})
+	ts := httptest.NewServer(s.Handler())
+	t.Cleanup(ts.Close)
+	return s, ts, status
+}
+
+// A release is available only where the box's package source has it:
+// latest is the source's newest, never newer than GitHub's, and
+// released GitHub's where the source has it not yet; a source that
+// cannot be read makes nothing available, and says why. The source is
+// read for the channel, and not where GitHub has nothing newer.
+func TestUpdateFromTheSource(t *testing.T) {
+	t.Parallel()
+	f, src := &fakeFinder{tag: "v0.1.0-alpha.11"}, &fakePackages{}
+	_, ts, _ := sourceServer(t, f, src)
+	get := func() map[string]any {
+		t.Helper()
+		var out map[string]any
+		if code := getJSON(t, ts, "secret", "/api/v1/update?refresh=1", &out); code != 200 {
+			t.Fatalf("GET: %d %v", code, out)
+		}
+		return out
+	}
+	for _, c := range []struct {
+		source, latest, released string
+		available                bool
+	}{
+		{"v0.1.0-alpha.11", "v0.1.0-alpha.11", "", true},                // level with GitHub
+		{"v0.1.0-alpha.10", "v0.1.0-alpha.10", "v0.1.0-alpha.11", true}, // behind, but newer than the running one
+		{"v0.1.0-alpha.12", "v0.1.0-alpha.11", "", true},                // never newer than GitHub's
+		{"v0.1.0-alpha.9", "v0.1.0-alpha.9", "v0.1.0-alpha.11", false},  // the running one
+		{"", "", "v0.1.0-alpha.11", false},                              // none in the index
+	} {
+		src.tag = c.source
+		out := get()
+		latest, _ := out["latest"].(string)
+		released, _ := out["released"].(string)
+		if latest != c.latest || released != c.released || out["available"] != c.available || out["can_update"] != c.available || out["source_error"] != nil {
+			t.Errorf("the source at %q: %v", c.source, out)
+		}
+	}
+	if src.channel != "alpha" {
+		t.Errorf("the source read for %q", src.channel)
+	}
+	if code, out := call(t, ts, "POST", "secret"); code != 409 || !strings.Contains(out["error"].(string), "v0.1.0-alpha.11 is out, but apt has it not yet") {
+		t.Errorf("POST while apt has nothing newer: %d %v", code, out)
+	}
+
+	src.err = errors.New("GET https://massimo.example.invalid/apt/dists/alpha/main/binary-armhf/Packages.gz: 503 Service Unavailable")
+	out := get()
+	if out["source_error"] != src.err.Error() || out["latest"] != nil || out["available"] != false || out["can_update"] != false {
+		t.Errorf("an unreadable source: %v", out)
+	}
+	if code, out := call(t, ts, "POST", "secret"); code != 502 || !strings.Contains(out["error"].(string), "reading what apt has failed") {
+		t.Errorf("POST with an unreadable source: %d %v", code, out)
+	}
+
+	src.err, f.tag = nil, "v0.1.0-alpha.9"
+	calls := src.calls
+	if out := get(); out["latest"] != "v0.1.0-alpha.9" || out["available"] != false || src.calls != calls {
+		t.Errorf("nothing newer on GitHub: %v, %d reads", out, src.calls-calls)
+	}
+}
+
+// After the helper's "nothing newer yet" for a version, it is held back:
+// not available, no Update, POST refused, until a check made after the
+// helper's answer finds it in the source; a newer release is not held.
+func TestUpdateHeldAfterNothingNewer(t *testing.T) {
+	t.Parallel()
+	f, src := &fakeFinder{tag: "v0.1.0-alpha.10"}, &fakePackages{tag: "v0.1.0-alpha.10"}
+	s, ts, status := sourceServer(t, f, src)
+	if code, out := call(t, ts, "POST", "secret"); code != 202 {
+		t.Fatalf("POST: %d %v", code, out)
+	}
+	get := func(path string) map[string]any {
+		t.Helper()
+		var out map[string]any
+		if code := getJSON(t, ts, "secret", path, &out); code != 200 {
+			t.Fatalf("GET: %d %v", code, out)
+		}
+		return out
+	}
+	// apt had nothing newer; the check the POST made is older than that
+	ended := time.Now()
+	for at := s.updateHistory(t.Context())[0].At; !ended.After(at); ended = time.Now() {
+	}
+	if err := update.WriteStatus(status, update.Status{State: "up-to-date", Channel: "alpha", Message: "apt has nothing newer yet", Time: ended}); err != nil {
+		t.Fatal(err)
+	}
+	if out := get("/api/v1/update"); out["held"] != "v0.1.0-alpha.10" || out["available"] != false || out["can_update"] != false || out["latest"] != "v0.1.0-alpha.10" {
+		t.Fatalf("held: %v", out)
+	}
+	// a later check that does not find it keeps it held, and POST, which
+	// checks again, is refused
+	src.tag = "v0.1.0-alpha.9"
+	if out := get("/api/v1/update?refresh=1"); out["held"] != "v0.1.0-alpha.10" || out["available"] != false {
+		t.Fatalf("held after a check without it: %v", out)
+	}
+	if code, out := call(t, ts, "POST", "secret"); code != 409 || !strings.Contains(out["error"].(string), "v0.1.0-alpha.10 is held back") {
+		t.Fatalf("POST while held: %d %v", code, out)
+	}
+	// a check that finds it ends the hold
+	src.tag = "v0.1.0-alpha.10"
+	if out := get("/api/v1/update?refresh=1"); out["held"] != nil || out["available"] != true || out["can_update"] != true {
+		t.Fatalf("after a check that finds it: %v", out)
+	}
+	// a newer release is not held by an older version's hold
+	s.holdVersion("v0.1.0-alpha.10", time.Now().Add(time.Hour))
+	f.tag, src.tag = "v0.1.0-alpha.11", "v0.1.0-alpha.11"
+	if out := get("/api/v1/update?refresh=1"); out["held"] != nil || out["latest"] != "v0.1.0-alpha.11" || out["available"] != true {
+		t.Fatalf("a newer release: %v", out)
+	}
+}
+
+// A hand install has no source: GitHub's release is offered as it is,
+// and a hold ends at the next check after it, which finds it there.
+func TestUpdateWithoutSource(t *testing.T) {
+	t.Parallel()
+	f := &fakeFinder{tag: "v0.1.0-alpha.10"}
+	ts, _ := updateServer(t, "secret", filepath.Join(t.TempDir(), "update-request"), f)
+	code, out := call(t, ts, "GET", "secret")
+	if code != 200 || out["latest"] != "v0.1.0-alpha.10" || out["released"] != nil || out["source_error"] != nil || out["available"] != true {
+		t.Fatalf("GET: %d %v", code, out)
+	}
+}
+
+// A check whose source could not be read is tried again after
+// checkEvery, as one that failed.
+func TestUpdateSelfCheckSourceFailed(t *testing.T) {
+	t.Parallel()
+	src := &fakePackages{err: errors.New("no network")}
+	s := New(Options{Store: testStore(t, ""), Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Update: UpdateOptions{Version: "v0.1.0-alpha.9", Channel: "alpha", Manager: "apt", Finder: &fakeFinder{tag: "v0.1.0-alpha.10"}, Source: src.read}})
+	start := time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC)
+	s.updateTick(t.Context(), start)
+	if src.calls != 1 || !s.updateNext.Equal(start.Add(checkEvery)) {
+		t.Fatalf("%d reads, next check at %v", src.calls, s.updateNext)
+	}
+}

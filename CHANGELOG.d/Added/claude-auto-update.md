@@ -1,3 +1,3 @@
-- The server checks for a release by itself, a minute after its start
-  and every six hours, so that the notification `update` reaches people
-  without an open page (docs/api-v1.md, "GET /api/v1/update").
+- The server checks for a release by itself every six hours and offers
+  one once apt's index or brew's tap has it, holding back a version the
+  helper found nothing for (docs/api-v1.md, packaging/README.md).

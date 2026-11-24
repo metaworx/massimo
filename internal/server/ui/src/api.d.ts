@@ -1114,12 +1114,27 @@ export interface UpdateInfo {
    */
   manager?: string;
   /**
-   * Newest signed release the channel takes: of its own flavour or a more
-   * stable one
+   * The version an update would install: the newest signed release the channel
+   * takes, of its own flavour or a more stable one; where apt or brew owns the
+   * binary, the newest its package source has, never newer than the signed
+   * release
    */
   latest?: string;
+  /** The newest signed release, where the package source has it not yet */
+  released?: string;
+  /**
+   * Why the package source (apt's index, brew's formula) could not be read;
+   * nothing is available then
+   */
+  source_error?: string;
+  /**
+   * A version the update helper found nothing to install for (up-to-date), held
+   * back until a check made after it finds it in the package source
+   */
+  held?: string;
+  /** The page of the newest signed release */
   release_url?: string;
-  /** latest is newer than current */
+  /** latest is newer than current, and not held back */
   available: boolean;
   /** @format date-time */
   checked_at: string;

@@ -1979,6 +1979,14 @@ The server's sign, when it says an update is out, opens it at Software update.
   Under Homebrew's service it says "Installed by brew",
   and **Update** runs `brew upgrade` as the service's user
   (packaging/README.md, "Homebrew").
+  There a release is offered once apt's index or brew's tap has it:
+  one out on GitHub that the source has not yet, without **Update**,
+  reads "v0.16.0-alpha.2 is out; apt has it not yet",
+  and a source that cannot be read says why.
+  A version the helper found nothing to install for,
+  "apt has nothing newer yet",
+  is held back without **Update** until a check finds it (`docs/api-v1.md`,
+  "GET /api/v1/update?refresh=1").
   While the helper works, **Check for updates** and **Update** are greyed out,
   also after a reload of the page, until it reports that it is done.
   **Last updates** lists the last three under the version lines,
