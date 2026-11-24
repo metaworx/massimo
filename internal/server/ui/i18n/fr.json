@@ -1803,6 +1803,7 @@
   "backup.take": "Sauvegarder maintenant",
   "backup.taken": "Sauvegarde conservée.",
   "backup.none": "Aucune sauvegarde conservée pour l'instant.",
+  "backup.unchanged": "Aucune modification depuis la sauvegarde la plus récente : le serveur en fait une après une modification.",
   "backup.badge.kept.one": "{n} conservée",
   "backup.badge.kept.other": "{n} conservées",
   "backup.noHistory": "Ce Cube n'est pas dans la base du serveur : le serveur n'en conserve aucune sauvegarde.",

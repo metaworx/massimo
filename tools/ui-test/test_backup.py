@@ -7,14 +7,21 @@ taken by hand shows in the list and downloads, its plan says that the
 Cube holds it already, it compares with the one before, and it is
 deleted again. In System settings a fold per Cube, a single Cube's
 open, each with its count; a fold kept as it was when the page is shown
-again. The four cases share the server, so each removes what it
+again. A load onto either page shows the Cube's list, read once, though
+the page is shown before it knows its Cubes; under a clean Cube's list
+a line says why no newer backup follows, and none does while one is
+pending. The four cases share the server, so each removes what it
 took."""
+from datetime import datetime, timedelta, timezone
+
 from conftest import api_call
 from helpers import assert_busy, busy_state, hold, named_buttons, show_view, wait_held, wait_until
 
 SERIAL = "KEQ0000100"
 SECOND = "KEQ0000200"
 BOX = "#cube-backup .backup-box"
+SYS_BOX = f'#backups-cubes > .backup-fold[data-serial="{SERIAL}"] .backup-box'
+LIST = f"**/api/v1/cubes/{SERIAL}/backups"
 REASON_MANUAL = {"en": "by hand", "de": "von Hand"}
 NOTHING = {"en": "The Cube already holds this backup: nothing to send.",
            "de": "Der Cube enthält diese Sicherung bereits: nichts zu senden."}
@@ -29,11 +36,10 @@ def manual():
     return len([b for b in kept() if b["reason"] == "manual"])
 
 
-def rows(page, n):
+def rows(page, n, box=BOX):
     """The box's list loaded (something in it: its rows, or that there is none) and showing n rows."""
-    return wait_until(page, f"document.querySelector('{BOX} .backups-list').children.length > 0"
-                            f" && document.querySelectorAll('{BOX} .backups-list .backup-row').length === {n}", 10)
-
+    return wait_until(page, f"document.querySelector('{box} .backups-list')?.children.length > 0"
+                            f" && document.querySelectorAll('{box} .backups-list .backup-row').length === {n}", 10)
 
 
 def test_backup_box_on_cube_settings(page, case):
@@ -157,4 +163,78 @@ def test_back_up_now_turns_until_answered(page, case):
         assert came.count("POST") == 1 and len(sent) == 1, f"and none sent while the first waited or once it was answered: {came}"
     finally:
         page.unroute("**/backups")
+    show_view(page, "tiles")
+
+
+# The loads that drew the card empty (the analysis of AP BackupWatch, the
+# cases A, B, E and H), and the one that had a Cube to read from at once:
+# the address, the Cube stored or none ('massimo.serial'), the page's
+# section and the box of the Cube.
+LOADS = [("#system", False, "#system", SYS_BOX), ("#system", True, "#system", SYS_BOX),
+         ("#cube", False, "#cube-page", BOX), ("#cube", True, "#cube-page", BOX)]
+
+
+def test_backup_lists_after_a_load_onto_their_page(page, case):
+    """A load onto System settings without a Cube stored, as a first open
+    is, a reload onto it with the Cube stored, as checkVersion's after an
+    update is, and a reload onto Cube settings without and with a stored
+    Cube: each shows the Cube's list, though the page shows its page
+    before it knows its Cubes, and reads it once, whoever asks for it
+    (the page shown, the box drawn)."""
+    n = len(kept())
+    assert n > 0, "the Cube has run.sh's backup by hand"
+    read = []
+    page.on("request", lambda r: read.append(r.url) if r.method == "GET" and r.url.endswith(f"/cubes/{SERIAL}/backups") else None)
+    for address, stored, section, box in LOADS:
+        what = f"{address}, " + ("the Cube stored" if stored else "no Cube stored")
+        page.evaluate("([address, serial]) => {"
+                      " if (serial) localStorage.setItem('massimo.serial', serial); else localStorage.removeItem('massimo.serial');"
+                      " history.replaceState(null, '', location.pathname + address); }", [address, SERIAL if stored else None])
+        mark = len(read)
+        page.reload()
+        page.locator(section).wait_for(state="visible", timeout=10000)
+        assert wait_until(page, "state.eventsOpen", 10), f"{what}: the page started"
+        assert rows(page, n, box), f"{what}: the list's {n} rows"
+        assert len(read) - mark == 1, f"{what}: the list read once: {read[mark:]}"
+    show_view(page, "tiles")
+
+
+def test_clean_cube_says_why_no_backup_follows(page, case, reads):
+    """Under a list with backups and nothing pending (the list's changed
+    and due taken out of the server's answer), on Cube settings and in
+    System settings, the line that nothing changed since the newest
+    backup; with a backup pending (changed and due put in), the pending
+    line instead, and no such line."""
+    assert kept(), "the Cube has run.sh's backup by hand"
+    now = datetime.now(timezone.utc)
+
+    def clean(body):
+        body.pop("changed", None)
+        body.pop("due", None)
+        return body
+
+    def pending(body):
+        body["changed"] = (now - timedelta(minutes=5)).isoformat()
+        body["due"] = (now + timedelta(minutes=55)).isoformat()
+        return body
+
+    text = page.evaluate("t('backup.unchanged')")
+    line = " .backups-list .backup-clean"
+    try:
+        reads.change(LIST, clean)
+        for view, box in (("cube", BOX), ("system", SYS_BOX)):
+            show_view(page, view)
+            assert rows(page, len(kept()), box), f"{view}: the list loaded"
+            assert wait_until(page, f"document.querySelector('{box}{line}')?.textContent === {text!r}", 5), f"{view}: the clean Cube's line"
+            assert page.locator(box + " .backup-pending").is_hidden(), f"{view}: nothing pending"
+        reads.clear(LIST)
+        reads.change(LIST, pending)
+        for view, box in (("cube", BOX), ("system", SYS_BOX)):
+            show_view(page, "tiles")
+            show_view(page, view)
+            assert wait_until(page, f"!document.querySelector('{box} .backup-pending').classList.contains('hidden')", 5), f"{view}: the pending line"
+            assert page.locator(box + line).count() == 0, f"{view}: no clean Cube's line while a backup is pending"
+            assert rows(page, len(kept()), box), f"{view}: the list still shown"
+    finally:
+        reads.clear(LIST)
     show_view(page, "tiles")

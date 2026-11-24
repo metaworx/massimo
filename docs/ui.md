@@ -1923,7 +1923,11 @@ settings forms and have none of it.
   at the latest two hours after the first change (the settings `backups.*`,
   docs/api-v1.md, "Backups"), also across a restart of the server,
   which takes a pending one as it stops,
-  and a line says when while one is pending.
+  and a line says when while one is pending;
+  while none is, a line under a list of backups says that nothing changed
+  since the newest one, and that the server takes one after a change.
+  Each list is read when its page is shown,
+  and after a load onto the page once the page knows its Cubes.
   **Take a backup now** keeps one by hand.
   Each row has **Download**, **Compare with the one before**,
   which lists what changed as the restore would send it,

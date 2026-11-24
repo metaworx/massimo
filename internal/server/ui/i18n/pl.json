@@ -1854,6 +1854,7 @@
   "backup.take": "Utwórz kopię teraz",
   "backup.taken": "Kopia zachowana.",
   "backup.none": "Brak zachowanych kopii.",
+  "backup.unchanged": "Brak zmian od najnowszej kopii: serwer wykonuje ją po zmianie.",
   "backup.badge.kept.one": "{n} zachowana",
   "backup.badge.kept.few": "{n} zachowane",
   "backup.badge.kept.many": "{n} zachowanych",

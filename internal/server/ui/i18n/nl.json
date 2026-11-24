@@ -1802,6 +1802,7 @@
   "backup.take": "Nu een back-up maken",
   "backup.taken": "Back-up bewaard.",
   "backup.none": "Nog geen back-ups bewaard.",
+  "backup.unchanged": "Geen wijziging sinds de nieuwste back-up: de server maakt er een na een wijziging.",
   "backup.badge.kept.one": "{n} bewaard",
   "backup.badge.kept.other": "{n} bewaard",
   "backup.noHistory": "Deze Cube staat niet in de opslag van de server, dus de server bewaart er geen back-ups van.",

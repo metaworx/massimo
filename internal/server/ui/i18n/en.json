@@ -1801,6 +1801,7 @@
   "backup.take": "Take a backup now",
   "backup.taken": "Backup kept.",
   "backup.none": "No backups kept yet.",
+  "backup.unchanged": "No change since the newest backup: the server takes one after a change.",
   "backup.badge.kept.one": "{n} kept",
   "backup.badge.kept.other": "{n} kept",
   "backup.noHistory": "This Cube is not in the server's store, so the server keeps no backups of it.",

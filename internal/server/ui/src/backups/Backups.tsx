@@ -11,7 +11,8 @@
  * backup, Take a backup now where the server keeps backups, Restore from
  * file…, the automatic backup pending, the backups kept, each with
  * Download, Restore…, Compare with the one before and Delete, which asks
- * in its row, and the restore shown with its steps and Send, then how
+ * in its row, under them that nothing changed since the newest where none
+ * is pending, and the restore shown with its steps and Send, then how
  * each step went. A restore is a command, no settings form.
  */
 
@@ -26,8 +27,9 @@ import { FileButton } from "../shared/file";
 import { BusyButton, Question, useAsk } from "../shared/question";
 import { fmtWhen } from "../shared/time";
 import { useLook } from "../shared/look";
+import { isShown } from "../shared/pages";
 import {
-  boxOf, closePlan, compareBackup, deleteBackup, downloadNow, downloadStored, foldUI, of, planFile, planStored, running, sendRestore, takeBackup,
+  boxOf, closePlan, compareBackup, deleteBackup, downloadNow, downloadStored, foldUI, of, planFile, planStored, readUnloaded, running, sendRestore, takeBackup,
 } from "./store";
 
 /** Diff is what changed from the backup before: the planner's steps. */
@@ -131,16 +133,28 @@ function PlanBox({ place, serial }: { place: string; serial: string }) {
   );
 }
 
+/** The page of each place's boxes. */
+const placeView: Record<string, string> = { cube: "cube", sys: "system" };
+
 /**
  * Box is a Cube's box for a place ("cube" or "sys"), which its ids carry,
- * as both pages may hold the same Cube's.
+ * as both pages may hold the same Cube's. Drawn on the page shown before
+ * its list was read, as on a load onto the page, which shows it before it
+ * knows its Cubes, it reads the list itself, once.
  */
 export function Box({ serial, place }: { serial: string; place: string }) {
   useLook();
   const c = of(serial);
   const ui = boxOf(place, serial);
+  const loaded = c.loaded;
+  // a list that no showing of its page read, read once the box is drawn there
+  useEffect(() => {
+    if (!loaded && isShown(placeView[place])) readUnloaded(serial);
+  }, [loaded, place, serial]);
   const due = !!(c.changed && c.due);
   const list = c.list;
+  // a clean Cube's list, nothing pending: why no newer backup follows
+  const clean = loaded && c.history && list.length > 0 && !c.changed && !c.due;
   const format = "backup-format-" + place + "-" + serial;
   return (
     <div class="backup-box" data-serial={serial}>
@@ -156,6 +170,7 @@ export function Box({ serial, place }: { serial: string; place: string }) {
         {c.loaded && !c.history && <p class="muted small">{t("backup.noHistory")}</p>}
         {c.loaded && c.history && !list.length && <p class="muted small">{t("backup.none")}</p>}
         {c.loaded && c.history && list.map((b, i) => <Row key={b.id} place={place} serial={serial} b={b} older={list[i + 1]} />)}
+        {clean && <p class="backup-clean muted small">{t("backup.unchanged")}</p>}
       </div>
       <div class="restore-box"><PlanBox place={place} serial={serial} /></div>
       <ResultLine cls="backup-msg small cubes-msg" role="status" res={ui.said} />

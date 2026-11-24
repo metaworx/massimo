@@ -1803,6 +1803,7 @@
   "backup.take": "Esegui un backup ora",
   "backup.taken": "Backup conservato.",
   "backup.none": "Ancora nessun backup conservato.",
+  "backup.unchanged": "Nessuna modifica dall'ultimo backup: il server ne esegue uno dopo una modifica.",
   "backup.badge.kept.one": "{n} conservato",
   "backup.badge.kept.other": "{n} conservati",
   "backup.noHistory": "Questo Cube non è nell'archivio del server, quindi il server non ne conserva backup.",

@@ -117,14 +117,37 @@ async function loadBackups(serial: string): Promise<void> {
   if (b.plan?.backup && !b.run && !b.list.some((x) => x.id === b.plan?.backup)) b.plan = null;
 }
 
-/** refreshBackups reads a Cube's list again and draws its boxes; a failure is said in each of them. */
-export async function refreshBackups(serial: string): Promise<void> {
+/** The reads of a Cube's list under way, by its serial, so that a box drawn meanwhile does not ask again (readUnloaded). */
+const reading = new Map<string, Promise<void>>();
+
+/** readList reads a Cube's list and draws its boxes; a failure is said in each of them. */
+async function readList(serial: string): Promise<void> {
   const n = session();
   try {
     await loadBackups(serial);
   } catch (e) {
     for (const place of ["cube", "sys"]) say(place, serial, t("backup.failed", { error: (e as Error).message }), false, n);
   }
+}
+
+/** refreshBackups reads a Cube's list again and draws its boxes; a failure is said in each of them. */
+export function refreshBackups(serial: string): Promise<void> {
+  const p = readList(serial);
+  reading.set(serial, p);
+  void p.finally(() => {
+    if (reading.get(serial) === p) reading.delete(serial);
+  });
+  return p;
+}
+
+/**
+ * readUnloaded reads a Cube's list where it has not loaded and no read of
+ * it is under way: a box drawn before its page knew its Cubes (a load
+ * onto System settings, or onto Cube settings without a Cube stored),
+ * whose page's showing read no list for it.
+ */
+export function readUnloaded(serial: string): void {
+  if (serial && !of(serial).loaded && !reading.has(serial)) void refreshBackups(serial);
 }
 
 /** saveResponse saves an answer as a file, named as the server says. */
@@ -307,9 +330,10 @@ export function resynced(): void {
   }
 }
 
-/** forgetBackups forgets what the boxes kept of the user who was signed in (MassimoParts.signedOut): every Cube's data, every box's message. */
+/** forgetBackups forgets what the boxes kept of the user who was signed in (MassimoParts.signedOut): every Cube's data, every box's message, the reads under way. */
 export function forgetBackups(): void {
   known.clear();
+  reading.clear();
   cubeData.clear();
   boxUI.clear();
   foldUI.clear();

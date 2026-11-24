@@ -8,9 +8,12 @@
  * with the chosen Cube's box, and System settings' with a fold per Cube,
  * each drawn once into its place and updated in place; what a Cube has is
  * kept by its serial, so that both show the same. The lists are read when
- * their page is shown, after every change and after a restore. The plain
- * code calls MassimoParts.backups (app.js selectCube and its stream); the
- * cards' heads count the backups kept.
+ * their page is shown, after every change and after a restore; a box
+ * drawn on the page shown whose list has not loaded (a load onto the
+ * page, which shows it before it knows its Cubes) reads it once, where no
+ * read of it runs (Box, readUnloaded). The plain code calls
+ * MassimoParts.backups (app.js selectCube and its stream); the cards'
+ * heads count the backups kept.
  */
 
 import { useLayoutEffect } from "preact/hooks";
