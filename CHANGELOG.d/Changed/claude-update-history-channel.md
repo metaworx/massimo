@@ -1,3 +1,2 @@
-- Software update's last updates show the date first and each version's
-  channel; one the helper ended without a restart, "nothing to install",
-  ends at once, not at the next start (docs/ui.md, docs/api-v1.md).
+- Software update's last updates show the date first, then each
+  version with its channel (docs/ui.md, docs/api-v1.md).

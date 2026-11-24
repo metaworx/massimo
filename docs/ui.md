@@ -1986,14 +1986,15 @@ The server's sign, when it says an update is out, opens it at Software update.
   then who started it,
   or "outside Massimo" with apt or brew where Massimo did not start it:
   "24.11.2026, 15:53 · v0.16.0-alpha.1 (devel) · by Anna".
-  The version is the one reached,
+  The version is the one reached, the one apt chose where it is another,
   or the one asked for with "under way" while the update runs;
   the channel is the one the update asked for,
   or, from outside, the one the box followed at the start that found it.
   One the helper ended without its version says how it ended,
   "nothing to install" where apt had nothing newer,
-  from the page's next reading, not the next start (`docs/api-v1.md`,
-  "GET /api/v1/update?refresh=1").
+  from the page's next reading, not the next start;
+  one it rolled back says "failed and rolled back" after the version reached
+  (`docs/api-v1.md`, "GET /api/v1/update?refresh=1").
   The section is drawn in place as a check comes in,
   the header's every half hour, Check for updates, the reading while the helper works
   and Maintenance shown again:

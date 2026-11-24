@@ -46,15 +46,17 @@ function helperText(h: UpdateStatus): string {
 /**
  * historyLine is one of the last updates: when; the version reached, or
  * the one asked for with how far it got (under way for the newest, else
- * not reached, or the helper's outcome), the version with its channel in
- * brackets; and by whom, or from outside Massimo with the package manager.
+ * not reached), the version with its channel in brackets, and the
+ * helper's outcome where it has one, a rollback after the version reached
+ * included; and by whom, or from outside Massimo with the package manager.
  */
 function historyLine(e: UpdateEntry, newest: boolean): string {
   const withChannel = (version: string) => (version && e.channel ? t("update.history.withChannel", { version, channel: e.channel }) : version);
-  const asked = withChannel(e.to || "");
-  let what = e.reached ? withChannel(e.reached) : "";
-  if (!what && e.result) what = t("update.history.ended", { version: asked, state: stateText(e.result) });
-  else if (!what) what = t(newest ? "update.history.running" : "update.history.notReached", { version: asked });
+  const version = withChannel(e.reached || e.to || "");
+  let what: string;
+  if (e.result) what = t("update.history.ended", { version, state: stateText(e.result) });
+  else if (e.reached) what = version;
+  else what = t(newest ? "update.history.running" : "update.history.notReached", { version });
   const parts: string[] = [];
   const ms = Date.parse(e.reached_at || e.at || "");
   if (!isNaN(ms)) parts.push(fmtInstant(new Date(ms))); // app.js

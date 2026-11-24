@@ -4278,16 +4278,20 @@ kept in the setting `update.history`:
 an update started here names who started it (`by`, absent for the owner's key),
 the version it ran (`from`), the one it asked for (`to`)
 and the channel it asked on (`channel`);
-the next start with another version adds `reached` and `reached_at`.
+the next start with another version adds `reached` and `reached_at`,
+whichever version that is:
+apt may install an older one than `to`, in between, or a newer one.
 A new version that no entry waits for came from outside Massimo (`outside`):
 apt, brew (`manager`) or a person on the box;
 its `channel` is the one the box followed at the start that found it.
-`result` is the update helper's outcome where it ended without reaching `to`:
-`failed`, `rolled-back` or `up-to-date`.
+`result` is the helper's outcome where the box did not stay on a new version:
+`failed` or `up-to-date`, without `reached`,
+or `rolled-back`, after the version `reached` ran.
 An outcome the helper reports while the server runs on,
 `up-to-date` where apt has nothing newer yet or a failure before the restart,
-is taken at the next read of this route;
+is taken at the next read of this route or at the next update started;
 one that comes with a restart, at that start.
+An entry the helper reports no outcome for stays open.
 The log keeps an update's lines for a month only.
 
 ### POST /api/v1/update

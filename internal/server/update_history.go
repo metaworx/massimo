@@ -100,8 +100,11 @@ func (s *Server) editHistory(ctx context.Context, edit func([]updateEntry) []upd
 
 // noteUpdateStart adds the entry of an update started in Massimo at at:
 // by whom (userID, 0 for the owner's key), from the running version to
-// the one asked for on channel.
-func (s *Server) noteUpdateStart(ctx context.Context, at time.Time, userID int64, from, to, channel string) {
+// the one asked for on channel. The entry before it, still waiting, ends
+// with the outcome the update helper reported for it (helper, read just
+// before; helperFinal), so that a second Update leaves no entry open for
+// good; one the helper has no outcome for stays as it is.
+func (s *Server) noteUpdateStart(ctx context.Context, at time.Time, userID int64, from, to, channel string, helper *update.Status) {
 	e := updateEntry{At: at.UTC(), From: from, To: to, Channel: channel}
 	if userID != 0 {
 		if u, ok, err := s.opts.Store.UserByID(ctx, userID); err == nil && ok {
@@ -109,18 +112,26 @@ func (s *Server) noteUpdateStart(ctx context.Context, at time.Time, userID int64
 		}
 	}
 	s.editHistory(ctx, func(list []updateEntry) []updateEntry {
+		if len(list) > 0 && list[0].waiting() {
+			if r := helperFinal(helper, &list[0]); r != "" {
+				list[0].Result = r
+			}
+		}
 		return append([]updateEntry{e}, list...)
 	})
 }
 
 // noteVersionStart completes the history at a start of version, where
 // the last start ran before ("" for none known). A new version completes
-// the newest entry where it waits for it, or for an unknown version;
-// one that no entry waits for is an update from outside Massimo, through
-// the box's package manager where it has one, on the channel the box
-// follows now. An entry the update helper ended without reaching its
-// version gets the helper's outcome (helper, nil where the box has
-// none); an entry it completes keeps its own channel.
+// the newest entry where it waits, whatever version it is: Massimo
+// started that update, and apt or brew may install another than the
+// one asked for, an older one in between or a newer one. Where no entry
+// waits, or the helper had ended the waiting one without a restart, the
+// new version came from outside Massimo, through the box's package
+// manager where it has one, on the channel the box follows now. An entry
+// the update helper ended without reaching its version gets the
+// helper's outcome (helper, nil where the box has none); an entry it
+// completes keeps its own channel.
 func (s *Server) noteVersionStart(ctx context.Context, before, version string, helper *update.Status) {
 	now := time.Now().UTC()
 	s.editHistory(ctx, func(list []updateEntry) []updateEntry {
@@ -139,9 +150,13 @@ func (s *Server) noteVersionStart(ctx context.Context, before, version string, h
 				}
 			}
 			return nil
-		case newest != nil && newest.waiting() && (newest.To == "" || newest.To == version):
+		case newest != nil && newest.waiting() && helperFinal(helper, newest) == "":
 			newest.Reached, newest.ReachedAt = version, &now
 			return list
+		case newest != nil && newest.waiting():
+			// The helper ended it without a restart ("apt has nothing
+			// newer yet"); the new version came another way.
+			newest.Result = helperFinal(helper, newest)
 		case newest != nil && newest.Reached == before && newest.From == version && helperEnded(helper, newest, version) == "rolled-back":
 			// The new version ran, and the helper put the old one back.
 			newest.Result = "rolled-back"
