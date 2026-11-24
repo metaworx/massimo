@@ -872,10 +872,13 @@ jobs:
   # GitHub counts a step's limit as a failure and a job's as a
   # cancellation, and run.sh takes the step's shell's place (exec), so that
   # the runner's signal at that limit reaches it and its cleanup keeps the
-  # results; on a failure or a cancellation the run's results (the
-  # emulator's log with the kernel's, the device's, the servers', the
-  # screens of failed tests and Gradle's report) are the artifact
-  # app-emulator-results; a flaky case is fixed or taken out, not retried.
+  # results; the run's results (the emulator's log with the kernel's, the
+  # device's, the servers', the screens of failed tests and Gradle's report
+  # and JUnit results) are the artifact app-emulator-results, on a failure
+  # or a cancellation and, kept seven days, on a pass, so that a passing
+  # run can be read too; run.sh is strict here (CI=true): a test skipped,
+  # or fewer run than the sources declare, fails it, which Gradle would
+  # pass; a flaky case is fixed or taken out, not retried.
   # It runs where Android app runs (What
   # to test's app and app_done), and All tests passed counts both under the
   # Tested record's app=, which has no room for a word of its own
@@ -933,6 +936,15 @@ jobs:
           name: app-emulator-results
           path: tools/app-emulator/results/
           if-no-files-found: ignore
+
+      # a pass's results too, what ran with them, for a week
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: success()
+        with:
+          name: app-emulator-results
+          path: tools/app-emulator/results/
+          if-no-files-found: warn
+          retention-days: 7
 
   # Fails on a vulnerability the code can reach (govulncheck exits 3),
   # for the platforms with code of their own.

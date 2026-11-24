@@ -23,10 +23,16 @@
 # finger enrolled by EnrollTest alone, the run stopped where that fails;
 # then Gradle's :app:connectedFossDebugAndroidTest on that one emulator
 # (ANDROID_SERIAL), the servers, the user, the PIN and the key's file as
-# the instrumentation's arguments; then everything stopped, and what the
-# run leaves kept in results/ next to this script (the emulator's log
-# with the kernel's, the device's, the helper's, the servers', the screen
-# of a failed test, Gradle's report).
+# the instrumentation's arguments; after each of the two Gradle runs, what
+# it ran, counted from its JUnit results against the tests the sources
+# declare (tally/); then everything stopped, and what the run leaves kept
+# in results/ next to this script (the emulator's log with the kernel's,
+# the device's, the helper's, the servers', the screen of a failed test,
+# Gradle's report and results).
+#
+# Gradle passes a run whose tests were skipped, or that ran fewer than
+# declared: strict (APP_EMU_STRICT=1, or CI=true as GitHub sets it), the
+# run fails there too.
 #
 # A run stopped by a signal (INT, TERM), as a CI runner stops a step at
 # its time limit, keeps them too: Gradle is waited for in the background,
@@ -41,7 +47,8 @@
 # ANDROID_HOME); ANDROID_AVD_HOME (default ~/.android/avd); APP_EMU_PORT
 # (the emulator's console port, even, 5554 to 5682, default 5584);
 # APP_EMU_BOOT_TIMEOUT (seconds the boot may take once the builds are
-# done, default 300); APP_EMU_CLASS (a test class,
+# done, default 300); APP_EMU_STRICT (1: a test skipped or not run fails
+# the run, as under CI=true; 0 or empty: it is said only); APP_EMU_CLASS (a test class,
 # or a class#method, as the instrumentation's -e class takes it);
 # APP_EMU_API_PORT_A and _B (the servers' ports, 9443 and 9444),
 # APP_EMU_CUBE_PORT_A and _B (their fake Cubes', 62941 and 62942) and
@@ -93,6 +100,12 @@ fi
 if ! [[ $boot_s =~ ^[0-9]+$ ]]; then
 	die "APP_EMU_BOOT_TIMEOUT is a number of seconds, not '$boot_s'"
 fi
+case "${APP_EMU_STRICT:-}" in
+1) strict=1 ;;
+0) strict=0 ;;
+"") strict=0; [ "${CI:-}" != true ] || strict=1 ;;
+*) die "APP_EMU_STRICT is 1 or 0, not '$APP_EMU_STRICT'" ;;
+esac
 serial="emulator-$port"
 
 # --- what the run needs, said before anything starts ---------------------
@@ -265,6 +278,7 @@ pids+=("$!")
 
 echo "app-emulator: the servers and the app, while it boots"
 servers_build
+go -C "$root" build -o "$work/tally" ./tools/app-emulator/tally
 servers_start a
 servers_start b
 fp_a=$(servers_ready a) || exit 1
@@ -318,21 +332,42 @@ connected() {
 	step env -C "$root/app/android" ANDROID_SERIAL="$serial" ./gradlew --no-daemon --console=plain :app:connectedFossDebugAndroidTest "${given[@]}" "$@"
 }
 
+# tally what dir [class] says what the Gradle run named what ran, from its
+# results moved into dir, against the tests the sources declare, narrowed
+# by the class filter; strict, it fails where a test was skipped, failed
+# or not run.
+tally() {
+	local a=(-what "$1" -tests "$root/app/android/app/src/androidTest/kotlin")
+	[ -z "${3:-}" ] || a+=(-class "$3")
+	[ "$strict" = 0 ] || a+=(-strict)
+	"$work/tally" "${a[@]}" "$2"
+}
+
 # The finger once, before the suite: a finger not enrolled is this one
 # failure, and not a wait in each case.
 echo "app-emulator: the finger, enrolled by EnrollTest alone"
-if ! connected "$arg.class=ch.metaworx.massimo.EnrollTest"; then
-	die "no finger was enrolled, which every case needs, so the suite did not start; Settings' screen is kept in $out/shots, the steps in $out/logcat.txt (MassimoEmu), Gradle's report in $out/report"
+enroll=ch.metaworx.massimo.EnrollTest
+if ! connected "$arg.class=$enroll"; then
+	reports "$out/enroll"
+	tally "the enrollment" "$out/enroll/test-results" "$enroll" || true
+	die "no finger was enrolled, which every case needs, so the suite did not start; Settings' screen is kept in $out/shots, the steps in $out/logcat.txt (MassimoEmu), Gradle's report in $out/enroll/report"
 fi
 reports "$out/enroll"
+tally "the enrollment" "$out/enroll/test-results" "$enroll" || die "the enrollment did not run as it should (above), so the suite did not start"
 
 echo "app-emulator: the suite"
 suite=()
 [ -z "${APP_EMU_CLASS:-}" ] || suite+=("$arg.class=$APP_EMU_CLASS")
 rc=0
 connected "${suite[@]}" || rc=$?
+reports "$out"
+counted=0
+tally "the suite" "$out/test-results" "${APP_EMU_CLASS:-}" || counted=$?
 if [ "$rc" -ne 0 ]; then
 	echo "app-emulator: the suite failed; its report, the logs and the screens of failed tests are kept in $out" >&2
 	exit "$rc"
+fi
+if [ "$counted" -ne 0 ]; then
+	die "Gradle passed the suite, but not every test the sources declare ran and passed (above): a test skipped or left out passes there"
 fi
 echo "app-emulator: the suite passed"

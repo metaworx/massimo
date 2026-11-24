@@ -81,6 +81,8 @@ the first one on a machine also fetches the test libraries.
    the user, the PIN and the name of the key's file
    as the instrumentation's arguments;
    `APP_EMU_CLASS` runs one class, or one `class#method`.
+   After it, and after the enrollment's run,
+   what the run ran (below, "The results").
 7. Everything stopped, the emulator by its console,
    and what the run leaves in `results/`,
    also where a signal (`INT`, `TERM`) stops it:
@@ -193,8 +195,27 @@ the device's `logcat.txt` from the boot on (the suite's steps under
 `MassimoEmu`, and for a failed test the window's hierarchy and the page's
 text), `fingers.log`, each server's and fake Cube's log,
 `shots/` with the screen of each failed test,
-Gradle's `report/` and `test-results/`,
-and `enroll/`, the enrollment's report where it passed.
+Gradle's `report/` and `test-results/` (its JUnit results, `TEST-*.xml`),
+and `enroll/`, the enrollment's report and results where it passed.
+
+After each of the two Gradle runs,
+`tally/` reads its JUnit results and says what ran,
+one line for the run and one for each test with how it went:
+
+```text
+app-emulator: the suite: 14 tests, 0 skipped, 0 failed; 0 of the 14 the sources declare not run
+app-emulator:   passed   KeepTest.aServerIsAddedAndItsCertificateTrusted
+```
+
+The tests it expects are those the sources declare,
+each `@Test` of `app/src/androidTest/kotlin/`,
+narrowed by the run's class (`APP_EMU_CLASS`,
+or `EnrollTest` for the enrollment),
+so that a new test is expected as soon as it is written.
+Gradle passes a run whose tests were skipped (an `assume`) or that ran fewer than that;
+strict, under CI (`CI=true`) or with `APP_EMU_STRICT=1`,
+the run fails there too, and says which.
+
 The suite logs no key, token or password:
 the owner's key reaches the tests as a file on the emulator,
 not as an argument,
@@ -229,8 +250,10 @@ in a step with a time limit of its own (32 minutes, inside the job's 45),
 `run.sh` in the shell's place (`exec`),
 so that the runner's signal at that limit reaches it and its cleanup
 keeps the results;
-on a failure or a cancellation `results/` is the artifact
-`app-emulator-results`.
+`results/` is the artifact `app-emulator-results`,
+on a failure or a cancellation,
+and on a pass too, kept seven days, so that a passing run can be read;
+the run is strict there (`CI=true`).
 Its result counts with Android app's in the Tested record's `app=`.
 
 ## Files
@@ -242,4 +265,5 @@ Its result counts with Android app's in the Tested record's `app=`.
 | `fingers.sh` | the helper that answers each touch a test asks for |
 | `sdk.sh` | `check` and `fetch` of the pinned emulator and image |
 | `pins.sh` | the pins |
+| `tally/` | the command that says what a Gradle run ran, against the tests the sources declare, with its Go tests |
 | `scripts_test.go`, `doc.go` | the Go tests of the helper, of `sdk.sh` and of the pins, a part of `go test ./...` |
