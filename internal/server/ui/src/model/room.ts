@@ -14,6 +14,7 @@
 
 import type { Device } from "../api";
 import type { Item } from "../shared/problems";
+import { fmtSetpoint } from "../shared/setpoint";
 
 /**
  * roomActualDevice is the device whose measured temperature stands for
@@ -61,14 +62,14 @@ export function confirmFieldName(f: string): string {
   return t(key) === key ? f : t(key);
 }
 
-/** confirmShown is what a device's state shows of a value its write waits for; "" for a configuration's value, which the state does not hold. */
+/** confirmShown is what a device's state shows of a value its write waits for, a setpoint as its display shows it (OFF for 4.5 °C); "" for a configuration's value, which the state does not hold. */
 function confirmShown(d: Device, f: string): string {
   const s = d.state || {};
   switch (f) {
     case "mode":
       return s.mode ? modeName(s.mode) : "";
     case "setpoint":
-      return s.setpoint !== undefined ? fmtTemp(s.setpoint) : "";
+      return s.setpoint !== undefined ? fmtSetpoint(s.setpoint) : "";
     case "until":
       return s.until ? fmtUntil(s.until) : "";
     case "locked":

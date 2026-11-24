@@ -14,7 +14,7 @@
 import type { Device, FailedRadiogram, Mismatch } from "../api";
 
 declare global {
-  /** A thermostat's configured eco and comfort temperatures. */
+  /** A thermostat's configured eco and comfort temperatures, from its entry, else from its detail. */
   function presetTemps(th: Device): Promise<{ eco?: number; comfort?: number }>;
   /** Sets the room to its thermostat's eco or comfort temperature in the room's mode, from the More menu. */
   function sendPreset(room: PageRoom, which: "eco" | "comfort"): Promise<unknown>;

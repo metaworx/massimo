@@ -1133,6 +1133,14 @@ button.subtle { color: var(--muted); }
 @media (max-width: 359px) {
   .temp-tag { display: none; }
 }
+/* On a phone the row's sides and gaps are narrower and its numbers a
+   little smaller, so that the longest labels of IS and SET (Italian's)
+   and the widest value fit a 390 px screen's tile with room to spare. */
+@media (max-width: 420px) {
+  .setpoint-row { gap: 8px; padding-left: 4px; padding-right: 4px; }
+  .temp-block { gap: 4px; }
+  .temp-big { font-size: 2.1rem; }
+}
 .temp-label {
   font-size: 0.66rem;
   letter-spacing: 0.1em;
@@ -1140,6 +1148,34 @@ button.subtle { color: var(--muted); }
   line-height: 1;
 }
 .setpoint-big.pending { color: var(--accent); }
+/* A setpoint at a thermostat's eco or comfort temperature carries the
+   device's own mark (shared/setpoint.tsx PresetMark), in the accent
+   colour of the icons beside it, costing no width: in the tile a badge
+   at the top right of SET's value, out of the flow, in the room the row
+   leaves above it; in a device row in the place of Set's gauge (.di).
+   The value is as wide as "30.5°" whatever it shows, so that neither it
+   nor the chevrons move as a step passes eco or comfort, and the tiles
+   line up. */
+.preset-mark { display: inline-flex; flex: none; align-self: center; line-height: 0; }
+.set-val { position: relative; display: inline-block; }
+.setpoint-big { min-width: 4.3ch; }
+.set-val > .preset-mark { position: absolute; right: -2px; bottom: 100%; margin-bottom: 1px; }
+.set-val > .preset-mark .ti { width: 1rem; height: 1rem; }
+/* The room's thermostats while their setpoints differ, under the
+   setpoint row (Tile.tsx Members): each by name, setpoint and mark, " · "
+   between them, a member on a line of its own where the tile is too
+   narrow. */
+.members-line {
+  margin: 0 14px 8px;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--muted);
+  text-align: center;
+  min-width: 0;
+}
+.members-line .member { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; vertical-align: middle; }
+.members-line .member-name { overflow-wrap: anywhere; min-width: 0; }
+.members-line .member-set { color: var(--fg); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* The measured temperature's age sits under the number, out of the flow,
    so tiles with and without one line up. */
 .temp-val { position: relative; display: inline-block; }

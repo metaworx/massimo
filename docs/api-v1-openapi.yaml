@@ -5176,6 +5176,8 @@ components:
             warn_at: {type: string, format: date-time}
             alert_at: {type: string, format: date-time}
         battery: {type: string, enum: [ok, weak, low], description: "A reported device's battery level, from the history of its flag: weak once the flag was seen, low once it stayed 15 minutes; ok again after a long valve move without it (weak) or an hour without it (low). Absent for a virtual wall thermostat and a device without state"}
+        comfort_temp: {type: number, description: "A radiator or wall thermostat's comfort temperature, from its configuration (C line); absent for another device and where the Cube sent none"}
+        eco_temp: {type: number, description: "A radiator or wall thermostat's eco temperature, from its configuration (C line); absent for another device and where the Cube sent none"}
         stale: {type: boolean, description: "Radiator or wall thermostat whose entry has not changed for its stale threshold (stale_after, 50 hours, or stale_after_wall, 24 hours): out of range, flat battery, or just quiet. Present when true. A virtual wall thermostat is stale when every source of its actual_temp is"}
         virtual: {type: boolean, description: "A room's virtual wall thermostat, which the server computes from the room's devices; present when true"}
         room_uid: {type: string, description: "A virtual wall thermostat's room's uid"}

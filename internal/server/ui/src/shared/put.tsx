@@ -30,6 +30,7 @@ import { live } from "./live";
 import { byteLength, defaultDeviceName, NAME_BYTES } from "./name";
 import { cubePath } from "./path";
 import { session, stillSession } from "./session";
+import { fmtSetpoint } from "./setpoint";
 import { can } from "./me";
 
 /** What a form that puts a device into a room keeps: the name typed, the room and the copy chosen, its request under way, its outcome, and done once the device is in its room. */
@@ -64,7 +65,7 @@ type Answer = { copied?: Copied; budget?: { duty_cycle_pct?: number; free_memory
 
 /** stateText words the state a copy's 0x40 carried: auto on the programme, auto with a setpoint until the next switch point, manual, a holiday. */
 function stateText(s: CopiedState): string {
-  const temp = s.setpoint === undefined ? "" : fmtNum(s.setpoint, 1) + " °C";
+  const temp = s.setpoint === undefined ? "" : fmtSetpoint(s.setpoint);
   switch (s.mode) {
     case "manual":
       return t("put.stateManual", { temp });

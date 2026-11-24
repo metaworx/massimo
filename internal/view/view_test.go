@@ -5,6 +5,8 @@ package view
 
 import (
 	"encoding/base64"
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -221,5 +223,77 @@ func TestStalenessByType(t *testing.T) {
 	s = Staleness{Radiator: time.Hour, Wall: 2 * time.Hour}
 	if s.after(cube.DeviceRadiatorThermostatPlus) != time.Hour || s.after(cube.DeviceWallThermostat) != 2*time.Hour {
 		t.Fatalf("given %v %v", s.after(cube.DeviceRadiatorThermostatPlus), s.after(cube.DeviceWallThermostat))
+	}
+}
+
+// A thermostat's entry carries its comfort and eco temperatures from its
+// C line, a radiator thermostat's and a wall thermostat's alike, by the
+// API's names; another device and a device without a C line carry none
+// (AP RoomMajority, D13-A).
+func TestPresetTemperatures(t *testing.T) {
+	// The fixture has radiator thermostats alone: silentDevice's C line,
+	// made a wall thermostat's with comfort 19 °C and eco 16.5 °C.
+	line, ok := snapshot(t).ConfigLine(silentDevice)
+	if !ok {
+		t.Fatal("no C line of the silent device")
+	}
+	raw, err := base64.StdEncoding.DecodeString(line.Data[strings.Index(line.Data, ",")+1:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw[4], raw[0x12], raw[0x13] = byte(cube.DeviceWallThermostat), 38, 33
+	wall := cube.Message{Type: 'C', Data: silentDevice.String() + "," + base64.StdEncoding.EncodeToString(raw)}
+	snap := snapshot(t, reportedLine, wall)
+	if c := snap.Config(silentDevice); c == nil || c.Wall == nil || c.Wall.ComfortTemp != 19 || c.Wall.EcoTemp != 16.5 {
+		t.Fatalf("the wall thermostat's configuration %+v", c)
+	}
+	kinds := map[cube.DeviceType]int{}
+	for _, d := range Devices(snap, nil, Staleness{}) {
+		rf, err := cube.ParseRFAddress(d.RFAddress)
+		if err != nil {
+			t.Fatal(err)
+		}
+		c := snap.Config(rf)
+		raw, err := json.Marshal(d)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var fields map[string]any
+		if err := json.Unmarshal(raw, &fields); err != nil {
+			t.Fatal(err)
+		}
+		var comfort, eco float64
+		switch {
+		case c != nil && c.Thermostat != nil:
+			comfort, eco = c.Thermostat.ComfortTemp, c.Thermostat.EcoTemp
+		case c != nil && c.Wall != nil:
+			comfort, eco = c.Wall.ComfortTemp, c.Wall.EcoTemp
+		default:
+			if _, ok := fields["comfort_temp"]; ok {
+				t.Errorf("%s (%s): comfort_temp %v without a thermostat's configuration", d.RFAddress, d.Type, fields["comfort_temp"])
+			}
+			if _, ok := fields["eco_temp"]; ok {
+				t.Errorf("%s (%s): eco_temp %v without a thermostat's configuration", d.RFAddress, d.Type, fields["eco_temp"])
+			}
+			continue
+		}
+		kinds[d.Type]++
+		if comfort == 0 || eco == 0 {
+			t.Fatalf("%s: the fixture's configuration has comfort %v, eco %v", d.RFAddress, comfort, eco)
+		}
+		if fields["comfort_temp"] != comfort || fields["eco_temp"] != eco {
+			t.Errorf("%s (%s): comfort_temp %v, eco_temp %v, want %v and %v from its C line", d.RFAddress, d.Type, fields["comfort_temp"], fields["eco_temp"], comfort, eco)
+		}
+	}
+	if kinds[cube.DeviceRadiatorThermostat]+kinds[cube.DeviceRadiatorThermostatPlus] == 0 || kinds[cube.DeviceWallThermostat] == 0 {
+		t.Fatalf("the fixture's thermostats by type %v: a radiator and a wall thermostat wanted", kinds)
+	}
+	// The rooms' lists carry the same entries.
+	for _, r := range Rooms(snap, nil, Staleness{}) {
+		for _, d := range r.Devices {
+			if d.Type.IsThermostat() && (d.ComfortTemp == nil || d.EcoTemp == nil) {
+				t.Errorf("room %d: thermostat %s without its temperatures", r.ID, d.RFAddress)
+			}
+		}
 	}
 }

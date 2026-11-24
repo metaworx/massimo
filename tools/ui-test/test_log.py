@@ -48,6 +48,62 @@ def test_log_changes(page, case, reads):
     show_view(page, "tiles")
 
 
+OFF_SAYS = {
+    "en": {"state": "manual, set OFF (4.5 °C)", "change": "set 18.0 → OFF (4.5 °C)",
+           "differ": "{a}: manual set OFF (4.5 °C), {b}: manual set 18.0",
+           "drift": "does not follow its week programme: OFF (4.5 °C) instead of 21.0 since the switch point at 18:20",
+           "audit": "setpoint {a}: mode manual, temperature OFF (4.5 °C), by Anna"},
+    "de": {"state": "manuell, Soll OFF (4,5 °C)", "change": "Soll 18,0 → OFF (4,5 °C)",
+           "differ": "{a}: Manuell Soll OFF (4,5 °C), {b}: Manuell Soll 18,0",
+           "drift": "folgt seinem Wochenprogramm nicht: OFF (4,5 °C) statt 21,0 seit dem Schaltpunkt um 18:20",
+           "audit": "Solltemperatur {a}: Modus manual, Temperatur OFF (4,5 °C), durch Anna"},
+}
+
+
+def test_log_writes_off(page, case, reads):
+    """The log writes a setpoint of 4.5 °C as the devices show it, with
+    its temperature (AP RoomMajority, D6-A): a state event's state and
+    its change, a room check's member, a thermostat off its programme
+    and a setpoint's change line."""
+    show_view(page, "log")
+    isolate_log(page, reads)
+    wait_log_live(page)
+    names = page.evaluate("""() => {
+      const r = state.rooms.find((x) => x.devices.filter((d) => !d.virtual).length >= 2);
+      const ds = r.devices.filter((d) => !d.virtual);
+      const d = JSON.parse(JSON.stringify(ds[0]));
+      d.state = Object.assign({}, d.state, { mode: "manual", setpoint: 4.5 });
+      delete d.state.actual_temp;
+      delete d.state.valve_pct;
+      delete d.state.window_open;
+      Object.assign(d.state, { battery_low: false, error: false, link_error: false, panel_locked: false });
+      const now = () => new Date().toISOString();
+      const send = (kind, ev) => state.events.dispatchEvent(new MessageEvent(kind, { data: JSON.stringify(Object.assign({ kind, time: now() }, ev)) }));
+      send("state", { device: d.rf_address, state: d });
+      send("state", { device: d.rf_address, state: d, changes: { setpoint: { from: 18, to: 4.5 } } });
+      send("disagree", { source: "cube", level: "warn", summary: { room: r.id, outcome: "differ", minutes: 11, differs: ["setpoint"],
+        members: [{ rf: ds[0].rf_address, mode: "manual", setpoint: 4.5 }, { rf: ds[1].rf_address, mode: "manual", setpoint: 18 }] } });
+      send("drift", { source: "device", level: "warn", device: ds[1].rf_address, serial: ds[1].serial, summary: { room: r.id,
+        outcome: "not_following", setpoint: 4.5, expected: 21, switch_at: "18:20" } });
+      send("change", { source: "config", level: "info", summary: { action: "setpoint", target: "device:" + ds[0].rf_address,
+        set: { mode: "manual", temp: 4.5 } }, by: { name: "anna", display_name: "Anna" } });
+      return { a: deviceName(ds[0]), b: deviceName(ds[1]) };
+    }""")
+    assert wait_until(page, "document.querySelectorAll('#log-lines .log-line.kind-change').length > 0", 5), "the change line"
+    says = OFF_SAYS[case.lang]
+    states = page.locator("#log-lines .log-line.kind-state")
+    assert states.count() == 2, "the two state lines"
+    assert states.nth(1).locator(".log-text").inner_text() == says["state"], states.nth(1).locator(".log-text").inner_text()
+    assert states.nth(0).locator(".log-text").inner_text() == says["change"], states.nth(0).locator(".log-text").inner_text()
+    differ = page.locator("#log-lines .log-line.kind-disagree").first.locator(".log-text").inner_text()
+    assert says["differ"].format(**names) in differ, differ
+    drift = page.locator("#log-lines .log-line.kind-drift").first.locator(".log-text").inner_text()
+    assert drift.startswith(says["drift"]), drift
+    change = page.locator("#log-lines .log-line.kind-change").first.locator(".log-text").inner_text()
+    assert change == says["audit"].format(**names), change
+    show_view(page, "tiles")
+
+
 def test_log_radio_faults(page, case, reads):
     """The log names a device's flags as its badges do: a communication
     error that came with the radiogram that failed, by its technical

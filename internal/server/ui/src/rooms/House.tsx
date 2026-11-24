@@ -20,6 +20,7 @@ import { Choices } from "../shared/choices";
 import { DateTime, FormFooter, Stepper } from "../shared/field";
 import { useBusy } from "../shared/question";
 import { session, stillSession } from "../shared/session";
+import { fmtSetpoint } from "../shared/setpoint";
 import { untracked } from "@preact/signals";
 import { useLook } from "../shared/look";
 import { house } from "./store";
@@ -80,7 +81,9 @@ function ticked(id: number): boolean {
 
 /**
  * houseRequests applies the panel: one room command after another, each
- * room's outcome in the panel's result line as it comes.
+ * room's outcome in the panel's result line as it comes, its setpoint as
+ * the devices show it (OFF for 4.5 °C), and each room's tile waiting for
+ * its thermostats to show it, as after the tile's own write.
  */
 async function houseRequests(): Promise<void> {
   const mode = house.mode;
@@ -109,7 +112,9 @@ async function houseRequests(): Promise<void> {
       let body: Record<string, unknown> = { mode: "auto" };
       if (mode !== "auto") body = until ? { mode: "vacation", temp, until } : { mode: "manual", temp };
       const res = await api<{ discarded?: boolean } | null>("PUT", base() + "/rooms/" + room.id + "/setpoint", body);
-      const what = mode === "auto" ? t("house.auto") : t(until ? "house.tempUntil" : "house.temp", { temp: fmtNum(temp, 1), until });
+      if (!stillSession(n)) return;
+      awaitMembers(room, body, res); // the room's tile waits for its thermostats, as after its own write
+      const what = mode === "auto" ? t("house.auto") : until ? t("house.tempUntil", { temp: fmtSetpoint(temp), until }) : fmtSetpoint(temp);
       results.push(res && res.discarded ? t("house.roomDiscarded", { room: room.name }) : t("house.roomOk", { room: room.name, what }));
       if (res && res.discarded) failed = true;
     } catch (e) {

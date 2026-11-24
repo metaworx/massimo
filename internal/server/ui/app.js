@@ -3,8 +3,9 @@
 
 // The Massimo web UI, core: API access with the token (the sign-in is
 // login.js), the helpers the
-// other files share that read the page's state (fmtTemp, fmtAge,
-// helpParts; fmtNum is in i18n.js, the components in components.js),
+// other files share that read the page's state (fmtTemp, fmtSetpoint,
+// fmtAge, helpParts; fmtNum is in i18n.js, the components in
+// components.js),
 // settings, the Cube clock, loading of cubes and rooms,
 // polling and the event stream with its tickets. The header is in
 // header.js, the home notice and the search for Cubes in home.js; the
@@ -431,6 +432,19 @@ function fmtTemp(v, unit) {
   return fmtNum(v, 1) + (unit === undefined ? " °C" : unit);
 }
 
+// TEMP_OFF is the setpoint a device shows as OFF, its valve shut
+// (cube.TempOff).
+const TEMP_OFF = 4.5;
+
+// fmtSetpoint is a setpoint as a device's display shows it, for the
+// plain scripts (the tiles' result lines of rooms.js and tiles.js, the
+// week programme's segments through its kit): OFF for 4.5 °C, without a
+// unit, else as fmtTemp gives it; no ON for 30.5 °C. The number fields
+// keep 4.5. The parts' is fmtSetpoint of ui/src/shared/setpoint.tsx.
+function fmtSetpoint(v, unit) {
+  return v === TEMP_OFF ? t("temp.off") : fmtTemp(v, unit);
+}
+
 // --- ages of values ---------------------------------------------------
 
 // observedSince is when the server first heard from the selected Cube,
@@ -779,6 +793,7 @@ function selectCube(serial) {
   state.serial = serial;
   store("massimo.serial", serial);
   state.details = {};
+  for (const ui of Object.values(state.ui)) if (ui.awaitTimer) clearTimeout(ui.awaitTimer); // rooms.js awaitMembers
   state.ui = {};
   refresh().then((fresh) => fresh && connectEvents());
   MassimoParts.log.cubeChanged();
@@ -801,12 +816,16 @@ function poll(rooms) {
 // clearCubeData forgets what the page loaded of the Cubes and draws it
 // empty, for the next to sign in, who may be someone else (Sign out,
 // login.js): the Cubes and the found ones, the rooms and the devices,
-// the tiles' states with a setpoint not yet sent, the last poll and the
-// Cube's clock; the poll stops until the sign-in starts it again.
+// the tiles' states with a setpoint not yet sent and a setpoint's wait for
+// the thermostats (rooms.js awaitMembers), the last poll and the Cube's
+// clock; the poll stops until the sign-in starts it again.
 function clearCubeData() {
   if (state.pollTimer) clearInterval(state.pollTimer);
   state.pollTimer = null;
-  for (const ui of Object.values(state.ui)) if (ui.timer) clearTimeout(ui.timer);
+  for (const ui of Object.values(state.ui)) {
+    if (ui.timer) clearTimeout(ui.timer);
+    if (ui.awaitTimer) clearTimeout(ui.awaitTimer);
+  }
   Object.assign(state, { cubes: [], found: [], rooms: [], unlisted: [], roomsOf: null, details: {}, ui: {}, lastPoll: null });
   renderRooms(); // rooms.js
   renderHomeNotice(); // the header with it (home.js)
@@ -941,6 +960,9 @@ async function connectEvents() {
   // agree again: the tiles' marks
   on("mismatch", logged(() => loadRooms()));
   on("config", logged((data) => {
+    // the device's entry with its new configuration (its eco and comfort
+    // temperatures, which mark its setpoint), as a state event brings it
+    if (data && data.state && !data.state.virtual) updateDevice(data.state);
     // a device that just joined pairing: its C line makes it a device without a room
     if (data && data.device && !state.unlisted.some((d) => d.rf_address === data.device) &&
         !state.rooms.some((r) => r.devices.some((d) => d.rf_address === data.device))) loadRooms().catch(() => {});

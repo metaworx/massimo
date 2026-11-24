@@ -13,10 +13,13 @@
 // come from the host's kit, so that it looks as the page it is in:
 //
 //   kit = { t, elem, textEl, button, switchEl, fieldRow, numberInput,
-//           fmtNum, fmtTemp, clamp, temps: { min, max, step } }
+//           fmtNum, fmtTemp, fmtSetpoint, clamp, temps: { min, max, step } }
 //
 // t(key, values) is the page's translation, the keys those of prog.*,
 // day.* and dayShort.*; the others build elements as components.js does.
+// fmtSetpoint writes a segment's temperature as the devices' displays
+// show it, OFF for 4.5 °C (fmtTemp where a kit has none); the switch
+// points' fields keep the number.
 // After every edit the element draws itself again and dispatches a
 // bubbling "change" event; the host's Send asks dirtyDays().
 "use strict";
@@ -298,14 +301,15 @@ class MassimoWeekProgram extends HTMLElement {
     let start = 0;
     const temps = points.map((p) => p.temp);
     const lo = Math.min(...temps), hi = Math.max(...temps);
+    const fmt = k.fmtSetpoint || k.fmtTemp; // OFF for 4.5 °C, as the devices show it
     for (const pt of points) {
       const end = W.minutesOf(pt.until);
       // A label only when the segment is wide enough to hold it.
-      const seg = k.textEl("span", end - start >= 120 ? k.fmtNum(pt.temp, 1) + "°" : "", "prog-seg");
+      const seg = k.textEl("span", end - start >= 120 ? fmt(pt.temp, "°") : "", "prog-seg");
       seg.style.flexGrow = String(Math.max(1, end - start));
       const warm = hi > lo ? (pt.temp - lo) / (hi - lo) : 0.5;
       seg.style.setProperty("--warm", warm.toFixed(2));
-      seg.title = W.clockOf(start) + " – " + pt.until + ": " + k.fmtTemp(pt.temp);
+      seg.title = W.clockOf(start) + " – " + pt.until + ": " + fmt(pt.temp);
       bar.appendChild(seg);
       start = end;
     }

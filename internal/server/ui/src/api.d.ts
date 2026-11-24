@@ -1715,6 +1715,16 @@ export interface Device {
    */
   battery?: "ok" | "weak" | "low";
   /**
+   * A radiator or wall thermostat's comfort temperature, from its configuration
+   * (C line); absent for another device and where the Cube sent none
+   */
+  comfort_temp?: number;
+  /**
+   * A radiator or wall thermostat's eco temperature, from its configuration (C
+   * line); absent for another device and where the Cube sent none
+   */
+  eco_temp?: number;
+  /**
    * Radiator or wall thermostat whose entry has not changed for its stale
    * threshold (stale_after, 50 hours, or stale_after_wall, 24 hours): out of
    * range, flat battery, or just quiet. Present when true. A virtual wall

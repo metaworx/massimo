@@ -17,6 +17,7 @@ import { mismatchText, radiogramName, rfLabel, roomName } from "../model/device"
 import type { Loose, LogLine } from "./lines";
 import { type CubeRooms, logState } from "./state";
 import { confirmFieldName } from "../model/room";
+import { fmtSetpoint, TEMP_OFF } from "../shared/setpoint";
 
 /**
  * logRoomsOf are the rooms and the unlisted list loaded of a Cube, by its
@@ -140,6 +141,17 @@ function logDeviceRoom(d: Device, serial: string): string {
   return roomName(r.id, r.name);
 }
 
+/**
+ * logSetpoint is a setpoint as the log writes it: the number with one
+ * digit, and 4.5 °C as the devices' displays show it with its
+ * temperature, "OFF (4.5 °C)" (AP RoomMajority, D6-A); "–" for none.
+ */
+function logSetpoint(v: unknown): string {
+  if (v === null || v === undefined) return "–";
+  if (v === TEMP_OFF) return t("log.setpointOff", { off: fmtSetpoint(v), temp: fmtTemp(v) });
+  return fmtNum(v as number, 1);
+}
+
 /** logStateText is the short state text of a state event. */
 function logStateText(s: Loose | null): string {
   if (!s) return "";
@@ -147,7 +159,7 @@ function logStateText(s: Loose | null): string {
   if (s.reported === false) parts.push(t("log.notReported"));
   const st = s.state || {};
   if (st.mode) parts.push(modeName(st.mode));
-  if (st.setpoint !== undefined) parts.push(t("log.set", { v: fmtNum(st.setpoint, 1) }));
+  if (st.setpoint !== undefined) parts.push(t("log.set", { v: logSetpoint(st.setpoint) }));
   if (st.actual_temp !== undefined) parts.push(t("log.actual", { v: fmtNum(st.actual_temp, 1) }));
   if (st.valve_pct !== undefined) parts.push(t("log.valve", { v: st.valve_pct }));
   if (st.window_open !== undefined) parts.push(t(st.window_open ? "log.windowOpen" : "log.windowClosed"));
@@ -188,7 +200,7 @@ function logChangesText(changes: Loose): string {
         parts.push(t("log.ch.mode", { mode: to ? modeName(to) : "–" }));
         break;
       case "setpoint":
-        parts.push(t("log.ch.set", { from: num(from, 1), to: num(to, 1) }));
+        parts.push(t("log.ch.set", { from: logSetpoint(from), to: logSetpoint(to) }));
         break;
       case "actual_temp":
         parts.push(t("log.ch.actual", { from: num(from, 1), to: num(to, 1) }));
@@ -444,7 +456,7 @@ function logRoomName(id: number, serial: string): string {
  */
 function logSettingText(m: Loose): string {
   const parts = [logWord("log.mode.", m.mode)];
-  if (m.setpoint !== undefined) parts.push(t("log.set", { v: fmtNum(m.setpoint, 1) }));
+  if (m.setpoint !== undefined) parts.push(t("log.set", { v: logSetpoint(m.setpoint) }));
   else if (m.mode === "auto") parts.push(t("log.disagree.program"));
   if (m.until) parts.push(t("log.until", { until: m.until }));
   return parts.join(" ");
@@ -515,7 +527,7 @@ function logUnconfirmedText(s: Loose, serial: string): string {
   const value = (k: string, v: unknown): string => {
     if (Array.isArray(v)) return ""; // a day's switch points: its name says it
     if (k === "mode") return logWord("log.mode.", v);
-    if (k === "setpoint") return fmtNum(v as number, 1);
+    if (k === "setpoint") return logSetpoint(v);
     if (k === "locked") return t(v ? "confirm.lockedOn" : "confirm.lockedOff");
     return logValue(k, v);
   };
@@ -541,7 +553,7 @@ function logDriftText(s: Loose): string {
   const num = (v: unknown) => (v === undefined || v === null ? "–" : String(v));
   switch (s.outcome) {
     case "not_following": {
-      const parts = [t("log.sum.driftNot", { setpoint: fmtNum(s.setpoint, 1), expected: fmtNum(s.expected, 1), at: s.switch_at || "–" })];
+      const parts = [t("log.sum.driftNot", { setpoint: logSetpoint(s.setpoint), expected: logSetpoint(s.expected), at: s.switch_at || "–" })];
       if (s.hour_off) parts.push(t(s.auto_dst === false ? "log.sum.driftHourNoDst" : "log.sum.driftHour"));
       if (s.failed_radiogram) parts.push(t("log.errorRadiogram", { radiogram: radiogramName(s.failed_radiogram) }));
       return parts.join("; ");
@@ -600,7 +612,7 @@ function logChangeText(s: Loose, serial: string): string {
       .filter((k) => s.set[k] !== "…" && typeof s.set[k] !== "object")
       .map((k) => {
         const label = t("log.cfg." + k) === "log.cfg." + k ? k : t("log.cfg." + k);
-        return label + " " + logValue(k, s.set[k]);
+        return label + " " + (k === "temp" ? logSetpoint(s.set[k]) : logValue(k, s.set[k])); // a setpoint's temperature, OFF at 4.5 °C
       });
     if (parts.length) text += ": " + parts.join(", ");
   }

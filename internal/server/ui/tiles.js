@@ -12,8 +12,12 @@
 "use strict";
 
 // presetTemps are a thermostat's configured eco and comfort
-// temperatures, { eco, comfort }, undefined where it has none.
+// temperatures, { eco, comfort }, undefined where it has none: those of
+// its entry in the page's data (comfort_temp, eco_temp, which the config
+// and state events keep current), its detail's where the entry lacks
+// them (a server before them).
 async function presetTemps(th) {
+  if (th.eco_temp !== undefined && th.comfort_temp !== undefined) return { eco: th.eco_temp, comfort: th.comfort_temp };
   const detail = await deviceDetail(th);
   const cfg = detail.thermostat || detail.wall_thermostat || {};
   return { eco: cfg.eco_temp, comfort: cfg.comfort_temp };
@@ -31,9 +35,10 @@ function presetBody(room, temp) {
   return { mode: "manual", temp };
 }
 
-// presetLabel names a preset's write by the body it sends.
+// presetLabel names a preset's write by the body it sends, its
+// temperature as the devices show it (OFF for 4.5 °C).
 function presetLabel(which, body) {
-  const temp = fmtNum(body.temp, 1);
+  const temp = fmtSetpoint(body.temp);
   const label = which === "eco" ? t("label.eco", { temp }) : t("label.comfort", { temp });
   if (body.mode === "auto") return t("label.presetAuto", { label });
   if (body.mode === "vacation") return t("label.presetUntil", { label, until: fmtUntil(body.until) });

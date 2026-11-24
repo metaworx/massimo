@@ -2004,7 +2004,9 @@ each with its `room_uid` and the devices the view (`devices=`, see
         "room_id": 5,
         "serial": "JEQ0000502",
         "reported": true,
-        "state": {"mode": "auto", "setpoint": 22, "valve_pct": 0, "battery_low": false, "error": false, "link_error": false}
+        "state": {"mode": "auto", "setpoint": 22, "valve_pct": 0, "battery_low": false, "error": false, "link_error": false},
+        "comfort_temp": 21,
+        "eco_temp": 17
       }
     ]
   }
@@ -2035,6 +2037,11 @@ Thermostats carry `mode` (`auto`, `manual`, `vacation`, `boost`), `setpoint`,
 its entries carry none),
 `valve_pct` for radiator thermostats, `until` for vacation mode;
 shutter contacts carry `window_open`.
+A radiator or wall thermostat's entry, beside `state`, carries `comfort_temp`
+and `eco_temp`, its comfort and eco temperatures from its configuration
+(its C line, as `GET …/devices/{rf}` gives them under `thermostat` or
+`wall_thermostat`), absent where the Cube sent none:
+the web UI marks a setpoint that is one of them, as the device's display does.
 `error` is the device's communication error,
 as the original software's UI calls it ("Communication error!"):
 the Cube's last radiogram to the device failed,

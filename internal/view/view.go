@@ -191,6 +191,12 @@ type Device struct {
 	// (internal/battery); empty for a virtual wall thermostat and a
 	// device without a state.
 	Battery string `json:"battery,omitempty"`
+	// ComfortTemp and EcoTemp are a thermostat's comfort and eco
+	// temperatures, from its configuration (C line); absent for another
+	// device and where the Cube sent none. A client marks a setpoint
+	// that is one of them, as the device's display does.
+	ComfortTemp *float64 `json:"comfort_temp,omitempty"`
+	EcoTemp     *float64 `json:"eco_temp,omitempty"`
 	// Stale marks a thermostat whose entry has not changed for its
 	// type's stale threshold (Staleness): it may be out of range or out
 	// of battery, and its values may be old. Shutter contacts and eco buttons transmit only
@@ -269,7 +275,8 @@ var now = time.Now
 // DeviceOf builds the view of one device from the metadata, its
 // configuration and its live state. The metadata names the device and
 // its room; the configuration, when present, has the last word on the
-// type. stale holds the stale thresholds.
+// type and gives a thermostat's comfort and eco temperatures. stale
+// holds the stale thresholds.
 func DeviceOf(snap *cubelan.Snapshot, rf cube.RFAddress, stale Staleness) Device {
 	st, _ := snap.State(rf)
 	d := Device{RFAddress: rf.String(), Type: st.Type}
@@ -286,6 +293,12 @@ func DeviceOf(snap *cubelan.Snapshot, rf cube.RFAddress, stale Staleness) Device
 		d.Type = c.Type
 		if d.Serial == "" {
 			d.Serial, d.RoomID = c.Serial, c.RoomID
+		}
+		switch {
+		case c.Thermostat != nil:
+			d.ComfortTemp, d.EcoTemp = new(c.Thermostat.ComfortTemp), new(c.Thermostat.EcoTemp)
+		case c.Wall != nil:
+			d.ComfortTemp, d.EcoTemp = new(c.Wall.ComfortTemp), new(c.Wall.EcoTemp)
 		}
 	}
 	d.Reported = st.Valid

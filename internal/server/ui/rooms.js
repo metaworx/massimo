@@ -14,6 +14,10 @@ const MIN_TEMP = 4.5;
 const MAX_TEMP = 30.5;
 const DEFAULT_TEMP = 20; // stepper start when the room has no setpoint yet
 const SEND_DELAY_MS = 2000;
+// AWAIT_MS is how long a setpoint written to a room waits for the room's
+// thermostats to show it, as the server's confirmation waits (confirm.go,
+// five minutes after the Cube's answer).
+const AWAIT_MS = 5 * 60 * 1000;
 
 // --- room facts -------------------------------------------------------
 
@@ -56,7 +60,9 @@ function received(d, field) {
 // and confirm the holiday form and the deletion's question, config the
 // configuration open (ui/src/rooms/Config.tsx, which keeps the rest),
 // sending the write running (tileWrite), hold the Hold switch, result the
-// result line (showTileResult).
+// result line (showTileResult), awaiting and awaitTimer a setpoint
+// written to the room that its thermostats do not all show yet
+// (awaitMembers).
 function roomUI(room) {
   if (!state.ui[room.id]) state.ui[room.id] = MassimoParts.rooms.ui();
   return state.ui[room.id];
@@ -84,6 +90,7 @@ function fmtUntil(text) {
 // tile and the devices without a room are shown where they have
 // something.
 function renderRooms() {
+  for (const r of state.rooms) settleAwaiting(r, false);
   MassimoParts.rooms.render();
   $("house").classList.toggle("hidden", !state.rooms.some(roomThermostat));
   $("unlisted").classList.toggle("hidden", !state.unlisted.length);
@@ -107,6 +114,7 @@ function updateDevice(d) {
       r.devices = r.devices.map((x, k) => (k === i ? d : x));
       r.ready = r.devices.every((x) => x.reported);
       r.stale = r.devices.some((x) => x.stale);
+      settleAwaiting(r, true);
       return;
     }
   }
@@ -180,7 +188,7 @@ function dropPendingSetpoints() {
   for (const room of state.rooms) {
     const ui = state.ui[room.id];
     if (!ui || !ui.timer || ui.pending === null) continue;
-    const label = t("label.manual", { temp: fmtNum(ui.pending, 1) });
+    const label = t("label.manual", { temp: fmtSetpoint(ui.pending) });
     cancelSetpoint(room);
     showTileResult(room.id, t("result.error", { label, error: notSentText() }), false); // app.js
   }
@@ -201,11 +209,75 @@ async function flushSetpoint(room) {
   const temp = ui.pending;
   await tileWrite(room, "setpoint", async () => {
     try {
-      return await setpointRequest(room, { mode: "manual", temp }, t("label.manual", { temp: fmtNum(temp, 1) }));
+      return await setpointRequest(room, { mode: "manual", temp }, t("label.manual", { temp: fmtSetpoint(temp) }));
     } finally {
       ui.pending = null;
     }
   });
+}
+
+// awaitMembers marks a setpoint the Cube took for the room as waiting
+// for the room's thermostats to show it: res is the Cube's answer, body
+// what was sent, its mode and the temperature where one was given. The
+// tile does not show its members' setpoints meanwhile (Members of
+// ui/src/rooms/Tile.tsx), as a room command reaches the devices one by
+// one. Only a write the Cube took replaces a wait: one that failed, the
+// Cube discarded or that was never sent leaves an earlier wait as it
+// is, and a boost, which changes no setpoint the line shows, starts
+// none. The wait ends once every thermostat of the room shows it
+// (settleAwaiting), after AWAIT_MS, or with the room's next write. A
+// write with a temperature that every thermostat shows already ends at
+// once. One without, such as AUTO, records each thermostat's setpoint
+// and when the server received it (before): the thermostats show the
+// mode before they take its setpoints, so it ends at a later state event
+// alone, and only once they show setpoints taken since.
+function awaitMembers(room, body, res) {
+  if (!res || res.discarded || !body || !body.mode || body.mode === "boost") return;
+  const ui = roomUI(room);
+  if (ui.awaitTimer) clearTimeout(ui.awaitTimer);
+  const want = typeof body.temp === "number" ? { mode: body.mode, setpoint: body.temp } : { mode: body.mode, before: {} };
+  if (want.before) {
+    for (const d of room.devices) {
+      if (isThermostat(d) && d.state) want.before[d.rf_address] = { setpoint: d.state.setpoint, at: received(d, "setpoint") };
+    }
+  }
+  ui.awaiting = want;
+  ui.awaitTimer = setTimeout(() => {
+    if (ui.awaiting !== want) return;
+    ui.awaiting = null;
+    ui.awaitTimer = null;
+  }, AWAIT_MS);
+  if (want.setpoint !== undefined) settleAwaiting(room, false);
+}
+
+// settleAwaiting ends the wait of a setpoint written to the room
+// (awaitMembers) once every thermostat of the room with a state shows
+// it: its mode and the temperature sent. A write without a temperature
+// ends at a state event alone (event), once the setpoints agree and they
+// are new since the write: at least one differs from its thermostat's
+// before it, or every one came later than its before (received); a state
+// event of another kind (a valve, a window contact, a configuration)
+// while they still show the setpoints from before ends nothing.
+function settleAwaiting(room, event) {
+  const ui = state.ui[room.id];
+  const want = ui && ui.awaiting;
+  if (!want) return;
+  const ths = room.devices.filter((d) => isThermostat(d) && d.state);
+  if (!ths.every((d) => d.state.mode === want.mode)) return;
+  if (want.setpoint !== undefined && !ths.every((d) => d.state.setpoint === want.setpoint)) return;
+  if (want.setpoint === undefined) {
+    if (!event || new Set(ths.map((d) => d.state.setpoint)).size > 1) return;
+    const was = (d) => want.before[d.rf_address];
+    const changed = ths.some((d) => was(d) && d.state.setpoint !== was(d).setpoint);
+    const later = (d) => {
+      const at = Date.parse(received(d, "setpoint") || ""), then = Date.parse((was(d) && was(d).at) || "");
+      return !isNaN(at) && (isNaN(then) || at > then);
+    };
+    if (!changed && !ths.every(later)) return;
+  }
+  if (ui.awaitTimer) clearTimeout(ui.awaitTimer);
+  ui.awaitTimer = null;
+  ui.awaiting = null;
 }
 
 // sendRoomSetpoint sends a mode or a setpoint of the tile as the write
@@ -220,6 +292,7 @@ async function setpointRequest(room, body, label) {
   try {
     const res = await api("PUT", base() + "/rooms/" + room.id + "/setpoint", body);
     if (!MassimoParts.stillSession(n)) return null; // answered after the session ended: no line on the next user's tile
+    awaitMembers(room, body, res);
     showTileResult(room.id, resultText(label, res), !(res && res.discarded));
     return res;
   } catch (e) {
