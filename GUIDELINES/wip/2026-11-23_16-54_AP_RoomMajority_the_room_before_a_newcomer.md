@@ -1,4 +1,4 @@
-# AP RoomMajority v1.1: The room before a newcomer
+# AP RoomMajority v1.2: The room before a newcomer
 
 ## TL;DR
 
@@ -9,20 +9,20 @@ One order speaks for a room, the dead passed over.
 
 - copy's 0x40: auto, 0 → the members' state before the change, still direct
 - one order (D9): dead passed over → majority → master → wall → radiators
-- re-send (RadioHealth.D188): + the state before the change,
-  + the newest change on a tie (D3-A, D7-C)
+- re-send: + the state before the change, + the newest change on a tie
 - copy's configuration: first other thermostat → per group and day, by the order
-- 4.5 °C → "OFF"; the log "OFF (4.5 °C)"
-- tile: moon at eco, sun at comfort, both at both;
-  the members' setpoints while they differ
+- 4.5 °C → "OFF"; moon at eco, sun at comfort; the members' setpoints
+- the room's configuration and programme, its marks, the virtual wall thermostat:
+  their own orders → the one order (D19-A)
 
-The room of 2026-11-23 then keeps its manual 5 °C.
+Blocks 1 to 3 are in #410.
 
 ### Blocks
 
 1. Order: one order for a room's addressee and reference; the re-send (`drift.go`)
 2. Copy: the reference state in the copy; the configuration by the order
 3. Marks: OFF, the eco and comfort marks, the members' setpoints (UI, log, API)
+4. Sources: the room's configuration, programme, marks and VWT by the order
 
 ## Discussion
 
@@ -197,6 +197,30 @@ The owner, at v1.0's gate (2026-11-23):
   Dutch, whose labels already pass the label's width,
   and one before the value would move its digits off Actual's.
 
+The owner, at the completion gate of Blocks 1 to 3
+(2026-11-24, "EXEC++ as recommended", on top of #410),
+on the run's NOTE (`wip/2026-11-24_01-44_NOTE_RoomMajority_v1.1_how_blocks_1_to_3_went.md`):
+
+- **D19-A.
+  The other places where one member stands for its room**
+  take the one order too, as Block 4, on the same pull request:
+  the room's configuration and programme (`GET …/rooms/{id}/config`, `…/program`),
+  the page's `roomThermostat` (the tile's mark, More's presets),
+  and the virtual wall thermostat's mode, setpoint and until.
+- **D20-A.
+  The repair's reference** stays the report's room-level one,
+  the device's own configuration counted,
+  so that the repair's preview names what the report named
+  (RadioHealth.D163-A's "the others" changes).
+- **D21-A.
+  Findings frozen until every thermostat has reported** stays:
+  the report keeps a room's member findings while one of its thermostats has
+  not reported since the Cube's restart.
+- **D22-A.
+  A check on hardware,** on the owner's word, as the NOTE lists its steps:
+  it needs the owner at the devices (a wall thermostat's batteries out)
+  and the rooms named, so it waits for the owner and is not part of this run.
+
 Cited, not edited: AP DeviceUnPairingFix,
 whose copy of a room's settings (its Blocks 1 and 2, `MoveCommands`,
 `CopyCommands`) and addressee (D167, D169-A) this changes, and AP RadioHealth,
@@ -299,6 +323,17 @@ extends.
   No moon or sun symbol is in `index.html` yet.
   A device row's cell is a flex of label, value, unit and icon
   (`Cell`, `Devices.tsx`), aligned by minimum widths, not by a grid.
+- **The places D19 names** (read at v1.2):
+  `getRoomConfig` and `getRoomProgram` with `programOfRoom` (`config_api.go`,
+  `etag.go`): the room's first radiator thermostat, else its first wall
+  thermostat;
+  the page's `roomThermostat` (`rooms.js`; called from `tiles.js`, `Tile.tsx`,
+  `House.tsx`, `Config.tsx`): the wall thermostat, else the first thermostat;
+  the virtual wall thermostat (`internal/view/vwt.go`): boost while any
+  thermostat boosts, else the wall thermostat's mode, setpoint and until,
+  else the radiator thermostat that reported last.
+  The re-send's state order (`referenceState`, Block 1) lives in `drift.go`,
+  where the view cannot reach it.
 - **The UI** is AP UiParts':
   the tile and the device rows are parts (`src/rooms/Tile.tsx`,
   `src/rooms/Devices.tsx`),
@@ -445,9 +480,44 @@ where the repair's texts changed.
 `make ui-check`; the changed UI test files, as `make ui-test` runs them;
 `go test ./internal/server ./internal/view`; `TestOpenAPICoversRoutes`.
 
+### Block 4: Sources
+
+- One function for a room's state by D9, without Massimo's own command and the
+  hold, which the server alone knows:
+  what more than half of the live thermostats show,
+  the newest change (D3-A as D7-C counts it, `StateTimes.Changes`),
+  then the master's, the wall thermostat's, the radiator thermostats';
+  in a package both `internal/view` and `drift.go` reach,
+  and `referenceState` calls it for its steps after the hold.
+- The virtual wall thermostat (`vwt.go`): boost while any thermostat boosts,
+  as now; else its mode, setpoint and until by that function;
+  its `sources` name the members the state came from.
+- `GET …/rooms/{id}/config` and `…/program` (`getRoomConfig`, `getRoomProgram`,
+  `programOfRoom`): the room's configuration by `cubeio.RoomConfig`,
+  per group and per day, the etag following it; a room without a live
+  thermostat as the rule says.
+- The room entry (`view.Room`) carries `thermostat`, the first of
+  `cubeio.RoomOrder`, and the room's `comfort_temp` and `eco_temp` by
+  `RoomConfig`; the page's `roomThermostat` takes `room.thermostat`,
+  and the tile's mark and More's presets the room's temperatures.
+- Tests, with exact values: the room's configuration and programme on a tie,
+  by most, with a dead member; the virtual wall thermostat's state by most,
+  by the newest change, by the order, a dead member passed over;
+  the room entry's fields; UI tests of the tile's mark and More by the room's
+  temperatures where the wall thermostat's differ from most of the room's.
+- Docs: `docs/api-v1.md` (the room's configuration and programme, the room
+  entry, "The virtual wall thermostat"), the OpenAPI file and `api.d.ts`,
+  `docs/ui.md` (the tile's mark, More, `roomThermostat`).
+- A `Changed` CHANGELOG fragment.
+
+**Verification:**
+each new test fails with its rule taken out; `go test` of the touched packages,
+`-race` of `internal/server`; `gofmt`, `go vet` for the three systems;
+`make ui-check`; the touched UI test files in the four cases.
+
 ### The pull request
 
-The three commits on one branch, `main` merged in before it;
+The commits on one branch, `main` merged in before it;
 the guidelines check over the range; the pull request's run green.
 The owner merges it.
 
@@ -460,6 +530,9 @@ The owner merges it.
   `fix(copy): A thermostat put into a room takes the room's state and configuration`
 - Block 3:
   `feat(ui/rooms): OFF for 4.5 °C, marks for eco and comfort, and the setpoints of members that differ`
+- The plan: `chore(aps): +RoomMajority v1.2`
+- Block 4:
+  `fix(rooms): Every place that reads one thermostat for its room follows the one order`
 
 ## Change History
 
@@ -471,3 +544,8 @@ The owner merges it.
   place, the addressee and the repair included, D10-A, D11-A, D12-D, D13-A,
   D14-A, D15-A, D16-A, D17-A (Block 3), and D18 from the owner's three places;
   no decision open.
+- v1.2 (2026-11-24): the owner's answers at the completion gate of Blocks 1 to 3,
+  by EXEC++: D19-A as Block 4 (the room's configuration and programme, the
+  page's room thermostat and the virtual wall thermostat by the one order),
+  D20-A, D21-A, D22-A (a hardware check, waiting for the owner);
+  Blocks 1 to 3 built (#410).
