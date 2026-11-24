@@ -17,6 +17,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/certs"
 	"go.metaworx.ch/massimo/internal/protocol/cube"
+	"go.metaworx.ch/massimo/internal/store"
 	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/testkit/cubewatch"
 	"go.metaworx.ch/massimo/internal/view"
@@ -194,6 +195,61 @@ func TestHealthzStarted(t *testing.T) {
 	}
 	if !h.OK || h.StartedAt.Before(before.Add(-time.Second)) || h.StartedAt.After(time.Now()) {
 		t.Fatalf("healthz %+v, want ok and started_at since %v", h, before)
+	}
+}
+
+// The setting auth.password_reveal (AP MobileApp, D84-A): on by default,
+// a switch written as the others are, by a holder of settings alone, and
+// said by GET /healthz to anyone, before a sign-in, as the web UI's
+// sign-in card reads it; a server without a store says on.
+func TestPasswordReveal(t *testing.T) {
+	t.Parallel()
+	healthz := func(ts *httptest.Server) any {
+		t.Helper()
+		var h map[string]any
+		if code := getJSON(t, ts, "", "/healthz", &h); code != 200 {
+			t.Fatalf("healthz: %d", code)
+		}
+		return h["password_reveal"]
+	}
+	if v := healthz(startServer(t, withOptions(Options{Token: "secret"})).ts); v != true {
+		t.Errorf("without a store, healthz says %v", v)
+	}
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts := r.ts
+	setting := func() settingView {
+		t.Helper()
+		_, body := callAPI(t, ts, "GET", "/api/v1/settings", "secret", "")
+		var all map[string]settingView
+		if err := json.Unmarshal([]byte(body), &all); err != nil {
+			t.Fatalf("settings: %v %s", err, body)
+		}
+		return all[store.PasswordRevealKey]
+	}
+	if v := setting(); v.Value != "true" || v.Default != "true" || v.Set || v.InEffect != "true" || v.Applies != "now" {
+		t.Fatalf("the default: %+v", v)
+	}
+	if v := healthz(ts); v != true {
+		t.Errorf("by default, healthz says %v", v)
+	}
+	viewer := userToken(t, r.s.opts.Store, "vera", store.RoleViewer)
+	if code, _ := callAPI(t, ts, "PUT", "/api/v1/settings", viewer, `{"`+store.PasswordRevealKey+`":false}`); code != 403 {
+		t.Errorf("a viewer writes it: %d", code)
+	}
+	for _, bad := range []string{`"no"`, `1`, `"false"`} {
+		if code, _ := callAPI(t, ts, "PUT", "/api/v1/settings", "secret", `{"`+store.PasswordRevealKey+`":`+bad+`}`); code != 400 {
+			t.Errorf("%s: %d", bad, code)
+		}
+	}
+	if code, body := callAPI(t, ts, "PUT", "/api/v1/settings", "secret", `{"`+store.PasswordRevealKey+`":false}`); code != 200 || setting().Value != "false" {
+		t.Fatalf("off: %d %s", code, body)
+	}
+	if v := healthz(ts); v != false {
+		t.Errorf("switched off, healthz says %v", v)
+	}
+	callAPI(t, ts, "PUT", "/api/v1/settings", "secret", `{"`+store.PasswordRevealKey+`":null}`)
+	if v := setting(); v.Set || v.Value != "true" || healthz(ts) != true {
+		t.Errorf("back to the default: %+v", v)
 	}
 }
 

@@ -489,6 +489,18 @@ hence `failed_checks_forgotten`.
   marks that key and scrolls a row below the first screen into view,
   marks nothing for an id that is not one of the user's keys,
   and nothing once the address or the page shown changes.
+- `test_password_eye.py`, the password fields' eye (AP MobileApp, D84-A):
+  the sign-in's password, the first owner's two, My profile's three and the
+  new user's each have it, which turns the field to text and back with the
+  value, the caret and the focus kept, by a click and by the keyboard,
+  labelled Show password and Hide password and pressed while it shows;
+  an API key's field has none; the password hidden again at the submit, at
+  the card's next opening and when My profile's fold or a user's panel
+  opens again, the field drawn, in a browser and in the app;
+  System settings → Users' switch writes `auth.password_reveal` (stubbed)
+  and the page's fields follow at once, a password shown before hidden and
+  staying so when the eye comes back; no eye while `/healthz` is held, and
+  none once it says off, the browser's own hidden on every field.
 - `test_sign_in_resend.py`, a request that meets an expired session (AP
   SignInResend), its 401 answered by a route:
   a write is never sent again after the sign-in, whoever signs in,
@@ -668,7 +680,10 @@ hence `failed_checks_forgotten`.
   put into the page by `add_init_script` and answering from a configuration
   the test gives it, which it may change while the page runs:
   each server shows what its probe found (on the LAN, remote, not reachable),
-  a tap opens it at the address found, and one that does not answer says so;
+  a tap opens it at the address found with `open(id, url)` alone, one
+  opening at a time, and one that does not answer says so;
+  a server with a kept login has the sign-in icon, labelled, which opens it
+  with `{signIn: true}`, and a key refused at a tap is said and gone;
   an address typed is probed by HTTPS first and added,
   a private one as the LAN address;
   what is not an address says so and plain HTTP outside the home network is warned of;
@@ -676,14 +691,15 @@ hence `failed_checks_forgotten`.
   Cancel adds nothing and Trust pins it,
   and a changed certificate shows the old and the new fingerprint before the server opens;
   a server's settings open from ⚙ and a long press,
-  save the biometric switch and Remove asks in place;
+  save the biometric switch, and Remove server, on a line of its own under
+  Cancel and Save after a rule, with what it does, asks in place;
   discovery offers a server not in the list and moves a saved one's LAN address;
   the card of the server on the phone starts and stops it;
   Turn off, Forget all and Remove say what they revoked, their toasts naming
   the keys that stay valid, left or on the phone alone;
   Remove turns a kept login off first;
   a key left shows in its server's settings with Show in My profile,
-  which opens `<address>#profile?key=<id>`,
+  off while the server does not answer, which opens `<address>#profile?key=<id>`,
   Remove warns of it, and a session found there takes its line away;
   a session left, as the bridge's version 5 keeps one, shows in its
   server's settings, Sign out without an answer leaves one, Remove signs
@@ -696,6 +712,13 @@ hence `failed_checks_forgotten`.
   with a login kept, the row with the fingerprint is on one line at 390 px
   in all six languages, the card centred,
   and the fingerprint's spinner turns inside its button in the icon's place;
+  the card names its server under its title, in the app alone, with the
+  name once where it is the address and an ⓘ for the instance id and the
+  fingerprint, each copied with a tap, fitting the card at 390 px in all six
+  languages (and in `test_keep_open.py` on the first owner's steps);
+  ☰ in the app has This server's settings… and App settings… after Select
+  server…, each calling the bridge, fitting ☰ in all six languages, and the
+  connect page opens a server's settings from `#settings=<id>`;
   My profile in the app tags the key the phone keeps "this device's key",
   by `login.status()`'s `key_id`, and reads its keys once the sign-in's
   revoke is done, a key it revoked not marked but named in a toast;

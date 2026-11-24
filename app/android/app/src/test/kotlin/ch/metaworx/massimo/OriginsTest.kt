@@ -52,7 +52,8 @@ class OriginsTest {
             assertTrue(call, Origins.allowed(Caller.CONNECT, call))
             assertFalse(call, Origins.allowed(Caller.SERVER, call))
         }
-        for (call in listOf("token", "setToken", "login.status", "login.keep", "login.fingerprint", "connect")) {
+        // contract version 5: the server's page hands over to this server's settings and the app's, on the connect page
+        for (call in listOf("token", "setToken", "login.status", "login.keep", "login.fingerprint", "connect", "openServerSettings", "openAppSettings")) {
             assertFalse(call, Origins.allowed(Caller.CONNECT, call))
             assertTrue(call, Origins.allowed(Caller.SERVER, call))
         }
@@ -60,6 +61,26 @@ class OriginsTest {
         assertTrue(Origins.allowed(Caller.SERVER, "hello"))
         for (call in listOf("hello", "servers", "token", "anything")) assertFalse(call, Origins.allowed(Caller.NONE, call))
         assertFalse(Origins.allowed(Caller.CONNECT, "anything"))
+    }
+
+    @Test
+    fun theConnectPagesFragments() {
+        // what connect.js opens at its start: a server's settings by its id, and App settings
+        assertEquals("#settings=0123456789abcdef01234567", Origins.settingsOf("0123456789abcdef01234567"))
+        assertEquals("#settings=a%26b%23c", Origins.settingsOf("a&b#c"))
+        assertEquals("#app-settings", Origins.APP_SETTINGS)
+    }
+
+    @Test
+    fun aPagesOwnWayToTheListCarriesNoFragment() {
+        // the settings the list opens at its start are the bridge's handover alone
+        assertEquals(Origins.CONNECT_URL, Origins.byPage(Origins.CONNECT_URL + "#settings=0123456789abcdef01234567"))
+        assertEquals(Origins.CONNECT_URL, Origins.byPage(Origins.CONNECT_URL + Origins.APP_SETTINGS))
+        assertNull("the list alone goes as it is", Origins.byPage(Origins.CONNECT_URL))
+        assertNull("another origin is not the shell's", Origins.byPage("https://massimo.example.net/#settings=x"))
+        // a form posted to the list keeps its fragment past shouldOverrideUrlLoading: the shell serves GET alone
+        assertTrue(Origins.appServes("GET"))
+        for (m in listOf("POST", "PUT", "DELETE", "HEAD", "OPTIONS", "get")) assertFalse(m, Origins.appServes(m))
     }
 
     @Test

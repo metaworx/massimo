@@ -10,7 +10,7 @@
  * again, the sign-out, a password registered by OPAQUE and the current
  * one proved, and the page's address; for the sign-in's parts the app's
  * bridge, the token kept, the sign-in by OPAQUE and the page's start
- * after it.
+ * after it; for ☰ the app's ways to its servers and to its settings.
  */
 
 import type { User } from "../api";
@@ -24,13 +24,21 @@ declare global {
   function roleLabel(key: string, name?: string): string;
   /** The keys of the six default roles, for a role choice that cannot read the roles. */
   const DEFAULT_ROLES: string[];
-  /** The app's status of the login by fingerprint (docs/app.md): whether the phone can keep one, the user kept, whether the address is plain HTTP outside the private ranges; from contract version 5 the id of the key kept, 0 for none or not known. */
+  /** The server a page in the app was opened for (login.status's server, contract version 5): its name in the app's list, the address it was opened at, its node (the instance id of /healthz) and its pinned certificate fingerprint, "" for none. */
+  interface AppServer {
+    name?: string;
+    url?: string;
+    node?: string;
+    fp?: string;
+  }
+  /** The app's status of the login by fingerprint (docs/app.md): whether the phone can keep one, the user kept, whether the address is plain HTTP outside the private ranges; from contract version 5 the id of the key kept, 0 for none or not known, and the server the page was opened for. */
   interface AppLoginStatus {
     can?: boolean;
     user?: string;
     plain?: boolean;
     ask?: string;
     key_id?: number;
+    server?: AppServer;
   }
   /** In the app, the bridge's login by fingerprint (contract version 2 and later); null in a browser. */
   function appLogin(): {
@@ -40,6 +48,10 @@ declare global {
   } | null;
   /** In the app, the way back to its servers (Select server); null in a browser. */
   function appConnect(): (() => Promise<unknown>) | null;
+  /** In the app, the way to this server's settings on the app's own page (☰'s This server's settings…, contract version 5); null in a browser and in an app before it. */
+  function appServerSettings(): (() => Promise<unknown>) | null;
+  /** In the app, the way to the app's settings on its own page (☰'s App settings…, contract version 5); null in a browser and in an app before it. */
+  function appAppSettings(): (() => Promise<unknown>) | null;
   /** A sign-in askLogin opened, which the sign-in's card hands back to finishSignIn: who was in, the pushes held, its end; whether it opened on the first owner's form, and its dismissal (Skip for now). */
   interface SignInAsk {
     readonly was: string;

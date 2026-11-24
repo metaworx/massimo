@@ -9,8 +9,8 @@
 // the page runs:
 //
 //   kind     "connect" (the default) for the connect page's calls,
-//            "server" for a server's page's, token, setToken, login.*
-//            and connect
+//            "server" for a server's page's, token, setToken, login.*,
+//            connect, openServerSettings and openAppSettings
 //   servers  the servers the app keeps, as {id, name, node, lan, …,
 //            login, login_key, ask, start, session, trusted_at, unrevoked,
 //            unended}
@@ -31,19 +31,27 @@
 //   core     the server on the phone's status, for a bridge with core
 //   push     true for a bridge with push
 //   token    the token the app keeps, for kind "server"
+//   appEntries for kind "server", false for an app before contract
+//            version 5: no openServerSettings and openAppSettings, which
+//            are there otherwise, login or none
 //   revokeAtSignIn for kind "server", {user, ids, ms}: the keys and
 //            sessions left there that the app revokes with a new token
 //            before setToken answers, as {revoked: ids} (contract version
 //            5): each revoked at the page's server with that token, ms
 //            after the call, as the app's check takes its time
 //   login    for kind "server", the login by fingerprint (contract
-//            version 2): {status: {can, user, ask, plain, key_id}, keep: [answers
+//            version 2): {status: {can, user, ask, plain, key_id, server}, keep: [answers
 //            of login.keep in turn, true, false or "error:<message>"],
 //            fingerprint: the token login.fingerprint resolves to, null,
 //            or "error:<message>"}; a keep that resolves true keeps the
 //            user given as keepAs; without it the page has no login
-//   openLogin for kind "connect", what open(id, url, {login: true})
-//            does: true (the default), false, or "error:<message>"
+//   openLogin for kind "connect", what the prompt of open does at a
+//            server with a kept login, a tap's (open(id, url), the rule
+//            of contract version 5, its prompt simplified to every tap
+//            there) and {login: true}'s: true (the default) or false, a
+//            tap opening the page, at its card where false, and
+//            {login: true} opening nothing for false; or
+//            "error:<message>", the kept key refused and forgotten
 //   keys     by server id, the key {user, id} its kept login holds, the
 //            id 0 for a login kept before the id was (contract version 4)
 //   unrevokable the ids of the servers whose key the server does not
@@ -58,7 +66,8 @@
 // and a server's unrevoked as it was; trust notes trusted_at; open takes
 // a server's lan or remote, alone or with #profile?key=<id>, and refuses
 // any other URL; forget (Turn off) and signOut end the server's session;
-// signOut answers {ended} true where it was given an address. Turning a
+// signOut answers {ended} true where it was given an address; open
+// with {signIn: true} opens at once, without a prompt. Turning a
 // login off, as Turn off, Forget all and Remove do, as the app's Revoker
 // does: the key revoked where the server answers (an address given, or
 // one of its addresses in answers, as the app looks for one) and is not
@@ -131,6 +140,17 @@
       };
       api.connect = () => {
         call("connect");
+        return later(null);
+      };
+    }
+    if (cfg.appEntries !== false) {
+      // ☰'s two entries (contract version 5): the app's own page with this server's settings, or App settings
+      api.openServerSettings = () => {
+        call("openServerSettings");
+        return later(null);
+      };
+      api.openAppSettings = () => {
+        call("openAppSettings");
         return later(null);
       };
     }
@@ -262,13 +282,12 @@
       else call("open", id, url);
       const target = server(id);
       if (!target || !opens(target, url)) return answerOf("error:That address is not one of the server's.", 20);
-      if (!opts || !opts.login) return later(true);
+      if (opts && opts.signIn) return later(true); // the sign-in card, no prompt
+      if (!target.login || (opts && !opts.login)) return later(true);
       const a = cfg.openLogin === undefined ? true : cfg.openLogin;
-      if (typeof a === "string") {
-        const s = rec.servers.find((x) => x.id === id);
-        if (s) s.login = ""; // a key the server refused is forgotten
-      }
-      return answerOf(a, 30);
+      if (typeof a === "string") target.login = ""; // a key the server refused is forgotten
+      if (typeof a === "string" || (opts && opts.login)) return answerOf(a, 30);
+      return later(true, 30); // a tap: the page, signed in or at its card
     },
     forget(id, url) {
       call("forget", id, url);

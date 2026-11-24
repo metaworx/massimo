@@ -342,6 +342,20 @@ function appConnect() {
   return b && typeof b.connect === "function" ? () => b.connect() : null;
 }
 
+// appServerSettings is the bridge's way to this server's settings on the
+// app's own page, and appAppSettings to the app's settings there (☰'s two
+// entries, contract version 5; AP MobileApp, D73-A), else null: the page
+// passes no id and reads nothing of them.
+function appServerSettings() {
+  const b = appBridge();
+  return b && typeof b.openServerSettings === "function" ? () => b.openServerSettings() : null;
+}
+
+function appAppSettings() {
+  const b = appBridge();
+  return b && typeof b.openAppSettings === "function" ? () => b.openAppSettings() : null;
+}
+
 // askLogin opens the sign-in dialog and resolves true once a session or
 // a key is in, false when the dialog was dismissed. While it is open the
 // page is signed out: the body's class signed-out hides all of it but the

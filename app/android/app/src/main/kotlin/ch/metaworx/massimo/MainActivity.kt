@@ -143,7 +143,7 @@ class MainActivity : AppCompatActivity() {
             host = object : Bridge.Host {
                 override fun open(url: String) = openServer(url)
 
-                override fun connectPage() = web.loadUrl(Origins.CONNECT_URL)
+                override fun connectPage(fragment: String) = web.loadUrl(Origins.CONNECT_URL + fragment)
 
                 override fun privacy() = this@MainActivity.privacy()
 
@@ -183,7 +183,9 @@ class MainActivity : AppCompatActivity() {
         val id = savedInstanceState?.getString(KEY_ID)
         val origin = savedInstanceState?.getString(KEY_ORIGIN)
         val url = savedInstanceState?.getString(KEY_URL)
-        bridge.opened = if (id != null && origin != null && url != null) Bridge.Opened(id, origin, url) else null
+        // a page opened at its card stays there when the activity is made anew (a new appearance), its session still withheld
+        val withheld = savedInstanceState?.getBoolean(KEY_WITHHELD) == true
+        bridge.opened = if (id != null && origin != null && url != null) Bridge.Opened(id, origin, url, withheld) else null
         channel(bridge.opened?.origin)
         if (savedInstanceState == null || web.restoreState(savedInstanceState) == null) {
             val first = if (savedInstanceState == null) servers.atStart() else null
@@ -241,6 +243,7 @@ class MainActivity : AppCompatActivity() {
             outState.putString(KEY_ID, it.id)
             outState.putString(KEY_ORIGIN, it.origin)
             outState.putString(KEY_URL, it.url)
+            outState.putBoolean(KEY_WITHHELD, it.withheld)
         }
     }
 
@@ -355,6 +358,10 @@ class MainActivity : AppCompatActivity() {
     private inner class Client : WebViewClient() {
         override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
             if (request.url.host != Origins.APP_HOST) return null
+            // GET alone: a form a page posts to the list would keep its fragment (Origins.appServes).
+            if (!Origins.appServes(request.method)) {
+                return WebResourceResponse("text/plain", "utf-8", 405, "Method Not Allowed", mapOf("Allow" to "GET"), ByteArrayInputStream(ByteArray(0)))
+            }
             // Nothing of the app's own origin goes to the network.
             // A file the app does not have is answered as not found, where
             // the handler's empty answer is one the WebView calls invalid.
@@ -362,10 +369,17 @@ class MainActivity : AppCompatActivity() {
                 ?: WebResourceResponse("text/plain", "utf-8", 404, "Not Found", null, ByteArrayInputStream(ByteArray(0)))
         }
 
+        // A page's own way to the list carries no fragment: what the list
+        // opens at its start is the bridge's handover alone (Origins.byPage).
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
             if (!request.isForMainFrame) return false
             val origin = Origins.of(request.url.toString())
-            if (origin == Origins.APP || (origin != null && origin == bridge.opened?.origin)) return false
+            if (origin == Origins.APP) {
+                val plain = Origins.byPage(request.url.toString()) ?: return false
+                view.loadUrl(plain)
+                return true
+            }
+            if (origin != null && origin == bridge.opened?.origin) return false
             external(request.url)
             return true
         }
@@ -374,10 +388,23 @@ class MainActivity : AppCompatActivity() {
             back.isEnabled = view.canGoBack()
         }
 
-        // The page shown decides whether Recents may keep its picture.
+        // The page shown decides whether Recents may keep its picture. The
+        // list in a server's page's place withholds the session of a server
+        // asked at each return, so that its page reached again without a
+        // tap shows its card (Bridge.leaving, D72-B).
         override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
             shown = url?.let(Origins::of)
+            if (shown == Origins.APP) bridge.leaving()
             privacy()
+        }
+
+        // The list is the app's first page: once it has loaded, the pages
+        // before it are forgotten, so that Back from it leaves the app, never
+        // back into a server's page past its prompt.
+        override fun onPageFinished(view: WebView, url: String?) {
+            if (url?.let(Origins::of) != Origins.APP) return
+            view.clearHistory()
+            back.isEnabled = view.canGoBack()
         }
 
         // A certificate the system does not trust is the server's where it
@@ -496,6 +523,7 @@ class MainActivity : AppCompatActivity() {
         const val KEY_ID = "massimo.opened.id"
         const val KEY_ORIGIN = "massimo.opened.origin"
         const val KEY_URL = "massimo.opened.url"
+        const val KEY_WITHHELD = "massimo.opened.withheld"
         const val SETTLE_MS = 2000L
 
         // agent names the app and the phone first: the server labels a

@@ -14,10 +14,12 @@ from conftest import URL
 from helpers import VIEWER, css_hidden, open_main_menu, show_view, wait_until
 from test_login import sign_in
 
-ORDER = ["#menu-log", "hr", "#menu-cube", "#menu-system", "#menu-maint", "#menu-info", "hr", "#menu-me", "#menu-servers", "#menu-logout", "#menu-owner"]
-# in the app alone: Select server…, back to the app's servers (test_connect.py); on a server without users alone, in
-# Sign out's place: Create the owner… (AP FirstOwner, test_ways.py)
-APP_ONLY = {"#menu-servers", "#menu-owner"}
+ORDER = ["#menu-log", "hr", "#menu-cube", "#menu-system", "#menu-maint", "#menu-info", "hr", "#menu-me", "#menu-servers", "#menu-server-settings",
+         "#menu-app-settings", "#menu-logout", "#menu-owner"]
+# in the app alone: Select server…, back to the app's servers, and This server's settings… and App settings… on the
+# app's own page (AP MobileApp, D73-A; test_connect.py); on a server without users alone, in Sign out's place: Create
+# the owner… (AP FirstOwner, test_ways.py)
+APP_ONLY = {"#menu-servers", "#menu-server-settings", "#menu-app-settings", "#menu-owner"}
 PAGES = {"log": ("#logview", "#log", "#menu-log"), "cube": ("#cube-page", "#cube", "#menu-cube"),
          "system": ("#system", "#system", "#menu-system"), "maint": ("#maint-page", "#maintenance", "#menu-maint"),
          "info": ("#info-page", "#info", "#menu-info"),
@@ -26,8 +28,8 @@ PAGES = {"log": ("#logview", "#log", "#menu-log"), "cube": ("#cube-page", "#cube
 
 def test_main_menu_entries(page, case):
     """☰ at every width, the server's version its first row, a rule under
-    it, then its entries with their icons in this order, the groups apart; Sign out with the personal page's label and icon, in
-    its accent and weight."""
+    it, then its entries with their icons in this order, the groups apart, the app's three not shown in a browser; Sign out
+    with the personal page's label and icon, in its accent and weight."""
     assert page.locator("#nav-menu").is_visible(), "☰ shown"
     m = open_main_menu(page)
     got = m.locator(".menu-items > *").evaluate_all("(es) => es.map((e) => e.id ? '#' + e.id : e.tagName.toLowerCase())")

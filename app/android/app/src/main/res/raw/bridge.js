@@ -85,6 +85,8 @@
       fingerprint: () => call("login.fingerprint"),
     });
     api.connect = () => call("connect");
+    api.openServerSettings = () => call("openServerSettings");
+    api.openAppSettings = () => call("openAppSettings");
   }
   Object.defineProperty(window, "massimo", { value: Object.freeze(api), enumerable: true });
 

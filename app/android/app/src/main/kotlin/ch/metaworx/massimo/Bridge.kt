@@ -11,6 +11,7 @@ import org.json.JSONObject
 import java.io.IOException
 import java.util.concurrent.Executor
 import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Bridge is the native side of `window.massimo` (docs/app.md, contract
@@ -18,7 +19,8 @@ import java.util.concurrent.RejectedExecutionException
  * checks who sent each by its origin, and answers it. The connect page gets
  * the calls of the server list, the sessions the app holds and the app's
  * settings; a server's page only its own session, its login by fingerprint
- * and the way back to the list. The login's key never reaches a page: the
+ * and the ways back to the list, to its settings there and to the app's.
+ * The login's key never reaches a page: the
  * bridge makes and holds it and hands a page the session alone, each login
  * sealed under the one app key ([AppKey]), which a prompt opens for one
  * step. Turn off, Remove and Forget all are the [Revoker]'s, and the keys
@@ -48,8 +50,8 @@ class Bridge(
         /** open loads [url], an address of the server, in the WebView. */
         fun open(url: String)
 
-        /** connectPage shows the connect page again. */
-        fun connectPage()
+        /** connectPage shows the connect page again, with [fragment] for what it opens at its start ("" for nothing): a server's settings or App settings. */
+        fun connectPage(fragment: String = "")
 
         /** privacy is told that what keeps the page from Recents may have changed (guarded). */
         fun privacy()
@@ -63,11 +65,39 @@ class Bridge(
         fun post(message: String)
     }
 
-    /** Opened is the server `open` loaded: its id, the origin its page has, and the address it was opened at. */
-    data class Opened(val id: String, val origin: String, val url: String)
+    /**
+     * Opened is the server `open` loaded: its id, the origin its page has,
+     * the address it was opened at, and whether the session held is
+     * withheld from the page for this opening ([withheld]: `token()`
+     * answers null, so that its sign-in card shows), a prompt of a tap
+     * having been cancelled or failed, or the sign-in icon tapped, until
+     * the page has a session of its own (contract version 5).
+     */
+    data class Opened(val id: String, val origin: String, val url: String, val withheld: Boolean = false) {
+        /**
+         * leaving is this opening once its page gives way to the connect
+         * page: withheld where its server is [guarded], a kept login asked
+         * at each return, so that a way back into the page, Back among
+         * them, shows its card and not the session held (D72-B); any other
+         * as it is.
+         */
+        fun leaving(guarded: Boolean): Opened = if (guarded && !withheld) copy(withheld = true) else this
 
-    @Volatile
-    var opened: Opened? = null
+        /**
+         * takes says whether the page's setToken([token]) changes the
+         * session the app holds: not null from a page whose session is
+         * withheld, which holds none of its own to forget, so that the
+         * session withheld is not forgotten unended.
+         */
+        fun takes(token: String?): Boolean = token != null || !withheld
+    }
+
+    private val current = AtomicReference<Opened?>(null)
+
+    /** opened is the server the page shown was opened for, null before any. */
+    var opened: Opened?
+        get() = current.get()
+        set(value) = current.set(value)
 
     // The connect page's channel, for the events.
     private var connect: Reply? = null
@@ -101,12 +131,30 @@ class Bridge(
     fun guarded(origin: String?): Boolean {
         val now = opened ?: return false
         if (origin == null || origin != now.origin) return false
-        val s = servers.get(now.id) ?: return false
+        return guardedServer(now.id)
+    }
+
+    // guardedServer reports whether the server [id] has a kept login asked at each return.
+    private fun guardedServer(id: String): Boolean {
+        val s = servers.get(id) ?: return false
         return s.ask == Server.ASK_RETURN && logins.get(s.id) != null
     }
 
-    /** covers reports whether the page of [origin] is guarded and signed in, with a session the cover keeps from others. */
-    fun covers(origin: String?): Boolean = guarded(origin) && opened?.let { keeper.inMemory(it.id) } == true
+    /**
+     * leaving takes the connect page loading in place of the opened
+     * server's page (MainActivity's onPageStarted), whether by the page's
+     * way back or by Back: the opening of a server asked at each return is
+     * withheld (Opened.leaving), so that the page, reached again without
+     * a tap and its prompt, shows its card (AP MobileApp, D72-B).
+     */
+    fun leaving() {
+        val o = opened ?: return
+        val next = o.leaving(guardedServer(o.id))
+        if (next !== o) current.compareAndSet(o, next)
+    }
+
+    /** covers reports whether the page of [origin] is guarded and signed in, with a session the cover keeps from others; not one at its card, the session withheld. */
+    fun covers(origin: String?): Boolean = guarded(origin) && opened?.let { !it.withheld && keeper.inMemory(it.id) } == true
 
     /** close drops the app key a step still holds, as the activity goes (onDestroy). */
     fun close() = appKey.dropAll()
@@ -207,8 +255,9 @@ class Bridge(
             "forget" -> forget(string(args, 0), args.opt(1) as? String ?: "", answer)
             "forgetAll" -> forgetAll(answer)
             "token" -> {
-                val id = (now ?: throw bad()).id
-                background(answer) { servers.get(id)?.let { sessions.held(it) } }
+                val o = now ?: throw bad()
+                // withheld for this opening: its card shows (Opened.withheld)
+                if (o.withheld) answer.ok(null) else background(answer) { servers.get(o.id)?.let { sessions.held(it) } }
             }
             "setToken" -> {
                 val o = now ?: throw bad()
@@ -219,6 +268,11 @@ class Bridge(
                     else -> throw bad()
                 }
                 if (token != null && token.length > MAX_TOKEN) throw bad()
+                // a page at its card holds no session of its own: its null forgets nothing (Opened.takes)
+                if (!o.takes(token)) {
+                    answer.ok(null)
+                    return
+                }
                 // null forgets it: Sign out, Forget key, and the dead session
                 // the page drops at the server's first 401. A new session is
                 // checked before the answer (Sessions.look): its id learnt,
@@ -229,12 +283,14 @@ class Bridge(
                 // reads its keys once it has it (D67-A); null for null. A
                 // session the new one replaces is ended there after the
                 // answer (D68-A), so that a server slow to answer holds no
-                // sign-in up.
+                // sign-in up. A session handed in ends what the opening
+                // withheld (release).
                 io.execute {
                     var ending: Sessions.Ending? = null
                     val revoked = try {
                         val s = servers.get(id)
                         if (s != null) ending = sessions.put(s, token, o.url)
+                        if (token != null) release(o)
                         if (token == null || s == null) null else runCatching { sessions.look(s, o.url).revoked }.getOrDefault(emptyList())
                     } catch (e: Exception) {
                         answer.fail(e)
@@ -249,20 +305,37 @@ class Bridge(
                 val can = biometric.canStrong()
                 background(answer) {
                     val s = servers.get(o.id) ?: throw BridgeException(R.string.err_no_server)
-                    // key_id: the kept login's key, 0 for none or not known (contract version 5; AP MobileApp, D65-A)
+                    // key_id: the kept login's key, 0 for none or not known (contract version 5; AP MobileApp, D65-A); server:
+                    // the server the page was opened for, at the address it was opened at, its node and pinned fingerprint,
+                    // which the sign-in card names in place of the address bar the app has not (D62-A)
                     JSONObject().put("can", can).put("user", logins.user(s.id)).put("ask", s.ask).put("plain", Origins.plainOutside(o.url))
                         .put("key_id", logins.get(s.id)?.keyId?.coerceAtLeast(0) ?: 0)
+                        .put("server", JSONObject().put("name", s.name).put("url", o.url).put("node", s.node).put("fp", s.fp))
                 }
             }
             "login.keep" -> keep(now ?: throw bad(), answer)
             "login.fingerprint" -> {
                 val o = now ?: throw bad()
                 val s = servers.get(o.id) ?: throw BridgeException(R.string.err_no_server)
-                fingerprint(s, o.url, answer) { session -> answer.ok(session) }
+                fingerprint(s, o.url, answer) { session ->
+                    if (session != null) release(o)
+                    answer.ok(session)
+                }
             }
             "connect" -> {
                 answer.ok(null)
                 host.connectPage()
+            }
+            // ☰'s two entries on a server's page (contract version 5; AP MobileApp, D73-A): the connect page with this
+            // server's settings open, its id the bridge's, or App settings; the page reads and saves nothing of them
+            "openServerSettings" -> {
+                val o = now ?: throw bad()
+                answer.ok(null)
+                host.connectPage(Origins.settingsOf(o.id))
+            }
+            "openAppSettings" -> {
+                answer.ok(null)
+                host.connectPage(Origins.APP_SETTINGS)
             }
             else -> throw bad()
         }
@@ -289,24 +362,65 @@ class Bridge(
     }
 
     // open loads a server's address, or My profile's there with a key
-    // marked (`#profile?key=<id>`, contract version 4); with {login: true}
-    // it logs in by fingerprint first, and resolves false without opening
-    // where the prompt was dismissed.
+    // marked (`#profile?key=<id>`, contract version 4), as a tap's rule
+    // says (Opening, contract version 5; AP MobileApp, D72-B, D74-A): the
+    // page at once, or the fingerprint first, without the key for the
+    // session held or with it for a new one, the prompt titled with the
+    // server's name; a prompt cancelled or failed opens the page with the
+    // session withheld for that opening, so that its card shows, and
+    // {signIn: true} opens it so without a prompt; a key the server
+    // refuses is forgotten and rejects, as do the key's other failures.
+    // With {login: true} it logs in by fingerprint first, and resolves
+    // false without opening where the prompt was dismissed.
     private fun open(args: JSONArray, answer: Answer) {
         val s = servers.get(string(args, 0)) ?: throw BridgeException(R.string.err_no_server)
         val url = string(args, 1)
         val base = s.opening(url) ?: throw BridgeException(R.string.err_open_url)
         val origin = Origins.of(base) ?: throw BridgeException(R.string.err_open_url)
-        val go = {
+        val opts = args.optJSONObject(2)
+        val go = { withheld: Boolean ->
             answer.ok(true)
-            opened = Opened(s.id, origin, base)
+            opened = Opened(s.id, origin, base, withheld)
             host.open(url)
         }
-        if (args.optJSONObject(2)?.opt("login") != true) {
-            go()
-            return
+        when {
+            opts?.opt("signIn") == true -> go(true)
+            opts?.opt("login") == true -> fingerprint(s, base, answer) { session -> if (session == null) answer.ok(false) else go(false) }
+            else -> io.execute {
+                // the store and the sealed session are read off the main thread
+                val rule = try {
+                    Opening.of(s.ask, logins.get(s.id) != null, sessions.where(s))
+                } catch (e: Exception) {
+                    answer.fail(e)
+                    return@execute
+                }
+                main.post { tap(s, base, rule, answer, go) }
+            }
         }
-        fingerprint(s, base, answer) { session -> if (session == null) answer.ok(false) else go() }
+    }
+
+    // tap opens [s] at [base] as [rule] says, on the main thread, where the
+    // prompt shows; [go] opens the page, the session withheld or not. Over
+    // plain HTTP outside the home network the key is not sent (D36-A): the
+    // card opens, and says why.
+    private fun tap(s: Server, base: String, rule: Opening, answer: Answer, go: (Boolean) -> Unit) {
+        try {
+            when {
+                rule == Opening.OPEN -> go(false)
+                rule == Opening.ASK -> biometric.unlock(texts.get(R.string.login_title, s.name)) { passed -> go(!passed) }
+                Origins.plainOutside(base) -> go(true)
+                else -> fingerprint(s, base, answer) { session -> go(session == null) }
+            }
+        } catch (e: Exception) {
+            answer.fail(e)
+        }
+    }
+
+    // release gives the page of the opening [o] the sessions held from now
+    // on, once it has a session of its own (setToken, login.fingerprint):
+    // a reload no longer shows its card. A later opening is left as it is.
+    private fun release(o: Opened) {
+        if (o.withheld) current.compareAndSet(o, o.copy(withheld = false))
     }
 
     // fingerprint asks for the fingerprint, opens the server's kept key in
