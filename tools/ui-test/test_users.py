@@ -4,10 +4,13 @@
 owner's): the operator run.sh creates is listed with the owner, the
 roles with the six default ones."""
 
+import json
+import re
+
 import pytest
 
 from conftest import URL, api_call
-from helpers import NAME_BAD, NAME_TAKEN, assert_busy, frames, hold, named_buttons, scroll_width, show_view, sign_out, undo, wait_held, wait_until
+from helpers import NAME_BAD, NAME_TAKEN, assert_busy, frames, hold, named_buttons, safe_route, scroll_width, show_view, sign_out, undo, wait_held, wait_until
 
 
 def test_users_and_roles(page, case):
@@ -100,6 +103,116 @@ def test_integration_users_by_their_chain(page, case, reads):
         assert scroll_width(page) <= case.width, "no horizontal scroll with an integration's users"
     finally:
         reads.clear("**/api/v1/users")
+    show_view(page, "tiles")
+
+
+PROVIDERS = [{"key": "cloud", "name": "Cloud"}]
+
+
+def test_an_integrations_user_has_no_way_in(page, case, reads):
+    """An integration's users (the list stubbed, a provider enabled) are
+    offered no password, no new key and no identity to assign, and the
+    line says why; one that holds a password and a key from before is
+    offered the password's removal, which sends an empty one, and the
+    key's Revoke; a regular user's panel offers all three as before (AP
+    LooseEnds, D1)."""
+    held = [dict(u, has_password=u["name"] == PHONE) for u in INTEGRATION_USERS]
+    reads.change("**/api/v1/users", lambda body: body + held)
+    reads.change("**/api/v1/login/providers", lambda body: PROVIDERS)
+    held_key = {"id": 901, "kind": "api", "label": "from before", "created_at": "2026-11-16T10:00:00Z"}
+
+    def keys_and_identities(route):
+        # the stubbed users' identities none, the phone's user one key
+        mine = "/tokens" in route.request.url and route.request.url.split("/tokens")[0].endswith("a" * 32)
+        route.fulfill(status=200, content_type="application/json", body=json.dumps([held_key] if mine else []))
+
+    sent = []
+
+    def put_phone(route):
+        if route.request.method != "PUT":
+            route.fallback()
+            return
+        sent.append(route.request.post_data_json)
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(dict(held[1], has_password=False)))
+
+    stubbed = f"**/api/v1/users/{INTEGRATION}*/**"
+    routed = safe_route(page, stubbed, keys_and_identities)
+    phone_path = re.compile(r"/api/v1/users/" + INTEGRATION + r"(%3A|:)" + "a" * 32 + r"$")
+    put_routed = safe_route(page, phone_path, put_phone)
+    try:
+        show_view(page, "system")
+        line = page.evaluate("t('users.integrationNoSignIn')")
+        for name in (INTEGRATION + ":", PHONE, "operator"):
+            panel = page.locator(f".user-panel[data-name='{name}']")
+            panel.wait_for()
+            panel.locator("> summary").click()
+            regular = name == "operator"
+            assert panel.locator("input[name='password']").count() == (1 if regular else 0), f"{name}: a password offered"
+            assert panel.locator(".create-key").count() == (1 if regular else 0), f"{name}: a new key offered"
+            assert panel.locator(f"[id='user-identity-provider-{name}']").count() == (1 if regular else 0), f"{name}: an identity to assign offered"
+            said = panel.locator(".user-no-sign-in")
+            assert said.count() == (0 if regular else 1), f"{name}: the line"
+            if not regular:
+                assert said.inner_text() == line, f"{name}: the line's words"
+            assert panel.locator(".remove-password").count() == (1 if name == PHONE else 0), f"{name}: the held password's removal"
+            if name == PHONE:
+                row = panel.locator(f".user-tokens li[data-id='{held_key['id']}']")
+                row.wait_for()
+                assert row.locator(".revoke-token").count() == 1, "the held key's Revoke"
+                with page.expect_request(lambda r: r.method == "PUT" and phone_path.search(r.url)):
+                    panel.locator(".remove-password").click()
+                assert sent == [{"password": ""}], f"the removal sends an empty password: {sent}"
+            assert panel.locator(".remove-user").count() == 1, f"{name}: still removable"
+            panel.locator("> summary").click()
+        named_buttons(page, "System settings → Users, an integration's users without a way in")
+        assert scroll_width(page) <= case.width, "no horizontal scroll"
+    finally:
+        page.unroute(phone_path, put_routed)
+        page.unroute(stubbed, routed)
+        reads.clear("**/api/v1/users")
+        reads.clear("**/api/v1/login/providers")
+    show_view(page, "tiles")
+
+
+def test_profile_of_an_integrations_user(page, case, reads):
+    """My profile of an integration's user, in with a key it holds from
+    before (/me stubbed), says it has no sign-in of its own in place of
+    the password, lists its keys with Revoke and without a new one, and
+    offers no Link; the regular owner first shows what is looked for
+    (AP LooseEnds, D1)."""
+    def as_integration(body):
+        if body.get("user"):
+            body["user"]["integration"] = {"key": INTEGRATION, "uuid": INTEGRATION, "id": "b" * 32, "name": "Anna"}
+        return body
+
+    reads.change("**/api/v1/login/providers", lambda body: PROVIDERS)
+    try:
+        page.evaluate("history.replaceState(null, '', location.pathname)")
+        page.reload()
+        page.wait_for_selector(".room", timeout=10000)
+        show_view(page, "profile")
+        page.locator("#profile-identities button[data-provider]").first.wait_for()
+        assert page.locator("#me-password").count() == 1, "the regular owner: the password offered"
+        assert page.locator("#profile-tokens .create-key").count() == 1, "the regular owner: a new key offered"
+        reads.change("**/api/v1/me", as_integration)
+        page.evaluate("history.replaceState(null, '', location.pathname)")
+        page.reload()
+        page.wait_for_selector(".room", timeout=10000)
+        show_view(page, "profile")
+        said = page.locator("#me-no-sign-in")
+        said.wait_for()
+        assert said.inner_text() == page.evaluate("t('users.integrationNoSignIn')"), "the line"
+        assert page.locator("#me-password").count() == 0, "no password offered"
+        page.locator("#profile-tokens .user-tokens li").first.wait_for()
+        assert page.locator("#profile-tokens .user-tokens li .revoke-token").count() >= 1, "its keys with Revoke"
+        assert page.locator("#profile-tokens .create-key").count() == 0, "no new key offered"
+        assert page.locator("#profile-identities button[data-provider]").count() == 0, "no Link offered"
+    finally:
+        reads.clear("**/api/v1/me")
+        reads.clear("**/api/v1/login/providers")
+        page.evaluate("history.replaceState(null, '', location.pathname)")
+        page.reload()
+        page.wait_for_selector(".room", timeout=10000)
     show_view(page, "tiles")
 
 
