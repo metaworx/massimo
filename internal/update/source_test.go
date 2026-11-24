@@ -74,10 +74,21 @@ func writeIndex(t *testing.T, dir, suite, arch, index string) {
 	}
 }
 
+// slashPath is the local path p as a file: URL's path: p itself on
+// Unix, /C:/Users/… for Windows's C:\Users\….
+func slashPath(p string) string {
+	s := filepath.ToSlash(p)
+	if !strings.HasPrefix(s, "/") {
+		s = "/" + s
+	}
+	return s
+}
+
 // The newest massimo of a suite's index, from a file: repository and an
 // https one, for the box's architecture: a build between tags after its
 // tag, other packages and continuation lines left out; none where the
-// index has none, and an error where it is missing or not gzip.
+// index has none, and an error where it is missing or not gzip, or the
+// file: URL names no absolute path.
 func TestAptNewest(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -85,22 +96,26 @@ func TestAptNewest(t *testing.T) {
 	writeIndex(t, dir, "devel", "amd64", "Package: massimo\nVersion: 0.15.0\n")
 	writeIndex(t, dir, "beta", "armhf", "Package: massimo-archive-keyring\nVersion: 1\n")
 	ctx := t.Context()
-	for _, uri := range []string{"file:" + dir, "file://" + dir + "/"} {
+	repo := "file:" + slashPath(dir)
+	for _, uri := range []string{repo, "file://" + slashPath(dir) + "/"} {
 		if got, err := AptNewest(ctx, nil, uri, "devel", "main", "armhf"); err != nil || got != "v0.16.0-alpha.1-597-g43930b56" {
 			t.Errorf("%s: %q, %v", uri, got, err)
 		}
 	}
-	if got, err := AptNewest(ctx, nil, "file:"+dir, "devel", "main", "amd64"); err != nil || got != "v0.15.0" {
+	if got, err := AptNewest(ctx, nil, repo, "devel", "main", "amd64"); err != nil || got != "v0.15.0" {
 		t.Errorf("amd64: %q, %v", got, err)
 	}
-	if got, err := AptNewest(ctx, nil, "file:"+dir, "beta", "main", "armhf"); err != nil || got != "" {
+	if got, err := AptNewest(ctx, nil, repo, "beta", "main", "armhf"); err != nil || got != "" {
 		t.Errorf("an index without massimo: %q, %v", got, err)
 	}
-	if _, err := AptNewest(ctx, nil, "file:"+dir, "stable", "main", "armhf"); err == nil {
+	if _, err := AptNewest(ctx, nil, repo, "stable", "main", "armhf"); err == nil {
 		t.Error("a missing index read")
 	}
-	if _, err := AptNewest(ctx, nil, "file:"+dir, "../devel", "main", "armhf"); err == nil {
+	if _, err := AptNewest(ctx, nil, repo, "../devel", "main", "armhf"); err == nil {
 		t.Error("a suite with a path read")
+	}
+	if _, err := AptNewest(ctx, nil, "file:apt", "devel", "main", "armhf"); err == nil || !strings.Contains(err.Error(), "no absolute path") {
+		t.Errorf("a relative file: URL: %v", err)
 	}
 	if _, err := AptNewest(ctx, nil, "http://example.invalid/apt", "devel", "main", "armhf"); err == nil {
 		t.Error("plain http read")
@@ -108,7 +123,7 @@ func TestAptNewest(t *testing.T) {
 	bad := filepath.Join(dir, "dists", "rc", "main", "binary-armhf", "Packages.gz")
 	os.MkdirAll(filepath.Dir(bad), 0o755)
 	os.WriteFile(bad, []byte("Package: massimo\n"), 0o644)
-	if _, err := AptNewest(ctx, nil, "file:"+dir, "rc", "main", "armhf"); err == nil {
+	if _, err := AptNewest(ctx, nil, repo, "rc", "main", "armhf"); err == nil {
 		t.Error("an index that is not gzip read")
 	}
 
@@ -127,7 +142,7 @@ func TestAptNewestBounded(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	writeIndex(t, dir, "devel", "amd64", "Package: massimo\nVersion: 0.15.0\n\n"+strings.Repeat("X-Pad: "+strings.Repeat("x", 1000)+"\n", maxIndex/1000+1))
-	if _, err := AptNewest(t.Context(), nil, "file:"+dir, "devel", "main", "amd64"); err == nil || !strings.Contains(err.Error(), "more than") {
+	if _, err := AptNewest(t.Context(), nil, "file:"+slashPath(dir), "devel", "main", "amd64"); err == nil || !strings.Contains(err.Error(), "more than") {
 		t.Fatalf("a large index: %v", err)
 	}
 }
@@ -147,24 +162,25 @@ func TestAptArch(t *testing.T) {
 func TestFormulaNewest(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
+	// write writes a formula and gives its file: URL.
 	write := func(name, body string) string {
 		t.Helper()
 		p := filepath.Join(dir, name)
 		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		return p
+		return "file:" + slashPath(p)
 	}
 	good := write("massimo-alpha.rb", "class MassimoAlpha < Formula\n  url \"https://example.invalid/v0.16.0-alpha.2.tar.gz\"\n  version \"0.16.0-alpha.2\"\nend\n")
-	if got, err := FormulaNewest(t.Context(), nil, "file:"+good); err != nil || got != "v0.16.0-alpha.2" {
+	if got, err := FormulaNewest(t.Context(), nil, good); err != nil || got != "v0.16.0-alpha.2" {
 		t.Errorf("the formula: %q, %v", got, err)
 	}
 	rolling := write("massimo-devel.rb", "class MassimoDevel < Formula\n  version \"0.16.0-alpha.1-597-g43930b56\"\nend\n")
-	if got, err := FormulaNewest(t.Context(), nil, "file:"+rolling); err != nil || got != "v0.16.0-alpha.1-597-g43930b56" {
+	if got, err := FormulaNewest(t.Context(), nil, rolling); err != nil || got != "v0.16.0-alpha.1-597-g43930b56" {
 		t.Errorf("a rolling formula: %q, %v", got, err)
 	}
 	for _, body := range []string{"class Massimo < Formula\nend\n", "class Massimo < Formula\n  version \"head\"\nend\n"} {
-		if _, err := FormulaNewest(t.Context(), nil, "file:"+write("bad.rb", body)); err == nil {
+		if _, err := FormulaNewest(t.Context(), nil, write("bad.rb", body)); err == nil {
 			t.Errorf("read %q", body)
 		}
 	}

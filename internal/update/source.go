@@ -23,7 +23,9 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -202,7 +204,11 @@ func fetch(ctx context.Context, hc *http.Client, where string, limit int64) ([]b
 	var body io.Reader
 	switch u.Scheme {
 	case "file":
-		f, err := os.Open(u.Path)
+		p, err := filePath(u)
+		if err != nil {
+			return nil, err
+		}
+		f, err := os.Open(p)
 		if err != nil {
 			return nil, err
 		}
@@ -236,4 +242,20 @@ func fetch(ctx context.Context, hc *http.Client, where string, limit int64) ([]b
 		return nil, fmt.Errorf("%s: more than %d bytes", where, limit)
 	}
 	return b, nil
+}
+
+// filePath is the local file a file: URL names, file:/srv/apt or
+// file:///srv/apt as an apt source writes it: the URL's path, which is
+// absolute. On Windows a drive's path is written file:///C:/apt: the
+// slash before the drive letter is dropped, the others become
+// backslashes.
+func filePath(u *url.URL) (string, error) {
+	p := u.Path
+	if !strings.HasPrefix(p, "/") {
+		return "", fmt.Errorf("%s names no absolute path", u.Redacted())
+	}
+	if runtime.GOOS == "windows" && filepath.VolumeName(p[1:]) != "" {
+		p = p[1:]
+	}
+	return filepath.FromSlash(p), nil
 }

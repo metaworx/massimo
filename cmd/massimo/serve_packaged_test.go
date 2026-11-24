@@ -105,22 +105,33 @@ func aptRepo(t *testing.T, dir, arch string, suites map[string][]string) {
 // TestPackagedUpdateSource: on a box apt updates, a release is offered
 // once apt's index has it: the index of the channel's suite, which the
 // helper switches the source to before it fetches, else the source's
-// own; for the box's architecture, armhf for arm.
+// own; for the box's architecture, armhf for arm, and not another's.
 func TestPackagedUpdateSource(t *testing.T) {
 	t.Parallel()
 	arch := update.AptArch(runtime.GOARCH)
 	if arch == "" {
 		t.Skip("the apt repository has no packages for", runtime.GOARCH)
 	}
+	// An architecture other than the box's: arm, or arm64 on an arm box.
+	other := "arm"
+	if arch == update.AptArch(other) {
+		other = "arm64"
+	}
 	root, repo := t.TempDir(), t.TempDir()
 	aptRepo(t, repo, arch, map[string][]string{
 		"alpha": {"0.16.0~alpha.1", "0.16.0~alpha.2"},
 		"devel": {"0.16.0~alpha.2", "0.16.0~alpha.2+3.gabc1234"},
 	})
-	aptRepo(t, repo, "armhf", map[string][]string{"alpha": {"0.16.0~alpha.3"}})
+	aptRepo(t, repo, update.AptArch(other), map[string][]string{"alpha": {"0.16.0~alpha.3"}})
+	// The URI as apt names a local repository, file:/srv/apt; on
+	// Windows file:/C:/Users/….
+	uri := filepath.ToSlash(repo)
+	if !strings.HasPrefix(uri, "/") {
+		uri = "/" + uri
+	}
 	source := filepath.Join(root, install.AptSource)
 	os.MkdirAll(filepath.Dir(source), 0o755)
-	os.WriteFile(source, []byte("Types: deb\nURIs: file:"+repo+"\nSuites: alpha\nComponents: main\n"), 0o644)
+	os.WriteFile(source, []byte("Types: deb\nURIs: file:"+uri+"\nSuites: alpha\nComponents: main\n"), 0o644)
 	upd := server.UpdateOptions{}
 	packagedUpdate(&upd, install.Manager{Name: "apt"}, root, func(string) string { return "" })
 	if upd.Source == nil {
@@ -132,8 +143,8 @@ func TestPackagedUpdateSource(t *testing.T) {
 			t.Errorf("channel %s: %q, %v; want %q", channel, got, err, want)
 		}
 	}
-	if got, err := aptNewest(ctx, source, "alpha", "arm"); err != nil || got != "v0.16.0-alpha.3" {
-		t.Errorf("arm: %q, %v", got, err)
+	if got, err := aptNewest(ctx, source, "alpha", other); err != nil || got != "v0.16.0-alpha.3" {
+		t.Errorf("%s: %q, %v", other, got, err)
 	}
 	if _, err := aptNewest(ctx, source, "alpha", "riscv64"); err == nil {
 		t.Error("an architecture without packages read")
