@@ -33,7 +33,9 @@ handed over before the stream opens again.
 
 A test marked clock gets Playwright's clock installed before the page's
 scripts run, its time flowing as the real one: the test moves it on with
-page.clock.fast_forward, for what the page does after a minute.
+page.clock.fast_forward, for what the page does after a minute. A test
+pauses it with helpers.pause_clock alone: a test module that calls
+clock.pause_at itself fails its collection (pytest_collect_file).
 
 test_login.py opens a context of its own, without the token, from
 pytest-playwright's new_context with the case's viewport and locale.
@@ -56,10 +58,12 @@ under the directory run.sh names with --output, tools/ui-test/results/,
 and the screenshot, the video and the trace of a failed test that run.sh
 runs once more under results/retry/.
 """
+import io
 import json
 import os
 import sqlite3
 import ssl
+import tokenize
 import urllib.request
 
 import pytest
@@ -159,6 +163,45 @@ def pytest_collection_modifyitems(config, items):
     if dropped:
         config.hook.pytest_deselected(items=dropped)
         items[:] = kept
+
+
+def calls_pause_at(source):
+    """The lines of a module's source that call a clock's pause_at
+    themselves (clock.pause_at( in the code, not in a comment or a
+    string)."""
+    names = [t for t in tokenize.generate_tokens(io.StringIO(source).readline)
+             if t.type not in (tokenize.NL, tokenize.NEWLINE, tokenize.INDENT, tokenize.DEDENT, tokenize.COMMENT)]
+    return [names[i].start[0] for i in range(len(names) - 3)
+            if [t.string for t in names[i:i + 4]] == ["clock", ".", "pause_at", "("]]
+
+
+class DirectPause(pytest.File):
+    """A test module that pauses Playwright's clock itself, which fails
+    its collection."""
+
+    def __init__(self, *, lines, **kwargs):
+        super().__init__(**kwargs)
+        self.lines = lines
+
+    def collect(self):
+        raise self.CollectError(
+            f"{self.path.name} calls clock.pause_at at line {', '.join(map(str, self.lines))}: "
+            "pause the clock with helpers.pause_clock(page), which takes the page's now in seconds")
+
+
+def pytest_collect_file(file_path, parent):
+    """A test module that calls clock.pause_at itself is an error at its
+    collection, which names helpers.pause_clock: Python's pause_at takes
+    seconds, and the page's Date.now() given it as they are jumped the
+    clock millennia ahead. helpers.py alone may call it, and is no test
+    module."""
+    if file_path.suffix != ".py" or not file_path.name.startswith("test_"):
+        return None
+    source = file_path.read_text(encoding="utf-8")
+    if "pause_at" not in source:
+        return None
+    lines = calls_pause_at(source)
+    return DirectPause.from_parent(parent, path=file_path, lines=lines) if lines else None
 
 
 @pytest.hookimpl(tryfirst=True)

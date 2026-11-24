@@ -16,7 +16,8 @@ mark; isolate_log keeps a log of the test's own lines; wait_log_live
 waits until the log takes the stream's state events; safe_route is the
 one route handler that lets go a request the page no longer waits for;
 undo is a cleanup that says what it could not undo; held_poll holds the
-page's poll while a test measures what the page does by itself.
+page's poll while a test measures what the page does by itself;
+pause_clock pauses Playwright's clock at the page's now.
 """
 import contextlib
 import json
@@ -60,6 +61,36 @@ def wait_until(page, expr, seconds):
             return True
         page.wait_for_timeout(200)
     return False
+
+
+def pause_clock(page, ahead_ms=50):
+    """Playwright's clock paused at the page's now and ahead_ms on. At the
+    pause Playwright runs once every timer due up to the pause's time, a
+    pending animation frame and a timer due within ahead_ms among them;
+    after it, no timer and no frame of the page's comes by itself: what a
+    test gets is that nothing due later than now plus ahead_ms has run. The
+    test runs them with page.clock.run_for, and drives the page meanwhile by
+    evaluate and by
+    Python's own waits (wait_until), none of which waits on a timer or a
+    frame of the page's. Python's pause_at takes seconds, the page's
+    Date.now() milliseconds: given those, the clock jumped millennia ahead
+    and fired every timer of the page's at once, its poll, its stream's
+    renewal and a held read's time limit among them, which aborts it
+    (apiRequest, AP MobileApp, D82-A). It pauses ahead_ms on, so that the
+    time asked for is not past once the call arrives; where it is past all
+    the same, as on a run with the trace, whose every call takes longer,
+    Playwright refuses it and it asks again from the page's new now, twice
+    as far on, up to four times (100 to 800 ms, the timers due within them
+    run at that pause). It is the one way the tests pause the
+    clock: conftest.py fails the collection of a test module that calls
+    pause_at itself."""
+    for attempt in range(5):
+        try:
+            page.clock.pause_at((page.evaluate("Date.now()") + ahead_ms * 2 ** attempt) / 1000)
+            return
+        except Error as e:
+            if "Cannot fast-forward to the past" not in str(e) or attempt == 4:
+                raise
 
 
 def scroll_settled(page, seconds=3):
