@@ -610,7 +610,8 @@ func tokenSubject(tok store.Token, u store.User) map[string]any {
 }
 
 // deleteUser handles DELETE /api/v1/users/{name}: the user is removed
-// and its tokens revoked; the last enabled owner stays.
+// and its tokens revoked; the last enabled owner stays. Where the
+// removal of a regular user turns the server open, the log warns.
 func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) error {
 	st, err := s.userStore()
 	if err != nil {
@@ -621,13 +622,24 @@ func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	var by int64
-	if p := principalOf(r); p.named() {
+	p := principalOf(r)
+	if p.named() {
 		by = p.user.ID
 	}
+	wasUsers := s.authMode(r.Context()) == modeUsers
 	if err := st.DeleteUser(r.Context(), u.Name, by); err != nil {
 		return userFail(err)
 	}
 	s.log.Info("user removed", "user", s.logUserName(r.Context(), u), "remote", s.clientIP(r))
+	if wasUsers && u.IntegrationID == 0 && s.authMode(r.Context()) == modeOpen {
+		// The last regular user gone, an owner with an end date removing
+		// itself among the ways (AP LooseEnds, D1): the server is open.
+		who := "nobody"
+		if p.named() {
+			who = s.logUserName(r.Context(), p.user)
+		}
+		s.log.Warn("the server is open: its last regular user was removed; create the owner", "user", s.logUserName(r.Context(), u), "by", who, "remote", s.clientIP(r))
+	}
 	auditSubject(r, userSubject(u)) // as the user was
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "name": u.Name})
 	return nil

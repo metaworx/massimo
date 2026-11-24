@@ -21,15 +21,16 @@ const BootstrapUser = "owner"
 
 // BootstrapResult says what Bootstrap did.
 type BootstrapResult struct {
-	Users        int  // users after the call, removed ones not counted
+	Users        int  // regular users after the call (CountUsers): removed ones and an integration's not counted
 	OwnerCreated bool // the user owner was created from the token
 	TokenAdded   bool // the token was added to an owner's keys
 	Revoked      int  // tokens with the label whose secret is not the token any more
 }
 
 // Bootstrap applies MASSIMO_API_TOKEN (token, "" for none) to the
-// store at a start: with no user and a token, the user owner is created
-// with the token as its API key; with users, a token whose hash is
+// store at a start: with no regular user (CountUsers, an integration's
+// users beside it or not) and a token, the user owner is created with
+// the token as its API key; with regular users, a token whose hash is
 // unknown is added to the first enabled owner that is not an
 // integration's, and a key with the token's label that is not the token
 // any more is revoked.

@@ -34,7 +34,7 @@ var (
 
 // regularUser is the condition of a regular user in the table users: one
 // that is not removed and is not an integration's, a disabled one
-// included.
+// included. A server is open while it has none (AP LooseEnds, D1).
 const regularUser = `deleted_at IS NULL AND integration_id IS NULL`
 
 // integrationUser is regularUser's opposite among the users not
@@ -184,12 +184,28 @@ func (s *Store) UserIDByName(ctx context.Context, name string) (int64, bool, err
 	return id, true, nil
 }
 
-// CountUsers counts the users that are not removed, disabled ones
-// included: with one, every request needs a token.
-func (s *Store) CountUsers(ctx context.Context) (int, error) {
+// countUsers counts the regular users (regularUser) through q, the
+// store or a transaction.
+func countUsers(ctx context.Context, q queryer) (int, error) {
 	var n int
-	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM users WHERE deleted_at IS NULL`).Scan(&n); err != nil {
+	if err := q.QueryRowContext(ctx, `SELECT count(*) FROM users WHERE `+regularUser).Scan(&n); err != nil {
 		return 0, fmt.Errorf("store: users: %w", err)
+	}
+	return n, nil
+}
+
+// CountUsers counts the regular users, disabled ones included and an
+// integration's not: with one, every request needs a token.
+func (s *Store) CountUsers(ctx context.Context) (int, error) {
+	return countUsers(ctx, s.db)
+}
+
+// CountIntegrationUsers counts the integrations' users that are not
+// removed (integrationUser), which CountUsers leaves out.
+func (s *Store) CountIntegrationUsers(ctx context.Context) (int, error) {
+	var n int
+	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM users WHERE `+integrationUser).Scan(&n); err != nil {
+		return 0, fmt.Errorf("store: integration users: %w", err)
 	}
 	return n, nil
 }
@@ -262,10 +278,10 @@ func (s *Store) AddUser(ctx context.Context, u User, password string, by int64) 
 }
 
 // AddFirstOwner adds the first owner, as AddUser does with the role
-// owner and nobody as its creator, only while the server has no users:
-// ErrHasUsers where it has one, also one that another request added
-// since its caller looked, since the count is read again in the
-// transaction that writes the user (AP FirstOwner, D15).
+// owner and nobody as its creator, only while the server has no regular
+// user (CountUsers): ErrHasUsers where it has one, also one that another
+// request added since its caller looked, since the count is read again
+// in the transaction that writes the user (AP FirstOwner, D15).
 func (s *Store) AddFirstOwner(ctx context.Context, u User, password string) (User, error) {
 	u.Role = RoleOwner
 	u, err := s.newUser(u)
@@ -301,11 +317,12 @@ func (s *Store) AddFirstOpaqueOwner(ctx context.Context, u User, record []byte, 
 	return s.addUser(ctx, u, credential{record: record, ksf: ksf}, 0, true)
 }
 
-// noUsers reports ErrHasUsers where a user that is not removed exists.
+// noUsers reports ErrHasUsers where a regular user exists
+// (regularUser); an integration's users do not count.
 func (s *Store) noUsers(ctx context.Context, q queryer) error {
-	var n int
-	if err := q.QueryRowContext(ctx, `SELECT count(*) FROM users WHERE deleted_at IS NULL`).Scan(&n); err != nil {
-		return fmt.Errorf("store: users: %w", err)
+	n, err := countUsers(ctx, q)
+	if err != nil {
+		return err
 	}
 	if n > 0 {
 		return fmt.Errorf("%w: the first owner exists already", ErrHasUsers)
@@ -390,7 +407,7 @@ func (s *Store) AddOpaqueUser(ctx context.Context, u User, record []byte, ksf st
 
 // addUser writes a user that newUser checked, with its credential, and
 // removes the setting KeepOpenKey in the same transaction; first, only
-// while the server has no users (AddFirstOwner). The transaction begins
+// while the server has no regular user (AddFirstOwner). The transaction begins
 // IMMEDIATE (the store's _txlock), so it holds the database's one write
 // lock from its start: a second one waits for the first to commit, and
 // its count then sees the first one's user.

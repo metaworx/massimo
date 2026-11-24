@@ -6,7 +6,8 @@ package server
 // Authentication (docs/store.md section 6): who a request comes from
 // and what it may do. A server runs in one of three modes. Without a
 // store (serve -addr) the one token of Options.Token is checked as it
-// always was. With a store and no user yet, the API is open and every
+// always was. With a store and no regular user yet, an integration's
+// users not counting (store.CountUsers), the API is open and every
 // request may do everything; POST /api/v1/users then creates the first
 // owner (users_api.go). With users, every request carries a session or
 // an API token, resolved through the store to its user, whose role
@@ -103,7 +104,7 @@ type authMode int
 
 const (
 	modeLegacy authMode = iota // no store: Options.Token, or nothing
-	modeOpen                   // a store without users: everything is open
+	modeOpen                   // a store without regular users: everything is open
 	modeUsers                  // users: a token names one, its role grants capabilities
 )
 
@@ -180,9 +181,11 @@ func (s *Server) require(r *http.Request, capability string) error {
 	return nil
 }
 
-// authMode says how the server authenticates now: the store's user
-// count decides between open and users, and a store that cannot be read
-// fails closed.
+// authMode says how the server authenticates now: the store's count of
+// its regular users (store.CountUsers) decides between open and users,
+// so a server is open while it has no user that is not an
+// integration's, a disabled one counting (AP LooseEnds, D1); a store
+// that cannot be read fails closed.
 func (s *Server) authMode(ctx context.Context) authMode {
 	if s.opts.Store == nil {
 		return modeLegacy
@@ -199,7 +202,7 @@ func (s *Server) authMode(ctx context.Context) authMode {
 }
 
 // AuthMode names the mode for the log: "users", "open" (a store without
-// users), "token" or "none" (no store).
+// regular users), "token" or "none" (no store).
 func (s *Server) AuthMode() string {
 	switch s.authMode(context.Background()) {
 	case modeOpen:
@@ -255,8 +258,28 @@ func (s *Server) SetToken(ctx context.Context, token string) error {
 	return nil
 }
 
+// warnIntegrationUsersOnly warns at the start of a server whose only
+// users are an integration's: it is open, as one without users, until
+// its first owner is made (AP LooseEnds, D2). A version before counted
+// those users, and kept such a server closed. A server kept open on
+// purpose (auth.keep_open) is not told.
+func (s *Server) warnIntegrationUsersOnly(ctx context.Context) {
+	st := s.opts.Store
+	if st == nil || s.authMode(ctx) != modeOpen || st.KeepOpen(ctx) {
+		return
+	}
+	n, err := st.CountIntegrationUsers(ctx)
+	if err != nil {
+		s.log.Error("store: the integrations' users not counted", "error", err)
+		return
+	}
+	if n > 0 {
+		s.log.Warn("the server is open: its only users are an integration's; create the owner", "integration_users", n)
+	}
+}
+
 // DropKeepOpen removes the setting auth.keep_open where the server has
-// users (store.DropKeepOpen): at the start and at each reload of the
+// regular users (store.DropKeepOpen): at the start and at each reload of the
 // settings file, for what another process, or an older version, left
 // behind (AP FirstOwner, D12). Without a store there is no setting.
 func (s *Server) DropKeepOpen(ctx context.Context) {
@@ -373,11 +396,11 @@ func localPeer(ip string) bool {
 const openRefused = "this server is open and answers only its local network; create a user or set MASSIMO_API_TOKEN"
 
 // openAllowed reports whether a server that asks for no key, a store
-// without users or no store and no token, answers a request: only a
-// client on the local network (localPeer), and a request that names a
-// client in a forwarding header only through a trusted proxy, since a
-// reverse proxy on the box would otherwise pass the internet through as
-// itself.
+// without regular users or no store and no token, answers a request:
+// only a client on the local network (localPeer), and a request that
+// names a client in a forwarding header only through a trusted proxy,
+// since a reverse proxy on the box would otherwise pass the internet
+// through as itself.
 func (s *Server) openAllowed(r *http.Request) bool {
 	if forwarded(r) && !s.trustedProxy(peerIP(r.RemoteAddr)) {
 		return false

@@ -1276,8 +1276,17 @@ the roles and their sets are rows (section 5), seeded by the first migration.
 
 ### Bootstrap and compatibility
 
+- A regular user is a user that is not removed and is not an integration's
+  (`users.integration_id IS NULL`), a disabled one included;
+  "users" below means regular users (AP LooseEnds, D1).
+  A server whose only users are an integration's is open,
+  as one without users, and warns so at its start
+  (`the server is open: its only users are an integration's; create the owner`)
+  unless it is kept open on purpose;
+  a version before counted them, so such a server was closed and becomes open
+  at the upgrade (D2).
 - With `MASSIMO_API_TOKEN` set and no user in the store (the first start after
-  the update),
+  the update, or a store with an integration's users alone),
   the server creates the user `owner` with the role `owner` and no password,
   and a token of kind `api` with the hash of `MASSIMO_API_TOKEN`,
   label `MASSIMO_API_TOKEN`.
@@ -1309,8 +1318,9 @@ the roles and their sets are rows (section 5), seeded by the first migration.
   (AP FirstOwner, D11), and nothing changes about who is let in.
   It counts only while there are no users:
   every transaction of the store that makes a user removes it,
-  the API's first owner, `massimo user add`, the owner of `MASSIMO_API_TOKEN`,
-  a provider's user and an integration's among them,
+  the API's first owner, `massimo user add`, the owner of `MASSIMO_API_TOKEN`
+  and a provider's user among them;
+  an integration approved and its users leave it as it is,
   and the server removes it at its start and at each reload of the settings
   file where it finds users beside it,
   which a process of an older version can leave;
@@ -1605,6 +1615,8 @@ so that no route can give it a way in of its own;
 what it held before stays, a key acting while its integration is active and
 within the role `integration` and the integration's maximum,
 a password or an identity signing in nowhere.
+They are not regular users: they neither close an open server nor block its
+first owner ("Bootstrap and compatibility").
 A request approved as an earlier integration (`merged_into`) reuses that
 one's row, users and links, as after a key lost or revoked;
 a revoke ends the key and keeps the rest.

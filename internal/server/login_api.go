@@ -112,9 +112,9 @@ type meView struct {
 	// Setup says the first owner can be created from here: the server is
 	// open and the caller is on the local network.
 	Setup bool `json:"setup,omitempty"`
-	// KeptOpen says the server without users is kept open on purpose,
-	// the setting auth.keep_open: the web UI does not ask for the first
-	// owner (AP FirstOwner, D11). Only on an open server.
+	// KeptOpen says the server without regular users is kept open on
+	// purpose, the setting auth.keep_open: the web UI does not ask for the
+	// first owner (AP FirstOwner, D11). Only on an open server.
 	KeptOpen bool `json:"kept_open,omitempty"`
 	// Token is the one the caller presented.
 	Token *tokenView `json:"token,omitempty"`

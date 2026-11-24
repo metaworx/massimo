@@ -83,6 +83,25 @@ func TestBootstrap(t *testing.T) {
 	}
 }
 
+// MASSIMO_API_TOKEN on a store whose only users are an integration's
+// makes the owner with the token as its key, as on a store without
+// users (AP LooseEnds, D1).
+func TestBootstrapBesideIntegrationUsers(t *testing.T) {
+	t.Parallel()
+	s := open(t, t.TempDir())
+	ctx := context.Background()
+	integrationOnly(t, s)
+	res, err := s.Bootstrap(ctx, "secret-one")
+	if err != nil || !res.OwnerCreated || !res.TokenAdded || res.Users != 1 {
+		t.Fatalf("%+v %v", res, err)
+	}
+	owner, ok, _ := s.User(ctx, BootstrapUser)
+	tok, found, _ := s.TokenByHash(ctx, HashToken("secret-one"))
+	if !ok || owner.Role != RoleOwner || !found || tok.UserID != owner.ID {
+		t.Fatalf("owner %+v %v, token %+v %v", owner, ok, tok, found)
+	}
+}
+
 // MASSIMO_API_TOKEN goes to the first regular owner, where an
 // integration's user with the role owner came before it: such a user
 // holds no key.

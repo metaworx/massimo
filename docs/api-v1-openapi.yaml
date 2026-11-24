@@ -411,7 +411,9 @@ paths:
         The mode (users, open, token, none), the caller's user, role and
         effective capabilities, and the token presented; outside users
         mode user and role are null and the capabilities are all of
-        them. setup is true on an open server for a caller on the local
+        them. An open server has no regular user: an integration's users
+        do not count, and its key is answered as anyone's, mode open.
+        setup is true on an open server for a caller on the local
         network, which may create the first owner; kept_open is true on an
         open server while the setting auth.keep_open is on, and absent
         otherwise.
@@ -701,7 +703,8 @@ paths:
       x-capability: users
       description: |
         With users, any role; with guests alone, the role guest. On a
-        server without users, the first owner: open to a caller on the
+        server without regular users (an integration's do not count), the
+        first owner: open to a caller on the
         local network (loopback, a private range, link-local), the role
         owner and a password required, refused from anywhere else, and
         created once: a second request at the same moment is 409.
@@ -3565,10 +3568,11 @@ paths:
         /api/v1/login takes a password (off, the users sign in by OPAQUE
         alone); integrations.requests, true or false, whether
         integrations may ask to be registered; auth.keep_open, true or
-        false, whether a server without users is kept open on purpose, so
-        that the web UI does not ask for the first owner (it changes
-        nothing about who is let in, counts only while the server has no
-        users, goes with the first user, and true is 409 on a server with
+        false, whether a server without regular users is kept open on
+        purpose, so that the web UI does not ask for the first owner (it
+        changes nothing about who is let in, counts only while the server
+        has no regular users, and goes with the first regular user, not
+        with an integration's; true is 409 on a server with regular
         users); auth.password_reveal, true or false, whether the web UI's
         password fields offer their eye (true by default; GET /healthz says
         it before anyone signs in); announce, auto, on or off,
@@ -4664,7 +4668,7 @@ components:
         integration:
           type: object
           nullable: true
-          description: "The registered integration whose key it is; null for any other key"
+          description: "The registered integration whose key it is; null for any other key, and on an open server, which does not look at the key (mode open)"
           properties:
             uuid: {type: string}
             name: {type: string, description: "Its name as the owner gives it, its own user's display name"}
@@ -4673,7 +4677,7 @@ components:
             instance_id: {type: string}
         acts_for:
           type: object
-          description: "With X-MassimoHA-On-Behalf-Of: the integration's user the call acts for; capabilities is then what the chain leaves"
+          description: "With X-MassimoHA-On-Behalf-Of: the integration's user the call acts for; capabilities is then what the chain leaves. On an open server the header is not read and nothing is attributed"
           properties:
             id: {type: string}
             name: {type: string}

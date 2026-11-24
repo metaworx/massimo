@@ -111,7 +111,9 @@ and the page registers the password by OPAQUE at once:
 it is the last time that password goes to the server.
 A server without users asks whoever opens its page from the local network
 to create the owner, in the sign-in card,
-at each load of the page (AP FirstOwner):
+at each load of the page (AP FirstOwner);
+an integration's users do not count,
+so an integration approved on an open server leaves it open (AP LooseEnds, D1):
 the card is titled that there are no users yet,
 and has the form that creates the first owner instead of the ways to sign in:
 its name, its password typed twice and, in the app, the switch and Cancel;
@@ -1812,7 +1814,9 @@ settings forms and have none of it.
   on every device; off, no field has one,
   and this page's fields lose theirs at once, the others' at their next look
   at the server.
-  On a server without users (FirstOwner D14) the section says so instead,
+  On a server without users (FirstOwner D14),
+  an integration's beside it or not (AP LooseEnds, D42),
+  the section says so instead,
   with **Create the owner…**, which opens the sign-in card with its form,
   and no password sign-in, no list and no Add a user;
   while the server is kept open (Keep it open… of the sign-in card),

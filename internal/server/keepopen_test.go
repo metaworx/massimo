@@ -6,12 +6,16 @@ package server
 import (
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 )
 
 // sendFrom answers a request with a body as if it came from addr.
@@ -315,4 +319,186 @@ func TestFirstOwnerOnce(t *testing.T) {
 		raced += codes[409]
 	}
 	t.Logf("%d of 12 rounds raced", raced)
+}
+
+// An integration approved on an open server kept open leaves it open:
+// /me still says open, setup and kept_open, a read without a token is
+// answered, and the first owner can still be made, who then closes the
+// server and takes the setting with it. Before AP LooseEnds (D1) the
+// approval closed the server, and nobody could sign in.
+func TestIntegrationLeavesAnOpenServerOpen(t *testing.T) {
+	t.Parallel()
+	s := startServer(t, withOptions(storeOptions(t, t.TempDir(), ""))).s
+	lan := "192.168.1.20:5000"
+	if rec := sendFrom(s, "PUT", "/api/v1/settings", lan, "", `{"auth.keep_open":true}`); rec.Code != 200 {
+		t.Fatalf("kept open: %d %s", rec.Code, rec.Body.String())
+	}
+	rec := sendFrom(s, "POST", "/api/v1/integrations/requests", lan, "",
+		`{"kind":"homeassistant","name":"Casa Leone","instance_id":"0123456789ABCDEF0123456789abcdef","url":"http://ha:8123","version":"2026.11.1"}`)
+	if rec.Code != 201 {
+		t.Fatalf("the request: %d %s", rec.Code, rec.Body.String())
+	}
+	var req struct{ ID, Code string }
+	decodeInto(t, rec.Body.String(), &req)
+	if rec := sendFrom(s, "POST", "/api/v1/integrations/"+req.ID+"/approve", lan, "", `{"max_caps":["read"]}`); rec.Code != 200 {
+		t.Fatalf("the approval: %d %s", rec.Code, rec.Body.String())
+	}
+	if n, _ := s.opts.Store.CountIntegrationUsers(t.Context()); n != 2 {
+		t.Fatalf("%d integration users", n)
+	}
+	if code, me, text := meFrom(t, s, lan, ""); code != 200 || me.Mode != "open" || !me.Setup || !me.KeptOpen {
+		t.Fatalf("/me after the approval: %d %s", code, text)
+	}
+	if rec := sendFrom(s, "GET", "/api/v1/cubes", lan, "", ""); rec.Code != 200 {
+		t.Fatalf("a read without a token: %d %s", rec.Code, rec.Body.String())
+	}
+	// The integration's key is not looked at: anyone's from the local
+	// network, refused from beyond it (D40-A).
+	rec = sendFrom(s, "GET", "/api/v1/integrations/requests/"+req.ID+"?code="+req.Code, lan, "", "")
+	var got struct{ Key string }
+	if decodeInto(t, rec.Body.String(), &got); rec.Code != 200 || got.Key == "" {
+		t.Fatalf("the key collected: %d %s", rec.Code, rec.Body.String())
+	}
+	if code, me, text := meFrom(t, s, lan, got.Key); code != 200 || me.Mode != "open" || me.Integration != nil {
+		t.Fatalf("/me with the integration's key: %d %s", code, text)
+	}
+	if code, _, text := meFrom(t, s, "203.0.113.9:5000", got.Key); code != 403 {
+		t.Fatalf("/me with the integration's key from beyond the local network: %d %s", code, text)
+	}
+	// Anyone on the local network may give an integration's user the role
+	// owner, and nothing else: no way in of its own.
+	system := req.ID + ":system"
+	if rec := sendFrom(s, "PUT", "/api/v1/users/"+system, lan, "", `{"role":"owner"}`); rec.Code != 200 {
+		t.Fatalf("the role owner on an open server: %d %s", rec.Code, rec.Body.String())
+	}
+	refusesWayIn(t, s, lan, "", system)
+	if rec := sendFrom(s, "POST", "/api/v1/users", lan, "", `{"name":"root","password":"p"}`); rec.Code != 201 {
+		t.Fatalf("the first owner: %d %s", rec.Code, rec.Body.String())
+	}
+	if code, _, text := meFrom(t, s, lan, ""); code != 401 {
+		t.Fatalf("/me without a token after the owner: %d %s", code, text)
+	}
+	if _, set, _ := s.opts.Store.Setting(t.Context(), store.KeepOpenKey); set {
+		t.Fatal("the setting stays with the first owner")
+	}
+	// Then nothing answers for that user but the integration's key,
+	// within the role integration (what it might hold from before:
+	// TestHeldCredentialsOfAnIntegrationsUser).
+	for _, c := range meCaps(t, s, got.Key, nil) {
+		if !slices.Contains(integrationCeiling, c) {
+			t.Errorf("the integration's key: %s beyond the role integration", c)
+		}
+	}
+}
+
+// The states an older version can leave, at the start: one without
+// users is open without a word; one whose only users are an
+// integration's is open and warns, once its owner is removed or its
+// integration revoked too, but not while it is kept open on purpose,
+// which then stays; with a regular user, a disabled owner alone among
+// them, it is in users mode, without a warning, and a setting left goes
+// (AP LooseEnds, D1, D2).
+func TestOpenWarningAtTheStart(t *testing.T) {
+	t.Parallel()
+	const warning = "the server is open: its only users are an integration's; create the owner"
+	for _, c := range []struct {
+		name                  string
+		integration, keepOpen bool
+		make                  func(t *testing.T, st *store.Store)
+		mode                  string
+		warns, keptOpen       bool
+	}{
+		{name: "no users at all", mode: "open"},
+		{name: "integration users alone", integration: true, mode: "open", warns: true},
+		{name: "kept open beside them", integration: true, keepOpen: true, mode: "open", keptOpen: true},
+		{name: "beside a regular owner", integration: true, keepOpen: true, mode: "users",
+			make: func(t *testing.T, st *store.Store) { userToken(t, st, "anna", store.RoleOwner) }},
+		{name: "a removed owner beside them", integration: true, mode: "open", warns: true, make: func(t *testing.T, st *store.Store) {
+			if _, err := st.AddUser(t.Context(), store.User{Name: "anna", Role: store.RoleOwner, ExpiresAt: time.Now().Add(time.Hour)}, "", 0); err != nil {
+				t.Fatal(err)
+			}
+			if err := st.DeleteUser(t.Context(), "anna", 0); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{name: "a revoked integration's users", integration: true, mode: "open", warns: true, make: func(t *testing.T, st *store.Store) {
+			list, _ := st.Integrations(t.Context())
+			if err := st.RevokeIntegration(t.Context(), list[0].UUID, 0); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{name: "a disabled owner alone", mode: "users", make: func(t *testing.T, st *store.Store) {
+			if _, err := st.AddUser(t.Context(), store.User{Name: "anna", Role: store.RoleOwner, Disabled: true}, "", 0); err != nil {
+				t.Fatal(err)
+			}
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			opts := storeOptions(t, t.TempDir(), "")
+			st := opts.Store
+			if c.integration {
+				registerHA(t, st, []string{"read"})
+			}
+			if c.make != nil {
+				c.make(t, st)
+			}
+			if err := st.SetSetting(t.Context(), store.KeepOpenKey, c.keepOpen); err != nil {
+				t.Fatal(err)
+			}
+			var logs *testkit.Watch[testkit.Record]
+			opts.Logger, logs = testkit.LogWatch(nil)
+			m := logs.Mark()
+			s := New(opts)
+			// by the message alone, so that a warning with another count is
+			// counted where none is expected; where one is, it counts two
+			warned := logs.Count(m, testkit.MsgAt(slog.LevelWarn, warning))
+			counted := logs.Count(m, testkit.MsgAt(slog.LevelWarn, warning, "integration_users", "2"))
+			if s.AuthMode() != c.mode || (warned == 1) != c.warns || warned > 1 || counted != warned || st.KeepOpen(t.Context()) != c.keptOpen {
+				t.Fatalf("%s, %d warnings, kept open %v: %v", s.AuthMode(), warned, st.KeepOpen(t.Context()), logs.Since(m, nil))
+			}
+		})
+	}
+}
+
+// The removal of the last regular user turns the server open, and the
+// log warns, naming whom and by whom: an owner with an end date, alone
+// beside an integration's users, as the command line or an older
+// version can leave one, removes itself. The removal of an
+// integration's user on a server that was open already says nothing
+// (AP LooseEnds, D1).
+func TestLastRegularUserRemovedWarns(t *testing.T) {
+	t.Parallel()
+	const warning = "the server is open: its last regular user was removed; create the owner"
+	opts := storeOptions(t, t.TempDir(), "")
+	var logs *testkit.Watch[testkit.Record]
+	opts.Logger, logs = testkit.LogWatch(nil)
+	s := startServer(t, withOptions(opts)).s
+	st := s.opts.Store
+	lan := "192.168.1.20:5000"
+	i, _ := registerHA(t, st, []string{"read"})
+	anna, err := st.AddUser(t.Context(), store.User{Name: "anna", Role: store.RoleOwner, ExpiresAt: time.Now().Add(time.Hour)}, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, key, err := st.AddToken(t.Context(), anna.ID, store.TokenAPI, "test", time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := logs.Mark()
+	if rec := sendFrom(s, "DELETE", "/api/v1/users/anna", lan, key, ""); rec.Code != 200 {
+		t.Fatalf("anna removes itself: %d %s", rec.Code, rec.Body.String())
+	}
+	logs.Await(t, m, "the warning", testkit.MsgAt(slog.LevelWarn, warning, "user", "anna", "by", "anna"))
+	if s.AuthMode() != "open" {
+		t.Fatalf("after: %s", s.AuthMode())
+	}
+	m = logs.Mark()
+	if rec := sendFrom(s, "DELETE", "/api/v1/users/"+i.UUID+":system", lan, "", ""); rec.Code != 200 {
+		t.Fatalf("an integration's user removed on the open server: %d %s", rec.Code, rec.Body.String())
+	}
+	logs.Await(t, m, "the removal's line", testkit.Msg("user removed"))
+	if n := logs.Count(m, testkit.Msg(warning)); n != 0 {
+		t.Fatalf("%d warnings for an integration's user on an open server", n)
+	}
 }
