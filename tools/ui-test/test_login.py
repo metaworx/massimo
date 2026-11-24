@@ -5,8 +5,8 @@ token, as the operator run.sh creates (password op-pass). A page error
 fails the test (the guard); the console is not watched, since the
 page's first requests without a token are refused on purpose."""
 from conftest import TOKEN, URL, api_call
-from helpers import (assert_login_card_centred, assert_login_row, frames, named_buttons, open_personal_page, scroll_settled, show_view,
-                     sign_out, wait_until)
+from helpers import (ApiReads, assert_login_card_centred, assert_login_row, frames, named_buttons, open_personal_page, scroll_settled,
+                     show_view, sign_out, wait_held, wait_until)
 
 
 def test_sign_in_and_out(new_context, case, watch, guard):
@@ -336,6 +336,173 @@ def test_sign_in_is_busy_until_answered(new_context, case, watch, guard):
         "Sign in stops turning once the answer is in"
     sign_out(page)
     assert wait_until(page, "document.getElementById('login-dialog').open", 5), "signed out at the end"
+
+
+WRONG = {"en": "Wrong name or password.", "de": "Falscher Name oder falsches Passwort."}
+DIALOG_OPEN = "document.getElementById('login-dialog').open"
+
+
+def test_a_wrong_password_in_the_pages_language(new_context, case, watch, guard):
+    """A wrong password is said in the case's language, not with the
+    server's English words. Fails on the page before: "Nicht angemeldet:
+    wrong user or password" (the walk-through of AP LooseEnds, finding 2).
+    And Escape leaves no sign-in the server asks for: a forward guard, as
+    Escape did nothing in the card before (AP LooseEnds, D3)."""
+    page = new_context().new_page()
+    guard.page = page
+    page.set_default_timeout(5000)
+    page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+    page.goto(URL)
+    assert wait_until(page, DIALOG_OPEN, 5), "the sign-in dialog opens"
+    page.locator("#login-user").fill("operator")
+    page.locator("#login-password").fill("wrong")
+    page.locator("#login-form button[type=submit]").click()
+    assert wait_until(page, "!document.getElementById('login-error').classList.contains('hidden')", 5), "a wrong password is refused"
+    said = page.locator("#login-error").inner_text()
+    assert said == WRONG[case.lang], f"said in the page's language: {said!r}"
+    page.keyboard.press("Escape")
+    frames(page)
+    assert page.evaluate(DIALOG_OPEN), "Escape leaves no sign-in the server asks for"
+
+
+def test_a_keys_second_enter_signs_in_once(new_context, case, watch, guard):
+    """Two Enters in the API key's form, the card opened on a running page
+    as a refused request opens it: Sign in turns while the key signs in,
+    and the sign-in's reads of who is in go once each, the check of who
+    signed in (settleSignIn) and the page's read after it (afterLogin):
+    two, counted once the page has started again. The test holds the
+    first. Fails on the page before: no busy state, and each Enter settled
+    the sign-in, three reads."""
+    page = new_context().new_page()
+    guard.page = page
+    page.set_default_timeout(5000)
+    page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+    page.goto(URL)
+    sign_in(page, "operator", "op-pass")
+    page.evaluate("() => { askLogin(); }")
+    assert wait_until(page, DIALOG_OPEN, 5), "the sign-in opens on the running page"
+    page.locator("#login-ways .login-way[data-way='key']").click()
+    page.locator("#login-token").fill(TOKEN)
+    held, mes, tickets = [], [], []
+
+    def me(route):
+        if route.request.method != "GET":
+            return route.continue_()
+        mes.append(route.request.url)
+        if len(mes) == 1:
+            held.append(route)
+            return
+        route.continue_()
+
+    page.route("**/api/v1/me", me)
+    page.on("request", lambda r: tickets.append(r.url) if r.method == "POST" and r.url.endswith("/events/ticket") else None)
+    reads = ApiReads(page)
+    page.evaluate("() => { const f = document.getElementById('login-key-form'); f.requestSubmit(); f.requestSubmit(); }")
+    assert wait_held(page, held), "the check of who signed in"
+    submit = page.locator("#login-key-form button[type=submit]")
+    assert submit.evaluate("(b) => b.classList.contains('busy') && b.disabled && b.getAttribute('aria-busy') === 'true'"), \
+        "Sign in turns while the key signs in"
+    held.pop().continue_()
+    assert wait_until(page, f"!({DIALOG_OPEN})", 10), "signed in with the key"
+    assert wait_held(page, tickets, 10), "the page started again: its stream's ticket"
+    assert reads.answered(), f"the page's reads answered: {reads.open}"
+    assert len(mes) == 2, f"one check of who signed in and one read after it: {len(mes)} reads of /api/v1/me"
+    assert page.evaluate("state.me.token.kind") == "api", "in with the key"
+    assert not submit.evaluate("(b) => b.classList.contains('busy')"), "Sign in stops turning"
+    page.unroute("**/api/v1/me")
+    sign_out(page)
+    assert wait_until(page, DIALOG_OPEN, 5), "signed out at the end"
+
+
+def held_me(page):
+    """GET /api/v1/me held once the test asks (stage["hold"]), the one
+    request after that; the others go through. Returns the stage and the
+    list the held route lands in."""
+    stage = {"hold": False}
+    held = []
+
+    def me(route):
+        if stage["hold"] and route.request.method == "GET":
+            stage["hold"] = False
+            held.append(route)
+            return
+        route.continue_()
+
+    page.route("**/api/v1/me", me)
+    return stage, held
+
+
+def test_the_card_empties_its_secrets_after_a_sign_in(new_context, case, watch, guard):
+    """A refused sign-in keeps what was typed for the retry. Once the card
+    has closed on a sign-in, the password and the API key stay while the
+    page's first read after it is held, and go once it has settled: both
+    empty, the password hidden, the name kept (AP LooseEnds, D13, D41-A).
+    A card opened again while that read is held, typed in and left keeps
+    what was typed once the read has settled and the page has started:
+    nothing empties a field late. Fails on the page before: the fields
+    kept the secrets until the next opening."""
+    page = new_context().new_page()
+    guard.page = page
+    page.set_default_timeout(5000)
+    page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+    stage, held = held_me(page)
+    page.goto(URL)
+    assert wait_until(page, DIALOG_OPEN, 5), "the sign-in dialog opens"
+    page.locator("#login-ways .login-way[data-way='key']").click()
+    page.locator("#login-token").fill("typed-key")
+    page.locator("#login-ways .login-way[data-way='password']").click()
+    page.locator("#login-user").fill("operator")
+    page.locator("#login-password").fill("wrong")
+    page.locator("#login-form button[type=submit]").click()
+    assert wait_until(page, "!document.getElementById('login-error').classList.contains('hidden')", 5), "refused"
+    frames(page)
+    assert page.locator("#login-password").input_value() == "wrong" and page.locator("#login-token").input_value() == "typed-key", \
+        "a refusal keeps what was typed"
+    eye = page.locator("#login-form .pw-eye")
+    eye.wait_for(state="visible")
+    eye.click()
+    assert page.locator("#login-password").get_attribute("type") == "text", "the password shown"
+    page.locator("#login-password").fill("op-pass")
+    stage["hold"] = True
+    page.locator("#login-form button[type=submit]").click()
+    assert wait_until(page, f"!({DIALOG_OPEN})", 10), "signed in, the card closed"
+    assert wait_held(page, held), "the page's first read after the sign-in, held"
+    frames(page)
+    assert page.locator("#login-password").input_value() == "op-pass" and page.locator("#login-token").input_value() == "typed-key", \
+        "kept while the read after the sign-in has not settled"
+    held.pop().continue_()
+    assert wait_until(page, "document.getElementById('login-password').value === '' && document.getElementById('login-token').value === ''", 10), \
+        "the password and the key emptied once it has"
+    assert page.locator("#login-password").get_attribute("type") == "password", "the password hidden"
+    assert page.locator("#login-user").input_value() == "operator", "the name kept"
+    page.wait_for_selector(".room", timeout=10000)
+    assert wait_until(page, "state.eventsOpen", 10), "the page started"
+    # a card opened again while the read after a sign-in is held, typed in and left
+    sign_out(page)
+    assert wait_until(page, DIALOG_OPEN, 5), "the card after Sign out"
+    page.locator("#login-user").fill("operator")
+    page.locator("#login-password").fill("op-pass")
+    stage["hold"] = True
+    page.locator("#login-form button[type=submit]").click()
+    assert wait_until(page, f"!({DIALOG_OPEN})", 10), "signed in again"
+    assert wait_held(page, held), "the read after it, held"
+    page.evaluate("() => { askLogin(); }")
+    assert wait_until(page, DIALOG_OPEN, 5), "the card opened again"
+    assert page.locator("#login-password").input_value() == "", "emptied at the opening"
+    page.locator("#login-password").fill("typed-later")
+    page.evaluate("() => { document.getElementById('login-dialog').close(); }")
+    assert wait_until(page, f"!({DIALOG_OPEN})", 5), "and left"
+    reads = ApiReads(page)
+    held.pop().continue_()
+    page.wait_for_selector(".room", timeout=10000)
+    assert wait_until(page, "state.eventsOpen", 10), "the page started"
+    assert reads.answered(), f"the page's reads answered: {reads.open}"
+    frames(page)
+    assert page.locator("#login-password").input_value() == "typed-later", "what was typed after the close stays"
+    page.unroute("**/api/v1/me")
+    sign_out(page)
+    assert wait_until(page, DIALOG_OPEN, 5), "signed out at the end"
+    assert page.locator("#login-password").input_value() == "", "emptied at the opening, as before"
 
 
 TITLE = {"en": "Sign in", "de": "Anmelden"}

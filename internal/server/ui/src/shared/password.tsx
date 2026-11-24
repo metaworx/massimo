@@ -16,9 +16,10 @@
  * (Edge's) is hidden on every field of the page in each case (style.css),
  * so that a field has one eye at most. The fields are free fields of the caller's own
  * state, never a draft and in no store, so that the password goes with
- * the form that holds it, or, in the card, not controlled at all and read
- * through their refs at the submit (UiParts D210); newPasswordProblem is
- * the one check of the pair.
+ * the form that holds it, or, in the card, not controlled at all, read
+ * through their refs at the submit (UiParts D210) and emptied by the card
+ * at its openings and after a success (AP LooseEnds, D13);
+ * newPasswordProblem is the one check of the pair.
  */
 
 import { signal } from "@preact/signals";
@@ -61,7 +62,7 @@ type One = { value: string; set: (v: string) => void; inputRef?: Ref<HTMLInputEl
  * neither opens nor closes. It turns the input's type between password
  * and text, keeping its value, its caret where the field has the focus,
  * and its autocomplete; the password hidden again at each change of reset
- * (the sign-in card's openings) and at the form's submit, before the
+ * (the sign-in card's openings and successes) and at the form's submit, before the
  * form's own handler, so that a password manager reads a password field.
  * Shown as text, the keyboard is asked for no capitals, correction or
  * spelling. Without the server's word, or with the setting off, there is
@@ -69,7 +70,8 @@ type One = { value: string; set: (v: string) => void; inputRef?: Ref<HTMLInputEl
  * required, disabled and placeholder are the input's, inputCls its class
  * (field-control in a row, beside the box's own); value and set, or
  * inputRef alone, as One says. reset is whatever the caller counts as a
- * new start: the card's openings, a fold's open state; a password shown
+ * new start: the card's openings and its successes, a fold's open
+ * state; a password shown
  * is also hidden whenever a fold the field is in is closed and opened,
  * however fast, in the very task that opens it, before a paint or a read
  * can come between (an observer of the folds' open attribute, whose call

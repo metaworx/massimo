@@ -9,30 +9,38 @@
  * the card opens with it instead of the ways to sign in (askLogin
  * "owner" of login.js). The name, checked as Add a user checks it
  * (shared/username.tsx), the password twice (shared/password.tsx), each
- * with its eye, hidden again at each opening, and in
+ * with its eye, hidden again at each opening and after a success, and in
  * the app where the phone can and the address takes a key the switch that
  * keeps the login by fingerprint, and Cancel, back to the app's servers.
  * Create the owner creates the owner with a password of version 2 and
  * signs in at once, and turns through that, the app's keeping (UiParts
  * D213) and the read of who is in until the card has closed, so that no
  * second tap meets the form, and Skip for now and the app's Cancel are
- * off meanwhile; a toast then says it (FirstOwner D22). A
+ * off meanwhile; a toast then says it (FirstOwner D22). What a submit
+ * finds wrong is said alone, an earlier attempt's line cleared, and the
+ * focus goes to the field to change: the name, or Again where the two
+ * passwords differ; a missing password the browser refuses itself, the
+ * fields being required, its focus on Password (AP LooseEnds, Block 2). A
  * refusal for lack of a session, or the server's word that the first
  * owner exists already, turns the card to the sign-in (askLogin): the
  * server has users now. Under the form, Skip for now closes the card for
  * this load (D10, D21), or "Back to the page" where the user opened the
- * card on a running page, which marks nothing (D36), and Keep it open… shows the confirmation that
- * keeps the server open (KeepOpen.tsx, AP FirstOwner, Block 3) in the
- * form's place, the two of one height, where the server is not kept open
- * already. Its fields are not controlled, as the card's
+ * card on a running page, which marks nothing (D36), and Escape there
+ * too, at either step and not while a request of the card runs, the
+ * card's ☰ closed first where it is open (AP LooseEnds, D3); and Keep it
+ * open… shows the confirmation that keeps the server open (KeepOpen.tsx,
+ * AP FirstOwner, Block 3) in the form's place, the two of one height,
+ * where the server is not kept open already. Its fields are not controlled, as the card's
  * (UiParts D210): no drawing writes what they hold, they are read at the
- * submit and emptied at each opening alone, never at the closing nor at
- * the turn to the sign-in, so that a password manager finds what was
- * typed when the form goes (FirstOwner D43); the form is drawn once with
+ * submit and emptied at each opening, never at a dismissal nor at the
+ * turn to the sign-in, and the two passwords once the card has closed on
+ * the new owner and the page's first reads after it have settled
+ * (store.ts settled; AP LooseEnds, D13, D41-A; it changes FirstOwner D43,
+ * which kept them for a password manager); the form is drawn once with
  * the card and only hidden.
  */
 
-import { useLayoutEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { app, toServers } from "../shared/app";
 import { ResultLine } from "../shared/badge";
 import { hid } from "../shared/cls";
@@ -44,7 +52,7 @@ import { me } from "../shared/me";
 import { keptOpen } from "../shared/owner";
 import { offer } from "./app";
 import { KeepOpen } from "./KeepOpen";
-import { ask, card, creationEnded, keepAsk, skip } from "./store";
+import { ask, card, creationEnded, keepAsk, leaves, skip } from "./store";
 
 /** Owner is the first owner's place in the card: the form, and under it the row with Skip for now. */
 export function Owner() {
@@ -54,6 +62,7 @@ export function Owner() {
   const working = card.working;
   const kept = keptOpen(me.value);
   const opened = card.opened;
+  const succeeded = card.succeeded;
   const focus = card.focus;
   const offered = offer(app.value);
   const [keep, setKeep] = useState(false);
@@ -63,6 +72,18 @@ export function Owner() {
   const keepRef = useRef<HTMLButtonElement>(null);
   const nc = useNameCheck(() => []);
   const create = useBusy();
+  const byUser = shown && card.byUser && card.shown;
+  // Escape leaves a card the user opened, as Back to the page does, at either step (AP LooseEnds, D3): a listener on
+  // the document while it is open, after the menus' own (components.js), which mark the Escape that closed a menu,
+  // so that with the card's ☰ open the first Escape closes the menu alone; nothing while a request of the card runs
+  useEffect(() => {
+    if (!byUser) return;
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape" && !ev.defaultPrevented && leaves()) skip();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [byUser]);
   // each opening empties the fields, the name's line and the switch, as the card's own (UiParts D210)
   // biome-ignore lint/correctness/useExhaustiveDependencies: opened is read from the card's store, which Biome takes for a stable import; the effect is for each opening, so it is listed, and nc's line is cleared with it.
   useLayoutEffect(() => {
@@ -71,6 +92,14 @@ export function Owner() {
     setKeep(false);
     nc.say("");
   }, [opened]);
+  // the owner made, signed in, the card closed and the page's first reads after it settled (store.ts settled): the two
+  // passwords emptied (AP LooseEnds, D13, D41-A), their eyes hidden again by their reset; the name stays until the
+  // next opening
+  // biome-ignore lint/correctness/useExhaustiveDependencies: succeeded is read from the card's store, which Biome takes for a stable import; the effect is for each success, so it is listed.
+  useLayoutEffect(() => {
+    if (!succeeded) return;
+    for (const r of [passRef, againRef]) if (r.current) r.current.value = "";
+  }, [succeeded]);
   // the name in focus at the first owner's opening, in the drawing that shows the form; none on a touch screen, where it
   // would bring the soft keyboard up by itself (UiParts D224)
   // and Keep it open… in focus again after Back
@@ -89,6 +118,7 @@ export function Owner() {
     ev.preventDefault();
     if (create.busy) return;
     const a = ask();
+    card.ownerSaid = null; // the line says what is wrong now: none of an earlier attempt beside the name's rule
     const name = nameRef.current?.value || "";
     if (!nc.check(name)) {
       nameRef.current?.focus();
@@ -96,9 +126,15 @@ export function Owner() {
     }
     const n = name.trim();
     const password = passRef.current?.value || "";
-    const problem = n ? newPasswordProblem(password, againRef.current?.value || "") : t("login.missing");
-    if (problem) return say(problem);
-    card.ownerSaid = null;
+    const again = againRef.current?.value || "";
+    const problem = n ? newPasswordProblem(password, again) : t("login.missing");
+    if (problem) {
+      say(problem);
+      // the focus on the field to change, in the submit's handler: the name missing, or the two differing; no password
+      // at all never comes here, the browser refusing the required fields first
+      (n ? againRef : nameRef).current?.focus();
+      return;
+    }
     card.working = true;
     card.creating = true;
     // busy through the creation, the sign-in, the app's keeping of the login (UiParts D213) and the read of who is in
@@ -150,7 +186,7 @@ export function Owner() {
             <p class="muted">{t("setup.text")}</p>
             <p id="setup-tls" class={"notice small" + hid(!card.selfSigned)} role="note">{t("header.selfSigned")}</p>
             <UserNameField label={t("users.name")} id="setup-user" msgId="setup-name-msg" nc={nc} autocomplete="username" inputRef={nameRef} />
-            <NewPassword ids={["setup-password", "setup-again"]} label={t("login.password")} inputRefs={[passRef, againRef]} required reset={opened} />
+            <NewPassword ids={["setup-password", "setup-again"]} label={t("login.password")} inputRefs={[passRef, againRef]} required reset={opened + succeeded} />
             <label id="setup-keep-row" class={"switch login-keep" + hid(!offered)}>
               <input type="checkbox" id="setup-keep" checked={keep && offered} onChange={(ev) => setKeep(ev.currentTarget.checked)} />
               <span class="slider" aria-hidden="true" />

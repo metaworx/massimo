@@ -101,6 +101,140 @@ def test_each_way_opens_the_card(new_context, case, watch, guard, way):
     assert page.evaluate(DIALOG_OPEN), "the card opens again: nothing was skipped"
 
 
+def focus_back(page, back):
+    """The focus on the control that opened the card: back's id, or ☰'s button for None."""
+    if back:
+        return page.evaluate("document.activeElement && document.activeElement.id") == back
+    return page.evaluate("document.activeElement === document.querySelector('#nav-menu > summary')")
+
+
+@pytest.mark.parametrize("way", ["banner", "menu", "users"])
+def test_escape_leaves_a_card_the_user_opened(new_context, case, watch, guard, way):
+    """Escape in the card opened by one of the three ways leaves it as
+    Back to the page does (AP LooseEnds, D3): the page shown, its poll and
+    stream again, the focus back on what opened it. With the card's ☰
+    open, the first Escape closes the ☰ alone, the focus on its button,
+    and the next leaves the card. Fails on the page before: Escape did
+    nothing (the walk-through of AP LooseEnds, finding 5)."""
+    page, _ = page_kept(new_context, guard, watch)
+    back = open_by(page, way)
+    page.keyboard.press("Escape")
+    assert wait_until(page, f"!({DIALOG_OPEN})", 5), "Escape closes the card"
+    assert page.locator("main").is_visible(), "the page shown"
+    assert wait_until(page, "state.eventsOpen && state.pollTimer !== null", 10), "the poll and the stream again"
+    assert focus_back(page, back), "the focus back on what opened the card"
+    open_by(page, way)
+    page.locator("#login-menu summary").click()
+    assert page.locator("#login-menu").get_attribute("open") is not None, "the card's ☰ open"
+    page.keyboard.press("Escape")
+    frames(page)
+    assert page.locator("#login-menu").get_attribute("open") is None, "the first Escape closes the ☰"
+    assert page.evaluate(DIALOG_OPEN), "and leaves the card open"
+    assert page.evaluate("document.activeElement === document.querySelector('#login-menu summary')"), "the focus on the ☰'s button"
+    page.keyboard.press("Escape")
+    assert wait_until(page, f"!({DIALOG_OPEN})", 5), "the next Escape leaves the card"
+    assert focus_back(page, back), "the focus back on what opened the card"
+
+
+def test_escape_on_the_confirmation_and_not_at_the_start(new_context, case, watch, guard):
+    """Escape does nothing in the card the page's start opens, on the
+    form or on the confirmation that keeps the server open; in the card
+    opened from the banner after Skip for now, Escape on the confirmation
+    leaves the card, the focus back on Create the owner…. Fails on the
+    page before: Escape did nothing in either (a forward guard for the
+    start's card)."""
+    page = start_page(new_context, guard, watch, OPEN)
+    owner_card(page)
+    page.keyboard.press("Escape")
+    frames(page)
+    assert page.evaluate(DIALOG_OPEN), "the start's card stays at Escape"
+    page.locator("#setup-keep-open").click()
+    assert page.locator("#keep-open").is_visible(), "the confirmation"
+    page.keyboard.press("Escape")
+    frames(page)
+    assert page.evaluate(DIALOG_OPEN) and page.locator("#keep-open").is_visible(), "the start's confirmation stays at Escape"
+    page.locator("#keep-open-back").click()
+    page.locator("#setup-skip").click()
+    page.wait_for_selector(".room", timeout=10000)
+    assert wait_until(page, "state.eventsOpen", 10), "the page started"
+    back = open_by(page, "banner")
+    page.locator("#setup-keep-open").click()
+    assert page.locator("#keep-open").is_visible(), "the confirmation"
+    page.keyboard.press("Escape")
+    assert wait_until(page, f"!({DIALOG_OPEN})", 5), "Escape on the confirmation leaves the card"
+    assert focus_back(page, back), "the focus back on Create the owner…"
+
+
+def typed(page, password):
+    """The two passwords of the first owner's form typed."""
+    page.locator("#setup-password").fill(password)
+    page.locator("#setup-again").fill(password)
+
+
+def kept(page, password, what):
+    """The closed card's two passwords still hold what was typed."""
+    frames(page)
+    assert not page.evaluate(DIALOG_OPEN), f"{what}: the card closed"
+    values = [page.locator(f).input_value() for f in ("#setup-password", "#setup-again")]
+    assert values == [password, password], f"{what} empties nothing: {values}"
+
+
+def emptied_at_the_opening(page, what):
+    values = [page.locator(f).input_value() for f in ("#setup-password", "#setup-again")]
+    assert values == ["", ""], f"the opening after {what} empties them: {values}"
+
+
+def test_skip_back_and_escape_empty_nothing(new_context, case, watch, guard):
+    """Skip for now, Back to the page and Escape leave the first owner's
+    card as they found it: the closed card's passwords still hold what was
+    typed, and the next opening empties them (AP LooseEnds, D13). A
+    forward guard: the card emptied its fields at the opening alone
+    before."""
+    page = start_page(new_context, guard, watch, OPEN)
+    owner_card(page)
+    typed(page, "skipped")
+    page.locator("#setup-skip").click()
+    kept(page, "skipped", "Skip for now")
+    page.wait_for_selector(".room", timeout=10000)
+    assert wait_until(page, "state.eventsOpen", 10), "the page started"
+    open_by(page, "banner")
+    emptied_at_the_opening(page, "Skip for now")
+    typed(page, "back")
+    page.locator("#setup-skip").click()
+    kept(page, "back", "Back to the page")
+    open_by(page, "menu")
+    emptied_at_the_opening(page, "Back to the page")
+    typed(page, "escaped")
+    page.keyboard.press("Escape")
+    assert wait_until(page, f"!({DIALOG_OPEN})", 5), "Escape closes the card"
+    kept(page, "escaped", "Escape")
+    open_by(page, "users")
+    emptied_at_the_opening(page, "Escape")
+
+
+def test_no_escape_while_create_turns(new_context, case, watch, guard):
+    """Escape does nothing while Create the owner turns in a card the user
+    opened: the card stays until the creation has ended, then closes on the
+    owner. Fails on the page before: Escape did nothing at all, so a
+    forward guard of the guard in the card's Escape."""
+    page, stage = page_kept(new_context, guard, watch)
+    open_by(page, "banner")
+    page.route("**/api/v1/users", lambda route: route.fulfill(status=201, content_type="application/json", body="{}")
+               if route.request.method == "POST" else route.continue_())
+    page.evaluate("""(token) => {
+      registerPassword = async () => ({ record: "r", ksf: "m=19456,t=2,p=1" });
+      signIn = () => new Promise((res) => { window.__letSignIn = () => res({ token }); });
+    }""", TOKEN)
+    create(page)
+    assert wait_until(page, "typeof window.__letSignIn === 'function'", 5), "the creation reached its sign-in"
+    page.keyboard.press("Escape")
+    frames(page)
+    assert page.evaluate(DIALOG_OPEN), "the card stays while Create the owner turns"
+    stage["me"] = None
+    page.evaluate("() => { window.__letSignIn(); }")
+    assert wait_until(page, f"!({DIALOG_OPEN})", 10), "the card closes on the owner"
+
+
 def test_the_banner_hidden_stays_hidden(new_context, case, watch, guard):
     """Hide hides the warning at once, the focus on ☰'s button, and the
     browser keeps it so for that server: after a reload it is still
