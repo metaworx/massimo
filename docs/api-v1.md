@@ -1354,7 +1354,19 @@ Nothing in a row is a secret.
 (RFC 3339) pages: the rows before that time, a time only, unlike the log's;
 `limit` is 100 by default and at most 1000; `user` filters by login name,
 the rows made with that user's rights or by it.
-The rows are append-only; a later stage prunes them by age.
+A row's `time` is when its request came,
+and the row is written once the request is answered,
+a row of refused requests once its minute has ended:
+after rows of requests that came later, so that an `id` is no measure of time.
+A page is therefore ordered by `time`, then by `id`, both newest first,
+so that the next page, `before` the `time` of a page's last row,
+goes on where it ended.
+Rows of the same millisecond that a page's end divides stay divided:
+the next page, before that time, has none of them.
+A row written while a client pages, with a time on a page it has already read,
+is on none of the later pages; a new read from the newest finds it.
+The rows are append-only,
+and kept for `audit.keep_days` (`GET`/`PUT /api/v1/settings`).
 
 **Who did it.**
 A row of the audit or the log names two users,
