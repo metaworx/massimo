@@ -185,11 +185,18 @@ func TestRolesAgainstRoutes(t *testing.T) {
 	rg := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
 	ts, s := rg.ts, rg.s
 	routes := registeredRoutes(t)
-	// Removing the Cube last, so that the other routes still find it.
-	sort.SliceStable(routes, func(i, j int) bool {
-		di, dj := routes[i].method == "DELETE" && routes[i].path == "/api/v1/cubes/{sn}", routes[j].method == "DELETE" && routes[j].path == "/api/v1/cubes/{sn}"
-		return !di && dj
-	})
+	// Removing the Cube late, so that the other routes still find it, and
+	// the role's token revoking itself last, so that it still calls them.
+	rank := func(r route) int {
+		switch {
+		case r.method == "DELETE" && r.path == "/api/v1/me/token":
+			return 2
+		case r.method == "DELETE" && r.path == "/api/v1/cubes/{sn}":
+			return 1
+		}
+		return 0
+	}
+	sort.SliceStable(routes, func(i, j int) bool { return rank(routes[i]) < rank(routes[j]) })
 	roles := []string{store.RoleViewer, store.RoleIntegration, store.RoleGuest, store.RoleOperator, store.RoleManager, store.RoleOwner}
 	for _, role := range roles {
 		tok := userToken(t, s.opts.Store, "u-"+role, role)

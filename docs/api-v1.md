@@ -218,7 +218,7 @@ the OpenAPI file carries each operation's as `x-capability`:
 | `preferences` | keep one's own settings and colour schemes on the server, so that they follow the user across browsers, and be notified; without it they stay in the browser | `PUT`/`DELETE /api/v1/me/preferences/{key}`, `/api/v1/me/push` |
 | `setpoint` | set temperatures and modes | `PUT …/devices/{rf}/setpoint`, `PUT …/rooms/{id}/setpoint` |
 | `lock` | lock and unlock the thermostats' buttons | `PUT …/devices/{rf}/lock` |
-| `configure` | temperatures, device settings, week programmes | `PUT …/rooms/{id}/config`, `PUT …/devices/{rf}/config`, `PUT …/rooms/{id}/program`, `PUT …/devices/{rf}/program`, the copy of a room's settings in `PUT …/devices/{rf}` |
+| `configure` | temperatures, device settings, week programmes, and new batteries marked | `PUT …/rooms/{id}/config`, `PUT …/devices/{rf}/config`, `PUT …/rooms/{id}/program`, `PUT …/devices/{rf}/program`, the copy of a room's settings in `PUT …/devices/{rf}`, `POST …/devices/{rf}/battery` |
 | `rename` | room and device names | `PUT …/rooms/{id}`, `PUT …/devices/{rf}` with `name` |
 | `structure` | move and remove devices, delete rooms | `PUT …/devices/{rf}` with `room_id`, `DELETE …/devices/{rf}`, `DELETE …/rooms/{id}` |
 | `pair` | put the Cube into pairing mode and stop it | `POST …/pairing`, `DELETE …/pairing` |
@@ -235,6 +235,11 @@ the OpenAPI file carries each operation's as `x-capability`:
 | `cubes` | add, configure and remove Cubes | `POST /api/v1/cubes`, `PUT`/`DELETE /api/v1/cubes/{sn}` |
 | `cubes.reboot` | reboot a Cube, which drops the radiograms it has not delivered; seeded for no role | `POST /api/v1/cubes/{sn}/reboot` |
 | `settings` | the server's settings, its store and the settings in effect | `GET`/`PUT /api/v1/settings`, `GET /api/v1/store`, `GET /api/v1/config` |
+| `update` | start a software update | `POST /api/v1/update` |
+| `restart` | restart the server through the service manager that runs it, read its settings file again, and read a Cube again at once | `GET`/`POST /api/v1/restart`, `POST /api/v1/reload`, `POST /api/v1/cubes/{sn}/refresh` |
+| `reboot` | reboot the computer the server runs on, where its owner switched that on; seeded for no role | `GET`/`POST`/`DELETE /api/v1/reboot` |
+| `audit` | read the audit | `GET /api/v1/audit` |
+| `auth` | the OpenID Connect providers users sign in through; seeded for no role | `GET`/`POST /api/v1/providers`, `PUT`/`DELETE /api/v1/providers/{key}` |
 
 A user changes only users whose role has no capability its own lacks,
 and gives only such roles: an owner changes everyone,
@@ -242,11 +247,6 @@ nobody but an owner changes an owner or gives the role `owner`,
 and a role made with `users` but without, say, `restore` changes no manager.
 The users routes say what the caller may do with each user they list
 (`"may": {"manage": true, "password": true}`).
-| `update` | start a software update | `POST /api/v1/update` |
-| `restart` | restart the server through the service manager that runs it, and read its settings file again | `GET`/`POST /api/v1/restart`, `POST /api/v1/reload` |
-| `reboot` | reboot the computer the server runs on, where its owner switched that on; seeded for no role | `GET`/`POST`/`DELETE /api/v1/reboot` |
-| `audit` | read the audit | `GET /api/v1/audit` |
-| `auth` | the OpenID Connect providers users sign in through; seeded for no role | `GET`/`POST /api/v1/providers`, `PUT`/`DELETE /api/v1/providers/{key}` |
 
 The default roles and their sets are those of docs/store.md section 6:
 `owner` has every capability and cannot be changed,
@@ -404,7 +404,7 @@ and `warning` is set while something needs the owner:
 a certificate within two weeks of its end,
 or an order from Let's Encrypt that has not succeeded yet.
 
-### POST /api/v1/login, POST /api/v1/logout, GET /api/v1/me
+### POST /api/v1/login, POST /api/v1/logout, DELETE /api/v1/me/token, GET /api/v1/me
 
 `POST /api/v1/login` with `{"user": "anna", "password": "…"}`,
 and an optional `label` that names the session under the user's tokens
@@ -453,7 +453,25 @@ with which the client sets the user's own record (`PUT /api/v1/users/{name}`
 with `record`, `ksf` and `proof`) without the password.
 
 `POST /api/v1/logout` revokes the session that makes the call, `{"ok": true}`.
-An API key answers `400`; a key is revoked under the user's tokens.
+An API key answers `400`; a key is revoked under the user's tokens,
+or by itself (below).
+
+`DELETE /api/v1/me/token` revokes the token that makes the call,
+whatever it is: a session, or an API key and the sessions made from it,
+`{"ok": true, "id": 4}` with the token's id (AP MobileApp, D80-B).
+It is one call for any token, without the user's name or the token's id:
+the apps revoke a kept key with the key alone so,
+and an integration may revoke its own key.
+It is audited as `token.revoke`, as a revoke under the user's tokens is.
+A caller without a token of a user,
+on an open server or with the one token of a server without users,
+is `400`, and so is an integration's call on a user's behalf
+(`X-MassimoHA-On-Behalf-Of`), which would revoke the integration's key in that
+user's name: the integration revokes its key without the header.
+The settings file's token, `MASSIMO_API_TOKEN`, is `409`:
+the next start would not add the owner's key back, its hash being taken,
+so it is changed or removed in the settings file;
+revoked under the user's tokens by the owner's choice, it stays revoked too.
 
 `GET /api/v1/me` says who the caller is:
 
@@ -727,6 +745,10 @@ and a retry with its `Idempotency-Key` answers `201` without it too.
 a token of another user is `404`.
 A session made from a key (`POST /api/v1/login/key`) carries the key's id
 as `key_id`; revoking the key revokes that session with it.
+A token revokes itself the same way, as its own bearer:
+a key with `DELETE …/tokens/{id}` and its own id,
+or any token with `DELETE /api/v1/me/token`, which needs neither the name nor the id;
+a session ends itself with `POST /api/v1/logout`.
 
 ### Identities: /api/v1/users/{name}/identities
 
@@ -1906,6 +1928,37 @@ and the server's log has no loss for it.
 `502` when `R` could not be sent.
 `massimo netconfig -reboot` sends the same request without the server (README.md).
 
+### POST /api/v1/cubes/{sn}/refresh
+
+Reads the Cube again at once,
+as the periodic refresh does every `refresh_interval` (the settings, above):
+the server ends its connection to the Cube and connects again,
+and the Cube's greeting replaces what the server holds of it,
+its rooms, its devices with their state and battery flags, and its budget.
+The reconnect goes through the Cube's queue, after the commands before it,
+so that it cuts none off;
+it sends nothing by radio and takes no memory slot.
+It needs no body, and the capability `restart`.
+The request waits for the new greeting, a minute at most once its turn has come,
+and answers `200`:
+
+```json
+{"ok": true, "budget": {"duty_cycle_pct": 5, "free_memory_slots": 49, "updated_at": "…"}}
+```
+
+`budget` is the one the new greeting brought.
+The server's log says `snapshot refreshed` with `asked` and the user,
+and the Cube's log has the request as a change, with who made it.
+`409` comes while the Cube reboots (`link` `rebooting`),
+whose greeting after the reboot reads it again,
+while the Cube's serial or address is not known yet,
+and when a newer refresh took the request's place before its turn;
+`502` when the reconnect failed:
+the Cube did not greet again within the minute, as when it is not reachable
+or another client holds it (`link` `busy`),
+or the server still holds a lost connection to it (`link` `held`).
+The error names the reconnect's error and the `link` after it.
+
 ### POST /api/v1/cubes/discover
 
 Looks for Cubes on the LAN now (UDP discovery, about three seconds) and
@@ -2073,10 +2126,14 @@ A weak device is `ok` again once a long valve move has gone by without the flag:
 its next decalcification, a valve move of 50 points or more,
 or for a device without a valve a day;
 a low one an hour after the flag went, with new batteries.
+A low or weak device is also `ok` at once when someone marks its new batteries
+once its flag is off (`POST …/devices/{rf}/battery`, below).
 The levels outlive a restart: the server reads them back from its log
 (docs/cube-protocol.md, "How devices report").
 A change of a device's level is a `battery` event in the log,
 its `summary` the `level` and the one before (`from`); `low` at warn.
+Where someone marked new batteries, its `summary` has `cause` `replaced` too,
+and `by` names who marked them.
 
 How old the values are: a device with state also has `received`,
 the time per value of `state` (same names) at which the server saw its current
@@ -2939,6 +2996,37 @@ On the device itself the lock is toggled by pressing Auto/Manu and the second
 button (Boost or the moon/sun key,
 Mode/Menu and Boost/OK on a wall thermostat) together.
 
+### POST /api/v1/cubes/{sn}/devices/{rf}/battery
+
+Marks new batteries in a device:
+a device whose `battery` is `weak` or `low` and whose flag is off,
+`battery_low` as the Cube shows it now, is `ok` at once,
+rather than when the server's rules say so,
+a low one an hour after its flag went (see the devices' `battery` above).
+The body is `{"replaced": true}` and nothing else;
+the route needs the capability `configure`, and sends nothing to the Cube.
+The answer is the level, the one before, and whether it changed:
+
+```json
+{"battery": "ok", "from": "low", "changed": true}
+```
+
+A device that is `ok` already answers `{"battery": "ok", "from": "ok", "changed": false}`.
+The change is a `battery` event in the log, as every change of a level is,
+its `summary` with `cause` `replaced`, and `by` naming who marked the batteries,
+beside the request's `change` line;
+the server reads it back at a start with the device's states,
+so that the level stays `ok` across a restart.
+Later reports follow the rules of an `ok` device:
+the flag seen again makes it `weak`, held for 15 minutes `low`.
+`409` while the device's flag is on, since the device has not reported its new
+batteries yet, and while the Cube holds no current report of the device,
+since the Cube's restart or for some minutes (`reported` false):
+the error says to wait for the device's next report.
+`404` for a device the Cube does not have;
+`400` for another body, a virtual wall thermostat and the Cube itself,
+which have no batteries.
+
 ### Pairing: POST, GET, DELETE /api/v1/cubes/{sn}/pairing
 
 `POST` with `{"seconds": 60}` (optional; 1 to 255,
@@ -3622,7 +3710,9 @@ the server retries by itself, without an event for each attempt,
 and sends `connected` when the Cube is back),
 `hello` (new budget or clock from the Cube),
 `metadata` (rooms or names changed), `config` (a device configuration arrived),
-`state`, `battery` (a device's battery level changed, see the devices above),
+`state`, `battery` (a device's battery level changed, see the devices above;
+with `cause` `replaced` in its `summary` and who in `by` where someone marked
+new batteries),
 `wall_reset` (a wall thermostat came back after five minutes or more without a
 state on another mode than it had, as after new batteries, at warn: its
 `summary` has the `mode` and the `was_mode`, the setpoints and `silent_min`),

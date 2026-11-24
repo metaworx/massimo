@@ -26,6 +26,7 @@ class ServerApiTest {
     private lateinit var base: String
     private val seen = mutableListOf<String>() // "<method> <path> <bearer> <body>"
     private var keyRevoked = false
+    private var selfRoute = 200 // what DELETE /api/v1/me/token answers: 200 where it is there, 404 or 405 at an older server
 
     private fun answer(ex: HttpExchange, code: Int, body: String) {
         val b = body.toByteArray()
@@ -50,10 +51,16 @@ class ServerApiTest {
                     answer(ex, 201, """{"token":"key-secret","id":42,"kind":"api","label":"x"}""")
                 ex.requestMethod == "POST" && path == "/api/v1/login/key" && bearer == "key-secret" && !keyRevoked ->
                     answer(ex, 200, """{"token":"session-2","expires_at":"2026-12-18T12:00:00Z"}""")
-                ex.requestMethod == "DELETE" && path == "/api/v1/users/anna%20maria/tokens/42" && bearer == "key-secret" -> {
+                ex.requestMethod == "DELETE" && path == "/api/v1/users/anna%20maria/tokens/42" && bearer == "key-secret" && !keyRevoked -> {
                     keyRevoked = true
                     answer(ex, 200, """{"ok":true,"id":42}""")
                 }
+                ex.requestMethod == "DELETE" && path == "/api/v1/me/token" && selfRoute != 200 -> answer(ex, selfRoute, "")
+                ex.requestMethod == "DELETE" && path == "/api/v1/me/token" && bearer == "key-secret" && !keyRevoked -> {
+                    keyRevoked = true
+                    answer(ex, 200, """{"ok":true,"id":42}""")
+                }
+                ex.requestMethod == "DELETE" && keyRevoked -> answer(ex, 401, """{"error":"missing or wrong token"}""")
                 ex.requestMethod == "POST" && path == "/api/v1/login/key" -> answer(ex, 401, """{"error":"missing or wrong token"}""")
                 else -> answer(ex, 403, """{"error":"capability \"users\" required"}""")
             }
@@ -77,6 +84,50 @@ class ServerApiTest {
         api.revoke(base, "", key.token, user, key.id)
         try {
             api.loginKey(base, "", key.token)
+            fail("a revoked key made a session")
+        } catch (e: ServerApi.Refused) {
+            assertEquals("missing or wrong token", e.message)
+        }
+    }
+
+    @Test
+    fun theKeyRevokesItselfAtAnyServer() {
+        // DELETE /api/v1/me/token, the key as its own bearer (D80-B)
+        api.revokeSelf(base, "", "key-secret", "anna maria", 42)
+        assertEquals("DELETE /api/v1/me/token key-secret", seen.single())
+        assertKeyRevoked()
+        // at a server older than the route, which answers 404 or 405: by the user's name and the key's id
+        for (older in listOf(404, 405)) {
+            seen.clear()
+            keyRevoked = false
+            selfRoute = older
+            api.revokeSelf(base, "", "key-secret", "anna maria", 42)
+            assertEquals(listOf("DELETE /api/v1/me/token key-secret", "DELETE /api/v1/users/anna%20maria/tokens/42 key-secret"), seen)
+            assertKeyRevoked()
+        }
+        // a key the server takes no more is Refused, either way
+        for (route in listOf(200, 404)) {
+            selfRoute = route
+            try {
+                api.revokeSelf(base, "", "key-secret", "anna maria", 42)
+                fail("a revoked key revoked again")
+            } catch (e: ServerApi.Refused) {
+                assertEquals("missing or wrong token", e.message)
+            }
+        }
+        // another refusal fails with the server's words, and is not taken for an older server
+        selfRoute = 403
+        try {
+            api.revokeSelf(base, "", "key-secret", "anna maria", 42)
+            fail("revoked")
+        } catch (e: ServerApi.Failed) {
+            assertEquals(403, e.status)
+        }
+    }
+
+    private fun assertKeyRevoked() {
+        try {
+            api.loginKey(base, "", "key-secret")
             fail("a revoked key made a session")
         } catch (e: ServerApi.Refused) {
             assertEquals("missing or wrong token", e.message)

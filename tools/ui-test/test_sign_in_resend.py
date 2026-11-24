@@ -23,7 +23,7 @@ import json
 import pytest
 
 from conftest import TOKEN, URL, api_call, clear_preferences
-from helpers import frames, open_personal_page, show_view, wait_until
+from helpers import frames, open_personal_page, show_view, sign_out, wait_held, wait_until
 from test_login import sign_in
 
 NOT_SENT = {"en": "not sent, since you were signed out: do it again once signed in",
@@ -423,6 +423,102 @@ def test_two_tiles_one_sign_in(page, case, watch):
     assert len(writes.sent) == 2, f"neither is sent again: {len(writes.sent)}"
     for i in (0, 1):
         assert NOT_SENT[case.lang] in tiles.nth(i).locator(".tile-result").inner_text(), f"tile {i + 1} still says it"
+
+
+def sessions_of(user):
+    """The ids of the user's live sessions at the server."""
+    return {t["id"] for t in api_call("GET", f"api/v1/users/{user}/tokens") or [] if t.get("kind") == "session"}
+
+
+def test_late_refusal_of_an_earlier_sign_in(new_context, case, watch, guard):
+    """F36 (AP MobileApp, D68-A): a read sent without a token while the
+    card is open meets its 401 only once the sign-in has answered and the
+    card has closed, as a poll whose answer a slow link held back: no
+    second card opens, the read is sent again with the new session and
+    answered, and that session is the only one the sign-in left at the
+    server."""
+    before = sessions_of("operator")
+    page = own_page(new_context, guard, watch)
+    held, sent = [], []
+
+    def handle(route):
+        sent.append(route.request.headers.get("authorization") or "")
+        if len(sent) == 1:
+            held.append(route)  # its 401 held back until the sign-in is in
+        else:
+            route.continue_()
+
+    page.route("**/api/v1/me?late=1", handle)
+    page.goto(URL)
+    assert wait_until(page, DIALOG_OPEN, 5), "the card opens without a token"
+    page.evaluate("""() => {
+      window.lateRead = null;
+      api('GET', 'api/v1/me?late=1').then((m) => { window.lateRead = m.user.name; }, (e) => { window.lateRead = 'failed: ' + e.message; });
+    }""")
+    assert wait_held(page, held), "the read is sent while the card is open"
+    assert sent == [""], f"without a token: {sent}"
+    page.locator("#login-user").fill("operator")
+    page.locator("#login-password").fill("op-pass")
+    page.locator("#login-form button[type=submit]").click()
+    assert wait_until(page, f"!({DIALOG_OPEN}) && !!state.token", 10), "signed in, the card closed"
+    page.wait_for_selector(".room", timeout=10000)
+    held[0].fulfill(status=401, content_type="application/json", body=json.dumps({"error": "unauthorized"}))
+    wait_until(page, f"window.lateRead !== null || {DIALOG_OPEN}", 5)
+    for _ in range(10):  # a second card would open at the 401
+        assert not page.evaluate(DIALOG_OPEN), "no second card"
+        page.wait_for_timeout(200)
+    assert wait_until(page, "window.lateRead !== null", 5), "the read is answered"
+    assert not page.evaluate("document.body.classList.contains('signed-out')"), "the page stays shown"
+    assert page.evaluate("window.lateRead") == "operator", f"the read is answered for the new session: {page.evaluate('window.lateRead')}"
+    token = page.evaluate("state.token")
+    assert sent == ["", "Bearer " + token], "sent again once, with the new session"
+    made = sessions_of("operator") - before
+    assert made == {page.evaluate("state.me.token.id")}, f"the sign-in's session the only one it left at the server: {made}"
+    sign_out(page)
+
+
+def test_late_refusal_of_a_write(new_context, case, watch, guard):
+    """A write sent without a token while the card is open, by api() and
+    by apiRaw (a backup's file), whose 401 comes only once the sign-in has
+    answered and the card has closed (AP MobileApp, D68-A): each fails as
+    not sent, sent once, and no second card opens."""
+    page = own_page(new_context, guard, watch)
+    held, sent = [], []
+
+    def handle(route):
+        sent.append(route.request.method + " " + route.request.url.split("/api/v1/")[-1])
+        held.append(route)
+
+    page.route("**/api/v1/me/preferences/late", handle)
+    page.route("**/restore/plan?late=1", handle)
+    page.goto(URL)
+    assert wait_until(page, DIALOG_OPEN, 5), "the card opens without a token"
+    page.evaluate("""() => {
+      window.late = {};
+      const said = (k) => [() => { window.late[k] = 'sent'; }, (e) => { window.late[k] = e.message; }];
+      api('PUT', 'api/v1/me/preferences/late', {}).then(...said('api'));
+      apiRaw('POST', 'api/v1/cubes/KEQ0000100/restore/plan?late=1', '{}', 'application/json').then(...said('raw'));
+    }""")
+    for _ in range(25):
+        if len(held) == 2:
+            break
+        page.wait_for_timeout(200)
+    assert len(held) == 2, f"both writes are sent while the card is open: {sent}"
+    page.locator("#login-user").fill("operator")
+    page.locator("#login-password").fill("op-pass")
+    page.locator("#login-form button[type=submit]").click()
+    assert wait_until(page, f"!({DIALOG_OPEN}) && !!state.token", 10), "signed in, the card closed"
+    page.wait_for_selector(".room", timeout=10000)
+    for route in held:
+        route.fulfill(status=401, content_type="application/json", body=json.dumps({"error": "unauthorized"}))
+    assert wait_until(page, "window.late.api !== undefined && window.late.raw !== undefined", 5), "both answered"
+    for _ in range(10):
+        assert not page.evaluate(DIALOG_OPEN), "no second card"
+        page.wait_for_timeout(200)
+    late = page.evaluate("window.late")
+    assert late == {"api": NOT_SENT[case.lang], "raw": NOT_SENT[case.lang]}, f"each fails as not sent: {late}"
+    assert sorted(sent) == ["POST cubes/KEQ0000100/restore/plan?late=1", "PUT me/preferences/late"], f"each sent once: {sent}"
+    sign_out(page)
 
 
 def test_dismissed_then_a_later_sign_in(page, case, watch):

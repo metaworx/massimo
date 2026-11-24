@@ -12,7 +12,8 @@
 //            "server" for a server's page's, token, setToken, login.*
 //            and connect
 //   servers  the servers the app keeps, as {id, name, node, lan, …,
-//            login, ask, start, session, trusted_at, unrevoked}
+//            login, login_key, ask, start, session, trusted_at, unrevoked,
+//            unended}
 //   answers  by URL, how /healthz answers there: {node, version,
 //            fingerprint, self_signed, subject, issuer, names,
 //            not_before, not_after}; a self-signed certificate is
@@ -30,8 +31,13 @@
 //   core     the server on the phone's status, for a bridge with core
 //   push     true for a bridge with push
 //   token    the token the app keeps, for kind "server"
+//   revokeAtSignIn for kind "server", {user, ids, ms}: the keys and
+//            sessions left there that the app revokes with a new token
+//            before setToken answers, as {revoked: ids} (contract version
+//            5): each revoked at the page's server with that token, ms
+//            after the call, as the app's check takes its time
 //   login    for kind "server", the login by fingerprint (contract
-//            version 2): {status: {can, user, ask, plain}, keep: [answers
+//            version 2): {status: {can, user, ask, plain, key_id}, keep: [answers
 //            of login.keep in turn, true, false or "error:<message>"],
 //            fingerprint: the token login.fingerprint resolves to, null,
 //            or "error:<message>"}; a keep that resolves true keeps the
@@ -42,8 +48,12 @@
 //            id 0 for a login kept before the id was (contract version 4)
 //   unrevokable the ids of the servers whose key the server does not
 //            revoke (it fails there)
+//   sessionIds by server id, the session the app holds there as its last
+//            check found it, {user, id} (contract version 5): where the app
+//            forgets it without reaching the server, it is left in the
+//            server's unended
 //
-// The connect page's bridge is version 4: save keeps start at one server
+// The connect page's bridge is version 5: save keeps start at one server
 // at most and turns it on for the first one added, as the adapters do,
 // and a server's unrevoked as it was; trust notes trusted_at; open takes
 // a server's lan or remote, alone or with #profile?key=<id>, and refuses
@@ -55,8 +65,13 @@
 // unrevokable; else, with a key id from keys, left once in the server's
 // unrevoked; else forgotten on the phone alone. forget answers
 // {revoked, left}, forgetAll {revoked, left, local} by server id, remove
-// {revoked, keys, local} with keys the ids of the keys still valid there.
-// A session found (session) revokes the keys left there for its user.
+// {revoked, keys, sessions, local} with keys and sessions the ids of the
+// keys and the sessions still valid there. A session the app forgets
+// without reaching the server (Sign out without an address, Turn off,
+// Forget all and Remove where the server does not answer) is left in the
+// server's unended by its id in sessionIds; Remove signs out first. A
+// session found (session) revokes the keys and the sessions left there for
+// its user.
 // Every call is recorded in window.__fakeBridge.calls as [name, args…],
 // and the servers, the settings and the token as they stand in
 // window.__fakeBridge.
@@ -82,10 +97,17 @@
         call("token");
         return later(rec.token, 20);
       },
-      setToken(t) {
+      async setToken(t) {
         call("setToken", t);
         rec.token = t;
-        return later(null);
+        if (!t) return later(null);
+        // as the app's check before its answer: what is left there revoked with the new token (D67-A)
+        const left = cfg.revokeAtSignIn || { user: "", ids: [] };
+        if (left.ms) await new Promise((resolve) => setTimeout(resolve, left.ms));
+        for (const id of left.ids || []) {
+          await fetch("api/v1/users/" + encodeURIComponent(left.user) + "/tokens/" + id, { method: "DELETE", headers: { Authorization: "Bearer " + t } });
+        }
+        return later({ revoked: left.ids || [] });
       },
     };
     if (cfg.login) {
@@ -135,13 +157,24 @@
     return Object.assign(r, { ok: true, node: a.node || "", version: a.version || "" });
   };
   const server = (id) => rec.servers.find((x) => x.id === id);
+  // signedOut forgets the session the app holds for s, left by its id in
+  // the server's unended, once, where the server was not reached.
+  const signedOut = (s, reached) => {
+    const held = (cfg.sessionIds || {})[s.id];
+    if (s.session && !reached && held && held.id > 0) {
+      s.unended = s.unended || [];
+      if (!s.unended.some((x) => x.user === held.user && x.id === held.id)) s.unended.push(copy(held));
+    }
+    s.session = null;
+  };
   // turnOff turns a server's kept login off, as the app's Revoker does,
   // and says how its key went: "revoked", "left" (by its id, once, in the
   // server's unrevoked) or "local"; the session signed out.
   const turnOff = (s, reached) => {
     const key = (cfg.keys || {})[s.id];
     s.login = "";
-    s.session = null;
+    s.login_key = 0;
+    signedOut(s, reached);
     if (reached && !(cfg.unrevokable || []).includes(s.id)) return "revoked";
     if (!key || !(key.id > 0)) return "local";
     s.unrevoked = s.unrevoked || [];
@@ -161,7 +194,7 @@
   };
   let seq = 0;
   window.massimo = {
-    version: 4,
+    version: 5,
     servers() {
       call("servers");
       return later(rec.servers);
@@ -175,28 +208,35 @@
       if (old) {
         s.fp = old.fp;
         s.login = old.login || "";
+        s.login_key = old.login_key || 0;
         s.session = old.session || null;
         s.trusted_at = old.trusted_at || "";
         s.unrevoked = old.unrevoked || [];
+        s.unended = old.unended || [];
         Object.assign(old, s);
         return later(old);
       }
       s.id = "new" + ++seq;
       s.fp = "";
       s.login = "";
+      s.login_key = 0;
       s.session = null;
       s.trusted_at = "";
       s.unrevoked = [];
+      s.unended = [];
       rec.servers.push(s);
       return later(s);
     },
     remove(id, url) {
       call("remove", id, url);
       const s = server(id);
-      const went = s && s.login ? turnOff(s, reached(s, url)) : "";
+      let went = "";
+      if (s && s.login) went = turnOff(s, reached(s, url));
+      else if (s) signedOut(s, reached(s, url)); // signed out first (D69-A)
       const keys = s ? (s.unrevoked || []).map((k) => k.id) : [];
+      const sessions = s ? (s.unended || []).map((x) => x.id) : [];
       rec.servers = rec.servers.filter((x) => x.id !== id);
-      return later({ revoked: went === "revoked", keys, local: went === "local" }, 30);
+      return later({ revoked: went === "revoked", keys, sessions, local: went === "local" }, 30);
     },
     discover(ms) {
       call("discover", ms);
@@ -252,18 +292,19 @@
       if (s && typeof found === "string" && !found.startsWith("error:")) {
         s.session = found;
         s.unrevoked = (s.unrevoked || []).filter((k) => k.user !== found); // revoked with that session
+        s.unended = (s.unended || []).filter((x) => x.user !== found);
       }
       return answerOf(found, 20);
     },
     signOut(id, url) {
       call("signOut", id, url);
       const s = server(id);
-      if (s) s.session = null;
+      if (s) signedOut(s, !!url);
       return later({ ended: !!url }, 30);
     },
     signOutAll() {
       call("signOutAll");
-      for (const s of rec.servers) s.session = null;
+      for (const s of rec.servers) signedOut(s, reached(s, ""));
       return later(null, 30);
     },
     settings() {

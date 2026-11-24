@@ -148,3 +148,133 @@ func TestLoginKeyModes(t *testing.T) {
 		t.Fatalf("the login by key while the password sign-in is off: %d %s", code, text)
 	}
 }
+
+// DELETE /api/v1/me/token revokes the token that calls (AP MobileApp,
+// D80-B): a session by itself, a key by itself with its session, each
+// refused after and audited as token.revoke; a caller without a token
+// of a user is 400, and so is an integration's call on a user's behalf,
+// the integration's key revoking itself without the header; the settings
+// file's token is 409 and stays.
+func TestDeleteMyToken(t *testing.T) {
+	t.Parallel()
+	opts := storeOptions(t, t.TempDir(), "secret")
+	r := startServer(t, withOptions(opts))
+	ts, st := r.ts, r.s.opts.Store
+	ctx := t.Context()
+	anna, err := st.AddUser(ctx, store.User{Name: "anna", Role: store.RoleViewer}, "pw", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revoke := func(token, what string) int64 {
+		t.Helper()
+		code, text := callAPI(t, ts, "DELETE", "/api/v1/me/token", token, "")
+		var got struct {
+			OK bool  `json:"ok"`
+			ID int64 `json:"id"`
+		}
+		json.Unmarshal([]byte(text), &got)
+		if code != 200 || !got.OK || got.ID == 0 {
+			t.Fatalf("%s revokes itself: %d %s", what, code, text)
+		}
+		return got.ID
+	}
+	live := func(id int64) bool {
+		t.Helper()
+		tokens, err := st.Tokens(ctx, anna.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, tk := range tokens {
+			if tk.ID == id {
+				return true
+			}
+		}
+		return false
+	}
+
+	// A session revokes itself; the key it was not made from stays.
+	other, _, _ := st.AddToken(ctx, anna.ID, store.TokenAPI, "another key", time.Time{})
+	sessTok, sess, _ := st.AddToken(ctx, anna.ID, store.TokenSession, "a browser", time.Now().Add(time.Hour))
+	if id := revoke(sess, "a session"); id != sessTok.ID {
+		t.Fatalf("the session's id: %d, not %d", id, sessTok.ID)
+	}
+	if code, _ := callAPI(t, ts, "GET", "/api/v1/me", sess, ""); code != 401 {
+		t.Fatalf("the session after its own revoke: %d", code)
+	}
+	if live(sessTok.ID) || !live(other.ID) {
+		t.Fatalf("the session gone, the other key live: %v %v", live(sessTok.ID), live(other.ID))
+	}
+
+	// A key revokes itself, and the session made from it goes with it.
+	keyTok, key, _ := st.AddToken(ctx, anna.ID, store.TokenAPI, "SM-X, login by fingerprint", time.Time{})
+	code, text := callAPI(t, ts, "POST", "/api/v1/login/key", key, "")
+	var made struct {
+		Token string `json:"token"`
+	}
+	json.Unmarshal([]byte(text), &made)
+	if code != 200 || made.Token == "" {
+		t.Fatalf("a session from the key: %d %s", code, text)
+	}
+	if id := revoke(key, "a key"); id != keyTok.ID {
+		t.Fatalf("the key's id: %d, not %d", id, keyTok.ID)
+	}
+	for what, token := range map[string]string{"the key": key, "its session": made.Token} {
+		if code, _ := callAPI(t, ts, "GET", "/api/v1/me", token, ""); code != 401 {
+			t.Fatalf("%s after the key's own revoke: %d", what, code)
+		}
+	}
+	if live(keyTok.ID) || !live(other.ID) {
+		t.Fatalf("the key gone, the other key live: %v %v", live(keyTok.ID), live(other.ID))
+	}
+	rows, err := st.AuditList(ctx, time.Time{}, 100, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	revokes := map[string]bool{}
+	for _, row := range rows {
+		if row.Action == "token.revoke" && row.Result == "ok" {
+			revokes[row.Target] = true
+		}
+	}
+	for _, id := range []int64{sessTok.ID, keyTok.ID} {
+		if !revokes["token:"+strconv.FormatInt(id, 10)] {
+			t.Fatalf("no audit row token.revoke for token %d: %+v", id, rows)
+		}
+	}
+
+	// The settings file's token is refused and stays, as the next start
+	// could not bring it back.
+	if code, text := callAPI(t, ts, "DELETE", "/api/v1/me/token", "secret", ""); code != 409 || !strings.Contains(text, "settings file") {
+		t.Fatalf("the settings file's token: %d %s", code, text)
+	}
+	if code, _ := callAPI(t, ts, "GET", "/api/v1/me", "secret", ""); code != 200 {
+		t.Fatalf("the settings file's token after its refused revoke: %d", code)
+	}
+
+	// An integration's call on a user's behalf revokes nothing; its key
+	// revokes itself without the header.
+	_, haKey := registerHA(t, st, []string{"read"})
+	if resp, text := callWith(t, ts, "DELETE", "/api/v1/me/token", haKey, "", as(haAnna, LevelView)); resp.StatusCode != 400 || !strings.Contains(text, OnBehalfHeader) {
+		t.Fatalf("on a user's behalf: %d %s", resp.StatusCode, text)
+	}
+	if code, text := callAPI(t, ts, "GET", "/api/v1/me", haKey, ""); code != 200 {
+		t.Fatalf("the integration's key after a call on a user's behalf: %d %s", code, text)
+	}
+	if code, text := callAPI(t, ts, "DELETE", "/api/v1/me/token", haKey, ""); code != 200 {
+		t.Fatalf("the integration's key by itself: %d %s", code, text)
+	}
+	if code, _ := callAPI(t, ts, "GET", "/api/v1/me", haKey, ""); code != 401 {
+		t.Fatalf("the integration's key after its own revoke: %d", code)
+	}
+
+	// Without a token of a user: an open server, the one token of a
+	// server without users.
+	open := startServer(t, withOptions(Options{Store: testStore(t, t.TempDir())})).ts
+	if code, text := callAPI(t, open, "DELETE", "/api/v1/me/token", "", ""); code != 400 {
+		t.Fatalf("an open server: %d %s", code, text)
+	}
+	legacy := startServer(t, withOptions(Options{Token: "only"})).ts
+	if code, text := callAPI(t, legacy, "DELETE", "/api/v1/me/token", "only", ""); code != 400 {
+		t.Fatalf("the one token of a server without users: %d %s", code, text)
+	}
+}

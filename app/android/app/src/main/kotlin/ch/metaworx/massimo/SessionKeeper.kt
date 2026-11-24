@@ -30,6 +30,14 @@ class SessionKeeper(private val tokens: TokenStore) {
         }
     }
 
+    /** swap keeps [token] for the server [id] as [put] does and returns the session it held before, in one step, so that two at once each replace their own. */
+    @Synchronized
+    fun swap(id: String, token: String?, inMemory: Boolean): String? {
+        val old = get(id, inMemory)
+        put(id, token, inMemory)
+        return old
+    }
+
     /** move takes the server's session to where [inMemory] says, for a login kept or forgotten, or another choice. */
     @Synchronized
     fun move(id: String, inMemory: Boolean) {

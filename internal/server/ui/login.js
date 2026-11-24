@@ -72,18 +72,48 @@ function roleLabel(key, name) {
   return s === k ? key : s;
 }
 
+// meToken is the token state.me was read with (loadMe), "" for none: the
+// kind of the token the page holds is known only for that one.
+let meToken = "";
+
+// tokenAnswered is the bridge's answer to the last token setToken handed
+// it, a sign-in's: from contract version 5 {revoked}, the keys and
+// sessions left there that the app revoked before it answered (AP
+// MobileApp, D67-A); null in a browser.
+let tokenAnswered = Promise.resolve(null);
+
+// tokenAnswer is that answer, for My profile, whose keys are read once the
+// app has revoked what the sign-in revokes (ui/src/shared/app.ts).
+function tokenAnswer() {
+  return tokenAnswered;
+}
+
 // setToken keeps the page's token, or forgets it with null: in the
 // browser's storage, or in the app's where the page runs in the app
 // (appBridge, app.js). A token the app could not keep still serves this
-// page, and the app asks for a sign-in at its next start.
+// page, and the app asks for a sign-in at its next start. A session that
+// a new token replaces is ended at the server once (AP MobileApp, D68-A):
+// in a browser here, POST /api/v1/logout with it, not awaited and a
+// refusal ignored, where who is in was read with it and it is a session
+// (a key answers 400 there, and one not read yet is left as it is); in
+// the app by the bridge's setToken, which holds it. It returns the
+// bridge's answer, null in a browser and where the bridge failed, so that
+// what reads the session from the app next (login.keep, which the bridge
+// answers from the session it holds) waits for it to be kept there.
 function setToken(token) {
+  const old = state.token;
   state.token = token;
   const b = appBridge();
   if (!b) {
     store("massimo.token", token);
-    return;
+    if (token && old && old !== token && old === meToken && state.me && state.me.token && state.me.token.kind === "session") {
+      apiRequest("POST", "api/v1/logout", undefined, { token: old }).catch(() => {});
+    }
+    return Promise.resolve(null);
   }
-  b.setToken(token).catch(() => {});
+  const answer = Promise.resolve(b.setToken(token)).catch(() => null);
+  if (token) tokenAnswered = answer;
+  return answer;
 }
 
 // sawOpen is set once the page has seen a server without a store ask for
@@ -120,6 +150,7 @@ async function loadMe(asks = true) {
     me = null;
   }
   if (!MassimoParts.stillSession(n)) return state.me; // who was in before a sign-out: the next sign-in reads who is in, and asks for the owner there
+  meToken = state.token || ""; // a read sent again after a sign-in carried the token held now (api, app.js)
   state.me = me;
   if (state.me && state.me.mode === "none") sawOpen = true;
   applyCaps();
@@ -406,7 +437,7 @@ function askLogin(on) {
     made = ask;
     MassimoParts.signIn.open(way, said, ask); // the fields emptied, the way chosen, the lines cleared, the switch off
     if (!owner) renderLoginProviders();
-    MassimoParts.signIn.readApp(); // the app's login by fingerprint, as login.status() answers, not awaited (ui/src/signin/app.ts)
+    MassimoParts.signIn.readApp(); // the app's login by fingerprint, as login.status() answers, not awaited (ui/src/shared/app.ts)
     dlg.onclose = dismiss;
     document.body.classList.add("signed-out");
     // Not modal: the page behind is empty, and a modal dialog makes the

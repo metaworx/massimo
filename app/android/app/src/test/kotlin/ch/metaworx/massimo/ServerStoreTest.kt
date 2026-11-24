@@ -183,12 +183,15 @@ class ServerStoreTest {
     fun thePageSeesTheSessionTheFileDoesNot() {
         val st = ServerStore(file())
         val a = st.save(input("name" to "Home", "lan" to "http://192.168.1.20:8099/"))
-        val page = a.toJson("anna", "bob")
+        val page = a.toJson("anna", "bob", 46)
         assertEquals("anna", page.getString("login"))
+        assertEquals("the kept login's key (contract version 5)", 46L, page.getLong("login_key"))
         assertEquals("bob", page.getString("session"))
         assertEquals(true, page.get("start"))
         assertEquals("", page.getString("trusted_at"))
         assertTrue("no session checked is null", a.toJson().isNull("session"))
+        assertEquals("no login kept, no key", 0L, a.toJson("", null, 46).getLong("login_key"))
+        assertEquals("a key not known", 0L, a.toJson("anna").getLong("login_key"))
         val kept = file().readText()
         assertFalse(kept.contains("session"))
         assertFalse(kept.contains("login"))
@@ -242,6 +245,41 @@ class ServerStoreTest {
         // a file's key that is no key is left out
         file().writeText("""[{"id":"a","name":"Home","lan":"http://192.168.1.20/","unrevoked":[{"user":"anna","id":3},{"user":"","id":4},{"id":5},"x"]}]""")
         assertEquals(listOf(KeyLeft("anna", 3)), ServerStore(file()).get("a")!!.unrevoked)
+    }
+
+    @Test
+    fun sessionsLeftAreKeptUntilEnded() {
+        val st = ServerStore(file())
+        val a = st.save(input("name" to "Home", "lan" to "http://192.168.1.20:8099/"))
+        assertTrue(a.unended.isEmpty())
+        assertEquals("[]", a.toJson().getJSONArray("unended").toString())
+        assertTrue(st.leaveSession(a.id, "anna", 7))
+        assertTrue("noted already, once", st.leaveSession(a.id, "anna", 7))
+        assertTrue(st.leaveSession(a.id, "bob", 9))
+        assertFalse("no id, never learnt", st.leaveSession(a.id, "anna", 0))
+        assertFalse("no user", st.leaveSession(a.id, "", 8))
+        assertFalse("no server", st.leaveSession("gone", "anna", 5))
+        assertEquals(listOf(SessionLeft("anna", 7), SessionLeft("bob", 9)), st.get(a.id)!!.unended)
+        // when it was made, kept beside it across a start
+        assertTrue(st.leaveSession(a.id, "carl", 11, "2026-11-20T10:00:11Z"))
+        assertEquals(SessionLeft("carl", 11, "2026-11-20T10:00:11Z"), ServerStore(file()).get(a.id)!!.unended.last())
+        assertEquals("2026-11-20T10:00:11Z", st.get(a.id)!!.toJson().getJSONArray("unended").getJSONObject(2).getString("created_at"))
+        st.ended(a.id, listOf(SessionLeft("carl", 11, "2026-11-20T10:00:11Z")))
+        assertTrue("apart from the keys left", st.get(a.id)!!.unrevoked.isEmpty())
+        val shown = st.get(a.id)!!.toJson().getJSONArray("unended")
+        assertEquals(listOf("anna" to 7L, "bob" to 9L), (0 until shown.length()).map { shown.getJSONObject(it).let { k -> k.getString("user") to k.getLong("id") } })
+        // kept across a start and by a save from the page, which cannot set them
+        assertEquals(listOf(SessionLeft("anna", 7), SessionLeft("bob", 9)), ServerStore(file()).get(a.id)!!.unended)
+        val saved = st.save(input("id" to a.id, "name" to "House", "lan" to "http://192.168.1.20:8099/", "unended" to org.json.JSONArray()))
+        assertEquals(2, saved.unended.size)
+        st.ended(a.id, listOf(SessionLeft("anna", 7), SessionLeft("anna", 99)))
+        assertEquals(listOf(SessionLeft("bob", 9)), ServerStore(file()).get(a.id)!!.unended)
+        // another node: those sessions are another server's
+        val moved = st.save(input("id" to a.id, "name" to "House", "node" to "node-b", "lan" to "http://192.168.1.20:8099/"))
+        assertTrue(moved.unended.isEmpty())
+        // a file's session that is no session is left out
+        file().writeText("""[{"id":"a","name":"Home","lan":"http://192.168.1.20/","unended":[{"user":"anna","id":3,"created_at":"2026-11-20T10:00:03Z"},{"user":"","id":4},{"id":5},"x"]}]""")
+        assertEquals(listOf(SessionLeft("anna", 3, "2026-11-20T10:00:03Z")), ServerStore(file()).get("a")!!.unended)
     }
 
     @Test

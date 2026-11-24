@@ -7,7 +7,9 @@
  * A device's row, in a tile's device list and among the devices without a
  * room: its type's icon before its name, its problems as icons that list
  * them, its badges in words, in expert mode its type, serial and radio
- * address; a thermostat's values, Lock and the device's Repair…, whose box
+ * address; a thermostat's values; New batteries while its battery is
+ * weak or low and its flag off, with its result line under the actions;
+ * Lock and the device's Repair…, whose box
  * (the shared RepairBox) opens under the row. The room's
  * virtual wall thermostat, in expert mode, has its two settings under it,
  * a settings form kept by the room (shared/forms.ts), whose unsaved
@@ -20,7 +22,7 @@ import type { ComponentChildren } from "preact";
 import { useEffect, useState } from "preact/hooks";
 import type { Device, DeviceDetail } from "../api";
 import { deviceEntry, deviceIcon, mismatchText } from "../model/device";
-import { actionRunner, type Outcome } from "../shared/action";
+import { actionRunner, fader, type Outcome } from "../shared/action";
 import { Age, Badge, ResultLine } from "../shared/badge";
 import { DeviceIds } from "../shared/device";
 import { FormFooter, Select, TextField, useDraft } from "../shared/field";
@@ -169,6 +171,50 @@ function Lock({ d, ui }: { d: Device; ui?: RoomUI }) {
   );
 }
 
+/**
+ * newBatteriesOffered says whether a device's row offers New batteries
+ * (AP RefreshBatteries v1.0, D8-A): its battery level weak or low and its
+ * battery flag off, as the Cube shows it now; with the flag still on the
+ * device has not reported its new batteries yet.
+ */
+function newBatteriesOffered(d: Device): boolean {
+  return !d.virtual && d.reported && (d.battery === "weak" || d.battery === "low") && !d.state?.battery_low;
+}
+
+/** The answer of POST …/devices/{rf}/battery: the level, the one before, and whether it changed. */
+interface BatteryAnswer {
+  battery: string;
+  from: string;
+  changed: boolean;
+}
+
+/**
+ * NewBatteries is a device's New batteries, for a role with configure:
+ * it tells the server that the device has new batteries, whose level is
+ * then ok at once, and turns until the answer, which say gives the row's
+ * result line, the error's text where it failed. The badge and the
+ * button go with the level's battery event, or with the next device
+ * list, not with the answer.
+ */
+function NewBatteries({ d, say }: { d: Device; say: (res: Outcome | null) => void }) {
+  const own = useBusy();
+  const send = async () => {
+    const n = session();
+    try {
+      const res = await api<BatteryAnswer>("POST", devicePath(d) + "/battery", { replaced: true });
+      if (stillSession(n)) say({ text: t(res?.changed === false ? "device.newBatteriesOk" : "device.newBatteriesDone"), ok: true });
+    } catch (e) {
+      if (stillSession(n)) say({ text: t("device.newBatteriesFailed", { error: (e as Error).message }), ok: false });
+    }
+  };
+  return (
+    <button type="button" {...busyProps("needs-configure device-batteries", own.busy)} title={t("device.newBatteriesTitle")}
+      aria-label={t("device.newBatteriesLabel", { device: deviceName(d) })} onClick={() => own.run(send)}>
+      {t("device.newBatteries")}
+    </button>
+  );
+}
+
 const rfNorm = (x: string) => x.trim().toLowerCase();
 
 /**
@@ -253,6 +299,9 @@ export function DeviceRow({ d, ui, room, actions, children }: {
   children?: ComponentChildren;
 }) {
   useLook();
+  // New batteries' outcome, kept by the row while its button goes with the level
+  const [battery, setBattery] = useState<Outcome | null>(null);
+  const [sayBattery] = useState(() => fader(setBattery, RESULT_FADE_MS));
   const virtual = !!d.virtual;
   // An out-of-date device shows the values of its last report.
   const values = isThermostat(d) && !!(d.reported || (d.out_of_date && d.last_known));
@@ -297,6 +346,7 @@ export function DeviceRow({ d, ui, room, actions, children }: {
       </div>
       {values ? <Values d={d} shown={d.reported ? d : { ...d, state: d.last_known }} offset={cfg?.temp_offset} /> : <div class="device-vals hidden" />}
       <div class="device-actions">
+        {newBatteriesOffered(d) && <NewBatteries d={d} say={sayBattery} />}
         {isThermostat(d) && !virtual && <Lock d={d} ui={ui} />}
         {!virtual && (
           // The device's repairs: its configuration for a thermostat, its
@@ -307,6 +357,7 @@ export function DeviceRow({ d, ui, room, actions, children }: {
         )}
         {actions}
       </div>
+      {!virtual && <ResultLine res={battery} cls="tile-result battery-result" role="status" />}
       {!virtual && <RepairBox scope={scope} />}
       {virtual && room && <VirtualSettings v={d} room={room} serial={serial} detail={detail} error={error} saved={again} />}
       {children}

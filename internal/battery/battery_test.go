@@ -126,6 +126,69 @@ func TestUnknownAndForgotten(t *testing.T) {
 	}
 }
 
+// New batteries marked make a low or a weak device whose flag is off ok
+// at once, its change returned; the rules of an ok device follow: the
+// flag again makes it weak, held it makes it low, and the hour of the
+// old flag gone makes no change of its own.
+func TestReplaced(t *testing.T) {
+	tr := tracker()
+	tr.Report("rad", t0, Report{Flag: true, Valve: valve(0)})
+	tr.Tick(t0.Add(HoldLow))
+	off := t0.Add(time.Hour)
+	tr.Report("rad", off, Report{Valve: valve(0)})
+	want(t, tr, "the flag gone", Low)
+	at := off.Add(5 * time.Minute)
+	c := tr.Replaced("rad", at)
+	if len(c) != 1 || c[0] != (Change{Device: "rad", From: Low, To: OK, At: at}) {
+		t.Fatalf("a low device replaced: %+v", c)
+	}
+	want(t, tr, "replaced", OK)
+	if c := tr.Tick(off.Add(ClearLow)); len(c) != 0 {
+		t.Fatalf("the hour after the flag went: %+v", c)
+	}
+	if c := tr.Replaced("rad", at.Add(time.Minute)); len(c) != 0 {
+		t.Fatalf("an ok device replaced: %+v", c)
+	}
+
+	again := off.Add(3 * time.Hour)
+	if c := tr.Report("rad", again, Report{Flag: true, Valve: valve(0)}); len(c) != 1 || c[0].From != OK || c[0].To != Weak {
+		t.Fatalf("the flag after the mark: %+v", c)
+	}
+	if c := tr.Replaced("rad", again.Add(time.Minute)); len(c) != 0 {
+		t.Fatalf("a weak device with its flag on replaced: %+v", c)
+	}
+	want(t, tr, "the flag on", Weak)
+	if c := tr.Tick(again.Add(HoldLow)); len(c) != 1 || c[0].To != Low {
+		t.Fatalf("the flag held after the mark: %+v", c)
+	}
+	if c := tr.Replaced("rad", again.Add(HoldLow+time.Minute)); len(c) != 0 {
+		t.Fatalf("a low device with its flag on replaced: %+v", c)
+	}
+	want(t, tr, "low with the flag on", Low)
+
+	// A weak wall thermostat, its flag gone, is ok at once too, and
+	// makes no change a day later, when its rule would have cleared it.
+	tr.Report("wall", t0, Report{Flag: true})
+	tr.Report("wall", t0.Add(time.Minute), Report{})
+	if c := tr.Replaced("wall", t0.Add(2*time.Minute)); len(c) != 1 || c[0].Device != "wall" || c[0].From != Weak || c[0].To != OK {
+		t.Fatalf("a weak device replaced: %+v", c)
+	}
+	if c := tr.Tick(t0.Add(ClearWall + time.Minute)); len(c) != 0 {
+		t.Fatalf("a day after the mark: %+v", c)
+	}
+
+	// A device the tracker has not seen stays unseen.
+	if c := tr.Replaced("new", t0); len(c) != 0 || tr.Level("new") != OK {
+		t.Fatalf("an unknown device replaced: %+v", c)
+	}
+	tr.mu.Lock()
+	_, seen := tr.devs["new"]
+	tr.mu.Unlock()
+	if seen {
+		t.Fatal("an unknown device replaced is kept")
+	}
+}
+
 // The next decalcification is after the time given, in its time zone.
 func TestNextDecalc(t *testing.T) {
 	sat := Decalc{Day: time.Saturday, Hour: 12}

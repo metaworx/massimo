@@ -464,7 +464,11 @@ hence `failed_checks_forgotten`.
   a guest made with an end date that has seconds is saved without the end date
   when its display name alone changes, and Save without a change sends nothing;
   a user's Remove asks in the panel, Keep gives the focus back to Remove,
-  and a double click on Yes sends one DELETE and says it worked.
+  and a double click on Yes sends one DELETE and says it worked;
+  a Revoke the server never answers turns until the page's limit, under
+  Playwright's clock, and then says that no answer came;
+  every row of the sessions and keys shows its id, inside its list at
+  390 px in six languages, and so do My profile's.
 - `test_login.py`, in a fresh browser context without the stored token:
   the sign-in dialog opens in the middle of the window, its title centred,
   refuses a wrong password, signs in as the operator,
@@ -477,10 +481,27 @@ hence `failed_checks_forgotten`.
   each button's text on one line,
   its group named "Sign in with" for a screen reader alone;
   a browser has no Cancel;
+  a sign-in on a running page that replaces the session held signs that
+  session out at the server with its own token, and a key replaced is not
+  (`test_a_replaced_session_ends`); a tab whose session another tab's
+  sign-in replaced leaves that tab's stored token alone at its 401;
   My profile opened at `#profile?key=<id>` (`test_profile_marks_a_key`)
   marks that key and scrolls a row below the first screen into view,
   marks nothing for an id that is not one of the user's keys,
   and nothing once the address or the page shown changes.
+- `test_sign_in_resend.py`, a request that meets an expired session (AP
+  SignInResend), its 401 answered by a route:
+  a write is never sent again after the sign-in, whoever signs in,
+  it fails at once and says so where its result shows, also once the page
+  is back, a setpoint, a backup's file, a Cube's and a role's Save, a
+  settings change on the page's message line and a deletion among them;
+  a read is sent again, and the stream's ticket waits for the sign-in;
+  a stepped setpoint is dropped as the sign-in opens; another user sees and
+  sends nothing of the first one's; and a read sent while the card is open,
+  its 401 held back until the sign-in has answered and the card has closed,
+  opens no second card and is sent again with the new session, the only
+  one the sign-in left at the server (AP MobileApp, F36), and a write so
+  held, by `api()` and by `apiRaw`, fails as not sent, no card opening.
 - `test_first_owner.py`, the first owner in the sign-in card (AP FirstOwner),
   `/api/v1/me` stubbed as an open server:
   the card opens at the page's start with the first owner's form,
@@ -664,6 +685,9 @@ hence `failed_checks_forgotten`.
   a key left shows in its server's settings with Show in My profile,
   which opens `<address>#profile?key=<id>`,
   Remove warns of it, and a session found there takes its line away;
+  a session left, as the bridge's version 5 keeps one, shows in its
+  server's settings, Sign out without an answer leaves one, Remove signs
+  out first and warns of one left and names it;
   a browser without the bridge sees the line saying the page is the app's;
   and the server's page in the app takes its token from the bridge,
   keeps none in the browser, and hands a sign-in and a sign-out to the bridge;
@@ -671,7 +695,11 @@ hence `failed_checks_forgotten`.
   and "Select server…" last in its ☰, each calling `connect()`;
   with a login kept, the row with the fingerprint is on one line at 390 px
   in all six languages, the card centred,
-  and the fingerprint's spinner turns inside its button in the icon's place.
+  and the fingerprint's spinner turns inside its button in the icon's place;
+  My profile in the app tags the key the phone keeps "this device's key",
+  by `login.status()`'s `key_id`, and reads its keys once the sign-in's
+  revoke is done, a key it revoked not marked but named in a toast;
+  a server's settings name the kept login's key by its id.
   axe-core (`axe-playwright-python`) finds no violation on the connect page
   in each state the tests open.
 - `test_notifications.py`, 👤 → Notifications:

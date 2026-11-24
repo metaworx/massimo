@@ -341,7 +341,10 @@ paths:
     post:
       summary: End the session that makes the call
       x-capability: any
-      description: An API key is not a session and answers 400; it is revoked under the user's tokens.
+      description: |
+        An API key is not a session and answers 400; it is revoked with
+        DELETE /api/v1/me/token as its own bearer, or under the user's
+        tokens.
       responses:
         "200":
           description: Ended
@@ -358,6 +361,46 @@ paths:
               schema: {$ref: "#/components/schemas/Error"}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+  /api/v1/me/token:
+    delete:
+      summary: Revoke the token that makes the call
+      x-capability: any
+      description: |
+        The bearer is revoked, whatever it is: a session, or an API key
+        and the sessions made from it (POST /api/v1/login/key). One call
+        for any token, without the user's name or the token's id, as the
+        apps revoke a kept key with the key alone. Audited as
+        token.revoke. A caller without a token of a user, on an open
+        server or with the one token of a server without users, is 400,
+        and so is an integration's call on a user's behalf
+        (X-MassimoHA-On-Behalf-Of). The settings file's token
+        (MASSIMO_API_TOKEN) is 409: it is changed or removed in the
+        settings file, since the next start would not add it back.
+      parameters:
+        - {$ref: "#/components/parameters/idempotencyKey"}
+      responses:
+        "200":
+          description: Revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+                  id: {type: integer, description: "The token's id, as the user's token list had it"}
+        "400":
+          description: No token of a user to revoke, or a call on a user's behalf
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409":
+          description: The token is the settings file's MASSIMO_API_TOKEN
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
         "429": {$ref: "#/components/responses/LockedOut"}
   /api/v1/me:
     get:
@@ -2107,6 +2150,65 @@ paths:
         "404": {$ref: "#/components/responses/NotFound"}
         "409": {$ref: "#/components/responses/Superseded"}
         "502": {$ref: "#/components/responses/CubeError"}
+  /api/v1/cubes/{sn}/devices/{rf}/battery:
+    post:
+      summary: Mark new batteries in a device, whose battery level is then ok at once
+      x-capability: configure
+      description: |
+        A device whose battery level is weak or low and whose battery flag
+        is off, as the Cube shows it now (battery_low), is ok at once, not
+        when the server's rules say so (a low one an hour after the flag
+        went). Its battery event in the log says cause replaced in its
+        summary, and who marked it in "by"; the server reads it back at a
+        start, so that the level stays ok. Nothing goes to the Cube. A
+        device already ok answers changed false.
+      parameters:
+        - {$ref: "#/components/parameters/sn"}
+        - {$ref: "#/components/parameters/rf"}
+        - {$ref: "#/components/parameters/idempotencyKey"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [replaced]
+              additionalProperties: false
+              properties:
+                replaced: {type: boolean, enum: [true]}
+      responses:
+        "200":
+          description: The level, the one before, and whether it changed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  battery: {type: string, enum: [ok]}
+                  from:
+                    type: string
+                    enum: [ok, weak, low]
+                    description: The level before; ok where it did not change
+                  changed: {type: boolean}
+        "400":
+          description: >-
+            Another body than {"replaced": true}, a bad device, a virtual wall
+            thermostat or the Cube itself, which have no batteries
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          description: >-
+            The device's flag is still on: it has not reported its new
+            batteries yet; or the Cube holds no current report of it, since
+            the Cube's restart or for some minutes. Wait for its next report
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
   /api/v1/cubes/{sn}/rooms/{id}:
     put:
       summary: Rename a room
@@ -2983,6 +3085,43 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
+  /api/v1/cubes/{sn}/refresh:
+    post:
+      summary: Read the Cube again at once, by a new connection; nothing goes by radio
+      x-capability: restart
+      description: |
+        The reconnect of the periodic refresh (refresh_interval), at once:
+        the server ends its connection to the Cube and connects again, and
+        the Cube's greeting replaces what the server holds of it, its rooms,
+        its devices with their state and battery flags, and its budget. It
+        goes through the Cube's queue after the commands before it, sends
+        nothing by radio and takes no memory slot. The request waits for the
+        new greeting, a minute at most once its turn has come. No body.
+      parameters: [{$ref: "#/components/parameters/sn"}, {$ref: "#/components/parameters/idempotencyKey"}]
+      responses:
+        "200":
+          description: The new greeting has replaced the snapshot
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: {type: boolean}
+                  budget: {$ref: "#/components/schemas/Budget"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409":
+          description: The Cube reboots (link rebooting), its serial or address is not known yet, or a newer refresh took the request's place before its turn
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "429": {$ref: "#/components/responses/LockedOut"}
+        "502":
+          description: "The reconnect failed: no greeting within the minute, as from a Cube not reachable or held by another client (link busy), or a lost connection still held (link held)"
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
   /api/v1/cubes/{sn}/pairing:
     post:
       summary: Start pairing (inclusion mode)
@@ -3231,7 +3370,8 @@ paths:
         then an event per change the Cube reports. Kinds: connected,
         disconnected (once per loss of the connection, not at each retry),
         hello, metadata, config, state, battery (a device's battery
-        level changed), wall_reset (a wall thermostat back from a silence
+        level changed; cause replaced in "summary" and who in "by" where
+        someone marked new batteries), wall_reset (a wall thermostat back from a silence
         on another mode, at warn), error_reset (the server reset the
         communication error of a device that reported while flagged, once a
         day at most: the room of its C line and automatic in "summary"),
@@ -5175,7 +5315,16 @@ components:
             open_since: {type: string, format: date-time}
             warn_at: {type: string, format: date-time}
             alert_at: {type: string, format: date-time}
-        battery: {type: string, enum: [ok, weak, low], description: "A reported device's battery level, from the history of its flag: weak once the flag was seen, low once it stayed 15 minutes; ok again after a long valve move without it (weak) or an hour without it (low). Absent for a virtual wall thermostat and a device without state"}
+        battery:
+          type: string
+          enum: [ok, weak, low]
+          description: >-
+            A reported device's battery level, from the history of its flag:
+            weak once the flag was seen, low once it stayed 15 minutes; ok
+            again after a long valve move without it (weak) or an hour without
+            it (low), or at once when someone marks new batteries (POST
+            …/devices/{rf}/battery). Absent for a virtual wall thermostat and a
+            device without state
         comfort_temp: {type: number, description: "A radiator or wall thermostat's comfort temperature, from its configuration (C line); absent for another device and where the Cube sent none"}
         eco_temp: {type: number, description: "A radiator or wall thermostat's eco temperature, from its configuration (C line); absent for another device and where the Cube sent none"}
         stale: {type: boolean, description: "Radiator or wall thermostat whose entry has not changed for its stale threshold (stale_after, 50 hours, or stale_after_wall, 24 hours): out of range, flat battery, or just quiet. Present when true. A virtual wall thermostat is stale when every source of its actual_temp is"}

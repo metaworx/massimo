@@ -257,23 +257,78 @@ function base() {
   return "api/v1/cubes/" + encodeURIComponent(state.serial);
 }
 
+// API_WAIT_MS is how long a request waits for the server's answer (AP
+// MobileApp, F32, D82-A): a link that stalls answers nothing, and what
+// waits for it, a button turning, would wait for good. A route that waits
+// longer by design has its own limit (waitOf).
+const API_WAIT_MS = 20000;
+
+// waitOf is how long a request of method to path waits for its answer:
+// API_WAIT_MS, but for the routes that wait longer by design, each a
+// little longer than the server's own limit (internal/server): a repair's
+// run ten minutes (repair_api.go); every other write to a Cube, its rooms
+// or its devices, and a Cube added, the Cube's answer through its queue,
+// up to five minutes for a device's settings, its removal and the
+// configurations and week programs (config_api.go); the search for Cubes
+// waits for a run going on and its own, each up to 30 s while another
+// program holds the discovery port; the look for an update, asked or
+// before an update is started, 30 s under the server's lock of the look,
+// which a request may first wait for while another holds it, so twice
+// that (update_api.go); the look for integrations on the LAN 30 s; the end
+// of a sign-in through a provider up to 10 s for each of its calls there
+// (oidc.go). The stream's ticket asks no Cube.
+function waitOf(method, path) {
+  const route = path.split("?")[0];
+  if (route === "api/v1/cubes/discover") return 90000;
+  if (method !== "GET" && /^api\/v1\/cubes\/[^/]+\/events\/ticket$/.test(route)) return API_WAIT_MS;
+  if (method !== "GET" && /^api\/v1\/cubes\/[^/]+\/(.+\/)?repair\//.test(route)) return 630000;
+  if (method !== "GET" && (route === "api/v1/cubes" || /^api\/v1\/cubes\/[^/]+\/./.test(route))) return 330000;
+  if (route === "api/v1/update") return 75000;
+  if (method === "GET" && route === "api/v1/integrations/found") return 45000;
+  if (route === "api/v1/login/oidc/finish") return 45000;
+  return API_WAIT_MS;
+}
+
+// noAnswer is the error of a request the server did not answer within its
+// limit (waitOf): a read failed, a write's text saying that it may have
+// been done all the same, since it may have reached the server; its status
+// 0, as no answer has one.
+function noAnswer(method) {
+  const err = new Error(t(method === "GET" ? "api.noAnswer" : "api.noAnswerWrite"));
+  err.status = 0;
+  err.noAnswer = true;
+  return err;
+}
+
 // apiRequest sends one request and returns the answer's JSON, null for
 // an empty one; an answer that is not ok is thrown as an Error with the
 // server's error (or the status), its status and its data. The token
 // goes along unless auth is false, and a token given in its place;
-// keepalive lets the request outlive the page. api() adds the sign-in on
-// a 401; the sign-in itself and the last preferences sent as the page is
-// left use it as it is (login.js).
+// keepalive lets the request outlive the page, and has no time limit;
+// every other request is aborted where its answer has not come within
+// its limit (waitOf), and fails as no answer (noAnswer). api() adds the
+// sign-in on a 401; the sign-in itself and the last preferences sent as
+// the page is left use it as it is (login.js).
 async function apiRequest(method, path, body, { auth = true, keepalive = false, token = "", headers: extra = {} } = {}) {
   const headers = { ...extra };
   const bearer = token || (auth && state.token);
   if (bearer) headers.Authorization = "Bearer " + bearer;
   if (body !== undefined) headers["Content-Type"] = "application/json";
-  const resp = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), keepalive });
+  const stop = keepalive ? null : new AbortController();
+  const timer = stop ? setTimeout(() => stop.abort(), waitOf(method, path)) : null;
+  let resp, text;
+  try {
+    resp = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), keepalive, signal: stop ? stop.signal : undefined });
+    text = await resp.text(); // the answer's body within the same limit
+  } catch (e) {
+    if (stop && stop.signal.aborted) throw noAnswer(method);
+    throw e;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
   noteServerClock(resp);
   state.repliedAt = Date.now();
   let data = null;
-  const text = await resp.text();
   if (text) {
     try {
       data = JSON.parse(text);
@@ -297,9 +352,15 @@ async function apiRequest(method, path, body, { auth = true, keepalive = false, 
 // where a dead token sent by each poll and stream ticket would lock the
 // address out within the minute. A 401 of a token the page no longer
 // holds, one a sign-in since replaced, forgets nothing. The app forgets
-// it too (setToken, login.js).
+// it too (setToken, login.js). In a browser the stored token goes only
+// where it is still the one refused: another tab's sign-in may have stored
+// its own since, ending the one this page held (AP MobileApp, D68-A).
 function dropToken(sentWith) {
   if (!sentWith || sentWith !== state.token) return;
+  if (!appBridge() && readStored("massimo.token") !== sentWith) {
+    state.token = null;
+    return;
+  }
   setToken(null);
 }
 
@@ -355,14 +416,40 @@ function notSent() {
   return err;
 }
 
+// earlierSignIn reports whether a 401 is of a sign-in before the page's
+// current one: its request carried another token than the one the page
+// holds now, or none, while it holds one, as a read sent while the card
+// was open whose answer comes once the card has closed (AP MobileApp,
+// F36, D68-A). Such a 401 opens no card and drops nothing: a read is sent
+// again with the token held, a write fails as not sent (lateNotSent). The
+// session's number cannot tell it: a sign-in nobody was signed in before
+// raises none (settleSignIn, login.js).
+function earlierSignIn(sentWith) {
+  return !!state.token && sentWith !== state.token;
+}
+
+// lateNotSent is the error a write fails with whose 401 was of an earlier
+// sign-in (earlierSignIn): not sent, to be done again, as notSent says it,
+// without opening the sign-in, which is in; its status stays 401.
+function lateNotSent() {
+  const err = new Error(notSentText());
+  err.status = 401;
+  return err;
+}
+
 // api is apiRequest with the token, asking for a sign-in on a 401: a read
-// is sent again once one is in, a write fails at once (sentAgain); headers
-// are added to the request's own.
+// is sent again once one is in, a write fails at once (sentAgain); a 401
+// of an earlier sign-in asks for none (earlierSignIn); headers are added
+// to the request's own.
 async function api(method, path, body, headers) {
   try {
     return await apiRequest(method, path, body, { headers });
   } catch (e) {
     if (e.status !== 401) throw e;
+    if (earlierSignIn(e.sentWith)) {
+      if (!sentAgain(method, path)) throw lateNotSent();
+      return api(method, path, body, headers);
+    }
     dropToken(e.sentWith);
     if (!sentAgain(method, path)) throw notSent();
     if (await askLogin()) return api(method, path, body, headers); // login.js
@@ -380,6 +467,10 @@ async function apiRaw(method, path, body, contentType) {
   if (body !== undefined) headers["Content-Type"] = contentType || "application/octet-stream";
   const resp = await fetch(path, { method, headers, body });
   if (resp.status === 401) {
+    if (earlierSignIn(sentWith || "")) {
+      if (!sentAgain(method, path)) throw lateNotSent();
+      return apiRaw(method, path, body, contentType);
+    }
     dropToken(sentWith);
     if (!sentAgain(method, path)) throw notSent();
     if (await askLogin()) return apiRaw(method, path, body, contentType); // login.js
@@ -949,6 +1040,12 @@ async function connectEvents() {
     loadRooms().catch(() => {});
   });
   on("device_forgotten", logged(() => loadRooms()));
+  // A device's battery level changed: its row's badge follows (rooms.js),
+  // and the parts that follow the server see it as before.
+  on("battery", logged((data) => {
+    updateBattery(data);
+    MassimoParts.serverEvent(data);
+  }));
   // A write a device has not shown by its deadline, or showed late: the
   // rooms' confirmations changed without a state event (confirm.go).
   on("unconfirmed", logged(() => loadRooms()));
@@ -983,7 +1080,7 @@ async function connectEvents() {
   // Cube's address and its leaving the LAN, the changes, for the log, and
   // for the parts that follow the server while their page is shown
   // (MassimoParts.serverEvent).
-  const handled = new Set(["state", "hello", "metadata", "pairing_started", "pairing_ended", "paired", "device_forgotten",
+  const handled = new Set(["state", "hello", "metadata", "pairing_started", "pairing_ended", "paired", "device_forgotten", "battery",
     "connected", "disconnected", "slots", "mismatch", "config", "cube_found", "restore_step", "restore_done", "unconfirmed"]);
   for (const kind of MassimoParts.log.kinds) if (!handled.has(kind)) on(kind, logged((data) => MassimoParts.serverEvent(data)));
   es.onerror = () => {
