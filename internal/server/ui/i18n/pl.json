@@ -1722,6 +1722,7 @@
   "users.fromKey": "utworzona z klucza API {label}",
   "users.revoke": "Unieważnij",
   "users.revokeLabel": "unieważnij {label}",
+  "users.fromSettings": "z pliku ustawień: zmień go lub usuń tam",
   "users.revoked": "Token {id} unieważniony.",
   "users.newKey": "Nowy klucz API",
   "users.keyLabel": "do czego służy klucz",

@@ -1290,6 +1290,9 @@ the roles and their sets are rows (section 5), seeded by the first migration.
   and one that was removed from the file is revoked.
   The file stays the way to recover an owner who lost the password:
   put a token into the file, log in with it, set a password.
+  The API does not revoke the file's key (`409`;
+  docs/api-v1.md, "Tokens: /api/v1/users/{name}/tokens"):
+  a revoked row keeps its hash, unique, so the next start could not add it back.
   Whoever can edit the file is root or the service user,
   who can edit the database anyway.
 - Without `MASSIMO_API_TOKEN` and without users,

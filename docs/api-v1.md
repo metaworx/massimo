@@ -475,7 +475,7 @@ user's name: the integration revokes its key without the header.
 The settings file's token, `MASSIMO_API_TOKEN`, is `409`:
 the next start would not add the owner's key back, its hash being taken,
 so it is changed or removed in the settings file;
-revoked under the user's tokens by the owner's choice, it stays revoked too.
+a revoke under the user's tokens is `409` too (below).
 
 `GET /api/v1/me` says who the caller is:
 
@@ -733,7 +733,10 @@ a user cannot remove itself.
 A user's sessions and API keys, as `GET /api/v1/me` shows the one presented;
 the same rules of access as the user.
 
-`GET` lists the live ones, oldest first, without their secrets.
+`GET` lists the live ones, oldest first, without their secrets;
+the key that is the settings file's `MASSIMO_API_TOKEN` carries `"from_settings": true`,
+found by the hash of the file's token, not by its label
+(AP MobileApp v1.4, D86-A).
 `POST` with `{"label": "Loxone"}` creates an API key, which never expires,
 and answers `201` with the key once:
 
@@ -747,6 +750,9 @@ and a retry with its `Idempotency-Key` answers `201` without it too.
 
 `DELETE …/tokens/{id}` revokes a session or a key by the `id` of the list;
 a token of another user is `404`.
+The settings file's key is `409`, as `DELETE /api/v1/me/token` answers it:
+it is changed or removed in the settings file,
+since the next start would not add it back, its hash being taken.
 A session made from a key (`POST /api/v1/login/key`) carries the key's id
 as `key_id`; revoking the key revokes that session with it.
 A token revokes itself the same way, as its own bearer:

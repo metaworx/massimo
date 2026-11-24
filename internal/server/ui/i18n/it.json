@@ -1677,6 +1677,7 @@
   "users.fromKey": "creata dalla chiave API {label}",
   "users.revoke": "Revoca",
   "users.revokeLabel": "revoca {label}",
+  "users.fromSettings": "dal file delle impostazioni: modificala o rimuovila lì",
   "users.revoked": "Token {id} revocato.",
   "users.newKey": "Nuova chiave API",
   "users.keyLabel": "a cosa serve la chiave",
