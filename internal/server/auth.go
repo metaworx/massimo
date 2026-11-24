@@ -698,7 +698,9 @@ func guessed(why error) bool {
 	return errors.Is(why, errBadToken) && !errors.Is(why, errEndedToken)
 }
 
-type forbiddenError struct{ msg string }
+// forbiddenError carries the words of the refusal, and where a client
+// tells refusals apart by it, a code ("integration_disabled").
+type forbiddenError struct{ msg, code string }
 
 func (e *forbiddenError) Error() string { return e.msg }
 
@@ -757,7 +759,9 @@ func (s *Server) unknownToken(ctx context.Context, hash string, now time.Time) e
 
 // principalFor is the principal of a live token: its user, who must be
 // enabled and not past its end, and the capabilities of the user's
-// role, which must be enabled.
+// role, which must be enabled; an integration's user's only while its
+// integration is active, and within the role integration and its
+// maximum.
 func (s *Server) principalFor(ctx context.Context, tok store.Token, now time.Time) (*principal, error) {
 	st := s.opts.Store
 	u, ok, err := st.UserByID(ctx, tok.UserID)
@@ -783,6 +787,20 @@ func (s *Server) principalFor(ctx context.Context, tok store.Token, now time.Tim
 	p := &principal{mode: modeUsers, user: u, token: tok, caps: map[string]bool{}}
 	for _, c := range caps {
 		p.caps[c] = true
+	}
+	if u.IntegrationID != 0 {
+		// An integration's user, by whatever key it came: only while its
+		// integration is active, and within the role integration and the
+		// integration's maximum, whatever its own role (docs/api-v1.md,
+		// "Acting for an integration's users").
+		integ, ok, err := st.IntegrationByID(ctx, u.IntegrationID)
+		if err != nil {
+			return nil, err
+		}
+		if !ok || integ.State != store.IntegrationActive {
+			return nil, &forbiddenError{msg: fmt.Sprintf("the integration of user %s is disabled", u.Name), code: "integration_disabled"}
+		}
+		p.caps = intersect(intersect(p.caps, integrationCeiling), integ.MaxCaps)
 	}
 	return p, nil
 }
@@ -935,7 +953,11 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request, capability st
 			if guess && s.limiter.fail(ctx, key) {
 				s.logLockout(ip, "tokens")
 			}
-			writeError(w, http.StatusForbidden, fe.msg)
+			if fe.code != "" {
+				writeJSON(w, http.StatusForbidden, map[string]any{"error": fe.msg, "code": fe.code})
+			} else {
+				writeError(w, http.StatusForbidden, fe.msg)
+			}
 		case why != nil && !errors.Is(why, errBadToken):
 			s.log.Error("api: token not resolved", "error", why)
 			writeError(w, http.StatusInternalServerError, "authentication failed; see the log")

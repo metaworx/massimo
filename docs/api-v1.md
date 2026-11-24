@@ -716,7 +716,8 @@ a `password` set later makes it version 1 again.
 A record that does not decode, or a `ksf` below the cost of
 `m=19456,t=2,p=1` or above 256 MiB, 16 passes or 16 lanes, is `400`.
 The last enabled owner without an end date cannot be disabled, demoted
-or given an end date (`409`): an owner with one does not count.
+or given an end date (`409`): an owner with one does not count,
+nor does an integration's user, whatever its role.
 
 `DELETE /api/v1/users/{name}` removes a user: its sessions and keys are revoked,
 its preferences removed,
@@ -735,7 +736,8 @@ the same rules of access as the user.
 
 `GET` lists the live ones, oldest first, without their secrets.
 `POST` with `{"label": "Loxone"}` creates an API key, which never expires,
-and answers `201` with the key once:
+and answers `201` with the key once;
+an integration's user gets none (`403`, "Acting for an integration's users"):
 
 ```json
 {"token": "…", "id": 4, "kind": "api", "label": "Loxone", "created_at": "…"}
@@ -990,7 +992,24 @@ acts for one of the integration's users.
   5. the level: `view` reads, `control` also sets, locks and configures,
      and `admin` adds nothing of its own.
 - **Without the header** the key acts as the integration itself:
-  its role and its maximum (an integration's own polls and stream).
+  its role and its maximum (an integration's own polls and stream),
+  within the role `integration` as every call through it.
+- **No way in of its own:** an integration's user acts through its integration
+  alone, whatever role the owner gives it.
+  The users' routes refuse it a key (`POST /api/v1/users/{name}/tokens`),
+  a password, plain or by a record (`PUT /api/v1/users/{name}`,
+  `POST /api/v1/users/{name}/register`),
+  and an identity at a provider (`POST` and `PUT /api/v1/users/{name}/identities`,
+  the link's start), with `403`, before any other change of the request;
+  no sign-in makes it a session, the integration's key at
+  `POST /api/v1/login/key` included.
+  An empty `password` that removes one is taken.
+  A key it was given before this version keeps working
+  while its integration is active (else `403` with `integration_disabled`),
+  within the role `integration` and the integration's maximum,
+  as every call of such a user, whatever its role;
+  `GET /api/v1/me` with it says what is left.
+  A password or a provider's identity it holds signs in nowhere.
 - **The audit and the log** name the user the call acted as,
   `effective_user`, and the integration's user, `real_user`
   (GET /api/v1/audit, "Who did it");

@@ -30,8 +30,9 @@ type BootstrapResult struct {
 // Bootstrap applies MASSIMO_API_TOKEN (token, "" for none) to the
 // store at a start: with no user and a token, the user owner is created
 // with the token as its API key; with users, a token whose hash is
-// unknown is added to the first enabled owner, and a key with the
-// token's label that is not the token any more is revoked.
+// unknown is added to the first enabled owner that is not an
+// integration's, and a key with the token's label that is not the token
+// any more is revoked.
 func (s *Store) Bootstrap(ctx context.Context, token string) (BootstrapResult, error) {
 	var res BootstrapResult
 	if err := s.writable(); err != nil {
@@ -101,7 +102,10 @@ func (s *Store) Bootstrap(ctx context.Context, token string) (BootstrapResult, e
 		return res, nil
 	}
 	var owner int64
-	err = s.db.QueryRowContext(ctx, `SELECT u.id FROM users u JOIN roles r ON r.id = u.role_id WHERE r.key = ? AND u.disabled = 0 AND u.deleted_at IS NULL ORDER BY u.id LIMIT 1`, RoleOwner).Scan(&owner)
+	// A regular owner: an integration's user with the role owner holds
+	// no key (ErrIntegrationUser).
+	err = s.db.QueryRowContext(ctx, `SELECT u.id FROM users u JOIN roles r ON r.id = u.role_id WHERE r.key = ? AND u.disabled = 0
+		AND u.id IN (SELECT id FROM users WHERE `+regularUser+`) ORDER BY u.id LIMIT 1`, RoleOwner).Scan(&owner)
 	if err != nil {
 		s.log.Warn("MASSIMO_API_TOKEN is set but no enabled owner can hold it", "error", err)
 		return res, nil

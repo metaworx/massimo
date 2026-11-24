@@ -82,3 +82,25 @@ func TestBootstrap(t *testing.T) {
 		t.Fatalf("token for the enabled owner: %+v %+v", res, tok)
 	}
 }
+
+// MASSIMO_API_TOKEN goes to the first regular owner, where an
+// integration's user with the role owner came before it: such a user
+// holds no key.
+func TestBootstrapBesideAnIntegrationsOwner(t *testing.T) {
+	t.Parallel()
+	s := open(t, t.TempDir())
+	ctx := context.Background()
+	i := integrationOnly(t, s)
+	if _, err := s.UpdateUser(ctx, i.UUID+":", func(u *User) error { u.Role = RoleOwner; return nil }, 0); err != nil {
+		t.Fatal(err)
+	}
+	anna, err := s.AddUser(ctx, User{Name: "anna", Role: RoleOwner}, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := s.Bootstrap(ctx, "secret-one")
+	tok, ok, _ := s.TokenByHash(ctx, HashToken("secret-one"))
+	if err != nil || !res.TokenAdded || !ok || tok.UserID != anna.ID {
+		t.Fatalf("%+v %v, the token %+v %v", res, err, tok, ok)
+	}
+}

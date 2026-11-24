@@ -112,10 +112,21 @@ func userFail(err error) error {
 		return fail(http.StatusBadRequest, "%s", text)
 	case errors.Is(err, store.ErrNoOpaque):
 		return fail(http.StatusServiceUnavailable, "%s", text)
-	case errors.Is(err, store.ErrImmutable):
+	case errors.Is(err, store.ErrImmutable), errors.Is(err, store.ErrIntegrationUser):
 		return fail(http.StatusForbidden, "%s", text)
 	}
 	return fail(http.StatusInternalServerError, "%s", text)
+}
+
+// noWayIn refuses a key, a password or a provider's identity for an
+// integration's user: it acts through its integration alone, whose own
+// key is the one way in, so that nobody, on an open server anybody on
+// the local network, gives such a user a sign-in of its own.
+func noWayIn(u store.User) error {
+	if u.IntegrationID != 0 {
+		return fail(http.StatusForbidden, "the user %s is an integration's: it acts through its integration alone, with no key, password or sign-in of its own", u.Name)
+	}
+	return nil
 }
 
 // busyRetry is the Retry-After, in seconds, of a password check or
@@ -499,6 +510,12 @@ func (s *Server) putUser(w http.ResponseWriter, r *http.Request) error {
 		return a.assignFail(*req.Role)
 	}
 	setsPassword := req.Password != nil || req.Record != nil
+	if req.Password != nil && *req.Password != "" || req.Record != nil {
+		// Before any other change of the request is written.
+		if err := noWayIn(u); err != nil {
+			return err
+		}
+	}
 	if setsPassword && !a.self && !a.maySetPassword(u) {
 		return a.rankFail(u.Role, "passwords")
 	}
@@ -659,6 +676,9 @@ func (s *Server) postToken(w http.ResponseWriter, r *http.Request) error {
 	req.Label = strings.TrimSpace(req.Label)
 	if req.Label == "" || len(req.Label) > maxLabel {
 		return fail(http.StatusBadRequest, "label: 1 to %d bytes", maxLabel)
+	}
+	if err := noWayIn(u); err != nil {
+		return err
 	}
 	tok, secret, err := st.AddToken(r.Context(), u.ID, store.TokenAPI, req.Label, time.Time{})
 	if err != nil {

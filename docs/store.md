@@ -1137,7 +1137,8 @@ The default roles and their sets are seeded at the first start and can be
 changed afterwards by whoever holds the `roles` capability, with one exception:
 `owner` always has every capability and cannot be edited, disabled or deleted,
 and the store refuses to disable, delete, demote or give an end date to the
-last enabled owner user without one.
+last enabled owner user without one,
+an integration's user with the role `owner` not counting.
 The default roles keep their keys (`owner`, `manager`, `operator`, `guest`,
 `viewer`, `integration`), so that the code,
 the documentation and the translations can refer to them;
@@ -1596,6 +1597,14 @@ before: a name the owner gave stays.
 The names of an integration's users follow
 `^<uuid>:([a-z0-9]{1,64}|system)?$`; only the store makes them, and the
 rule of every other name has no colon.
+An integration's user acts through its integration alone:
+the store gives it no key but the integration's own (`CollectIntegrationKey`),
+no session, no password of either version and no identity at a provider
+(`ErrIntegrationUser`), whatever its role,
+so that no route can give it a way in of its own;
+what it held before stays, a key acting while its integration is active and
+within the role `integration` and the integration's maximum,
+a password or an identity signing in nowhere.
 A request approved as an earlier integration (`merged_into`) reuses that
 one's row, users and links, as after a key lost or revoked;
 a revoke ends the key and keeps the rest.

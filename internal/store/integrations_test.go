@@ -273,3 +273,127 @@ func TestLinkIntegrationUser(t *testing.T) {
 		t.Fatalf("all %d", len(all))
 	}
 }
+
+// integrationOnly approves an integration on s and makes one of its
+// users at that user's first call: two users of the integration's and
+// a third, none of them a regular user.
+func integrationOnly(t *testing.T, s *Store) Integration {
+	t.Helper()
+	ctx := context.Background()
+	req, err := s.AddIntegrationRequest(ctx, haRequest(instanceA), "K7Q2PX")
+	if err != nil {
+		t.Fatal(err)
+	}
+	i, err := s.ApproveIntegration(ctx, req.UUID, []string{"read"}, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.IntegrationUser(ctx, i, IntegrationSeen{Subject: "abc123", Name: "Anna"}); err != nil {
+		t.Fatal(err)
+	}
+	return i
+}
+
+// An integration's user acts through its integration alone: whatever
+// its role, the store gives it no key, no session, no password of
+// either version and no identity at a provider; the integration's own
+// key is still collected, and a password it holds may be removed.
+func TestIntegrationUserHasNoWayIn(t *testing.T) {
+	t.Parallel()
+	s := open(t, t.TempDir())
+	ctx := context.Background()
+	if _, err := s.AddUser(ctx, User{Name: "anna", Role: RoleOwner}, "", 0); err != nil {
+		t.Fatal(err)
+	}
+	i := integrationOnly(t, s)
+	p, err := s.AddProvider(ctx, AuthProvider{Key: "cloud", Name: "Cloud", Issuer: "https://cloud.example.com", ClientID: "massimo", Enabled: true}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record, err := s.opaqueRecordFor(ctx, "x", "correct horse")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{i.UUID + ":", i.UUID + ":system", i.UUID + ":abc123"} {
+		u, err := s.UpdateUser(ctx, name, func(u *User) error { u.Role = RoleOwner; return nil }, 0)
+		if err != nil {
+			t.Fatalf("%s: the role owner: %v", name, err)
+		}
+		if _, _, err := s.AddToken(ctx, u.ID, TokenAPI, "x", time.Time{}); !errors.Is(err, ErrIntegrationUser) {
+			t.Errorf("%s: a key: %v", name, err)
+		}
+		if _, _, err := s.AddToken(ctx, u.ID, TokenSession, "x", time.Time{}); !errors.Is(err, ErrIntegrationUser) {
+			t.Errorf("%s: a session: %v", name, err)
+		}
+		if _, err := s.AddTokenHash(ctx, u.ID, TokenAPI, BootstrapLabel, HashToken("secret"), time.Time{}); !errors.Is(err, ErrIntegrationUser) {
+			t.Errorf("%s: a key by its hash: %v", name, err)
+		}
+		if err := s.SetPassword(ctx, name, "correct horse", 0); !errors.Is(err, ErrIntegrationUser) {
+			t.Errorf("%s: a password: %v", name, err)
+		}
+		if err := s.SetPassword(ctx, name, "", 0); err != nil {
+			t.Errorf("%s: no password: %v", name, err)
+		}
+		if err := s.SetOpaqueRecord(ctx, name, record, OpaqueKSF, 0); !errors.Is(err, ErrIntegrationUser) {
+			t.Errorf("%s: a record: %v", name, err)
+		}
+		if _, err := s.AddIdentity(ctx, u.ID, p.Key, "anna@example.com", 0); !errors.Is(err, ErrIntegrationUser) {
+			t.Errorf("%s: an e-mail at a provider: %v", name, err)
+		}
+		if _, err := s.AddSubjectIdentity(ctx, u.ID, p.Key, "sub-"+u.UUID, 0); !errors.Is(err, ErrIntegrationUser) {
+			t.Errorf("%s: a user id at a provider: %v", name, err)
+		}
+		if _, err := s.UpdateIdentity(ctx, u.ID, 1, "anna@example.com", ""); !errors.Is(err, ErrIntegrationUser) {
+			t.Errorf("%s: an identity changed: %v", name, err)
+		}
+		if _, err := s.LinkIdentity(ctx, u.ID, p.ID, "sub-"+u.UUID, IdentityDetails{}); !errors.Is(err, ErrIntegrationUser) {
+			t.Errorf("%s: a link: %v", name, err)
+		}
+		if got, _, _ := s.UserByID(ctx, u.ID); got.HasPassword {
+			t.Errorf("%s: a password kept", name)
+		}
+	}
+	key, _, err := s.CollectIntegrationKey(ctx, i.UUID, "K7Q2PX")
+	if err != nil {
+		t.Fatalf("the integration's own key: %v", err)
+	}
+	tok, ok, _ := s.TokenByHash(ctx, HashToken(key))
+	if !ok || tok.UserID != i.UserID {
+		t.Fatalf("the own key %+v %v", tok, ok)
+	}
+	if _, _, err := s.AddKeySession(ctx, tok.ID, "x", time.Time{}); !errors.Is(err, ErrIntegrationUser) {
+		t.Errorf("a session from the integration's key: %v", err)
+	}
+}
+
+// The last regular owner stays, beside an integration's user given the
+// role owner: it is no owner left, and its own change of role is not
+// held back (AP LooseEnds, D1).
+func TestLastOwnerBesideAnIntegrationsOwner(t *testing.T) {
+	t.Parallel()
+	s := open(t, t.TempDir())
+	ctx := context.Background()
+	if _, err := s.AddUser(ctx, User{Name: "anna", Role: RoleOwner}, "", 0); err != nil {
+		t.Fatal(err)
+	}
+	i := integrationOnly(t, s)
+	system := i.UUID + ":system"
+	if _, err := s.UpdateUser(ctx, system, func(u *User) error { u.Role = RoleOwner; return nil }, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteUser(ctx, "anna", 0); !errors.Is(err, ErrLastOwner) {
+		t.Fatalf("the last regular owner removed: %v", err)
+	}
+	if _, err := s.UpdateUser(ctx, "anna", func(u *User) error { u.Role = RoleViewer; return nil }, 0); !errors.Is(err, ErrLastOwner) {
+		t.Fatalf("the last regular owner demoted: %v", err)
+	}
+	if _, err := s.UpdateUser(ctx, "anna", func(u *User) error { u.Disabled = true; return nil }, 0); !errors.Is(err, ErrLastOwner) {
+		t.Fatalf("the last regular owner disabled: %v", err)
+	}
+	if _, err := s.UpdateUser(ctx, system, func(u *User) error { u.Role = RoleIntegration; return nil }, 0); err != nil {
+		t.Fatalf("the integration's user narrowed: %v", err)
+	}
+	if err := s.DeleteUser(ctx, i.UUID+":abc123", 0); err != nil {
+		t.Fatalf("an integration's user removed: %v", err)
+	}
+}

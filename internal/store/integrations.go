@@ -426,7 +426,7 @@ func (s *Store) CollectIntegrationKey(ctx context.Context, uuid, code string) (s
 			return "", Integration{}, err
 		}
 	}
-	_, secret, err := s.AddToken(ctx, i.UserID, TokenAPI, "integration "+i.Name, time.Time{})
+	_, secret, err := s.addToken(ctx, i.UserID, TokenAPI, "integration "+i.Name, time.Time{}, true)
 	if err != nil {
 		return "", Integration{}, err
 	}

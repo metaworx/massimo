@@ -26,7 +26,33 @@ var (
 	ErrNoUser     = errors.New("store: no such user")
 	ErrBadName    = errors.New("store: bad user name")
 	ErrLastOwner  = errors.New("store: the last enabled owner without an end date cannot be disabled, removed, demoted or given one")
+	// ErrIntegrationUser is a key, a password or a provider's identity
+	// asked for an integration's user, which acts through its
+	// integration alone: the integration's own key is the one way in.
+	ErrIntegrationUser = errors.New("store: an integration's user acts through its integration alone")
 )
+
+// regularUser is the condition of a regular user in the table users: one
+// that is not removed and is not an integration's, a disabled one
+// included.
+const regularUser = `deleted_at IS NULL AND integration_id IS NULL`
+
+// integrationUser is regularUser's opposite among the users not
+// removed: an integration's user.
+const integrationUser = `deleted_at IS NULL AND integration_id IS NOT NULL`
+
+// noWayIn reports ErrIntegrationUser where the user that where and arg
+// name (for example "id = ?" and an id) is an integration's.
+func noWayIn(ctx context.Context, q queryer, where string, arg any) error {
+	var n int
+	if err := q.QueryRowContext(ctx, `SELECT count(*) FROM users WHERE `+where+` AND `+integrationUser, arg).Scan(&n); err != nil {
+		return fmt.Errorf("store: user: %w", err)
+	}
+	if n > 0 {
+		return ErrIntegrationUser
+	}
+	return nil
+}
 
 // userName is a login name: lower case, 1 to 64 of letters, digits,
 // '.', '_', '-' and '@', starting with a letter or digit.
@@ -406,15 +432,19 @@ func (s *Store) addUser(ctx context.Context, u User, c credential, by int64, fir
 }
 
 // ownerLeft reports whether a user counts as an owner that is left: an
-// enabled owner without an end date, who can sign in for good.
-func ownerLeft(u User) bool { return u.Role == RoleOwner && !u.Disabled && u.ExpiresAt.IsZero() }
+// enabled owner without an end date, who can sign in for good. An
+// integration's user is none, whatever its role: it signs in nowhere.
+func ownerLeft(u User) bool {
+	return u.Role == RoleOwner && !u.Disabled && u.ExpiresAt.IsZero() && u.IntegrationID == 0
+}
 
-// ownersLeft counts the owners left (ownerLeft) that are not removed,
-// other than the user id.
+// ownersLeft counts the owners left (ownerLeft) among the regular users
+// (regularUser), other than the user id.
 func (s *Store) ownersLeft(ctx context.Context, q queryer, id int64) (int, error) {
 	var n int
 	err := q.QueryRowContext(ctx, `SELECT count(*) FROM users u JOIN roles r ON r.id = u.role_id
-		WHERE r.key = ? AND u.disabled = 0 AND u.expires_at IS NULL AND u.deleted_at IS NULL AND u.id <> ?`, RoleOwner, id).Scan(&n)
+		WHERE r.key = ? AND u.disabled = 0 AND u.expires_at IS NULL AND u.id <> ?
+		AND u.id IN (SELECT id FROM users WHERE `+regularUser+`)`, RoleOwner, id).Scan(&n)
 	if err != nil {
 		return 0, fmt.Errorf("store: owners: %w", err)
 	}
@@ -468,13 +498,17 @@ func (s *Store) UpdateUser(ctx context.Context, name string, change func(*User) 
 
 // SetPassword sets a user's password of version 1, or removes it when
 // empty, a record of version 2 with it. Its sessions are the caller's to
-// revoke (RevokeSessions).
+// revoke (RevokeSessions). An integration's user gets none
+// (ErrIntegrationUser); one it holds may be removed.
 func (s *Store) SetPassword(ctx context.Context, name, password string, by int64) error {
 	if err := s.writable(); err != nil {
 		return err
 	}
 	hash := ""
 	if password != "" {
+		if err := noWayIn(ctx, s.db, "name = ?", NormalName(name)); err != nil {
+			return err
+		}
 		// No hash for a user that is not there.
 		var live int
 		if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM users WHERE name = ? AND deleted_at IS NULL`, NormalName(name)).Scan(&live); err != nil {
