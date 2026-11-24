@@ -68,7 +68,7 @@ func TestUpdateHistoryOutsideChannel(t *testing.T) {
 	t.Parallel()
 	st := testStore(t, "")
 	s := New(Options{Store: st, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Update: UpdateOptions{
-		Version: "v0.1.0-beta.2", Flavour: "alpha", Manager: "apt", Suite: func() string { return "beta" },
+		Version: "v0.1.0-beta.2", Flavour: "alpha", Manager: "apt", Suite: func() string { return "beta" }, Finder: &fakeFinder{},
 	}})
 	ctx := t.Context()
 	s.noteVersionStart(ctx, "v0.1.0-beta.1", "v0.1.0-beta.2", nil)

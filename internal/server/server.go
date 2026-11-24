@@ -288,6 +288,9 @@ type Options struct {
 	// (autoreset.go) and the error watch's timers (errorwatch.go), for
 	// the tests; nil is the real one.
 	clock notify.Clock
+	// selfCheckTick is the tick of the server's own release check
+	// (updateLoop), for the tests; 0 is a minute.
+	selfCheckTick time.Duration
 	// checkClock is the clock of the radio health checks, such as the
 	// readings of the Cubes' free slots (slots.go), for the tests; nil is
 	// the real one.
@@ -383,6 +386,9 @@ type Server struct {
 	// steps writes the queues' step rows in order (commands.go).
 	steps   serialWorker
 	updates updateCheck
+	// updateNext is when the server's own release check is due
+	// (updateTick), zero before the first; the update loop's alone.
+	updateNext time.Time
 	// updateMu holds one update request at a time (startUpdate).
 	updateMu sync.Mutex
 	// historyMu holds the last updates' row while it is read and written
@@ -892,6 +898,10 @@ func (s *Server) Run(ctx context.Context) error {
 	if s.notify != nil {
 		s.wg.Add(1)
 		go func() { defer s.wg.Done(); s.notify.Run(ctx) }()
+	}
+	if s.opts.Store != nil {
+		s.wg.Add(1)
+		go func() { defer s.wg.Done(); s.updateLoop(ctx) }()
 	}
 	<-ctx.Done()
 	s.logStopping() // before the writer stops, which writes it

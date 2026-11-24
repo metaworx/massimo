@@ -1169,7 +1169,7 @@ keep the default:
 | `device_stale` | a thermostat went past the stale threshold (`stale_after`, `stale_after_wall`) | off |
 | `paired` | a device joined by pairing | off |
 | `cube_found` | discovery found a Cube that is not configured | off |
-| `update` | `GET /api/v1/update` saw a newer release | off |
+| `update` | the server's own check, after its start and every six hours, or `GET /api/v1/update` saw a newer release; once per release | off |
 
 `after_min` is 1 to 1440, `below_c` −10 to 20.
 A `PUT` of a document the rules cannot read (an unknown kind,
@@ -4233,6 +4233,12 @@ A channel takes the releases of its own flavour and of every more stable one,
 in the order `devel`, `nightly`, `alpha`, `beta`, `rc`, `stable`
 ([README.md](../README.md), "Versions").
 The server asks GitHub at most every ten minutes; `refresh` asks now.
+It also checks by itself, whatever its settings say:
+a minute after its start, then every six hours,
+and ten minutes after a check that failed,
+so that the notification `update` reaches people without an open page.
+It does so only with a store and a valid channel;
+a channel set later is checked within a minute.
 
 ```json
 {

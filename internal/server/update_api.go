@@ -4,12 +4,14 @@
 package server
 
 // Software updates: GET /api/v1/update says whether a newer signed release
-// is out on the update channel (updateChannel), POST /api/v1/update asks the update
-// helper to install it (internal/update): through a request file that a
-// systemd path unit (packaging/systemd) or launchd (packaging/launchd)
-// watches, and on Windows by starting the helper itself (Start). The
-// server only checks and asks; the helper replaces the binary, or, where
-// the Debian package owns it, has apt upgrade it (packaging/deb).
+// is out on the update channel (updateChannel), as the server's own check
+// does every six hours (updateLoop), and POST /api/v1/update asks the
+// update helper to install it (internal/update): through a request file
+// that a systemd path unit (packaging/systemd) or launchd
+// (packaging/launchd) watches, and on Windows by starting the helper
+// itself (Start). The server only checks and asks; the helper replaces
+// the binary, or, where the Debian package owns it, has apt upgrade it
+// (packaging/deb).
 
 import (
 	"context"
@@ -73,8 +75,13 @@ type ReleaseFinder interface {
 	Latest(ctx context.Context, channel string) (*update.Release, error)
 }
 
-// checkEvery is how long a release check is reused.
+// checkEvery is how long a release check is reused, and how long the
+// server's own check waits after one that failed.
 const checkEvery = 10 * time.Minute
+
+// selfCheckEvery is how often the server checks for a release by itself
+// (updateLoop).
+const selfCheckEvery = 6 * time.Hour
 
 type updateCheck struct {
 	mu      sync.Mutex
@@ -138,11 +145,61 @@ func (s *Server) keepChannel(ctx context.Context, channel string, rel *update.Re
 	s.log.Info("update channel kept", "channel", channel, "flavour", s.opts.Update.Flavour, "release_flavour", rel.Flavour)
 }
 
+// finder is where the server looks for releases: the options' Finder,
+// else defaultFinder's.
 func (s *Server) finder() ReleaseFinder {
 	if s.opts.Update.Finder != nil {
 		return s.opts.Update.Finder
 	}
-	return update.NewClient()
+	return defaultFinder()
+}
+
+// defaultFinder is the finder of a server whose options name none:
+// GitHub's releases. The package's tests replace it with one that fails
+// loudly, so that none of them reaches GitHub.
+var defaultFinder = func() ReleaseFinder { return update.NewClient() }
+
+// updateLoop checks for a release by itself (AP AutoUpdate D4-A),
+// whatever the settings say, so that the notification update reaches
+// people without an open page. Each minute's tick asks updateTick
+// whether a check is due: the first tick's, a minute after the start,
+// when a box that has just booted most likely has its network, then
+// every selfCheckEvery. It ends with ctx.
+func (s *Server) updateLoop(ctx context.Context) {
+	tick := s.opts.selfCheckTick
+	if tick <= 0 {
+		tick = time.Minute
+	}
+	t := time.NewTicker(tick)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		s.updateTick(ctx, time.Now())
+	}
+}
+
+// updateTick checks for a release where the server's own check is due at
+// now: the first at once, then selfCheckEvery after one that answered,
+// checkEvery after one that failed. The check is updateRelease's, fresh,
+// which pushes update where a newer release is out; the rules tell each
+// version once. Nothing is checked without a store, which the rules and
+// the settings need, or without a valid channel: a channel set later is
+// checked at the next tick.
+func (s *Server) updateTick(ctx context.Context, now time.Time) {
+	if s.opts.Store == nil || now.Before(s.updateNext) || !update.ValidChannel(s.updateChannel(ctx)) {
+		return
+	}
+	v, _ := s.updateRelease(ctx, true)
+	if v.CheckError != "" {
+		s.updateNext = now.Add(checkEvery)
+		s.log.Debug("update check failed", "channel", v.Channel, "error", v.CheckError)
+		return
+	}
+	s.updateNext = now.Add(selfCheckEvery)
 }
 
 // latest returns the newest release on the channel, checked at most every

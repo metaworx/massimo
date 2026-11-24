@@ -7,6 +7,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -18,13 +20,16 @@ import (
 	"testing"
 	"time"
 
+	"go.metaworx.ch/massimo/internal/notify"
 	"go.metaworx.ch/massimo/internal/store"
+	"go.metaworx.ch/massimo/internal/testkit"
 	"go.metaworx.ch/massimo/internal/update"
 )
 
 type fakeFinder struct {
 	tag     string // "" = no release
 	flavour string // the release's flavour; "" = the channel asked for
+	err     error  // where set, the check fails with it
 	calls   int
 	channel string // the channel last asked for
 }
@@ -32,6 +37,9 @@ type fakeFinder struct {
 func (f *fakeFinder) Latest(ctx context.Context, channel string) (*update.Release, error) {
 	f.calls++
 	f.channel = channel
+	if f.err != nil {
+		return nil, f.err
+	}
 	if f.tag == "" {
 		return nil, nil
 	}
@@ -443,4 +451,188 @@ func TestUpdateChannelFromAptSuite(t *testing.T) {
 	if c, _ := s.opts.Store.SettingString(context.Background(), store.UpdateChannelKey); c != "" {
 		t.Fatalf("stored %q on a box apt owns", c)
 	}
+}
+
+// No server test reaches GitHub: the finder of a server whose options
+// name none panics, and startServer refuses a channel without a Finder.
+func init() {
+	defaultFinder = func() ReleaseFinder { return githubGuard{} }
+}
+
+// githubGuard is the finder of a server test that gave none.
+type githubGuard struct{}
+
+// Latest panics: the test gave the server a channel but no Finder, and
+// the check would have asked GitHub.
+func (githubGuard) Latest(_ context.Context, channel string) (*update.Release, error) {
+	panic("a server test checks the channel " + channel + " on GitHub: give it UpdateOptions.Finder")
+}
+
+// The guard is the finder of a server without one, and fails loudly.
+func TestNoServerTestReachesGitHub(t *testing.T) {
+	t.Parallel()
+	s := New(Options{Update: UpdateOptions{Channel: "alpha"}})
+	if _, ok := s.finder().(githubGuard); !ok {
+		t.Fatalf("a server without a Finder asks %T", s.finder())
+	}
+	defer func() {
+		if recover() == nil {
+			t.Fatal("the guard let the check through")
+		}
+	}()
+	s.updateRelease(t.Context(), true)
+}
+
+// finderFunc is a ReleaseFinder of a function.
+type finderFunc func(ctx context.Context, channel string) (*update.Release, error)
+
+// Latest calls f.
+func (f finderFunc) Latest(ctx context.Context, channel string) (*update.Release, error) {
+	return f(ctx, channel)
+}
+
+// selfCheckServer is a server over a store that runs v0.1.0-alpha.9 on
+// alpha and finds f's releases, not running; its rules run on clock (nil
+// for the real one) for one user who wants update, and told carries the
+// version of each update they tell.
+func selfCheckServer(t *testing.T, f ReleaseFinder, clock notify.Clock) (s *Server, told <-chan string) {
+	t.Helper()
+	s = New(Options{Store: testStore(t, ""), Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Update: UpdateOptions{Version: "v0.1.0-alpha.9", Channel: "alpha", Finder: f}})
+	prefs := notify.Defaults()
+	prefs[notify.KindUpdate] = notify.Rule{On: true}
+	versions := make(chan string, 16)
+	s.notify = notify.New(notify.Options{
+		Clock: clock,
+		Users: func(context.Context) ([]notify.User, error) { return []notify.User{{ID: 1, Prefs: prefs}}, nil },
+		Deliver: func(_ int64, n notify.Notification) {
+			if n.Kind == notify.KindUpdate {
+				v, _ := n.Values["version"].(string)
+				versions <- v
+			}
+		},
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); s.notify.Run(ctx) }()
+	t.Cleanup(func() { cancel(); <-done })
+	return s, versions
+}
+
+// The server checks for a release by itself: at its first tick, six
+// hours later and not before, whatever else asks; a check that failed
+// again ten minutes later, then six hours after the one that answered.
+func TestUpdateSelfCheckTimes(t *testing.T) {
+	t.Parallel()
+	f := &fakeFinder{tag: "v0.1.0-alpha.10"}
+	s, _ := selfCheckServer(t, f, nil)
+	start := time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC)
+	tick := func(at time.Time, checks int, what string) {
+		t.Helper()
+		s.updateTick(t.Context(), at)
+		if f.calls != checks {
+			t.Fatalf("%s: %d checks, want %d", what, f.calls, checks)
+		}
+	}
+	tick(start, 1, "the first tick")
+	if f.channel != "alpha" {
+		t.Fatalf("the channel checked: %q", f.channel)
+	}
+	tick(start.Add(time.Minute), 1, "the next tick")
+	tick(start.Add(selfCheckEvery-time.Minute), 1, "a minute before six hours")
+	tick(start.Add(selfCheckEvery), 2, "six hours on")
+	f.err = errors.New("no network")
+	failed := start.Add(2 * selfCheckEvery)
+	tick(failed, 3, "the check that failed")
+	tick(failed.Add(checkEvery-time.Minute), 3, "a minute before ten minutes")
+	f.err = nil
+	tick(failed.Add(checkEvery), 4, "ten minutes after the failure")
+	tick(failed.Add(checkEvery+selfCheckEvery-time.Minute), 4, "a minute before six hours after it")
+	tick(failed.Add(checkEvery+selfCheckEvery), 5, "six hours after it")
+}
+
+// Each check that finds a newer release pushes update; the rules tell
+// each version once.
+func TestUpdateSelfCheckTellsOncePerVersion(t *testing.T) {
+	t.Parallel()
+	f := &fakeFinder{tag: "v0.1.0-alpha.10"}
+	start := time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC)
+	clock := testkit.NewClock(start)
+	s, told := selfCheckServer(t, f, kitClock{clock})
+	expect := func(want string) {
+		t.Helper()
+		select {
+		case v := <-told:
+			if v != want {
+				t.Fatalf("told %s, want %s", v, want)
+			}
+		case <-time.After(testkit.Scale(10 * time.Second)):
+			t.Fatalf("%s not told", want)
+		}
+	}
+	s.updateTick(t.Context(), start)
+	expect("v0.1.0-alpha.10")
+	clock.Add(selfCheckEvery)
+	s.updateTick(t.Context(), start.Add(selfCheckEvery))
+	f.tag = "v0.1.0-alpha.11"
+	clock.Add(selfCheckEvery)
+	s.updateTick(t.Context(), start.Add(2*selfCheckEvery))
+	if f.calls != 3 {
+		t.Fatalf("%d checks, want 3", f.calls)
+	}
+	// the rules take the pushes in order: the next told is alpha.11's
+	// where alpha.10's second push was told nothing
+	expect("v0.1.0-alpha.11")
+}
+
+// Nothing is checked without a store or without a valid channel; a
+// channel set later is checked at the next tick.
+func TestUpdateSelfCheckNeedsStoreAndChannel(t *testing.T) {
+	t.Parallel()
+	f := &fakeFinder{tag: "v0.1.0-alpha.10"}
+	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
+	now := time.Now()
+	New(Options{Logger: discard, Update: UpdateOptions{Version: "v0.1.0-alpha.9", Channel: "alpha", Finder: f}}).updateTick(t.Context(), now)
+	if f.calls != 0 {
+		t.Fatalf("a server without a store checked %d times", f.calls)
+	}
+	st := testStore(t, "")
+	s := New(Options{Store: st, Logger: discard, Update: UpdateOptions{Version: "v0.1.0-alpha.9", Finder: f}})
+	s.updateTick(t.Context(), now)
+	if f.calls != 0 {
+		t.Fatalf("a server without a channel checked %d times", f.calls)
+	}
+	if err := st.SetSetting(t.Context(), store.UpdateChannelKey, "beta"); err != nil {
+		t.Fatal(err)
+	}
+	s.updateTick(t.Context(), now.Add(time.Minute))
+	if f.calls != 1 || f.channel != "beta" {
+		t.Fatalf("the channel set later: %d checks, of %q", f.calls, f.channel)
+	}
+}
+
+// Run starts the server's own check: its first tick asks the finder,
+// and the loop ends with the server.
+func TestUpdateSelfCheckRuns(t *testing.T) {
+	t.Parallel()
+	asked := make(chan string, 64)
+	opts := storeOptions(t, t.TempDir(), "secret")
+	opts.Update = UpdateOptions{Version: "v0.1.0-alpha.9", Channel: "alpha", Finder: finderFunc(func(_ context.Context, channel string) (*update.Release, error) {
+		select {
+		case asked <- channel:
+		default:
+		}
+		return nil, nil
+	})}
+	opts.selfCheckTick = time.Millisecond
+	r := startServer(t, withOptions(opts))
+	select {
+	case c := <-asked:
+		if c != "alpha" {
+			t.Fatalf("checked %q", c)
+		}
+	case <-time.After(testkit.Scale(10 * time.Second)):
+		t.Fatal("Run checked nothing")
+	}
+	r.stop()
 }
