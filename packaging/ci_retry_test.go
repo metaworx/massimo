@@ -110,7 +110,7 @@ func runTestedRecord(t *testing.T, needs string) (desc, stderr string) {
 
 // recordNeeds is a push's needs with What to test's answers and
 // Platforms' result and outputs as given; the UI tests, LAN, Fuzz and
-// the Android app passed.
+// the Android app, its build and its emulator, passed.
 func recordNeeds(changes map[string]string, platforms string, outputs map[string]string) string {
 	answers := map[string]string{"ui": "true", "lan": "true", "app": "true", "macos": "true", "windows": "true",
 		"ui_done": "false", "lan_done": "false", "app_done": "false", "fuzz_done": "false", "macos_done": "false", "windows_done": "false"}
@@ -123,6 +123,7 @@ func recordNeeds(changes map[string]string, platforms string, outputs map[string
 		"lan":         map[string]any{"result": "success"},
 		"fuzz":        map[string]any{"result": "success"},
 		"android":     map[string]any{"result": "success"},
+		"emulator":    map[string]any{"result": "success"},
 		"platforms":   map[string]any{"result": platforms, "outputs": outputs},
 	}
 	b, err := json.Marshal(needs)
@@ -167,10 +168,21 @@ func TestTestedRecord(t *testing.T) {
 	// Failed and not needed: LAN and the Android app; the UI tests and Fuzz
 	// know no unneeded.
 	needs := `{"changes":{"outputs":{"lan":"false","app":"false","ui":"false","fuzz_done":"false","macos":"true","windows":"true"}},` +
-		`"screenshots":{"result":"skipped"},"lan":{"result":"skipped"},"fuzz":{"result":"failure"},"android":{"result":"skipped"},` +
+		`"screenshots":{"result":"skipped"},"lan":{"result":"skipped"},"fuzz":{"result":"failure"},"android":{"result":"skipped"},"emulator":{"result":"skipped"},` +
 		`"platforms":{"result":"success","outputs":{"macos":"true","windows":"true"}}}`
 	if desc, _ := runTestedRecord(t, needs); desc != fp+" ui=false lan=unneeded fuzz=false app=unneeded mac=true win=true" {
 		t.Errorf("not needed: %q", desc)
+	}
+	// The Android app passed where its build and its emulator both did (AP
+	// MobileApp, Block 18): either alone is app=false.
+	for _, tc := range []struct{ android, emulator string }{{"success", "failure"}, {"failure", "success"}, {"success", "skipped"}} {
+		needs := `{"changes":{"outputs":{"ui":"true","lan":"true","app":"true","macos":"true","windows":"true"}},` +
+			`"screenshots":{"result":"success"},"lan":{"result":"success"},"fuzz":{"result":"success"},` +
+			`"android":{"result":"` + tc.android + `"},"emulator":{"result":"` + tc.emulator + `"},` +
+			`"platforms":{"result":"success","outputs":{"macos":"true","windows":"true"}}}`
+		if desc, _ := runTestedRecord(t, needs); desc != fp+" ui=true lan=true fuzz=true app=false mac=true win=true" {
+			t.Errorf("the build %s, the emulator %s: %q", tc.android, tc.emulator, desc)
+		}
 	}
 }
 

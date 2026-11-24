@@ -50,8 +50,8 @@ func TestHSTSDays(t *testing.T) {
 		}
 	}
 	for _, bad := range []string{"-1", "x", "1.5"} {
-		if _, err := hstsDays(bad); err == nil {
-			t.Errorf("hsts %q accepted", bad)
+		if _, err := hstsDays(bad); err == nil || err.Error() != `-hsts or MASSIMO_HSTS "`+bad+`": want a number of days, 0 or more` {
+			t.Errorf("hsts %q: %v", bad, err)
 		}
 	}
 }

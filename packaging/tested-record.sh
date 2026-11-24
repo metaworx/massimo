@@ -15,7 +15,10 @@
 #     counts as not run (AP TestSpeed, D5-A, D16-A): the merge's push runs
 #     it, and the nightly build runs it before it ships the code.
 # The UI tests passed where their matrix job did (screenshots: the four
-# cases and the screenshot set, AP TestSpeed, D7-A); macOS and Windows
+# cases and the screenshot set, AP TestSpeed, D7-A); the Android app where
+# its build and its flows on an emulator both did (android and emulator,
+# AP MobileApp, Block 18: the record has no room for a word of its own);
+# macOS and Windows
 # where platforms.yml's output says so, as the call's result is that of
 # both jobs together.
 #
@@ -36,7 +39,7 @@ desc=$(jq -r --arg fp "$fp" '
 		+ " ui=\(word($a.ui_done; .screenshots.result == "success"; null))"
 		+ " lan=\(word($a.lan_done; .lan.result == "success"; $a.lan))"
 		+ " fuzz=\(word($a.fuzz_done; .fuzz.result == "success"; null))"
-		+ " app=\(word($a.app_done; .android.result == "success"; $a.app))"
+		+ " app=\(word($a.app_done; .android.result == "success" and .emulator.result == "success"; $a.app))"
 		+ " mac=\(word($a.macos_done; $p.macos == "true"; $a.macos))"
 		+ " win=\(word($a.windows_done; $p.windows == "true"; $a.windows))"' <<<"$needs")
 [ "${#desc}" -le 140 ] || echo "::warning::the Tested record is ${#desc} characters, GitHub takes 140: ${desc}" >&2

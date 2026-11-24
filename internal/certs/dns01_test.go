@@ -265,6 +265,55 @@ func hookCalls(path string) (records map[string][]string, calls []string) {
 	return records, calls
 }
 
+// CheckDNS01 refuses what OpenDNS01 refuses before its directory, in the
+// same words, and writes nothing: OpenDNS01 refused leaves the data
+// directory as it was, and a wildcard passes. Windows checks no execute
+// bit.
+func TestCheckDNS01(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	hook, noExec := filepath.Join(dir, "hook.sh"), filepath.Join(dir, "noexec.sh")
+	os.WriteFile(hook, []byte("#!/bin/sh\n"), 0o755)
+	os.WriteFile(noExec, []byte("#!/bin/sh\n"), 0o644)
+	missing := filepath.Join(dir, "none.sh")
+	_, statErr := os.Stat(missing)
+	names := []string{"*.example.net", "example.net"}
+	cases := []struct {
+		names      []string
+		hook, want string
+	}{
+		{nil, hook, "tls: -tls acme needs the names of -tls-names"},
+		{[]string{"192.0.2.10"}, hook, "tls: no certificate for an address (192.0.2.10); use a DNS name"},
+		{[]string{"example.net", "pi"}, hook, `tls: "pi" is not a public DNS name`},
+		{names, "", "tls: DNS-01 needs the hook of -acme-dns-hook"},
+		{names, missing, "tls: -acme-dns-hook: " + statErr.Error()},
+	}
+	if runtime.GOOS != "windows" {
+		cases = append(cases, struct {
+			names      []string
+			hook, want string
+		}{names, noExec, "tls: -acme-dns-hook " + noExec + " is not executable"})
+	}
+	data := t.TempDir()
+	for _, c := range cases {
+		if err := CheckDNS01(c.names, c.hook); err == nil || err.Error() != c.want {
+			t.Errorf("%q %s: %v, want %s", c.names, c.hook, err, c.want)
+		}
+		if _, err := OpenDNS01(data, c.names, "", "", c.hook, nil); err == nil || err.Error() != c.want {
+			t.Errorf("OpenDNS01 %q %s: %v, want %s", c.names, c.hook, err, c.want)
+		}
+	}
+	if left, err := os.ReadDir(data); err != nil || len(left) != 0 {
+		t.Fatalf("the data directory after the refusals: %v %v", left, err)
+	}
+	if err := CheckDNS01(names, hook); err != nil {
+		t.Fatalf("a wildcard and a hook: %v", err)
+	}
+	if left, _ := os.ReadDir(dir); len(left) != 2 {
+		t.Fatalf("the check wrote: %v", left)
+	}
+}
+
 func TestDNS01(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the hook is a shell script")

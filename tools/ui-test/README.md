@@ -330,6 +330,8 @@ hence `failed_checks_forgotten`.
   nothing behind its back; another setting changed during the own PUT is read
   after it;
   the settings file read again shows what waits with nothing read;
+  a read at warn reads what the next start refuses, one at info takes it away
+  with nothing read;
   a reboot event keeps this page's wait, which follows at its time; an event
   keeps the restart's question and the delay, and takes the reboot's back
   where a reboot waits;

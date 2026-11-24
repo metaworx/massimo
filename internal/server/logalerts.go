@@ -92,8 +92,9 @@ var settleRules = map[string]settleRule{
 	// the server's own: an update failed or rolled back, the log's file
 	// not rotated, a failed sign-in, an address locked out, a restart, a
 	// reboot or an update not started; a settings file read again whose
-	// value the next start refuses: the file read again without one, or
-	// a start, which took the values
+	// value the next start refuses, or that does not parse or is there
+	// but cannot be read: the file read again without one, a change or
+	// none, or a start, which took the values
 	"update_result": {by: []string{"update_result"}},
 	"log_rotated":   {by: []string{"log_rotated"}},
 	"settings_read": {by: []string{"settings_read", "server_started"}},

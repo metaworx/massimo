@@ -90,24 +90,8 @@ func OpenDNS01(dataDir string, names []string, email, directory, hook string, lo
 	if log == nil {
 		log = slog.Default()
 	}
-	if len(names) == 0 {
-		return nil, errors.New("tls: -tls acme needs the names of -tls-names")
-	}
-	for _, n := range names {
-		if net.ParseIP(n) != nil {
-			return nil, fmt.Errorf("tls: no certificate for an address (%s); use a DNS name", n)
-		}
-		if !strings.Contains(n, ".") {
-			return nil, fmt.Errorf("tls: %q is not a public DNS name", n)
-		}
-	}
-	if hook == "" {
-		return nil, errors.New("tls: DNS-01 needs the hook of -acme-dns-hook")
-	}
-	if fi, err := os.Stat(hook); err != nil {
-		return nil, fmt.Errorf("tls: -acme-dns-hook: %w", err)
-	} else if runtime.GOOS != "windows" && fi.Mode()&0o111 == 0 {
-		return nil, fmt.Errorf("tls: -acme-dns-hook %s is not executable", hook)
+	if err := CheckDNS01(names, hook); err != nil {
+		return nil, err
 	}
 	if directory == "" {
 		directory = acme.LetsEncryptURL
@@ -129,6 +113,35 @@ func OpenDNS01(dataDir string, names []string, email, directory, hook string, lo
 		d.status.Names = names
 	}
 	return d, nil
+}
+
+// CheckDNS01 is what OpenDNS01 refuses before it makes its directory:
+// no names, an address or a name without a dot among them (a wildcard
+// this challenge allows), no hook, and a hook that is missing or,
+// outside Windows, not executable. It reads the hook's mode and writes
+// nothing, so that serve can ask at a reload what its next start would
+// refuse.
+func CheckDNS01(names []string, hook string) error {
+	if len(names) == 0 {
+		return errors.New("tls: -tls acme needs the names of -tls-names")
+	}
+	for _, n := range names {
+		if net.ParseIP(n) != nil {
+			return fmt.Errorf("tls: no certificate for an address (%s); use a DNS name", n)
+		}
+		if !strings.Contains(n, ".") {
+			return fmt.Errorf("tls: %q is not a public DNS name", n)
+		}
+	}
+	if hook == "" {
+		return errors.New("tls: DNS-01 needs the hook of -acme-dns-hook")
+	}
+	if fi, err := os.Stat(hook); err != nil {
+		return fmt.Errorf("tls: -acme-dns-hook: %w", err)
+	} else if runtime.GOOS != "windows" && fi.Mode()&0o111 == 0 {
+		return fmt.Errorf("tls: -acme-dns-hook %s is not executable", hook)
+	}
+	return nil
 }
 
 // GetCertificate serves the certificate ordered, or fails the handshake

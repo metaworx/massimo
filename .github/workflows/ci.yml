@@ -11,8 +11,8 @@ name: CI
 # screenshot set in a job of its own, and the mDNS test against
 # avahi only when it changes the announcement, discovery, the test or
 # this file, the Windows and macOS jobs only when they change their
-# platform's code or the announcement, and the Android app's job only
-# when it changes the app, the
+# platform's code or the announcement, and the Android app's jobs, its
+# build and its flows on an emulator, only when it changes the app, the
 # web UI's files it bundles, its scripts or the release's workflows; a
 # push to main or of a tag runs all of it, but for a push
 # to main of a release commit, which its tag's run tests (What to test).
@@ -87,11 +87,13 @@ jobs:
   # this file. A push whose record says lan=unneeded, its pull request's
   # filter having found LAN not needed for this code, answers lan=false
   # (AP SiteOnly, D78-C); a pull request's own filter decides. app, for
-  # the job Android app, is true for a push; for a pull request when it
+  # the jobs Android app and Android emulator, is true for a push; for a
+  # pull request when it
   # touches app/, the files of the web UI the app bundles (all but
   # index.html, partials/, src/, parts.js and vendor/, as BundleUi in
   # app/android/app/build.gradle.kts leaves them out), the app's scripts
-  # under packaging/, or this file, build.yml or release.yml; app=unneeded
+  # under packaging/, the emulator suite's (tools/app-emulator/), or this
+  # file, build.yml or release.yml; app=unneeded
   # is carried as lan's is (AP MobileApp, D17-A). macos and windows, for
   # the macOS LaunchDaemon and Windows service jobs, are true for a push
   # and a tag; for a pull request when it touches the announcement (one
@@ -281,7 +283,7 @@ jobs:
             [ -n "$macfiles" ] || macos=false
             winfiles="$(grep -vE "$notwin" <<<"$changed" | grep -E "^(${announce}|internal/(install|update|safefile|cubelan)/|internal/server/(discovery|hostnets|runtimes|update_api|update_history)[^/]*\.go$|internal/proxy/proxy\.go$|cmd/massimo/(install|update|service|restart|reboot|discover)[^/]*\.go$|(cmd|internal)/.*_(windows|other)[^/]*\.go$|packaging/(embed\.go|env\.template)$|\.github/workflows/(ci|platforms)\.yml$|\.github/actions/|tools/uibundle/)" || true)"
             [ -n "$winfiles" ] || windows=false
-            appfiles="$(grep -E '^(app/|packaging/app-[a-z-]+\.sh$|\.github/workflows/(ci|build|release)\.yml$)' <<<"$changed" || true)"
+            appfiles="$(grep -E '^(app/|packaging/app-[a-z-]+\.sh$|tools/app-emulator/|\.github/workflows/(ci|build|release)\.yml$)' <<<"$changed" || true)"
             bundled="$(grep -E '^internal/server/ui/' <<<"$changed" | grep -vE '^internal/server/ui/(index\.html$|partials/|src/|parts\.js$|vendor/)' || true)"
             [ -n "${appfiles}${bundled}" ] || app=false
           fi
@@ -322,12 +324,12 @@ jobs:
             }
             job_row ui "$ui" "$ui_done" "UI test"
             job_row lan "$lan" "$lan_done" "LAN against avahi"
-            job_row app "$app" "$app_done" "Android app"
+            job_row app "$app" "$app_done" "Android app and Android emulator"
             job_row macos "$macos" "$macos_done" "macOS LaunchDaemon"
             job_row windows "$windows" "$windows_done" "Windows service"
             row ui_done "$ui_done" "the UI tests passed for this code before" "-"
             row lan_done "$lan_done" "LAN passed for this code before" "-"
-            row app_done "$app_done" "Android app passed for this code before" "-"
+            row app_done "$app_done" "Android app and Android emulator passed for this code before" "-"
             row fuzz_done "$fuzz_done" "Fuzz passed for this code before" "-"
             row macos_done "$macos_done" "macOS LaunchDaemon passed for this code before" "-"
             row windows_done "$windows_done" "Windows service passed for this code before" "-"
@@ -856,6 +858,94 @@ jobs:
             exit 1
           fi
 
+  # The Android app's flows on an emulator (tools/app-emulator/README.md;
+  # AP MobileApp, Block 18, D71-A): make app-emulator-test, the app's
+  # instrumented tests against two servers on the runner built from this
+  # tree with the fake Cube, the fingerprint simulated. KVM is given to
+  # the runner's user by a udev rule; the emulator and its system image
+  # are the pinned ones (tools/app-emulator/pins.sh), fetched into a
+  # directory of the run's and held to their sizes and SHA-1s (sdk.sh
+  # fetch), the runner image's SDK left as it is; the emulator boots without a
+  # window, audio or snapshots, within APP_EMU_BOOT_TIMEOUT of the builds'
+  # end. An emulator in CI is known to stall at its boot or at a prompt:
+  # the suite's step has a time limit of its own inside the job's, as
+  # GitHub counts a step's limit as a failure and a job's as a
+  # cancellation, and run.sh takes the step's shell's place (exec), so that
+  # the runner's signal at that limit reaches it and its cleanup keeps the
+  # results; the run's results (the emulator's log with the kernel's, the
+  # device's, the servers', the screens of failed tests and Gradle's report
+  # and JUnit results) are the artifact app-emulator-results, on a failure
+  # or a cancellation and, kept seven days, on a pass, so that a passing
+  # run can be read too; run.sh is strict here (CI=true): a test skipped,
+  # or fewer run than the sources declare, fails it, which Gradle would
+  # pass; a flaky case is fixed or taken out, not retried.
+  # It runs where Android app runs (What
+  # to test's app and app_done), and All tests passed counts both under the
+  # Tested record's app=, which has no room for a word of its own
+  # (GUIDELINES/project/CI.md, section 2). Until it has runs of its own,
+  # its limit is about three times what it is estimated to take.
+  emulator:
+    name: Android emulator
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' && needs.changes.outputs.code != 'false' && needs.changes.outputs.app != 'false' && needs.changes.outputs.app_done != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
+      - uses: ./.github/actions/ui-bundle
+
+      - name: KVM for the runner's user
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules >/dev/null
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+
+      - name: JDK 17, the Android SDK, and the pinned emulator and image
+        env:
+          APP_EMU_SDK: ${{ runner.temp }}/emu-sdk
+        run: |
+          echo "JAVA_HOME=${JAVA_HOME_17_X64:?the runner image has no JDK 17}" >> "$GITHUB_ENV"
+          for p in platforms/android-36 build-tools/36.0.0 platform-tools; do
+            if [ ! -d "${ANDROID_HOME:?the runner image has no Android SDK}/${p}" ]; then
+              echo "::error::the runner image's Android SDK lacks ${p}"
+              exit 1
+            fi
+          done
+          tools/app-emulator/sdk.sh fetch
+          echo "APP_EMU_SDK=${APP_EMU_SDK}" >> "$GITHUB_ENV"
+
+      # make app-emulator-test's two steps, run.sh in the shell's place
+      - name: The app's flows on the emulator
+        timeout-minutes: 32
+        env:
+          APP_EMU_BOOT_TIMEOUT: 420
+        run: |
+          make ui
+          exec tools/app-emulator/run.sh
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: failure() || cancelled()
+        with:
+          name: app-emulator-results
+          path: tools/app-emulator/results/
+          if-no-files-found: ignore
+
+      # a pass's results too, what ran with them, for a week
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: success()
+        with:
+          name: app-emulator-results
+          path: tools/app-emulator/results/
+          if-no-files-found: warn
+          retention-days: 7
+
   # Fails on a vulnerability the code can reach (govulncheck exits 3),
   # for the platforms with code of their own.
   govulncheck:
@@ -1094,7 +1184,8 @@ jobs:
   # section 2) on the commit the run tested, a pull request's head or the
   # commit pushed to main: the fingerprint of the code that ran and whether
   # the UI tests, LAN, Fuzz, the Android app, macOS and Windows passed for
-  # it, in this run or the one it carries on; LAN, the Android app, macOS
+  # it, in this run or the one it carries on, the Android app where its
+  # build and its emulator both passed; LAN, the Android app, macOS
   # and Windows are unneeded where What to test answered false for them
   # and they did not pass (packaging/tested-record.sh). A macOS or Windows
   # job that no runner took on a pull request or a push to main counts as
@@ -1106,7 +1197,7 @@ jobs:
   # a read-only token, and the step's failure fails nothing.
   tests:
     name: All tests passed
-    needs: [ changes, test, actionlint, ui-types, race, armv6, fuzz, screenshots, lan, android, govulncheck, deb, platforms, guidelines, site, code-result ]
+    needs: [ changes, test, actionlint, ui-types, race, armv6, fuzz, screenshots, lan, android, emulator, govulncheck, deb, platforms, guidelines, site, code-result ]
     if: ${{ !cancelled() && needs.changes.outputs.suite != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10

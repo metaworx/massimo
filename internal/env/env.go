@@ -206,6 +206,7 @@ func Known(k string) bool {
 	case Address, SN, Ignore, Proxy, ProxySerial, Name, FileVar, DataVar, LogLevel,
 		LogFormat, LogFileFormat, LogProcessFormat, LogRotateSize, LogKeep, LogKeepMin,
 		"MASSIMO_API_TOKEN", "MASSIMO_LOG", "MASSIMO_LISTEN", "MASSIMO_UPDATE_REQUEST", "MASSIMO_REBOOT",
+		"MASSIMO_RESTART", "MASSIMO_SIGHUP",
 		TLS, TLSCert, TLSKey, TLSNames, HSTS, ACMEEmail, ACMEDirectory, TLSHTTP, ACMEDNSHook, TrustedProxies, Announce, PublicURL,
 		// massimo update: the release channel, the API (update.APIVar)
 		// and update.TokenVar.
