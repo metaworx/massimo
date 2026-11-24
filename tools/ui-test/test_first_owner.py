@@ -450,6 +450,35 @@ def test_the_passwords_are_checked_before_anything_is_sent(new_context, case, wa
     assert not sent(page, "POST", "/register") and not sent(page, "POST", "/api/v1/users"), "nothing sent"
 
 
+def test_the_form_says_only_what_is_wrong_now(new_context, case, watch, guard):
+    """Each Create the owner says what is wrong at that submit alone and
+    puts the focus on the field to change, in its handler: a mismatch says
+    so with the focus on Again; Again fixed and a bad name, the name's rule
+    alone, the mismatch's line gone, the focus on the name. No password at
+    all the browser refuses itself (the fields are required), Password
+    invalid and in focus. Nothing is sent. Fails on the page before: the
+    mismatch's line stayed beside the name's rule, and the focus stayed on
+    Create the owner (the walk-through of AP LooseEnds, finding 3)."""
+    page = start_page(new_context, guard, watch, OPEN)
+    owner_card(page)
+    submit = page.locator("#setup-form button[type=submit]")
+    fill_owner(page, password="pw", again="other")
+    submit.click()
+    assert wait_until(page, "document.getElementById('setup-msg').textContent === t('setup.mismatch')", 3), "the passwords differ"
+    assert page.evaluate("document.activeElement.id") == "setup-again", "the focus on Again"
+    fill_owner(page, name="bad name", password="pw", again="pw")
+    submit.click()
+    assert wait_until(page, "!document.getElementById('setup-name-msg').classList.contains('hidden')", 3), "the name's rule"
+    assert page.locator("#setup-name-msg").inner_text() == NAME_BAD[case.lang], "the store's rule"
+    assert page.locator("#setup-msg").is_hidden(), "and no line of the earlier attempt"
+    assert page.evaluate("document.activeElement.id") == "setup-user", "the focus on the name"
+    fill_owner(page, password="", again="")
+    submit.click()
+    assert wait_until(page, "document.activeElement && document.activeElement.id === 'setup-password'", 3), "the browser's focus on Password"
+    assert page.evaluate("document.getElementById('setup-password').matches(':invalid')"), "Password refused by the browser"
+    assert not sent(page, "POST", "/register") and not sent(page, "POST", "/api/v1/users"), "nothing sent"
+
+
 def test_the_name_is_checked_as_it_is_typed(new_context, case, watch, guard):
     """The owner's name, read through the field alone, is checked 2 s
     after the last keystroke, under the paused clock: nothing said before,

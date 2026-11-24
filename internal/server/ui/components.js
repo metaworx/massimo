@@ -731,10 +731,15 @@ document.addEventListener("click", (ev) => {
     if (!m.contains(ev.target)) m.open = false;
   }
 });
+// Escape closes every open menu, and where it closed one it marks the
+// event (preventDefault), so that a listener after this one that leaves a
+// place by Escape (the sign-in card the user opened, ui/src/signin/) leaves
+// it at the next Escape only: the menu first, as everywhere.
 document.addEventListener("keydown", (ev) => {
   if (ev.key !== "Escape") return;
   for (const m of document.querySelectorAll("details.menu[open]")) {
     m.open = false;
+    ev.preventDefault();
     if (m.contains(document.activeElement)) m.querySelector("summary").focus();
   }
 });

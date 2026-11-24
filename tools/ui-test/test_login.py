@@ -5,8 +5,8 @@ token, as the operator run.sh creates (password op-pass). A page error
 fails the test (the guard); the console is not watched, since the
 page's first requests without a token are refused on purpose."""
 from conftest import TOKEN, URL, api_call
-from helpers import (assert_login_card_centred, assert_login_row, frames, named_buttons, open_personal_page, scroll_settled, show_view,
-                     sign_out, wait_until)
+from helpers import (ApiReads, assert_login_card_centred, assert_login_row, frames, named_buttons, open_personal_page, scroll_settled,
+                     show_view, sign_out, wait_held, wait_until)
 
 
 def test_sign_in_and_out(new_context, case, watch, guard):
@@ -336,6 +336,82 @@ def test_sign_in_is_busy_until_answered(new_context, case, watch, guard):
         "Sign in stops turning once the answer is in"
     sign_out(page)
     assert wait_until(page, "document.getElementById('login-dialog').open", 5), "signed out at the end"
+
+
+WRONG = {"en": "Wrong name or password.", "de": "Falscher Name oder falsches Passwort."}
+DIALOG_OPEN = "document.getElementById('login-dialog').open"
+
+
+def test_a_wrong_password_in_the_pages_language(new_context, case, watch, guard):
+    """A wrong password is said in the case's language, not with the
+    server's English words. Fails on the page before: "Nicht angemeldet:
+    wrong user or password" (the walk-through of AP LooseEnds, finding 2).
+    And Escape leaves no sign-in the server asks for: a forward guard, as
+    Escape did nothing in the card before (AP LooseEnds, D3)."""
+    page = new_context().new_page()
+    guard.page = page
+    page.set_default_timeout(5000)
+    page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+    page.goto(URL)
+    assert wait_until(page, DIALOG_OPEN, 5), "the sign-in dialog opens"
+    page.locator("#login-user").fill("operator")
+    page.locator("#login-password").fill("wrong")
+    page.locator("#login-form button[type=submit]").click()
+    assert wait_until(page, "!document.getElementById('login-error').classList.contains('hidden')", 5), "a wrong password is refused"
+    said = page.locator("#login-error").inner_text()
+    assert said == WRONG[case.lang], f"said in the page's language: {said!r}"
+    page.keyboard.press("Escape")
+    frames(page)
+    assert page.evaluate(DIALOG_OPEN), "Escape leaves no sign-in the server asks for"
+
+
+def test_a_keys_second_enter_signs_in_once(new_context, case, watch, guard):
+    """Two Enters in the API key's form, the card opened on a running page
+    as a refused request opens it: Sign in turns while the key signs in,
+    and the sign-in's reads of who is in go once each, the check of who
+    signed in (settleSignIn) and the page's read after it (afterLogin):
+    two, counted once the page has started again. The test holds the
+    first. Fails on the page before: no busy state, and each Enter settled
+    the sign-in, three reads."""
+    page = new_context().new_page()
+    guard.page = page
+    page.set_default_timeout(5000)
+    page.on("pageerror", lambda e: watch.problems.append(f"page error: {e}"))
+    page.goto(URL)
+    sign_in(page, "operator", "op-pass")
+    page.evaluate("() => { askLogin(); }")
+    assert wait_until(page, DIALOG_OPEN, 5), "the sign-in opens on the running page"
+    page.locator("#login-ways .login-way[data-way='key']").click()
+    page.locator("#login-token").fill(TOKEN)
+    held, mes, tickets = [], [], []
+
+    def me(route):
+        if route.request.method != "GET":
+            return route.continue_()
+        mes.append(route.request.url)
+        if len(mes) == 1:
+            held.append(route)
+            return
+        route.continue_()
+
+    page.route("**/api/v1/me", me)
+    page.on("request", lambda r: tickets.append(r.url) if r.method == "POST" and r.url.endswith("/events/ticket") else None)
+    reads = ApiReads(page)
+    page.evaluate("() => { const f = document.getElementById('login-key-form'); f.requestSubmit(); f.requestSubmit(); }")
+    assert wait_held(page, held), "the check of who signed in"
+    submit = page.locator("#login-key-form button[type=submit]")
+    assert submit.evaluate("(b) => b.classList.contains('busy') && b.disabled && b.getAttribute('aria-busy') === 'true'"), \
+        "Sign in turns while the key signs in"
+    held.pop().continue_()
+    assert wait_until(page, f"!({DIALOG_OPEN})", 10), "signed in with the key"
+    assert wait_held(page, tickets, 10), "the page started again: its stream's ticket"
+    assert reads.answered(), f"the page's reads answered: {reads.open}"
+    assert len(mes) == 2, f"one check of who signed in and one read after it: {len(mes)} reads of /api/v1/me"
+    assert page.evaluate("state.me.token.kind") == "api", "in with the key"
+    assert not submit.evaluate("(b) => b.classList.contains('busy')"), "Sign in stops turning"
+    page.unroute("**/api/v1/me")
+    sign_out(page)
+    assert wait_until(page, DIALOG_OPEN, 5), "signed out at the end"
 
 
 TITLE = {"en": "Sign in", "de": "Anmelden"}

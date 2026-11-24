@@ -14,9 +14,10 @@
  * Skip for now, which holds for the page's load (AP FirstOwner, D10),
  * and the card turned to the sign-in where the server has users after
  * all; the step of the first owner's place, the form or the confirmation
- * that keeps the server open (AP FirstOwner, Block 3), its line, and
+ * that keeps the server open (AP FirstOwner, Block 3), its line,
  * whether a request of the card is under way, which keeps every control
- * that ends the card off. No name, password or key typed is kept here: the card's fields
+ * that ends the card off, and whether the card is open, for Escape, which
+ * leaves a card the user opened (AP LooseEnds, D3). No name, password or key typed is kept here: the card's fields
  * are not controlled (UiParts D210), read at the submit and emptied at
  * each opening.
  */
@@ -39,9 +40,10 @@ export type OwnerStep = "form" | "keep";
 /** BANNER is the browser's key for the open server's warning hidden, per origin and so per server, while there is no owner (AP FirstOwner, D2, D38). */
 const BANNER = "massimo.openBanner";
 
-/** The card's state; opened counts the openings, owner says the first owner's form is shown instead of the ways, focus the focus asked for. */
+/** The card's state; opened counts the openings, shown says the card is open, owner says the first owner's form is shown instead of the ways, focus the focus asked for. */
 export const card = live({
   opened: 0,
+  shown: false,
   owner: false,
   way: "password" as Way,
   said: null as Outcome | null,
@@ -71,6 +73,17 @@ let skipped = false;
 
 /** The choice the login by fingerprint not kept waits for: true Try again, false Sign in without it, null dropped. */
 let choose: ((again: boolean | null) => void) | null = null;
+
+/**
+ * leaves says whether Escape leaves the card now, as "Back to the page"
+ * does (AP LooseEnds, D3): the first owner's place shown in a card the
+ * user opened from the running page (the banner, ☰, Users), at either of
+ * its steps, while no request of the card runs. Not the start's card, nor
+ * a sign-in the server asks for.
+ */
+export function leaves(): boolean {
+  return card.shown && card.owner && card.byUser && !card.working;
+}
 
 /** askFocus asks for the focus on one of the card's places, given in the drawing that follows. */
 export function askFocus(on: FocusOn): void {
@@ -106,6 +119,7 @@ export function open(on: Way | "owner", said: string, ask: SignInAsk): void {
   card.ownerSaid = null;
   card.keepSaid = null;
   card.providersSaid = said ? { text: said, ok: false } : null;
+  card.shown = true;
   card.opened++;
   askFocus(on === "owner" ? "owner" : "way");
 }
@@ -205,15 +219,19 @@ export function creationEnded(session: boolean): void {
   if (turn) askLogin();
 }
 
-/** skip takes Skip for now: the card closes, as a dismissal, and asks no more in this load (AP FirstOwner, D10). */
+/**
+ * skip takes Skip for now: the card closes, as a dismissal, and asks no
+ * more in this load (AP FirstOwner, D10). On the user's own opening it is
+ * "Back to the page", and Escape too (leaves, AP LooseEnds, D3).
+ */
 export function skip(): void {
   if (!card.byUser) skipped = true; // "Back to the page" on the user's own opening marks nothing (D36)
   const back = asker;
   asker = null;
   if (asking) asking.dismiss();
   // the page shown again in this turn, dismiss having taken the class signed-out away: the control that asked, which
-  // was in the page all along, takes the focus in the handler of the user's action (a drawing that shows an element
-  // gives it in a layout effect)
+  // was in the page all along, takes the focus in the handler of the user's action, a click or Escape (a drawing that
+  // shows an element gives it in a layout effect)
   if (back && back.isConnected) back.focus();
 }
 
@@ -235,6 +253,7 @@ export function closed(): void {
   dropChoice();
   asking = null;
   asker = null;
+  card.shown = false;
 }
 
 /** ask is the sign-in the card answers now, taken at a submit's start; null while none is open. */

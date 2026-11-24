@@ -16,6 +16,10 @@ which is chosen from the start once the page has seen a server without a store
 ask for no key (its only way in is `MASSIMO_API_TOKEN`),
 the field of the form shown in focus.
 A screen reader names the row's group "Sign in with"; no label shows it.
+A wrong name or password is said in the page's language,
+any other refusal, too many attempts for example, in the server's words.
+**Sign in** turns while it signs in, by the password or by a key,
+and a second Enter meanwhile sends nothing.
 The password form holds the one password field, its fields named,
 so that a password manager such as KeePassXC fills it.
 Every password field of the page, the sign-in's, the first owner's two,
@@ -118,6 +122,9 @@ its name, its password typed twice and, in the app, the switch and Cancel;
 its ☰ as at a sign-in, no provider.
 Its fields are emptied at an opening alone, never when the card closes,
 so that a password manager finds what was typed (FirstOwner D43);
+what Create the owner finds wrong is said alone,
+the focus on the field to change: the name, or Again where the two passwords
+differ; a missing password the browser refuses itself, its focus on Password;
 under the form, **Skip for now**, which shows the page as it is for this load,
 and the next load asks again,
 and **Keep it open…**, where the server is not kept open already.
@@ -181,6 +188,12 @@ a read of it refused while the owner is being made waiting for the sign-in;
 **Back to the page**, in Skip for now's place, closes the card,
 starts both again and gives the focus back to what opened it,
 marking nothing as skipped (FirstOwner D36);
+Escape does the same, on the form and on the confirmation that keeps the
+server open, but not while a request of the card runs,
+and where the card's ☰ is open the first Escape closes the ☰ alone
+(AP LooseEnds, D3);
+the card at the page's start and a sign-in the server asks for
+are not left by Escape;
 after Create the owner the page it was opened on is shown again,
 read anew as the owner (FirstOwner D37).
 A request refused while the owner is being made waits for the sign-in it ends in,
@@ -1816,7 +1829,7 @@ settings forms and have none of it.
   with **Create the owner…**, which opens the sign-in card with its form,
   and no password sign-in, no list and no Add a user;
   while the server is kept open (Keep it open… of the sign-in card),
-  **This server is kept open without an owner** follows, on:
+  **Keep this server open without an owner** follows, on:
   turned off, it is saved at once and stays in sight, off, for that showing,
   with the line that the page asks for the owner again at its next load;
   who is in is read again then, by the one read that asks for nobody,
@@ -2233,9 +2246,10 @@ A `data-help` slot of a card's head gets its help button from `app.js`
 `go test ./internal/server` holds every id a plain script looks up to the skeleton's
 (`TestUIPage`), and refuses a plain script's `document.querySelector` and
 `document.querySelectorAll` but of what every element of a kind shares, a part's too:
-the menus (`details.menu[open]`: one open at a time, closed by Escape
-and by a click outside, `components.js`) and the help slots of the cards' heads
-(`[data-help]`, `initHelpSlots` of `app.js`).
+the menus (`details.menu[open]`: one open at a time, closed by Escape,
+which marks an Escape that closed one so that a part that leaves its place
+by Escape leaves it at the next, and by a click outside, `components.js`)
+and the help slots of the cards' heads (`[data-help]`, `initHelpSlots` of `app.js`).
 Through a `root` the document is by default, two more look over the whole page,
 which the test does not see: `applyI18n` (`[data-i18n]` and the templates'),
 which finds none in a part, and `brandMarks` (`[data-brand]`),

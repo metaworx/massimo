@@ -29,7 +29,12 @@
  * finishSignIn of login.js goes on as they went on. The card is never
  * drawn anew: its buttons, their busy states and its fields stay through
  * every draw, the app's status, the providers, the language, a 401's
- * askLogin, which hands out the same opening.
+ * askLogin, which hands out the same opening. The server's 401 is said
+ * as a wrong name or password in the page's language, a sign-in that
+ * took too long included, which a new try passes; any other refusal (too
+ * many attempts, a server not ready) with the server's words; Sign in
+ * turns while a key signs in as while a password does, so that a second
+ * Enter meanwhile signs in no second time (AP LooseEnds, Block 2).
  */
 
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
@@ -86,6 +91,7 @@ export function Card() {
   const servers = !!appConnect();
   const [keep, setKeep] = useState(false);
   const pw = useBusy();
+  const kb = useBusy();
   const fp = useBusy();
   const userRef = useRef<HTMLInputElement>(null);
   const passRef = useRef<HTMLInputElement>(null);
@@ -132,7 +138,10 @@ export function Card() {
       try {
         session = await signIn(user, password);
       } catch (e) {
-        fail(t("login.failed", { error: (e as Error).message }));
+        const err = e as Error & { status?: number };
+        // the server's 401 in the page's language; any other refusal (too many attempts, a server not ready) says more
+        // in the server's own words than a key would
+        fail(err.status === 401 ? t("login.wrong") : t("login.failed", { error: err.message }));
         askFocus("password");
         return;
       }
@@ -147,11 +156,14 @@ export function Card() {
   };
   const submitKey = (ev: Event) => {
     ev.preventDefault();
+    if (kb.busy) return; // a second Enter while it signs in
     const a = ask();
     const key = (keyRef.current?.value || "").trim();
     if (!key) return;
-    setToken(key);
-    if (a) finishSignIn(a);
+    kb.run(async () => {
+      await setToken(key); // in the app, the key kept by the bridge before the sign-in's reads go out with it
+      if (a) await finishSignIn(a);
+    });
   };
   // the login by fingerprint: a session from the key the app keeps
   const fingerprint = () => fp.run(async () => {
@@ -230,7 +242,7 @@ export function Card() {
           <label><span>{t("login.token")}</span> <input ref={keyRef} type="password" id="login-token" name="api-key" autocomplete="off" /></label>
           <div class="actions">
             <button type="button" id="login-key-cancel" class={"form-cancel" + hid(!servers)} onClick={toServers}>{t("action.cancel")}</button>
-            <button type="submit" class="primary">{t("login.submit")}</button>
+            <button type="submit" {...busyProps("primary", kb.busy)}>{t("login.submit")}</button>
           </div>
         </form>
       </div>
