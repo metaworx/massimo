@@ -1803,6 +1803,8 @@
   "backup.taken": "Back-up bewaard.",
   "backup.none": "Nog geen back-ups bewaard.",
   "backup.unchanged": "Geen wijziging sinds de nieuwste back-up: de server maakt er een na een wijziging.",
+  "backup.notServed": "niet bediend",
+  "backup.notServedNote": "Deze Cube wordt niet bediend, dus geen back-up en geen herstel. Zijn back-ups kunnen worden gedownload, vergeleken en verwijderd; om er een op een andere Cube te zetten, download hem en kies Herstellen uit bestand… bij die Cube.",
   "backup.badge.kept.one": "{n} bewaard",
   "backup.badge.kept.other": "{n} bewaard",
   "backup.noHistory": "Deze Cube staat niet in de opslag van de server, dus de server bewaart er geen back-ups van.",

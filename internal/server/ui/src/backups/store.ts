@@ -15,12 +15,16 @@
  * it is now or of a stored backup, a restore's plan (POST
  * …/restore/plan) and its steps sent (POST …/restore), followed on the
  * event stream. Each box has its own message line and its format. An
- * answer after a sign-out is dropped (shared/session.ts).
+ * answer after a sign-out is dropped (shared/session.ts). The Cubes the
+ * server keeps backups of and does not serve (unserved) are its list of
+ * them (GET /api/v1/backups/unserved, AP BackupWatch v1.0, D4-B and
+ * D6-A), read when System settings is shown and after a delete, also
+ * those discovery does not hear.
  */
 
-import type { BackupList, RestorePlan, StoredBackup } from "../api";
+import type { BackupList, RestorePlan, StoredBackup, UnservedCube } from "../api";
 import type { Outcome } from "../shared/action";
-import { liveMap } from "../shared/live";
+import { live, liveMap } from "../shared/live";
 import { cubePath } from "../shared/path";
 import { session, stillSession } from "../shared/session";
 import { fmtWhen } from "../shared/time";
@@ -86,6 +90,32 @@ export function boxOf(place: string, serial: string) {
 /** say shows text in a box's message line, ok green, else red; no text hides it; nothing where n, the session it was asked in, has ended. */
 export function say(place: string, serial: string, text: string, ok?: boolean, n = session()): void {
   if (stillSession(n)) boxOf(place, serial).said = text ? { text, ok: !!ok } : null;
+}
+
+/** The Cubes the server keeps backups of and does not serve, as GET /api/v1/backups/unserved last listed them, by serial. */
+export const unservedList = live({ cubes: [] as UnservedCube[] });
+
+/**
+ * unserved lists the Cubes the server keeps backups of and does not
+ * serve, whose routes still list, give out, compare and delete them; a
+ * Cube served since the list was read is left out, its fold being a
+ * served Cube's.
+ */
+export function unserved(): UnservedCube[] {
+  return unservedList.cubes.filter((c) => !state.cubes.some((s) => s.serial === c.serial));
+}
+
+/** loadUnserved reads the Cubes not served that keep backups; a read that fails leaves their folds as they were. */
+export async function loadUnserved(): Promise<void> {
+  if (!can("backup")) return;
+  const n = session();
+  let r: UnservedCube[] | null;
+  try {
+    r = await api<UnservedCube[]>("GET", "api/v1/backups/unserved");
+  } catch {
+    return; // the folds as they were; each box says what its own reads meet
+  }
+  if (stillSession(n)) unservedList.cubes = r || [];
 }
 
 /** running says whether a restore sent to the Cube runs: its Restore… and Restore from file… are off meanwhile, in both places. */
@@ -216,6 +246,8 @@ export async function deleteBackup(place: string, serial: string, b: StoredBacku
     const { [b.id]: _gone, ...rest } = c.diff;
     c.diff = rest;
     await refreshBackups(serial);
+    // a Cube not served whose last backup went has no fold any more
+    if (unservedList.cubes.some((u) => u.serial === serial)) await loadUnserved();
     return true;
   } catch (e) {
     say(place, serial, t("backup.failed", { error: (e as Error).message }), false, n);
@@ -337,4 +369,5 @@ export function forgetBackups(): void {
   cubeData.clear();
   boxUI.clear();
   foldUI.clear();
+  unservedList.cubes = [];
 }

@@ -1989,10 +1989,26 @@ Implemented on 2026-11-07 (AP StoreBackups v1.0).
   `backups.auto_max` (never below `auto_min`), `backups.keep_days_auto`,
   `backups.keep_days_manual`, `backups.keep_newest`.
   A Cube without a row in the store has none of it (503).
+- A Cube no longer served (AP BackupWatch v1.0, Block 3, D4-B, D5-A, D6-A):
+  a row of the store that no runtime serves,
+  taken out of the configuration or only found,
+  keeps its backups, the newest `backups.keep_newest` whatever their age.
+  Its list (without `changed` and `due`), the file, the diff and the delete
+  find it by its row;
+  `POST …/backups` and the restore answer 409,
+  as it takes no backup and no restore.
+  `GET /api/v1/cubes` gives each Cube's count kept, `backups`,
+  and `GET /api/v1/backups/unserved` lists the rows not served that keep backups,
+  with the count and the newest's time,
+  both from one grouped query by serial (`KeptBackups`).
 - UI: Settings → Backup and restore: the download as YAML or JSON,
   a backup by hand, the list with download, the comparison with the one before,
   restore and delete, a restore from a file; a restore shows its plan first,
   then each step as the Cube took it.
+  After the served Cubes,
+  a fold for each Cube that route lists, also one no longer on the network,
+  marked not served: download, comparison and delete, no backup and no restore;
+  one of them goes onto another Cube by that Cube's restore from a file.
 - Tests: the store's round trip,
   the prune by reason and age and the migration's copy;
   no id given out again after a prune or a purged tombstone,
@@ -2013,7 +2029,14 @@ Implemented on 2026-11-07 (AP StoreBackups v1.0).
   the routes and the settings' check;
   a restore keeping `before_restore` and `upload`, by id, and clean after;
   the diff of a backup against itself and an edited copy;
-  the pytest suite's panel.
+  a found Cube's backups listed, given out in both formats,
+  compared and deleted,
+  409 for its backup and its restore, and the counts by serial;
+  the list of the rows not served,
+  without the served Cube, a row without backups, a tombstone or a removed row,
+  and its capability;
+  the pytest suite's panel,
+  with the fold of a Cube not served that discovery does not hear.
 - Decisions, the owner's of 2026-11-07: the whole panel in this stage (D1);
   backups after a change with a quiet window and a latest (D2,
   D3 folded into it); the five settings (D4); deleting needs `restore` (D5);

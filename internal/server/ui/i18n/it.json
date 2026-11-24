@@ -1804,6 +1804,8 @@
   "backup.taken": "Backup conservato.",
   "backup.none": "Ancora nessun backup conservato.",
   "backup.unchanged": "Nessuna modifica dall'ultimo backup: il server ne esegue uno dopo una modifica.",
+  "backup.notServed": "non servito",
+  "backup.notServedNote": "Questo Cube non è servito, quindi niente backup né ripristino. I suoi backup si possono scaricare, confrontare ed eliminare; per metterne uno su un altro Cube, scaricalo e scegli Ripristina da file… su quel Cube.",
   "backup.badge.kept.one": "{n} conservato",
   "backup.badge.kept.other": "{n} conservati",
   "backup.noHistory": "Questo Cube non è nell'archivio del server, quindi il server non ne conserva backup.",

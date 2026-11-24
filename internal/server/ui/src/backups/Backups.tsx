@@ -13,11 +13,17 @@
  * Download, Restore…, Compare with the one before and Delete, which asks
  * in its row, under them that nothing changed since the newest where none
  * is pending, and the restore shown with its steps and Send, then how
- * each step went. A restore is a command, no settings form.
+ * each step went. A restore is a command, no settings form. After the
+ * served Cubes' folds, a fold for each Cube the server keeps backups of
+ * and does not serve, marked so, whose box keeps the format, the backups
+ * kept with Download, Compare with the one before and Delete, and a note
+ * that a backup of it goes onto another Cube by that Cube's Restore from
+ * file…: no Download backup, Take a backup now, Restore… or Restore from
+ * file…, which need the Cube served (AP BackupWatch v1.0, D4-B).
  */
 
 import { useEffect, useRef } from "preact/hooks";
-import type { Cube, StoredBackup } from "../api";
+import type { Cube, StoredBackup, UnservedCube } from "../api";
 import { CubeIcon, CubeSign } from "../model/cube";
 import { Badge, ResultLine } from "../shared/badge";
 import { hid } from "../shared/cls";
@@ -30,6 +36,7 @@ import { useLook } from "../shared/look";
 import { isShown } from "../shared/pages";
 import {
   boxOf, closePlan, compareBackup, deleteBackup, downloadNow, downloadStored, foldUI, of, planFile, planStored, readUnloaded, running, sendRestore, takeBackup,
+  unserved,
 } from "./store";
 
 /** Diff is what changed from the backup before: the planner's steps. */
@@ -44,8 +51,12 @@ function Diff({ d }: { d: { steps?: { what?: string }[] } }) {
   );
 }
 
-/** Row is a stored backup: when, why, the size and who, the note, and its actions; older is the one before it, to compare with. */
-function Row({ place, serial, b, older }: { place: string; serial: string; b: StoredBackup; older?: StoredBackup }) {
+/**
+ * Row is a stored backup: when, why, the size and who, the note, and its
+ * actions; older is the one before it, to compare with; a Cube not served
+ * has no Restore….
+ */
+function Row({ place, serial, b, older, served }: { place: string; serial: string; b: StoredBackup; older?: StoredBackup; served: boolean }) {
   useLook();
   const ask = useAsk<HTMLButtonElement>();
   const diff = of(serial).diff[b.id];
@@ -61,7 +72,7 @@ function Row({ place, serial, b, older }: { place: string; serial: string; b: St
       <p class={"backup-note muted small" + hid(!b.note)}>{b.note}</p>
       <div class="actions backup-actions">
         <BusyButton cls="small" label={t("backup.downloadOne")} run={() => downloadStored(place, serial, b)} />
-        <BusyButton cls="small needs-restore" label={t("backup.restore")} off={running(serial)} run={() => planStored(place, serial, b)} />
+        {served && <BusyButton cls="small needs-restore" label={t("backup.restore")} off={running(serial)} run={() => planStored(place, serial, b)} />}
         {older && <BusyButton cls="small" label={t("backup.compare")} run={() => compareBackup(place, serial, b, older)} />}
         <button ref={ask.ref} type="button" class="small needs-restore" onClick={ask.ask}>{t("action.delete")}</button>
       </div>
@@ -140,9 +151,11 @@ const placeView: Record<string, string> = { cube: "cube", sys: "system" };
  * Box is a Cube's box for a place ("cube" or "sys"), which its ids carry,
  * as both pages may hold the same Cube's. Drawn on the page shown before
  * its list was read, as on a load onto the page, which shows it before it
- * knows its Cubes, it reads the list itself, once.
+ * knows its Cubes, it reads the list itself, once. A Cube not served
+ * (served false) has the format, a note and its backups kept, and none of
+ * what needs it served.
  */
-export function Box({ serial, place }: { serial: string; place: string }) {
+export function Box({ serial, place, served = true }: { serial: string; place: string; served?: boolean }) {
   useLook();
   const c = of(serial);
   const ui = boxOf(place, serial);
@@ -154,22 +167,25 @@ export function Box({ serial, place }: { serial: string; place: string }) {
   const due = !!(c.changed && c.due);
   const list = c.list;
   // a clean Cube's list, nothing pending: why no newer backup follows
-  const clean = loaded && c.history && list.length > 0 && !c.changed && !c.due;
+  const clean = served && loaded && c.history && list.length > 0 && !c.changed && !c.due;
   const format = "backup-format-" + place + "-" + serial;
   return (
     <div class="backup-box" data-serial={serial}>
       <div class="backup-bar">
         <Select label={t("backup.format")} id={format} options={[["yaml", "YAML"], ["json", "JSON"]]} value={ui.format} onChange={(v) => { ui.format = v; }} />
-        <BusyButton cls="backup-download" label={t("backup.download")} run={() => downloadNow(place, serial)} />
-        <BusyButton cls={"backup-take" + hid(!c.history)} label={t("backup.take")} run={() => takeBackup(place, serial)} />
-        <FileButton cls="restore-file needs-restore" label={t("restore.fromFile")} accept=".json,.yaml,.yml,application/json,application/yaml" off={running(serial)}
-          onFile={(file) => planFile(place, serial, file)} />
+        {served && <BusyButton cls="backup-download" label={t("backup.download")} run={() => downloadNow(place, serial)} />}
+        {served && <BusyButton cls={"backup-take" + hid(!c.history)} label={t("backup.take")} run={() => takeBackup(place, serial)} />}
+        {served && (
+          <FileButton cls="restore-file needs-restore" label={t("restore.fromFile")} accept=".json,.yaml,.yml,application/json,application/yaml" off={running(serial)}
+            onFile={(file) => planFile(place, serial, file)} />
+        )}
       </div>
+      {!served && <p class="backup-unserved-note muted small">{t("backup.notServedNote")}</p>}
       <p class={"backup-pending muted small" + hid(!due)}>{due ? t("backup.pending", { changed: fmtWhen(c.changed || ""), due: fmtWhen(c.due || "") }) : ""}</p>
       <div class="backups-list">
         {c.loaded && !c.history && <p class="muted small">{t("backup.noHistory")}</p>}
         {c.loaded && c.history && !list.length && <p class="muted small">{t("backup.none")}</p>}
-        {c.loaded && c.history && list.map((b, i) => <Row key={b.id} place={place} serial={serial} b={b} older={list[i + 1]} />)}
+        {c.loaded && c.history && list.map((b, i) => <Row key={b.id} place={place} serial={serial} b={b} older={list[i + 1]} served={served} />)}
         {clean && <p class="backup-clean muted small">{t("backup.unchanged")}</p>}
       </div>
       <div class="restore-box"><PlanBox place={place} serial={serial} /></div>
@@ -203,11 +219,39 @@ function CubeFold({ c }: { c: Cube }) {
   );
 }
 
-/** SystemBackups is System settings' card: a fold per Cube, or that none is configured. */
+/**
+ * UnservedFold is the fold in System settings of a Cube the server keeps
+ * backups of and does not serve: the cube, its name where its row has
+ * one, its serial, that it is not served and the count kept in its head,
+ * closed at first, and its box without what needs the Cube served.
+ */
+function UnservedFold({ c }: { c: UnservedCube }) {
+  useLook();
+  const ui = foldUI.of(c.serial);
+  const kept = keptText(c.serial);
+  return (
+    <Fold cls="panel backup-fold backup-unserved" open={ui.open ?? false} onToggle={(o) => { ui.open = o; }} data={{ serial: c.serial }}
+      summary={<FoldHead before={<CubeIcon />} name={c.name || undefined} mono={c.serial}
+        badges={[<Badge key="unserved" kind="mode" text={t("backup.notServed")} />, kept && <Badge key="kept" kind="mode" text={kept} />]} />}>
+      <Box serial={c.serial} place="sys" served={false} />
+    </Fold>
+  );
+}
+
+/**
+ * SystemBackups is System settings' card: a fold per Cube served, or that
+ * none is configured, then a fold per Cube not served that has backups.
+ */
 export function SystemBackups() {
   useLook();
-  if (!state.cubes.length) return <p class="muted small">{t("cubes.none")}</p>;
-  return <>{state.cubes.map((c) => <CubeFold key={c.serial} c={c} />)}</>;
+  const others = unserved();
+  return (
+    <>
+      {!state.cubes.length && <p class="muted small">{t("cubes.none")}</p>}
+      {state.cubes.map((c) => <CubeFold key={c.serial} c={c} />)}
+      {others.map((c) => <UnservedFold key={c.serial} c={c} />)}
+    </>
+  );
 }
 
 /** CubeBackup is Cube settings' card: the chosen Cube's box, nothing where none is chosen. */

@@ -10,12 +10,15 @@ open, each with its count; a fold kept as it was when the page is shown
 again. A load onto either page shows the Cube's list, read once, though
 the page is shown before it knows its Cubes; under a clean Cube's list
 a line says why no newer backup follows, and none does while one is
-pending. The four cases share the server, so each removes what it
-took."""
+pending. A Cube the server keeps backups of and does not serve, by the
+server's list of them, has a fold after the served Cubes', without what
+needs the Cube served. The four cases share the server, so each removes
+what it took."""
+import json
 from datetime import datetime, timedelta, timezone
 
 from conftest import api_call
-from helpers import assert_busy, busy_state, hold, named_buttons, show_view, wait_held, wait_until
+from helpers import assert_busy, busy_state, hold, named_buttons, safe_route, show_view, wait_held, wait_until
 
 SERIAL = "KEQ0000100"
 SECOND = "KEQ0000200"
@@ -237,4 +240,133 @@ def test_clean_cube_says_why_no_backup_follows(page, case, reads):
             assert rows(page, len(kept()), box), f"{view}: the list still shown"
     finally:
         reads.clear(LIST)
+    show_view(page, "tiles")
+
+
+# A Cube the server keeps backups of and does not serve, which discovery
+# does not hear, and one found without backups: the list of the Cubes not
+# served, the Cubes' list and the first's backups are the test's, so that
+# the shared server keeps no row or backup of either.
+OTHER = "KEQ0000300"
+EMPTY = "KEQ0000301"
+OTHER_NAME = "Old hall"
+OTHER_BOX = f'#backups-cubes > .backup-fold[data-serial="{OTHER}"] .backup-box'
+OTHER_STORED = [
+    {"id": 902, "taken_at": "2026-11-20T10:00:00Z", "reason": "manual", "format": "yaml", "size": 24000, "sha256": "ab" * 32, "note": "the old Cube"},
+    {"id": 901, "taken_at": "2026-11-09T10:00:00Z", "reason": "auto", "format": "json", "size": 23990, "sha256": "cd" * 32},
+]
+
+
+def found_cube(serial, backups):
+    """A Cube found on the network and not served, as GET /api/v1/cubes lists it, with the backups the server keeps of it."""
+    return {"serial": serial, "kind": "cube", "configured": False, "address": "192.0.2.30", "rf_address": "0a0302", "firmware": "1.1.3",
+            "found_at": "2026-11-24T08:00:00+01:00", "last_seen": "2026-11-24T08:00:00+01:00", "backups": backups}
+
+
+def test_backups_of_a_cube_not_served(page, case, reads):
+    """After the served Cube's fold, one for the Cube not served that
+    keeps backups, from the server's list of them, though discovery does
+    not hear it, and none for a found Cube without backups: closed at
+    first, its name, serial and that it is not served, its count in its
+    head and in the card's; its box has the format, a note and the
+    backups with Download, Compare with the one before and Delete, and no
+    Download backup, Take a backup now, Restore… or Restore from file…; a
+    backup downloads, compares and is deleted, after which the list of
+    the Cubes not served is read again, and the last one deleted takes
+    the fold away."""
+    assert kept(), "the Cube has run.sh's backup by hand"
+    stored = list(OTHER_STORED)
+    unserved_reads = []
+
+    def answer_unserved(route):
+        if route.request.method != "GET":
+            route.fallback()
+            return
+        unserved_reads.append(route.request.url)
+        listed = [{"serial": OTHER, "name": OTHER_NAME, "backups": len(stored), "newest": stored[0]["taken_at"]}] if stored else []
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(listed))
+
+    def answer_list(route):
+        if route.request.method != "GET":
+            route.fallback()
+            return
+        route.fulfill(status=200, content_type="application/json", body=json.dumps({"backups": stored}))
+
+    def answer_file(route):
+        method, url = route.request.method, route.request.url
+        if method == "DELETE":
+            gone = int(url.rstrip("/").rsplit("/", 1)[1])
+            stored[:] = [b for b in stored if b["id"] != gone]
+            route.fulfill(status=204, body="")
+        elif method != "GET":
+            route.fallback()
+        elif "/diff?" in url:
+            route.fulfill(status=200, content_type="application/json",
+                          body=json.dumps({"steps": [{"what": "write room and device names", "radio": False}], "notes": [], "radio_commands": 0}))
+        else:
+            route.fulfill(status=200, content_type="application/yaml", body="version: 1\n",
+                          headers={"Content-Disposition": f"attachment; filename=massimo-backup-{OTHER}-20261120-110000.yaml"})
+
+    folds = "#backups-cubes > .backup-fold"
+    routes = [("**/api/v1/backups/unserved", answer_unserved), (f"**/api/v1/cubes/{OTHER}/backups", answer_list),
+              (f"**/api/v1/cubes/{OTHER}/backups/**", answer_file)]
+    routed = [(pattern, safe_route(page, pattern, handler)) for pattern, handler in routes]
+    try:
+        reads.found(found_cube(EMPTY, 0))
+        page.evaluate("loadCubes()")
+        assert page.evaluate(f"!state.found.some((c) => c.serial === '{OTHER}') && state.found.some((c) => c.serial === '{EMPTY}')"), \
+            "the Cube not served is no found Cube"
+        show_view(page, "system")
+        assert wait_until(page, f"[...document.querySelectorAll('{folds}')].map((f) => f.dataset.serial).join() === '{SERIAL},{OTHER}'", 10), \
+            "the served Cube's fold, then the one not served with backups, none for the found one without"
+        fold = page.locator(f'{folds}[data-serial="{OTHER}"]')
+        assert fold.get_attribute("open") is None, "closed at first"
+        head = fold.locator(":scope > summary")
+        text = head.inner_text()
+        assert page.evaluate("t('backup.notServed')") in text and OTHER in text and OTHER_NAME in text, "its name and serial, marked not served"
+        count = page.evaluate("(n) => tn('backup.badge.kept', n)", len(stored))
+        assert wait_until(page, f"[...document.querySelectorAll('{folds}[data-serial=\"{OTHER}\"] > summary .flag')].some((b) => b.textContent === {count!r})", 10), \
+            "its count in its head"
+        total = page.evaluate("(n) => tn('backup.badge.kept', n)", len(kept()) + len(stored))
+        assert wait_until(page, f"document.querySelector('#sys-backup > .section-head .section-badges').innerText === {total!r}", 10), \
+            "the card counts its backups too"
+        head.click()
+        box = page.locator(OTHER_BOX)
+        assert rows(page, len(stored), OTHER_BOX), "its backups listed"
+        assert box.locator(f"select#backup-format-sys-{OTHER}").count() == 1, "the format"
+        assert box.locator(".backup-download, .backup-take, .restore-file").count() == 0, "no Download backup, Take a backup now or Restore from file…"
+        assert box.locator(".backup-unserved-note").inner_text() == page.evaluate("t('backup.notServedNote')"), "the note"
+        assert box.locator(".backup-clean, .restore-plan").count() == 0, "no clean Cube's line, no plan"
+        words = page.evaluate("[t('backup.downloadOne'), t('backup.compare'), t('action.delete')]")
+        newest, oldest = box.locator(".backups-list .backup-row").nth(0), box.locator(".backups-list .backup-row").nth(1)
+        assert newest.locator(".backup-actions button").all_inner_texts() == words, "Download, Compare with the one before and Delete"
+        assert oldest.locator(".backup-actions button").all_inner_texts() == [words[0], words[2]], "the oldest without Compare"
+        named_buttons(page, "the fold of a Cube not served")
+
+        with page.expect_download() as file:
+            newest.locator(".backup-actions button").nth(0).click()
+        assert file.value.suggested_filename.startswith(f"massimo-backup-{OTHER}-"), file.value.suggested_filename
+        newest.locator(".backup-actions button").nth(1).click()
+        newest.locator(".backup-diff").wait_for(state="visible", timeout=10000)
+        assert "write room and device names" in newest.locator(".backup-diff").inner_text(), "what changed from the one before"
+
+        mark = len(unserved_reads)
+        oldest.locator(".backup-actions button").last.click()
+        oldest.locator(".confirm-yes").click()
+        assert rows(page, 1, OTHER_BOX), "the backup deleted"
+        for _ in range(50):  # the route's handler runs while the page is waited on
+            if len(unserved_reads) > mark:
+                break
+            page.wait_for_timeout(100)
+        assert len(unserved_reads) > mark, "the list of the Cubes not served read again after the delete"
+        assert fold.count() == 1, "the fold kept while a backup is left"
+        row = box.locator(".backups-list .backup-row").nth(0)
+        row.locator(".backup-actions button").last.click()
+        row.locator(".confirm-yes").click()
+        assert wait_until(page, f"!document.querySelector('{folds}[data-serial=\"{OTHER}\"]')", 10), "the last one deleted, the fold gone"
+    finally:
+        reads.clear()
+        for pattern, handler in routed:
+            page.unroute(pattern, handler)
+        page.evaluate("loadCubes()")
     show_view(page, "tiles")

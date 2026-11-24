@@ -1802,6 +1802,8 @@
   "backup.taken": "Backup kept.",
   "backup.none": "No backups kept yet.",
   "backup.unchanged": "No change since the newest backup: the server takes one after a change.",
+  "backup.notServed": "not served",
+  "backup.notServedNote": "This Cube is not served, so it takes no backup and no restore. Its backups can be downloaded, compared and deleted; to put one onto another Cube, download it and choose Restore from file… on that Cube.",
   "backup.badge.kept.one": "{n} kept",
   "backup.badge.kept.other": "{n} kept",
   "backup.noHistory": "This Cube is not in the server's store, so the server keeps no backups of it.",

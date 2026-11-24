@@ -1855,6 +1855,8 @@
   "backup.taken": "Kopia zachowana.",
   "backup.none": "Brak zachowanych kopii.",
   "backup.unchanged": "Brak zmian od najnowszej kopii: serwer wykonuje ją po zmianie.",
+  "backup.notServed": "nieobsługiwany",
+  "backup.notServedNote": "Ten Cube nie jest obsługiwany, więc bez kopii i bez przywracania. Jego kopie można pobrać, porównać i usunąć; aby przenieść jedną na inny Cube, pobierz ją i wybierz Przywróć z pliku… na tamtym Cube.",
   "backup.badge.kept.one": "{n} zachowana",
   "backup.badge.kept.few": "{n} zachowane",
   "backup.badge.kept.many": "{n} zachowanych",

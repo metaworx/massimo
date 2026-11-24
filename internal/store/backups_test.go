@@ -86,6 +86,55 @@ func TestBackupsStored(t *testing.T) {
 	}
 }
 
+// The backup counts are by serial, of the rows that are not removed,
+// configured or only found: a tombstone does not count, a row without
+// a backup and a removed row are not listed; the kept list has the
+// same rows by serial, each with its newest backup's time.
+func TestBackupCounts(t *testing.T) {
+	t.Parallel()
+	s := open(t, t.TempDir())
+	ctx := context.Background()
+	served, _ := s.AddCube(ctx, Cube{Serial: "KEQ0000001", Configured: true, Name: "Hall"})
+	found, _, err := s.NoteDiscovered(ctx, Discovered{Serial: "KEQ0000002", Address: "192.0.2.2"})
+	if err != nil || found.Configured {
+		t.Fatalf("found: %+v %v", found, err)
+	}
+	s.AddCube(ctx, Cube{Serial: "KEQ0000003", Configured: true})
+	gone, _ := s.AddCube(ctx, Cube{Serial: "KEQ0000004", Configured: true})
+	body := []byte(`{"version": 1}`)
+	add := func(id int64) Backup {
+		t.Helper()
+		b, err := s.AddBackup(ctx, Backup{CubeID: id, Reason: ReasonManual, Format: "json"}, body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+	add(served.ID)
+	deleted := add(served.ID)
+	add(served.ID)
+	add(found.ID)
+	add(gone.ID)
+	if ok, err := s.DeleteBackup(ctx, served.ID, deleted.ID); !ok || err != nil {
+		t.Fatalf("delete: %v %v", ok, err)
+	}
+	if _, err := s.RemoveCube(ctx, gone.Serial, 0); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.BackupCounts(ctx)
+	if err != nil || len(got) != 2 || got["KEQ0000001"] != 2 || got["KEQ0000002"] != 1 {
+		t.Fatalf("counts: %v %v", got, err)
+	}
+	kept, err := s.KeptBackups(ctx)
+	if err != nil || len(kept) != 2 || kept[0].Serial != "KEQ0000001" || kept[0].Name != "Hall" || kept[0].Count != 2 ||
+		kept[1].Serial != "KEQ0000002" || kept[1].Name != "" || kept[1].Count != 1 {
+		t.Fatalf("kept: %+v %v", kept, err)
+	}
+	if newest, _, _ := s.NewestBackup(ctx, served.ID); !kept[0].Newest.Equal(newest.TakenAt) || kept[0].Newest.IsZero() {
+		t.Fatalf("the newest: %v, want %v", kept[0].Newest, newest.TakenAt)
+	}
+}
+
 // The prune keeps the newest backups.keep_newest of each Cube whatever
 // their age, and of the others removes an automatic one past
 // backups.keep_days_auto and any other past backups.keep_days_manual,

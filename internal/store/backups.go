@@ -198,6 +198,58 @@ func (s *Store) Backups(ctx context.Context, cubeID int64) ([]Backup, error) {
 	return out, rows.Err()
 }
 
+// CubeBackups is what the store keeps of one Cube row's backups: the
+// row's serial and name, how many are kept and when the newest was
+// taken.
+type CubeBackups struct {
+	Serial string
+	Name   string
+	Count  int
+	Newest time.Time
+}
+
+// KeptBackups lists every Cube row that is not removed and keeps a
+// backup, by serial, with its count kept, tombstones left out, and the
+// newest one's time, in one grouped query: the list of the Cubes counts
+// them (BackupCounts), and the Cubes not served are listed from it (AP
+// BackupWatch v1.0, D5-A, D6-A).
+func (s *Store) KeptBackups(ctx context.Context) ([]CubeBackups, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT c.serial, c.name, COUNT(*), MAX(b.taken_at) FROM backups b JOIN cubes c ON c.id = b.cube_id
+		WHERE b.deleted_at IS NULL AND c.deleted_at IS NULL GROUP BY c.id ORDER BY c.serial`)
+	if err != nil {
+		return nil, fmt.Errorf("store: kept backups: %w", err)
+	}
+	defer rows.Close()
+	out := []CubeBackups{}
+	for rows.Next() {
+		var c CubeBackups
+		var newest sql.NullString
+		if err := rows.Scan(&c.Serial, &c.Name, &c.Count, &newest); err != nil {
+			return nil, fmt.Errorf("store: kept backups: %w", err)
+		}
+		c.Newest = parseTime(newest)
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// BackupCounts counts the backups kept of every Cube row that is not
+// removed and has any, by the row's serial (KeptBackups): the list of
+// the Cubes says it per Cube, served or not (AP BackupWatch v1.0,
+// D5-A). A serial is the key since a found Cube is known by it alone,
+// and a live row has a serial of its own (cubes_serial).
+func (s *Store) BackupCounts(ctx context.Context) (map[string]int, error) {
+	kept, err := s.KeptBackups(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]int, len(kept))
+	for _, c := range kept {
+		out[c.Serial] = c.Count
+	}
+	return out, nil
+}
+
 // StoredBackup returns one of a Cube's backups, and whether it is there.
 func (s *Store) StoredBackup(ctx context.Context, cubeID, id int64) (Backup, bool, error) {
 	b, err := scanBackup(s.db.QueryRowContext(ctx, `SELECT `+backupColumns+backupFrom+` WHERE b.cube_id = ? AND b.id = ? AND b.deleted_at IS NULL`, cubeID, id))

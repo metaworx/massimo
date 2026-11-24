@@ -11,23 +11,32 @@
  * their page is shown, after every change and after a restore; a box
  * drawn on the page shown whose list has not loaded (a load onto the
  * page, which shows it before it knows its Cubes) reads it once, where no
- * read of it runs (Box, readUnloaded). The plain code calls
+ * read of it runs (Box, readUnloaded). After the served Cubes' folds,
+ * System settings has one for each Cube the server keeps backups of and
+ * does not serve (unserved), whose list the page's showing reads, and
+ * their backups as theirs are. The plain code calls
  * MassimoParts.backups (app.js selectCube and its stream); the cards'
- * heads count the backups kept.
+ * heads count the backups kept, System settings' those of the Cubes not
+ * served too.
  */
 
 import { useLayoutEffect } from "preact/hooks";
 import { mounter, register } from "../shared/region";
 import { CubeBackup, keptText, SystemBackups } from "./Backups";
-import { type RestoreEvent, boxUI, forgetBackups, of, refreshBackups, restoreEvent, resynced } from "./store";
+import { type RestoreEvent, boxUI, forgetBackups, loadUnserved, of, refreshBackups, restoreEvent, resynced, unserved } from "./store";
 import { cardBadges } from "../shared/card";
 import { isShown, onView } from "../shared/pages";
 import { can } from "../shared/me";
 import { useLook } from "../shared/look";
 
-/** The badges of System settings' card: every Cube's backups kept, once one list has come. */
+/** systemSerials are the Cubes of System settings' folds: the served ones, then those not served with backups. */
+function systemSerials(): string[] {
+  return [...state.cubes.map((c) => c.serial), ...unserved().map((c) => c.serial)];
+}
+
+/** The badges of System settings' card: every fold's backups kept, once one list has come. */
 function systemCount(): string {
-  const kept = state.cubes.map((c) => of(c.serial)).filter((b) => b.loaded && b.history);
+  const kept = systemSerials().map((s) => of(s)).filter((b) => b.loaded && b.history);
   return kept.length ? tn("backup.badge.kept", kept.reduce((sum, b) => sum + b.list.length, 0)) : "";
 }
 
@@ -35,7 +44,7 @@ function systemCount(): string {
 function System() {
   useLook();
   const count = systemCount();
-  // the card's head counts every Cube's backups
+  // the card's head counts every fold's backups
   useLayoutEffect(() => {
     cardBadges("sys-backup", count ? [{ text: count, kind: "mode" }] : []);
   }, [count]);
@@ -58,7 +67,7 @@ const mountPage = mounter("cube-backup-body", () => <Page />);
 
 /** quiet takes every box's message back, as a page is shown. */
 function quiet(): void {
-  for (const c of state.cubes) for (const place of ["cube", "sys"]) boxUI.of(place + ":" + c.serial).said = null;
+  for (const s of systemSerials()) for (const place of ["cube", "sys"]) boxUI.of(place + ":" + s).said = null;
 }
 
 /** showPage draws Cube settings' card and reads the chosen Cube's list again. */
@@ -92,7 +101,9 @@ onView("system", () => {
   quiet();
   if (!can("backup")) return;
   mountSystem();
-  for (const c of state.cubes) refreshBackups(c.serial);
+  for (const s of systemSerials()) refreshBackups(s);
+  // a Cube not served that comes with it reads its list once its fold is drawn (Box)
+  void loadUnserved();
 });
 onView("cube", () => {
   quiet();

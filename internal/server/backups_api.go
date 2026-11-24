@@ -6,8 +6,14 @@ package server
 // The backup history's routes (docs/api-v1.md, "Backups"): a Cube's
 // stored backups, listed newest first, taken by hand, downloaded as
 // stored or in the other format, and deleted; the restore takes a
-// stored one by id (restore_api.go).
+// stored one by id (restore_api.go). A Cube the store keeps a row of
+// and no runtime serves, one taken out of the configuration or only
+// found, keeps its backups listed, downloaded, compared and deleted, but
+// takes no backup and no restore (AP BackupWatch v1.0, D4-B); the
+// Cubes not served that keep backups are listed by a route of their own
+// (D6-A).
 //
+//	GET    /api/v1/backups/unserved          the Cubes not served that keep backups
 //	GET    /api/v1/cubes/{sn}/backups        the list, and whether a backup is due
 //	POST   /api/v1/cubes/{sn}/backups        take one now, with an optional note
 //	GET    /api/v1/cubes/{sn}/backups/{id}   the file (?format=json|yaml)
@@ -16,6 +22,7 @@ package server
 //	                                         what would turn the other into this one
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -26,6 +33,7 @@ import (
 
 	"go.metaworx.ch/massimo/internal/backup"
 	"go.metaworx.ch/massimo/internal/cubelan"
+	"go.metaworx.ch/massimo/internal/protocol/cube"
 	"go.metaworx.ch/massimo/internal/store"
 )
 
@@ -58,17 +66,138 @@ type backupList struct {
 	Due     *time.Time   `json:"due,omitempty"`
 }
 
-// backupHistory returns the request's Cube with its store and row, or
-// errNoHistory.
-func (s *Server) backupHistory(r *http.Request) (*runtime, *store.Store, int64, error) {
+// history is the Cube a backup route is about: the runtime that serves
+// it, nil for a row of the store that no runtime serves; the store, the
+// row's id and the Cube's serial; and the devices a comparison leaves
+// out, the hidden ones unless the server shows them.
+type history struct {
+	rt         *runtime
+	st         *store.Store
+	cubeID     int64
+	serial     string
+	hidden     []cube.RFAddress
+	showHidden bool
+}
+
+// servedHistory is the history of a served Cube with a row in the
+// store.
+func servedHistory(rt *runtime) history {
+	return history{rt: rt, st: rt.store, cubeID: rt.storeID.Load(), serial: rt.cubeSerial(), hidden: rt.config().Hidden, showHidden: rt.showHidden}
+}
+
+// backupHistory returns the request's Cube with its store and row:
+// the served Cube's, errNoHistory for a served Cube without a row, or,
+// for a serial no runtime serves, its row in the store that is not
+// removed (unservedHistory); 404 without either.
+func (s *Server) backupHistory(r *http.Request) (history, error) {
 	rt, err := s.cube(r)
 	if err != nil {
-		return nil, nil, 0, err
+		return s.unservedHistory(r, err)
 	}
 	if rt.store == nil || rt.storeID.Load() == 0 {
-		return nil, nil, 0, errNoHistory
+		return history{}, errNoHistory
 	}
-	return rt, rt.store, rt.storeID.Load(), nil
+	return servedHistory(rt), nil
+}
+
+// unservedHistory is the history of a serial that no runtime serves:
+// its row in the store that is not removed, configured or not, with
+// the row's hidden list; notFound, the 404 of s.cube, where there is no
+// such row or no store.
+func (s *Server) unservedHistory(r *http.Request, notFound error) (history, error) {
+	st := s.opts.Store
+	if st == nil {
+		return history{}, notFound
+	}
+	row, ok, err := st.Cube(r.Context(), r.PathValue("sn"))
+	if err != nil {
+		return history{}, fail(http.StatusInternalServerError, "%v", err)
+	}
+	if !ok {
+		return history{}, notFound
+	}
+	h := history{st: st, cubeID: row.ID, serial: row.Serial, showHidden: s.opts.ShowHidden}
+	if cfg, err := CubeFromRow(row); err == nil {
+		h.hidden = cfg.Hidden
+	}
+	return h, nil
+}
+
+// notServed is the error of a backup taken or a restore asked for a
+// Cube the store keeps a row of and no runtime serves.
+func notServed(serial string) error {
+	return fail(http.StatusConflict, "cube %s is not served, so it takes no backup and no restore; its stored backups can still be listed, downloaded, compared and deleted", serial)
+}
+
+// servedCube returns the request's Cube for a route that needs it
+// served: a serial whose row the store keeps and no runtime serves is
+// notServed (409), any other unknown serial the 404 of s.cube.
+func (s *Server) servedCube(r *http.Request) (*runtime, error) {
+	rt, err := s.cube(r)
+	if err == nil {
+		return rt, nil
+	}
+	h, err := s.unservedHistory(r, err)
+	if err != nil {
+		return nil, err
+	}
+	return nil, notServed(h.serial)
+}
+
+// emitHistory sends an event about a Cube's backups: on its stream and
+// into its log where a runtime serves it, else into its row's log in the
+// store and the server's log lines.
+func (s *Server) emitHistory(h history, ev event) {
+	if h.rt != nil {
+		s.emitBy(h.rt, ev)
+		return
+	}
+	s.nameUser(context.Background(), &ev)
+	ev.settle()
+	eventLine(s.opts.Logger, h.serial, ev)
+	h.st.AddEvent(storedEvent(h.cubeID, ev))
+}
+
+// unservedView is a Cube the store keeps backups of and no runtime
+// serves, as GET /api/v1/backups/unserved lists it: its serial, its
+// name where its row has one, the backups kept and when the newest was
+// taken.
+type unservedView struct {
+	Serial  string    `json:"serial"`
+	Name    string    `json:"name,omitempty"`
+	Backups int       `json:"backups"`
+	Newest  time.Time `json:"newest"`
+}
+
+// listUnserved handles GET /api/v1/backups/unserved: the Cube rows of
+// the store that are not removed, keep a backup and that no runtime
+// serves, by serial, from one query (store.KeptBackups); their backups
+// are the routes' of …/backups (unservedHistory). Empty without a
+// store, which keeps none.
+func (s *Server) listUnserved(w http.ResponseWriter, r *http.Request) error {
+	out := []unservedView{}
+	if st := s.opts.Store; st != nil {
+		kept, err := st.KeptBackups(r.Context())
+		if err != nil {
+			return fail(http.StatusInternalServerError, "%v", err)
+		}
+		for _, c := range kept {
+			if !s.serves(c.Serial) {
+				out = append(out, unservedView{Serial: c.Serial, Name: c.Name, Backups: c.Count, Newest: c.Newest})
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, out)
+	return nil
+}
+
+// serves reports whether a runtime serves serial, found as s.cube finds
+// the path's Cube, so that a Cube listed as not served is one whose
+// backup routes take its row (backupHistory).
+func (s *Server) serves(serial string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cubes[strings.ToLower(serial)] != nil
 }
 
 // userIDOf is the request's user, 0 outside users mode.
@@ -88,23 +217,29 @@ func backupID(r *http.Request) (int64, error) {
 	return id, nil
 }
 
-// listBackups handles GET …/backups.
+// listBackups handles GET …/backups; a Cube no runtime serves has no
+// watch, so its list says no changed and no due.
 func (s *Server) listBackups(w http.ResponseWriter, r *http.Request) error {
-	rt, st, cubeID, err := s.backupHistory(r)
+	h, err := s.backupHistory(r)
 	if err != nil {
 		return err
 	}
-	set, setErr := st.BackupSettings(r.Context())
-	// The rows and the state in one step against takeBackup, which
-	// stores a row and makes the Cube clean under the same lock: a
-	// backup is never listed beside the change it covered.
+	var list []store.Backup
 	var changed, due time.Time
-	rt.bk.rows.RLock()
-	list, err := st.Backups(r.Context(), cubeID)
-	if err == nil && setErr == nil {
-		changed, due = rt.bk.state(set, s.backupMinute())
+	if rt := h.rt; rt != nil {
+		set, setErr := h.st.BackupSettings(r.Context())
+		// The rows and the state in one step against takeBackup, which
+		// stores a row and makes the Cube clean under the same lock: a
+		// backup is never listed beside the change it covered.
+		rt.bk.rows.RLock()
+		list, err = h.st.Backups(r.Context(), h.cubeID)
+		if err == nil && setErr == nil {
+			changed, due = rt.bk.state(set, s.backupMinute())
+		}
+		rt.bk.rows.RUnlock()
+	} else {
+		list, err = h.st.Backups(r.Context(), h.cubeID)
 	}
-	rt.bk.rows.RUnlock()
 	if err != nil {
 		return fail(http.StatusInternalServerError, "%v", err)
 	}
@@ -122,9 +257,12 @@ func (s *Server) listBackups(w http.ResponseWriter, r *http.Request) error {
 // postBackup handles POST …/backups: a backup of the Cube now, with an
 // optional {"note": …}.
 func (s *Server) postBackup(w http.ResponseWriter, r *http.Request) error {
-	rt, _, _, err := s.backupHistory(r)
+	h, err := s.backupHistory(r)
 	if err != nil {
 		return err
+	}
+	if h.rt == nil {
+		return notServed(h.serial)
 	}
 	var req struct {
 		Note string `json:"note"`
@@ -138,7 +276,7 @@ func (s *Server) postBackup(w http.ResponseWriter, r *http.Request) error {
 	if utf8.RuneCountInString(req.Note) > maxBackupNote {
 		return fail(http.StatusBadRequest, "the note holds at most %d characters", maxBackupNote)
 	}
-	b, _, err := s.takeBackup(r.Context(), rt, store.ReasonManual, userIDOf(r), req.Note)
+	b, _, err := s.takeBackup(r.Context(), h.rt, store.ReasonManual, userIDOf(r), req.Note)
 	if err != nil {
 		return err
 	}
@@ -149,7 +287,7 @@ func (s *Server) postBackup(w http.ResponseWriter, r *http.Request) error {
 // getStoredBackup handles GET …/backups/{id}: the file as it was stored,
 // or in the format ?format= asks for.
 func (s *Server) getStoredBackup(w http.ResponseWriter, r *http.Request) error {
-	rt, st, cubeID, err := s.backupHistory(r)
+	h, err := s.backupHistory(r)
 	if err != nil {
 		return err
 	}
@@ -157,12 +295,12 @@ func (s *Server) getStoredBackup(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	b, ok, err := st.StoredBackup(r.Context(), cubeID, id)
+	b, ok, err := h.st.StoredBackup(r.Context(), h.cubeID, id)
 	if err != nil {
 		return fail(http.StatusInternalServerError, "%v", err)
 	}
 	if !ok {
-		return fail(http.StatusNotFound, "no backup %d of cube %s", id, rt.serial)
+		return fail(http.StatusNotFound, "no backup %d of cube %s", id, h.serial)
 	}
 	format := r.URL.Query().Get("format")
 	switch format {
@@ -172,7 +310,7 @@ func (s *Server) getStoredBackup(w http.ResponseWriter, r *http.Request) error {
 	default:
 		return fail(http.StatusBadRequest, "format is json or yaml, not %q", format)
 	}
-	body, ok, err := st.BackupBody(r.Context(), cubeID, id)
+	body, ok, err := h.st.BackupBody(r.Context(), h.cubeID, id)
 	if err != nil || !ok {
 		return fail(http.StatusInternalServerError, "backup %d: %v", id, err)
 	}
@@ -186,7 +324,7 @@ func (s *Server) getStoredBackup(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	w.Header().Set("Content-Type", "application/"+format)
-	w.Header().Set("Content-Disposition", "attachment; filename=massimo-backup-"+rt.serial+"-"+b.TakenAt.Local().Format("20060102-150405")+"."+format)
+	w.Header().Set("Content-Disposition", "attachment; filename=massimo-backup-"+h.serial+"-"+b.TakenAt.Local().Format("20060102-150405")+"."+format)
 	w.Write(body)
 	return nil
 }
@@ -194,8 +332,11 @@ func (s *Server) getStoredBackup(w http.ResponseWriter, r *http.Request) error {
 // deleteBackup handles DELETE …/backups/{id}. Deleting the newest
 // makes the automatic backup forget its reference, read again from the
 // one now newest at the next look; with none left, one follows at once.
+// A Cube no runtime serves has no reference to forget: a runtime made
+// for it later reads its reference at its first look, and drops windows
+// kept against another (backups.go).
 func (s *Server) deleteBackup(w http.ResponseWriter, r *http.Request) error {
-	rt, st, cubeID, err := s.backupHistory(r)
+	h, err := s.backupHistory(r)
 	if err != nil {
 		return err
 	}
@@ -203,37 +344,42 @@ func (s *Server) deleteBackup(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	// The newest, the delete and forget() in one step against
-	// takeBackup, which stores a row and makes it the reference under
-	// the same lock; a newest not readable forgets as well.
-	rt.bk.rows.Lock()
-	newest, has, newestErr := st.NewestBackup(r.Context(), cubeID)
-	ok, err := st.DeleteBackup(r.Context(), cubeID, id)
-	if ok && (newestErr != nil || !has || newest.ID == id) && rt.bk.forget() {
-		s.dropKept(r.Context(), rt)
+	var ok bool
+	if rt := h.rt; rt != nil {
+		// The newest, the delete and forget() in one step against
+		// takeBackup, which stores a row and makes it the reference
+		// under the same lock; a newest not readable forgets as well.
+		rt.bk.rows.Lock()
+		newest, has, newestErr := h.st.NewestBackup(r.Context(), h.cubeID)
+		ok, err = h.st.DeleteBackup(r.Context(), h.cubeID, id)
+		if ok && (newestErr != nil || !has || newest.ID == id) && rt.bk.forget() {
+			s.dropKept(r.Context(), rt)
+		}
+		rt.bk.rows.Unlock()
+	} else {
+		ok, err = h.st.DeleteBackup(r.Context(), h.cubeID, id)
 	}
-	rt.bk.rows.Unlock()
 	if err != nil {
 		return fail(http.StatusInternalServerError, "%v", err)
 	}
 	if !ok {
-		return fail(http.StatusNotFound, "no backup %d of cube %s", id, rt.serial)
+		return fail(http.StatusNotFound, "no backup %d of cube %s", id, h.serial)
 	}
-	s.emitBy(rt, systemEvent("backup_deleted", userIDOf(r), map[string]any{"id": id}))
+	s.emitHistory(h, systemEvent("backup_deleted", userIDOf(r), map[string]any{"id": id}))
 	w.WriteHeader(http.StatusNoContent)
 	return nil
 }
 
 // storedFile reads one of the Cube's stored backups as a file.
-func (s *Server) storedFile(r *http.Request, rt *runtime, st *store.Store, cubeID, id int64) (*backup.File, error) {
-	b, ok, err := st.StoredBackup(r.Context(), cubeID, id)
+func (s *Server) storedFile(r *http.Request, h history, id int64) (*backup.File, error) {
+	b, ok, err := h.st.StoredBackup(r.Context(), h.cubeID, id)
 	if err != nil {
 		return nil, fail(http.StatusInternalServerError, "%v", err)
 	}
 	if !ok {
-		return nil, fail(http.StatusNotFound, "no backup %d of cube %s", id, rt.serial)
+		return nil, fail(http.StatusNotFound, "no backup %d of cube %s", id, h.serial)
 	}
-	body, ok, err := st.BackupBody(r.Context(), cubeID, id)
+	body, ok, err := h.st.BackupBody(r.Context(), h.cubeID, id)
 	if err != nil || !ok {
 		return nil, fail(http.StatusInternalServerError, "backup %d: %v", id, err)
 	}
@@ -257,7 +403,7 @@ type backupDiff struct {
 // planner's comparison of the backup with the Cube as the other one's
 // raw lines record it, with the restore's options from the query.
 func (s *Server) diffBackups(w http.ResponseWriter, r *http.Request) error {
-	rt, st, cubeID, err := s.backupHistory(r)
+	h, err := s.backupHistory(r)
 	if err != nil {
 		return err
 	}
@@ -273,12 +419,12 @@ func (s *Server) diffBackups(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	opts.Hidden, opts.ShowHidden = rt.config().Hidden, rt.showHidden
-	newer, err := s.storedFile(r, rt, st, cubeID, id)
+	opts.Hidden, opts.ShowHidden = h.hidden, h.showHidden
+	newer, err := s.storedFile(r, h, id)
 	if err != nil {
 		return err
 	}
-	older, err := s.storedFile(r, rt, st, cubeID, against)
+	older, err := s.storedFile(r, h, against)
 	if err != nil {
 		return err
 	}
