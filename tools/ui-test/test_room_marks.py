@@ -148,9 +148,15 @@ def stroke(locator):
     return locator.evaluate("(e) => getComputedStyle(e).stroke")
 
 
-def box(page, sel):
-    """An element's box, x, y, width and height."""
-    return page.evaluate("(s) => { const r = document.querySelector(s).getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; }", sel)
+def box(page, sel, within):
+    """An element's box, x, y, width and height, x and y from the top
+    left of the element within it: what moves the whole of that does not
+    move it, such as the header's line of radiograms pending above the
+    tiles, which comes and goes with the Cube's free memory slots."""
+    return page.evaluate("""([s, w]) => {
+      const r = document.querySelector(s).getBoundingClientRect(), o = document.querySelector(w).getBoundingClientRect();
+      return [r.x - o.x, r.y - o.y, r.width, r.height];
+    }""", [sel, within])
 
 
 @pytest.mark.cases("1100-en")
@@ -188,11 +194,13 @@ def test_marks_and_off(page, case):
     comfort equal to eco, at none of them and at the highest: OFF
     without a unit, the mark at the top right of the tile's value, out of
     the flow, and in the place of the row's gauge, labelled; the tile's
-    value and the chevrons, and the row's icon slot, where they are in
-    every case, the mark costing no width; the
+    value and the chevrons in the setpoint row, the row as large, and the
+    device row's icon slot in that row, where they are in every case, the
+    mark costing no width; the
     stepped value marked as it is stepped onto eco, nothing moving; the
     marks in the accent colour of the tile's and the row's other icons,
-    in light and in dark; no horizontal scroll."""
+    in light and in dark; no horizontal scroll. Each place is measured
+    in its row, which whatever is above the tile moves as a whole."""
     room = page.evaluate(ROOM, [None, False])
     rid, ths = room["id"], room["devices"]
     sel = '.room[data-id="%s"]' % rid
@@ -201,6 +209,7 @@ def test_marks_and_off(page, case):
     tile.locator(".room-name-btn").click()
     row = tile.locator('.device[data-rf="%s"]' % ths[0]["rf"])
     row.wait_for()
+    sp_row = sel + " .setpoint-row"
     slots, geometry = [], []
     try:
         for name, sp, eco, comfort, preset in CASES:
@@ -216,7 +225,7 @@ def test_marks_and_off(page, case):
                 assert m == {"preset": preset, "label": label, "title": label, "role": "img", "symbol": SYMBOL[preset]}, f"{name}: the tile's mark: {m}"
             assert tile.locator(".temp-tag use[href='#icon-set']").count() == 1, f"{name}: SET keeps its icon"
             assert tile.locator(".temp-tag .temp-label").nth(1).inner_text() == ("SET" if lang == "en" else "SOLL"), f"{name}: and its label"
-            geometry.append((box(page, sel + " .setpoint-big"), box(page, sel + " .stepper")))
+            geometry.append((box(page, sel + " .setpoint-big", sp_row), box(page, sel + " .stepper", sp_row), box(page, sp_row, sp_row)))
 
             cell = set_cell(row, lang)
             assert cell.locator(".num").inner_text() == shown(sp, lang, ""), f"{name}: the row's value: {cell.locator('.num').inner_text()!r}"
@@ -228,7 +237,7 @@ def test_marks_and_off(page, case):
                 label = LABEL[lang][preset]
                 assert rm == {"preset": preset, "label": label, "title": label, "role": "img", "symbol": SYMBOL[preset]}, f"{name}: the row's mark: {rm}"
                 assert cell.locator("use[href='#icon-set']").count() == 0, f"{name}: the mark in the gauge's place"
-            slots.append(cell.locator("svg.di").bounding_box())
+            slots.append(cell.evaluate("(c) => { const r = c.querySelector('svg.di').getBoundingClientRect(), o = c.closest('.device').getBoundingClientRect(); return { x: r.x - o.x, width: r.width }; }"))
 
             row_box = page.evaluate("(s) => { const e = document.querySelector(s); return [e.scrollWidth, e.clientWidth]; }", sel + " .setpoint-row")
             assert row_box[0] <= row_box[1], f"{name}: the setpoint row fits its tile: {row_box}"
@@ -238,14 +247,14 @@ def test_marks_and_off(page, case):
             assert abs(b["x"] - slots[0]["x"]) < 0.5 and abs(b["width"] - slots[0]["width"]) < 0.5, \
                 f"{name}: the row's icon slot stays where it is: {b}, {slots[0]}"
         for (name, *_), g in zip(CASES, geometry):
-            for what, a, b in zip(("the value", "the chevrons"), g, geometry[0]):
-                assert all(abs(x - y) < 0.5 for x, y in zip(a, b)), f"{name}: {what} stays where it is: {a}, {geometry[0]}"
+            for what, a, b in zip(("the value", "the chevrons", "the setpoint row"), g, geometry[0]):
+                assert all(abs(x - y) < 0.5 for x, y in zip(a, b)), f"{name}: {what} stays where it is in the setpoint row: {a}, {geometry[0]}"
 
         # The stepped value: half a degree under the eco temperature, then
         # stepped onto it; held at its route, so that nothing is sent.
         page.evaluate(SET, [rid, {d["rf"]: {"setpoint": 16.5, "eco": 17, "comfort": 21} for d in ths}])
         assert wait_until(page, "!document.querySelector(%r)" % (sel + " .setpoint-row .preset-mark"), 5), "16.5 is no preset"
-        before = box(page, sel + " .stepper")
+        before = box(page, sel + " .stepper", sp_row)
         held, sent = [], []
         hold(page, PUT, "PUT", held, sent)
         try:
@@ -254,7 +263,8 @@ def test_marks_and_off(page, case):
             assert tile.locator(".setpoint-big.pending").inner_text() == num(17, lang) + "°", "the stepped value"
             m = mark_of(tile.locator(".setpoint-row"))
             assert m and m["preset"] == "eco", f"the stepped value at eco is marked: {m}"
-            assert box(page, sel + " .stepper") == before, "the chevrons stay put as the step reaches eco"
+            after = box(page, sel + " .stepper", sp_row)
+            assert all(abs(x - y) < 0.5 for x, y in zip(after, before)), f"the chevrons stay put in the setpoint row as the step reaches eco: {after}, {before}"
             tile.locator(".pending-cancel").click()
             assert mark_of(tile.locator(".setpoint-row")) is None, "the setpoint again, no mark"
             page.evaluate(SET, [rid, {d["rf"]: {"setpoint": 5, "eco": 17, "comfort": 21} for d in ths}])
@@ -294,7 +304,7 @@ def test_the_setpoint_row_fits_in_every_language(page, case):
     differ in length (Italian's the longest): the setpoint row fits its
     tile and the page does not scroll, at the widest value and at OFF,
     with a mark and without, in light and dark; the mark costs no width,
-    the chevrons where they are without it."""
+    the chevrons where they are in the row without it."""
     room = page.evaluate(ROOM, [None, False])
     rid, ths = room["id"], room["devices"]
     sel = '.room[data-id="%s"]' % rid
@@ -318,7 +328,7 @@ def test_the_setpoint_row_fits_in_every_language(page, case):
                       const left = Math.min(...boxes.map((b) => b.left)), right = Math.max(...boxes.map((b) => b.right));
                       return { scroll: row.scrollWidth, client: row.clientWidth, inside: left >= lo - 0.5 && right <= hi + 0.5,
                         spare: Math.round((lo - left) * 10) / 10 + "/" + Math.round((right - hi) * 10) / 10,
-                        stepper: row.querySelector(".stepper").getBoundingClientRect().x, page: document.documentElement.scrollWidth };
+                        stepper: row.querySelector(".stepper").getBoundingClientRect().x - r.x, page: document.documentElement.scrollWidth };
                     }""", sel)
                     got.append((lang, theme, sp, marked, m))
                     assert m["scroll"] <= m["client"] and m["inside"], f"{lang}, {theme}, {sp}, mark {marked}: the row's content fits inside its padding: {m}"
