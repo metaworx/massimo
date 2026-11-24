@@ -102,8 +102,13 @@ def test_the_search_for_cubes(new_context, case, watch, guard, way):
 def test_the_house_to_every_room(new_context, case, watch, guard, way):
     """The House panel's Auto to every room (rooms/House.tsx), its first
     room's setpoint answered in the next user's session, writes no further
-    room and says nothing. Fails on the page before: it wrote the next
-    room under the next user's key and drew the rooms' outcome."""
+    room, says nothing, and leaves the room's tile waiting for nothing.
+    Fails on the page before: it wrote the next room under the next user's
+    key and drew the rooms' outcome; and without the session's check after
+    the setpoint's answer (AP RoomMajority v1.1, Block 3), the room's tile
+    waited for the user before's setpoint (rooms.js awaitMembers), which
+    held the next user's members' line on that room for up to five
+    minutes."""
     page = owner_page(new_context, guard, watch, URL, TOKEN)
     page.locator("#house-auto").click()
     page.locator("#house-rooms .check-all input").check()
@@ -111,12 +116,15 @@ def test_the_house_to_every_room(new_context, case, watch, guard, way):
     hold(page, "**/rooms/*/setpoint", "PUT", held, sent)
     page.locator("#house-panel button[type=submit]").click()
     assert wait_held(page, held), "the first room's setpoint is on its way"
+    rid = int(held[0].request.url.split("/rooms/")[1].split("/")[0])
     end_session(page, way)
     line = "document.querySelector('#house-panel .tile-result').textContent"
     said = page.evaluate(line)
     let_go(page, held, "PUT", "/setpoint", {})
     assert len(sent) == 1, f"no further room written: {sent}"
     assert page.evaluate(line) == said, "the House says no room's outcome"
+    assert page.evaluate("(rid) => roomUI(state.rooms.find((r) => r.id === rid)).awaiting", rid) is None, \
+        "the room's tile waits for no setpoint of the user before"
 
 
 def without_presets(rooms):
