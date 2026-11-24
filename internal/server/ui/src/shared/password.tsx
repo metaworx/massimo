@@ -44,6 +44,11 @@ function setRef<T>(r: Ref<T> | undefined, v: T | null): void {
   else if (r) r.current = v;
 }
 
+/** toggled says whether a fold the records are of was closed or opened since they began: its open attribute before one of them other than it is now (a set to the state it has is none). */
+function toggled(records: MutationRecord[]): boolean {
+  return records.some((r) => (r.oldValue !== null) !== (r.target as Element).hasAttribute("open"));
+}
+
 /** A password field's value: the caller's state and its setter, or, not controlled, the ref the caller reads it through. */
 type One = { value: string; set: (v: string) => void; inputRef?: Ref<HTMLInputElement> } | { value?: undefined; set?: undefined; inputRef: Ref<HTMLInputElement> };
 
@@ -65,12 +70,15 @@ type One = { value: string; set: (v: string) => void; inputRef?: Ref<HTMLInputEl
  * (field-control in a row, beside the box's own); value and set, or
  * inputRef alone, as One says. reset is whatever the caller counts as a
  * new start: the card's openings, a fold's open state; a password shown
- * is also hidden at each toggle of a fold the field is in, as the browser
- * fires it, however fast the fold is closed and opened; switched off, a
- * password shown is hidden, and stays hidden when the eye comes back. The
- * type never turns while the field is in a closed fold (a details): Chrome
- * draws nothing of an input whose type turned there once the fold opens,
- * so it is turned as the fold opens, before it is painted.
+ * is also hidden whenever a fold the field is in is closed and opened,
+ * however fast, in the very task that opens it, before a paint or a read
+ * can come between (an observer of the folds' open attribute, whose call
+ * is that task's microtask, not the toggle event, which comes in a task
+ * of its own and, two toggles pressed before it, once for both);
+ * switched off, a password shown is hidden, and stays hidden when the eye
+ * comes back. The type never turns while the field is in a closed fold (a
+ * details): Chrome draws nothing of an input whose type turned there once
+ * the fold opens, so it is turned as the fold opens, before it is painted.
  */
 export function PasswordInput(props: One & {
   id: string;
@@ -97,18 +105,16 @@ export function PasswordInput(props: One & {
     setRef(inputRef, el);
   }, [inputRef]);
   const [, redraw] = useState(0);
-  // hide hides the password: at once, or, the field in a closed fold, once the fold opens again, since Chrome draws an
-  // input whose type turned inside a closed details as nothing when it opens (the type held meanwhile, below)
+  // a hide waiting for the closed fold the field is in to open, the type held meanwhile (below): Chrome draws an input
+  // whose type turned inside a closed details as nothing when it opens
+  const pending = useRef(false);
+  // hide hides the password: at once, or, the field in a closed fold, as the fold opens again (the observer below)
   const hide = useCallback(() => {
-    const fold = own.current?.closest("details:not([open])");
-    if (!fold) {
-      setShown(false);
+    if (own.current?.closest("details:not([open])")) {
+      pending.current = true;
       return;
     }
-    fold.addEventListener("toggle", () => {
-      setShown(false);
-      redraw((n) => n + 1);
-    }, { once: true });
+    setShown(false);
   }, []);
   // hidden again at each new start the caller counts
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset is the caller's count of its starts, read for nothing else; the effect is for each, so it is listed.
@@ -119,16 +125,30 @@ export function PasswordInput(props: One & {
   useLayoutEffect(() => {
     if (!on) hide();
   }, [on, hide]);
-  // hidden again at each toggle of a fold the field is in, the browser's own event: a close and an opening pressed
-  // before the page took the first make one event, open to open, which a fold's open state never sees change
+  // hidden again whenever a fold the field is in is closed and opened, in the very task that opens it: an observer of
+  // the folds' open attribute is called in that task's microtasks, before a paint or a read can come, where the toggle
+  // event comes in a task of its own, later on a loaded page, and once for a close and an opening pressed before it.
+  // Closed, a password shown waits, its type held; opened, the type turns on the element at once, the state following
   useEffect(() => {
     const folds: Element[] = [];
     for (let d = own.current?.closest("details"); d; d = d.parentElement?.closest("details")) folds.push(d);
-    for (const d of folds) d.addEventListener("toggle", hide);
-    return () => {
-      for (const d of folds) d.removeEventListener("toggle", hide);
-    };
-  }, [hide]);
+    if (!folds.length) return;
+    const watch = new MutationObserver((records) => {
+      const el = own.current;
+      if (!el || !toggled(records)) return;
+      if (el.closest("details:not([open])")) {
+        if (el.type === "text") pending.current = true;
+        return;
+      }
+      if (!pending.current && el.type !== "text") return;
+      pending.current = false;
+      el.type = "password";
+      setShown(false);
+      redraw((n) => n + 1);
+    });
+    for (const d of folds) watch.observe(d, { attributes: true, attributeFilter: ["open"], attributeOldValue: true });
+    return () => watch.disconnect();
+  }, []);
   // the caret where it was once the type has turned, the field still in focus
   // biome-ignore lint/correctness/useExhaustiveDependencies: shown is what turned the type; the effect follows each turn, so it is listed.
   useLayoutEffect(() => {
@@ -149,7 +169,7 @@ export function PasswordInput(props: One & {
     return () => form.removeEventListener("submit", hide, true);
   }, []);
   const visible = on && shown;
-  // the type as it is while the field is in a closed fold, turned once it opens (hide)
+  // the type as it is while the field is in a closed fold, turned as it opens (the folds' observer)
   const held = own.current?.closest("details:not([open])") ? own.current.type : "";
   const type = held === "text" || held === "password" ? held : visible ? "text" : "password";
   const toggle = () => {

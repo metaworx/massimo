@@ -187,7 +187,8 @@ def test_my_profiles_password_eyes(new_context, case, watch, guard):
     twice, each with its eye; the values typed kept; a password shown is
     hidden again when the fold is closed and opened, the field drawn, also
     where the two come before the page takes the first, as one toggle
-    event, as a loaded page meets them (the CI's)."""
+    event, as a loaded page meets them; hidden in the very task that
+    opens the fold, before a paint or a read can come between (the CI's)."""
     page = fresh_page(new_context, guard, watch)
     sign_in(page, "operator", "op-pass")
     show_view(page, "profile")
@@ -207,6 +208,20 @@ def test_my_profiles_password_eyes(new_context, case, watch, guard):
     s = state(page, "me-new")
     hidden(s, case, "the fold closed and opened again")
     assert s["value"] == "not-set-me-new", f"what is typed kept: {s}"
+    # closed, then opened: the password hidden in the very task that opens the fold, before it can be painted, not at
+    # the toggle event's later task, which a loaded page runs after other work, a paint or the test's read among it
+    # (the CI's)
+    eye_of(page, "me-new").click()
+    shown(state(page, "me-new"), case, "before the fold closes again")
+    page.evaluate("() => { document.getElementById('me-password-title').click(); }")
+    assert wait_until(page, "!document.getElementById('me-password').open", 3)
+    frames(page)
+    typed = page.evaluate("""async () => { document.getElementById('me-password-title').click(); await Promise.resolve();
+      return [document.getElementById('me-password').open, document.getElementById('me-new').type]; }""")
+    assert typed == [True, "password"], f"hidden in the task that opens the fold: {typed}"
+    frames(page)
+    page.locator("#me-new").wait_for(state="visible")
+    hidden(state(page, "me-new"), case, "opened again, drawn")
     # closed and opened before the page takes the first toggle, as a loaded page does: one event, open to open, which
     # hides it all the same
     eye_of(page, "me-new").click()
