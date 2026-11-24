@@ -217,6 +217,44 @@ def test_token_rows_show_their_ids(page, case):
     show_view(page, "tiles")
 
 
+FROM_SETTINGS = {"en": "from the settings file: change or remove it there",
+                 "de": "aus der Einstellungsdatei: dort ändern oder entfernen"}
+
+
+def test_settings_file_key_has_no_revoke(page, case):
+    """The settings file's key, the suite's token, says in its row that it
+    comes from the settings file and offers no Revoke, in the owner's
+    panel of System settings → Users as in My profile, where it is this
+    device; another key of the owner's offers Revoke. The list's answer
+    marks it (AP MobileApp v1.4, D86-A); the server's refusal of its
+    revoke is TestSettingsFileKey's, so that a regression there does not
+    revoke the suite's token."""
+    prefix = f"ui-test-file-key-{case.width}-{case.lang}-"
+    file_key = api_call("GET", "api/v1/me")["token"]["id"]
+    other = api_call("POST", "api/v1/users/owner/tokens", {"label": prefix + "other"})
+    try:
+        marked = [tk["id"] for tk in api_call("GET", "api/v1/users/owner/tokens") or [] if tk.get("from_settings")]
+        assert marked == [file_key], f"the list marks the settings file's key {file_key} alone: {marked}"
+        show_view(page, "system")
+        panel = page.locator(".user-panel[data-name='owner']")
+        panel.wait_for()
+        panel.locator("summary").click()
+        for where, rows in (("System settings → Users", ".user-panel[data-name='owner'] .user-tokens"), ("My profile", "#profile-tokens .user-tokens")):
+            if where == "My profile":
+                show_view(page, "profile")
+            row = page.locator(f"{rows} li[data-id='{file_key}']")
+            row.wait_for(timeout=5000)
+            page.locator(f"{rows} li[data-id='{other['id']}']").wait_for(timeout=5000)
+            assert row.locator(".revoke-token").count() == 0, f"{where}: no Revoke on the settings file's key"
+            assert row.locator(".token-settings").inner_text() == FROM_SETTINGS[case.lang], f"{where}: it says where it comes from"
+            assert page.locator(f"{rows} li[data-id='{other['id']}'] .revoke-token").count() == 1, f"{where}: another key offers Revoke"
+            assert page.locator(f"{rows} .token-settings").count() == 1, f"{where}: that row alone says so"
+        assert scroll_width(page) <= case.width, "no horizontal scroll"
+    finally:
+        api_call("DELETE", "api/v1/users/owner/tokens/%d" % other["id"])
+    show_view(page, "tiles")
+
+
 NO_ANSWER = {"en": "no answer from the server; it may have been done all the same",
              "de": "keine Antwort vom Server; es wurde vielleicht trotzdem ausgeführt"}
 

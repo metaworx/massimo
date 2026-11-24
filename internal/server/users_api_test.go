@@ -233,6 +233,104 @@ func TestUsersRoutes(t *testing.T) {
 	}
 }
 
+// The settings file's key (MASSIMO_API_TOKEN) is marked from_settings in
+// its user's token list and refused by id with 409, by itself and by
+// another owner, as DELETE /api/v1/me/token refuses it: the next start
+// could not add it back, its hash being taken (AP MobileApp v1.4,
+// D86-A). The mark is the file's token, not the label: a key given that
+// label by hand is not marked and is revoked; and the mark follows the
+// file's token when it changes.
+func TestSettingsFileKey(t *testing.T) {
+	t.Parallel()
+	r := startServer(t, withOptions(storeOptions(t, t.TempDir(), "secret")))
+	ts, s := r.ts, r.s
+	ctx := t.Context()
+	olga := userToken(t, s.opts.Store, "olga", store.RoleOwner)
+	type row struct {
+		ID           int64  `json:"id"`
+		Kind         string `json:"kind"`
+		Label        string `json:"label"`
+		FromSettings *bool  `json:"from_settings"`
+	}
+	// marked lists the owner's tokens and returns the ids marked.
+	marked := func(what string) []int64 {
+		t.Helper()
+		code, text := callAPI(t, ts, "GET", "/api/v1/users/owner/tokens", olga, "")
+		var rows []row
+		if err := json.Unmarshal([]byte(text), &rows); code != 200 || err != nil {
+			t.Fatalf("%s: the owner's tokens: %d %s", what, code, text)
+		}
+		var ids []int64
+		for _, tk := range rows {
+			if tk.FromSettings == nil {
+				continue
+			}
+			if !*tk.FromSettings || tk.Kind != store.TokenAPI {
+				t.Fatalf("%s: from_settings on %+v: true on the settings file's key alone, absent elsewhere", what, tk)
+			}
+			ids = append(ids, tk.ID)
+		}
+		return ids
+	}
+	code, text := callAPI(t, ts, "POST", "/api/v1/users/owner/tokens", olga, `{"label":"`+store.BootstrapLabel+`"}`)
+	var byHand struct {
+		ID    int64  `json:"id"`
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal([]byte(text), &byHand); code != 201 || err != nil {
+		t.Fatalf("a key labelled %s by hand: %d %s", store.BootstrapLabel, code, text)
+	}
+	file, ok, err := s.opts.Store.TokenByHash(ctx, store.HashToken("secret"))
+	if err != nil || !ok {
+		t.Fatalf("the settings file's key: %v %v", ok, err)
+	}
+	if ids := marked("at the start"); len(ids) != 1 || ids[0] != file.ID {
+		t.Fatalf("at the start: marked %v, want [%d] (the key labelled by hand is %d)", ids, file.ID, byHand.ID)
+	}
+	revoke := func(id int64, bearer string) (int, string) {
+		t.Helper()
+		return callAPI(t, ts, "DELETE", "/api/v1/users/owner/tokens/"+strconv.FormatInt(id, 10), bearer, "")
+	}
+	for _, by := range []struct{ what, bearer string }{{"by itself", "secret"}, {"by another owner", olga}} {
+		if code, text := revoke(file.ID, by.bearer); code != 409 || !strings.Contains(text, "settings file") {
+			t.Fatalf("the settings file's key revoked %s: %d %s, want 409", by.what, code, text)
+		}
+	}
+	if code, text := callAPI(t, ts, "GET", "/api/v1/me", "secret", ""); code != 200 {
+		t.Fatalf("the settings file's key after the refusals: %d %s", code, text)
+	}
+	if code, text := revoke(byHand.ID, olga); code != 200 {
+		t.Fatalf("the key labelled by hand: %d %s", code, text)
+	}
+
+	// The file's token changes: the old key is revoked, as at a start,
+	// and the new one is the key marked and refused.
+	if err := s.SetToken(ctx, "fresh"); err != nil {
+		t.Fatal(err)
+	}
+	fresh, ok, err := s.opts.Store.TokenByHash(ctx, store.HashToken("fresh"))
+	if err != nil || !ok {
+		t.Fatalf("the settings file's new key: %v %v", ok, err)
+	}
+	if ids := marked("after the change"); len(ids) != 1 || ids[0] != fresh.ID {
+		t.Fatalf("after the change: marked %v, want [%d]", ids, fresh.ID)
+	}
+	if code, text := revoke(fresh.ID, olga); code != 409 {
+		t.Fatalf("the settings file's new key: %d %s, want 409", code, text)
+	}
+	if code, text := revoke(file.ID, olga); code != 404 {
+		t.Fatalf("the file's old key, revoked by the change: %d %s, want 404", code, text)
+	}
+
+	// Without a token in the file no key is marked.
+	if err := s.SetToken(ctx, ""); err != nil {
+		t.Fatal(err)
+	}
+	if ids := marked("without a token in the file"); len(ids) != 0 {
+		t.Fatalf("without a token in the file: marked %v", ids)
+	}
+}
+
 // The first owner is created on an open server from the local network.
 func TestFirstOwner(t *testing.T) {
 	t.Parallel()

@@ -617,7 +617,7 @@ func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) error {
 }
 
 // listTokens handles GET /api/v1/users/{name}/tokens: the live sessions
-// and keys of the user.
+// and keys of the user, the settings file's key marked from_settings.
 func (s *Server) listTokens(w http.ResponseWriter, r *http.Request) error {
 	st, err := s.userStore()
 	if err != nil {
@@ -631,9 +631,15 @@ func (s *Server) listTokens(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return userFail(err)
 	}
+	file, err := s.settingsKeyID(r.Context())
+	if err != nil {
+		return userFail(err)
+	}
 	out := []tokenView{}
 	for _, t := range tokens {
-		out = append(out, viewToken(t))
+		v := viewToken(t)
+		v.FromSettings = file != 0 && t.ID == file
+		out = append(out, v)
 	}
 	writeJSON(w, http.StatusOK, out)
 	return nil
@@ -673,7 +679,8 @@ func (s *Server) postToken(w http.ResponseWriter, r *http.Request) error {
 }
 
 // deleteToken handles DELETE /api/v1/users/{name}/tokens/{id}: the
-// session or key is revoked.
+// session or key is revoked. The settings file's key is 409, as
+// DELETE /api/v1/me/token answers it (settingsKeyID).
 func (s *Server) deleteToken(w http.ResponseWriter, r *http.Request) error {
 	st, err := s.userStore()
 	if err != nil {
@@ -693,6 +700,13 @@ func (s *Server) deleteToken(w http.ResponseWriter, r *http.Request) error {
 	}
 	if !ok || tok.UserID != u.ID || !tok.DeletedAt.IsZero() {
 		return fail(http.StatusNotFound, "user %s has no token %d", u.Name, id)
+	}
+	file, err := s.settingsKeyID(r.Context())
+	if err != nil {
+		return userFail(err)
+	}
+	if file != 0 && id == file {
+		return fail(http.StatusConflict, settingsKeyKept)
 	}
 	if err := st.RevokeToken(r.Context(), id); err != nil {
 		return userFail(err)
