@@ -1674,6 +1674,7 @@
   "users.fromKey": "made from the API key {label}",
   "users.revoke": "Revoke",
   "users.revokeLabel": "revoke {label}",
+  "users.fromSettings": "from the settings file: change or remove it there",
   "users.revoked": "Token {id} revoked.",
   "users.newKey": "New API key",
   "users.keyLabel": "what the key is for",

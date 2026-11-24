@@ -1975,7 +1975,8 @@ massimo-week-program { display: contents; }
 /* a grid item's margins collapse with nothing outside it: the first line's
    top margin, which collapsed with the row's above it, would add itself */
 .login-forms > * > :first-child { margin-top: 0; }
-.user-tokens li .revoke-token { margin-left: auto; }
+/* Revoke, or in its place the settings file's key's word (shared/tokens.tsx), at the row's end */
+.user-tokens li .revoke-token, .user-tokens li .token-settings { margin-left: auto; }
 /* the key My profile was opened with (#profile?key=<id>, ui/src/profile/
    store.ts markKey, shared/tokens.tsx): tinted and outlined in the
    accent, in either theme */

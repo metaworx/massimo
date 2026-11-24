@@ -20,7 +20,10 @@
  * that follows its making and gone at the next, kept in this part's own
  * state alone. An API key the caller names is marked, its row tinted,
  * and the caller is told of every read drawn, with that row, to bring it
- * into view (My profile's key of its address). Moved from System
+ * into view (My profile's key of its address). The key that is the
+ * settings file's MASSIMO_API_TOKEN (from_settings in the list) says so
+ * in place of Revoke, which the server refuses for it: it is changed or
+ * removed in the file (AP MobileApp v1.4, D86-A). Moved from System
  * settings' users (AP UiParts, Block 13), its texts the users.… keys both
  * places use.
  */
@@ -44,7 +47,8 @@ import { session, stillSession } from "./session";
  * one's own user, the token the page is signed in with says "this
  * device", the key that session was made of "its key"; in the app the key
  * the phone keeps, of the id deviceKey, says "this device's key" in its
- * place; Revoke on "this device" signs out.
+ * place; Revoke on "this device" signs out. The settings file's key has
+ * no Revoke, and says where it is changed in its place.
  */
 function TokenRow({ u, tk, labels, run, marked, deviceKey }: {
   u: User;
@@ -71,8 +75,10 @@ function TokenRow({ u, tk, labels, run, marked, deviceKey }: {
       <span class="muted small token-used">
         {tk.last_used_at ? <>{t("users.lastUsed", { from: tk.last_used_from || "?" }) + " "}<Age at={tk.last_used_at} plain /></> : t("users.neverUsed")}
       </span>
-      <BusyButton cls="revoke-token" label={t("users.revoke")} aria={t("users.revokeLabel", { label: tk.label || kind })}
-        run={() => (current ? revokeOwn(u.name, tk) : revokeToken(run, u.name, tk))} />
+      {tk.from_settings
+        ? <span class="muted small token-settings">{t("users.fromSettings")}</span>
+        : <BusyButton cls="revoke-token" label={t("users.revoke")} aria={t("users.revokeLabel", { label: tk.label || kind })}
+          run={() => (current ? revokeOwn(u.name, tk) : revokeToken(run, u.name, tk))} />}
     </li>
   );
 }
