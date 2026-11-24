@@ -94,6 +94,52 @@ func TestTLSSource(t *testing.T) {
 	}
 }
 
+// CheckTLS refuses what tlsSource refuses before it makes a source, in
+// the words tlsSource gives after "serve: ", and passes the rest. It
+// takes no data directory, and writes nothing beside the hook it reads.
+func TestCheckTLS(t *testing.T) {
+	t.Parallel()
+	certPath, keyPath, _ := testPair(t, t.TempDir())
+	dir := t.TempDir()
+	hook := filepath.Join(dir, "hook.sh")
+	os.WriteFile(hook, []byte("#!/bin/sh\n"), 0o755)
+	missingKey := filepath.Join(dir, "none.pem")
+	_, keyErr := os.Stat(missingKey)
+	_, pairErr := tls.LoadX509KeyPair(keyPath, keyPath) // the key where the certificate goes
+	for _, c := range []struct {
+		o    TLS
+		want string
+	}{
+		{TLS{Mode: "files", Cert: certPath, Key: keyPath, HTTP: ":80"}, "-tls-http goes with -tls acme"},
+		{TLS{HTTP: ":80"}, "-tls-http goes with -tls acme"},
+		{TLS{Mode: "self-signed", DNSHook: hook}, "-acme-dns-hook goes with -tls acme"},
+		{TLS{Mode: "acme", Names: "a.example.net", DNSHook: hook, HTTP: ":80"}, "-tls-http is for the HTTP-01 challenge; with -acme-dns-hook the DNS-01 challenge needs no port"},
+		{TLS{Mode: "files", Cert: certPath}, "-tls files needs -tls-cert and -tls-key (MASSIMO_TLS_CERT and MASSIMO_TLS_KEY)"},
+		{TLS{Cert: certPath, Key: missingKey}, "tls: " + keyErr.Error()},
+		{TLS{Mode: "files", Cert: keyPath, Key: keyPath}, "tls: " + pairErr.Error()},
+		{TLS{Mode: "acme"}, "tls: -tls acme needs the names of -tls-names"},
+		{TLS{Mode: "acme", Names: "*.example.net"}, "tls: a wildcard (*.example.net) needs the DNS-01 challenge (-acme-dns-hook)"},
+		{TLS{Mode: "acme", Names: "192.0.2.10", DNSHook: hook}, "tls: no certificate for an address (192.0.2.10); use a DNS name"},
+		{TLS{Mode: "yes"}, `-tls or MASSIMO_TLS "yes": want off, files, self-signed or acme`},
+	} {
+		if err := CheckTLS(c.o); err == nil || err.Error() != c.want {
+			t.Errorf("%+v: %v, want %s", c.o, err, c.want)
+		}
+		if _, err := tlsSource(c.o, "", t.TempDir(), quietLog()); err == nil || err.Error() != "serve: "+c.want {
+			t.Errorf("tlsSource %+v: %v, want serve: %s", c.o, err, c.want)
+		}
+	}
+	for _, o := range []TLS{{}, {Mode: "off", Cert: certPath}, {Cert: certPath, Key: keyPath}, {Mode: "self-signed", Names: "massimo.example.net"},
+		{Mode: "acme", Names: "massimo.example.net", HTTP: ":80"}, {Mode: "acme", Names: "*.example.net,example.net", DNSHook: hook}} {
+		if err := CheckTLS(o); err != nil {
+			t.Errorf("%+v: %v", o, err)
+		}
+	}
+	if left, _ := os.ReadDir(dir); len(left) != 1 {
+		t.Fatalf("the check wrote: %v", left)
+	}
+}
+
 // TestServeTLS serves the API over the listener serve builds and reads
 // /healthz over https.
 func TestServeTLS(t *testing.T) {

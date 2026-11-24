@@ -8,7 +8,8 @@
  * line as maintenance.js did: the announcement on the LAN and the Cube
  * intervals (GET and PUT /api/v1/settings, each saved at once), the
  * settings file read again (POST /api/v1/reload), the server's restart
- * (GET and POST /api/v1/restart), every Cube read again at once (POST
+ * (GET and POST /api/v1/restart) with what waits for the next start and
+ * what that start refuses, every Cube read again at once (POST
  * /api/v1/cubes/{sn}/refresh, one after the other) and the computer's
  * reboot (GET, POST and DELETE /api/v1/reboot), the restart and the
  * reboot each followed by /healthz every two seconds until the server
@@ -19,7 +20,7 @@
  * follows the server while it is away.
  */
 
-import type { RebootInfo, RestartInfo, Setting } from "../api";
+import type { RebootInfo, Refusal, RestartInfo, Setting } from "../api";
 import { type ServerEvent, settingsChanged } from "../model/event";
 import type { Outcome } from "../shared/action";
 import { burstReader } from "../shared/burst";
@@ -50,6 +51,8 @@ export const restart = live({
   text: null as Say | null,
   /** The settings file's settings that wait for the next start. */
   pending: [] as string[],
+  /** What the next start refuses, as the server's last read of the settings file found it: each setting, or the file itself, with the start's text. */
+  refused: [] as Refusal[],
   /** The settings file and when it was last read. */
   file: null as Say | null,
   /** The page follows the server through its restart. */
@@ -284,8 +287,9 @@ async function putInterval(iv: Interval, sec: number): Promise<void> {
 /**
  * renderRestart takes GET /api/v1/restart: the restart's button while
  * this page may restart the server, and otherwise why not; the settings
- * that wait for the next start; the settings file and when it was last
- * read. The question goes where the restart is no longer offered.
+ * that wait for the next start, and what that start refuses, which
+ * blocks nothing; the settings file and when it was last read. The
+ * question goes where the restart is no longer offered.
  */
 function renderRestart(v: RestartInfo): void {
   lastRestart = v;
@@ -293,6 +297,7 @@ function renderRestart(v: RestartInfo): void {
   const reason = v.blocked || "";
   restart.text = !v.available && reason ? () => t("restart.unavailable", { reason }) : () => t("maint.restartText");
   restart.pending = v.pending || [];
+  restart.refused = v.refused || [];
   restart.file = () => {
     const file: string[] = [];
     if (v.file) file.push(t("maint.fileText", { file: v.file }));
@@ -619,14 +624,16 @@ const reader = burstReader(async (what) => {
 }, () => isShown("maint"));
 
 /**
- * pendingOf takes a settings_read event, which carries what waits for the
- * next start (at_next_start) and when the file was read: the restart's
- * row shows them with nothing read. Not while the page follows a restart.
+ * pendingOf takes a settings_read event at info, which carries what waits
+ * for the next start (at_next_start) and when the file was read, and
+ * says that the next start refuses nothing (AP ReloadChecks, D8-B): the
+ * restart's row shows them with nothing read. Not while the page follows
+ * a restart.
  */
 function pendingOf(ev: ServerEvent): void {
   const p = (ev.summary || {}).at_next_start;
   if (!can("restart") || restart.following || !lastRestart || !Array.isArray(p)) return;
-  renderRestart({ ...lastRestart, pending: p.map(String), read_at: ev.time || lastRestart.read_at });
+  renderRestart({ ...lastRestart, pending: p.map(String), read_at: ev.time || lastRestart.read_at, refused: undefined });
 }
 
 /**
@@ -635,15 +642,19 @@ function pendingOf(ev: ServerEvent): void {
  * the stream, which is how the page learns of a restart (the server's
  * start is written before any stream opens); the announcement or an
  * interval set (change); a reboot asked for, begun, failed or taken back
- * (reboot, reboot_cancelled); a settings_read event says itself what
- * waits for the next start. A restart or a reboot
- * this page follows reads by its own pace (loadRestart and loadReboot
- * read nothing meanwhile), and a reboot's wait keeps its timer.
+ * (reboot, reboot_cancelled); a settings_read event at info says itself
+ * what waits for the next start, and that the start refuses nothing; one
+ * at warn or above, a read that found the next start refuses something,
+ * reads the restart's row, which names what and of which setting. A restart or a
+ * reboot this page follows reads by its own pace (loadRestart and
+ * loadReboot read nothing meanwhile), and a reboot's wait keeps its
+ * timer.
  */
 export function serverEvent(ev: ServerEvent): void {
   if (!isShown("maint")) return;
   if (settingsChanged(ev).some((k) => SHOWN_SETTINGS.includes(k))) reader("settings");
   if (ev.kind === "resync") reader("settings", "restart", "reboot");
+  else if (ev.kind === "settings_read" && ev.level && ev.level !== "info") reader("restart");
   else if (ev.kind === "settings_read") pendingOf(ev);
   else if (ev.kind === "reboot" || ev.kind === "reboot_cancelled") reader("reboot");
 }
@@ -671,7 +682,7 @@ export function forgetMaintenance(): void {
   waitAt = NaN;
   lastRestart = null;
   for (const o of [owns.settings, owns.reboot]) o.missed = false; // a read skipped for the user who was is no read of the next one's
-  Object.assign(restart, { shown: false, off: false, text: null, pending: [], file: null, following: false, reloaded: null });
+  Object.assign(restart, { shown: false, off: false, text: null, pending: [], refused: [], file: null, following: false, reloaded: null });
   Object.assign(reboot, { shown: false, cancel: false, off: false, text: null, msg: null, following: false, delay: "60" });
   restartAsk.asking = false;
   rebootAsk.asking = false;

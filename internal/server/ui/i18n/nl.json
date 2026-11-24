@@ -285,6 +285,8 @@
   "restart.notBack": "De server is na twee minuten niet terug; controleer zijn dienst op het apparaat.",
   "restart.failed": "Niet opnieuw gestart: {error}",
   "restart.pending": "Geldt vanaf de volgende herstart: {names}.",
+  "restart.refused": "De volgende start weigert wat volgt; de server komt na een herstart, een update of een herstart van de computer pas terug als het instellingenbestand is hersteld:",
+  "restart.refusal": "{names}: {error}",
   "restart.unavailable": "Opnieuw starten vanaf hier is niet mogelijk: {reason}.",
   "restart.cannotAsk": "Kan de server niet naar het opnieuw starten vragen: {error}",
   "reboot.button": "Herstarten",

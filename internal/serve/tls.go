@@ -57,54 +57,69 @@ func TLSMode(mode, certPath, keyPath string) string {
 	return mode
 }
 
-// tlsSource is the certificate source o names, nil for off; listen is
-// the API's address, whose host a self-signed certificate holds, and
-// dataDir where the self-signed pair and the ACME cache live.
-func tlsSource(o TLS, listen, dataDir string, log *slog.Logger) (certs.Source, error) {
+// CheckTLS is what serve's start refuses of o before it makes the
+// certificate source: the flags that go together, the mode, the files'
+// pair, which it loads, and the names and hook of acme. It creates no
+// directory and no certificate, so that a reload of the settings file
+// can ask it what the next start would refuse (cmd/massimo); a
+// self-signed certificate is made at the start, and refused only there.
+func CheckTLS(o TLS) error {
 	m := TLSMode(o.Mode, o.Cert, o.Key)
 	if o.HTTP != "" && m != "acme" {
-		return nil, errors.New("serve: -tls-http goes with -tls acme")
+		return errors.New("-tls-http goes with -tls acme")
 	}
 	if o.DNSHook != "" && m != "acme" {
-		return nil, errors.New("serve: -acme-dns-hook goes with -tls acme")
+		return errors.New("-acme-dns-hook goes with -tls acme")
 	}
 	if o.DNSHook != "" && o.HTTP != "" {
-		return nil, errors.New("serve: -tls-http is for the HTTP-01 challenge; with -acme-dns-hook the DNS-01 challenge needs no port")
+		return errors.New("-tls-http is for the HTTP-01 challenge; with -acme-dns-hook the DNS-01 challenge needs no port")
 	}
 	switch m {
-	case "off":
-		return nil, nil
+	case "off", "self-signed":
+		return nil
 	case "files":
 		if o.Cert == "" || o.Key == "" {
-			return nil, errors.New("serve: -tls files needs -tls-cert and -tls-key (" + env.TLSCert + " and " + env.TLSKey + ")")
+			return errors.New("-tls files needs -tls-cert and -tls-key (" + env.TLSCert + " and " + env.TLSKey + ")")
 		}
-		src, err := certs.OpenFiles(o.Cert, o.Key, log)
-		if err != nil {
-			return nil, fmt.Errorf("serve: %w", err)
-		}
-		return src, nil
-	case "self-signed":
-		src, err := certs.OpenSelfSigned(dataDir, certs.Names(ListenHost(listen), certs.ParseNames(o.Names)), log, nil)
-		if err != nil {
-			return nil, fmt.Errorf("serve: %w", err)
-		}
-		return src, nil
+		_, err := certs.OpenFiles(o.Cert, o.Key, nil)
+		return err
 	case "acme":
 		if o.DNSHook != "" {
-			src, err := certs.OpenDNS01(dataDir, certs.ParseNames(o.Names), o.ACMEEmail, o.ACMEDirectory, o.DNSHook, log)
-			if err != nil {
-				return nil, fmt.Errorf("serve: %w", err)
-			}
-			return src, nil
+			return certs.CheckDNS01(certs.ParseNames(o.Names), o.DNSHook)
 		}
-		src, err := certs.OpenACME(dataDir, certs.ParseNames(o.Names), o.ACMEEmail, o.ACMEDirectory, log)
-		if err != nil {
-			return nil, fmt.Errorf("serve: %w", err)
-		}
-		return src, nil
-	default:
-		return nil, fmt.Errorf("serve: -tls %q: want off, files, self-signed or acme", m)
+		return certs.CheckACMENames(certs.ParseNames(o.Names))
 	}
+	return fmt.Errorf("-tls or %s %q: want off, files, self-signed or acme", env.TLS, m)
+}
+
+// tlsSource is the certificate source o names, nil for off; listen is
+// the API's address, whose host a self-signed certificate holds, and
+// dataDir where the self-signed pair and the ACME cache live. What
+// CheckTLS refuses it refuses first.
+func tlsSource(o TLS, listen, dataDir string, log *slog.Logger) (certs.Source, error) {
+	if err := CheckTLS(o); err != nil {
+		return nil, fmt.Errorf("serve: %w", err)
+	}
+	var src certs.Source
+	var err error
+	switch TLSMode(o.Mode, o.Cert, o.Key) {
+	case "files":
+		src, err = certs.OpenFiles(o.Cert, o.Key, log)
+	case "self-signed":
+		src, err = certs.OpenSelfSigned(dataDir, certs.Names(ListenHost(listen), certs.ParseNames(o.Names)), log, nil)
+	case "acme":
+		if o.DNSHook != "" {
+			src, err = certs.OpenDNS01(dataDir, certs.ParseNames(o.Names), o.ACMEEmail, o.ACMEDirectory, o.DNSHook, log)
+		} else {
+			src, err = certs.OpenACME(dataDir, certs.ParseNames(o.Names), o.ACMEEmail, o.ACMEDirectory, log)
+		}
+	default: // off: CheckTLS refused every other mode
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("serve: %w", err)
+	}
+	return src, nil
 }
 
 // ListenHost is the host of a listen address, "" for every interface.

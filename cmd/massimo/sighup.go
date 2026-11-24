@@ -41,7 +41,7 @@ func sighupAction(mode string, managed, ignored bool) (string, error) {
 	case sighupReload, sighupStop:
 		return mode, nil
 	}
-	return "", fmt.Errorf("serve: -sighup %q: want auto, reload or stop", mode)
+	return "", fmt.Errorf("-sighup or %s %q: want auto, reload or stop", sighupVar, mode)
 }
 
 // hupReload is SIGHUP as a reload, caught from serve's start (AP

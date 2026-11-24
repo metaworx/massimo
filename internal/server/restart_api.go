@@ -15,12 +15,15 @@ package server
 // POST /api/v1/reload reads the settings file again at once, as SIGHUP
 // does, with what cmd/massimo hands the server (SetReloader); the server
 // reads it by itself within seconds of a change anyway. GET
-// /api/v1/restart names the file and when it was last read.
+// /api/v1/restart names the file and when it was last read, and both
+// answer what the last read found the next start refuses (SetRefused),
+// which blocks nothing: the restart still goes (AP ReloadChecks, D8-B).
 
 import (
 	"context"
 	"net"
 	"net/http"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -38,17 +41,35 @@ type restartView struct {
 	// apply only at the next one.
 	Pending []string `json:"pending,omitempty"`
 	// File is the settings file, ReadAt when it was last read: at the
-	// start, or again since.
+	// start, or again since, also where it did not parse, or was there
+	// but could not be read (the log's settings_read).
 	File   string     `json:"file,omitempty"`
 	ReadAt *time.Time `json:"read_at,omitempty"`
+	// Refused is what the last read found the next start refuses
+	// (SetRefused).
+	Refused []Refusal `json:"refused,omitempty"`
+}
+
+// Refusal is one thing the next start of serve refuses, as a read of the
+// settings file found it (cmd/massimo, startchecks.go and reload.go): the
+// settings that changed since the start and that the refusing check of
+// the start reads, by name, and the start's own text, which may quote a
+// value, a secret's named by its variable; no settings where the file
+// itself does not parse, or is there but cannot be read, the text then
+// naming the file and the line by its number.
+type Refusal struct {
+	Settings []string `json:"settings,omitempty"`
+	Error    string   `json:"error"`
 }
 
 // ReloadResult is what reading the settings file again found: the
 // variables that changed (names, never values), those that now differ
-// from the start and apply only at the next one, and when it was read.
+// from the start and apply only at the next one, what the next start
+// refuses of them (SetRefused), and when it was read.
 type ReloadResult struct {
 	Changed []string  `json:"changed"`
 	Pending []string  `json:"pending"`
+	Refused []Refusal `json:"refused"`
 	ReadAt  time.Time `json:"read_at"`
 }
 
@@ -108,6 +129,33 @@ func (s *Server) pendingRestart() []string {
 	return append([]string(nil), s.pending...)
 }
 
+// SetRefused says what the last read of the settings file found the next
+// start refuses, none for an empty list (cmd/massimo, the settings
+// file's reload): a read that finds nothing refused clears it, and the
+// start has none, since it would have refused it. It blocks nothing,
+// neither the restart nor an update or a reboot (AP ReloadChecks, D8-B).
+func (s *Server) SetRefused(refused []Refusal) {
+	s.pendingMu.Lock()
+	s.refused = cloneRefusals(refused)
+	s.pendingMu.Unlock()
+}
+
+func (s *Server) refusedAtNextStart() []Refusal {
+	s.pendingMu.Lock()
+	defer s.pendingMu.Unlock()
+	return cloneRefusals(s.refused)
+}
+
+// cloneRefusals is a copy of refused that shares nothing with it, nil
+// for none.
+func cloneRefusals(refused []Refusal) []Refusal {
+	var out []Refusal
+	for _, f := range refused {
+		out = append(out, Refusal{Settings: slices.Clone(f.Settings), Error: f.Error})
+	}
+	return out
+}
+
 // openRestartRefused is the reason an open server gives a request that
 // does not come from the box itself.
 const openRestartRefused = "this server is open: restart it from the box itself, or create a user or set MASSIMO_API_TOKEN"
@@ -165,6 +213,7 @@ func (s *Server) restartState(r *http.Request) (v restartView, open bool) {
 func (s *Server) getRestart(w http.ResponseWriter, r *http.Request) error {
 	v, _ := s.restartState(r)
 	v.Pending = s.pendingRestart()
+	v.Refused = s.refusedAtNextStart()
 	v.File, v.ReadAt, _ = s.settingsState()
 	writeJSON(w, http.StatusOK, v)
 	return nil

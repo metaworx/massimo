@@ -824,6 +824,39 @@ def test_the_settings_file_read_again_shows_what_waits_with_nothing_read(page, c
         page.unroute("**/api/v1/restart")
 
 
+def test_a_settings_read_warning_reads_what_the_next_start_refuses(page, case):
+    """A settings_read event at warn, a read of the settings file that
+    found the next start refuses the file, one that does not parse, reads
+    the restart's row, which says the file's error alone; one at info then
+    says the start refuses nothing, and the row no longer says it, with
+    nothing read (AP ReloadChecks, D8-B)."""
+    refused = {"error": "/etc/massimo/env:3: expected KEY=VALUE"}
+    answer = {"body": AVAILABLE}
+    safe_route(page, "**/api/v1/restart", lambda route: route.fulfill(status=200, content_type="application/json", body=answer["body"]))
+
+    def settings_read(level, summary):
+        """A settings_read event at level, as the stream brings it."""
+        page.evaluate("""([level, s]) => state.events.dispatchEvent(new MessageEvent('settings_read', { data: JSON.stringify({
+          kind: 'settings_read', source: 'system', time: new Date().toISOString(), summary: s,
+          ...(level ? { level, error: 'the next start refuses: ' + level } : {}) }) }))""", [level, summary])
+    try:
+        show_view(page, "maint")
+        page.locator("#restart-btn").wait_for(state="visible")
+        answer["body"] = json.dumps(dict(json.loads(AVAILABLE), pending=["MASSIMO_HSTS"], refused=[refused]))
+        reads = counted(page, "**/api/v1/restart")
+        settings_read("warn", {"why": "the settings file changed", "changed": [], "at_next_start": ["MASSIMO_HSTS"]})
+        assert wait_until(page, "document.querySelector('#restart-refused .restart-refusal')?.textContent === %s" % json.dumps(refused["error"]), 5), \
+            "the warning read what the next start refuses: the file's error, without a setting"
+        assert len(reads) == 1, f"one read of the restart's row ({reads})"
+        answer["body"] = json.dumps(dict(json.loads(AVAILABLE), pending=["MASSIMO_HSTS"]))
+        settings_read("", {"why": "the settings file changed", "changed": ["MASSIMO_HSTS"], "at_next_start": ["MASSIMO_HSTS"]})
+        assert wait_until(page, "document.getElementById('restart-refused').classList.contains('hidden')", 5), "gone at info"
+        answered(page)
+        assert len(reads) == 1, f"nothing read at info ({reads})"
+    finally:
+        page.unroute("**/api/v1/restart")
+
+
 @pytest.mark.clock
 def test_a_reboot_event_while_this_pages_reboot_waits(page, case):
     """This page asks for a reboot in 30 s; a reboot event meanwhile reads

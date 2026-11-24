@@ -104,7 +104,7 @@ func restartBy(mode string, p processInfo) (by, blocked string, err error) {
 	case restartOff:
 		return "", "the restart is switched off (-restart off)", nil
 	default:
-		return "", "", fmt.Errorf("serve: -restart %q: want auto, exit or off", mode)
+		return "", "", fmt.Errorf("-restart or %s %q: want auto, exit or off", restartVar, mode)
 	}
 	switch {
 	case p.service:

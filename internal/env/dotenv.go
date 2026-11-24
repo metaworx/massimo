@@ -57,7 +57,11 @@ func File() string {
 // pair is one KEY=VALUE line of the file.
 type pair struct{ k, v string }
 
-// readFile parses path whole; a missing file is os.ErrNotExist.
+// readFile parses path whole; a missing file is os.ErrNotExist. A line
+// that does not parse, or that the read stops at (one too long for the
+// scanner, a read error), is named by the file and its number, never
+// quoted: it may hold a secret, a value wrapped onto a line of its own,
+// and the error is shown at the start and in serve's log.
 func readFile(path string) ([]pair, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -66,7 +70,8 @@ func readFile(path string) ([]pair, error) {
 	defer f.Close()
 	var out []pair
 	sc := bufio.NewScanner(f)
-	for n := 1; sc.Scan(); n++ {
+	n := 1 // the line read, or the one the read stopped at
+	for ; sc.Scan(); n++ {
 		line := strings.TrimSpace(sc.Text())
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
@@ -82,7 +87,10 @@ func readFile(path string) ([]pair, error) {
 		}
 		out = append(out, pair{k, v})
 	}
-	return out, sc.Err()
+	if err := sc.Err(); err != nil {
+		return nil, fmt.Errorf("%s:%d: %w", path, n, err)
+	}
+	return out, nil
 }
 
 // LoadFile reads KEY=VALUE lines from path and sets them in the process
@@ -117,8 +125,9 @@ func LoadFile(path string) error {
 // environment had not set is set from it; one the environment set before
 // the file stays as it is. The file is parsed whole first, so a parse
 // error, or a missing file (an editor may be replacing it), changes
-// nothing and is returned. It returns the names whose value changed,
-// sorted.
+// nothing and is returned; a parse error is the one LoadFile returns,
+// the line named by its number, never quoted (readFile). It returns the
+// names whose value changed, sorted.
 func ReloadFile(path string) ([]string, error) {
 	pairs, err := readFile(path)
 	if err != nil {

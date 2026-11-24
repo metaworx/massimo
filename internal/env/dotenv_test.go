@@ -4,6 +4,7 @@
 package env
 
 import (
+	"bufio"
 	"errors"
 	"os"
 	"path/filepath"
@@ -27,6 +28,39 @@ func TestLoadDotEnv(t *testing.T) {
 	os.WriteFile(p, []byte("garbage\n"), 0o600)
 	if err := LoadFile(p); err == nil {
 		t.Fatal("want error for malformed line")
+	}
+}
+
+// A line that does not parse, or one too long to be read, is named by
+// its number, at the start as at a reload, and never quoted: a value
+// wrapped onto a line of its own is half a secret, and a long line may
+// be a whole one. Neither sets anything.
+func TestParseErrorQuotesNoLine(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct{ what, text, want string }{
+		{"a line without =", "MASSIMO_TEST_Q=placeholder-token-\nwrapped-secret-9\n", ":2: expected KEY=VALUE"},
+		{"a line too long", "MASSIMO_TEST_Q=placeholder-token-1\nMASSIMO_TEST_Q2=" + strings.Repeat("s", bufio.MaxScanTokenSize) + "\n",
+			":2: " + bufio.ErrTooLong.Error()},
+	} {
+		p := filepath.Join(t.TempDir(), ".env")
+		if err := os.WriteFile(p, []byte(c.text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		want := p + c.want
+		changed, reloadErr := ReloadFile(p)
+		for _, f := range []struct {
+			what string
+			err  error
+		}{{"LoadFile", LoadFile(p)}, {"ReloadFile", reloadErr}} {
+			if f.err == nil || f.err.Error() != want {
+				t.Errorf("%s, %s: %v, want %s", c.what, f.what, f.err, want)
+			}
+		}
+		_, set1 := os.LookupEnv("MASSIMO_TEST_Q")
+		_, set2 := os.LookupEnv("MASSIMO_TEST_Q2")
+		if set1 || set2 || changed != nil {
+			t.Errorf("%s: set %v %v, changed %v", c.what, set1, set2, changed)
+		}
 	}
 }
 

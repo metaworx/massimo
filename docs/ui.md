@@ -874,7 +874,9 @@ A list or configuration line says what changed: "MEQ0000101 “Window” moved
 from Bath to Kitchen", "comfort 21.0 → 21.5", "Monday's program changed".
 The server's own lines are there too: its start with its version, its stop
 and why, the settings file read again with the names of what changed
-(a warning where the next start would refuse a log level or format),
+(a warning, in the start's own words,
+where the next start would refuse a setting, or the file,
+one that does not parse or is there but cannot be read),
 a restart, a reboot or an update asked for and its outcome, the backups, their
 prune and the log's, a restore started; and a Cube's new address or its
 leaving the LAN.
@@ -1954,6 +1956,20 @@ The server's sign, when it says an update is out, opens it at Software update.
   The settings of the settings file that changed since the start and apply only
   at the next one are listed under it, by name, and counted in the card's head,
   with the card's own settings that wait for it.
+  Under them, where the server's last read of the settings file found
+  that the next start refuses something, the card says so,
+  edged in the warning's colour, with a line each:
+  the settings that changed, by name, and the start's own text,
+  which may quote a value, a secret's named by its variable,
+  or the file's error alone,
+  where it does not parse or cannot be read (`docs/api-v1.md`,
+  "GET /api/v1/restart, POST /api/v1/restart").
+  It stands there, beside what waits for the next start and above the reboot,
+  because a restart, an update or a reboot then leaves the server down
+  until the file is fixed:
+  the owner reads it where the restart is asked for.
+  It blocks nothing, and the restart is offered all the same;
+  a read that finds nothing refused, Reload now's among them, takes it away.
   **Announce on the LAN** (with `settings`) chooses **Automatic**, **On**
   or **Off** for the setting `announce`: the announcement by mDNS for
   `massimo discover`, the apps and Home Assistant, Automatic on unless the
@@ -2023,7 +2039,7 @@ The server's sign, when it says an update is out, opens it at Software update.
   | Event | When the server sends it | What Maintenance reads |
   |---|---|---|
   | `change` of `announce` or an interval | the setting set, from any browser | the settings (`GET /api/v1/settings`) |
-  | `settings_read` | the settings file read again: changed on disk, SIGHUP, Reload now | nothing: the event names what waits for the next start, and its time is when the file was read |
+  | `settings_read` | the settings file read again: changed on disk, SIGHUP, Reload now | at `info` nothing: the event names what waits for the next start, its time is when the file was read, and the next start refuses nothing, so the card takes a refusal away; at `warn` the restart's row (`GET /api/v1/restart`): the read found the next start refuses something, and the row names what |
   | `reboot` | a reboot asked for, begun or failed | the reboot's state (`GET /api/v1/reboot`) |
   | `reboot_cancelled` | a reboot taken back, or the owner's switch turned off | the same |
   | `resync` | the stream opened again with no replay: after the server's restart | the settings, the restart's row and the reboot's |

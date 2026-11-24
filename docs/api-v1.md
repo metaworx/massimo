@@ -3528,7 +3528,7 @@ of the same Cube, or of the server for the server's own:
 | `command` retried, failed or dropped | the same command key acknowledged for the same device |
 | `hold` | its end: the duty cycle's reset, or the wait for free slots |
 | `backup`, `restore_done`, `update_result`, `log_rotated` failed | the next one of its kind below warn |
-| `settings_read` with a value the next start would refuse | the next `settings_read` below warn, or `server_started` |
+| `settings_read` with a value the next start would refuse, or a file that does not parse or is there but cannot be read | the next `settings_read` below warn, or `server_started` |
 | `proxy_refused` | the Cube's `connected`, or `proxy_connected` |
 | `proxy_warning`, a pairing not stopped or not started | `pairing_ended`; `pairing_started` or `proxy_pairing` |
 | `disagree`, a room's thermostats differing or its state not sent again | a `disagree` of the same `room` whose `outcome` is `agree` |
@@ -3644,8 +3644,21 @@ request asked for it, `by`:
 `server_stopping` (`why`: `restart`, `reboot`, `update` or `stop`),
 `settings_read` (the settings file read again: `why`, the names of the
 variables `changed` and of those waiting `at_next_start`, never their values;
-at `warn` with its `error` where the next start would refuse one of them,
-a log level or format that does not parse),
+at `warn` with its `error`
+where the next start would refuse a setting of the file,
+such as a log level that does not parse
+or a `MASSIMO_TLS_HTTP` beside a `MASSIMO_TLS` that is not `acme`,
+or the file itself, one that does not parse or is there but cannot be read,
+which then changed nothing, and whose next read writes its `settings_read`
+even where nothing changed:
+the start's own error after "the next start refuses: ",
+a secret's value, the path of `MASSIMO_TLS_KEY`, named by its variable,
+and a line by its number, never quoted;
+GET /api/v1/restart's `refused` says the same, each with its settings,
+and a read whose settings did not change writes its `settings_read`
+where that differs from the last read's,
+as a DNS hook made or removed meanwhile makes it;
+README.md, "Server", says which settings it checks),
 `restart`, `reboot`, `reboot_cancelled`, `update` (`from`, `to`, `channel`),
 `update_result` (the helper's outcome after the restart, once:
 `state`, `from`, `to`; a failure at `warn` with its `error`),
@@ -4086,7 +4099,35 @@ names the settings of the settings file that changed since the start
 and apply only at the next one,
 such as `["MASSIMO_TLS", "MASSIMO_LISTEN"]`: names, never values;
 `file` is the settings file `serve` reads and `read_at` when it last read it,
-at the start or since.
+at the start or since,
+also where the file did not parse, or was there but could not be read.
+`refused`, where there is any,
+is what that read found the next start refuses, in the start's order,
+as the log's `settings_read` says it (POST /api/v1/reload):
+
+```json
+{"available": true, "by": "systemd", "pending": ["MASSIMO_HSTS"], "refused": [
+  {"settings": ["MASSIMO_HSTS"], "error": "-hsts or MASSIMO_HSTS \"-1\": want a number of days, 0 or more"}
+]}
+```
+
+each with `settings`, the settings that changed since the start
+and that the refusing check reads, by name,
+such as `MASSIMO_TLS`, changed from acme,
+for the `MASSIMO_TLS_HTTP` the start took beside it,
+also one that `pending` does not list,
+`MASSIMO_REBOOT`, which applies at once,
+or `MASSIMO_CUBE_SN`, which it never lists,
+and `error`, the start's own text,
+which may quote a value,
+a secret's (the path of `MASSIMO_TLS_KEY`) named by its variable;
+without `settings` for the file itself,
+one that does not parse or is there but cannot be read,
+its error naming the file and the line by its number, never the line.
+A read that finds nothing refused clears it,
+and the start has none, since it would have refused it.
+It blocks nothing: the restart is offered all the same,
+and so are an update and a reboot.
 `by` is `systemd`, `launchd` (also Homebrew's job), `windows`
 (the Windows service manager) or `exit` (`serve -restart exit`:
 whatever runs the server, told by the exit status).
@@ -4119,6 +4160,8 @@ or while an update runs, which restarts the server itself;
 
 Reads the settings file again at once, as SIGHUP does on Unix:
 `MASSIMO_API_TOKEN` applies at once unless `-token` was given,
+and so does the reboot's switch, `MASSIMO_REBOOT`,
+unless `-allow-reboot` was given;
 every other setting that changed applies at the next start,
 and the store is checkpointed.
 `serve` also reads the file by itself within seconds of a change,
@@ -4126,18 +4169,28 @@ so this is for not waiting, and for systems without SIGHUP.
 Needs the capability `restart`, and answers what it found:
 
 ```json
-{"changed": ["MASSIMO_LISTEN"], "pending": ["MASSIMO_LISTEN"], "read_at": "2026-11-08T19:52:00Z"}
+{"changed": ["MASSIMO_LISTEN"], "pending": ["MASSIMO_LISTEN"], "refused": [], "read_at": "2026-11-08T19:52:00Z"}
 ```
 
 `changed` names the variables this read changed, `pending` those that now
 differ from the start and wait for the next one; names, never values.
-A log level or format among them that the next start would refuse is not refused here:
-the log's `settings_read` is then at `warn`,
-its `error` the start's own after "the next start refuses: ".
+A setting the next start would refuse is not refused here:
+`refused` says it, as GET /api/v1/restart does from then on,
+each with its settings and the start's own text, `[]` for none;
+the log's `settings_read` (under GET /api/v1/cubes/{sn}/events) is then at `warn`,
+its `error` those texts after "the next start refuses: ", joined by "; ",
+and a reboot's switch the start would refuse is off.
 It sends nothing to a Cube, and is an audit row (`server.reload`) but no
 command, so a retry is harmless.
 `409` when the server reads no settings file,
-`500` when the file could not be read.
+`500` when the file could not be read, with the error:
+nothing is applied, and what waits for the next start stays as it was,
+and the log's `settings_read` is at `warn`
+with the start's own error after "the next start refuses: "
+for a file that does not parse, or is there but cannot be read,
+which GET /api/v1/restart's `refused` then says, without a setting;
+a missing one, which an editor may be replacing,
+is a warning on the process's log alone.
 
 ### GET /api/v1/reboot, POST /api/v1/reboot, DELETE /api/v1/reboot
 
@@ -4145,7 +4198,7 @@ The reboot of the computer the server runs on, for the capability `reboot`,
 which no default role but `owner` has:
 restarting the server is not rebooting a computer that may run other services.
 It needs the owner's switch, `MASSIMO_REBOOT=on` in the settings file
-or `serve -allow-reboot` (README, "serve"),
+or `serve -allow-reboot` (README.md, "Server"),
 and on Linux and macOS the root helper that `massimo install -reboot-helper`
 installs (packaging/README.md, "Rebooting from the web UI");
 the Windows service reboots by itself.

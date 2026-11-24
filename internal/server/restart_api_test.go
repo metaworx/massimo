@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -40,8 +41,15 @@ func decodeRestart(t *testing.T, text string) restartView {
 	return v
 }
 
-// With users, a holder of restart restarts the server once: the answer
-// is 202, the restart is asked for, the request is an audit row and an
+// sameRefusals reports whether two lists of refusals say the same, each
+// with the same settings.
+func sameRefusals(a, b []Refusal) bool {
+	return slices.EqualFunc(a, b, func(x, y Refusal) bool { return slices.Equal(x.Settings, y.Settings) && x.Error == y.Error })
+}
+
+// With users, a holder of restart restarts the server once, though the
+// next start refuses a setting (AP ReloadChecks, D8-B): the answer is
+// 202, the restart is asked for, the request is an audit row and an
 // acknowledged command, its retry is replayed, a second one is refused
 // while the first is under way, and the Cube is sent nothing.
 func TestRestartRoutes(t *testing.T) {
@@ -70,6 +78,12 @@ func TestRestartRoutes(t *testing.T) {
 		if code, text := callAPI(t, ts, m, path, "", "{}"); code != 401 {
 			t.Fatalf("%s without a key: %d %s", m, code, text)
 		}
+	}
+	// What the next start refuses blocks nothing.
+	refused := []Refusal{{Settings: []string{"MASSIMO_HSTS"}, Error: `-hsts or MASSIMO_HSTS "-1": want a number of days, 0 or more`}}
+	s.SetRefused(refused)
+	if code, text := callAPI(t, ts, "GET", path, manager, ""); code != 200 || !decodeRestart(t, text).Available || !sameRefusals(decodeRestart(t, text).Refused, refused) {
+		t.Fatalf("GET with a setting refused: %d %s", code, text)
 	}
 	received := cubewatch.Lines(fc)
 	before := received.Mark()
@@ -227,10 +241,13 @@ func TestFromTheBox(t *testing.T) {
 
 // POST /api/v1/reload reads the settings file again through what
 // cmd/massimo hands the server: for a holder of restart it answers what
-// changed and what waits for the next start, GET /api/v1/restart then
-// names the file and when it was read, the request is an audit row and
-// no command, and the Cube is sent nothing; without restart it is
-// refused, and a server without a reloader says it reads no file.
+// changed, what waits for the next start and what that start refuses,
+// GET /api/v1/restart then names the file, when it was read and what the
+// next start refuses, the restart still offered (AP ReloadChecks, D8-B),
+// the request is an audit row and no command, and the Cube is sent
+// nothing; a read that finds nothing refused clears it from GET. Without
+// restart it is refused, and a server without a reloader says it reads
+// no file.
 func TestReloadRoute(t *testing.T) {
 	t.Parallel()
 	opts := storeOptions(t, t.TempDir(), "secret")
@@ -246,21 +263,25 @@ func TestReloadRoute(t *testing.T) {
 	}
 	at := time.Date(2026, 11, 8, 19, 52, 0, 0, time.UTC)
 	calls := 0
+	// What cmd/massimo's reload finds the next start refuses, and keeps.
+	refused := []Refusal{{Settings: []string{"MASSIMO_HSTS"}, Error: `-hsts or MASSIMO_HSTS "-1": want a number of days, 0 or more`}}
 	s.SetReloader("/etc/massimo/env", func(context.Context) (ReloadResult, error) {
 		calls++
 		s.SetSettingsRead(at)
-		return ReloadResult{Changed: []string{"MASSIMO_LISTEN"}, Pending: []string{"MASSIMO_LISTEN"}, ReadAt: at}, nil
+		s.SetRefused(refused)
+		return ReloadResult{Changed: []string{"MASSIMO_LISTEN", "MASSIMO_HSTS"}, Pending: []string{"MASSIMO_HSTS", "MASSIMO_LISTEN"}, Refused: refused, ReadAt: at}, nil
 	})
 	received := cubewatch.Lines(fc)
 	before := received.Mark()
 	code, text := callAPI(t, ts, "POST", path, manager, "{}")
 	var res ReloadResult
 	if err := json.Unmarshal([]byte(text), &res); err != nil || code != 200 || calls != 1 ||
-		strings.Join(res.Changed, ",") != "MASSIMO_LISTEN" || strings.Join(res.Pending, ",") != "MASSIMO_LISTEN" || !res.ReadAt.Equal(at) {
+		strings.Join(res.Changed, ",") != "MASSIMO_LISTEN,MASSIMO_HSTS" || strings.Join(res.Pending, ",") != "MASSIMO_HSTS,MASSIMO_LISTEN" ||
+		!sameRefusals(res.Refused, refused) || !res.ReadAt.Equal(at) {
 		t.Fatalf("POST as manager: %d %s (%d calls)", code, text, calls)
 	}
 	_, text = callAPI(t, ts, "GET", "/api/v1/restart", "secret", "")
-	if v := decodeRestart(t, text); v.File != "/etc/massimo/env" || v.ReadAt == nil || !v.ReadAt.Equal(at) {
+	if v := decodeRestart(t, text); v.File != "/etc/massimo/env" || v.ReadAt == nil || !v.ReadAt.Equal(at) || !sameRefusals(v.Refused, refused) {
 		t.Fatalf("GET /api/v1/restart: %s", text)
 	}
 	rows := auditRows(t, ts, "secret", "?limit=1")
@@ -269,6 +290,17 @@ func TestReloadRoute(t *testing.T) {
 	}
 	if code, text := callAPI(t, ts, "POST", path, operator, "{}"); code != 403 || errorOf(text) != `capability "restart" required` {
 		t.Fatalf("as operator: %d %s", code, text)
+	}
+	// A good read clears it: GET then has none at all.
+	s.SetReloader("/etc/massimo/env", func(context.Context) (ReloadResult, error) {
+		s.SetRefused([]Refusal{})
+		return ReloadResult{Changed: []string{"MASSIMO_HSTS"}, Pending: []string{"MASSIMO_LISTEN"}, Refused: []Refusal{}, ReadAt: at}, nil
+	})
+	if code, text := callAPI(t, ts, "POST", path, "secret", "{}"); code != 200 || !strings.Contains(text, `"refused": []`) {
+		t.Fatalf("a good read: %d %s", code, text)
+	}
+	if _, text := callAPI(t, ts, "GET", "/api/v1/restart", "secret", ""); strings.Contains(text, "refused") {
+		t.Fatalf("GET /api/v1/restart after a good read: %s", text)
 	}
 	s.SetReloader("/etc/massimo/env", func(context.Context) (ReloadResult, error) {
 		return ReloadResult{}, errors.New("permission denied")
