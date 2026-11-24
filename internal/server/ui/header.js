@@ -135,7 +135,8 @@ function certText(tls) {
 
 // checkVersion compares the server's version with the one the page was
 // loaded with; a newer server reloads the page when nothing is open,
-// otherwise the pile's list offers the reload.
+// otherwise the pile's list offers the reload. Its answer also says,
+// before anyone signs in, whether the password fields offer their eye.
 async function checkVersion() {
   let h;
   try {
@@ -148,6 +149,8 @@ async function checkVersion() {
   updateDue();
   const v = h && h.version ? h.version : "";
   renderTLS(h && h.tls);
+  // the password fields' eye, as the server's setting auth.password_reveal says, read at each look (ui/src/shared/password.tsx)
+  MassimoParts.chrome.reveal(!(h && h.password_reveal === false));
   if (state.version === null) {
     state.version = v;
     MassimoParts.chrome.version(v); // ☰'s first row, and signed out the sign-in card's foot and the first row of its ☰ (ui/src/shared/server.ts)

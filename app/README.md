@@ -48,6 +48,7 @@ What the shell is, by class (`android/app/src/main/kotlin/ch/metaworx/massimo/`)
 | `ServerStore` | the servers, in a JSON file of the app's own, each with when its fingerprint is asked (`ask`), whether it opens at start (`start`, one at most, the first added until the user chooses), when its fingerprint was trusted (`trusted_at`) and the keys and the sessions of the phone's left valid there (`unrevoked`, `unended`, user and id, no secret); version 1's switch is reset once, its session forgotten |
 | `TokenStore`, `KeystoreSealer` | a session per server, sealed with AES-256-GCM under a key of the Android Keystore, the server's id bound into the seal |
 | `SessionKeeper` | where a server's session is kept: in memory alone for a kept login asked at each return or start, else in `TokenStore` |
+| `Opening` | what a tap on a server in the list does, by its `ask`, whether a login is kept and where a session is held: open the page, ask for the fingerprint without the key first, or with the key for a new session (docs/app.md, "Opening from the list"); `Bridge` withholds the session from a page whose prompt was cancelled, and from a server's page asked at each return once the list takes its place, so that its card shows; `MainActivity` forgets the pages before the list once it has loaded, so that Back from the list leaves the app |
 | `Sessions` | the sessions the app holds, as the connect page sees them: checked at the address a probe found (`GET /api/v1/me`) and forgotten at a `401`, the check keeping the session's id, revoking the keys and sessions left there for the session's user and giving a login kept without its key's id the session's key; a session the page's new one replaces ended there; signed out of one server or of all (`POST /api/v1/logout`), a session the server did not end left in `KeysLeft` by its id; and Turn off's revoke, with the session or with the key; a failure in the phone's log (`Log.w`, tag `Massimo`), without any secret |
 | `Revoker` | Turn off, Remove, which signs out first where no login is kept, and Forget all stored credentials: each kept login's key revoked with the session held, else with the key after one prompt for the run (one more for each login kept before the app key), one server after the other; a key not revoked left in `KeysLeft` where its id is known, then the session signed out before the login is forgotten |
 | `KeysLeft` | the keys and the sessions of the phone's left valid, kept in `ServerStore`, revoked with the next session of their user there (`DELETE /api/v1/users/{name}/tokens/{id}`) where the user's list has the id as an API key, or as a session, and it is not the token in use: a `404` drops one too, a `403` or a failure keeps it |
@@ -191,6 +192,8 @@ the trust manager with a self-signed certificate, fingerprints,
 origins and who may call what, the discovery event;
 the login store with JVM keys, the login's requests against a local HTTP
 server, and where each choice of when the fingerprint is asked keeps a session;
+what a tap in the list does, row for row of its rule (`OpeningTest`),
+and what an opening withholds on leaving for the list (`OpenedTest`);
 the sessions' check, sign-out and Turn off's revoke against a local HTTP
 server, a failure logged without any secret,
 Turn off and Forget all on every path and the keys they leave,

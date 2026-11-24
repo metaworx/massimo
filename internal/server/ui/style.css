@@ -1490,6 +1490,19 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
    signed-out page's flow, centred there, its title under the logo. */
 #login-dialog[open] { position: static; margin: 0 auto; }
 .login-title { text-align: center; }
+/* in the app, the server under the title (ui/src/signin/Server.tsx): its
+   name and its address on a line that wraps at a phone's width, the ⓘ at
+   its end, and under it the facts the ⓘ shows, each copied with a tap */
+.login-server { margin: -6px 0 12px; text-align: center; }
+.login-server-line { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0 8px; margin: 0; }
+.login-server-name { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.login-server-address { min-width: 0; color: var(--muted); overflow-wrap: anywhere; }
+button.login-server-more { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 0; background: none; color: var(--muted); }
+button.login-server-more:hover, button.login-server-more:focus-visible, button.login-server-more[aria-expanded="true"] { color: var(--accent); }
+button.login-server-more .ni { width: 18px; height: 18px; }
+.login-server-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 10px; margin: 4px 0 0; text-align: left; }
+.login-server-facts dt { color: var(--muted); font-size: 0.85rem; }
+.login-server-facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 /* its ☰, the language and the mode: drawn as the header's, at the end of
    the row of the ways to sign in, dropping down from the card's right
    edge */
@@ -1497,6 +1510,24 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
 .login-menu .menu-items { gap: 10px; padding: 10px; width: min(300px, calc(100vw - 64px)); }
 .login-menu label { margin-bottom: 0; }
 dialog label { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+/* a field whose control is more than an input (the sign-in's password with
+   its eye), its label before it, as a label wrapping its input stands */
+dialog .login-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+dialog .login-field > label { margin: 0; }
+/* a password field with its eye (ui/src/shared/password.tsx; AP MobileApp,
+   D84-A): the button inside the field's box at its right end, the text
+   kept clear of it */
+.pw-box { position: relative; display: flex; align-items: center; min-width: 0; }
+.pw-box > input { flex: 1 1 auto; width: 100%; min-width: 0; }
+.pw-box.has-eye > input { padding-right: 42px; }
+/* the browser's own eye and clear button (Edge's) hidden on every field of
+   the page, the setting on or off: a password field has ours at most, and
+   no field shows a password the setting switched off */
+input::-ms-reveal, input::-ms-clear { display: none; }
+button.pw-eye { position: absolute; top: 2px; right: 2px; bottom: 2px; display: inline-flex; align-items: center; justify-content: center; width: 38px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--muted); }
+button.pw-eye:hover, button.pw-eye:focus-visible { color: var(--accent); }
+button.pw-eye:focus-visible { outline-offset: -2px; }
+button.pw-eye .ni { width: 20px; height: 20px; }
 /* a switch's label beside it, the switch at the left */
 dialog label.switch { flex-direction: row; align-items: center; align-self: flex-start; gap: 8px; }
 dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
@@ -1958,7 +1989,7 @@ massimo-week-program { display: contents; }
 .server-name { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
 .server-where { flex: 1 1 8em; min-width: 0; overflow-wrap: anywhere; }
 .server-badges { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
-.icon-btn.server-cog, .icon-btn.server-login { flex: none; height: auto; min-height: 36px; }
+.icon-btn.server-cog, .icon-btn.server-signin { flex: none; height: auto; min-height: 36px; }
 /* a server's lines in its settings: the login kept, the session, the
    certificate, each with its button */
 .server-login-kept, .server-fact { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; overflow-wrap: anywhere; }
@@ -1967,6 +1998,10 @@ massimo-week-program { display: contents; }
 .servers-ask:not(:empty) { margin-top: 10px; }
 .cert-value { overflow-wrap: anywhere; }
 .server-row > .server-panel { flex-basis: 100%; }
+/* Remove server on a line of its own under Cancel and Save, after a rule,
+   with what it does above it (connect.js settingsPanel, AP MobileApp F34) */
+.server-remove-box { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.server-remove-hint { margin: 0 0 8px; }
 .server-panel .field { margin-bottom: 12px; }
 .found-server { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
 .found-name { font-weight: 600; overflow-wrap: anywhere; }

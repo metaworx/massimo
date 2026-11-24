@@ -1347,9 +1347,11 @@ func (s *Server) Handler() http.Handler { return s.handler }
 func (s *Server) routes() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		h := map[string]any{"ok": true, "version": s.opts.Version, "started_at": s.started, "features": s.featuresOf()}
+		h := map[string]any{"ok": true, "version": s.opts.Version, "started_at": s.started, "features": s.featuresOf(), "password_reveal": true}
 		if s.opts.Store != nil {
 			h["node_id"] = s.opts.Store.NodeID()
+			// the web UI's sign-in learns it here, before anyone signs in (store.PasswordRevealKey)
+			h["password_reveal"] = s.opts.Store.PasswordReveal(r.Context())
 		}
 		if s.opts.TLS != nil {
 			h["tls"] = s.opts.TLS.Status()

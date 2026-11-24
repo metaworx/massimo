@@ -8,7 +8,8 @@
  * and providers.js did: the users (GET /api/v1/users) with the enabled
  * sign-in providers and, where they may be read, the roles; a user's
  * change and removal (PUT and DELETE …/users/{name}), a new user (POST)
- * and the password sign-in (the setting auth.password_login); a user's
+ * and the password sign-in (the setting auth.password_login) and the
+ * password fields' eye (auth.password_reveal); a user's
  * sessions, keys and identities send theirs through this list's runner
  * (run, shared/account.ts). A change reads the users again and says how
  * it went under the list; a user gone from a load that went through
@@ -23,7 +24,8 @@ import { actionRunner } from "../shared/action";
 import { forgetForms } from "../shared/forms";
 import { session, stillSession } from "../shared/session";
 import { wordNameError } from "../shared/username";
-import { enabled, keptOff, passwordLogin, reads, roles, said, userFormKey, userUI, users } from "./store";
+import { enabled, keptOff, passwordLogin, passwordReveal, reads, roles, said, userFormKey, userUI, users } from "./store";
+import { reveal } from "../shared/password";
 import { can, canManageUsersOf, isMe, me } from "../shared/me";
 
 /** usersAdmin says what the signed-in user may do with users: everything, guests only, or nothing but its own user. */
@@ -161,7 +163,7 @@ export function createUser(body: Record<string, unknown> & { name: string }, pas
   return run(body.name, create, t("users.created", { name: body.name }));
 }
 
-/** loadPasswordLogin reads whether the server takes the password sign-in, for a holder of settings, who alone sees the switch. */
+/** loadPasswordLogin reads whether the server takes the password sign-in and whether the password fields offer their eye, for a holder of settings, who alone sees the switches. */
 export async function loadPasswordLogin(): Promise<void> {
   if (!can("settings")) return;
   const n = session();
@@ -170,8 +172,10 @@ export async function loadPasswordLogin(): Promise<void> {
     if (!stillSession(n)) return;
     const v = all["auth.password_login"];
     passwordLogin.value = !v || v.value !== "false";
+    const eye = all["auth.password_reveal"];
+    passwordReveal.value = !eye || eye.value !== "false";
   } catch {
-    // the switch stays as it was
+    // the switches stay as they were
   }
 }
 
@@ -192,6 +196,25 @@ export async function keepOpenOff(): Promise<void> {
     await loadMe(false);
   } catch (e) {
     if (stillSession(n)) usersMsg(t("users.keepOpenFailed", { error: (e as Error).message }), false);
+  }
+}
+
+/**
+ * setPasswordReveal turns the password fields' eye on or off (AP
+ * MobileApp, D84-A), saved at once, and this page's fields follow at once,
+ * the others at their next look at /healthz; refused, the switch stays as
+ * stored.
+ */
+export async function setPasswordReveal(on: boolean): Promise<void> {
+  const n = session();
+  try {
+    await api("PUT", "api/v1/settings", { "auth.password_reveal": on });
+    if (!stillSession(n)) return;
+    passwordReveal.value = on;
+    reveal.value = on;
+    usersMsg(t(on ? "users.passwordRevealOn" : "users.passwordRevealOff"), true);
+  } catch (e) {
+    if (stillSession(n)) usersMsg(t("users.failed", { name: "", error: (e as Error).message }), false);
   }
 }
 

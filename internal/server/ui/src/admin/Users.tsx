@@ -28,11 +28,12 @@ import { isoOf, localOf } from "../shared/time";
 import { type Changes, Identities } from "../shared/identities";
 import { Tokens } from "../shared/tokens";
 import { UserNameField, useNameCheck } from "../shared/username";
+import { PasswordField } from "../shared/password";
 import { useLang } from "../shared/lang";
 import { firstOwnerOf, isMe, me } from "../shared/me";
 import { askOwner, keptOpen } from "../shared/owner";
-import { adding, enabled, identityFormKey, identityUI, keptOff, passwordLogin, reads, said, userFormKey, userUI, users } from "./store";
-import { createUser, keepOpenOff, mayManage, mayPassword, removeUser, roleOptions, run, saveUser, setPasswordLogin, usersAdmin, usersMsg } from "./sendUsers";
+import { adding, enabled, identityFormKey, identityUI, keptOff, passwordLogin, passwordReveal, reads, said, userFormKey, userUI, users } from "./store";
+import { createUser, keepOpenOff, mayManage, mayPassword, removeUser, roleOptions, run, saveUser, setPasswordLogin, setPasswordReveal, usersAdmin, usersMsg } from "./sendUsers";
 import { cardBadges, showCard } from "../shared/card";
 import { isShown, showView } from "../shared/pages";
 import { useLook } from "../shared/look";
@@ -97,9 +98,10 @@ const trim = (v: string) => v.trim();
  * for one's own without managing it, the current one; Remove, which asks
  * in place of the actions, Reset and Save. The fields that show what is
  * stored keep their drafts by the user's name; Save sends those that
- * differ from the user as the list last gave it.
+ * differ from the user as the list last gave it. open is the panel's: a
+ * password shown is hidden again as the panel closes or opens.
  */
-function UserForm({ u, off }: { u: User; off: boolean }) {
+function UserForm({ u, off, open }: { u: User; off: boolean; open: boolean }) {
   useLook();
   const manage = mayManage(u);
   const self = isMe(u.name);
@@ -141,13 +143,13 @@ function UserForm({ u, off }: { u: User; off: boolean }) {
         show={(v) => (v ? fmtShortTime(Date.parse(v)) : t("users.noEnd"))}>
         <DateTime id={id("expires")} cls="field-control" step={60} value={expires.value} set={expires.set} />
       </Field>
-      <TextField label={t("users.password")} id={id("password")} name="password" type="password" autocomplete="new-password" placeholder={t("users.passwordHint")}
-        value={password} set={(v) => {
+      <PasswordField label={t("users.password")} id={id("password")} name="password" autocomplete="new-password" placeholder={t("users.passwordHint")}
+        reset={open} value={password} set={(v) => {
           setPassword(v);
           form.place("password").changed();
         }} />
-      <TextField label={t("users.currentPassword")} id={id("current_password")} name="current_password" type="password" autocomplete="current-password"
-        cls={"field-current" + hid(manage || !self)} value={current} set={setCurrent} />
+      <PasswordField label={t("users.currentPassword")} id={id("current_password")} name="current_password" autocomplete="current-password"
+        cls={"field-current" + hid(manage || !self)} reset={open} value={current} set={setCurrent} />
       {ask.asking ? (
         <Question text={t("users.removeConfirm", { name: u.name })} yes={t("users.remove")} no={t("action.keep")} onNo={() => ask.done()}
           onYes={async () => {
@@ -182,7 +184,7 @@ function UserPanel({ u }: { u: User }) {
     <Fold cls="panel user-panel" open={ui.open} onToggle={(o) => { ui.open = o; }} data={{ name: u.name }}
       summary={<FoldHead name={userName(u)} mono={u.integration ? "" : u.name} badges={badges(u)} />}>
       {links && <p class="muted small user-integration-links">{t("users.linksList", { users: links })}</p>}
-      <UserForm u={u} off={locked} />
+      <UserForm u={u} off={locked} open={ui.open} />
       <Tokens u={u} off={!manage && !self} open={ui.open} reads={reads.value} run={run} say={usersMsg} labelId={"user-key-label-" + u.name} />
       <Identities u={u} off={!manage || !enabled.value.length} open={ui.open} reads={reads.value} providers={enabled.value} run={run} say={usersMsg}
         title={t("users.identities")} none={t("users.identitiesNone")} changes={changes} assign />
@@ -232,7 +234,7 @@ function NewUser() {
         placeholder={t("users.nameHint")} inputRef={nameRef} />
       <TextField label={t("users.displayName")} id="user-new-display_name" name="display_name" maxLength={64} value={display} set={setDisplay} />
       <Select label={t("users.role")} id="user-new-role" name="role" wide options={roleOptions()} value={role} onChange={setRole} />
-      <TextField label={t("login.password")} id="user-new-password" name="password" type="password" autocomplete="new-password" placeholder={t("users.noPasswordHint")}
+      <PasswordField label={t("login.password")} id="user-new-password" name="password" autocomplete="new-password" placeholder={t("users.noPasswordHint")}
         value={password} set={setPassword} />
       <Field label={t("users.expires")} id="user-new-expires" wide>
         <DateTime id="user-new-expires" cls="field-control" step={60} value={expires} set={setExpires} />
@@ -251,17 +253,22 @@ function NewUser() {
  * PasswordLogin is the password sign-in's switch, for a holder of
  * settings, saved at once and off while its request runs, and the line
  * that counts the users whose password the server still checks: with the
- * switch off they cannot sign in until a password is set for them here.
+ * switch off they cannot sign in until a password is set for them here;
+ * then the switch of the password fields' eye (AP MobileApp, D84-A), on by
+ * default, saved so, with the line that says what it does.
  */
 function PasswordLogin() {
   useLook();
   const on = useSetAtOnce(!!passwordLogin.value);
+  const eye = useSetAtOnce(passwordReveal.value !== false);
   const list = users.list;
   const left = list.filter((u) => u.has_password && u.auth_version === 1).length;
   return (
     <div class="password-login needs-settings">
       <Switch id="password-login" label={t("users.passwordLogin")} checked={on.value} onChange={(v) => on.set(v, setPasswordLogin)} />
       <p id="password-login-hint" class="muted small">{users.loaded ? (left ? tn("users.passwordLoginHint", left) : t("users.passwordLoginNone")) : ""}</p>
+      <Switch id="password-reveal" label={t("users.passwordReveal")} checked={eye.value} onChange={(v) => eye.set(v, setPasswordReveal)} />
+      <p id="password-reveal-hint" class="muted small">{t("users.passwordRevealHint")}</p>
     </div>
   );
 }

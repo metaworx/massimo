@@ -13,7 +13,8 @@
  * (scroll.ts, ToTop.tsx). The pages it shows are the store of
  * shared/pages.ts, which it first hands the page's pages (pages.ts). The
  * log tells its count and tone through MassimoParts.chrome.log (the log's
- * part, log/alerts.ts renderLogSign), header.js the server's version. No region may import another: it knows
+ * part, log/alerts.ts renderLogSign), header.js the server's version and
+ * whether the password fields offer their eye. No region may import another: it knows
  * the forms through shared/forms.ts alone.
  */
 
@@ -26,6 +27,7 @@ import { drawCards } from "./Cards";
 import { Nav } from "./Menu";
 import { CARD_ADDRESSES, PAGE_VIEWS } from "./pages";
 import { stickyHeader } from "./scroll";
+import { reveal } from "../shared/password";
 import { version } from "../shared/server";
 import { logSign } from "./store";
 import { ToTop } from "./ToTop";
@@ -52,6 +54,10 @@ const chrome = register("chrome", {
   /** version takes the server's whole version, ☰'s first row (header.js checkVersion). */
   version(v: string): void {
     version.value = v;
+  },
+  /** reveal takes whether the password fields offer their eye, /healthz's password_reveal, before anyone signs in (header.js checkVersion; AP MobileApp, D84-A). */
+  reveal(on: boolean): void {
+    if (reveal.peek() !== on) reveal.value = on;
   },
   /** showCard brings the card of the id into view, opened, the focus on its heading (components.js showCard). */
   showCard(id: string, instant?: boolean): void {

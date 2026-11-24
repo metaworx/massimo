@@ -5,6 +5,7 @@ package ch.metaworx.massimo
 
 import java.net.URI
 import java.net.URISyntaxException
+import java.net.URLEncoder
 
 /** Who sent a message over the bridge (docs/app.md, "Where the bridge exists"). */
 enum class Caller { CONNECT, SERVER, NONE }
@@ -16,11 +17,44 @@ object Origins {
     const val APP_HOST = "appassets.androidplatform.net"
     const val CONNECT_URL = "$APP/ui/connect.html"
 
+    /** The connect page's fragment that opens App settings at its start (connect.js APP_HASH). */
+    const val APP_SETTINGS = "#app-settings"
+
+    /** settingsOf is the connect page's fragment that opens the settings of the server [id] at its start (connect.js openFromAddress). */
+    fun settingsOf(id: String): String = "#settings=" + URLEncoder.encode(id, "UTF-8")
+
+    /**
+     * appServes reports whether the shell serves a request of [method] on
+     * its own origin: GET alone. A form a page posts there would keep its
+     * fragment, since shouldOverrideUrlLoading is not called for a POST
+     * (byPage), so anything else is answered 405 (AP MobileApp, D73-A).
+     */
+    fun appServes(method: String): Boolean = method == "GET"
+
+    /**
+     * byPage is where a page's own navigation to [url] on the shell's
+     * origin goes instead, or null where it goes as it is: without its
+     * fragment, since what the connect page opens at its start (a server's
+     * settings, App settings) is the bridge's handover alone
+     * (openServerSettings, openAppSettings), never a page's own link or
+     * script (AP MobileApp, D73-A). The shell's own loads, and the page
+     * the WebView restores after a new appearance, are no such navigation.
+     */
+    fun byPage(url: String): String? {
+        val at = url.indexOf('#')
+        if (at < 0 || of(url) != APP) return null
+        return url.substring(0, at)
+    }
+
     private val connectCalls = setOf(
         "hello", "servers", "save", "remove", "discover", "probe", "trust", "open", "forget", "forgetAll",
         "session", "signOut", "signOutAll", "settings", "saveSettings",
     )
-    private val serverCalls = setOf("hello", "token", "setToken", "login.status", "login.keep", "login.fingerprint", "connect")
+    // openServerSettings and openAppSettings (contract version 5) hand over to the connect page, as connect does: the server's
+    // page passes no id and reads nothing of them (AP MobileApp, D73-A)
+    private val serverCalls = setOf(
+        "hello", "token", "setToken", "login.status", "login.keep", "login.fingerprint", "connect", "openServerSettings", "openAppSettings",
+    )
 
     private val ipv4 = Regex("""^(\d+)\.(\d+)\.\d+\.\d+$""")
 

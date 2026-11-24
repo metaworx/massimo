@@ -253,8 +253,27 @@ const PasswordLoginKey = "auth.password_login"
 // a setting that cannot be read counts as the default, on.
 func (s *Store) PasswordLogin(ctx context.Context) bool {
 	on, ok, err := s.SettingBool(ctx, PasswordLoginKey)
-	if err != nil {
+	if err != nil && ctx.Err() == nil {
 		s.log.Warn("store: the password sign-in setting not read; it stays on", "error", err)
+	}
+	return !ok || on
+}
+
+// PasswordRevealKey says whether the web UI's password fields offer their
+// eye, the button that shows the password as it is typed (true by
+// default, AP MobileApp D84-A): off, no field shows one. The page learns
+// it before anyone signs in, from GET /healthz (docs/api-v1.md).
+const PasswordRevealKey = "auth.password_reveal"
+
+// PasswordReveal reports whether the password fields offer their eye; a
+// setting that cannot be read counts as the default, on. GET /healthz
+// reads it at every call: a request that went away before the read
+// (its context cancelled) is no failure of the store's, and goes to no
+// log.
+func (s *Store) PasswordReveal(ctx context.Context) bool {
+	on, ok, err := s.SettingBool(ctx, PasswordRevealKey)
+	if err != nil && ctx.Err() == nil {
+		s.log.Warn("store: the password reveal setting not read; it stays on", "error", err)
 	}
 	return !ok || on
 }

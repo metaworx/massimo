@@ -14,6 +14,9 @@ Each server in the list says whether the app reaches it
 (on the LAN, remote, not reachable, or a changed certificate)
 and, in green, who you are signed in as there.
 Touch a server to open it; ⚙, or a long press, opens its settings.
+Where the app keeps a login by fingerprint for a server,
+touching it asks for your fingerprint first (below),
+and the sign-in icon beside it opens its sign-in form straight away.
 
 ### The list's menu
 
@@ -33,6 +36,8 @@ Touch a server to open it; ⚙, or a long press, opens its settings.
 
 Opening a server's settings does not open the keyboard;
 touch a field to change it.
+On a server's page, **☰** → **This server's settings…** opens them too,
+on the list, and **App settings…** the app's own.
 
 - **Open at start**: the app opens this server when it starts,
   in place of the list.
@@ -52,7 +57,8 @@ touch a field to change it.
   could not remove the phone's key at the server,
   or the phone no longer opens its login, or a new certificate was trusted:
   **Show in My profile** opens the server at My profile,
-  the key marked, to revoke it there.
+  the key marked, to revoke it there;
+  it is off while the server does not answer.
 - **Certificate**, for a server reached over `https://`:
   its name and how long it is valid.
   **Certificate…** shows it in full: who it is for and who issued it,
@@ -60,6 +66,8 @@ touch a field to change it.
   and since when the app trusts it:
   since you compared its fingerprint when you added the server,
   or because a certificate authority the phone knows signed it.
+- **Remove server**, at the foot of the settings under **Cancel** and **Save**,
+  takes the server off the list; below.
 
 ### App settings
 
@@ -90,8 +98,14 @@ The switch shows only where the phone has a fingerprint enrolled.
 The sign-in form's row of the ways to sign in, **Password** and **API key**,
 starts with the fingerprint, **Login by fingerprint** for your name.
 Touch it and then the sensor.
-On the list of servers, the fingerprint button beside a server
-signs you in straight away, without the form.
+
+On the list of servers, touching a server with a login by fingerprint
+asks for your fingerprint, or your PIN, and opens it signed in,
+without the form.
+If you cancel, the server opens at its sign-in form,
+where the fingerprint, your password and an API key are all offered.
+The sign-in icon beside the server, **Sign in with password or key**,
+opens that form at once, without asking for the fingerprint.
 
 Your password still works as before.
 
@@ -103,6 +117,8 @@ say when the app asks for your fingerprint:
 - **each time the app comes back**: whenever you return to the app,
   it is covered until you touch the sensor;
   the page is as you left it.
+  Opening the server from the list asks each time too,
+  and going back to it from the list shows its sign-in form.
   The phone also keeps no picture of the page in its list of recent apps.
   On Android 12 and older, this also blocks screenshots of that page;
 - **when the app starts** (the usual choice):
@@ -154,7 +170,7 @@ At home, on the local network, plain `http://` works as usual.
   If you cancel the fingerprint, it asks no more,
   and those keys stay valid at their servers (below).
   Its message names the servers where a key stays valid.
-- **Remove** of a server turns its login by fingerprint off first,
+- **Remove server**, in a server's settings, turns its login by fingerprint off first,
   as Turn off does, or signs the app out there,
   then forgets everything the app kept for it.
   It says so before, and warns where a key or a session of the phone is

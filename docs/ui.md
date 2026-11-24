@@ -18,6 +18,27 @@ the field of the form shown in focus.
 A screen reader names the row's group "Sign in with"; no label shows it.
 The password form holds the one password field, its fields named,
 so that a password manager such as KeePassXC fills it.
+Every password field of the page, the sign-in's, the first owner's two,
+My profile's and System settings → Users', has an eye at its right end
+(AP MobileApp, D84-A): a closed eye while the password is hidden,
+an open one while it shows in clear text, labelled **Show password** and
+**Hide password**, a button the keyboard reaches after its field;
+it keeps what is typed, the caret and the field's focus,
+and the password is hidden again at the submit and at each opening of the
+sign-in card.
+A password shown is hidden again when its fold opens again
+(My profile's Change password, a user's panel),
+and when the eye is switched off, staying hidden when it comes back;
+its field's type never turns inside a closed fold,
+where Chrome would draw nothing of the field once the fold opens.
+The browser's own eye (Edge's) is hidden on every field of the page,
+so that a field has one at most.
+The server's setting `auth.password_reveal` turns the eye off
+(System settings → Users, below);
+the page learns it from `/healthz` before anyone signs in,
+so that the card shows the eye or not from its first drawing,
+and none shows until it has answered.
+An API key's field, and a provider's client secret, have no eye.
 The page keeps the session in the browser for 30 days from its last use;
 **Sign out** in ☰, or on the personal settings, ends it.
 The card's ☰, at the end of that row, shows the version first,
@@ -40,8 +61,19 @@ the account not known, no e-mail sent, the e-mail not verified,
 or the account in none of the groups the provider admits.
 The app shows no such button yet:
 the providers refuse a sign-in inside an app's page.
-In the app the card has the login by fingerprint instead (docs/app.md,
-"The login by fingerprint"):
+In the app the card names the server it signs in to, on a line of its own
+under its title, in place of the address bar the app has not
+(`login.status()`'s `server`, docs/app.md):
+the server's name as the app's list has it and the full address the page
+was opened at (`https://host:port`), the name once where it is the address,
+and ⓘ, "About this server", which shows the server's instance id (its `node`)
+and the certificate's fingerprint the app pinned, each copied with a tap,
+one the app does not have left out;
+the line shows on the sign-in, the first owner's form and the confirmation
+that keeps the server open alike, the ⓘ closed again at each opening;
+a browser shows none, its address bar naming the server.
+In the app the card has the login by fingerprint instead of the providers
+(docs/app.md, "The login by fingerprint"):
 **Enable login by fingerprint**, a switch under the password, its label to
 its right, where the phone has a fingerprint and keeps no login for the
 server, which after the sign-in asks for the fingerprint and keeps an API key
@@ -363,7 +395,12 @@ The compacted header has **↑**, back to the top, first of the page buttons: �
   **Maintenance**, for those and a role with `update`, `restart` or `reboot`,
   and **System info**, for every role with `read`;
   **Personal settings**, its tooltip naming whose they are, by display name and login,
-  in the app **Select server…**, back to the app's servers;
+  in the app **Select server…**, back to the app's servers,
+  then **This server's settings…** and **App settings…**,
+  which show the app's own page with that server's settings open,
+  or its App settings (docs/app.md; AP MobileApp, D73-A):
+  the server's page neither reads nor saves them,
+  each shown where the app has its call;
   and **Sign out** (Forget key for an API key or the token, none on an open server),
   or on a server without users where the owner can be created from here
   **Create the owner…**, which opens the sign-in card with its form (FirstOwner D9),
@@ -1677,6 +1714,11 @@ settings forms and have none of it.
   which the page uses for users whose password the server still hashes;
   the line under it says how many those are,
   and they cannot sign in once it is off until a password is set for them here.
+  Under it, **Show password button**, on by default (`auth.password_reveal`,
+  AP MobileApp D84-A), offers the eye at the end of every password field,
+  on every device; off, no field has one,
+  and this page's fields lose theirs at once, the others' at their next look
+  at the server.
   On a server without users (FirstOwner D14) the section says so instead,
   with **Create the owner…**, which opens the sign-in card with its form,
   and no password sign-in, no list and no Add a user;
@@ -2004,7 +2046,11 @@ the servers the app keeps, each with what it found
 when it last looked (on the LAN, remote, not reachable, a changed certificate)
 and, as a green badge, the user the app is signed in as there,
 checked at each look,
-a tap opening the server, ⚙ or a long press its settings;
+a tap opening the server, the app asking for the fingerprint first where it
+keeps a login (docs/app.md, "Opening from the list"),
+a cancel opening the server's sign-in card,
+the sign-in icon, where a login is kept, that card without the prompt,
+⚙ or a long press its settings;
 the Servers card's ☰, with **Add server…**, **Sign out of all**,
 **Forget all stored credentials** where a login is kept,
 asked first, under the list,
@@ -2026,17 +2072,22 @@ is trusted, the login by fingerprint with **Turn off**,
 which revokes its key and signs out,
 a line for each key of the phone's still valid there with **Show in My profile**,
 which opens the server's page at My profile with the key marked,
+off while the server does not answer, its title saying why,
 a line for each session of the phone's still valid there,
 which the app forgot without the server ending it,
 the server not answering, and ends at the next sign-in there as its user,
-and **Remove**, which turns a kept login off first, or signs out first,
+and under Cancel and Save, after a rule, **Remove server** on a line of its own,
+with a line saying what it does, which turns a kept login off first, or signs out first,
 its question and its message naming a key or a session left.
 **App settings** hold the **Appearance**, as the phone, light or dark,
 for that page and for every server's page set to "as the system".
 A browser that opens that page sees a line saying it is the app's.
 A server's page in the app is this page,
 except that the app keeps its session in place of the browser,
-behind the phone's fingerprint or PIN where the server's settings in the app ask for it.
+behind the phone's fingerprint or PIN where the server's settings in the app ask for it,
+the sign-in card names the server under its title,
+and ☰ has **Select server…**, **This server's settings…** and **App settings…**,
+which show the app's page, the last two with that server's settings or App settings open.
 
 ## How the page is built
 
@@ -2100,7 +2151,7 @@ A region's root is drawn once into its place in the skeleton (`mounter` of `shar
 | Region | Directory | Where it draws | What the plain code calls (`MassimoParts.…`) |
 |---|---|---|---|
 | the header | `header/` | `#header-pile`, `#header-cube`, `#header-times`, `#tls-slot`, `#home-notice` | `header.render`, `header.tls` (app.js, header.js, home.js, theme.js) |
-| the page's chrome | `chrome/` | ☰ in `#nav`, each page's `[data-bar]` row, the cards' heads, ↑ | `chrome.version` (header.js), `chrome.showCard` (components.js), `chrome.log` (the log's part) |
+| the page's chrome | `chrome/` | ☰ in `#nav`, each page's `[data-bar]` row, the cards' heads, ↑ | `chrome.version` and `chrome.reveal` (header.js), `chrome.showCard` (components.js), `chrome.log` (the log's part) |
 | the rooms | `rooms/` | `#rooms`, `#house-slot`, `#unlisted-devices` | `rooms.render`, `rooms.loaded`, `rooms.result`, `rooms.ui`, `rooms.houseOpen`, `rooms.closeHouse` (app.js, rooms.js, header.js, login.js) |
 | the Cubes | `cubes/` | `#cubes-list`, `#cube-page-body` | `cubes.render`, `cubes.polled`, `cubes.openFound`, `cubes.pairingEvent`, `cubes.pairingJoined` (app.js, home.js) |
 | the users, roles and providers | `admin/` | `#sys-users-body`, `#sys-roles-body`, `#sys-caps-body`, `#sys-providers-body` | `users.load` (My profile) |
@@ -2451,8 +2502,10 @@ a value's age it takes from `received` of `rooms.js`, as the rooms do.
 | `FileButton` | `file.tsx` | a button that opens the browser's choice of a file of the types it accepts, the same file again too | `id` (the button's), `cls`, `label`, `accept`, `off`, `inputId` and `inputLabel` (the input's id and its name in the page's language: the Appearance card's Import…), `onFile(file)` |
 | `Adder` | `adder.tsx` | the end of a list that adds an item: the new item's form in its place while shown, the button that shows it hidden meanwhile, the focus in the form's first field when it comes, in the drawing's own turn, and back on the button when it goes (Users, Roles, Sign-in providers) | `id` (the button's), `formId` (the form's place), `label`, `shown`, `set(shown)`, the form as children |
 | `UserNameField`, `useNameCheck`, `wordNameError` | `username.tsx` | a new user's login name (Add a user, the first owner's form): checked 2 s after the last keystroke and when left, the store's rule and the names in use; a fixed name clears the line at once; the server's refusal worded alike | `label`, `id`, `msgId` (the line under it, which describes it), `value` and `set` (Add a user's), or neither, the field not controlled and read through `inputRef` (the first owner's, UiParts D210), `nc` (`useNameCheck(taken)`: `problem`, `say`, `check(v)`, `typed(v)`), `name` (the input's, Add a user's alone), `autocomplete`, `placeholder`, `inputRef` |
-| `NewPassword`, `newPasswordProblem` | `password.tsx` | a new password typed twice (My profile's Change password, the first owner's form), free fields of the caller's own state, never a draft, or fields not controlled, read through their refs (the first owner's, UiParts D210); the pair's one check, the mismatch first, then none typed | `ids` (the two inputs'), `names` (their name attributes, My profile's alone), `label` (the first's), `value`, `set`, `again`, `setAgain`, or instead `inputRefs` (the two inputs' refs), `required` |
+| `PasswordInput`, `PasswordField`, `reveal` | `password.tsx` | a password's input with its eye, every password field's (AP MobileApp, D84-A): the button at the field's right end, inside its box, labelled Show password and Hide password, `aria-pressed`, that turns the type between `password` and `text`, the value, the caret and the `autocomplete` kept, the click keeping the focus in the field; hidden again at each change of `reset` (the card's openings, a fold's open state) and at the form's submit, in the capture before the form's handler, and when switched off, the type never turned inside a closed fold, but as it opens; no eye while `reveal`, the setting `auth.password_reveal` as `/healthz` says it (`MassimoParts.chrome.reveal`), is not `true`; the field in its row | `id`, `name`, `autocomplete`, `value` and `set`, or `inputRef`, `required`, `disabled`, `placeholder`, `reset`; the row's `label`, `hint`, `cls` |
+| `NewPassword`, `newPasswordProblem` | `password.tsx` | a new password typed twice (My profile's Change password, the first owner's form), each field with its eye, free fields of the caller's own state, never a draft, or fields not controlled, read through their refs (the first owner's, UiParts D210); the pair's one check, the mismatch first, then none typed | `ids` (the two inputs'), `names` (their name attributes, My profile's alone), `label` (the first's), `value`, `set`, `again`, `setAgain`, or instead `inputRefs` (the two inputs' refs), `required`, `reset` |
 | `toServers` | `app.ts` | back to the app's servers where the page is in the app (`appConnect` of `login.js`): ☰'s Select server, the sign-in's ☰ and Cancels, the first owner's Cancel | |
+| `toServerSettings`, `toAppSettings` | `app.ts` | to this server's settings and to the app's on the app's own page (`appServerSettings` and `appAppSettings` of `login.js`, contract version 5): ☰'s two entries after Select server | |
 | `app`, `readApp`, `appKeyId`, `signInRevoked` | `app.ts` | the app's status of the login by fingerprint, a signal read again at each opening of the sign-in, a fingerprint refused, the first owner's form and My profile shown (`login.status`), null in a browser; its key of this device's id, 0 for none; the ids of what the last sign-in's `setToken` revoked, `[]` in a browser (`tokenAnswer` of `login.js`) | `st` (the status) |
 | `KvList`, `CountList` | `kv.tsx` | a list of facts, a name and its value each, every fact given, the caller leaving out those it does not show; a list of counts by name, sorted, in columns | `facts` (`[name, value, mono]`); `counts` |
 | `Copy`, `CopyIcon`, `CopyPair` | `copy.tsx` | a text that copies itself, a copy icon (`copyEl`, `copyIcon`); something with its copy icon after it, a text or a link (an address served: an integration's, System info's) | `text`, `value` (what it copies, where it is not the text), `label` (named "Copy …"), `name` (its whole name in its place: the server's version), `icon`, `cls`, `id`; `get`, `label`; `get`, `label`, what it follows as children |
@@ -2802,7 +2855,10 @@ and its entries from the pages' store (`ui/src/shared/pages.ts`) and who is in
 (`ui/src/shared/me.ts`), worded by its `whoOf`,
 as the personal page's row words it:
 Sign out or Forget key, and whose Personal settings they are;
-in the app Select server, by `appConnect` of `login.js`, and Sign out by its `logout`.
+in the app Select server, by `appConnect` of `login.js`,
+This server's settings… and App settings…,
+by its `appServerSettings` and `appAppSettings`,
+and Sign out by its `logout`.
 My settings (`ui/src/prefs/`, AP UiParts Block 13) draws their rows into
 `#prefs-rows` as `parts.js` loads, before `init` applies the settings;
 the rows read `state.settings`, a `live` object of `shared/data.ts`,
@@ -2967,7 +3023,9 @@ and emptied at each opening alone, never at the closing,
 so that a password manager can still save them.
 The app's status of the login by fingerprint is read at each opening
 and after a fingerprint refused
-(`app.ts`); the fingerprint's button and Sign in turn until the sign-in has settled,
+(`app.ts`), and with it the server the line under the title names (`Server.tsx`,
+`serverOf` of `signin/app.ts`), its ⓘ closed at each opening;
+the fingerprint's button and Sign in turn until the sign-in has settled,
 and the button stays the same element while the system's prompt is open;
 a login not kept shows its box, the focus on Try again,
 and the sign-in waits for the choice.

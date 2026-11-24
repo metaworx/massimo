@@ -394,6 +394,10 @@ What a key may do is not here but in `GET /api/v1/me`.
 `node_id` is the box's identifier from its store (`node.id`,
 a UUID made at the first start, see docs/store.md);
 it stays the same across restarts and updates.
+`password_reveal` is the setting `auth.password_reveal` (below), `true`
+without a store: whether the web UI's password fields offer their eye;
+the page reads it here, before anyone signs in, so that the sign-in card
+shows the eye or not from its first drawing.
 `tls`, with TLS, describes the certificate served:
 `{"source": "files", "names": ["massimo.example.net"], "not_after": "2027-02-01T00:00:00Z", "fingerprint": "SHA256:…", "self_signed": false}`;
 `source` is `files` (the owner's files, re-read when they change),
@@ -1869,6 +1873,12 @@ where they find users beside it;
 the log says `keep-open setting removed`.
 With users, `in_effect` is `false`, and `true` is `409`;
 `false` and `null` are taken.
+`auth.password_reveal`, true by default, says whether the web UI's password
+fields offer their eye, a button at a field's end that shows the password as
+it is typed, and applies at once (AP MobileApp, D84-A):
+off, no field shows one, the browser's own eye hidden either way;
+`GET /healthz` says it as `password_reveal`, since the sign-in reads it
+before anyone signs in, and System settings → Users has its switch (docs/ui.md).
 `announce`, `auto` by default, says whether the server announces itself
 on the LAN by mDNS (README.md, "Server"): `on`, `off`,
 or `auto`, on unless it listens on a loopback address;
@@ -1883,7 +1893,8 @@ the build's flavour by default, and applies at once;
 `{"stale_after": "36h", "refresh_interval": null}`,
 with `null` for the default and `"0"` to switch the refresh or the periodic discovery off.
 A number setting takes a JSON number, or the number as a string,
-`auth.password_login`, `integrations.requests` and `auth.keep_open` `true` or `false`,
+`auth.password_login`, `integrations.requests`, `auth.keep_open`
+and `auth.password_reveal` `true` or `false`,
 `announce` `auto`, `on` or `off`, and `update.channel` a name.
 The ranges: `stale_after` and `stale_after_wall` 1h to 720h, `poll_interval` 10s to 1h,
 `refresh_interval` 10m to 168h, `discover_interval` 1m to 24h, `duty_wait` 1m to 1h,

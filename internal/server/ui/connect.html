@@ -28,9 +28,10 @@
   <symbol id="icon-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
   <symbol id="icon-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
   <symbol id="icon-signout" viewBox="0 0 24 24"><path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4"/><path d="M15 8l4 4-4 4"/><path d="M19 12H9"/></symbol>
+  <!-- the row's sign-in, the mirror of icon-signout: the arrow into the door -->
+  <symbol id="icon-signin" viewBox="0 0 24 24"><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/><path d="M10 8l4 4-4 4"/><path d="M14 12H4"/></symbol>
   <symbol id="icon-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l8-8"/><path d="M16 7l2 2"/><path d="M14 9l2 2"/></symbol>
   <symbol id="icon-sliders" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
-  <symbol id="icon-fingerprint" viewBox="0 0 24 24"><path d="M4 15.5V11A8 8 0 0 1 7.07 4.70"/><path d="M10.34 3.17A8 8 0 0 1 16.93 4.70"/><path d="M19.19 7.49A8 8 0 0 1 20 11v2"/><path d="M7.8 19.5V11a4.2 4.2 0 0 1 8.4 0v4"/><path d="M12 11v4.5a12 12 0 0 0 .9 4.5"/></symbol>
 </svg>
 
 <header class="top connect-top">
@@ -142,14 +143,15 @@
   <div class="actions"><button type="button" id="cert-close" class="primary" data-i18n="action.close">Close</button></div>
 </dialog>
 
-<!-- A saved server in the list: a tap opens it, the fingerprint (where a
-     login is kept) opens it signed in, a long press or the cog its
-     settings (connect.js serverRow); its badges say what the probe found
-     and who the app is signed in as there. -->
+<!-- A saved server in the list: a tap opens it, the app asking for the
+     fingerprint first where a login is kept, the sign-in icon (where a
+     login is kept) opens its sign-in card without the prompt, a long press
+     or the cog its settings (connect.js serverRow); its badges say what
+     the probe found and who the app is signed in as there. -->
 <template id="tpl-server">
   <li class="server-row">
     <button type="button" class="server-open"><span class="server-name"></span><span class="server-where mono muted small"></span><span class="server-badges"></span></button>
-    <button type="button" class="icon-btn server-login hidden" aria-label="Login by fingerprint" data-i18n-attr="aria-label:login.fingerprint"><svg class="ni" aria-hidden="true"><use href="#icon-fingerprint"/></svg></button>
+    <button type="button" class="icon-btn server-signin hidden" aria-label="Sign in with password or key" title="Sign in with password or key" data-i18n-attr="aria-label:connect.signIn title:connect.signIn"><svg class="ni" aria-hidden="true"><use href="#icon-signin"/></svg></button>
     <button type="button" class="icon-btn server-cog" aria-expanded="false" aria-label="settings" data-i18n-attr="aria-label:connect.settings title:connect.settings"><svg class="ni" aria-hidden="true"><use href="#icon-cog"/></svg></button>
   </li>
 </template>
